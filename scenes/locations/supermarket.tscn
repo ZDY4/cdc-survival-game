@@ -1,0 +1,117 @@
+[gd_scene load_steps=9 format=3 uid="uid://supermarket001"]
+
+[ext_resource type="Script" path="res://scripts/locations/supermarket.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://bg_supermarket" path="res://assets/images/backgrounds/street.png" id="2_bg"]
+[ext_resource type="Script" path="res://modules/interaction/interactable.gd" id="3_interactable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_door"]
+size = Vector2(100, 100)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_shelves"]
+size = Vector2(150, 80)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_freezer"]
+size = Vector2(120, 80)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_office"]
+size = Vector2(100, 80)
+
+[node name="Supermarket" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="Background" type="Sprite2D" parent="."]
+position = Vector2(640, 360)
+texture = ExtResource("2_bg")
+
+[node name="ReturnDoor" type="Area2D" parent="."]
+position = Vector2(100, 500)
+script = ExtResource("3_interactable")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ReturnDoor"]
+shape = SubResource("RectangleShape2D_door")
+
+[node name="Label" type="Label" parent="ReturnDoor"]
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = -20.0
+text = "回街道"
+horizontal_alignment = 1
+
+[node name="SearchShelves" type="Area2D" parent="."]
+position = Vector2(400, 400)
+script = ExtResource("3_interactable")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="SearchShelves"]
+shape = SubResource("RectangleShape2D_shelves")
+
+[node name="Label" type="Label" parent="SearchShelves"]
+offset_left = -60.0
+offset_top = -50.0
+offset_right = 60.0
+offset_bottom = -30.0
+text = "搜索货架"
+horizontal_alignment = 1
+
+[node name="SearchFreezer" type="Area2D" parent="."]
+position = Vector2(700, 350)
+script = ExtResource("3_interactable")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="SearchFreezer"]
+shape = SubResource("RectangleShape2D_freezer")
+
+[node name="Label" type="Label" parent="SearchFreezer"]
+offset_left = -50.0
+offset_top = -50.0
+offset_right = 50.0
+offset_bottom = -30.0
+text = "搜索冷冻柜"
+horizontal_alignment = 1
+
+[node name="SearchOffice" type="Area2D" parent="."]
+position = Vector2(1000, 300)
+script = ExtResource("3_interactable")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="SearchOffice"]
+shape = SubResource("RectangleShape2D_office")
+
+[node name="Label" type="Label" parent="SearchOffice"]
+offset_left = -40.0
+offset_top = -50.0
+offset_right = 40.0
+offset_bottom = -30.0
+text = "搜索经理室"
+horizontal_alignment = 1
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="LocationLabel" type="Label" parent="UI"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -100.0
+offset_right = 100.0
+offset_bottom = 50.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 24
+text = "废弃超市"
+horizontal_alignment = 1
+
+[node name="StatusBar" type="HBoxContainer" parent="UI"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 40.0
+grow_horizontal = 2
+alignment = 1
+
+[node name="HP" type="Label" parent="UI/StatusBar"]
+layout_mode = 2
+text = "HP: 100/100"
+
+[node name="Hunger" type="Label" parent="UI/StatusBar"]
+layout_mode = 2
+text = "饥饿: 100"
+
+[node name="Thirst" type="Label" parent="UI/StatusBar"]
+layout_mode = 2
+text = "口渴: 100"

@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3 uid="uid://c8m2m4x8x8x8x"]
+
+[ext_resource type="Script" path="res://modules/map/map_location.gd" id="1_abc123"]
+[node name="MapLocation" type="TextureButton"]
+custom_minimum_size = Vector2(64, 64)
+anchors_preset = -1
+anchor_right = 0.033
+anchor_bottom = 0.059
+offset_right = -0.640003
+offset_bottom = -0.520004
+script = ExtResource("1_abc123")
+location_id = ""
+
+[node name="NameLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = -1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.5
+offset_top = 5.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 14
+text = "地点名称"
+horizontal_alignment = 1
+vertical_alignment = 1

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://145ea1c5085e4475"]
+
+[ext_resource type="Texture2D" uid="uid://f86cd30317254ae9" path="res://assets/generated/items/keycard.png" id="1_item"]
+
+[node name="keycard" type="Sprite2D"]
+texture = ExtResource("1_item")

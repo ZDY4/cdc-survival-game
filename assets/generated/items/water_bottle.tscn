@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://water_bottle_20260219181805"]
+
+[ext_resource type="Texture2D" path="res://assets/generated/items/water_bottle.png" id="1_tex"]
+
+[node name="Water_bottle" type="Area2D"]
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("1_tex")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_xxx")

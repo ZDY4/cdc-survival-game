@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://hospital_20260219181829"]
+
+[ext_resource type="Texture2D" path="res://assets/generated/scenes/hospital.png" id="1_tex"]
+
+[node name="Hospital" type="StaticBody2D"]
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("1_tex")

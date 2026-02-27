@@ -1,0 +1,94 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
+[application]
+
+config/name="cdc_survival_game"
+config/description="CDC Survival Game"
+run/main_scene="res://scenes/ui/main_menu.tscn"
+config/features=PackedStringArray("4.6", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+DataManager="*res://core/data_manager.gd"
+ItemDatabase="*res://core/item_database.gd"
+EventBus="*res://core/event_bus.gd"
+NPCModule="*res://modules/npc/npc_module.gd"
+GameState="*res://core/game_state.gd"
+DialogModule="*res://modules/dialog/dialog_module.gd"
+CombatModule="*res://modules/combat/combat_module.gd"
+InventoryModule="*res://modules/inventory/inventory_module.gd"
+MapModule="*res://modules/map/map_module.gd"
+SaveSystem="*res://systems/save_system.gd"
+CraftingModule="*res://modules/crafting/crafting_module.gd"
+RecipeSystem="*res://systems/recipe_system.gd"
+BaseBuildingModule="*res://modules/base_building/base_building_module.gd"
+SkillModule="*res://modules/skills/skill_module.gd"
+WeatherModule="*res://modules/weather/weather_module.gd"
+QuestSystem="*res://systems/quest_system.gd"
+SurvivalSystem="*res://systems/survival_system.gd"
+EnemyDatabase="*res://systems/enemy_database.gd"
+CombatSystem="*res://systems/combat_system.gd"
+WeaponSystem="*res://systems/weapon_system.gd"
+CraftingSystem="*res://systems/crafting_system.gd"
+EquipmentSystem="*res://systems/equipment_system.gd"
+EffectSystem="*res://systems/effect_system.gd"
+UnifiedEquipmentSystem="*res://systems/unified_equipment_system.gd"
+AudioSystem="*res://systems/audio_system.gd"
+CarrySystem="*res://systems/carry_system.gd"
+GodotMCPBridge="*res://modules/mcp/godot_mcp_bridge.gd"
+GameStateManager="*res://core/game_state_manager.gd"
+ChoiceSystem="*res://core/choice_system.gd"
+TesterAgent="*res://core/tester_agent.gd"
+CombatPenaltySystem="*res://systems/combat_penalty_system.gd"
+AITestBridge="*res://modules/ai_test/ai_test_bridge.gd"
+TimeManager="*res://systems/time_manager.gd"
+ExperienceSystem="*res://systems/experience_system.gd"
+AttributeSystem="*res://systems/attribute_system.gd"
+ResponsiveUIManager="*res://core/responsive_ui_manager.gd"
+TouchInputHandler="*res://core/touch_input_handler.gd"
+DayNightRiskSystem="*res://systems/day_night_risk_system.gd"
+SurvivalStatusSystem="*res://systems/survival_status_system.gd"
+ScavengeSystem="*res://systems/scavenge_system.gd"
+EncounterSystem="*res://systems/encounter_system.gd"
+EncounterDatabase="*res://data/encounters/encounter_database.gd"
+ItemDurabilitySystem="*res://systems/item_durability_system.gd"
+StoryClueSystem="*res://systems/story_clue_system.gd"
+TelegramIntegration="*res://scripts/telegram_integration.gd"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/vsync/vsync_mode=0
+
+[dotnet]
+
+project/assembly_name="cdc_survival_game"
+
+[input]
+
+touch_click={
+"deadzone": 0.5,
+"events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":1,"canceled":false,"pressed":false,"double_click":false,"script":null)
+]
+}
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

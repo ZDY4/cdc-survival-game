@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://auto_heroine_20260219181100"]
+
+[ext_resource type="Texture2D" path="res://assets/generated/characters/auto_heroine.png" id="1_tex"]
+
+[node name="Auto_heroine" type="CharacterBody2D"]
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("1_tex")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]

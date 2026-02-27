@@ -1,0 +1,97 @@
+{
+  "zombie_walker": {
+    "name": "行尸",
+    "description": "缓慢移动的普通僵尸",
+    "level": 1,
+    "stats": {
+      "hp": 25,
+      "max_hp": 25,
+      "damage": 4,
+      "defense": 1,
+      "speed": 3,
+      "accuracy": 60
+    },
+    "behavior": "passive",
+    "weaknesses": ["head", "fire"],
+    "resistances": ["poison"],
+    "loot": [
+      {"item": "scrap_metal", "chance": 0.3, "min": 1, "max": 2},
+      {"item": "rotten_flesh", "chance": 0.5, "min": 1, "max": 1}
+    ],
+    "xp": 10,
+    "spawn_locations": ["street", "street_a", "street_b"],
+    "spawn_rate": 0.4
+  },
+  "zombie_runner": {
+    "name": "奔袭者",
+    "description": "移动速度快的僵尸，更难对付",
+    "level": 2,
+    "stats": {
+      "hp": 20,
+      "max_hp": 20,
+      "damage": 5,
+      "defense": 0,
+      "speed": 7,
+      "accuracy": 70
+    },
+    "behavior": "aggressive",
+    "weaknesses": ["head", "leg"],
+    "resistances": [],
+    "loot": [
+      {"item": "scrap_metal", "chance": 0.4, "min": 1, "max": 3},
+      {"item": "water_bottle", "chance": 0.2, "min": 1, "max": 1}
+    ],
+    "xp": 15,
+    "spawn_locations": ["street_a", "street_b"],
+    "spawn_rate": 0.25
+  },
+  "zombie_brute": {
+    "name": "巨力僵尸",
+    "description": "体型巨大，攻击力强的僵尸",
+    "level": 3,
+    "stats": {
+      "hp": 50,
+      "max_hp": 50,
+      "damage": 8,
+      "defense": 3,
+      "speed": 2,
+      "accuracy": 50
+    },
+    "behavior": "territorial",
+    "weaknesses": ["head", "fire"],
+    "resistances": ["physical"],
+    "special_abilities": ["stun_attack"],
+    "loot": [
+      {"item": "scrap_metal", "chance": 0.6, "min": 2, "max": 4},
+      {"item": "bandage", "chance": 0.3, "min": 1, "max": 2},
+      {"item": "food_canned", "chance": 0.2, "min": 1, "max": 1}
+    ],
+    "xp": 30,
+    "spawn_locations": ["street_b", "hospital"],
+    "spawn_rate": 0.15
+  },
+  "zombie_mutant": {
+    "name": "变异体",
+    "description": "高度变异的恐怖僵尸，有强力特殊攻击",
+    "level": 4,
+    "stats": {
+      "hp": 60,
+      "max_hp": 60,
+      "damage": 10,
+      "defense": 2,
+      "speed": 4,
+      "accuracy": 75
+    },
+    "behavior": "aggressive",
+    "weaknesses": ["fire", "explosive"],
+    "resistances": ["poison", "physical"],
+    "special_abilities": ["acid_spit", "regeneration"],
+    "loot": [
+      {"item": "mutant_organ", "chance": 0.5, "min": 1, "max": 2},
+      {"item": "rare_component", "chance": 0.2, "min": 1, "max": 1}
+    ],
+    "xp": 50,
+    "spawn_locations": ["hospital", "factory"],
+    "spawn_rate": 0.1
+  }
+}

@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://first_aid_kit_20260219181736"]
+
+[ext_resource type="Texture2D" path="res://assets/generated/items/first_aid_kit.png" id="1_tex"]
+
+[node name="First_aid_kit" type="Area2D"]
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("1_tex")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_xxx")

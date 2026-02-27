@@ -1,0 +1,92 @@
+{
+  "safehouse": {
+    "id": "safehouse",
+    "name": "安全屋",
+    "description": "一个相对安全的避难所，可以休息恢复状态",
+    "danger_level": 0,
+    "scene_path": "res://scenes/locations/safehouse.tscn",
+    "icon": "res://assets/icons/location_safehouse.png",
+    "default_unlocked": true
+  },
+  "street_a": {
+    "id": "street_a",
+    "name": "废弃街道A",
+    "description": "到处都是废弃的车辆，偶尔有游荡的感染者",
+    "danger_level": 2,
+    "scene_path": "res://scenes/locations/street_a.tscn",
+    "icon": "res://assets/icons/location_street.png",
+    "default_unlocked": true
+  },
+  "street_b": {
+    "id": "street_b",
+    "name": "废弃街道B",
+    "description": "这里看起来更加荒凉，危险程度较高",
+    "danger_level": 3,
+    "scene_path": "res://scenes/locations/street_b.tscn",
+    "icon": "res://assets/icons/location_street.png",
+    "default_unlocked": true
+  },
+  "supermarket": {
+    "id": "supermarket",
+    "name": "废弃超市",
+    "description": "可能有食物和日用品，但也有掠夺者出没",
+    "danger_level": 2,
+    "scene_path": "res://scenes/locations/supermarket.tscn",
+    "icon": "res://assets/icons/location_supermarket.png",
+    "default_unlocked": true
+  },
+  "hospital": {
+    "id": "hospital",
+    "name": "废弃医院",
+    "description": "有医疗物资，但感染者众多，非常危险",
+    "danger_level": 4,
+    "scene_path": "res://scenes/locations/hospital.tscn",
+    "icon": "res://assets/icons/location_hospital.png",
+    "default_unlocked": false
+  },
+  "factory": {
+    "id": "factory",
+    "name": "废弃工厂",
+    "description": "可以找到制作材料，适合搜刮零件",
+    "danger_level": 4,
+    "scene_path": "res://scenes/locations/factory.tscn",
+    "icon": "res://assets/icons/location_factory.png",
+    "default_unlocked": true
+  },
+  "subway": {
+    "id": "subway",
+    "name": "地铁站",
+    "description": "黑暗的地下，充满未知危险，但可能有宝贵物资",
+    "danger_level": 5,
+    "scene_path": "res://scenes/locations/subway.tscn",
+    "icon": "res://assets/icons/location_subway.png",
+    "default_unlocked": false
+  },
+  "school": {
+    "id": "school",
+    "name": "废弃学校",
+    "description": "曾经的教育场所，现在荒废，偶尔有拾荒者",
+    "danger_level": 3,
+    "scene_path": "res://scenes/locations/school.tscn",
+    "icon": "res://assets/icons/location_school.png",
+    "default_unlocked": false
+  },
+  "forest": {
+    "id": "forest",
+    "name": "城市森林",
+    "description": "相对安全的野外区域，可以找到食物和材料",
+    "danger_level": 2,
+    "scene_path": "res://scenes/locations/forest.tscn",
+    "icon": "res://assets/icons/location_forest.png",
+    "default_unlocked": false
+  },
+  "ruins": {
+    "id": "ruins",
+    "name": "废墟",
+    "description": "危险的废墟区域，据说隐藏着秘密",
+    "danger_level": 5,
+    "scene_path": "res://scenes/locations/ruins.tscn",
+    "icon": "res://assets/icons/location_ruins.png",
+    "default_unlocked": false
+  }
+}

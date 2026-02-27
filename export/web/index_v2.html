@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+    <title>CDC Survival Game</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%;
+            background: #050508;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #canvas { display: block; width: 100%; height: 100%; }
+        #status {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            text-align: center; z-index: 100;
+            padding: 20px;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+        .error-box {
+            background: rgba(255,0,0,0.2);
+            border: 1px solid #ff6b6b;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 300px;
+        }
+        .error-box h3 { color: #ff6b6b; margin-bottom: 10px; }
+        .error-box p { font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
+        .open-browser-btn {
+            display: inline-block;
+            background: #2ea6ff;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">
+        <div class="spinner"></div>
+        <div id="status-text">Loading...</div>
+    </div>
+    <canvas id="canvas"></canvas>
+    
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        const statusDiv = document.getElementById('status');
+        const statusText = document.getElementById('status-text');
+        
+        // Telegram init
+        if (window.Telegram && Telegram.WebApp) {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+        }
+        
+        // Check WebGL 2.0 support
+        function checkWebGL() {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl2');
+            if (!gl) {
+                return { supported: false, reason: 'WebGL 2.0 not supported' };
+            }
+            return { supported: true };
+        }
+        
+        // Check WebAssembly
+        function checkWasm() {
+            if (typeof WebAssembly === 'undefined') {
+                return { supported: false, reason: 'WebAssembly not supported' };
+            }
+            return { supported: true };
+        }
+        
+        // Check all requirements
+        const webgl = checkWebGL();
+        const wasm = checkWasm();
+        
+        if (!webgl.supported || !wasm.supported) {
+            const reason = !webgl.supported ? webgl.reason : wasm.reason;
+            const isTelegram = window.Telegram && Telegram.WebApp;
+            
+            let html = '<div class="error-box">';
+            html += '<h3>⚠️ Browser Not Supported</h3>';
+            html += '<p>' + reason + '</p>';
+            
+            if (isTelegram) {
+                html += '<p>Telegram WebView may not support advanced graphics features.</p>';
+                html += '<a href="' + window.location.href + '" class="open-browser-btn" target="_blank">';
+                html += 'Open in Browser →';
+                html += '</a>';
+            } else {
+                html += '<p>Please use a modern browser like Chrome, Firefox, or Safari.</p>';
+            }
+            
+            html += '</div>';
+            statusDiv.innerHTML = html;
+            throw new Error(reason);
+        }
+        
+        // Continue loading game
+        statusText.textContent = 'Loading engine...';
+    </script>
+    <script src="index.js"></script>
+    <script>
+        const GODOT_CONFIG = {
+            "args": [],
+            "canvasResizePolicy": 2,
+            "executable": "index",
+            "fileSizes": {"index.pck": 7185064, "index.wasm": 37004618},
+            "focusCanvas": true
+        };
+        
+        const canvas = document.getElementById('canvas');
+        
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        
+        if (typeof Engine === 'undefined') {
+            statusDiv.innerHTML = '<div class="error-box"><h3>Failed to load engine</h3></div>';
+        } else {
+            const engine = new Engine(GODOT_CONFIG);
+            
+            engine.onProgress = function(current, total) {
+                const pct = Math.round((current / total) * 100);
+                statusText.textContent = 'Loading... ' + pct + '%';
+            };
+            
+            engine.startGame().then(function() {
+                statusDiv.classList.add('hidden');
+                if (window.Telegram && Telegram.WebApp) {
+                    Telegram.WebApp.ready();
+                }
+            }).catch(function(err) {
+                statusDiv.innerHTML = '<div class="error-box">' + 
+                    '<h3>Failed to start</h3>' + 
+                    '<p>' + (err.message || err) + '</p>' +
+                    '</div>';
+            });
+        }
+    </script>
+</body>
+</html>

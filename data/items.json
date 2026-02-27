@@ -1,0 +1,65 @@
+{
+  "medkit": {
+	"name": "First Aid Kit",
+	"description": "Restores 50 HP",
+	"type": "consumable",
+	"effect": {"heal": 50},
+	"rarity": "common"
+  },
+  "bandage": {
+	"name": "Bandage",
+	"description": "Restores 25 HP",
+	"type": "consumable",
+	"effect": {"heal": 25},
+	"rarity": "common"
+  },
+  "painkiller": {
+	"name": "Painkiller",
+	"description": "Restores 30 HP and reduces pain",
+	"type": "consumable",
+	"effect": {"heal": 30, "mental": 10},
+	"rarity": "uncommon"
+  },
+  "crowbar": {
+	"name": "Crowbar",
+	"description": "Melee weapon, +10 Attack",
+	"type": "weapon",
+	"damage": 10,
+	"rarity": "common"
+  },
+  "knife": {
+	"name": "Survival Knife",
+	"description": "Melee weapon, +8 Attack",
+	"type": "weapon",
+	"damage": 8,
+	"rarity": "common"
+  },
+  "pistol": {
+	"name": "Pistol",
+	"description": "Ranged weapon, +20 Attack",
+	"type": "weapon",
+	"damage": 20,
+	"rarity": "uncommon"
+  },
+  "food_canned": {
+	"name": "Canned Food",
+	"description": "Restores 30 hunger",
+	"type": "consumable",
+	"effect": {"hunger": 30},
+	"rarity": "common"
+  },
+  "water_bottle": {
+	"name": "Water Bottle",
+	"description": "Restores 40 thirst",
+	"type": "consumable",
+	"effect": {"thirst": 40},
+	"rarity": "common"
+  },
+  "energy_drink": {
+	"name": "Energy Drink",
+	"description": "Restores 50 stamina",
+	"type": "consumable",
+	"effect": {"stamina": 50},
+	"rarity": "common"
+  }
+}

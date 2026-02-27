@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDC Game Test</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+        #log {
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .info { color: #2196F3; }
+        button {
+            background: #2ea6ff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>CDC 游戏诊断工具</h1>
+    <p>点击下方按钮测试游戏资源加载</p>
+    <button onclick="testResources()">测试资源加载</button>
+    <button onclick="clearLog()">清除日志</button>
+    <div id="log"></div>
+    
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        const logDiv = document.getElementById('log');
+        
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logDiv.appendChild(div);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            logDiv.innerHTML = '';
+        }
+        
+        // 检测 Telegram
+        if (window.Telegram && Telegram.WebApp) {
+            log('Telegram WebApp detected', 'success');
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+            log(`Platform: ${Telegram.WebApp.platform}`, 'info');
+            log(`Version: ${Telegram.WebApp.version}`, 'info');
+            log(`Color Scheme: ${Telegram.WebApp.colorScheme}`, 'info');
+        } else {
+            log('Running in standard browser', 'info');
+        }
+        
+        // 检测 WebGL
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (gl) {
+            log(`WebGL supported: ${gl instanceof WebGL2RenderingContext ? 'WebGL 2.0' : 'WebGL 1.0'}`, 'success');
+        } else {
+            log('WebGL NOT supported!', 'error');
+        }
+        
+        // 检测 WebAssembly
+        if (typeof WebAssembly !== 'undefined') {
+            log('WebAssembly supported', 'success');
+        } else {
+            log('WebAssembly NOT supported!', 'error');
+        }
+        
+        async function testResources() {
+            log('Testing resources...', 'info');
+            
+            const resources = [
+                { name: 'index.js', type: 'script' },
+                { name: 'index.wasm', type: 'binary' },
+                { name: 'index.pck', type: 'binary' },
+                { name: 'telegram_webapp_bridge.js', type: 'script' }
+            ];
+            
+            for (const res of resources) {
+                try {
+                    const response = await fetch(res.name, { method: 'HEAD' });
+                    if (response.ok) {
+                        const size = response.headers.get('content-length');
+                        log(`${res.name}: OK (${(size/1024/1024).toFixed(2)} MB)`, 'success');
+                    } else {
+                        log(`${res.name}: Failed (${response.status})`, 'error');
+                    }
+                } catch (e) {
+                    log(`${res.name}: Error - ${e.message}`, 'error');
+                }
+            }
+            
+            // 尝试加载 index.js
+            log('Attempting to load index.js...', 'info');
+            try {
+                const script = document.createElement('script');
+                script.src = 'index.js';
+                script.onload = () => {
+                    log('index.js loaded successfully', 'success');
+                    if (typeof Engine !== 'undefined') {
+                        log('Engine class available', 'success');
+                    } else {
+                        log('Engine class NOT available', 'error');
+                    }
+                };
+                script.onerror = () => log('Failed to load index.js', 'error');
+                document.head.appendChild(script);
+            } catch (e) {
+                log(`Error loading index.js: ${e.message}`, 'error');
+            }
+        }
+        
+        // 捕获错误
+        window.onerror = function(msg, url, line) {
+            log(`Error: ${msg} at line ${line}`, 'error');
+        };
+    </script>
+</body>
+</html>

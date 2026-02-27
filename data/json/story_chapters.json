@@ -1,0 +1,44 @@
+{
+  "outbreak_beginning": {
+    "title": "爆发之初",
+    "description": "疫情是如何开始的",
+    "required_clues": ["diary_doctor_1", "diary_nurse_1", "file_news_article"],
+    "reward": "了解疫情起源"
+  },
+  "survival_struggle": {
+    "title": "生存挣扎",
+    "description": "普通人的求生之路",
+    "required_clues": ["diary_survivor_1", "recording_mother", "map_supply_cache"],
+    "reward": "解锁更多生存技能"
+  },
+  "conspiracy": {
+    "title": "阴谋",
+    "description": "真相远比想象的可怕",
+    "required_clues": ["recording_cdc", "photo_evidence", "file_cdc_report"],
+    "reward": "了解真相"
+  },
+  "military_coverup": {
+    "title": "军事掩盖",
+    "description": "军方的秘密行动",
+    "required_clues": ["diary_soldier", "photo_quarantine", "file_military_orders"],
+    "reward": "了解军方计划"
+  },
+  "innocence_lost": {
+    "title": "失去的纯真",
+    "description": "这场灾难中最无辜的受害者",
+    "required_clues": ["diary_child", "photo_family"],
+    "reward": "情感共鸣"
+  },
+  "hope": {
+    "title": "希望",
+    "description": "即使在黑暗中，希望依然存在",
+    "required_clues": ["photo_survivors", "file_research_notes"],
+    "reward": "解锁真结局条件"
+  },
+  "escape_plan": {
+    "title": "逃离计划",
+    "description": "找到离开这座城市的方法",
+    "required_clues": ["map_underground"],
+    "reward": "解锁森林区域"
+  }
+}

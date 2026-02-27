@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://mcpbridge001"]
+
+[ext_resource type="Script" path="res://modules/mcp/godot_mcp_bridge.gd" id="1_mcp"]
+
+[node name="GodotMCPBridge" type="Node"]
+script = ExtResource("1_mcp")

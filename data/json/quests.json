@@ -1,0 +1,83 @@
+{
+  "tutorial_survive": {
+    "title": "第一课：生存",
+    "description": "在安全屋休息一晚，恢复你的状态",
+    "objectives": [
+      {"type": "sleep", "target": 1, "current": 0, "description": "在安全屋睡觉"}
+    ],
+    "rewards": {
+      "items": [{"id": "food_canned", "count": 2}],
+      "experience": 50
+    },
+    "prerequisites": [],
+    "time_limit": -1
+  },
+  "first_explore": {
+    "title": "初次探索",
+    "description": "前往废弃街道探索，至少搜索一次",
+    "objectives": [
+      {"type": "travel", "target": "street_a", "current": false, "description": "前往废弃街道"},
+      {"type": "search", "target": 1, "current": 0, "description": "搜索废弃街道"}
+    ],
+    "rewards": {
+      "items": [{"id": "water_bottle", "count": 1}],
+      "experience": 100
+    },
+    "prerequisites": ["tutorial_survive"]
+  },
+  "zombie_hunter": {
+    "title": "僵尸猎人",
+    "description": "在街道上击败3只僵尸",
+    "objectives": [
+      {"type": "kill", "target": 3, "current": 0, "enemy_type": "zombie", "description": "击败僵尸"}
+    ],
+    "rewards": {
+      "items": [{"id": "bandage", "count": 3}],
+      "experience": 200,
+      "unlock_location": "hospital"
+    },
+    "prerequisites": ["first_explore"]
+  },
+  "find_medicine": {
+    "title": "寻找药品",
+    "description": "前往废弃医院，搜索医疗物资",
+    "objectives": [
+      {"type": "travel", "target": "hospital", "current": false, "description": "前往医院"},
+      {"type": "search", "target": 2, "current": 0, "description": "搜索医院"},
+      {"type": "collect", "target": 1, "current": 0, "item_id": "first_aid_kit", "description": "获得急救包"}
+    ],
+    "rewards": {
+      "items": [{"id": "first_aid_kit", "count": 2}],
+      "experience": 300,
+      "skill_points": 1
+    },
+    "prerequisites": ["zombie_hunter"]
+  },
+  "survival_day": {
+    "title": "生存挑战",
+    "description": "存活5天",
+    "objectives": [
+      {"type": "survive", "target": 5, "current": 0, "description": "存活天数"}
+    ],
+    "rewards": {
+      "items": [{"id": "key", "count": 1}],
+      "experience": 500,
+      "title": "生存专家"
+    },
+    "prerequisites": ["tutorial_survive"]
+  },
+  "find_food": {
+    "title": "食物短缺",
+    "description": "前往超市寻找10罐食物",
+    "objectives": [
+      {"type": "travel", "target": "supermarket", "current": false, "description": "前往超市"},
+      {"type": "collect", "target": 10, "current": 0, "item_id": "food_canned", "description": "收集罐头"}
+    ],
+    "rewards": {
+      "items": [{"id": "water_bottle", "count": 5}],
+      "experience": 300,
+      "skill_points": 2
+    },
+    "prerequisites": ["first_explore"]
+  }
+}
