@@ -66,14 +66,14 @@ var current_file_path: String = ""
 var _validation_errors: Dictionary = {}
 
 # 工具
-var _undo_redo_helper: EditorUndoRedoHelper
+var _undo_redo_helper: RefCounted
 
 # 编辑器插件引用
 var editor_plugin: EditorPlugin = null:
 	set(plugin):
 		editor_plugin = plugin
 		if plugin:
-			_undo_redo_helper = EditorUndoRedoHelper.new(plugin)
+			_undo_redo_helper = load("res://addons/cdc_game_editor/utils/undo_redo_helper.gd").new(plugin)
 
 func _ready():
 	_setup_ui()

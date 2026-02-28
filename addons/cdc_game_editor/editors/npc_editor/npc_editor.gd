@@ -25,11 +25,11 @@ var current_file_path: String = ""
 var editor_plugin: EditorPlugin = null
 
 # UI引用
-@onready var npc_list: ItemList
-@onready var property_panel: Control
-@onready var toolbar: HBoxContainer
-@onready var file_dialog: FileDialog
-@onready var status_bar: Label
+var npc_list: ItemList
+var property_panel: Control
+var toolbar: HBoxContainer
+var file_dialog: FileDialog
+var status_bar: Label
 
 func _ready():
 	_setup_ui()
@@ -177,6 +177,13 @@ func _update_npc_list(filter: String = ""):
 	if stats_label:
 		stats_label.text = "总计: %d个NPC" % npcs.size()
 
+func get_data() -> Dictionary:
+	# 转换
+	var data = {}
+	for npc_id in npcs:
+		data[npc_id] = npcs[npc_id].serialize()
+	return data
+
 func _on_search_changed(text: String):
 	_update_npc_list(text)
 
@@ -229,18 +236,18 @@ func _update_property_panel(npc: NPCData):
 	
 	property_panel.add_separator()
 	
-	// 类型
+	## 类型
 	var type_dict = {}
 	for key in NPC_TYPES:
 		type_dict[str(key)] = NPC_TYPES[key]
 	property_panel.add_enum_property("npc_type", "NPC类型:", type_dict, str(npc.npc_type))
 	
-	// 等级
+	# 等级
 	property_panel.add_number_property("level", "等级:", npc.level, 1, 100, 1, false)
 	
 	property_panel.add_separator()
 	
-	// 属性
+	# 属性
 	property_panel.add_section_label("📊 属性")
 	property_panel.add_number_property("attr_strength", "力量:", npc.attributes.get("strength", 10), 1, 20, 1, false)
 	property_panel.add_number_property("attr_perception", "感知:", npc.attributes.get("perception", 10), 1, 20, 1, false)
@@ -252,16 +259,16 @@ func _update_property_panel(npc: NPCData):
 	
 	property_panel.add_separator()
 	
-	// 情绪
+	# 情绪
 	property_panel.add_section_label("😊 初始情绪")
-	property_panel.add_number_property("mood_friendliness", "友好度:", npc.mood.friendliness, 0, 100, 5, false)
-	property_panel.add_number_property("mood_trust", "信任度:", npc.mood.trust, 0, 100, 5, false)
-	property_panel.add_number_property("mood_fear", "恐惧度:", npc.mood.fear, 0, 100, 5, false)
-	property_panel.add_number_property("mood_anger", "愤怒度:", npc.mood.anger, 0, 100, 5, false)
+	property_panel.add_number_property("mood_friendliness", "友好度:", npc.mood.get("friendliness", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_trust", "信任度:", npc.mood.get("trust", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_fear", "恐惧度:", npc.mood.get("fear", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_anger", "愤怒度:", npc.mood.get("anger", 0), 0, 100, 5, false)
 	
 	property_panel.add_separator()
 	
-	// 能力
+	# 能力
 	property_panel.add_section_label("⚡ 能力")
 	# 使用自定义控件显示布尔值
 	property_panel.add_custom_control(_create_bool_checkbox("can_trade", "可以交易", npc.can_trade))
@@ -271,16 +278,18 @@ func _update_property_panel(npc: NPCData):
 	
 	property_panel.add_separator()
 	
-	// 位置
+	# 位置
 	property_panel.add_string_property("default_location", "默认位置:", npc.default_location, false, "如：safehouse")
 	
 	property_panel.add_separator()
 	
-	// 外观
+	# 外观
 	property_panel.add_section_label("🎨 外观")
 	property_panel.add_string_property("portrait_path", "默认立绘:", npc.portrait_path, false, "res://assets/portraits/...")
 	
-	// 表情立绘
+	property_panel.add_separator()
+	
+	# 表情立绘
 	property_panel.add_section_label("😊 表情立绘（可选）")
 	property_panel.add_string_property("expr_normal", "正常:", npc.expression_paths.get("normal", ""), false, "res://assets/portraits/...")
 	property_panel.add_string_property("expr_happy", "开心:", npc.expression_paths.get("happy", ""), false, "res://assets/portraits/...")
@@ -339,19 +348,19 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 		"portrait_path":
 			npc.portrait_path = new_value
 		
-		// 表情立绘
+		# 表情立绘
 		"expr_normal":
-			npc.set_expression_path("normal", new_value)
+			npc.expression_paths["normal"] = new_value
 		"expr_happy":
-			npc.set_expression_path("happy", new_value)
+			npc.expression_paths["happy"] = new_value
 		"expr_angry":
-			npc.set_expression_path("angry", new_value)
+			npc.expression_paths["angry"] = new_value
 		"expr_sad":
-			npc.set_expression_path("sad", new_value)
+			npc.expression_paths["sad"] = new_value
 		"expr_fear":
-			npc.set_expression_path("fear", new_value)
+			npc.expression_paths["fear"] = new_value
 		"expr_surprised":
-			npc.set_expression_path("surprised", new_value)
+			npc.expression_paths["surprised"] = new_value
 		
 		# 属性
 		"attr_strength":
@@ -369,15 +378,15 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 		"attr_luck":
 			npc.attributes.luck = int(new_value)
 		
-		// 情绪
+		# 情绪
 		"mood_friendliness":
-			npc.mood.friendliness = int(new_value)
+			npc.mood["friendliness"] = int(new_value)
 		"mood_trust":
-			npc.mood.trust = int(new_value)
+			npc.mood["trust"] = int(new_value)
 		"mood_fear":
-			npc.mood.fear = int(new_value)
+			npc.mood["fear"] = int(new_value)
 		"mood_anger":
-			npc.mood.anger = int(new_value)
+			npc.mood["anger"] = int(new_value)
 
 func _on_bool_property_changed(property_name: String, value: bool):
 	if current_npc_id.is_empty():

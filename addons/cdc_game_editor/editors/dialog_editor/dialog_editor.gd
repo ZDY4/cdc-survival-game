@@ -40,18 +40,18 @@ var connections: Array[Dictionary] = []
 var selected_node_id: String = ""
 
 # 工具
-var _undo_redo_helper: EditorUndoRedoHelper
-var _clipboard: EditorClipboard
+var _undo_redo_helper: RefCounted
+var _clipboard: RefCounted
 
 # 编辑器插件引用（用于获取undo_redo）
 var editor_plugin: EditorPlugin = null:
 	set(plugin):
 		editor_plugin = plugin
 		if plugin:
-			_undo_redo_helper = EditorUndoRedoHelper.new(plugin)
+			_undo_redo_helper = load("res://addons/cdc_game_editor/utils/undo_redo_helper.gd").new(plugin)
 
 func _ready():
-	_clipboard = EditorClipboard.get_instance()
+	_clipboard = load("res://addons/cdc_game_editor/utils/editor_clipboard.gd").get_instance()
 	_setup_ui()
 	_setup_file_dialog()
 	_setup_shortcuts()

@@ -1,6 +1,5 @@
 @tool
 extends RefCounted
-class_name EditorUndoRedoHelper
 ## 编辑器撤销/重做辅助类
 ## 简化撤销重做操作的创建和管理
 
@@ -12,7 +11,7 @@ func _init(plugin: EditorPlugin):
 	_undo_redo = plugin.get_undo_redo()
 
 ## 开始创建撤销/重做动作
-func create_action(action_name: String, merge_mode: int = UndoRedo.MERGE_DISABLE) -> UndoRedo:
+func create_action(action_name: String, merge_mode: int = 0) -> Object:
 	_undo_redo.create_action(action_name, merge_mode)
 	return _undo_redo
 
