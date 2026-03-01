@@ -28,7 +28,7 @@ func find_path(start_pos: Vector3, end_pos: Vector3, is_walkable: Callable) -> A
             if not is_walkable.call(neighbor):
                 continue
                 
-            var tentative_g := g_score[current] + 1.0
+            var tentative_g: float = g_score[current] + 1.0
             
             if not g_score.has(neighbor) or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current

@@ -49,12 +49,12 @@ func _handle_zoom_input(event: InputEvent) -> void:
         else:
             _target_zoom = min(_target_zoom + zoom_speed, max_zoom)
 
-func _update_zoom(delta: float) -> void:
+func _update_zoom(_delta: float) -> void:
     _current_zoom = lerp(_current_zoom, _target_zoom, zoom_smoothing)
     if _camera:
         _camera.size = _current_zoom
 
-func _update_follow(delta: float) -> void:
+func _update_follow(_delta: float) -> void:
     if not target:
         return
     

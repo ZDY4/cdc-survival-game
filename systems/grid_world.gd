@@ -3,7 +3,6 @@ extends Node
 
 const GRID_SIZE := 1.0
 
-var _walkable_grids: Dictionary = {}
 var _obstacles: Array[Vector3i] = []
 
 func register_obstacle(world_pos: Vector3) -> void:
