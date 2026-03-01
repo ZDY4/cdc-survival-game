@@ -97,7 +97,7 @@
     "id": "bandit_leader",
     "name": "铁爪",
     "title": "掠夺者头目",
-    "description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的"合作伙伴"还算公平。",
+    "description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的合作伙伴还算公平。",
     "npc_type": 1,
     "portrait_path": "res://assets/portraits/bandit.png",
     "level": 8,
