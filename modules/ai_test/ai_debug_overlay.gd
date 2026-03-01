@@ -45,7 +45,7 @@ func _refresh_state():
 		_status_label.text = "AI Test Bridge: Not Available"
 		return
 	
-	_status_label.text = "AI Test Bridge: " + AITestBridge.is_running() ? ("Running" : "Stopped")
+	_status_label.text = "AI Test Bridge: " + ("Running" if AITestBridge.is_running() else "Stopped")
 	_status_label.text += " | Port: " + str(AITestBridge.get_port())
 	
 	# Collect && display game state
@@ -69,9 +69,9 @@ func _collect_game_state(item: Dictionary = {}):
 			"max_slots": GameState.inventory_max_slots
 		},
 		"world": {
-			"time": WeatherModule ? WeatherModule.get_time_string() : "N/A",
-			"day": WeatherModule ? WeatherModule.get_current_day() : 1,
-			"danger_level": WeatherModule ? WeatherModule.get_danger_level() : 0
+		"time": WeatherModule.get_time_string() if WeatherModule else "N/A",
+		"day": WeatherModule.get_current_day() if WeatherModule else 1,
+		"danger_level": WeatherModule.get_danger_level() if WeatherModule else 0
 		}
 	}
 	return state

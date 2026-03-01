@@ -94,7 +94,7 @@ func _refresh_item_list(type: String = ""):
 		var item_id = item.get("id", "")
 		var count = item.get("count", 1)
 		var item_name = _get_item_name(item_id)
-		var weight = CarrySystem ? CarrySystem.get_item_weight(item_id) : 0.1
+		var weight = CarrySystem.get_item_weight(item_id) if CarrySystem else 0.1
 		
 		var display_text = "%s x%d (%.1fkg)" % [item_name, count, weight * count]
 		item_list.add_item(display_text)

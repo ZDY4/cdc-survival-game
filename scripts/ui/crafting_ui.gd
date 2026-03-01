@@ -78,7 +78,7 @@ func _update_recipe_list():
 	
 	for recipe in recipes:
 		var button = Button.new()
-		var status = recipe.can_craft ? "✓" : "✗"
+		var status = "✓" if recipe.can_craft else "✗"
 		button.text = "%s %s" % [status, recipe.name]
 		button.disabled = not recipe.can_craft
 		button.pressed.connect(_on_recipe_selected.bind(recipe.id))
@@ -131,7 +131,7 @@ func _update_recipe_details(recipe_id: String):
 				break
 		
 		var mat_label = Label.new()
-		var status = has_count >= material.count ? "✓" : "✗"
+		var status = "✓" if has_count >= material.count else "✗"
 		mat_label.text = "  %s %s: %d/%d" % [status, material.item, has_count, material.count]
 		recipe_details.add_child(mat_label)
 	
