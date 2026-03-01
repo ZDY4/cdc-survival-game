@@ -72,12 +72,22 @@ func _input(event: InputEvent) -> void:
         if event.pressed:
             _handle_touch_click(event.position)
 
-func _process(_delta: float) -> void:
-    _update_path_preview()
+func _process(delta: float) -> void:
+    _update_path_preview(delta)
 
-func _update_path_preview() -> void:
+var _last_preview_grid: Vector3i = Vector3i.ZERO
+var _preview_update_timer: float = 0.0
+const PREVIEW_UPDATE_INTERVAL: float = 0.1
+
+func _update_path_preview(delta: float) -> void:
     if not _player or not _path_preview:
         return
+    
+    # Throttle updates
+    _preview_update_timer += delta
+    if _preview_update_timer < PREVIEW_UPDATE_INTERVAL:
+        return
+    _preview_update_timer = 0.0
     
     var mouse_pos := get_viewport().get_mouse_position()
     var camera := get_viewport().get_camera_3d()
@@ -98,6 +108,13 @@ func _update_path_preview() -> void:
     
     if result:
         var world_pos: Vector3 = result.position
+        var current_grid := GridMovementSystem.world_to_grid(world_pos)
+        
+        # Only update if grid position changed
+        if current_grid == _last_preview_grid:
+            return
+        _last_preview_grid = current_grid
+        
         _last_hover_pos = world_pos
         
         var path := _navigator.find_path(
@@ -112,6 +129,7 @@ func _update_path_preview() -> void:
             _path_preview.hide_path()
     else:
         _path_preview.hide_path()
+        _last_preview_grid = Vector3i.ZERO
 
 func _handle_ground_click() -> void:
     var mouse_pos := get_viewport().get_mouse_position()

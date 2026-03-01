@@ -61,12 +61,16 @@ func _execute_next_step(target_node: Node3D) -> void:
     
     var target_pos := _current_path[_current_step]
     
+    # Kill old tween if exists
+    if _tween and _tween.is_valid():
+        _tween.kill()
+    
     _tween = create_tween()
     _tween.set_trans(Tween.TRANS_QUAD)
     _tween.set_ease(Tween.EASE_IN_OUT)
     
     _tween.tween_property(target_node, "position", target_pos, step_duration)
-    _tween.finished.connect(_on_step_completed.bind(target_node))
+    _tween.finished.connect(_on_step_completed.bind(target_node), CONNECT_ONE_SHOT)
 
 func _on_step_completed(target_node: Node3D) -> void:
     step_completed.emit(_current_path[_current_step], _current_step, _current_path.size())
