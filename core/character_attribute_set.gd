@@ -36,7 +36,7 @@ var disease_resistance: float = 0.0 # 疾病抗性
 # ===== 属性标签（用于特殊效果）=====
 var active_effects: Array[Dictionary] = []
 
-func _init():
+func _init(initial_values: Dictionary = {}):
 	# 使用传入的初始值设置属性
 	for key in initial_values.keys():
 		if key in self:
@@ -44,8 +44,7 @@ func _init():
 
 # ===== HP 管理 =====
 
-func damage():
-	
+func damage(amount: float) -> float:
 	var old_hp = hp
 	
 	# 计算防御减免
@@ -59,14 +58,12 @@ func damage():
 	
 	return actual_damage
 
-func heal():
-	
+func heal(amount: float) -> void:
 	var old_hp = hp
 	hp = minf(max_hp, hp + amount)
 	attribute_changed.emit("hp", hp, old_hp)
 
-func set_max_hp():
-	
+func set_max_hp(new_max: float) -> void:
 	var old_max = max_hp
 	max_hp = new_max
 	hp = minf(hp, max_hp)  # 确保当前HP不超过新最大值
@@ -75,13 +72,12 @@ func set_max_hp():
 func is_alive():
 	return hp > 0.0
 
-func get_hp_percent():
-	return hp / max_hp > 0 ? max_hp : 0.0
+func get_hp_percent() -> float:
+	return (hp / max_hp) if max_hp > 0 else 0.0
 
 # ===== 饥饿管理 =====
 
-func consume_hunger():
-	
+func consume_hunger(amount: float) -> void:
 	var old_hunger = hunger
 	hunger = maxf(0.0, hunger - amount)
 	attribute_changed.emit("hunger", hunger, old_hunger)
@@ -89,22 +85,20 @@ func consume_hunger():
 	if hunger <= 0.0:
 		attribute_depleted.emit("hunger")
 
-func restore_hunger():
-	
+func restore_hunger(amount: float) -> void:
 	var old_hunger = hunger
 	hunger = minf(max_hunger, hunger + amount)
 	attribute_changed.emit("hunger", hunger, old_hunger)
 
-func is_starving():
+func is_starving() -> bool:
 	return hunger <= 0.0
 
-func get_hunger_percent():
-	return hunger / max_hunger > 0 ? max_hunger : 0.0
+func get_hunger_percent() -> float:
+	return (hunger / max_hunger) if max_hunger > 0 else 0.0
 
 # ===== 口渴管理 =====
 
-func consume_thirst():
-	
+func consume_thirst(amount: float) -> void:
 	var old_thirst = thirst
 	thirst = maxf(0.0, thirst - amount)
 	attribute_changed.emit("thirst", thirst, old_thirst)
@@ -112,22 +106,20 @@ func consume_thirst():
 	if thirst <= 0.0:
 		attribute_depleted.emit("thirst")
 
-func restore_thirst():
-	
+func restore_thirst(amount: float) -> void:
 	var old_thirst = thirst
 	thirst = minf(max_thirst, thirst + amount)
 	attribute_changed.emit("thirst", thirst, old_thirst)
 
-func is_dehydrated():
+func is_dehydrated() -> bool:
 	return thirst <= 0.0
 
-func get_thirst_percent():
-	return thirst / max_thirst > 0 ? max_thirst : 0.0
+func get_thirst_percent() -> float:
+	return (thirst / max_thirst) if max_thirst > 0 else 0.0
 
 # ===== 体力管理 =====
 
-func consume_stamina():
-	
+func consume_stamina(amount: float) -> bool:
 	if stamina < amount:
 		return false
 	
@@ -140,22 +132,20 @@ func consume_stamina():
 	
 	return true
 
-func restore_stamina():
-	
+func restore_stamina(amount: float) -> void:
 	var old_stamina = stamina
 	stamina = minf(max_stamina, stamina + amount)
 	attribute_changed.emit("stamina", stamina, old_stamina)
 
-func has_enough_stamina():
+func has_enough_stamina(amount: float) -> bool:
 	return stamina >= amount
 
-func get_stamina_percent():
-	return stamina / max_stamina > 0 ? max_stamina : 0.0
+func get_stamina_percent() -> float:
+	return (stamina / max_stamina) if max_stamina > 0 else 0.0
 
 # ===== 精神管理 =====
 
-func damage_mental():
-	
+func damage_mental(amount: float) -> void:
 	var old_mental = mental
 	mental = maxf(0.0, mental - amount)
 	attribute_changed.emit("mental", mental, old_mental)
@@ -163,35 +153,31 @@ func damage_mental():
 	if mental <= 0.0:
 		attribute_depleted.emit("mental")
 
-func restore_mental():
-	
+func restore_mental(amount: float) -> void:
 	var old_mental = mental
 	mental = minf(max_mental, mental + amount)
 	attribute_changed.emit("mental", mental, old_mental)
 
-func is_insane():
+func is_insane() -> bool:
 	return mental <= 0.0
 
-func get_mental_percent():
-	return mental / max_mental > 0 ? max_mental : 0.0
+func get_mental_percent() -> float:
+	return (mental / max_mental) if max_mental > 0 else 0.0
 
 # ===== 属性效果 =====
 
-func add_effect():
-	
+func add_effect(effect: Dictionary) -> void:
 	active_effects.append(effect)
 	_apply_effect(effect)
 
-func remove_effect():
-	
+func remove_effect(effect_id: String) -> void:
 	for i in range(active_effects.size()):
 		if active_effects[i].get("id") == effect_id:
 			_remove_effect(active_effects[i])
 			active_effects.remove_at(i)
 			break
 
-func _apply_effect():
-	
+func _apply_effect(effect: Dictionary) -> void:
 	match effect.get("type"):
 		"max_hp_boost":
 			set_max_hp(max_hp + effect.get("amount", 0))
@@ -203,8 +189,7 @@ func _apply_effect():
 			# 由外部定时调用
 			pass
 
-func _remove_effect():
-	
+func _remove_effect(effect: Dictionary) -> void:
 	match effect.get("type"):
 		"max_hp_boost":
 			set_max_hp(max_hp - effect.get("amount", 0))
@@ -213,8 +198,7 @@ func _remove_effect():
 		"speed_boost":
 			speed -= effect.get("amount", 0)
 
-func update_effects():
-	
+func update_effects(delta: float) -> void:
 	for effect in active_effects:
 		if effect.get("type") == "regeneration":
 			heal(effect.get("amount_per_second", 0) * delta)
@@ -223,8 +207,7 @@ func update_effects():
 
 # ===== 批量恢复 =====
 
-func rest():
-	
+func rest(full: bool = false) -> void:
 	if full:
 		heal(max_hp)
 		restore_hunger(max_hunger * 0.2)
@@ -235,8 +218,7 @@ func rest():
 		heal(max_hp * 0.3)
 		restore_stamina(max_stamina * 0.5)
 
-func full_restore():
-	
+func full_restore() -> void:
 	heal(max_hp)
 	restore_hunger(max_hunger)
 	restore_thirst(max_thirst)
@@ -245,8 +227,7 @@ func full_restore():
 
 # ===== 获取状态摘要 =====
 
-func get_status_summary():
-	
+func get_status_summary() -> Dictionary:
 	return {
 		"hp": {"current": hp, "max": max_hp, "percent": get_hp_percent()},
 		"hunger": {"current": hunger, "max": max_hunger, "percent": get_hunger_percent()},
@@ -256,13 +237,12 @@ func get_status_summary():
 		"is_alive": is_alive(),
 		"is_starving": is_starving(),
 		"is_dehydrated": is_dehydrated(),
-		"has_critical_status": hp < max_hp * 0.2 || hunger < 10 || thirst < 10
+		"has_critical_status": hp < max_hp * 0.2 or hunger < 10 or thirst < 10
 	}
 
 # ===== 序列化 =====
 
-func serialize():
-	
+func serialize() -> Dictionary:
 	return {
 		"hp": hp,
 		"max_hp": max_hp,
@@ -283,8 +263,7 @@ func serialize():
 		"active_effects": active_effects
 	}
 
-func deserialize():
-	
+func deserialize(data: Dictionary) -> void:
 	hp = data.get("hp", 100.0)
 	max_hp = data.get("max_hp", 100.0)
 	hunger = data.get("hunger", 100.0)

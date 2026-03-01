@@ -5,9 +5,9 @@ extends Node2D
 func _ready():
 	print("[Main] Title screen loaded. Press ANY KEY to start.")
 
-func _input():
+func _input(event: InputEvent) -> void:
 	# 检测任意键盘按键按下
-	if event is InputEventKey && event.pressed && not event.echo:
+	if event is InputEventKey and event.pressed and not event.echo:
 		_start_game()
 		# 标记输入为已处理，防止传播
 		if get_viewport():
