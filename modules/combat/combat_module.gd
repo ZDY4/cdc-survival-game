@@ -35,7 +35,7 @@ var limb_system: Node = null
 var current_combo: int = 0
 var last_target_limb: int = -1
 var action_queue: Array = []
-var is_processing: bool = false
+var _is_processing: bool = false
 
 # 武器部位偏好 (使用整数对应 LimbType: TORSO=1, LEGS=4, HEAD=0)
 var weapon_limb_preference: Dictionary = {
@@ -433,7 +433,7 @@ func _on_combat_started(_enemy_data: Dictionary) -> void:
 	current_combo = 0
 	last_target_limb = -1
 	action_queue.clear()
-	is_processing = false
+	_is_processing = false
 
 func _on_combat_ended(_victory: bool) -> void:
 	current_combo = 0

@@ -94,7 +94,8 @@ func gain_quest_xp(quest_difficulty: String = "normal") -> Dictionary:
 func get_xp_to_next_level() -> int:
 	return int(BASE_XP_REQUIREMENT * pow(current_level, 1.2))
 
-## 获取当前等级进度百分"func get_level_progress_percent() -> float:
+## 获取当前等级进度百分比
+func get_level_progress_percent() -> float:
 	var xp_needed = get_xp_to_next_level()
 	if xp_needed <= 0:
 		return 1.0

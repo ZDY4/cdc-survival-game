@@ -43,8 +43,8 @@ func _on_continue_pressed():
 		if SaveSystem.load_game():
 			print("[MainMenu] 存档加载成功")
 			# 根据存档中的位置进入相应场景
-			var position = GameState.player_position
-			var scene_path = _get_scene_path(position)
+			var player_pos = GameState.player_position
+			var scene_path = _get_scene_path(player_pos)
 			get_tree().change_scene_to_file(scene_path)
 		else:
 			print("[MainMenu] 存档加载失败")

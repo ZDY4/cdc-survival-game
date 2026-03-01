@@ -289,6 +289,6 @@ func debug_print_inventory():
 	for item in items:
 		var item_id = item.get("id", "")
 		var count = item.get("count", 1)
-		var name = ItemDatabase.get_item_name(item_id)
+		var item_name = ItemDatabase.get_item_name(item_id)
 		var weight = ItemDatabase.get_item_weight(item_id) * count
-		print("  %s x%d (%.1f kg)" % [name, count, weight])
+		print("  %s x%d (%.1f kg)" % [item_name, count, weight])

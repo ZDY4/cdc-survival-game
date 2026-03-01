@@ -407,7 +407,7 @@ static func spawn_enemy_for_location(location: String, player_level: int = 1):
 				})
 	
 	if possible_enemies.size() == 0:
-		return EnemyDatabase.get_enemy("zombie_walker")
+		return get_enemy("zombie_walker")
 	
 	# 加权随机选择
 	var total_weight = 0.0
