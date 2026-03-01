@@ -33,8 +33,8 @@ func _on_start_pressed():
 	# 重置游戏状态
 	_reset_game_state()
 	
-	# 进入安全屋场景
-	get_tree().change_scene_to_file("res://scenes/locations/safehouse.tscn")
+	# 进入3D游戏世界
+	get_tree().change_scene_to_file("res://scenes/locations/game_world_3d.tscn")
 
 func _on_continue_pressed():
 	print("[MainMenu] 继续游戏")
