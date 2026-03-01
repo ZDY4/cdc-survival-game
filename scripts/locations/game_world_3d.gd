@@ -24,6 +24,12 @@ func _setup_world() -> void:
     
     _grid_floor = $GridFloor
     _setup_grid_floor_collision()
+    
+    # Add grid visualizer
+    if show_grid_debug:
+        var visualizer := GridVisualizer.new()
+        add_child(visualizer)
+        visualizer.show_grid()
 
 func _setup_grid_floor_collision() -> void:
     var collision_shape := CollisionShape3D.new()
