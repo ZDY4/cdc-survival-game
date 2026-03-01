@@ -47,7 +47,14 @@ enum EventType {
 	# NPC事件
 	NPC_RECRUITED,
 	NPC_DIED,
-	NPC_TRADE_COMPLETED
+	NPC_TRADE_COMPLETED,
+	
+	# 网格移动事件
+	PLAYER_MOVED,
+	GRID_CLICKED,
+	MOVEMENT_STARTED,
+	MOVEMENT_FINISHED,
+	PATH_PREVIEW_UPDATED
 }
 
 var _event_listeners: Dictionary = {}
