@@ -10,7 +10,17 @@ var player_thirst: int = 100
 var player_stamina: int = 100
 var player_mental: int = 100
 var player_position: String = "safehouse"
+var player_position_3d: Vector3 = Vector3.ZERO
+var player_grid_position: Vector3i = Vector3i.ZERO
+var is_player_moving: bool = false
 var player_defense: int = 0  # 装备提供的防御力
+
+func save_3d_position(pos: Vector3, grid_pos: Vector3i) -> void:
+    player_position_3d = pos
+    player_grid_position = grid_pos
+
+func get_saved_3d_position() -> Vector3:
+    return player_position_3d
 
 # ===== 货币系统 =====
 var player_money: int = 0
