@@ -40,7 +40,7 @@ func _update_display(level: int = 1):
 	_update_current_weapon()
 	_update_ammo_display()
 
-func _update_current_weapon(weapon: Dictionary = {}):
+func _update_current_weapon(_weapon: Dictionary = {}):
 	var weapon = WeaponSystem.get_equipped_weapon()
 	current_weapon_label.text = "当前武器: %s" % weapon.name
 	

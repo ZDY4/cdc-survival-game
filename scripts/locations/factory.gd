@@ -41,7 +41,7 @@ func _setup_interactables():
 		search_locker_room.interaction_name = "搜索更衣室"
 		search_locker_room.interacted.connect(_on_search_locker_room)
 
-func _random_encounter(enemy: Dictionary = {}):
+func _random_encounter(_enemy: Dictionary = {}):
 	var roll = randf()
 	
 	if roll < 0.5:
@@ -53,19 +53,19 @@ func _random_encounter(enemy: Dictionary = {}):
 		]
 		
 		var enemy_id = enemy_types[randi() % enemy_types.size()]
-		var enemy = EnemyDatabase.get_enemy(enemy_id)
+		var enemy_data = EnemyDatabase.get_enemy(enemy_id)
 		
 		DialogModule.show_dialog(
-			"%s从阴影中冲了出来！" % enemy.name,
+			"%s从阴影中冲了出来！" % enemy_data.name,
 			"遭遇",
 			""
 		)
 		
 		await get_tree().create_timer(2.0).timeout
-		CombatModule.start_combat(enemy)
-		CombatModule.combat_ended.connect(_on_combat_ended)
+		CombatModule.start_combat(enemy_data)
+		CombatModule.combat_ended.connect(_on_combat_ended.bind(true))
 
-func _on_combat_ended():
+func _on_combat_ended(victory: bool = true):
 	CombatModule.combat_ended.disconnect(_on_combat_ended)
 	
 	if victory:

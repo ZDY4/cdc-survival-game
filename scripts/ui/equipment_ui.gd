@@ -98,7 +98,7 @@ func _update_inventory(level: int = 1):
 		
 		# 装备名称
 		var name_label = Label.new()
-		var equipped_marker = "[装备] item.is_equipped ? " : ""
+		var equipped_marker = "[装备] " if item.is_equipped else ""
 		var durability_text = ""
 		if item.max_durability > 0:
 			durability_text = " (%d%%)" % int(float(item.durability) / item.max_durability * 100)

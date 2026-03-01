@@ -50,9 +50,9 @@ func _random_encounter(enemy: Dictionary = {}):
 		})
 		
 		# 等待战斗结束
-		CombatModule.combat_ended.connect(_on_combat_ended)
+		CombatModule.combat_ended.connect(_on_combat_ended.bind(true))
 
-func _on_combat_ended():
+func _on_combat_ended(victory: bool = true):
 	CombatModule.combat_ended.disconnect(_on_combat_ended)
 	
 	if victory:

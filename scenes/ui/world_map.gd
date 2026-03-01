@@ -23,7 +23,7 @@ var _current_location_button: MapLocation = null
 func _ready():
 	_setup_ui()
 	_refresh_locations()
-	_info_panel.hide()
+	info_panel.hide()
 
 func _setup_ui():
 	# 连接按钮信号
@@ -53,7 +53,7 @@ func _on_location_selected(location_id: String, button: MapLocation):
 	var cost = MapModule._calculate_travel_cost(current, location_id)
 	
 	_update_info_panel(button.get_location_name(), cost)
-	_info_panel.show()
+		info_panel.show()
 
 func _show_locked_info(location_id: String):
 	preview_title.text = "未解锁"
@@ -61,7 +61,7 @@ func _show_locked_info(location_id: String):
 	food_label.text = "完成任务或探索以解锁"
 	risk_label.text = ""
 	travel_button.disabled = true
-	_info_panel.show()
+	info_panel.show()
 
 func _update_info_panel(dest_name: String, cost: Dictionary):
 	preview_title.text = "前往: %s" % dest_name
@@ -125,7 +125,7 @@ func _on_close_pressed():
 func show_map():
 	show()
 	_refresh_locations()
-	_info_panel.hide()
+	info_panel.hide()
 	
 	# 高亮当前位置
 	_highlight_current_location()

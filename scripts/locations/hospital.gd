@@ -41,7 +41,7 @@ func _setup_interactables():
 		search_pharmacy.interaction_description = "寻找药品"
 		search_pharmacy.interacted.connect(_on_search_pharmacy)
 
-func _random_encounter(enemy: Dictionary = {}):
+func _random_encounter(_enemy: Dictionary = {}):
 	
 	var roll = randf()
 	
@@ -52,10 +52,10 @@ func _random_encounter(enemy: Dictionary = {}):
 			{"name": "僵尸医生", "hp": 30, "damage": 5}
 		]
 		
-		var enemy = enemy_types[randi() % enemy_types.size()]
+		var selected_enemy = enemy_types[randi() % enemy_types.size()]
 		
 		DialogModule.show_dialog(
-			"一只%s从阴影中冲了出来！" % enemy.name,
+			"一只%s从阴影中冲了出来！" % selected_enemy.name,
 			"遭遇",
 			""
 		)
@@ -63,16 +63,16 @@ func _random_encounter(enemy: Dictionary = {}):
 		await get_tree().create_timer(2.0).timeout
 		
 		CombatModule.start_combat({
-			"name": enemy.name,
-			"hp": enemy.hp,
-			"max_hp": enemy.hp,
-			"damage": enemy.damage,
+			"name": selected_enemy.name,
+			"hp": selected_enemy.hp,
+			"max_hp": selected_enemy.hp,
+			"damage": selected_enemy.damage,
 			"type": "zombie"
 		})
 		
-		CombatModule.combat_ended.connect(_on_combat_ended)
+		CombatModule.combat_ended.connect(_on_combat_ended.bind(true))
 
-func _on_combat_ended():
+func _on_combat_ended(victory: bool = true):
 	CombatModule.combat_ended.disconnect(_on_combat_ended)
 	
 	if victory:
@@ -82,7 +82,7 @@ func _on_combat_ended():
 			""
 		)
 		InventoryModule.add_item("scrap_metal", randi() % 2 + 1)
-		SkillModule.add_skill_points(randf() > 0.5 ? 2 : 1)
+		SkillModule.add_skill_points(2 if randf() > 0.5 else 1)
 		
 		# 更新任务
 		QuestSystem.on_search_completed("hospital")

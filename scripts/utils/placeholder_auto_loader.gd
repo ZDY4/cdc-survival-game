@@ -15,7 +15,7 @@ func _apply_placeholders_to_current_scene():
 	if current_scene:
 		_apply_placeholders_recursive(current_scene)
 
-func _apply_placeholders_recursive():
+func _apply_placeholders_recursive(node: Node):
 	# Apply placeholder based on node name && type
 	if node is Sprite2D:
 		_apply_sprite_placeholder(node)
@@ -26,7 +26,7 @@ func _apply_placeholders_recursive():
 	for child in node.get_children():
 		_apply_placeholders_recursive(child)
 
-func _apply_sprite_placeholder():
+func _apply_sprite_placeholder(sprite: Sprite2D):
 	if sprite.texture != null:
 		return
 	
@@ -35,7 +35,7 @@ func _apply_sprite_placeholder():
 	# Determine placeholder type based on parent name
 	if "door" in node_name:
 		PlaceholderGenerator.apply_to_sprite(sprite, "object", "door")
-	elif "locker" in node_name || "chest" in node_name:
+	elif "locker" in node_name or "chest" in node_name:
 		PlaceholderGenerator.apply_to_sprite(sprite, "object", "locker")
 	elif "bed" in node_name:
 		PlaceholderGenerator.apply_to_sprite(sprite, "object", "bed")
@@ -43,7 +43,7 @@ func _apply_sprite_placeholder():
 		PlaceholderGenerator.apply_to_sprite(sprite, "object", "car")
 	elif "trash" in node_name:
 		PlaceholderGenerator.apply_to_sprite(sprite, "object", "trash")
-	elif "zombie" in node_name || "enemy" in node_name:
+	elif "zombie" in node_name or "enemy" in node_name:
 		PlaceholderGenerator.apply_to_sprite(sprite, "character", "zombie")
 	elif "npc" in node_name:
 		PlaceholderGenerator.apply_to_sprite(sprite, "character", "npc")
@@ -52,7 +52,7 @@ func _apply_sprite_placeholder():
 	else:
 		PlaceholderGenerator.apply_to_sprite(sprite, "object", "box")
 
-func _apply_texture_rect_placeholder():
+func _apply_texture_rect_placeholder(rect: TextureRect):
 	if rect.texture != null:
 		return
 	
@@ -73,7 +73,7 @@ func _apply_texture_rect_placeholder():
 		
 		PlaceholderGenerator.apply_to_texture_rect(rect, "background", location_type)
 
-func _on_node_added():
+func _on_node_added(node: Node):
 	# Apply placeholder to newly added nodes
 	if node is Sprite2D:
 		_apply_sprite_placeholder(node)

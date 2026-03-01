@@ -126,7 +126,7 @@ static func _test_icon_and_resources():
            "Project icon not found")
 
 # 辅助断言函数
-static func assert():
+static func assert(condition: bool, message: String = ""):
     if not condition:
         push_error("SANITY TEST FAILED: " + message)
         # 在实际测试中这里会抛出异常

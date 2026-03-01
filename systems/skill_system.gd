@@ -34,7 +34,8 @@ class Skill:
 		if current_level <= 0:
 			return {}
 		var effect = effects.duplicate()
-		# 根据等级调整效果数"		for key in effect.keys():
+		# 根据等级调整效果数量
+		for key in effect.keys():
 			if effect[key] is float or effect[key] is int:
 				effect[key] = effect[key] * current_level
 		return effect
@@ -60,7 +61,7 @@ var available_points: int = 0
 var skills: Dictionary = {}
 var learned_skills: Array[String] = []
 
-# ===== 激活的技能效"=====
+# ===== 激活的技能效果 =====
 var active_effects: Dictionary = {}
 
 func _ready():
@@ -70,7 +71,8 @@ func _ready():
 # ===== 初始化技能树 =====
 
 func _initialize_skill_tree():
-	# 战斗技"	_add_skill("combat_training", "战斗训练", "基础战斗技巧，提升伤害输出", "combat", 5, 
+	# 战斗技能
+	_add_skill("combat_training", "战斗训练", "基础战斗技巧，提升伤害输出", "combat", 5, 
 		{"damage_bonus": 0.05})
 	
 	_add_skill("precise_strike", "精准打击", "提高暴击", "combat", 3,

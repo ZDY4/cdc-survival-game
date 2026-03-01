@@ -210,7 +210,7 @@ func _show_results():
 	
 	for test_name in _test_results.keys():
 		var result = _test_results[test_name]
-		var status = result.success ? "✅" : "❌"
+		var status = "✅" if result.success else "❌"
 		print(status + " " + test_name)
 		
 		if result.success:

@@ -111,7 +111,8 @@ static func set_difficulty_preset(preset: String):
 			# 极限难度
 			pass
 
-## 获取平衡数"static func get_value(category: String, key: String, default_value = 0):
+## 获取平衡数值
+static func get_value(category: String, key: String, default_value = 0):
 	match category:
 		"status":
 			return STATUS_BALANCE.get(key, default_value)

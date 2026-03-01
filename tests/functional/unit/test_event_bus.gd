@@ -4,7 +4,7 @@
 extends Node
 class_name FunctionalTest_EventBus
 
-static func run_tests():
+static func run_tests(runner: TestRunner) -> void:
     runner.register_test(
         "event_bus_singleton",
         TestRunner.TestLayer.FUNCTIONAL,

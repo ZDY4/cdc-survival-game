@@ -386,7 +386,7 @@ const ABILITY_EFFECTS = {
 }
 
 # 获取敌人数据
-static func get_enemy(enemy_id: String):
+func get_enemy(enemy_id: String):
     if ENEMIES.has(enemy_id):
         return ENEMIES[enemy_id].duplicate(true)
     return ENEMIES["zombie_walker"].duplicate(true)
@@ -429,7 +429,7 @@ static func spawn_enemy_for_location(location: String, player_level: int = 1):
     return result
 
 # 计算掉落
-static func calculate_loot(enemy_id: String):
+func calculate_loot(enemy_id: String):
     var enemy = ENEMIES[enemy_id]
     var loot = []
     

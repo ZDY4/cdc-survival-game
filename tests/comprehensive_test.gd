@@ -483,11 +483,11 @@ func _generate_report():
 	
 	for system in _test_results:
 		var result = _test_results[system]
-		var status = result.passed == result.tests ? "✓" : "✗"
+		var status = "✓" if result.passed == result.tests else "✗"
 		print(status + " " + system + ": " + str(result.passed) + "/" + str(result.tests))
 	
 	print("\n----------------------------------------")
-	var percentage = float(_passed_tests) / float(_total_tests) * _total_tests > 0 ? 100.0 : 0.0
+	var percentage = float(_passed_tests) / float(_total_tests) * 100.0 if _total_tests > 0 else 0.0
 	print("总计: " + str(_passed_tests) + "/" + str(_total_tests) + " (" + str(int(percentage)) + "%)")
 	
 	if _passed_tests == _total_tests:

@@ -132,14 +132,16 @@ func _input(event):
 			
 			KEY_2:
 				# 开始对话
-				if NPCModule.start_dialog("trader_lao_wang"):
+				var dialog_result = await NPCModule.start_dialog("trader_lao_wang")
+				if dialog_result:
 					print("按2: 开始对话")
 				else:
 					print("按2: 无法开始对话（NPC不存在或不可交互）")
 			
 			KEY_3:
 				# 开始交易
-				if NPCModule.start_trade("trader_lao_wang"):
+				var trade_result = await NPCModule.start_trade("trader_lao_wang")
+				if trade_result:
 					print("按3: 开始交易")
 				else:
 					print("按3: 无法开始交易")

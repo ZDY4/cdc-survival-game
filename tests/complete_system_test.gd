@@ -205,7 +205,7 @@ func _show_final_results():
 	
 	for test_name in _test_results.keys():
 		var result = _test_results[test_name]
-		var status = result.success ? "✅" : "❌"
+		var status = "✅" if result.success else "❌"
 		print(status + " " + test_name)
 		
 		if result.success:
@@ -224,4 +224,7 @@ func _show_final_results():
 	
 	# 退出
 	await get_tree().create_timer(2.0).timeout
-	failed == 0 ? get_tree().quit(0 : 1)
+	if failed == 0:
+		get_tree().quit(0)
+	else:
+		get_tree().quit(1)

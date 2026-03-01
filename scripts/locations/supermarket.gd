@@ -47,7 +47,7 @@ func _setup_interactables():
 		search_office.interaction_description = "可能有值钱的东西"
 		search_office.interacted.connect(_on_search_office)
 
-func _random_encounter(enemy: Dictionary = {}):
+func _random_encounter(_enemy: Dictionary = {}):
 	var roll = randf()
 	
 	if roll < 0.4:
@@ -58,19 +58,19 @@ func _random_encounter(enemy: Dictionary = {}):
 		]
 		
 		var enemy_template = enemy_types[randi() % enemy_types.size()]
-		var enemy = EnemyDatabase.get_enemy(enemy_template.id)
+		var enemy_data = EnemyDatabase.get_enemy(enemy_template.id)
 		
 		DialogModule.show_dialog(
-			"%s出现在货架之间！" % enemy.name,
+			"%s出现在货架之间！" % enemy_data.name,
 			"遭遇",
 			""
 		)
 		
 		await get_tree().create_timer(2.0).timeout
-		CombatModule.start_combat(enemy)
-		CombatModule.combat_ended.connect(_on_combat_ended)
+		CombatModule.start_combat(enemy_data)
+		CombatModule.combat_ended.connect(_on_combat_ended.bind(true))
 
-func _on_combat_ended():
+func _on_combat_ended(victory: bool = true):
 	CombatModule.combat_ended.disconnect(_on_combat_ended)
 	
 	if victory:
@@ -132,7 +132,8 @@ func _on_search_freezer():
 		InventoryModule.add_item("water_bottle", 1)
 	elif roll < 0.6:
 		DialogModule.show_dialog("一股恶臭扑面而来...食物都腐烂了。", "搜索", "")
-		randf() < 0.3 ? SurvivalSystem.add_disease("food_poisoning") : null
+		if randf() < 0.3:
+			SurvivalSystem.add_disease("food_poisoning")
 	else:
 		DialogModule.show_dialog("冷冻柜里只有冰和霉菌。", "搜索", "")
 

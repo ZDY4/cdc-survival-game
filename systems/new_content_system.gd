@@ -160,15 +160,15 @@ func _register_new_quests():
 			# 添加新任务到数据"
 			print("[NewContentSystem] 注册新任: " + quest_id)
 
-## 获取新敌人数"
-func get_new_enemy():
+## 获取新敌人数据
+func get_new_enemy(enemy_id: String):
 	return NEW_ENEMIES.get(enemy_id, {})
 
-## 获取新任务数"
-func get_new_quest():
+## 获取新任务数据
+func get_new_quest(quest_id: String):
 	return NEW_QUESTS.get(quest_id, {})
 
-## 获取新地点数"
-func get_new_location(type: String = ""):
+## 获取新地点数据
+func get_new_location(location_id: String):
 	return NEW_LOCATIONS.get(location_id, {})
 

@@ -40,7 +40,7 @@ func _setup_nodes():
 	if _flee_button:
 		_flee_button.pressed.connect(_on_flee_pressed)
 
-func show_combat():
+func show_combat(enemy_data: Dictionary = {}):
 	visible = true
 	
 	# Update enemy info
@@ -58,15 +58,19 @@ func show_combat():
 	if _combat_log:
 		_combat_log.text = "Combat started! You encountered " + enemy_data.get("name", "Enemy") + "!"
 
-func update_enemy_hp(enemy: Dictionary = {}):
-	_enemy_hp_bar.max_value = max_hp
-	_enemy_hp_bar.value = current
-	_combat_log.text += "\nYou dealt damage to the enemy!"
+func update_enemy_hp(max_hp: float, current: float):
+	if _enemy_hp_bar:
+		_enemy_hp_bar.max_value = max_hp
+		_enemy_hp_bar.value = current
+	if _combat_log:
+		_combat_log.text += "\nYou dealt damage to the enemy!"
 
-func update_player_hp(player: Dictionary = {}):
-	_player_hp_bar.max_value = max_hp
-	_player_hp_bar.value = current
-	_combat_log.text += "\nYou took damage!"
+func update_player_hp(max_hp: float, current: float):
+	if _player_hp_bar:
+		_player_hp_bar.max_value = max_hp
+		_player_hp_bar.value = current
+	if _combat_log:
+		_combat_log.text += "\nYou took damage!"
 
 func hide_combat():
 	visible = false

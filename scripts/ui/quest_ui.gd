@@ -54,7 +54,7 @@ func _update_quest_display():
 		for quest in active_quests:
 			_add_quest_item(quest)
 
-func _add_quest_item():
+func _add_quest_item(quest: Dictionary):
 	var item = PanelContainer.new()
 	item.custom_minimum_size = Vector2(0, 80)
 	
@@ -62,25 +62,26 @@ func _add_quest_item():
 	item.add_child(vbox)
 	
 	# 任务标题
-	var title = Label.new()
-	title.text = quest.title
-	title.theme_type_variation = "HeaderSmall"
-	vbox.add_child(title)
+	var title_label = Label.new()
+	title_label.text = quest.get("title", "未知任务")
+	title_label.theme_type_variation = "HeaderSmall"
+	vbox.add_child(title_label)
 	
 	# 任务描述
 	var desc = Label.new()
-	desc.text = quest.description
+	desc.text = quest.get("description", "")
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(desc)
 	
 	# 进度
-	for obj_id in quest.progress.keys():
-		var obj = quest.progress[obj_id]
+	var progress = quest.get("progress", {})
+	for obj_id in progress.keys():
+		var obj = progress[obj_id]
 		var progress_label = Label.new()
 		progress_label.text = "  %s: %s/%s" % [
-			obj.description,
-			obj.current,
-			obj.target
+			obj.get("description", ""),
+			obj.get("current", 0),
+			obj.get("target", 0)
 		]
 		progress_label.add_theme_font_size_override("font_size", 12)
 		vbox.add_child(progress_label)
@@ -91,23 +92,23 @@ func _add_quest_item():
 	var separator = HSeparator.new()
 	quest_list.add_child(separator)
 
-func _on_quest_started():
-	var quest = QuestSystem.QUESTS[quest_id]
-	_show_notification("新任务", quest.title)
+func _on_quest_started(quest_id: String):
+	var quest = QuestSystem.QUESTS.get(quest_id, {})
+	_show_notification("新任务", quest.get("title", "未知任务"))
 	if is_visible:
 		_update_quest_display()
 
-func _on_quest_updated():
+func _on_quest_updated(quest_id: String):
 	if is_visible:
 		_update_quest_display()
 
-func _on_quest_completed():
-	var quest = QuestSystem.QUESTS[quest_id]
-	_show_notification("任务完成", quest.title)
+func _on_quest_completed(quest_id: String):
+	var quest = QuestSystem.QUESTS.get(quest_id, {})
+	_show_notification("任务完成", quest.get("title", "未知任务"))
 	if is_visible:
 		_update_quest_display()
 
-func _show_notification():
+func _show_notification(title: String, message: String):
 	var notification = PanelContainer.new()
 	notification.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	notification.position = Vector2(get_viewport().size.x - 300, 100)
@@ -131,7 +132,7 @@ func _show_notification():
 	await get_tree().create_timer(3.0).timeout
 	notification.queue_free()
 
-func _input():
+func _input(event: InputEvent):
 	if event is InputEventKey:
-		if event.pressed && event.keycode == KEY_Q:
+		if event.pressed and event.keycode == KEY_Q:
 			_on_toggle_pressed()

@@ -118,7 +118,7 @@ func run_all_tests():
     
     final_report.layers.append({
         "layer": "functional",
-        "status": _layer_passed(TestLayer.FUNCTIONAL) ? "passed" : "failed",
+		"status": "passed" if _layer_passed(TestLayer.FUNCTIONAL) else "failed",
         "results": _current_results.duplicate()
     })
     all_results.append_array(_current_results)
@@ -252,9 +252,9 @@ func _layer_name():
         _: return "UNKNOWN"
 
 # 打印测试结果
-func _print_test_result():
-    var status_color = result.passed ? "green" : "red"
-    var status_icon = result.passed ? "✓" : "✗"
+func _print_test_result(result: Dictionary):
+    var status_color = "green" if result.passed else "red"
+    var status_icon = "✓" if result.passed else "✗"
     var priority_str = _priority_name(result.priority)
     
     print_rich("[color=%s]%s [%s] %s (%.2fs)[/color]" % [
@@ -270,7 +270,13 @@ func _print_layer_summary():
     var total = results.size()
     var duration = results.reduce(func(acc, r): return acc + r.duration, 0.0)
     
-    var color = passed == total ? "green" : "yellow" if passed >= total * 0.8 else "red"
+    var color: String
+    if passed == total:
+        color = "green"
+    elif passed >= total * 0.8:
+        color = "yellow"
+    else:
+        color = "red"
     
     print_rich("[color=%s]----------------------------------------[/color]" % color)
     print_rich("[color=%s]Layer Summary: %d/%d passed (%.2fs)[/color]" % [color, passed, total, duration])
@@ -283,7 +289,13 @@ func _print_final_report():
     print_rich("[color=cyan]========================================[/color]")
     
     var summary = report.summary
-    var color = summary.failed == 0 ? "green" : "yellow" if summary.failed < summary.total * 0.2 else "red"
+    var color: String
+    if summary.failed == 0:
+        color = "green"
+    elif summary.failed < summary.total * 0.2:
+        color = "yellow"
+    else:
+        color = "red"
     
     print_rich("[color=%s]Total: %d | Passed: %d | Failed: %d | Duration: %.2fs[/color]" % [
         color, summary.total, summary.passed, summary.failed, summary.duration
@@ -292,7 +304,7 @@ func _print_final_report():
     print_rich("[color=cyan]========================================[/color]")
 
 # 获取优先级名称
-func _priority_name():
+func _priority_name(priority: TestPriority) -> String:
     match priority:
         TestPriority.P0_CRITICAL: return "P0"
         TestPriority.P1_MAJOR: return "P1"
