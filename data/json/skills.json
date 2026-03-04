@@ -1,0 +1,34 @@
+{
+  "combat": {
+    "name": "战斗精通",
+    "description": "增加攻击力",
+    "max_level": 5,
+    "effect_per_level": {
+      "damage_bonus": 2
+    }
+  },
+  "survival": {
+    "name": "生存专家",
+    "description": "减少饥饿和口渴消耗",
+    "max_level": 5,
+    "effect_per_level": {
+      "consumption_reduction": 0.1
+    }
+  },
+  "crafting": {
+    "name": "制作大师",
+    "description": "解锁高级配方",
+    "max_level": 3,
+    "effect_per_level": {
+      "recipe_unlock": 1
+    }
+  },
+  "stealth": {
+    "name": "潜行",
+    "description": "降低被敌人发现几率",
+    "max_level": 5,
+    "effect_per_level": {
+      "detection_reduction": 0.15
+    }
+  }
+}

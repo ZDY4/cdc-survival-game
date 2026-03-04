@@ -32,6 +32,7 @@ const STATION_TYPES = {
 # 数据
 var recipes: Dictionary = {}  # recipe_id -> recipe_data
 var current_recipe_id: String = ""
+var editor_plugin: EditorPlugin = null
 
 # UI节点
 @onready var _recipe_list: ItemList
@@ -175,7 +176,7 @@ func _setup_file_dialog():
 
 func _load_recipes_from_data_manager():
 	var data_manager = get_node_or_null("/root/DataManager")
-	if data_manager:
+	if data_manager and data_manager.has_method("get_all_recipes"):
 		recipes = data_manager.get_all_recipes()
 		print("[RecipeEditor] 从DataManager加载了 %d 个配方" % recipes.size())
 
@@ -227,8 +228,10 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 func _get_output_item_name(recipe: Dictionary) -> String:
 	var output = recipe.get("output", {})
 	var item_id = output.get("item_id", "")
-	if ItemDatabase:
-		return ItemDatabase.get_item_name(item_id)
+	# 安全访问 ItemDatabase
+	var item_db = get_node_or_null("/root/ItemDatabase")
+	if item_db and item_db.has_method("get_item_name"):
+		return item_db.get_item_name(item_id)
 	return item_id
 
 func _on_category_filter_changed(index: int):

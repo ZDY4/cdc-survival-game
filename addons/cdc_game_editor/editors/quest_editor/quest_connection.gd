@@ -1,7 +1,6 @@
 @tool
 extends RefCounted
-
-class_name CDCQuestConnection
+## 任务连接
 
 # 连接信息
 var from_quest: String = ""

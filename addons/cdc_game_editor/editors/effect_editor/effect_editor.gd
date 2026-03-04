@@ -3,8 +3,6 @@ extends Control
 ## EffectEditor - 效果编辑器
 ## 用于创建和编辑游戏中的效果（buffs/debuffs）
 
-class_name EffectEditor
-
 signal effect_saved(effect_id: String)
 signal effect_loaded(effect_id: String)
 

@@ -18,3 +18,24 @@ Thumbs.db
 
 # Worktrees
 .worktrees/
+
+# Local lint/cache artifacts
+.gdlint
+nul
+__pycache__/
+.pytest_cache/
+.venv/
+
+# IDE/editor settings
+.vscode/
+.idea/
+
+# Common temp files
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Local asset backup files
+*.backup

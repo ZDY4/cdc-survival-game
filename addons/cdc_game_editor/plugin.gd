@@ -330,25 +330,18 @@ func _edit(object: Object):
 		elif path.ends_with(".item") or path.ends_with(".items"):
 			_show_editor("item")
 
-func _apply_changes() -> bool:
+func _apply_changes():
 	# 在编辑器失去焦点时检查未保存的更改
-	var has_unsaved = false
 	if dialog_editor and dialog_editor.has_method("has_unsaved_changes") and dialog_editor.has_unsaved_changes():
 		print("[%s] 对话编辑器有未保存的更改" % PLUGIN_NAME)
-		has_unsaved = true
 	if quest_editor and quest_editor.has_method("has_unsaved_changes") and quest_editor.has_unsaved_changes():
 		print("[%s] 任务编辑器有未保存的更改" % PLUGIN_NAME)
-		has_unsaved = true
 	if item_editor and item_editor.has_method("has_unsaved_changes") and item_editor.has_unsaved_changes():
 		print("[%s] 物品编辑器有未保存的更改" % PLUGIN_NAME)
-		has_unsaved = true
 	if npc_editor and npc_editor.has_method("has_unsaved_changes") and npc_editor.has_unsaved_changes():
 		print("[%s] NPC编辑器有未保存的更改" % PLUGIN_NAME)
-		has_unsaved = true
 	if recipe_editor and recipe_editor.has_method("has_unsaved_changes") and recipe_editor.has_unsaved_changes():
 		print("[%s] 配方编辑器有未保存的更改" % PLUGIN_NAME)
-		has_unsaved = true
-	return true
 
 func _build() -> bool:
 	# 在构建项目前验证数据

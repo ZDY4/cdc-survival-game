@@ -726,7 +726,7 @@ func _validate_quest(quest_id: String) -> bool:
 		if obj.get("target", "").is_empty():
 			errors.append("目标 #%d 缺少目标ID" % (i + 1))
 	
-	// 检查前置任务
+	# 检查前置任务
 	for prereq in quest.get("prerequisites", []):
 		if not quests.has(prereq):
 			errors.append("前置任务 '%s' 不存在" % prereq)

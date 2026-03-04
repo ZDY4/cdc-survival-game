@@ -8,19 +8,22 @@
 # Run game
 godot --path . --scene scenes/ui/main_menu.tscn
 
-# Run tests
-python run_tests.py --all
-python run_tests.py --sanity        # 30s - file integrity
-python run_tests.py --functional    # 5min - unit tests
-python run_tests.py --agent         # 30min+ - AI exploration
+# Run tests via Python runner
+python tests/agent_test_runner.py --all
+python tests/agent_test_runner.py --sanity        # 30s - file integrity
+python tests/agent_test_runner.py --functional    # 5min - unit tests
+python tests/agent_test_runner.py --agent         # 30min+ - AI exploration
 
-# Run single test (requires game running)
+# Run single test (requires game running on port 8080)
 curl -X POST http://localhost:8080/execute \
   -H "Content-Type: application/json" \
   -d '{"action": "test", "parameters": {"test_name": "event_bus"}}'
 
 # Run GDScript test directly
 godot --path . --script tests/functional/unit/test_event_bus.gd
+
+# Check game health
+curl http://localhost:8080/health
 ```
 
 ## Project Structure
@@ -162,6 +165,7 @@ static func _test_func() -> void:
 
 ## References
 
-- `GODOT_STYLE_GUIDE.md` - Full style guide
-- `MODULE_ARCHITECTURE.md` - Architecture patterns
 - `tests/README.md` - Testing guide
+- `tests/TEST_FRAMEWORK.md` - Test architecture
+- `core/AGENTS.md` - Core framework details
+- `tests/AGENTS.md` - Test framework details

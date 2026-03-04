@@ -63,7 +63,7 @@ DayNightRiskSystem="*res://systems/day_night_risk_system.gd"
 SurvivalStatusSystem="*res://systems/survival_status_system.gd"
 ScavengeSystem="*res://systems/scavenge_system.gd"
 EncounterSystem="*res://systems/encounter_system.gd"
-EncounterDatabase="*res://data/encounters/encounter_database.gd"
+EncounterDatabase="*res://systems/encounter_database.gd"
 ItemDurabilitySystem="*res://systems/item_durability_system.gd"
 StoryClueSystem="*res://systems/story_clue_system.gd"
 TelegramIntegration="*res://scripts/telegram_integration.gd"
@@ -80,6 +80,10 @@ window/vsync/vsync_mode=0
 [dotnet]
 
 project/assembly_name="cdc_survival_game"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/cdc_game_editor/plugin.cfg")
 
 [input]
 

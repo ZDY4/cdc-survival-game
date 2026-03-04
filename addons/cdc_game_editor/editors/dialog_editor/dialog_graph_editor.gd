@@ -12,7 +12,9 @@ var grid_snap: bool = true
 func _ready():
 	# 设置视觉样式
 	show_grid = true
-	snap_distance = grid_size
+	# Godot 4.x 使用 snapping_distance 代替 snap_distance
+	if "snapping_distance" in self:
+		set("snapping_distance", grid_size)
 	connection_lines_curvature = 0.5
 	connection_lines_thickness = 2.0
 	

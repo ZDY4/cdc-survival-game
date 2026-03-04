@@ -1,0 +1,44 @@
+{
+  "hands": {
+    "name": "徒手",
+    "efficiency": 0.5,
+    "noise": 0.1,
+    "durability_cost": 0,
+    "can_open": ["open_container"],
+    "description": "最安静但效率最低"
+  },
+  "crowbar": {
+    "name": "撬棍",
+    "efficiency": 1.2,
+    "noise": 0.6,
+    "durability_cost": 2,
+    "can_open": ["open_container", "locked_door", "barred_window", "crate"],
+    "description": "强力但噪音大"
+  },
+  "screwdriver": {
+    "name": "螺丝刀",
+    "efficiency": 0.9,
+    "noise": 0.2,
+    "durability_cost": 1,
+    "can_open": ["open_container", "vent", "panel", "electronics"],
+    "description": "适合精密搜索"
+  },
+  "lockpick": {
+    "name": "开锁器",
+    "efficiency": 1.0,
+    "noise": 0.15,
+    "durability_cost": 1,
+    "can_open": ["locked_door", "locked_drawer", "safe"],
+    "special_bonus": "发现隐藏物品 +20%",
+    "description": "安静开锁，需要技术"
+  },
+  "flashlight": {
+    "name": "手电筒",
+    "efficiency": 1.1,
+    "noise": 0.1,
+    "durability_cost": 1,
+    "can_open": ["open_container", "dark_area"],
+    "special_bonus": "夜间效率 +50%",
+    "description": "夜间搜索必备"
+  }
+}

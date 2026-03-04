@@ -1,0 +1,51 @@
+{
+  "supermarket": {
+    "common": ["canned_food", "water_bottle", "snack", "juice"],
+    "uncommon": ["first_aid_kit", "backpack", "flashlight", "battery"],
+    "rare": ["medicine", "map", "radio"],
+    "base_quality": 1.0,
+    "search_difficulty": 0.3
+  },
+  "hospital": {
+    "common": ["bandage", "painkiller", "water_bottle"],
+    "uncommon": ["first_aid_kit", "medicine", "syringe", "antibiotics"],
+    "rare": ["surgical_kit", "rare_medicine", "medical_equipment"],
+    "base_quality": 1.2,
+    "search_difficulty": 0.5
+  },
+  "street_a": {
+    "common": ["scrap_metal", "cloth", "wood", "stone"],
+    "uncommon": ["crowbar", "rope", "nails", "glass_bottle"],
+    "rare": ["hidden_stash", "weapon_part", "electronics"],
+    "base_quality": 0.7,
+    "search_difficulty": 0.4
+  },
+  "street_b": {
+    "common": ["scrap_metal", "cloth", "wood", "stone"],
+    "uncommon": ["crowbar", "rope", "nails", "glass_bottle"],
+    "rare": ["hidden_stash", "weapon_part", "electronics"],
+    "base_quality": 0.7,
+    "search_difficulty": 0.4
+  },
+  "factory": {
+    "common": ["scrap_metal", "wood", "rope", "tools"],
+    "uncommon": ["crowbar", "metal_sheet", "gear", "wire"],
+    "rare": ["blueprint", "advanced_tools", "machine_part"],
+    "base_quality": 1.1,
+    "search_difficulty": 0.6
+  },
+  "subway": {
+    "common": ["scrap_metal", "cloth", "bottle"],
+    "uncommon": ["backpack", "map", "battery", "canned_food"],
+    "rare": ["weapon", "armor", "hidden_cache"],
+    "base_quality": 0.9,
+    "search_difficulty": 0.7
+  },
+  "safehouse": {
+    "common": ["wood", "cloth", "nails"],
+    "uncommon": ["food", "water", "basic_tools"],
+    "rare": ["personal_cache"],
+    "base_quality": 0.5,
+    "search_difficulty": 0.1
+  }
+}

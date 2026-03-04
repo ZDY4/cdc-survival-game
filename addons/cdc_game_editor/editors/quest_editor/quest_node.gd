@@ -1,7 +1,6 @@
 @tool
 extends GraphNode
-
-class_name CDCQuestNode
+## 任务节点
 
 # 任务数据
 var quest_id: String = ""
@@ -59,7 +58,7 @@ func _update_ui():
 	# 分隔线
 	add_child(HSeparator.new())
 	
-	// 任务描述预览
+	# 任务描述预览
 	var desc = quest_data.get("description", "")
 	var desc_label = Label.new()
 	desc_label.text = _truncate_text(desc, 60)
@@ -67,7 +66,7 @@ func _update_ui():
 	desc_label.custom_minimum_size = Vector2(180, 40)
 	add_child(desc_label)
 	
-	// 目标数量
+	# 目标数量
 	var objectives = quest_data.get("objectives", [])
 	var obj_label = Label.new()
 	obj_label.text = "目标: %d个" % objectives.size()
@@ -75,7 +74,7 @@ func _update_ui():
 	obj_label.modulate = Color.LIGHT_BLUE
 	add_child(obj_label)
 	
-	// 奖励预览
+	# 奖励预览
 	var rewards = quest_data.get("rewards", {})
 	var exp = rewards.get("experience", 0)
 	var items = rewards.get("items", [])
@@ -89,7 +88,7 @@ func _update_ui():
 	reward_label.modulate = Color.GREEN
 	add_child(reward_label)
 	
-	// 输入/输出端口
+	# 输入/输出端口
 	_add_ports()
 
 func _add_ports():
@@ -98,7 +97,7 @@ func _add_ports():
 	set_slot_enabled_left(0, has_prereq)
 	set_slot_color_left(0, Color.GRAY)
 	
-	// 右侧输出端口（解锁后续任务）
+	# 右侧输出端口（解锁后续任务）
 	set_slot_enabled_right(get_child_count() - 1, true)
 	set_slot_color_right(get_child_count() - 1, Color.YELLOW)
 

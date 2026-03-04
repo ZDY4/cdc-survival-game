@@ -1,7 +1,6 @@
 @tool
 extends GraphNode
-
-class_name CDCDialogNode
+## 对话编辑器节点
 
 signal data_changed(node_id: String, new_data: Dictionary)
 
@@ -11,13 +10,24 @@ var output_ports: Array[int] = []
 
 func _ready():
 	resizable = true
-	show_close = true
 	draggable = true
 	selectable = true
 	
-	# 连接关闭按钮
-	close_request.connect(_on_close_request)
-	dragged.connect(_on_dragged)
+	# Godot 4.x GraphNode 属性兼容性处理
+	# 尝试设置关闭按钮 (不同版本属性名可能不同)
+	if "show_close" in self:
+		set("show_close", true)
+	elif "close_button_enabled" in self:
+		set("close_button_enabled", true)
+	
+	# 连接信号 (不同版本信号名可能不同)
+	if "close_request" in self:
+		connect("close_request", _on_close_request)
+	elif "delete_request" in self:
+		connect("delete_request", _on_close_request)
+	
+	if "dragged" in self:
+		connect("dragged", _on_dragged)
 	
 	_update_ui()
 
@@ -94,7 +104,7 @@ func _create_dialog_ui():
 func _create_choice_ui():
 	if node_data.has("options"):
 		var title = Label.new()
-	title.text = "选项列表 (%d个)" % node_data.options.size()
+		title.text = "选项列表 (%d个)" % node_data.options.size()
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		add_child(title)
 		

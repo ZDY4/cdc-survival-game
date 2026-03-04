@@ -3,8 +3,6 @@ extends Control
 ## EnemyEditor - 敌人编辑器
 ## 用于创建和编辑游戏中的敌人数据
 
-class_name EnemyEditor
-
 signal enemy_saved(enemy_id: String)
 signal enemy_loaded(enemy_id: String)
 

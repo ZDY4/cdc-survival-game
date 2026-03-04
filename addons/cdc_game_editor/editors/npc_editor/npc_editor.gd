@@ -144,11 +144,13 @@ func _load_npcs_from_data_manager():
 		var data = data_manager.get_all_npcs()
 		if not data.is_empty():
 			# 转换为NPCData对象
-			for npc_id in data:
-				var npc_data = NPCData.new()
-				npc_data.deserialize(data[npc_id])
-				npcs[npc_id] = npc_data
-			print("[NPCEditor] 从DataManager加载了 %d 个NPC" % npcs.size())
+			var NPCDataClass = load("res://modules/npc/npc_data.gd")
+			if NPCDataClass:
+				for npc_id in data:
+					var npc_data = NPCDataClass.new()
+					npc_data.deserialize(data[npc_id])
+					npcs[npc_id] = npc_data
+				print("[NPCEditor] 从DataManager加载了 %d 个NPC" % npcs.size())
 
 func _update_npc_list(filter: String = ""):
 	npc_list.clear()
@@ -158,19 +160,20 @@ func _update_npc_list(filter: String = ""):
 	
 	for npc_id in sorted_npcs:
 		var npc = npcs[npc_id]
-		var display_text = "%s - %s (%s)" % [npc_id, npc.name, NPC_TYPES.get(npc.npc_type, "未知")]
+		var npc_type = npc.get("npc_type", 0)
+		var display_text = "%s - %s (%s)" % [npc_id, npc.name, NPC_TYPES.get(npc_type, "未知")]
 		
 		if filter.is_empty() or display_text.to_lower().contains(filter.to_lower()):
 			var idx = npc_list.add_item(display_text)
 			npc_list.set_item_metadata(idx, npc_id)
 		
-			# 根据类型设置颜色
-			match npc.npc_type:
-				NPCData.Type.TRADER:
+			# 根据类型设置颜色 (3=TRADER, 2=HOSTILE, 4=QUEST_GIVER)
+			match npc_type:
+				3:  # TRADER
 					npc_list.set_item_custom_fg_color(idx, Color.GOLD)
-				NPCData.Type.HOSTILE:
+				2:  # HOSTILE
 					npc_list.set_item_custom_fg_color(idx, Color.RED)
-				NPCData.Type.QUEST_GIVER:
+				4:  # QUEST_GIVER
 					npc_list.set_item_custom_fg_color(idx, Color.CYAN)
 	
 	var stats_label = get_node_or_null("StatsLabel")
@@ -189,11 +192,16 @@ func _on_search_changed(text: String):
 
 func _on_new_npc():
 	var npc_id = "npc_%d" % Time.get_ticks_msec()
-	var npc_data = NPCData.new()
+	var NPCDataClass = load("res://modules/npc/npc_data.gd")
+	if not NPCDataClass:
+		_update_status("❌ 无法加载 NPCData 类")
+		return
+	
+	var npc_data = NPCDataClass.new()
 	npc_data.id = npc_id
 	npc_data.name = "新NPC"
 	npc_data.description = "NPC描述"
-	npc_data.npc_type = NPCData.Type.FRIENDLY
+	npc_data.npc_type = 0  # Type.FRIENDLY = 0
 	npc_data.default_location = "safehouse"
 	npc_data.current_location = "safehouse"
 	
@@ -222,81 +230,84 @@ func _select_npc(npc_id: String):
 	if npc:
 		_update_property_panel(npc)
 
-func _update_property_panel(npc: NPCData):
+func _update_property_panel(npc):
 	property_panel.clear()
 	
 	if not npc:
 		return
 	
-	# 基础信息
-	property_panel.add_string_property("id", "NPC ID:", npc.id, false, "唯一标识符")
-	property_panel.add_string_property("name", "名称:", npc.name, false, "显示名称")
-	property_panel.add_string_property("title", "称号:", npc.title, false, "如：废土商人")
-	property_panel.add_string_property("description", "描述:", npc.description, true, "详细描述...")
+	# 基础信息 - 使用 get() 安全访问
+	property_panel.add_string_property("id", "NPC ID:", npc.get("id", ""), false, "唯一标识符")
+	property_panel.add_string_property("name", "名称:", npc.get("name", ""), false, "显示名称")
+	property_panel.add_string_property("title", "称号:", npc.get("title", ""), false, "如：废土商人")
+	property_panel.add_string_property("description", "描述:", npc.get("description", ""), true, "详细描述...")
 	
 	property_panel.add_separator()
 	
-	## 类型
+	# 类型
 	var type_dict = {}
 	for key in NPC_TYPES:
 		type_dict[str(key)] = NPC_TYPES[key]
-	property_panel.add_enum_property("npc_type", "NPC类型:", type_dict, str(npc.npc_type))
+	property_panel.add_enum_property("npc_type", "NPC类型:", type_dict, str(npc.get("npc_type", 0)))
 	
 	# 等级
-	property_panel.add_number_property("level", "等级:", npc.level, 1, 100, 1, false)
+	property_panel.add_number_property("level", "等级:", npc.get("level", 1), 1, 100, 1, false)
 	
 	property_panel.add_separator()
 	
 	# 属性
 	property_panel.add_section_label("📊 属性")
-	property_panel.add_number_property("attr_strength", "力量:", npc.attributes.get("strength", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_perception", "感知:", npc.attributes.get("perception", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_endurance", "体质:", npc.attributes.get("endurance", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_charisma", "魅力:", npc.attributes.get("charisma", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_intelligence", "智力:", npc.attributes.get("intelligence", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_agility", "敏捷:", npc.attributes.get("agility", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_luck", "幸运:", npc.attributes.get("luck", 10), 1, 20, 1, false)
+	var attributes = npc.get("attributes", {})
+	property_panel.add_number_property("attr_strength", "力量:", attributes.get("strength", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_perception", "感知:", attributes.get("perception", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_endurance", "体质:", attributes.get("endurance", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_charisma", "魅力:", attributes.get("charisma", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_intelligence", "智力:", attributes.get("intelligence", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_agility", "敏捷:", attributes.get("agility", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_luck", "幸运:", attributes.get("luck", 10), 1, 20, 1, false)
 	
 	property_panel.add_separator()
 	
 	# 情绪
 	property_panel.add_section_label("😊 初始情绪")
-	property_panel.add_number_property("mood_friendliness", "友好度:", npc.mood.get("friendliness", 0), 0, 100, 5, false)
-	property_panel.add_number_property("mood_trust", "信任度:", npc.mood.get("trust", 0), 0, 100, 5, false)
-	property_panel.add_number_property("mood_fear", "恐惧度:", npc.mood.get("fear", 0), 0, 100, 5, false)
-	property_panel.add_number_property("mood_anger", "愤怒度:", npc.mood.get("anger", 0), 0, 100, 5, false)
+	var mood = npc.get("mood", {})
+	property_panel.add_number_property("mood_friendliness", "友好度:", mood.get("friendliness", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_trust", "信任度:", mood.get("trust", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_fear", "恐惧度:", mood.get("fear", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_anger", "愤怒度:", mood.get("anger", 0), 0, 100, 5, false)
 	
 	property_panel.add_separator()
 	
 	# 能力
 	property_panel.add_section_label("⚡ 能力")
 	# 使用自定义控件显示布尔值
-	property_panel.add_custom_control(_create_bool_checkbox("can_trade", "可以交易", npc.can_trade))
-	property_panel.add_custom_control(_create_bool_checkbox("can_recruit", "可以招募", npc.can_recruit))
-	property_panel.add_custom_control(_create_bool_checkbox("can_give_quest", "可以发布任务", npc.can_give_quest))
-	property_panel.add_custom_control(_create_bool_checkbox("can_heal", "可以治疗", npc.can_heal))
+	property_panel.add_custom_control(_create_bool_checkbox("can_trade", "可以交易", npc.get("can_trade", false)))
+	property_panel.add_custom_control(_create_bool_checkbox("can_recruit", "可以招募", npc.get("can_recruit", false)))
+	property_panel.add_custom_control(_create_bool_checkbox("can_give_quest", "可以发布任务", npc.get("can_give_quest", false)))
+	property_panel.add_custom_control(_create_bool_checkbox("can_heal", "可以治疗", npc.get("can_heal", false)))
 	
 	property_panel.add_separator()
 	
 	# 位置
-	property_panel.add_string_property("default_location", "默认位置:", npc.default_location, false, "如：safehouse")
+	property_panel.add_string_property("default_location", "默认位置:", npc.get("default_location", "safehouse"), false, "如：safehouse")
 	
 	property_panel.add_separator()
 	
 	# 外观
 	property_panel.add_section_label("🎨 外观")
-	property_panel.add_string_property("portrait_path", "默认立绘:", npc.portrait_path, false, "res://assets/portraits/...")
+	property_panel.add_string_property("portrait_path", "默认立绘:", npc.get("portrait_path", ""), false, "res://assets/portraits/...")
 	
 	property_panel.add_separator()
 	
 	# 表情立绘
 	property_panel.add_section_label("😊 表情立绘（可选）")
-	property_panel.add_string_property("expr_normal", "正常:", npc.expression_paths.get("normal", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_happy", "开心:", npc.expression_paths.get("happy", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_angry", "愤怒:", npc.expression_paths.get("angry", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_sad", "悲伤:", npc.expression_paths.get("sad", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_fear", "恐惧:", npc.expression_paths.get("fear", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_surprised", "惊讶:", npc.expression_paths.get("surprised", ""), false, "res://assets/portraits/...")
+	var expression_paths = npc.get("expression_paths", {})
+	property_panel.add_string_property("expr_normal", "正常:", expression_paths.get("normal", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_happy", "开心:", expression_paths.get("happy", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_angry", "愤怒:", expression_paths.get("angry", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_sad", "悲伤:", expression_paths.get("sad", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_fear", "恐惧:", expression_paths.get("fear", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_surprised", "惊讶:", expression_paths.get("surprised", ""), false, "res://assets/portraits/...")
 
 func _create_bool_checkbox(property_name: String, label: String, value: bool) -> Control:
 	var hbox = HBoxContainer.new()
@@ -321,87 +332,98 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 	if not npc:
 		return
 	
+	# 确保嵌套字典存在
+	if not npc.has("attributes"):
+		npc["attributes"] = {}
+	if not npc.has("mood"):
+		npc["mood"] = {}
+	if not npc.has("expression_paths"):
+		npc["expression_paths"] = {}
+	
 	# 处理不同类型的属性
 	match property_name:
 		"id":
 			# ID变更需要特殊处理
 			if new_value != current_npc_id and not new_value.is_empty() and not npcs.has(new_value):
 				npcs.erase(current_npc_id)
-				npc.id = new_value
+				npc["id"] = new_value
 				npcs[new_value] = npc
 				current_npc_id = new_value
 				_update_npc_list()
 		
 		"name":
-			npc.name = new_value
+			npc["name"] = new_value
 		"title":
-			npc.title = new_value
+			npc["title"] = new_value
 		"description":
-			npc.description = new_value
+			npc["description"] = new_value
 		"npc_type":
-			npc.npc_type = int(new_value)
+			npc["npc_type"] = int(new_value)
 		"level":
-			npc.level = int(new_value)
+			npc["level"] = int(new_value)
 		"default_location":
-			npc.default_location = new_value
-			npc.current_location = new_value
+			npc["default_location"] = new_value
+			npc["current_location"] = new_value
 		"portrait_path":
-			npc.portrait_path = new_value
+			npc["portrait_path"] = new_value
 		
 		# 表情立绘
 		"expr_normal":
-			npc.expression_paths["normal"] = new_value
+			npc["expression_paths"]["normal"] = new_value
 		"expr_happy":
-			npc.expression_paths["happy"] = new_value
+			npc["expression_paths"]["happy"] = new_value
 		"expr_angry":
-			npc.expression_paths["angry"] = new_value
+			npc["expression_paths"]["angry"] = new_value
 		"expr_sad":
-			npc.expression_paths["sad"] = new_value
+			npc["expression_paths"]["sad"] = new_value
 		"expr_fear":
-			npc.expression_paths["fear"] = new_value
+			npc["expression_paths"]["fear"] = new_value
 		"expr_surprised":
-			npc.expression_paths["surprised"] = new_value
+			npc["expression_paths"]["surprised"] = new_value
 		
 		# 属性
 		"attr_strength":
-			npc.attributes.strength = int(new_value)
+			npc["attributes"]["strength"] = int(new_value)
 		"attr_perception":
-			npc.attributes.perception = int(new_value)
+			npc["attributes"]["perception"] = int(new_value)
 		"attr_endurance":
-			npc.attributes.endurance = int(new_value)
+			npc["attributes"]["endurance"] = int(new_value)
 		"attr_charisma":
-			npc.attributes.charisma = int(new_value)
+			npc["attributes"]["charisma"] = int(new_value)
 		"attr_intelligence":
-			npc.attributes.intelligence = int(new_value)
+			npc["attributes"]["intelligence"] = int(new_value)
 		"attr_agility":
-			npc.attributes.agility = int(new_value)
+			npc["attributes"]["agility"] = int(new_value)
 		"attr_luck":
-			npc.attributes.luck = int(new_value)
+			npc["attributes"]["luck"] = int(new_value)
 		
 		# 情绪
 		"mood_friendliness":
-			npc.mood["friendliness"] = int(new_value)
+			npc["mood"]["friendliness"] = int(new_value)
 		"mood_trust":
-			npc.mood["trust"] = int(new_value)
+			npc["mood"]["trust"] = int(new_value)
 		"mood_fear":
-			npc.mood["fear"] = int(new_value)
+			npc["mood"]["fear"] = int(new_value)
 		"mood_anger":
-			npc.mood["anger"] = int(new_value)
+			npc["mood"]["anger"] = int(new_value)
 
 func _on_bool_property_changed(property_name: String, value: bool):
 	if current_npc_id.is_empty():
 		return
 	
 	var npc = npcs[current_npc_id]
+	if not npc:
+		return
+		
 	match property_name:
 		"can_trade":
-			npc.can_trade = value
+			npc["can_trade"] = value
 		"can_recruit":
-			npc.can_recruit = value
+			npc["can_recruit"] = value
 		"can_give_quest":
-			npc.can_give_quest = value
+			npc["can_give_quest"] = value
 		"can_heal":
-			npc.can_heal = value
+			npc["can_heal"] = value
 
 func _on_save_npcs():
 	file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
@@ -412,7 +434,12 @@ func _on_save_npcs():
 func _save_to_file(path: String):
 	var data = {}
 	for npc_id in npcs:
-		data[npc_id] = npcs[npc_id].serialize()
+		var npc = npcs[npc_id]
+		# 如果 NPC 对象有 serialize 方法，使用它；否则直接使用字典数据
+		if npc.has_method("serialize"):
+			data[npc_id] = npc.serialize()
+		else:
+			data[npc_id] = npc.duplicate(true)
 	
 	var json = JSON.stringify(data, "\t")
 	var file = FileAccess.open(path, FileAccess.WRITE)
@@ -447,10 +474,14 @@ func _load_from_file(path: String):
 	var data = json.data
 	npcs.clear()
 	
-	for npc_id in data:
-		var npc_data = NPCData.new()
-		npc_data.deserialize(data[npc_id])
-		npcs[npc_id] = npc_data
+	var NPCDataClass = load("res://modules/npc/npc_data.gd")
+	if NPCDataClass:
+		for npc_id in data:
+			var npc_data = NPCDataClass.new()
+			npc_data.deserialize(data[npc_id])
+			npcs[npc_id] = npc_data
+	else:
+		_update_status("⚠️ 无法加载 NPCData 类，跳过 NPC 数据加载")
 	
 	_update_npc_list()
 	property_panel.clear()

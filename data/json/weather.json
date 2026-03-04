@@ -1,0 +1,27 @@
+{
+  "clear": {
+    "visibility": 1.0,
+    "movement_speed": 1.0,
+    "danger_multiplier": 1.0
+  },
+  "cloudy": {
+    "visibility": 0.9,
+    "movement_speed": 1.0,
+    "danger_multiplier": 1.1
+  },
+  "rain": {
+    "visibility": 0.7,
+    "movement_speed": 0.8,
+    "danger_multiplier": 1.2
+  },
+  "storm": {
+    "visibility": 0.5,
+    "movement_speed": 0.6,
+    "danger_multiplier": 1.5
+  },
+  "fog": {
+    "visibility": 0.4,
+    "movement_speed": 0.9,
+    "danger_multiplier": 1.3
+  }
+}
