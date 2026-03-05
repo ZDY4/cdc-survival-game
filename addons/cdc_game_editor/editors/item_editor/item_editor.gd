@@ -58,6 +58,7 @@ const WEAPON_SUBTYPES = {
 @onready var _file_dialog: FileDialog
 @onready var _status_bar: Label
 @onready var _validation_panel: VBoxContainer
+@onready var _stats_label: Label
 
 # 数据
 var items: Dictionary = {}  # item_id -> item_data
@@ -181,11 +182,11 @@ func _create_left_panel() -> Control:
 	panel.add_child(_item_list)
 	
 	# 统计信息
-	var stats_label = Label.new()
-	stats_label.name = "StatsLabel"
-	stats_label.text = "总计: 0 | 武器: 0 | 护甲: 0 | 消耗品: 0"
-	stats_label.add_theme_color_override("font_color", Color.GRAY)
-	panel.add_child(stats_label)
+	_stats_label = Label.new()
+	_stats_label.name = "StatsLabel"
+	_stats_label.text = "总计: 0 | 武器: 0 | 护甲: 0 | 消耗品: 0"
+	_stats_label.add_theme_color_override("font_color", Color.GRAY)
+	panel.add_child(_stats_label)
 	
 	return panel
 
@@ -281,22 +282,21 @@ func _on_new_item():
 		"required_level": 0,
 		"special_effects": []
 	}
+	var item_snapshot = item_data.duplicate(true)
 	
 	# 撤销/重做
 	if _undo_redo_helper:
-		_undo_redo_helper.create_method_action(
-			"创建物品",
-			self, "_add_item",
-			[item_id, item_data],
-			[item_id]
-		)
+		_undo_redo_helper.create_action("创建物品")
+		_undo_redo_helper.add_undo_method(self, "_remove_item", item_id)
+		_undo_redo_helper.add_redo_method(self, "_add_item", item_id, item_snapshot)
+		_undo_redo_helper.commit_action()
 	
 	_add_item(item_id, item_data)
 	_select_item(item_id)
 	_update_status("创建了新物品: %s" % item_id)
 
 func _add_item(item_id: String, item_data: Dictionary):
-	items[item_id] = item_data
+	items[item_id] = item_data.duplicate(true)
 	_update_item_list()
 	_update_stats()
 
@@ -320,19 +320,18 @@ func _on_delete_item():
 	if current_item_id.is_empty():
 		return
 	
-	var old_data = items[current_item_id].duplicate(true)
+	var item_id = current_item_id
+	var old_data = items[item_id].duplicate(true)
 	
 	# 撤销/重做
 	if _undo_redo_helper:
-		_undo_redo_helper.create_method_action(
-			"删除物品",
-			self, "_add_item",
-			[current_item_id],
-			[current_item_id, old_data]
-		)
+		_undo_redo_helper.create_action("删除物品")
+		_undo_redo_helper.add_undo_method(self, "_add_item", item_id, old_data)
+		_undo_redo_helper.add_redo_method(self, "_remove_item", item_id)
+		_undo_redo_helper.commit_action()
 	
-	_remove_item(current_item_id)
-	_update_status("删除了物品: %s" % current_item_id)
+	_remove_item(item_id)
+	_update_status("删除了物品: %s" % item_id)
 
 func _on_item_selected(index: int):
 	var item_id = _item_list.get_item_metadata(index)
@@ -398,9 +397,8 @@ func _update_stats():
 			"consumable": consumables += 1
 			"material": materials += 1
 	
-	var stats_label = get_node_or_null("StatsLabel")
-	if stats_label:
-		stats_label.text = "总计: %d | 武器: %d | 护甲: %d | 消耗品: %d | 材料: %d" % [
+	if _stats_label and is_instance_valid(_stats_label):
+		_stats_label.text = "总计: %d | 武器: %d | 护甲: %d | 消耗品: %d | 材料: %d" % [
 			total, weapons, armors, consumables, materials
 		]
 
@@ -663,12 +661,10 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 	if property_name == "id":
 		if new_value != current_item_id and not new_value.is_empty():
 			if _undo_redo_helper:
-				_undo_redo_helper.create_method_action(
-					"修改物品ID",
-					self, "_change_item_id",
-					[current_item_id, new_value],
-					[new_value, current_item_id]
-				)
+				_undo_redo_helper.create_action("修改物品ID")
+				_undo_redo_helper.add_undo_method(self, "_change_item_id", new_value, current_item_id)
+				_undo_redo_helper.add_redo_method(self, "_change_item_id", current_item_id, new_value)
+				_undo_redo_helper.commit_action()
 			_change_item_id(current_item_id, new_value)
 			return
 	else:
@@ -762,14 +758,7 @@ func _on_save_items():
 
 func _save_to_file(path: String):
 	current_file_path = path
-	
-	var data = {
-		"version": "1.0",
-		"export_time": Time.get_datetime_string_from_system(),
-		"items": items
-	}
-	
-	var json = JSON.stringify(data, "\t")
+	var json = JSON.stringify(items, "\t")
 	var file = FileAccess.open(path, FileAccess.WRITE)
 	if file:
 		file.store_string(json)
@@ -800,11 +789,14 @@ func _load_from_file(path: String):
 		return
 	
 	var data = json.data
-	if not data is Dictionary or not data.has("items"):
+	if not data is Dictionary:
 		_update_status("❌ 无效的文件格式")
 		return
-	
-	items = data.items
+
+	if data.has("items") and data["items"] is Dictionary:
+		items = data["items"]
+	else:
+		items = data
 	current_file_path = path
 	current_item_id = ""
 	_validation_errors.clear()

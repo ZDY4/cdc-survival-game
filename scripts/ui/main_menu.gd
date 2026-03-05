@@ -40,7 +40,7 @@ func _on_continue_pressed():
 	print("[MainMenu] 继续游戏")
 	
 	if SaveSystem.has_save():
-		if SaveSystem.load_game():
+		if SaveSystem.load_latest_game():
 			print("[MainMenu] 存档加载成功")
 			# 根据存档中的位置进入相应场景
 			var player_pos = GameState.player_position

@@ -39,8 +39,16 @@ func _setup_ui():
 ## 清除所有编辑器
 func clear():
 	for name in _editors:
-		_editors[name].queue_free()
+		var editor: Control = _editors[name]
+		if editor:
+			editor.queue_free()
 	_editors.clear()
+	
+	# Keep title and the first separator, clear all dynamic controls.
+	while _container and _container.get_child_count() > 2:
+		var child: Node = _container.get_child(_container.get_child_count() - 1)
+		_container.remove_child(child)
+		child.queue_free()
 
 ## 添加字符串属性
 func add_string_property(name: String, label: String, value: String = "", 

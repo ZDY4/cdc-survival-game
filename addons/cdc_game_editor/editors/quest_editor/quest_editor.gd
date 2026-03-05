@@ -213,22 +213,21 @@ func _on_new_quest():
 		"time_limit": -1,
 		"_status": "draft"
 	}
+	var quest_snapshot = quest_data.duplicate(true)
 	
 	# 撤销/重做
 	if _undo_redo_helper:
-		_undo_redo_helper.create_method_action(
-			"创建任务",
-			self, "_add_quest",
-			[quest_id, quest_data],
-			[quest_id]
-		)
+		_undo_redo_helper.create_action("创建任务")
+		_undo_redo_helper.add_undo_method(self, "_remove_quest", quest_id)
+		_undo_redo_helper.add_redo_method(self, "_add_quest", quest_id, quest_snapshot)
+		_undo_redo_helper.commit_action()
 	
 	_add_quest(quest_id, quest_data)
 	_select_quest(quest_id)
 	_update_status("创建了新任务: %s" % quest_id)
 
 func _add_quest(quest_id: String, quest_data: Dictionary):
-	quests[quest_id] = quest_data
+	quests[quest_id] = quest_data.duplicate(true)
 	_update_quest_list()
 	_validate_quest(quest_id)
 
@@ -251,19 +250,18 @@ func _on_delete_quest():
 	if current_quest_id.is_empty():
 		return
 	
-	var old_data = quests[current_quest_id].duplicate(true)
+	var quest_id = current_quest_id
+	var old_data = quests[quest_id].duplicate(true)
 	
 	# 撤销/重做
 	if _undo_redo_helper:
-		_undo_redo_helper.create_method_action(
-			"删除任务",
-			self, "_add_quest",
-			[current_quest_id],
-			[current_quest_id, old_data]
-		)
+		_undo_redo_helper.create_action("删除任务")
+		_undo_redo_helper.add_undo_method(self, "_add_quest", quest_id, old_data)
+		_undo_redo_helper.add_redo_method(self, "_remove_quest", quest_id)
+		_undo_redo_helper.commit_action()
 	
-	_remove_quest(current_quest_id)
-	_update_status("删除了任务: %s" % current_quest_id)
+	_remove_quest(quest_id)
+	_update_status("删除了任务: %s" % quest_id)
 
 func _on_quest_selected(index: int):
 	var quest_id = _quest_list.get_item_metadata(index)
@@ -445,15 +443,15 @@ func _add_objective(quest: Dictionary, list_container: VBoxContainer):
 		"count": 1,
 		"description": "新目标"
 	}
+	var quest_id = str(quest.get("quest_id", ""))
+	var insert_index = quest.objectives.size()
 	
 	# 撤销/重做
-	if _undo_redo_helper:
-		_undo_redo_helper.create_method_action(
-			"添加目标",
-			self, "_remove_objective_at",
-			[quest, quest.objectives.size(), list_container],
-			[quest, new_objective, list_container]
-		)
+	if _undo_redo_helper and not quest_id.is_empty():
+		_undo_redo_helper.create_action("添加目标")
+		_undo_redo_helper.add_undo_method(self, "_remove_objective_at", quest_id, insert_index)
+		_undo_redo_helper.add_redo_method(self, "_insert_objective_at", quest_id, insert_index, new_objective)
+		_undo_redo_helper.commit_action()
 	
 	quest.objectives.append(new_objective)
 	_refresh_objectives_list(list_container, quest)
@@ -462,30 +460,40 @@ func _add_objective(quest: Dictionary, list_container: VBoxContainer):
 func _remove_objective(quest: Dictionary, index: int, list_container: VBoxContainer):
 	if index < quest.objectives.size():
 		var old_obj = quest.objectives[index].duplicate(true)
+		var quest_id = str(quest.get("quest_id", ""))
 		
 		# 撤销/重做
-		if _undo_redo_helper:
-			_undo_redo_helper.create_method_action(
-				"删除目标",
-				self, "_insert_objective_at",
-				[quest, index, old_obj, list_container],
-				[quest, index, list_container]
-			)
+		if _undo_redo_helper and not quest_id.is_empty():
+			_undo_redo_helper.create_action("删除目标")
+			_undo_redo_helper.add_undo_method(self, "_insert_objective_at", quest_id, index, old_obj)
+			_undo_redo_helper.add_redo_method(self, "_remove_objective_at", quest_id, index)
+			_undo_redo_helper.commit_action()
 		
 		quest.objectives.remove_at(index)
 		_refresh_objectives_list(list_container, quest)
 		_validate_quest(quest.quest_id)
 
-func _remove_objective_at(quest: Dictionary, index: int, list_container: VBoxContainer):
-	if index < quest.objectives.size():
+func _remove_objective_at(quest_id: String, index: int):
+	var quest = quests.get(quest_id, {})
+	if quest and index >= 0 and index < quest.objectives.size():
 		quest.objectives.remove_at(index)
-		_refresh_objectives_list(list_container, quest)
-		_validate_quest(quest.quest_id)
+		_validate_quest(quest_id)
+		if current_quest_id == quest_id:
+			_update_property_panel(quest)
+		_update_quest_list(_search_box.text)
+		_update_validation_panel()
 
-func _insert_objective_at(quest: Dictionary, index: int, obj: Dictionary, list_container: VBoxContainer):
-	quest.objectives.insert(index, obj)
-	_refresh_objectives_list(list_container, quest)
-	_validate_quest(quest.quest_id)
+func _insert_objective_at(quest_id: String, index: int, obj: Dictionary):
+	var quest = quests.get(quest_id, {})
+	if not quest:
+		return
+	var target_index: int = clampi(index, 0, quest.objectives.size())
+	quest.objectives.insert(target_index, obj.duplicate(true))
+	_validate_quest(quest_id)
+	if current_quest_id == quest_id:
+		_update_property_panel(quest)
+	_update_quest_list(_search_box.text)
+	_update_validation_panel()
 
 func _create_rewards_editor(quest: Dictionary) -> Control:
 	var container = VBoxContainer.new()
@@ -671,12 +679,10 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 		# ID变更需要特殊处理
 		if new_value != current_quest_id and not new_value.is_empty():
 			if _undo_redo_helper:
-				_undo_redo_helper.create_method_action(
-					"修改任务ID",
-					self, "_change_quest_id",
-					[current_quest_id, new_value],
-					[new_value, current_quest_id]
-				)
+				_undo_redo_helper.create_action("修改任务ID")
+				_undo_redo_helper.add_undo_method(self, "_change_quest_id", new_value, current_quest_id)
+				_undo_redo_helper.add_redo_method(self, "_change_quest_id", current_quest_id, new_value)
+				_undo_redo_helper.commit_action()
 			_change_quest_id(current_quest_id, new_value)
 			return
 	else:
@@ -790,14 +796,7 @@ func _on_save_quests():
 
 func _save_to_file(path: String):
 	current_file_path = path
-	
-	var data = {
-		"version": "1.0",
-		"export_time": Time.get_datetime_string_from_system(),
-		"quests": quests
-	}
-	
-	var json = JSON.stringify(data, "\t")
+	var json = JSON.stringify(quests, "\t")
 	var file = FileAccess.open(path, FileAccess.WRITE)
 	if file:
 		file.store_string(json)
@@ -828,11 +827,14 @@ func _load_from_file(path: String):
 		return
 	
 	var data = json.data
-	if not data is Dictionary or not data.has("quests"):
+	if not data is Dictionary:
 		_update_status("❌ 无效的文件格式")
 		return
-	
-	quests = data.quests
+
+	if data.has("quests") and data["quests"] is Dictionary:
+		quests = data["quests"]
+	else:
+		quests = data
 	current_file_path = path
 	current_quest_id = ""
 	_validation_errors.clear()

@@ -3,6 +3,8 @@ extends Node
 
 const SAVE_DIR: String = "user://saves/"
 const SAVE_FILE: String = "savegame.json"
+const SAVE_FILE_PREFIX: String = "save_"
+const SAVE_FILE_EXT: String = ".json"
 const LOCAL_STORAGE_KEY: String = "cdc_survival_save"
 
 var _is_web: bool = false
@@ -74,6 +76,65 @@ func _delete_local_storage_save() -> bool:
 	js_bridge.eval(js_code)
 	return true
 
+func _save_to_file(path: String, save_data: Dictionary) -> bool:
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	if not file:
+		return false
+	file.store_string(JSON.stringify(save_data, "\t"))
+	file.close()
+	return true
+
+func _load_from_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	
+	var file = FileAccess.open(path, FileAccess.READ)
+	if not file:
+		return {}
+	
+	var json_string = file.get_as_text()
+	file.close()
+	
+	var json = JSON.new()
+	if json.parse(json_string) != OK:
+		return {}
+	
+	var data = json.get_data()
+	return data if data is Dictionary else {}
+
+func _is_valid_save_filename(file_name: String) -> bool:
+	if not file_name.ends_with(SAVE_FILE_EXT):
+		return false
+	return file_name == SAVE_FILE or file_name.begins_with(SAVE_FILE_PREFIX)
+
+func _build_timestamped_save_name() -> String:
+	return "%s%d%s" % [SAVE_FILE_PREFIX, Time.get_unix_time_from_system(), SAVE_FILE_EXT]
+
+func _get_desktop_latest_save_path() -> String:
+	if not DirAccess.dir_exists_absolute(SAVE_DIR):
+		return ""
+	
+	var dir = DirAccess.open(SAVE_DIR)
+	if not dir:
+		return ""
+	
+	var latest_path := ""
+	var latest_modified := -1
+	
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and _is_valid_save_filename(file_name):
+			var full_path = SAVE_DIR + file_name
+			var modified = FileAccess.get_modified_time(full_path)
+			if modified > latest_modified:
+				latest_modified = modified
+				latest_path = full_path
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	
+	return latest_path
+
 func save_game():
 	var gs = get_node("/root/GameState")
 	if not gs:
@@ -108,19 +169,19 @@ func save_game():
 		# Web平台：使用localStorage
 		success = _save_to_local_storage(save_data)
 	else:
-		# 桌面平台：使用文件系统
-		var file = FileAccess.open(SAVE_DIR + SAVE_FILE, FileAccess.WRITE)
-		if file:
-			file.store_string(JSON.stringify(save_data, "\t"))
-			file.close()
-			success = true
+		# 桌面平台：写入最新存档 + 时间戳快照
+		var latest_path = SAVE_DIR + SAVE_FILE
+		var snapshot_path = SAVE_DIR + _build_timestamped_save_name()
+		var latest_ok = _save_to_file(latest_path, save_data)
+		var snapshot_ok = _save_to_file(snapshot_path, save_data)
+		success = latest_ok or snapshot_ok
 	
 	if success:
 		EventBus.emit(EventBus.EventType.GAME_SAVED, {})
 	
 	return success
 
-func load_game():
+func load_game(path: String = ""):
 	var gs = get_node("/root/GameState")
 	if not gs:
 		return false
@@ -131,23 +192,13 @@ func load_game():
 		# Web平台：从localStorage读取
 		data = _load_from_local_storage()
 	else:
-		# 桌面平台：从文件读取
-		var save_path = SAVE_DIR + SAVE_FILE
-		if not FileAccess.file_exists(save_path):
+		# 桌面平台：默认读取最近一次存档
+		var save_path = path
+		if save_path.is_empty():
+			save_path = _get_desktop_latest_save_path()
+		if save_path.is_empty():
 			return false
-		
-		var file = FileAccess.open(save_path, FileAccess.READ)
-		if not file:
-			return false
-		
-		var json_string = file.get_as_text()
-		file.close()
-		
-		var json = JSON.new()
-		if json.parse(json_string) != OK:
-			return false
-		
-		data = json.get_data()
+		data = _load_from_file(save_path)
 	
 	if data.is_empty():
 		return false
@@ -185,19 +236,37 @@ func load_game():
 	EventBus.emit(EventBus.EventType.GAME_LOADED, {})
 	return true
 
+func load_latest_game() -> bool:
+	return load_game()
+
 func has_save():
 	if _is_web_platform():
 		return _has_local_storage_save()
 	else:
-		return FileAccess.file_exists(SAVE_DIR + SAVE_FILE)
+		return not _get_desktop_latest_save_path().is_empty()
 
 func delete_save():
 	if _is_web_platform():
 		return _delete_local_storage_save()
 	else:
-		if FileAccess.file_exists(SAVE_DIR + SAVE_FILE):
-			return DirAccess.remove_absolute(SAVE_DIR + SAVE_FILE) == OK
-		return false
+		if not DirAccess.dir_exists_absolute(SAVE_DIR):
+			return false
+		
+		var dir = DirAccess.open(SAVE_DIR)
+		if not dir:
+			return false
+		
+		var removed_count := 0
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		while not file_name.is_empty():
+			if not dir.current_is_dir() and _is_valid_save_filename(file_name):
+				if DirAccess.remove_absolute(SAVE_DIR + file_name) == OK:
+					removed_count += 1
+			file_name = dir.get_next()
+		dir.list_dir_end()
+		
+		return removed_count > 0
 
 # 获取保存数据摘要（用于显示存档信息）
 func get_save_info() -> Dictionary:
@@ -206,22 +275,10 @@ func get_save_info() -> Dictionary:
 	if _is_web_platform():
 		data = _load_from_local_storage()
 	else:
-		var save_path = SAVE_DIR + SAVE_FILE
-		if not FileAccess.file_exists(save_path):
+		var save_path = _get_desktop_latest_save_path()
+		if save_path.is_empty():
 			return {}
-		
-		var file = FileAccess.open(save_path, FileAccess.READ)
-		if not file:
-			return {}
-		
-		var json_string = file.get_as_text()
-		file.close()
-		
-		var json = JSON.new()
-		if json.parse(json_string) != OK:
-			return {}
-		
-		data = json.get_data()
+		data = _load_from_file(save_path)
 	
 	if data.is_empty():
 		return {}

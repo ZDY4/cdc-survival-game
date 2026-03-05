@@ -40,10 +40,15 @@ var editor_plugin: EditorPlugin = null
 @onready var _toolbar: HBoxContainer
 @onready var _file_dialog: FileDialog
 @onready var _status_bar: Label
+@onready var _category_filter: OptionButton
+@onready var _search_box: LineEdit
+@onready var _stats_label: Label
 
 # UI元素引用
 var _ui_elements: Dictionary = {}
 var _materials_container: VBoxContainer
+var _selected_category_filter: String = ""
+var _search_filter_text: String = ""
 
 func _ready():
 	_setup_ui()
@@ -136,23 +141,24 @@ func _create_recipe_list_panel() -> Control:
 	filter_label.text = "类别:"
 	filter_hbox.add_child(filter_label)
 	
-	var category_filter = OptionButton.new()
-	category_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	category_filter.add_item("全部")
+	_category_filter = OptionButton.new()
+	_category_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_category_filter.add_item("全部")
+	_category_filter.set_item_metadata(0, "")
 	var idx = 1
 	for cat_key in RECIPE_CATEGORIES.keys():
-		category_filter.add_item(RECIPE_CATEGORIES[cat_key])
-		category_filter.set_item_metadata(idx, cat_key)
+		_category_filter.add_item(RECIPE_CATEGORIES[cat_key])
+		_category_filter.set_item_metadata(idx, cat_key)
 		idx += 1
-	category_filter.item_selected.connect(_on_category_filter_changed)
-	filter_hbox.add_child(category_filter)
+	_category_filter.item_selected.connect(_on_category_filter_changed)
+	filter_hbox.add_child(_category_filter)
 	panel.add_child(filter_hbox)
 	
 	# 搜索框
-	var search_box = LineEdit.new()
-	search_box.placeholder_text = "搜索配方..."
-	search_box.text_changed.connect(_on_search_changed)
-	panel.add_child(search_box)
+	_search_box = LineEdit.new()
+	_search_box.placeholder_text = "搜索配方..."
+	_search_box.text_changed.connect(_on_search_changed)
+	panel.add_child(_search_box)
 	
 	# 配方列表
 	_recipe_list = ItemList.new()
@@ -161,10 +167,9 @@ func _create_recipe_list_panel() -> Control:
 	panel.add_child(_recipe_list)
 	
 	# 统计
-	var stats = Label.new()
-	stats.name = "StatsLabel"
-	stats.text = "总计: 0个配方"
-	panel.add_child(stats)
+	_stats_label = Label.new()
+	_stats_label.text = "Total: 0 / Filtered: 0"
+	panel.add_child(_stats_label)
 	
 	return panel
 
@@ -186,6 +191,7 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 	
 	var sorted_recipes = recipes.keys()
 	sorted_recipes.sort()
+	var filtered_count := 0
 	
 	for recipe_id in sorted_recipes:
 		var recipe = recipes[recipe_id]
@@ -207,6 +213,7 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 		
 		var idx = _recipe_list.add_item(display_text)
 		_recipe_list.set_item_metadata(idx, recipe_id)
+		filtered_count += 1
 		
 		# 根据类别设置颜色
 		match category:
@@ -221,9 +228,8 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 			"ammo":
 				_recipe_list.set_item_custom_fg_color(idx, Color.YELLOW)
 	
-	var stats_label = get_node_or_null("StatsLabel")
-	if stats_label:
-		stats_label.text = "总计: %d个配方" % recipes.size()
+	if _stats_label and is_instance_valid(_stats_label):
+		_stats_label.text = "Total: %d / Filtered: %d" % [recipes.size(), filtered_count]
 
 func _get_output_item_name(recipe: Dictionary) -> String:
 	var output = recipe.get("output", {})
@@ -235,13 +241,15 @@ func _get_output_item_name(recipe: Dictionary) -> String:
 	return item_id
 
 func _on_category_filter_changed(index: int):
-	var category = ""
-	if index > 0:
-		category = _recipe_list.get_item_metadata(index)
-	_update_recipe_list(category)
+	var category := ""
+	if _category_filter and index >= 0 and index < _category_filter.get_item_count():
+		category = str(_category_filter.get_item_metadata(index))
+	_selected_category_filter = category
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
 
 func _on_search_changed(text: String):
-	_update_recipe_list("", text)
+	_search_filter_text = text.strip_edges()
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
 
 func _on_new_recipe():
 	var recipe_id = "recipe_%d" % Time.get_ticks_msec()
@@ -456,7 +464,7 @@ func _add_materials_editor(materials: Array):
 	
 	# 显示当前材料
 	for i in range(materials.size()):
-		_create_material_row(_materials_container, i, materials[i])
+		_create_material_row(_materials_container, i, materials[i], materials)
 	
 	# 添加按钮
 	var add_btn = Button.new()
@@ -478,7 +486,8 @@ func _create_material_row(container: VBoxContainer, index: int, material: Dictio
 	item_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_edit.text_changed.connect(func(v): 
 		material.item_id = v
-		_on_field_changed("materials", materials_ref if materials_ref else recipes[current_recipe_id].get("materials", []))
+		var target_materials = _resolve_materials_ref(materials_ref)
+		_on_field_changed("materials", target_materials)
 	)
 	row.add_child(item_edit)
 	
@@ -489,16 +498,22 @@ func _create_material_row(container: VBoxContainer, index: int, material: Dictio
 	count_spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	count_spin.value_changed.connect(func(v):
 		material.count = int(v)
-		_on_field_changed("materials", materials_ref if materials_ref else recipes[current_recipe_id].get("materials", []))
+		var target_materials = _resolve_materials_ref(materials_ref)
+		_on_field_changed("materials", target_materials)
 	)
 	row.add_child(count_spin)
 	
 	var del_btn = Button.new()
 	del_btn.text = "删除"
 	del_btn.pressed.connect(func():
-		materials_ref.remove_at(index)
+		var target_materials = _resolve_materials_ref(materials_ref)
+		var target_index = target_materials.find(material)
+		if target_index < 0:
+			target_index = index
+		if target_index >= 0 and target_index < target_materials.size():
+			target_materials.remove_at(target_index)
 		row.queue_free()
-		_on_field_changed("materials", materials_ref)
+		_on_field_changed("materials", target_materials)
 	)
 	row.add_child(del_btn)
 	
@@ -507,6 +522,13 @@ func _create_material_row(container: VBoxContainer, index: int, material: Dictio
 	container.add_child(row)
 	if add_button_idx >= 0:
 		container.move_child(row, add_button_idx)
+
+func _resolve_materials_ref(materials_ref: Array) -> Array:
+	if not materials_ref.is_empty():
+		return materials_ref
+	if current_recipe_id.is_empty() or not recipes.has(current_recipe_id):
+		return []
+	return recipes[current_recipe_id].get("materials", [])
 
 func _add_string_array_field(key: String, label_text: String, values: Array):
 	var vbox = VBoxContainer.new()
