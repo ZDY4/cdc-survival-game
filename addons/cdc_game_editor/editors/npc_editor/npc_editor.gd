@@ -8,13 +8,15 @@ signal npc_loaded(npc_id: String)
 
 # NPC绫诲瀷閫夐」
 const NPC_TYPES = {
-	0: "鍙嬪ソ",
-	1: "涓珛",
-	2: "鏁屽",
-	3: "鍟嗕汉",
-	4: "浠诲姟鍙戝竷鑰?,
-	5: "鍙嫑鍕?
+	0: "Friendly",
+	1: "Neutral",
+	2: "Hostile",
+	3: "Trader",
+	4: "Quest Giver",
+	5: "Recruitable"
 }
+
+const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
 
 # 鏁版嵁
 var npcs: Dictionary = {}  # npc_id -> NPCData
@@ -35,7 +37,7 @@ var _stats_label: Label
 func _ready():
 	_setup_ui()
 	_setup_file_dialog()
-	_load_npcs_from_data_manager()
+	_load_npcs_from_project_data()
 	_update_npc_list()
 
 func _setup_ui():
@@ -44,6 +46,9 @@ func _setup_ui():
 	# 宸ュ叿鏍?
 	toolbar = HBoxContainer.new()
 	toolbar.custom_minimum_size = Vector2(0, 45)
+	toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	toolbar.offset_top = 0
+	toolbar.offset_bottom = 45
 	add_child(toolbar)
 	
 	var new_btn = Button.new()
@@ -77,8 +82,9 @@ func _setup_ui():
 	
 	# 涓诲垎鍓插鍣?
 	var main_split = HSplitContainer.new()
-	main_split.position = Vector2(0, 50)
-	main_split.size = Vector2(size.x, size.y - 70)
+	main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main_split.offset_top = 50
+	main_split.offset_bottom = -20
 	add_child(main_split)
 	
 	# 宸︿晶锛歂PC鍒楄〃
@@ -96,8 +102,11 @@ func _setup_ui():
 	
 	# 鐘舵€佹爮
 	status_bar = Label.new()
-	status_bar.position = Vector2(0, size.y - 20)
-	status_bar.size = Vector2(size.x, 20)
+	status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	status_bar.offset_top = -20
+	status_bar.offset_bottom = 0
+	status_bar.offset_left = 0
+	status_bar.offset_right = 0
 	status_bar.text = "灏辩华"
 	add_child(status_bar)
 
@@ -139,19 +148,62 @@ func _setup_file_dialog():
 	file_dialog.add_filter("*.json; JSON鏂囦欢")
 	add_child(file_dialog)
 
-func _load_npcs_from_data_manager():
+func _load_npcs_from_project_data():
 	var data_manager = get_node_or_null("/root/DataManager")
-	if data_manager:
-		var data = data_manager.get_all_npcs()
-		if not data.is_empty():
-			# 杞崲涓篘PCData瀵硅薄
-			var NPCDataClass = load("res://modules/npc/npc_data.gd")
-			if NPCDataClass:
-				for npc_id in data:
-					var npc_data = NPCDataClass.new()
-					npc_data.deserialize(data[npc_id])
-					npcs[npc_id] = npc_data
-				print("[NPCEditor] 浠嶥ataManager鍔犺浇浜?%d 涓狽PC" % npcs.size())
+	if data_manager and data_manager.has_method("get_all_npcs"):
+		var data: Variant = data_manager.get_all_npcs()
+		if data is Dictionary and not data.is_empty():
+			_apply_npc_dictionary(data)
+			print("[NPCEditor] Loaded %d NPCs from DataManager" % npcs.size())
+			return
+		elif not (data is Dictionary):
+			push_warning("[NPCEditor] Invalid NPC data from DataManager: expected Dictionary")
+
+	var file_data: Dictionary = _load_json_dictionary([
+		"res://data/json/npcs.json",
+		"res://data/npcs.json"
+	])
+	if not file_data.is_empty():
+		_apply_npc_dictionary(file_data)
+		current_file_path = "res://data/json/npcs.json" if FileAccess.file_exists("res://data/json/npcs.json") else "res://data/npcs.json"
+		print("[NPCEditor] Loaded %d NPCs from %s" % [npcs.size(), current_file_path])
+
+func _load_json_dictionary(paths: Array[String]) -> Dictionary:
+	for path in paths:
+		if not FileAccess.file_exists(path):
+			continue
+		var validation := JSON_VALIDATOR.validate_file(path, {
+			"root_type": JSON_VALIDATOR.TYPE_DICTIONARY,
+			"wrapper_key": "npcs",
+			"wrapper_type": JSON_VALIDATOR.TYPE_DICTIONARY,
+			"entry_type": JSON_VALIDATOR.TYPE_DICTIONARY,
+			"entry_label": "npc"
+		})
+		if bool(validation.get("ok", false)):
+			var loaded_npcs: Variant = validation.get("data", {})
+			if loaded_npcs is Dictionary:
+				return loaded_npcs
+			push_warning("[JSON] %s | Invalid validator result: data must be Dictionary" % path)
+			continue
+		push_warning(str(validation.get("message", "[JSON] Unknown validation error")))
+	return {}
+
+func _apply_npc_dictionary(data: Dictionary) -> void:
+	npcs.clear()
+	var npc_data_class: Script = load("res://modules/npc/npc_data.gd")
+	for npc_id in data.keys():
+		var raw_npc: Variant = data[npc_id]
+		if raw_npc is Object:
+			npcs[npc_id] = raw_npc
+			continue
+		if raw_npc is Dictionary and npc_data_class:
+			var npc_data: Variant = npc_data_class.new()
+			if npc_data is Object and npc_data.has_method("deserialize"):
+				npc_data.deserialize(raw_npc)
+				npcs[npc_id] = npc_data
+				continue
+		if raw_npc is Dictionary:
+			npcs[npc_id] = raw_npc.duplicate(true)
 
 func _update_npc_list(filter: String = ""):
 	npc_list.clear()
@@ -185,7 +237,13 @@ func get_data() -> Dictionary:
 	# 杞崲
 	var data = {}
 	for npc_id in npcs:
-		data[npc_id] = npcs[npc_id].serialize()
+		var npc: Variant = npcs[npc_id]
+		if npc is Object and npc.has_method("serialize"):
+			data[npc_id] = npc.serialize()
+		elif npc is Dictionary:
+			data[npc_id] = npc.duplicate(true)
+		else:
+			data[npc_id] = npc
 	return data
 
 func _on_search_changed(text: String):
@@ -427,11 +485,12 @@ func _save_to_file(path: String):
 	var data = {}
 	for npc_id in npcs:
 		var npc = npcs[npc_id]
-		# 濡傛灉 NPC 瀵硅薄鏈?serialize 鏂规硶锛屼娇鐢ㄥ畠锛涘惁鍒欑洿鎺ヤ娇鐢ㄥ瓧鍏告暟鎹?
-		if npc.has_method("serialize"):
+		if npc is Object and npc.has_method("serialize"):
 			data[npc_id] = npc.serialize()
-		else:
+		elif npc is Dictionary:
 			data[npc_id] = npc.duplicate(true)
+		else:
+			data[npc_id] = npc
 	
 	var json = JSON.stringify(data, "\t")
 	var file = FileAccess.open(path, FileAccess.WRITE)
@@ -449,36 +508,31 @@ func _on_load_npcs():
 	file_dialog.popup_centered(Vector2(800, 600))
 
 func _load_from_file(path: String):
-	var file = FileAccess.open(path, FileAccess.READ)
-	if not file:
-		_update_status("鉂?鏃犳硶鎵撳紑鏂囦欢")
+	var validation := JSON_VALIDATOR.validate_file(path, {
+		"root_type": JSON_VALIDATOR.TYPE_DICTIONARY,
+		"wrapper_key": "npcs",
+		"wrapper_type": JSON_VALIDATOR.TYPE_DICTIONARY,
+		"entry_type": JSON_VALIDATOR.TYPE_DICTIONARY,
+		"entry_label": "npc"
+	})
+	if not bool(validation.get("ok", false)):
+		_update_status(str(validation.get("message", "[JSON] Unknown validation error")))
 		return
-	
-	var json_text = file.get_as_text()
-	file.close()
-	
-	var json = JSON.new()
-	var error = json.parse(json_text)
-	if error != OK:
-		_update_status("鉂?JSON瑙ｆ瀽閿欒")
+
+	var loaded_npcs: Variant = validation.get("data", {})
+	if not (loaded_npcs is Dictionary):
+		_update_status("[JSON] %s | Invalid validator result: data must be Dictionary" % path)
 		return
-	
-	var data = json.data
-	npcs.clear()
-	
-	var NPCDataClass = load("res://modules/npc/npc_data.gd")
-	if NPCDataClass:
-		for npc_id in data:
-			var npc_data = NPCDataClass.new()
-			npc_data.deserialize(data[npc_id])
-			npcs[npc_id] = npc_data
-	else:
-		_update_status("鈿狅笍 鏃犳硶鍔犺浇 NPCData 绫伙紝璺宠繃 NPC 鏁版嵁鍔犺浇")
+	var data: Dictionary = loaded_npcs
+
+	_apply_npc_dictionary(data)
+	current_file_path = path
+	current_npc_id = ""
 	
 	_update_npc_list()
 	property_panel.clear()
 	npc_loaded.emit(current_npc_id)
-	_update_status("鉁?宸插姞杞? %s (%d涓狽PC)" % [path, npcs.size()])
+	_update_status("Loaded: %s (%d NPCs)" % [path, npcs.size()])
 
 func _on_export_json():
 	_on_save_npcs()
@@ -496,4 +550,6 @@ func get_npcs_count() -> int:
 
 func has_unsaved_changes() -> bool:
 	return npcs.size() > 0
+
+
 
