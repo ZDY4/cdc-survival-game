@@ -1,12 +1,12 @@
-﻿@tool
+@tool
 extends Control
-## NPC缂栬緫鍣?
-## 鐢ㄤ簬鍒涘缓鍜岀紪杈慛PC鏁版嵁
+## NPC编辑器
+## 用于创建和编辑NPC数据
 
 signal npc_saved(npc_id: String)
 signal npc_loaded(npc_id: String)
 
-# NPC绫诲瀷閫夐」
+# NPC类型选项
 const NPC_TYPES = {
 	0: "Friendly",
 	1: "Neutral",
@@ -18,15 +18,15 @@ const NPC_TYPES = {
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
 
-# 鏁版嵁
-var npcs: Dictionary = {}  # npc_id -> NPCData
+# 数据
+var npcs: Dictionary = {}  # npc_id -> Dictionary
 var current_npc_id: String = ""
 var current_file_path: String = ""
 
-# 缂栬緫鍣ㄦ彃浠跺紩鐢?
+# 编辑器插件引
 var editor_plugin: EditorPlugin = null
 
-# UI寮曠敤
+# UI引用
 var npc_list: ItemList
 var property_panel: Control
 var toolbar: HBoxContainer
@@ -43,7 +43,7 @@ func _ready():
 func _setup_ui():
 	anchors_preset = Control.PRESET_FULL_RECT
 	
-	# 宸ュ叿鏍?
+	# 工具栏
 	toolbar = HBoxContainer.new()
 	toolbar.custom_minimum_size = Vector2(0, 45)
 	toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -52,62 +52,62 @@ func _setup_ui():
 	add_child(toolbar)
 	
 	var new_btn = Button.new()
-	new_btn.text = "鏂板缓NPC"
+	new_btn.text = "新建NPC"
 	new_btn.pressed.connect(_on_new_npc)
 	toolbar.add_child(new_btn)
 	
 	var delete_btn = Button.new()
-	delete_btn.text = "鍒犻櫎"
+	delete_btn.text = "删除"
 	delete_btn.pressed.connect(_on_delete_npc)
 	toolbar.add_child(delete_btn)
 	
 	toolbar.add_child(VSeparator.new())
 	
 	var save_btn = Button.new()
-	save_btn.text = "淇濆瓨"
+	save_btn.text = "保存"
 	save_btn.pressed.connect(_on_save_npcs)
 	toolbar.add_child(save_btn)
 	
 	var load_btn = Button.new()
-	load_btn.text = "鍔犺浇"
+	load_btn.text = "加载"
 	load_btn.pressed.connect(_on_load_npcs)
 	toolbar.add_child(load_btn)
 	
 	toolbar.add_child(VSeparator.new())
 	
 	var export_btn = Button.new()
-	export_btn.text = "瀵煎嚭JSON"
+	export_btn.text = "导出JSON"
 	export_btn.pressed.connect(_on_export_json)
 	toolbar.add_child(export_btn)
 	
-	# 涓诲垎鍓插鍣?
+	# 主分割
 	var main_split = HSplitContainer.new()
 	main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
 	main_split.offset_top = 50
 	main_split.offset_bottom = -20
 	add_child(main_split)
 	
-	# 宸︿晶锛歂PC鍒楄〃
+	# 左侧：NPC列表
 	var left_panel = _create_npc_list_panel()
 	main_split.add_child(left_panel)
 	
-	# 鍙充晶锛氬睘鎬ч潰鏉?
+	# 右侧：属性面板
 	property_panel = preload("res://addons/cdc_game_editor/utils/property_panel.gd").new()
 	property_panel.custom_minimum_size = Vector2(400, 0)
-	property_panel.panel_title = "NPC灞炴€?
+	property_panel.panel_title = "NPC Properties"
 	property_panel.property_changed.connect(_on_property_changed)
 	main_split.add_child(property_panel)
 	
 	main_split.split_offset = 250
 	
-	# 鐘舵€佹爮
+	# 状态栏
 	status_bar = Label.new()
 	status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	status_bar.offset_top = -20
 	status_bar.offset_bottom = 0
 	status_bar.offset_left = 0
 	status_bar.offset_right = 0
-	status_bar.text = "灏辩华"
+	status_bar.text = "就绪"
 	add_child(status_bar)
 
 func _create_npc_list_panel() -> Control:
@@ -115,29 +115,29 @@ func _create_npc_list_panel() -> Control:
 	panel.custom_minimum_size = Vector2(280, 0)
 	
 	var title = Label.new()
-	title.text = "馃 NPC鍒楄〃"
+	title.text = "🧑 NPC列表"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
 	panel.add_child(title)
 	
 	panel.add_child(HSeparator.new())
 	
-	# 鎼滅储妗?
+	# 搜索
 	var search_box = LineEdit.new()
-	search_box.placeholder_text = "鎼滅储NPC..."
+	search_box.placeholder_text = "搜索NPC..."
 	search_box.text_changed.connect(_on_search_changed)
 	panel.add_child(search_box)
 	
-	# NPC鍒楄〃
+	# NPC列表
 	npc_list = ItemList.new()
 	npc_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	npc_list.item_selected.connect(_on_npc_selected)
 	panel.add_child(npc_list)
 	
-	# 缁熻
+	# 统计
 	_stats_label = Label.new()
 	_stats_label.name = "StatsLabel"
-	_stats_label.text = "鎬昏: 0涓狽PC"
+	_stats_label.text = "总计: 0个NPC"
 	panel.add_child(_stats_label)
 	
 	return panel
@@ -145,7 +145,7 @@ func _create_npc_list_panel() -> Control:
 func _setup_file_dialog():
 	file_dialog = FileDialog.new()
 	file_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	file_dialog.add_filter("*.json; JSON鏂囦欢")
+	file_dialog.add_filter("*.json; JSON文件")
 	add_child(file_dialog)
 
 func _load_npcs_from_project_data():
@@ -194,13 +194,19 @@ func _apply_npc_dictionary(data: Dictionary) -> void:
 	for npc_id in data.keys():
 		var raw_npc: Variant = data[npc_id]
 		if raw_npc is Object:
-			npcs[npc_id] = raw_npc
+			if raw_npc.has_method("serialize"):
+				npcs[npc_id] = raw_npc.serialize()
+			else:
+				push_warning("[NPCEditor] NPC '%s' is Object without serialize(); skipping entry" % npc_id)
 			continue
 		if raw_npc is Dictionary and npc_data_class:
 			var npc_data: Variant = npc_data_class.new()
 			if npc_data is Object and npc_data.has_method("deserialize"):
 				npc_data.deserialize(raw_npc)
-				npcs[npc_id] = npc_data
+				if npc_data.has_method("serialize"):
+					npcs[npc_id] = npc_data.serialize()
+				else:
+					npcs[npc_id] = raw_npc.duplicate(true)
 				continue
 		if raw_npc is Dictionary:
 			npcs[npc_id] = raw_npc.duplicate(true)
@@ -215,13 +221,13 @@ func _update_npc_list(filter: String = ""):
 		var npc = npcs[npc_id]
 		var npc_type = int(npc.get("npc_type", 0))
 		var npc_name = str(npc.get("name", npc_id))
-		var display_text = "%s - %s (%s)" % [npc_id, npc_name, NPC_TYPES.get(npc_type, "鏈煡")]
+		var display_text = "%s - %s (%s)" % [npc_id, npc_name, NPC_TYPES.get(npc_type, "未知")]
 		
 		if filter.is_empty() or display_text.to_lower().contains(filter.to_lower()):
 			var idx = npc_list.add_item(display_text)
 			npc_list.set_item_metadata(idx, npc_id)
 		
-			# 鏍规嵁绫诲瀷璁剧疆棰滆壊 (3=TRADER, 2=HOSTILE, 4=QUEST_GIVER)
+			# 根据类型设置颜色 (3=TRADER, 2=HOSTILE, 4=QUEST_GIVER)
 			match npc_type:
 				3:  # TRADER
 					npc_list.set_item_custom_fg_color(idx, Color.GOLD)
@@ -231,10 +237,10 @@ func _update_npc_list(filter: String = ""):
 					npc_list.set_item_custom_fg_color(idx, Color.CYAN)
 	
 	if _stats_label:
-		_stats_label.text = "鎬昏: %d涓狽PC" % npcs.size()
+		_stats_label.text = "总计: %d个NPC" % npcs.size()
 
 func get_data() -> Dictionary:
-	# 杞崲
+	# 转换
 	var data = {}
 	for npc_id in npcs:
 		var npc: Variant = npcs[npc_id]
@@ -253,21 +259,31 @@ func _on_new_npc():
 	var npc_id = "npc_%d" % Time.get_ticks_msec()
 	var NPCDataClass = load("res://modules/npc/npc_data.gd")
 	if not NPCDataClass:
-		_update_status("鉂?鏃犳硶鍔犺浇 NPCData 绫?)
+		_update_status("Failed to load NPCData class")
 		return
 	
 	var npc_data = NPCDataClass.new()
 	npc_data.id = npc_id
-	npc_data.name = "鏂癗PC"
-	npc_data.description = "NPC鎻忚堪"
+	npc_data.name = "新NPC"
+	npc_data.description = "NPC描述"
 	npc_data.npc_type = 0  # Type.FRIENDLY = 0
 	npc_data.default_location = "safehouse"
 	npc_data.current_location = "safehouse"
-	
-	npcs[npc_id] = npc_data
+
+	if npc_data.has_method("serialize"):
+		npcs[npc_id] = npc_data.serialize()
+	else:
+		npcs[npc_id] = {
+			"id": npc_id,
+			"name": "新NPC",
+			"description": "NPC描述",
+			"npc_type": 0,
+			"default_location": "safehouse",
+			"current_location": "safehouse"
+		}
 	_update_npc_list()
 	_select_npc(npc_id)
-	_update_status("鍒涘缓浜嗘柊NPC: %s" % npc_id)
+	_update_status("创建了新NPC: %s" % npc_id)
 
 func _on_delete_npc():
 	if current_npc_id.is_empty():
@@ -277,7 +293,7 @@ func _on_delete_npc():
 	current_npc_id = ""
 	_update_npc_list()
 	property_panel.clear()
-	_update_status("鍒犻櫎浜哊PC")
+	_update_status("删除了NPC")
 
 func _on_npc_selected(index: int):
 	var npc_id = npc_list.get_item_metadata(index)
@@ -295,78 +311,78 @@ func _update_property_panel(npc):
 	if not npc:
 		return
 	
-	# 鍩虹淇℃伅 - 浣跨敤 get() 瀹夊叏璁块棶
-	property_panel.add_string_property("id", "NPC ID:", npc.get("id", ""), false, "鍞竴鏍囪瘑绗?)
-	property_panel.add_string_property("name", "鍚嶇О:", npc.get("name", ""), false, "鏄剧ず鍚嶇О")
-	property_panel.add_string_property("title", "绉板彿:", npc.get("title", ""), false, "濡傦細搴熷湡鍟嗕汉")
-	property_panel.add_string_property("description", "鎻忚堪:", npc.get("description", ""), true, "璇︾粏鎻忚堪...")
+	# 基础信息 - 使用 get() 安全访问
+	property_panel.add_string_property("id", "NPC ID:", npc.get("id", ""), false, "Unique identifier")
+	property_panel.add_string_property("name", "名称:", npc.get("name", ""), false, "显示名称")
+	property_panel.add_string_property("title", "称号:", npc.get("title", ""), false, "如：废土商人")
+	property_panel.add_string_property("description", "描述:", npc.get("description", ""), true, "详细描述...")
 	
 	property_panel.add_separator()
 	
-	# 绫诲瀷
+	# 类型
 	var type_dict = {}
 	for key in NPC_TYPES:
 		type_dict[str(key)] = NPC_TYPES[key]
-	property_panel.add_enum_property("npc_type", "NPC绫诲瀷:", type_dict, str(npc.get("npc_type", 0)))
+	property_panel.add_enum_property("npc_type", "NPC类型:", type_dict, str(npc.get("npc_type", 0)))
 	
-	# 绛夌骇
-	property_panel.add_number_property("level", "绛夌骇:", npc.get("level", 1), 1, 100, 1, false)
+	# 等级
+	property_panel.add_number_property("level", "等级:", npc.get("level", 1), 1, 100, 1, false)
 	
 	property_panel.add_separator()
 	
-	# 灞炴€?
-	property_panel.add_section_label("馃搳 灞炴€?)
+	# 属
+	property_panel.add_section_label("Attributes")
 	var attributes = npc.get("attributes", {})
-	property_panel.add_number_property("attr_strength", "鍔涢噺:", attributes.get("strength", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_perception", "鎰熺煡:", attributes.get("perception", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_endurance", "浣撹川:", attributes.get("endurance", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_charisma", "榄呭姏:", attributes.get("charisma", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_intelligence", "鏅哄姏:", attributes.get("intelligence", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_agility", "鏁忔嵎:", attributes.get("agility", 10), 1, 20, 1, false)
-	property_panel.add_number_property("attr_luck", "骞歌繍:", attributes.get("luck", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_strength", "力量:", attributes.get("strength", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_perception", "感知:", attributes.get("perception", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_endurance", "体质:", attributes.get("endurance", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_charisma", "魅力:", attributes.get("charisma", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_intelligence", "智力:", attributes.get("intelligence", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_agility", "敏捷:", attributes.get("agility", 10), 1, 20, 1, false)
+	property_panel.add_number_property("attr_luck", "幸运:", attributes.get("luck", 10), 1, 20, 1, false)
 	
 	property_panel.add_separator()
 	
-	# 鎯呯华
-	property_panel.add_section_label("馃槉 鍒濆鎯呯华")
+	# 情绪
+	property_panel.add_section_label("😊 初始情绪")
 	var mood = npc.get("mood", {})
-	property_panel.add_number_property("mood_friendliness", "鍙嬪ソ搴?", mood.get("friendliness", 0), 0, 100, 5, false)
-	property_panel.add_number_property("mood_trust", "淇′换搴?", mood.get("trust", 0), 0, 100, 5, false)
-	property_panel.add_number_property("mood_fear", "鎭愭儳搴?", mood.get("fear", 0), 0, 100, 5, false)
-	property_panel.add_number_property("mood_anger", "鎰ゆ€掑害:", mood.get("anger", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_friendliness", "友好", mood.get("friendliness", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_trust", "信任", mood.get("trust", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_fear", "恐惧", mood.get("fear", 0), 0, 100, 5, false)
+	property_panel.add_number_property("mood_anger", "愤怒度:", mood.get("anger", 0), 0, 100, 5, false)
 	
 	property_panel.add_separator()
 	
-	# 鑳藉姏
-	property_panel.add_section_label("鈿?鑳藉姏")
-	# 浣跨敤鑷畾涔夋帶浠舵樉绀哄竷灏斿€?
-	property_panel.add_custom_control(_create_bool_checkbox("can_trade", "鍙互浜ゆ槗", npc.get("can_trade", false)))
-	property_panel.add_custom_control(_create_bool_checkbox("can_recruit", "鍙互鎷涘嫙", npc.get("can_recruit", false)))
-	property_panel.add_custom_control(_create_bool_checkbox("can_give_quest", "鍙互鍙戝竷浠诲姟", npc.get("can_give_quest", false)))
-	property_panel.add_custom_control(_create_bool_checkbox("can_heal", "鍙互娌荤枟", npc.get("can_heal", false)))
+	# 能力
+	property_panel.add_section_label("能力")
+	# 使用义控件显示布尔
+	property_panel.add_custom_control(_create_bool_checkbox("can_trade", "可以交易", npc.get("can_trade", false)))
+	property_panel.add_custom_control(_create_bool_checkbox("can_recruit", "可以招募", npc.get("can_recruit", false)))
+	property_panel.add_custom_control(_create_bool_checkbox("can_give_quest", "可以发布任务", npc.get("can_give_quest", false)))
+	property_panel.add_custom_control(_create_bool_checkbox("can_heal", "可以治疗", npc.get("can_heal", false)))
 	
 	property_panel.add_separator()
 	
-	# 浣嶇疆
-	property_panel.add_string_property("default_location", "榛樿浣嶇疆:", npc.get("default_location", "safehouse"), false, "濡傦細safehouse")
+	# 位置
+	property_panel.add_string_property("default_location", "默认位置:", npc.get("default_location", "safehouse"), false, "如：safehouse")
 	
 	property_panel.add_separator()
 	
-	# 澶栬
-	property_panel.add_section_label("馃帹 澶栬")
-	property_panel.add_string_property("portrait_path", "榛樿绔嬬粯:", npc.get("portrait_path", ""), false, "res://assets/portraits/...")
+	# 外观
+	property_panel.add_section_label("🎨 外观")
+	property_panel.add_string_property("portrait_path", "默认立绘:", npc.get("portrait_path", ""), false, "res://assets/portraits/...")
 	
 	property_panel.add_separator()
 	
-	# 琛ㄦ儏绔嬬粯
-	property_panel.add_section_label("馃槉 琛ㄦ儏绔嬬粯锛堝彲閫夛級")
+	# 表情立绘
+	property_panel.add_section_label("😊 表情立绘（可选）")
 	var expression_paths = npc.get("expression_paths", {})
-	property_panel.add_string_property("expr_normal", "姝ｅ父:", expression_paths.get("normal", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_happy", "寮€蹇?", expression_paths.get("happy", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_angry", "鎰ゆ€?", expression_paths.get("angry", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_sad", "鎮蹭激:", expression_paths.get("sad", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_fear", "鎭愭儳:", expression_paths.get("fear", ""), false, "res://assets/portraits/...")
-	property_panel.add_string_property("expr_surprised", "鎯婅:", expression_paths.get("surprised", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_normal", "正常:", expression_paths.get("normal", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_happy", "??:", expression_paths.get("happy", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_angry", "??:", expression_paths.get("angry", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_sad", "悲伤:", expression_paths.get("sad", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_fear", "恐惧:", expression_paths.get("fear", ""), false, "res://assets/portraits/...")
+	property_panel.add_string_property("expr_surprised", "惊讶:", expression_paths.get("surprised", ""), false, "res://assets/portraits/...")
 
 func _create_bool_checkbox(property_name: String, label: String, value: bool) -> Control:
 	var hbox = HBoxContainer.new()
@@ -387,7 +403,7 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 	if current_npc_id.is_empty():
 		return
 	
-	var npc: Object = npcs[current_npc_id]
+	var npc: Variant = npcs[current_npc_id]
 	if not npc:
 		return
 	
@@ -461,7 +477,7 @@ func _on_bool_property_changed(property_name: String, value: bool):
 	if current_npc_id.is_empty():
 		return
 	
-	var npc: Object = npcs[current_npc_id]
+	var npc: Variant = npcs[current_npc_id]
 	if not npc:
 		return
 	
@@ -498,9 +514,9 @@ func _save_to_file(path: String):
 		file.store_string(json)
 		file.close()
 		npc_saved.emit(current_npc_id)
-		_update_status("鉁?宸蹭繚瀛? %s (%d涓狽PC)" % [path, npcs.size()])
+		_update_status("已保 %s (%d个NPC)" % [path, npcs.size()])
 	else:
-		_update_status("鉂?淇濆瓨澶辫触")
+		_update_status("保存失败")
 
 func _on_load_npcs():
 	file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -541,7 +557,7 @@ func _update_status(message: String):
 	status_bar.text = message
 	print("[NPCEditor] %s" % message)
 
-# 鍏叡鏂规硶
+# 公共方法
 func get_current_npc_id() -> String:
 	return current_npc_id
 

@@ -5,9 +5,9 @@ extends RefCounted
 # 连接信息
 var from_quest: String = ""
 var to_quest: String = ""
-var connection_type: String = "unlock"  # unlock: 完成后解锁, require: 需要前置
+var connection_type: String = "unlock"  # unlock after completion; require as prerequisite
 
-# 视觉属性
+# 视属
 var line_color: Color = Color(0.8, 0.8, 0.2)
 var line_width: float = 2.0
 var is_highlighted: bool = false
@@ -33,8 +33,8 @@ func to_dict() -> Dictionary:
 		"type": connection_type
 	}
 
-static func from_dict(data: Dictionary) -> CDCQuestConnection:
-	return CDCQuestConnection.new(
+static func from_dict(data: Dictionary) -> RefCounted:
+	return load("res://addons/cdc_game_editor/editors/quest_editor/quest_connection.gd").new(
 		data.get("from", ""),
 		data.get("to", ""),
 		data.get("type", "unlock")

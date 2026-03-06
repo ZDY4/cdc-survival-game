@@ -166,7 +166,10 @@ func _try_move_to_screen_position(screen_pos: Vector2) -> void:
     _request_player_move(ground_hit.position)
 
 func _request_player_move(world_pos: Vector3) -> void:
-    var snapped_pos := GridMovementSystem.snap_to_grid(world_pos)
+    var move_target := world_pos
+    move_target.y = _player.global_position.y
+    var snapped_pos := GridMovementSystem.snap_to_grid(move_target)
+    snapped_pos.y = _player.global_position.y
     _player.move_to(snapped_pos)
     if not _player.is_moving():
         return
@@ -181,8 +184,11 @@ func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, 
         _hide_preview()
         return
 
+    var preview_target := target_world_pos
+    preview_target.y = _player.global_position.y
+
     var player_grid := GridMovementSystem.world_to_grid(_player.global_position)
-    var target_grid := GridMovementSystem.world_to_grid(target_world_pos)
+    var target_grid := GridMovementSystem.world_to_grid(preview_target)
     var preview_signature := "%s|%s|%s" % [mode, str(player_grid), str(target_grid)]
     if preview_signature == _last_preview_signature:
         return
@@ -190,7 +196,7 @@ func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, 
 
     var path := _navigator.find_path(
         _player.global_position,
-        target_world_pos,
+        preview_target,
         GridMovementSystem.grid_world.is_walkable
     )
 

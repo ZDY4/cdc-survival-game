@@ -283,7 +283,6 @@ func _open_editor_window(editor_key: String) -> void:
 	editor_window.show()
 	await get_tree().process_frame
 	_position_window_safely(editor_window, window_size)
-	editor_window.move_to_foreground()
 	editor_window.grab_focus()
 
 func _create_editor_window(editor_key: String) -> bool:

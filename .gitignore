@@ -4,6 +4,10 @@
 export.cfg
 export_presets.cfg
 
+# Godot resource metadata should be versioned
+!*.uid
+!*.import
+
 # Imported translations (automatically generated from CSV files)
 *.translation
 
@@ -36,6 +40,10 @@ __pycache__/
 *.bak
 *.swp
 *~
+
+# Build artifacts
+*.pck
+*.wasm
 
 # Local asset backup files
 *.backup

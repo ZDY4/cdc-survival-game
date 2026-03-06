@@ -1,19 +1,19 @@
-﻿@tool
+@tool
 extends Control
-## 浠诲姟缂栬緫鍣?
-## 闆嗘垚鎾ら攢/閲嶅仛銆佹暟鎹獙璇併€佹敼杩涚殑灞炴€х紪杈戠瓑鍔熻兘
+## 任务编辑器
+## 集成撤销/重做、数据验证、改进的属性编辑等功能
 
 signal quest_saved(quest_id: String)
 signal quest_loaded(quest_id: String)
 signal validation_errors_found(errors: Array[String])
 
-# 甯搁噺
+# 常量
 const OBJECTIVE_TYPES = {
-	"collect": "鏀堕泦鐗╁搧",
-	"kill": "鍑昏触鏁屼汉",
-	"location": "鍒拌揪鍦扮偣",
-	"talk": "涓嶯PC瀵硅瘽",
-	"custom": "鑷畾涔夋潯浠?
+	"collect": "收集物品",
+	"kill": "击败敌人",
+	"location": "到达地点",
+	"talk": "与NPC对话",
+	"custom": "Custom"
 }
 
 const QUEST_STATUS_COLORS = {
@@ -24,7 +24,7 @@ const QUEST_STATUS_COLORS = {
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
 
-# 鑺傜偣寮曠敤
+# 节点引用
 @onready var _quest_list: ItemList
 @onready var _property_panel: Control
 @onready var _toolbar: HBoxContainer
@@ -33,16 +33,16 @@ const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validato
 @onready var _search_box: LineEdit
 @onready var _validation_panel: VBoxContainer
 
-# 鏁版嵁
+# 数据
 var quests: Dictionary = {}  # quest_id -> quest_data
 var current_quest_id: String = ""
 var current_file_path: String = ""
 var _validation_errors: Dictionary = {}  # quest_id -> Array[String]
 
-# 宸ュ叿
+# 工具
 var _undo_redo_helper: RefCounted
 
-# 缂栬緫鍣ㄦ彃浠跺紩鐢?
+# 编辑器插件引
 var editor_plugin: EditorPlugin = null:
 	set(plugin):
 		editor_plugin = plugin
@@ -74,7 +74,7 @@ func _load_quests_from_project_data() -> void:
 func _setup_ui():
 	anchors_preset = Control.PRESET_FULL_RECT
 	
-	# 鍒涘缓宸ュ叿鏍?
+	# 创建工具栏
 	_toolbar = HBoxContainer.new()
 	_toolbar.custom_minimum_size = Vector2(0, 45)
 	_toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -83,7 +83,7 @@ func _setup_ui():
 	add_child(_toolbar)
 	_create_toolbar()
 	
-	# 鍒涘缓涓诲垎鍓插鍣?
+	# 创建主分割容器
 	var main_split = HSplitContainer.new()
 	main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
 	main_split.offset_top = 50
@@ -92,79 +92,79 @@ func _setup_ui():
 	main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_child(main_split)
 	
-	# 宸︿晶锛氫换鍔″垪琛?
+	# 左侧：任务列
 	var left_panel = _create_quest_list_panel()
 	main_split.add_child(left_panel)
 	
-	# 鍙充晶锛氬睘鎬ч潰鏉垮拰楠岃瘉闈㈡澘
+	# 右侧：属性面板和验证面板
 	var right_container = VBoxContainer.new()
 	right_container.custom_minimum_size = Vector2(350, 0)
 	right_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_split.add_child(right_container)
 	
-	# 鎼滅储妗?
+	# 搜索
 	var search_container = HBoxContainer.new()
 	search_container.custom_minimum_size = Vector2(0, 30)
 	right_container.add_child(search_container)
 	
 	var search_label = Label.new()
-	search_label.text = "馃攳"
+	search_label.text = "🔍"
 	search_container.add_child(search_label)
 	
 	_search_box = LineEdit.new()
-	_search_box.placeholder_text = "鎼滅储浠诲姟..."
+	_search_box.placeholder_text = "搜索任务..."
 	_search_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search_box.text_changed.connect(_on_search_changed)
 	search_container.add_child(_search_box)
 	
 	var clear_btn = Button.new()
-	clear_btn.text = "娓呴櫎"
+	clear_btn.text = "清除"
 	clear_btn.pressed.connect(func(): _search_box.clear(); _on_search_changed(""))
 	search_container.add_child(clear_btn)
 	
-	# 灞炴€ч潰鏉?
+	# 属面
 	_property_panel = preload("res://addons/cdc_game_editor/utils/property_panel.gd").new()
 	_property_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_property_panel.panel_title = "浠诲姟灞炴€?
+	_property_panel.panel_title = "Quest Properties"
 	_property_panel.property_changed.connect(_on_property_changed)
 	right_container.add_child(_property_panel)
 	
-	# 楠岃瘉閿欒闈㈡澘
+	# 验证错误面板
 	_validation_panel = VBoxContainer.new()
 	_validation_panel.visible = false
 	right_container.add_child(_validation_panel)
 	
 	var validation_title = Label.new()
-	validation_title.text = "鈿狅笍 楠岃瘉闂"
+	validation_title.text = "⚠️ 验证问题"
 	validation_title.add_theme_color_override("font_color", Color(0.9, 0.6, 0.2))
 	_validation_panel.add_child(validation_title)
 	_validation_panel.add_child(HSeparator.new())
 	
 	main_split.split_offset = 250
 	
-	# 鐘舵€佹爮
+	# 状态栏
 	_status_bar = Label.new()
 	_status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_status_bar.offset_top = -20
 	_status_bar.offset_bottom = 0
 	_status_bar.offset_left = 0
 	_status_bar.offset_right = 0
-	_status_bar.text = "灏辩华 - 0 涓换鍔?
+	_status_bar.text = "Ready - 0 quests"
 	add_child(_status_bar)
 
 func _create_toolbar():
-	_add_toolbar_button("鏂板缓", _on_new_quest, "鏂板缓浠诲姟 (Ctrl+N)")
-	_add_toolbar_button("鍒犻櫎", _on_delete_quest, "鍒犻櫎閫変腑浠诲姟 (Delete)")
+	_add_toolbar_button("新建", _on_new_quest, "新建任务 (Ctrl+N)")
+	_add_toolbar_button("删除", _on_delete_quest, "删除选中任务 (Delete)")
 	_toolbar.add_child(VSeparator.new())
-	_add_toolbar_button("鎾ら攢", _on_undo, "鎾ら攢 (Ctrl+Z)")
-	_add_toolbar_button("閲嶅仛", _on_redo, "閲嶅仛 (Ctrl+Y)")
+	_add_toolbar_button("撤销", _on_undo, "撤销 (Ctrl+Z)")
+	_add_toolbar_button("重做", _on_redo, "重做 (Ctrl+Y)")
 	_toolbar.add_child(VSeparator.new())
-	_add_toolbar_button("淇濆瓨", _on_save_quests, "淇濆瓨鍒版枃浠?(Ctrl+S)")
-	_add_toolbar_button("鍔犺浇", _on_load_quests, "浠庢枃浠跺姞杞?)
+	_add_toolbar_button("保存", _on_save_quests, "保存到文(Ctrl+S)")
+	_add_toolbar_button("Load", _on_load_quests, "Load from file")
 	_toolbar.add_child(VSeparator.new())
-	_add_toolbar_button("楠岃瘉", _on_validate_all, "楠岃瘉鎵€鏈変换鍔?)
-	_add_toolbar_button("瀵煎嚭GD", _on_export_gdscript, "瀵煎嚭涓篏DScript")
+	_add_toolbar_button("Validate", _on_validate_all, "Validate all quests")
+	_add_toolbar_button("导出GD", _on_export_gdscript, "导出为GDScript")
 
 func _add_toolbar_button(text: String, callback: Callable, tooltip: String = ""):
 	var btn = Button.new()
@@ -182,16 +182,16 @@ func _create_quest_list_panel() -> Control:
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_child(vbox)
 	
-	# 鏍囬
+	# 标题
 	var title = Label.new()
-	title.text = "浠诲姟鍒楄〃"
+	title.text = "任务列表"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(title)
 	
 	vbox.add_child(HSeparator.new())
 	
-	# 浠诲姟鍒楄〃
+	# 任务列表
 	_quest_list = ItemList.new()
 	_quest_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_quest_list.item_selected.connect(_on_quest_selected)
@@ -202,8 +202,8 @@ func _create_quest_list_panel() -> Control:
 func _setup_file_dialog():
 	_file_dialog = FileDialog.new()
 	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_file_dialog.add_filter("*.json; JSON 鏂囦欢")
-	_file_dialog.add_filter("*.quest; 浠诲姟鏂囦欢")
+	_file_dialog.add_filter("*.json; JSON 文件")
+	_file_dialog.add_filter("*.quest; 任务文件")
 	add_child(_file_dialog)
 
 func _input(event: InputEvent):
@@ -223,13 +223,13 @@ func _input(event: InputEvent):
 			KEY_Y when event.ctrl_pressed:
 				_on_redo()
 
-# 浠诲姟绠＄悊
+# 任务管理
 func _on_new_quest():
 	var quest_id = "quest_%d" % Time.get_ticks_msec()
 	var quest_data = {
 		"quest_id": quest_id,
-		"title": "鏂颁换鍔?,
-		"description": "浠诲姟鎻忚堪",
+		"title": "New Quest",
+		"description": "任务描述",
 		"objectives": [],
 		"rewards": {
 			"items": [],
@@ -241,16 +241,16 @@ func _on_new_quest():
 	}
 	var quest_snapshot = quest_data.duplicate(true)
 	
-	# 鎾ら攢/閲嶅仛
+	# 撤销/重做
 	if _undo_redo_helper:
-		_undo_redo_helper.create_action("鍒涘缓浠诲姟")
+		_undo_redo_helper.create_action("创建任务")
 		_undo_redo_helper.add_undo_method(self, "_remove_quest", quest_id)
 		_undo_redo_helper.add_redo_method(self, "_add_quest", quest_id, quest_snapshot)
 		_undo_redo_helper.commit_action()
 	
 	_add_quest(quest_id, quest_data)
 	_select_quest(quest_id)
-	_update_status("鍒涘缓浜嗘柊浠诲姟: %s" % quest_id)
+	_update_status("创建了新任务: %s" % quest_id)
 
 func _add_quest(quest_id: String, quest_data: Dictionary):
 	quests[quest_id] = quest_data.duplicate(true)
@@ -279,15 +279,15 @@ func _on_delete_quest():
 	var quest_id = current_quest_id
 	var old_data = quests[quest_id].duplicate(true)
 	
-	# 鎾ら攢/閲嶅仛
+	# 撤销/重做
 	if _undo_redo_helper:
-		_undo_redo_helper.create_action("鍒犻櫎浠诲姟")
+		_undo_redo_helper.create_action("删除任务")
 		_undo_redo_helper.add_undo_method(self, "_add_quest", quest_id, old_data)
 		_undo_redo_helper.add_redo_method(self, "_remove_quest", quest_id)
 		_undo_redo_helper.commit_action()
 	
 	_remove_quest(quest_id)
-	_update_status("鍒犻櫎浜嗕换鍔? %s" % quest_id)
+	_update_status("删除了任 %s" % quest_id)
 
 func _on_quest_selected(index: int):
 	var quest_id = _quest_list.get_item_metadata(index)
@@ -308,66 +308,66 @@ func _update_quest_list(filter: String = ""):
 	
 	for quest_id in sorted_quests:
 		var quest = quests[quest_id]
-		var display_text = "%s - %s" % [quest_id, quest.get("title", "鏈懡鍚?)]
+		var display_text = "%s - %s" % [quest_id, quest.get("title", "Unnamed")]
 		
 		if filter.is_empty() or display_text.to_lower().contains(filter.to_lower()):
 			var idx = _quest_list.add_item(display_text)
 			_quest_list.set_item_metadata(idx, quest_id)
 			
-			# 鏍规嵁楠岃瘉鐘舵€佽缃鑹?
+			# 根据验证状
 			if _validation_errors.has(quest_id) and not _validation_errors[quest_id].is_empty():
 				_quest_list.set_item_custom_fg_color(idx, QUEST_STATUS_COLORS.error)
 	
-	_update_status("鍏?%d 涓换鍔? % quests.size())
+	_update_status("Total quests: %d" % quests.size())
 
 func _on_search_changed(text: String):
 	_update_quest_list(text)
 
-# 灞炴€ч潰鏉?
+# 属面
 func _update_property_panel(quest: Dictionary):
 	_property_panel.clear()
 	
 	if quest.is_empty():
 		return
 	
-	# ID锛堝彲缂栬緫锛屼絾闇€瑕佺壒娈婂鐞嗭級
-	_property_panel.add_string_property("quest_id", "浠诲姟ID:", quest.get("quest_id", ""), false, "鍞竴鏍囪瘑绗?)
+	# ID（可编辑，但需要特殊处理）
+	_property_panel.add_string_property("quest_id", "任务ID:", quest.get("quest_id", ""), false, "Unique identifier")
 	
-	# 鏍囬鍜屾弿杩?
-	_property_panel.add_string_property("title", "浠诲姟鏍囬:", quest.get("title", ""), false, "鏄剧ず鍚嶇О")
-	_property_panel.add_string_property("description", "浠诲姟鎻忚堪:", quest.get("description", ""), true, "璇︾粏鎻忚堪...")
+	# 标和描
+	_property_panel.add_string_property("title", "任务标题:", quest.get("title", ""), false, "显示名称")
+	_property_panel.add_string_property("description", "任务描述:", quest.get("description", ""), true, "详细描述...")
 	
 	_property_panel.add_separator()
 	
-	# 缁忛獙鍊煎鍔?
+	# 经验值
 	var rewards = quest.get("rewards", {})
-	_property_panel.add_number_property("experience", "缁忛獙鍊煎鍔?", 
+	_property_panel.add_number_property("experience", "经验值", 
 		rewards.get("experience", 0), 0, 999999, 10, false)
 	
-	# 鏃堕棿闄愬埗
-	_property_panel.add_number_property("time_limit", "鏃堕棿闄愬埗(绉?:", 
+	# 时间限制
+	_property_panel.add_number_property("time_limit", "时间限制(:", 
 		quest.get("time_limit", -1), -1, 999999, 1, false)
 	
 	_property_panel.add_separator()
 	
-	# 鑷畾涔夋帶浠讹細鐩爣鍒楄〃
+	# 自定义控件：目标列表
 	_property_panel.add_custom_control(_create_objectives_editor(quest))
 	
 	_property_panel.add_separator()
 	
-	# 鑷畾涔夋帶浠讹細濂栧姳鐗╁搧鍒楄〃
+	# 自定义控件：奖励物品列表
 	_property_panel.add_custom_control(_create_rewards_editor(quest))
 	
 	_property_panel.add_separator()
 	
-	# 鑷畾涔夋帶浠讹細鍓嶇疆浠诲姟
+	# 自定义控件：前置任务
 	_property_panel.add_custom_control(_create_prerequisites_editor(quest))
 
 func _create_objectives_editor(quest: Dictionary) -> Control:
 	var container = VBoxContainer.new()
 	
 	var label = Label.new()
-	label.text = "馃搵 浠诲姟鐩爣 (%d涓?" % quest.objectives.size()
+	label.text = "📋 任务 (%d" % quest.objectives.size()
 	label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
 	container.add_child(label)
 	
@@ -378,7 +378,7 @@ func _create_objectives_editor(quest: Dictionary) -> Control:
 	_refresh_objectives_list(list_container, quest)
 	
 	var add_btn = Button.new()
-	add_btn.text = "+ 娣诲姞鐩爣"
+	add_btn.text = "+ 添加目标"
 	add_btn.pressed.connect(func(): _add_objective(quest, list_container))
 	container.add_child(add_btn)
 	
@@ -407,7 +407,7 @@ func _create_objective_row(quest: Dictionary, index: int, obj: Dictionary, list_
 	var vbox = VBoxContainer.new()
 	margin.add_child(vbox)
 	
-	# 绫诲瀷鍜岀洰鏍?
+	# 类型和目
 	var top_row = HBoxContainer.new()
 	vbox.add_child(top_row)
 	
@@ -426,7 +426,7 @@ func _create_objective_row(quest: Dictionary, index: int, obj: Dictionary, list_
 	
 	var target_edit = LineEdit.new()
 	target_edit.text = obj.get("target", "")
-	target_edit.placeholder_text = "鐩爣ID"
+	target_edit.placeholder_text = "目标ID"
 	target_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	target_edit.text_changed.connect(func(v): _on_objective_field_changed(quest, index, "target", v))
 	top_row.add_child(target_edit)
@@ -438,20 +438,20 @@ func _create_objective_row(quest: Dictionary, index: int, obj: Dictionary, list_
 	count_spin.value_changed.connect(func(v): _on_objective_field_changed(quest, index, "count", int(v)))
 	top_row.add_child(count_spin)
 	
-	# 鎻忚堪
+	# 描述
 	var desc_row = HBoxContainer.new()
 	vbox.add_child(desc_row)
 	
 	var desc_edit = LineEdit.new()
 	desc_edit.text = obj.get("description", "")
-	desc_edit.placeholder_text = "鐩爣鎻忚堪"
+	desc_edit.placeholder_text = "目标描述"
 	desc_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	desc_edit.text_changed.connect(func(v): _on_objective_field_changed(quest, index, "description", v))
 	desc_row.add_child(desc_edit)
 	
 	var del_btn = Button.new()
-	del_btn.text = "脳"
-	del_btn.tooltip_text = "鍒犻櫎鐩爣"
+	del_btn.text = "×"
+	del_btn.tooltip_text = "删除目标"
 	del_btn.pressed.connect(func(): _remove_objective(quest, index, list_container))
 	desc_row.add_child(del_btn)
 	
@@ -467,14 +467,14 @@ func _add_objective(quest: Dictionary, list_container: VBoxContainer):
 		"type": "collect",
 		"target": "",
 		"count": 1,
-		"description": "鏂扮洰鏍?
+		"description": "New objective"
 	}
 	var quest_id = str(quest.get("quest_id", ""))
 	var insert_index = quest.objectives.size()
 	
-	# 鎾ら攢/閲嶅仛
+	# 撤销/重做
 	if _undo_redo_helper and not quest_id.is_empty():
-		_undo_redo_helper.create_action("娣诲姞鐩爣")
+		_undo_redo_helper.create_action("添加目标")
 		_undo_redo_helper.add_undo_method(self, "_remove_objective_at", quest_id, insert_index)
 		_undo_redo_helper.add_redo_method(self, "_insert_objective_at", quest_id, insert_index, new_objective)
 		_undo_redo_helper.commit_action()
@@ -488,9 +488,9 @@ func _remove_objective(quest: Dictionary, index: int, list_container: VBoxContai
 		var old_obj = quest.objectives[index].duplicate(true)
 		var quest_id = str(quest.get("quest_id", ""))
 		
-		# 鎾ら攢/閲嶅仛
+		# 撤销/重做
 		if _undo_redo_helper and not quest_id.is_empty():
-			_undo_redo_helper.create_action("鍒犻櫎鐩爣")
+			_undo_redo_helper.create_action("删除目标")
 			_undo_redo_helper.add_undo_method(self, "_insert_objective_at", quest_id, index, old_obj)
 			_undo_redo_helper.add_redo_method(self, "_remove_objective_at", quest_id, index)
 			_undo_redo_helper.commit_action()
@@ -525,7 +525,7 @@ func _create_rewards_editor(quest: Dictionary) -> Control:
 	var container = VBoxContainer.new()
 	
 	var label = Label.new()
-	label.text = "馃巵 鐗╁搧濂栧姳"
+	label.text = "🎁 物品奖励"
 	label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
 	container.add_child(label)
 	
@@ -541,7 +541,7 @@ func _create_rewards_editor(quest: Dictionary) -> Control:
 		list.add_child(row)
 	
 	var add_btn = Button.new()
-	add_btn.text = "+ 娣诲姞鐗╁搧"
+	add_btn.text = "+ 添加物品"
 	add_btn.pressed.connect(func(): _add_reward_item(quest, list))
 	container.add_child(add_btn)
 	
@@ -552,7 +552,7 @@ func _create_reward_row(quest: Dictionary, index: int, item: Dictionary, list: V
 	
 	var id_edit = LineEdit.new()
 	id_edit.text = item.get("id", "")
-	id_edit.placeholder_text = "鐗╁搧ID"
+	id_edit.placeholder_text = "物品ID"
 	id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	id_edit.text_changed.connect(func(v):
 		quest.rewards.items[index].id = v
@@ -569,7 +569,7 @@ func _create_reward_row(quest: Dictionary, index: int, item: Dictionary, list: V
 	row.add_child(count_spin)
 	
 	var del_btn = Button.new()
-	del_btn.text = "脳"
+	del_btn.text = "×"
 	del_btn.pressed.connect(func(): _remove_reward_item(quest, index, list))
 	row.add_child(del_btn)
 	
@@ -597,7 +597,7 @@ func _create_prerequisites_editor(quest: Dictionary) -> Control:
 	var container = VBoxContainer.new()
 	
 	var label = Label.new()
-	label.text = "馃敆 鍓嶇疆浠诲姟"
+	label.text = "🔗 前置任务"
 	label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
 	container.add_child(label)
 	
@@ -608,7 +608,7 @@ func _create_prerequisites_editor(quest: Dictionary) -> Control:
 	_refresh_prereq_list(prereq_list, quest)
 	
 	var add_btn = Button.new()
-	add_btn.text = "+ 娣诲姞鍓嶇疆浠诲姟"
+	add_btn.text = "+ 添加前置任务"
 	add_btn.pressed.connect(func(): _show_prereq_selector(quest, prereq_list))
 	container.add_child(add_btn)
 	
@@ -627,7 +627,7 @@ func _refresh_prereq_list(list: VBoxContainer, quest: Dictionary):
 		row.add_child(id_label)
 		
 		var del_btn = Button.new()
-		del_btn.text = "脳"
+		del_btn.text = "×"
 		del_btn.pressed.connect(func(): _remove_prereq(quest, prereq_id, list))
 		row.add_child(del_btn)
 		
@@ -641,7 +641,7 @@ func _show_prereq_selector(quest: Dictionary, list: VBoxContainer):
 	popup.add_child(vbox)
 	
 	var title = Label.new()
-	title.text = "閫夋嫨鍓嶇疆浠诲姟"
+	title.text = "选择前置任务"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 	
@@ -665,7 +665,7 @@ func _show_prereq_selector(quest: Dictionary, list: VBoxContainer):
 	vbox.add_child(btn_box)
 	
 	var confirm_btn = Button.new()
-	confirm_btn.text = "纭"
+	confirm_btn.text = "确认"
 	confirm_btn.pressed.connect(func():
 		var selected = item_list.get_selected_items()
 		if selected.size() > 0:
@@ -689,23 +689,23 @@ func _remove_prereq(quest: Dictionary, prereq_id: String, list: VBoxContainer):
 	_refresh_prereq_list(list, quest)
 	_validate_quest(quest.quest_id)
 
-# 灞炴€у彉鏇?
+# 属变
 func _on_property_changed(property_name: String, new_value: Variant, old_value: Variant):
 	if current_quest_id.is_empty():
 		return
 	
 	var quest = quests[current_quest_id]
 	
-	# 鐗规畩澶勭悊宓屽灞炴€?
+	# 特殊处理嵌属
 	if property_name == "experience":
 		quest.rewards.experience = int(new_value)
 	elif property_name == "time_limit":
 		quest.time_limit = int(new_value)
 	elif property_name == "quest_id":
-		# ID鍙樻洿闇€瑕佺壒娈婂鐞?
+		# ID变更要特殊
 		if new_value != current_quest_id and not new_value.is_empty():
 			if _undo_redo_helper:
-				_undo_redo_helper.create_action("淇敼浠诲姟ID")
+				_undo_redo_helper.create_action("修改任务ID")
 				_undo_redo_helper.add_undo_method(self, "_change_quest_id", new_value, current_quest_id)
 				_undo_redo_helper.add_redo_method(self, "_change_quest_id", current_quest_id, new_value)
 				_undo_redo_helper.commit_action()
@@ -732,7 +732,7 @@ func _change_quest_id(old_id: String, new_id: String):
 		_update_quest_list()
 		_select_quest(new_id)
 
-# 楠岃瘉
+# 验证
 func _validate_quest(quest_id: String) -> bool:
 	var quest = quests.get(quest_id)
 	if not quest:
@@ -740,28 +740,37 @@ func _validate_quest(quest_id: String) -> bool:
 	
 	var errors: Array[String] = []
 	
-	# 妫€鏌D
+	# 检查ID
 	if quest_id.is_empty():
-		errors.append("浠诲姟ID涓嶈兘涓虹┖")
+		errors.append("任务ID不能为空")
 	
-	# 妫€鏌ユ爣棰?
+	# 查标
 	if quest.get("title", "").is_empty():
-		errors.append("浠诲姟鏍囬涓嶈兘涓虹┖")
+		errors.append("任务标题不能为空")
 	
-	# 妫€鏌ョ洰鏍?
+	# 查目
 	var objectives = quest.get("objectives", [])
 	if objectives.is_empty():
-		errors.append("鑷冲皯闇€瑕佽缃竴涓洰鏍?)
+		errors.append("At least one objective is required")
 	
 	for i in range(objectives.size()):
-		var obj = objectives[i]
-		if obj.get("target", "").is_empty():
-			errors.append("鐩爣 #%d 缂哄皯鐩爣ID" % (i + 1))
+		var obj: Variant = objectives[i]
+		if not (obj is Dictionary):
+			errors.append("目标 #%d 数据格式无效" % (i + 1))
+			continue
+		if not obj.has("target"):
+			errors.append("目标 #%d 缺少目标ID" % (i + 1))
+			continue
+		var target: Variant = obj.get("target")
+		if target == null:
+			errors.append("目标 #%d 缺少目标ID" % (i + 1))
+		elif target is String and target.strip_edges().is_empty():
+			errors.append("目标 #%d 缺少目标ID" % (i + 1))
 	
-	# 妫€鏌ュ墠缃换鍔?
+	# 查前
 	for prereq in quest.get("prerequisites", []):
 		if not quests.has(prereq):
-			errors.append("鍓嶇疆浠诲姟 '%s' 涓嶅瓨鍦? % prereq)
+			errors.append("Prerequisite quest '%s' does not exist" % prereq)
 	
 	_validation_errors[quest_id] = errors
 	return errors.is_empty()
@@ -782,9 +791,9 @@ func _on_validate_all():
 	_update_validation_panel()
 	
 	if errors.is_empty():
-		_update_status("鉁?鎵€鏈変换鍔￠獙璇侀€氳繃")
+		_update_status("有任务验证过")
 	else:
-		_update_status("鈿狅笍 鍙戠幇 %d 涓棶棰? % errors.size())
+		_update_status("Found %d validation issues" % errors.size())
 
 func _update_validation_panel():
 	if current_quest_id.is_empty():
@@ -799,18 +808,18 @@ func _update_validation_panel():
 	
 	_validation_panel.visible = true
 	
-	# 娓呴櫎鏃х殑閿欒鏄剧ず锛堜繚鐣欐爣棰樺拰鍒嗛殧绗︼級
+	# 清除旧的错误显示（保留标题和分隔符）
 	while _validation_panel.get_child_count() > 2:
 		_validation_panel.remove_child(_validation_panel.get_child(2))
 	
 	for error in errors:
 		var label = Label.new()
-		label.text = "鈥?%s" % error
+		label.text = "%s" % error
 		label.add_theme_color_override("font_color", Color(0.9, 0.5, 0.5))
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_validation_panel.add_child(label)
 
-# 鏂囦欢鎿嶄綔
+# 文件操作
 func _on_save_quests():
 	if current_file_path.is_empty():
 		_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
@@ -828,9 +837,9 @@ func _save_to_file(path: String):
 		file.store_string(json)
 		file.close()
 		quest_saved.emit(current_quest_id)
-		_update_status("鉁?宸蹭繚瀛? %s" % path)
+		_update_status("已保 %s" % path)
 	else:
-		_update_status("鉂?鏃犳硶淇濆瓨鏂囦欢")
+		_update_status("无法保存文件")
 
 func _on_load_quests():
 	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -878,14 +887,14 @@ func _on_export_gdscript():
 		if file:
 			file.store_string(output)
 			file.close()
-			_update_status("鉁?宸插鍑篏DScript")
+			_update_status("已出GDScript")
 	, CONNECT_ONE_SHOT)
 	_file_dialog.popup_centered(Vector2(800, 600))
 
 func _build_gdscript() -> String:
 	var lines: Array[String] = []
-	lines.append("# 鑷姩鐢熸垚鐨勪换鍔℃暟鎹?)
-	lines.append("# 鐢熸垚鏃堕棿: %s" % Time.get_datetime_string_from_system())
+	lines.append("# Auto-generated quest data")
+	lines.append("# 生成时间: %s" % Time.get_datetime_string_from_system())
 	lines.append("")
 	lines.append("const QUESTS = {")
 	
@@ -899,7 +908,7 @@ func _build_gdscript() -> String:
 		lines.append('\t\t"title": "%s",' % quest.get("title", ""))
 		lines.append('\t\t"description": "%s",' % quest.get("description", ""))
 		
-		# 鐩爣
+		# 目标
 		lines.append('\t\t"objectives": [')
 		for obj in quest.get("objectives", []):
 			lines.append('\t\t\t{')
@@ -910,7 +919,7 @@ func _build_gdscript() -> String:
 			lines.append('\t\t\t},')
 		lines.append('\t\t],')
 		
-		# 濂栧姳
+		# 奖励
 		lines.append('\t\t"rewards": {')
 		lines.append('\t\t\t"items": [')
 		for item in quest.get("rewards", {}).get("items", []):
@@ -919,7 +928,7 @@ func _build_gdscript() -> String:
 		lines.append('\t\t\t"experience": %d' % quest.get("rewards", {}).get("experience", 0))
 		lines.append('\t\t},')
 		
-		# 鍓嶇疆浠诲姟
+		# 前置任务
 		lines.append('\t\t"prerequisites": %s,' % str(quest.get("prerequisites", [])))
 		lines.append('\t\t"time_limit": %d' % quest.get("time_limit", -1))
 		lines.append('\t},')
@@ -931,26 +940,26 @@ func _build_gdscript() -> String:
 	
 	return "\n".join(lines)
 
-# 鎾ら攢/閲嶅仛
+# 撤销/重做
 func _on_undo():
 	if editor_plugin and editor_plugin.get_undo_redo():
 		editor_plugin.get_undo_redo().undo()
-		_update_status("鎾ら攢")
+		_update_status("撤销")
 		_update_quest_list()
 		_update_validation_panel()
 
 func _on_redo():
 	if editor_plugin and editor_plugin.get_undo_redo():
 		editor_plugin.get_undo_redo().redo()
-		_update_status("閲嶅仛")
+		_update_status("重做")
 		_update_quest_list()
 		_update_validation_panel()
 
 func _update_status(message: String):
-	_status_bar.text = "%s - 鍏?%d 涓换鍔? % [message, quests.size()]
-	print("浠诲姟缂栬緫鍣? %s" % message)
+	_status_bar.text = "%s - Total %d quests" % [message, quests.size()]
+	print("任务编辑器 %s" % message)
 
-# 鍏叡鏂规硶
+# 公共方法
 func get_current_quest_id() -> String:
 	return current_quest_id
 
