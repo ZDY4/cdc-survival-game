@@ -1,6 +1,8 @@
 extends "res://core/base_module.gd"
 # 注意: 作为 Autoload 单例，不使用 class_name
 
+const DialogUI = preload("res://modules/dialog/dialog_ui.gd")
+
 signal dialog_started(text: String, speaker: String)
 signal choice_selected(index: int, choice_text: String)
 signal dialog_finished()

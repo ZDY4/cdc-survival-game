@@ -2,6 +2,7 @@ extends Node
 # AITestBridge - AI test bridge (v2.0)
 # Supports HTTP API and direct test API calls
 
+
 signal test_started(test_id: String)
 signal test_completed(test_id: String, result: Dictionary)
 signal test_step_completed(step_index: int, step_data: Dictionary)
@@ -598,7 +599,7 @@ func _action_interact_primary(params: Dictionary) -> Dictionary:
 		result.error = "Target not found"
 		return result
 	
-	if target is Interactable:
+	if target.has_method("_on_left_click"):
 		target._on_left_click()
 		result.success = true
 		result.data.method = "interactable_left_click"
@@ -627,12 +628,8 @@ func _action_interact_option(params: Dictionary) -> Dictionary:
 		result.error = "Target not found"
 		return result
 	
-	if not (target is Interactable):
-		result.error = "Target is not Interactable"
-		return result
-	
 	if not target.has_method("_get_available_options") or not target.has_method("_execute_option"):
-		result.error = "Target does not support options"
+		result.error = "Target is not Interactable"
 		return result
 	
 	var options: Array = target._get_available_options()

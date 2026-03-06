@@ -3,6 +3,8 @@ extends Node
 ## 管理所有制作配方，提供查询和制作接口
 ## 注意: 作为Autoload单例，不使用class_name
 
+const RecipeData = preload("res://modules/crafting/recipe_data.gd")
+
 # ========== 信号 ==========
 signal recipe_unlocked(recipe_id: String)
 signal recipe_completed(recipe_id: String, output_item_id: String, count: int)

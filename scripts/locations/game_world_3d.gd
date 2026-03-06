@@ -1,6 +1,12 @@
 class_name GameWorld3D
 extends Node3D
 
+const CameraController3D = preload("res://systems/camera_controller_3d.gd")
+const PlayerController3D = preload("res://systems/player_controller_3d.gd")
+const PathPreview = preload("res://systems/path_preview.gd")
+const GridNavigator = preload("res://systems/grid_navigator.gd")
+const GridVisualizer = preload("res://systems/grid_visualizer.gd")
+
 @export var player_scene: PackedScene = null
 @export var show_grid_debug := false
 @export var max_preview_path_points := 200
@@ -292,7 +298,7 @@ func _collect_ring_cells(center: Vector3i, radius: int) -> Array[Vector3i]:
     var cells: Array[Vector3i] = []
     for x in range(center.x - radius, center.x + radius + 1):
         for z in range(center.z - radius, center.z + radius + 1):
-            var manhattan := abs(x - center.x) + abs(z - center.z)
+            var manhattan: int = int(abs(x - center.x) + abs(z - center.z))
             if manhattan != radius:
                 continue
             cells.append(Vector3i(x, center.y, z))

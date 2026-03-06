@@ -428,7 +428,7 @@ func _move_history_cursor(direction: int) -> void:
 	_input_line.caret_column = _input_line.text.length()
 
 func _append_log_line(line: String) -> void:
-	var lines: Array[String] = line.split("\n", false)
+	var lines: PackedStringArray = line.split("\n", false)
 	for split_line in lines:
 		_log_lines.append(split_line)
 

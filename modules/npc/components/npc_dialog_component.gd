@@ -5,6 +5,8 @@ extends Node
 
 class_name NPCDialogComponent
 
+const NPCBase = preload("res://modules/npc/npc_base.gd")
+
 # ========== 信号 ==========
 signal dialog_started
 signal dialog_ended
