@@ -18,12 +18,17 @@ var _is_mouse_pressed := false
 var _last_hover_pos: Vector3
 var _active_move_target: Vector3 = Vector3.ZERO
 var _has_active_move_target := false
+var _grid_visualizer: GridVisualizer = null
 
 func _ready() -> void:
     _setup_world()
     _spawn_player()
     _setup_camera()
     _setup_input()
+    _register_debug_entries()
+
+func _exit_tree() -> void:
+    _unregister_debug_entries()
 
 func _setup_world() -> void:
     _navigator = GridNavigator.new()
@@ -31,11 +36,9 @@ func _setup_world() -> void:
     _grid_floor = $GridFloor
     _setup_grid_floor_collision()
     
-    # Add grid visualizer
-    if show_grid_debug:
-        var visualizer := GridVisualizer.new()
-        add_child(visualizer)
-        visualizer.show_grid()
+    _grid_visualizer = GridVisualizer.new()
+    add_child(_grid_visualizer)
+    set_grid_debug_visible(show_grid_debug)
 
 func _setup_grid_floor_collision() -> void:
     var collision_shape := CollisionShape3D.new()
@@ -313,3 +316,89 @@ func get_player() -> PlayerController3D:
 
 func get_camera() -> CameraController3D:
     return _camera_controller
+
+func set_grid_debug_visible(visible: bool) -> void:
+    show_grid_debug = visible
+    if not _grid_visualizer:
+        return
+
+    if show_grid_debug:
+        _grid_visualizer.show_grid()
+    else:
+        _grid_visualizer.hide_grid()
+
+func toggle_grid_debug() -> bool:
+    set_grid_debug_visible(not show_grid_debug)
+    return show_grid_debug
+
+func is_grid_debug_visible() -> bool:
+    return show_grid_debug
+
+func _register_debug_entries() -> void:
+    if not DebugModule:
+        return
+
+    DebugModule.register_module("grid", {
+        "description": "3D grid debug controls"
+    })
+    DebugModule.register_command(
+        "grid",
+        "grid",
+        Callable(self, "_debug_cmd_grid"),
+        "Show/hide/toggle the 3D debug grid",
+        "grid [on|off|toggle|status]"
+    )
+    DebugModule.register_variable(
+        "grid",
+        "grid.visible",
+        Callable(self, "is_grid_debug_visible"),
+        Callable(self, "_set_grid_debug_from_variant"),
+        "3D debug grid visibility"
+    )
+
+func _unregister_debug_entries() -> void:
+    if not DebugModule:
+        return
+
+    DebugModule.unregister_variable("grid.visible")
+    DebugModule.unregister_command("grid")
+    DebugModule.unregister_module("grid")
+
+func _set_grid_debug_from_variant(value: Variant) -> void:
+    var parsed_visible := false
+    if value is bool:
+        parsed_visible = value
+    elif value is int:
+        parsed_visible = value != 0
+    elif value is float:
+        parsed_visible = value != 0.0
+    else:
+        var text_value := str(value).to_lower().strip_edges()
+        parsed_visible = text_value in ["on", "show", "true", "1", "yes"]
+
+    set_grid_debug_visible(parsed_visible)
+
+func _debug_cmd_grid(args: Array[String]) -> Dictionary:
+    var action := "toggle"
+    if not args.is_empty():
+        action = args[0].to_lower()
+
+    match action:
+        "on", "show", "true", "1":
+            set_grid_debug_visible(true)
+        "off", "hide", "false", "0":
+            set_grid_debug_visible(false)
+        "toggle":
+            toggle_grid_debug()
+        "status":
+            pass
+        _:
+            return {
+                "success": false,
+                "error": "Usage: grid [on|off|toggle|status]"
+            }
+
+    return {
+        "success": true,
+        "message": "grid.visible = %s" % ("on" if show_grid_debug else "off")
+    }
