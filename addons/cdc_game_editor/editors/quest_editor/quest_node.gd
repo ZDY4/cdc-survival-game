@@ -23,9 +23,9 @@ signal quest_double_clicked(quest_id: String)
 
 func _ready():
 	resizable = false
-	show_close = false
-	draggable = true
-	selectable = true
+	set("show_close", false)
+	set("draggable", true)
+	set("selectable", true)
 	
 	custom_minimum_size = Vector2(200, 120)
 	
@@ -38,13 +38,13 @@ func _ready():
 func setup(quest: Dictionary):
 	quest_data = quest
 	quest_id = quest.get("quest_id", "")
-	title = quest.get("title", "未命名任务")
+	title = quest.get("title", "Unnamed Quest")
 	
 	_update_ui()
 	_update_appearance()
 
 func _update_ui():
-	# 清除现有子节点
+	# 清除现有子节
 	for child in get_children():
 		child.queue_free()
 	
@@ -55,7 +55,7 @@ func _update_ui():
 	id_label.modulate = Color.GRAY
 	add_child(id_label)
 	
-	# 分隔线
+	# 分隔
 	add_child(HSeparator.new())
 	
 	# 任务描述预览
@@ -69,7 +69,7 @@ func _update_ui():
 	# 目标数量
 	var objectives = quest_data.get("objectives", [])
 	var obj_label = Label.new()
-	obj_label.text = "目标: %d个" % objectives.size()
+	obj_label.text = "Objectives: %d" % objectives.size()
 	obj_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	obj_label.modulate = Color.LIGHT_BLUE
 	add_child(obj_label)
@@ -111,7 +111,7 @@ func _update_appearance():
 	elif prerequisites.size() > 0 and not _check_prerequisites():
 		base_color = COLOR_LOCKED
 	
-	# 标题栏样式
+	# 标栏样
 	var title_style = StyleBoxFlat.new()
 	title_style.bg_color = base_color.darkened(0.3)
 	title_style.border_color = base_color
@@ -131,7 +131,7 @@ func _update_appearance():
 
 func _check_prerequisites() -> bool:
 	# 检查前置任务是否已完成
-	# 这里需要访问任务系统，简化实现
+	# 这里要务系统，化实
 	return true
 
 func _truncate_text(text: String, max_length: int) -> String:
@@ -171,7 +171,7 @@ func add_unlock(quest_id_to_unlock: String):
 func remove_unlock(quest_id_to_unlock: String):
 	unlocks.erase(quest_id_to_unlock)
 
-# 序列化/反序列化
+# 序列反序列化
 func to_dict() -> Dictionary:
 	return {
 		"quest_id": quest_id,

@@ -69,13 +69,21 @@ func _create_placeholder_texture() -> void:
 
 func move_to(world_pos: Vector3) -> void:
     var start_pos := global_position
-    var path := _navigator.find_path(start_pos, world_pos, _grid_world.is_walkable)
+    var target_pos := world_pos
+    target_pos.y = start_pos.y
+    var path := _navigator.find_path(start_pos, target_pos, _grid_world.is_walkable)
     
     if path.is_empty():
-        push_warning("No path found to: " + str(world_pos))
+        push_warning("No path found to: " + str(target_pos))
         return
+
+    for i in range(path.size()):
+        var point: Vector3 = path[i]
+        point.y = start_pos.y
+        path[i] = point
     
-    move_requested.emit(world_pos)
+    print("[Move] Movement started to: ", target_pos)
+    move_requested.emit(target_pos)
     _movement.move_along_path(path, self)
 
 func cancel_movement() -> void:

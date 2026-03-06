@@ -11,7 +11,7 @@ var _editors: Dictionary = {}  # property_name -> editor
 var _container: VBoxContainer
 var _title_label: Label
 
-@export var panel_title: String = "属性":
+@export var panel_title: String = "Properties":
 	get: return _title_label.text if _title_label else ""
 	set(v):
 		if _title_label:
@@ -50,7 +50,7 @@ func clear():
 		_container.remove_child(child)
 		child.queue_free()
 
-## 添加字符串属性
+## 添加字串属
 func add_string_property(name: String, label: String, value: String = "", 
 		multiline: bool = false, placeholder: String = "") -> Control:
 	
@@ -68,7 +68,7 @@ func add_string_property(name: String, label: String, value: String = "",
 	
 	return editor
 
-## 添加数值属性
+## 添加数属
 func add_number_property(name: String, label: String, value: float = 0.0,
 		min_val: float = 0.0, max_val: float = 999999.0, step: float = 1.0,
 		allow_float: bool = false) -> Control:
@@ -89,7 +89,7 @@ func add_number_property(name: String, label: String, value: float = 0.0,
 	
 	return editor
 
-## 添加枚举属性
+## 添加枚举属
 func add_enum_property(name: String, label: String, enum_values: Dictionary,
 		current_value: String = "") -> Control:
 	
@@ -124,15 +124,15 @@ func add_readonly_label(name: String, label: String, value: String):
 	
 	_container.add_child(hbox)
 
-## 添加分隔线
+## 添加分隔
 func add_separator():
 	_container.add_child(HSeparator.new())
 
-## 添加自定义控件
+## 添加义控
 func add_custom_control(control: Control):
 	_container.add_child(control)
 
-## 连接编辑器信号
+## 连接编辑器信
 func _connect_editor_signals(editor: Control):
 	editor.value_changed.connect(_on_editor_value_changed)
 	editor.edit_started.connect(_on_editor_edit_started)
@@ -142,14 +142,14 @@ func _connect_editor_signals(editor: Control):
 func get_editor(property_name: String) -> Control:
 	return _editors.get(property_name)
 
-## 获取属性值
+## 获取属
 func get_value(property_name: String) -> Variant:
 	var editor = _editors.get(property_name)
 	if editor:
 		return editor.get_value()
 	return null
 
-## 设置属性值
+## 设置属
 func set_value(property_name: String, value: Variant):
 	var editor = _editors.get(property_name)
 	if editor:

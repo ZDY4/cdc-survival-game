@@ -1,42 +1,42 @@
-﻿@tool
+@tool
 extends Control
-## RecipeEditor - 閰嶆柟缂栬緫鍣?
-## 鐢ㄤ簬鍒涘缓鍜岀紪杈戞父鎴忎腑鐨勫埗浣滈厤鏂?
+## RecipeEditor - 配方编辑器
+## 用于创建和编辑游戏中的制作配
 
 signal recipe_saved(recipe_id: String)
 signal recipe_loaded(recipe_id: String)
 
-# 閰嶆柟绫诲埆
+# 配方类别
 const RECIPE_CATEGORIES = {
-	"weapon": "姝﹀櫒",
-	"armor": "鎶ょ敳",
-	"accessory": "楗板搧",
-	"medical": "鍖荤枟",
-	"food": "椋熺墿",
-	"ammo": "寮硅嵂",
-	"tool": "宸ュ叿",
-	"material": "鏉愭枡鍔犲伐",
-	"misc": "鏉傞」"
+	"weapon": "武器",
+	"armor": "护甲",
+	"accessory": "饰品",
+	"medical": "医疗",
+	"food": "食物",
+	"ammo": "弹药",
+	"tool": "工具",
+	"material": "材料加工",
+	"misc": "杂项"
 }
 
-# 宸ヤ綔鍙扮被鍨?
+# 工作台类
 const STATION_TYPES = {
-	"none": "鏃狅紙鎵嬫寔鍒朵綔锛?,
-	"workbench": "宸ヤ綔鍙?,
-	"forge": "閿婚€犲彴",
-	"medical_station": "鍖荤枟鍙?,
-	"cooking_station": "鐑归オ鍙?,
-	"chemistry_lab": "鍖栧瀹為獙瀹?
+	"none": "None (Hand Craft)",
+	"workbench": "Workbench",
+	"forge": "锻造台",
+	"medical_station": "Medical Station",
+	"cooking_station": "Cooking Station",
+	"chemistry_lab": "Chemistry Lab"
 }
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
 
-# 鏁版嵁
+# 数据
 var recipes: Dictionary = {}  # recipe_id -> recipe_data
 var current_recipe_id: String = ""
 var editor_plugin: EditorPlugin = null
 
-# UI鑺傜偣
+# UI节点
 @onready var _recipe_list: ItemList
 @onready var _property_panel: VBoxContainer
 @onready var _toolbar: HBoxContainer
@@ -46,7 +46,7 @@ var editor_plugin: EditorPlugin = null
 @onready var _search_box: LineEdit
 @onready var _stats_label: Label
 
-# UI鍏冪礌寮曠敤
+# UI元素引用
 var _ui_elements: Dictionary = {}
 var _materials_container: VBoxContainer
 var _selected_category_filter: String = ""
@@ -61,7 +61,7 @@ func _ready():
 func _setup_ui():
 	anchors_preset = Control.PRESET_FULL_RECT
 	
-	# 宸ュ叿鏍?
+	# 工具栏
 	_toolbar = HBoxContainer.new()
 	_toolbar.custom_minimum_size = Vector2(0, 45)
 	_toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -70,46 +70,46 @@ func _setup_ui():
 	add_child(_toolbar)
 	
 	var new_btn = Button.new()
-	new_btn.text = "鏂板缓閰嶆柟"
+	new_btn.text = "新建配方"
 	new_btn.pressed.connect(_on_new_recipe)
 	_toolbar.add_child(new_btn)
 	
 	var delete_btn = Button.new()
-	delete_btn.text = "鍒犻櫎"
+	delete_btn.text = "删除"
 	delete_btn.pressed.connect(_on_delete_recipe)
 	_toolbar.add_child(delete_btn)
 	
 	_toolbar.add_child(VSeparator.new())
 	
 	var save_btn = Button.new()
-	save_btn.text = "淇濆瓨"
+	save_btn.text = "保存"
 	save_btn.pressed.connect(_on_save_recipes)
 	_toolbar.add_child(save_btn)
 	
 	var load_btn = Button.new()
-	load_btn.text = "鍔犺浇"
+	load_btn.text = "加载"
 	load_btn.pressed.connect(_on_load_recipes)
 	_toolbar.add_child(load_btn)
 	
 	_toolbar.add_child(VSeparator.new())
 	
 	var duplicate_btn = Button.new()
-	duplicate_btn.text = "澶嶅埗"
+	duplicate_btn.text = "复制"
 	duplicate_btn.pressed.connect(_on_duplicate_recipe)
 	_toolbar.add_child(duplicate_btn)
 	
-	# 涓诲垎鍓插鍣?
+	# 主分割
 	var main_split = HSplitContainer.new()
 	main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
 	main_split.offset_top = 50
 	main_split.offset_bottom = -20
 	add_child(main_split)
 	
-	# 宸︿晶锛氶厤鏂瑰垪琛?
+	# 左侧：配方列
 	var left_panel = _create_recipe_list_panel()
 	main_split.add_child(left_panel)
 	
-	# 鍙充晶锛氬睘鎬ч潰鏉?
+	# 右侧：属性面板
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -122,14 +122,14 @@ func _setup_ui():
 	main_split.add_child(scroll)
 	main_split.split_offset = 250
 	
-	# 鐘舵€佹爮
+	# 状态栏
 	_status_bar = Label.new()
 	_status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_status_bar.offset_top = -20
 	_status_bar.offset_bottom = 0
 	_status_bar.offset_left = 0
 	_status_bar.offset_right = 0
-	_status_bar.text = "灏辩华"
+	_status_bar.text = "就绪"
 	add_child(_status_bar)
 
 func _create_recipe_list_panel() -> Control:
@@ -137,22 +137,22 @@ func _create_recipe_list_panel() -> Control:
 	panel.custom_minimum_size = Vector2(300, 0)
 	
 	var title = Label.new()
-	title.text = "馃搵 閰嶆柟鍒楄〃"
+	title.text = "📋 配方列表"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
 	panel.add_child(title)
 	
 	panel.add_child(HSeparator.new())
 	
-	# 绫诲埆杩囨护
+	# 类别过滤
 	var filter_hbox = HBoxContainer.new()
 	var filter_label = Label.new()
-	filter_label.text = "绫诲埆:"
+	filter_label.text = "类别:"
 	filter_hbox.add_child(filter_label)
 	
 	_category_filter = OptionButton.new()
 	_category_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_category_filter.add_item("鍏ㄩ儴")
+	_category_filter.add_item("全部")
 	_category_filter.set_item_metadata(0, "")
 	var idx = 1
 	for cat_key in RECIPE_CATEGORIES.keys():
@@ -163,19 +163,19 @@ func _create_recipe_list_panel() -> Control:
 	filter_hbox.add_child(_category_filter)
 	panel.add_child(filter_hbox)
 	
-	# 鎼滅储妗?
+	# 搜索
 	_search_box = LineEdit.new()
-	_search_box.placeholder_text = "鎼滅储閰嶆柟..."
+	_search_box.placeholder_text = "搜索配方..."
 	_search_box.text_changed.connect(_on_search_changed)
 	panel.add_child(_search_box)
 	
-	# 閰嶆柟鍒楄〃
+	# 配方列表
 	_recipe_list = ItemList.new()
 	_recipe_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_recipe_list.item_selected.connect(_on_recipe_selected)
 	panel.add_child(_recipe_list)
 	
-	# 缁熻
+	# 统计
 	_stats_label = Label.new()
 	_stats_label.text = "Total: 0 / Filtered: 0"
 	panel.add_child(_stats_label)
@@ -185,7 +185,7 @@ func _create_recipe_list_panel() -> Control:
 func _setup_file_dialog():
 	_file_dialog = FileDialog.new()
 	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_file_dialog.add_filter("*.json; JSON鏂囦欢")
+	_file_dialog.add_filter("*.json; JSON文件")
 	add_child(_file_dialog)
 
 func _load_recipes_from_data_manager():
@@ -227,13 +227,13 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 		var recipe = recipes[recipe_id]
 		var category = recipe.get("category", "misc")
 		var output_name = _get_output_item_name(recipe)
-		var display_text = "%s - %s 鈫?%s" % [recipe_id, recipe.get("name", "鏈懡鍚?), output_name]
+		var display_text = "%s - %s -> %s" % [recipe_id, recipe.get("name", "Unnamed"), output_name]
 		
-		# 绫诲埆杩囨护
+		# 类别过滤
 		if not category_filter.is_empty() and category != category_filter:
 			continue
 		
-		# 鎼滅储杩囨护
+		# 搜索过滤
 		if not search_filter.is_empty():
 			var search_lower = search_filter.to_lower()
 			if not recipe_id.to_lower().contains(search_lower) and \
@@ -245,7 +245,7 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 		_recipe_list.set_item_metadata(idx, recipe_id)
 		filtered_count += 1
 		
-		# 鏍规嵁绫诲埆璁剧疆棰滆壊
+		# 根据类别设置颜色
 		match category:
 			"weapon":
 				_recipe_list.set_item_custom_fg_color(idx, Color.RED)
@@ -264,7 +264,7 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 func _get_output_item_name(recipe: Dictionary) -> String:
 	var output = recipe.get("output", {})
 	var item_id = output.get("item_id", "")
-	# 瀹夊叏璁块棶 ItemDatabase
+	# 安全访问 ItemDatabase
 	var item_db = get_node_or_null("/root/ItemDatabase")
 	if item_db and item_db.has_method("get_item_name"):
 		return item_db.get_item_name(item_id)
@@ -285,7 +285,7 @@ func _on_new_recipe():
 	var recipe_id = "recipe_%d" % Time.get_ticks_msec()
 	var recipe_data = {
 		"id": recipe_id,
-		"name": "鏂伴厤鏂?,
+		"name": "New Recipe",
 		"description": "",
 		"category": "misc",
 		"output": {
@@ -307,7 +307,7 @@ func _on_new_recipe():
 	recipes[recipe_id] = recipe_data
 	_update_recipe_list()
 	_select_recipe(recipe_id)
-	_update_status("鍒涘缓浜嗘柊閰嶆柟: %s" % recipe_id)
+	_update_status("创建了新配方: %s" % recipe_id)
 
 func _on_delete_recipe():
 	if current_recipe_id.is_empty():
@@ -317,7 +317,7 @@ func _on_delete_recipe():
 	current_recipe_id = ""
 	_update_recipe_list()
 	_clear_property_panel()
-	_update_status("鍒犻櫎浜嗛厤鏂?)
+	_update_status("Deleted recipe")
 
 func _on_duplicate_recipe():
 	if current_recipe_id.is_empty():
@@ -330,12 +330,12 @@ func _on_duplicate_recipe():
 	var new_id = "recipe_%d" % Time.get_ticks_msec()
 	var new_recipe = source_recipe.duplicate(true)
 	new_recipe.id = new_id
-	new_recipe.name = new_recipe.name + " (澶嶅埗)"
+	new_recipe.name = new_recipe.name + " (复制)"
 	
 	recipes[new_id] = new_recipe
 	_update_recipe_list()
 	_select_recipe(new_id)
-	_update_status("澶嶅埗浜嗛厤鏂? %s" % new_id)
+	_update_status("复制了配 %s" % new_id)
 
 func _on_recipe_selected(index: int):
 	var recipe_id = _recipe_list.get_item_metadata(index)
@@ -355,45 +355,45 @@ func _update_property_panel(recipe: Dictionary):
 	_clear_property_panel()
 	_ui_elements.clear()
 	
-	# 鍩虹淇℃伅
-	_add_section_label("馃搵 鍩虹淇℃伅")
-	_add_string_field("id", "閰嶆柟 ID:", recipe.get("id", ""), false)
-	_add_string_field("name", "鏄剧ず鍚嶇О:", recipe.get("name", ""))
-	_add_string_field("description", "鎻忚堪:", recipe.get("description", ""), true)
-	_add_enum_field("category", "绫诲埆:", RECIPE_CATEGORIES, recipe.get("category", "misc"))
-	_add_bool_field("is_default_unlocked", "榛樿瑙ｉ攣:", recipe.get("is_default_unlocked", true))
+	# 基础信息
+	_add_section_label("📋 基础信息")
+	_add_string_field("id", "配方 ID:", recipe.get("id", ""), false)
+	_add_string_field("name", "显示名称:", recipe.get("name", ""))
+	_add_string_field("description", "描述:", recipe.get("description", ""), true)
+	_add_enum_field("category", "类别:", RECIPE_CATEGORIES, recipe.get("category", "misc"))
+	_add_bool_field("is_default_unlocked", "默认解锁:", recipe.get("is_default_unlocked", true))
 	
 	_add_separator()
 	
-	# 浜у嚭
-	_add_section_label("馃摝 浜у嚭")
+	# 产出
+	_add_section_label("📦 产出")
 	var output = recipe.get("output", {})
-	_add_string_field("output_item_id", "浜у嚭鐗╁搧ID:", output.get("item_id", ""))
-	_add_number_field("output_count", "浜у嚭鏁伴噺:", output.get("count", 1), 1, 999, 1)
-	_add_number_field("output_quality", "鍝佽川鍔犳垚:", output.get("quality_bonus", 0), 0, 10, 1)
+	_add_string_field("output_item_id", "产出物品ID:", output.get("item_id", ""))
+	_add_number_field("output_count", "产出数量:", output.get("count", 1), 1, 999, 1)
+	_add_number_field("output_quality", "品质加成:", output.get("quality_bonus", 0), 0, 10, 1)
 	
 	_add_separator()
 	
-	# 鏉愭枡
-	_add_section_label("馃敡 鏉愭枡")
+	# 材料
+	_add_section_label("🔧 材料")
 	_add_materials_editor(recipe.get("materials", []))
 	
 	_add_separator()
 	
-	# 宸ュ叿
-	_add_section_label("馃洜锔?宸ュ叿")
-	_add_string_array_field("required_tools", "蹇呴渶宸ュ叿:", recipe.get("required_tools", []))
-	_add_string_array_field("optional_tools", "鍙€夊伐鍏?", recipe.get("optional_tools", []))
+	# 工具
+	_add_section_label("🛠工具")
+	_add_string_array_field("required_tools", "必需工具:", recipe.get("required_tools", []))
+	_add_string_array_field("optional_tools", "工", recipe.get("optional_tools", []))
 	
 	_add_separator()
 	
-	# 宸ヤ綔鍙板拰鎶€鑳?
-	_add_section_label("鈿欙笍 闇€姹?)
-	_add_enum_field("required_station", "宸ヤ綔鍙?", STATION_TYPES, recipe.get("required_station", "none"))
-	_add_number_field("craft_time", "鍒朵綔鏃堕棿(绉?:", recipe.get("craft_time", 10.0), 0.0, 3600.0, 1.0)
-	_add_number_field("experience_reward", "缁忛獙濂栧姳:", recipe.get("experience_reward", 5), 0, 9999, 1)
+	# 工作台和
+	_add_section_label("Requirements")
+	_add_enum_field("required_station", "工作", STATION_TYPES, recipe.get("required_station", "none"))
+	_add_number_field("craft_time", "制作时间(:", recipe.get("craft_time", 10.0), 0.0, 3600.0, 1.0)
+	_add_number_field("experience_reward", "经验奖励:", recipe.get("experience_reward", 5), 0, 9999, 1)
 
-# ========== UI 杈呭姪鏂规硶 ==========
+# ========== UI 辅助方法 ==========
 
 func _add_section_label(text: String):
 	var label = Label.new()
@@ -492,13 +492,13 @@ func _add_materials_editor(materials: Array):
 	_materials_container = VBoxContainer.new()
 	_materials_container.name = "MaterialsContainer"
 	
-	# 鏄剧ず褰撳墠鏉愭枡
+	# 显示当前材料
 	for i in range(materials.size()):
 		_create_material_row(_materials_container, i, materials[i], materials)
 	
-	# 娣诲姞鎸夐挳
+	# 添加按钮
 	var add_btn = Button.new()
-	add_btn.text = "+ 娣诲姞鏉愭枡"
+	add_btn.text = "+ 添加材料"
 	add_btn.pressed.connect(func():
 		materials.append({"item_id": "", "count": 1})
 		_create_material_row(_materials_container, materials.size() - 1, materials.back(), materials)
@@ -511,7 +511,7 @@ func _create_material_row(container: VBoxContainer, index: int, material: Dictio
 	var row = HBoxContainer.new()
 	
 	var item_edit = LineEdit.new()
-	item_edit.placeholder_text = "鐗╁搧ID"
+	item_edit.placeholder_text = "物品ID"
 	item_edit.text = material.get("item_id", "")
 	item_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_edit.text_changed.connect(func(v): 
@@ -534,7 +534,7 @@ func _create_material_row(container: VBoxContainer, index: int, material: Dictio
 	row.add_child(count_spin)
 	
 	var del_btn = Button.new()
-	del_btn.text = "鍒犻櫎"
+	del_btn.text = "删除"
 	del_btn.pressed.connect(func():
 		var target_materials = _resolve_materials_ref(materials_ref)
 		var target_index = target_materials.find(material)
@@ -547,7 +547,7 @@ func _create_material_row(container: VBoxContainer, index: int, material: Dictio
 	)
 	row.add_child(del_btn)
 	
-	# 鎻掑叆鍒版坊鍔犳寜閽箣鍓?
+	# 插入到添加按
 	var add_button_idx = container.get_child_count() - 1
 	container.add_child(row)
 	if add_button_idx >= 0:
@@ -574,7 +574,7 @@ func _add_string_array_field(key: String, label_text: String, values: Array):
 		_create_string_array_row(list_container, i, values[i], values)
 	
 	var add_btn = Button.new()
-	add_btn.text = "+ 娣诲姞"
+	add_btn.text = "+ 添加"
 	add_btn.pressed.connect(func():
 		values.append("")
 		_create_string_array_row(list_container, values.size() - 1, "", values)
@@ -598,14 +598,14 @@ func _create_string_array_row(container: VBoxContainer, index: int, value: Strin
 	row.add_child(line_edit)
 	
 	var del_btn = Button.new()
-	del_btn.text = "鍒犻櫎"
+	del_btn.text = "删除"
 	del_btn.pressed.connect(func():
 		array_ref.remove_at(index)
 		row.queue_free()
 	)
 	row.add_child(del_btn)
 	
-	# 鎻掑叆鍒版坊鍔犳寜閽箣鍓?
+	# 插入到添加按
 	var add_button_idx = container.get_child_count() - 1
 	container.add_child(row)
 	if add_button_idx >= 0:
@@ -617,7 +617,7 @@ func _on_field_changed(key: String, value: Variant):
 	
 	var recipe = recipes[current_recipe_id]
 	
-	# 澶勭悊鐗规畩瀛楁
+	# 处理特殊字段
 	if key == "id" and value != current_recipe_id and not value.is_empty() and not recipes.has(value):
 		recipes.erase(current_recipe_id)
 		recipe.id = value
@@ -639,9 +639,9 @@ func _on_field_changed(key: String, value: Variant):
 	else:
 		recipe[key] = value
 	
-	_update_status("宸叉洿鏂? %s" % key)
+	_update_status("已更 %s" % key)
 
-# ========== 鏂囦欢鎿嶄綔 ==========
+# ========== 文件操作 ==========
 
 func _on_save_recipes():
 	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
@@ -656,9 +656,9 @@ func _save_to_file(path: String):
 		file.store_string(json)
 		file.close()
 		recipe_saved.emit(current_recipe_id)
-		_update_status("鉁?宸蹭繚瀛? %s (%d涓厤鏂?" % [path, recipes.size()])
+		_update_status("已保 %s (%d" % [path, recipes.size()])
 	else:
-		_update_status("鉂?淇濆瓨澶辫触")
+		_update_status("保存失败")
 
 func _on_load_recipes():
 	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -693,7 +693,7 @@ func _update_status(message: String):
 	_status_bar.text = message
 	print("[RecipeEditor] %s" % message)
 
-# 鍏叡鏂规硶
+# 公共方法
 func get_current_recipe_id() -> String:
 	return current_recipe_id
 

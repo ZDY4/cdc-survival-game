@@ -1,32 +1,33 @@
-﻿extends Node
-# AITestBridge - AI娴嬭瘯妗ユ帴鍣?(v2.0)
-# 鏀寔HTTP API鍜岀洿鎺ユ祴璇旳PI璋冪敤
+extends Node
+# AITestBridge - AI test bridge (v2.0)
+# Supports HTTP API and direct test API calls
 
 signal test_started(test_id: String)
 signal test_completed(test_id: String, result: Dictionary)
 signal test_step_completed(step_index: int, step_data: Dictionary)
 signal action_executed(action: String, result: Dictionary)
 
-# ===== 閰嶇疆 =====
+# ===== Config =====
 @export var enabled: bool = true
-@export var test_mode: bool = true  # true = 鐩存帴API妯″紡, false = HTTP鏈嶅姟鍣ㄦā寮?
+@export var test_mode: bool = true  # true = direct API mode, false = HTTP server mode
 @export var auto_start: bool = false
 @export var port: int = 0
-@export var enable_http_api: bool = false  # test_mode 下仍允许运行 HTTP API
+@export var enable_http_api: bool = false  # Allow HTTP API even when test_mode is enabled
 
-# ===== HTTP鏈嶅姟鍣ㄧ粍浠?=====
+# ===== HTTP Server =====
 var _server: TCPServer
 var _clients: Array[StreamPeerTCP] = []
 var _is_server_running: bool = false
 var _port: int = 8080
+const PORT_FALLBACK_ATTEMPTS: int = 20
 
-# ===== 娴嬭瘯鐘舵€?=====
+# ===== Test State =====
 var _current_test: Dictionary = {}
 var _test_history: Array[Dictionary] = []
 var _is_recording: bool = false
 var _recorded_actions: Array[Dictionary] = []
 
-# ===== 缂撳瓨鐨勬父鎴忕姸鎬?=====
+# ===== Cached Game State =====
 var _last_game_state: Dictionary = {}
 var _actions: Dictionary = {}
 var _action_meta: Dictionary = {}
@@ -90,24 +91,30 @@ func _ready():
 		var server_port = port if port > 0 else 8080
 		start_server(server_port)
 
-# ===== HTTP鏈嶅姟鍣ㄥ姛鑳?(鍚戝悗鍏煎) =====
+# ===== HTTP Server (backward compatible) =====
 
 func start_server(server_port: int = 0):
 	if test_mode and not enable_http_api:
-		print("[AITestBridge] 璀﹀憡锛氭祴璇曟ā寮忎笅涓嶉渶瑕佸惎鍔ㄦ湇鍔″櫒")
+		print("[AITestBridge] Warning: no need to start HTTP server in test mode")
 		return true
-	
-	_port = server_port
-	_server = TCPServer.new()
-	
-	var error = _server.listen(_port)
-	if error != OK:
-		push_error("[AITestBridge] 鍚姩鏈嶅姟鍣ㄥけ璐ワ紝绔彛: " + str(_port))
-		return false
-	
-	_is_server_running = true
-	print("[AITestBridge] HTTP鏈嶅姟鍣ㄥ凡鍚姩锛岀鍙? " + str(_port))
-	return true
+
+	var base_port: int = server_port if server_port > 0 else 8080
+	for offset in range(PORT_FALLBACK_ATTEMPTS):
+		var candidate_port: int = base_port + offset
+		var candidate_server := TCPServer.new()
+		var error := candidate_server.listen(candidate_port)
+		if error == OK:
+			_server = candidate_server
+			_port = candidate_port
+			_is_server_running = true
+			if candidate_port != base_port:
+				push_warning("[AITestBridge] Port %d unavailable, fallback to %d" % [base_port, candidate_port])
+			print("[AITestBridge] HTTP server started on port: " + str(_port))
+			return true
+
+	push_warning("[AITestBridge] Failed to start HTTP server on ports %d-%d" % [base_port, base_port + PORT_FALLBACK_ATTEMPTS - 1])
+	_is_server_running = false
+	return false
 
 func stop_server():
 	_is_server_running = false
@@ -120,7 +127,7 @@ func stop_server():
 		_server.stop()
 		_server = null
 	
-	print("[AITestBridge] HTTP鏈嶅姟鍣ㄥ凡鍋滄")
+	print("[AITestBridge] HTTP server stopped")
 
 func is_running() -> bool:
 	return _is_server_running
@@ -132,12 +139,12 @@ func _process(delta: float):
 	if not _is_server_running || not _server:
 		return
 	
-	# 澶勭悊HTTP杩炴帴
+	# Handle HTTP connections
 	if _server.is_connection_available():
 		var client = _server.take_connection()
 		if client:
 			_clients.append(client)
-			print("[AITestBridge] 瀹㈡埛绔凡杩炴帴")
+			print("[AITestBridge] Client connected")
 	
 	for i in range(_clients.size() - 1, -1, -1):
 		var client = _clients[i]
@@ -151,9 +158,9 @@ func _process(delta: float):
 			var data = client.get_string(available_bytes)
 			_handle_http_request(client, data)
 
-# ===== 鏍稿績娴嬭瘯API (娴嬭瘯妯″紡) =====
+# ===== Core Test API (test mode) =====
 
-## 杩愯娴嬭瘯搴忓垪
+## Run test sequence
 func run_test_sequence(test_id: String, sequence: Array):
 	test_started.emit(test_id)
 	
@@ -166,22 +173,22 @@ func run_test_sequence(test_id: String, sequence: Array):
 		"current_step": 0
 	}
 	
-	print("[AITestBridge] 寮€濮嬫祴璇? " + test_id)
-	print("[AITestBridge] 娴嬭瘯姝ラ鏁? " + str(sequence.size()))
+	print("[AITestBridge] Starting test: " + test_id)
+	print("[AITestBridge] Total steps: " + str(sequence.size()))
 	
 	for i in range(sequence.size()):
 		_current_test.current_step = i
 		var step = sequence[i]
 		
-		print("[AITestBridge] 鎵ц姝ラ " + str(i + 1) + "/" + str(sequence.size()) + ": " + step.get("action", "unknown"))
+		print("[AITestBridge] Executing step " + str(i + 1) + "/" + str(sequence.size()) + ": " + step.get("action", "unknown"))
 		
 		var result = await _execute_test_step(step)
 		_current_test.results.append(result)
 		test_step_completed.emit(i, result)
 		
-		# 濡傛灉鏄叧閿楠や笖澶辫触锛屽仠姝㈡祴璇?
+		# Stop test if a critical step fails
 		if not result.success && step.get("critical", false):
-			print("[AITestBridge] 鍏抽敭姝ラ澶辫触锛屽仠姝㈡祴璇?")
+			print("[AITestBridge] Critical step failed, stopping test")
 			_current_test.success = false
 			break
 	
@@ -190,13 +197,13 @@ func run_test_sequence(test_id: String, sequence: Array):
 	
 	_test_history.append(_current_test.duplicate())
 	
-	var result_str = "閫氳繃" if _current_test.success else "澶辫触"
-	print("[AITestBridge] 娴嬭瘯瀹屾垚: " + test_id + ", 缁撴灉: " + result_str)
+	var result_str = "passed" if _current_test.success else "failed"
+	print("[AITestBridge] Test finished: " + test_id + ", result: " + result_str)
 	
 	test_completed.emit(test_id, _current_test)
 	return _current_test
 
-## 鎵ц鍗曚釜娴嬭瘯姝ラ
+## Execute single test step
 func _execute_test_step(step: Dictionary):
 	var action = step.get("action", "")
 	var result = {
@@ -249,7 +256,7 @@ func _execute_test_step(step: Dictionary):
 					params.erase("critical")
 				result = execute_action(action, params)
 			else:
-				result.error = "鏈知鎿嶄綔: " + action
+				result.error = "Unknown action: " + action
 	
 	action_executed.emit(action, result)
 	return result
@@ -321,17 +328,17 @@ func _register_default_actions() -> void:
 	register_action("dialog.continue", Callable(self, "_action_dialog_continue"), {"category": "dialog"})
 	register_action("combat.attack", Callable(self, "_action_combat_attack"), {"category": "combat"})
 
-# ===== 鍏蜂綋鍔ㄤ綔瀹炵幇 =====
+# ===== Action Implementations =====
 
 func _action_set_state(step: Dictionary):
 	var result = {"success": true, "data": {}}
 	
-	# 璁剧疆浣嶇疆
+	# Set position
 	if step.has("position"):
 		GameState.player_position = step.position
 		result.data.position = step.position
 	
-	# 璁剧疆灞炴€?
+	# Set attributes
 	if step.has("hp"):
 		GameState.player_hp = step.hp
 		result.data.hp = step.hp
@@ -342,37 +349,37 @@ func _action_set_state(step: Dictionary):
 	if step.has("thirst"):
 		GameState.player_thirst = step.thirst
 	
-	# 璁剧疆鏍囪
+	# Set flags
 	if step.has("flags"):
 		for flag_name in step.flags.keys():
 			GameStateManager.set_flag(flag_name, step.flags[flag_name])
 	
-	# 娣诲姞鐗╁搧
+	# Add inventory items
 	if step.has("inventory"):
 		GameState.inventory_items.clear()
 		for item in step.inventory:
 			GameState.inventory_items.append(item)
 	
-	print("[AITestBridge] 鐘舵€佸凡璁剧疆: " + str(result.data))
+	print("[AITestBridge] State updated: " + str(result.data))
 	return result
 
 func _action_click(step: Dictionary):
 	var target = step.get("target", "")
 	var result = {"success": false, "data": {"target": target}}
 	
-	# 鏌ユ壘鐩爣鑺傜偣
+	# Find target node
 	var current_scene = get_tree().current_scene
 	if not current_scene:
-		result.error = "娌℃湁娲诲姩鍦烘櫙"
+		result.error = "No active scene"
 		return result
 	
 	var target_node = current_scene.find_child(target, true, false)
 	
 	if not target_node:
-		result.error = "鎵句笉鍒扮洰鏍? " + target
+		result.error = "Target not found: " + target
 		return result
 	
-	# 妯℃嫙鐐瑰嚮
+	# Simulate click
 	if target_node.has_method("_on_click") || target_node.has_signal("interacted"):
 		if target_node.has_method("_on_click"):
 			target_node._on_click()
@@ -381,9 +388,9 @@ func _action_click(step: Dictionary):
 		
 		result.success = true
 		result.data.clicked = target
-		print("[AITestBridge] 鐐瑰嚮鎴愬姛: " + target)
+		print("[AITestBridge] Click succeeded: " + target)
 	else:
-		result.error = "鐩爣涓嶅彲浜や簰: " + target
+		result.error = "Target not interactable: " + target
 	
 	return result
 
@@ -391,9 +398,9 @@ func _action_input(step: Dictionary):
 	var text = step.get("text", "")
 	var result = {"success": true, "data": {"input": text}}
 	
-	# 妯℃嫙杈撳叆浜嬩欢
-	# 杩欓噷鍙互鎵╁睍涓哄疄闄呯殑UI杈撳叆妯℃嫙
-	print("[AITestBridge] 杈撳叆鏂囨湰: " + text)
+	# Simulate input event
+	# Can be extended with real UI input simulation
+	print("[AITestBridge] Input text: " + text)
 	
 	return result
 
@@ -425,20 +432,20 @@ func _action_verify(step: Dictionary):
 			result.data.has_item = has
 		
 		"dialog_opened":
-			# 妫€鏌ュ璇濇鏄惁鎵撳紑
-			result.success = true  # 绠€鍖栧疄鐜?
+			# Check whether dialog is opened
+			result.success = true  # Simplified implementation
 			result.data.dialog_open = true
 		
 		"ui_opened":
-			# 妫€鏌I鏄惁鎵撳紑
-			result.success = true  # 绠€鍖栧疄鐜?
+			# Check whether target UI is opened
+			result.success = true  # Simplified implementation
 			result.data.ui = expected
 		
 		_:
-			result.error = "鏈煡楠岃瘉绫诲瀷: " + check
+			result.error = "Unknown verify type: " + check
 	
 	if not result.success && result.error == "":
-		result.error = "楠岃瘉澶辫触: 鏈熸湜 " + str(expected) + ", 瀹為檯 " + str(result.data.get("actual", "unknown"))
+		result.error = "Verification failed: expected " + str(expected) + ", actual " + str(result.data.get("actual", "unknown"))
 	
 	return result
 
@@ -475,7 +482,7 @@ func _action_screenshot(step: Dictionary):
 	var path = step.get("path", "user://screenshots/test_%s.png" % str(Time.get_unix_time_from_system()))
 	var result = {"success": false, "data": {"path": path}}
 	
-	# 鑾峰彇瑙嗗彛鎴浘
+	# Capture viewport screenshot
 	var viewport = get_tree().root.get_viewport()
 	var img = viewport.get_texture().get_image()
 	
@@ -483,11 +490,11 @@ func _action_screenshot(step: Dictionary):
 		var error = img.save_png(path)
 		if error == OK:
 			result.success = true
-			print("[AITestBridge] 鎴浘宸蹭繚瀛? " + path)
+			print("[AITestBridge] Screenshot saved: " + path)
 		else:
-			result.error = "淇濆瓨鎴浘澶辫触"
+			result.error = "Failed to save screenshot"
 	else:
-		result.error = "鑾峰彇鎴浘澶辫触"
+		result.error = "Failed to capture screenshot"
 	
 	return result
 
@@ -509,7 +516,7 @@ func _action_interact(step: Dictionary):
 	var target = step.get("target", "")
 	var result = {"success": false, "data": {"target": target}}
 	
-	# 绠€鍖栧疄鐜帮細鐩存帴璋冪敤鐐瑰嚮
+	# Simplified implementation: reuse click action
 	result = await _action_click(step)
 	
 	return result
@@ -744,37 +751,37 @@ func _action_combat_attack(params: Dictionary) -> Dictionary:
 	result.data.result = combat_result
 	return result
 
-# ===== 娴嬭瘯杈呭姪鍔熻兘 =====
+# ===== Test Utilities =====
 
-## 寮€濮嬪綍鍒?
+## Start recording
 func start_recording():
 	_is_recording = true
 	_recorded_actions.clear()
 	print("[AITestBridge] Start recording")
 
-## 鍋滄褰曞埗
+## Stop recording
 func stop_recording() -> Array[Dictionary]:
 	_is_recording = false
 	print("[AITestBridge] Stop recording, count: " + str(_recorded_actions.size()))
 	return _recorded_actions.duplicate()
 
-## 褰曞埗鍔ㄤ綔
+## Record action
 func record_action(action: Dictionary):
 	if _is_recording:
 		action["timestamp"] = Time.get_unix_time_from_system()
 		_recorded_actions.append(action)
 
-## 鑾峰彇娴嬭瘯鍘嗗彶
+## Get test history
 func get_test_history() -> Array[Dictionary]:
 	return _test_history.duplicate()
 
-## 鑾峰彇鏈€鍚庝竴娆℃祴璇?
+## Get last test
 func get_last_test():
 	if _test_history.size() > 0:
 		return _test_history[-1]
 	return {}
 
-## 鑾峰彇鍙氦浜掑璞″垪琛?
+## Get interactable objects
 func get_interactable_objects() -> Array[Dictionary]:
 	var objects = []
 	var current_scene = get_tree().current_scene
@@ -797,14 +804,14 @@ func get_interactable_objects() -> Array[Dictionary]:
 	
 	return objects
 
-## 蹇€熷瓨妗?璇绘。
+## Quick save/load
 func quick_save():
 	return SaveSystem.save_game()
 
 func quick_load():
 	return SaveSystem.load_game()
 
-## 绛夊緟鏉′欢婊¤冻
+## Wait for condition
 func wait_for_condition(timeout: float, condition: Callable, check_interval: float = 0.5):
 	var elapsed = 0.0
 	
@@ -817,7 +824,7 @@ func wait_for_condition(timeout: float, condition: Callable, check_interval: flo
 	
 	return false
 
-# ===== HTTP璇锋眰澶勭悊 (鍚戝悗鍏煎) =====
+# ===== HTTP Request Handling (backward compatible) =====
 
 func _handle_http_request(client: StreamPeerTCP, data: String):
 	var request_line = data.split("\r\n")[0]
@@ -895,9 +902,9 @@ func _send_json_response(client: StreamPeerTCP, status_code: int, body: String):
 	response += body
 	client.put_data(response.to_utf8_buffer())
 
-# ===== 娴嬭瘯棰勮 =====
+# ===== Built-in Test Presets =====
 
-## 涓绘祦绋嬫祴璇?
+## Main flow test
 func run_main_flow_test():
 	var sequence = [
 		{"action": "set_state", "position": "safehouse", "hp": 100, "hunger": 100, "thirst": 100},
@@ -911,7 +918,7 @@ func run_main_flow_test():
 	
 	return await run_test_sequence("main_flow", sequence)
 
-## 鎴樻枟绯荤粺娴嬭瘯
+## Combat system test
 func run_combat_test():
 	var sequence = [
 		{"action": "set_state", "hp": 100},
@@ -923,7 +930,7 @@ func run_combat_test():
 	
 	return await run_test_sequence("combat_system", sequence)
 
-## 鑳屽寘绯荤粺娴嬭瘯
+## Inventory system test
 func run_inventory_test(level: int = 1):
 	var sequence = [
 		{"action": "set_state", "inventory": [{"id": "food_canned", "count": 3}]},
@@ -932,7 +939,7 @@ func run_inventory_test(level: int = 1):
 	
 	return await run_test_sequence("inventory_system", sequence)
 
-## 杩愯鎵€鏈夋祴璇?
+## Run all tests
 func run_all_tests():
 	var results = {
 		"main_flow": await run_main_flow_test(),
