@@ -39,3 +39,6 @@ __pycache__/
 
 # Local asset backup files
 *.backup
+
+# Local Godot UID backups
+.local_backup/
