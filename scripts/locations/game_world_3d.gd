@@ -126,10 +126,12 @@ func _update_path_preview(delta: float) -> void:
         _last_preview_grid = current_grid
         
         _last_hover_pos = world_pos
+        var preview_target := world_pos
+        preview_target.y = _player.global_position.y
         
         var path := _navigator.find_path(
             _player.global_position,
-            world_pos,
+            preview_target,
             GridMovementSystem.grid_world.is_walkable
         )
         
@@ -173,6 +175,8 @@ func _try_move_to_screen_position(screen_pos: Vector2) -> void:
     if result:
         var world_pos: Vector3 = result.position
         world_pos = GridMovementSystem.snap_to_grid(world_pos)
+        world_pos.y = _player.global_position.y
+        print("[Move] Ground click target: ", world_pos)
         _player.move_to(world_pos)
         
         EventBus.emit(EventBus.EventType.GRID_CLICKED, {
