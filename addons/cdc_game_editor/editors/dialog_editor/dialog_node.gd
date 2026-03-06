@@ -1,6 +1,6 @@
 @tool
 extends GraphNode
-## 对话编辑器节点
+## 对话编辑器节
 
 signal data_changed(node_id: String, new_data: Dictionary)
 
@@ -13,14 +13,14 @@ func _ready():
 	draggable = true
 	selectable = true
 	
-	# Godot 4.x GraphNode 属性兼容性处理
+	# Godot 4.x GraphNode 属兼容
 	# 尝试设置关闭按钮 (不同版本属性名可能不同)
 	if "show_close" in self:
 		set("show_close", true)
 	elif "close_button_enabled" in self:
 		set("close_button_enabled", true)
 	
-	# 连接信号 (不同版本信号名可能不同)
+	# 连接信号 (不同版本信号名可能不
 	if "close_request" in self:
 		connect("close_request", _on_close_request)
 	elif "delete_request" in self:
@@ -52,7 +52,7 @@ func set_color(color: Color):
 	add_theme_stylebox_override("panel", panel_style)
 
 func _update_ui():
-	# 清除现有子节点
+	# 清除现有子节
 	for child in get_children():
 		child.queue_free()
 	
@@ -78,7 +78,7 @@ func _update_ui():
 		_create_default_ui()
 
 func _create_dialog_ui():
-	# 说话人标签
+	# 说话人标
 	if node_data.has("speaker"):
 		var speaker_label = Label.new()
 		speaker_label.text = "🎭 %s" % node_data.speaker
@@ -96,7 +96,7 @@ func _create_dialog_ui():
 	# 头像预览
 	if node_data.has("portrait") and not node_data.portrait.is_empty():
 		var portrait_label = Label.new()
-		portrait_label.text = "🖼️ %s" % node_data.portrait.get_file()
+		portrait_label.text = "🖼%s" % node_data.portrait.get_file()
 		portrait_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		portrait_label.modulate = Color.GRAY
 		add_child(portrait_label)
@@ -104,7 +104,7 @@ func _create_dialog_ui():
 func _create_choice_ui():
 	if node_data.has("options"):
 		var title = Label.new()
-		title.text = "选项列表 (%d个)" % node_data.options.size()
+		title.text = "选项列表 (%d" % node_data.options.size()
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		add_child(title)
 		
@@ -131,14 +131,14 @@ func _create_condition_ui():
 
 func _create_action_ui():
 	var icon = Label.new()
-	icon.text = "⚡ 动作节点"
+	icon.text = "动作节点"
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(icon)
 	
 	if node_data.has("actions"):
 		var count = node_data.actions.size()
 		var label = Label.new()
-		label.text = "包含 %d 个动作" % count
+		label.text = "Contains %d actions" % count
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.modulate = Color.GREEN
 		add_child(label)

@@ -1,6 +1,6 @@
 @tool
 extends RefCounted
-## 编辑器剪贴板管理器
+## 编辑器剪贴板管理
 ## 用于节点复制粘贴功能
 
 static var _instance = null
@@ -17,7 +17,7 @@ static func get_instance() -> RefCounted:
 func copy_node(node_data: Dictionary, node_type: String):
 	_clipboard_data = node_data.duplicate(true)
 	_clipboard_type = node_type
-	print("节点已复制: %s" % node_data.get("id", "unknown"))
+	print("节点已 %s" % node_data.get("id", "unknown"))
 
 ## 粘贴节点数据
 func paste_node() -> Dictionary:
@@ -36,21 +36,21 @@ func paste_node() -> Dictionary:
 	if pasted_data.has("false_next"):
 		pasted_data.false_next = ""
 	
-	# 偏移位置（粘贴时稍微偏移）
+	# 偏移位置（粘贴时稍微偏移
 	if pasted_data.has("position"):
 		pasted_data.position += Vector2(50, 50)
 	
 	return pasted_data
 
-## 检查剪贴板是否有数据
+## 查剪贴板有数
 func has_data() -> bool:
 	return not _clipboard_data.is_empty()
 
-## 获取剪贴板数据类型
+## 获取板数
 func get_clipboard_type() -> String:
 	return _clipboard_type
 
-## 清空剪贴板
+## 清空
 func clear():
 	_clipboard_data.clear()
 	_clipboard_type = ""
@@ -66,7 +66,7 @@ func copy_nodes(nodes: Array[Dictionary], node_type: String):
 		"nodes": nodes.duplicate(true),
 		"type": node_type
 	}
-	print("批量复制 %d 个节点" % nodes.size())
+	print("Copied %d nodes" % nodes.size())
 
 ## 批量粘贴
 func paste_nodes() -> Array[Dictionary]:
@@ -77,12 +77,12 @@ func paste_nodes() -> Array[Dictionary]:
 	var pasted_nodes: Array[Dictionary] = []
 	var original_nodes: Array = _clipboard_data.nodes
 	
-	# 创建ID映射表（原ID -> 新ID）
+	# 创建ID映射原ID -> 新ID
 	var id_mapping = {}
 	for node in original_nodes:
 		id_mapping[node.id] = _generate_new_id()
 	
-	# 复制节点并更新ID和连接
+	# 复制节点并更新ID和连
 	for node in original_nodes:
 		var new_node = node.duplicate(true)
 		new_node.id = id_mapping[node.id]

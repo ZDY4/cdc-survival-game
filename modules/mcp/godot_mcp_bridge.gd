@@ -1,45 +1,54 @@
 extends Node
-# GodotMCPBridge - Godot端MCP桥接
-# 允许外部通过Socket控制Godot（Web平台禁用）
+# GodotMCPBridge - Godot MCP bridge
+# Allows external control of Godot over socket (disabled on web platform)
 
 const PORT = 9742
+const PORT_FALLBACK_ATTEMPTS = 20
 
 var _server: TCPServer
 var _clients: Array[StreamPeerTCP] = []
 var _is_running: bool = false
+var _active_port: int = PORT
 
 func _ready():
-	# Web平台不支持TCP服务器，禁用MCP
+	# Web platform does not support TCP server, disable MCP
 	if OS.has_feature("web"):
-		print("[GodotMCPBridge] Web平台，MCP功能已禁用")
+		print("[GodotMCPBridge] Web platform detected, MCP bridge disabled")
 		set_process(false)
 		return
 	
-	print("[GodotMCPBridge] 初始化...")
+	print("[GodotMCPBridge] Initializing...")
 	_start_server()
 
 func _start_server():
-	_server = TCPServer.new()
-	var err = _server.listen(PORT)
-	if err != OK:
-		push_error("[GodotMCPBridge] 无法启动服务器，端口: " + str(PORT))
-		return
-	
-	_is_running = true
-	print("[GodotMCPBridge] 服务器已启动，端口: " + str(PORT))
+	for offset in range(PORT_FALLBACK_ATTEMPTS):
+		var candidate_port: int = PORT + offset
+		var candidate_server := TCPServer.new()
+		var err := candidate_server.listen(candidate_port)
+		if err == OK:
+			_server = candidate_server
+			_active_port = candidate_port
+			_is_running = true
+			if candidate_port != PORT:
+				push_warning("[GodotMCPBridge] Port %d unavailable, fallback to %d" % [PORT, candidate_port])
+			print("[GodotMCPBridge] Server started on port: " + str(candidate_port))
+			return
+
+	push_warning("[GodotMCPBridge] Unable to start server on ports %d-%d" % [PORT, PORT + PORT_FALLBACK_ATTEMPTS - 1])
+	_is_running = false
 
 func _process(delta: float):
 	if not _is_running:
 		return
 	
-	# 接受新连接
+	# Accept new connections
 	if _server.is_connection_available():
 		var client = _server.take_connection()
 		_clients.append(client)
-		print("[GodotMCPBridge] 新客户端连接")
+		print("[GodotMCPBridge] New client connected")
 		_send_response(client, {"status": "connected", "godot_version": Engine.get_version_info()})
 	
-	# 处理客户端消息
+	# Process client messages
 	for i in range(_clients.size() - 1, -1, -1):
 		var client = _clients[i]
 		if client.get_status() != StreamPeerTCP.STATUS_CONNECTED:
@@ -55,14 +64,14 @@ func _handle_message(client: StreamPeerTCP, data: String):
 	var json = JSON.new()
 	var err = json.parse(data)
 	if err != OK:
-		_send_error(client, "JSON解析错误")
+		_send_error(client, "JSON parse error")
 		return
 	
 	var request = json.get_data()
 	var method = request.get("method", "")
 	var params = request.get("params", {})
 	
-	print("[GodotMCPBridge] 收到命令: " + method)
+	print("[GodotMCPBridge] Received method: " + method)
 	
 	match method:
 		"get_scene_info":
@@ -76,7 +85,7 @@ func _handle_message(client: StreamPeerTCP, data: String):
 		"take_screenshot":
 			_take_screenshot(client)
 		_:
-			_send_error(client, "未知方法: " + method)
+			_send_error(client, "Unknown method: " + method)
 
 func _get_scene_info(client):
 	var current_scene = get_tree().current_scene
@@ -95,7 +104,7 @@ func _get_scene_info(client):
 func _get_node_info(client: StreamPeerTCP, node_path: String):
 	var node = get_node_or_null(node_path)
 	if not node:
-		_send_error(client, "节点不存在: " + node_path)
+		_send_error(client, "Node not found: " + node_path)
 		return
 	
 	var visible_value = null
@@ -112,7 +121,7 @@ func _get_node_info(client: StreamPeerTCP, node_path: String):
 
 func _get_carry_info(client: StreamPeerTCP):
 	if not CarrySystem:
-		_send_error(client, "CarrySystem未加载")
+		_send_error(client, "CarrySystem not loaded")
 		return
 	
 	var info = {
@@ -133,7 +142,7 @@ func _add_item(client: StreamPeerTCP, params: Dictionary):
 		CarrySystem.on_inventory_changed()
 		_send_response(client, {"success": success, "item": item_id, "count": count})
 	else:
-		_send_error(client, "GameState未加载")
+		_send_error(client, "GameState not loaded")
 
 func _take_screenshot(client: StreamPeerTCP):
 	var viewport = get_viewport()
