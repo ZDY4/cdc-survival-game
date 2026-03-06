@@ -1,8 +1,6 @@
 extends Node
 
-class_name BaseModule
-
-const MODULE_NAME: String = "BaseModule"
+const BASE_MODULE_NAME: String = "BaseModule"
 const VERSION: String = "1.0.0"
 
 signal module_initialized()

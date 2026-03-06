@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 ## InventoryModule - 背包模块
 ## 提供背包管理的高层接口，实际数据存储在GameState
 

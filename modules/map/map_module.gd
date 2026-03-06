@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 # MapModule - 地图模块
 # 数据从 DataManager 加载
 

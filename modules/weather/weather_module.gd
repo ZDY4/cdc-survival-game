@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 # WeatherModule - 天气系统
 
 signal weather_changed(new_weather: String)

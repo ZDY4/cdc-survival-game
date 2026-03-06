@@ -3,6 +3,9 @@ extends Node
 ## 负责管理所有NPC的生成、销毁和数据
 ## 注意: 作为Autoload单例，不使用class_name
 
+const NPCBase = preload("res://modules/npc/npc_base.gd")
+const NPCData = preload("res://modules/npc/npc_data.gd")
+
 # ========== 信号 ==========
 signal npc_spawned(npc_id: String, npc: NPCBase)
 signal npc_despawned(npc_id: String)

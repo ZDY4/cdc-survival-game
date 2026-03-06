@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 # 注意: 作为 Autoload 单例，不使用 class_name
 
 signal dialog_started(text: String, speaker: String)

@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 # SkillModule - 技能系统
 # 数据从 DataManager 加载
 
