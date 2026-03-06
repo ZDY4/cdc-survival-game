@@ -1,7 +1,7 @@
 @tool
 extends Control
 ## EffectEditor - 效果编辑器
-## 用于创建和编辑游戏中的效果（buffs/debuffs）
+## 用于创建和编辑游戏中的效果（buffs/debuffs
 
 signal effect_saved(effect_id: String)
 signal effect_loaded(effect_id: String)
@@ -10,7 +10,7 @@ signal effect_loaded(effect_id: String)
 const EFFECT_CATEGORIES = {
 	"buff": "增益 (Buff)",
 	"debuff": "减益 (Debuff)",
-	"neutral": "中性 (Neutral)"
+	"neutral": "(Neutral)"
 }
 
 # 叠加模式
@@ -21,7 +21,7 @@ const STACK_MODES = {
 	"separate": "独立实例"
 }
 
-# 可用属性列表
+# 属列
 const AVAILABLE_STATS = [
 	"strength",
 	"agility",
@@ -59,7 +59,7 @@ var current_file_path: String = ""
 # UI元素引用
 var _ui_elements: Dictionary = {}
 
-# 编辑器插件引用
+# 编辑器插件引
 var editor_plugin: EditorPlugin = null
 
 func _ready():
@@ -97,13 +97,13 @@ func _setup_ui():
 	load_btn.pressed.connect(_on_load_effects)
 	_toolbar.add_child(load_btn)
 	
-	# 主分割容器
+	# 主分割
 	var main_split = HSplitContainer.new()
 	main_split.position = Vector2(0, 50)
 	main_split.size = Vector2(size.x, size.y - 70)
 	add_child(main_split)
 	
-	# 左侧：效果列表
+	# 左侧：效果列
 	var left_panel = _create_effect_list_panel()
 	main_split.add_child(left_panel)
 	
@@ -125,7 +125,7 @@ func _create_effect_list_panel() -> Control:
 	panel.custom_minimum_size = Vector2(280, 0)
 	
 	var title = Label.new()
-	title.text = "✨ 效果列表"
+	title.text = "效果列表"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
 	panel.add_child(title)
@@ -137,11 +137,11 @@ func _create_effect_list_panel() -> Control:
 	_category_filter.add_item("全部类别")
 	_category_filter.add_item("增益 (Buff)")
 	_category_filter.add_item("减益 (Debuff)")
-	_category_filter.add_item("中性 (Neutral)")
+	_category_filter.add_item("(Neutral)")
 	_category_filter.item_selected.connect(_on_category_filter_changed)
 	panel.add_child(_category_filter)
 	
-	# 搜索框
+	# 搜索
 	_search_box = LineEdit.new()
 	_search_box.placeholder_text = "搜索效果..."
 	_search_box.text_changed.connect(_on_search_changed)
@@ -156,7 +156,7 @@ func _create_effect_list_panel() -> Control:
 	# 统计
 	var stats = Label.new()
 	stats.name = "StatsLabel"
-	stats.text = "总计: 0个效果"
+	stats.text = "Total: 0 effects"
 	panel.add_child(stats)
 	
 	return panel
@@ -189,7 +189,7 @@ func _update_effect_list(category_filter: String = "", search_filter: String = "
 	for effect_id in sorted_effects:
 		var effect = effects[effect_id]
 		var category = effect.get("category", "neutral")
-		var display_text = "%s - %s (%s)" % [effect_id, effect.get("name", "未命名"), EFFECT_CATEGORIES.get(category, category)]
+		var display_text = "%s - %s (%s)" % [effect_id, effect.get("name", "Unnamed"), EFFECT_CATEGORIES.get(category, category)]
 		
 		# 类别过滤
 		if not category_filter.is_empty() and category != category_filter:
@@ -213,7 +213,7 @@ func _update_effect_list(category_filter: String = "", search_filter: String = "
 	
 	var stats_label = get_node_or_null("StatsLabel")
 	if stats_label:
-		stats_label.text = "总计: %d个效果" % effects.size()
+		stats_label.text = "Total: %d effects" % effects.size()
 
 func _on_category_filter_changed(index: int):
 	var category = ""
@@ -237,7 +237,7 @@ func _on_new_effect():
 	var effect_id = "effect_%d" % Time.get_ticks_msec()
 	var effect_data = {
 		"id": effect_id,
-		"name": "新效果",
+		"name": "New Effect",
 		"description": "效果描述",
 		"category": "neutral",
 		"icon_path": "",
@@ -266,7 +266,7 @@ func _on_delete_effect():
 	current_effect_id = ""
 	_update_effect_list()
 	_clear_property_panel()
-	_update_status("删除了效果")
+	_update_status("Deleted effect")
 
 func _on_effect_selected(index: int):
 	var effect_id = _effect_list.get_item_metadata(index)
@@ -298,15 +298,15 @@ func _update_property_panel(effect: Dictionary):
 	
 	# 持续时间
 	_add_section_label("⏱️ 持续时间")
-	_add_number_field("duration", "持续时间(秒):", effect.get("duration", 60.0), 0.0, 99999.0, 1.0)
+	_add_number_field("duration", "持续时间(:", effect.get("duration", 60.0), 0.0, 99999.0, 1.0)
 	_add_bool_field("is_infinite", "无限持续时间:", effect.get("is_infinite", false))
 	
 	_add_separator()
 	
 	# 叠加设置
 	_add_section_label("🔢 叠加设置")
-	_add_bool_field("is_stackable", "可叠加:", effect.get("is_stackable", false))
-	_add_number_field("max_stacks", "最大叠加层数:", effect.get("max_stacks", 1), 1, 100, 1)
+	_add_bool_field("is_stackable", "???:", effect.get("is_stackable", false))
+	_add_number_field("max_stacks", "大叠加层", effect.get("max_stacks", 1), 1, 100, 1)
 	_add_enum_field("stack_mode", "叠加模式:", STACK_MODES, effect.get("stack_mode", "refresh"))
 	
 	_add_separator()
@@ -318,14 +318,14 @@ func _update_property_panel(effect: Dictionary):
 	_add_separator()
 	
 	# 特殊效果
-	_add_section_label("✨ 特殊效果")
+	_add_section_label("特殊效果")
 	_add_special_effects_editor(effect.get("special_effects", []))
 	
 	_add_separator()
 	
 	# 高级设置
 	_add_section_label("⚙️ 高级设置")
-	_add_number_field("tick_interval", "触发间隔(秒):", effect.get("tick_interval", 0.0), 0.0, 60.0, 0.1)
+	_add_number_field("tick_interval", "触发间隔(:", effect.get("tick_interval", 0.0), 0.0, 60.0, 0.1)
 	_add_string_field("visual_effect", "视觉特效:", effect.get("visual_effect", ""))
 	_add_string_field("color_tint", "屏幕色调:", effect.get("color_tint", ""), false, "#FF0000")
 
@@ -437,7 +437,7 @@ func _add_stat_modifiers_editor(modifiers: Dictionary):
 	var container = VBoxContainer.new()
 	container.name = "StatModifiersContainer"
 	
-	# 显示当前修饰符
+	# 显示当前
 	for stat_name in modifiers.keys():
 		var value = modifiers[stat_name]
 		_create_stat_modifier_row(container, stat_name, value)
@@ -496,7 +496,7 @@ func _create_stat_modifier_row(container: VBoxContainer, stat_name: String, valu
 	)
 	row.add_child(del_btn)
 	
-	# 插入到添加按钮之前
+	# 插入到添加按
 	var add_button_idx = container.get_child_count() - 1
 	container.add_child(row)
 	container.move_child(row, add_button_idx)
@@ -558,7 +558,7 @@ func _on_field_changed(key: String, value: Variant):
 	else:
 		effect[key] = value
 	
-	_update_status("已更新: %s" % key)
+	_update_status("已更 %s" % key)
 
 # ========== 文件操作 ==========
 
@@ -579,9 +579,9 @@ func _save_to_file(path: String):
 		file.store_string(json)
 		file.close()
 		effect_saved.emit(current_effect_id)
-		_update_status("✓ 已保存: %s (%d个效果)" % [path, effects.size()])
+		_update_status("已保 %s (%d" % [path, effects.size()])
 	else:
-		_update_status("❌ 保存失败")
+		_update_status("保存失败")
 
 func _on_load_effects():
 	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -591,7 +591,7 @@ func _on_load_effects():
 func _load_from_file(path: String):
 	var file = FileAccess.open(path, FileAccess.READ)
 	if not file:
-		_update_status("❌ 无法打开文件")
+		_update_status("无法打开文件")
 		return
 	
 	var json_text = file.get_as_text()
@@ -600,7 +600,7 @@ func _load_from_file(path: String):
 	var json = JSON.new()
 	var error = json.parse(json_text)
 	if error != OK:
-		_update_status("❌ JSON解析错误")
+		_update_status("JSON解析错")
 		return
 	
 	var data = json.data
@@ -612,7 +612,7 @@ func _load_from_file(path: String):
 	_update_effect_list()
 	_clear_property_panel()
 	effect_loaded.emit(current_effect_id)
-	_update_status("✓ 已加载: %s (%d个效果)" % [path, effects.size()])
+	_update_status("已加 %s (%d" % [path, effects.size()])
 
 func _update_status(message: String):
 	_status_bar.text = message
