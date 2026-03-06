@@ -18,6 +18,7 @@ var _camera: Camera3D = null
 func _ready() -> void:
     _camera = Camera3D.new()
     add_child(_camera)
+    _camera.make_current()
     
     _camera.projection = Camera3D.PROJECTION_ORTHOGONAL
     _current_zoom = initial_zoom

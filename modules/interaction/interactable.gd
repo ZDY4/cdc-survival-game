@@ -10,14 +10,14 @@ signal interacted
 @export var loot_table: Array[Dictionary] = []
 
 # New interaction system: options are configurable resources.
-@export var interaction_options: Array[InteractionOption] = []
+@export var interaction_options: Array = []
 @export var emit_interacted_signal: bool = true
 @export var enable_context_menu: bool = true
 
 var _outline_material: ShaderMaterial
 var _sprite: Sprite2D
 var _context_menu: PopupMenu
-var _context_menu_options: Array[InteractionOption] = []
+var _context_menu_options: Array = []
 var _context_menu_legacy_mode: bool = false
 
 func _ready() -> void:
@@ -107,7 +107,7 @@ func _on_click() -> void:
 
 func _on_left_click() -> void:
 	_emit_interacted_signal()
-	var option := _get_primary_option()
+	var option = _get_primary_option()
 	if option:
 		_execute_option(option)
 		return
@@ -135,7 +135,7 @@ func _show_interaction_menu(screen_pos: Vector2) -> void:
 			_context_menu.set_item_tooltip(0, interaction_description)
 	else:
 		for i in range(_context_menu_options.size()):
-			var option := _context_menu_options[i]
+			var option = _context_menu_options[i]
 			_context_menu.add_item(option.get_option_name(self), i)
 			if not option.description.is_empty():
 				_context_menu.set_item_tooltip(i, option.description)
@@ -153,8 +153,8 @@ func _on_context_menu_id_pressed(id: int) -> void:
 		return
 	_execute_option(_context_menu_options[id])
 
-func _get_available_options() -> Array[InteractionOption]:
-	var available: Array[InteractionOption] = []
+func _get_available_options() -> Array:
+	var available: Array = []
 	for option in interaction_options:
 		if option == null:
 			continue
@@ -163,18 +163,18 @@ func _get_available_options() -> Array[InteractionOption]:
 	available.sort_custom(_sort_options_by_priority)
 	return available
 
-func _get_primary_option() -> InteractionOption:
+func _get_primary_option():
 	var available := _get_available_options()
 	if available.is_empty():
 		return null
 	return available[0]
 
-func _sort_options_by_priority(a: InteractionOption, b: InteractionOption) -> bool:
+func _sort_options_by_priority(a, b) -> bool:
 	if a.priority == b.priority:
 		return a.get_option_name(self) < b.get_option_name(self)
 	return a.priority > b.priority
 
-func _execute_option(option: InteractionOption) -> void:
+func _execute_option(option) -> void:
 	if option == null:
 		return
 	option.execute(self)
@@ -197,7 +197,7 @@ func _emit_interacted_signal() -> void:
 		interacted.emit()
 
 func get_interaction_name() -> String:
-	var primary := _get_primary_option()
+	var primary = _get_primary_option()
 	if primary:
 		return primary.get_option_name(self)
 	if not interaction_name.is_empty():
@@ -227,7 +227,7 @@ func _talk() -> void:
 
 func _sleep() -> void:
 	DialogModule.show_dialog("You feel very tired and need to rest.")
-	var choice := await DialogModule.show_choices(["Sleep here", "Continue exploring"])
+	var choice: int = await DialogModule.show_choices(["Sleep here", "Continue exploring"])
 	if choice == 0:
 		SaveSystem.save_game()
 		GameState.heal_player(50)

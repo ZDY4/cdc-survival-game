@@ -3,6 +3,8 @@ extends Node3D
 
 @export var player_scene: PackedScene = null
 @export var show_grid_debug := false
+@export var max_preview_path_points := 200
+@export var max_preview_distance := 40.0
 
 @onready var _camera_controller: CameraController3D
 @onready var _player: PlayerController3D
@@ -94,6 +96,10 @@ func _update_path_preview(delta: float) -> void:
     
     if not camera:
         return
+    if not GridMovementSystem or not GridMovementSystem.grid_world:
+        return
+    if not get_world_3d():
+        return
     
     var from := camera.project_ray_origin(mouse_pos)
     var to := from + camera.project_ray_normal(mouse_pos) * 1000
@@ -108,6 +114,10 @@ func _update_path_preview(delta: float) -> void:
     
     if result:
         var world_pos: Vector3 = result.position
+        if _player.global_position.distance_to(world_pos) > max_preview_distance:
+            _path_preview.hide_path()
+            _last_preview_grid = Vector3i.ZERO
+            return
         var current_grid := GridMovementSystem.world_to_grid(world_pos)
         
         # Only update if grid position changed
@@ -123,7 +133,9 @@ func _update_path_preview(delta: float) -> void:
             GridMovementSystem.grid_world.is_walkable
         )
         
-        if path.size() > 1:
+        if path.size() > max_preview_path_points:
+            _path_preview.hide_path()
+        elif path.size() > 1:
             _path_preview.show_path(path)
         else:
             _path_preview.hide_path()
@@ -141,6 +153,10 @@ func _handle_touch_click(screen_pos: Vector2) -> void:
 func _try_move_to_screen_position(screen_pos: Vector2) -> void:
     var camera := get_viewport().get_camera_3d()
     if not camera:
+        return
+    if not GridMovementSystem or not GridMovementSystem.grid_world:
+        return
+    if not get_world_3d():
         return
     
     var from := camera.project_ray_origin(screen_pos)

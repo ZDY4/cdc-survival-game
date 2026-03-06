@@ -3,7 +3,7 @@ extends RefCounted
 
 const GRID_SIZE := 1.0
 
-func find_path(start_pos: Vector3, end_pos: Vector3, is_walkable: Callable) -> Array[Vector3]:
+func find_path(start_pos: Vector3, end_pos: Vector3, is_walkable: Callable, max_nodes: int = 5000) -> Array[Vector3]:
     var start_grid := world_to_grid(start_pos)
     var end_grid := world_to_grid(end_pos)
     
@@ -15,8 +15,13 @@ func find_path(start_pos: Vector3, end_pos: Vector3, is_walkable: Callable) -> A
     var came_from: Dictionary = {}
     var g_score: Dictionary = {start_grid: 0.0}
     var f_score: Dictionary = {start_grid: _heuristic(start_grid, end_grid)}
+    var nodes_visited := 0
     
     while not open_set.is_empty():
+        nodes_visited += 1
+        if nodes_visited > max_nodes:
+            push_warning("Pathfinding aborted: exceeded max_nodes (" + str(max_nodes) + ")")
+            return []
         var current := _get_lowest_f_score(open_set, f_score)
         
         if current == end_grid:

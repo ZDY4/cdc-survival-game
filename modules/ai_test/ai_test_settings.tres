@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AITestSettings" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modules/ai_test/ai_test_settings.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+enabled = true
+test_mode = true
+auto_start = true
+enable_http_api = true
+port = 8080
