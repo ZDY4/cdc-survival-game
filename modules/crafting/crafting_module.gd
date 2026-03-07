@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 # CraftingModule - 制作系统
 
 const CRAFTING_RECIPES = {

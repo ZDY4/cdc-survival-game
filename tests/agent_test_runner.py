@@ -14,6 +14,7 @@ class CDCAgent:
         self.api_url = api_url
         self.action_history: List[Dict] = []
         self.errors: List[str] = []
+        self.available_actions: List[str] = []
         self.running = False
     
     def get_state(self) -> Optional[Dict]:
@@ -34,10 +35,11 @@ class CDCAgent:
         try:
             response = requests.post(
                 f"{self.api_url}/execute",
-                json={"action": action_type, "parameters": params},
+                json={"action": action_type, "params": params},
                 timeout=10
             )
-            result = response.json()
+            payload = response.json()
+            result = payload.get("result", payload)
             
             self.action_history.append({
                 "action": action_type,
@@ -51,38 +53,32 @@ class CDCAgent:
             error_result = {"success": False, "message": str(e)}
             self.errors.append(f"Action {action_type} failed: {e}")
             return error_result
+
+    def fetch_actions(self) -> List[str]:
+        """获取可用动作列表"""
+        try:
+            response = requests.get(f"{self.api_url}/actions", timeout=5)
+            if response.status_code != 200:
+                return []
+            data = response.json()
+            actions = data.get("actions", [])
+            names: List[str] = []
+            for item in actions:
+                name = item.get("name", "")
+                if name:
+                    names.append(name)
+            self.available_actions = names
+            return names
+        except Exception as e:
+            self.errors.append(f"Fetch actions failed: {e}")
+            return []
     
     def decide_action(self, state: Dict) -> tuple:
         """决定下一个操作"""
         if not state:
-            return "wait", {}
-        
-        player = state.get("player", {})
-        hp = player.get("hp", 100)
-        hunger = player.get("hunger", 100)
-        
-        # 低血量时优先休息
-        if hp < 30:
-            return "sleep", {}
-        
-        # 饥饿时搜索
-        if hunger < 30:
-            return "search", {}
-        
-        # 随机选择可用操作
-        actions = ["search", "sleep"]
-        
-        # 如果有目的地可以旅行
-        location = state.get("location", {})
-        destinations = location.get("available_destinations", [])
-        if destinations:
-            dest = random.choice(destinations)
-            actions.append(("travel", {"destination": dest.get("id", "street_a")}))
-        
-        choice = random.choice(actions)
-        if isinstance(choice, tuple):
-            return choice
-        return choice, {}
+            return "get_state", {}
+
+        return "get_state", {}
     
     def run_test(self, max_actions: int = 30, duration: int = 60):
         """运行 Agent 测试"""
@@ -107,6 +103,12 @@ class CDCAgent:
         # 运行测试
         print(f"\n[2] Running {max_actions} actions (max {duration}s)...")
         print("-" * 60)
+
+        actions = self.fetch_actions()
+        if actions:
+            print(f"Available actions: {', '.join(actions)}")
+        else:
+            print("Available actions: <none> (fallback to get_state)")
         
         self.running = True
         start_time = time.time()

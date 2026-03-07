@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 # BaseBuildingModule - 基地建设系统
 
 signal structure_built(structure_id: String, position: Vector2)

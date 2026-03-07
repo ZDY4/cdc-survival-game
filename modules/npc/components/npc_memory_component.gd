@@ -4,6 +4,8 @@ extends Node
 
 class_name NPCMemoryComponent
 
+const NPCBase = preload("res://modules/npc/npc_base.gd")
+
 signal memory_updated(key: String, value: Variant)
 
 var npc: NPCBase

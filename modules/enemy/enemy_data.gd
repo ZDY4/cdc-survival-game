@@ -1,4 +1,4 @@
-extends CharacterBase
+extends "res://core/character_base.gd"
 ## EnemyData - 敌人数据类
 ## 继承自CharacterBase，添加敌人特有属性
 

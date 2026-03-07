@@ -4,6 +4,8 @@ extends Node
 
 class_name NPCTradeComponent
 
+const NPCBase = preload("res://modules/npc/npc_base.gd")
+
 signal trade_opened
 signal trade_closed
 signal item_bought(item_id: String, count: int, price: int)
@@ -11,7 +13,7 @@ signal item_sold(item_id: String, count: int, price: int)
 signal trade_completed(profit: int)
 
 var npc: NPCBase
-var trade_ui: NPCTradeUI = null
+var trade_ui: Control = null
 
 func initialize(parent_npc: NPCBase):
 	npc = parent_npc
@@ -35,7 +37,8 @@ func open_trade_ui() -> bool:
 		return false
 	
 	trade_ui = ui_scene.instantiate()
-	trade_ui.initialize(self, npc.npc_data)
+	if trade_ui.has_method("initialize"):
+		trade_ui.call("initialize", self, npc.npc_data)
 	
 	get_tree().current_scene.add_child(trade_ui)
 	

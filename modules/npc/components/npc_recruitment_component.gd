@@ -4,6 +4,8 @@ extends Node
 
 class_name NPCRecruitmentComponent
 
+const NPCBase = preload("res://modules/npc/npc_base.gd")
+
 signal recruitment_checked(passed: bool, reasons: Array)
 signal recruited
 

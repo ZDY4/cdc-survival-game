@@ -1,4 +1,4 @@
-extends CharacterBase
+extends "res://core/character_base.gd"
 ## NPCData - NPC数据类
 ## 继承自CharacterBase，添加NPC特有属性和状态
 

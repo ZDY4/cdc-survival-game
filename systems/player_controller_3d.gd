@@ -1,6 +1,10 @@
 class_name PlayerController3D
 extends CharacterBody3D
 
+const GridMovement = preload("res://systems/grid_movement.gd")
+const GridNavigator = preload("res://systems/grid_navigator.gd")
+const GridWorld = preload("res://systems/grid_world.gd")
+
 signal move_requested(world_pos: Vector3)
 signal movement_completed
 

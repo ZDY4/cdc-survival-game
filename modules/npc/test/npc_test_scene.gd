@@ -4,6 +4,8 @@ extends Node2D
 
 class_name NPCTestScene
 
+const NPCBase = preload("res://modules/npc/npc_base.gd")
+
 var test_npc: NPCBase = null
 
 func _ready():

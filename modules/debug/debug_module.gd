@@ -1,4 +1,4 @@
-extends BaseModule
+extends "res://core/base_module.gd"
 ## Global debug manager with runtime console.
 
 # 1. Constants
@@ -428,7 +428,7 @@ func _move_history_cursor(direction: int) -> void:
 	_input_line.caret_column = _input_line.text.length()
 
 func _append_log_line(line: String) -> void:
-	var lines: Array[String] = line.split("\n", false)
+	var lines: PackedStringArray = line.split("\n", false)
 	for split_line in lines:
 		_log_lines.append(split_line)
 
@@ -492,7 +492,7 @@ func _tokenize_command(raw_command: String) -> Array[String]:
 
 func _normalize_command_result(command_name: String, raw_result: Variant) -> Dictionary:
 	if raw_result is Dictionary:
-		var result := raw_result.duplicate(true)
+		var result: Dictionary = (raw_result as Dictionary).duplicate(true)
 		if not result.has("success"):
 			result["success"] = true
 		if not result.has("message") and not result.has("error"):

@@ -4,6 +4,9 @@ extends Control
 
 class_name NPCTradeUI
 
+const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
+const NPCData = preload("res://modules/npc/npc_data.gd")
+
 signal trade_finished
 
 var trade_component: NPCTradeComponent

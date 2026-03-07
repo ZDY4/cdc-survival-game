@@ -34,8 +34,32 @@ func _ready():
 # 开始战斗
 func start_combat(enemy_id: String):
     # 从敌人数据库获取数据
-    _current_enemy = EnemyDatabase.get_enemy(enemy_id)
-    _current_enemy.current_hp = _current_enemy.stats.hp
+    var enemy_data: Dictionary = EnemyDatabase.get_enemy(enemy_id)
+    if enemy_data.is_empty():
+        push_error("[CombatSystem] 敌人数据不存在: %s" % enemy_id)
+        return
+
+    if not enemy_data.has("id"):
+        enemy_data["id"] = enemy_id
+    if not enemy_data.has("name"):
+        enemy_data["name"] = "未知敌人"
+    if not enemy_data.has("level"):
+        enemy_data["level"] = 1
+
+    var stats: Dictionary = {}
+    if enemy_data.has("stats") and enemy_data["stats"] is Dictionary:
+        stats = enemy_data["stats"]
+
+    var hp: int = int(stats.get("hp", 10))
+    stats["hp"] = hp
+    stats["max_hp"] = int(stats.get("max_hp", hp))
+    stats["damage"] = int(stats.get("damage", 3))
+    stats["defense"] = int(stats.get("defense", 0))
+    stats["speed"] = int(stats.get("speed", 5))
+    enemy_data["stats"] = stats
+    enemy_data["current_hp"] = hp
+
+    _current_enemy = enemy_data
     
     _combat_state = CombatState.PLAYER_TURN
     _turn_count = 0
@@ -158,7 +182,8 @@ func _calculate_player_damage(attack_type: String, target_part: String):
         base_damage = int(base_damage * 1.5)
     
     # 敌人防御减免
-    var defense = _current_enemy.stats.defense
+    var enemy_stats: Dictionary = _current_enemy.get("stats", {})
+    var defense: int = int(enemy_stats.get("defense", 0))
     
     # 连击加成
     if _player_combo > 1:

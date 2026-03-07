@@ -4,6 +4,13 @@ extends CharacterBody2D
 
 class_name NPCBase
 
+const NPCData = preload("res://modules/npc/npc_data.gd")
+const NPCDialogComponent = preload("res://modules/npc/components/npc_dialog_component.gd")
+const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
+const NPCMoodComponent = preload("res://modules/npc/components/npc_mood_component.gd")
+const NPCMemoryComponent = preload("res://modules/npc/components/npc_memory_component.gd")
+const NPCRecruitmentComponent = preload("res://modules/npc/components/npc_recruitment_component.gd")
+
 # ========== 信号 ==========
 signal npc_died(npc_id: String)
 signal npc_recruited(npc_id: String)
