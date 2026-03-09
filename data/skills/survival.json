@@ -1,0 +1,17 @@
+{
+  "name": "生存本能",
+  "icon": "",
+  "description": "降低饥饿和口渴等生存消耗。",
+  "tree_id": "survival",
+  "max_level": 5,
+  "prerequisites": [],
+  "attribute_requirements": {
+    "constitution": 5
+  },
+  "effect_class": "res://modules/skills/skill_effects/survival_efficiency_skill_effect.gd",
+  "effect_params": {
+    "consumption_reduction_per_level": 0.05,
+    "max_reduction": 0.35
+  },
+  "id": "survival"
+}

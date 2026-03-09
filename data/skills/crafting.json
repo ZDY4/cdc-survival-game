@@ -1,0 +1,18 @@
+{
+  "name": "制作基础",
+  "icon": "",
+  "description": "提升制作速度并降低资源浪费。",
+  "tree_id": "crafting",
+  "max_level": 5,
+  "prerequisites": [],
+  "attribute_requirements": {
+    "strength": 5,
+    "agility": 5
+  },
+  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
+  "effect_params": {
+    "effect_name": "crafting_speed",
+    "per_level": 0.08
+  },
+  "id": "crafting"
+}

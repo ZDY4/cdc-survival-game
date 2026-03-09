@@ -9,6 +9,7 @@ const MENU_QUEST_EDITOR: int = 2
 const MENU_ITEM_EDITOR: int = 3
 const MENU_NPC_EDITOR: int = 4
 const MENU_RECIPE_EDITOR: int = 5
+const MENU_SKILL_EDITOR: int = 6
 const MENU_CDC_EDITORS_ROOT: int = 100
 
 const CDC_SUBMENU_NAME: String = "CDCEditorsSubmenu"
@@ -21,6 +22,7 @@ const EDITOR_QUEST: String = "quest"
 const EDITOR_ITEM: String = "item"
 const EDITOR_NPC: String = "npc"
 const EDITOR_RECIPE: String = "recipe"
+const EDITOR_SKILL: String = "skill"
 
 const EDITOR_CONFIGS: Dictionary = {
 	EDITOR_DIALOG: {
@@ -47,6 +49,11 @@ const EDITOR_CONFIGS: Dictionary = {
 		"window_title": "CDC - Recipe Editor",
 		"script_path": "res://addons/cdc_game_editor/editors/recipe_editor/recipe_editor.gd",
 		"window_size": Vector2i(1200, 800)
+	},
+	EDITOR_SKILL: {
+		"window_title": "CDC - Skill Editor",
+		"script_path": "res://addons/cdc_game_editor/editors/skill_editor/skill_editor.gd",
+		"window_size": Vector2i(1300, 900)
 	}
 }
 
@@ -55,7 +62,8 @@ const MENU_TO_EDITOR_KEY: Dictionary = {
 	MENU_QUEST_EDITOR: EDITOR_QUEST,
 	MENU_ITEM_EDITOR: EDITOR_ITEM,
 	MENU_NPC_EDITOR: EDITOR_NPC,
-	MENU_RECIPE_EDITOR: EDITOR_RECIPE
+	MENU_RECIPE_EDITOR: EDITOR_RECIPE,
+	MENU_SKILL_EDITOR: EDITOR_SKILL
 }
 
 var _cdc_menu_button: MenuButton = null
@@ -168,6 +176,7 @@ func _populate_cdc_menu(menu: PopupMenu) -> void:
 	menu.add_item("Item Editor", MENU_ITEM_EDITOR)
 	menu.add_item("NPC Editor", MENU_NPC_EDITOR)
 	menu.add_item("Recipe Editor", MENU_RECIPE_EDITOR)
+	menu.add_item("Skill Editor", MENU_SKILL_EDITOR)
 
 func _remove_existing_cdc_submenu() -> void:
 	if not _editor_popup_menu:

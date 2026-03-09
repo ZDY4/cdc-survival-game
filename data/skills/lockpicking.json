@@ -1,0 +1,19 @@
+{
+  "name": "开锁",
+  "icon": "",
+  "description": "提高开锁检定成功率。",
+  "tree_id": "crafting",
+  "max_level": 3,
+  "prerequisites": [
+    "crafting"
+  ],
+  "attribute_requirements": {
+    "agility": 7
+  },
+  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
+  "effect_params": {
+    "effect_name": "lockpicking_bonus",
+    "per_level": 0.15
+  },
+  "id": "lockpicking"
+}

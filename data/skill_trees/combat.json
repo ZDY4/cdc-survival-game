@@ -1,0 +1,34 @@
+{
+  "name": "战斗系",
+  "description": "专注于输出、机动与隐匿战斗。",
+  "skills": [
+    "combat",
+    "athletics",
+    "stealth"
+  ],
+  "links": [
+    {
+      "from": "combat",
+      "to": "athletics"
+    },
+    {
+      "from": "athletics",
+      "to": "stealth"
+    }
+  ],
+  "layout": {
+    "combat": {
+      "x": 0,
+      "y": 0
+    },
+    "athletics": {
+      "x": 240,
+      "y": 120
+    },
+    "stealth": {
+      "x": 480,
+      "y": 240
+    }
+  },
+  "id": "combat"
+}

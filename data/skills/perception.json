@@ -1,0 +1,20 @@
+{
+  "name": "观察力",
+  "icon": "",
+  "description": "提高发现线索和隐藏目标的能力。",
+  "tree_id": "survival",
+  "max_level": 4,
+  "prerequisites": [
+    "survival"
+  ],
+  "attribute_requirements": {
+    "agility": 6,
+    "constitution": 6
+  },
+  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
+  "effect_params": {
+    "effect_name": "perception_bonus",
+    "per_level": 0.08
+  },
+  "id": "perception"
+}

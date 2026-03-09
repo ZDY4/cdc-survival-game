@@ -24,7 +24,8 @@ const DATA_PATHS = {
 	"scavenge_locations": "res://data/json/scavenge_locations.json",
 	"weapons": "res://data/json/weapons.json",
 	"npcs": "res://data/json/npcs.json",
-	"skills": "res://data/json/skills.json",
+	"skills": "res://data/skills",
+	"skill_trees": "res://data/skill_trees",
 	"balance": "res://data/json/balance.json",
 	"map_data": "res://data/json/map_data.json",
 	"structures": "res://data/json/structures.json",
@@ -54,7 +55,7 @@ func _load_category(category: String) -> void:
 		push_error("[DataManager] 未知的数据类别: %s" % category)
 		return
 
-	var data = _load_json_file(path)
+	var data = _load_json_directory(path) if DirAccess.open(path) != null else _load_json_file(path)
 	if data != null:
 		_data_cache[category] = data
 		_loaded_categories[category] = true
@@ -84,6 +85,31 @@ func _load_json_file(path: String) -> Variant:
 		return null
 
 	return json.data
+
+
+## 加载目录下所有JSON文件（文件名作为ID）
+func _load_json_directory(directory_path: String) -> Dictionary:
+	var result: Dictionary = {}
+	var dir := DirAccess.open(directory_path)
+	if dir == null:
+		push_warning("[DataManager] 数据目录不存在或无法访问: %s" % directory_path)
+		return result
+
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and file_name.ends_with(".json"):
+			var full_path: String = "%s/%s" % [directory_path, file_name]
+			var data: Variant = _load_json_file(full_path)
+			if data is Dictionary:
+				var skill_id: String = file_name.trim_suffix(".json")
+				var item: Dictionary = data
+				if item.has("id"):
+					skill_id = str(item.get("id", skill_id))
+				result[skill_id] = item
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	return result
 
 
 # ========== 公共API ==========
@@ -264,11 +290,30 @@ func get_all_effects() -> Dictionary:
 
 ## 技能数据
 func get_skill(skill_id: String) -> Dictionary:
-	return get_item("skills", skill_id)
+	var skills = get_all_skills()
+	return skills.get(skill_id, {})
 
 
 func get_all_skills() -> Dictionary:
-	return get_data("skills")
+	var data = get_data("skills")
+	var nested = data.get("skills", null)
+	if nested is Dictionary:
+		return nested as Dictionary
+	return data
+
+
+## 技能树数据
+func get_skill_tree(tree_id: String) -> Dictionary:
+	var trees = get_all_skill_trees()
+	return trees.get(tree_id, {})
+
+
+func get_all_skill_trees() -> Dictionary:
+	var data = get_data("skill_trees")
+	var nested = data.get("trees", null)
+	if nested is Dictionary:
+		return nested as Dictionary
+	return data
 
 
 ## 平衡配置数据

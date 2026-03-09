@@ -171,10 +171,15 @@ func _on_skill_points_changed(points: int):
 	_update_points_display()
 
 func _update_points_display():
-	if xp_system:
-		var points = xp_system.get_available_points()
-		points_label.text = "技能点: %d" % points.skill_points
-		points_label.add_theme_color_override("font_color", Color.GREEN if points.skill_points > 0 else Color.GRAY)
+	var points_value: int = 0
+	if skill_system and skill_system.has_method("get_available_points"):
+		points_value = int(skill_system.get_available_points())
+	elif xp_system and xp_system.has_method("get_available_points"):
+		var points: Dictionary = xp_system.get_available_points()
+		points_value = int(points.get("skill_points", 0))
+
+	points_label.text = "技能点: %d" % points_value
+	points_label.add_theme_color_override("font_color", Color.GREEN if points_value > 0 else Color.GRAY)
 
 func show_ui():
 	_build_skill_tree()

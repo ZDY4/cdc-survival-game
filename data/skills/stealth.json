@@ -1,0 +1,20 @@
+{
+  "name": "潜行",
+  "icon": "",
+  "description": "降低被敌人发现概率，提升潜行路线成功率。",
+  "tree_id": "combat",
+  "max_level": 4,
+  "prerequisites": [
+    "athletics"
+  ],
+  "attribute_requirements": {
+    "agility": 7
+  },
+  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
+  "effect_params": {
+    "effect_name": "detection_reduction",
+    "per_level": 0.06,
+    "max_value": 0.4
+  },
+  "id": "stealth"
+}

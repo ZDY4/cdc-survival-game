@@ -1,0 +1,19 @@
+{
+  "name": "体能强化",
+  "icon": "",
+  "description": "提升机动能力与遭遇判定中的体能成功率。",
+  "tree_id": "combat",
+  "max_level": 3,
+  "prerequisites": [
+    "combat"
+  ],
+  "attribute_requirements": {
+    "agility": 6
+  },
+  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
+  "effect_params": {
+    "effect_name": "athletics_bonus",
+    "per_level": 0.1
+  },
+  "id": "athletics"
+}

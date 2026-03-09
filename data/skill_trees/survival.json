@@ -1,0 +1,34 @@
+{
+  "name": "生存系",
+  "description": "围绕续航、治疗与观察的成长路径。",
+  "skills": [
+    "survival",
+    "medicine",
+    "perception"
+  ],
+  "links": [
+    {
+      "from": "survival",
+      "to": "medicine"
+    },
+    {
+      "from": "survival",
+      "to": "perception"
+    }
+  ],
+  "layout": {
+    "survival": {
+      "x": 0,
+      "y": 0
+    },
+    "medicine": {
+      "x": 240,
+      "y": 120
+    },
+    "perception": {
+      "x": 240,
+      "y": -120
+    }
+  },
+  "id": "survival"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "制作系",
+  "description": "强化制造、技巧和交涉能力。",
+  "skills": [
+    "crafting",
+    "lockpicking",
+    "negotiation"
+  ],
+  "links": [
+    {
+      "from": "crafting",
+      "to": "lockpicking"
+    },
+    {
+      "from": "crafting",
+      "to": "negotiation"
+    }
+  ],
+  "layout": {
+    "crafting": {
+      "x": 0,
+      "y": 0
+    },
+    "lockpicking": {
+      "x": 220,
+      "y": -100
+    },
+    "negotiation": {
+      "x": 220,
+      "y": 100
+    }
+  },
+  "id": "crafting"
+}
