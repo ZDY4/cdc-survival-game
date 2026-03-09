@@ -50,6 +50,7 @@ const WEAPON_SUBTYPES = {
 }
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
+const ITEM_DATA_DIR := "res://data/items"
 
 # 节点引用
 @onready var _item_list: ItemList
@@ -67,6 +68,8 @@ var items: Dictionary = {}  # item_id -> item_data
 var current_item_id: String = ""
 var current_file_path: String = ""
 var _validation_errors: Dictionary = {}
+var _dirty_item_ids: Dictionary = {}
+var _deleted_item_ids: Dictionary = {}
 
 # 工具
 var _undo_redo_helper: RefCounted
@@ -88,20 +91,8 @@ func _ready():
 	_update_stats()
 
 func _load_items_from_project_data() -> void:
-	var preferred_paths: Array[String] = [
-		"res://data/json/items.json",
-		"res://data/items.json"
-	]
-	var has_candidate_file := false
-	for path in preferred_paths:
-		if not FileAccess.file_exists(path):
-			continue
-		has_candidate_file = true
-		if _load_from_file(path):
-			return
-
-	if has_candidate_file:
-		_update_status("[JSON] project_data | No valid item JSON file found in project data paths")
+	if not _load_from_directory(ITEM_DATA_DIR):
+		_update_status("[JSON] %s | No item files found" % ITEM_DATA_DIR)
 
 func _setup_ui():
 	anchors_preset = Control.PRESET_FULL_RECT
@@ -152,7 +143,7 @@ func _create_toolbar():
 	_add_toolbar_button("重做", _on_redo, "重做 (Ctrl+Y)")
 	_toolbar.add_child(VSeparator.new())
 	_add_toolbar_button("保存", _on_save_items, "保存到文(Ctrl+S)")
-	_add_toolbar_button("Load", _on_load_items, "Load from file")
+	_add_toolbar_button("刷新", _on_load_items, "重新加载物品目录")
 	_toolbar.add_child(VSeparator.new())
 	_add_toolbar_button("Validate", _on_validate_all, "Validate all items")
 	_add_toolbar_button("导出", _on_export_data, "导出数据")
@@ -271,8 +262,8 @@ func _load_default_items():
 	# 如果还没有物品，加载些默认示
 	if items.is_empty():
 		items = {
-			"fist": {
-				"id": "fist",
+			"1001": {
+				"id": 1001,
 				"name": "拳头",
 				"description": "Basic melee attack",
 				"type": "weapon",
@@ -294,12 +285,14 @@ func _load_default_items():
 				"required_level": 0
 			}
 		}
+		_mark_all_items_dirty()
 
 # 物品管理
 func _on_new_item():
-	var item_id = "item_%d" % Time.get_ticks_msec()
+	var item_id_int: int = _generate_next_item_id()
+	var item_id = str(item_id_int)
 	var item_data = {
-		"id": item_id,
+		"id": item_id_int,
 		"name": "New Item",
 		"description": "物品描述",
 		"type": "misc",
@@ -323,8 +316,18 @@ func _on_new_item():
 	_select_item(item_id)
 	_update_status("创建了新物品: %s" % item_id)
 
+func _generate_next_item_id() -> int:
+	var max_id := 1000
+	for key in items.keys():
+		var key_str := str(key)
+		if key_str.is_valid_int():
+			max_id = maxi(max_id, int(key_str))
+	return max_id + 1
+
 func _add_item(item_id: String, item_data: Dictionary):
 	items[item_id] = item_data.duplicate(true)
+	_dirty_item_ids[item_id] = true
+	_deleted_item_ids.erase(item_id)
 	_update_item_list()
 	_update_stats()
 
@@ -333,6 +336,8 @@ func _remove_item(item_id: String) -> Dictionary:
 		var old_data = items[item_id].duplicate(true)
 		items.erase(item_id)
 		_validation_errors.erase(item_id)
+		_dirty_item_ids.erase(item_id)
+		_deleted_item_ids[item_id] = true
 		
 		if current_item_id == item_id:
 			current_item_id = ""
@@ -376,7 +381,7 @@ func _update_item_list(filter_text: String = "", category_filter: String = ""):
 	_item_list.clear()
 	
 	var sorted_items = items.keys()
-	sorted_items.sort()
+	sorted_items.sort_custom(func(a, b): return int(str(a)) < int(str(b)))
 	
 	for item_id in sorted_items:
 		var item = items[item_id]
@@ -388,9 +393,10 @@ func _update_item_list(filter_text: String = "", category_filter: String = ""):
 			continue
 		
 		# 搜索过滤
-		var display_text = "%s - %s" % [item_id, item_name]
+		var display_text = item_name
 		if not filter_text.is_empty():
-			if not display_text.to_lower().contains(filter_text.to_lower()):
+			var search_text = "%s %s" % [item_name, str(item_id)]
+			if not search_text.to_lower().contains(filter_text.to_lower()):
 				continue
 		
 		var idx = _item_list.add_item(display_text)
@@ -446,8 +452,8 @@ func _update_property_panel(item: Dictionary):
 		return
 	
 	# 基础信息
-	_property_panel.add_string_property("id", "物品ID:", item.get("id", ""), false, "Unique identifier")
-	_property_panel.add_string_property("name", "显示名称:", item.get("name", ""), false, "物品名称")
+	_property_panel.add_number_property("id", "物品ID:", int(item.get("id", 0)), 1, 99999999, 1, false)
+	_property_panel.add_string_property("name", "物品名称:", item.get("name", ""), false, "物品名称")
 	_property_panel.add_string_property("description", "描述:", item.get("description", ""), true, "物品描述...")
 	
 	_property_panel.add_separator()
@@ -612,7 +618,10 @@ func _create_effects_editor(item: Dictionary) -> Control:
 		var effect_edit = LineEdit.new()
 		effect_edit.text = effects[i]
 		effect_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		effect_edit.text_changed.connect(func(v): effects[i] = v)
+		effect_edit.text_changed.connect(func(v):
+			effects[i] = v
+			_mark_current_item_dirty()
+		)
 		row.add_child(effect_edit)
 		
 		var del_btn = Button.new()
@@ -639,21 +648,29 @@ func _add_number_field(parent: Control, label: String, value: float, callback: C
 	spin.allow_greater = true
 	if is_float:
 		spin.step = 0.1
-		spin.value_changed.connect(callback)
+		spin.value_changed.connect(func(v):
+			callback.call(v)
+			_mark_current_item_dirty()
+		)
 	else:
 		spin.step = 1
-		spin.value_changed.connect(func(v): callback.call(int(v)))
+		spin.value_changed.connect(func(v):
+			callback.call(int(v))
+			_mark_current_item_dirty()
+		)
 	parent.add_child(spin)
 
 func _add_effect(item: Dictionary, list: VBoxContainer):
 	if not item.has("special_effects"):
 		item.special_effects = []
 	item.special_effects.append("")
+	_mark_current_item_dirty()
 	_refresh_effects_list(list, item)
 
 func _remove_effect(item: Dictionary, index: int, list: VBoxContainer):
 	if item.has("special_effects") and index < item.special_effects.size():
 		item.special_effects.remove_at(index)
+		_mark_current_item_dirty()
 		_refresh_effects_list(list, item)
 
 func _refresh_effects_list(list: VBoxContainer, item: Dictionary):
@@ -668,7 +685,10 @@ func _refresh_effects_list(list: VBoxContainer, item: Dictionary):
 		var effect_edit = LineEdit.new()
 		effect_edit.text = effects[i]
 		effect_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		effect_edit.text_changed.connect(func(v): effects[i] = v)
+		effect_edit.text_changed.connect(func(v):
+			effects[i] = v
+			_mark_current_item_dirty()
+		)
 		row.add_child(effect_edit)
 		
 		var del_btn = Button.new()
@@ -677,6 +697,18 @@ func _refresh_effects_list(list: VBoxContainer, item: Dictionary):
 		row.add_child(del_btn)
 		
 		list.add_child(row)
+
+func _mark_current_item_dirty() -> void:
+	if current_item_id.is_empty():
+		return
+	_dirty_item_ids[current_item_id] = true
+	_deleted_item_ids.erase(current_item_id)
+
+func _mark_all_items_dirty() -> void:
+	_dirty_item_ids.clear()
+	for item_key in items.keys():
+		_dirty_item_ids[str(item_key)] = true
+	_deleted_item_ids.clear()
 
 # 属变
 func _on_property_changed(property_name: String, new_value: Variant, old_value: Variant):
@@ -687,16 +719,21 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 	
 	# ID变更特殊处理
 	if property_name == "id":
-		if new_value != current_item_id and not new_value.is_empty():
+		var new_id_int := int(new_value)
+		if new_id_int <= 0:
+			return
+		var new_id := str(new_id_int)
+		if new_id != current_item_id:
 			if _undo_redo_helper:
 				_undo_redo_helper.create_action("修改物品ID")
-				_undo_redo_helper.add_undo_method(self, "_change_item_id", new_value, current_item_id)
-				_undo_redo_helper.add_redo_method(self, "_change_item_id", current_item_id, new_value)
+				_undo_redo_helper.add_undo_method(self, "_change_item_id", new_id, current_item_id)
+				_undo_redo_helper.add_redo_method(self, "_change_item_id", current_item_id, new_id)
 				_undo_redo_helper.commit_action()
-			_change_item_id(current_item_id, new_value)
+			_change_item_id(current_item_id, new_id)
 			return
 	else:
 		item[property_name] = new_value
+		_mark_current_item_dirty()
 	
 	_validate_item(current_item_id)
 	_update_item_list(_search_box.text, _category_filter.get_item_metadata(_category_filter.selected))
@@ -704,9 +741,13 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 func _change_item_id(old_id: String, new_id: String):
 	if items.has(old_id) and not items.has(new_id):
 		var data = items[old_id]
-		data.id = new_id
+		data.id = int(new_id)
 		items.erase(old_id)
 		items[new_id] = data
+		_dirty_item_ids.erase(old_id)
+		_dirty_item_ids[new_id] = true
+		_deleted_item_ids[old_id] = true
+		_deleted_item_ids.erase(new_id)
 		
 		if _validation_errors.has(old_id):
 			_validation_errors[new_id] = _validation_errors[old_id]
@@ -725,8 +766,14 @@ func _validate_item(item_id: String) -> bool:
 	
 	var errors: Array[String] = []
 	
-	if item_id.is_empty():
+	if item_id.is_empty() or not item_id.is_valid_int():
 		errors.append("物品ID不能为空")
+	else:
+		var item_internal_id := int(item.get("id", 0))
+		if item_internal_id <= 0:
+			errors.append("物品ID必须是正整数")
+		elif str(item_internal_id) != item_id:
+			errors.append("物品ID字段与字典键不一致")
 	
 	if item.get("name", "").is_empty():
 		errors.append("物品名称不能为空")
@@ -776,58 +823,109 @@ func _update_validation_panel():
 
 # 文件操作
 func _on_save_items():
-	if current_file_path.is_empty():
-		_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-		_file_dialog.current_file = "items.json"
-		_file_dialog.file_selected.connect(_save_to_file, CONNECT_ONE_SHOT)
-		_file_dialog.popup_centered(Vector2(800, 600))
-	else:
-		_save_to_file(current_file_path)
-
-func _save_to_file(path: String):
-	current_file_path = path
-	var json = JSON.stringify(items, "\t")
-	var file = FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string(json)
-		file.close()
+	if _save_to_directory(ITEM_DATA_DIR):
+		current_file_path = ITEM_DATA_DIR
 		item_saved.emit(current_item_id)
-		_update_status("已保 %s" % path)
+		_update_status("已保存到目录: %s" % ITEM_DATA_DIR)
 	else:
-		_update_status("无法保存文件")
+		_update_status("无法保存物品目录")
 
 func _on_load_items():
-	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	_file_dialog.file_selected.connect(_load_from_file, CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
+	if not _load_from_directory(ITEM_DATA_DIR):
+		_update_status("[JSON] %s | Reload failed" % ITEM_DATA_DIR)
 
-func _load_from_file(path: String) -> bool:
-	var validation := JSON_VALIDATOR.validate_file(path, {
-		"root_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"wrapper_key": "items",
-		"wrapper_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"entry_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"entry_label": "item"
-	})
-	if not bool(validation.get("ok", false)):
-		_update_status(str(validation.get("message", "[JSON] Unknown validation error")))
+func _load_from_directory(dir_path: String) -> bool:
+	var absolute_dir_path := ProjectSettings.globalize_path(dir_path)
+	if not DirAccess.dir_exists_absolute(absolute_dir_path):
 		return false
 
-	var loaded_items: Variant = validation.get("data", {})
-	if not (loaded_items is Dictionary):
-		_update_status("[JSON] %s | Invalid validator result: data must be Dictionary" % path)
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		_update_status("[JSON] %s | Failed to open directory" % dir_path)
 		return false
+
+	var loaded_items: Dictionary = {}
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if dir.current_is_dir() or not file_name.ends_with(".json"):
+			file_name = dir.get_next()
+			continue
+
+		var file_path := "%s/%s" % [dir_path, file_name]
+		var validation := JSON_VALIDATOR.validate_file(file_path, {
+			"root_type": JSON_VALIDATOR.TYPE_DICTIONARY
+		})
+		if not bool(validation.get("ok", false)):
+			_update_status(str(validation.get("message", "[JSON] Invalid item file")))
+			dir.list_dir_end()
+			return false
+
+		var item_data: Variant = validation.get("data", {})
+		if not (item_data is Dictionary):
+			_update_status("[JSON] %s | Invalid item data: expected Dictionary" % file_path)
+			dir.list_dir_end()
+			return false
+
+		var item_id := str(item_data.get("id", ""))
+		if item_id.is_empty():
+			_update_status("[JSON] %s | Missing item id" % file_path)
+			dir.list_dir_end()
+			return false
+
+		loaded_items[item_id] = item_data
+		file_name = dir.get_next()
+
+	dir.list_dir_end()
+	if loaded_items.is_empty():
+		return false
+
 	items = loaded_items
-
-	current_file_path = path
+	current_file_path = dir_path
 	current_item_id = ""
 	_validation_errors.clear()
-	
+	_dirty_item_ids.clear()
+	_deleted_item_ids.clear()
 	_update_item_list()
 	_update_stats()
 	_property_panel.clear()
 	item_loaded.emit(current_item_id)
-	_update_status("Loaded: %s" % path)
+	_update_status("Loaded directory: %s" % dir_path)
+	return true
+
+func _save_to_directory(dir_path: String) -> bool:
+	var absolute_dir_path := ProjectSettings.globalize_path(dir_path)
+	if not DirAccess.dir_exists_absolute(absolute_dir_path):
+		var create_error := DirAccess.make_dir_recursive_absolute(absolute_dir_path)
+		if create_error != OK:
+			_update_status("无法创建目录: %s" % dir_path)
+			return false
+
+	for item_id in _deleted_item_ids.keys():
+		var delete_path := "%s/%s.json" % [absolute_dir_path, str(item_id)]
+		if FileAccess.file_exists(delete_path):
+			var delete_error := DirAccess.remove_absolute(delete_path)
+			if delete_error != OK:
+				_update_status("无法删除旧文件: %s" % delete_path)
+				return false
+
+	for item_key in _dirty_item_ids.keys():
+		var item_id := str(item_key)
+		if not items.has(item_id):
+			continue
+		var item_data: Dictionary = items[item_key].duplicate(true)
+		item_data["id"] = int(item_id)
+
+		var file_path := "%s/%s.json" % [dir_path, item_id]
+		var file := FileAccess.open(file_path, FileAccess.WRITE)
+		if file == null:
+			_update_status("无法写入文件: %s" % file_path)
+			return false
+		file.store_string(JSON.stringify(item_data, "\t"))
+		file.close()
+
+	_deleted_item_ids.clear()
+	_dirty_item_ids.clear()
 	return true
 
 func _on_export_data():

@@ -45,7 +45,7 @@ func _load_all_items():
 	# 从DataManager加载
 	var data_manager = get_node_or_null("/root/DataManager")
 	if data_manager:
-		var items_data = data_manager.get_all_items()
+		var items_data: Dictionary = data_manager.get_all_items()
 		for item_id in items_data.keys():
 			_items[item_id] = _validate_and_fix_item(items_data[item_id])
 		print("[ItemDatabase] 已加载 %d 个物品" % _items.size())
@@ -55,7 +55,7 @@ func _load_all_items():
 ## 验证并修复物品数据（确保所有必需字段存在）
 func _validate_and_fix_item(item_data: Dictionary) -> Dictionary:
 	var defaults = {
-		"id": "",
+		"id": 0,
 		"name": "未命名物品",
 		"description": "",
 		"type": "misc",

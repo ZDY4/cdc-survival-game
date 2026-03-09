@@ -8,6 +8,8 @@ var _data_cache: Dictionary = {}
 var _loaded_categories: Dictionary = {}
 
 # ========== 数据文件路径配置 ==========
+const ITEM_DATA_DIR := "res://data/items"
+
 const DATA_PATHS = {
 	"clues": "res://data/json/clues.json",
 	"story_chapters": "res://data/json/story_chapters.json",
@@ -17,7 +19,7 @@ const DATA_PATHS = {
 	"effects": "res://data/json/effects.json",
 	"quests": "res://data/json/quests.json",
 	"equipment": "res://data/json/equipment.json",
-	"items": "res://data/json/items.json",
+	"items": ITEM_DATA_DIR,
 	"map_locations": "res://data/json/map_locations.json",
 	"limb_data": "res://data/json/limb_data.json",
 	"encounters": "res://data/json/encounters.json",
@@ -49,18 +51,63 @@ func _load_all_data() -> void:
 
 ## 加载单个数据类别
 func _load_category(category: String) -> void:
+	if category == "items":
+		var directory_items: Dictionary = _load_items_from_directory(ITEM_DATA_DIR)
+		_data_cache[category] = directory_items
+		_loaded_categories[category] = true
+		print("[DataManager] 已加载 %s (%d 条数据)" % [category, directory_items.size()])
+		return
+
 	var path = DATA_PATHS.get(category, "")
 	if path.is_empty():
 		push_error("[DataManager] 未知的数据类别: %s" % category)
 		return
 
-	var data = _load_json_file(path)
+	var data: Variant = _load_json_file(path)
+
 	if data != null:
 		_data_cache[category] = data
 		_loaded_categories[category] = true
 		print(
 			"[DataManager] 已加载 %s (%d 条数据)" % [category, data.size() if data is Dictionary else 0]
 		)
+
+func _load_items_from_directory(dir_path: String) -> Dictionary:
+	var result: Dictionary = {}
+	var absolute_dir_path := ProjectSettings.globalize_path(dir_path)
+	if not DirAccess.dir_exists_absolute(absolute_dir_path):
+		return result
+
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		push_warning("[DataManager] 无法打开物品目录: %s" % dir_path)
+		return result
+
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if dir.current_is_dir() or not file_name.ends_with(".json"):
+			file_name = dir.get_next()
+			continue
+
+		var file_path := "%s/%s" % [dir_path, file_name]
+		var item_data: Variant = _load_json_file(file_path)
+		if not (item_data is Dictionary):
+			push_warning("[DataManager] 跳过无效物品文件: %s" % file_path)
+			file_name = dir.get_next()
+			continue
+
+		var item_id := str(item_data.get("id", ""))
+		if item_id.is_empty():
+			push_warning("[DataManager] 物品文件缺少 id 字段: %s" % file_path)
+			file_name = dir.get_next()
+			continue
+
+		result[item_id] = item_data
+		file_name = dir.get_next()
+
+	dir.list_dir_end()
+	return result
 
 
 ## 加载JSON文件

@@ -1,0 +1,32 @@
+{
+  "id": 1002,
+  "name": "小刀",
+  "description": "锋利的匕首，适合近距离战斗",
+  "type": "weapon",
+  "subtype": "dagger",
+  "rarity": "common",
+  "weight": 0.3,
+  "value": 50,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "res://assets/icons/weapons/knife.png",
+  "equippable": true,
+  "slot": "main_hand",
+  "level_requirement": 1,
+  "durability": 50,
+  "max_durability": 50,
+  "repairable": true,
+  "usable": false,
+  "weapon_data": {
+    "damage": 12,
+    "attack_speed": 1.2,
+    "range": 1,
+    "stamina_cost": 3,
+    "crit_chance": 0.15,
+    "crit_multiplier": 2.0
+  },
+  "special_effects": [
+    "bleeding"
+  ],
+  "attributes_bonus": {}
+}
