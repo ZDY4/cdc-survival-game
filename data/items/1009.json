@@ -1,0 +1,41 @@
+{
+  "id": 1009,
+  "name": "手枪弹药",
+  "description": "适用于手枪的弹药",
+  "type": "ammo",
+  "subtype": "pistol",
+  "rarity": "common",
+  "weight": 0.01,
+  "value": 5,
+  "stackable": true,
+  "max_stack": 999,
+  "icon_path": "res://assets/icons/ammo/ammo_pistol.png",
+  "equippable": false,
+  "slot": "",
+  "level_requirement": 0,
+  "durability": -1,
+  "max_durability": -1,
+  "repairable": false,
+  "usable": false,
+  "special_effects": [],
+  "attributes_bonus": {},
+  "crafting_recipe": {
+    "materials": [
+      {
+        "item_id": "gunpowder",
+        "count": 1
+      },
+      {
+        "item_id": 1010,
+        "count": 1
+      }
+    ],
+    "time": 10
+  },
+  "deconstruct_yield": [
+    {
+      "item_id": 1010,
+      "count": 1
+    }
+  ]
+}

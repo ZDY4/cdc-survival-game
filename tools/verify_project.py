@@ -68,9 +68,7 @@ def verify_project():
     print("-" * 70)
     scenes = {
         "scenes/ui/main_menu.tscn": "Main menu scene",
-        "scenes/locations/safehouse.tscn": "Safehouse location",
-        "scenes/locations/street_a.tscn": "Street A location",
-        "scenes/locations/street_b.tscn": "Street B location"
+        "scenes/locations/game_world_3d.tscn": "Unified 3D game world"
     }
     
     for file, desc in scenes.items():
@@ -90,8 +88,7 @@ def verify_project():
     print("-" * 70)
     scripts = {
         "scripts/ui/main_menu.gd": "Main menu logic",
-        "scripts/locations/safehouse.gd": "Safehouse logic",
-        "scripts/locations/street_a.gd": "Street A logic"
+        "scripts/locations/game_world_3d.gd": "3D world orchestration"
     }
     
     for file, desc in scripts.items():

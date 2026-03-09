@@ -5,8 +5,6 @@ extends Node
 
 class_name NPCDialogComponent
 
-const NPCBase = preload("res://modules/npc/npc_base.gd")
-
 # ========== 信号 ==========
 signal dialog_started
 signal dialog_ended
@@ -20,7 +18,7 @@ signal event_triggered(event_type: String, event_data: Dictionary)
 var dialog_tree: Dictionary = {}
 var current_node_id: String = ""
 var current_node: Dictionary = {}
-var npc: NPCBase
+var npc: Node
 
 # 对话上下文（用于条件判断）
 var context: Dictionary = {
@@ -33,7 +31,7 @@ var context: Dictionary = {
 
 # ========== 初始化 ==========
 
-func initialize(parent_npc: NPCBase):
+func initialize(parent_npc: Node):
 	npc = parent_npc
 
 # ========== 核心对话流程 ==========

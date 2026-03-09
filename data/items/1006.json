@@ -1,0 +1,44 @@
+{
+  "id": 1006,
+  "name": "绷带",
+  "description": "恢复25点生命值",
+  "type": "consumable",
+  "subtype": "healing",
+  "rarity": "common",
+  "weight": 0.1,
+  "value": 20,
+  "stackable": true,
+  "max_stack": 20,
+  "icon_path": "res://assets/icons/items/bandage.png",
+  "equippable": false,
+  "slot": "",
+  "level_requirement": 0,
+  "durability": -1,
+  "max_durability": -1,
+  "repairable": false,
+  "usable": true,
+  "consumable_data": {
+    "effects": {
+      "heal": 25
+    },
+    "uses": 1,
+    "use_time": 1.5
+  },
+  "special_effects": [],
+  "attributes_bonus": {},
+  "crafting_recipe": {
+    "materials": [
+      {
+        "item_id": 1011,
+        "count": 2
+      }
+    ],
+    "time": 15
+  },
+  "deconstruct_yield": [
+    {
+      "item_id": 1011,
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": 1001,
+  "name": "拳头",
+  "description": "最基础的攻击方式",
+  "type": "weapon",
+  "subtype": "unarmed",
+  "rarity": "common",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "res://assets/icons/weapons/fist.png",
+  "equippable": true,
+  "slot": "main_hand",
+  "level_requirement": 0,
+  "durability": -1,
+  "max_durability": -1,
+  "repairable": false,
+  "usable": false,
+  "weapon_data": {
+    "damage": 5,
+    "attack_speed": 1.0,
+    "range": 1,
+    "stamina_cost": 2,
+    "crit_chance": 0.05,
+    "crit_multiplier": 1.5
+  },
+  "special_effects": [],
+  "attributes_bonus": {}
+}

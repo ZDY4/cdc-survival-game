@@ -1,0 +1,31 @@
+{
+  "id": 1007,
+  "name": "罐头食品",
+  "description": "恢复30点饥饿值",
+  "type": "consumable",
+  "subtype": "food",
+  "rarity": "common",
+  "weight": 0.3,
+  "value": 15,
+  "stackable": true,
+  "max_stack": 20,
+  "icon_path": "res://assets/icons/items/food_canned.png",
+  "equippable": false,
+  "slot": "",
+  "level_requirement": 0,
+  "durability": -1,
+  "max_durability": -1,
+  "repairable": false,
+  "usable": true,
+  "consumable_data": {
+    "effects": {
+      "hunger": 30
+    },
+    "uses": 1,
+    "use_time": 2.0
+  },
+  "special_effects": [],
+  "attributes_bonus": {},
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}

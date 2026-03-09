@@ -6,7 +6,7 @@ signal step_completed(world_pos: Vector3, step_index: int, total_steps: int)
 signal movement_finished
 signal movement_cancelled
 
-@export var step_duration := 0.4
+@export var step_duration := 0.25
 
 var _current_path: Array[Vector3] = []
 var _current_step := 0

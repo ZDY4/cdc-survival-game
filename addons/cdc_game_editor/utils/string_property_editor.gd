@@ -4,6 +4,8 @@ extends "res://addons/cdc_game_editor/utils/property_editor_base.gd"
 ## 字符串属性编辑器
 
 var _line_edit: LineEdit
+var _text_edit: TextEdit
+var _editor_control: Control
 var _placeholder: String = ""
 var _multiline: bool = false
 
@@ -11,7 +13,9 @@ var _multiline: bool = false
 	get: return _multiline
 	set(v):
 		_multiline = v
-		_setup_editor()
+		if is_node_ready():
+			_setup_editor()
+			_update_ui()
 
 @export var placeholder: String = "":
 	get: return _placeholder
@@ -19,6 +23,8 @@ var _multiline: bool = false
 		_placeholder = v
 		if _line_edit:
 			_line_edit.placeholder_text = v
+		if _text_edit:
+			_text_edit.placeholder_text = v
 
 func _setup_ui():
 	# 标签
@@ -29,37 +35,46 @@ func _setup_ui():
 
 func _setup_editor():
 	# 移除旧编辑器
-	if _line_edit:
-		_line_edit.queue_free()
+	if _editor_control and is_instance_valid(_editor_control):
+		_editor_control.queue_free()
+	_editor_control = null
+	_line_edit = null
+	_text_edit = null
 	
 	if _multiline:
-		var text_edit = TextEdit.new()
-		text_edit.custom_minimum_size = Vector2(0, 100)
-		text_edit.placeholder_text = _placeholder
-		text_edit.text_changed.connect(_on_text_changed)
-		text_edit.focus_entered.connect(_start_edit)
-		text_edit.focus_exited.connect(_finish_edit)
-		_line_edit = null
-		add_child(text_edit)
+		_text_edit = TextEdit.new()
+		_text_edit.custom_minimum_size = Vector2(0, 100)
+		_text_edit.placeholder_text = _placeholder
+		_text_edit.text_changed.connect(_on_multiline_text_changed)
+		_text_edit.focus_entered.connect(_start_edit)
+		_text_edit.focus_exited.connect(_finish_edit)
+		_editor_control = _text_edit
+		add_child(_text_edit)
 	else:
 		_line_edit = LineEdit.new()
 		_line_edit.placeholder_text = _placeholder
 		_line_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_line_edit.text_changed.connect(_on_text_changed)
+		_line_edit.text_changed.connect(_on_line_text_changed)
 		_line_edit.focus_entered.connect(_start_edit)
 		_line_edit.focus_exited.connect(_finish_edit)
+		_editor_control = _line_edit
 		add_child(_line_edit)
 
 func _update_ui():
 	if _line_edit:
 		_line_edit.text = str(_current_value) if _current_value != null else ""
-	else:
-		var text_edit = get_child(get_child_count() - 1)
-		if text_edit is TextEdit:
-			text_edit.text = str(_current_value) if _current_value != null else ""
+	elif _text_edit:
+		_text_edit.text = str(_current_value) if _current_value != null else ""
 
-func _on_text_changed(new_text: String):
+func _on_line_text_changed(new_text: String):
 	_current_value = new_text
+	if not _is_editing:
+		value_changed.emit(property_name, _current_value, _old_value)
+
+func _on_multiline_text_changed():
+	if not _text_edit:
+		return
+	_current_value = _text_edit.text
 	if not _is_editing:
 		value_changed.emit(property_name, _current_value, _old_value)
 
