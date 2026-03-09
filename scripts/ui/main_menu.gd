@@ -42,10 +42,8 @@ func _on_continue_pressed():
 	if SaveSystem.has_save():
 		if SaveSystem.load_latest_game():
 			print("[MainMenu] 存档加载成功")
-			# 根据存档中的位置进入相应场景
-			var player_pos = GameState.player_position
-			var scene_path = _get_scene_path(player_pos)
-			get_tree().change_scene_to_file(scene_path)
+			# 3D统一世界入口：继续游戏固定进入game_world_3d
+			get_tree().change_scene_to_file("res://scenes/locations/game_world_3d.tscn")
 		else:
 			print("[MainMenu] 存档加载失败")
 			# 显示错误提示
@@ -89,26 +87,6 @@ func _reset_game_state(item: Dictionary = {}):
 	GameState.world_day = 1
 	GameState.world_weather = "clear"
 	GameState.world_unlocked_locations = ["safehouse", "street_a"]
-
-func _get_scene_path(location: String):
-	
-	match location:
-		"safehouse":
-			return "res://scenes/locations/safehouse.tscn"
-		"street_a":
-			return "res://scenes/locations/street_a.tscn"
-		"street_b":
-			return "res://scenes/locations/street_b.tscn"
-		"hospital":
-			return "res://scenes/locations/hospital.tscn"
-		"supermarket":
-			return "res://scenes/locations/supermarket.tscn"
-		"factory":
-			return "res://scenes/locations/factory.tscn"
-		"subway":
-			return "res://scenes/locations/subway.tscn"
-		_:
-			return "res://scenes/locations/safehouse.tscn"
 
 func _apply_safe_area():
 	# 移动端安全区域适配（刘海屏、圆角屏等）

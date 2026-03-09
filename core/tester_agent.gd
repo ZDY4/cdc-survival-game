@@ -422,8 +422,7 @@ func _get_all_tscn_files() -> Array[String]:
 	# 简化实现
 	return [
 		"res://scenes/ui/main_menu.tscn",
-		"res://scenes/locations/safehouse.tscn",
-		"res://scenes/locations/street_a.tscn"
+		"res://scenes/locations/game_world_3d.tscn"
 	]
 
 func _check_gdscript_syntax(content: String, file_path: String) -> Array[String]:

@@ -1,12 +1,10 @@
 extends NPCTradeComponent
-## Adapts the existing NPC trade UI for 3D scene merchants.
+## Adapts the existing NPC trade UI for runtime 3D NPC merchants.
 
 var merchant_data: NPCData
 
-
 func initialize_with_data(data: NPCData) -> void:
 	merchant_data = data
-
 
 func open_trade_ui() -> bool:
 	if not merchant_data:
@@ -40,7 +38,6 @@ func open_trade_ui() -> bool:
 	trade_closed.emit()
 	return true
 
-
 func calculate_buy_price(item_id: String, base_price: int) -> int:
 	if not merchant_data:
 		return base_price
@@ -55,7 +52,6 @@ func calculate_buy_price(item_id: String, base_price: int) -> int:
 
 	return int(base_price * final_multiplier)
 
-
 func calculate_sell_price(item_id: String, base_price: int) -> int:
 	if not merchant_data:
 		return base_price
@@ -68,7 +64,6 @@ func calculate_sell_price(item_id: String, base_price: int) -> int:
 	var final_multiplier: float = clampf(multiplier + charisma_bonus + friendliness_bonus, 0.1, 2.0)
 
 	return int(base_price * final_multiplier)
-
 
 func can_buy_item(item_id: String, count: int) -> bool:
 	if not merchant_data:
@@ -83,7 +78,6 @@ func can_buy_item(item_id: String, count: int) -> bool:
 			return true
 
 	return false
-
 
 func buy_item(item_id: String, count: int) -> Dictionary:
 	var result: Dictionary = {"success": false, "reason": ""}
@@ -119,7 +113,6 @@ func buy_item(item_id: String, count: int) -> Dictionary:
 	item_bought.emit(item_id, count, total_price)
 	return result
 
-
 func sell_item(item_id: String, count: int) -> Dictionary:
 	var result: Dictionary = {"success": false, "reason": ""}
 	if not merchant_data:
@@ -153,24 +146,20 @@ func sell_item(item_id: String, count: int) -> Dictionary:
 	item_sold.emit(item_id, count, total_price)
 	return result
 
-
 func get_npc_inventory() -> Array:
 	if not merchant_data:
 		return []
 	return _get_inventory().duplicate(true)
-
 
 func get_npc_money() -> int:
 	if not merchant_data:
 		return 0
 	return int(merchant_data.trade_data.get("money", 0))
 
-
 func set_npc_money(amount: int):
 	if not merchant_data:
 		return
 	merchant_data.trade_data["money"] = maxi(0, amount)
-
 
 func _get_inventory() -> Array:
 	if not merchant_data:
@@ -178,7 +167,6 @@ func _get_inventory() -> Array:
 	if not merchant_data.trade_data.has("inventory"):
 		merchant_data.trade_data["inventory"] = []
 	return merchant_data.trade_data["inventory"]
-
 
 func _remove_from_merchant_inventory(item_id: String, count: int) -> void:
 	var inventory: Array = _get_inventory()
@@ -194,7 +182,6 @@ func _remove_from_merchant_inventory(item_id: String, count: int) -> void:
 			item["count"] = remaining
 			inventory[i] = item
 		return
-
 
 func _add_to_merchant_inventory(item_id: String, count: int, price: int) -> void:
 	var inventory: Array = _get_inventory()

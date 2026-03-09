@@ -4,14 +4,12 @@ extends Node
 
 class_name NPCMoodComponent
 
-const NPCBase = preload("res://modules/npc/npc_base.gd")
-
 signal mood_changed(mood_type: String, new_value: int, old_value: int)
 signal attitude_changed(new_attitude: String)
 
-var npc: NPCBase
+var npc: Node
 
-func initialize(parent_npc: NPCBase):
+func initialize(parent_npc: Node):
 	npc = parent_npc
 
 ## 改变情绪值

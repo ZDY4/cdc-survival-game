@@ -84,7 +84,8 @@ func _initialize_skill_tree():
 	_add_skill("weapon_master", "武器大师", "熟练使用各种武器", "combat", 3,
 		{"weapon_damage": 0.10}, ["combat_training", "precise_strike"])
 	
-	# 生存技"	_add_skill("survival_instinct", "生存本能", "提高生存能力", "survival", 5,
+	# 生存技"	
+	_add_skill("survival_instinct", "生存本能", "提高生存能力", "survival", 5,
 		{"stamina_efficiency": 0.05})
 	
 	_add_skill("scavenger", "拾荒专家", "搜索时获得额外物", "survival", 3,
@@ -96,7 +97,8 @@ func _initialize_skill_tree():
 	_add_skill("night_owl", "夜猫", "夜间行动能力增强", "survival", 3,
 		{"night_penalty_reduction": 0.20}, ["survival_instinct"])
 	
-	# 制作技"	_add_skill("crafting_basic", "基础制作", "基础制作技", "crafting", 5,
+	# 制作技"	
+	_add_skill("crafting_basic", "基础制作", "基础制作技", "crafting", 5,
 		{"crafting_speed": 0.10})
 	
 	_add_skill("efficient_crafting", "高效制作", "减少材料消", "crafting", 3,
@@ -108,7 +110,7 @@ func _initialize_skill_tree():
 	_add_skill("advanced_crafting", "高级制作", "解锁高级配方", "crafting", 3,
 		{}, ["crafting_basic", "efficient_crafting"])
 	
-	print("[SkillSystem] 技能树初始化完成，"%d 个技" % skills.size())
+	print("[SkillSystem] 技能树初始化完成，'%d 个技' % skills.size()")
 
 func _add_skill(id: String, name: String, desc: String, category: String, max_level: int, 
 		effects: Dictionary = {}, prerequisites: Array[String] = []):

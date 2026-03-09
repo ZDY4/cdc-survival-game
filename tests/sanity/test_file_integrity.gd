@@ -9,8 +9,7 @@ const PROJECT_PATH = "res://"
 # 必需文件列表
 const REQUIRED_FILES = [
     "project.godot",
-    "icon.svg",
-    "main.tscn"
+    "icon.svg"
 ]
 
 # 必需模块
@@ -27,9 +26,8 @@ const REQUIRED_MODULES = [
 
 # 必需场景
 const REQUIRED_SCENES = [
-    "scenes/locations/safehouse.tscn",
-    "scenes/locations/street_a.tscn",
-    "scenes/locations/street_b.tscn",
+    "scenes/ui/main_menu.tscn",
+    "scenes/locations/game_world_3d.tscn",
     "modules/dialog/dialog_ui.tscn"
 ]
 

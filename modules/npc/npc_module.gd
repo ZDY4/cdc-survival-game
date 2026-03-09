@@ -3,11 +3,14 @@ extends Node
 ## 负责管理所有NPC的生成、销毁和数据
 ## 注意: 作为Autoload单例，不使用class_name
 
-const NPCBase = preload("res://modules/npc/npc_base.gd")
 const NPCData = preload("res://modules/npc/npc_data.gd")
+const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
+const MovementComponent = preload("res://systems/movement_component.gd")
+const CharacterActorScript = preload("res://systems/character_actor.gd")
+const GameWorldMerchantTradeComponent = preload("res://modules/npc/components/game_world_merchant_trade_component.gd")
 
 # ========== 信号 ==========
-signal npc_spawned(npc_id: String, npc: NPCBase)
+signal npc_spawned(npc_id: String, npc: Node)
 signal npc_despawned(npc_id: String)
 signal npc_died(npc_id: String)
 signal npc_recruited(npc_id: String)
@@ -16,25 +19,19 @@ signal player_met_npc(npc_id: String, first_time: bool)
 
 # ========== 核心数据 ==========
 
-# 所有活跃的NPC实例（当前场景中的）
-var active_npcs: Dictionary = {}  # npc_id -> NPCBase
+# 所有活跃的NPC实例（旧2D链路，已废弃）
+var active_npcs: Dictionary = {}  # npc_id -> Node
+var active_npc_actors: Dictionary = {}  # npc_id -> Node3D
+var active_npc_trade_components: Dictionary = {}  # npc_id -> NPCTradeComponent
 
 # NPC数据库（所有可能的NPC定义）
 var npc_database: Dictionary = {}  # npc_id -> NPCData
-
-# NPC场景资源
-var _npc_scene: PackedScene = null
 
 # ========== 初始化 ==========
 
 func _ready():
 	print("[NPCModule] NPC系统已初始化")
 	_load_npc_database()
-	# 运行时加载场景文件，避免文件不存在时出错
-	if FileAccess.file_exists("res://modules/npc/npc_base.tscn"):
-		_npc_scene = load("res://modules/npc/npc_base.tscn")
-	else:
-		push_warning("[NPCModule] npc_base.tscn 不存在，NPC生成功能不可用")
 	
 	# 订阅事件
 	if EventBus:
@@ -92,64 +89,79 @@ func _load_default_npcs():
 
 # ========== NPC生成/销毁 ==========
 
-## 在指定位置生成NPC
-func spawn_npc(npc_id: String, location: String = "", show_message: bool = true) -> NPCBase:
-	# 检查是否已存在
-	if active_npcs.has(npc_id):
-		push_warning("[NPCModule] NPC %s 已经存在，返回现有实例" % npc_id)
-		return active_npcs[npc_id]
-	
-	# 获取NPC数据
-	var npc_data = npc_database.get(npc_id)
+## 统一生成入口（3D Runtime）
+func spawn_actor(role_kind: String, role_id: String, world_pos: Vector3, context: Dictionary = {}) -> Node3D:
+	if role_kind.to_lower() != "npc":
+		return null
+	if role_id.is_empty():
+		return null
+
+	if active_npc_actors.has(role_id):
+		var existing: Node3D = active_npc_actors[role_id]
+		if existing and is_instance_valid(existing):
+			return existing
+		active_npc_actors.erase(role_id)
+
+	var npc_data: NPCData = _build_runtime_npc_data(role_id)
 	if not npc_data:
-		push_error("[NPCModule] NPC数据不存在: %s" % npc_id)
+		push_warning("[NPCModule] 无法生成NPC，数据不存在: %s" % role_id)
 		return null
-	
-	# 检查是否已死亡或被招募
-	if not npc_data.state.is_alive:
-		push_warning("[NPCModule] NPC %s 已死亡，无法生成" % npc_id)
-		return null
-	if npc_data.state.is_recruited:
-		push_warning("[NPCModule] NPC %s 已被招募，无法生成" % npc_id)
-		return null
-	
-	# 实例化NPC
-	if not _npc_scene:
-		if FileAccess.file_exists("res://modules/npc/npc_base.tscn"):
-			_npc_scene = load("res://modules/npc/npc_base.tscn")
-		else:
-			push_error("[NPCModule] npc_base.tscn 不存在，无法生成NPC")
-			return null
-	
-	var npc = _npc_scene.instantiate()
-	if not npc:
-		push_error("[NPCModule] 无法实例化NPC场景")
-		return null
-	
-	# 初始化NPC
-	npc.initialize(npc_data)
-	
-	# 设置位置
-	if location.is_empty():
-		location = npc_data.default_location
-	npc.set_location(location)
-	
-	# 添加到场景
-	get_tree().current_scene.add_child(npc)
-	active_npcs[npc_id] = npc
-	
-	# 连接信号
-	npc.npc_died.connect(_on_npc_died)
-	npc.npc_recruited.connect(_on_npc_recruited)
-	npc.interaction_started.connect(_on_npc_interaction_started)
-	
-	# 发送信号
-	npc_spawned.emit(npc_id, npc)
-	
-	if show_message:
-		print("[NPCModule] NPC %s 已在 %s 生成" % [npc_id, location])
-	
-	return npc
+
+	var actor := CharacterActorScript.new()
+	actor.name = "NPC_%s" % role_id
+	actor.position = world_pos
+	var npc_body_color := _get_npc_color(npc_data)
+	actor.set_placeholder_colors(npc_body_color.lightened(0.20), npc_body_color)
+	actor.collision_layer = 1 << 1
+	actor.collision_mask = 0
+	actor.set_meta("npc_id", role_id)
+	actor.set_meta("role_kind", "npc")
+	actor.set_meta("spawn_id", str(context.get("spawn_id", role_id)))
+	actor.set_meta("npc_data", npc_data)
+	actor.add_to_group("npc")
+
+	var collision_shape := CollisionShape3D.new()
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.45
+	shape.height = 1.0
+	collision_shape.shape = shape
+	collision_shape.position = Vector3(0.0, 1.0, 0.0)
+	actor.add_child(collision_shape)
+
+	var name_label := Label3D.new()
+	name_label.text = npc_data.get_display_name()
+	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	name_label.font_size = 32
+	name_label.position = Vector3(0.0, 2.2, 0.0)
+	actor.add_child(name_label)
+
+	var movement_component := MovementComponent.new()
+	actor.add_child(movement_component)
+	if GridMovementSystem and GridMovementSystem.grid_world:
+		movement_component.initialize(actor, GridMovementSystem.grid_world)
+
+	if npc_data.can_trade:
+		var trade_component := GameWorldMerchantTradeComponent.new() as NPCTradeComponent
+		actor.add_child(trade_component)
+		trade_component.initialize_with_data(npc_data)
+		active_npc_trade_components[role_id] = trade_component
+
+	active_npc_actors[role_id] = actor
+	return actor
+
+func despawn_actor(role_id: String) -> void:
+	if not active_npc_actors.has(role_id):
+		return
+	var actor: Node3D = active_npc_actors[role_id]
+	active_npc_actors.erase(role_id)
+	active_npc_trade_components.erase(role_id)
+	if actor and is_instance_valid(actor):
+		actor.queue_free()
+
+## 在指定位置生成NPC
+func spawn_npc(npc_id: String, _location: String = "", _show_message: bool = true) -> Node:
+	push_warning("[NPCModule] spawn_npc 已废弃：旧2D NPC链路已移除 (%s)" % npc_id)
+	return null
 
 ## 移除NPC（但不删除数据）
 func despawn_npc(npc_id: String):
@@ -173,7 +185,7 @@ func despawn_npcs_at_location(location: String):
 # ========== NPC查询 ==========
 
 ## 获取活跃NPC
-func get_npc(npc_id: String) -> NPCBase:
+func get_npc(npc_id: String) -> Node:
 	return active_npcs.get(npc_id, null)
 
 ## 获取NPC数据
@@ -181,24 +193,24 @@ func get_npc_data(npc_id: String) -> NPCData:
 	return npc_database.get(npc_id, null)
 
 ## 获取某位置的所有NPC
-func get_npcs_at_location(location: String) -> Array[NPCBase]:
-	var result: Array[NPCBase] = []
+func get_npcs_at_location(location: String) -> Array[Node]:
+	var result: Array[Node] = []
 	for npc in active_npcs.values():
 		if npc.current_location == location:
 			result.append(npc)
 	return result
 
 ## 获取某类型的所有NPC
-func get_npcs_by_type(npc_type: NPCData.Type) -> Array[NPCBase]:
-	var result: Array[NPCBase] = []
+func get_npcs_by_type(npc_type: NPCData.Type) -> Array[Node]:
+	var result: Array[Node] = []
 	for npc in active_npcs.values():
 		if npc.npc_data.npc_type == npc_type:
 			result.append(npc)
 	return result
 
 ## 获取可交互的NPC
-func get_interactable_npcs_at(location: String) -> Array[NPCBase]:
-	var result: Array[NPCBase] = []
+func get_interactable_npcs_at(location: String) -> Array[Node]:
+	var result: Array[Node] = []
 	for npc in active_npcs.values():
 		if npc.current_location == location and npc.is_interactable():
 			result.append(npc)
@@ -241,6 +253,46 @@ func start_trade(npc_id: String) -> bool:
 	var result = await npc.open_trade_ui()
 	return result
 
+## 3D场景中的统一交互入口
+func start_npc_interaction(npc_id: String) -> bool:
+	var npc_data: NPCData = _build_runtime_npc_data(npc_id)
+	if not npc_data:
+		return false
+
+	var speaker := npc_data.name if not npc_data.name.is_empty() else npc_id
+	var greeting := "你好，我是%s。" % speaker
+	if npc_data.can_trade:
+		greeting = "需要补给吗？我这里还能交易。"
+	DialogModule.show_dialog(greeting, speaker)
+	await DialogModule.dialog_finished
+
+	if npc_data.can_trade:
+		var choice: int = await DialogModule.show_choices(["交易", "闲聊", "离开"])
+		match choice:
+			0:
+				var trade_component: NPCTradeComponent = active_npc_trade_components.get(npc_id, null)
+				if trade_component:
+					var opened: bool = await trade_component.open_trade_ui()
+					if not opened:
+						DialogModule.show_dialog("现在无法交易。", speaker)
+						await DialogModule.dialog_finished
+			1:
+				DialogModule.show_dialog("夜晚外出要小心。", speaker)
+				await DialogModule.dialog_finished
+			_:
+				DialogModule.show_dialog("保重。", speaker)
+				await DialogModule.dialog_finished
+	else:
+		var lines: Array[String] = [
+			"别走太远，外面很危险。",
+			"活着回来就好。",
+			"如果你发现线索，记得告诉我。"
+		]
+		DialogModule.show_dialog(lines[randi() % lines.size()], speaker)
+		await DialogModule.dialog_finished
+
+	return true
+
 ## 尝试招募NPC
 func try_recruit(npc_id: String) -> Dictionary:
 	var npc = get_npc(npc_id)
@@ -259,21 +311,9 @@ func confirm_recruit(npc_id: String) -> bool:
 
 # ========== 事件处理 ==========
 
-func _on_player_changed_location(data: Dictionary):
-	var new_location = data.get("location", "")
-	var old_location = data.get("old_location", "")
-	
-	# 移除旧位置的NPC（可选，取决于游戏设计）
-	# despawn_npcs_at_location(old_location)
-	
-	# 生成新位置应该存在的NPC
-	for npc_data in npc_database.values():
-		if npc_data.default_location == new_location and npc_data.state.is_alive and not npc_data.state.is_recruited:
-			# 检查是否应该生成（概率或剧情条件）
-			if not active_npcs.has(npc_data.id):
-				spawn_npc(npc_data.id, new_location, false)
-	
-	print("[NPCModule] 玩家移动到 %s，更新了NPC" % new_location)
+func _on_player_changed_location(_data: Dictionary):
+	# 旧2D按地点刷NPC链路已移除。3D场景由AISpawnSystem负责。
+	return
 
 func _on_time_advanced(data: Dictionary):
 	var hours = data.get("hours", 0)
@@ -323,6 +363,32 @@ func _restock_npc_inventory(npc_data: NPCData):
 	# 恢复默认库存
 	# TODO: 从配置文件加载默认库存
 	print("[NPCModule] NPC %s 的库存已补货" % npc_data.id)
+
+func _build_runtime_npc_data(npc_id: String) -> NPCData:
+	var record = npc_database.get(npc_id, null)
+	if not record:
+		return null
+
+	if record is NPCData:
+		return record as NPCData
+
+	var npc_data := NPCData.new()
+	if record is Dictionary:
+		npc_data.deserialize(record)
+		npc_data.id = str(record.get("id", npc_id))
+		npc_data.name = str(record.get("name", npc_data.name))
+		if npc_data.default_location.is_empty():
+			npc_data.default_location = str(record.get("default_location", ""))
+		if npc_data.current_location.is_empty():
+			npc_data.current_location = npc_data.default_location
+	return npc_data
+
+func _get_npc_color(npc_data: NPCData) -> Color:
+	if npc_data.can_trade:
+		return Color(0.86, 0.73, 0.33, 1.0)
+	if npc_data.npc_type == NPCData.Type.HOSTILE:
+		return Color(0.78, 0.28, 0.28, 1.0)
+	return Color(0.58, 0.72, 0.88, 1.0)
 
 ## 添加新的NPC定义
 func register_npc(npc_data: NPCData):
