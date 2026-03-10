@@ -1,0 +1,20 @@
+{
+  "special_effects": [],
+  "max_stacks": 1,
+  "is_stackable": false,
+  "id": "berserk",
+  "is_infinite": false,
+  "stack_mode": "refresh",
+  "color_tint": "#FF0000",
+  "description": "伤害提升25%，但防御降低10点",
+  "icon_path": "res://assets/icons/effects/berserk.png",
+  "tick_interval": 0.0,
+  "duration": 60.0,
+  "visual_effect": "res://effects/berserk_particles.tscn",
+  "name": "狂暴",
+  "stat_modifiers": {
+    "defense": -10,
+    "damage_mult": 1.25
+  },
+  "category": "buff"
+}

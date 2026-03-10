@@ -1,0 +1,19 @@
+{
+  "special_effects": [],
+  "max_stacks": 1,
+  "is_stackable": false,
+  "id": "defense_boost",
+  "is_infinite": false,
+  "stack_mode": "refresh",
+  "color_tint": "#0066FF",
+  "description": "增加10点防御力",
+  "icon_path": "res://assets/icons/effects/defense_boost.png",
+  "tick_interval": 0.0,
+  "duration": 180.0,
+  "visual_effect": "",
+  "name": "防御姿态",
+  "stat_modifiers": {
+    "defense": 10
+  },
+  "category": "buff"
+}

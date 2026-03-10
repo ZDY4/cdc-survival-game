@@ -1,0 +1,19 @@
+{
+  "special_effects": [],
+  "max_stacks": 3,
+  "is_stackable": true,
+  "id": "slow",
+  "is_infinite": false,
+  "stack_mode": "intensity",
+  "color_tint": "#3366CC",
+  "description": "移动速度降低30%",
+  "icon_path": "res://assets/icons/effects/slow.png",
+  "tick_interval": 0.0,
+  "duration": 30.0,
+  "visual_effect": "",
+  "name": "减速",
+  "stat_modifiers": {
+    "speed_mult": 0.7
+  },
+  "category": "debuff"
+}

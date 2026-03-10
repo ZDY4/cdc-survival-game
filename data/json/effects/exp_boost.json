@@ -1,0 +1,19 @@
+{
+  "special_effects": [],
+  "max_stacks": 1,
+  "is_stackable": false,
+  "id": "exp_boost",
+  "is_infinite": false,
+  "stack_mode": "refresh",
+  "color_tint": "#FFD700",
+  "description": "获得经验值增加50%",
+  "icon_path": "res://assets/icons/effects/exp_boost.png",
+  "tick_interval": 0.0,
+  "duration": 600.0,
+  "visual_effect": "",
+  "name": "经验加成",
+  "stat_modifiers": {
+    "exp_mult": 1.5
+  },
+  "category": "buff"
+}

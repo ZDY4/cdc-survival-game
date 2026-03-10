@@ -10,11 +10,13 @@
   "attribute_requirements": {
     "agility": 7
   },
-  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
-  "effect_params": {
-    "effect_name": "detection_reduction",
-    "per_level": 0.06,
-    "max_value": 0.4
-  },
-  "id": "stealth"
+  "id": "stealth",
+  "gameplay_effect": {
+    "modifiers": {
+      "detection_reduction": {
+        "max_value": 0.4,
+        "per_level": 0.06
+      }
+    }
+  }
 }

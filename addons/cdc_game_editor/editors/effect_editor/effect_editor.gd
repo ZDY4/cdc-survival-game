@@ -13,6 +13,8 @@ const EFFECT_CATEGORIES = {
 	"neutral": "(Neutral)"
 }
 
+const DEFAULT_EFFECTS_DIR := "res://data/json/effects"
+
 # 叠加模式
 const STACK_MODES = {
 	"refresh": "刷新持续时间",
@@ -54,7 +56,7 @@ const AVAILABLE_STATS = [
 # 数据
 var effects: Dictionary = {}  # effect_id -> effect_data
 var current_effect_id: String = ""
-var current_file_path: String = ""
+var current_dir_path: String = ""
 
 # UI元素引用
 var _ui_elements: Dictionary = {}
@@ -178,6 +180,11 @@ func _setup_file_dialog():
 	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	_file_dialog.add_filter("*.json; JSON文件")
 	add_child(_file_dialog)
+	
+	var default_dir := ProjectSettings.globalize_path(DEFAULT_EFFECTS_DIR)
+	if DirAccess.dir_exists_absolute(default_dir):
+		_file_dialog.current_dir = default_dir
+		current_dir_path = default_dir
 
 func _update_effect_list(category_filter: String = "", search_filter: String = ""):
 	_effect_list.clear()
@@ -563,56 +570,93 @@ func _on_field_changed(key: String, value: Variant):
 # ========== 文件操作 ==========
 
 func _on_save_effects():
-	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_file_dialog.current_file = "effects.json"
-	_file_dialog.file_selected.connect(_save_to_file, CONNECT_ONE_SHOT)
+	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+	if not current_dir_path.is_empty():
+		_file_dialog.current_dir = current_dir_path
+	_file_dialog.dir_selected.connect(_save_to_directory, CONNECT_ONE_SHOT)
 	_file_dialog.popup_centered(Vector2(800, 600))
 
-func _save_to_file(path: String):
-	var data = {}
-	for effect_id in effects:
-		data[effect_id] = effects[effect_id]
+func _save_to_directory(path: String):
+	if effects.is_empty():
+		_update_status("没有可保存的效果")
+		return
 	
-	var json = JSON.stringify(data, "\t")
-	var file = FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string(json)
-		file.close()
-		effect_saved.emit(current_effect_id)
-		_update_status("已保 %s (%d" % [path, effects.size()])
-	else:
-		_update_status("保存失败")
+	var dir := DirAccess.open(path)
+	if dir == null:
+		_update_status("无法打开目录")
+		return
+	
+	current_dir_path = path
+	for effect_id in effects.keys():
+		var effect_data: Dictionary = effects[effect_id]
+		if not effect_data.has("id"):
+			effect_data["id"] = effect_id
+		
+		var file_path := "%s/%s.json" % [path, effect_id]
+		var json := JSON.stringify(effect_data, "\t")
+		var file := FileAccess.open(file_path, FileAccess.WRITE)
+		if file:
+			file.store_string(json)
+			file.close()
+		else:
+			_update_status("保存失败: %s" % file_path)
+	
+	effect_saved.emit(current_effect_id)
+	_update_status("已保存到目录: %s (%d)" % [path, effects.size()])
 
 func _on_load_effects():
-	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	_file_dialog.file_selected.connect(_load_from_file, CONNECT_ONE_SHOT)
+	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+	if not current_dir_path.is_empty():
+		_file_dialog.current_dir = current_dir_path
+	_file_dialog.dir_selected.connect(_load_from_directory, CONNECT_ONE_SHOT)
 	_file_dialog.popup_centered(Vector2(800, 600))
 
-func _load_from_file(path: String):
-	var file = FileAccess.open(path, FileAccess.READ)
-	if not file:
-		_update_status("无法打开文件")
+func _load_from_directory(path: String):
+	var dir := DirAccess.open(path)
+	if dir == null:
+		_update_status("无法打开目录")
 		return
 	
-	var json_text = file.get_as_text()
-	file.close()
-	
-	var json = JSON.new()
-	var error = json.parse(json_text)
-	if error != OK:
-		_update_status("JSON解析错")
-		return
-	
-	var data = json.data
+	current_dir_path = path
 	effects.clear()
 	
-	for effect_id in data:
-		effects[effect_id] = data[effect_id]
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while not file_name.is_empty():
+		if dir.current_is_dir() or not file_name.ends_with(".json"):
+			file_name = dir.get_next()
+			continue
+		
+		var file_path := "%s/%s" % [path, file_name]
+		var file := FileAccess.open(file_path, FileAccess.READ)
+		if file == null:
+			file_name = dir.get_next()
+			continue
+		
+		var json_text := file.get_as_text()
+		file.close()
+		
+		var json := JSON.new()
+		var error := json.parse(json_text)
+		if error != OK:
+			_update_status("JSON解析错: %s" % file_name)
+			file_name = dir.get_next()
+			continue
+		
+		var data := json.data
+		if data is Dictionary:
+			var effect_id := file_name.trim_suffix(".json")
+			if data.has("id") and not str(data.get("id", "")).is_empty():
+				effect_id = str(data.get("id", effect_id))
+			effects[effect_id] = data
+		
+		file_name = dir.get_next()
+	dir.list_dir_end()
 	
 	_update_effect_list()
 	_clear_property_panel()
 	effect_loaded.emit(current_effect_id)
-	_update_status("已加 %s (%d" % [path, effects.size()])
+	_update_status("已加载目录: %s (%d)" % [path, effects.size()])
 
 func _update_status(message: String):
 	_status_bar.text = message

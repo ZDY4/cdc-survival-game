@@ -1,0 +1,19 @@
+{
+  "special_effects": [],
+  "max_stacks": 1,
+  "is_stackable": false,
+  "id": "weakness",
+  "is_infinite": false,
+  "stack_mode": "refresh",
+  "color_tint": "#666666",
+  "description": "伤害降低20%",
+  "icon_path": "res://assets/icons/effects/weakness.png",
+  "tick_interval": 0.0,
+  "duration": 60.0,
+  "visual_effect": "",
+  "name": "虚弱",
+  "stat_modifiers": {
+    "damage_mult": 0.8
+  },
+  "category": "debuff"
+}

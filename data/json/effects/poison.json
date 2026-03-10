@@ -1,0 +1,19 @@
+{
+  "special_effects": [
+    "poison"
+  ],
+  "max_stacks": 10,
+  "is_stackable": true,
+  "id": "poison",
+  "is_infinite": false,
+  "stack_mode": "extend",
+  "color_tint": "#660066",
+  "description": "每秒损失3点生命值",
+  "icon_path": "res://assets/icons/effects/poison.png",
+  "tick_interval": 1.0,
+  "duration": 20.0,
+  "visual_effect": "res://effects/poison_particles.tscn",
+  "name": "中毒",
+  "stat_modifiers": {},
+  "category": "debuff"
+}

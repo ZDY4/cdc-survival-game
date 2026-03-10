@@ -9,10 +9,13 @@
     "strength": 5,
     "agility": 5
   },
-  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
-  "effect_params": {
-    "effect_name": "crafting_speed",
-    "per_level": 0.08
-  },
-  "id": "crafting"
+  "id": "crafting",
+  "gameplay_effect": {
+    "modifiers": {
+      "crafting_speed": {
+        "max_value": 0.0,
+        "per_level": 0.08
+      }
+    }
+  }
 }

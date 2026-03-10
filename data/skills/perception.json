@@ -11,10 +11,13 @@
     "agility": 6,
     "constitution": 6
   },
-  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
-  "effect_params": {
-    "effect_name": "perception_bonus",
-    "per_level": 0.08
-  },
-  "id": "perception"
+  "id": "perception",
+  "gameplay_effect": {
+    "modifiers": {
+      "perception_bonus": {
+        "max_value": 0.0,
+        "per_level": 0.08
+      }
+    }
+  }
 }

@@ -8,9 +8,12 @@
   "attribute_requirements": {
     "strength": 5
   },
-  "effect_class": "res://modules/skills/skill_effects/combat_damage_skill_effect.gd",
-  "effect_params": {
-    "damage_bonus_per_level": 0.04
-  },
-  "id": "combat"
+  "id": "combat",
+  "gameplay_effect": {
+    "modifiers": {
+      "damage_bonus": {
+        "per_level": 0.04
+      }
+    }
+  }
 }

@@ -8,10 +8,13 @@
   "attribute_requirements": {
     "constitution": 5
   },
-  "effect_class": "res://modules/skills/skill_effects/survival_efficiency_skill_effect.gd",
-  "effect_params": {
-    "consumption_reduction_per_level": 0.05,
-    "max_reduction": 0.35
-  },
-  "id": "survival"
+  "id": "survival",
+  "gameplay_effect": {
+    "modifiers": {
+      "consumption_reduction": {
+        "max_value": 0.35,
+        "per_level": 0.05
+      }
+    }
+  }
 }

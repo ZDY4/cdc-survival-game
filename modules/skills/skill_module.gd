@@ -6,7 +6,6 @@ extends "res://core/base_module.gd"
 # 1. Constants
 const SKILLS_DATA_DIR: String = "res://data/skills"
 const SKILL_TREES_DATA_DIR: String = "res://data/skill_trees"
-const DEFAULT_EFFECT_CLASS: String = "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd"
 
 # 2. Signals
 signal skill_learned(skill_id: String)
@@ -21,9 +20,9 @@ var learned_skills: Dictionary = {}  # skill_id -> level
 # 4. Private variables
 var _skills: Dictionary = {}  # skill_id -> skill config
 var _skill_trees: Dictionary = {}  # tree_id -> tree config
-var _effect_instances: Dictionary = {}  # skill_id -> effect object
-var _active_effects: Dictionary = {}  # skill_id -> computed effect dictionary
+var _active_effects: Dictionary = {}  # skill_id -> GameplayEffect
 var _total_effects: Dictionary = {}  # effect name -> combined number
+var _effect_system: Node = null
 
 # 5. Lifecycle
 func _ready() -> void:
@@ -32,6 +31,7 @@ func _ready() -> void:
 
 
 func _initialize_skill_framework() -> void:
+	_effect_system = get_node_or_null("/root/EffectSystem")
 	reload_skill_data()
 
 
@@ -43,7 +43,6 @@ func reload_skill_data() -> bool:
 		return false
 
 	_skill_trees = _load_skill_trees_from_directory(SKILL_TREES_DATA_DIR)
-	_instantiate_effects()
 	_rebuild_all_effects()
 	skill_data_reloaded.emit(_skills.size(), _skill_trees.size())
 	return true
@@ -56,7 +55,6 @@ func reload_skill(skill_id: String) -> bool:
 		return false
 
 	_skills[skill_id] = _normalize_skill(skill_id, data as Dictionary)
-	_instantiate_skill_effect(skill_id)
 	_refresh_skill_effect(skill_id)
 	skill_data_reloaded.emit(_skills.size(), _skill_trees.size())
 	return true
@@ -149,6 +147,7 @@ func reset_skills() -> void:
 	for skill_id in learned_skills.keys():
 		refunded_points += int(learned_skills.get(skill_id, 0))
 	learned_skills.clear()
+	_remove_all_skill_effects_from_system()
 	_active_effects.clear()
 	_total_effects.clear()
 	skill_points += refunded_points
@@ -160,10 +159,20 @@ func get_skill_level(skill_id: String) -> int:
 
 
 func get_skill_effect(skill_id: String) -> Dictionary:
-	return _active_effects.get(skill_id, {})
+	var effect: Variant = _active_effects.get(skill_id, null)
+	if effect is GameplayEffect:
+		return effect.get_modifiers()
+	if effect is Dictionary:
+		return effect as Dictionary
+	return {}
 
 
 func get_total_effect(effect_name: String) -> float:
+	if _effect_system != null and _effect_system.has_method("get_total_modifiers"):
+		var modifiers: Dictionary = _effect_system.get_total_modifiers("player")
+		var external_value: Variant = modifiers.get(effect_name, 0.0)
+		return float(external_value)
+	
 	var value: Variant = _total_effects.get(effect_name, 0.0)
 	if value is int:
 		return float(value)
@@ -372,9 +381,7 @@ func _normalize_skill(skill_id: String, data: Dictionary) -> Dictionary:
 	var attribute_requirements: Dictionary = _normalize_int_dictionary(
 		data.get("attribute_requirements", {})
 	)
-	var effect_params: Dictionary = data.get("effect_params", {})
-	if not (effect_params is Dictionary):
-		effect_params = {}
+	var effect_config: Dictionary = _normalize_effect_config(data)
 
 	return {
 		"id": skill_id,
@@ -385,8 +392,7 @@ func _normalize_skill(skill_id: String, data: Dictionary) -> Dictionary:
 		"max_level": maxi(1, int(data.get("max_level", 1))),
 		"prerequisites": prerequisites,
 		"attribute_requirements": attribute_requirements,
-		"effect_class": data.get("effect_class", DEFAULT_EFFECT_CLASS),
-		"effect_params": effect_params
+		"gameplay_effect": effect_config
 	}
 
 
@@ -427,30 +433,8 @@ func _normalize_int_dictionary(value: Variant) -> Dictionary:
 	return result
 
 
-func _instantiate_effects() -> void:
-	_effect_instances.clear()
-	for skill_id in _skills.keys():
-		_instantiate_skill_effect(skill_id)
-
-
-func _instantiate_skill_effect(skill_id: String) -> void:
-	var skill: Dictionary = _skills.get(skill_id, {})
-	var effect_path: String = skill.get("effect_class", DEFAULT_EFFECT_CLASS)
-	var effect_script: Script = load(effect_path) as Script
-	if effect_script == null:
-		push_warning("[SkillModule] 效果类不存在: %s" % effect_path)
-		return
-
-	var effect_instance: Variant = effect_script.new()
-	if effect_instance == null:
-		return
-
-	if effect_instance.has_method("setup"):
-		effect_instance.setup(skill_id, skill.get("effect_params", {}))
-	_effect_instances[skill_id] = effect_instance
-
-
 func _rebuild_all_effects() -> void:
+	_remove_all_skill_effects_from_system()
 	_active_effects.clear()
 	_total_effects.clear()
 	for skill_id in _skills.keys():
@@ -459,42 +443,134 @@ func _rebuild_all_effects() -> void:
 
 func _refresh_skill_effect(skill_id: String) -> void:
 	var level: int = get_skill_level(skill_id)
-	var effect: Dictionary = {}
+	var effect: GameplayEffect = null
 	if level > 0:
 		effect = _compute_effect(skill_id, level)
+	
+	var previous: Variant = _active_effects.get(skill_id, null)
+	if level <= 0 and previous is GameplayEffect and _effect_system != null:
+		_effect_system.remove_effect(previous.id, "player")
+	
 	_active_effects[skill_id] = effect
+	if effect != null and _effect_system != null:
+		_effect_system.upsert_gameplay_effect(effect, "player")
 	_recalculate_total_effects()
 
 
-func _compute_effect(skill_id: String, level: int) -> Dictionary:
-	var effect_instance: Variant = _effect_instances.get(skill_id, null)
-	if effect_instance == null:
-		return {}
-	if not effect_instance.has_method("on_level_changed"):
-		return {}
+func _compute_effect(skill_id: String, level: int) -> GameplayEffect:
+	var skill: Dictionary = _skills.get(skill_id, {})
+	if skill.is_empty():
+		return null
 
-	var context: Dictionary = {
-		"skill_module": self,
-		"game_state": get_node_or_null("/root/GameState"),
-		"event_bus": get_node_or_null("/root/EventBus")
-	}
-	var result: Variant = effect_instance.on_level_changed(level, context)
-	if result is Dictionary:
-		return result as Dictionary
-	return {}
+	var config: Dictionary = skill.get("gameplay_effect", {})
+	var modifiers: Dictionary = _build_modifiers_from_config(config, level)
+	if modifiers.is_empty():
+		return null
+
+	var effect_def: Dictionary = config.duplicate(true)
+	effect_def["id"] = "skill_" + skill_id
+	effect_def["source_type"] = "skill"
+	effect_def["source_id"] = skill_id
+	if not effect_def.has("category"):
+		effect_def["category"] = "skill"
+	if not effect_def.has("is_infinite"):
+		effect_def["is_infinite"] = true
+	if not effect_def.has("is_stackable"):
+		effect_def["is_stackable"] = false
+	if not effect_def.has("max_stacks"):
+		effect_def["max_stacks"] = 1
+	if not effect_def.has("stack_mode"):
+		effect_def["stack_mode"] = "refresh"
+
+	effect_def["modifiers"] = modifiers
+
+	var effect := GameplayEffect.new()
+	effect.configure(effect_def)
+	return effect
 
 
 func _recalculate_total_effects() -> void:
 	_total_effects.clear()
 	for effect in _active_effects.values():
-		if not (effect is Dictionary):
-			continue
-		var dictionary: Dictionary = effect
-		for key in dictionary.keys():
-			var value: Variant = dictionary.get(key, 0)
-			if value is int or value is float:
-				var current: float = float(_total_effects.get(key, 0.0))
-				_total_effects[key] = current + float(value)
+		if effect is GameplayEffect:
+			var modifiers: Dictionary = effect.get_modifiers()
+			for key in modifiers.keys():
+				var value: Variant = modifiers.get(key, 0)
+				if value is int or value is float:
+					var current: float = float(_total_effects.get(key, 0.0))
+					_total_effects[key] = current + float(value)
+		elif effect is Dictionary:
+			var dictionary: Dictionary = effect
+			for key in dictionary.keys():
+				var value: Variant = dictionary.get(key, 0)
+				if value is int or value is float:
+					var current: float = float(_total_effects.get(key, 0.0))
+					_total_effects[key] = current + float(value)
+
+
+func _normalize_effect_config(data: Dictionary) -> Dictionary:
+	var config: Dictionary = {}
+	var raw: Variant = data.get("gameplay_effect", null)
+	if raw is Dictionary:
+		config = raw.duplicate(true)
+		return config
+
+	# 兼容旧字段：effect_params -> gameplay_effect.modifiers
+	var legacy_params: Variant = data.get("effect_params", {})
+	if not (legacy_params is Dictionary):
+		return config
+
+	var modifiers: Dictionary = {}
+	if legacy_params.has("effect_name"):
+		var effect_name: String = str(legacy_params.get("effect_name", ""))
+		if not effect_name.is_empty():
+			modifiers[effect_name] = {
+				"per_level": float(legacy_params.get("per_level", 0.0)),
+				"max_value": float(legacy_params.get("max_value", 0.0))
+			}
+	elif legacy_params.has("damage_bonus_per_level"):
+		modifiers["damage_bonus"] = {
+			"per_level": float(legacy_params.get("damage_bonus_per_level", 0.0))
+		}
+	elif legacy_params.has("consumption_reduction_per_level"):
+		modifiers["consumption_reduction"] = {
+			"per_level": float(legacy_params.get("consumption_reduction_per_level", 0.0)),
+			"max_value": float(legacy_params.get("max_reduction", 0.0))
+		}
+
+	if not modifiers.is_empty():
+		config["modifiers"] = modifiers
+
+	return config
+
+
+func _build_modifiers_from_config(config: Dictionary, level: int) -> Dictionary:
+	var result: Dictionary = {}
+	var raw: Variant = config.get("modifiers", config.get("stat_modifiers", {}))
+	if not (raw is Dictionary):
+		return result
+
+	for key in raw.keys():
+		var value: Variant = raw.get(key)
+		if value is Dictionary:
+			var base_value: float = float(value.get("base", 0.0))
+			var per_level: float = float(value.get("per_level", 0.0))
+			var max_value: float = float(value.get("max_value", 0.0))
+			var computed: float = base_value + per_level * float(level)
+			if max_value > 0.0:
+				computed = minf(computed, max_value)
+			result[key] = computed
+		elif value is int or value is float:
+			result[key] = float(value)
+	return result
+
+
+func _remove_all_skill_effects_from_system() -> void:
+	if _effect_system == null:
+		return
+	for effect in _active_effects.values():
+		if effect is GameplayEffect:
+			_effect_system.remove_effect(effect.id, "player")
 
 
 func _get_attribute_value(attribute_name: String) -> int:

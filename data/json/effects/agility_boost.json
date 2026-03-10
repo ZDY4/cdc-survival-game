@@ -1,0 +1,19 @@
+{
+  "special_effects": [],
+  "max_stacks": 3,
+  "is_stackable": true,
+  "id": "agility_boost",
+  "is_infinite": false,
+  "stack_mode": "intensity",
+  "color_tint": "#00FF00",
+  "description": "增加5点敏捷值",
+  "icon_path": "res://assets/icons/effects/agility_boost.png",
+  "tick_interval": 0.0,
+  "duration": 300.0,
+  "visual_effect": "",
+  "name": "敏捷提升",
+  "stat_modifiers": {
+    "agility": 5
+  },
+  "category": "buff"
+}

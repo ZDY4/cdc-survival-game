@@ -1,0 +1,19 @@
+{
+  "special_effects": [],
+  "max_stacks": 3,
+  "is_stackable": true,
+  "id": "strength_boost",
+  "is_infinite": false,
+  "stack_mode": "intensity",
+  "color_tint": "#FF6600",
+  "description": "增加5点力量值",
+  "icon_path": "res://assets/icons/effects/strength_boost.png",
+  "tick_interval": 0.0,
+  "duration": 300.0,
+  "visual_effect": "",
+  "name": "力量强化",
+  "stat_modifiers": {
+    "strength": 5
+  },
+  "category": "buff"
+}

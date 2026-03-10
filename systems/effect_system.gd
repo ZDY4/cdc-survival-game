@@ -44,7 +44,37 @@ func _load_effect_definitions():
 
 # ========== 公共 API ==========
 
-## 对实体应用效果
+## 对实体应用GameplayEffect
+## @param effect: GameplayEffect实例
+## @param entity_id: 实体ID（玩家、敌人等）
+## @param stacks: 初始层数
+## @return: 是否成功应用
+func apply_gameplay_effect(effect: GameplayEffect, entity_id: String, stacks: int = 1) -> bool:
+	if effect == null:
+		return false
+	if effect.id.is_empty():
+		push_error("[EffectSystem] GameplayEffect 缺少 id")
+		return false
+	
+	# 确保实体有记录
+	if not _active_effects.has(entity_id):
+		_active_effects[entity_id] = {}
+	
+	var entity_effects = _active_effects[entity_id]
+	var effect_id = effect.id
+	
+	# 检查是否已存在该效果
+	if entity_effects.has(effect_id):
+		# 处理叠加
+		_handle_stack(effect_id, entity_id, stacks)
+	else:
+		# 创建新效果实例
+		_create_effect_instance(effect, entity_id, stacks)
+	
+	effect_applied.emit(entity_id, effect_id, stacks)
+	return true
+
+## 对实体应用效果（按ID从数据定义生成GameplayEffect）
 ## @param effect_id: 效果ID
 ## @param entity_id: 实体ID（玩家、敌人等）
 ## @param stacks: 初始层数
@@ -55,22 +85,33 @@ func apply_effect(effect_id: String, entity_id: String, stacks: int = 1) -> bool
 		push_error("[EffectSystem] 未找到效果定义: %s" % effect_id)
 		return false
 	
-	# 确保实体有记录
+	var effect := GameplayEffect.new()
+	effect.configure(definition)
+	return apply_gameplay_effect(effect, entity_id, stacks)
+
+## 更新或插入GameplayEffect（用于技能等级变动等）
+func upsert_gameplay_effect(effect: GameplayEffect, entity_id: String) -> bool:
+	if effect == null:
+		return false
+	if effect.id.is_empty():
+		push_error("[EffectSystem] GameplayEffect 缺少 id")
+		return false
+	
 	if not _active_effects.has(entity_id):
 		_active_effects[entity_id] = {}
 	
 	var entity_effects = _active_effects[entity_id]
+	if entity_effects.has(effect.id):
+		var instance: EffectInstance = entity_effects[effect.id]
+		_remove_stat_modifiers(entity_id, instance.effect, instance.stacks)
+		instance.effect = effect
+		instance.is_infinite = effect.is_infinite
+		instance.remaining_time = effect.duration
+		instance.tick_timer = 0.0
+		_apply_stat_modifiers(entity_id, effect, instance.stacks)
+		return true
 	
-	# 检查是否已存在该效果
-	if entity_effects.has(effect_id):
-		# 处理叠加
-		_handle_stack(effect_id, entity_id, stacks, definition)
-	else:
-		# 创建新效果实例
-		_create_effect_instance(effect_id, entity_id, stacks, definition)
-	
-	effect_applied.emit(entity_id, effect_id, stacks)
-	return true
+	return apply_gameplay_effect(effect, entity_id, 1)
 
 ## 移除实体的效果
 ## @param effect_id: 效果ID，空字符串表示移除所有
@@ -105,7 +146,7 @@ func get_active_effects(entity_id: String) -> Array:
 			"effect_id": effect_id,
 			"stacks": instance.stacks,
 			"remaining_time": instance.remaining_time,
-			"definition": instance.definition
+			"definition": instance.effect
 		})
 	return result
 
@@ -118,10 +159,10 @@ func get_stat_modifier(entity_id: String, stat_name: String) -> float:
 	
 	for effect_id in _active_effects[entity_id].keys():
 		var instance = _active_effects[entity_id][effect_id]
-		var modifiers = instance.definition.get("stat_modifiers", {})
+		var modifiers = instance.effect.get_modifiers()
 		
 		if modifiers.has(stat_name):
-			var value = modifiers[stat_name]
+			var value = float(modifiers[stat_name])
 			# 百分比修饰符
 			if stat_name.ends_with("_mult"):
 				total += (value - 1.0) * instance.stacks
@@ -129,6 +170,22 @@ func get_stat_modifier(entity_id: String, stat_name: String) -> float:
 				total += value * instance.stacks
 	
 	return total
+
+## 获取实体所有修饰符汇总
+func get_total_modifiers(entity_id: String) -> Dictionary:
+	var totals: Dictionary = {}
+	if not _active_effects.has(entity_id):
+		return totals
+	
+	for effect_id in _active_effects[entity_id].keys():
+		var instance = _active_effects[entity_id][effect_id]
+		var modifiers = instance.effect.get_modifiers()
+		for stat_name in modifiers.keys():
+			var value = float(modifiers.get(stat_name, 0.0))
+			var current = float(totals.get(stat_name, 0.0))
+			totals[stat_name] = current + value * instance.stacks
+	
+	return totals
 
 ## 检查实体是否有特定效果
 func has_effect(effect_id: String, entity_id: String) -> bool:
@@ -151,36 +208,37 @@ func get_stacks(effect_id: String, entity_id: String) -> int:
 func _get_effect_definition(effect_id: String) -> Dictionary:
 	return _effect_definitions.get(effect_id, {})
 
-func _create_effect_instance(effect_id: String, entity_id: String, stacks: int, definition: Dictionary):
+func _create_effect_instance(effect: GameplayEffect, entity_id: String, stacks: int):
 	var instance = EffectInstance.new()
-	instance.effect_id = effect_id
 	instance.entity_id = entity_id
-	instance.definition = definition
-	instance.stacks = mini(stacks, definition.get("max_stacks", 1))
-	instance.remaining_time = definition.get("duration", 0.0)
-	instance.is_infinite = definition.get("is_infinite", false)
+	instance.effect = effect
+	instance.stacks = mini(stacks, effect.max_stacks)
+	instance.remaining_time = effect.duration
+	instance.is_infinite = effect.is_infinite
 	
-	_active_effects[entity_id][effect_id] = instance
+	_active_effects[entity_id][effect.id] = instance
 	
 	# 应用属性修饰
-	_apply_stat_modifiers(entity_id, definition, instance.stacks)
+	_apply_stat_modifiers(entity_id, effect, instance.stacks)
+	effect.on_apply(entity_id)
 	
-	print("[EffectSystem] 效果已应用: %s -> %s (层数: %d)" % [effect_id, entity_id, instance.stacks])
+	print("[EffectSystem] 效果已应用: %s -> %s (层数: %d)" % [effect.id, entity_id, instance.stacks])
 
-func _handle_stack(effect_id: String, entity_id: String, additional_stacks: int, definition: Dictionary):
+func _handle_stack(effect_id: String, entity_id: String, additional_stacks: int):
 	var instance = _active_effects[entity_id][effect_id]
-	var stack_mode = definition.get("stack_mode", "refresh")
-	var max_stacks = definition.get("max_stacks", 1)
+	var effect: GameplayEffect = instance.effect
+	var stack_mode = effect.stack_mode
+	var max_stacks = effect.max_stacks
 	
 	match stack_mode:
 		"refresh":
 			# 刷新持续时间
-			instance.remaining_time = definition.get("duration", 0.0)
+			instance.remaining_time = effect.duration
 			instance.stacks = mini(instance.stacks + additional_stacks, max_stacks)
 			
 		"extend":
 			# 延长持续时间
-			instance.remaining_time += definition.get("duration", 0.0)
+			instance.remaining_time += effect.duration
 			instance.stacks = mini(instance.stacks + additional_stacks, max_stacks)
 			
 		"intensity":
@@ -189,7 +247,7 @@ func _handle_stack(effect_id: String, entity_id: String, additional_stacks: int,
 			instance.stacks = mini(instance.stacks + additional_stacks, max_stacks)
 			# 重新计算属性修饰
 			if instance.stacks > old_stacks:
-				_apply_stat_modifiers(entity_id, definition, instance.stacks - old_stacks)
+				_apply_stat_modifiers(entity_id, effect, instance.stacks - old_stacks)
 			
 		"separate":
 			# 创建独立实例（这里简化处理，只增加层数）
@@ -202,7 +260,8 @@ func _remove_single_effect(effect_id: String, entity_id: String):
 	var instance = _active_effects[entity_id][effect_id]
 	
 	# 移除属性修饰（取反）
-	_remove_stat_modifiers(entity_id, instance.definition, instance.stacks)
+	_remove_stat_modifiers(entity_id, instance.effect, instance.stacks)
+	instance.effect.on_remove(entity_id)
 	
 	_active_effects[entity_id].erase(effect_id)
 	
@@ -212,17 +271,17 @@ func _remove_single_effect(effect_id: String, entity_id: String):
 	
 	print("[EffectSystem] 效果已移除: %s -> %s" % [effect_id, entity_id])
 
-func _apply_stat_modifiers(entity_id: String, definition: Dictionary, stacks: int):
-	var modifiers = definition.get("stat_modifiers", {})
+func _apply_stat_modifiers(entity_id: String, effect: GameplayEffect, stacks: int):
+	var modifiers = effect.get_modifiers()
 	for stat_name in modifiers.keys():
-		var value = modifiers[stat_name]
+		var value = float(modifiers[stat_name])
 		var final_value = value * stacks
 		stat_modified.emit(entity_id, stat_name, final_value)
 
-func _remove_stat_modifiers(entity_id: String, definition: Dictionary, stacks: int):
-	var modifiers = definition.get("stat_modifiers", {})
+func _remove_stat_modifiers(entity_id: String, effect: GameplayEffect, stacks: int):
+	var modifiers = effect.get_modifiers()
 	for stat_name in modifiers.keys():
-		var value = modifiers[stat_name]
+		var value = float(modifiers[stat_name])
 		var final_value = -value * stacks  # 取反
 		stat_modified.emit(entity_id, stat_name, final_value)
 
@@ -246,11 +305,12 @@ func _update_effects(delta: float):
 			instance.remaining_time -= delta
 			
 			# 触发周期性效果
-			var tick_interval = instance.definition.get("tick_interval", 0.0)
+			var tick_interval = instance.effect.tick_interval
 			if tick_interval > 0:
 				instance.tick_timer += delta
 				if instance.tick_timer >= tick_interval:
 					instance.tick_timer = 0.0
+					instance.effect.on_tick(entity_id, {"remaining_time": instance.remaining_time})
 					effect_tick.emit(entity_id, effect_id, instance.remaining_time)
 			
 			# 检查过期
@@ -291,9 +351,8 @@ func deserialize_entity_effects(entity_id: String, data: Array):
 
 # ========== 效果实例类 ==========
 class EffectInstance:
-	var effect_id: String
 	var entity_id: String
-	var definition: Dictionary
+	var effect: GameplayEffect
 	var stacks: int = 1
 	var remaining_time: float = 0.0
 	var is_infinite: bool = false

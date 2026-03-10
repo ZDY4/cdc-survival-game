@@ -10,10 +10,13 @@
   "attribute_requirements": {
     "agility": 6
   },
-  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
-  "effect_params": {
-    "effect_name": "athletics_bonus",
-    "per_level": 0.1
-  },
-  "id": "athletics"
+  "id": "athletics",
+  "gameplay_effect": {
+    "modifiers": {
+      "athletics_bonus": {
+        "max_value": 0.0,
+        "per_level": 0.1
+      }
+    }
+  }
 }

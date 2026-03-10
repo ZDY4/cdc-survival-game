@@ -10,10 +10,13 @@
   "attribute_requirements": {
     "constitution": 6
   },
-  "effect_class": "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd",
-  "effect_params": {
-    "effect_name": "negotiation_bonus",
-    "per_level": 0.1
-  },
-  "id": "negotiation"
+  "id": "negotiation",
+  "gameplay_effect": {
+    "modifiers": {
+      "negotiation_bonus": {
+        "max_value": 0.0,
+        "per_level": 0.1
+      }
+    }
+  }
 }

@@ -4,7 +4,6 @@ extends Control
 
 const SKILLS_DIR: String = "res://data/skills"
 const SKILL_TREES_DIR: String = "res://data/skill_trees"
-const DEFAULT_EFFECT_CLASS: String = "res://modules/skills/skill_effects/stat_bonus_skill_effect.gd"
 
 var editor_plugin: EditorPlugin = null
 
@@ -19,9 +18,8 @@ var _skill_tree_id_input: LineEdit
 var _max_level_input: SpinBox
 var _prerequisites_input: LineEdit
 var _attr_requirements_input: LineEdit
-var _effect_class_input: LineEdit
 var _description_input: TextEdit
-var _effect_params_input: TextEdit
+var _gameplay_effect_input: TextEdit
 
 var _tree_selector: OptionButton
 var _new_tree_button: Button
@@ -158,7 +156,6 @@ func _build_ui() -> void:
 	_max_level_input = _add_spin_field(skill_grid, "最大等级", 1, 50, 1)
 	_prerequisites_input = _add_line_field(skill_grid, "前置技能(逗号)")
 	_attr_requirements_input = _add_line_field(skill_grid, "属性要求(strength:6)")
-	_effect_class_input = _add_line_field(skill_grid, "效果类脚本")
 
 	right_vbox.add_child(_make_label("描述"))
 	_description_input = TextEdit.new()
@@ -166,11 +163,11 @@ func _build_ui() -> void:
 	_description_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_vbox.add_child(_description_input)
 
-	right_vbox.add_child(_make_label("效果参数(JSON)"))
-	_effect_params_input = TextEdit.new()
-	_effect_params_input.custom_minimum_size = Vector2(0, 140)
-	_effect_params_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(_effect_params_input)
+	right_vbox.add_child(_make_label("GameplayEffect(JSON)"))
+	_gameplay_effect_input = TextEdit.new()
+	_gameplay_effect_input.custom_minimum_size = Vector2(0, 140)
+	_gameplay_effect_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_vbox.add_child(_gameplay_effect_input)
 
 	right_vbox.add_child(HSeparator.new())
 
@@ -233,9 +230,8 @@ func _connect_signals() -> void:
 	_max_level_input.value_changed.connect(func(_v: float): _mark_dirty())
 	_prerequisites_input.text_changed.connect(func(_t: String): _mark_dirty())
 	_attr_requirements_input.text_changed.connect(func(_t: String): _mark_dirty())
-	_effect_class_input.text_changed.connect(func(_t: String): _mark_dirty())
 	_description_input.text_changed.connect(_mark_dirty)
-	_effect_params_input.text_changed.connect(_mark_dirty)
+	_gameplay_effect_input.text_changed.connect(_mark_dirty)
 	_tree_id_input.text_changed.connect(func(_t: String): _mark_dirty())
 	_tree_name_input.text_changed.connect(func(_t: String): _mark_dirty())
 	_tree_skills_input.text_changed.connect(func(_t: String): _mark_dirty())
@@ -334,8 +330,7 @@ func _fill_skill_form(skill_id: String) -> void:
 	_max_level_input.value = float(int(skill.get("max_level", 1)))
 	_prerequisites_input.text = _join_string_array(skill.get("prerequisites", []))
 	_attr_requirements_input.text = _format_attr_requirements(skill.get("attribute_requirements", {}))
-	_effect_class_input.text = str(skill.get("effect_class", DEFAULT_EFFECT_CLASS))
-	_effect_params_input.text = JSON.stringify(skill.get("effect_params", {}), "\t")
+	_gameplay_effect_input.text = JSON.stringify(skill.get("gameplay_effect", {}), "\t")
 	_is_form_syncing = false
 
 
@@ -349,8 +344,7 @@ func _clear_skill_form() -> void:
 	_max_level_input.value = 1.0
 	_prerequisites_input.text = ""
 	_attr_requirements_input.text = ""
-	_effect_class_input.text = DEFAULT_EFFECT_CLASS
-	_effect_params_input.text = "{}"
+	_gameplay_effect_input.text = "{}"
 	_is_form_syncing = false
 
 
@@ -391,8 +385,7 @@ func _on_new_skill_pressed() -> void:
 		"max_level": 1,
 		"prerequisites": [],
 		"attribute_requirements": {},
-		"effect_class": DEFAULT_EFFECT_CLASS,
-		"effect_params": {"effect_name": "new_bonus", "per_level": 0.1}
+		"gameplay_effect": {"modifiers": {"new_bonus": {"per_level": 0.1}}}
 	}
 	_refresh_skill_list()
 	var index: int = _find_item_list_index(_skill_list, new_id)
@@ -470,9 +463,9 @@ func _save_current_forms() -> bool:
 			_set_status("技能ID重复: %s" % new_skill_id)
 			return false
 
-		var effect_params: Variant = JSON.parse_string(_effect_params_input.text)
-		if effect_params == null or not (effect_params is Dictionary):
-			_set_status("效果参数必须是合法JSON对象")
+		var gameplay_effect: Variant = JSON.parse_string(_gameplay_effect_input.text)
+		if gameplay_effect == null or not (gameplay_effect is Dictionary):
+			_set_status("GameplayEffect 必须是合法JSON对象")
 			return false
 
 		var skill_data: Dictionary = {
@@ -483,8 +476,7 @@ func _save_current_forms() -> bool:
 			"max_level": int(_max_level_input.value),
 			"prerequisites": _parse_csv(_prerequisites_input.text),
 			"attribute_requirements": _parse_attr_requirements(_attr_requirements_input.text),
-			"effect_class": _effect_class_input.text.strip_edges(),
-			"effect_params": effect_params
+			"gameplay_effect": gameplay_effect
 		}
 		_skills.erase(old_skill_id)
 		_skills[new_skill_id] = skill_data
@@ -647,8 +639,9 @@ func _rebuild_validation_errors() -> void:
 			_validation_errors.append("skill[%s]: tree_id 不能为空" % skill_id)
 		if int(skill.get("max_level", 0)) <= 0:
 			_validation_errors.append("skill[%s]: max_level 必须 > 0" % skill_id)
-		if str(skill.get("effect_class", "")).strip_edges().is_empty():
-			_validation_errors.append("skill[%s]: effect_class 不能为空" % skill_id)
+		var gameplay_effect: Variant = skill.get("gameplay_effect", {})
+		if not (gameplay_effect is Dictionary) or gameplay_effect.is_empty():
+			_validation_errors.append("skill[%s]: gameplay_effect 不能为空" % skill_id)
 
 		var prerequisites: Array[String] = _parse_csv(_join_string_array(skill.get("prerequisites", [])))
 		for prerequisite in prerequisites:
