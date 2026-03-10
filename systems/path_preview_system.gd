@@ -123,6 +123,10 @@ func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
         return null
 
     var node := hit.collider as Node
+    var component := _find_interactable_component(node)
+    if component != null:
+        return component
+
     while node != null:
         if node.is_in_group("interactable"):
             return node
@@ -136,6 +140,24 @@ func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
             return node
         node = node.get_parent()
 
+    return null
+
+func _find_interactable_component(node: Node) -> Interactable:
+    if not node:
+        return null
+    if node is Interactable:
+        return node
+    for child in node.get_children():
+        if child is Interactable:
+            return child
+    var current := node.get_parent()
+    while current != null:
+        if current is Interactable:
+            return current
+        for child in current.get_children():
+            if child is Interactable:
+                return child
+        current = current.get_parent()
     return null
 
 func _find_nearest_interaction_target(interactable: Node, hit_position: Vector3) -> Dictionary:

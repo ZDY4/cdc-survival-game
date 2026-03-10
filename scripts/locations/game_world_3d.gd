@@ -3,11 +3,7 @@ extends Node3D
 
 const CameraController3D = preload("res://systems/camera_controller_3d.gd")
 const PlayerController3D = preload("res://systems/player_controller_3d.gd")
-const PathPreview = preload("res://systems/path_preview.gd")
-const GridNavigator = preload("res://systems/grid_navigator.gd")
 const GridVisualizer = preload("res://systems/grid_visualizer.gd")
-const InteractionSystem = preload("res://systems/interaction_system.gd")
-const PathPreviewSystem = preload("res://systems/path_preview_system.gd")
 const AISpawnSystem = preload("res://systems/spawn/ai_spawn_system.gd")
 const NPCInteractionSystem = preload("res://modules/npc/npc_interaction_system.gd")
 
@@ -22,11 +18,7 @@ const NPCInteractionSystem = preload("res://modules/npc/npc_interaction_system.g
 
 var _camera_controller: CameraController3D = null
 var _player: PlayerController3D = null
-var _path_preview: PathPreview = null
-var _navigator: GridNavigator = null
 var _grid_visualizer: GridVisualizer = null
-var _interaction_system: InteractionSystem = null
-var _path_preview_system: PathPreviewSystem = null
 var _spawn_system: AISpawnSystem = null
 var _npc_interaction_system: NPCInteractionSystem = null
 
@@ -41,7 +33,6 @@ func _exit_tree() -> void:
     _unregister_debug_entries()
 
 func _setup_world() -> void:
-    _navigator = GridNavigator.new()
     _setup_grid_floor_collision()
 
     _grid_visualizer = GridVisualizer.new()
@@ -74,51 +65,25 @@ func _setup_camera() -> void:
     _camera_controller.target = _player
 
 func _setup_runtime_systems() -> void:
-    _path_preview = PathPreview.new()
-    add_child(_path_preview)
-
-    _interaction_system = InteractionSystem.new()
-    add_child(_interaction_system)
-
-    _path_preview_system = PathPreviewSystem.new()
-    add_child(_path_preview_system)
-    _path_preview_system.initialize(self, _interaction_system, _navigator, _player, _path_preview)
-    _path_preview_system.max_preview_path_points = max_preview_path_points
-    _path_preview_system.max_preview_distance = max_preview_distance
-    _path_preview_system.interaction_preview_min_radius = interaction_preview_min_radius
-    _path_preview_system.interaction_preview_max_radius = interaction_preview_max_radius
-    _player.move_requested.connect(_path_preview_system.on_move_requested)
-    _player.movement_completed.connect(_path_preview_system.on_movement_completed)
-
     _npc_interaction_system = NPCInteractionSystem.new()
     add_child(_npc_interaction_system)
-    _npc_interaction_system.initialize(self, _interaction_system)
+    if _player:
+        _npc_interaction_system.initialize(self, _player.get_interaction_system())
 
     _spawn_system = AISpawnSystem.new()
     add_child(_spawn_system)
     _spawn_system.initialize(self)
     _spawn_system.spawn_auto_points()
 
-func _input(event: InputEvent) -> void:
-    if not _interaction_system or not _interaction_system.is_primary_pressed(event):
-        return
-
-    var screen_pos := _interaction_system.get_screen_position(event)
-    if _player and _player.is_moving():
-        _player.cancel_movement()
-        if _path_preview_system:
-            _path_preview_system.clear_active_move_target()
-        return
-
-    if _npc_interaction_system and _npc_interaction_system.try_interact(screen_pos):
-        return
-
     if _player:
-        _player.move_to_screen_position(screen_pos, _interaction_system, self)
+        _player.set_interaction_context(self, _npc_interaction_system)
+        _player.configure_path_preview_settings(
+            max_preview_path_points,
+            max_preview_distance,
+            interaction_preview_min_radius,
+            interaction_preview_max_radius
+        )
 
-func _process(delta: float) -> void:
-    if _path_preview_system:
-        _path_preview_system.tick(delta)
 
 func get_player() -> PlayerController3D:
     return _player

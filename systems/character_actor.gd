@@ -3,6 +3,8 @@ extends CharacterBody3D
 ## Shared runtime character base for player, NPC and enemy.
 ## Provides temporary 2-sprite placeholder visuals (head + body).
 
+const InteractionSystem = preload("res://systems/interaction_system.gd")
+
 @export var head_color: Color = Color(0.95, 0.84, 0.70, 1.0)
 @export var body_color: Color = Color(0.30, 0.58, 0.90, 1.0)
 @export var sprite_pixel_size: float = 0.01
@@ -11,8 +13,10 @@ extends CharacterBody3D
 
 var _head_sprite: Sprite3D = null
 var _body_sprite: Sprite3D = null
+var _interaction_system: InteractionSystem = null
 
 func _ready() -> void:
+    _setup_interaction_system()
     _ensure_placeholder_sprites()
     _refresh_placeholder_textures()
 
@@ -47,6 +51,18 @@ func _ensure_placeholder_sprites() -> void:
 func _refresh_placeholder_textures() -> void:
     _body_sprite.texture = _create_body_texture(body_sprite_size, body_color)
     _head_sprite.texture = _create_head_texture(head_sprite_size, head_color)
+
+func get_interaction_system() -> InteractionSystem:
+    return _interaction_system
+
+func _setup_interaction_system() -> void:
+    var existing := get_node_or_null("InteractionSystem")
+    if existing and existing is InteractionSystem:
+        _interaction_system = existing
+        return
+    _interaction_system = InteractionSystem.new()
+    _interaction_system.name = "InteractionSystem"
+    add_child(_interaction_system)
 
 func _create_head_texture(size: Vector2i, color: Color) -> Texture2D:
     var image := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)

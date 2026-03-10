@@ -8,6 +8,8 @@ const CharacterActorScript = preload("res://systems/character_actor.gd")
 const AIController = preload("res://systems/ai/ai_controller.gd")
 const GameWorldMerchantTradeComponent = preload("res://modules/npc/components/game_world_merchant_trade_component.gd")
 const VisionSystemScript = preload("res://systems/vision_system.gd")
+const Interactable = preload("res://modules/interaction/interactable.gd")
+const NPCInteractionOption = preload("res://modules/interaction/options/npc_interaction_option.gd")
 
 signal actor_spawned(spawn_id: String, actor: Node3D)
 signal actor_despawned(spawn_id: String)
@@ -237,6 +239,13 @@ func _spawn_npc(npc_id: String, world_pos: Vector3, spawn_id: String) -> Node3D:
 	var ai_controller := AIController.new()
 	actor.add_child(ai_controller)
 	ai_controller.initialize(actor, movement_component, world_pos, "npc", npc_id, DEFAULT_NPC_AI)
+
+	var interactable := Interactable.new()
+	interactable.name = "Interactable"
+	interactable.set_meta("npc_id", npc_id)
+	var npc_option := NPCInteractionOption.new()
+	interactable.set_options([npc_option])
+	actor.add_child(interactable)
 
 	var trade_component: Node = null
 	if not (npc_data is Dictionary) and npc_data.can_trade:
