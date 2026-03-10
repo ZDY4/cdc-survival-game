@@ -17,11 +17,19 @@ const ENEMIES = {
 			"accuracy": 60
 		},
 		"behavior": "passive",  # passive, aggressive, territorial
+		"ai": {
+			"aggro_range": 5.0,
+			"attack_range": 1.2,
+			"wander_radius": 3.0,
+			"leash_distance": 6.0,
+			"decision_interval": 0.9,
+			"attack_cooldown": 2.2
+		},
 		"weaknesses": ["head", "fire"],
 		"resistances": ["poison"],
 		"loot": [
-			{"item": "scrap_metal", "chance": 0.3, "min": 1, "max": 2},
-			{"item": "rotten_flesh", "chance": 0.5, "min": 1, "max": 1}
+			{"item": 1010, "chance": 0.3, "min": 1, "max": 2},
+			{"item": 1111, "chance": 0.5, "min": 1, "max": 1}
 		],
 		"xp": 10,
 		"spawn_locations": ["street", "street_a", "street_b"],
@@ -45,8 +53,8 @@ const ENEMIES = {
 		"weaknesses": ["head", "leg"],
 		"resistances": [],
 		"loot": [
-			{"item": "scrap_metal", "chance": 0.4, "min": 1, "max": 3},
-			{"item": "water_bottle", "chance": 0.2, "min": 1, "max": 1}
+			{"item": 1010, "chance": 0.4, "min": 1, "max": 3},
+			{"item": 1008, "chance": 0.2, "min": 1, "max": 1}
 		],
 		"xp": 15,
 		"spawn_locations": ["street_a", "street_b"],
@@ -71,9 +79,9 @@ const ENEMIES = {
 		"resistances": ["physical"],
 		"special_abilities": ["stun_attack"],
 		"loot": [
-			{"item": "scrap_metal", "chance": 0.6, "min": 2, "max": 4},
-			{"item": "bandage", "chance": 0.3, "min": 1, "max": 2},
-			{"item": "food_canned", "chance": 0.2, "min": 1, "max": 1}
+			{"item": 1010, "chance": 0.6, "min": 2, "max": 4},
+			{"item": 1006, "chance": 0.3, "min": 1, "max": 2},
+			{"item": 1007, "chance": 0.2, "min": 1, "max": 1}
 		],
 		"xp": 30,
 		"spawn_locations": ["street_b", "hospital"],
@@ -98,9 +106,9 @@ const ENEMIES = {
 		"resistances": ["poison", "physical"],
 		"special_abilities": ["acid_spit", "regeneration"],
 		"loot": [
-			{"item": "first_aid_kit", "chance": 0.4, "min": 1, "max": 1},
-			{"item": "antiseptic", "chance": 0.5, "min": 1, "max": 2},
-			{"item": "key", "chance": 0.1, "min": 1, "max": 1}
+			{"item": 1005, "chance": 0.4, "min": 1, "max": 1},
+			{"item": 1030, "chance": 0.5, "min": 1, "max": 2},
+			{"item": 1138, "chance": 0.1, "min": 1, "max": 1}
 		],
 		"xp": 50,
 		"spawn_locations": ["hospital"],
@@ -125,9 +133,9 @@ const ENEMIES = {
 		"resistances": ["poison"],
 		"special_abilities": ["heal_nearby"],
 		"loot": [
-			{"item": "bandage", "chance": 0.5, "min": 1, "max": 3},
-			{"item": "painkiller", "chance": 0.3, "min": 1, "max": 2},
-			{"item": "first_aid_kit", "chance": 0.2, "min": 1, "max": 1}
+			{"item": 1006, "chance": 0.5, "min": 1, "max": 3},
+			{"item": 1033, "chance": 0.3, "min": 1, "max": 2},
+			{"item": 1005, "chance": 0.2, "min": 1, "max": 1}
 		],
 		"xp": 20,
 		"spawn_locations": ["hospital"],
@@ -151,9 +159,9 @@ const ENEMIES = {
 		"weaknesses": ["head", "torso"],
 		"resistances": [],
 		"loot": [
-			{"item": "scrap_metal", "chance": 0.5, "min": 1, "max": 3},
-			{"item": "water_bottle", "chance": 0.3, "min": 1, "max": 1},
-			{"item": "knife", "chance": 0.2, "min": 1, "max": 1}
+			{"item": 1010, "chance": 0.5, "min": 1, "max": 3},
+			{"item": 1008, "chance": 0.3, "min": 1, "max": 1},
+			{"item": 1002, "chance": 0.2, "min": 1, "max": 1}
 		],
 		"xp": 25,
 		"spawn_locations": ["street", "street_a", "street_b"],
@@ -178,10 +186,10 @@ const ENEMIES = {
 		"resistances": ["physical"],
 		"special_abilities": ["call_reinforcements", "taunt"],
 		"loot": [
-			{"item": "key", "chance": 0.8, "min": 1, "max": 1},
-			{"item": "first_aid_kit", "chance": 0.5, "min": 1, "max": 2},
-			{"item": "food_canned", "chance": 0.6, "min": 2, "max": 4},
-			{"item": "water_bottle", "chance": 0.6, "min": 2, "max": 3}
+			{"item": 1138, "chance": 0.8, "min": 1, "max": 1},
+			{"item": 1005, "chance": 0.5, "min": 1, "max": 2},
+			{"item": 1007, "chance": 0.6, "min": 2, "max": 4},
+			{"item": 1008, "chance": 0.6, "min": 2, "max": 3}
 		],
 		"xp": 100,
 		"spawn_locations": ["street_b"],
@@ -206,7 +214,7 @@ const ENEMIES = {
 		"resistances": ["poison"],
 		"special_abilities": ["pack_hunter"],
 		"loot": [
-			{"item": "rotten_flesh", "chance": 0.7, "min": 1, "max": 2}
+			{"item": 1111, "chance": 0.7, "min": 1, "max": 2}
 		],
 		"xp": 12,
 		"spawn_locations": ["street", "street_a"],
@@ -231,10 +239,10 @@ const ENEMIES = {
 		"resistances": ["physical", "poison"],
 		"special_abilities": ["ground_slam", "spore_cloud", "regeneration"],
 		"loot": [
-			{"item": "first_aid_kit", "chance": 0.8, "min": 2, "max": 4},
-			{"item": "component_electronic", "chance": 0.6, "min": 2, "max": 3},
-			{"item": "weapon_pipe", "chance": 0.3, "min": 1, "max": 1},
-			{"item": "key", "chance": 1.0, "min": 1, "max": 1}
+			{"item": 1005, "chance": 0.8, "min": 2, "max": 4},
+			{"item": 1012, "chance": 0.6, "min": 2, "max": 3},
+			{"item": 1013, "chance": 0.3, "min": 1, "max": 1},
+			{"item": 1138, "chance": 1.0, "min": 1, "max": 1}
 		],
 		"xp": 300,
 		"spawn_locations": ["subway", "factory"],
@@ -259,8 +267,8 @@ const ENEMIES = {
 		"resistances": ["physical"],
 		"special_abilities": ["night_vision", "silent_move"],
 		"loot": [
-			{"item": "scrap_metal", "chance": 0.5, "min": 2, "max": 4},
-			{"item": "component_electronic", "chance": 0.3, "min": 1, "max": 1}
+			{"item": 1010, "chance": 0.5, "min": 2, "max": 4},
+			{"item": 1012, "chance": 0.3, "min": 1, "max": 1}
 		],
 		"xp": 45,
 		"spawn_locations": ["street_b", "subway"],
@@ -285,8 +293,8 @@ const ENEMIES = {
 		"resistances": ["radiation", "poison"],
 		"special_abilities": ["radiation_aura", "poison_touch"],
 		"loot": [
-			{"item": "antiseptic", "chance": 0.6, "min": 1, "max": 2},
-			{"item": "component_electronic", "chance": 0.4, "min": 1, "max": 2}
+			{"item": 1030, "chance": 0.6, "min": 1, "max": 2},
+			{"item": 1012, "chance": 0.4, "min": 1, "max": 2}
 		],
 		"xp": 60,
 		"spawn_locations": ["factory", "subway"],
@@ -459,3 +467,5 @@ static func get_enemies_for_location(location: String):
 				"level": ENEMIES[enemy_id].level
 			})
 	return result
+
+

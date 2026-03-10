@@ -2,20 +2,20 @@ class_name AISpawnSystem
 extends Node
 
 const AISpawnPoint = preload("res://systems/spawn/ai_spawn_point.gd")
-const EnemySystem = preload("res://systems/enemy_system.gd")
+const AIManager = preload("res://systems/ai/ai_manager.gd")
 
 signal actor_spawned(spawn_id: String, actor: Node3D)
 signal actor_despawned(spawn_id: String)
 
 var _scene_root: Node = null
-var _enemy_provider: EnemySystem = null
+var _ai_manager: AIManager = null
 var _spawn_points: Dictionary = {}
 var _active_instances: Dictionary = {}
 var _respawn_deadlines: Dictionary = {}
 
 func _ready() -> void:
-    _enemy_provider = EnemySystem.new()
-    add_child(_enemy_provider)
+    _ai_manager = AIManager.new()
+    add_child(_ai_manager)
 
 func _process(_delta: float) -> void:
     if _respawn_deadlines.is_empty():
@@ -66,11 +66,9 @@ func spawn_from_point(point: AISpawnPoint) -> Node3D:
     }
 
     match role_kind:
-        "npc":
-            if NPCModule and NPCModule.has_method("spawn_actor"):
-                actor = NPCModule.spawn_actor("npc", point.role_id, spawn_pos, context)
-        "enemy":
-            actor = _enemy_provider.spawn_actor("enemy", point.role_id, spawn_pos, context)
+        "npc", "enemy":
+            if _ai_manager:
+                actor = _ai_manager.spawn_actor(role_kind, point.role_id, spawn_pos, context)
         _:
             push_warning("[AISpawnSystem] Unknown role_kind '%s' for spawn point: %s" % [role_kind, spawn_id])
             return null
@@ -97,7 +95,9 @@ func despawn_actor(spawn_id: String) -> void:
     var actor: Node3D = entry.get("node", null)
     _active_instances.erase(spawn_id)
 
-    if actor and is_instance_valid(actor):
+    if _ai_manager:
+        _ai_manager.despawn_actor(spawn_id)
+    elif actor and is_instance_valid(actor):
         actor.queue_free()
 
     actor_despawned.emit(spawn_id)

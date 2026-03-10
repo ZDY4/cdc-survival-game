@@ -149,6 +149,24 @@ func spawn_actor(role_kind: String, role_id: String, world_pos: Vector3, context
 	active_npc_actors[role_id] = actor
 	return actor
 
+## 由外部系统注册运行时NPC（AIManager统一入口）
+func register_npc_actor(npc_id: String, actor: Node3D, trade_component: NPCTradeComponent = null) -> void:
+	if npc_id.is_empty() or not actor:
+		return
+	active_npc_actors[npc_id] = actor
+	if trade_component:
+		active_npc_trade_components[npc_id] = trade_component
+	npc_spawned.emit(npc_id, actor)
+
+## 由外部系统注销运行时NPC（AIManager统一入口）
+func unregister_npc_actor(npc_id: String) -> void:
+	if npc_id.is_empty():
+		return
+	if active_npc_actors.has(npc_id):
+		active_npc_actors.erase(npc_id)
+	active_npc_trade_components.erase(npc_id)
+	npc_despawned.emit(npc_id)
+
 func despawn_actor(role_id: String) -> void:
 	if not active_npc_actors.has(role_id):
 		return
@@ -382,6 +400,14 @@ func _build_runtime_npc_data(npc_id: String) -> NPCData:
 		if npc_data.current_location.is_empty():
 			npc_data.current_location = npc_data.default_location
 	return npc_data
+
+## 提供运行时数据给AI系统
+func get_runtime_npc_data(npc_id: String) -> NPCData:
+	return _build_runtime_npc_data(npc_id)
+
+## 提供NPC颜色给AI系统
+func get_npc_color(npc_data: NPCData) -> Color:
+	return _get_npc_color(npc_data)
 
 func _get_npc_color(npc_data: NPCData) -> Color:
 	if npc_data.can_trade:
