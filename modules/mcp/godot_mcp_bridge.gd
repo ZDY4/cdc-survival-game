@@ -2,7 +2,7 @@ extends Node
 # GodotMCPBridge - Godot MCP bridge
 # Allows external control of Godot over socket (disabled on web platform)
 
-const PORT = 9742
+const PORT = 0
 const PORT_FALLBACK_ATTEMPTS = 20
 
 var _server: TCPServer
@@ -21,20 +21,28 @@ func _ready():
 	_start_server()
 
 func _start_server():
-	for offset in range(PORT_FALLBACK_ATTEMPTS):
-		var candidate_port: int = PORT + offset
+	var base_port: int = PORT
+	var attempts: int = PORT_FALLBACK_ATTEMPTS if base_port > 0 else 1
+	for offset in range(attempts):
+		var candidate_port: int = base_port + offset if base_port > 0 else 0
 		var candidate_server := TCPServer.new()
 		var err := candidate_server.listen(candidate_port)
 		if err == OK:
 			_server = candidate_server
-			_active_port = candidate_port
+			var actual_port: int = candidate_port
+			if candidate_server.has_method("get_local_port"):
+				actual_port = candidate_server.get_local_port()
+			_active_port = actual_port
 			_is_running = true
-			if candidate_port != PORT:
-				push_warning("[GodotMCPBridge] Port %d unavailable, fallback to %d" % [PORT, candidate_port])
-			print("[GodotMCPBridge] Server started on port: " + str(candidate_port))
+			if base_port > 0 and candidate_port != base_port:
+				print("[GodotMCPBridge] Port %d unavailable, fallback to %d" % [base_port, candidate_port])
+			print("[GodotMCPBridge] Server started on port: " + str(actual_port))
 			return
 
-	push_warning("[GodotMCPBridge] Unable to start server on ports %d-%d" % [PORT, PORT + PORT_FALLBACK_ATTEMPTS - 1])
+	if base_port > 0:
+		push_warning("[GodotMCPBridge] Unable to start server on ports %d-%d" % [base_port, base_port + PORT_FALLBACK_ATTEMPTS - 1])
+	else:
+		push_warning("[GodotMCPBridge] Unable to start server on any port")
 	_is_running = false
 
 func _process(delta: float):

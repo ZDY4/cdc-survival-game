@@ -8,4 +8,4 @@ enabled = true
 test_mode = true
 auto_start = true
 enable_http_api = true
-port = 8080
+port = 0

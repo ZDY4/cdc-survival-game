@@ -19,7 +19,7 @@ signal action_executed(action: String, result: Dictionary)
 var _server: TCPServer
 var _clients: Array[StreamPeerTCP] = []
 var _is_server_running: bool = false
-var _port: int = 8080
+var _port: int = 0
 const PORT_FALLBACK_ATTEMPTS: int = 20
 
 # ===== Test State =====
@@ -63,11 +63,16 @@ func _apply_settings() -> void:
 			if cfg_port > 0:
 				port = cfg_port
 				_port = port
+			else:
+				port = 0
+				_port = 0
 
 func _ready():
 	_apply_settings()
 	if port > 0:
 		_port = port
+	else:
+		_port = 0
 	if not enabled:
 		print("[AITestBridge] Disabled")
 		return
@@ -86,10 +91,10 @@ func _ready():
 	if test_mode:
 		print("[AITestBridge] Test mode ready")
 		if auto_start and enable_http_api:
-			var server_port = port if port > 0 else 8080
+			var server_port = port if port > 0 else 0
 			start_server(server_port)
 	elif auto_start:
-		var server_port = port if port > 0 else 8080
+		var server_port = port if port > 0 else 0
 		start_server(server_port)
 
 # ===== HTTP Server (backward compatible) =====
@@ -99,21 +104,28 @@ func start_server(server_port: int = 0):
 		print("[AITestBridge] Warning: no need to start HTTP server in test mode")
 		return true
 
-	var base_port: int = server_port if server_port > 0 else 8080
-	for offset in range(PORT_FALLBACK_ATTEMPTS):
-		var candidate_port: int = base_port + offset
+	var base_port: int = server_port if server_port > 0 else 0
+	var attempts: int = PORT_FALLBACK_ATTEMPTS if base_port > 0 else 1
+	for offset in range(attempts):
+		var candidate_port: int = base_port + offset if base_port > 0 else 0
 		var candidate_server := TCPServer.new()
 		var error := candidate_server.listen(candidate_port)
 		if error == OK:
 			_server = candidate_server
-			_port = candidate_port
+			var actual_port: int = candidate_port
+			if candidate_server.has_method("get_local_port"):
+				actual_port = candidate_server.get_local_port()
+			_port = actual_port
 			_is_server_running = true
-			if candidate_port != base_port:
-				push_warning("[AITestBridge] Port %d unavailable, fallback to %d" % [base_port, candidate_port])
+			if base_port > 0 and candidate_port != base_port:
+				print("[AITestBridge] Port %d unavailable, fallback to %d" % [base_port, candidate_port])
 			print("[AITestBridge] HTTP server started on port: " + str(_port))
 			return true
 
-	push_warning("[AITestBridge] Failed to start HTTP server on ports %d-%d" % [base_port, base_port + PORT_FALLBACK_ATTEMPTS - 1])
+	if base_port > 0:
+		push_warning("[AITestBridge] Failed to start HTTP server on ports %d-%d" % [base_port, base_port + PORT_FALLBACK_ATTEMPTS - 1])
+	else:
+		push_warning("[AITestBridge] Failed to start HTTP server on any port")
 	_is_server_running = false
 	return false
 
