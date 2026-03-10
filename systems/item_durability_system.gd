@@ -11,9 +11,9 @@ signal repair_failed(item_id: String, reason: String)
 # ===== 耐久配置 =====
 const DURABILITY_MAX: int = 100
 const DURABILITY_BROKEN: int = 0
-const REPAIR_KIT_EFFICIENCY: float = 0.5  # 维修包恢"0%耐久
+const REPAIR_KIT_EFFICIENCY: float = 0.5  # 维修包恢复50%耐久
 
-# ===== 物品耐久数据"=====
+# ===== 物品耐久数据 =====
 const ITEM_DURABILITY_DATA: Dictionary = {
 	# ===== 武器 =====
 	"knife": {"max": 100, "decay_per_use": 2, "type": "weapon", "repairable": true},
@@ -24,6 +24,14 @@ const ITEM_DURABILITY_DATA: Dictionary = {
 	"pistol": {"max": 200, "decay_per_use": 1, "type": "weapon", "repairable": true},
 	"rifle": {"max": 250, "decay_per_use": 1, "type": "weapon", "repairable": true},
 	"shotgun": {"max": 180, "decay_per_use": 2, "type": "weapon", "repairable": true},
+	# 数值ID别名（与ItemDatabase保持一致）
+	"1002": {"max": 100, "decay_per_use": 2, "type": "weapon", "repairable": true}, # knife
+	"1003": {"max": 80, "decay_per_use": 5, "type": "weapon", "repairable": true},  # baseball_bat
+	"1004": {"max": 200, "decay_per_use": 1, "type": "weapon", "repairable": true}, # pistol
+	"1014": {"max": 120, "decay_per_use": 2, "type": "weapon", "repairable": true}, # machete
+	"1018": {"max": 180, "decay_per_use": 2, "type": "weapon", "repairable": true}, # shotgun
+	"1019": {"max": 250, "decay_per_use": 1, "type": "weapon", "repairable": true}, # rifle
+	"1125": {"max": 150, "decay_per_use": 3, "type": "weapon", "repairable": true}, # crowbar
 	
 	# ===== 工具 =====
 	"screwdriver": {"max": 80, "decay_per_use": 2, "type": "tool", "repairable": true},
@@ -32,6 +40,11 @@ const ITEM_DURABILITY_DATA: Dictionary = {
 	"flashlight": {"max": 100, "decay_per_use": 1, "type": "tool", "repairable": true, "battery": true},
 	"compass": {"max": 200, "decay_per_use": 0, "type": "tool", "repairable": false},
 	"fishing_rod": {"max": 60, "decay_per_use": 4, "type": "tool", "repairable": true},
+	"hammer": {"max": 120, "decay_per_use": 2, "type": "tool", "repairable": true},
+	"1126": {"max": 100, "decay_per_use": 1, "type": "tool", "repairable": true, "battery": true}, # flashlight
+	"1150": {"max": 50, "decay_per_use": 5, "type": "tool", "repairable": false}, # lockpick
+	"1151": {"max": 80, "decay_per_use": 2, "type": "tool", "repairable": true}, # screwdriver
+	"1166": {"max": 120, "decay_per_use": 2, "type": "tool", "repairable": true}, # hammer
 	
 	# ===== 护甲 =====
 	"cloth_armor": {"max": 50, "decay_per_hit": 5, "type": "armor", "repairable": true},
@@ -40,8 +53,12 @@ const ITEM_DURABILITY_DATA: Dictionary = {
 	"military_armor": {"max": 200, "decay_per_hit": 2, "type": "armor", "repairable": true},
 	"helmet": {"max": 100, "decay_per_hit": 5, "type": "armor", "repairable": true},
 	"riot_shield": {"max": 120, "decay_per_hit": 8, "type": "armor", "repairable": true},
+	"2004": {"max": 50, "decay_per_hit": 5, "type": "armor", "repairable": true}, # cloth armor
+	"2005": {"max": 80, "decay_per_hit": 4, "type": "armor", "repairable": true}, # leather jacket
+	"2007": {"max": 150, "decay_per_hit": 3, "type": "armor", "repairable": true}, # kevlar vest
+	"2001": {"max": 100, "decay_per_hit": 5, "type": "armor", "repairable": true}, # helmet
 	
-	# ===== 装备（背包等"=====
+	# ===== 装备（背包等） =====
 	"small_backpack": {"max": 80, "decay_per_use": 1, "type": "equipment", "repairable": true},
 	"large_backpack": {"max": 120, "decay_per_use": 1, "type": "equipment", "repairable": true},
 	"tactical_vest": {"max": 150, "decay_per_hit": 3, "type": "equipment", "repairable": true},
@@ -52,7 +69,7 @@ const ITEM_DURABILITY_DATA: Dictionary = {
 	"gas_mask": {"max": 60, "decay_per_use": 2, "type": "equipment", "repairable": true}
 }
 
-# ===== 维修材料需"=====
+# ===== 维修材料需求 =====
 const REPAIR_MATERIALS: Dictionary = {
 	"weapon": {"scrap_metal": 2, "cloth": 1},
 	"tool": {"scrap_metal": 1, "wood": 1},
@@ -60,7 +77,7 @@ const REPAIR_MATERIALS: Dictionary = {
 	"equipment": {"cloth": 2, "rope": 1}
 }
 
-# ===== 当前耐久状"=====
+# ===== 当前耐久状态 =====
 var _durability_data: Dictionary = {}  # item_instance_id -> {current, max, data}
 
 func _ready():
@@ -427,7 +444,7 @@ func repair_all() -> Dictionary:
 	
 	return results
 
-# ===== 序列"=====
+# ===== 序列 =====
 func serialize() -> Dictionary:
 	return {
 		"durability_data": _durability_data.duplicate()

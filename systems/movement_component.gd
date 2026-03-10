@@ -10,6 +10,7 @@ signal move_started(path: Array[Vector3])
 signal move_finished
 signal move_cancelled
 signal move_failed(target_pos: Vector3)
+signal movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int)
 
 @export var step_duration: float = 0.25
 
@@ -19,57 +20,66 @@ var _grid_movement: GridMovement = null
 var _owner_node: Node3D = null
 
 func _ready() -> void:
-    _navigator = GridNavigator.new()
-    _grid_movement = GridMovement.new()
-    _grid_movement.step_duration = step_duration
-    add_child(_grid_movement)
+	_navigator = GridNavigator.new()
+	_grid_movement = GridMovement.new()
+	_grid_movement.step_duration = step_duration
+	add_child(_grid_movement)
 
-    _grid_movement.movement_started.connect(_on_movement_started)
-    _grid_movement.movement_finished.connect(_on_movement_finished)
-    _grid_movement.movement_cancelled.connect(_on_movement_cancelled)
+	_grid_movement.movement_started.connect(_on_movement_started)
+	_grid_movement.movement_finished.connect(_on_movement_finished)
+	_grid_movement.movement_cancelled.connect(_on_movement_cancelled)
+	_grid_movement.step_completed.connect(_on_step_completed)
 
 func initialize(owner_node: Node3D, grid_world: GridWorld) -> void:
-    _owner_node = owner_node
-    _grid_world = grid_world
+	_owner_node = owner_node
+	_grid_world = grid_world
 
 func set_grid_world(grid_world: GridWorld) -> void:
-    _grid_world = grid_world
+	_grid_world = grid_world
 
 func move_to(world_pos: Vector3) -> bool:
-    if not _owner_node or not _grid_world or not _navigator or not _grid_movement:
-        move_failed.emit(world_pos)
-        return false
+	if not _owner_node or not _grid_world or not _navigator or not _grid_movement:
+		move_failed.emit(world_pos)
+		return false
 
-    var start_pos := _owner_node.global_position
-    var target_pos := world_pos
-    target_pos.y = start_pos.y
+	var start_pos := _owner_node.global_position
+	var target_pos := world_pos
+	target_pos.y = start_pos.y
 
-    var path := _navigator.find_path(start_pos, target_pos, _grid_world.is_walkable)
-    if path.is_empty():
-        move_failed.emit(target_pos)
-        return false
+	var path := _navigator.find_path(start_pos, target_pos, _grid_world.is_walkable)
+	if path.is_empty():
+		move_failed.emit(target_pos)
+		return false
 
-    for i in range(path.size()):
-        var point: Vector3 = path[i]
-        point.y = start_pos.y
-        path[i] = point
+	for i in range(path.size()):
+		var point: Vector3 = path[i]
+		point.y = start_pos.y
+		path[i] = point
 
-    move_requested.emit(target_pos)
-    _grid_movement.move_along_path(path, _owner_node)
-    return true
+	move_requested.emit(target_pos)
+	_grid_movement.move_along_path(path, _owner_node)
+	return true
 
 func cancel() -> void:
-    if _grid_movement:
-        _grid_movement.cancel_movement()
+	if _grid_movement:
+		_grid_movement.cancel_movement()
 
 func is_moving() -> bool:
-    return _grid_movement != null and _grid_movement.is_moving()
+	return _grid_movement != null and _grid_movement.is_moving()
 
 func _on_movement_started(path: Array[Vector3]) -> void:
-    move_started.emit(path)
+	move_started.emit(path)
 
 func _on_movement_finished() -> void:
-    move_finished.emit()
+	move_finished.emit()
 
 func _on_movement_cancelled() -> void:
-    move_cancelled.emit()
+	move_cancelled.emit()
+
+func _on_step_completed(world_pos: Vector3, step_index: int, total_steps: int) -> void:
+	var grid_pos := Vector3i.ZERO
+	if _grid_world:
+		grid_pos = _grid_world.world_to_grid(world_pos)
+	else:
+		grid_pos = GridMovementSystem.world_to_grid(world_pos)
+	movement_step_completed.emit(grid_pos, world_pos, step_index, total_steps)

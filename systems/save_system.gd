@@ -139,6 +139,8 @@ func save_game():
 	var gs = get_node("/root/GameState")
 	if not gs:
 		return false
+	var equip_system = gs.get_equipment_system()
+	var equip_data: Dictionary = equip_system.get_save_data() if equip_system else gs.get_pending_equipment_save_data()
 	
 	var save_data = {
 		"player": {
@@ -154,11 +156,13 @@ func save_game():
 			"items": gs.inventory_items.duplicate(),
 			"max_slots": gs.inventory_max_slots
 		},
+		"equipment": equip_data,
 		"world": {
 			"time": gs.world_time,
 			"day": gs.world_day,
 			"weather": gs.world_weather,
-			"unlocked_locations": gs.world_unlocked_locations.duplicate()
+			"unlocked_locations": gs.world_unlocked_locations.duplicate(),
+			"fog_of_war_by_map": gs.fog_of_war_by_map.duplicate(true)
 		},
 		"timestamp": Time.get_unix_time_from_system()
 	}
@@ -222,6 +226,14 @@ func load_game(path: String = ""):
 		for item in loaded_items:
 			gs.inventory_items.append(item)
 		gs.inventory_max_slots = inv.get("max_slots", 20)
+
+	# 恢复装备
+	if data.has("equipment"):
+		var equip_system = gs.get_equipment_system()
+		if equip_system:
+			equip_system.load_save_data(data.equipment)
+		else:
+			gs.set_pending_equipment_save_data(data.equipment)
 	
 	# 恢复世界状"	if data.has("world"):
 		var w = data.world
@@ -232,6 +244,7 @@ func load_game(path: String = ""):
 		var loaded_locations = w.get("unlocked_locations", ["safehouse"])
 		for location in loaded_locations:
 			gs.world_unlocked_locations.append(location)
+		gs.fog_of_war_by_map = w.get("fog_of_war_by_map", {})
 	
 	EventBus.emit(EventBus.EventType.GAME_LOADED, {})
 	return true

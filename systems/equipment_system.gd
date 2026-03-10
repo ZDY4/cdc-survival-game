@@ -1,23 +1,19 @@
 extends Node
-# EquipmentSystem - 装备系统
-# 管理装备槽位、属性加成、耐久度
+# EquipmentSystem - 统一装备系统
+# 合并武器和装备，支持10个槽位
 
-signal equipment_equipped(slot: String, item_id: String, item_data: Dictionary)
-signal equipment_unequipped(slot: String, item_id: String)
-signal equipment_broken(slot: String, item_id: String)
-signal equipment_damaged(slot: String, durability_percent: float)
-signal stats_changed()
-
-# ===== 装备槽位 =====
+# 装备槽位枚举
 enum EquipmentSlot {
-	HEAD,      # 头部
-	BODY,      # 身体/护甲
-	HANDS,     # 手部/手套
-	LEGS,      # 腿部/裤子
-	FEET,      # 脚部/鞋子
-	BACK,      # 背部/背包
-	ACCESSORY_1,  # 饰品1
-	ACCESSORY_2   # 饰品2
+	HEAD,       # 头部
+	BODY,       # 身体
+	HANDS,      # 手部
+	LEGS,       # 腿部
+	FEET,       # 脚部
+	BACK,       # 背部
+	MAIN_HAND,  # 主手（武器）
+	OFF_HAND,   # 副手（武器/盾牌）
+	ACCESSORY_1,# 饰品1
+	ACCESSORY_2 # 饰品2
 }
 
 const SLOT_NAMES = {
@@ -27,461 +23,314 @@ const SLOT_NAMES = {
 	"legs": "腿部",
 	"feet": "脚部",
 	"back": "背部",
+	"main_hand": "主手",
+	"off_hand": "副手",
 	"accessory_1": "饰品1",
 	"accessory_2": "饰品2"
 }
+# ===== 信号 =====
+signal item_equipped(slot: String, item_id: String)
+signal item_unequipped(slot: String, item_id: String)
+signal item_broken(slot: String, item_id: String)
+signal durability_changed(slot: String, durability_percent: float)
+signal ammo_changed(ammo_type: String, current: int, max_ammo: int)
 
-# ===== 装备数据=====
-const EQUIPMENT = {
-	# === 头部装备 ===
-	"helmet_makeshift": {
-		"name": "简易头盔",
-		"description": "用废金属拼凑的防护头盔",
-		"slot": "head",
-		"rarity": "common",
-		"weight": 1.5,
-		"stats": {
-			"defense": 2,
-			"insulation": 0.1
-		},
-		"durability": 30,
-		"max_durability": 30,
-		"special_effects": [],
-		"required_level": 1,
-		"repair_materials": [{"item": "scrap_metal", "count": 2}]
-	},
-	
-	"helmet_military": {
-		"name": "军用头盔",
-		"description": "标准军用装备，提供良好防护",
-		"slot": "head",
-		"rarity": "rare",
-		"stats": {
-			"defense": 5,
-			"insulation": 0.2,
-			"headshot_protection": 0.5  # 50%概率免疫爆头
-		},
-		"durability": 60,
-		"max_durability": 60,
-		"special_effects": ["headshot_protection"],
-		"required_level": 3,
-		"repair_materials": [{"item": "scrap_metal", "count": 4}]
-	},
-	
-	"helmet_advanced": {
-		"name": "战术头盔",
-		"description": "配备夜视仪接口的高级头盔",
-		"slot": "head",
-		"rarity": "epic",
-		"stats": {
-			"defense": 8,
-			"insulation": 0.3,
-			"accuracy": 10,
-			"night_vision": true
-		},
-		"durability": 80,
-		"max_durability": 80,
-		"special_effects": ["night_vision", "accuracy_bonus"],
-		"required_level": 5,
-		"repair_materials": [{"item": "scrap_metal", "count": 6}, {"item": "component_electronic", "count": 2}]
-	},
-	
-	# === 身体装备 ===
-	"armor_cloth": {
-		"name": "布衣",
-		"description": "普通的旧衣服，几乎没有防护",
-		"slot": "body",
-		"rarity": "common",
-		"stats": {
-			"defense": 1,
-			"insulation": 0.1
-		},
-		"durability": 20,
-		"max_durability": 20,
-		"special_effects": [],
-		"required_level": 0,
-		"repair_materials": [{"item": "cloth", "count": 2}]
-	},
-	
-	"armor_leather": {
-		"name": "皮夹克",
-		"description": "结实的皮夹克，提供基础防护",
-		"slot": "body",
-		"rarity": "common",
-		"stats": {
-			"defense": 3,
-			"insulation": 0.3
-		},
-		"durability": 40,
-		"max_durability": 40,
-		"special_effects": [],
-		"required_level": 1,
-		"repair_materials": [{"item": "cloth", "count": 3}]
-	},
-	
-	"armor_metal": {
-		"name": "金属护甲",
-		"description": "用废金属片制成的护甲",
-		"slot": "body",
-		"rarity": "uncommon",
-		"stats": {
-			"defense": 6,
-			"insulation": 0.2,
-			"speed_penalty": 0.1  # 移动速度-10%
-		},
-		"durability": 60,
-		"max_durability": 60,
-		"special_effects": [],
-		"required_level": 2,
-		"repair_materials": [{"item": "scrap_metal", "count": 5}]
-	},
-	
-	"armor_tactical": {
-		"name": "战术背心",
-		"description": "军用战术背心，轻便而坚固",
-		"slot": "body",
-		"rarity": "rare",
-		"stats": {
-			"defense": 10,
-			"insulation": 0.2,
-			"ammo_capacity": 20  # 额外弹药容量
-		},
-		"durability": 80,
-		"max_durability": 80,
-		"special_effects": ["ammo_capacity"],
-		"required_level": 4,
-		"repair_materials": [{"item": "scrap_metal", "count": 6}, {"item": "cloth", "count": 3}]
-	},
-	
-	"armor_heavy": {
-		"name": "重型护甲",
-		"description": "全身重型护甲，防护极佳但行动不便",
-		"slot": "body",
-		"rarity": "epic",
-		"stats": {
-			"defense": 15,
-			"insulation": 0.4,
-			"speed_penalty": 0.2,
-			"damage_reduction": 0.25  # 25%伤害减免
-		},
-		"durability": 100,
-		"max_durability": 100,
-		"special_effects": ["damage_reduction"],
-		"required_level": 6,
-		"repair_materials": [{"item": "scrap_metal", "count": 10}, {"item": "component_electronic", "count": 2}]
-	},
-	
-	"armor_hazmat": {
-		"name": "防化服",
-		"description": "防护化学污染和辐射",
-		"slot": "body",
-		"rarity": "rare",
-		"stats": {
-			"defense": 4,
-			"insulation": 0.5,
-			"			radiation_resistance": 0.8,  # 80%辐射抗性
-			"disease_resistance": 0.5
-		},
-		"durability": 50,
-		"max_durability": 50,
-		"special_effects": ["radiation_resistance", "disease_resistance"],
-		"required_level": 4,
-		"repair_materials": [{"item": "cloth", "count": 5}, {"item": "antiseptic", "count": 1}]
-	},
-	
-	# === 手部装备 ===
-	"gloves_leather": {
-		"name": "皮手套",
-		"description": "保护双手的基础手套",
-		"slot": "hands",
-		"rarity": "common",
-		"stats": {
-			"defense": 1,
-			"insulation": 0.1
-		},
-		"durability": 25,
-		"max_durability": 25,
-		"special_effects": [],
-		"required_level": 1,
-		"repair_materials": [{"item": "cloth", "count": 2}]
-	},
-	
-	"gloves_tactical": {
-		"name": "战术手套",
-		"description": "提升武器操作精度",
-		"slot": "hands",
-		"rarity": "uncommon",
-		"stats": {
-			"defense": 2,
-			"accuracy": 5,
-			"reload_speed": 0.2  # 装填速度+20%
-		},
-		"durability": 40,
-		"max_durability": 40,
-		"special_effects": ["reload_speed"],
-		"required_level": 3,
-		"repair_materials": [{"item": "cloth", "count": 3}, {"item": "scrap_metal", "count": 1}]
-	},
-	
-	"gloves_power": {
-		"name": "动力手套",
-		"description": "增强力量，提升近战伤害",
-		"slot": "hands",
-		"rarity": "rare",
-		"stats": {
-			"defense": 3,
-			"melee_damage": 0.15  # 近战伤害+15%
-		},
-		"durability": 50,
-		"max_durability": 50,
-		"special_effects": ["melee_damage"],
-		"required_level": 4,
-		"repair_materials": [{"item": "scrap_metal", "count": 4}, {"item": "component_electronic", "count": 2}]
-	},
-	
-	# === 腿部装备 ===
-	"pants_jeans": {
-		"name": "牛仔裤",
-		"description": "普通的牛仔裤",
-		"slot": "legs",
-		"rarity": "common",
-		"stats": {
-			"defense": 1,
-			"insulation": 0.1
-		},
-		"durability": 20,
-		"max_durability": 20,
-		"special_effects": [],
-		"required_level": 0,
-		"repair_materials": [{"item": "cloth", "count": 2}]
-	},
-	
-	"pants_tactical": {
-		"name": "战术裤",
-		"description": "带多个口袋的战术裤",
-		"slot": "legs",
-		"rarity": "uncommon",
-		"stats": {
-			"defense": 3,
-			"insulation": 0.2,
-			"inventory_slots": 2  # 额外背包格子
-		},
-		"durability": 45,
-		"max_durability": 45,
-		"special_effects": ["inventory_bonus"],
-		"required_level": 2,
-		"repair_materials": [{"item": "cloth", "count": 4}]
-	},
-	
-	# === 脚部装备 ===
-	"shoes_sneakers": {
-		"name": "运动鞋",
-		"description": "舒适的运动鞋",
-		"slot": "feet",
-		"rarity": "common",
-		"stats": {
-			"defense": 1,
-			"speed_bonus": 0.1  # 移动速度+10%
-		},
-		"durability": 25,
-		"max_durability": 25,
-		"special_effects": [],
-		"required_level": 1,
-		"repair_materials": [{"item": "cloth", "count": 2}]
-	},
-	
-	"boots_combat": {
-		"name": "战斗靴",
-		"description": "坚固的军靴",
-		"slot": "feet",
-		"rarity": "uncommon",
-		"stats": {
-			"defense": 3,
-			"insulation": 0.2,
-			"stamina_efficiency": 0.15  # 体力消耗15%
-		},
-		"durability": 50,
-		"max_durability": 50,
-		"special_effects": ["stamina_efficiency"],
-		"required_level": 2,
-		"repair_materials": [{"item": "cloth", "count": 3}, {"item": "scrap_metal", "count": 1}]
-	},
-	
-	"boots_advanced": {
-		"name": "战术裤",
-		"description": "高科技战术靴，静音且舒",
-		"slot": "feet",
-		"rarity": "rare",
-		"stats": {
-			"defense": 4,
-			"speed_bonus": 0.15,
-			"noise_reduction": 0.5,  # 移动噪音-50%
-			"stamina_efficiency": 0.2
-		},
-		"durability": 60,
-		"max_durability": 60,
-		"special_effects": ["noise_reduction", "stamina_efficiency"],
-		"required_level": 4,
-		"repair_materials": [{"item": "cloth", "count": 4}, {"item": "component_electronic", "count": 1}]
-	},
-	
-	# === 背部装备 ===
-	"backpack_small": {
-		"name": "小背包",
-		"description": "简易布袋，增加负重能力",
-		"slot": "back",
-		"rarity": "common",
-		"weight": 0.5,
-		"stats": {},
-		"carry_bonus": 5.0,  # +5kg负重
-		"durability": 30,
-		"max_durability": 30,
-		"special_effects": [],
-		"required_level": 1,
-		"repair_materials": [{"item": "cloth", "count": 3}]
-	},
-	
-	"backpack_medium": {
-		"name": "中背包",
-		"description": "登山包，大幅增加负重能力",
-		"slot": "back",
-		"rarity": "uncommon",
-		"weight": 1.2,
-		"stats": {},
-		"carry_bonus": 10.0,  # +10kg负重
-		"durability": 50,
-		"max_durability": 50,
-		"special_effects": [],
-		"required_level": 2,
-		"repair_materials": [{"item": "cloth", "count": 5}]
-	},
-	
-	"backpack_large": {
-		"name": "大背包",
-		"description": "军用级背包，极大增加负重能力",
-		"slot": "back",
-		"rarity": "rare",
-		"weight": 2.0,
-		"stats": {},
-		"carry_bonus": 20.0,  # +20kg负重
-		"durability": 70,
-		"max_durability": 70,
-		"special_effects": [],
-		"required_level": 4,
-		"repair_materials": [{"item": "cloth", "count": 7}, {"item": "scrap_metal", "count": 2}]
-	},
-	
-	# === 饰品 ===
-	"ring_luck": {
-		"name": "幸运戒指",
-		"description": "暴击率5%",
-		"slot": "accessory",
-		"rarity": "rare",
-		"stats": {
-			"crit_chance": 0.05
-		},
-		"durability": -1,  # 饰品不消耗耐久
-		"max_durability": -1,
-		"special_effects": ["crit_chance"],
-		"required_level": 3,
-		"repair_materials": []
-	},
-	
-	"amulet_health": {
-		"name": "生命护符",
-		"description": "最大生命值20",
-		"slot": "accessory",
-		"rarity": "rare",
-		"stats": {
-			"max_hp": 20
-		},
-		"durability": -1,
-		"max_durability": -1,
-		"special_effects": ["max_hp"],
-		"required_level": 3,
-		"repair_materials": []
-	},
-	
-	"watch_survival": {
-		"name": "生存手表",
-		"description": "显示更多生存信息",
-		"slot": "accessory",
-		"rarity": "epic",
-		"stats": {
-			"hunger_efficiency": 0.1,  # 饥饿消耗10%
-			"thirst_efficiency": 0.1   # 口渴消耗10%
-		},
-		"durability": -1,
-		"max_durability": -1,
-		"special_effects": ["survival_info"],
-		"required_level": 5,
-		"repair_materials": []
-	}
+var _equipped_items: Dictionary = {
+	"head": null,
+	"body": null,
+	"hands": null,
+	"legs": null,
+	"feet": null,
+	"back": null,
+	"main_hand": null,
+	"off_hand": null,
+	"accessory_1": null,
+	"accessory_2": null
 }
-
-# ===== 当前装备 =====
-var equipped_items: Dictionary = {}  # slot -> {id, durability, data}
-var equipment_inventory: Array[Dictionary] = []  # 拥有的装备
+var _item_instances: Dictionary = {}
 
 func _ready():
+	if GameState:
+		GameState.set_equipment_system(self)
 	print("[EquipmentSystem] 装备系统已初始化")
-	# 初始化装备槽位
-	for slot in SLOT_NAMES.keys():
-		equipped_items[slot] = null
+	var loaded_from_save = false
+	if GameState:
+		var pending_save = GameState.consume_pending_equipment_save_data()
+		if not pending_save.is_empty():
+			load_save_data(pending_save)
+			loaded_from_save = true
+	
+	if not loaded_from_save:
+		# 确保主手有默认武器
+		if not _equipped_items.main_hand:
+			_equip_item_internal("main_hand", "1001")
+		
+		if GameState:
+			var pending_ammo = GameState.consume_pending_ammo()
+			for entry in pending_ammo:
+				add_ammo(str(entry.ammo_type), int(entry.count))
+			
+			var pending_equips = GameState.consume_pending_equips()
+			for entry in pending_equips:
+				equip(str(entry.item_id), str(entry.slot))
 
-# 装备物品
-func equip(item_id: String):
-	if not EQUIPMENT.has(item_id):
-		push_error("Equipment not found: " + item_id)
-		return false
-	
-	var item_data = EQUIPMENT[item_id]
-	var slot = item_data.slot
-	
-	# 检查等级
-	var player_level = _get_player_level()
-	if player_level < item_data.required_level:
-		print("[Equipment] Level too low")
-		return false
-	
-	# 检查是否拥有
-	if not _has_equipment(item_id):
-		print("[Equipment] Don't have equipment: " + item_id)
-		return false
-	
-	# 如果该槽位已有装备，先卸下
-	if equipped_items[slot] != null:
-		unequip(slot)
-	
-	# 找到背包中的装备并装备
-	for item in equipment_inventory:
-		if item.id == item_id:
-			equipped_items[slot] = item.duplicate()
-			equipment_equipped.emit(slot, item_id, item_data)
-			print("[Equipment] Equipped: " + item_data.name + " to " + SLOT_NAMES[slot])
-			_update_stats()
-			return true
-	
-	return false
+# ===== 核心接口 =====
 
-# 卸下装备
+## 装备物品
+func equip(item_id: String, slot: String = ""):
+	var resolved_id = ItemDatabase.resolve_item_id(item_id)
+	if not ItemDatabase.has_item(resolved_id):
+		print("[Equipment] 物品不存在: " + item_id)
+		return false
+	
+	var item_data = ItemDatabase.get_item(resolved_id)
+	var target_slot = slot if slot != "" else item_data.slot
+	
+	# 检查槽位是否匹配
+	if item_data.slot != target_slot && not _is_compatible_slot(item_data.slot, target_slot):
+		print("[Equipment] 物品不能装备到该槽位: " + item_id + " -> " + target_slot)
+		return false
+	
+	# 检查等级要求
+	var required_level = item_data.get("level_requirement", item_data.get("required_level", 0))
+	if required_level > _get_player_level():
+		print("[Equipment] 等级不足")
+		return false
+
+	# 检查是否拥有（拳头例外）
+	if resolved_id != "1001":
+		if not InventoryModule.has_item(item_id) and not InventoryModule.has_item(resolved_id):
+			print("[Equipment] 没有该物品: " + item_id)
+			return false
+	
+	# 卸下当前装备
+	if _equipped_items[target_slot]:
+		unequip(target_slot)
+	
+	# 装备新物品
+	return _equip_item_internal(target_slot, resolved_id)
+
+## 卸下装备
 func unequip(slot: String):
-	if equipped_items[slot] == null:
+	if not _equipped_items.has(slot):
 		return false
 	
-	var item = equipped_items[slot]
-	var item_data = EQUIPMENT[item.id]
+	var current_id = _equipped_items[slot]
+	if not current_id:
+		return true  # 本来就没有装备
 	
-	equipped_items[slot] = null
-	equipment_unequipped.emit(slot, item.id)
-	print("[Equipment] Unequipped: " + item_data.name)
-	_update_stats()
+	# 如果是主手武器，切换到拳头
+	if slot == "main_hand":
+		_equip_item_internal("main_hand", "1001")
+	else:
+		_equipped_items[slot] = null
+	
+	item_unequipped.emit(slot, current_id)
+	print("[Equipment] 卸下: " + current_id + " from " + slot)
+	_apply_stats_to_game_state()
 	return true
 
-# 获取装备属性总和
-func get_total_stats():
-	var totals = {
+## 获取当前装备
+func get_equipped(slot: String):
+	return _equipped_items.get(slot, "")
+
+## 兼容旧接口
+func get_equipped_item(slot: String):
+	return get_equipped(slot)
+
+## 获取装备数据
+func get_item_data(item_id: String):
+	return ItemDatabase.get_item(item_id)
+
+## 获取槽位中的完整数据
+func get_equipped_data(slot: String):
+	var item_id = _equipped_items.get(slot, "")
+	if not item_id:
+		return {}
+	
+	var base_data = ItemDatabase.get_item(item_id).duplicate()
+	base_data.id = item_id
+	
+	# 添加实例数据（耐久等）
+	if _item_instances.has(item_id):
+		base_data.current_durability = _item_instances[item_id].durability
+	
+	return base_data
+
+# ===== 战斗属性计算 =====
+
+## 计算战斗属性
+func calculate_combat_stats():
+	var stats = {
+		"damage": 0,
+		"attack_speed": 1.0,
+		"range": 1,
 		"defense": 0,
+		"crit_chance": 0.05,
+		"crit_multiplier": 1.5,
+		"stamina_cost": 0,
+		"carry_bonus": 0.0
+	}
+	
+	# 主手武器
+	var main_hand_data = get_equipped_data("main_hand")
+	if main_hand_data && main_hand_data.get("type") == "weapon":
+		var weapon = main_hand_data.get("weapon_data", {})
+		stats.damage = weapon.get("damage", 0)
+		stats.attack_speed = weapon.get("attack_speed", 1.0)
+		stats.range = weapon.get("range", 1)
+		stats.crit_chance = weapon.get("crit_chance", 0.05)
+		stats.crit_multiplier = weapon.get("crit_multiplier", 1.5)
+		stats.stamina_cost = weapon.get("stamina_cost", 0)
+	
+	# 防具加成
+	for slot in _equipped_items.keys():
+		var item_data = get_equipped_data(slot)
+		if item_data && item_data.size() > 0:
+			var bonuses = _get_attributes_bonus(item_data)
+			stats.defense += bonuses.get("defense", 0)
+
+	stats.carry_bonus = calculate_carry_bonus()
+	
+	return stats
+
+## 计算总负重
+func calculate_total_weight():
+	var total = 0.0
+	for slot in _equipped_items.keys():
+		var item_id = _equipped_items[slot]
+		if item_id && ItemDatabase.has_item(item_id):
+			total += ItemDatabase.get_item_weight(item_id)
+	return total
+
+## 计算负重加成
+func calculate_carry_bonus():
+	var bonus = 0.0
+	
+	for slot in _equipped_items.keys():
+		var item_data = get_equipped_data(slot)
+		if item_data && item_data.size() > 0:
+			var bonuses = _get_attributes_bonus(item_data)
+			bonus += bonuses.get("carry_bonus", 0.0)
+	
+	return bonus
+
+# ===== 耐久度系统 =====
+
+## 消耗耐久
+func consume_durability(slot: String, amount: int = 1):
+	var item_id = _equipped_items.get(slot, "")
+	if not item_id || not _item_instances.has(item_id):
+		return
+	
+	var instance = _item_instances[item_id]
+	instance.durability = maxi(0, instance.durability - amount)
+	
+	var max_dur = ItemDatabase.get_max_durability(item_id)
+	if max_dur <= 0:
+		return
+	var percent = float(instance.durability) / max_dur
+	durability_changed.emit(slot, percent)
+	
+	if instance.durability <= 0:
+		_item_broken(slot, item_id)
+
+## 修复装备
+func repair(slot: String):
+	var item_id = _equipped_items.get(slot, "")
+	if not item_id:
+		return false
+	
+	var item_data = ItemDatabase.get_item(item_id)
+	var repair_materials = item_data.get("repair_materials", [])
+	var max_durability = ItemDatabase.get_max_durability(item_id)
+	
+	# 检查材料
+	for material in repair_materials:
+		var material_id = ItemDatabase.resolve_item_id(material.item)
+		if not InventoryModule.has_item(material.item, material.count) and not InventoryModule.has_item(material_id, material.count):
+			return false
+	
+	# 消耗材料
+	for material in repair_materials:
+		var material_id = ItemDatabase.resolve_item_id(material.item)
+		if InventoryModule.has_item(material.item, material.count):
+			InventoryModule.remove_item(material.item, material.count)
+		else:
+			InventoryModule.remove_item(material_id, material.count)
+	
+	# 恢复耐久
+	if not _item_instances.has(item_id):
+		_item_instances[item_id] = {"durability": max_durability}
+	else:
+		_item_instances[item_id].durability = max_durability
+	
+	print("[Equipment] 修复: " + item_id)
+	return true
+
+## 修复指定物品（不要求已装备）
+func repair_item(item_id: String):
+	var resolved_id = ItemDatabase.resolve_item_id(item_id)
+	if not ItemDatabase.has_item(resolved_id):
+		return false
+	var item_data = ItemDatabase.get_item(resolved_id)
+	var repair_materials = item_data.get("repair_materials", [])
+	var max_durability = ItemDatabase.get_max_durability(resolved_id)
+	
+	for material in repair_materials:
+		var material_id = ItemDatabase.resolve_item_id(material.item)
+		if not InventoryModule.has_item(material.item, material.count) and not InventoryModule.has_item(material_id, material.count):
+			return false
+	
+	for material in repair_materials:
+		var material_id = ItemDatabase.resolve_item_id(material.item)
+		if InventoryModule.has_item(material.item, material.count):
+			InventoryModule.remove_item(material.item, material.count)
+		else:
+			InventoryModule.remove_item(material_id, material.count)
+	
+	_item_instances[resolved_id] = {"durability": max_durability}
+	return true
+
+# ===== 弹药系统 =====
+
+## 当前弹药
+var _current_ammo: Dictionary = {
+	"1009": 0,   # ammo_pistol
+	"1021": 0,   # ammo_shotgun
+	"1022": 0,   # ammo_rifle
+	"1023": 999  # stone 无限
+}
+
+## 添加弹药
+func add_ammo(ammo_type: String, count: int = 1):
+	var resolved = ItemDatabase.resolve_item_id(ammo_type)
+	_current_ammo[resolved] = _current_ammo.get(resolved, 0) + count
+	var max_ammo = _get_max_ammo_capacity(resolved)
+	ammo_changed.emit(resolved, _current_ammo[resolved], max_ammo)
+
+## 消耗弹药
+func consume_ammo(ammo_type: String, count: int = 1):
+	var resolved = ItemDatabase.resolve_item_id(ammo_type)
+	if _current_ammo.get(resolved, 0) >= count:
+		_current_ammo[resolved] -= count
+		var max_ammo = _get_max_ammo_capacity(resolved)
+		ammo_changed.emit(resolved, _current_ammo[resolved], max_ammo)
+		return true
+	return false
+
+## 获取当前弹药
+func get_ammo(ammo_type: String):
+	var resolved = ItemDatabase.resolve_item_id(ammo_type)
+	return _current_ammo.get(resolved, 0)
+
+## 获取总属性
+func get_total_stats():
+	var stats = {
+		"damage": 0,
+		"defense": 0,
+		"damage_reduction": 0.0,
+		"carry_bonus": 0.0,
 		"insulation": 0.0,
 		"speed_bonus": 0.0,
 		"speed_penalty": 0.0,
@@ -495,237 +344,199 @@ func get_total_stats():
 		"stamina_efficiency": 0.0,
 		"hunger_efficiency": 0.0,
 		"thirst_efficiency": 0.0,
-		"damage_reduction": 0.0,
 		"headshot_protection": 0.0,
 		"noise_reduction": 0.0,
-		"reload_speed": 0.0
+		"reload_speed": 0.0,
+		"ammo_capacity": 0.0
 	}
 	
-	for slot in equipped_items.keys():
-		var equipped = equipped_items[slot]
-		if equipped == null:
-			continue
-		
-		var item_data = EQUIPMENT[equipped.id]
-		var stats = item_data.stats
-		
-		# 累加所有属性
-		for stat_name in totals.keys():
-			if stats.has(stat_name):
-				totals[stat_name] += stats[stat_name]
+	# 主手武器伤害
+	var main_hand_data = get_equipped_data("main_hand")
+	if main_hand_data && main_hand_data.get("type") == "weapon":
+		stats.damage = main_hand_data.get("weapon_data", {}).get("damage", 0)
 	
-	return totals
+	# 防具加成
+	for slot in _equipped_items.keys():
+		var item_data = get_equipped_data(slot)
+		if item_data && item_data.size() > 0:
+			var bonuses = _get_attributes_bonus(item_data)
+			for key in bonuses.keys():
+				if stats.has(key):
+					stats[key] += bonuses[key]
+	
+	# 负重加成
+	stats.carry_bonus = calculate_carry_bonus()
+	
+	return stats
 
-# 更新玩家属性
-func _update_stats(level: int = 1):
-	var stats = get_total_stats()
-	
-	# 应用到GameState
-	# 防御力影响伤害减免
-	GameState.player_defense = stats.defense
-	
-	# 背包容量
-	GameState.inventory_max_slots = 20 + stats.inventory_slots
-	
-	# 最大生命值
-	GameState.player_max_hp = 100 + stats.max_hp
-	
-	stats_changed.emit()
-
-# 受到伤害时减少装备耐久
+## 当受到伤害时（消耗装备耐久）
 func on_damage_taken(damage: int):
-	for slot in equipped_items.keys():
-		var equipped = equipped_items[slot]
-		if equipped == null:
-			continue
-		
-		var item_data = EQUIPMENT[equipped.id]
-		if item_data.durability <= 0:  # 饰品不消耗耐久
-			continue
-		
-		# 根据伤害减少耐久
-		var durability_loss = maxi(1, damage / 10)
-		equipped.durability = maxi(0, equipped.durability - durability_loss)
-		
-		var durability_percent = float(equipped.durability) / item_data.max_durability
-		equipment_damaged.emit(slot, durability_percent)
-		
-		if equipped.durability <= 0:
-			equipment_broken.emit(slot, equipped.id)
-			DialogModule.show_dialog(
-				"你的 %s 损坏了！" % item_data.name,
-				"装备",
-				""
-			)
-			unequip(slot)
+	var slots = ["head", "body", "hands", "legs", "feet"]
+	for slot in slots:
+		if _equipped_items.get(slot):
+			var durability_loss = int(damage * 0.1)  # 10%伤害转化为耐久损失
+			if durability_loss > 0:
+				consume_durability(slot, durability_loss)
 
-# 修复装备
-func repair_equipment(item_id: String):
-	if not _has_equipment(item_id):
-		return false
+## 装填弹药
+func reload_weapon():
+	var main_hand = get_equipped_data("main_hand")
+	if not main_hand || main_hand.get("type") != "weapon":
+		return {"success": false, "message": "没有装备武器"}
 	
-	var item_data = EQUIPMENT[item_id]
-	var repair_materials = item_data.get("repair_materials", [])
+	var weapon_data = main_hand.get("weapon_data", {})
+	var ammo_type = ItemDatabase.resolve_item_id(str(weapon_data.get("ammo_type", "")))
 	
-	# 检查材料
-	for material in repair_materials:
-		if not InventoryModule.has_item(material.item, material.count):
-			return false
+	if not ammo_type:
+		return {"success": false, "message": "不需要弹药"}
 	
-	# 消耗材料
-	for material in repair_materials:
-		InventoryModule.remove_item(material.item, material.count)
+	var max_ammo = weapon_data.get("max_ammo", 0)
+	var current_ammo = _current_ammo.get(ammo_type, 0)
 	
-	# 修复耐久
-	for item in equipment_inventory:
-		if item.id == item_id:
-			item.durability = item_data.max_durability
-			
-			# 如果当前装备着，更新equipped_items
-			for slot in equipped_items.keys():
-				if equipped_items[slot] != null && equipped_items[slot].id == item_id:
-					equipped_items[slot].durability = item_data.max_durability
-			
-			return true
+	if current_ammo <= 0:
+		return {"success": false, "message": "没有弹药"}
 	
-	return false
+	var to_load = mini(current_ammo, max_ammo)
+	_current_ammo[ammo_type] -= to_load
+	
+	# 这里应该跟踪武器中的弹药，简化处理
+	ammo_changed.emit(ammo_type, _current_ammo[ammo_type], max_ammo)
+	
+	return {"success": true, "ammo_loaded": to_load}
 
-# 添加装备到背包
-func add_equipment(item_id: String):
-	if not EQUIPMENT.has(item_id):
-		return false
+# ===== 私有方法 =====
+
+func _equip_item_internal(slot: String, item_id: String):
+	_equipped_items[slot] = item_id
 	
-	# 如果已有，修复耐久
-	if _has_equipment(item_id):
-		repair_equipment(item_id)
-		return true
+	# 初始化实例数据
+	if not _item_instances.has(item_id):
+		var max_dur = ItemDatabase.get_max_durability(item_id)
+		_item_instances[item_id] = {
+			"durability": max_dur if max_dur > 0 else -1,
+			"enhancements": []
+		}
 	
-	var item_data = EQUIPMENT[item_id]
-	var new_item = {
-		"id": item_id,
-		"durability": item_data.max_durability,
-		"enhancements": []
-	}
+	item_equipped.emit(slot, item_id)
+	print("[Equipment] 装备: " + item_id + " to " + slot)
 	
-	equipment_inventory.append(new_item)
-	print("[Equipment] Added: " + item_data.name)
+	# 更新负重系统
+	if CarrySystem:
+		CarrySystem.on_equipment_changed()
+	_apply_stats_to_game_state()
+	
 	return true
 
-# 检查是否拥有装备
-func _has_equipment(item_id: String):
-	for item in equipment_inventory:
-		if item.id == item_id:
-			return true
-	return false
+func _is_compatible_slot(item_slot: String, target_slot: String):
+	# 武器可以装备到主手或副手
+	if item_slot == "main_hand" && target_slot in ["main_hand", "off_hand"]:
+		return true
+	# 饰品可以装备到饰品槽
+	if item_slot == "accessory" && target_slot in ["accessory_1", "accessory_2"]:
+		return true
+	return item_slot == target_slot
 
-# 获取某槽位的装备
-func get_equipped_in_slot(slot: String):
-	if equipped_items.has(slot) && equipped_items[slot] != null:
-		var item = equipped_items[slot]
-		var item_data = EQUIPMENT[item.id]
-		return {
-			"id": item.id,
-			"name": item_data.name,
-			"durability": item.durability,
-			"max_durability": item_data.max_durability,
-			"stats": item_data.stats
-		}
-	return {}
+func _item_broken(slot: String, item_id: String):
+	item_broken.emit(slot, item_id)
+	print("[Equipment] 装备损坏: " + item_id)
+	# 卸下损坏的装备
+	unequip(slot)
 
-# 获取所有已装备
-func get_all_equipped():
-	var result = {}
-	for slot in equipped_items.keys():
-		var equipped = get_equipped_in_slot(slot)
-		if not equipped.is_empty():
-			result[slot] = equipped
-	return result
-
-# 获取装备列表
-func get_equipment_inventory() -> Array[Dictionary]:
-	var result = []
-	for item in equipment_inventory:
-		var item_data = EQUIPMENT[item.id]
-		result.append({
-			"id": item.id,
-			"name": item_data.name,
-			"slot": item_data.slot,
-			"durability": item.durability,
-			"max_durability": item_data.max_durability,
-			"rarity": item_data.rarity,
-			"is_equipped": _is_equipped(item.id)
-		})
-	return result
-
-func _is_equipped(item_id: String):
-	for slot in equipped_items.keys():
-		if equipped_items[slot] != null && equipped_items[slot].id == item_id:
-			return true
-	return false
-
-# 辅助方法
 func _get_player_level():
+	# 简化实现
 	return 1
 
-# 保存/加载
+func _get_max_ammo_capacity(ammo_type: String):
+	var main_hand = get_equipped_data("main_hand")
+	if main_hand && main_hand.get("type") == "weapon":
+		var weapon_ammo = ItemDatabase.resolve_item_id(str(main_hand.get("weapon_data", {}).get("ammo_type", "")))
+		if weapon_ammo == ammo_type:
+			return main_hand.get("weapon_data", {}).get("max_ammo", 0)
+	return 0
+
+func _get_attributes_bonus(item_data: Dictionary) -> Dictionary:
+	if item_data.has("attributes_bonus") and item_data.attributes_bonus is Dictionary:
+		return item_data.attributes_bonus
+	if item_data.has("armor_data") and item_data.armor_data is Dictionary:
+		return item_data.armor_data
+	return {}
+
+func _apply_stats_to_game_state():
+	var stats = get_total_stats()
+	if GameState:
+		GameState.player_defense = int(stats.get("defense", 0))
+		GameState.inventory_max_slots = 20 + int(stats.get("inventory_slots", 0))
+		var old_max = GameState.player_max_hp
+		GameState.player_max_hp = 100 + int(stats.get("max_hp", 0))
+		if GameState.player_max_hp > 0:
+			GameState.player_hp = mini(GameState.player_hp, GameState.player_max_hp)
+
+# ===== 存档接口 =====
+
 func get_save_data():
 	return {
-		"equipped_items": equipped_items,
-		"equipment_inventory": equipment_inventory
+		"equipped_items": _equipped_items.duplicate(),
+		"item_instances": _item_instances.duplicate(),
+		"current_ammo": _current_ammo.duplicate()
 	}
 
 func load_save_data(data: Dictionary):
-	equipped_items = data.get("equipped_items", {})
-	equipment_inventory = data.get("equipment_inventory", [])
-	_update_stats()
-	print("[EquipmentSystem] Loaded save data")
+	_equipped_items = data.get("equipped_items", _equipped_items)
+	_item_instances = data.get("item_instances", {})
+	var loaded_ammo: Dictionary = data.get("current_ammo", _current_ammo)
+	_current_ammo = {}
+	for ammo_key in loaded_ammo.keys():
+		var resolved_key = ItemDatabase.resolve_item_id(str(ammo_key))
+		_current_ammo[resolved_key] = loaded_ammo[ammo_key]
+	
+	# 确保主手有武器
+	if not _equipped_items.get("main_hand"):
+		_equip_item_internal("main_hand", "1001")
+	
+	print("[EquipmentSystem] 装备数据已加载")
 
-# ===== 重量系统接口 =====
+## 执行攻击 (兼容旧WeaponSystem接口)
+func perform_attack():
+	var main_hand = get_equipped_data("main_hand")
+	if not main_hand || main_hand.get("type") != "weapon":
+		return {"success": false, "message": "没有装备武器"}
+	
+	var weapon_data = main_hand.get("weapon_data", {})
+	var ammo_type = ItemDatabase.resolve_item_id(str(weapon_data.get("ammo_type", "")))
+	
+	# 检查弹药
+	if ammo_type && ammo_type != "":
+		if _current_ammo.get(ammo_type, 0) <= 0:
+			return {"success": false, "message": "没有弹药"}
+		_current_ammo[ammo_type] -= 1
+		ammo_changed.emit(ammo_type, _current_ammo[ammo_type], weapon_data.get("max_ammo", 0))
+	
+	# 计算伤害
+	var damage = weapon_data.get("damage", 5)
+	var crit_chance = weapon_data.get("crit_chance", 0.05)
+	var is_critical = randf() < crit_chance
+	
+	if is_critical:
+		damage = int(damage * weapon_data.get("crit_multiplier", 1.5))
+	
+	# 消耗耐久
+	consume_durability("main_hand", 1)
+	
+	# 应用特效
+	var effects_applied = []
+	for effect in main_hand.get("special_effects", []):
+		match effect:
+			"bleeding":
+				effects_applied.append({"type": "bleeding", "damage": main_hand.get("effect_data", {}).get("bleeding_damage", 2)})
+			"stun":
+				if randf() < main_hand.get("effect_data", {}).get("stun_chance", 0.2):
+					effects_applied.append({"type": "stun", "duration": 1})
+	
+	return {
+		"success": true,
+		"damage": damage,
+		"is_critical": is_critical,
+		"effects_applied": effects_applied
+	}
 
-## 获取装备重量
-func get_equipment_weight(item_id: String):
-	if not EQUIPMENT.has(item_id):
-		return 0.0
-	return EQUIPMENT[item_id].get("weight", 0.0)
-
-## 获取当前已装备装备的总重量
-func get_total_weight():
-	var total = 0.0
-	for slot in equipped_items.keys():
-		if equipped_items[slot] != null:
-			var item_id = equipped_items[slot].id
-			total += get_equipment_weight(item_id)
-	return total
-
-## 获取装备提供的负重加成
-func get_equipment_carry_bonus(item_id: String):
-	if not EQUIPMENT.has(item_id):
-		return 0.0
-	return EQUIPMENT[item_id].get("carry_bonus", 0.0)
-
-## 获取当前已装备装备的总负重加成
-func get_total_carry_bonus():
-	var total = 0.0
-	for slot in equipped_items.keys():
-		if equipped_items[slot] != null:
-			var item_id = equipped_items[slot].id
-			total += get_equipment_carry_bonus(item_id)
-	return total
-
-## 获取背包类型（用于CarrySystem）
-func get_backpack_type():
-	# 检查背部装备
-	if equipped_items.has("back") && equipped_items.back != null:
-		var backpack_id = equipped_items.back.id
-		# 返回背包类型ID
-		match backpack_id:
-			"backpack_cloth":
-				return "cloth_bag"
-			"backpack_hiking":
-				return "hiking_pack"
-			"backpack_military":
-				return "military_pack"
-			"backpack_tactical":
-				return "tactical_pack"
-	return "none"
 

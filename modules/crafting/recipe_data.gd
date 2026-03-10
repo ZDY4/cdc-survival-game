@@ -61,28 +61,32 @@ func serialize() -> Dictionary:
 	}
 
 func deserialize(data: Dictionary):
-	id = data.get("id", "")
-	name = data.get("name", "")
-	description = data.get("description", "")
-	category = data.get("category", "misc")
+	id = str(data.get("id", ""))
+	name = str(data.get("name", ""))
+	description = str(data.get("description", ""))
+	category = str(data.get("category", "misc"))
 	
 	var output = data.get("output", {})
-	output_item_id = output.get("item_id", "")
-	output_count = output.get("count", 1)
-	output_quality_bonus = output.get("quality_bonus", 0)
+	output_item_id = str(output.get("item_id", ""))
+	output_count = int(output.get("count", 1))
+	output_quality_bonus = int(output.get("quality_bonus", 0))
 	
 	var mats = data.get("materials", [])
 	materials = Array(mats, TYPE_DICTIONARY, "", null)
 	var req_tools = data.get("required_tools", [])
-	required_tools = Array(req_tools, TYPE_STRING, "", null)
+	required_tools = []
+	for tool in req_tools:
+		required_tools.append(str(tool))
 	
 	var opt_tools = data.get("optional_tools", [])
-	optional_tools = Array(opt_tools, TYPE_STRING, "", null)
-	required_station = data.get("required_station", "")
+	optional_tools = []
+	for tool in opt_tools:
+		optional_tools.append(str(tool))
+	required_station = str(data.get("required_station", ""))
 	skill_requirements = data.get("skill_requirements", {}).duplicate()
 	
-	craft_time = data.get("craft_time", 10.0)
-	experience_reward = data.get("experience_reward", 10)
+	craft_time = float(data.get("craft_time", 10.0))
+	experience_reward = int(data.get("experience_reward", 10))
 	
 	var unlock_conds = data.get("unlock_conditions", [])
 	unlock_conditions = Array(unlock_conds, TYPE_DICTIONARY, "", null)

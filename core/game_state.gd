@@ -15,6 +15,13 @@ var player_grid_position: Vector3i = Vector3i.ZERO
 var is_player_moving: bool = false
 var player_defense: int = 0  # 装备提供的防御力
 
+# ===== 角色装备系统 =====
+signal equipment_system_ready(equipment_system: Node)
+var _equipment_system: Node = null
+var _pending_equipment_save_data: Dictionary = {}
+var _pending_equips: Array[Dictionary] = []
+var _pending_ammo: Array[Dictionary] = []
+
 func save_3d_position(pos: Vector3, grid_pos: Vector3i) -> void:
 	player_position_3d = pos
 	player_grid_position = grid_pos
@@ -61,6 +68,7 @@ var world_day: int = 1:
 
 var world_weather: String = "clear"
 var world_unlocked_locations: Array[String] = ["safehouse", "street_a", "street_b"]
+var fog_of_war_by_map: Dictionary = {}
 
 # ===== 任务状态 =====
 var quest_active: Array[Dictionary] = []
@@ -73,6 +81,51 @@ var _attr_system: Node = null
 var _skill_system: Node = null
 var _risk_system: Node = null
 var _survival_status: Node = null
+
+func _resolve_item_id(item_id: String) -> String:
+	if ItemDatabase:
+		return ItemDatabase.resolve_item_id(item_id)
+	return item_id
+
+func set_equipment_system(system: Node) -> void:
+	_equipment_system = system
+	equipment_system_ready.emit(system)
+
+func get_equipment_system() -> Node:
+	return _equipment_system
+
+func set_pending_equipment_save_data(data: Dictionary) -> void:
+	_pending_equipment_save_data = data
+
+func consume_pending_equipment_save_data() -> Dictionary:
+	var data = _pending_equipment_save_data
+	_pending_equipment_save_data = {}
+	return data
+
+func get_pending_equipment_save_data() -> Dictionary:
+	return _pending_equipment_save_data.duplicate(true)
+
+func queue_equip(item_id: String, slot: String) -> void:
+	_pending_equips.append({
+		"item_id": _resolve_item_id(item_id),
+		"slot": slot
+	})
+
+func consume_pending_equips() -> Array[Dictionary]:
+	var equips = _pending_equips.duplicate(true)
+	_pending_equips.clear()
+	return equips
+
+func queue_ammo(ammo_type: String, count: int) -> void:
+	_pending_ammo.append({
+		"ammo_type": _resolve_item_id(ammo_type),
+		"count": count
+	})
+
+func consume_pending_ammo() -> Array[Dictionary]:
+	var ammo = _pending_ammo.duplicate(true)
+	_pending_ammo.clear()
+	return ammo
 
 func _ready():
 	print("[GameState] Initialized")
@@ -261,9 +314,11 @@ func damage_player(amount: int):
 		actual_damage = maxi(1, amount - player_defense / 2)  # 每2点防御减免1点伤害
 	
 	# 检查装备的伤害减免效果
-	var equipment_stats = EquipmentSystem.get_total_stats()
-	if equipment_stats.damage_reduction > 0:
-		actual_damage = int(actual_damage * (1.0 - equipment_stats.damage_reduction))
+	var equip_system = get_equipment_system()
+	if equip_system:
+		var equipment_stats = equip_system.get_total_stats()
+		if equipment_stats.damage_reduction > 0:
+			actual_damage = int(actual_damage * (1.0 - equipment_stats.damage_reduction))
 	
 	# 应用属性系统的伤害减免
 	if _attr_system:
@@ -272,7 +327,8 @@ func damage_player(amount: int):
 	player_hp = maxi(0, player_hp - actual_damage)
 	
 	# 减少装备耐久
-	EquipmentSystem.on_damage_taken(actual_damage)
+	if equip_system:
+		equip_system.on_damage_taken(actual_damage)
 	
 	# 受伤影响生存状态
 	if _survival_status:
@@ -286,6 +342,7 @@ func heal_player(amount: int):
 	EventBus.emit(EventBus.EventType.PLAYER_HEALED, {"hp": player_hp, "amount": amount})
 
 func add_item(item_id: String, count: int = 1):
+	var resolved_id = _resolve_item_id(str(item_id))
 	# 应用拾荒技能加成
 	if _skill_system and _skill_system.get_loot_bonus_chance() > 0:
 		if randf() < _skill_system.get_loot_bonus_chance():
@@ -294,7 +351,10 @@ func add_item(item_id: String, count: int = 1):
 	
 	# 查找是否已存在
 	for item in inventory_items:
-		if item.id == item_id:
+		var existing_id = _resolve_item_id(str(item.id))
+		if existing_id != item.id:
+			item.id = existing_id
+		if existing_id == resolved_id:
 			item.count += count
 			EventBus.emit(EventBus.EventType.INVENTORY_CHANGED, {})
 			return true
@@ -303,13 +363,17 @@ func add_item(item_id: String, count: int = 1):
 	if inventory_items.size() >= inventory_max_slots:
 		return false
 	
-	inventory_items.append({"id": item_id, "count": count})
+	inventory_items.append({"id": resolved_id, "count": count})
 	EventBus.emit(EventBus.EventType.INVENTORY_CHANGED, {})
 	return true
 
 func remove_item(item_id: String, count: int = 1):
+	var resolved_id = _resolve_item_id(str(item_id))
 	for i in range(inventory_items.size()):
-		if inventory_items[i].id == item_id:
+		var existing_id = _resolve_item_id(str(inventory_items[i].id))
+		if existing_id != inventory_items[i].id:
+			inventory_items[i].id = existing_id
+		if existing_id == resolved_id:
 			inventory_items[i].count -= count
 			if inventory_items[i].count <= 0:
 				inventory_items.remove_at(i)
@@ -318,8 +382,12 @@ func remove_item(item_id: String, count: int = 1):
 	return false
 
 func has_item(item_id: String, count: int = 1):
+	var resolved_id = _resolve_item_id(str(item_id))
 	for item in inventory_items:
-		if item.id == item_id and item.count >= count:
+		var existing_id = _resolve_item_id(str(item.id))
+		if existing_id != item.id:
+			item.id = existing_id
+		if existing_id == resolved_id and item.count >= count:
 			return true
 	return false
 
@@ -401,6 +469,7 @@ func get_save_data() -> Dictionary:
 		# 世界状态
 		"world_weather": world_weather,
 		"world_unlocked_locations": world_unlocked_locations,
+		"fog_of_war_by_map": fog_of_war_by_map.duplicate(true),
 		
 		# 任务
 		"quest_active": quest_active,
@@ -451,10 +520,15 @@ func load_save_data(data: Dictionary):
 	
 	# 背包
 	inventory_items = data.get("inventory_items", [])
+	for item in inventory_items:
+		if item.has("id"):
+			var resolved_id = _resolve_item_id(str(item.id))
+			item.id = resolved_id
 	
 	# 世界状态
 	world_weather = data.get("world_weather", "clear")
 	world_unlocked_locations = data.get("world_unlocked_locations", ["safehouse"])
+	fog_of_war_by_map = data.get("fog_of_war_by_map", {})
 	
 	# 任务
 	quest_active = data.get("quest_active", [])
