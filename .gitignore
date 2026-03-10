@@ -5,7 +5,6 @@ export.cfg
 export_presets.cfg
 
 # Godot resource metadata should be versioned
-!*.uid
 !*.import
 
 # Imported translations (automatically generated from CSV files)
@@ -50,3 +49,6 @@ __pycache__/
 
 # Local Godot UID backups
 .local_backup/
+
+# Godot UID cache files should not be versioned
+*.uid
