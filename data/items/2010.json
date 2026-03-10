@@ -1,0 +1,32 @@
+{
+  "id": 2010,
+  "name": "皮手套",
+  "description": "保护双手的基础手套",
+  "type": "armor",
+  "subtype": "gloves",
+  "rarity": "common",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "hands",
+  "level_requirement": 1,
+  "durability": 25,
+  "max_durability": 25,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 1,
+    "insulation": 0.1
+  },
+  "special_effects": [],
+  "repair_materials": [
+    {"item": 1011, "count": 2}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

@@ -40,7 +40,7 @@
 - ✅ **ChoiceSystem** - 选择系统
 - ✅ **CombatSystem** - 回合制战斗系统
 - ✅ **QuestSystem** - 任务系统（16个任务，可视化编辑器）
-- ✅ **WeaponSystem** - 武器系统（12种武器）
+- ✅ **EquipmentSystem** - 武器系统（12种武器）
 - ✅ **EquipmentSystem** - 装备系统（23件装备）
 - ✅ **CraftingSystem** - 制作系统（16个配方，编辑器）
 - ✅ **InventoryModule** - 背包系统
@@ -424,3 +424,4 @@ assets/
 
 *报告生成时间: 2026-02-21*  
 *分析师: Sisyphus Agent*
+

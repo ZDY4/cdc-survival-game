@@ -100,18 +100,10 @@ func _refresh_item_list(type: String = ""):
 		item_list.add_item(display_text)
 
 func _get_item_name(item_id: String = ""):
-	# 从统一装备系统获取名称
-	if UnifiedEquipmentSystem:
-		var data = UnifiedEquipmentSystem.get_item_data(item_id)
-		if data && data.has("name"):
-			return data.name
-	
-	# 回退到CraftingSystem
-	var crafting_items = CraftingSystem.get("ITEMS")
-	if crafting_items && crafting_items.has(item_id):
-		return crafting_items[item_id].get("name", item_id)
-	
-	return item_id
+	var data = ItemDatabase.get_item(item_id)
+	if data && data.has("name"):
+		return data.name
+	return str(item_id)
 
 func _apply_responsive_ui():
 	if not ResponsiveUIManager:

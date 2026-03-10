@@ -15,6 +15,7 @@ func add_item(item_id: String, count: int = 1) -> bool:
 	if not GameState:
 		push_error("[InventoryModule] GameState not found")
 		return false
+	item_id = str(item_id)
 	
 	# 验证物品是否存在
 	if not ItemDatabase.has_item(item_id):
@@ -44,6 +45,7 @@ func add_item(item_id: String, count: int = 1) -> bool:
 func remove_item(item_id: String, count: int = 1) -> bool:
 	if not GameState:
 		return false
+	item_id = str(item_id)
 	
 	var result = GameState.remove_item(item_id, count)
 	
@@ -58,6 +60,7 @@ func remove_item(item_id: String, count: int = 1) -> bool:
 func use_item(item_id: String) -> bool:
 	if not GameState:
 		return false
+	item_id = str(item_id)
 	
 	if not GameState.has_item(item_id):
 		item_used.emit(item_id, false)
@@ -93,13 +96,13 @@ func use_item(item_id: String) -> bool:
 func has_item(item_id: String, count: int = 1) -> bool:
 	if not GameState:
 		return false
-	return GameState.has_item(item_id, count)
+	return GameState.has_item(str(item_id), count)
 
 ## 获取物品数量
 func get_item_count(item_id: String) -> int:
 	if not GameState:
 		return 0
-	return GameState.get_item_count(item_id)
+	return GameState.get_item_count(str(item_id))
 
 ## 获取背包中的所有物品
 func get_items() -> Array[Dictionary]:
@@ -109,11 +112,11 @@ func get_items() -> Array[Dictionary]:
 
 ## 获取物品名称
 func get_item_display_name(item_id: String) -> String:
-	return ItemDatabase.get_item_name(item_id)
+	return ItemDatabase.get_item_name(str(item_id))
 
 ## 获取物品图标路径
 func get_item_icon(item_id: String) -> String:
-	var item = ItemDatabase.get_item(item_id)
+	var item = ItemDatabase.get_item(str(item_id))
 	return item.get("icon_path", "")
 
 # ========== 重量系统 ==========
@@ -137,8 +140,9 @@ func get_max_weight() -> float:
 	var base_weight = 50.0  # 基础负重50kg
 	
 	# 检查装备系统提供的额外负重
-	if UnifiedEquipmentSystem:
-		var carry_bonus = UnifiedEquipmentSystem.calculate_combat_stats().get("carry_bonus", 0.0)
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system:
+		var carry_bonus = equip_system.calculate_carry_bonus()
 		base_weight += carry_bonus
 	
 	return base_weight

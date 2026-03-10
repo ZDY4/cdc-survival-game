@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "隐藏储藏",
+  "subtype": "stash",
+  "slot": "",
+  "weight": 0.6,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 5,
+  "value": 25,
+  "durability": -1,
+  "description": "隐藏的补给",
+  "rarity": "common",
+  "stackable": true,
+  "type": "misc",
+  "id": 1142,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

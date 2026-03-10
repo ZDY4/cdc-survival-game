@@ -1,4 +1,4 @@
-﻿extends Node
+extends Node
 # NewContentSystem - 新内容系"
 # 添加新敌人、任务、地"
 
@@ -21,9 +21,9 @@ const NEW_ENEMIES = {
 		"resistances": ["poison"],
 		"special_abilities": ["pack_hunter"],
 		"loot": [
-			{"item": "dog_fang", "chance": 0.6, "min": 1, "max": 2},
-			{"item": "raw_meat", "chance": 0.4, "min": 1, "max": 2},
-			{"item": "leather", "chance": 0.3, "min": 1, "max": 1}
+			{"item": 1158, "chance": 0.6, "min": 1, "max": 2},
+			{"item": 1037, "chance": 0.4, "min": 1, "max": 2},
+			{"item": 1159, "chance": 0.3, "min": 1, "max": 1}
 		],
 		"xp": 25,
 		"spawn_locations": ["street", "street_a", "street_b", "factory"],
@@ -47,9 +47,9 @@ const NEW_ENEMIES = {
 		"resistances": [],
 		"special_abilities": ["call_reinforcements"],
 		"loot": [
-			{"item": "ammo_pistol", "chance": 0.5, "min": 2, "max": 5},
-			{"item": "scrap_metal", "chance": 0.6, "min": 2, "max": 4},
-			{"item": "food_canned", "chance": 0.3, "min": 1, "max": 2}
+			{"item": 1009, "chance": 0.5, "min": 2, "max": 5},
+			{"item": 1010, "chance": 0.6, "min": 2, "max": 4},
+			{"item": 1007, "chance": 0.3, "min": 1, "max": 2}
 		],
 		"xp": 35,
 		"spawn_locations": ["street", "supermarket", "factory"],
@@ -171,4 +171,7 @@ func get_new_quest(quest_id: String):
 ## 获取新地点数据
 func get_new_location(location_id: String):
 	return NEW_LOCATIONS.get(location_id, {})
+
+
+
 

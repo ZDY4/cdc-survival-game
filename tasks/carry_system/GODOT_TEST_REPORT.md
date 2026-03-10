@@ -26,7 +26,7 @@ Godot_v4.6-stable_win64.exe --headless --path . --quit-after 100
 
 ### 1. CraftingSystem.gd:352
 **问题**: `AMMO_TYPES` 未声明  
-**修复**: 改为 `WeaponSystem.AMMO_TYPES.has()`
+**修复**: 改为 `EquipmentSystem.AMMO_TYPES.has()`
 
 ### 2. GameStateManager.gd:443
 **问题**: List comprehension 语法不兼容  
@@ -65,7 +65,7 @@ Godot_v4.6-stable_win64.exe --headless --path . --quit-after 100
 [QuestSystem] Initialized
 [SurvivalSystem] Initialized
 [CombatSystem] Initialized
-[WeaponSystem] Initialized
+[EquipmentSystem] Initialized
 [CraftingSystem] Initialized
 [EquipmentSystem] Initialized
 [CarrySystem] Initialized ✓
@@ -86,7 +86,7 @@ Godot_v4.6-stable_win64.exe --headless --path . --quit-after 100
 | 5级负重等级 | ✅ | 判断逻辑正确 |
 | 移动惩罚 | ✅ | 集成到MapModule |
 | 战斗惩罚 | ✅ | 计算方法正确 |
-| 武器重量 | ✅ | WeaponSystem支持 |
+| 武器重量 | ✅ | EquipmentSystem支持 |
 | 装备重量 | ✅ | EquipmentSystem支持 |
 | 背包加成 | ✅ | 5/10/20/25kg加成 |
 
@@ -115,3 +115,4 @@ Godot_v4.6-stable_win64.exe --headless --path . --quit-after 100
 
 *测试日期: 2026-02-18*  
 *测试环境: Godot 4.6-stable, Windows*
+

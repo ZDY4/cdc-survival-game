@@ -1,0 +1,31 @@
+{
+  "id": 2019,
+  "name": "中背包",
+  "description": "登山包，大幅增加负重能力",
+  "type": "armor",
+  "subtype": "backpack",
+  "rarity": "uncommon",
+  "weight": 1.2,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "back",
+  "level_requirement": 2,
+  "durability": 50,
+  "max_durability": 50,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "carry_bonus": 10.0
+  },
+  "special_effects": [],
+  "repair_materials": [
+    {"item": 1011, "count": 5}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

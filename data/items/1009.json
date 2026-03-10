@@ -22,7 +22,7 @@
   "crafting_recipe": {
     "materials": [
       {
-        "item_id": "gunpowder",
+        "item_id": 1105,
         "count": 1
       },
       {
@@ -39,3 +39,4 @@
     }
   ]
 }
+

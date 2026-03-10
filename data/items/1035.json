@@ -1,0 +1,29 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": true,
+  "name": "果汁",
+  "subtype": "drink",
+  "slot": "",
+  "weight": 0.3,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 10,
+  "value": 8,
+  "durability": -1,
+  "description": "补充水分的饮料",
+  "rarity": "common",
+  "stackable": true,
+  "consumable_data": {
+    "effects": {
+      "thirst": 20
+    },
+    "use_time": 1.0,
+    "uses": 1
+  },
+  "type": "consumable",
+  "id": 1035,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

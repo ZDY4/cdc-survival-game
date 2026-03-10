@@ -406,7 +406,7 @@ func get_survival_choices(situation: String) -> Array[Dictionary]:
 				{
 					"id": "eat_food",
 					"text": "吃食物",
-					"condition": {"type": "has_item", "item": "food_canned"}
+					"condition": {"type": "has_item", "item": 1007}
 				},
 				{
 					"id": "hunt",
@@ -422,7 +422,7 @@ func get_survival_choices(situation: String) -> Array[Dictionary]:
 				{
 					"id": "use_bandage",
 					"text": "使用绷带",
-					"condition": {"type": "has_item", "item": "bandage"}
+					"condition": {"type": "has_item", "item": 1006}
 				},
 				{
 					"id": "rest",
@@ -463,3 +463,5 @@ func get_save_data():
 func load_save_data(data: Dictionary):
 	# 恢复选择状态
 	pass
+
+

@@ -1,0 +1,30 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": true,
+  "name": "刺激剂",
+  "subtype": "medical",
+  "slot": "",
+  "weight": 0.1,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 5,
+  "value": 60,
+  "durability": -1,
+  "description": "强效注射剂，快速恢复",
+  "rarity": "common",
+  "stackable": true,
+  "consumable_data": {
+    "effects": {
+      "stamina": 20,
+      "heal": 60
+    },
+    "use_time": 1.0,
+    "uses": 1
+  },
+  "type": "consumable",
+  "id": 1039,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

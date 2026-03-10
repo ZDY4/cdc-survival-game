@@ -1,0 +1,35 @@
+{
+  "id": 2002,
+  "name": "军用头盔",
+  "description": "标准军用装备，提供良好防护",
+  "type": "armor",
+  "subtype": "helmet",
+  "rarity": "rare",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "head",
+  "level_requirement": 3,
+  "durability": 60,
+  "max_durability": 60,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 5,
+    "insulation": 0.2,
+    "headshot_protection": 0.5
+  },
+  "special_effects": [
+    "headshot_protection"
+  ],
+  "repair_materials": [
+    {"item": 1010, "count": 4}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

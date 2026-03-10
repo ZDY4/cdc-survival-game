@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "绳索",
+  "subtype": "fiber",
+  "slot": "",
+  "weight": 0.2,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 999,
+  "value": 4,
+  "durability": -1,
+  "description": "结实的绳索",
+  "rarity": "common",
+  "stackable": true,
+  "type": "material",
+  "id": 1103,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

@@ -32,7 +32,7 @@ curl http://localhost:8080/health
 |-----------|---------|-----------|
 | `core/` | Framework | EventBus, GameState, BaseModule |
 | `modules/` | Features | dialog/, combat/, inventory/, map/ |
-| `systems/` | Game systems | save_system.gd, weapon_system.gd |
+| `systems/` | Game systems | save_system.gd, equipment_system.gd |
 | `scenes/` | Locations | safehouse.tscn, street_a.tscn |
 | `scripts/ui/` | UI scripts | inventory_ui.gd, crafting_ui.gd |
 | `tests/` | Tests | sanity/, functional/, agent/ |

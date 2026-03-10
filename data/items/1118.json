@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "工具材料",
+  "subtype": "tools",
+  "slot": "",
+  "weight": 0.3,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 99,
+  "value": 8,
+  "durability": -1,
+  "description": "通用工具材料",
+  "rarity": "common",
+  "stackable": true,
+  "type": "material",
+  "id": 1118,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

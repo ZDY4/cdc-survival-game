@@ -108,11 +108,6 @@ func _get_strength_bonus():
 
 ## 获取背包加成
 func _get_backpack_bonus():
-	# 从装备系统获取背"
-	if EquipmentSystem.has_method("get_backpack_type"):
-		var backpack_type = EquipmentSystem.get_backpack_type()
-		if BACKPACKS.has(backpack_type):
-			return BACKPACKS[backpack_type].carry_bonus
 	return 0.0
 
 ## 获取装备负重加成
@@ -120,11 +115,9 @@ func _get_equipment_bonus():
 	var bonus = 0.0
 	
 	# 使用统一装备系统
-	if UnifiedEquipmentSystem:
-		bonus = UnifiedEquipmentSystem.calculate_carry_bonus()
-	elif EquipmentSystem && EquipmentSystem.has_method("get_total_carry_bonus"):
-		# 向后兼容
-		bonus = EquipmentSystem.get_total_carry_bonus()
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system:
+		bonus = equip_system.calculate_carry_bonus()
 	
 	return bonus
 
@@ -133,11 +126,9 @@ func _get_equipment_weight():
 	var weight = 0.0
 	
 	# 使用统一装备系统
-	if UnifiedEquipmentSystem:
-		weight = UnifiedEquipmentSystem.calculate_total_weight()
-	elif EquipmentSystem && EquipmentSystem.has_method("get_total_weight"):
-		# 向后兼容
-		weight = EquipmentSystem.get_total_weight()
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system:
+		weight = equip_system.calculate_total_weight()
 	
 	return weight
 
@@ -228,22 +219,11 @@ func get_encumbrance_name():
 ## 获取物品重量
 func get_item_weight(item_id: String):
 	# 优先从统一装备系统查询
-	if UnifiedEquipmentSystem:
-		var item_data = UnifiedEquipmentSystem.get_item_data(item_id)
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system:
+		var item_data = equip_system.get_item_data(item_id)
 		if item_data && item_data.size() > 0:
 			return item_data.get("weight", DEFAULT_ITEM_WEIGHT)
-	
-	# 向后兼容：从WeaponSystem"
-	if WeaponSystem && WeaponSystem.has_method("get_weapon_weight"):
-		var weapon_weight = WeaponSystem.get_weapon_weight(item_id)
-		if weapon_weight > 0:
-			return weapon_weight
-	
-	# 向后兼容：从EquipmentSystem"
-	if EquipmentSystem && EquipmentSystem.has_method("get_equipment_weight"):
-		var equip_weight = EquipmentSystem.get_equipment_weight(item_id)
-		if equip_weight > 0:
-			return equip_weight
 	
 	# 从CraftingSystem查物品数"
 	var crafting_items = CraftingSystem.get("ITEMS")

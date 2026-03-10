@@ -1,223 +1,233 @@
 {
-	"strength_boost": {
-		"id": "strength_boost",
-		"name": "力量强化",
-		"description": "增加5点力量值",
-		"category": "buff",
-		"icon_path": "res://assets/icons/effects/strength_boost.png",
-		"duration": 300.0,
-		"is_infinite": false,
-		"is_stackable": true,
-		"max_stacks": 3,
-		"stack_mode": "intensity",
-		"stat_modifiers": {
-			"strength": 5
-		},
-		"special_effects": [],
-		"tick_interval": 0.0,
-		"visual_effect": "",
-		"color_tint": "#FF6600"
-	},
-	"agility_boost": {
-		"id": "agility_boost",
-		"name": "敏捷提升",
-		"description": "增加5点敏捷值",
-		"category": "buff",
-		"icon_path": "res://assets/icons/effects/agility_boost.png",
-		"duration": 300.0,
-		"is_infinite": false,
-		"is_stackable": true,
-		"max_stacks": 3,
-		"stack_mode": "intensity",
-		"stat_modifiers": {
-			"agility": 5
-		},
-		"special_effects": [],
-		"tick_interval": 0.0,
-		"visual_effect": "",
-		"color_tint": "#00FF00"
-	},
-	"defense_boost": {
-		"id": "defense_boost",
-		"name": "防御姿态",
-		"description": "增加10点防御力",
-		"category": "buff",
-		"icon_path": "res://assets/icons/effects/defense_boost.png",
-		"duration": 180.0,
-		"is_infinite": false,
-		"is_stackable": false,
-		"max_stacks": 1,
-		"stack_mode": "refresh",
-		"stat_modifiers": {
-			"defense": 10
-		},
-		"special_effects": [],
-		"tick_interval": 0.0,
-		"visual_effect": "",
-		"color_tint": "#0066FF"
-	},
-	"berserk": {
-		"id": "berserk",
-		"name": "狂暴",
-		"description": "伤害提升25%，但防御降低10点",
-		"category": "buff",
-		"icon_path": "res://assets/icons/effects/berserk.png",
-		"duration": 60.0,
-		"is_infinite": false,
-		"is_stackable": false,
-		"max_stacks": 1,
-		"stack_mode": "refresh",
-		"stat_modifiers": {
-			"damage_mult": 1.25,
-			"defense": -10
-		},
-		"special_effects": [],
-		"tick_interval": 0.0,
-		"visual_effect": "res://effects/berserk_particles.tscn",
-		"color_tint": "#FF0000"
-	},
-	"regeneration": {
-		"id": "regeneration",
-		"name": "生命恢复",
-		"description": "每秒恢复5点生命值",
-		"category": "buff",
-		"icon_path": "res://assets/icons/effects/regeneration.png",
-		"duration": 30.0,
-		"is_infinite": false,
-		"is_stackable": true,
-		"max_stacks": 5,
-		"stack_mode": "intensity",
-		"stat_modifiers": {},
-		"special_effects": ["regeneration"],
-		"tick_interval": 1.0,
-		"visual_effect": "res://effects/heal_particles.tscn",
-		"color_tint": "#00FF66"
-	},
-	"poison": {
-		"id": "poison",
-		"name": "中毒",
-		"description": "每秒损失3点生命值",
-		"category": "debuff",
-		"icon_path": "res://assets/icons/effects/poison.png",
-		"duration": 20.0,
-		"is_infinite": false,
-		"is_stackable": true,
-		"max_stacks": 10,
-		"stack_mode": "extend",
-		"stat_modifiers": {},
-		"special_effects": ["poison"],
-		"tick_interval": 1.0,
-		"visual_effect": "res://effects/poison_particles.tscn",
-		"color_tint": "#660066"
-	},
-	"bleeding": {
-		"id": "bleeding",
-		"name": "流血",
-		"description": "每秒损失5点生命值",
-		"category": "debuff",
-		"icon_path": "res://assets/icons/effects/bleeding.png",
-		"duration": 15.0,
-		"is_infinite": false,
-		"is_stackable": true,
-		"max_stacks": 5,
-		"stack_mode": "intensity",
-		"stat_modifiers": {},
-		"special_effects": ["bleeding"],
-		"tick_interval": 1.0,
-		"visual_effect": "",
-		"color_tint": "#990000"
-	},
-	"stun": {
-		"id": "stun",
-		"name": "眩晕",
-		"description": "无法行动",
-		"category": "debuff",
-		"icon_path": "res://assets/icons/effects/stun.png",
-		"duration": 3.0,
-		"is_infinite": false,
-		"is_stackable": false,
-		"max_stacks": 1,
-		"stack_mode": "extend",
-		"stat_modifiers": {
-			"speed": -100
-		},
-		"special_effects": ["stun"],
-		"tick_interval": 0.0,
-		"visual_effect": "res://effects/stun_particles.tscn",
-		"color_tint": "#FFFF00"
-	},
-	"weakness": {
-		"id": "weakness",
-		"name": "虚弱",
-		"description": "伤害降低20%",
-		"category": "debuff",
-		"icon_path": "res://assets/icons/effects/weakness.png",
-		"duration": 60.0,
-		"is_infinite": false,
-		"is_stackable": false,
-		"max_stacks": 1,
-		"stack_mode": "refresh",
-		"stat_modifiers": {
-			"damage_mult": 0.8
-		},
-		"special_effects": [],
-		"tick_interval": 0.0,
-		"visual_effect": "",
-		"color_tint": "#666666"
-	},
-	"slow": {
-		"id": "slow",
-		"name": "减速",
-		"description": "移动速度降低30%",
-		"category": "debuff",
-		"icon_path": "res://assets/icons/effects/slow.png",
-		"duration": 30.0,
-		"is_infinite": false,
-		"is_stackable": true,
-		"max_stacks": 3,
-		"stack_mode": "intensity",
-		"stat_modifiers": {
-			"speed_mult": 0.7
-		},
-		"special_effects": [],
-		"tick_interval": 0.0,
-		"visual_effect": "",
-		"color_tint": "#3366CC"
-	},
-	"invisible": {
-		"id": "invisible",
-		"name": "隐身",
-		"description": "敌人无法发现你",
-		"category": "neutral",
-		"icon_path": "res://assets/icons/effects/invisible.png",
-		"duration": 20.0,
-		"is_infinite": false,
-		"is_stackable": false,
-		"max_stacks": 1,
-		"stack_mode": "refresh",
-		"stat_modifiers": {},
-		"special_effects": ["invisible"],
-		"tick_interval": 0.0,
-		"visual_effect": "res://effects/invisible_particles.tscn",
-		"color_tint": "#CC99FF"
-	},
-	"exp_boost": {
-		"id": "exp_boost",
-		"name": "经验加成",
-		"description": "获得经验值增加50%",
-		"category": "buff",
-		"icon_path": "res://assets/icons/effects/exp_boost.png",
-		"duration": 600.0,
-		"is_infinite": false,
-		"is_stackable": false,
-		"max_stacks": 1,
-		"stack_mode": "refresh",
-		"stat_modifiers": {
-			"exp_mult": 1.5
-		},
-		"special_effects": [],
-		"tick_interval": 0.0,
-		"visual_effect": "",
-		"color_tint": "#FFD700"
-	}
+  "weakness": {
+    "special_effects": [],
+    "max_stacks": 1,
+    "is_stackable": false,
+    "id": "weakness",
+    "is_infinite": false,
+    "stack_mode": "refresh",
+    "color_tint": "#666666",
+    "description": "伤害降低20%",
+    "icon_path": "res://assets/icons/effects/weakness.png",
+    "tick_interval": 0.0,
+    "duration": 60.0,
+    "visual_effect": "",
+    "name": "虚弱",
+    "stat_modifiers": {
+      "damage_mult": 0.8
+    },
+    "category": "debuff"
+  },
+  "poison": {
+    "special_effects": [
+      "poison"
+    ],
+    "max_stacks": 10,
+    "is_stackable": true,
+    "id": "poison",
+    "is_infinite": false,
+    "stack_mode": "extend",
+    "color_tint": "#660066",
+    "description": "每秒损失3点生命值",
+    "icon_path": "res://assets/icons/effects/poison.png",
+    "tick_interval": 1.0,
+    "duration": 20.0,
+    "visual_effect": "res://effects/poison_particles.tscn",
+    "name": "中毒",
+    "stat_modifiers": {},
+    "category": "debuff"
+  },
+  "defense_boost": {
+    "special_effects": [],
+    "max_stacks": 1,
+    "is_stackable": false,
+    "id": "defense_boost",
+    "is_infinite": false,
+    "stack_mode": "refresh",
+    "color_tint": "#0066FF",
+    "description": "增加10点防御力",
+    "icon_path": "res://assets/icons/effects/defense_boost.png",
+    "tick_interval": 0.0,
+    "duration": 180.0,
+    "visual_effect": "",
+    "name": "防御姿态",
+    "stat_modifiers": {
+      "defense": 10
+    },
+    "category": "buff"
+  },
+  "invisible": {
+    "special_effects": [
+      "invisible"
+    ],
+    "max_stacks": 1,
+    "is_stackable": false,
+    "id": "invisible",
+    "is_infinite": false,
+    "stack_mode": "refresh",
+    "color_tint": "#CC99FF",
+    "description": "敌人无法发现你",
+    "icon_path": "res://assets/icons/effects/invisible.png",
+    "tick_interval": 0.0,
+    "duration": 20.0,
+    "visual_effect": "res://effects/invisible_particles.tscn",
+    "name": "隐身",
+    "stat_modifiers": {},
+    "category": "neutral"
+  },
+  "slow": {
+    "special_effects": [],
+    "max_stacks": 3,
+    "is_stackable": true,
+    "id": "slow",
+    "is_infinite": false,
+    "stack_mode": "intensity",
+    "color_tint": "#3366CC",
+    "description": "移动速度降低30%",
+    "icon_path": "res://assets/icons/effects/slow.png",
+    "tick_interval": 0.0,
+    "duration": 30.0,
+    "visual_effect": "",
+    "name": "减速",
+    "stat_modifiers": {
+      "speed_mult": 0.7
+    },
+    "category": "debuff"
+  },
+  "regeneration": {
+    "special_effects": [
+      "regeneration"
+    ],
+    "max_stacks": 5,
+    "is_stackable": true,
+    "id": "regeneration",
+    "is_infinite": false,
+    "stack_mode": "intensity",
+    "color_tint": "#00FF66",
+    "description": "每秒恢复5点生命值",
+    "icon_path": "res://assets/icons/effects/regeneration.png",
+    "tick_interval": 1.0,
+    "duration": 30.0,
+    "visual_effect": "res://effects/heal_particles.tscn",
+    "name": "生命恢复",
+    "stat_modifiers": {},
+    "category": "buff"
+  },
+  "stun": {
+    "special_effects": [
+      "stun"
+    ],
+    "max_stacks": 1,
+    "is_stackable": false,
+    "id": "stun",
+    "is_infinite": false,
+    "stack_mode": "extend",
+    "color_tint": "#FFFF00",
+    "description": "无法行动",
+    "icon_path": "res://assets/icons/effects/stun.png",
+    "tick_interval": 0.0,
+    "duration": 3.0,
+    "visual_effect": "res://effects/stun_particles.tscn",
+    "name": "眩晕",
+    "stat_modifiers": {
+      "speed": -100
+    },
+    "category": "debuff"
+  },
+  "agility_boost": {
+    "special_effects": [],
+    "max_stacks": 3,
+    "is_stackable": true,
+    "id": "agility_boost",
+    "is_infinite": false,
+    "stack_mode": "intensity",
+    "color_tint": "#00FF00",
+    "description": "增加5点敏捷值",
+    "icon_path": "res://assets/icons/effects/agility_boost.png",
+    "tick_interval": 0.0,
+    "duration": 300.0,
+    "visual_effect": "",
+    "name": "敏捷提升",
+    "stat_modifiers": {
+      "agility": 5
+    },
+    "category": "buff"
+  },
+  "berserk": {
+    "special_effects": [],
+    "max_stacks": 1,
+    "is_stackable": false,
+    "id": "berserk",
+    "is_infinite": false,
+    "stack_mode": "refresh",
+    "color_tint": "#FF0000",
+    "description": "伤害提升25%，但防御降低10点",
+    "icon_path": "res://assets/icons/effects/berserk.png",
+    "tick_interval": 0.0,
+    "duration": 60.0,
+    "visual_effect": "res://effects/berserk_particles.tscn",
+    "name": "狂暴",
+    "stat_modifiers": {
+      "defense": -10,
+      "damage_mult": 1.25
+    },
+    "category": "buff"
+  },
+  "exp_boost": {
+    "special_effects": [],
+    "max_stacks": 1,
+    "is_stackable": false,
+    "id": "exp_boost",
+    "is_infinite": false,
+    "stack_mode": "refresh",
+    "color_tint": "#FFD700",
+    "description": "获得经验值增加50%",
+    "icon_path": "res://assets/icons/effects/exp_boost.png",
+    "tick_interval": 0.0,
+    "duration": 600.0,
+    "visual_effect": "",
+    "name": "经验加成",
+    "stat_modifiers": {
+      "exp_mult": 1.5
+    },
+    "category": "buff"
+  },
+  "strength_boost": {
+    "special_effects": [],
+    "max_stacks": 3,
+    "is_stackable": true,
+    "id": "strength_boost",
+    "is_infinite": false,
+    "stack_mode": "intensity",
+    "color_tint": "#FF6600",
+    "description": "增加5点力量值",
+    "icon_path": "res://assets/icons/effects/strength_boost.png",
+    "tick_interval": 0.0,
+    "duration": 300.0,
+    "visual_effect": "",
+    "name": "力量强化",
+    "stat_modifiers": {
+      "strength": 5
+    },
+    "category": "buff"
+  },
+  "bleeding": {
+    "special_effects": [
+      "bleeding"
+    ],
+    "max_stacks": 5,
+    "is_stackable": true,
+    "id": "bleeding",
+    "is_infinite": false,
+    "stack_mode": "intensity",
+    "color_tint": "#990000",
+    "description": "每秒损失5点生命值",
+    "icon_path": "res://assets/icons/effects/bleeding.png",
+    "tick_interval": 1.0,
+    "duration": 15.0,
+    "visual_effect": "",
+    "name": "流血",
+    "stat_modifiers": {},
+    "category": "debuff"
+  }
 }

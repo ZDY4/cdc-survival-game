@@ -33,7 +33,7 @@
         "count": 2
       },
       {
-        "item_id": "painkiller",
+        "item_id": 1033,
         "count": 1
       }
     ],
@@ -41,3 +41,4 @@
   },
   "deconstruct_yield": []
 }
+

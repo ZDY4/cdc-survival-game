@@ -1,44 +1,63 @@
 {
   "hands": {
-    "name": "徒手",
+    "can_open": [
+      "open_container"
+    ],
     "efficiency": 0.5,
+    "description": "最安静但效率最低",
     "noise": 0.1,
-    "durability_cost": 0,
-    "can_open": ["open_container"],
-    "description": "最安静但效率最低"
-  },
-  "crowbar": {
-    "name": "撬棍",
-    "efficiency": 1.2,
-    "noise": 0.6,
-    "durability_cost": 2,
-    "can_open": ["open_container", "locked_door", "barred_window", "crate"],
-    "description": "强力但噪音大"
+    "name": "徒手",
+    "durability_cost": 0
   },
   "screwdriver": {
-    "name": "螺丝刀",
+    "can_open": [
+      "open_container",
+      "vent",
+      "panel",
+      1012
+    ],
     "efficiency": 0.9,
+    "description": "适合精密搜索",
     "noise": 0.2,
-    "durability_cost": 1,
-    "can_open": ["open_container", "vent", "panel", "electronics"],
-    "description": "适合精密搜索"
-  },
-  "lockpick": {
-    "name": "开锁器",
-    "efficiency": 1.0,
-    "noise": 0.15,
-    "durability_cost": 1,
-    "can_open": ["locked_door", "locked_drawer", "safe"],
-    "special_bonus": "发现隐藏物品 +20%",
-    "description": "安静开锁，需要技术"
+    "name": "螺丝刀",
+    "durability_cost": 1
   },
   "flashlight": {
-    "name": "手电筒",
+    "can_open": [
+      "open_container",
+      "dark_area"
+    ],
     "efficiency": 1.1,
+    "description": "夜间搜索必备",
     "noise": 0.1,
-    "durability_cost": 1,
-    "can_open": ["open_container", "dark_area"],
+    "name": "手电筒",
     "special_bonus": "夜间效率 +50%",
-    "description": "夜间搜索必备"
+    "durability_cost": 1
+  },
+  "lockpick": {
+    "can_open": [
+      "locked_door",
+      "locked_drawer",
+      "safe"
+    ],
+    "efficiency": 1.0,
+    "description": "安静开锁，需要技术",
+    "noise": 0.15,
+    "name": "开锁器",
+    "special_bonus": "发现隐藏物品 +20%",
+    "durability_cost": 1
+  },
+  "crowbar": {
+    "can_open": [
+      "open_container",
+      "locked_door",
+      "barred_window",
+      "crate"
+    ],
+    "efficiency": 1.2,
+    "description": "强力但噪音大",
+    "noise": 0.6,
+    "name": "撬棍",
+    "durability_cost": 2
   }
 }

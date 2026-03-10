@@ -27,16 +27,16 @@ AI Agent自动化测试系统 (Godot 4.6)
 ## 修复的问题
 
 ### 1. InventoryModule 物品重量查询
-**问题**: 只查询CraftingSystem，没有查询WeaponSystem  
-**修复**: 添加WeaponSystem查询
+**问题**: 只查询CraftingSystem，没有查询EquipmentSystem  
+**修复**: 添加EquipmentSystem查询
 
 ```gdscript
 # 修复前
 if CraftingSystem.has("ITEMS"):
 
 # 修复后
-if WeaponSystem.has_method("get_weapon_weight"):
-    var weapon_weight = WeaponSystem.get_weapon_weight(item_id)
+if EquipmentSystem.has_method("get_weapon_weight"):
+    var weapon_weight = EquipmentSystem.get_weapon_weight(item_id)
 ```
 
 ### 2. 武器缺少weight字段
@@ -80,7 +80,7 @@ if WeaponSystem.has_method("get_weapon_weight"):
 | 完全超载 | >100% | ×5.0 |
 
 ### ✅ 系统集成
-- WeaponSystem 重量支持
+- EquipmentSystem 重量支持
 - EquipmentSystem 重量和负重加成
 - InventoryModule 物品重量计算
 - MapModule 移动惩罚集成
@@ -119,3 +119,4 @@ Godot --headless --path . res://tests/carry_integration_test.tscn
 
 *报告生成时间: 2026-02-19*  
 *测试工具: Godot 4.6 + 自定义测试框架*
+

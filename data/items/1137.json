@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "钥匙串",
+  "subtype": "key",
+  "slot": "",
+  "weight": 0.1,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 5,
+  "value": 5,
+  "durability": -1,
+  "description": "一串钥匙",
+  "rarity": "common",
+  "stackable": true,
+  "type": "misc",
+  "id": 1137,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

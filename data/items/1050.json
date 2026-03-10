@@ -1,0 +1,30 @@
+{
+  "icon_path": "",
+  "max_durability": 50,
+  "usable": false,
+  "name": "长矛",
+  "subtype": "pole",
+  "slot": "main_hand",
+  "weight": 1.0,
+  "special_effects": [],
+  "equippable": true,
+  "weapon_data": {
+    "range": 2,
+    "attack_speed": 0.9,
+    "damage": 14,
+    "crit_multiplier": 1.6,
+    "crit_chance": 0.08,
+    "stamina_cost": 4
+  },
+  "repairable": true,
+  "max_stack": 1,
+  "value": 30,
+  "durability": 50,
+  "description": "简易长矛，用于近战",
+  "rarity": "common",
+  "stackable": false,
+  "type": "weapon",
+  "id": 1050,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

@@ -10,8 +10,8 @@
 
 | 文件 | 来源 | 数据项数 | 状态 |
 |------|------|----------|------|
-| weapons.json | weapon_system.gd | 12 | ✅ |
-| ammo_types.json | weapon_system.gd | 5 | ✅ |
+| weapons.json | equipment_system.gd | 12 | ✅ |
+| ammo_types.json | equipment_system.gd | 5 | ✅ |
 | skills.json | skill_module.gd | 4 | ✅ |
 | balance.json | balance_config.gd | 8 类别 | ✅ |
 | map_data.json | map_module.gd | 3 部分 | ✅ |
@@ -33,7 +33,7 @@
   - `get_loot_table()` / `get_all_loot_tables()`
   - `get_weather()` / `get_all_weather()`
 
-#### WeaponSystem (systems/weapon_system.gd)
+#### EquipmentSystem (systems/equipment_system.gd)
 - ✅ 添加了 `_weapons` 和 `_ammo_types` 缓存变量
 - ✅ 添加了 `_load_data_from_manager()` 方法
 - ✅ 修改了所有访问武器/弹药数据的方法使用 DataManager
@@ -102,7 +102,7 @@ var distances = DataManager.get_map_distances()
 ### 在系统中使用（带缓存）
 
 ```gdscript
-# WeaponSystem 示例
+# EquipmentSystem 示例
 var _weapons: Dictionary = {}
 
 func _ready():
@@ -138,3 +138,4 @@ func get_weapon(id: String) -> Dictionary:
 - ✅ JSON 文件格式验证通过
 - ✅ 所有新创建的数据文件可以正常加载
 - ⚠️ 需要运行游戏测试验证功能正常
+

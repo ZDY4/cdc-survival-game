@@ -1,0 +1,29 @@
+{
+  "type": "consumable",
+  "subtype": "medical",
+  "attributes_bonus": {},
+  "icon_path": "",
+  "name": "夹板",
+  "rarity": "common",
+  "id": 1041,
+  "stackable": true,
+  "max_durability": -1,
+  "level_requirement": 0,
+  "max_stack": 10,
+  "weight": 0.3,
+  "special_effects": [],
+  "equippable": false,
+  "description": "用于固定受伤肢体",
+  "durability": -1,
+  "slot": "",
+  "value": 15,
+  "consumable_data": {
+    "use_time": 2.0,
+    "uses": 1,
+    "effects": {
+      "heal": 20
+    }
+  },
+  "usable": true,
+  "repairable": false
+}

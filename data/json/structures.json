@@ -1,25 +1,32 @@
 {
-  "workbench": {
-    "name": "工作台",
-    "cost": {
-      "wood": 5,
-      "metal": 2
-    },
-    "benefits": ["解锁制作功能"]
-  },
   "bed": {
     "name": "床铺",
     "cost": {
-      "wood": 3,
-      "cloth": 2
+      "1011": 2,
+      "1100": 3
     },
-    "benefits": ["可以睡觉存档", "恢复体力"]
+    "benefits": [
+      "可以睡觉存档",
+      "恢复体力"
+    ]
   },
   "storage": {
     "name": "储物箱",
     "cost": {
-      "wood": 4
+      "1100": 4
     },
-    "benefits": ["增加10个背包格子"]
+    "benefits": [
+      "增加10个背包格子"
+    ]
+  },
+  "workbench": {
+    "name": "工作台",
+    "cost": {
+      "1100": 5,
+      "1101": 2
+    },
+    "benefits": [
+      "解锁制作功能"
+    ]
   }
 }

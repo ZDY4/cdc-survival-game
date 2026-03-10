@@ -86,7 +86,7 @@ func _test_game_state(level: int = 1):
 	# 测试物品操作
 	tests += 1
 	GameState.inventory_items.clear()
-	var success = GameState.add_item("test_item", 1)
+	var success = GameState.add_item("1163", 1)
 	if success && GameState.inventory_items.size() > 0:
 		passed += 1
 		print("  ✓ 物品添加正常")
@@ -110,8 +110,8 @@ func _test_inventory():
 	
 	# 测试添加物品
 	tests += 1
-	var result = InventoryModule.add_item("water_bottle", 2)
-	if result && GameState.has_item("water_bottle", 2):
+	var result = InventoryModule.add_item("1008", 2)
+	if result && GameState.has_item("1008", 2):
 		passed += 1
 		print("  ✓ 添加物品正常")
 	else:
@@ -119,7 +119,7 @@ func _test_inventory():
 	
 	# 测试检查物品
 	tests += 1
-	if InventoryModule.has_item("water_bottle", 1):
+	if InventoryModule.has_item("1008", 1):
 		passed += 1
 		print("  ✓ 检查物品正常")
 	else:
@@ -136,8 +136,8 @@ func _test_inventory():
 	
 	# 测试移除物品
 	tests += 1
-	result = InventoryModule.remove_item("water_bottle", 1)
-	if result && GameState.has_item("water_bottle", 1):
+	result = InventoryModule.remove_item("1008", 1)
+	if result && GameState.has_item("1008", 1):
 		passed += 1
 		print("  ✓ 移除物品正常")
 	else:
@@ -192,7 +192,7 @@ func _test_crafting():
 	
 	# 清理背包并添加材料
 	GameState.inventory_items.clear()
-	GameState.add_item("cloth", 5)
+	GameState.add_item("1011", 5)
 	
 	# 测试检查制作
 	tests += 1
@@ -207,7 +207,7 @@ func _test_crafting():
 	tests += 1
 	if can_craft:
 		var result = CraftingModule.craft("bandage")
-		if result && GameState.has_item("bandage", 1):
+		if result && GameState.has_item("1006", 1):
 			passed += 1
 			print("  ✓ 制作执行正常")
 		else:
@@ -234,7 +234,7 @@ func _test_base_building():
 	# 清理并准备材料
 	GameState.inventory_items.clear()
 	BaseBuildingModule.built_structures.clear()
-	GameState.add_item("wood", 10)
+	GameState.add_item("1100", 10)
 	
 	# 测试检查建造
 	tests += 1
@@ -358,7 +358,7 @@ func _test_save_system():
 	# 设置测试数据
 	GameState.player_hp = 75
 	GameState.player_position = "street_a"
-	GameState.add_item("test_item", 1)
+	GameState.add_item("1163", 1)
 	
 	# 测试保存
 	tests += 1
@@ -498,3 +498,5 @@ func _generate_report():
 		print("\n⚠️ 有测试失败，需要检查")
 	
 	print("========================================\n")
+
+

@@ -254,8 +254,10 @@ func get_craftable_recipes_by_category() -> Dictionary:
 # ========== 私有方法 ==========
 
 func _has_tool(tool_id: String) -> bool:
+	tool_id = str(tool_id)
 	# 检查装备槽
-	var equipped = UnifiedEquipmentSystem.get_equipped_item("main_hand")
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	var equipped = equip_system.get_equipped_item("main_hand") if equip_system else ""
 	if equipped == tool_id:
 		return true
 	

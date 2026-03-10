@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "生存指南",
+  "subtype": "document",
+  "slot": "",
+  "weight": 0.2,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 1,
+  "value": 20,
+  "durability": -1,
+  "description": "包含生存技巧的手册",
+  "rarity": "common",
+  "stackable": false,
+  "type": "misc",
+  "id": 1133,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

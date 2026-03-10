@@ -65,12 +65,12 @@ func travel_to(location_id: String) -> bool:
 
 	# 检查食物是否足够
 	var food_required = travel_cost.food_cost
-	if not InventoryModule.has_item("food_canned", food_required):
+	if not InventoryModule.has_item("1007", food_required):
 		DialogModule.show_dialog("食物不足！需要 %d 个罐头才能到达该地点。" % food_required, "提示", "")
 		return false
 
 	# 消耗食物
-	InventoryModule.remove_item("food_canned", food_required)
+	InventoryModule.remove_item("1007", food_required)
 
 	travel_started.emit(current, location_id)
 
@@ -459,3 +459,4 @@ func serialize() -> Dictionary:
 func deserialize(data: Dictionary):
 	# 地点连接和距离是静态配置，不需要从存档加载
 	print("[MapModule] 地图数据已加载")
+

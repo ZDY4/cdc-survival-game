@@ -1,0 +1,38 @@
+{
+  "id": 2003,
+  "name": "战术头盔",
+  "description": "配备夜视仪接口的高级头盔",
+  "type": "armor",
+  "subtype": "helmet",
+  "rarity": "epic",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "head",
+  "level_requirement": 5,
+  "durability": 80,
+  "max_durability": 80,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 8,
+    "insulation": 0.3,
+    "accuracy": 10,
+    "night_vision": true
+  },
+  "special_effects": [
+    "night_vision",
+    "accuracy_bonus"
+  ],
+  "repair_materials": [
+    {"item": 1010, "count": 6},
+    {"item": 1012, "count": 2}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

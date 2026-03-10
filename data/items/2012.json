@@ -1,0 +1,35 @@
+{
+  "id": 2012,
+  "name": "动力手套",
+  "description": "增强力量，提升近战伤害",
+  "type": "armor",
+  "subtype": "gloves",
+  "rarity": "rare",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "hands",
+  "level_requirement": 4,
+  "durability": 50,
+  "max_durability": 50,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 3,
+    "melee_damage": 0.15
+  },
+  "special_effects": [
+    "melee_damage"
+  ],
+  "repair_materials": [
+    {"item": 1010, "count": 4},
+    {"item": 1012, "count": 2}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

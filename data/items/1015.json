@@ -1,0 +1,56 @@
+{
+  "id": 1015,
+  "name": "武士刀",
+  "description": "锋利的日本刀，极其致命",
+  "type": "weapon",
+  "subtype": "sword",
+  "rarity": "rare",
+  "weight": 1.2,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "res://assets/icons/weapons/katana.png",
+  "equippable": true,
+  "slot": "main_hand",
+  "level_requirement": 5,
+  "durability": 80,
+  "max_durability": 80,
+  "repairable": true,
+  "usable": false,
+  "weapon_data": {
+    "damage": 35,
+    "attack_speed": 1.3,
+    "range": 3,
+    "stamina_cost": 8,
+    "crit_chance": 0.20,
+    "crit_multiplier": 2.5
+  },
+  "special_effects": [
+    "cleave",
+    "bleeding",
+    "decapitation"
+  ],
+  "effect_data": {
+    "cleave_damage": 0.7,
+    "bleeding_damage": 5,
+    "bleeding_duration": 5,
+    "decapitation_chance": 0.1
+  },
+  "attributes_bonus": {},
+  "repair_materials": [
+    {"item": 1010, "count": 8},
+    {"item": 1012, "count": 2}
+  ],
+  "crafting_recipe": {
+    "materials": [
+      {"item": 1010, "count": 15},
+      {"item": 1012, "count": 3},
+      {"item": 1144, "count": 2}
+    ],
+    "time": 120
+  },
+  "deconstruct_yield": []
+}
+
+
+

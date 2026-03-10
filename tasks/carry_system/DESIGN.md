@@ -211,7 +211,7 @@ func travel(destination: String) -> float:
 | 文件 | 修改内容 |
 |------|---------|
 | `core/character_attribute_set.gd` | 添加负重属性、力量影响负重 |
-| `systems/weapon_system.gd` | 添加武器重量字段 |
+| `systems/equipment_system.gd` | 添加武器重量字段 |
 | `systems/equipment_system.gd` | 添加装备重量、背包负重加成 |
 | `modules/inventory/inventory_module.gd` | 显示重量、集成重量计算 |
 | `modules/inventory/inventory_ui.gd` | 添加重量显示 (数字格式) |
@@ -279,3 +279,4 @@ func travel(destination: String) -> float:
 - 是否添加"背包升级"系统
 
 请告诉我是否需要修改，确认后我立即开始开发！
+

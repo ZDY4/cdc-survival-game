@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "私人储物",
+  "subtype": "stash",
+  "slot": "",
+  "weight": 0.5,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 5,
+  "value": 18,
+  "durability": -1,
+  "description": "私人存放的物资",
+  "rarity": "common",
+  "stackable": true,
+  "type": "misc",
+  "id": 1143,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

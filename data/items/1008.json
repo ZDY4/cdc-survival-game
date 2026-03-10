@@ -29,8 +29,9 @@
   "crafting_recipe": null,
   "deconstruct_yield": [
     {
-      "item_id": "plastic",
+      "item_id": 1104,
       "count": 1
     }
   ]
 }
+

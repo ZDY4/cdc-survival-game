@@ -68,14 +68,14 @@
 5. `systems/combat_penalty_system.gd` - 战斗惩罚系统
 6. `tests/complete_system_test.gd` - 完整测试脚本
 7. `docs/EQUIPMENT_MERGE_DESIGN.md` - 装备合并设计
-8. `docs/UNIFIED_EQUIPMENT_COMPLETE.md` - 装备合并完成报告
+8. `docs/EQUIPMENT_SYSTEM_COMPLETE.md` - 装备系统完成报告
 
 ### 修改的文件 (6个)
 1. `systems/carry_system.gd` - 集成统一装备系统
 2. `systems/inventory_module.gd` - 集成统一装备系统
 3. `systems/crafting_system.gd` - 集成统一装备系统
 4. `modules/combat/combat_module.gd` - 使用统一装备系统
-5. `project.godot` - 添加新系统到autoload
+5. `project.godot` - 更新装备系统配置（移除 Autoload）
 6. `systems/enemy_database.gd` - 添加新敌人
 
 ---
@@ -85,7 +85,7 @@
 ### 核心系统 (15个)
 - ✅ EventBus
 - ✅ GameState
-- ✅ UnifiedEquipmentSystem (新)
+- ✅ EquipmentSystem（角色挂载）
 - ✅ CarrySystem
 - ✅ AudioSystem (新)
 - ✅ CombatPenaltySystem (新)

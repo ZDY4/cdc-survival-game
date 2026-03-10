@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "武器零件",
+  "subtype": "parts",
+  "slot": "",
+  "weight": 0.3,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 99,
+  "value": 10,
+  "durability": -1,
+  "description": "可用于制作武器的零件",
+  "rarity": "common",
+  "stackable": true,
+  "type": "material",
+  "id": 1116,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

@@ -1,189 +1,262 @@
 {
   "trader_lao_wang": {
-    "id": "trader_lao_wang",
-    "name": "老王",
-    "title": "废土商人",
-    "description": "在这个区域经营多年的老商人，消息灵通，货物齐全。曾是一名医生，末日后来到这里开起了杂货铺。",
+    "attributes": {
+      "strength": 8,
+      "agility": 9,
+      "luck": 11,
+      "charisma": 15,
+      "endurance": 10,
+      "perception": 14,
+      "intelligence": 12
+    },
     "npc_type": 3,
-    "portrait_path": "res://assets/portraits/trader_lao_wang.png",
-    "avatar_path": "",
     "expression_paths": {
       "normal": "res://assets/portraits/trader_lao_wang.png",
       "happy": "res://assets/portraits/trader_lao_wang_happy.png",
       "angry": "res://assets/portraits/trader_lao_wang_angry.png"
     },
+    "id": "trader_lao_wang",
     "level": 5,
-    "attributes": {
-      "strength": 8,
-      "perception": 14,
-      "endurance": 10,
-      "charisma": 15,
-      "intelligence": 12,
-      "agility": 9,
-      "luck": 11
-    },
+    "avatar_path": "",
+    "default_location": "safehouse",
+    "can_recruit": true,
+    "description": "在这个区域经营多年的老商人，消息灵通，货物齐全。曾是一名医生，末日后来到这里开起了杂货铺。",
+    "portrait_path": "res://assets/portraits/trader_lao_wang.png",
+    "can_give_quest": true,
+    "can_trade": true,
+    "dialog_tree_id": "trader_lao_wang_dialog",
     "mood": {
       "friendliness": 60,
-      "trust": 40,
       "fear": 0,
-      "anger": 0
+      "anger": 0,
+      "trust": 40
     },
-    "default_location": "safehouse",
-    "can_trade": true,
-    "can_give_quest": true,
-    "can_recruit": true,
     "trade_data": {
+      "money": 500,
+      "currency_preference": [
+        "food_canned",
+        "ammo",
+        "medical"
+      ],
       "buy_price_modifier": 1.2,
       "sell_price_modifier": 0.8,
-      "currency_preference": ["food_canned", "ammo", "medical"],
       "restock_interval": 24,
-      "money": 500,
       "inventory": [
-        {"id": "medkit", "count": 3, "price": 50},
-        {"id": "bandage", "count": 10, "price": 10},
-        {"id": "ammo_pistol", "count": 50, "price": 5},
-        {"id": "food_canned", "count": 5, "price": 15},
-        {"id": "water_bottle", "count": 8, "price": 12},
-        {"id": "knife", "count": 2, "price": 100}
+        {
+          "price": 50,
+          "id": 1005,
+          "count": 3
+        },
+        {
+          "price": 10,
+          "id": 1006,
+          "count": 10
+        },
+        {
+          "price": 5,
+          "id": 1009,
+          "count": 50
+        },
+        {
+          "price": 15,
+          "id": 1007,
+          "count": 5
+        },
+        {
+          "price": 12,
+          "id": 1008,
+          "count": 8
+        },
+        {
+          "price": 100,
+          "id": 1002,
+          "count": 2
+        }
       ]
     },
+    "title": "废土商人",
+    "name": "老王",
     "recruitment": {
-      "required_quests": ["help_trader_first"],
-      "required_items": [],
       "min_charisma": 10,
-      "min_friendliness": 80,
+      "required_quests": [
+        "help_trader_first"
+      ],
+      "cost_items": [
+        {
+          "id": 1007,
+          "count": 20
+        }
+      ],
       "min_trust": 50,
-      "cost_items": [{"id": "food_canned", "count": 20}]
-    },
-    "dialog_tree_id": "trader_lao_wang_dialog"
-  },
-  
-  "survivor_xiao_ming": {
-    "id": "survivor_xiao_ming",
-    "name": "小明",
-    "title": "年轻幸存者",
-    "description": "末日爆发时还是个孩子，在安全屋长大。对世界充满好奇，渴望冒险。",
-    "npc_type": 0,
-    "portrait_path": "res://assets/portraits/xiao_ming.png",
-    "level": 1,
-    "attributes": {
-      "strength": 8,
-      "perception": 12,
-      "endurance": 9,
-      "charisma": 10,
-      "intelligence": 11,
-      "agility": 14,
-      "luck": 10
-    },
-    "mood": {
-      "friendliness": 70,
-      "trust": 30,
-      "fear": 10,
-      "anger": 0
-    },
-    "default_location": "safehouse",
-    "can_trade": false,
-    "can_give_quest": true,
-    "can_recruit": true,
-    "recruitment": {
-      "required_quests": [],
-      "min_charisma": 8,
-      "min_friendliness": 60,
-      "cost_items": [{"id": "food_canned", "count": 5}]
+      "min_friendliness": 80,
+      "required_items": []
     }
   },
-  
   "bandit_leader": {
-    "id": "bandit_leader",
-    "name": "铁爪",
-    "title": "掠夺者头目",
-    "description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的合作伙伴还算公平。",
-    "npc_type": 1,
-    "portrait_path": "res://assets/portraits/bandit.png",
-    "level": 8,
     "attributes": {
       "strength": 16,
-      "perception": 12,
-      "endurance": 14,
-      "charisma": 8,
-      "intelligence": 10,
       "agility": 13,
-      "luck": 9
+      "luck": 9,
+      "charisma": 8,
+      "endurance": 14,
+      "perception": 12,
+      "intelligence": 10
     },
-    "combat_data": {
-      "hp": 120,
-      "max_hp": 120,
-      "damage": 15,
-      "defense": 8,
-      "speed": 7,
-      "is_boss": false
-    },
+    "npc_type": 1,
+    "id": "bandit_leader",
+    "can_recruit": false,
+    "description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的合作伙伴还算公平。",
+    "portrait_path": "res://assets/portraits/bandit.png",
+    "level": 8,
+    "can_trade": true,
+    "default_location": "street_b",
     "mood": {
       "friendliness": 30,
-      "trust": 10,
       "fear": 0,
-      "anger": 20
+      "anger": 20,
+      "trust": 10
     },
-    "default_location": "street_b",
-    "can_trade": true,
-    "can_recruit": false,
     "trade_data": {
-      "buy_price_modifier": 1.5,
-      "sell_price_modifier": 0.5,
-      "money": 300,
       "inventory": [
-        {"id": "ammo_shotgun", "count": 20, "price": 15},
-        {"id": "weapon_pipe", "count": 1, "price": 80},
-        {"id": "stimpack", "count": 3, "price": 60}
-      ]
+        {
+          "price": 15,
+          "id": 1021,
+          "count": 20
+        },
+        {
+          "price": 80,
+          "id": 1013,
+          "count": 1
+        },
+        {
+          "price": 60,
+          "id": 1039,
+          "count": 3
+        }
+      ],
+      "buy_price_modifier": 1.5,
+      "money": 300,
+      "sell_price_modifier": 0.5
+    },
+    "title": "掠夺者头目",
+    "name": "铁爪",
+    "combat_data": {
+      "defense": 8,
+      "hp": 120,
+      "max_hp": 120,
+      "is_boss": false,
+      "damage": 15,
+      "speed": 7
     }
   },
-  
+  "survivor_xiao_ming": {
+    "attributes": {
+      "strength": 8,
+      "agility": 14,
+      "luck": 10,
+      "charisma": 10,
+      "endurance": 9,
+      "perception": 12,
+      "intelligence": 11
+    },
+    "npc_type": 0,
+    "recruitment": {
+      "cost_items": [
+        {
+          "id": 1007,
+          "count": 5
+        }
+      ],
+      "required_quests": [],
+      "min_charisma": 8,
+      "min_friendliness": 60
+    },
+    "id": "survivor_xiao_ming",
+    "can_recruit": true,
+    "description": "末日爆发时还是个孩子，在安全屋长大。对世界充满好奇，渴望冒险。",
+    "portrait_path": "res://assets/portraits/xiao_ming.png",
+    "can_give_quest": true,
+    "can_trade": false,
+    "default_location": "safehouse",
+    "mood": {
+      "friendliness": 70,
+      "fear": 10,
+      "anger": 0,
+      "trust": 30
+    },
+    "title": "年轻幸存者",
+    "name": "小明",
+    "level": 1
+  },
   "doctor_chen": {
-    "id": "doctor_chen",
-    "name": "陈医生",
-    "title": "战地医生",
-    "description": "曾是市中心医院的主任医师，末日后在安全屋建立了临时诊所。心地善良，尽力帮助每一个伤者。",
-    "npc_type": 4,
-    "portrait_path": "res://assets/portraits/doctor.png",
-    "level": 6,
     "attributes": {
       "strength": 7,
-      "perception": 15,
-      "endurance": 9,
-      "charisma": 12,
-      "intelligence": 16,
       "agility": 8,
-      "luck": 10
+      "luck": 10,
+      "charisma": 12,
+      "endurance": 9,
+      "perception": 15,
+      "intelligence": 16
     },
+    "npc_type": 4,
+    "recruitment": {
+      "min_trust": 70,
+      "cost_items": [
+        {
+          "id": 1005,
+          "count": 10
+        }
+      ],
+      "min_charisma": 12,
+      "required_quests": [
+        "save_survivors",
+        1117
+      ],
+      "min_friendliness": 85
+    },
+    "id": "doctor_chen",
+    "level": 6,
+    "can_recruit": true,
+    "description": "曾是市中心医院的主任医师，末日后在安全屋建立了临时诊所。心地善良，尽力帮助每一个伤者。",
+    "portrait_path": "res://assets/portraits/doctor.png",
+    "can_give_quest": true,
+    "can_heal": true,
+    "can_trade": true,
+    "default_location": "safehouse",
     "mood": {
       "friendliness": 80,
-      "trust": 60,
       "fear": 0,
-      "anger": 0
+      "anger": 0,
+      "trust": 60
     },
-    "default_location": "safehouse",
-    "can_trade": true,
-    "can_give_quest": true,
-    "can_recruit": true,
-    "can_heal": true,
     "trade_data": {
-      "buy_price_modifier": 0.9,
-      "sell_price_modifier": 0.7,
-      "money": 400,
       "inventory": [
-        {"id": "medkit", "count": 5, "price": 40},
-        {"id": "bandage", "count": 20, "price": 8},
-        {"id": "antibiotics", "count": 5, "price": 60},
-        {"id": "painkiller", "count": 10, "price": 25}
-      ]
+        {
+          "price": 40,
+          "id": 1005,
+          "count": 5
+        },
+        {
+          "price": 8,
+          "id": 1006,
+          "count": 20
+        },
+        {
+          "price": 60,
+          "id": 1031,
+          "count": 5
+        },
+        {
+          "price": 25,
+          "id": 1033,
+          "count": 10
+        }
+      ],
+      "buy_price_modifier": 0.9,
+      "money": 400,
+      "sell_price_modifier": 0.7
     },
-    "recruitment": {
-      "required_quests": ["save_survivors", "medical_supplies"],
-      "min_charisma": 12,
-      "min_friendliness": 85,
-      "min_trust": 70,
-      "cost_items": [{"id": "medkit", "count": 10}]
-    }
+    "title": "战地医生",
+    "name": "陈医生"
   }
 }

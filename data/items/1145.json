@@ -1,0 +1,22 @@
+{
+  "level_requirement": 0,
+  "max_stack": 1,
+  "description": "可为设施供电的发电机",
+  "repairable": false,
+  "durability": -1,
+  "usable": false,
+  "slot": "",
+  "name": "发电机",
+  "id": 1145,
+  "type": "misc",
+  "value": 120,
+  "weight": 8.0,
+  "rarity": "common",
+  "special_effects": [],
+  "equippable": false,
+  "icon_path": "",
+  "attributes_bonus": {},
+  "stackable": false,
+  "max_durability": -1,
+  "subtype": "device"
+}

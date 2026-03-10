@@ -283,17 +283,17 @@ func _handle_good_event_result(event_data: Dictionary, choice: Dictionary) -> St
 			return "你小心地移动，没有引起更多注意。"
 		"hidden_room":
 			if choice.text == "强行破开":
-				GameState.add_item("rare_loot", 1)
+				GameState.add_item("1160", 1)
 				return "你成功打开了隐藏房间，发现了稀有物资！"
 			return "你找到了隐藏入口，获得了一些额外物资。"
 		"valuable_discovered":
-			GameState.add_item("valuable_item", 1)
+			GameState.add_item("1161", 1)
 			return "你获得了贵重物品！"
 		"supply_cache":
-			GameState.add_item("food", 3)
+			GameState.add_item("1007", 3)
 			return "你获得了3份食物。"
 		"locked_safe":
-			GameState.add_item("valuable_loot", 2)
+			GameState.add_item("1162", 2)
 			return "你成功打开了保险箱！"
 		_:
 			return choice.get("reward", "事件解决")
@@ -324,3 +324,5 @@ func hide_ui():
 
 func _on_close_pressed():
 	hide_ui()
+
+

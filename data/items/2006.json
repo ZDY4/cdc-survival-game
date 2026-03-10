@@ -1,0 +1,33 @@
+{
+  "id": 2006,
+  "name": "金属护甲",
+  "description": "用废金属片制成的护甲",
+  "type": "armor",
+  "subtype": "body",
+  "rarity": "uncommon",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "body",
+  "level_requirement": 2,
+  "durability": 60,
+  "max_durability": 60,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 6,
+    "insulation": 0.2,
+    "speed_penalty": 0.1
+  },
+  "special_effects": [],
+  "repair_materials": [
+    {"item": 1010, "count": 5}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

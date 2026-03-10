@@ -114,7 +114,8 @@ func _on_combat_started():
 func _on_player_action(action: String):
 	if action == "attack":
 		# 攻击时消耗额外耐力
-		var base_stamina = UnifiedEquipmentSystem.calculate_combat_stats().get("stamina_cost", 5)
+		var equip_system = GameState.get_equipment_system() if GameState else null
+		var base_stamina = equip_system.calculate_combat_stats().get("stamina_cost", 5) if equip_system else 5
 		var actual_cost = calculate_stamina_cost(base_stamina)
 		
 		# 如果超载，显示提示

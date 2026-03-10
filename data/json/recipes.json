@@ -1,216 +1,300 @@
 {
-  "recipe_bandage_basic": {
-    "id": "recipe_bandage_basic",
-    "name": "基础绷带",
-    "description": "用布料制作基础绷带",
-    "category": "medical",
-    "output": {
-      "item_id": "bandage",
-      "count": 1,
-      "quality_bonus": 0
-    },
-    "materials": [
-      {"item_id": "cloth", "count": 2}
-    ],
-    "required_tools": [],
-    "optional_tools": ["scissors"],
-    "required_station": "none",
-    "skill_requirements": {},
-    "craft_time": 10.0,
-    "experience_reward": 5,
-    "unlock_conditions": [],
-    "is_default_unlocked": true
-  },
-  
-  "recipe_first_aid_kit": {
-    "id": "recipe_first_aid_kit",
-    "name": "急救包",
-    "description": "用绷带和消毒剂制作急救包",
-    "category": "medical",
-    "output": {
-      "item_id": "medkit",
-      "count": 1,
-      "quality_bonus": 0
-    },
-    "materials": [
-      {"item_id": "bandage", "count": 2},
-      {"item_id": "antiseptic", "count": 1}
-    ],
-    "required_tools": [],
-    "optional_tools": [],
-    "required_station": "workbench",
-    "skill_requirements": {"medical": 1},
-    "craft_time": 30.0,
-    "experience_reward": 15,
-    "unlock_conditions": [],
-    "is_default_unlocked": true
-  },
-  
-  "recipe_knife_basic": {
-    "id": "recipe_knife_basic",
-    "name": "基础小刀",
-    "description": "用废金属和电子元件制作小刀",
-    "category": "weapon",
-    "output": {
-      "item_id": "knife",
-      "count": 1,
-      "quality_bonus": 0
-    },
-    "materials": [
-      {"item_id": "scrap_metal", "count": 3},
-      {"item_id": "component_electronic", "count": 1}
-    ],
-    "required_tools": ["screwdriver"],
-    "optional_tools": ["hammer"],
-    "required_station": "workbench",
-    "skill_requirements": {"crafting": 1},
-    "craft_time": 30.0,
-    "experience_reward": 10,
-    "unlock_conditions": [],
-    "is_default_unlocked": true
-  },
-  
-  "recipe_baseball_bat": {
-    "id": "recipe_baseball_bat",
-    "name": "棒球棍",
-    "description": "用废金属制作棒球棍",
-    "category": "weapon",
-    "output": {
-      "item_id": "baseball_bat",
-      "count": 1,
-      "quality_bonus": 0
-    },
-    "materials": [
-      {"item_id": "scrap_metal", "count": 5}
-    ],
-    "required_tools": [],
-    "optional_tools": ["hammer"],
-    "required_station": "workbench",
-    "skill_requirements": {},
-    "craft_time": 45.0,
-    "experience_reward": 8,
-    "unlock_conditions": [],
-    "is_default_unlocked": true
-  },
-  
-  "recipe_pipe_wrench": {
-    "id": "recipe_pipe_wrench",
-    "name": "管钳",
-    "description": "重型钝器/工具，可用于战斗和维修",
-    "category": "weapon",
-    "output": {
-      "item_id": "pipe_wrench",
-      "count": 1,
-      "quality_bonus": 0
-    },
-    "materials": [
-      {"item_id": "scrap_metal", "count": 8},
-      {"item_id": "tool_kit", "count": 1}
-    ],
-    "required_tools": ["screwdriver"],
-    "optional_tools": [],
-    "required_station": "workbench",
-    "skill_requirements": {"crafting": 2},
-    "craft_time": 60.0,
-    "experience_reward": 12,
-    "unlock_conditions": [],
-    "is_default_unlocked": true
-  },
-  
   "recipe_machete": {
+    "skill_requirements": {
+      "crafting": 3
+    },
+    "required_tools": [
+      1166
+    ],
     "id": "recipe_machete",
-    "name": "砍刀",
-    "description": "锋利的砍刀，适合野外生存",
-    "category": "weapon",
-    "output": {
-      "item_id": "machete",
-      "count": 1,
-      "quality_bonus": 0
-    },
-    "materials": [
-      {"item_id": "scrap_metal", "count": 10},
-      {"item_id": "tool_kit", "count": 1}
-    ],
-    "required_tools": ["hammer"],
-    "optional_tools": [],
+    "unlock_conditions": [],
     "required_station": "workbench",
-    "skill_requirements": {"crafting": 3},
-    "craft_time": 90.0,
     "experience_reward": 15,
-    "unlock_conditions": [],
-    "is_default_unlocked": true
-  },
-  
-  "recipe_pistol": {
-    "id": "recipe_pistol",
-    "name": "手枪",
-    "description": "制作基础手枪",
-    "category": "weapon",
     "output": {
-      "item_id": "pistol",
-      "count": 1,
-      "quality_bonus": 0
+      "quality_bonus": 0,
+      "item_id": 1014,
+      "count": 1
     },
-    "materials": [
-      {"item_id": "scrap_metal", "count": 12},
-      {"item_id": "component_electronic", "count": 3}
-    ],
-    "required_tools": ["screwdriver", "hammer"],
     "optional_tools": [],
-    "required_station": "workbench",
-    "skill_requirements": {"crafting": 2, "engineering": 1},
-    "craft_time": 100.0,
-    "experience_reward": 25,
-    "unlock_conditions": [],
-    "is_default_unlocked": false
+    "is_default_unlocked": true,
+    "description": "锋利的砍刀，适合野外生存",
+    "craft_time": 90.0,
+    "name": "砍刀",
+    "materials": [
+      {
+        "count": 10,
+        "item_id": 1010
+      },
+      {
+        "count": 1,
+        "item_id": 1144
+      }
+    ],
+    "category": "weapon"
   },
-  
-  "recipe_ammo_pistol": {
-    "id": "recipe_ammo_pistol",
-    "name": "手枪弹药",
-    "description": "制作手枪弹药",
-    "category": "ammo",
-    "output": {
-      "item_id": "ammo_pistol",
-      "count": 10,
-      "quality_bonus": 0
-    },
-    "materials": [
-      {"item_id": "gunpowder", "count": 1},
-      {"item_id": "scrap_metal", "count": 1}
-    ],
-    "required_tools": [],
-    "optional_tools": [],
-    "required_station": "workbench",
+  "recipe_baseball_bat": {
     "skill_requirements": {},
-    "craft_time": 10.0,
-    "experience_reward": 5,
+    "required_tools": [],
+    "id": "recipe_baseball_bat",
     "unlock_conditions": [],
-    "is_default_unlocked": true
-  },
-  
-  "recipe_advanced_knife": {
-    "id": "recipe_advanced_knife",
-    "name": "精制小刀",
-    "description": "使用更好的材料制作高品质小刀",
-    "category": "weapon",
+    "required_station": "workbench",
+    "experience_reward": 8,
     "output": {
-      "item_id": "knife",
-      "count": 1,
-      "quality_bonus": 2
+      "quality_bonus": 0,
+      "item_id": 1003,
+      "count": 1
     },
-    "materials": [
-      {"item_id": "steel_ingot", "count": 2},
-      {"item_id": "component_electronic", "count": 2},
-      {"item_id": "tool_kit", "count": 1}
+    "optional_tools": [
+      1166
     ],
-    "required_tools": ["screwdriver", "hammer"],
-    "optional_tools": ["grinder"],
-    "required_station": "forge",
-    "skill_requirements": {"crafting": 3, "engineering": 2},
+    "is_default_unlocked": true,
+    "description": "用废金属制作棒球棍",
+    "craft_time": 45.0,
+    "name": "棒球棍",
+    "materials": [
+      {
+        "count": 5,
+        "item_id": 1010
+      }
+    ],
+    "category": "weapon"
+  },
+  "recipe_first_aid_kit": {
+    "skill_requirements": {
+      "medical": 1
+    },
+    "required_tools": [],
+    "id": "recipe_first_aid_kit",
+    "unlock_conditions": [],
+    "required_station": "workbench",
+    "experience_reward": 15,
+    "output": {
+      "quality_bonus": 0,
+      "item_id": 1005,
+      "count": 1
+    },
+    "optional_tools": [],
+    "is_default_unlocked": true,
+    "description": "用绷带和消毒剂制作急救包",
+    "craft_time": 30.0,
+    "name": "急救包",
+    "materials": [
+      {
+        "count": 2,
+        "item_id": 1006
+      },
+      {
+        "count": 1,
+        "item_id": 1030
+      }
+    ],
+    "category": "medical"
+  },
+  "recipe_pipe_wrench": {
+    "skill_requirements": {
+      "crafting": 2
+    },
+    "required_tools": [
+      1151
+    ],
+    "id": "recipe_pipe_wrench",
+    "unlock_conditions": [],
+    "required_station": "workbench",
+    "experience_reward": 12,
+    "output": {
+      "quality_bonus": 0,
+      "item_id": 1013,
+      "count": 1
+    },
+    "optional_tools": [],
+    "is_default_unlocked": true,
+    "description": "重型钝器/工具，可用于战斗和维修",
     "craft_time": 60.0,
+    "name": "管钳",
+    "materials": [
+      {
+        "count": 8,
+        "item_id": 1010
+      },
+      {
+        "count": 1,
+        "item_id": 1144
+      }
+    ],
+    "category": "weapon"
+  },
+  "recipe_pistol": {
+    "skill_requirements": {
+      "crafting": 2,
+      "engineering": 1
+    },
+    "required_tools": [
+      1151,
+      1166
+    ],
+    "id": "recipe_pistol",
+    "unlock_conditions": [],
+    "required_station": "workbench",
+    "experience_reward": 25,
+    "output": {
+      "quality_bonus": 0,
+      "item_id": 1004,
+      "count": 1
+    },
+    "optional_tools": [],
+    "is_default_unlocked": false,
+    "description": "制作基础手枪",
+    "craft_time": 100.0,
+    "name": "手枪",
+    "materials": [
+      {
+        "count": 12,
+        "item_id": 1010
+      },
+      {
+        "count": 3,
+        "item_id": 1012
+      }
+    ],
+    "category": "weapon"
+  },
+  "recipe_knife_basic": {
+    "skill_requirements": {
+      "crafting": 1
+    },
+    "required_tools": [
+      1151
+    ],
+    "id": "recipe_knife_basic",
+    "unlock_conditions": [],
+    "required_station": "workbench",
+    "experience_reward": 10,
+    "output": {
+      "quality_bonus": 0,
+      "item_id": 1002,
+      "count": 1
+    },
+    "optional_tools": [
+      1166
+    ],
+    "is_default_unlocked": true,
+    "description": "用废金属和电子元件制作小刀",
+    "craft_time": 30.0,
+    "name": "基础小刀",
+    "materials": [
+      {
+        "count": 3,
+        "item_id": 1010
+      },
+      {
+        "count": 1,
+        "item_id": 1012
+      }
+    ],
+    "category": "weapon"
+  },
+  "recipe_advanced_knife": {
+    "skill_requirements": {
+      "crafting": 3,
+      "engineering": 2
+    },
+    "required_tools": [
+      1151,
+      1166
+    ],
+    "id": "recipe_advanced_knife",
+    "unlock_conditions": [
+      {
+        "id": "recipe_knife_basic",
+        "type": "recipe"
+      }
+    ],
+    "required_station": "forge",
     "experience_reward": 20,
-    "unlock_conditions": [{"type": "recipe", "id": "recipe_knife_basic"}],
-    "is_default_unlocked": false
+    "output": {
+      "quality_bonus": 2,
+      "item_id": 1002,
+      "count": 1
+    },
+    "optional_tools": [
+      "grinder"
+    ],
+    "is_default_unlocked": false,
+    "description": "使用更好的材料制作高品质小刀",
+    "craft_time": 60.0,
+    "name": "精制小刀",
+    "materials": [
+      {
+        "count": 2,
+        "item_id": 1106
+      },
+      {
+        "count": 2,
+        "item_id": 1012
+      },
+      {
+        "count": 1,
+        "item_id": 1144
+      }
+    ],
+    "category": "weapon"
+  },
+  "recipe_ammo_pistol": {
+    "skill_requirements": {},
+    "required_tools": [],
+    "id": "recipe_ammo_pistol",
+    "unlock_conditions": [],
+    "required_station": "workbench",
+    "experience_reward": 5,
+    "output": {
+      "quality_bonus": 0,
+      "item_id": 1009,
+      "count": 10
+    },
+    "optional_tools": [],
+    "is_default_unlocked": true,
+    "description": "制作手枪弹药",
+    "craft_time": 10.0,
+    "name": "手枪弹药",
+    "materials": [
+      {
+        "count": 1,
+        "item_id": 1105
+      },
+      {
+        "count": 1,
+        "item_id": 1010
+      }
+    ],
+    "category": "ammo"
+  },
+  "recipe_bandage_basic": {
+    "skill_requirements": {},
+    "required_tools": [],
+    "id": "recipe_bandage_basic",
+    "unlock_conditions": [],
+    "required_station": "none",
+    "experience_reward": 5,
+    "output": {
+      "quality_bonus": 0,
+      "item_id": 1006,
+      "count": 1
+    },
+    "optional_tools": [
+      "scissors"
+    ],
+    "is_default_unlocked": true,
+    "description": "用布料制作基础绷带",
+    "craft_time": 10.0,
+    "name": "基础绷带",
+    "materials": [
+      {
+        "count": 2,
+        "item_id": 1011
+      }
+    ],
+    "category": "medical"
   }
 }
+
+

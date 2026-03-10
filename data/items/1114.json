@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "电线",
+  "subtype": "parts",
+  "slot": "",
+  "weight": 0.1,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 999,
+  "value": 4,
+  "durability": -1,
+  "description": "可用作电路材料",
+  "rarity": "common",
+  "stackable": true,
+  "type": "material",
+  "id": 1114,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

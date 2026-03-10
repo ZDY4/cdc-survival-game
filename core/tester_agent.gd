@@ -477,7 +477,7 @@ func _check_comments(content: String, file_path: String) -> Array[String]:
 func _get_test_methods():
 	# 返回所有测试方法
 	return [
-		_test_weapon_system,
+		_test_equipment_system,
 		_test_inventory_system,
 		_test_quest_system
 	]
@@ -493,18 +493,24 @@ func _update_summary(results: Dictionary, test_result: Dictionary):
 
 # ===== 具体测试用例 =====
 
-func _test_weapon_system():
+func _test_equipment_system():
 	var result = {"success": true, "error": ""}
 	
-	# 测试武器数据
-	if not WeaponSystem.WEAPONS.has("knife"):
+	# 测试物品数据
+	if not ItemDatabase.has_item("1002"):
 		result.success = false
-		result.error = "武器数据库缺少knife"
+		result.error = "物品数据库缺少knife"
 		return result
 	
 	# 测试装备
-	WeaponSystem.equip_weapon("knife")
-	if WeaponSystem.equipped_weapon != "knife":
+	InventoryModule.add_item("1002", 1)
+	var equip_system = GameState.get_equipment_system()
+	if not equip_system:
+		equip_system = load("res://systems/equipment_system.gd").new()
+		GameState.set_equipment_system(equip_system)
+		get_tree().root.add_child(equip_system)
+	equip_system.equip("1002", "main_hand")
+	if ItemDatabase.resolve_item_id(equip_system.get_equipped("main_hand")) != "1002":
 		result.success = false
 		result.error = "装备武器失败"
 		return result
@@ -515,14 +521,14 @@ func _test_inventory_system():
 	var result = {"success": true, "error": ""}
 	
 	# 测试添加物品
-	var success = GameState.add_item("test_item", 1)
+	var success = GameState.add_item("1163", 1)
 	if not success:
 		result.success = false
 		result.error = "添加物品失败"
 		return result
 	
 	# 测试检查物品
-	if not GameState.has_item("test_item"):
+	if not GameState.has_item("1163"):
 		result.success = false
 		result.error = "检查物品失败"
 		return result
@@ -560,7 +566,7 @@ func _test_inventory_full(state: Dictionary):
 		GameState.inventory_items.append({"id": "item_" + str(i), "count": 1})
 	
 	# 尝试添加更多物品
-	var success = GameState.add_item("extra_item", 1)
+	var success = GameState.add_item("1165", 1)
 	if success:
 		result.success = false
 		result.error = "背包满时应拒绝添加物品"
@@ -603,3 +609,5 @@ func generate_test_report(results: Dictionary):
 				report += "  - " + error + "\n"
 	
 	return report
+
+

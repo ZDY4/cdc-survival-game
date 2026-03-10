@@ -1,90 +1,140 @@
 {
-  "bandage": {
-    "name": "绷带",
-    "description": "基础医疗用品，恢复 10HP",
-    "category": "medical",
-    "materials": [
-      {"item": "cloth", "count": 2}
-    ],
-    "output": {"item": "bandage", "count": 1},
-    "craft_time": 10.0,
-    "required_level": 0,
-    "required_station": "none",
-    "tool_required": "",
-    "durability_influence": 1.0
-  },
-  "first_aid_kit": {
-    "name": "急救包",
-    "description": "恢复50HP",
-    "category": "medical",
-    "materials": [
-      {"item": "bandage", "count": 2},
-      {"item": "antiseptic", "count": 1}
-    ],
-    "output": {"item": "first_aid_kit", "count": 1},
-    "craft_time": 30.0,
-    "required_level": 2,
-    "required_station": "workbench",
-    "tool_required": "",
-    "durability_influence": 1.0
-  },
-  "knife": {
-    "name": "小刀",
-    "description": "近战武器，耐久100，适合精准攻击",
+  "machete": {
+    "output": {
+      "item": 1014,
+      "count": 1
+    },
     "category": "weapon",
+    "tool_required": 1166,
+    "description": "锋利的砍刀，耐久120，适合野外生存",
     "materials": [
-      {"item": "scrap_metal", "count": 3},
-      {"item": "component_electronic", "count": 1}
+      {
+        "item": 1010,
+        "count": 10
+      },
+      {
+        "item": 1144,
+        "count": 1
+      }
     ],
-    "output": {"item": "knife", "count": 1},
-    "craft_time": 30.0,
-    "required_level": 1,
     "required_station": "workbench",
-    "tool_required": "screwdriver",
+    "required_level": 3,
+    "name": "砍刀",
+    "craft_time": 90.0,
     "durability_influence": 1.0
   },
   "baseball_bat": {
-    "name": "棒球棍",
-    "description": "钝器，耐久80，制作简单",
+    "output": {
+      "item": 1003,
+      "count": 1
+    },
     "category": "weapon",
-    "materials": [
-      {"item": "scrap_metal", "count": 5}
-    ],
-    "output": {"item": "baseball_bat", "count": 1},
-    "craft_time": 45.0,
-    "required_level": 1,
-    "required_station": "workbench",
     "tool_required": "",
+    "description": "钝器，耐久80，制作简单",
+    "materials": [
+      {
+        "item": 1010,
+        "count": 5
+      }
+    ],
+    "required_station": "workbench",
+    "required_level": 1,
+    "name": "棒球棍",
+    "craft_time": 45.0,
+    "durability_influence": 1.0
+  },
+  "bandage": {
+    "output": {
+      "item": 1006,
+      "count": 1
+    },
+    "category": "medical",
+    "tool_required": "",
+    "description": "基础医疗用品，恢复 10HP",
+    "materials": [
+      {
+        "item": 1011,
+        "count": 2
+      }
+    ],
+    "required_station": "none",
+    "required_level": 0,
+    "name": "绷带",
+    "craft_time": 10.0,
+    "durability_influence": 1.0
+  },
+  "first_aid_kit": {
+    "output": {
+      "item": 1005,
+      "count": 1
+    },
+    "category": "medical",
+    "tool_required": "",
+    "description": "恢复50HP",
+    "materials": [
+      {
+        "item": 1006,
+        "count": 2
+      },
+      {
+        "item": 1030,
+        "count": 1
+      }
+    ],
+    "required_station": "workbench",
+    "required_level": 2,
+    "name": "急救包",
+    "craft_time": 30.0,
+    "durability_influence": 1.0
+  },
+  "knife": {
+    "output": {
+      "item": 1002,
+      "count": 1
+    },
+    "category": "weapon",
+    "tool_required": 1151,
+    "description": "近战武器，耐久100，适合精准攻击",
+    "materials": [
+      {
+        "item": 1010,
+        "count": 3
+      },
+      {
+        "item": 1012,
+        "count": 1
+      }
+    ],
+    "required_station": "workbench",
+    "required_level": 1,
+    "name": "小刀",
+    "craft_time": 30.0,
     "durability_influence": 1.0
   },
   "pipe_wrench": {
-    "name": "管钳",
+    "output": {
+      "item": 1013,
+      "count": 1
+    },
+    "category": "weapon",
+    "tool_required": 1151,
     "description": "重型钝器/工具，耐久120，可用于战斗和维修",
-    "category": "weapon",
     "materials": [
-      {"item": "scrap_metal", "count": 8},
-      {"item": "tool_kit", "count": 1}
+      {
+        "item": 1010,
+        "count": 8
+      },
+      {
+        "item": 1144,
+        "count": 1
+      }
     ],
-    "output": {"item": "pipe_wrench", "count": 1},
-    "craft_time": 60.0,
+    "required_station": "workbench",
     "required_level": 2,
-    "required_station": "workbench",
-    "tool_required": "screwdriver",
-    "durability_influence": 1.0
-  },
-  "machete": {
-    "name": "砍刀",
-    "description": "锋利的砍刀，耐久120，适合野外生存",
-    "category": "weapon",
-    "materials": [
-      {"item": "scrap_metal", "count": 10},
-      {"item": "tool_kit", "count": 1}
-    ],
-    "output": {"item": "machete", "count": 1},
-    "craft_time": 90.0,
-    "required_level": 3,
-    "required_station": "workbench",
-    "tool_required": "hammer",
+    "name": "管钳",
+    "craft_time": 60.0,
     "durability_influence": 1.0
   }
 }
+
+

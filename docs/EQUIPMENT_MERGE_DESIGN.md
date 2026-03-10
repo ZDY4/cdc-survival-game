@@ -2,7 +2,7 @@
 
 ## 现状分析
 
-### WeaponSystem (武器系统)
+### EquipmentSystem (武器系统)
 **专属属性:**
 - damage - 伤害值
 - attack_speed - 攻击速度
@@ -181,22 +181,22 @@ func calculate_combat_stats() -> Dictionary:
 保持两个系统独立，但提供统一的外观接口:
 
 ```gdscript
-# UnifiedEquipmentSystem - 统一外观
+# EquipmentSystemFacade - 统一外观（可选）
 func equip(item_id: String, slot: String) -> bool:
     if slot in ["main_hand", "off_hand"]:
-        return WeaponSystem.equip_weapon(item_id)
+        return EquipmentSystem.equip_weapon(item_id)
     else:
         return EquipmentSystem.equip(item_id, slot)
 
 func unequip(slot: String) -> bool:
     if slot in ["main_hand", "off_hand"]:
-        return WeaponSystem.unequip()
+        return EquipmentSystem.unequip()
     else:
         return EquipmentSystem.unequip(slot)
 
 func get_item_in_slot(slot: String) -> Dictionary:
     if slot in ["main_hand", "off_hand"]:
-        return WeaponSystem.get_equipped_weapon_data()
+        return EquipmentSystem.get_equipped_weapon_data()
     else:
         return EquipmentSystem.get_equipped_in_slot(slot)
 ```
@@ -240,3 +240,4 @@ B) **保持分离** - 当前状态，各自独立工作
 C) **统一API** - 两套系统但提供统一接口
 
 需要我实施合并方案吗？
+

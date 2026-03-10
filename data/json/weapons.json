@@ -1,318 +1,522 @@
 {
-  "fist": {
-    "name": "拳头",
-    "description": "最基础的攻击方式",
+  "baseball_bat": {
+    "special_effects": [
+      "stun"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 3
+      }
+    ],
+    "max_durability": 40,
+    "attack_speed": 0.9,
+    "stamina_cost": 5,
+    "can_craft": true,
+    "durability": 40,
+    "crit_chance": 0.1,
+    "range": 2,
+    "stun_duration": 1,
     "type": "melee",
-    "subtype": "unarmed",
-    "damage": 5,
-    "attack_speed": 1.0,
-    "range": 1,
-    "weight": 0.0,
-    "durability": -1,
+    "stun_chance": 0.2,
+    "craft_recipe": {
+      "materials": [
+        {
+          "item": 1010,
+          "count": 5
+        }
+      ],
+      "time": 45
+    },
+    "crit_multiplier": 1.5,
+    "damage": 15,
+    "description": "结实的木棒，可以造成不错的伤害",
+    "subtype": "blunt",
+    "name": "棒球棍",
+    "required_level": 1,
+    "weight": 1.2
+  },
+  "fist": {
+    "special_effects": [],
+    "repair_materials": [],
     "max_durability": -1,
+    "stamina_cost": 2,
+    "can_craft": false,
+    "durability": -1,
+    "range": 1,
+    "attack_speed": 1.0,
+    "type": "melee",
     "crit_chance": 0.05,
     "crit_multiplier": 1.5,
-    "stamina_cost": 2,
-    "special_effects": [],
+    "damage": 5,
+    "description": "最基础的攻击方式",
+    "subtype": "unarmed",
+    "name": "拳头",
     "required_level": 0,
-    "repair_materials": [],
-    "can_craft": false
-  },
-  "knife": {
-    "name": "小刀",
-    "description": "锋利的匕首，适合近距离战斗",
-    "type": "melee",
-    "subtype": "dagger",
-    "damage": 12,
-    "attack_speed": 1.2,
-    "range": 1,
-    "weight": 0.3,
-    "durability": 50,
-    "max_durability": 50,
-    "crit_chance": 0.15,
-    "crit_multiplier": 2.0,
-    "stamina_cost": 3,
-    "special_effects": ["bleeding"],
-    "bleeding_damage": 2,
-    "bleeding_duration": 3,
-    "required_level": 1,
-    "repair_materials": [{"item": "scrap_metal", "count": 2}],
-    "can_craft": true,
-    "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 3}, {"item": "component_electronic", "count": 1}],
-      "time": 30
-    }
-  },
-  "baseball_bat": {
-    "name": "棒球棍",
-    "description": "结实的木棒，可以造成不错的伤害",
-    "type": "melee",
-    "subtype": "blunt",
-    "damage": 15,
-    "attack_speed": 0.9,
-    "range": 2,
-    "weight": 1.2,
-    "durability": 40,
-    "max_durability": 40,
-    "crit_chance": 0.10,
-    "crit_multiplier": 1.5,
-    "stamina_cost": 5,
-    "special_effects": ["stun"],
-    "stun_chance": 0.2,
-    "stun_duration": 1,
-    "required_level": 1,
-    "repair_materials": [{"item": "scrap_metal", "count": 3}],
-    "can_craft": true,
-    "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 5}],
-      "time": 45
-    }
-  },
-  "pipe_wrench": {
-    "name": "管钳",
-    "description": "沉重的金属工具，伤害可观",
-    "type": "melee",
-    "subtype": "blunt",
-    "damage": 20,
-    "attack_speed": 0.8,
-    "range": 2,
-    "weight": 2.0,
-    "durability": 60,
-    "max_durability": 60,
-    "crit_chance": 0.08,
-    "crit_multiplier": 1.8,
-    "stamina_cost": 7,
-    "special_effects": ["armor_break"],
-    "armor_break_chance": 0.25,
-    "required_level": 2,
-    "repair_materials": [{"item": "scrap_metal", "count": 4}],
-    "can_craft": true,
-    "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 8}, {"item": "tool_kit", "count": 1}],
-      "time": 60
-    }
-  },
-  "machete": {
-    "name": "砍刀",
-    "description": "锋利的砍刀，对付僵尸很有效",
-    "type": "melee",
-    "subtype": "sword",
-    "damage": 25,
-    "attack_speed": 1.0,
-    "range": 2,
-    "weight": 1.0,
-    "durability": 45,
-    "max_durability": 45,
-    "crit_chance": 0.12,
-    "crit_multiplier": 2.0,
-    "stamina_cost": 6,
-    "special_effects": ["cleave", "bleeding"],
-    "cleave_damage": 0.5,
-    "bleeding_damage": 3,
-    "bleeding_duration": 4,
-    "required_level": 3,
-    "repair_materials": [{"item": "scrap_metal", "count": 5}],
-    "can_craft": true,
-    "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 10}, {"item": "tool_kit", "count": 1}],
-      "time": 90
-    }
-  },
-  "katana": {
-    "name": "武士刀",
-    "description": "锋利的日本刀，极其致命",
-    "type": "melee",
-    "subtype": "sword",
-    "damage": 35,
-    "attack_speed": 1.3,
-    "range": 3,
-    "weight": 1.2,
-    "durability": 80,
-    "max_durability": 80,
-    "crit_chance": 0.20,
-    "crit_multiplier": 2.5,
-    "stamina_cost": 8,
-    "special_effects": ["cleave", "bleeding", "decapitation"],
-    "cleave_damage": 0.7,
-    "bleeding_damage": 5,
-    "bleeding_duration": 5,
-    "decapitation_chance": 0.1,
-    "required_level": 5,
-    "repair_materials": [{"item": "scrap_metal", "count": 8}, {"item": "component_electronic", "count": 2}],
-    "can_craft": true,
-    "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 15}, {"item": "component_electronic", "count": 3}, {"item": "tool_kit", "count": 2}],
-      "time": 120
-    }
+    "weight": 0.0
   },
   "chainsaw": {
-    "name": "电锯",
-    "description": "恐怖的伤害，但需要燃料",
-    "type": "melee",
-    "subtype": "heavy",
-    "damage": 50,
+    "special_effects": [
+      "bleeding",
+      "fear"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 10
+      },
+      {
+        "item": 1012,
+        "count": 3
+      }
+    ],
+    "max_durability": 100,
+    "weight": 4.0,
+    "bleeding_duration": 6,
+    "bleeding_damage": 8,
+    "can_craft": true,
+    "durability": 100,
     "attack_speed": 0.6,
     "range": 2,
-    "weight": 4.0,
-    "durability": 100,
-    "max_durability": 100,
-    "crit_chance": 0.05,
-    "crit_multiplier": 3.0,
-    "stamina_cost": 15,
-    "fuel_consumption": 1,
-    "special_effects": ["bleeding", "fear"],
-    "bleeding_damage": 8,
-    "bleeding_duration": 6,
     "fear_chance": 0.3,
-    "required_level": 6,
-    "repair_materials": [{"item": "scrap_metal", "count": 10}, {"item": "component_electronic", "count": 3}],
-    "can_craft": true,
-    "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 20}, {"item": "component_electronic", "count": 5}, {"item": "tool_kit", "count": 3}],
-      "time": 180
-    }
-  },
-  "slingshot": {
-    "name": "弹弓",
-    "description": "简易的远程武器",
-    "type": "ranged",
-    "subtype": "light",
-    "damage": 8,
-    "attack_speed": 1.0,
-    "range": 10,
-    "weight": 0.2,
-    "accuracy": 70,
-    "durability": 30,
-    "max_durability": 30,
-    "ammo_type": "stone",
-    "max_ammo": 1,
-    "reload_time": 1.0,
+    "type": "melee",
     "crit_chance": 0.05,
-    "crit_multiplier": 1.5,
-    "stamina_cost": 2,
-    "special_effects": ["headshot_bonus"],
-    "headshot_damage": 1.5,
-    "required_level": 1,
-    "repair_materials": [{"item": "scrap_metal", "count": 2}],
-    "can_craft": true,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 2}],
-      "time": 20
-    }
+      "materials": [
+        {
+          "item": 1010,
+          "count": 20
+        },
+        {
+          "item": 1012,
+          "count": 5
+        },
+        {
+          "item": 1144,
+          "count": 3
+        }
+      ],
+      "time": 180
+    },
+    "crit_multiplier": 3.0,
+    "damage": 50,
+    "description": "恐怖的伤害，但需要燃料",
+    "subtype": "heavy",
+    "fuel_consumption": 1,
+    "name": "电锯",
+    "required_level": 6,
+    "stamina_cost": 15
+  },
+  "machete": {
+    "special_effects": [
+      "cleave",
+      "bleeding"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 5
+      }
+    ],
+    "max_durability": 45,
+    "weight": 1.0,
+    "bleeding_duration": 4,
+    "bleeding_damage": 3,
+    "can_craft": true,
+    "durability": 45,
+    "range": 2,
+    "attack_speed": 1.0,
+    "type": "melee",
+    "crit_chance": 0.12,
+    "craft_recipe": {
+      "materials": [
+        {
+          "item": 1010,
+          "count": 10
+        },
+        {
+          "item": 1144,
+          "count": 1
+        }
+      ],
+      "time": 90
+    },
+    "cleave_damage": 0.5,
+    "crit_multiplier": 2.0,
+    "description": "锋利的砍刀，对付僵尸很有效",
+    "subtype": "sword",
+    "damage": 25,
+    "name": "砍刀",
+    "required_level": 3,
+    "stamina_cost": 6
   },
   "pistol": {
-    "name": "手枪",
-    "description": "可靠的副武器",
-    "type": "ranged",
-    "subtype": "pistol",
-    "damage": 25,
-    "attack_speed": 1.2,
-    "range": 25,
-    "weight": 0.8,
-    "accuracy": 80,
-    "durability": 100,
+    "special_effects": [
+      "headshot_bonus"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 5
+      },
+      {
+        "item": 1012,
+        "count": 2
+      }
+    ],
     "max_durability": 100,
-    "ammo_type": "ammo_pistol",
-    "max_ammo": 12,
-    "reload_time": 2.0,
-    "crit_chance": 0.10,
-    "crit_multiplier": 2.0,
+    "weight": 0.8,
     "stamina_cost": 3,
-    "special_effects": ["headshot_bonus"],
     "headshot_damage": 2.0,
-    "required_level": 3,
-    "repair_materials": [{"item": "scrap_metal", "count": 5}, {"item": "component_electronic", "count": 2}],
     "can_craft": true,
+    "durability": 100,
+    "range": 25,
+    "attack_speed": 1.2,
+    "type": "ranged",
+    "crit_chance": 0.1,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 12}, {"item": "component_electronic", "count": 3}],
+      "materials": [
+        {
+          "item": 1010,
+          "count": 12
+        },
+        {
+          "item": 1012,
+          "count": 3
+        }
+      ],
       "time": 100
-    }
+    },
+    "crit_multiplier": 2.0,
+    "damage": 25,
+    "description": "可靠的副武器",
+    "ammo_type": 1009,
+    "subtype": "pistol",
+    "max_ammo": 12,
+    "name": "手枪",
+    "required_level": 3,
+    "accuracy": 80,
+    "reload_time": 2.0
+  },
+  "knife": {
+    "special_effects": [
+      "bleeding"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 2
+      }
+    ],
+    "max_durability": 50,
+    "bleeding_duration": 3,
+    "bleeding_damage": 2,
+    "can_craft": true,
+    "durability": 50,
+    "range": 1,
+    "attack_speed": 1.2,
+    "type": "melee",
+    "crit_chance": 0.15,
+    "craft_recipe": {
+      "materials": [
+        {
+          "item": 1010,
+          "count": 3
+        },
+        {
+          "item": 1012,
+          "count": 1
+        }
+      ],
+      "time": 30
+    },
+    "crit_multiplier": 2.0,
+    "damage": 12,
+    "description": "锋利的匕首，适合近距离战斗",
+    "subtype": "dagger",
+    "name": "小刀",
+    "required_level": 1,
+    "stamina_cost": 3,
+    "weight": 0.3
   },
   "shotgun": {
-    "name": "霰弹枪",
-    "description": "近距离威力巨大",
-    "type": "ranged",
-    "subtype": "shotgun",
-    "damage": 40,
-    "attack_speed": 0.7,
-    "range": 15,
-    "weight": 4.0,
-    "accuracy": 60,
-    "durability": 80,
-    "max_durability": 80,
-    "ammo_type": "ammo_shotgun",
-    "max_ammo": 6,
-    "reload_time": 3.0,
-    "crit_chance": 0.08,
-    "crit_multiplier": 1.5,
-    "stamina_cost": 8,
-    "special_effects": ["spread", "knockback"],
-    "spread_targets": 3,
+    "special_effects": [
+      "spread",
+      "knockback"
+    ],
     "spread_damage": 0.6,
-    "knockback_chance": 0.4,
-    "required_level": 4,
-    "repair_materials": [{"item": "scrap_metal", "count": 8}],
+    "max_durability": 80,
+    "weight": 4.0,
+    "stamina_cost": 8,
     "can_craft": true,
+    "durability": 80,
+    "range": 15,
+    "attack_speed": 0.7,
+    "type": "ranged",
+    "crit_chance": 0.08,
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 8
+      }
+    ],
+    "crit_multiplier": 1.5,
+    "max_ammo": 6,
+    "damage": 40,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 15}, {"item": "component_electronic", "count": 2}],
+      "materials": [
+        {
+          "item": 1010,
+          "count": 15
+        },
+        {
+          "item": 1012,
+          "count": 2
+        }
+      ],
       "time": 120
-    }
+    },
+    "ammo_type": 1021,
+    "subtype": "shotgun",
+    "description": "近距离威力巨大",
+    "spread_targets": 3,
+    "name": "霰弹枪",
+    "required_level": 4,
+    "knockback_chance": 0.4,
+    "accuracy": 60,
+    "reload_time": 3.0
+  },
+  "pipe_wrench": {
+    "special_effects": [
+      "armor_break"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 4
+      }
+    ],
+    "max_durability": 60,
+    "armor_break_chance": 0.25,
+    "stamina_cost": 7,
+    "can_craft": true,
+    "durability": 60,
+    "range": 2,
+    "attack_speed": 0.8,
+    "type": "melee",
+    "crit_chance": 0.08,
+    "craft_recipe": {
+      "materials": [
+        {
+          "item": 1010,
+          "count": 8
+        },
+        {
+          "item": 1144,
+          "count": 1
+        }
+      ],
+      "time": 60
+    },
+    "crit_multiplier": 1.8,
+    "damage": 20,
+    "description": "沉重的金属工具，伤害可观",
+    "subtype": "blunt",
+    "name": "管钳",
+    "required_level": 2,
+    "weight": 2.0
+  },
+  "katana": {
+    "special_effects": [
+      "cleave",
+      "bleeding",
+      "decapitation"
+    ],
+    "description": "锋利的日本刀，极其致命",
+    "max_durability": 80,
+    "weight": 1.2,
+    "bleeding_duration": 5,
+    "bleeding_damage": 5,
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 8
+      },
+      {
+        "item": 1012,
+        "count": 2
+      }
+    ],
+    "durability": 80,
+    "range": 3,
+    "attack_speed": 1.3,
+    "type": "melee",
+    "decapitation_chance": 0.1,
+    "crit_chance": 0.2,
+    "craft_recipe": {
+      "materials": [
+        {
+          "item": 1010,
+          "count": 15
+        },
+        {
+          "item": 1012,
+          "count": 3
+        },
+        {
+          "item": 1144,
+          "count": 2
+        }
+      ],
+      "time": 120
+    },
+    "cleave_damage": 0.7,
+    "crit_multiplier": 2.5,
+    "subtype": "sword",
+    "can_craft": true,
+    "damage": 35,
+    "name": "武士刀",
+    "required_level": 5,
+    "stamina_cost": 8
   },
   "rifle": {
-    "name": "步枪",
-    "description": "精准的中距离武器",
-    "type": "ranged",
-    "subtype": "rifle",
-    "damage": 45,
-    "attack_speed": 0.8,
-    "range": 50,
-    "weight": 3.5,
-    "accuracy": 90,
-    "durability": 90,
+    "special_effects": [
+      "headshot_bonus",
+      "armor_pierce"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 6
+      },
+      {
+        "item": 1012,
+        "count": 3
+      }
+    ],
     "max_durability": 90,
-    "ammo_type": "ammo_rifle",
-    "max_ammo": 10,
-    "reload_time": 2.5,
-    "crit_chance": 0.15,
-    "crit_multiplier": 2.5,
+    "weight": 3.5,
     "stamina_cost": 5,
-    "special_effects": ["headshot_bonus", "armor_pierce"],
     "headshot_damage": 3.0,
-    "armor_pierce": 0.5,
-    "required_level": 5,
-    "repair_materials": [{"item": "scrap_metal", "count": 6}, {"item": "component_electronic", "count": 3}],
     "can_craft": true,
+    "durability": 90,
+    "range": 50,
+    "attack_speed": 0.8,
+    "type": "ranged",
+    "crit_chance": 0.15,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 18}, {"item": "component_electronic", "count": 5}],
+      "materials": [
+        {
+          "item": 1010,
+          "count": 18
+        },
+        {
+          "item": 1012,
+          "count": 5
+        }
+      ],
       "time": 150
-    }
+    },
+    "crit_multiplier": 2.5,
+    "damage": 45,
+    "description": "精准的中距离武器",
+    "ammo_type": 1022,
+    "subtype": "rifle",
+    "armor_pierce": 0.5,
+    "max_ammo": 10,
+    "name": "步枪",
+    "required_level": 5,
+    "accuracy": 90,
+    "reload_time": 2.5
+  },
+  "slingshot": {
+    "special_effects": [
+      "headshot_bonus"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 2
+      }
+    ],
+    "max_durability": 30,
+    "weight": 0.2,
+    "stamina_cost": 2,
+    "headshot_damage": 1.5,
+    "can_craft": true,
+    "durability": 30,
+    "range": 10,
+    "attack_speed": 1.0,
+    "type": "ranged",
+    "crit_chance": 0.05,
+    "craft_recipe": {
+      "materials": [
+        {
+          "item": 1010,
+          "count": 2
+        }
+      ],
+      "time": 20
+    },
+    "crit_multiplier": 1.5,
+    "damage": 8,
+    "description": "简易的远程武器",
+    "ammo_type": 1023,
+    "subtype": "light",
+    "max_ammo": 1,
+    "name": "弹弓",
+    "required_level": 1,
+    "accuracy": 70,
+    "reload_time": 1.0
   },
   "assault_rifle": {
-    "name": "突击步枪",
-    "description": "全自动火力压制",
-    "type": "ranged",
-    "subtype": "rifle",
-    "damage": 30,
-    "attack_speed": 2.0,
-    "range": 40,
-    "weight": 4.2,
-    "accuracy": 75,
-    "durability": 120,
+    "special_effects": [
+      "burst_fire"
+    ],
+    "repair_materials": [
+      {
+        "item": 1010,
+        "count": 10
+      },
+      {
+        "item": 1012,
+        "count": 4
+      }
+    ],
     "max_durability": 120,
-    "ammo_type": "ammo_rifle",
-    "max_ammo": 30,
-    "reload_time": 3.0,
-    "crit_chance": 0.08,
-    "crit_multiplier": 1.8,
+    "weight": 4.2,
     "stamina_cost": 6,
-    "special_effects": ["burst_fire"],
-    "burst_count": 3,
-    "required_level": 6,
-    "repair_materials": [{"item": "scrap_metal", "count": 10}, {"item": "component_electronic", "count": 4}],
     "can_craft": true,
+    "durability": 120,
+    "range": 40,
+    "attack_speed": 2.0,
+    "type": "ranged",
+    "crit_chance": 0.08,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 25}, {"item": "component_electronic", "count": 8}],
+      "materials": [
+        {
+          "item": 1010,
+          "count": 25
+        },
+        {
+          "item": 1012,
+          "count": 8
+        }
+      ],
       "time": 200
-    }
+    },
+    "crit_multiplier": 1.8,
+    "damage": 30,
+    "description": "全自动火力压制",
+    "ammo_type": 1022,
+    "subtype": "rifle",
+    "max_ammo": 30,
+    "name": "突击步枪",
+    "required_level": 6,
+    "burst_count": 3,
+    "accuracy": 75,
+    "reload_time": 3.0
   }
 }
+
+

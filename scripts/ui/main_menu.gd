@@ -65,23 +65,23 @@ func _reset_game_state(item: Dictionary = {}):
 	GameState.player_position = "safehouse"
 	
 	GameState.inventory_items.clear()
-	GameState.inventory_items.append({"id": "water_bottle", "count": 2})
-	GameState.inventory_items.append({"id": "food_canned", "count": 1})
-	GameState.inventory_items.append({"id": "bandage", "count": 3})
+	InventoryModule.add_item("1008", 2)
+	InventoryModule.add_item("1007", 1)
+	InventoryModule.add_item("1006", 3)
 	
 	# 添加初始武器和弹药
-	WeaponSystem.add_weapon("knife")
-	WeaponSystem.add_weapon("baseball_bat")
-	WeaponSystem.add_ammo("ammo_pistol", 12)
-	WeaponSystem.equip_weapon("knife")
+	InventoryModule.add_item("1002", 1)
+	InventoryModule.add_item("1003", 1)
+	GameState.queue_ammo("1009", 12)
+	GameState.queue_equip("1002", "main_hand")
 	
 	# 添加初始装备
-	EquipmentSystem.add_equipment("armor_cloth")
-	EquipmentSystem.add_equipment("pants_jeans")
-	EquipmentSystem.add_equipment("shoes_sneakers")
-	EquipmentSystem.equip("armor_cloth")
-	EquipmentSystem.equip("pants_jeans")
-	EquipmentSystem.equip("shoes_sneakers")
+	InventoryModule.add_item("2004", 1)
+	InventoryModule.add_item("2013", 1)
+	InventoryModule.add_item("2015", 1)
+	GameState.queue_equip("2004", "body")
+	GameState.queue_equip("2013", "legs")
+	GameState.queue_equip("2015", "feet")
 	
 	GameState.world_time = 8
 	GameState.world_day = 1

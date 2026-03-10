@@ -41,8 +41,8 @@ AI Agent (TesterAgent)
 
 | 系统 | 接口 | 状态 |
 |------|------|------|
-| WeaponSystem | `get_weapon_weight()` | ✅ 已实现 |
-| WeaponSystem | `get_equipped_weapon_weight()` | ✅ 已实现 |
+| EquipmentSystem | `get_weapon_weight()` | ✅ 已实现 |
+| EquipmentSystem | `get_equipped_weapon_weight()` | ✅ 已实现 |
 | EquipmentSystem | `get_total_weight()` | ✅ 已实现 |
 | EquipmentSystem | `get_total_carry_bonus()` | ✅ 已实现 |
 | InventoryModule | `get_inventory_weight()` | ✅ 已实现 |
@@ -103,7 +103,7 @@ AI Agent (TesterAgent)
 - `systems/carry_system.gd` - 负重核心系统 ✅
 
 ### 集成文件
-- `systems/weapon_system.gd` - 武器重量 ✅
+- `systems/equipment_system.gd` - 武器重量 ✅
 - `systems/equipment_system.gd` - 装备重量和负重加成 ✅
 - `modules/inventory/inventory_module.gd` - 物品重量 ✅
 - `modules/map/map_module.gd` - 移动惩罚集成 ✅
@@ -131,3 +131,4 @@ AI Agent (TesterAgent)
 
 *报告生成时间: 2026-02-18*  
 *测试工具: AI Agent自动化测试系统*
+

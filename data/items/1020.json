@@ -1,0 +1,54 @@
+{
+  "id": 1020,
+  "name": "突击步枪",
+  "description": "全自动火力压制",
+  "type": "weapon",
+  "subtype": "rifle",
+  "rarity": "epic",
+  "weight": 4.2,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "res://assets/icons/weapons/assault_rifle.png",
+  "equippable": true,
+  "slot": "main_hand",
+  "level_requirement": 6,
+  "durability": 120,
+  "max_durability": 120,
+  "repairable": true,
+  "usable": false,
+  "weapon_data": {
+    "damage": 30,
+    "attack_speed": 2.0,
+    "range": 40,
+    "stamina_cost": 6,
+    "accuracy": 75,
+    "ammo_type": "1022",
+    "max_ammo": 30,
+    "reload_time": 3.0,
+    "crit_chance": 0.08,
+    "crit_multiplier": 1.8,
+    "burst_count": 3
+  },
+  "special_effects": [
+    "burst_fire"
+  ],
+  "effect_data": {
+    "burst_count": 3
+  },
+  "attributes_bonus": {},
+  "repair_materials": [
+    {"item": 1010, "count": 10},
+    {"item": 1012, "count": 4}
+  ],
+  "crafting_recipe": {
+    "materials": [
+      {"item": 1010, "count": 25},
+      {"item": 1012, "count": 8}
+    ],
+    "time": 200
+  },
+  "deconstruct_yield": []
+}
+
+

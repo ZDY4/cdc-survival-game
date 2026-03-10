@@ -1,0 +1,35 @@
+{
+  "id": 2014,
+  "name": "战术裤",
+  "description": "带多个口袋的战术裤",
+  "type": "armor",
+  "subtype": "pants",
+  "rarity": "uncommon",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "legs",
+  "level_requirement": 2,
+  "durability": 45,
+  "max_durability": 45,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 3,
+    "insulation": 0.2,
+    "inventory_slots": 2
+  },
+  "special_effects": [
+    "inventory_bonus"
+  ],
+  "repair_materials": [
+    {"item": 1011, "count": 4}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

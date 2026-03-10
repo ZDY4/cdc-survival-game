@@ -18,7 +18,6 @@ const DATA_PATHS = {
 	"ability_effects": "res://data/json/ability_effects.json",
 	"effects": "res://data/json/effects.json",
 	"quests": "res://data/json/quests.json",
-	"equipment": "res://data/json/equipment.json",
 	"items": ITEM_DATA_DIR,
 	"map_locations": "res://data/json/map_locations.json",
 	"limb_data": "res://data/json/limb_data.json",

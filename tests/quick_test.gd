@@ -33,8 +33,8 @@ func _init():
 	# Test 3: Inventory
 	total_tests += 1
 	GameState.inventory_items.clear()
-	GameState.add_item("test", 1)
-	if GameState.has_item("test", 1):
+	GameState.add_item("1164", 1)
+	if GameState.has_item("1164", 1):
 		passed_tests += 1
 		print("✓ Inventory 正常")
 	else:
@@ -52,7 +52,7 @@ func _init():
 	# Test 5: Crafting
 	total_tests += 1
 	GameState.inventory_items.clear()
-	GameState.add_item("cloth", 5)
+	GameState.add_item("1011", 5)
 	if CraftingModule.can_craft("bandage"):
 		passed_tests += 1
 		print("✓ Crafting 正常")
@@ -112,7 +112,7 @@ func _init():
 	# Test 12: Base Building
 	total_tests += 1
 	GameState.inventory_items.clear()
-	GameState.add_item("wood", 10)
+	GameState.add_item("1100", 10)
 	BaseBuildingModule.built_structures.clear()
 	if BaseBuildingModule.can_build("bed"):
 		passed_tests += 1
@@ -136,3 +136,5 @@ func _init():
 	print("========================================\n")
 	
 	quit()
+
+

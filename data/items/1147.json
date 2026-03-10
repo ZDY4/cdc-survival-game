@@ -1,0 +1,22 @@
+{
+  "level_requirement": 0,
+  "max_stack": 99,
+  "description": "可用于发电机的燃料",
+  "repairable": false,
+  "durability": -1,
+  "usable": false,
+  "slot": "",
+  "name": "燃料",
+  "id": 1147,
+  "type": "material",
+  "value": 6,
+  "weight": 0.5,
+  "rarity": "common",
+  "special_effects": [],
+  "equippable": false,
+  "icon_path": "",
+  "attributes_bonus": {},
+  "stackable": true,
+  "max_durability": -1,
+  "subtype": "fuel"
+}

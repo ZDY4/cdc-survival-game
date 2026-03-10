@@ -1,0 +1,32 @@
+{
+  "id": 2015,
+  "name": "运动鞋",
+  "description": "舒适的运动鞋",
+  "type": "armor",
+  "subtype": "shoes",
+  "rarity": "common",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "feet",
+  "level_requirement": 1,
+  "durability": 25,
+  "max_durability": 25,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 1,
+    "speed_bonus": 0.1
+  },
+  "special_effects": [],
+  "repair_materials": [
+    {"item": 1011, "count": 2}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

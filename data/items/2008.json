@@ -1,0 +1,37 @@
+{
+  "id": 2008,
+  "name": "重型护甲",
+  "description": "全身重型护甲，防护极佳但行动不便",
+  "type": "armor",
+  "subtype": "body",
+  "rarity": "epic",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "body",
+  "level_requirement": 6,
+  "durability": 100,
+  "max_durability": 100,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 15,
+    "insulation": 0.4,
+    "speed_penalty": 0.2,
+    "damage_reduction": 0.25
+  },
+  "special_effects": [
+    "damage_reduction"
+  ],
+  "repair_materials": [
+    {"item": 1010, "count": 10},
+    {"item": 1012, "count": 2}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+

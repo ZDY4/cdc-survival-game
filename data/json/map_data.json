@@ -1,37 +1,65 @@
 {
-  "connections": {
-    "safehouse": ["street_a", "street_b"],
-    "street_a": ["safehouse", "supermarket", "hospital", "factory"],
-    "street_b": ["safehouse", "subway", "school"],
-    "supermarket": ["street_a"],
-    "hospital": ["street_a"],
-    "factory": ["street_a", "forest"],
-    "subway": ["street_b", "ruins"],
-    "school": ["street_b"],
-    "forest": ["factory"],
-    "ruins": ["subway"]
-  },
   "distances": {
-    "safehouse_street_a": 0.5,
-    "safehouse_street_b": 0.5,
+    "factory_forest": 2.0,
     "street_a_supermarket": 0.5,
+    "safehouse_street_b": 0.5,
     "street_a_hospital": 1.0,
     "street_a_factory": 1.5,
+    "subway_ruins": 1.0,
     "street_b_subway": 1.0,
-    "street_b_school": 0.5,
-    "factory_forest": 2.0,
-    "subway_ruins": 1.0
+    "safehouse_street_a": 0.5,
+    "street_b_school": 0.5
+  },
+  "connections": {
+    "subway": [
+      "street_b",
+      "ruins"
+    ],
+    "school": [
+      "street_b"
+    ],
+    "supermarket": [
+      "street_a"
+    ],
+    "street_b": [
+      "safehouse",
+      "subway",
+      "school"
+    ],
+    "forest": [
+      "factory"
+    ],
+    "factory": [
+      "street_a",
+      "forest"
+    ],
+    "safehouse": [
+      "street_a",
+      "street_b"
+    ],
+    "street_a": [
+      "safehouse",
+      "supermarket",
+      "hospital",
+      "factory"
+    ],
+    "hospital": [
+      "street_a"
+    ],
+    "ruins": [
+      "subway"
+    ]
   },
   "risks": {
-    "safehouse": 0,
-    "street_a": 2,
-    "street_b": 3,
-    "supermarket": 2,
-    "hospital": 4,
-    "factory": 4,
     "subway": 5,
     "school": 3,
+    "supermarket": 2,
+    "street_b": 3,
     "forest": 2,
+    "factory": 4,
+    "safehouse": 0,
+    "street_a": 2,
+    "hospital": 4,
     "ruins": 5
   }
 }

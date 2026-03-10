@@ -1,0 +1,29 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": true,
+  "name": "抗生素",
+  "subtype": "medical",
+  "slot": "",
+  "weight": 0.2,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 10,
+  "value": 60,
+  "durability": -1,
+  "description": "用于对抗感染的药物",
+  "rarity": "common",
+  "stackable": true,
+  "consumable_data": {
+    "effects": {
+      "immunity": 20
+    },
+    "use_time": 2.0,
+    "uses": 1
+  },
+  "type": "consumable",
+  "id": 1031,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

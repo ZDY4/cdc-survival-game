@@ -17,7 +17,7 @@
    - 背包/装备加成
 
 ### 修改文件
-2. ✅ `systems/weapon_system.gd`
+2. ✅ `systems/equipment_system.gd`
    - 添加武器weight字段
    - 添加get_weapon_weight()函数
    - 添加get_equipped_weapon_weight()函数
@@ -79,7 +79,7 @@ can_move() -> bool
 can_fight() -> bool
 ```
 
-### WeaponSystem 新增
+### EquipmentSystem 新增
 ```gdscript
 get_weapon_weight(weapon_id) -> float
 get_equipped_weapon_weight() -> float
@@ -165,3 +165,4 @@ func _on_weight_changed(current, max, ratio):
 负重系统核心功能已实现，可以正常使用！
 
 如需继续集成到大地图移动和战斗系统，请告诉我。
+

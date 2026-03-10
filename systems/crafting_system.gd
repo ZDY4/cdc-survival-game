@@ -15,9 +15,9 @@ const RECIPES = {
 		"description": "基础医疗用品，恢复 10HP",
 		"category": "medical",
 		"materials": [
-			{"item": "cloth", "count": 2}
+			{"item": 1011, "count": 2}
 		],
-		"output": {"item": "bandage", "count": 1},
+		"output": {"item": 1006, "count": 1},
 		"craft_time": 10.0,
 		"required_level": 0,
 		"required_station": "none",
@@ -30,10 +30,10 @@ const RECIPES = {
 		"description": "恢复50HP",
 		"category": "medical",
 		"materials": [
-			{"item": "bandage", "count": 2},
-			{"item": "antiseptic", "count": 1}
+			{"item": 1006, "count": 2},
+			{"item": 1030, "count": 1}
 		],
-		"output": {"item": "first_aid_kit", "count": 1},
+		"output": {"item": 1005, "count": 1},
 		"craft_time": 30.0,
 		"required_level": 2,
 		"required_station": "workbench",
@@ -47,14 +47,14 @@ const RECIPES = {
 		"description": "近战武器，耐久100，适合精准攻击",
 		"category": "weapon",
 		"materials": [
-			{"item": "scrap_metal", "count": 3},
-			{"item": "component_electronic", "count": 1}
+			{"item": 1010, "count": 3},
+			{"item": 1012, "count": 1}
 		],
-		"output": {"item": "knife", "count": 1},
+		"output": {"item": 1002, "count": 1},
 		"craft_time": 30.0,
 		"required_level": 1,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 1.0
 	},
 	
@@ -63,9 +63,9 @@ const RECIPES = {
 		"description": "钝器，耐久80，制作简",
 		"category": "weapon",
 		"materials": [
-			{"item": "scrap_metal", "count": 5}
+			{"item": 1010, "count": 5}
 		],
-		"output": {"item": "baseball_bat", "count": 1},
+		"output": {"item": 1003, "count": 1},
 		"craft_time": 45.0,
 		"required_level": 1,
 		"required_station": "workbench",
@@ -78,14 +78,14 @@ const RECIPES = {
 		"description": "重型钝器/工具，耐久120，可用于战斗和维",
 		"category": "weapon",
 		"materials": [
-			{"item": "scrap_metal", "count": 8},
-			{"item": "tool_kit", "count": 1}
+			{"item": 1010, "count": 8},
+			{"item": 1144, "count": 1}
 		],
-		"output": {"item": "pipe_wrench", "count": 1},
+		"output": {"item": 1013, "count": 1},
 		"craft_time": 60.0,
 		"required_level": 2,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 1.0
 	},
 	
@@ -94,14 +94,14 @@ const RECIPES = {
 		"description": "锋利的砍刀，耐久120，适合野外生存",
 		"category": "weapon",
 		"materials": [
-			{"item": "scrap_metal", "count": 10},
-			{"item": "tool_kit", "count": 1}
+			{"item": 1010, "count": 10},
+			{"item": 1144, "count": 1}
 		],
-		"output": {"item": "machete", "count": 1},
+		"output": {"item": 1014, "count": 1},
 		"craft_time": 90.0,
 		"required_level": 3,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 1.0
 	},
 	
@@ -110,9 +110,9 @@ const RECIPES = {
 		"description": "多功能工具武器，耐久150，可用于撬锁和战斗",
 		"category": "weapon",
 		"materials": [
-			{"item": "scrap_metal", "count": 12}
+			{"item": 1010, "count": 12}
 		],
-		"output": {"item": "crowbar", "count": 1},
+		"output": {"item": 1125, "count": 1},
 		"craft_time": 75.0,
 		"required_level": 2,
 		"required_station": "workbench",
@@ -126,10 +126,10 @@ const RECIPES = {
 		"description": "用于手枪",
 		"category": "ammo",
 		"materials": [
-			{"item": "scrap_metal", "count": 1},
-			{"item": "component_electronic", "count": 1}
+			{"item": 1010, "count": 1},
+			{"item": 1012, "count": 1}
 		],
-		"output": {"item": "ammo_pistol", "count": 5},
+		"output": {"item": 1009, "count": 5},
 		"craft_time": 20.0,
 		"required_level": 3,
 		"required_station": "workbench",
@@ -142,9 +142,9 @@ const RECIPES = {
 		"description": "用于霰弹",
 		"category": "ammo",
 		"materials": [
-			{"item": "scrap_metal", "count": 2}
+			{"item": 1010, "count": 2}
 		],
-		"output": {"item": "ammo_shotgun", "count": 4},
+		"output": {"item": 1021, "count": 4},
 		"craft_time": 25.0,
 		"required_level": 4,
 		"required_station": "workbench",
@@ -157,10 +157,10 @@ const RECIPES = {
 		"description": "用于步枪",
 		"category": "ammo",
 		"materials": [
-			{"item": "scrap_metal", "count": 2},
-			{"item": "component_electronic", "count": 1}
+			{"item": 1010, "count": 2},
+			{"item": 1012, "count": 1}
 		],
-		"output": {"item": "ammo_rifle", "count": 5},
+		"output": {"item": 1022, "count": 5},
 		"craft_time": 30.0,
 		"required_level": 5,
 		"required_station": "workbench",
@@ -173,10 +173,10 @@ const RECIPES = {
 		"description": "用于电锯",
 		"category": "ammo",
 		"materials": [
-			{"item": "scrap_metal", "count": 1},
-			{"item": "component_electronic", "count": 2}
+			{"item": 1010, "count": 1},
+			{"item": 1012, "count": 2}
 		],
-		"output": {"item": "fuel", "count": 10},
+		"output": {"item": 1147, "count": 10},
 		"craft_time": 40.0,
 		"required_level": 6,
 		"required_station": "workbench",
@@ -190,10 +190,10 @@ const RECIPES = {
 		"description": "制作必需品，耐久100",
 		"category": "tool",
 		"materials": [
-			{"item": "scrap_metal", "count": 5},
-			{"item": "component_electronic", "count": 2}
+			{"item": 1010, "count": 5},
+			{"item": 1012, "count": 2}
 		],
-		"output": {"item": "tool_kit", "count": 1},
+		"output": {"item": 1144, "count": 1},
 		"craft_time": 60.0,
 		"required_level": 2,
 		"required_station": "workbench",
@@ -206,9 +206,9 @@ const RECIPES = {
 		"description": "打开上锁的门和箱子，耐久50，制作简",
 		"category": "tool",
 		"materials": [
-			{"item": "scrap_metal", "count": 2}
+			{"item": 1010, "count": 2}
 		],
-		"output": {"item": "lockpick", "count": 3},
+		"output": {"item": 1150, "count": 3},
 		"craft_time": 15.0,
 		"required_level": 2,
 		"required_station": "none",
@@ -221,9 +221,9 @@ const RECIPES = {
 		"description": "精密工具，耐久80，提高制作成功率",
 		"category": "tool",
 		"materials": [
-			{"item": "scrap_metal", "count": 3}
+			{"item": 1010, "count": 3}
 		],
-		"output": {"item": "screwdriver", "count": 1},
+		"output": {"item": 1151, "count": 1},
 		"craft_time": 20.0,
 		"required_level": 1,
 		"required_station": "workbench",
@@ -236,14 +236,14 @@ const RECIPES = {
 		"description": "夜间搜索必备，耐久100，需要电",
 		"category": "tool",
 		"materials": [
-			{"item": "scrap_metal", "count": 2},
-			{"item": "component_electronic", "count": 2}
+			{"item": 1010, "count": 2},
+			{"item": 1012, "count": 2}
 		],
-		"output": {"item": "flashlight", "count": 1},
+		"output": {"item": 1126, "count": 1},
 		"craft_time": 30.0,
 		"required_level": 2,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 1.0
 	},
 	
@@ -253,9 +253,9 @@ const RECIPES = {
 		"description": "基础护甲，耐久50，轻便但防护有限",
 		"category": "armor",
 		"materials": [
-			{"item": "cloth", "count": 8}
+			{"item": 1011, "count": 8}
 		],
-		"output": {"item": "cloth_armor", "count": 1},
+		"output": {"item": 2004, "count": 1},
 		"craft_time": 40.0,
 		"required_level": 1,
 		"required_station": "workbench",
@@ -268,10 +268,10 @@ const RECIPES = {
 		"description": "皮制护甲，耐久80，较好的防护",
 		"category": "armor",
 		"materials": [
-			{"item": "cloth", "count": 5},
-			{"item": "scrap_metal", "count": 2}
+			{"item": 1011, "count": 5},
+			{"item": 1010, "count": 2}
 		],
-		"output": {"item": "leather_jacket", "count": 1},
+		"output": {"item": 2005, "count": 1},
 		"craft_time": 50.0,
 		"required_level": 2,
 		"required_station": "workbench",
@@ -284,15 +284,15 @@ const RECIPES = {
 		"description": "防弹护甲，耐久150，优秀的防",
 		"category": "armor",
 		"materials": [
-			{"item": "cloth", "count": 10},
-			{"item": "scrap_metal", "count": 8},
-			{"item": "component_electronic", "count": 3}
+			{"item": 1011, "count": 10},
+			{"item": 1010, "count": 8},
+			{"item": 1012, "count": 3}
 		],
-		"output": {"item": "kevlar_vest", "count": 1},
+		"output": {"item": 2007, "count": 1},
 		"craft_time": 90.0,
 		"required_level": 4,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 1.0
 	},
 	
@@ -301,10 +301,10 @@ const RECIPES = {
 		"description": "头部防护，耐久100",
 		"category": "armor",
 		"materials": [
-			{"item": "scrap_metal", "count": 5},
-			{"item": "cloth", "count": 3}
+			{"item": 1010, "count": 5},
+			{"item": 1011, "count": 3}
 		],
-		"output": {"item": "helmet", "count": 1},
+		"output": {"item": 2001, "count": 1},
 		"craft_time": 45.0,
 		"required_level": 2,
 		"required_station": "workbench",
@@ -318,9 +318,9 @@ const RECIPES = {
 		"description": "阻挡敌人",
 		"category": "base",
 		"materials": [
-			{"item": "scrap_metal", "count": 5}
+			{"item": 1010, "count": 5}
 		],
-		"output": {"item": "barricade_wood", "count": 1},
+		"output": {"item": 1156, "count": 1},
 		"craft_time": 30.0,
 		"required_level": 1,
 		"required_station": "workbench",
@@ -333,15 +333,15 @@ const RECIPES = {
 		"description": "提供电力",
 		"category": "base",
 		"materials": [
-			{"item": "scrap_metal", "count": 15},
-			{"item": "component_electronic", "count": 5},
-			{"item": "tool_kit", "count": 1}
+			{"item": 1010, "count": 15},
+			{"item": 1012, "count": 5},
+			{"item": 1144, "count": 1}
 		],
-		"output": {"item": "generator", "count": 1},
+		"output": {"item": 1145, "count": 1},
 		"craft_time": 120.0,
 		"required_level": 4,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 1.0
 	},
 	
@@ -350,10 +350,10 @@ const RECIPES = {
 		"description": "自动收集雨水",
 		"category": "base",
 		"materials": [
-			{"item": "scrap_metal", "count": 8},
-			{"item": "component_electronic", "count": 2}
+			{"item": 1010, "count": 8},
+			{"item": 1012, "count": 2}
 		],
-		"output": {"item": "water_collector", "count": 1},
+		"output": {"item": 1146, "count": 1},
 		"craft_time": 60.0,
 		"required_level": 3,
 		"required_station": "workbench",
@@ -366,9 +366,9 @@ const RECIPES = {
 		"description": "种植食物",
 		"category": "base",
 		"materials": [
-			{"item": "scrap_metal", "count": 5}
+			{"item": 1010, "count": 5}
 		],
-		"output": {"item": "grow_box", "count": 1},
+		"output": {"item": 1157, "count": 1},
 		"craft_time": 45.0,
 		"required_level": 2,
 		"required_station": "workbench",
@@ -382,14 +382,14 @@ const RECIPES = {
 		"description": "恢复武器30%耐久",
 		"category": "repair",
 		"materials": [
-			{"item": "scrap_metal", "count": 2},
-			{"item": "cloth", "count": 1}
+			{"item": 1010, "count": 2},
+			{"item": 1011, "count": 1}
 		],
-		"output": {"item": "repair_weapon", "count": 1, "repair_amount": 30},
+		"output": {"item": 1152, "count": 1, "repair_amount": 30},
 		"craft_time": 20.0,
 		"required_level": 1,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 0.8,
 		"is_repair": true,
 		"target_type": "weapon"
@@ -400,10 +400,10 @@ const RECIPES = {
 		"description": "恢复护甲30%耐久",
 		"category": "repair",
 		"materials": [
-			{"item": "cloth", "count": 3},
-			{"item": "scrap_metal", "count": 1}
+			{"item": 1011, "count": 3},
+			{"item": 1010, "count": 1}
 		],
-		"output": {"item": "repair_armor", "count": 1, "repair_amount": 30},
+		"output": {"item": 1153, "count": 1, "repair_amount": 30},
 		"craft_time": 20.0,
 		"required_level": 1,
 		"required_station": "workbench",
@@ -418,10 +418,10 @@ const RECIPES = {
 		"description": "恢复工具40%耐久",
 		"category": "repair",
 		"materials": [
-			{"item": "scrap_metal", "count": 1},
-			{"item": "wood", "count": 1}
+			{"item": 1010, "count": 1},
+			{"item": 1100, "count": 1}
 		],
-		"output": {"item": "repair_tool", "count": 1, "repair_amount": 40},
+		"output": {"item": 1154, "count": 1, "repair_amount": 40},
 		"craft_time": 15.0,
 		"required_level": 1,
 		"required_station": "none",
@@ -436,15 +436,15 @@ const RECIPES = {
 		"description": "恢复任何装备50%耐久",
 		"category": "repair",
 		"materials": [
-			{"item": "scrap_metal", "count": 5},
-			{"item": "cloth", "count": 3},
-			{"item": "tool_kit", "count": 1}
+			{"item": 1010, "count": 5},
+			{"item": 1011, "count": 3},
+			{"item": 1144, "count": 1}
 		],
-		"output": {"item": "repair_kit_advanced", "count": 1, "repair_amount": 50},
+		"output": {"item": 1155, "count": 1, "repair_amount": 50},
 		"craft_time": 60.0,
 		"required_level": 3,
 		"required_station": "workbench",
-		"tool_required": "screwdriver",
+		"tool_required": 1151,
 		"durability_influence": 1.0,
 		"is_repair": true,
 		"target_type": "any"
@@ -531,6 +531,7 @@ func can_craft(recipe_id: String) -> Dictionary:
 
 ## 检查所需工具
 func _check_required_tool(tool_id: String) -> Dictionary:
+	tool_id = str(tool_id)
 	if tool_id.is_empty():
 		return {"has_tool": true, "broken": false, "durability_percent": 100}
 	
@@ -650,13 +651,13 @@ func _finish_crafting(recipe_id: String):
 
 func _process_craft_result(output: Dictionary):
 	# 优先使用统一装备系统
-	if UnifiedEquipmentSystem and UnifiedEquipmentSystem.ITEMS.has(output.item):
-		InventoryModule.add_item(output.item, output.count)
-	elif output.item in ["ammo_pistol", "ammo_shotgun", "ammo_rifle"]:
-		if UnifiedEquipmentSystem:
-			UnifiedEquipmentSystem.add_ammo(output.item, output.count)
-		elif WeaponSystem:
-			WeaponSystem.add_ammo(output.item, output.count)
+	if ItemDatabase.has_item(output.item):
+		if ItemDatabase.get_item_type(output.item) == "ammo":
+			var equip_system = GameState.get_equipment_system() if GameState else null
+			if equip_system:
+				equip_system.add_ammo(str(output.item), output.count)
+		else:
+			InventoryModule.add_item(output.item, output.count)
 	else:
 		InventoryModule.add_item(output.item, output.count)
 
@@ -828,4 +829,8 @@ func load_save_data(data: Dictionary):
 		_start_next_craft()
 	
 	print("[CraftingSystem] Loaded save data")
+
+
+
+
 

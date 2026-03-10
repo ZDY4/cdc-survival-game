@@ -410,15 +410,15 @@ func _estimate_hp(actual_hp: int, visibility: float) -> String:
 		return "???"
 
 func _get_heal_item_data(item_id: String) -> Dictionary:
+	var resolved = ItemDatabase.resolve_item_id(item_id) if ItemDatabase else item_id
 	var item_db = {
-		"bandage": {"name": "绷带", "heal_amount": 15, "target": "single"},
-		"medkit": {"name": "医疗包", "heal_amount": 50, "target": "single"},
-		"first_aid_kit": {"name": "急救箱", "heal_amount": 30, "target": "all"},
-		"splint": {"name": "夹板", "heal_amount": 20, "target": "limbs", "limb_bonus": 1.5},
-		"painkiller": {"name": "止痛药", "heal_amount": 10, "target": "all"},
-		"herbal_medicine": {"name": "草药", "heal_amount": 25, "target": "single"}
+		"1006": {"name": "绷带", "heal_amount": 15, "target": "single"},
+		"1005": {"name": "医疗包", "heal_amount": 50, "target": "single"},
+		"1041": {"name": "夹板", "heal_amount": 20, "target": "limbs", "limb_bonus": 1.5},
+		"1033": {"name": "止痛药", "heal_amount": 10, "target": "all"},
+		"1038": {"name": "草药", "heal_amount": 25, "target": "single"}
 	}
-	return item_db.get(item_id, {})
+	return item_db.get(resolved, {})
 
 func _consume_item(item_id: String) -> void:
 	# 通知物品系统消耗物品

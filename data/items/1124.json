@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "医用剪刀",
+  "subtype": "tool",
+  "slot": "",
+  "weight": 0.2,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 10,
+  "value": 10,
+  "durability": -1,
+  "description": "医用工具",
+  "rarity": "common",
+  "stackable": true,
+  "type": "misc",
+  "id": 1124,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

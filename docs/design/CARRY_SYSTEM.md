@@ -180,7 +180,7 @@ can_move() -> bool                              # 检查是否可以移动
 can_fight() -> bool                             # 检查是否可以战斗
 ```
 
-### WeaponSystem 接口
+### EquipmentSystem 接口
 ```gdscript
 get_weapon_weight(weapon_id) -> float           # 获取武器重量
 get_equipped_weapon_weight() -> float           # 获取装备武器重量
@@ -253,7 +253,7 @@ func _on_weight_changed(current, max, ratio):
 - `systems/carry_system.gd` - 负重核心系统
 
 ### 集成文件
-- `systems/weapon_system.gd` - 武器重量
+- `systems/equipment_system.gd` - 武器重量
 - `systems/equipment_system.gd` - 装备重量和负重加成
 - `modules/inventory/inventory_module.gd` - 物品重量
 - `modules/map/map_module.gd` - 移动惩罚
@@ -274,3 +274,4 @@ func _on_weight_changed(current, max, ratio):
 ---
 
 *设计日期: 2026-02-18*
+

@@ -21,7 +21,7 @@ func _run_all_tests():
 	await _test_carry_system()
 	
 	# Phase 2: 统一装备
-	await _test_unified_equipment()
+	await _test_equipment()
 	
 	# Phase 3: 新敌人
 	await _test_new_enemies()
@@ -54,10 +54,10 @@ func _test_carry_system():
 	var max_weight = CarrySystem.get_max_carry_weight()
 	var overload_items = int(max_weight / 3.5) + 15
 	for i in range(overload_items):
-		GameState.add_item("rifle", 1)
+		GameState.add_item("1019", 1)
 	CarrySystem.on_inventory_changed()
 	
-	if CarrySystem.can_carry_item("rifle", 1):
+	if CarrySystem.can_carry_item("1019", 1):
 		result.success = false
 		result.tests.overload = "超重时应拒绝携带"
 	else:
@@ -65,14 +65,19 @@ func _test_carry_system():
 	
 	_record_result("负重系统", result)
 
-func _test_unified_equipment(level: int = 1):
+func _test_equipment(level: int = 1):
 	print("[Phase 2/6] 统一装备系统测试...")
 	
 	var result = {"success": true, "tests": {}}
 	
 	# 测试装备武器
-	if UnifiedEquipmentSystem:
-		var equip_result = UnifiedEquipmentSystem.equip("knife", "main_hand")
+	var equip_system = GameState.get_equipment_system()
+	if not equip_system:
+		equip_system = load("res://systems/equipment_system.gd").new()
+		GameState.set_equipment_system(equip_system)
+		get_tree().root.add_child(equip_system)
+	if equip_system:
+		var equip_result = equip_system.equip("1002", "main_hand")
 		if not equip_result:
 			result.success = false
 			result.tests.equip = "装备失败"
@@ -80,7 +85,7 @@ func _test_unified_equipment(level: int = 1):
 			result.tests.equip = "✅"
 		
 		# 测试战斗属性计算
-		var stats = UnifiedEquipmentSystem.calculate_combat_stats()
+		var stats = equip_system.calculate_combat_stats()
 		if stats.damage <= 0:
 			result.success = false
 			result.tests.stats = "战斗属性计算错误"

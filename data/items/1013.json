@@ -1,0 +1,49 @@
+{
+  "id": 1013,
+  "name": "管钳",
+  "description": "沉重的金属工具，伤害可观",
+  "type": "weapon",
+  "subtype": "blunt",
+  "rarity": "common",
+  "weight": 2.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "res://assets/icons/weapons/pipe_wrench.png",
+  "equippable": true,
+  "slot": "main_hand",
+  "level_requirement": 2,
+  "durability": 60,
+  "max_durability": 60,
+  "repairable": true,
+  "usable": false,
+  "weapon_data": {
+    "damage": 20,
+    "attack_speed": 0.8,
+    "range": 2,
+    "stamina_cost": 7,
+    "crit_chance": 0.08,
+    "crit_multiplier": 1.8
+  },
+  "special_effects": [
+    "armor_break"
+  ],
+  "effect_data": {
+    "armor_break_chance": 0.25
+  },
+  "attributes_bonus": {},
+  "repair_materials": [
+    {"item": 1010, "count": 4}
+  ],
+  "crafting_recipe": {
+    "materials": [
+      {"item": 1010, "count": 8},
+      {"item": 1144, "count": 1}
+    ],
+    "time": 60
+  },
+  "deconstruct_yield": []
+}
+
+
+

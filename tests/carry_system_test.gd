@@ -74,7 +74,7 @@ func _test_basic_weight_calculation():
 		return result
 	
 	# 添加物品并检查重量
-	GameState.add_item("knife", 1)
+	GameState.add_item("1002", 1)
 	CarrySystem.on_inventory_changed()
 	
 	var weight_after_add = CarrySystem.get_current_weight()
@@ -132,7 +132,7 @@ func _test_overload_detection():
 	# 假设最大负重50kg，每个rifle 3.5kg
 	var rifles_needed = int(max_weight / 3.5) + 5
 	for i in range(rifles_needed):
-		GameState.add_item("rifle", 1)
+		GameState.add_item("1019", 1)
 	
 	CarrySystem.on_inventory_changed()
 	
@@ -170,7 +170,7 @@ func _test_encumbrance_levels():
 	# 测试轻载 (0-50%)
 	var light_load_items = int((max_weight * 0.3) / 3.5)
 	for i in range(light_load_items):
-		GameState.add_item("rifle", 1)
+		GameState.add_item("1019", 1)
 	CarrySystem.on_inventory_changed()
 	
 	if CarrySystem.get_encumbrance_level() != CarrySystem.EncumbranceLevel.LIGHT:
@@ -182,7 +182,7 @@ func _test_encumbrance_levels():
 	GameState.inventory_items.clear()
 	var medium_load_items = int((max_weight * 0.6) / 3.5)
 	for i in range(medium_load_items):
-		GameState.add_item("rifle", 1)
+		GameState.add_item("1019", 1)
 	CarrySystem.on_inventory_changed()
 	
 	if CarrySystem.get_encumbrance_level() != CarrySystem.EncumbranceLevel.MEDIUM:
@@ -217,7 +217,7 @@ func _test_movement_penalty():
 	var max_weight = CarrySystem.get_max_carry_weight()
 	var heavy_items = int((max_weight * 0.8) / 3.5)
 	for i in range(heavy_items):
-		GameState.add_item("rifle", 1)
+		GameState.add_item("1019", 1)
 	CarrySystem.on_inventory_changed()
 	
 	var heavy_penalty = CarrySystem.get_movement_penalty()
@@ -241,3 +241,4 @@ func _update_results():
 
 func is_equal_approx():
 	return abs(a - b) < tolerance
+

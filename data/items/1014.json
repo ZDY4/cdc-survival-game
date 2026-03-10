@@ -1,0 +1,52 @@
+{
+  "id": 1014,
+  "name": "砍刀",
+  "description": "锋利的砍刀，对付僵尸很有效",
+  "type": "weapon",
+  "subtype": "sword",
+  "rarity": "uncommon",
+  "weight": 1.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "res://assets/icons/weapons/machete.png",
+  "equippable": true,
+  "slot": "main_hand",
+  "level_requirement": 3,
+  "durability": 45,
+  "max_durability": 45,
+  "repairable": true,
+  "usable": false,
+  "weapon_data": {
+    "damage": 25,
+    "attack_speed": 1.0,
+    "range": 2,
+    "stamina_cost": 6,
+    "crit_chance": 0.12,
+    "crit_multiplier": 2.0
+  },
+  "special_effects": [
+    "cleave",
+    "bleeding"
+  ],
+  "effect_data": {
+    "cleave_damage": 0.5,
+    "bleeding_damage": 3,
+    "bleeding_duration": 4
+  },
+  "attributes_bonus": {},
+  "repair_materials": [
+    {"item": 1010, "count": 5}
+  ],
+  "crafting_recipe": {
+    "materials": [
+      {"item": 1010, "count": 10},
+      {"item": 1144, "count": 1}
+    ],
+    "time": 90
+  },
+  "deconstruct_yield": []
+}
+
+
+

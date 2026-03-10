@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "测试物品(占位)",
+  "subtype": "test",
+  "slot": "",
+  "weight": 0.0,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 999,
+  "value": 0,
+  "durability": -1,
+  "description": "用于测试的占位物品",
+  "rarity": "common",
+  "stackable": true,
+  "type": "misc",
+  "id": 1164,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

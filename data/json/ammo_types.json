@@ -1,24 +1,56 @@
 {
-  "stone": {
-    "name": "石子",
+  "fuel": {
+    "name": "燃料",
     "damage_bonus": 0,
-    "can_craft": false
+    "can_craft": true,
+    "craft_recipe": {
+      "materials": [
+        {
+          "item": 1010,
+          "count": 1
+        },
+        {
+          "item": 1012,
+          "count": 2
+        }
+      ],
+      "output": 10
+    }
   },
   "ammo_pistol": {
     "name": "手枪弹药",
     "damage_bonus": 0,
     "can_craft": true,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 1}, {"item": "component_electronic", "count": 1}],
+      "materials": [
+        {
+          "item": 1010,
+          "count": 1
+        },
+        {
+          "item": 1012,
+          "count": 1
+        }
+      ],
       "output": 5
     }
+  },
+  "stone": {
+    "name": "石子",
+    "damage_bonus": 0,
+    "can_craft": false
   },
   "ammo_shotgun": {
     "name": "霰弹",
     "damage_bonus": 0,
     "can_craft": true,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 2}],
+      "materials": [
+        {
+          "item": 1010,
+          "count": 2
+        }
+      ],
       "output": 4
     }
   },
@@ -27,17 +59,17 @@
     "damage_bonus": 0,
     "can_craft": true,
     "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 2}, {"item": "component_electronic", "count": 1}],
+      "materials": [
+        {
+          "item": 1010,
+          "count": 2
+        },
+        {
+          "item": 1012,
+          "count": 1
+        }
+      ],
       "output": 5
-    }
-  },
-  "fuel": {
-    "name": "燃料",
-    "damage_bonus": 0,
-    "can_craft": true,
-    "craft_recipe": {
-      "materials": [{"item": "scrap_metal", "count": 1}, {"item": "component_electronic", "count": 2}],
-      "output": 10
     }
   }
 }

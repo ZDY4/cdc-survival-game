@@ -255,7 +255,7 @@ func _execute_night_event(event_id: String, event_data: Dictionary):
 				""
 			)
 			# 随机获得物品
-			GameState.add_item("bandage", randi_range(1, 3))
+			GameState.add_item("1006", randi_range(1, 3))
 		
 		"severe_injury":
 			DialogModule.show_dialog(
@@ -420,4 +420,5 @@ func deserialize(data: Dictionary):
 	hours_outside = data.get("hours_outside", 0.0)
 	last_sleep_day = data.get("last_sleep_day", 1)
 	print("[DayNightRiskSystem] 风险系统数据已加")
+
 

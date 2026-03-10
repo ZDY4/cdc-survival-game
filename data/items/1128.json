@@ -1,0 +1,22 @@
+{
+  "icon_path": "",
+  "max_durability": -1,
+  "usable": false,
+  "name": "收音机",
+  "subtype": "device",
+  "slot": "",
+  "weight": 0.6,
+  "special_effects": [],
+  "equippable": false,
+  "repairable": false,
+  "max_stack": 1,
+  "value": 30,
+  "durability": -1,
+  "description": "可接收广播信号",
+  "rarity": "common",
+  "stackable": false,
+  "type": "misc",
+  "id": 1128,
+  "level_requirement": 0,
+  "attributes_bonus": {}
+}

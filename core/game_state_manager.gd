@@ -279,7 +279,7 @@ func _execute_consequence(consequence: Dictionary):
 			CraftingSystem.unlock_recipe(consequence.recipe_id)
 		
 		"add_equipment":
-			EquipmentSystem.add_equipment(consequence.equipment_id)
+			InventoryModule.add_item(consequence.equipment_id, 1)
 		
 		"ending":
 			trigger_ending(consequence.ending_id)

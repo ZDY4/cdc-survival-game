@@ -5,12 +5,12 @@ const CRAFTING_RECIPES = {
 	"bandage": {
 		"name": "绷带",
 		"materials": {"cloth": 2},
-		"result": {"item": "bandage", "count": 1}
+		"result": {"item": 1006, "count": 1}
 	},
 	"spear": {
 		"name": "长矛",
 		"materials": {"wood": 3, "metal": 1},
-		"result": {"item": "spear", "count": 1}
+		"result": {"item": 1050, "count": 1}
 	}
 }
 
@@ -56,3 +56,5 @@ func get_available_recipes() -> Array[Dictionary]:
 			"can_craft": can_craft(recipe_id)
 		})
 	return available
+
+

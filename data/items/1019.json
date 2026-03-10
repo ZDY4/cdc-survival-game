@@ -1,0 +1,55 @@
+{
+  "id": 1019,
+  "name": "步枪",
+  "description": "精准的中距离武器",
+  "type": "weapon",
+  "subtype": "rifle",
+  "rarity": "rare",
+  "weight": 3.5,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "res://assets/icons/weapons/rifle.png",
+  "equippable": true,
+  "slot": "main_hand",
+  "level_requirement": 5,
+  "durability": 90,
+  "max_durability": 90,
+  "repairable": true,
+  "usable": false,
+  "weapon_data": {
+    "damage": 45,
+    "attack_speed": 0.8,
+    "range": 50,
+    "stamina_cost": 5,
+    "accuracy": 90,
+    "ammo_type": "1022",
+    "max_ammo": 10,
+    "reload_time": 2.5,
+    "crit_chance": 0.15,
+    "crit_multiplier": 2.5
+  },
+  "special_effects": [
+    "headshot_bonus",
+    "armor_pierce"
+  ],
+  "effect_data": {
+    "headshot_damage": 3.0,
+    "armor_pierce": 0.5
+  },
+  "attributes_bonus": {},
+  "repair_materials": [
+    {"item": 1010, "count": 6},
+    {"item": 1012, "count": 3}
+  ],
+  "crafting_recipe": {
+    "materials": [
+      {"item": 1010, "count": 18},
+      {"item": 1012, "count": 5}
+    ],
+    "time": 150
+  },
+  "deconstruct_yield": []
+}
+
+

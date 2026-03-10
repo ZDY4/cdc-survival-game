@@ -56,7 +56,7 @@ const QUESTS = {
 		"objectives": [
 			{"type": "travel", "target": "hospital", "current": false, "description": "前往医院"},
 			{"type": "search", "target": 2, "current": 0, "description": "搜索医院"},
-			{"type": "collect", "target": 1, "current": 0, "item_id": "first_aid_kit", "description": "获得急救包"}
+			{"type": "collect", "target": 1, "current": 0, "item_id": 1005, "description": "获得急救包"}
 		],
 		"rewards": {
 			"items": [{"id": "first_aid_kit", "count": 2}],
@@ -85,7 +85,7 @@ const QUESTS = {
 		"description": "前往超市寻找10罐食物",
 		"objectives": [
 			{"type": "travel", "target": "supermarket", "current": false, "description": "前往超市"},
-			{"type": "collect", "target": 10, "current": 0, "item_id": "food_canned", "description": "收集罐头"}
+			{"type": "collect", "target": 10, "current": 0, "item_id": 1007, "description": "收集罐头"}
 		],
 		"rewards": {
 			"items": [{"id": "water_bottle", "count": 5}],
@@ -100,7 +100,7 @@ const QUESTS = {
 		"description": "前往工厂收集20个废料",
 		"objectives": [
 			{"type": "travel", "target": "factory", "current": false, "description": "前往工厂"},
-			{"type": "collect", "target": 20, "current": 0, "item_id": "scrap_metal", "description": "收集废料"}
+			{"type": "collect", "target": 20, "current": 0, "item_id": 1010, "description": "收集废料"}
 		],
 		"rewards": {
 			"items": [{"id": "tool_kit", "count": 1}],
@@ -130,7 +130,7 @@ const QUESTS = {
 		"title": "寻找幸存者",
 		"description": "在地铁站找到通往幸存者营地的路",
 		"objectives": [
-			{"type": "collect", "target": 1, "current": 0, "item_id": "keycard_subway", "description": "获得地铁钥匙"},
+			{"type": "collect", "target": 1, "current": 0, "item_id": 1148, "description": "获得地铁钥匙"},
 			{"type": "search", "target": 5, "current": 0, "description": "搜索各种地点"}
 		],
 		"rewards": {
@@ -177,7 +177,7 @@ const QUESTS = {
 		"title": "弹药补给",
 		"description": "制作30发手枪弹药",
 		"objectives": [
-			{"type": "craft", "target": 30, "current": 0, "item_id": "ammo_pistol", "description": "制作手枪弹药"}
+			{"type": "craft", "target": 30, "current": 0, "item_id": 1009, "description": "制作手枪弹药"}
 		],
 		"rewards": {
 			"items": [{"id": "pistol", "count": 1}],
@@ -205,7 +205,7 @@ const QUESTS = {
 		"title": "传说武器",
 		"description": "制作一把武士刀",
 		"objectives": [
-			{"type": "craft", "target": 1, "current": 0, "item_id": "katana", "description": "制作武士刀"}
+			{"type": "craft", "target": 1, "current": 0, "item_id": 1015, "description": "制作武士刀"}
 		],
 		"rewards": {
 			"items": [{"id": "first_aid_kit", "count": 5}],
@@ -309,8 +309,14 @@ func update_quest_progress(quest_id: String, objective_type: String, amount: int
 			# 检查额外条件
 			if params.has("enemy_type") && objective.get("enemy_type") != params.enemy_type:
 				continue
-			if params.has("item_id") && objective.get("item_id") != params.item_id:
-				continue
+			if params.has("item_id") && objective.has("item_id"):
+				var expected_item = objective.get("item_id")
+				var provided_item = params.item_id
+				if ItemDatabase:
+					expected_item = ItemDatabase.resolve_item_id(str(expected_item))
+					provided_item = ItemDatabase.resolve_item_id(str(provided_item))
+				if expected_item != provided_item:
+					continue
 			if params.has("location") && objective.get("target") != params.location:
 				continue
 			
@@ -508,4 +514,6 @@ func load_save_data(data: Dictionary):
 	completed_quests = data.get("completed_quests", [])
 	failed_quests = data.get("failed_quests", [])
 	print("[QuestSystem] Loaded save data")
+
+
 

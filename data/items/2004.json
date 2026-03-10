@@ -1,0 +1,32 @@
+{
+  "id": 2004,
+  "name": "布衣",
+  "description": "普通的旧衣服，几乎没有防护",
+  "type": "armor",
+  "subtype": "body",
+  "rarity": "common",
+  "weight": 0.0,
+  "value": 0,
+  "stackable": false,
+  "max_stack": 1,
+  "icon_path": "",
+  "equippable": true,
+  "slot": "body",
+  "level_requirement": 0,
+  "durability": 20,
+  "max_durability": 20,
+  "repairable": true,
+  "usable": false,
+  "attributes_bonus": {
+    "defense": 1,
+    "insulation": 0.1
+  },
+  "special_effects": [],
+  "repair_materials": [
+    {"item": 1011, "count": 2}
+  ],
+  "crafting_recipe": null,
+  "deconstruct_yield": []
+}
+
+
