@@ -36,7 +36,7 @@ offset_right = 300.0
 offset_bottom = -180.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_font_sizes/font_size = 56
+theme_override_font_sizes/font_size = 48
 text = "CDC 末日生存"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -54,7 +54,7 @@ offset_right = 200.0
 offset_bottom = -140.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 20
 text = "Survival Game"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -72,25 +72,25 @@ offset_right = 180.0
 offset_bottom = 300.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 24
+theme_override_constants/separation = 18
 
 [node name="StartButton" type="Button" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 72)
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 24
 text = "开始游戏"
 
 [node name="ContinueButton" type="Button" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 72)
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 24
 text = "继续游戏"
 disabled = true
 
 [node name="ExitButton" type="Button" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 72)
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 24
 text = "退出游戏"
 
 [node name="VersionLabel" type="Label" parent="."]
@@ -106,6 +106,6 @@ offset_right = -20.0
 offset_bottom = -20.0
 grow_horizontal = 0
 grow_vertical = 0
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 12
 text = "v0.1.0 Alpha"
 horizontal_alignment = 2
