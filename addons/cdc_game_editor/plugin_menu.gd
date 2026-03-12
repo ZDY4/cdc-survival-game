@@ -1,17 +1,16 @@
-﻿@tool
+@tool
 extends EditorPlugin
 
 const PLUGIN_NAME: String = "CDC Game Editor"
-const PLUGIN_VERSION: String = "2.3.0"
+const PLUGIN_VERSION: String = "2.4.0"
 
 const MENU_DIALOG_EDITOR: int = 1
 const MENU_QUEST_EDITOR: int = 2
 const MENU_ITEM_EDITOR: int = 3
-const MENU_NPC_EDITOR: int = 4
+const MENU_CHARACTER_EDITOR: int = 4
 const MENU_RECIPE_EDITOR: int = 5
 const MENU_SKILL_EDITOR: int = 6
-const MENU_ENEMY_EDITOR: int = 7
-const MENU_EFFECT_EDITOR: int = 8
+const MENU_EFFECT_EDITOR: int = 7
 const MENU_CDC_EDITORS_ROOT: int = 100
 
 const CDC_SUBMENU_NAME: String = "CDCEditorsSubmenu"
@@ -22,14 +21,11 @@ const MENU_ATTACH_MAX_ATTEMPTS: int = 120
 const EDITOR_DIALOG: String = "dialog"
 const EDITOR_QUEST: String = "quest"
 const EDITOR_ITEM: String = "item"
-const EDITOR_NPC: String = "npc"
-const EDITOR_ENEMY: String = "enemy"
+const EDITOR_CHARACTER: String = "character"
 const EDITOR_EFFECT: String = "effect"
 const EDITOR_RECIPE: String = "recipe"
 const EDITOR_SKILL: String = "skill"
 
-const DATA_KIND_NPC: String = "npc"
-const DATA_KIND_ENEMY: String = "enemy"
 const DATA_KIND_ITEM: String = "item"
 const DATA_KIND_QUEST: String = "quest"
 const DATA_KIND_RECIPE: String = "recipe"
@@ -55,15 +51,10 @@ const EDITOR_CONFIGS: Dictionary = {
 		"script_path": "res://addons/cdc_game_editor/editors/item_editor/item_editor.gd",
 		"window_size": Vector2i(1200, 800)
 	},
-	EDITOR_NPC: {
-		"window_title": "CDC - NPC Editor",
-		"script_path": "res://addons/cdc_game_editor/editors/npc_editor/npc_editor.gd",
-		"window_size": Vector2i(1200, 800)
-	},
-	EDITOR_ENEMY: {
-		"window_title": "CDC - Enemy Editor",
-		"script_path": "res://addons/cdc_game_editor/editors/enemy_editor/enemy_editor.gd",
-		"window_size": Vector2i(1200, 800)
+	EDITOR_CHARACTER: {
+		"window_title": "CDC - Character Data Editor",
+		"script_path": "res://addons/cdc_game_editor/editors/character_data_editor/character_data_editor.gd",
+		"window_size": Vector2i(1320, 900)
 	},
 	EDITOR_EFFECT: {
 		"window_title": "CDC - Effect Editor",
@@ -86,21 +77,19 @@ const MENU_TO_EDITOR_KEY: Dictionary = {
 	MENU_DIALOG_EDITOR: EDITOR_DIALOG,
 	MENU_QUEST_EDITOR: EDITOR_QUEST,
 	MENU_ITEM_EDITOR: EDITOR_ITEM,
-	MENU_NPC_EDITOR: EDITOR_NPC,
-	MENU_ENEMY_EDITOR: EDITOR_ENEMY,
+	MENU_CHARACTER_EDITOR: EDITOR_CHARACTER,
 	MENU_EFFECT_EDITOR: EDITOR_EFFECT,
 	MENU_RECIPE_EDITOR: EDITOR_RECIPE,
 	MENU_SKILL_EDITOR: EDITOR_SKILL
 }
 
 const DATA_KIND_TO_EDITOR_KEY: Dictionary = {
-	DATA_KIND_NPC: EDITOR_NPC,
-	DATA_KIND_ENEMY: EDITOR_ENEMY,
 	DATA_KIND_ITEM: EDITOR_ITEM,
 	DATA_KIND_QUEST: EDITOR_QUEST,
 	DATA_KIND_RECIPE: EDITOR_RECIPE,
 	DATA_KIND_SKILL: EDITOR_SKILL,
-	DATA_KIND_EFFECT: EDITOR_EFFECT
+	DATA_KIND_EFFECT: EDITOR_EFFECT,
+	DATA_KIND_CHARACTER: EDITOR_CHARACTER
 }
 
 var _cdc_menu_button: MenuButton = null
@@ -161,7 +150,6 @@ func _create_cdc_menu() -> void:
 			return
 		await get_tree().process_frame
 
-	# Fallback if editor menu layout is not discoverable.
 	_cdc_menu_button = MenuButton.new()
 	_cdc_menu_button.text = "CDC"
 	_cdc_menu_button.tooltip_text = "Open CDC editors"
@@ -226,8 +214,7 @@ func _populate_cdc_menu(menu: PopupMenu) -> void:
 	menu.add_item("Dialog Editor", MENU_DIALOG_EDITOR)
 	menu.add_item("Quest Editor", MENU_QUEST_EDITOR)
 	menu.add_item("Item Editor", MENU_ITEM_EDITOR)
-	menu.add_item("NPC Editor", MENU_NPC_EDITOR)
-	menu.add_item("Enemy Editor", MENU_ENEMY_EDITOR)
+	menu.add_item("Character Data Editor", MENU_CHARACTER_EDITOR)
 	menu.add_item("Effect Editor", MENU_EFFECT_EDITOR)
 	menu.add_item("Recipe Editor", MENU_RECIPE_EDITOR)
 	menu.add_item("Skill Editor", MENU_SKILL_EDITOR)
@@ -262,13 +249,6 @@ func _find_main_menu_bar(root: Node) -> MenuBar:
 			return found
 
 	return null
-
-func _looks_like_main_menu_bar(menu_bar: MenuBar) -> bool:
-	var menu_button_count: int = 0
-	for child in menu_bar.get_children():
-		if child is MenuButton:
-			menu_button_count += 1
-	return menu_button_count >= 4
 
 func _find_editor_popup_menu(root: Node) -> PopupMenu:
 	var menu_button: MenuButton = _find_editor_menu_button(root)
@@ -352,20 +332,7 @@ func open_cdc_data_editor(data_kind: String, data_id: String) -> bool:
 		push_warning("[%s] Could not focus %s in %s editor" % [PLUGIN_NAME, normalized_id, editor_key])
 	return focused
 
-func _resolve_editor_key_for_data(data_kind: String, data_id: String) -> String:
-	if data_kind == DATA_KIND_CHARACTER:
-		var npc_ids: Array[String] = get_data_ids(DATA_KIND_NPC)
-		var enemy_ids: Array[String] = get_data_ids(DATA_KIND_ENEMY)
-		var in_npc: bool = npc_ids.has(data_id)
-		var in_enemy: bool = enemy_ids.has(data_id)
-		if in_npc and in_enemy:
-			push_warning("[%s] character id '%s' exists in npc and enemy, defaulting to npc editor" % [PLUGIN_NAME, data_id])
-		if in_npc:
-			return EDITOR_NPC
-		if in_enemy:
-			return EDITOR_ENEMY
-		return EDITOR_NPC
-
+func _resolve_editor_key_for_data(data_kind: String, _data_id: String) -> String:
 	return DATA_KIND_TO_EDITOR_KEY.get(data_kind, "")
 
 func _open_editor_window(editor_key: String) -> bool:
@@ -379,7 +346,6 @@ func _open_editor_window(editor_key: String) -> bool:
 		return false
 
 	if editor_window.visible:
-		# Keep current visible window behavior predictable: focus only.
 		editor_window.grab_focus()
 		return true
 
@@ -528,10 +494,6 @@ func _edit(object: Object) -> void:
 func get_data_ids(data_kind: String) -> Array[String]:
 	var normalized_kind: String = data_kind.strip_edges().to_lower()
 	match normalized_kind:
-		DATA_KIND_NPC:
-			return _load_ids_from_json_dict_files(["res://data/json/npcs.json", "res://data/npcs.json"])
-		DATA_KIND_ENEMY:
-			return _load_ids_from_json_dict_files(["res://data/json/enemies.json", "res://data/enemies.json"])
 		DATA_KIND_QUEST:
 			return _load_ids_from_json_dict_files(["res://data/json/quests.json", "res://data/quests.json"])
 		DATA_KIND_RECIPE:
@@ -546,18 +508,7 @@ func get_data_ids(data_kind: String) -> Array[String]:
 		DATA_KIND_EFFECT:
 			return _load_ids_from_json_directory("res://data/json/effects")
 		DATA_KIND_CHARACTER:
-			var merged_ids: Dictionary = {}
-			for id in get_data_ids(DATA_KIND_NPC):
-				merged_ids[id] = true
-			for id in get_data_ids(DATA_KIND_ENEMY):
-				if merged_ids.has(id):
-					push_warning("[%s] Duplicate character id found in npc/enemy: %s" % [PLUGIN_NAME, id])
-				merged_ids[id] = true
-			var character_ids: Array[String] = []
-			for key in merged_ids.keys():
-				character_ids.append(str(key))
-			character_ids.sort()
-			return character_ids
+			return _load_ids_from_json_directory("res://data/characters")
 		_:
 			return []
 

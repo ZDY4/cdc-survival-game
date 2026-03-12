@@ -14,6 +14,7 @@ enum CombatState { PLAYER_TURN, ENEMY_TURN, VICTORY, DEFEAT, FLED }
 # 战斗配置
 var _combat_state: CombatState = CombatState.PLAYER_TURN
 var _current_enemy: Dictionary = {}
+var _current_character_id: String = ""
 var _turn_count: int = 0
 var _player_defending: bool = false
 var _player_stunned: bool = false
@@ -32,33 +33,14 @@ func _ready():
     print("[CombatSystem] 深度战斗系统已初始化")
 
 # 开始战斗
-func start_combat(enemy_id: String):
-    # 从敌人数据库获取数据
-    var enemy_data: Dictionary = EnemyDatabase.get_enemy(enemy_id)
+func start_combat(character_ref: Variant):
+    var character_id: String = _resolve_character_id(character_ref)
+    var enemy_data: Dictionary = _build_runtime_enemy_from_character(character_id)
     if enemy_data.is_empty():
-        push_error("[CombatSystem] 敌人数据不存在: %s" % enemy_id)
+        push_error("[CombatSystem] 角色战斗数据不存在: %s" % character_id)
         return
 
-    if not enemy_data.has("id"):
-        enemy_data["id"] = enemy_id
-    if not enemy_data.has("name"):
-        enemy_data["name"] = "未知敌人"
-    if not enemy_data.has("level"):
-        enemy_data["level"] = 1
-
-    var stats: Dictionary = {}
-    if enemy_data.has("stats") and enemy_data["stats"] is Dictionary:
-        stats = enemy_data["stats"]
-
-    var hp: int = int(stats.get("hp", 10))
-    stats["hp"] = hp
-    stats["max_hp"] = int(stats.get("max_hp", hp))
-    stats["damage"] = int(stats.get("damage", 3))
-    stats["defense"] = int(stats.get("defense", 0))
-    stats["speed"] = int(stats.get("speed", 5))
-    enemy_data["stats"] = stats
-    enemy_data["current_hp"] = hp
-
+    _current_character_id = character_id
     _current_enemy = enemy_data
     
     _combat_state = CombatState.PLAYER_TURN
@@ -435,8 +417,8 @@ func _check_combat_end():
 
 # 处理胜利
 func _handle_victory(type: String = ""):
-    var xp = _current_enemy.get("xp", 10)
-    var loot = EnemyDatabase.calculate_loot(_current_enemy.id)
+    var xp = int(_current_enemy.get("xp", 10))
+    var loot = _calculate_character_loot(_current_enemy)
     
     # 给予经验（如果有经验系统"
     # ExperienceSystem.add_xp(xp)
@@ -482,6 +464,81 @@ func _format_loot(loot: Array):
         items.append("%s x%d" % [item.item, item.amount])
     
     return ", ".join(items)
+
+func _build_runtime_enemy_from_character(character_id: String) -> Dictionary:
+    if not DataManager or not DataManager.has_method("get_character"):
+        return {}
+
+    var character_data: Variant = DataManager.get_character(character_id)
+    if not (character_data is Dictionary):
+        return {}
+    var character: Dictionary = character_data
+    if character.is_empty():
+        return {}
+
+    var combat: Dictionary = character.get("combat", {})
+    var stats_data: Dictionary = combat.get("stats", {})
+    var hp: int = int(stats_data.get("hp", 10))
+    var max_hp: int = int(stats_data.get("max_hp", hp))
+    var normalized_stats: Dictionary = {
+        "hp": hp,
+        "max_hp": max_hp,
+        "damage": int(stats_data.get("damage", 3)),
+        "defense": int(stats_data.get("defense", 0)),
+        "speed": int(stats_data.get("speed", 5)),
+        "accuracy": int(stats_data.get("accuracy", 60))
+    }
+
+    return {
+        "id": str(character.get("id", character_id)),
+        "name": str(character.get("name", "未知敌人")),
+        "description": str(character.get("description", "")),
+        "level": int(character.get("level", 1)),
+        "stats": normalized_stats,
+        "current_hp": hp,
+        "behavior": str(combat.get("behavior", "passive")),
+        "special_abilities": combat.get("special_abilities", []).duplicate(),
+        "weaknesses": combat.get("weaknesses", []).duplicate(),
+        "resistances": combat.get("resistances", []).duplicate(),
+        "loot": combat.get("loot", []).duplicate(true),
+        "xp": int(combat.get("xp", 10))
+    }
+
+func _calculate_character_loot(enemy_data: Dictionary) -> Array:
+    var drops: Array = []
+    var loot_entries: Array = enemy_data.get("loot", [])
+    for entry in loot_entries:
+        if not (entry is Dictionary):
+            continue
+        var chance: float = float(entry.get("chance", 0.0))
+        if randf() > chance:
+            continue
+        var item_id: Variant = entry.get("item_id", entry.get("item", ""))
+        var min_amount: int = int(entry.get("min", 1))
+        var max_amount: int = int(entry.get("max", min_amount))
+        var amount: int = randi_range(min_amount, max_amount)
+        drops.append({
+            "item": item_id,
+            "amount": amount
+        })
+    return drops
+
+func _resolve_character_id(character_ref: Variant) -> String:
+    if character_ref is String:
+        return str(character_ref)
+    if character_ref is Dictionary:
+        var payload: Dictionary = character_ref
+        var from_character: String = str(payload.get("character_id", ""))
+        if not from_character.is_empty():
+            return from_character
+        var from_enemy_data: Variant = payload.get("enemy_data", null)
+        if from_enemy_data is String:
+            return str(from_enemy_data)
+        if from_enemy_data is Dictionary:
+            var nested: Dictionary = from_enemy_data
+            return str(nested.get("id", ""))
+        return str(payload.get("id", ""))
+    return str(character_ref)
 
 func _get_combat_skill(skill_id: String):
     # 返回技能数"

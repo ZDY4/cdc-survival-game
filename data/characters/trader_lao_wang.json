@@ -1,0 +1,114 @@
+{
+	"id": "trader_lao_wang",
+	"name": "老王",
+	"description": "在这个区域经营多年的老商人，消息灵通，货物齐全。曾是一名医生，末日后来到这里开起了杂货铺。",
+	"level": 5,
+	"identity": {
+		"camp_id": "survivor"
+	},
+	"visual": {
+		"portrait_path": "res://assets/portraits/trader_lao_wang.png",
+		"avatar_path": "",
+		"model_path": "",
+		"placeholder": {
+			"head_color": "#eecba0",
+			"body_color": "#6a9add",
+			"leg_color": "#3c5c90"
+		}
+	},
+	"combat": {
+		"stats": {
+			"hp": 60,
+			"max_hp": 60,
+			"damage": 4,
+			"defense": 2,
+			"speed": 4,
+			"accuracy": 70,
+			"crit_chance": 0.05,
+			"crit_damage": 1.5,
+			"evasion": 0.05
+		},
+		"ai": {
+			"aggro_range": 0.0,
+			"attack_range": 1.2,
+			"wander_radius": 3.0,
+			"leash_distance": 5.0,
+			"decision_interval": 1.2,
+			"attack_cooldown": 999.0
+		},
+		"behavior": "neutral",
+		"loot": [],
+		"xp": 25
+	},
+	"social": {
+		"title": "废土商人",
+		"dialog_tree_id": "trader_lao_wang_dialog",
+		"mood": {
+			"friendliness": 60,
+			"trust": 40,
+			"fear": 0,
+			"anger": 0
+		},
+		"trade": {
+			"enabled": true,
+			"buy_price_modifier": 1.2,
+			"sell_price_modifier": 0.8,
+			"money": 500,
+			"inventory": [
+				{
+					"id": 1005,
+					"count": 3,
+					"price": 50
+				},
+				{
+					"id": 1006,
+					"count": 10,
+					"price": 10
+				},
+				{
+					"id": 1009,
+					"count": 50,
+					"price": 5
+				},
+				{
+					"id": 1007,
+					"count": 5,
+					"price": 15
+				},
+				{
+					"id": 1008,
+					"count": 8,
+					"price": 12
+				},
+				{
+					"id": 1002,
+					"count": 2,
+					"price": 100
+				}
+			]
+		},
+		"recruitment": {
+			"enabled": true,
+			"min_charisma": 10,
+			"min_friendliness": 80,
+			"min_trust": 50,
+			"required_quests": [
+				"help_trader_first"
+			],
+			"required_items": [],
+			"cost_items": [
+				{
+					"id": 1007.0,
+					"count": 20.0
+				}
+			],
+			"cost_money": 0
+		},
+		"capabilities": {
+			"can_interact": true,
+			"can_trade": true,
+			"can_give_quest": true,
+			"can_recruit": true
+		}
+	}
+}

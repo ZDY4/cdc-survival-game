@@ -14,7 +14,8 @@ const DATA_PATHS = {
 	"clues": "res://data/json/clues.json",
 	"story_chapters": "res://data/json/story_chapters.json",
 	"recipes": "res://data/json/recipes.json",
-	"enemies": "res://data/json/enemies.json",
+	"characters": "res://data/characters",
+	"camp_relations": "res://data/json/camp_relations.json",
 	"effects": "res://data/json/effects",
 	"quests": "res://data/json/quests.json",
 	"items": ITEM_DATA_DIR,
@@ -23,7 +24,6 @@ const DATA_PATHS = {
 	"encounters": "res://data/json/encounters.json",
 	"scavenge_locations": "res://data/json/scavenge_locations.json",
 	"weapons": "res://data/json/weapons.json",
-	"npcs": "res://data/json/npcs.json",
 	"skills": "res://data/skills",
 	"skill_trees": "res://data/skill_trees",
 	"balance": "res://data/json/balance.json",
@@ -233,13 +233,17 @@ func get_all_recipes() -> Dictionary:
 	return get_data("recipes")
 
 
-## 敌人数据
-func get_enemy(enemy_id: String) -> Dictionary:
-	return get_item("enemies", enemy_id)
+## 角色数据
+func get_character(character_id: String) -> Dictionary:
+	return get_item("characters", character_id)
 
 
-func get_all_enemies() -> Dictionary:
-	return get_data("enemies")
+func get_all_characters() -> Dictionary:
+	return get_data("characters")
+
+
+func get_camp_relations() -> Dictionary:
+	return get_data("camp_relations")
 
 
 ## 任务数据
@@ -312,15 +316,6 @@ func get_scavenge_location(location_id: String) -> Dictionary:
 
 func get_all_scavenge_locations() -> Dictionary:
 	return get_data("scavenge_locations")
-
-
-## NPC数据
-func get_npc(npc_id: String) -> Dictionary:
-	return get_item("npcs", npc_id)
-
-
-func get_all_npcs() -> Dictionary:
-	return get_data("npcs")
 
 
 ## 效果数据

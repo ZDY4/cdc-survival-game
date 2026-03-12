@@ -3,7 +3,6 @@ class_name AISpawnPoint
 extends Marker3D
 
 @export var spawn_id: String = ""  # 刷新点唯一ID；为空时使用节点名
-@export_enum("npc", "enemy") var role_kind: String = "npc"  # 生成角色类型：npc 或 enemy
 @export_custom(PROPERTY_HINT_NONE, "cdc_data_id:character") var character_id: String = ""  # 角色配置ID（Inspector提供下拉和打开编辑器）
 @export var auto_spawn: bool = true  # 场景初始化时是否自动生成
 @export var respawn_enabled: bool = false  # 角色被移除后是否允许自动重生
@@ -19,12 +18,17 @@ func _set(property: StringName, value: Variant) -> bool:
 	if String(property) == "role_id":
 		character_id = str(value)
 		return true
+	# 历史字段 role_kind 已废弃，读取后直接忽略
+	if String(property) == "role_kind":
+		return true
 	return false
 
 func _get(property: StringName) -> Variant:
 	# 兼容历史场景字段 role_id -> character_id
 	if String(property) == "role_id":
 		return character_id
+	if String(property) == "role_kind":
+		return ""
 	return null
 
 func get_effective_spawn_id() -> String:
@@ -59,9 +63,7 @@ func _generate_unique_spawn_id() -> String:
 	return candidate
 
 func _build_spawn_id_base() -> String:
-	var kind: String = role_kind.strip_edges().to_lower()
-	if kind.is_empty():
-		kind = "role"
+	var kind: String = "character"
 	var node_key: String = name.to_snake_case().strip_edges()
 	if node_key.is_empty():
 		node_key = "spawn_point"
