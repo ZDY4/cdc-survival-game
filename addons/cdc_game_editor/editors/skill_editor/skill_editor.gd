@@ -667,6 +667,27 @@ func _set_status(message: String) -> void:
 		_status_label.text = message
 	print("[SkillEditor] %s" % message)
 
+func focus_record(record_id: String) -> bool:
+	var target_id: String = record_id.strip_edges()
+	if target_id.is_empty():
+		return false
+
+	_reload_all()
+	if not _skills.has(target_id):
+		_set_status("未找到技能: %s" % target_id)
+		return false
+
+	var item_index: int = _find_item_list_index(_skill_list, target_id)
+	if item_index < 0:
+		_set_status("未找到技能: %s" % target_id)
+		return false
+
+	_skill_list.select(item_index)
+	_on_skill_selected(item_index)
+	_skill_list.ensure_current_is_visible()
+	_set_status("已定位技能: %s" % target_id)
+	return true
+
 
 func _generate_unique_id(container: Dictionary, base_id: String) -> String:
 	var index: int = 1

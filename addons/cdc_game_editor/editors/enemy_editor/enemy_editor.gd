@@ -147,6 +147,26 @@ func _load_enemies_from_data_manager():
 	if data_manager:
 		enemies = data_manager.get_all_enemies()
 		print("[EnemyEditor] Loaded %d enemies from DataManager" % enemies.size())
+		if not enemies.is_empty():
+			return
+	_load_enemies_from_project_files()
+
+func _load_enemies_from_project_files() -> void:
+	var candidates: Array[String] = [
+		"res://data/json/enemies.json",
+		"res://data/enemies.json"
+	]
+	for path in candidates:
+		if not FileAccess.file_exists(path):
+			continue
+		var json_text: String = FileAccess.get_file_as_string(path)
+		if json_text.is_empty():
+			continue
+		var parsed: Variant = JSON.parse_string(json_text)
+		if parsed is Dictionary:
+			enemies = parsed
+			print("[EnemyEditor] Loaded %d enemies from %s" % [enemies.size(), path])
+			return
 
 func _update_enemy_list(filter: String = ""):
 	_enemy_list.clear()
@@ -455,3 +475,23 @@ func _load_from_file(path: String):
 func _update_status(message: String):
 	_status_bar.text = message
 	print("[EnemyEditor] %s" % message)
+
+func focus_record(record_id: String) -> bool:
+	var target_id: String = record_id.strip_edges()
+	if target_id.is_empty():
+		return false
+
+	_update_enemy_list()
+	if not enemies.has(target_id):
+		_update_status("未找到敌人: %s" % target_id)
+		return false
+
+	_select_enemy(target_id)
+	if _enemy_list:
+		for i in range(_enemy_list.get_item_count()):
+			if str(_enemy_list.get_item_metadata(i)) == target_id:
+				_enemy_list.select(i)
+				_enemy_list.ensure_current_is_visible()
+				break
+	_update_status("已定位敌人: %s" % target_id)
+	return true

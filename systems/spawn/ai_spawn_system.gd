@@ -54,8 +54,8 @@ func spawn_from_point(point: AISpawnPoint) -> Node3D:
             return existing
         _active_instances.erase(spawn_id)
 
-    if point.role_id.is_empty():
-        push_warning("[AISpawnSystem] role_id is empty for spawn point: %s" % spawn_id)
+    if point.character_id.is_empty():
+        push_warning("[AISpawnSystem] character_id is empty for spawn point: %s" % spawn_id)
         return null
 
     var actor: Node3D = null
@@ -65,10 +65,18 @@ func spawn_from_point(point: AISpawnPoint) -> Node3D:
         "spawn_id": spawn_id
     }
 
+    if _ai_manager and _ai_manager.has_method("is_character_id_valid_for_kind"):
+        if not bool(_ai_manager.is_character_id_valid_for_kind(role_kind, point.character_id)):
+            push_warning(
+                "[AISpawnSystem] character_id '%s' does not match role_kind '%s' at spawn point: %s" %
+                [point.character_id, role_kind, spawn_id]
+            )
+            return null
+
     match role_kind:
         "npc", "enemy":
             if _ai_manager:
-                actor = _ai_manager.spawn_actor(role_kind, point.role_id, spawn_pos, context)
+                actor = _ai_manager.spawn_actor(role_kind, point.character_id, spawn_pos, context)
         _:
             push_warning("[AISpawnSystem] Unknown role_kind '%s' for spawn point: %s" % [role_kind, spawn_id])
             return null

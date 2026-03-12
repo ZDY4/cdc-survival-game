@@ -67,6 +67,7 @@ var editor_plugin: EditorPlugin = null
 func _ready():
 	_setup_ui()
 	_setup_file_dialog()
+	_try_load_default_effects()
 	_update_effect_list()
 
 func _setup_ui():
@@ -185,6 +186,11 @@ func _setup_file_dialog():
 	if DirAccess.dir_exists_absolute(default_dir):
 		_file_dialog.current_dir = default_dir
 		current_dir_path = default_dir
+
+func _try_load_default_effects() -> void:
+	var absolute_default_dir: String = ProjectSettings.globalize_path(DEFAULT_EFFECTS_DIR)
+	if effects.is_empty() and DirAccess.dir_exists_absolute(absolute_default_dir):
+		_load_from_directory(DEFAULT_EFFECTS_DIR)
 
 func _update_effect_list(category_filter: String = "", search_filter: String = ""):
 	_effect_list.clear()
@@ -661,6 +667,26 @@ func _load_from_directory(path: String):
 func _update_status(message: String):
 	_status_bar.text = message
 	print("[EffectEditor] %s" % message)
+
+func focus_record(record_id: String) -> bool:
+	var target_id: String = record_id.strip_edges()
+	if target_id.is_empty():
+		return false
+
+	_update_effect_list()
+	if not effects.has(target_id):
+		_update_status("未找到效果: %s" % target_id)
+		return false
+
+	_select_effect(target_id)
+	if _effect_list:
+		for i in range(_effect_list.get_item_count()):
+			if str(_effect_list.get_item_metadata(i)) == target_id:
+				_effect_list.select(i)
+				_effect_list.ensure_current_is_visible()
+				break
+	_update_status("已定位效果: %s" % target_id)
+	return true
 
 # 公共方法
 func get_current_effect_id() -> String:

@@ -693,6 +693,26 @@ func _update_status(message: String):
 	_status_bar.text = message
 	print("[RecipeEditor] %s" % message)
 
+func focus_record(record_id: String) -> bool:
+	var target_id: String = record_id.strip_edges()
+	if target_id.is_empty():
+		return false
+
+	_update_recipe_list()
+	if not recipes.has(target_id):
+		_update_status("未找到配方: %s" % target_id)
+		return false
+
+	_select_recipe(target_id)
+	if _recipe_list:
+		for i in range(_recipe_list.get_item_count()):
+			if str(_recipe_list.get_item_metadata(i)) == target_id:
+				_recipe_list.select(i)
+				_recipe_list.ensure_current_is_visible()
+				break
+	_update_status("已定位配方: %s" % target_id)
+	return true
+
 # 公共方法
 func get_current_recipe_id() -> String:
 	return current_recipe_id

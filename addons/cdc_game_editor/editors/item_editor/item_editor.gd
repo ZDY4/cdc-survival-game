@@ -989,6 +989,26 @@ func _update_status(message: String):
 	_status_bar.text = "%s - Total %d items" % [message, items.size()]
 	print("物品编辑器 %s" % message)
 
+func focus_record(record_id: String) -> bool:
+	var target_id: String = record_id.strip_edges()
+	if target_id.is_empty():
+		return false
+
+	_update_item_list()
+	if not items.has(target_id):
+		_update_status("未找到物品: %s" % target_id)
+		return false
+
+	_select_item(target_id)
+	if _item_list:
+		for i in range(_item_list.get_item_count()):
+			if str(_item_list.get_item_metadata(i)) == target_id:
+				_item_list.select(i)
+				_item_list.ensure_current_is_visible()
+				break
+	_update_status("已定位物品: %s" % target_id)
+	return true
+
 # 公共方法
 func get_current_item_id() -> String:
 	return current_item_id

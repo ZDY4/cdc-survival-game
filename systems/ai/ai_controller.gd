@@ -14,7 +14,7 @@ var _owner_node: Node3D = null
 var _movement_component: Node = null
 var _spawn_pos: Vector3 = Vector3.ZERO
 var _role_kind: String = ""
-var _role_id: String = ""
+var _character_id: String = ""
 var _allow_attack: bool = false
 
 var _state: int = AIState.IDLE
@@ -30,14 +30,14 @@ func initialize(
 		movement_component: Node,
 		spawn_pos: Vector3,
 		role_kind: String,
-		role_id: String,
+		character_id: String,
 		ai_config: Dictionary
 	) -> void:
 	_owner_node = owner_node
 	_movement_component = movement_component
 	_spawn_pos = spawn_pos
 	_role_kind = role_kind
-	_role_id = role_id
+	_character_id = character_id
 	_allow_attack = role_kind.to_lower() == "enemy"
 
 	_apply_config(ai_config)
@@ -142,5 +142,5 @@ func _try_attack(now_s: float) -> void:
 	if now_s - _last_attack_time < attack_cooldown:
 		return
 	if CombatSystem and CombatSystem.has_method("start_combat"):
-		CombatSystem.start_combat(_role_id)
+		CombatSystem.start_combat(_character_id)
 		_last_attack_time = now_s

@@ -557,6 +557,26 @@ func _update_status(message: String):
 	status_bar.text = message
 	print("[NPCEditor] %s" % message)
 
+func focus_record(record_id: String) -> bool:
+	var target_id: String = record_id.strip_edges()
+	if target_id.is_empty():
+		return false
+
+	_update_npc_list()
+	if not npcs.has(target_id):
+		_update_status("未找到NPC: %s" % target_id)
+		return false
+
+	_select_npc(target_id)
+	if npc_list:
+		for i in range(npc_list.get_item_count()):
+			if str(npc_list.get_item_metadata(i)) == target_id:
+				npc_list.select(i)
+				npc_list.ensure_current_is_visible()
+				break
+	_update_status("已定位NPC: %s" % target_id)
+	return true
+
 # 公共方法
 func get_current_npc_id() -> String:
 	return current_npc_id

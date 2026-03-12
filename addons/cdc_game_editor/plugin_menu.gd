@@ -10,6 +10,8 @@ const MENU_ITEM_EDITOR: int = 3
 const MENU_NPC_EDITOR: int = 4
 const MENU_RECIPE_EDITOR: int = 5
 const MENU_SKILL_EDITOR: int = 6
+const MENU_ENEMY_EDITOR: int = 7
+const MENU_EFFECT_EDITOR: int = 8
 const MENU_CDC_EDITORS_ROOT: int = 100
 
 const CDC_SUBMENU_NAME: String = "CDCEditorsSubmenu"
@@ -21,8 +23,21 @@ const EDITOR_DIALOG: String = "dialog"
 const EDITOR_QUEST: String = "quest"
 const EDITOR_ITEM: String = "item"
 const EDITOR_NPC: String = "npc"
+const EDITOR_ENEMY: String = "enemy"
+const EDITOR_EFFECT: String = "effect"
 const EDITOR_RECIPE: String = "recipe"
 const EDITOR_SKILL: String = "skill"
+
+const DATA_KIND_NPC: String = "npc"
+const DATA_KIND_ENEMY: String = "enemy"
+const DATA_KIND_ITEM: String = "item"
+const DATA_KIND_QUEST: String = "quest"
+const DATA_KIND_RECIPE: String = "recipe"
+const DATA_KIND_SKILL: String = "skill"
+const DATA_KIND_EFFECT: String = "effect"
+const DATA_KIND_CHARACTER: String = "character"
+
+const GAME_DATA_ID_INSPECTOR_PLUGIN_SCRIPT := preload("res://addons/cdc_game_editor/inspector/game_data_id_inspector_plugin.gd")
 
 const EDITOR_CONFIGS: Dictionary = {
 	EDITOR_DIALOG: {
@@ -45,6 +60,16 @@ const EDITOR_CONFIGS: Dictionary = {
 		"script_path": "res://addons/cdc_game_editor/editors/npc_editor/npc_editor.gd",
 		"window_size": Vector2i(1200, 800)
 	},
+	EDITOR_ENEMY: {
+		"window_title": "CDC - Enemy Editor",
+		"script_path": "res://addons/cdc_game_editor/editors/enemy_editor/enemy_editor.gd",
+		"window_size": Vector2i(1200, 800)
+	},
+	EDITOR_EFFECT: {
+		"window_title": "CDC - Effect Editor",
+		"script_path": "res://addons/cdc_game_editor/editors/effect_editor/effect_editor.gd",
+		"window_size": Vector2i(1200, 800)
+	},
 	EDITOR_RECIPE: {
 		"window_title": "CDC - Recipe Editor",
 		"script_path": "res://addons/cdc_game_editor/editors/recipe_editor/recipe_editor.gd",
@@ -62,8 +87,20 @@ const MENU_TO_EDITOR_KEY: Dictionary = {
 	MENU_QUEST_EDITOR: EDITOR_QUEST,
 	MENU_ITEM_EDITOR: EDITOR_ITEM,
 	MENU_NPC_EDITOR: EDITOR_NPC,
+	MENU_ENEMY_EDITOR: EDITOR_ENEMY,
+	MENU_EFFECT_EDITOR: EDITOR_EFFECT,
 	MENU_RECIPE_EDITOR: EDITOR_RECIPE,
 	MENU_SKILL_EDITOR: EDITOR_SKILL
+}
+
+const DATA_KIND_TO_EDITOR_KEY: Dictionary = {
+	DATA_KIND_NPC: EDITOR_NPC,
+	DATA_KIND_ENEMY: EDITOR_ENEMY,
+	DATA_KIND_ITEM: EDITOR_ITEM,
+	DATA_KIND_QUEST: EDITOR_QUEST,
+	DATA_KIND_RECIPE: EDITOR_RECIPE,
+	DATA_KIND_SKILL: EDITOR_SKILL,
+	DATA_KIND_EFFECT: EDITOR_EFFECT
 }
 
 var _cdc_menu_button: MenuButton = null
@@ -77,17 +114,32 @@ var _menu_in_toolbar: bool = false
 var _editor_instances: Dictionary = {}
 var _editor_windows: Dictionary = {}
 var _is_disabling: bool = false
+var _game_data_id_inspector_plugin: EditorInspectorPlugin = null
 
 func _enter_tree() -> void:
 	print("[%s v%s] Initializing plugin..." % [PLUGIN_NAME, PLUGIN_VERSION])
 	_is_disabling = false
+	_register_inspector_plugin()
 	call_deferred("_initialize_menu_deferred")
 
 func _exit_tree() -> void:
 	_is_disabling = true
+	_unregister_inspector_plugin()
 	_cleanup_editor_windows()
 	_remove_cdc_menu()
 	print("[%s] Plugin disabled." % PLUGIN_NAME)
+
+func _register_inspector_plugin() -> void:
+	if _game_data_id_inspector_plugin:
+		return
+	_game_data_id_inspector_plugin = GAME_DATA_ID_INSPECTOR_PLUGIN_SCRIPT.new(self)
+	add_inspector_plugin(_game_data_id_inspector_plugin)
+
+func _unregister_inspector_plugin() -> void:
+	if not _game_data_id_inspector_plugin:
+		return
+	remove_inspector_plugin(_game_data_id_inspector_plugin)
+	_game_data_id_inspector_plugin = null
 
 func _initialize_menu_deferred() -> void:
 	await _create_cdc_menu()
@@ -175,6 +227,8 @@ func _populate_cdc_menu(menu: PopupMenu) -> void:
 	menu.add_item("Quest Editor", MENU_QUEST_EDITOR)
 	menu.add_item("Item Editor", MENU_ITEM_EDITOR)
 	menu.add_item("NPC Editor", MENU_NPC_EDITOR)
+	menu.add_item("Enemy Editor", MENU_ENEMY_EDITOR)
+	menu.add_item("Effect Editor", MENU_EFFECT_EDITOR)
 	menu.add_item("Recipe Editor", MENU_RECIPE_EDITOR)
 	menu.add_item("Skill Editor", MENU_SKILL_EDITOR)
 
@@ -269,30 +323,73 @@ func _on_cdc_menu_item_pressed(menu_id: int) -> void:
 	var editor_key: String = MENU_TO_EDITOR_KEY.get(menu_id, "")
 	if editor_key.is_empty():
 		return
-	_open_editor_window(editor_key)
+	open_cdc_editor(editor_key)
 
-func _open_editor_window(editor_key: String) -> void:
+func open_cdc_editor(editor_key: String) -> bool:
+	return _open_editor_window(editor_key)
+
+func open_cdc_data_editor(data_kind: String, data_id: String) -> bool:
+	var normalized_kind: String = data_kind.strip_edges().to_lower()
+	var normalized_id: String = data_id.strip_edges()
+	var editor_key: String = _resolve_editor_key_for_data(normalized_kind, normalized_id)
+	if editor_key.is_empty():
+		push_warning("[%s] No editor mapping for data kind: %s" % [PLUGIN_NAME, normalized_kind])
+		return false
+
+	var opened: bool = open_cdc_editor(editor_key)
+	if not opened:
+		return false
+	if normalized_id.is_empty():
+		return true
+
+	var editor: Object = _editor_instances.get(editor_key, null)
+	if not editor or not editor.has_method("focus_record"):
+		push_warning("[%s] Editor '%s' does not support focus_record" % [PLUGIN_NAME, editor_key])
+		return false
+
+	var focused: bool = bool(editor.call("focus_record", normalized_id))
+	if not focused:
+		push_warning("[%s] Could not focus %s in %s editor" % [PLUGIN_NAME, normalized_id, editor_key])
+	return focused
+
+func _resolve_editor_key_for_data(data_kind: String, data_id: String) -> String:
+	if data_kind == DATA_KIND_CHARACTER:
+		var npc_ids: Array[String] = get_data_ids(DATA_KIND_NPC)
+		var enemy_ids: Array[String] = get_data_ids(DATA_KIND_ENEMY)
+		var in_npc: bool = npc_ids.has(data_id)
+		var in_enemy: bool = enemy_ids.has(data_id)
+		if in_npc and in_enemy:
+			push_warning("[%s] character id '%s' exists in npc and enemy, defaulting to npc editor" % [PLUGIN_NAME, data_id])
+		if in_npc:
+			return EDITOR_NPC
+		if in_enemy:
+			return EDITOR_ENEMY
+		return EDITOR_NPC
+
+	return DATA_KIND_TO_EDITOR_KEY.get(data_kind, "")
+
+func _open_editor_window(editor_key: String) -> bool:
 	if not _editor_windows.has(editor_key):
 		var created: bool = _create_editor_window(editor_key)
 		if not created:
-			return
+			return false
 
 	var editor_window: Window = _editor_windows.get(editor_key)
 	if not editor_window:
-		return
+		return false
 
 	if editor_window.visible:
 		# Keep current visible window behavior predictable: focus only.
 		editor_window.grab_focus()
-		return
+		return true
 
 	var window_size: Vector2i = _get_editor_window_size(editor_key)
 	editor_window.size = window_size
 	_position_window_safely(editor_window, window_size)
 	editor_window.show()
-	await get_tree().process_frame
-	_position_window_safely(editor_window, window_size)
+	call_deferred("_position_window_safely", editor_window, window_size)
 	editor_window.grab_focus()
+	return true
 
 func _create_editor_window(editor_key: String) -> bool:
 	var editor_config: Dictionary = EDITOR_CONFIGS.get(editor_key, {})
@@ -422,11 +519,91 @@ func _edit(object: Object) -> void:
 
 	var path: String = object.resource_path
 	if path.ends_with(".dlg") or path.ends_with(".dialog"):
-		_open_editor_window(EDITOR_DIALOG)
+		open_cdc_editor(EDITOR_DIALOG)
 	elif path.ends_with(".quest") or path.ends_with(".quest_data"):
-		_open_editor_window(EDITOR_QUEST)
+		open_cdc_editor(EDITOR_QUEST)
 	elif path.ends_with(".item") or path.ends_with(".items"):
-		_open_editor_window(EDITOR_ITEM)
+		open_cdc_editor(EDITOR_ITEM)
+
+func get_data_ids(data_kind: String) -> Array[String]:
+	var normalized_kind: String = data_kind.strip_edges().to_lower()
+	match normalized_kind:
+		DATA_KIND_NPC:
+			return _load_ids_from_json_dict_files(["res://data/json/npcs.json", "res://data/npcs.json"])
+		DATA_KIND_ENEMY:
+			return _load_ids_from_json_dict_files(["res://data/json/enemies.json", "res://data/enemies.json"])
+		DATA_KIND_QUEST:
+			return _load_ids_from_json_dict_files(["res://data/json/quests.json", "res://data/quests.json"])
+		DATA_KIND_RECIPE:
+			return _load_ids_from_json_dict_files(["res://data/json/recipes.json", "res://data/recipes.json"])
+		DATA_KIND_ITEM:
+			var item_ids: Array[String] = _load_ids_from_json_directory("res://data/items")
+			if item_ids.is_empty():
+				item_ids = _load_ids_from_json_dict_files(["res://data/items.json", "res://data/json/items.json"])
+			return item_ids
+		DATA_KIND_SKILL:
+			return _load_ids_from_json_directory("res://data/skills")
+		DATA_KIND_EFFECT:
+			return _load_ids_from_json_directory("res://data/json/effects")
+		DATA_KIND_CHARACTER:
+			var merged_ids: Dictionary = {}
+			for id in get_data_ids(DATA_KIND_NPC):
+				merged_ids[id] = true
+			for id in get_data_ids(DATA_KIND_ENEMY):
+				if merged_ids.has(id):
+					push_warning("[%s] Duplicate character id found in npc/enemy: %s" % [PLUGIN_NAME, id])
+				merged_ids[id] = true
+			var character_ids: Array[String] = []
+			for key in merged_ids.keys():
+				character_ids.append(str(key))
+			character_ids.sort()
+			return character_ids
+		_:
+			return []
+
+func _load_ids_from_json_dict_files(paths: Array[String]) -> Array[String]:
+	for path in paths:
+		if not FileAccess.file_exists(path):
+			continue
+		var ids: Array[String] = _extract_ids_from_json_dict(path)
+		if not ids.is_empty():
+			return ids
+	return []
+
+func _extract_ids_from_json_dict(path: String) -> Array[String]:
+	var json_text: String = FileAccess.get_file_as_string(path)
+	if json_text.is_empty():
+		return []
+	var parsed: Variant = JSON.parse_string(json_text)
+	if not (parsed is Dictionary):
+		return []
+
+	var result: Array[String] = []
+	for key in parsed.keys():
+		var key_text: String = str(key).strip_edges()
+		if not key_text.is_empty():
+			result.append(key_text)
+	result.sort()
+	return result
+
+func _load_ids_from_json_directory(directory_path: String) -> Array[String]:
+	var ids: Array[String] = []
+	var dir: DirAccess = DirAccess.open(directory_path)
+	if not dir:
+		return ids
+
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and file_name.ends_with(".json"):
+			var id_text: String = file_name.trim_suffix(".json").strip_edges()
+			if not id_text.is_empty():
+				ids.append(id_text)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	ids.sort()
+	return ids
 
 func _apply_changes() -> void:
 	for editor_key in _editor_instances.keys():
