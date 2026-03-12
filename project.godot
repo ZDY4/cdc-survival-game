@@ -16,7 +16,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="cdc_survival_game"
 config/description="CDC Survival Game"
-run/main_scene="res://scenes/ui/main_menu.tscn"
+run/main_scene="uid://mainmenu001"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -26,7 +26,6 @@ DataManager="*res://core/data_manager.gd"
 ItemDatabase="*res://core/item_database.gd"
 EventBus="*res://core/event_bus.gd"
 DebugModule="*res://modules/debug/debug_module.gd"
-NPCModule="*res://modules/npc/npc_module.gd"
 GameState="*res://core/game_state.gd"
 DialogModule="*res://modules/dialog/dialog_module.gd"
 CombatModule="*res://modules/combat/combat_module.gd"
@@ -67,6 +66,10 @@ ItemDurabilitySystem="*res://systems/item_durability_system.gd"
 StoryClueSystem="*res://systems/story_clue_system.gd"
 TelegramIntegration="*res://scripts/telegram_integration.gd"
 GridMovementSystem="*res://systems/grid_movement_system.gd"
+CameraConfigService="*res://systems/camera_config_service.gd"
+GameplayTags="*res://addons/gameplay_tags/runtime/gameplay_tags_manager.gd"
+ControlSettingsService="*res://systems/control_settings_service.gd"
+MenuHotkeyService="*res://systems/menu_hotkey_service.gd"
 
 [display]
 
@@ -82,7 +85,7 @@ project/assembly_name="cdc_survival_game"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/cdc_game_editor/plugin.cfg")
+enabled=PackedStringArray("res://addons/cdc_game_editor/plugin.cfg", "res://addons/gameplay_tags/plugin.cfg")
 
 [input]
 
