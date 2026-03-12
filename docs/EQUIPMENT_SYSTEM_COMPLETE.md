@@ -21,7 +21,7 @@
 | 文件 | 修改内容 |
 |------|---------|
 | `core/game_state.gd` | 通过 `GameState.set/get_equipment_system()` 访问 |
-| `systems/player_controller_3d.gd` | 创建并挂载 `EquipmentSystem` 节点 |
+| `systems/player_controller.gd` | 创建并挂载 `EquipmentSystem` 节点 |
 | `scripts/ui/equipment_ui.gd` | 监听 `equipment_system_ready` |
 | `systems/save_system.gd` | 延迟保存/加载绑定到装备系统 |
 
@@ -67,3 +67,4 @@ var weight = equip_system.calculate_total_weight()
 ## 结论
 
 ✅ 装备系统已完成替换，并改为角色挂载节点。
+
