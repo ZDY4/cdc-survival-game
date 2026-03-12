@@ -1,9 +1,10 @@
 class_name PathPreviewSystem
 extends Node
 
-const PlayerController3D = preload("res://systems/player_controller_3d.gd")
+const PlayerController = preload("res://systems/player_controller.gd")
 const GridNavigator = preload("res://systems/grid_navigator.gd")
 const PathPreview = preload("res://systems/path_preview.gd")
+const GridHoverCornerOverlay = preload("res://systems/grid_hover_corner_overlay.gd")
 const InteractionSystem = preload("res://systems/interaction_system.gd")
 
 @export var max_preview_path_points: int = 200
@@ -11,14 +12,18 @@ const InteractionSystem = preload("res://systems/interaction_system.gd")
 @export var interaction_preview_min_radius: int = 1
 @export var interaction_preview_max_radius: int = 4
 @export var preview_update_interval: float = 0.1
+@export var hover_overlay_update_interval: float = 0.05
+@export var hover_overlay_world_y_offset: float = 0.03
 
 var _scene_root: Node3D = null
 var _interaction_system: InteractionSystem = null
 var _navigator: GridNavigator = null
-var _player: PlayerController3D = null
+var _player: PlayerController = null
 var _path_preview: PathPreview = null
+var _hover_overlay: GridHoverCornerOverlay = null
 
 var _preview_update_timer: float = 0.0
+var _hover_overlay_update_timer: float = 0.0
 var _last_preview_signature: String = ""
 var _active_move_target: Vector3 = Vector3.ZERO
 var _has_active_move_target: bool = false
@@ -27,20 +32,31 @@ func initialize(
     scene_root: Node3D,
     interaction_system: InteractionSystem,
     navigator: GridNavigator,
-    player: PlayerController3D,
-    path_preview: PathPreview
+    player: PlayerController,
+    path_preview: PathPreview,
+    hover_overlay: GridHoverCornerOverlay
 ) -> void:
     _scene_root = scene_root
     _interaction_system = interaction_system
     _navigator = navigator
     _player = player
     _path_preview = path_preview
+    _hover_overlay = hover_overlay
 
 func tick(delta: float) -> void:
     if not _scene_root or not _interaction_system or not _navigator or not _player or not _path_preview:
+        _hide_hover_overlay()
         return
     if not GridMovementSystem or not GridMovementSystem.grid_world:
+        _hide_hover_overlay()
         return
+    if _player.is_movement_input_blocked():
+        clear_active_move_target()
+        _hide_preview()
+        _hide_hover_overlay()
+        return
+
+    _tick_hover_overlay(delta)
 
     _preview_update_timer += delta
     if _preview_update_timer < preview_update_interval:
@@ -86,6 +102,9 @@ func clear_active_move_target() -> void:
     _active_move_target = Vector3.ZERO
     _last_preview_signature = ""
 
+func hide_hover_overlay() -> void:
+    _hide_hover_overlay()
+
 func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, mode: String) -> void:
     if limit_distance and _player.global_position.distance_to(target_world_pos) > max_preview_distance:
         _hide_preview()
@@ -117,6 +136,59 @@ func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, 
 func _hide_preview() -> void:
     _path_preview.hide_path()
     _last_preview_signature = ""
+
+func _tick_hover_overlay(delta: float) -> void:
+    _hover_overlay_update_timer += delta
+    if _hover_overlay_update_timer < hover_overlay_update_interval:
+        return
+    _hover_overlay_update_timer = 0.0
+    _update_hover_overlay()
+
+func _update_hover_overlay() -> void:
+    if not _hover_overlay:
+        return
+    if not _scene_root or not _interaction_system:
+        _hide_hover_overlay()
+        return
+
+    var viewport := _scene_root.get_viewport()
+    if not viewport:
+        _hide_hover_overlay()
+        return
+    if viewport.gui_get_hovered_control() != null:
+        _hide_hover_overlay()
+        return
+
+    var camera := viewport.get_camera_3d()
+    if not camera:
+        _hide_hover_overlay()
+        return
+
+    var mouse_pos := viewport.get_mouse_position()
+    var ground_hit := _interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
+    if ground_hit.is_empty() or not ground_hit.has("position"):
+        _hide_hover_overlay()
+        return
+
+    var hit_pos: Vector3 = ground_hit.position
+    var grid_pos := GridMovementSystem.world_to_grid(hit_pos)
+    var corner_y := hit_pos.y + hover_overlay_world_y_offset
+    var corners_world := _compute_grid_cell_world_corners(grid_pos, corner_y)
+    _hover_overlay.show_cell(corners_world, camera)
+
+func _hide_hover_overlay() -> void:
+    if _hover_overlay:
+        _hover_overlay.hide_cell()
+
+func _compute_grid_cell_world_corners(grid_pos: Vector3i, world_y: float) -> Array[Vector3]:
+    var center_world := GridMovementSystem.grid_to_world(grid_pos)
+    var half_cell := GridNavigator.GRID_SIZE * 0.5
+    return [
+        Vector3(center_world.x - half_cell, world_y, center_world.z - half_cell),
+        Vector3(center_world.x + half_cell, world_y, center_world.z - half_cell),
+        Vector3(center_world.x + half_cell, world_y, center_world.z + half_cell),
+        Vector3(center_world.x - half_cell, world_y, center_world.z + half_cell)
+    ]
 
 func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
     if not hit.has("collider"):
@@ -207,3 +279,4 @@ func _collect_ring_cells(center: Vector3i, radius: int) -> Array[Vector3i]:
                 continue
             cells.append(Vector3i(x, center.y, z))
     return cells
+
