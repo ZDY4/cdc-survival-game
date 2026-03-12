@@ -25,14 +25,18 @@ const NODE_TYPE_NAMES = {
 }
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
+const DIALOG_DATA_DIR := "res://data/dialogues"
 
 # 节点引用
 @onready var _graph_edit: Control
 @onready var _property_panel: Control
 @onready var _toolbar: HBoxContainer
 @onready var _search_box: LineEdit
+@onready var _dialog_id_input: LineEdit
 @onready var _file_dialog: FileDialog
 @onready var _status_bar: Label
+@onready var _open_dialog_popup: ConfirmationDialog
+@onready var _open_dialog_list: ItemList
 
 # 数据
 var current_dialog_id: String = ""
@@ -40,6 +44,7 @@ var current_file_path: String = ""
 var nodes: Dictionary = {}  # id -> node_data
 var connections: Array[Dictionary] = []
 var selected_node_id: String = ""
+var _open_dialog_paths: Array[String] = []
 
 # 工具
 var _undo_redo_helper: RefCounted
@@ -56,6 +61,7 @@ func _ready():
 	_clipboard = load("res://addons/cdc_game_editor/utils/editor_clipboard.gd").get_instance()
 	_setup_ui()
 	_setup_file_dialog()
+	_setup_open_dialog_popup()
 	_setup_shortcuts()
 
 func _setup_ui():
@@ -140,6 +146,18 @@ func _create_toolbar():
 	_add_toolbar_button("新建", _on_new_dialog, "新建对话")
 	_add_toolbar_button("打开", _on_open_dialog, "打开对话文件")
 	_add_toolbar_button("保存", _on_save_dialog, "保存对话文件")
+
+	var id_label := Label.new()
+	id_label.text = "dialog_id:"
+	_toolbar.add_child(id_label)
+
+	_dialog_id_input = LineEdit.new()
+	_dialog_id_input.placeholder_text = "npc_guard_intro"
+	_dialog_id_input.custom_minimum_size = Vector2(220, 0)
+	_dialog_id_input.tooltip_text = "仅允许 a-z 0-9 和下划线(_)"
+	_dialog_id_input.text_changed.connect(_on_dialog_id_text_changed)
+	_toolbar.add_child(_dialog_id_input)
+
 	_toolbar.add_child(VSeparator.new())
 	
 	# 编辑操作
@@ -175,6 +193,24 @@ func _setup_file_dialog():
 	_file_dialog.add_filter("*.dlg; 对话文件")
 	add_child(_file_dialog)
 
+func _setup_open_dialog_popup():
+	_open_dialog_popup = ConfirmationDialog.new()
+	_open_dialog_popup.title = "打开对话"
+	_open_dialog_popup.dialog_text = "请选择 data/dialogues 中的对话文件"
+	_open_dialog_popup.get_ok_button().text = "打开"
+	_open_dialog_popup.confirmed.connect(_on_open_dialog_confirmed)
+	add_child(_open_dialog_popup)
+
+	var container := VBoxContainer.new()
+	container.custom_minimum_size = Vector2(700, 420)
+	_open_dialog_popup.add_child(container)
+
+	_open_dialog_list = ItemList.new()
+	_open_dialog_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_open_dialog_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_open_dialog_list.item_activated.connect(_on_open_dialog_item_activated)
+	container.add_child(_open_dialog_list)
+
 func _setup_shortcuts():
 	#  _input _gui_input 
 	pass
@@ -195,6 +231,89 @@ func _input(event: InputEvent):
 				_on_copy_nodes()
 			KEY_V when event.ctrl_pressed:
 				_on_paste_nodes()
+
+func _on_dialog_id_text_changed(text: String) -> void:
+	current_dialog_id = text.strip_edges()
+
+func _set_dialog_id(dialog_id: String) -> void:
+	current_dialog_id = dialog_id.strip_edges()
+	if _dialog_id_input and _dialog_id_input.text != current_dialog_id:
+		_dialog_id_input.text = current_dialog_id
+
+func _is_valid_dialog_id(dialog_id: String) -> bool:
+	if dialog_id.is_empty():
+		return false
+	for i in range(dialog_id.length()):
+		var code := dialog_id.unicode_at(i)
+		var is_digit := code >= 48 and code <= 57
+		var is_lower := code >= 97 and code <= 122
+		if not (is_digit or is_lower or code == 95):
+			return false
+	return true
+
+func _ensure_dialog_data_dir() -> bool:
+	var absolute_dir_path := ProjectSettings.globalize_path(DIALOG_DATA_DIR)
+	if DirAccess.dir_exists_absolute(absolute_dir_path):
+		return true
+	var create_error := DirAccess.make_dir_recursive_absolute(absolute_dir_path)
+	if create_error != OK:
+		_update_status("无法创建目录: %s" % DIALOG_DATA_DIR)
+		return false
+	return true
+
+func _refresh_open_dialog_list() -> bool:
+	_open_dialog_paths.clear()
+	_open_dialog_list.clear()
+
+	var absolute_dir_path := ProjectSettings.globalize_path(DIALOG_DATA_DIR)
+	if not DirAccess.dir_exists_absolute(absolute_dir_path):
+		_update_status("目录不存在: %s" % DIALOG_DATA_DIR)
+		return false
+
+	var dir := DirAccess.open(DIALOG_DATA_DIR)
+	if dir == null:
+		_update_status("无法读取目录: %s" % DIALOG_DATA_DIR)
+		return false
+
+	var file_names: Array[String] = []
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and file_name.ends_with(".json"):
+			file_names.append(file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	file_names.sort()
+	if file_names.is_empty():
+		_update_status("未找到对话文件: %s" % DIALOG_DATA_DIR)
+		return false
+
+	for dialog_file in file_names:
+		_open_dialog_paths.append("%s/%s" % [DIALOG_DATA_DIR, dialog_file])
+		_open_dialog_list.add_item(dialog_file.get_basename())
+
+	_open_dialog_list.select(0)
+	return true
+
+func _on_open_dialog_item_activated(index: int) -> void:
+	_open_dialog_list.select(index)
+	_on_open_dialog_confirmed()
+
+func _on_open_dialog_confirmed() -> void:
+	var selected_items := _open_dialog_list.get_selected_items()
+	if selected_items.is_empty():
+		_update_status("请选择要打开的对话")
+		return
+
+	var selected_index := int(selected_items[0])
+	if selected_index < 0 or selected_index >= _open_dialog_paths.size():
+		_update_status("无效的对话选择")
+		return
+
+	var target_path := _open_dialog_paths[selected_index]
+	_open_dialog_popup.hide()
+	_load_dialog(target_path)
 
 # 节点创建
 func _create_node(type: String, position: Vector2 = Vector2.ZERO, data: Dictionary = {}):
@@ -683,7 +802,7 @@ func _on_search_text_changed(text: String):
 
 # 工具栏功
 func _on_new_dialog():
-	current_dialog_id = ""
+	_set_dialog_id("")
 	current_file_path = ""
 	nodes.clear()
 	connections.clear()
@@ -693,18 +812,23 @@ func _on_new_dialog():
 	_update_status("新建对话")
 
 func _on_open_dialog():
-	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	_file_dialog.file_selected.connect(_load_dialog, CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
+	if not _refresh_open_dialog_list():
+		return
+	_open_dialog_popup.popup_centered(Vector2(760, 520))
 
 func _on_save_dialog():
-	if current_file_path.is_empty():
-		_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-		_file_dialog.current_file = "dialog.json"
-		_file_dialog.file_selected.connect(_save_dialog_to_path, CONNECT_ONE_SHOT)
-		_file_dialog.popup_centered(Vector2(800, 600))
-	else:
-		_save_dialog_to_path(current_file_path)
+	var dialog_id := current_dialog_id.strip_edges()
+	_set_dialog_id(dialog_id)
+
+	if not _is_valid_dialog_id(dialog_id):
+		_update_status("dialog_id 无效: 仅允许 a-z0-9_")
+		return
+
+	if not _ensure_dialog_data_dir():
+		return
+
+	var target_path := "%s/%s.json" % [DIALOG_DATA_DIR, dialog_id]
+	_save_dialog_to_path(target_path)
 
 func _load_dialog(path: String):
 	_on_new_dialog()
@@ -742,7 +866,10 @@ func _load_dialog(path: String):
 	var loaded_nodes: Array = data.get("nodes", [])
 	var loaded_connections: Array = data.get("connections", [])
 	
-	current_dialog_id = str(data.get("dialog_id", ""))
+	var loaded_dialog_id := str(data.get("dialog_id", "")).strip_edges()
+	if loaded_dialog_id.is_empty():
+		loaded_dialog_id = path.get_file().get_basename()
+	_set_dialog_id(loaded_dialog_id)
 	current_file_path = path
 	
 	for node_data in loaded_nodes:
@@ -759,22 +886,26 @@ func _load_dialog(path: String):
 	dialog_loaded.emit(current_dialog_id)
 	_update_status("Loaded: %s" % current_dialog_id)
 
-func _save_dialog_to_path(path: String):
-	current_file_path = path
+func _save_dialog_to_path(path: String, persist_as_current: bool = true):
+	var dialog_id := current_dialog_id if not current_dialog_id.is_empty() else "dialog_%d" % Time.get_ticks_msec()
 	
-	var data = {
-		"dialog_id": current_dialog_id if not current_dialog_id.is_empty() else "dialog_%d" % Time.get_ticks_msec(),
+	var data: Dictionary = {
+		"dialog_id": dialog_id,
 		"nodes": nodes.values(),
 		"connections": connections
 	}
 	
-	var json = JSON.stringify(data, "\t")
-	var file = FileAccess.open(path, FileAccess.WRITE)
+	var json := JSON.stringify(data, "\t")
+	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file:
 		file.store_string(json)
 		file.close()
-		dialog_saved.emit(data.dialog_id)
-		_update_status("已保 %s" % path)
+		if persist_as_current:
+			current_file_path = path
+			dialog_saved.emit(dialog_id)
+			_update_status("已保存 %s" % path)
+		else:
+			_update_status("已导出 %s" % path)
 	else:
 		_update_status("无法保存文件")
 
@@ -782,7 +913,7 @@ func _on_export_json():
 	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	_file_dialog.current_file = "dialog_export.json"
 	_file_dialog.file_selected.connect(func(path):
-		_save_dialog_to_path(path)
+		_save_dialog_to_path(path, false)
 	, CONNECT_ONE_SHOT)
 	_file_dialog.popup_centered(Vector2(800, 600))
 
