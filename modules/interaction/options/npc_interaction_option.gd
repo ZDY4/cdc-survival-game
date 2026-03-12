@@ -17,8 +17,11 @@ func execute(interactable: Node) -> void:
 	var npc_id := _resolve_npc_id(interactable)
 	if npc_id.is_empty():
 		return
-	if NPCModule and NPCModule.has_method("start_npc_interaction"):
-		NPCModule.start_npc_interaction(npc_id)
+	if not AIManager.current:
+		push_warning("[NPCInteractionOption] AIManager.current unavailable; cannot interact with NPC: %s" % npc_id)
+		return
+	if AIManager.current.has_method("start_npc_interaction"):
+		AIManager.current.start_npc_interaction(npc_id)
 	if EventBus:
 		EventBus.emit(EventBus.EventType.SCENE_INTERACTION, {
 			"type": "npc_interact",

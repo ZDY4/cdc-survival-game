@@ -1,5 +1,5 @@
 extends Node
-## AIManager - Unified runtime actor provider (enemy/npc) for 3D scenes.
+## AIManager - Unified runtime actor provider and NPC runtime registry for 3D scenes.
 
 class_name AIManager
 
@@ -10,11 +10,17 @@ const GameWorldMerchantTradeComponent = preload("res://modules/npc/components/ga
 const VisionSystemScript = preload("res://systems/vision_system.gd")
 const Interactable = preload("res://modules/interaction/interactable.gd")
 const NPCInteractionOption = preload("res://modules/interaction/options/npc_interaction_option.gd")
+const NPCData = preload("res://modules/npc/npc_data.gd")
+const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
 
 signal actor_spawned(spawn_id: String, actor: Node3D)
 signal actor_despawned(spawn_id: String)
 signal enemy_spawned(enemy_id: String, enemy_instance: Node3D)
 signal enemy_despawned(spawn_id: String)
+signal npc_spawned(npc_id: String, npc: Node3D)
+signal npc_despawned(npc_id: String)
+
+static var current: AIManager = null
 
 const DEFAULT_AI_BY_BEHAVIOR := {
 	"passive": {
@@ -51,10 +57,21 @@ const DEFAULT_NPC_AI := {
 }
 
 var enemy_database: Dictionary = {}
+var npc_database: Dictionary = {}
 var active_actors: Dictionary = {}  # spawn_id -> Node3D
+var active_npc_actors: Dictionary = {}  # npc_id -> Node3D
+var active_npc_trade_components: Dictionary = {}  # npc_id -> NPCTradeComponent
 
 func _ready() -> void:
+	if current and current != self:
+		push_warning("[AIManager] Multiple instances detected; replacing AIManager.current")
+	current = self
 	_load_enemy_database()
+	_load_npc_database()
+
+func _exit_tree() -> void:
+	if current == self:
+		current = null
 
 func _load_enemy_database() -> void:
 	var data_manager := get_node_or_null("/root/DataManager")
@@ -64,9 +81,48 @@ func _load_enemy_database() -> void:
 		for enemy_id in EnemyDatabase.get_all_enemy_ids():
 			enemy_database[enemy_id] = EnemyDatabase.get_enemy(enemy_id)
 
-func spawn_actor(role_kind: String, role_id: String, world_pos: Vector3, context: Dictionary = {}) -> Node3D:
+func _load_npc_database() -> void:
+	var data_manager := get_node_or_null("/root/DataManager")
+	if data_manager:
+		var data = data_manager.get_data("npcs")
+		if data is Dictionary and not data.is_empty():
+			npc_database = data
+			return
+	_load_default_npcs()
+
+func _load_default_npcs() -> void:
+	var trader_data := NPCData.new()
+	trader_data.id = "trader_lao_wang"
+	trader_data.name = "老王"
+	trader_data.title = "废土商人"
+	trader_data.description = "在这个区域经营多年的老商人，消息灵通，货物齐全。"
+	trader_data.npc_type = NPCData.Type.TRADER
+	trader_data.portrait_path = "res://assets/portraits/trader.png"
+	trader_data.level = 5
+	trader_data.attributes.charisma = 15
+	trader_data.can_trade = true
+	trader_data.can_give_quest = true
+	trader_data.default_location = "safehouse"
+	trader_data.current_location = "safehouse"
+
+	trader_data.trade_data.inventory = [
+		{"id": "medkit", "count": 3, "price": 50},
+		{"id": "bandage", "count": 10, "price": 10},
+		{"id": "ammo_pistol", "count": 50, "price": 5},
+		{"id": "food_canned", "count": 5, "price": 15}
+	]
+	trader_data.trade_data.buy_price_modifier = 1.2
+	trader_data.trade_data.sell_price_modifier = 0.8
+
+	trader_data.recruitment.min_charisma = 10
+	trader_data.recruitment.min_friendliness = 80
+	trader_data.recruitment.cost_items = [{"id": "food_canned", "count": 20}]
+
+	npc_database[trader_data.id] = trader_data
+
+func spawn_actor(role_kind: String, character_id: String, world_pos: Vector3, context: Dictionary = {}) -> Node3D:
 	var normalized_kind := role_kind.to_lower()
-	if role_id.is_empty():
+	if character_id.is_empty():
 		return null
 
 	var spawn_id: String = str(context.get("spawn_id", "%s_%d" % [normalized_kind, Time.get_ticks_msec()]))
@@ -79,9 +135,9 @@ func spawn_actor(role_kind: String, role_id: String, world_pos: Vector3, context
 	var actor: Node3D = null
 	match normalized_kind:
 		"enemy":
-			actor = _spawn_enemy(role_id, world_pos, spawn_id)
+			actor = _spawn_enemy(character_id, world_pos, spawn_id)
 		"npc":
-			actor = _spawn_npc(role_id, world_pos, spawn_id)
+			actor = _spawn_npc(character_id, world_pos, spawn_id)
 		_:
 			push_warning("[AIManager] Unknown role_kind '%s'" % normalized_kind)
 			return null
@@ -94,6 +150,17 @@ func spawn_actor(role_kind: String, role_id: String, world_pos: Vector3, context
 	actor_spawned.emit(spawn_id, actor)
 	return actor
 
+func is_character_id_valid_for_kind(role_kind: String, character_id: String) -> bool:
+	if character_id.is_empty():
+		return false
+	match role_kind.to_lower():
+		"npc":
+			return get_runtime_npc_data(character_id) != null
+		"enemy":
+			return enemy_database.has(character_id)
+		_:
+			return false
+
 func despawn_actor(spawn_id: String) -> void:
 	if not active_actors.has(spawn_id):
 		return
@@ -103,10 +170,10 @@ func despawn_actor(spawn_id: String) -> void:
 
 	if actor and is_instance_valid(actor):
 		var role_kind := str(actor.get_meta("role_kind", ""))
-		if role_kind == "npc" and NPCModule:
+		if role_kind == "npc":
 			var npc_id := str(actor.get_meta("npc_id", ""))
-			if not npc_id.is_empty() and NPCModule.has_method("unregister_npc_actor"):
-				NPCModule.unregister_npc_actor(npc_id)
+			if not npc_id.is_empty():
+				unregister_npc_actor(npc_id)
 		actor.queue_free()
 
 	actor_despawned.emit(spawn_id)
@@ -173,16 +240,7 @@ func _spawn_enemy(enemy_id: String, world_pos: Vector3, spawn_id: String) -> Nod
 	return actor
 
 func _spawn_npc(npc_id: String, world_pos: Vector3, spawn_id: String) -> Node3D:
-	if not NPCModule:
-		push_warning("[AIManager] NPCModule unavailable; cannot spawn NPC: %s" % npc_id)
-		return null
-
-	var npc_data = null
-	if NPCModule.has_method("get_runtime_npc_data"):
-		npc_data = NPCModule.get_runtime_npc_data(npc_id)
-	else:
-		npc_data = NPCModule.get_npc_data(npc_id)
-
+	var npc_data: NPCData = get_runtime_npc_data(npc_id)
 	if not npc_data:
 		push_warning("[AIManager] NPC data not found: %s" % npc_id)
 		return null
@@ -190,7 +248,7 @@ func _spawn_npc(npc_id: String, world_pos: Vector3, spawn_id: String) -> Node3D:
 	var actor := CharacterActorScript.new()
 	actor.name = "NPC_%s" % npc_id
 	actor.position = world_pos
-	var npc_body_color := _resolve_npc_color(npc_data)
+	var npc_body_color := get_npc_color(npc_data)
 	actor.set_placeholder_colors(npc_body_color.lightened(0.20), npc_body_color)
 	actor.collision_layer = 1 << 1
 	actor.collision_mask = 0
@@ -209,10 +267,7 @@ func _spawn_npc(npc_id: String, world_pos: Vector3, spawn_id: String) -> Node3D:
 	actor.add_child(collision_shape)
 
 	var name_label := Label3D.new()
-	if npc_data is Dictionary:
-		name_label.text = str(npc_data.get("name", npc_id))
-	else:
-		name_label.text = npc_data.get_display_name() if npc_data.has_method("get_display_name") else str(npc_id)
+	name_label.text = npc_data.get_display_name()
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_label.font_size = 32
 	name_label.position = Vector3(0.0, 2.2, 0.0)
@@ -247,16 +302,151 @@ func _spawn_npc(npc_id: String, world_pos: Vector3, spawn_id: String) -> Node3D:
 	interactable.set_options([npc_option])
 	actor.add_child(interactable)
 
-	var trade_component: Node = null
-	if not (npc_data is Dictionary) and npc_data.can_trade:
+	var trade_component: NPCTradeComponent = null
+	if npc_data.can_trade:
 		trade_component = GameWorldMerchantTradeComponent.new()
 		actor.add_child(trade_component)
 		trade_component.initialize_with_data(npc_data)
 
-	if NPCModule.has_method("register_npc_actor"):
-		NPCModule.register_npc_actor(npc_id, actor, trade_component)
-
+	register_npc_actor(npc_id, actor, trade_component)
 	return actor
+
+func register_npc_actor(npc_id: String, actor: Node3D, trade_component: NPCTradeComponent = null) -> void:
+	if npc_id.is_empty() or not actor:
+		return
+	active_npc_actors[npc_id] = actor
+	if trade_component:
+		active_npc_trade_components[npc_id] = trade_component
+	npc_spawned.emit(npc_id, actor)
+
+func unregister_npc_actor(npc_id: String) -> void:
+	if npc_id.is_empty():
+		return
+	active_npc_actors.erase(npc_id)
+	active_npc_trade_components.erase(npc_id)
+	npc_despawned.emit(npc_id)
+
+func get_npc_data(npc_id: String) -> NPCData:
+	return _build_runtime_npc_data(npc_id)
+
+func get_runtime_npc_data(npc_id: String) -> NPCData:
+	return _build_runtime_npc_data(npc_id)
+
+func get_npc_color(npc_data: NPCData) -> Color:
+	if not npc_data:
+		return Color(0.58, 0.72, 0.88, 1.0)
+	if npc_data.can_trade:
+		return Color(0.86, 0.73, 0.33, 1.0)
+	if npc_data.npc_type == NPCData.Type.HOSTILE:
+		return Color(0.78, 0.28, 0.28, 1.0)
+	return Color(0.58, 0.72, 0.88, 1.0)
+
+func start_npc_interaction(npc_id: String) -> bool:
+	var npc_data: NPCData = _build_runtime_npc_data(npc_id)
+	if not npc_data:
+		return false
+	if not DialogModule:
+		push_warning("[AIManager] DialogModule unavailable; cannot start interaction: %s" % npc_id)
+		return false
+
+	var speaker: String = npc_data.name if not npc_data.name.is_empty() else npc_id
+	var greeting := "你好，我是%s。" % speaker
+	if npc_data.can_trade:
+		greeting = "需要补给吗？我这里还能交易。"
+	DialogModule.show_dialog(greeting, speaker)
+	await DialogModule.dialog_finished
+
+	if npc_data.can_trade:
+		var choice: int = await DialogModule.show_choices(["交易", "闲聊", "离开"])
+		match choice:
+			0:
+				var trade_component: NPCTradeComponent = active_npc_trade_components.get(npc_id, null)
+				if trade_component:
+					var opened: bool = await trade_component.open_trade_ui()
+					if not opened:
+						DialogModule.show_dialog("现在无法交易。", speaker)
+						await DialogModule.dialog_finished
+			1:
+				DialogModule.show_dialog("夜晚外出要小心。", speaker)
+				await DialogModule.dialog_finished
+			_:
+				DialogModule.show_dialog("保重。", speaker)
+				await DialogModule.dialog_finished
+	else:
+		var lines: Array[String] = [
+			"别走太远，外面很危险。",
+			"活着回来就好。",
+			"如果你发现线索，记得告诉我。"
+		]
+		DialogModule.show_dialog(lines[randi() % lines.size()], speaker)
+		await DialogModule.dialog_finished
+
+	return true
+
+func register_npc(npc_data: NPCData) -> void:
+	if not npc_data or npc_data.id.is_empty():
+		return
+	npc_database[npc_data.id] = npc_data
+
+func serialize_all_npc_data() -> Dictionary:
+	var result: Dictionary = {}
+	for npc_id in npc_database.keys():
+		var npc_data: NPCData = _build_runtime_npc_data(str(npc_id))
+		if npc_data:
+			result[npc_id] = npc_data.serialize()
+	return result
+
+func deserialize_all_npc_data(data: Dictionary) -> void:
+	for npc_id in data.keys():
+		var raw = data[npc_id]
+		if not (raw is Dictionary):
+			continue
+		var npc_data := NPCData.new()
+		npc_data.deserialize(raw)
+		npc_data.id = str(raw.get("id", str(npc_id)))
+		npc_database[npc_data.id] = npc_data
+
+func reset_all_npcs() -> void:
+	for npc_data in npc_database.values():
+		var runtime_data: NPCData = npc_data as NPCData
+		if not runtime_data:
+			continue
+		runtime_data.state.is_alive = true
+		runtime_data.state.is_recruited = false
+		runtime_data.state.is_hostile = false
+		runtime_data.state.is_busy = false
+		runtime_data.memory.met_player = false
+		runtime_data.memory.interaction_count = 0
+		runtime_data.memory.player_actions.clear()
+		runtime_data.mood.friendliness = 50
+		runtime_data.mood.trust = 30
+		runtime_data.mood.fear = 0
+		runtime_data.mood.anger = 0
+
+	for npc_id in active_npc_actors.keys():
+		unregister_npc_actor(str(npc_id))
+
+func _build_runtime_npc_data(npc_id: String) -> NPCData:
+	var record = npc_database.get(npc_id, null)
+	if not record:
+		return null
+
+	if record is NPCData:
+		return record as NPCData
+
+	if not (record is Dictionary):
+		return null
+
+	var npc_data := NPCData.new()
+	npc_data.deserialize(record)
+	npc_data.id = str(record.get("id", npc_id))
+	npc_data.name = str(record.get("name", npc_data.name))
+	if npc_data.default_location.is_empty():
+		npc_data.default_location = str(record.get("default_location", ""))
+	if npc_data.current_location.is_empty():
+		npc_data.current_location = npc_data.default_location
+	npc_database[npc_id] = npc_data
+	return npc_data
 
 func _build_enemy_ai_config(enemy_data: Dictionary) -> Dictionary:
 	var behavior := str(enemy_data.get("behavior", "passive"))
@@ -270,22 +460,6 @@ func _build_enemy_ai_config(enemy_data: Dictionary) -> Dictionary:
 		config.merge(enemy_data.ai, true)
 
 	return config
-
-func _resolve_npc_color(npc_data) -> Color:
-	if NPCModule and NPCModule.has_method("get_npc_color"):
-		return NPCModule.get_npc_color(npc_data)
-	if npc_data:
-		if npc_data is Dictionary:
-			if npc_data.get("can_trade", false):
-				return Color(0.86, 0.73, 0.33, 1.0)
-			if int(npc_data.get("npc_type", -1)) == 2:
-				return Color(0.78, 0.28, 0.28, 1.0)
-		else:
-			if npc_data.can_trade:
-				return Color(0.86, 0.73, 0.33, 1.0)
-			if int(npc_data.npc_type) == 2:
-				return Color(0.78, 0.28, 0.28, 1.0)
-	return Color(0.58, 0.72, 0.88, 1.0)
 
 func _get_blocker_cells() -> Array[Vector3i]:
 	var cells: Array[Vector3i] = []
@@ -303,13 +477,13 @@ func _on_actor_tree_exited(spawn_id: String) -> void:
 	var actor: Node3D = active_actors[spawn_id]
 	active_actors.erase(spawn_id)
 
-	if actor and is_instance_valid(actor):
+	if actor:
 		var role_kind := str(actor.get_meta("role_kind", ""))
-		if role_kind == "npc" and NPCModule and NPCModule.has_method("unregister_npc_actor"):
+		if role_kind == "npc":
 			var npc_id := str(actor.get_meta("npc_id", ""))
 			if not npc_id.is_empty():
-				NPCModule.unregister_npc_actor(npc_id)
+				unregister_npc_actor(npc_id)
 
 	actor_despawned.emit(spawn_id)
-	if actor and is_instance_valid(actor) and actor.has_meta("enemy_id"):
+	if actor and actor.has_meta("enemy_id"):
 		enemy_despawned.emit(spawn_id)

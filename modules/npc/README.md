@@ -13,7 +13,6 @@
 ### 核心架构
 ```
 modules/npc/
-├── npc_module.gd                      # NPC管理器（单例）
 ├── npc_data.gd                        # NPC数据类
 ├── npc_base.gd                        # NPC基类（场景实体）
 ├── components/
@@ -36,61 +35,52 @@ data/json/
 
 ### 集成修改
 ```
-project.godot                          # 添加 NPCModule autoload
 core/data_manager.gd                   # 添加 npcs 数据路径
 core/event_bus.gd                      # 添加 NPC_RECRUITED 事件
+systems/ai/ai_manager.gd               # AIManager.current 统一管理 NPC/Enemy 运行时
 ```
 
 ---
 
 ## 🚀 快速开始
 
+> 注意：`NPCModule` 及旧2D接口（如 `spawn_npc/start_dialog/start_trade/try_recruit`）已移除，请统一使用 `AIManager.current` 与 `AISpawnSystem`。
+
 ### 1. 在场景中使用NPC
 
 ```gdscript
-# 在安全屋生成商人老王
+# 直接通过AIManager生成NPC（推荐日常玩法使用AISpawnSystem）
 func _ready():
-    # 生成NPC（如果未生成）
-    if not NPCModule.get_npc("trader_lao_wang"):
-        NPCModule.spawn_npc("trader_lao_wang", "safehouse")
+    if AIManager.current:
+        AIManager.current.spawn_actor(
+            "npc",
+            "trader_lao_wang",
+            Vector3(0, 1, 0),
+            {"spawn_id": "demo_trader_lao_wang"}
+        )
 ```
 
 ### 2. 与NPC交互
 
 ```gdscript
-# 开始对话
-NPCModule.start_dialog("trader_lao_wang")
-
-# 开始交易
-NPCModule.start_trade("trader_lao_wang")
-
-# 尝试招募
-var result = NPCModule.try_recruit("trader_lao_wang")
-if result.success:
-    print("可以招募！")
-else:
-    print("还不能招募: %s" % result.reason)
+# 统一交互入口（会根据NPC能力进入交易/闲聊）
+if AIManager.current:
+    AIManager.current.start_npc_interaction("trader_lao_wang")
 ```
 
 ### 3. 获取NPC信息
 
 ```gdscript
-# 获取某位置的所有NPC
-var npcs = NPCModule.get_npcs_at_location("safehouse")
-for npc in npcs:
-    print("NPC: %s" % npc.npc_name)
-
-# 获取可交互的NPC
-var interactable = NPCModule.get_interactable_npcs_at("safehouse")
-
-# 获取已招募的队友
-var party = NPCModule.get_recruited_npcs()
+# 获取NPC定义数据
+var npc_data = AIManager.current.get_npc_data("trader_lao_wang") if AIManager.current else null
+if npc_data:
+    print("NPC: %s" % npc_data.get_display_name())
 ```
 
 ### 4. 修改NPC情绪
 
 ```gdscript
-var npc = NPCModule.get_npc("trader_lao_wang")
+var npc = AIManager.current.get_npc_data("trader_lao_wang") if AIManager.current else null
 if npc:
     # 增加友好度
     npc.change_mood("friendliness", 10)
@@ -134,7 +124,7 @@ if npc:
 ### 已实现功能
 
 ✅ **基础架构**
-- NPC单例管理器
+- AIManager.current 统一运行时管理
 - NPC数据类
 - NPC场景实体
 
@@ -215,7 +205,8 @@ if npc:
 2. **在游戏中生成**
 
 ```gdscript
-NPCModule.spawn_npc("my_new_npc", "safehouse")
+if AIManager.current:
+    AIManager.current.spawn_actor("npc", "my_new_npc", Vector3(2, 1, 2), {"spawn_id": "my_new_npc_demo"})
 ```
 
 ### 创建对话树
@@ -268,7 +259,7 @@ func _create_custom_dialog_tree() -> Dictionary:
 ## 📞 使用帮助
 
 如果遇到问题：
-1. 检查 `project.godot` 中是否正确添加了 `NPCModule` autoload
+1. 检查 `AIManager.current` 是否可用（是否已进入3D运行时场景）
 2. 检查 `data/json/npcs.json` 文件格式是否正确
 3. 查看Godot输出面板中的错误信息
 4. 确保所有组件都已正确附加到NPCBase场景

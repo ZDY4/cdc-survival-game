@@ -107,7 +107,7 @@ func _create_limb_panel(limb: int) -> Control:
 
 func _build_limb_panel(limb: int) -> Control:
 	var panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(200, compact_mode ? 40 : 60)
+	panel.custom_minimum_size = Vector2(200, 40 if compact_mode else 60)
 	
 	var hbox = HBoxContainer.new()
 	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -117,7 +117,7 @@ func _build_limb_panel(limb: int) -> Control:
 	# 图标
 	var icon_label = Label.new()
 	icon_label.text = limb_icons.get(limb, "•")
-	icon_label.add_theme_font_size_override("font_size", compact_mode ? 20 : 28)
+	icon_label.add_theme_font_size_override("font_size", 20 if compact_mode else 28)
 	icon_label.custom_minimum_size = Vector2(40, 40)
 	icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -134,7 +134,7 @@ func _build_limb_panel(limb: int) -> Control:
 	
 	var name_label = Label.new()
 	name_label.text = _get_limb_name(limb)
-	name_label.add_theme_font_size_override("font_size", compact_mode ? 12 : 14)
+	name_label.add_theme_font_size_override("font_size", 12 if compact_mode else 14)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_hbox.add_child(name_label)
 	
@@ -142,7 +142,7 @@ func _build_limb_panel(limb: int) -> Control:
 	var status_label = Label.new()
 	status_label.text = "正常"
 	status_label.name = "StatusLabel"
-	status_label.add_theme_font_size_override("font_size", compact_mode ? 10 : 12)
+	status_label.add_theme_font_size_override("font_size", 10 if compact_mode else 12)
 	name_hbox.add_child(status_label)
 	
 	# HP条
@@ -151,7 +151,7 @@ func _build_limb_panel(limb: int) -> Control:
 	hp_bar.min_value = 0
 	hp_bar.max_value = 100
 	hp_bar.value = 100
-	hp_bar.custom_minimum_size = Vector2(0, compact_mode ? 8 : 12)
+	hp_bar.custom_minimum_size = Vector2(0, 8 if compact_mode else 12)
 	if compact_mode:
 		hp_bar.add_theme_stylebox_override("fill", _create_compact_fill_style())
 	vbox.add_child(hp_bar)
@@ -160,7 +160,7 @@ func _build_limb_panel(limb: int) -> Control:
 	var hp_label = Label.new()
 	hp_label.name = "HPLabel"
 	hp_label.text = "100/100"
-	hp_label.add_theme_font_size_override("font_size", compact_mode ? 10 : 11)
+	hp_label.add_theme_font_size_override("font_size", 10 if compact_mode else 11)
 	hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	vbox.add_child(hp_label)
 	

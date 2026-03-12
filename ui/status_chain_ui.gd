@@ -7,7 +7,7 @@ class_name StatusChainUI
 @onready var chain_container: HBoxContainer = $ChainContainer
 @onready var warning_panel: Panel = $WarningPanel
 @onready var warning_label: Label = $WarningPanel/WarningLabel
-@noload var status_nodes: Dictionary = {}
+var status_nodes: Dictionary = {}
 
 # ===== 状态颜色 =====
 const COLOR_GOOD: Color = Color(0.2, 0.8, 0.2)      # 绿色

@@ -6,7 +6,7 @@ class_name ScavengeUI
 # ===== 节点引用 =====
 @onready var location_label: Label = $Panel/LocationLabel
 @onready var tool_container: VBoxContainer = $Panel/ToolSelection/ToolContainer
-@noload var time_slider: Slider
+var time_slider: Slider = null
 @onready var time_label: Label = $Panel/TimeSelection/TimeLabel
 @onready var preview_panel: Panel = $Panel/PreviewPanel
 @onready var yield_label: Label = $Panel/PreviewPanel/YieldLabel

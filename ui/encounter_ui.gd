@@ -8,7 +8,7 @@ class_name EncounterUI
 @onready var location_label: Label = $Panel/LocationLabel
 @onready var description_label: Label = $Panel/DescriptionLabel
 @onready var choices_container: VBoxContainer = $Panel/ChoicesContainer
-@noload var skill_check_panel: Panel
+var skill_check_panel: Panel = null
 @onready var result_panel: Panel = $ResultPanel
 @onready var result_title: Label = $ResultPanel/ResultTitle
 @onready var result_text: Label = $ResultPanel/ResultText
