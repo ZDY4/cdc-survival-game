@@ -2,6 +2,8 @@ class_name GridNavigator
 extends RefCounted
 
 const GRID_SIZE := 1.0
+const ORTHOGONAL_COST := 1.0
+const DIAGONAL_COST := 1.41421356237
 
 func find_path(start_pos: Vector3, end_pos: Vector3, is_walkable: Callable, max_nodes: int = 5000) -> Array[Vector3]:
     var start_grid := world_to_grid(start_pos)
@@ -30,10 +32,10 @@ func find_path(start_pos: Vector3, end_pos: Vector3, is_walkable: Callable, max_
         open_set.erase(current)
         
         for neighbor in _get_neighbors(current):
-            if not is_walkable.call(neighbor):
+            if not _can_traverse(current, neighbor, is_walkable):
                 continue
-                
-            var tentative_g: float = g_score[current] + 1.0
+
+            var tentative_g: float = g_score[current] + _movement_cost(current, neighbor)
             
             if not g_score.has(neighbor) or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current
@@ -64,11 +66,42 @@ func _get_neighbors(grid_pos: Vector3i) -> Array[Vector3i]:
         grid_pos + Vector3i(1, 0, 0),
         grid_pos + Vector3i(-1, 0, 0),
         grid_pos + Vector3i(0, 0, 1),
-        grid_pos + Vector3i(0, 0, -1)
+        grid_pos + Vector3i(0, 0, -1),
+        grid_pos + Vector3i(1, 0, 1),
+        grid_pos + Vector3i(1, 0, -1),
+        grid_pos + Vector3i(-1, 0, 1),
+        grid_pos + Vector3i(-1, 0, -1)
     ]
 
 func _heuristic(a: Vector3i, b: Vector3i) -> float:
-    return abs(a.x - b.x) + abs(a.z - b.z)
+    var dx: int = abs(a.x - b.x)
+    var dz: int = abs(a.z - b.z)
+    var diagonal_steps: int = mini(dx, dz)
+    var straight_steps: int = maxi(dx, dz) - diagonal_steps
+    return float(straight_steps) * ORTHOGONAL_COST + float(diagonal_steps) * DIAGONAL_COST
+
+func _movement_cost(from_pos: Vector3i, to_pos: Vector3i) -> float:
+    var dx: int = abs(to_pos.x - from_pos.x)
+    var dz: int = abs(to_pos.z - from_pos.z)
+    if dx == 1 and dz == 1:
+        return DIAGONAL_COST
+    return ORTHOGONAL_COST
+
+func _can_traverse(from_pos: Vector3i, to_pos: Vector3i, is_walkable: Callable) -> bool:
+    if not is_walkable.call(to_pos):
+        return false
+
+    var dx: int = to_pos.x - from_pos.x
+    var dz: int = to_pos.z - from_pos.z
+    if abs(dx) == 1 and abs(dz) == 1:
+        var horizontal_neighbor := from_pos + Vector3i(dx, 0, 0)
+        var vertical_neighbor := from_pos + Vector3i(0, 0, dz)
+        if not is_walkable.call(horizontal_neighbor):
+            return false
+        if not is_walkable.call(vertical_neighbor):
+            return false
+
+    return true
 
 func _get_lowest_f_score(open_set: Array[Vector3i], f_score: Dictionary) -> Vector3i:
     var lowest := open_set[0]

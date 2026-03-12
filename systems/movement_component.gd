@@ -13,6 +13,10 @@ signal move_failed(target_pos: Vector3)
 signal movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int)
 
 @export var step_duration: float = 0.25
+@export var ground_snap_enabled: bool = true
+@export_flags_3d_physics var ground_collision_mask: int = 1
+@export var ground_probe_height: float = 4.0
+@export var ground_probe_depth: float = 12.0
 
 var _grid_world: GridWorld = null
 var _navigator: GridNavigator = null
@@ -43,8 +47,11 @@ func move_to(world_pos: Vector3) -> bool:
 		return false
 
 	var start_pos := _owner_node.global_position
+	if ground_snap_enabled:
+		start_pos.y = _resolve_ground_y(start_pos, start_pos.y)
+		_owner_node.global_position = start_pos
 	var target_pos := world_pos
-	target_pos.y = start_pos.y
+	target_pos.y = _resolve_ground_y(world_pos, start_pos.y) if ground_snap_enabled else start_pos.y
 
 	var path := _navigator.find_path(start_pos, target_pos, _grid_world.is_walkable)
 	if path.is_empty():
@@ -53,7 +60,7 @@ func move_to(world_pos: Vector3) -> bool:
 
 	for i in range(path.size()):
 		var point: Vector3 = path[i]
-		point.y = start_pos.y
+		point.y = _resolve_ground_y(point, start_pos.y) if ground_snap_enabled else start_pos.y
 		path[i] = point
 
 	move_requested.emit(target_pos)
@@ -83,3 +90,25 @@ func _on_step_completed(world_pos: Vector3, step_index: int, total_steps: int) -
 	else:
 		grid_pos = GridMovementSystem.world_to_grid(world_pos)
 	movement_step_completed.emit(grid_pos, world_pos, step_index, total_steps)
+
+func _resolve_ground_y(world_pos: Vector3, fallback_y: float) -> float:
+	if not ground_snap_enabled or not _owner_node:
+		return fallback_y
+	var world_3d := _owner_node.get_world_3d()
+	if not world_3d:
+		return fallback_y
+
+	var from := world_pos + Vector3(0.0, maxf(ground_probe_height, 0.1), 0.0)
+	var to := world_pos - Vector3(0.0, maxf(ground_probe_depth, 0.1), 0.0)
+	var query := PhysicsRayQueryParameters3D.new()
+	query.from = from
+	query.to = to
+	query.collision_mask = ground_collision_mask
+	query.exclude = [_owner_node.get_rid()]
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	var hit := world_3d.direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return fallback_y
+	return float(hit.position.y)

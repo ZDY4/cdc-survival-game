@@ -9,6 +9,7 @@ signal dialog_finished()
 signal dialog_hidden()
 
 var _dialog_ui: DialogUI
+var _is_dialog_active: bool = false
 
 func _ready():
 	# 延迟加载UI，避免 _ready 时场景树不完整
@@ -33,6 +34,7 @@ func _setup_ui():
 	get_tree().root.add_child(_dialog_ui)
 	if _dialog_ui.has_method("hide_dialog"):
 		_dialog_ui.hide_dialog()
+	_set_dialog_active(false)
 	
 	# Connect UI signals
 	if _dialog_ui.has_signal("text_finished"):
@@ -45,7 +47,10 @@ func show_dialog(text: String, speaker: String = "", portrait: String = ""):
 		"text": text
 	}, ["text"]):
 		return
+	if not _dialog_ui:
+		return
 	
+	_set_dialog_active(true)
 	dialog_started.emit(text, speaker)
 	_dialog_ui.show_text(text, speaker, portrait)
 
@@ -54,16 +59,31 @@ func show_choices(choices: Array[String]):
 		"choices": choices
 	}, ["choices"]):
 		return -1
+	if not _dialog_ui:
+		return -1
 	
 	# 注意: 这是一个协程，调用处需要使用 await
-	return await _dialog_ui.show_choices(choices)
+	_set_dialog_active(true)
+	var selected_index: int = await _dialog_ui.show_choices(choices)
+	_set_dialog_active(false)
+	dialog_hidden.emit()
+	return selected_index
 
 func hide_dialog():
+	if not _dialog_ui:
+		return
 	_dialog_ui.hide_dialog()
+	_set_dialog_active(false)
 	dialog_hidden.emit()
+
+func is_dialog_active() -> bool:
+	return _is_dialog_active
 
 func _on_text_finished():
 	dialog_finished.emit()
 
 func _on_choice_made(index: int, choice_text: String):
 	choice_selected.emit(index, choice_text)
+
+func _set_dialog_active(is_active: bool) -> void:
+	_is_dialog_active = is_active
