@@ -42,12 +42,15 @@ static func run_tests(runner: TestRunner) -> void:
 
 static func _test_singleton():
     # 确保 EventBus 是单例
-    var bus1 = EventBus
-    var bus2 = EventBus
+    var bus1 = _get_event_bus()
+    var bus2 = _get_event_bus()
     
+    assert(bus1 != null, "EventBus should exist in scene tree")
     assert(bus1 == bus2, "EventBus should be singleton")
 
 static func _test_subscribe_and_emit():
+    var bus = _get_event_bus()
+    assert(bus != null, "EventBus should exist in scene tree")
     var received = false
     var received_data = {}
     
@@ -56,11 +59,11 @@ static func _test_subscribe_and_emit():
         received_data = data
     
     # 订阅事件
-    EventBus.subscribe(EventBus.EventType.GAME_STARTED, callback)
+    bus.subscribe(bus.EventType.GAME_STARTED, callback)
     
     # 触发事件
     var test_data = {"test": true, "value": 42}
-    EventBus.emit(EventBus.EventType.GAME_STARTED, test_data)
+    bus.emit(bus.EventType.GAME_STARTED, test_data)
     
     # 等待一帧让信号处理
     await Engine.get_main_loop().process_frame
@@ -70,46 +73,52 @@ static func _test_subscribe_and_emit():
     assert(received_data.test == true, "Event data should be correct")
     
     # 清理
-    EventBus.unsubscribe(EventBus.EventType.GAME_STARTED, callback)
+    bus.unsubscribe(bus.EventType.GAME_STARTED, callback)
 
 static func _test_multiple_listeners():
+    var bus = _get_event_bus()
+    assert(bus != null, "EventBus should exist in scene tree")
     var count = 0
     
     var callback1 = func(_data): count += 1
     var callback2 = func(_data): count += 1
     var callback3 = func(_data): count += 1
     
-    EventBus.subscribe(EventBus.EventType.COMBAT_STARTED, callback1)
-    EventBus.subscribe(EventBus.EventType.COMBAT_STARTED, callback2)
-    EventBus.subscribe(EventBus.EventType.COMBAT_STARTED, callback3)
+    bus.subscribe(bus.EventType.COMBAT_STARTED, callback1)
+    bus.subscribe(bus.EventType.COMBAT_STARTED, callback2)
+    bus.subscribe(bus.EventType.COMBAT_STARTED, callback3)
     
-    EventBus.emit(EventBus.EventType.COMBAT_STARTED, {})
+    bus.emit(bus.EventType.COMBAT_STARTED, {})
     
     await Engine.get_main_loop().process_frame
     
     assert(count == 3, "All 3 listeners should be called")
     
     # 清理
-    EventBus.unsubscribe(EventBus.EventType.COMBAT_STARTED, callback1)
-    EventBus.unsubscribe(EventBus.EventType.COMBAT_STARTED, callback2)
-    EventBus.unsubscribe(EventBus.EventType.COMBAT_STARTED, callback3)
+    bus.unsubscribe(bus.EventType.COMBAT_STARTED, callback1)
+    bus.unsubscribe(bus.EventType.COMBAT_STARTED, callback2)
+    bus.unsubscribe(bus.EventType.COMBAT_STARTED, callback3)
 
 static func _test_unsubscribe():
+    var bus = _get_event_bus()
+    assert(bus != null, "EventBus should exist in scene tree")
     var received = false
     
     var callback = func(_data):
         received = true
     
-    EventBus.subscribe(EventBus.EventType.DIALOG_STARTED, callback)
-    EventBus.unsubscribe(EventBus.EventType.DIALOG_STARTED, callback)
+    bus.subscribe(bus.EventType.DIALOG_STARTED, callback)
+    bus.unsubscribe(bus.EventType.DIALOG_STARTED, callback)
     
-    EventBus.emit(EventBus.EventType.DIALOG_STARTED, {})
+    bus.emit(bus.EventType.DIALOG_STARTED, {})
     
     await Engine.get_main_loop().process_frame
     
     assert(not received, "Unsubscribed listener should not be called")
 
 static func _test_data_passing():
+    var bus = _get_event_bus()
+    assert(bus != null, "EventBus should exist in scene tree")
     var complex_data = {
         "player_hp": 100,
         "enemy_name": "Zombie",
@@ -123,8 +132,8 @@ static func _test_data_passing():
     var callback = func(data):
         received_data = data
     
-    EventBus.subscribe(EventBus.EventType.PLAYER_HURT, callback)
-    EventBus.emit(EventBus.EventType.PLAYER_HURT, complex_data)
+    bus.subscribe(bus.EventType.PLAYER_HURT, callback)
+    bus.emit(bus.EventType.PLAYER_HURT, complex_data)
     
     await Engine.get_main_loop().process_frame
     
@@ -132,4 +141,13 @@ static func _test_data_passing():
     assert(received_data.player_hp == 100, "Nested data should be correct")
     assert(received_data.position == Vector2(100, 200), "Vector data should be correct")
     
-    EventBus.unsubscribe(EventBus.EventType.PLAYER_HURT, callback)
+    bus.unsubscribe(bus.EventType.PLAYER_HURT, callback)
+
+static func _get_event_bus() -> Node:
+    var loop = Engine.get_main_loop()
+    if not (loop is SceneTree):
+        return null
+    var tree: SceneTree = loop
+    if not tree.root:
+        return null
+    return tree.root.get_node_or_null("EventBus")

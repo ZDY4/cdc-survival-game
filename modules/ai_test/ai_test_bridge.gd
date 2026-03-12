@@ -907,9 +907,11 @@ func _send_json_response(client: StreamPeerTCP, status_code: int, body: String):
 	response += "Content-Type: application/json\r\n"
 	response += "Content-Length: " + str(body.length()) + "\r\n"
 	response += "Access-Control-Allow-Origin: *\r\n"
+	response += "Connection: close\r\n"
 	response += "\r\n"
 	response += body
 	client.put_data(response.to_utf8_buffer())
+	client.disconnect_from_host()
 
 # ===== Built-in Test Presets =====
 

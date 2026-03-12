@@ -53,7 +53,7 @@ func _on_location_selected(location_id: String, button: MapLocation):
 	var cost = MapModule._calculate_travel_cost(current, location_id)
 	
 	_update_info_panel(button.get_location_name(), cost)
-		info_panel.show()
+	info_panel.show()
 
 func _show_locked_info(location_id: String):
 	preview_title.text = "未解锁"

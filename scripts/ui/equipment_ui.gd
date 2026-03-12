@@ -1,5 +1,6 @@
 extends CanvasLayer
 # EquipmentUI - 装备界面（统一装备系统）
+const InputActions = preload("res://core/input_actions.gd")
 
 @onready var equipment_panel = $EquipmentPanel
 @onready var slots_container = $EquipmentPanel/VBoxContainer/SlotsContainer
@@ -311,6 +312,5 @@ func _get_target_slot(item_id: String) -> String:
 	return slot
 
 func _input(event):
-	if event is InputEventKey:
-		if event.pressed && event.keycode == KEY_E:
-			_on_toggle_pressed()
+	if event.is_action_pressed(InputActions.ACTION_MENU_INVENTORY):
+		_on_toggle_pressed()

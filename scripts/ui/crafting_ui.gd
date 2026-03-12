@@ -1,5 +1,6 @@
 extends CanvasLayer
 # CraftingUI - 制作系统界面
+const InputActions = preload("res://core/input_actions.gd")
 
 @onready var crafting_panel = $CraftingPanel
 @onready var category_tabs = $CraftingPanel/VBoxContainer/CategoryTabs
@@ -238,7 +239,6 @@ func _on_recipe_unlocked():
 		""
 	)
 
-func _input():
-	if event is InputEventKey:
-		if event.pressed && event.keycode == KEY_C:
-			_on_toggle_pressed()
+func _input(event: InputEvent):
+	if event.is_action_pressed(InputActions.ACTION_MENU_CRAFTING):
+		_on_toggle_pressed()

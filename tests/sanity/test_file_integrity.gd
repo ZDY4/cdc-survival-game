@@ -31,7 +31,7 @@ const REQUIRED_SCENES = [
     "modules/dialog/dialog_ui.tscn"
 ]
 
-static func run_tests():
+static func run_tests(runner: TestRunner) -> void:
     runner.register_test(
         "project_file_exists",
         TestRunner.TestLayer.SANITY,
@@ -70,38 +70,38 @@ static func run_tests():
 static func _test_project_file_exists():
     var project_file = PROJECT_PATH + "project.godot"
     
-    assert(FileAccess.file_exists(project_file), 
+    _ensure(FileAccess.file_exists(project_file), 
            "Project file not found: " + project_file)
     
     # 验证内容
     var file = FileAccess.open(project_file, FileAccess.READ)
-    assert(file != null, "Cannot open project.godot")
+    _ensure(file != null, "Cannot open project.godot")
     
     var content = file.get_as_text()
     file.close()
     
-    assert(content.contains("config/name"), 
+    _ensure(content.contains("config/name"), 
            "Project name not configured")
-    assert(content.contains("run/main_scene"), 
+    _ensure(content.contains("run/main_scene"), 
            "Main scene not configured")
 
 static func _test_core_modules_exist():
     for module_path in REQUIRED_MODULES:
         var full_path = PROJECT_PATH + module_path
-        assert(FileAccess.file_exists(full_path), 
+        _ensure(FileAccess.file_exists(full_path), 
                "Required module not found: " + module_path)
 
 static func _test_scene_files_exist():
     for scene_path in REQUIRED_SCENES:
         var full_path = PROJECT_PATH + scene_path
-        assert(FileAccess.file_exists(full_path), 
+        _ensure(FileAccess.file_exists(full_path), 
                "Required scene not found: " + scene_path)
 
 static func _test_autoload_configuration():
     var project_file = PROJECT_PATH + "project.godot"
     var file = FileAccess.open(project_file, FileAccess.READ)
     
-    assert(file != null, "Cannot open project.godot")
+    _ensure(file != null, "Cannot open project.godot")
     
     var content = file.get_as_text()
     file.close()
@@ -115,16 +115,15 @@ static func _test_autoload_configuration():
     ]
     
     for autoload in required_autoloads:
-        assert(content.contains(autoload + "=\"*res://"), 
+        _ensure(content.contains(autoload + "=\"*res://"), 
                "Autoload not configured: " + autoload)
 
 static func _test_icon_and_resources():
     var icon_path = PROJECT_PATH + "icon.svg"
-    assert(FileAccess.file_exists(icon_path), 
+    _ensure(FileAccess.file_exists(icon_path), 
            "Project icon not found")
 
 # 辅助断言函数
-static func assert(condition: bool, message: String = ""):
+static func _ensure(condition: bool, message: String = "") -> void:
     if not condition:
-        push_error("SANITY TEST FAILED: " + message)
-        # 在实际测试中这里会抛出异常
+        assert(false, "SANITY TEST FAILED: " + message)

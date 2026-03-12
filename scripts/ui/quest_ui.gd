@@ -1,5 +1,6 @@
 extends CanvasLayer
 # QuestUI - 任务界面
+const InputActions = preload("res://core/input_actions.gd")
 
 @onready var quest_panel = $QuestPanel
 @onready var quest_list = $QuestPanel/VBoxContainer/QuestList
@@ -133,6 +134,5 @@ func _show_notification(title: String, message: String):
 	notification.queue_free()
 
 func _input(event: InputEvent):
-	if event is InputEventKey:
-		if event.pressed and event.keycode == KEY_Q:
-			_on_toggle_pressed()
+	if event.is_action_pressed(InputActions.ACTION_MENU_JOURNAL):
+		_on_toggle_pressed()
