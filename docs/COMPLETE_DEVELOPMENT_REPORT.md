@@ -50,25 +50,23 @@
 **状态**: ⏭️ 待完成 (建议后续处理)
 
 ### ⏭️ Phase 6: 全面测试
-- [x] 创建 `tests/complete_system_test.gd`
 - [ ] 运行完整测试
 - [ ] 验证所有功能
 
-**状态**: ⚠️ 部分完成 (测试脚本已创建)
+**状态**: ⏭️ 待完成
 
 ---
 
 ## 已创建/修改的文件清单
 
-### 新文件 (12个)
+### 新文件 (7个)
 1. `scripts/ui/inventory_ui.gd` - 背包UI脚本
 2. `scenes/ui/inventory_ui.tscn` - 背包UI场景
 3. `systems/audio_system.gd` - 音效系统
 4. `systems/new_content_system.gd` - 新内容系统
 5. `systems/combat_penalty_system.gd` - 战斗惩罚系统
-6. `tests/complete_system_test.gd` - 完整测试脚本
-7. `docs/EQUIPMENT_MERGE_DESIGN.md` - 装备合并设计
-8. `docs/EQUIPMENT_SYSTEM_COMPLETE.md` - 装备系统完成报告
+6. `docs/EQUIPMENT_MERGE_DESIGN.md` - 装备合并设计
+7. `docs/EQUIPMENT_SYSTEM_COMPLETE.md` - 装备系统完成报告
 
 ### 修改的文件 (6个)
 1. `systems/carry_system.gd` - 集成统一装备系统

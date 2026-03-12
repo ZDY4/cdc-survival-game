@@ -4,23 +4,29 @@
 
 ### 运行所有测试
 ```bash
-python run_tests.py --all
+# 当前仓库暂无统一的 run_tests.py 入口
+# 可直接运行以下两个脚本：
+python tests/agent_test_runner.py
+python tests/test_via_api.py
 ```
 
 ### 只运行冒烟测试
 ```bash
-python run_tests.py --sanity
+# API 连通性检查
+python tests/test_via_api.py
 ```
 
 ### 运行功能测试
 ```bash
-python run_tests.py --functional
+# 当前 Functional/Sanity 以 GDScript 测试脚本为主，
+# 建议通过 Godot 内测试场景或自定义入口统一调度。
+godot --path . --scene scenes/ui/main_menu.tscn
 ```
 
 ### 运行Agent测试
 ```bash
 # 需要先启动游戏
-python run_tests.py --agent
+python tests/agent_test_runner.py
 ```
 
 ---
@@ -142,21 +148,21 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Sanity Test
-        run: python run_tests.py --sanity
+        run: python tests/test_via_api.py
 
   functional:
     needs: sanity
     runs-on: ubuntu-latest
     steps:
       - name: Functional Test
-        run: python run_tests.py --functional
+        run: python tests/test_via_api.py
 
   agent:
     needs: functional
     runs-on: ubuntu-latest
     steps:
       - name: Agent Test
-        run: python run_tests.py --agent --timeout 600
+        run: python tests/agent_test_runner.py
 ```
 
 ---

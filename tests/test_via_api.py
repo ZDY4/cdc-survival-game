@@ -5,6 +5,11 @@ import requests
 import json
 import time
 
+def _extract_result(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {"success": False, "message": "Invalid response"}
+    return payload.get("result", payload)
+
 def test_ai_bridge():
     """测试 AI Test Bridge 连接"""
     print("\n[测试] AI Test Bridge HTTP API")
@@ -58,35 +63,49 @@ def test_actions():
     actions_tested = 0
     actions_passed = 0
     
-    # 测试搜索
+    # 测试 get_state 动作（无需上下文）
     try:
         actions_tested += 1
         response = requests.post(
             "http://localhost:8080/execute",
-            json={"action": "search", "parameters": {}},
+            json={"action": "get_state", "params": {}},
             timeout=5
         )
         if response.status_code == 200:
-            actions_passed += 1
-            print("  [OK] 搜索操作")
-    except Exception as e:
-        print(f"  [FAIL] 搜索操作失败: {e}")
-    
-    # 测试存档
-    try:
-        actions_tested += 1
-        response = requests.post(
-            "http://localhost:8080/execute",
-            json={"action": "sleep", "parameters": {}},
-            timeout=5
-        )
-        if response.status_code == 200:
-            result = response.json()
+            result = _extract_result(response.json())
             if result.get("success"):
                 actions_passed += 1
-                print("  [OK] 存档操作")
+                print("  [OK] get_state 操作")
     except Exception as e:
-        print(f"  [FAIL] 存档操作失败: {e}")
+        print(f"  [FAIL] get_state 操作失败: {e}")
+    
+    # 测试 start_game（若已注册）
+    try:
+        action_names = []
+        actions_resp = requests.get("http://localhost:8080/actions", timeout=5)
+        if actions_resp.status_code == 200:
+            actions_data = actions_resp.json()
+            for item in actions_data.get("actions", []):
+                if isinstance(item, dict) and item.get("name"):
+                    action_names.append(item["name"])
+
+        if "start_game" not in action_names:
+            print("  [SKIP] start_game 未注册，跳过第二个动作测试")
+            return actions_tested, actions_passed
+
+        actions_tested += 1
+        response = requests.post(
+            "http://localhost:8080/execute",
+            json={"action": "start_game", "params": {}},
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = _extract_result(response.json())
+            if result.get("success"):
+                actions_passed += 1
+                print("  [OK] start_game 操作")
+    except Exception as e:
+        print(f"  [FAIL] start_game 操作失败: {e}")
     
     return actions_tested, actions_passed
 

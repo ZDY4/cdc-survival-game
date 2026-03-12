@@ -6,6 +6,7 @@ import requests
 import json
 import time
 import random
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
@@ -58,25 +59,60 @@ class CDCAgentBase(ABC):
         """获取当前游戏状态"""
         try:
             response = requests.get(f"{self.api_url}/state", timeout=5)
-            data = response.json()
-            
+            payload = response.json()
+            data = payload.get("data", payload) if isinstance(payload, dict) else {}
+
+            player = data.get("player", {})
+            inventory = data.get("inventory", {})
+            location = data.get("location", {})
+            world = data.get("world", {})
+
+            inventory_items = inventory.get("items", [])
+            if isinstance(inventory_items, list):
+                inventory_count = inventory.get("used_slots", inventory.get("count", len(inventory_items)))
+            else:
+                inventory_count = inventory.get("used_slots", inventory.get("count", 0))
+
+            available_actions = data.get("available_actions", [])
+            if not isinstance(available_actions, list) or len(available_actions) == 0:
+                available_actions = self.fetch_actions()
+
             self.current_state = GameState(
-                player_hp=data["player"]["hp"],
-                player_max_hp=data["player"]["max_hp"],
-                hunger=data["player"]["hunger"],
-                thirst=data["player"]["thirst"],
-                location=data["location"]["current"],
-                location_name=data["location"]["current_name"],
-                inventory_count=data["inventory"]["used_slots"],
-                inventory_max=data["inventory"]["max_slots"],
-                available_actions=data["available_actions"],
-                timestamp=data["timestamp"]
+                player_hp=int(player.get("hp", 0)),
+                player_max_hp=int(player.get("max_hp", max(int(player.get("hp", 0)), 1))),
+                hunger=int(player.get("hunger", 0)),
+                thirst=int(player.get("thirst", 0)),
+                location=str(location.get("current", player.get("position", world.get("day", "unknown")))),
+                location_name=str(location.get("current_name", data.get("scene", "unknown"))),
+                inventory_count=int(inventory_count),
+                inventory_max=int(inventory.get("max_slots", max(int(inventory_count), 0))),
+                available_actions=available_actions,
+                timestamp=float(data.get("timestamp", time.time()))
             )
             return self.current_state
             
         except Exception as e:
             self._log_error(f"Failed to get state: {e}")
             return None
+
+    def fetch_actions(self) -> List[str]:
+        """从 /actions 获取可用动作名"""
+        try:
+            response = requests.get(f"{self.api_url}/actions", timeout=5)
+            if response.status_code != 200:
+                return []
+            data = response.json()
+            actions = data.get("actions", [])
+            names: List[str] = []
+            for item in actions:
+                if isinstance(item, dict):
+                    name = item.get("name", "")
+                    if isinstance(name, str) and name:
+                        names.append(name)
+            return names
+        except Exception as e:
+            self._log_error(f"Failed to fetch actions: {e}")
+            return []
     
     def execute_action(self, action_type: str, parameters: Dict = None) -> Dict:
         """执行游戏操作"""
@@ -86,10 +122,11 @@ class CDCAgentBase(ABC):
         try:
             response = requests.post(
                 f"{self.api_url}/execute",
-                json={"action": action_type, "parameters": parameters},
+                json={"action": action_type, "params": parameters},
                 timeout=10
             )
-            result = response.json()
+            payload = response.json()
+            result = payload.get("result", payload) if isinstance(payload, dict) else {"success": False, "message": "Invalid response"}
             
             # 记录操作历史
             self.action_history.append({
@@ -250,8 +287,9 @@ class CDCAgentBase(ABC):
             "action_history": self.action_history[-50:],  # 最近50个操作
             "errors": [r for r in self.test_results if r["type"] == "error"]
         }
-        
-        with open("tests/results/agent_test_report.json", "w") as f:
+
+        os.makedirs("tests/results", exist_ok=True)
+        with open("tests/results/agent_test_report.json", "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2)
         
         print("📄 Detailed report saved to: tests/results/agent_test_report.json")
@@ -311,7 +349,13 @@ class SurvivalFocusedAgent(CDCAgentBase):
                 return AgentAction.SEARCH.value, {}
         
         # 否则随机探索
-        return RandomExplorationAgent().decide_next_action()
+        if available:
+            action = random.choice(available)
+            if action.startswith("travel:"):
+                return AgentAction.TRAVEL.value, {"destination": action.replace("travel:", "")}
+            if action in ("search", "sleep", "wait"):
+                return action, {}
+        return AgentAction.WAIT.value, {}
 
 if __name__ == "__main__":
     # 示例运行

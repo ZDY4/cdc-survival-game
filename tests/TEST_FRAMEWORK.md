@@ -163,23 +163,15 @@ tests/
 ### 命令行接口
 
 ```bash
-# 运行所有测试
-./run_tests.sh --all
+# 当前仓库暂无 run_tests.sh 统一入口
+# Agent smoke
+python tests/agent_test_runner.py
 
-# 只运行冒烟测试
-./run_tests.sh --sanity
+# API smoke
+python tests/test_via_api.py
 
-# 运行功能测试
-./run_tests.sh --functional
-
-# 运行特定模块测试
-./run_tests.sh --module dialog
-
-# 运行Agent测试(需功能测试通过)
-./run_tests.sh --agent
-
-# 生成HTML报告
-./run_tests.sh --all --report html
+# 启动游戏（用于 API/Agent 测试）
+godot --path . --scene scenes/ui/main_menu.tscn
 ```
 
 ### Godot编辑器内运行
@@ -295,13 +287,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Sanity Test
-        run: ./run_tests.sh --sanity
+        run: python tests/test_via_api.py
         
       - name: Functional Test
         if: success()
-        run: ./run_tests.sh --functional
+        run: python tests/test_via_api.py
         
       - name: Agent Test
         if: success()
-        run: ./run_tests.sh --agent --timeout 1800
+        run: python tests/agent_test_runner.py
 ```

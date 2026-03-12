@@ -13,19 +13,17 @@ Unique testing architecture with three layers:
 ## Quick Commands
 
 ```bash
-# Run all layers sequentially
-python tests/agent_test_runner.py --all
+# Agent smoke test (HTTP API)
+python tests/agent_test_runner.py
 
-# Individual layers
-python tests/agent_test_runner.py --sanity
-python tests/agent_test_runner.py --functional
-python tests/agent_test_runner.py --agent
+# API smoke test
+python tests/test_via_api.py
 
 # Single test via API
 curl http://localhost:8080/execute \
   -X POST \
   -H "Content-Type: application/json" \
-  -d '{"action": "search", "parameters": {}}'
+  -d '{"action": "get_state", "params": {}}'
 ```
 
 ## Where to Look
@@ -113,7 +111,7 @@ curl http://localhost:8080/state
 
 # Execute action
 curl -X POST http://localhost:8080/execute \
-  -d '{"action": "travel", "parameters": {"destination": "street_a"}}'
+  -d '{"action": "travel", "params": {"destination": "street_a"}}'
 ```
 
 ## Anti-Patterns (Tests)
