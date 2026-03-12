@@ -55,6 +55,7 @@ func update_from_grid(center: Vector3i) -> void:
 	var blockers: Dictionary = _get_blocker_set()
 	var visible: Array[Vector3i] = []
 	var radius: int = maxi(0, vision_radius)
+	var radius_f: float = float(radius)
 	var min_x: int = center_cell.x - radius
 	var max_x: int = center_cell.x + radius
 	var min_z: int = center_cell.z - radius
@@ -64,12 +65,11 @@ func update_from_grid(center: Vector3i) -> void:
 		max_x = mini(max_x, int(_grid_bounds.max_x))
 		min_z = maxi(min_z, int(_grid_bounds.min_z))
 		max_z = mini(max_z, int(_grid_bounds.max_z))
-	var radius_sq: int = radius * radius
 	for x in range(min_x, max_x + 1):
 		var dx: int = x - center_cell.x
 		for z in range(min_z, max_z + 1):
 			var dz: int = z - center_cell.z
-			if dx * dx + dz * dz > radius_sq:
+			if not _cell_intersects_vision_circle(dx, dz, radius_f):
 				continue
 			var cell := Vector3i(x, 0, z)
 			if _has_line_of_sight(center_cell, cell, blockers):
@@ -139,6 +139,14 @@ func _has_line_of_sight(from: Vector3i, to: Vector3i, blockers: Dictionary) -> b
 		if blockers.has(pos):
 			return false
 	return true
+
+func _cell_intersects_vision_circle(dx: int, dz: int, radius: float) -> bool:
+	if radius <= 0.0:
+		return dx == 0 and dz == 0
+	# Use cell-square intersection (instead of center-point test) to keep edges rounder on a grid.
+	var qx: float = maxf(absf(float(dx)) - 0.5, 0.0)
+	var qz: float = maxf(absf(float(dz)) - 0.5, 0.0)
+	return qx * qx + qz * qz <= radius * radius
 
 func _on_movement_step_completed(grid_pos: Vector3i, _world_pos: Vector3, _step_index: int, _total_steps: int) -> void:
 	update_from_grid(grid_pos)
