@@ -155,9 +155,6 @@ func _update_hover_overlay() -> void:
     if not viewport:
         _hide_hover_overlay()
         return
-    if viewport.gui_get_hovered_control() != null:
-        _hide_hover_overlay()
-        return
 
     var camera := viewport.get_camera_3d()
     if not camera:
@@ -189,6 +186,7 @@ func _compute_grid_cell_world_corners(grid_pos: Vector3i, world_y: float) -> Arr
         Vector3(center_world.x + half_cell, world_y, center_world.z + half_cell),
         Vector3(center_world.x - half_cell, world_y, center_world.z + half_cell)
     ]
+
 
 func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
     if not hit.has("collider"):

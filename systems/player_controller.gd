@@ -363,6 +363,7 @@ func _initialize_path_preview_system() -> void:
 	var interaction_system := get_interaction_system()
 	if not interaction_system:
 		return
+	_attach_hover_overlay_to_scene_root()
 	_path_preview_system.initialize(
 		_scene_root,
 		interaction_system,
@@ -372,6 +373,16 @@ func _initialize_path_preview_system() -> void:
 		_hover_corner_overlay
 	)
 	_apply_preview_settings()
+
+func _attach_hover_overlay_to_scene_root() -> void:
+	if not _hover_corner_overlay or not _scene_root:
+		return
+	if _hover_corner_overlay.get_parent() == _scene_root:
+		return
+	var current_parent := _hover_corner_overlay.get_parent()
+	if current_parent:
+		current_parent.remove_child(_hover_corner_overlay)
+	_scene_root.add_child(_hover_corner_overlay)
 
 func _apply_preview_settings() -> void:
 	if not _path_preview_system:
@@ -384,51 +395,112 @@ func _apply_preview_settings() -> void:
 func _update_hover_cursor() -> void:
 	if not _scene_root:
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_hide_hover_overlay()
 		return
 	if is_movement_input_blocked():
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_hide_hover_overlay()
 		return
 
 	var interaction_system := get_interaction_system()
 	if not interaction_system:
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_hide_hover_overlay()
 		return
 
 	var viewport := _scene_root.get_viewport()
 	if not viewport:
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_hide_hover_overlay()
 		return
-	if viewport.gui_get_hovered_control() != null:
+	if _is_hovering_blocking_ui(viewport):
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_hide_hover_overlay()
 		return
 
 	var mouse_pos := viewport.get_mouse_position()
 	var hit := interaction_system.raycast_screen_position(_scene_root, mouse_pos)
 	if hit.is_empty():
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_update_hover_overlay_from_mouse(interaction_system, viewport)
 		return
 
 	var interactable := _resolve_interactable_from_hit(hit)
 	if not interactable:
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_update_hover_overlay_from_mouse(interaction_system, viewport)
 		return
 	if not interactable.has_method("get_available_options"):
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_update_hover_overlay_from_mouse(interaction_system, viewport)
 		return
 
 	var options: Array = interactable.get_available_options()
 	if options.is_empty():
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_update_hover_overlay_from_mouse(interaction_system, viewport)
 		return
 
 	var option := options[0] as InteractionOption
 	if not option:
 		_apply_hover_cursor(null, Vector2.ZERO)
+		_update_hover_overlay_from_mouse(interaction_system, viewport)
 		return
 
 	var cursor_texture := option.get_cursor_texture(interactable)
 	var cursor_hotspot := option.get_cursor_hotspot(interactable)
 	_apply_hover_cursor(cursor_texture, cursor_hotspot)
+	_update_hover_overlay_from_mouse(interaction_system, viewport)
+
+func _update_hover_overlay_from_mouse(interaction_system: InteractionSystem, viewport: Viewport) -> void:
+	if not _hover_corner_overlay or not _scene_root or not interaction_system or not viewport:
+		return
+	var camera := viewport.get_camera_3d()
+	if not camera:
+		_hide_hover_overlay()
+		return
+	var mouse_pos := viewport.get_mouse_position()
+	var ground_hit := interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
+	if ground_hit.is_empty() or not ground_hit.has("position"):
+		_hide_hover_overlay()
+		return
+	var hit_pos: Vector3 = ground_hit.position
+	var grid_pos := GridMovementSystem.world_to_grid(hit_pos)
+	var center_world := GridMovementSystem.grid_to_world(grid_pos)
+	var half_cell := GridNavigator.GRID_SIZE * 0.5
+	var world_y := hit_pos.y + 0.03
+	var corners_world: Array[Vector3] = [
+		Vector3(center_world.x - half_cell, world_y, center_world.z - half_cell),
+		Vector3(center_world.x + half_cell, world_y, center_world.z - half_cell),
+		Vector3(center_world.x + half_cell, world_y, center_world.z + half_cell),
+		Vector3(center_world.x - half_cell, world_y, center_world.z + half_cell)
+	]
+	_hover_corner_overlay.show_cell(corners_world, camera)
+
+func _hide_hover_overlay() -> void:
+	if _hover_corner_overlay:
+		_hover_corner_overlay.hide_cell()
+
+func _is_hovering_blocking_ui(viewport: Viewport) -> bool:
+	if not viewport:
+		return false
+
+	var hovered := viewport.gui_get_hovered_control()
+	if hovered == null or not is_instance_valid(hovered):
+		return false
+	if _hover_corner_overlay and _hover_corner_overlay.owns_control(hovered):
+		return false
+
+	var control: Control = hovered
+	while control != null:
+		if not control.visible:
+			control = control.get_parent() as Control
+			continue
+		if control.mouse_filter == Control.MOUSE_FILTER_STOP:
+			return true
+		control = control.get_parent() as Control
+
+	return false
 
 func _apply_hover_cursor(cursor_texture: Texture2D, hotspot: Vector2) -> void:
 	if _active_hover_cursor == cursor_texture and _active_hover_hotspot.is_equal_approx(hotspot):
