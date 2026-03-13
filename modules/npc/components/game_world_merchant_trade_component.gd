@@ -1,17 +1,18 @@
 extends NPCTradeComponent
-## Adapts the existing NPC trade UI for runtime 3D NPC merchants.
+## Adapts the existing NPC trade UI for runtime 3D merchants.
 
-var merchant_data: NPCData
+var merchant_data: Dictionary = {}
 
-func initialize_with_data(data: NPCData) -> void:
-	merchant_data = data
+func initialize_with_data(data: Dictionary) -> void:
+	if data is Dictionary:
+		merchant_data = data.duplicate(true)
+	else:
+		merchant_data = {}
 
 func open_trade_ui() -> bool:
-	if not merchant_data:
+	if merchant_data.is_empty():
 		return false
-	if not merchant_data.can_trade:
-		return false
-	if not merchant_data.state.get("trade_enabled", true):
+	if not _is_trade_enabled():
 		return false
 
 	if not FileAccess.file_exists("res://modules/npc/ui/npc_trade_ui.tscn"):
@@ -39,34 +40,36 @@ func open_trade_ui() -> bool:
 	return true
 
 func calculate_buy_price(item_id: String, base_price: int) -> int:
-	if not merchant_data:
+	if merchant_data.is_empty():
 		return base_price
 
-	var trade: Dictionary = merchant_data.trade_data
+	var trade: Dictionary = _get_trade_dict()
+	var mood: Dictionary = _get_mood_dict()
 	var multiplier: float = float(trade.get("buy_price_modifier", 1.0))
 	var player_charisma: int = _get_player_charisma()
 	var charisma_bonus: float = float(player_charisma - 10) * 0.02
-	var friendliness_bonus: float = float(merchant_data.mood.get("friendliness", 50) - 50) * 0.01
-	var trust_bonus: float = float(merchant_data.mood.get("trust", 30) - 50) * 0.005
+	var friendliness_bonus: float = float(mood.get("friendliness", 50) - 50) * 0.01
+	var trust_bonus: float = float(mood.get("trust", 30) - 50) * 0.005
 	var final_multiplier: float = clampf(multiplier - charisma_bonus - friendliness_bonus - trust_bonus, 0.3, 3.0)
 
 	return int(base_price * final_multiplier)
 
 func calculate_sell_price(item_id: String, base_price: int) -> int:
-	if not merchant_data:
+	if merchant_data.is_empty():
 		return base_price
 
-	var trade: Dictionary = merchant_data.trade_data
+	var trade: Dictionary = _get_trade_dict()
+	var mood: Dictionary = _get_mood_dict()
 	var multiplier: float = float(trade.get("sell_price_modifier", 1.0))
 	var player_charisma: int = _get_player_charisma()
 	var charisma_bonus: float = float(player_charisma - 10) * 0.02
-	var friendliness_bonus: float = float(merchant_data.mood.get("friendliness", 50) - 50) * 0.005
+	var friendliness_bonus: float = float(mood.get("friendliness", 50) - 50) * 0.005
 	var final_multiplier: float = clampf(multiplier + charisma_bonus + friendliness_bonus, 0.1, 2.0)
 
 	return int(base_price * final_multiplier)
 
 func can_buy_item(item_id: String, count: int) -> bool:
-	if not merchant_data:
+	if merchant_data.is_empty():
 		return false
 	if count <= 0:
 		return false
@@ -81,7 +84,7 @@ func can_buy_item(item_id: String, count: int) -> bool:
 
 func buy_item(item_id: String, count: int) -> Dictionary:
 	var result: Dictionary = {"success": false, "reason": ""}
-	if not merchant_data:
+	if merchant_data.is_empty():
 		result.reason = "Merchant data unavailable"
 		return result
 	if count <= 0:
@@ -104,9 +107,11 @@ func buy_item(item_id: String, count: int) -> Dictionary:
 	if InventoryModule:
 		InventoryModule.add_item(item_id, count)
 
-	merchant_data.trade_data["money"] = get_npc_money() + total_price
-	merchant_data.trade_data["trade_count_today"] = int(merchant_data.trade_data.get("trade_count_today", 0)) + count
-	merchant_data.mood["friendliness"] = clampi(int(merchant_data.mood.get("friendliness", 50)) + 1, 0, 100)
+	var trade: Dictionary = _get_trade_dict()
+	trade["money"] = get_npc_money() + total_price
+	trade["trade_count_today"] = int(trade.get("trade_count_today", 0)) + count
+	var mood: Dictionary = _get_mood_dict()
+	mood["friendliness"] = clampi(int(mood.get("friendliness", 50)) + 1, 0, 100)
 
 	result.success = true
 	result.price = total_price
@@ -115,7 +120,7 @@ func buy_item(item_id: String, count: int) -> Dictionary:
 
 func sell_item(item_id: String, count: int) -> Dictionary:
 	var result: Dictionary = {"success": false, "reason": ""}
-	if not merchant_data:
+	if merchant_data.is_empty():
 		result.reason = "Merchant data unavailable"
 		return result
 	if count <= 0:
@@ -139,7 +144,8 @@ func sell_item(item_id: String, count: int) -> Dictionary:
 
 	_add_to_merchant_inventory(item_id, count, price_per_item)
 	_give_player_currency(total_price)
-	merchant_data.mood["friendliness"] = clampi(int(merchant_data.mood.get("friendliness", 50)) + 1, 0, 100)
+	var mood: Dictionary = _get_mood_dict()
+	mood["friendliness"] = clampi(int(mood.get("friendliness", 50)) + 1, 0, 100)
 
 	result.success = true
 	result.price = total_price
@@ -147,26 +153,59 @@ func sell_item(item_id: String, count: int) -> Dictionary:
 	return result
 
 func get_npc_inventory() -> Array:
-	if not merchant_data:
+	if merchant_data.is_empty():
 		return []
 	return _get_inventory().duplicate(true)
 
 func get_npc_money() -> int:
-	if not merchant_data:
+	if merchant_data.is_empty():
 		return 0
-	return int(merchant_data.trade_data.get("money", 0))
+	var trade: Dictionary = _get_trade_dict()
+	return int(trade.get("money", 0))
 
 func set_npc_money(amount: int):
-	if not merchant_data:
+	if merchant_data.is_empty():
 		return
-	merchant_data.trade_data["money"] = maxi(0, amount)
+	var trade: Dictionary = _get_trade_dict()
+	trade["money"] = maxi(0, amount)
+
+func _is_trade_enabled() -> bool:
+	var social: Dictionary = merchant_data.get("social", {})
+	var trade: Dictionary = social.get("trade", {})
+	return bool(trade.get("enabled", false))
+
+func _get_trade_dict() -> Dictionary:
+	if not merchant_data.has("social"):
+		merchant_data["social"] = {}
+	var social: Dictionary = merchant_data["social"]
+	if not social.has("trade"):
+		social["trade"] = {
+			"enabled": false,
+			"buy_price_modifier": 1.0,
+			"sell_price_modifier": 1.0,
+			"money": 0,
+			"inventory": []
+		}
+	return social["trade"]
+
+func _get_mood_dict() -> Dictionary:
+	if not merchant_data.has("social"):
+		merchant_data["social"] = {}
+	var social: Dictionary = merchant_data["social"]
+	if not social.has("mood"):
+		social["mood"] = {
+			"friendliness": 50,
+			"trust": 30,
+			"fear": 0,
+			"anger": 0
+		}
+	return social["mood"]
 
 func _get_inventory() -> Array:
-	if not merchant_data:
-		return []
-	if not merchant_data.trade_data.has("inventory"):
-		merchant_data.trade_data["inventory"] = []
-	return merchant_data.trade_data["inventory"]
+	var trade: Dictionary = _get_trade_dict()
+	if not trade.has("inventory"):
+		trade["inventory"] = []
+	return trade["inventory"]
 
 func _remove_from_merchant_inventory(item_id: String, count: int) -> void:
 	var inventory: Array = _get_inventory()

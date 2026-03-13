@@ -13,7 +13,6 @@ enum AIState { IDLE, WANDER, CHASE, ATTACK, RETURN }
 var _owner_node: Node3D = null
 var _movement_component: Node = null
 var _spawn_pos: Vector3 = Vector3.ZERO
-var _role_kind: String = ""
 var _character_id: String = ""
 var _allow_attack: bool = false
 
@@ -29,16 +28,14 @@ func initialize(
 		owner_node: Node3D,
 		movement_component: Node,
 		spawn_pos: Vector3,
-		role_kind: String,
 		character_id: String,
 		ai_config: Dictionary
 	) -> void:
 	_owner_node = owner_node
 	_movement_component = movement_component
 	_spawn_pos = spawn_pos
-	_role_kind = role_kind
 	_character_id = character_id
-	_allow_attack = role_kind.to_lower() == "enemy"
+	_allow_attack = bool(ai_config.get("allow_attack", false))
 
 	_apply_config(ai_config)
 

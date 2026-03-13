@@ -48,7 +48,6 @@ character_id = "survivor_xiao_ming"
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, -5)
 script = ExtResource("2_7y8c1")
 spawn_id = "gw3d_enemy_spawn"
-role_kind = "enemy"
 character_id = "zombie_walker"
 respawn_enabled = true
 respawn_delay = 20.0
