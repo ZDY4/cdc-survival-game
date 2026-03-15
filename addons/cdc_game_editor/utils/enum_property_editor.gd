@@ -52,6 +52,8 @@ func _update_ui():
 	_option_button.selected = -1
 
 func _on_item_selected(index: int):
+	if _is_syncing_ui:
+		return
 	_current_value = _option_button.get_item_metadata(index)
 	
 	if not _is_editing:

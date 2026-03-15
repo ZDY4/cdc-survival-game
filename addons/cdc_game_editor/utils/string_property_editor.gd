@@ -67,12 +67,16 @@ func _update_ui():
 		_text_edit.text = str(_current_value) if _current_value != null else ""
 
 func _on_line_text_changed(new_text: String):
+	if _is_syncing_ui:
+		return
 	_current_value = new_text
 	if not _is_editing:
 		value_changed.emit(property_name, _current_value, _old_value)
 
 func _on_multiline_text_changed():
 	if not _text_edit:
+		return
+	if _is_syncing_ui:
 		return
 	_current_value = _text_edit.text
 	if not _is_editing:

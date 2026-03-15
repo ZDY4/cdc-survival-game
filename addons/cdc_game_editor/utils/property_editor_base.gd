@@ -14,10 +14,11 @@ signal edit_finished(property_name: String)
 var _current_value: Variant
 var _old_value: Variant
 var _is_editing: bool = false
+var _is_syncing_ui: bool = false
 
 func _ready():
 	_setup_ui()
-	_update_ui()
+	_refresh_ui()
 
 ## 设置UI（子类重写）
 func _setup_ui():
@@ -31,7 +32,7 @@ func _update_ui():
 func set_value(value: Variant, emit_signal: bool = false):
 	_old_value = _current_value
 	_current_value = value
-	_update_ui()
+	_refresh_ui()
 	
 	if emit_signal:
 		value_changed.emit(property_name, value, _old_value)
@@ -64,7 +65,12 @@ func cancel_edit():
 	if _is_editing:
 		_current_value = _old_value
 		_is_editing = false
-		_update_ui()
+		_refresh_ui()
+
+func _refresh_ui():
+	_is_syncing_ui = true
+	_update_ui()
+	_is_syncing_ui = false
 
 ## 创建标签
 func _create_label(text: String) -> Label:

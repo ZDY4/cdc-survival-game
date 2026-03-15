@@ -33,6 +33,8 @@ func _update_ui():
 		_spin_box.value = float(_current_value) if _current_value != null else 0.0
 
 func _on_value_changed(new_value: float):
+	if _is_syncing_ui:
+		return
 	if allow_float:
 		_current_value = new_value
 	else:

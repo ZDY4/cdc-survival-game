@@ -528,6 +528,9 @@ func _extract_ids_from_json_dict(path: String) -> Array[String]:
 	var parsed: Variant = JSON.parse_string(json_text)
 	if not (parsed is Dictionary):
 		return []
+	var root: Dictionary = parsed
+	if root.has("quests") and root.quests is Dictionary:
+		parsed = root.quests
 
 	var result: Array[String] = []
 	for key in parsed.keys():

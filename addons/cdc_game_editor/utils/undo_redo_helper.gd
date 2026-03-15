@@ -3,10 +3,10 @@ extends RefCounted
 ## 编辑器撤销/重做辅助类
 ## 简化撤销重做操作的创建和管理
 
-var _undo_redo: EditorUndoRedoManager
-var _plugin: EditorPlugin
+var _undo_redo: Object
+var _plugin: Object
 
-func _init(plugin: EditorPlugin):
+func _init(plugin: Object):
 	_plugin = plugin
 	_undo_redo = plugin.get_undo_redo()
 
