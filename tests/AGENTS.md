@@ -1,136 +1,43 @@
-# Tests - Knowledge Base
+# Tests - Agent Notes
 
-**Location:** `tests/`  
-**Scope:** 3-layer testing architecture
+## Scope
 
-## Overview
+- Applies to files under `tests/`.
+- The repo currently mixes Python API smoke tests with GDScript sanity/functional tests.
 
-Unique testing architecture with three layers:
-- **Sanity** (30s): File integrity, syntax, basic connectivity
-- **Functional** (5min): Unit/integration tests via Python runner
-- **Agent** (30min+): AI-driven exploratory testing via HTTP API
-
-## Quick Commands
+## Current Entry Points
 
 ```bash
-# Agent smoke test (HTTP API)
-python tests/agent_test_runner.py
-
-# API smoke test
+# API connectivity and basic state/action checks
 python tests/test_via_api.py
 
-# Single test via API
-curl http://localhost:8080/execute \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"action": "get_state", "params": {}}'
+# Agent-style smoke run through the HTTP bridge
+python tests/agent_test_runner.py
 ```
 
-## Where to Look
+## Test Layout
 
-| Layer | Directory | Runner | Duration |
-|-------|-----------|--------|----------|
-| Sanity | `tests/sanity/` | Python | 30s |
-| Functional | `tests/functional/` | Python | 5min |
-| Agent | `tests/agent/` | Python + AI | 30min+ |
-| Utils | `tests/utils/` | Shared | - |
+- `tests/sanity/`: GDScript file-integrity and baseline checks
+- `tests/functional/unit/`: GDScript unit-style tests
+- `tests/agent/`: Python agent utilities and base classes
+- `tests/manual/`: manual/editor smoke scenes
+- `tests/utils/`: shared GDScript test helpers
 
-## Test Execution Flow
+## HTTP Bridge Notes
 
-```
-Sanity Test
-    ↓ PASS
-Functional Test
-    ↓ PASS (P0: 100%, P1: >95%)
-Agent Test
-    ↓ COMPLETE
-Final Report
-```
+- The game test bridge exposes `/health`, `/state`, `/actions`, and `/execute`.
+- `/execute` currently expects `{"action": "...", "params": {...}}`.
+- The source of truth for registered action names is `modules/ai_test/ai_test_bridge.gd`, not this document.
 
-**Rules:**
-- Sanity fails → Stop immediately
-- Functional fails → Fix before Agent
-- Agent fails → Review findings
+## Working Rules
 
-## Writing Tests
+- Prefer behavior checks over implementation-detail assertions.
+- If a test depends on the live HTTP bridge, make sure the project is already running.
+- When documenting or adding an action-based test, verify the action exists in `/actions` first.
+- Keep examples aligned with the current API shape and current registered actions.
 
-### Sanity Test
-```python
-# tests/sanity/test_module_exists.py
-def test_dialog_module_exists():
-    """Verify dialog_module.gd exists and has valid syntax"""
-    assert file_exists("modules/dialog/dialog_module.gd")
-    assert syntax_valid("modules/dialog/dialog_module.gd")
-```
+## Useful References
 
-### Functional Test
-```gdscript
-# tests/functional/unit/test_dialog_module.gd
-static func run_tests(runner: TestRunner) -> void:
-    runner.register_test(
-        "test_show_dialog",
-        TestRunner.TestLayer.FUNCTIONAL,
-        TestRunner.TestPriority.P0_CRITICAL,
-        _test_show_dialog
-    )
-
-static func _test_show_dialog() -> void:
-    DialogModule.show_dialog("Test message")
-    assert(DialogModule._dialog_ui.visible, "Dialog should be visible")
-```
-
-### Agent Test
-```python
-# tests/agent/test_exploration.py
-class ExplorationAgent(CDCAgentBase):
-    def decide_next_action(self, game_state):
-        # AI decision logic
-        if game_state["player"]["hp"] < 30:
-            return AgentAction.SLEEP, {}
-        elif random.random() < 0.5:
-            return AgentAction.SEARCH, {}
-        else:
-            return AgentAction.TRAVEL, {"destination": "street_a"}
-```
-
-## Test Priority Levels
-
-| Priority | Criteria | Required Pass Rate |
-|----------|----------|-------------------|
-| P0_CRITICAL | Core functionality | 100% |
-| P1_MAJOR | Important features | >95% |
-| P2_MINOR | Nice-to-have | >80% |
-
-## API Testing
-
-Game exposes HTTP API on port 8080:
-
-```bash
-# Get full game state
-curl http://localhost:8080/state
-
-# Execute action
-curl -X POST http://localhost:8080/execute \
-  -d '{"action": "travel", "params": {"destination": "street_a"}}'
-```
-
-## Anti-Patterns (Tests)
-
-- **Don't** test implementation details - test behavior
-- **Don't** have tests depend on each other
-- **Don't** hardcode timeouts - use configurable waits
-- **Don't** skip failing tests - fix or remove
-
-## Debug Overlay
-
-Press **F12** in-game to see:
-- Live game state
-- AI Test Bridge status
-- Recent actions log
-
-## See Also
-
-- Parent: [`../AGENTS.md`](../AGENTS.md)
-- Architecture: `tests/TEST_FRAMEWORK.md`
-- Usage: `tests/README.md`
-- API: `modules/ai_test/ai_test_bridge.gd`
+- [tests/README.md](G:\Projects\cdc_survival_game\tests\README.md)
+- [tests/TEST_FRAMEWORK.md](G:\Projects\cdc_survival_game\tests\TEST_FRAMEWORK.md)
+- [modules/ai_test/ai_test_bridge.gd](G:\Projects\cdc_survival_game\modules\ai_test\ai_test_bridge.gd)

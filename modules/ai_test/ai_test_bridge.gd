@@ -732,16 +732,11 @@ func _action_dialog_continue(_params: Dictionary) -> Dictionary:
 		result.error = "DialogUI not found"
 		return result
 	
-	var continue_button = dialog_ui.get_node_or_null("Panel/ContinueButton")
-	if not continue_button:
-		result.error = "Continue button not found"
-		return result
-	
-	if continue_button.has_signal("pressed"):
-		continue_button.pressed.emit()
+	if dialog_ui.has_method("advance_dialog"):
+		dialog_ui.advance_dialog()
 		result.success = true
 	else:
-		result.error = "Continue button not pressable"
+		result.error = "DialogUI cannot advance"
 	
 	return result
 

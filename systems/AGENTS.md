@@ -1,101 +1,27 @@
-# Systems - Knowledge Base
+# Systems - Agent Notes
 
-**Location:** `systems/`  
-**Scope:** Cross-cutting game systems (equipment incl. weapons, time, save)
+## Scope
 
-## Overview
+- Applies to files under `systems/`.
+- Systems are game-wide services such as combat, time, save/load, progression, movement, and world simulation.
 
-This directory contains high-complexity systems that manage game-wide mechanics:
-- **Equipment System** (874 lines) - Unified equipment management (角色挂载)
-- **Weapon Logic** (merged) - now inside Equipment System
-- **Time Manager** (282 lines) - Day/night cycle, game time
-- **Save System** - JSON serialization
+## Working Rules
 
-## Where to Look
+- Do not assume every system follows the same pattern. Some are long-lived services, some are helper components, and some expose signals instead of EventBus events.
+- Check `project.godot` before assuming a system is autoloaded.
+- Prefer extending existing system APIs over duplicating logic in modules or UI scripts.
+- When changing a system, search for direct consumers in `modules/`, `scripts/`, and `ui/`.
+- Keep documentation and code comments focused on real integration points, not file-length or complexity trivia.
 
-| System | File | Complexity | Purpose |
-|--------|------|------------|---------|
-| Equipment | `equipment_system.gd` | HIGH | Gear slots, stats, encumbrance |
-| Weapons (merged) | `equipment_system.gd` | HIGH | Firearms, melee, ammo, durability |
-| Time | `time_manager.gd` | MEDIUM | Time progression, schedules |
-| Save | `save_system.gd` | LOW | JSON save/load |
+## Files Commonly Worth Checking
 
-## Conventions (Systems)
+- `systems/time_manager.gd`
+- `systems/save_system.gd`
+- `systems/combat_system.gd`
+- `systems/equipment_system.gd`
+- `systems/interaction_system.gd`
 
-### System Pattern
-```gdscript
-extends Node
-# Systems extend Node (not BaseModule) - they can be instanced
+## Notes
 
-# Cache GameState reference
-var _game_state: Node
-
-func _ready():
-    _game_state = get_node("/root/GameState")
-    if not _game_state:
-        push_error("[SystemName] GameState not found")
-        return
-```
-
-### Large File Organization (>500 lines)
-
-**equipment_system.gd structure:**
-```
-# 1. Constants & Enums
-# 2. Public API (high-level methods)
-# 3. Equipment Slots Management
-# 4. Stats Calculation
-# 5. Encumbrance Logic
-# 6. Private Helpers
-```
-
-## Critical Patterns
-
-### Equipment System
-```gdscript
-# Get equipped item in slot
-func get_equipped(slot: String) -> Dictionary:
-    return _equipment_slots.get(slot, {})
-
-# Equip item with validation
-func equip_item(item: Dictionary) -> bool:
-    if not _can_equip(item):
-        return false
-    # ... equip logic
-    _recalculate_stats()
-    return true
-```
-
-### Weapon (Merged into Equipment System)
-```gdscript
-var equip_system = GameState.get_equipment_system()
-if equip_system:
-    var result = equip_system.perform_attack()
-    if not result.success:
-        return
-```
-
-## Anti-Patterns (Systems)
-
-- **Don't** access systems directly from modules - use EventBus
-- **Don't** modify GameState directly - use exposed methods
-- **Don't** create circular dependencies between systems
-
-## Integration Points
-
-| System | Consumes | Emits |
-|--------|----------|-------|
-| Equipment | `INVENTORY_CHANGED` | `EQUIPMENT_CHANGED`, `STATS_CHANGED` |
-| Time | - | `TIME_ADVANCED`, `DAY_NIGHT_CHANGED` |
-| Save | `GAME_SAVED` | `GAME_LOADED` |
-
-## Performance Notes
-
-- Equipment system caches calculated stats
-- Time manager uses Timer nodes, not _process delta
-
-## See Also
-
-- Parent: [`../AGENTS.md`](../AGENTS.md)
-- Related: `core/game_state.gd` (data storage)
-- Related: `modules/inventory/` (item source)
+- `TimeManager` exposes its own signals such as `time_advanced`; not all cross-system communication goes through `EventBus`.
+- Save/load behavior and platform-specific persistence details live in `save_system.gd`.
