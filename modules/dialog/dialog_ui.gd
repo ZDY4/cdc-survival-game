@@ -11,11 +11,13 @@ signal choice_made(index: int, choice_text: String)
 var _dialog_label: RichTextLabel
 var _speaker_label: Label
 var _portrait_container: TextureRect
+var _choices_scroll: ScrollContainer
 var _choices_container: VBoxContainer
-var _continue_button: Button
+var _next_indicator: Label
 
 # State
 var _is_typing: bool = false
+var _is_waiting_for_continue: bool = false
 var _current_text: String = ""
 var _current_speaker: String = ""
 var _choice_result: int = -1
@@ -26,39 +28,31 @@ func _ready():
 	call_deferred("_setup_nodes")
 
 func _setup_nodes():
-	_dialog_label = get_node_or_null("Panel/TextLabel")
-	_speaker_label = get_node_or_null("Panel/NameLabel")
-	_portrait_container = get_node_or_null("Panel/Portrait")
-	_choices_container = get_node_or_null("Panel/ChoicesContainer")
-	_continue_button = get_node_or_null("Panel/ContinueButton")
-	
-	if _continue_button:
-		_continue_button.pressed.connect(_on_continue_button_pressed)
-		# Mobile: larger touch target
-		if _is_mobile:
-			_continue_button.custom_minimum_size = Vector2(144, 64)
-			_continue_button.add_theme_font_size_override("font_size", 24)
+	_dialog_label = get_node_or_null("Panel/MarginContainer/MainRow/ContentColumn/TextLabel")
+	_speaker_label = get_node_or_null("Panel/MarginContainer/MainRow/ContentColumn/NameLabel")
+	_portrait_container = get_node_or_null("Panel/MarginContainer/MainRow/Portrait")
+	_choices_scroll = get_node_or_null("Panel/MarginContainer/MainRow/ContentColumn/ChoicesScroll")
+	_choices_container = get_node_or_null("Panel/MarginContainer/MainRow/ContentColumn/ChoicesScroll/ChoicesContainer")
+	_next_indicator = get_node_or_null("Panel/MarginContainer/MainRow/ContentColumn/FooterRow/NextIndicator")
 
 func show_text(text: String, speaker: String = "", portrait: String = ""):
 	_is_typing = true
+	_is_waiting_for_continue = false
 	_current_text = text
 	_current_speaker = speaker
 	
 	if _speaker_label:
 		_speaker_label.text = speaker
 	
-	if portrait != "" and _portrait_container:
-		var portrait_texture = load(portrait)
-		if portrait_texture:
-			_portrait_container.texture = portrait_texture
-			_portrait_container.visible = true
-	elif _portrait_container:
-		_portrait_container.visible = false
+	_set_portrait(portrait)
 	
 	if _dialog_label:
 		_dialog_label.text = ""
-	if _continue_button:
-		_continue_button.visible = false
+		_dialog_label.scroll_to_line(0)
+	if _next_indicator:
+		_next_indicator.visible = false
+	if _choices_scroll:
+		_choices_scroll.visible = false
 	if _choices_container:
 		_choices_container.visible = false
 	
@@ -74,16 +68,20 @@ func _start_typing(text: String):
 		await get_tree().create_timer(text_speed).timeout
 	
 	_is_typing = false
-	if _continue_button:
-		_continue_button.visible = true
-	text_finished.emit()
+	_is_waiting_for_continue = true
+	if _next_indicator:
+		_next_indicator.visible = true
 
 func show_choices(choices: Array[String]):
 	_is_typing = false
+	_is_waiting_for_continue = false
+	if _choices_scroll:
+		_choices_scroll.visible = true
+		_choices_scroll.scroll_vertical = 0
 	if _choices_container:
 		_choices_container.visible = true
-	if _continue_button:
-		_continue_button.visible = false
+	if _next_indicator:
+		_next_indicator.visible = false
 	if _dialog_label:
 		_dialog_label.text = ""
 	_choice_result = -1
@@ -113,39 +111,92 @@ func show_choices(choices: Array[String]):
 func _on_choice_button_pressed(index: int, choice_text: String):
 	_choice_result = index
 	choice_made.emit(index, choice_text)
-	hide()
+	hide_dialog()
 
 func hide_dialog():
 	_is_typing = false
+	_is_waiting_for_continue = false
 	visible = false
 	if _dialog_label:
 		_dialog_label.text = ""
+		_dialog_label.scroll_to_line(0)
 	if _speaker_label:
 		_speaker_label.text = ""
-	if _portrait_container:
-		_portrait_container.visible = false
+	_clear_portrait()
+	if _choices_scroll:
+		_choices_scroll.visible = false
 	if _choices_container:
 		_choices_container.visible = false
-	if _continue_button:
-		_continue_button.visible = false
+	if _next_indicator:
+		_next_indicator.visible = false
 
-func _on_continue_button_pressed():
-	if _is_typing:
-		_is_typing = false
-		if _dialog_label:
-			_dialog_label.text = _current_text
-		if _continue_button:
-			_continue_button.visible = true
-	else:
-		if _continue_button:
-			_continue_button.visible = false
-		text_finished.emit()
-
-# Touch support: tap anywhere to continue (mobile only)
 func _input(event):
-	if not _is_mobile or not visible:
+	if not visible or _is_choices_visible():
 		return
 	
 	if event is InputEventScreenTouch:
-		if event.pressed and not _choices_container.visible:
-			_on_continue_button_pressed()
+		if event.pressed and _is_mouse_inside_dialog(event.position):
+			advance_dialog()
+	elif event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT and _is_mouse_inside_dialog(event.position):
+			advance_dialog()
+	elif event is InputEventKey:
+		if event.pressed and not event.echo and _is_advance_key(event.keycode):
+			advance_dialog()
+
+func advance_dialog() -> void:
+	if _is_choices_visible():
+		return
+	
+	if _is_typing:
+		_finish_typing()
+		return
+	
+	if not _is_waiting_for_continue:
+		return
+	
+	_is_waiting_for_continue = false
+	if _next_indicator:
+		_next_indicator.visible = false
+	hide_dialog()
+	text_finished.emit()
+
+func _finish_typing() -> void:
+	_is_typing = false
+	_is_waiting_for_continue = true
+	if _dialog_label:
+		_dialog_label.text = _current_text
+	if _next_indicator:
+		_next_indicator.visible = true
+
+func _set_portrait(portrait_path: String) -> void:
+	if not _portrait_container:
+		return
+	
+	if portrait_path.is_empty():
+		_clear_portrait()
+		return
+	
+	var portrait_texture := load(portrait_path) as Texture2D
+	if portrait_texture:
+		_portrait_container.texture = portrait_texture
+		_portrait_container.visible = true
+		return
+	
+	_clear_portrait()
+
+func _clear_portrait() -> void:
+	if not _portrait_container:
+		return
+	
+	_portrait_container.texture = null
+	_portrait_container.visible = false
+
+func _is_choices_visible() -> bool:
+	return _choices_scroll != null and _choices_scroll.visible
+
+func _is_mouse_inside_dialog(pointer_position: Vector2) -> bool:
+	return get_global_rect().has_point(pointer_position)
+
+func _is_advance_key(keycode: Key) -> bool:
+	return keycode == KEY_SPACE or keycode == KEY_ENTER or keycode == KEY_KP_ENTER

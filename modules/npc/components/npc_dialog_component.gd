@@ -121,7 +121,7 @@ func _display_node(node: Dictionary) -> String:
 	var text = node.get("text", "...")
 	var speaker = node.get("speaker", npc.npc_name if npc else "")
 	var emotion = node.get("emotion", "normal")
-	var portrait = npc.get_current_portrait() if npc else ""
+	var portrait = _get_dialog_portrait(emotion)
 	
 	# 替换变量
 	text = _replace_variables(text)
@@ -173,6 +173,29 @@ func _display_node(node: Dictionary) -> String:
 	
 	# 处理选择
 	return await _process_option(selected_option)
+
+func _get_dialog_portrait(emotion: String) -> String:
+	if not npc or not npc.npc_data:
+		return ""
+	
+	var npc_data = npc.npc_data
+	var avatar_path: String = npc_data.avatar_path
+	if _is_valid_dialog_image_path(avatar_path):
+		return avatar_path
+	
+	if npc_data.has_method("get_expression_path"):
+		var expression_path: String = npc_data.get_expression_path(emotion)
+		if _is_valid_dialog_image_path(expression_path):
+			return expression_path
+	
+	var portrait_path: String = npc_data.portrait_path
+	if _is_valid_dialog_image_path(portrait_path):
+		return portrait_path
+	
+	return ""
+
+func _is_valid_dialog_image_path(path: String) -> bool:
+	return not path.is_empty() and ResourceLoader.exists(path)
 
 ## 获取可用的选项
 func _get_available_options(node: Dictionary) -> Array[Dictionary]:
