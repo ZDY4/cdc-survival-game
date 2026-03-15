@@ -84,7 +84,7 @@ project/assembly_name="cdc_survival_game"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/cdc_game_editor/plugin.cfg", "res://addons/gameplay_tags/plugin.cfg")
+enabled=PackedStringArray("res://addons/cdc_game_editor/plugin.cfg", "res://addons/cdc_procedural_builder/plugin.cfg", "res://addons/gameplay_tags/plugin.cfg")
 
 [input]
 

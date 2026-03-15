@@ -1,0 +1,287 @@
+@tool
+class_name ProcHouse3D
+extends ProcShapeGenerator3D
+
+enum RoofMode {
+	FLAT,
+	GABLE
+}
+
+@export_range(1.5, 12.0, 0.1, "or_greater") var wall_height: float = 3.0:
+	set = set_wall_height
+@export_range(0.05, 2.0, 0.05, "or_greater") var wall_thickness: float = 0.25:
+	set = set_wall_thickness
+@export_range(0.1, 6.0, 0.1, "or_greater") var roof_height: float = 1.2:
+	set = set_roof_height
+@export var roof_mode: RoofMode = RoofMode.FLAT:
+	set = set_roof_mode
+@export var openings: Array[HouseOpeningResource] = []:
+	set = set_openings
+
+func get_minimum_point_count() -> int:
+	return 3
+
+func _get_default_control_points() -> Array:
+	return [
+		Vector3(-3.0, 0.0, -2.0),
+		Vector3(3.0, 0.0, -2.0),
+		Vector3(3.0, 0.0, 2.0),
+		Vector3(-3.0, 0.0, 2.0)
+	]
+
+func _requires_closed_shape() -> bool:
+	return true
+
+func _supports_closed_toggle() -> bool:
+	return false
+
+func set_wall_height(value: float) -> void:
+	wall_height = maxf(value, 1.5)
+	_request_rebuild()
+
+func set_wall_thickness(value: float) -> void:
+	wall_thickness = maxf(value, 0.05)
+	_request_rebuild()
+
+func set_roof_height(value: float) -> void:
+	roof_height = maxf(value, 0.1)
+	_request_rebuild()
+
+func set_roof_mode(value: RoofMode) -> void:
+	roof_mode = value
+	_request_rebuild()
+
+func set_openings(value: Array) -> void:
+	var sanitized: Array[HouseOpeningResource] = [HouseOpeningResource.new()]
+	sanitized.clear()
+	for opening in value:
+		if opening != null:
+			sanitized.append(opening)
+	openings = sanitized
+	_request_rebuild()
+
+func add_default_opening() -> void:
+	var new_opening: HouseOpeningResource = HouseOpeningResource.new()
+	new_opening.edge_index = 0
+	new_opening.offset_on_edge = 1.5
+	new_opening.width = 1.2
+	new_opening.height = 2.1
+	new_opening.sill_height = 0.0
+	var updated: Array = openings.duplicate()
+	updated.append(new_opening)
+	set_openings(updated)
+
+func remove_opening(index: int) -> void:
+	if index < 0 or index >= openings.size():
+		return
+	var updated: Array = openings.duplicate()
+	updated.remove_at(index)
+	set_openings(updated)
+
+func _build_geometry() -> Dictionary:
+	var warnings: PackedStringArray = PackedStringArray()
+	if control_points.size() < 3:
+		warnings.append("House requires at least three control points.")
+		return {"mesh": null, "collision_boxes": [], "warnings": warnings, "build_info": {}}
+	if not ProcGeometryUtils.is_simple_polygon_xz(control_points):
+		warnings.append("House footprint must be a simple, non self-intersecting polygon.")
+		return {"mesh": null, "collision_boxes": [], "warnings": warnings, "build_info": {}}
+
+	var ordered_points: Array[Vector3] = _ensure_ccw_points(control_points)
+	var triangulated: PackedInt32Array = ProcGeometryUtils.triangulate_polygon_xz(ordered_points)
+	if triangulated.is_empty():
+		warnings.append("House footprint could not be triangulated.")
+		return {"mesh": null, "collision_boxes": [], "warnings": warnings, "build_info": {}}
+
+	var surface_tool: SurfaceTool = SurfaceTool.new()
+	surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var inside_point: Vector3 = _compute_inside_point(ordered_points)
+
+	ProcGeometryUtils.add_polygon_cap(surface_tool, ordered_points, triangulated, inside_point, true)
+
+	var roof_vertices: Array[Vector3] = _build_roof_vertices(ordered_points)
+	ProcGeometryUtils.add_polygon_cap(surface_tool, roof_vertices, triangulated, inside_point, false)
+
+	var edge_opening_map: Dictionary = _build_edge_opening_map(ordered_points, warnings)
+	var wall_piece_count: int = 0
+	var applied_opening_count: int = 0
+	for edge_index in range(ordered_points.size()):
+		var start_point: Vector3 = ordered_points[edge_index]
+		var end_point: Vector3 = ordered_points[(edge_index + 1) % ordered_points.size()]
+		var edge_openings: Array = []
+		if edge_opening_map.has(edge_index):
+			for opening_data in edge_opening_map[edge_index]:
+				edge_openings.append(opening_data)
+		applied_opening_count += edge_openings.size()
+		wall_piece_count += _build_wall_edge(surface_tool, start_point, end_point, edge_openings)
+
+	var mesh: ArrayMesh = surface_tool.commit()
+	var collision_shape: ConcavePolygonShape3D = null
+	if mesh != null:
+		collision_shape = mesh.create_trimesh_shape()
+
+	return {
+		"mesh": mesh,
+		"collision_shape": collision_shape,
+		"debug_mesh": _build_debug_mesh(),
+		"warnings": warnings,
+		"build_info": {
+			"segment_count": ordered_points.size(),
+			"opening_count": openings.size(),
+			"applied_opening_count": applied_opening_count,
+			"wall_piece_count": wall_piece_count,
+			"surface_count": mesh.get_surface_count() if mesh != null else 0
+		}
+	}
+
+func _build_default_material() -> StandardMaterial3D:
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.albedo_color = Color(0.77, 0.73, 0.67)
+	material.roughness = 0.95
+	material.cull_mode = BaseMaterial3D.CULL_BACK
+	return material
+
+func _build_debug_mesh() -> ImmediateMesh:
+	var debug_mesh: ImmediateMesh = ImmediateMesh.new()
+	debug_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+	for line_point in get_debug_line_points():
+		debug_mesh.surface_add_vertex(line_point + Vector3.UP * 0.1)
+	debug_mesh.surface_end()
+	return debug_mesh
+
+func _ensure_ccw_points(points: Array) -> Array[Vector3]:
+	var ccw_points: Array[Vector3] = [Vector3.ZERO]
+	ccw_points.clear()
+	for point in points:
+		if point is Vector3:
+			ccw_points.append(point)
+	if ProcGeometryUtils.polygon_area_xz(ccw_points) < 0.0:
+		ccw_points.reverse()
+	return ccw_points
+
+func _build_roof_vertices(points: Array) -> Array[Vector3]:
+	var roof_vertices: Array[Vector3] = [Vector3.ZERO]
+	roof_vertices.clear()
+	var bounds_min: Vector3 = points[0]
+	var bounds_max: Vector3 = points[0]
+	for point in points:
+		bounds_min.x = minf(bounds_min.x, point.x)
+		bounds_min.z = minf(bounds_min.z, point.z)
+		bounds_max.x = maxf(bounds_max.x, point.x)
+		bounds_max.z = maxf(bounds_max.z, point.z)
+
+	var span_x: float = maxf(bounds_max.x - bounds_min.x, ProcGeometryUtils.EPSILON)
+	var span_z: float = maxf(bounds_max.z - bounds_min.z, ProcGeometryUtils.EPSILON)
+	var ridge_on_x: bool = span_x >= span_z
+	for point in points:
+		var roof_point: Vector3 = point + Vector3.UP * wall_height
+		if roof_mode == RoofMode.GABLE:
+			var ratio: float = 0.0
+			if ridge_on_x:
+				ratio = absf(((point.z - bounds_min.z) / span_z) * 2.0 - 1.0)
+			else:
+				ratio = absf(((point.x - bounds_min.x) / span_x) * 2.0 - 1.0)
+			roof_point.y += maxf(0.0, 1.0 - ratio) * roof_height
+		roof_vertices.append(roof_point)
+	return roof_vertices
+
+func _compute_inside_point(points: Array[Vector3]) -> Vector3:
+	var center: Vector3 = Vector3.ZERO
+	for point in points:
+		center += point
+	center /= float(maxi(points.size(), 1))
+	center.y = wall_height * 0.5
+	return center
+
+func _build_edge_opening_map(points: Array[Vector3], warnings: PackedStringArray) -> Dictionary:
+	var opening_map: Dictionary = {}
+	for opening in openings:
+		if opening == null:
+			continue
+		var edge_index: int = clampi(opening.edge_index, 0, points.size() - 1)
+		var start_point: Vector3 = points[edge_index]
+		var end_point: Vector3 = points[(edge_index + 1) % points.size()]
+		var edge_length: float = start_point.distance_to(end_point)
+		if edge_length <= ProcGeometryUtils.EPSILON:
+			continue
+
+		var opening_width: float = clampf(opening.width, 0.4, edge_length - 0.1)
+		var opening_height: float = clampf(opening.height, 0.4, wall_height)
+		var sill_height: float = clampf(opening.sill_height, 0.0, wall_height - 0.2)
+		if opening.opening_type == "door":
+			sill_height = 0.0
+		var offset: float = clampf(opening.offset_on_edge, opening_width * 0.5, edge_length - opening_width * 0.5)
+		var span_start: float = offset - opening_width * 0.5
+		var span_end: float = offset + opening_width * 0.5
+		var top_height: float = minf(wall_height, sill_height + opening_height)
+		if top_height <= sill_height + ProcGeometryUtils.EPSILON:
+			warnings.append("Ignored zero-height opening on edge %d." % edge_index)
+			continue
+
+		if not opening_map.has(edge_index):
+			opening_map[edge_index] = []
+		var edge_openings: Array = opening_map[edge_index]
+		edge_openings.append({
+			"start": span_start,
+			"end": span_end,
+			"sill": sill_height,
+			"top": top_height
+		})
+		opening_map[edge_index] = edge_openings
+
+	for edge_index in opening_map.keys():
+		var edge_openings: Array = opening_map[edge_index]
+		edge_openings.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return float(a.get("start", 0.0)) < float(b.get("start", 0.0))
+		)
+		var filtered_openings: Array = []
+		var last_end: float = -1.0
+		for opening_data_variant in edge_openings:
+			var opening_data: Dictionary = opening_data_variant
+			if float(opening_data.get("start", 0.0)) < last_end - ProcGeometryUtils.EPSILON:
+				warnings.append("Skipped overlapping opening on edge %d." % int(edge_index))
+				continue
+			filtered_openings.append(opening_data)
+			last_end = float(opening_data.get("end", 0.0))
+		opening_map[edge_index] = filtered_openings
+
+	return opening_map
+
+func _build_wall_edge(surface_tool: SurfaceTool, start_point: Vector3, end_point: Vector3, edge_openings: Array) -> int:
+	var direction: Vector3 = end_point - start_point
+	var edge_length: float = direction.length()
+	if edge_length <= ProcGeometryUtils.EPSILON:
+		return 0
+
+	var basis: Basis = ProcGeometryUtils.build_segment_basis(direction)
+	var forward: Vector3 = direction.normalized()
+	var cursor: float = 0.0
+	var piece_count: int = 0
+
+	for opening_data in edge_openings:
+		var opening_start: float = clampf(float(opening_data.get("start", 0.0)), 0.0, edge_length)
+		var opening_end: float = clampf(float(opening_data.get("end", edge_length)), 0.0, edge_length)
+		var sill_height: float = clampf(float(opening_data.get("sill", 0.0)), 0.0, wall_height)
+		var top_height: float = clampf(float(opening_data.get("top", wall_height)), 0.0, wall_height)
+
+		if opening_start > cursor + ProcGeometryUtils.EPSILON:
+			piece_count += _add_wall_box(surface_tool, start_point + forward * cursor, start_point + forward * opening_start, 0.0, wall_height, basis)
+		if sill_height > ProcGeometryUtils.EPSILON:
+			piece_count += _add_wall_box(surface_tool, start_point + forward * opening_start, start_point + forward * opening_end, 0.0, sill_height, basis)
+		if top_height < wall_height - ProcGeometryUtils.EPSILON:
+			piece_count += _add_wall_box(surface_tool, start_point + forward * opening_start, start_point + forward * opening_end, top_height, wall_height, basis)
+		cursor = maxf(cursor, opening_end)
+
+	if cursor < edge_length - ProcGeometryUtils.EPSILON:
+		piece_count += _add_wall_box(surface_tool, start_point + forward * cursor, end_point, 0.0, wall_height, basis)
+	return piece_count
+
+func _add_wall_box(surface_tool: SurfaceTool, start_point: Vector3, end_point: Vector3, bottom_height: float, top_height: float, basis: Basis) -> int:
+	var height: float = top_height - bottom_height
+	var length: float = start_point.distance_to(end_point)
+	if height <= ProcGeometryUtils.EPSILON or length <= ProcGeometryUtils.EPSILON:
+		return 0
+
+	var center: Vector3 = (start_point + end_point) * 0.5 + Vector3.UP * (bottom_height + height * 0.5)
+	ProcGeometryUtils.add_box_prism(surface_tool, center, basis, Vector3(wall_thickness, height, length))
+	return 1

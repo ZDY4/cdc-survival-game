@@ -31,6 +31,18 @@ const REQUIRED_SCENES = [
     "modules/dialog/dialog_ui.tscn"
 ]
 
+const REQUIRED_PROCEDURAL_BUILDER_FILES = [
+    "addons/cdc_procedural_builder/plugin.cfg",
+    "addons/cdc_procedural_builder/plugin.gd",
+    "addons/cdc_procedural_builder/editor/procedural_builder_dock.gd",
+    "addons/cdc_procedural_builder/editor/procedural_builder_gizmo_plugin.gd",
+    "addons/cdc_procedural_builder/runtime/proc_shape_generator_3d.gd",
+    "addons/cdc_procedural_builder/runtime/proc_wall_3d.gd",
+    "addons/cdc_procedural_builder/runtime/proc_fence_3d.gd",
+    "addons/cdc_procedural_builder/runtime/proc_house_3d.gd",
+    "addons/cdc_procedural_builder/runtime/house_opening_resource.gd"
+]
+
 static func run_tests(runner: TestRunner) -> void:
     runner.register_test(
         "project_file_exists",
@@ -65,6 +77,20 @@ static func run_tests(runner: TestRunner) -> void:
         TestRunner.TestLayer.SANITY,
         TestRunner.TestPriority.P1_MAJOR,
         _test_icon_and_resources
+    )
+
+    runner.register_test(
+        "procedural_builder_plugin_files",
+        TestRunner.TestLayer.SANITY,
+        TestRunner.TestPriority.P1_MAJOR,
+        _test_procedural_builder_plugin_files
+    )
+
+    runner.register_test(
+        "procedural_builder_plugin_enabled",
+        TestRunner.TestLayer.SANITY,
+        TestRunner.TestPriority.P1_MAJOR,
+        _test_procedural_builder_plugin_enabled
     )
 
 static func _test_project_file_exists():
@@ -122,6 +148,23 @@ static func _test_icon_and_resources():
     var icon_path = PROJECT_PATH + "icon.svg"
     _ensure(FileAccess.file_exists(icon_path), 
            "Project icon not found")
+
+static func _test_procedural_builder_plugin_files():
+    for plugin_file in REQUIRED_PROCEDURAL_BUILDER_FILES:
+        var full_path = PROJECT_PATH + plugin_file
+        _ensure(FileAccess.file_exists(full_path),
+               "Procedural builder file not found: " + plugin_file)
+
+static func _test_procedural_builder_plugin_enabled():
+    var project_file = PROJECT_PATH + "project.godot"
+    var file = FileAccess.open(project_file, FileAccess.READ)
+    _ensure(file != null, "Cannot open project.godot")
+
+    var content = file.get_as_text()
+    file.close()
+
+    _ensure(content.contains("res://addons/cdc_procedural_builder/plugin.cfg"),
+           "Procedural builder plugin should be listed in project.godot editor_plugins")
 
 # 辅助断言函数
 static func _ensure(condition: bool, message: String = "") -> void:
