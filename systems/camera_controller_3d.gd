@@ -49,18 +49,17 @@ func _handle_zoom_input(event: InputEvent) -> void:
 		else:
 			_target_zoom = min(_target_zoom + _config.zoom_speed, max_value)
 
-func _update_zoom(_delta: float) -> void:
-	_current_zoom = lerp(_current_zoom, _target_zoom, _config.zoom_smoothing)
+func _update_zoom(delta: float) -> void:
+	_current_zoom = lerp(_current_zoom, _target_zoom, _get_smoothing_weight(_config.zoom_smoothing, delta))
 	_apply_zoom_value()
 
-func _update_follow(_delta: float) -> void:
+func _update_follow(delta: float) -> void:
 	if not target:
 		return
 
 	var viewpoint_world := _get_viewpoint_world()
 	var desired_camera_pos := viewpoint_world + _get_arm_direction_world() * _config.arm_length
-	global_position = lerp(global_position, desired_camera_pos, _config.follow_smoothing)
-	look_at(viewpoint_world)
+	global_position = lerp(global_position, desired_camera_pos, _get_smoothing_weight(_config.follow_smoothing, delta))
 
 func set_zoom(zoom: float) -> void:
 	_target_zoom = clamp(zoom, _get_min_zoom_value(), _get_max_zoom_value())
@@ -95,7 +94,6 @@ func _reload_config_from_service() -> void:
 	if target:
 		var viewpoint_world := _get_viewpoint_world()
 		global_position = viewpoint_world + _get_arm_direction_world() * _config.arm_length
-		look_at(viewpoint_world)
 
 func _get_initial_zoom_value() -> float:
 	if _config.projection_type == CameraConfig3D.ProjectionType.PERSPECTIVE:
@@ -142,6 +140,16 @@ func _get_arm_direction_world() -> Vector3:
 	)
 	var arm_basis := Basis.from_euler(euler)
 	return (arm_basis * Vector3.BACK).normalized()
+
+func _get_smoothing_weight(smoothing: float, delta: float) -> float:
+	if delta <= 0.0:
+		return 0.0
+	if smoothing <= 0.0:
+		return 1.0
+	if smoothing >= 1.0:
+		return 1.0
+	# Convert the existing frame-based smoothing value into a frame-rate independent weight.
+	return 1.0 - pow(1.0 - smoothing, delta * 60.0)
 
 func _get_camera_config_service() -> Node:
 	return get_node_or_null("/root/CameraConfigService")
