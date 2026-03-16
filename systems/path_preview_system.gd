@@ -50,7 +50,7 @@ func tick(delta: float) -> void:
     if not GridMovementSystem or not GridMovementSystem.grid_world:
         _hide_hover_overlay()
         return
-    if _player.is_movement_input_blocked():
+    if _player.is_world_input_blocked():
         clear_active_move_target()
         _hide_preview()
         _hide_hover_overlay()
@@ -235,12 +235,23 @@ func _find_nearest_interaction_target(interactable: Node, hit_position: Vector3)
     if interactable is Node3D:
         anchor_pos = (interactable as Node3D).global_position
 
+    var min_radius: int = interaction_preview_min_radius
+    var max_radius: int = interaction_preview_max_radius
+    var required_distance: float = -1.0
+    if interactable.has_method("get_primary_option"):
+        var primary_option: InteractionOption = interactable.get_primary_option()
+        if primary_option != null and primary_option.requires_proximity(interactable):
+            anchor_pos = primary_option.get_interaction_anchor_position(interactable)
+            required_distance = maxf(0.0, primary_option.get_required_distance(interactable))
+            min_radius = 1
+            max_radius = max(1, int(ceil(required_distance / GridNavigator.GRID_SIZE)))
+
     var player_grid := GridMovementSystem.world_to_grid(_player.global_position)
     var anchor_grid := GridMovementSystem.world_to_grid(anchor_pos)
     anchor_grid.y = player_grid.y
 
     var grid_world := GridMovementSystem.grid_world
-    for radius in range(interaction_preview_min_radius, interaction_preview_max_radius + 1):
+    for radius in range(min_radius, max_radius + 1):
         var ring_cells := _collect_ring_cells(anchor_grid, radius)
         var best_path: Array[Vector3] = []
         var best_world := Vector3.ZERO
@@ -249,6 +260,11 @@ func _find_nearest_interaction_target(interactable: Node, hit_position: Vector3)
             if not grid_world.is_walkable(candidate_grid):
                 continue
             var candidate_world := GridMovementSystem.grid_to_world(candidate_grid)
+            if required_distance >= 0.0:
+                var anchor_world := anchor_pos
+                anchor_world.y = candidate_world.y
+                if candidate_world.distance_to(anchor_world) > required_distance + 0.05:
+                    continue
             var path := _navigator.find_path(
                 _player.global_position,
                 candidate_world,

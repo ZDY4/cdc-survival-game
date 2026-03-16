@@ -9,7 +9,6 @@ var _last_scene_path: String = ""
 func _ready() -> void:
 	InputActions.ensure_actions_registered()
 	call_deferred("_sync_overlay_for_scene")
-	set_process_unhandled_input(true)
 	set_process(true)
 
 func _process(_delta: float) -> void:
@@ -22,25 +21,6 @@ func _process(_delta: float) -> void:
 	_last_scene_path = path
 	_sync_overlay_for_scene()
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not _is_in_game_scene():
-		return
-	if _overlay and _overlay.has_method("is_rebinding_input") and _overlay.is_rebinding_input():
-		return
-	if not (event is InputEventKey):
-		return
-	var key_event: InputEventKey = event as InputEventKey
-	if not key_event.pressed or key_event.echo:
-		return
-
-	var handled_action: StringName = _find_triggered_menu_action(event)
-	if handled_action == StringName():
-		return
-	_ensure_overlay()
-	if _overlay and _overlay.has_method("open_menu"):
-		_overlay.open_menu(handled_action)
-		get_viewport().set_input_as_handled()
-
 func _sync_overlay_for_scene() -> void:
 	if _is_in_game_scene():
 		_ensure_overlay()
@@ -51,6 +31,25 @@ func _sync_overlay_for_scene() -> void:
 			_overlay.close_all_menus()
 		if _overlay:
 			_overlay.visible = false
+
+func open_menu(action_name: StringName) -> bool:
+	if not _is_in_game_scene():
+		return false
+	_ensure_overlay()
+	if _overlay == null or not _overlay.has_method("open_menu"):
+		return false
+	_overlay.open_menu(action_name)
+	return true
+
+func close_all_menus() -> void:
+	if _overlay and _overlay.has_method("close_all_menus"):
+		_overlay.close_all_menus()
+
+func is_rebinding_input() -> bool:
+	return _overlay != null and _overlay.has_method("is_rebinding_input") and _overlay.is_rebinding_input()
+
+func is_any_menu_open() -> bool:
+	return _overlay != null and _overlay.has_method("is_any_menu_open") and _overlay.is_any_menu_open()
 
 func _ensure_overlay() -> void:
 	if _overlay:
@@ -64,10 +63,3 @@ func _is_in_game_scene() -> bool:
 		return false
 	var path: String = str(scene.scene_file_path)
 	return path.begins_with("res://scenes/locations/")
-
-func _find_triggered_menu_action(event: InputEvent) -> StringName:
-	for action_variant in InputActions.MENU_ACTIONS:
-		var action_name: StringName = action_variant
-		if event.is_action_pressed(action_name):
-			return action_name
-	return StringName()

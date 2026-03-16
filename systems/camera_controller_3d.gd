@@ -32,22 +32,13 @@ func _process(delta: float) -> void:
 	_update_zoom(delta)
 	_update_follow(delta)
 
-func _input(event: InputEvent) -> void:
-	_handle_zoom_input(event)
-
-func _handle_zoom_input(event: InputEvent) -> void:
+func adjust_zoom(direction: int) -> void:
 	var min_value := _get_min_zoom_value()
 	var max_value := _get_max_zoom_value()
-	if event.is_action_pressed("zoom_in"):
+	if direction < 0:
 		_target_zoom = max(_target_zoom - _config.zoom_speed, min_value)
-	elif event.is_action_pressed("zoom_out"):
+	elif direction > 0:
 		_target_zoom = min(_target_zoom + _config.zoom_speed, max_value)
-
-	if event is InputEventMagnifyGesture:
-		if event.factor > 1.0:
-			_target_zoom = max(_target_zoom - _config.zoom_speed, min_value)
-		else:
-			_target_zoom = min(_target_zoom + _config.zoom_speed, max_value)
 
 func _update_zoom(delta: float) -> void:
 	_current_zoom = lerp(_current_zoom, _target_zoom, _get_smoothing_weight(_config.zoom_smoothing, delta))

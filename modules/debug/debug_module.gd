@@ -5,9 +5,11 @@ extends "res://core/base_module.gd"
 const MODULE_NAME: String = "DebugModule"
 const CONSOLE_HEIGHT: float = 240.0
 const MAX_LOG_LINES: int = 200
+const MAX_AUTOCOMPLETE_CANDIDATES: int = 8
 
 # 2. Signals
 signal command_executed(command_name: String, success: bool, result: Dictionary)
+signal console_visibility_changed(visible: bool)
 
 # 3. Public variables
 var module_registry: Dictionary = {}
@@ -21,10 +23,15 @@ var _console_layer: Control = null
 var _console_panel: PanelContainer = null
 var _output_log: RichTextLabel = null
 var _input_line: LineEdit = null
+var _autocomplete_panel: PanelContainer = null
+var _autocomplete_list: ItemList = null
+var _autocomplete_description: Label = null
 var _is_console_visible: bool = false
 var _log_lines: Array[String] = []
 var _command_history: Array[String] = []
 var _history_index: int = -1
+var _autocomplete_candidates: Array[Dictionary] = []
+var _autocomplete_selection: int = -1
 
 # 5. Public methods
 func _ready() -> void:
@@ -304,6 +311,9 @@ func log_message(message: String, is_error: bool = false) -> void:
 	var line := "[Error] " + message if is_error else message
 	_append_log_line(line)
 
+func is_console_visible() -> bool:
+	return _is_console_visible
+
 # 6. Private methods
 func _setup_console_ui() -> void:
 	if not get_tree() or not get_tree().root:
@@ -352,9 +362,34 @@ func _setup_console_ui() -> void:
 	_input_line = LineEdit.new()
 	_input_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_input_line.placeholder_text = "Type command and press Enter (help)"
+	_input_line.text_changed.connect(_on_input_line_text_changed)
 	_input_line.text_submitted.connect(_on_command_submitted)
 	_input_line.gui_input.connect(_on_input_line_gui_input)
+	_input_line.focus_exited.connect(_on_input_line_focus_exited)
 	input_row.add_child(_input_line)
+
+	_autocomplete_panel = PanelContainer.new()
+	_autocomplete_panel.name = "DebugConsoleAutocomplete"
+	_autocomplete_panel.visible = false
+	_autocomplete_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_autocomplete_panel.custom_minimum_size = Vector2(0.0, 112.0)
+	layout.add_child(_autocomplete_panel)
+
+	var autocomplete_layout := VBoxContainer.new()
+	_autocomplete_panel.add_child(autocomplete_layout)
+
+	_autocomplete_list = ItemList.new()
+	_autocomplete_list.select_mode = ItemList.SELECT_SINGLE
+	_autocomplete_list.mouse_filter = Control.MOUSE_FILTER_STOP
+	_autocomplete_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_autocomplete_list.item_selected.connect(_on_autocomplete_item_selected)
+	_autocomplete_list.item_clicked.connect(_on_autocomplete_item_clicked)
+	autocomplete_layout.add_child(_autocomplete_list)
+
+	_autocomplete_description = Label.new()
+	_autocomplete_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_autocomplete_description.visible = false
+	autocomplete_layout.add_child(_autocomplete_description)
 
 	_append_log_line("[Debug] Console ready. Press ` to toggle.")
 
@@ -365,8 +400,15 @@ func _cleanup_console_ui() -> void:
 	_console_panel = null
 	_output_log = null
 	_input_line = null
+	_autocomplete_panel = null
+	_autocomplete_list = null
+	_autocomplete_description = null
+	_autocomplete_candidates.clear()
+	_autocomplete_selection = -1
 
 func _set_console_visible(visible: bool) -> void:
+	if _is_console_visible == visible:
+		return
 	_is_console_visible = visible
 	if _console_panel and is_instance_valid(_console_panel):
 		_console_panel.visible = _is_console_visible
@@ -374,8 +416,12 @@ func _set_console_visible(visible: bool) -> void:
 	if _is_console_visible and _input_line and is_instance_valid(_input_line):
 		_input_line.grab_focus()
 		_input_line.caret_column = _input_line.text.length()
+		_update_autocomplete()
 	elif _input_line and is_instance_valid(_input_line):
 		_input_line.release_focus()
+		_clear_autocomplete()
+
+	console_visibility_changed.emit(_is_console_visible)
 
 func _on_command_submitted(command_text: String) -> void:
 	var normalized_command := command_text.strip_edges()
@@ -385,6 +431,7 @@ func _on_command_submitted(command_text: String) -> void:
 	_command_history.append(normalized_command)
 	_history_index = _command_history.size()
 	_append_log_line("> " + normalized_command)
+	_clear_autocomplete()
 
 	var result: Dictionary = execute_command(normalized_command)
 	if bool(result.get("success", false)):
@@ -397,6 +444,10 @@ func _on_command_submitted(command_text: String) -> void:
 
 	if _input_line and is_instance_valid(_input_line):
 		_input_line.clear()
+		_update_autocomplete()
+
+func _on_input_line_text_changed(_new_text: String) -> void:
+	_update_autocomplete()
 
 func _on_input_line_gui_input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
@@ -405,10 +456,19 @@ func _on_input_line_gui_input(event: InputEvent) -> void:
 	if not key_event.pressed or key_event.echo:
 		return
 
-	if key_event.keycode == KEY_UP:
+	if key_event.keycode == KEY_TAB:
+		if _apply_current_autocomplete_candidate():
+			_input_line.accept_event()
+	elif key_event.keycode == KEY_UP:
+		if _move_autocomplete_selection(-1):
+			_input_line.accept_event()
+			return
 		_move_history_cursor(-1)
 		_input_line.accept_event()
 	elif key_event.keycode == KEY_DOWN:
+		if _move_autocomplete_selection(1):
+			_input_line.accept_event()
+			return
 		_move_history_cursor(1)
 		_input_line.accept_event()
 
@@ -426,6 +486,297 @@ func _move_history_cursor(direction: int) -> void:
 
 	_input_line.text = _command_history[_history_index]
 	_input_line.caret_column = _input_line.text.length()
+	_update_autocomplete()
+
+func _update_autocomplete() -> void:
+	if _input_line == null or not is_instance_valid(_input_line):
+		return
+	if not _is_console_visible:
+		_clear_autocomplete()
+		return
+
+	var context := _build_autocomplete_context(_input_line.text, _input_line.caret_column)
+	var candidates := _build_autocomplete_candidates(context)
+	if candidates.is_empty():
+		_clear_autocomplete()
+		return
+
+	_autocomplete_candidates = candidates
+	if _autocomplete_list == null or not is_instance_valid(_autocomplete_list):
+		_clear_autocomplete()
+		return
+
+	_autocomplete_list.clear()
+	for candidate in _autocomplete_candidates:
+		_autocomplete_list.add_item(str(candidate.get("text", "")))
+
+	_autocomplete_selection = 0
+	_autocomplete_list.select(_autocomplete_selection)
+	_refresh_autocomplete_description()
+	_set_autocomplete_visible(true)
+
+func _build_autocomplete_context(raw_text: String, caret_column: int) -> Dictionary:
+	var clamped_caret := clampi(caret_column, 0, raw_text.length())
+	var before := raw_text.substr(0, clamped_caret)
+	var after := raw_text.substr(clamped_caret)
+	var ends_with_space := before.ends_with(" ")
+
+	var tokens: Array[String] = []
+	for part in before.split(" ", false):
+		var token := str(part)
+		if not token.is_empty():
+			tokens.append(token)
+
+	var active_index := 0
+	var active_token := ""
+	var token_start := clamped_caret
+	if ends_with_space:
+		active_index = tokens.size()
+	else:
+		active_index = maxi(tokens.size() - 1, 0)
+		var previous_space := before.rfind(" ")
+		token_start = 0 if previous_space < 0 else previous_space + 1
+		active_token = before.substr(token_start, clamped_caret - token_start)
+
+	var next_space := after.find(" ")
+	var token_end := clamped_caret
+	if not ends_with_space:
+		token_end = clamped_caret + (next_space if next_space >= 0 else after.length())
+
+	return {
+		"tokens": tokens,
+		"active_index": active_index,
+		"active_token": active_token,
+		"active_token_normalized": _normalize_name(active_token),
+		"token_start": token_start,
+		"token_end": token_end,
+		"raw_text": raw_text,
+		"caret_column": clamped_caret,
+		"command": _normalize_name(tokens[0]) if not tokens.is_empty() else "",
+		"panel_action": _normalize_name(tokens[1]) if tokens.size() > 1 else ""
+	}
+
+func _build_autocomplete_candidates(context: Dictionary) -> Array[Dictionary]:
+	var active_index := int(context.get("active_index", 0))
+	var command_name := str(context.get("command", ""))
+	var panel_action := str(context.get("panel_action", ""))
+	var active_token := str(context.get("active_token", ""))
+
+	var source_candidates: Array[Dictionary] = []
+	if active_index == 0:
+		source_candidates = _build_command_candidates()
+	elif active_index == 1 and command_name in ["get", "set"]:
+		source_candidates = _build_variable_candidates()
+	elif command_name == "panel" and active_index == 1:
+		source_candidates = _build_panel_action_candidates()
+	elif command_name == "panel" and active_index == 2 and panel_action in ["open", "close"]:
+		source_candidates = _build_panel_candidates()
+
+	if source_candidates.is_empty():
+		return []
+
+	var sorted_candidates := _sort_autocomplete_candidates(active_token, source_candidates)
+	if sorted_candidates.size() == 1:
+		var only_candidate: Dictionary = sorted_candidates[0]
+		if _normalize_name(str(only_candidate.get("replacement", ""))) == _normalize_name(active_token):
+			return []
+	return sorted_candidates
+
+func _build_command_candidates() -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	for command_name_variant in command_registry.keys():
+		var command_name := str(command_name_variant)
+		var entry: Dictionary = command_registry[command_name]
+		var usage := str(entry.get("usage", command_name))
+		var description := str(entry.get("description", ""))
+		var subtitle := usage
+		if subtitle == command_name:
+			subtitle = description
+		elif not description.is_empty():
+			subtitle += " - " + description
+		candidates.append({
+			"text": command_name,
+			"replacement": command_name,
+			"description": subtitle
+		})
+	return candidates
+
+func _build_variable_candidates() -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	for variable_name_variant in variable_registry.keys():
+		var variable_name := str(variable_name_variant)
+		var entry: Dictionary = variable_registry[variable_name]
+		candidates.append({
+			"text": variable_name,
+			"replacement": variable_name,
+			"description": str(entry.get("description", ""))
+		})
+	return candidates
+
+func _build_panel_action_candidates() -> Array[Dictionary]:
+	return [
+		{
+			"text": "open",
+			"replacement": "open",
+			"description": "Open a registered debug panel"
+		},
+		{
+			"text": "close",
+			"replacement": "close",
+			"description": "Close an open debug panel"
+		},
+		{
+			"text": "list",
+			"replacement": "list",
+			"description": "List registered debug panels"
+		}
+	]
+
+func _build_panel_candidates() -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	for panel_name_variant in panel_registry.keys():
+		var panel_name := str(panel_name_variant)
+		var entry: Dictionary = panel_registry[panel_name]
+		candidates.append({
+			"text": panel_name,
+			"replacement": panel_name,
+			"description": str(entry.get("description", ""))
+		})
+	return candidates
+
+func _sort_autocomplete_candidates(
+	active_token: String,
+	source_candidates: Array[Dictionary]
+) -> Array[Dictionary]:
+	var sorted_candidates := source_candidates.duplicate(true)
+	sorted_candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_text := _normalize_name(str(a.get("text", "")))
+		var b_text := _normalize_name(str(b.get("text", "")))
+		var a_score := _get_autocomplete_match_score(a_text, active_token)
+		var b_score := _get_autocomplete_match_score(b_text, active_token)
+		if a_score != b_score:
+			return a_score < b_score
+		return a_text < b_text
+	)
+	if sorted_candidates.size() > MAX_AUTOCOMPLETE_CANDIDATES:
+		sorted_candidates.resize(MAX_AUTOCOMPLETE_CANDIDATES)
+	return sorted_candidates
+
+func _get_autocomplete_match_score(candidate_text: String, active_token: String) -> int:
+	var normalized_token := _normalize_name(active_token)
+	if normalized_token.is_empty():
+		return 3
+	if candidate_text == normalized_token:
+		return 0
+	if candidate_text.begins_with(normalized_token):
+		return 1
+	if candidate_text.contains(normalized_token):
+		return 2
+	return 99
+
+func _apply_current_autocomplete_candidate() -> bool:
+	if _autocomplete_candidates.is_empty():
+		return false
+	var selection := clampi(_autocomplete_selection, 0, _autocomplete_candidates.size() - 1)
+	return _apply_autocomplete_candidate(selection)
+
+func _apply_autocomplete_candidate(index: int) -> bool:
+	if _input_line == null or not is_instance_valid(_input_line):
+		return false
+	if index < 0 or index >= _autocomplete_candidates.size():
+		return false
+
+	var candidate: Dictionary = _autocomplete_candidates[index]
+	var replacement := str(candidate.get("replacement", ""))
+	if replacement.is_empty():
+		return false
+
+	var context := _build_autocomplete_context(_input_line.text, _input_line.caret_column)
+	var raw_text := str(context.get("raw_text", ""))
+	var token_start := int(context.get("token_start", 0))
+	var token_end := int(context.get("token_end", token_start))
+	_input_line.text = raw_text.substr(0, token_start) + replacement + raw_text.substr(token_end)
+	_input_line.caret_column = token_start + replacement.length()
+	_input_line.grab_focus()
+	_update_autocomplete()
+	return true
+
+func _set_autocomplete_visible(visible: bool) -> void:
+	if _autocomplete_panel and is_instance_valid(_autocomplete_panel):
+		_autocomplete_panel.visible = visible
+
+func _clear_autocomplete() -> void:
+	_autocomplete_candidates.clear()
+	_autocomplete_selection = -1
+	if _autocomplete_list and is_instance_valid(_autocomplete_list):
+		_autocomplete_list.clear()
+	if _autocomplete_description and is_instance_valid(_autocomplete_description):
+		_autocomplete_description.text = ""
+		_autocomplete_description.visible = false
+	_set_autocomplete_visible(false)
+
+func _move_autocomplete_selection(direction: int) -> bool:
+	if _autocomplete_candidates.is_empty():
+		return false
+	if _autocomplete_list == null or not is_instance_valid(_autocomplete_list):
+		return false
+
+	_autocomplete_selection = clampi(
+		maxi(_autocomplete_selection, 0) + direction,
+		0,
+		_autocomplete_candidates.size() - 1
+	)
+	_autocomplete_list.select(_autocomplete_selection)
+	_refresh_autocomplete_description()
+	return true
+
+func _refresh_autocomplete_description() -> void:
+	if _autocomplete_description == null or not is_instance_valid(_autocomplete_description):
+		return
+	if _autocomplete_selection < 0 or _autocomplete_selection >= _autocomplete_candidates.size():
+		_autocomplete_description.text = ""
+		_autocomplete_description.visible = false
+		return
+
+	var candidate: Dictionary = _autocomplete_candidates[_autocomplete_selection]
+	var description := str(candidate.get("description", "")).strip_edges()
+	_autocomplete_description.text = description
+	_autocomplete_description.visible = not description.is_empty()
+
+func _on_autocomplete_item_selected(index: int) -> void:
+	_autocomplete_selection = index
+	_refresh_autocomplete_description()
+
+func _on_autocomplete_item_clicked(
+	index: int,
+	_at_position: Vector2,
+	mouse_button_index: int
+) -> void:
+	if mouse_button_index != MOUSE_BUTTON_LEFT:
+		return
+	_apply_autocomplete_candidate(index)
+
+func _on_input_line_focus_exited() -> void:
+	call_deferred("_hide_autocomplete_if_focus_lost")
+
+func _hide_autocomplete_if_focus_lost() -> void:
+	if _input_line and is_instance_valid(_input_line) and _input_line.has_focus():
+		return
+	if _autocomplete_list and is_instance_valid(_autocomplete_list) and _autocomplete_list.has_focus():
+		return
+	if _is_mouse_over_autocomplete_panel():
+		return
+	_clear_autocomplete()
+
+func _is_mouse_over_autocomplete_panel() -> bool:
+	if _autocomplete_panel == null or not is_instance_valid(_autocomplete_panel):
+		return false
+	if not _autocomplete_panel.visible:
+		return false
+	var viewport := _autocomplete_panel.get_viewport()
+	if viewport == null:
+		return false
+	return _autocomplete_panel.get_global_rect().has_point(viewport.get_mouse_position())
 
 func _append_log_line(line: String) -> void:
 	var lines: PackedStringArray = line.split("\n", false)
