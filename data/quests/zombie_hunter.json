@@ -1,0 +1,27 @@
+{
+  "quest_id": "zombie_hunter",
+  "prerequisites": [
+    "first_explore"
+  ],
+  "description": "在街道上击败3只僵尸",
+  "title": "僵尸猎人",
+  "rewards": {
+    "items": [
+      {
+        "id": 1006,
+        "count": 3
+      }
+    ],
+    "experience": 200,
+    "unlock_location": "hospital"
+  },
+  "objectives": [
+    {
+      "description": "击败僵尸",
+      "target": 3,
+      "current": 0,
+      "enemy_type": "zombie",
+      "type": "kill"
+    }
+  ]
+}

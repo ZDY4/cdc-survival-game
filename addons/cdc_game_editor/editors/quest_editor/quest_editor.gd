@@ -23,6 +23,7 @@ const QUEST_STATUS_COLORS = {
 }
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
+const QUEST_DATA_DIR := "res://data/quests"
 
 @onready var _file_dialog: FileDialog
 @onready var _validation_panel: VBoxContainer
@@ -54,8 +55,8 @@ func _create_toolbar() -> void:
 	_add_toolbar_button("撤销", _on_undo, "撤销 (Ctrl+Z)")
 	_add_toolbar_button("重做", _on_redo, "重做 (Ctrl+Y)")
 	_add_toolbar_separator()
-	_add_toolbar_button("保存", _on_save_quests, "保存到文件 (Ctrl+S)")
-	_add_toolbar_button("加载", _on_load_quests, "从文件加载")
+	_add_toolbar_button("保存", _on_save_quests, "将每个任务分别保存到 data/quests 目录 (Ctrl+S)")
+	_add_toolbar_button("加载", _on_load_quests, "从 data/quests 目录加载任务，必要时兼容旧版 quests.json")
 	_add_toolbar_separator()
 	_add_toolbar_button("验证", _on_validate_all, "验证所有任务")
 	_add_toolbar_button("导出GD", _on_export_gdscript, "导出为 GDScript")
@@ -86,20 +87,45 @@ func _setup_validation_panel() -> void:
 	_validation_panel.add_child(HSeparator.new())
 
 func _load_quests_from_project_data() -> void:
-	var preferred_paths: Array[String] = [
-		"res://data/json/quests.json",
-		"res://data/quests.json"
-	]
-	var has_candidate_file := false
-	for path in preferred_paths:
-		if not FileAccess.file_exists(path):
-			continue
-		has_candidate_file = true
-		if _load_from_file(path):
-			return
+	if not _load_from_directory(QUEST_DATA_DIR):
+		_update_status("未找到任务目录或目录为空: %s" % QUEST_DATA_DIR)
 
-	if has_candidate_file:
-		_update_status("[JSON] project_data | No valid quest JSON file found in project data paths")
+func _ensure_quest_data_dir() -> bool:
+	var absolute_dir_path := ProjectSettings.globalize_path(QUEST_DATA_DIR)
+	if DirAccess.dir_exists_absolute(absolute_dir_path):
+		return true
+	var create_error := DirAccess.make_dir_recursive_absolute(absolute_dir_path)
+	if create_error != OK:
+		_update_status("无法创建目录: %s" % QUEST_DATA_DIR)
+		return false
+	return true
+
+func _is_valid_quest_file_id(quest_id: String) -> bool:
+	if quest_id.is_empty():
+		return false
+
+	var invalid_chars := ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+	for invalid_char in invalid_chars:
+		if quest_id.contains(str(invalid_char)):
+			return false
+	return true
+
+func _build_quest_file_path(quest_id: String) -> String:
+	return "%s/%s.json" % [QUEST_DATA_DIR, quest_id]
+
+func _serialize_quest_for_storage(quest_id: String, quest: Dictionary) -> Dictionary:
+	var serialized_quest: Dictionary = quest.duplicate(true)
+	var position: Vector2 = serialized_quest.get("position", Vector2.ZERO)
+
+	serialized_quest.erase("id")
+	serialized_quest.erase("type")
+	serialized_quest.erase("position")
+	serialized_quest["quest_id"] = quest_id
+	serialized_quest["_editor"] = {
+		"position": {"x": position.x, "y": position.y},
+		"node_type": "quest"
+	}
+	return serialized_quest
 
 func _generate_node_id(_node_type: String = "quest") -> String:
 	return "quest_%d" % Time.get_ticks_msec()
@@ -747,84 +773,124 @@ func _clear_editor_state() -> void:
 	_update_validation_panel()
 
 func _on_save_quests() -> void:
-	if current_file_path.is_empty():
-		_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-		_file_dialog.current_file = "quests.json"
-		_file_dialog.file_selected.connect(_save_to_file, CONNECT_ONE_SHOT)
-		_file_dialog.popup_centered(Vector2(800, 600))
-	else:
-		_save_to_file(current_file_path)
+	if not _ensure_quest_data_dir():
+		return
 
-func _save_to_file(path: String) -> void:
+	_save_to_directory(QUEST_DATA_DIR)
+
+func _save_to_directory(path: String) -> void:
 	current_file_path = path
 	_sync_node_positions_from_graph()
 
-	var output_quests: Dictionary = {}
 	var quest_ids: Array = nodes.keys()
 	quest_ids.sort()
+	var invalid_ids: Array[String] = []
 	for quest_id in quest_ids:
-		var quest: Dictionary = nodes[quest_id].duplicate(true)
-		var position: Vector2 = quest.get("position", Vector2.ZERO)
+		if not _is_valid_quest_file_id(str(quest_id)):
+			invalid_ids.append(str(quest_id))
 
-		quest.erase("id")
-		quest.erase("type")
-		quest.erase("position")
-		quest["_editor"] = {
-			"position": {"x": position.x, "y": position.y},
-			"node_type": "quest"
-		}
+	if not invalid_ids.is_empty():
+		_update_status("任务ID不能作为文件名: %s" % ", ".join(invalid_ids))
+		return
 
-		output_quests[quest_id] = quest
-
-	var json := JSON.stringify(output_quests, "\t")
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file:
+	var save_failed := false
+	for quest_id in quest_ids:
+		var quest: Dictionary = nodes[quest_id]
+		var json := JSON.stringify(_serialize_quest_for_storage(str(quest_id), quest), "\t")
+		var quest_file_path := _build_quest_file_path(str(quest_id))
+		var file := FileAccess.open(quest_file_path, FileAccess.WRITE)
+		if file == null:
+			save_failed = true
+			push_warning("无法保存任务文件: %s" % quest_file_path)
+			continue
 		file.store_string(json)
 		file.close()
-		quest_saved.emit(selected_node_id)
-		_update_status("已保存 %s" % path)
-	else:
-		_update_status("无法保存文件")
+
+	if save_failed:
+		_update_status("部分任务文件保存失败")
+		return
+
+	var dir := DirAccess.open(path)
+	if dir != null:
+		dir.list_dir_begin()
+		var file_name := dir.get_next()
+		while not file_name.is_empty():
+			if not dir.current_is_dir() and file_name.ends_with(".json"):
+				var existing_quest_id := file_name.trim_suffix(".json")
+				if not nodes.has(existing_quest_id):
+					dir.remove(file_name)
+			file_name = dir.get_next()
+		dir.list_dir_end()
+
+	quest_saved.emit(selected_node_id)
+	_update_status("已保存 %d 个任务到 %s" % [quest_ids.size(), path])
 
 func _on_load_quests() -> void:
-	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	_file_dialog.file_selected.connect(_load_from_file, CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
+	if not _load_from_directory(QUEST_DATA_DIR):
+		_update_status("未找到有效任务文件: %s" % QUEST_DATA_DIR)
 
-func _load_from_file(path: String) -> bool:
-	var validation := JSON_VALIDATOR.validate_file(path, {
-		"root_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"wrapper_key": "quests",
-		"wrapper_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"entry_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"entry_label": "quest"
-	})
-	if not bool(validation.get("ok", false)):
-		_update_status(str(validation.get("message", "[JSON] Unknown validation error")))
+func _load_from_directory(directory_path: String) -> bool:
+	var absolute_dir_path := ProjectSettings.globalize_path(directory_path)
+	if not DirAccess.dir_exists_absolute(absolute_dir_path):
 		return false
 
-	var loaded_quests: Variant = validation.get("data", {})
-	if not (loaded_quests is Dictionary):
-		_update_status("[JSON] %s | Invalid validator result: data must be Dictionary" % path)
+	var dir := DirAccess.open(directory_path)
+	if dir == null:
+		_update_status("无法读取目录: %s" % directory_path)
+		return false
+
+	var file_names: Array[String] = []
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and file_name.ends_with(".json"):
+			file_names.append(file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	file_names.sort()
+	if file_names.is_empty():
 		return false
 
 	_clear_editor_state()
 
-	var quest_ids: Array = loaded_quests.keys()
-	quest_ids.sort()
-	for i in range(quest_ids.size()):
-		var quest_id := str(quest_ids[i])
-		var node_data := _quest_to_node_data(quest_id, loaded_quests[quest_id], i)
-		_create_node_internal(node_data)
+	var loaded_count := 0
+	for file_index in range(file_names.size()):
+		var quest_file_name := file_names[file_index]
+		var quest_file_path := "%s/%s" % [directory_path, quest_file_name]
+		var validation := JSON_VALIDATOR.validate_file(quest_file_path, {
+			"root_type": JSON_VALIDATOR.TYPE_DICTIONARY
+		})
+		if not bool(validation.get("ok", false)):
+			push_warning(str(validation.get("message", "[JSON] Unknown validation error")))
+			continue
 
-	current_file_path = path
+		var loaded_quest: Variant = validation.get("data", {})
+		if not (loaded_quest is Dictionary):
+			push_warning("[JSON] %s | Invalid validator result: data must be Dictionary" % quest_file_path)
+			continue
+
+		var quest_id := str((loaded_quest as Dictionary).get("quest_id", "")).strip_edges()
+		if quest_id.is_empty():
+			quest_id = quest_file_name.get_basename()
+
+		var node_data := _quest_to_node_data(quest_id, loaded_quest as Dictionary, loaded_count)
+		_create_node_internal(node_data)
+		loaded_count += 1
+
+	if loaded_count == 0:
+		_clear_editor_state()
+		_update_status("未找到有效任务文件: %s" % directory_path)
+		return false
+
+	current_file_path = directory_path
 	_rebuild_connections_from_prerequisites()
 
 	for quest_id in nodes.keys():
 		_validate_quest(quest_id)
 
 	quest_loaded.emit(selected_node_id)
-	_update_status("Loaded: %s" % path)
+	_update_status("已从 %s 加载 %d 个任务" % [directory_path, loaded_count])
 	return true
 
 func _quest_to_node_data(quest_id: String, raw_quest: Dictionary, index: int) -> Dictionary:

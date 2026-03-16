@@ -28,7 +28,6 @@ func _run():
 	print("  ☐ equipment_system.gd - EQUIPMENT/ITEMS")
 	print("  ☐ weapon_system.gd - WEAPONS")
 	print("  ☐ map_module.gd - LOCATION_CONNECTIONS, LOCATION_DISTANCES")
-	print("  ☐ limb_damage_system.gd - LIMB_DATA")
 	print("  ☐ encounter_database.gd - ENCOUNTER_DATA")
 	print("")
 	print("迁移步骤:")

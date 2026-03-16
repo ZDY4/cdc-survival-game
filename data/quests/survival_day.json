@@ -1,0 +1,26 @@
+{
+  "quest_id": "survival_day",
+  "prerequisites": [
+    "tutorial_survive"
+  ],
+  "description": "存活5天",
+  "title": "生存挑战",
+  "rewards": {
+    "items": [
+      {
+        "id": 1138,
+        "count": 1
+      }
+    ],
+    "experience": 500,
+    "title": "生存专家"
+  },
+  "objectives": [
+    {
+      "description": "存活天数",
+      "target": 5,
+      "current": 0,
+      "type": "survive"
+    }
+  ]
+}

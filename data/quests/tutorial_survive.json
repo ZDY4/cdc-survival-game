@@ -1,0 +1,24 @@
+{
+  "quest_id": "tutorial_survive",
+  "rewards": {
+    "items": [
+      {
+        "id": 1007,
+        "count": 2
+      }
+    ],
+    "experience": 50
+  },
+  "description": "在安全屋休息一晚，恢复你的状态",
+  "prerequisites": [],
+  "time_limit": -1,
+  "title": "第一课：生存",
+  "objectives": [
+    {
+      "description": "在安全屋睡觉",
+      "target": 1,
+      "current": 0,
+      "type": "sleep"
+    }
+  ]
+}

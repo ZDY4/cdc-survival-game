@@ -226,12 +226,6 @@ def main():
             "output": "data/json/tools.json"
         },
         {
-            "name": "战利品表",
-            "source": "systems/scavenge_system.gd",
-            "const": "LOCATION_LOOT_TABLES",
-            "output": "data/json/loot_tables.json"
-        },
-        {
             "name": "平衡配置",
             "source": "systems/balance_config.gd",
             "const": "STATUS_BALANCE",

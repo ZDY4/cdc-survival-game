@@ -1,0 +1,33 @@
+{
+  "quest_id": "find_food",
+  "prerequisites": [
+    "first_explore"
+  ],
+  "description": "前往超市寻找10罐食物",
+  "title": "食物短缺",
+  "rewards": {
+    "items": [
+      {
+        "id": 1008,
+        "count": 5
+      }
+    ],
+    "experience": 300,
+    "skill_points": 2
+  },
+  "objectives": [
+    {
+      "description": "前往超市",
+      "target": "supermarket",
+      "current": false,
+      "type": "travel"
+    },
+    {
+      "description": "收集罐头",
+      "target": 10,
+      "current": 0,
+      "item_id": 1007,
+      "type": "collect"
+    }
+  ]
+}

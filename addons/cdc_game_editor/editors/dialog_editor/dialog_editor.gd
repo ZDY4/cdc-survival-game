@@ -102,7 +102,7 @@ func _setup_file_dialog() -> void:
 func _setup_open_dialog_popup() -> void:
 	_open_dialog_popup = ConfirmationDialog.new()
 	_open_dialog_popup.title = "打开对话"
-	_open_dialog_popup.dialog_text = "请选择 data/dialogues 中的对话文件"
+	_open_dialog_popup.dialog_text = "请选择 data/dialogues 中的对话文件，每个对话会单独保存为一个 JSON"
 	_open_dialog_popup.get_ok_button().text = "打开"
 	_open_dialog_popup.confirmed.connect(_on_open_dialog_confirmed)
 	add_child(_open_dialog_popup)
@@ -145,6 +145,24 @@ func _ensure_dialog_data_dir() -> bool:
 		_update_status("无法创建目录: %s" % DIALOG_DATA_DIR)
 		return false
 	return true
+
+func _build_dialog_file_path(dialog_id: String) -> String:
+	return "%s/%s.json" % [DIALOG_DATA_DIR, dialog_id]
+
+func _is_managed_dialog_file(path: String) -> bool:
+	return path.begins_with("%s/" % DIALOG_DATA_DIR)
+
+func _remove_replaced_dialog_file(previous_path: String, target_path: String) -> void:
+	if previous_path.is_empty() or previous_path == target_path:
+		return
+	if not _is_managed_dialog_file(previous_path):
+		return
+	if not FileAccess.file_exists(previous_path):
+		return
+
+	var remove_error := DirAccess.remove_absolute(ProjectSettings.globalize_path(previous_path))
+	if remove_error != OK:
+		push_warning("无法删除旧对话文件: %s" % previous_path)
 
 func _refresh_open_dialog_list() -> bool:
 	_open_dialog_paths.clear()
@@ -453,7 +471,7 @@ func _on_save_dialog() -> void:
 	if not _ensure_dialog_data_dir():
 		return
 
-	var target_path := "%s/%s.json" % [DIALOG_DATA_DIR, dialog_id]
+	var target_path := _build_dialog_file_path(dialog_id)
 	_save_dialog_to_path(target_path)
 
 func _load_dialog(path: String) -> void:
@@ -548,6 +566,7 @@ func _save_dialog_to_path(path: String, persist_as_current: bool = true) -> void
 	_sync_node_positions_from_graph()
 
 	var dialog_id := current_dialog_id if not current_dialog_id.is_empty() else "dialog_%d" % Time.get_ticks_msec()
+	var previous_file_path := current_file_path
 	var data: Dictionary = {
 		"dialog_id": dialog_id,
 		"nodes": nodes.values(),
@@ -560,6 +579,7 @@ func _save_dialog_to_path(path: String, persist_as_current: bool = true) -> void
 		file.store_string(json)
 		file.close()
 		if persist_as_current:
+			_remove_replaced_dialog_file(previous_file_path, path)
 			current_file_path = path
 			dialog_saved.emit(dialog_id)
 			_update_status("已保存 %s" % path)
@@ -570,7 +590,7 @@ func _save_dialog_to_path(path: String, persist_as_current: bool = true) -> void
 
 func _on_export_json() -> void:
 	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_file_dialog.current_file = "dialog_export.json"
+	_file_dialog.current_file = "%s.json" % (current_dialog_id if not current_dialog_id.is_empty() else "dialog_export")
 	_file_dialog.file_selected.connect(func(path: String): _save_dialog_to_path(path, false), CONNECT_ONE_SHOT)
 	_file_dialog.popup_centered(Vector2(800, 600))
 

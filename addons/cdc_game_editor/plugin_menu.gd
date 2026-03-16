@@ -33,7 +33,9 @@ const DATA_KIND_SKILL: String = "skill"
 const DATA_KIND_EFFECT: String = "effect"
 const DATA_KIND_CHARACTER: String = "character"
 
-const GAME_DATA_ID_INSPECTOR_PLUGIN_SCRIPT := preload("res://addons/cdc_game_editor/inspector/game_data_id_inspector_plugin.gd")
+const GAME_DATA_ID_INSPECTOR_PLUGIN_SCRIPT := preload(
+	"res://addons/cdc_game_editor/inspector/game_data_id_inspector_plugin.gd"
+)
 
 const EDITOR_CONFIGS: Dictionary = {
 	EDITOR_DIALOG: {
@@ -108,6 +110,7 @@ var _game_data_id_inspector_plugin: EditorInspectorPlugin = null
 func _enter_tree() -> void:
 	print("[%s v%s] Initializing plugin..." % [PLUGIN_NAME, PLUGIN_VERSION])
 	_is_disabling = false
+	set_input_event_forwarding_always_enabled()
 	_register_inspector_plugin()
 	call_deferred("_initialize_menu_deferred")
 
@@ -491,24 +494,108 @@ func _edit(object: Object) -> void:
 	elif path.ends_with(".item") or path.ends_with(".items"):
 		open_cdc_editor(EDITOR_ITEM)
 
+func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event == null:
+		return EditorPlugin.AFTER_GUI_INPUT_PASS
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+		return EditorPlugin.AFTER_GUI_INPUT_PASS
+
+	var target_spawn_point: AISpawnPoint = _find_spawn_point_from_preview_click(camera, mouse_event.position)
+	if target_spawn_point == null:
+		return EditorPlugin.AFTER_GUI_INPUT_PASS
+
+	_select_node_in_editor(target_spawn_point)
+	return EditorPlugin.AFTER_GUI_INPUT_STOP
+
+func _find_spawn_point_from_preview_click(camera: Camera3D, screen_pos: Vector2) -> AISpawnPoint:
+	if camera == null:
+		return null
+
+	var scene_root: Node = get_editor_interface().get_edited_scene_root()
+	if scene_root == null:
+		return null
+
+	var spawn_points: Array[AISpawnPoint] = _collect_ai_spawn_points(scene_root)
+	for spawn_point in spawn_points:
+		if spawn_point.editor_preview_hit_test(camera, screen_pos):
+			return spawn_point
+	return null
+
+func _collect_ai_spawn_points(root: Node) -> Array[AISpawnPoint]:
+	var result: Array[AISpawnPoint] = []
+	for child in root.get_children():
+		if child is AISpawnPoint:
+			result.append(child as AISpawnPoint)
+		result.append_array(_collect_ai_spawn_points(child))
+	return result
+
+func _select_node_in_editor(target_node: Node) -> void:
+	if target_node == null:
+		return
+
+	var selection: EditorSelection = get_editor_interface().get_selection()
+	if selection == null:
+		return
+
+	selection.clear()
+	selection.add_node(target_node)
+	get_editor_interface().edit_node(target_node)
+
 func get_data_ids(data_kind: String) -> Array[String]:
+	var entries: Array[Dictionary] = get_data_id_entries(data_kind)
+	if not entries.is_empty():
+		var ids: Array[String] = []
+		for entry in entries:
+			var id_text: String = str(entry.get("id", "")).strip_edges()
+			if not id_text.is_empty():
+				ids.append(id_text)
+		return ids
+
 	var normalized_kind: String = data_kind.strip_edges().to_lower()
+	var result: Array[String] = []
 	match normalized_kind:
 		DATA_KIND_QUEST:
-			return _load_ids_from_json_dict_files(["res://data/json/quests.json", "res://data/quests.json"])
+			result = _load_ids_from_json_directory("res://data/quests")
 		DATA_KIND_RECIPE:
-			return _load_ids_from_json_dict_files(["res://data/json/recipes.json", "res://data/recipes.json"])
+			result = _load_ids_from_json_dict_files(["res://data/json/recipes.json", "res://data/recipes.json"])
 		DATA_KIND_ITEM:
 			var item_ids: Array[String] = _load_ids_from_json_directory("res://data/items")
 			if item_ids.is_empty():
 				item_ids = _load_ids_from_json_dict_files(["res://data/items.json", "res://data/json/items.json"])
-			return item_ids
+			result = item_ids
 		DATA_KIND_SKILL:
-			return _load_ids_from_json_directory("res://data/skills")
+			result = _load_ids_from_json_directory("res://data/skills")
 		DATA_KIND_EFFECT:
-			return _load_ids_from_json_directory("res://data/json/effects")
+			result = _load_ids_from_json_directory("res://data/json/effects")
 		DATA_KIND_CHARACTER:
 			return _load_ids_from_json_directory("res://data/characters")
+		_:
+			result = []
+	return result
+
+func get_data_id_entries(data_kind: String) -> Array[Dictionary]:
+	var normalized_kind: String = data_kind.strip_edges().to_lower()
+	match normalized_kind:
+		DATA_KIND_NPC:
+			return _load_named_entries_from_json_dict_files(["res://data/json/npcs.json", "res://data/npcs.json"])
+		DATA_KIND_ENEMY:
+			return _load_named_entries_from_json_dict_files(["res://data/json/enemies.json", "res://data/enemies.json"])
+		DATA_KIND_ITEM:
+			var item_entries: Array[Dictionary] = _load_named_entries_from_json_directory("res://data/items")
+			if item_entries.is_empty():
+				item_entries = _load_named_entries_from_json_dict_files(["res://data/items.json", "res://data/json/items.json"])
+			return item_entries
+		DATA_KIND_QUEST:
+			return _load_named_entries_from_json_directory("res://data/quests", ["title", "name"])
+		DATA_KIND_RECIPE:
+			return _load_named_entries_from_json_dict_files(["res://data/json/recipes.json", "res://data/recipes.json"])
+		DATA_KIND_SKILL:
+			return _load_named_entries_from_json_directory("res://data/skills")
+		DATA_KIND_EFFECT:
+			return _load_named_entries_from_json_directory("res://data/json/effects")
+		DATA_KIND_CHARACTER:
+			return _load_named_entries_from_json_directory("res://data/characters")
 		_:
 			return []
 
@@ -528,10 +615,6 @@ func _extract_ids_from_json_dict(path: String) -> Array[String]:
 	var parsed: Variant = JSON.parse_string(json_text)
 	if not (parsed is Dictionary):
 		return []
-	var root: Dictionary = parsed
-	if root.has("quests") and root.quests is Dictionary:
-		parsed = root.quests
-
 	var result: Array[String] = []
 	for key in parsed.keys():
 		var key_text: String = str(key).strip_edges()
@@ -558,6 +641,90 @@ func _load_ids_from_json_directory(directory_path: String) -> Array[String]:
 
 	ids.sort()
 	return ids
+
+func _load_named_entries_from_json_dict_files(paths: Array[String], name_keys: Array[String] = []) -> Array[Dictionary]:
+	for path in paths:
+		if not FileAccess.file_exists(path):
+			continue
+		var entries: Array[Dictionary] = _extract_named_entries_from_json_dict(path, name_keys)
+		if not entries.is_empty():
+			return entries
+	return []
+
+func _extract_named_entries_from_json_dict(path: String, name_keys: Array[String] = []) -> Array[Dictionary]:
+	var json_text: String = FileAccess.get_file_as_string(path)
+	if json_text.is_empty():
+		return []
+	var parsed: Variant = JSON.parse_string(json_text)
+	if not (parsed is Dictionary):
+		return []
+	var parsed_dict: Dictionary = parsed as Dictionary
+
+	var ids: Array[String] = []
+	for key in parsed_dict.keys():
+		var key_text: String = str(key).strip_edges()
+		if not key_text.is_empty():
+			ids.append(key_text)
+	ids.sort()
+
+	var result: Array[Dictionary] = []
+	for id_text in ids:
+		var entry_data: Dictionary = parsed_dict.get(id_text, {}) as Dictionary
+		var item_name: String = _extract_display_name_from_dictionary(entry_data, name_keys)
+		result.append(_build_data_id_entry(id_text, item_name))
+	return result
+
+func _load_named_entries_from_json_directory(directory_path: String, name_keys: Array[String] = []) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var dir: DirAccess = DirAccess.open(directory_path)
+	if not dir:
+		return entries
+
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and file_name.ends_with(".json"):
+			var id_text: String = file_name.trim_suffix(".json").strip_edges()
+			if not id_text.is_empty():
+				var file_path: String = "%s/%s" % [directory_path, file_name]
+				var item_name: String = _extract_name_from_json_file(file_path, name_keys)
+				entries.append(_build_data_id_entry(id_text, item_name))
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	entries.sort_custom(func(a: Dictionary, b: Dictionary): return str(a.get("id", "")) < str(b.get("id", "")))
+	return entries
+
+func _extract_name_from_json_file(path: String, name_keys: Array[String] = []) -> String:
+	var json_text: String = FileAccess.get_file_as_string(path)
+	if json_text.is_empty():
+		return ""
+	var parsed: Variant = JSON.parse_string(json_text)
+	if parsed is Dictionary:
+		return _extract_display_name_from_dictionary(parsed as Dictionary, name_keys)
+	return ""
+
+func _extract_display_name_from_dictionary(data: Dictionary, name_keys: Array[String] = []) -> String:
+	var preferred_keys: Array[String] = name_keys
+	if preferred_keys.is_empty():
+		preferred_keys = ["name"]
+
+	for key in preferred_keys:
+		var value: String = str(data.get(key, "")).strip_edges()
+		if not value.is_empty():
+			return value
+	return ""
+
+func _build_data_id_entry(id_text: String, display_name: String) -> Dictionary:
+	var normalized_id: String = id_text.strip_edges()
+	var normalized_name: String = display_name.strip_edges()
+	var label: String = normalized_id
+	if not normalized_name.is_empty():
+		label = "%s | %s" % [normalized_id, normalized_name]
+	return {
+		"id": normalized_id,
+		"label": label
+	}
 
 func _apply_changes() -> void:
 	for editor_key in _editor_instances.keys():

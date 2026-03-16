@@ -9,6 +9,7 @@ var _loaded_categories: Dictionary = {}
 
 # ========== 数据文件路径配置 ==========
 const ITEM_DATA_DIR := "res://data/items"
+const QUEST_DATA_DIR := "res://data/quests"
 
 const DATA_PATHS = {
 	"clues": "res://data/json/clues.json",
@@ -17,10 +18,9 @@ const DATA_PATHS = {
 	"characters": "res://data/characters",
 	"camp_relations": "res://data/json/camp_relations.json",
 	"effects": "res://data/json/effects",
-	"quests": "res://data/json/quests.json",
+	"quests": QUEST_DATA_DIR,
 	"items": ITEM_DATA_DIR,
 	"map_locations": "res://data/json/map_locations.json",
-	"limb_data": "res://data/json/limb_data.json",
 	"encounters": "res://data/json/encounters.json",
 	"scavenge_locations": "res://data/json/scavenge_locations.json",
 	"weapons": "res://data/json/weapons.json",
@@ -30,7 +30,6 @@ const DATA_PATHS = {
 	"map_data": "res://data/json/map_data.json",
 	"structures": "res://data/json/structures.json",
 	"tools": "res://data/json/tools.json",
-	"loot_tables": "res://data/json/loot_tables.json",
 	"weather": "res://data/json/weather.json"
 }
 
@@ -55,6 +54,12 @@ func _load_category(category: String) -> void:
 		_data_cache[category] = directory_items
 		_loaded_categories[category] = true
 		print("[DataManager] 已加载 %s (%d 条数据)" % [category, directory_items.size()])
+		return
+	if category == "quests":
+		var quest_data: Dictionary = _load_quests_data()
+		_data_cache[category] = quest_data
+		_loaded_categories[category] = true
+		print("[DataManager] 已加载 %s (%d 条数据)" % [category, quest_data.size()])
 		return
 
 	var path = DATA_PATHS.get(category, "")
@@ -106,6 +111,60 @@ func _load_items_from_directory(dir_path: String) -> Dictionary:
 
 	dir.list_dir_end()
 	return result
+
+func _load_quests_data() -> Dictionary:
+	var directory_quests: Dictionary = _load_quests_from_directory(QUEST_DATA_DIR)
+	if directory_quests.is_empty():
+		push_warning("[DataManager] 未找到任务数据目录或目录为空: %s" % QUEST_DATA_DIR)
+	return directory_quests
+
+func _load_quests_from_directory(dir_path: String) -> Dictionary:
+	var result: Dictionary = {}
+	var absolute_dir_path := ProjectSettings.globalize_path(dir_path)
+	if not DirAccess.dir_exists_absolute(absolute_dir_path):
+		return result
+
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		push_warning("[DataManager] 无法打开任务目录: %s" % dir_path)
+		return result
+
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if dir.current_is_dir() or not file_name.ends_with(".json"):
+			file_name = dir.get_next()
+			continue
+
+		var file_path := "%s/%s" % [dir_path, file_name]
+		var quest_data: Variant = _load_json_file(file_path)
+		if not (quest_data is Dictionary):
+			push_warning("[DataManager] 跳过无效任务文件: %s" % file_path)
+			file_name = dir.get_next()
+			continue
+
+		var normalized_quest := _normalize_quest_data(quest_data as Dictionary, file_name.get_basename())
+		var quest_id := str(normalized_quest.get("quest_id", "")).strip_edges()
+		if quest_id.is_empty():
+			push_warning("[DataManager] 任务文件缺少 quest_id: %s" % file_path)
+			file_name = dir.get_next()
+			continue
+
+		result[quest_id] = normalized_quest
+		file_name = dir.get_next()
+
+	dir.list_dir_end()
+	return result
+
+func _normalize_quest_data(raw_quest: Dictionary, fallback_quest_id: String) -> Dictionary:
+	var normalized_quest: Dictionary = raw_quest.duplicate(true)
+	var quest_id := str(normalized_quest.get("quest_id", fallback_quest_id)).strip_edges()
+	if quest_id.is_empty():
+		quest_id = fallback_quest_id.strip_edges()
+
+	normalized_quest["quest_id"] = quest_id
+	normalized_quest.erase("_editor")
+	return normalized_quest
 
 
 ## 加载JSON文件
@@ -291,15 +350,6 @@ func get_all_locations() -> Dictionary:
 	return get_data("map_locations")
 
 
-## 部位伤害数据
-func get_limb_data(limb_id: String) -> Dictionary:
-	return get_item("limb_data", limb_id)
-
-
-func get_all_limb_data() -> Dictionary:
-	return get_data("limb_data")
-
-
 ## 遭遇数据
 func get_encounter(encounter_id: String) -> Dictionary:
 	return get_item("encounters", encounter_id)
@@ -399,15 +449,6 @@ func get_tool(tool_id: String) -> Dictionary:
 
 func get_all_tools() -> Dictionary:
 	return get_data("tools")
-
-
-## 战利品表数据
-func get_loot_table(location_id: String) -> Dictionary:
-	return get_item("loot_tables", location_id)
-
-
-func get_all_loot_tables() -> Dictionary:
-	return get_data("loot_tables")
 
 
 ## 天气数据

@@ -1,0 +1,39 @@
+{
+  "quest_id": "find_medicine",
+  "prerequisites": [
+    "zombie_hunter"
+  ],
+  "description": "前往废弃医院，搜索医疗物资",
+  "title": "寻找药品",
+  "rewards": {
+    "items": [
+      {
+        "id": 1005,
+        "count": 2
+      }
+    ],
+    "experience": 300,
+    "skill_points": 1
+  },
+  "objectives": [
+    {
+      "description": "前往医院",
+      "target": "hospital",
+      "current": false,
+      "type": "travel"
+    },
+    {
+      "description": "搜索医院",
+      "target": 2,
+      "current": 0,
+      "type": "search"
+    },
+    {
+      "description": "获得急救包",
+      "target": 1,
+      "current": 0,
+      "item_id": 1005,
+      "type": "collect"
+    }
+  ]
+}

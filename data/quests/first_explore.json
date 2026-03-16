@@ -1,0 +1,31 @@
+{
+  "quest_id": "first_explore",
+  "prerequisites": [
+    "tutorial_survive"
+  ],
+  "description": "前往废弃街道探索，至少搜索一次",
+  "title": "初次探索",
+  "rewards": {
+    "items": [
+      {
+        "id": 1008,
+        "count": 1
+      }
+    ],
+    "experience": 100
+  },
+  "objectives": [
+    {
+      "description": "前往废弃街道",
+      "target": "street_a",
+      "current": false,
+      "type": "travel"
+    },
+    {
+      "description": "搜索废弃街道",
+      "target": 1,
+      "current": 0,
+      "type": "search"
+    }
+  ]
+}
