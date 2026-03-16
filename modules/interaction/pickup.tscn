@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://modules/interaction/pickup.gd" id="1_pickup"]
 [ext_resource type="Script" path="res://modules/interaction/interactable.gd" id="2_interactable"]
+[ext_resource type="Script" path="res://systems/hover_outline_3d.gd" id="3_hover_outline"]
 
 [sub_resource type="QuadMesh" id="QuadMesh_icon"]
 size = Vector2(0.8, 0.9)
@@ -25,6 +26,11 @@ shape = SubResource("BoxShape3D_pickup")
 
 [node name="Interactable" type="Node3D" parent="."]
 script = ExtResource("2_interactable")
+hover_outline_target_path = NodePath("../HoverOutline3D")
+
+[node name="HoverOutline3D" type="Node3D" parent="."]
+script = ExtResource("3_hover_outline")
+target_node_paths = Array[NodePath]([NodePath("../VisualRoot/IconMesh"), NodePath("../FallbackLabel")])
 
 [node name="FallbackLabel" type="Label3D" parent="."]
 position = Vector3(0, 1.05, 0)

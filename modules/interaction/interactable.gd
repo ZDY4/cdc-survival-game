@@ -6,6 +6,7 @@ class_name Interactable
 # 2. Exports
 @export var interaction_name: String = ""
 @export var options: Array[InteractionOption] = []
+@export var hover_outline_target_path: NodePath = NodePath()
 
 # 4. Private variables
 var _runtime_options: Array[InteractionOption] = []
@@ -21,13 +22,29 @@ func set_options(new_options: Array[InteractionOption]) -> void:
 func get_interaction_name() -> String:
 	if not interaction_name.is_empty():
 		return interaction_name
-	var available := _get_available_options()
-	if not available.is_empty():
-		return available[0].get_option_name(self)
+	var primary_option := get_primary_option()
+	if primary_option:
+		return primary_option.get_option_name(self)
 	return name
 
 func get_available_options() -> Array:
 	return _get_available_options()
+
+func get_primary_option() -> InteractionOption:
+	var available := _get_available_options()
+	if available.is_empty():
+		return null
+	return available[0]
+
+func get_hover_outline_target() -> Node:
+	if not hover_outline_target_path.is_empty():
+		var explicit_target := get_node_or_null(hover_outline_target_path)
+		if explicit_target != null:
+			return explicit_target
+	var parent := get_parent()
+	if parent != null:
+		return parent
+	return self
 
 func execute_option(option: InteractionOption) -> void:
 	_execute_option(option)
@@ -39,7 +56,7 @@ func _get_available_options() -> Array:
 	for option in _runtime_options:
 		if option and option.is_available(self):
 			available.append(option)
-	available.sort_custom(func(a, b): return a.priority > b.priority)
+	available.sort_custom(func(a: InteractionOption, b: InteractionOption): return a.get_priority(self) > b.get_priority(self))
 	return available
 
 func _execute_option(option: InteractionOption) -> void:
@@ -47,10 +64,10 @@ func _execute_option(option: InteractionOption) -> void:
 		option.execute(self)
 
 func interact_primary() -> bool:
-	var available := _get_available_options()
-	if available.is_empty():
+	var primary_option := get_primary_option()
+	if primary_option == null:
 		return false
-	_execute_option(available[0])
+	_execute_option(primary_option)
 	return true
 
 # 7. Private methods

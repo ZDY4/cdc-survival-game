@@ -17,11 +17,17 @@ const STATE_INTERACTING_TAG_NAME: String = "State.Interacting"
 @export var leg_sprite_size: Vector2i = Vector2i(14, 34)
 @export var leg_spacing: float = 0.22
 @export var leg_height: float = 0.0
+@export var hover_outline_scale: float = 1.14
+@export var hover_outline_depth_offset: float = -0.002
 
 var _head_sprite: Sprite3D = null
 var _body_sprite: Sprite3D = null
 var _left_leg_sprite: Sprite3D = null
 var _right_leg_sprite: Sprite3D = null
+var _head_outline_sprite: Sprite3D = null
+var _body_outline_sprite: Sprite3D = null
+var _left_leg_outline_sprite: Sprite3D = null
+var _right_leg_outline_sprite: Sprite3D = null
 var _interaction_system: InteractionSystem = null
 var _gameplay_tag_stack: GameplayTagStackContainer = GameplayTagStackContainer.new()
 var _cached_interacting_tag: StringName = StringName()
@@ -29,6 +35,8 @@ var _warned_missing_gameplay_tags: bool = false
 var _character_id: String = ""
 var _character_data: Dictionary = {}
 var _resolver_result: Dictionary = {}
+var _hover_outline_visible: bool = false
+var _hover_outline_color: Color = Color(1.0, 1.0, 1.0, 1.0)
 
 func _ready() -> void:
 	_setup_interaction_system()
@@ -40,6 +48,16 @@ func set_placeholder_colors(new_head_color: Color, new_body_color: Color) -> voi
 	body_color = new_body_color
 	if _head_sprite and _body_sprite and _left_leg_sprite and _right_leg_sprite:
 		_refresh_placeholder_textures()
+
+func set_hover_outline_visible(visible: bool) -> void:
+	_hover_outline_visible = visible
+	_apply_hover_outline_visibility()
+
+func set_hover_outline_color(color: Color) -> void:
+	if _hover_outline_color == color:
+		return
+	_hover_outline_color = color
+	_refresh_hover_outline_textures()
 
 func initialize_from_character_data(
 	character_id: String,
@@ -65,7 +83,36 @@ func initialize_from_character_data(
 	leg_color = resolved_leg
 	set_placeholder_colors(resolved_head, resolved_body)
 
+func refresh_relation_state(resolver_result: Dictionary) -> void:
+	_resolver_result = resolver_result.duplicate(true)
+	set_meta("relation_result", _resolver_result.duplicate(true))
+	set_meta("resolved_attitude", str(_resolver_result.get("resolved_attitude", "neutral")))
+
 func _ensure_placeholder_sprites() -> void:
+	_body_outline_sprite = get_node_or_null("BodyOutlineSprite")
+	if not _body_outline_sprite:
+		_body_outline_sprite = Sprite3D.new()
+		_body_outline_sprite.name = "BodyOutlineSprite"
+		add_child(_body_outline_sprite)
+
+	_head_outline_sprite = get_node_or_null("HeadOutlineSprite")
+	if not _head_outline_sprite:
+		_head_outline_sprite = Sprite3D.new()
+		_head_outline_sprite.name = "HeadOutlineSprite"
+		add_child(_head_outline_sprite)
+
+	_left_leg_outline_sprite = get_node_or_null("LeftLegOutlineSprite")
+	if not _left_leg_outline_sprite:
+		_left_leg_outline_sprite = Sprite3D.new()
+		_left_leg_outline_sprite.name = "LeftLegOutlineSprite"
+		add_child(_left_leg_outline_sprite)
+
+	_right_leg_outline_sprite = get_node_or_null("RightLegOutlineSprite")
+	if not _right_leg_outline_sprite:
+		_right_leg_outline_sprite = Sprite3D.new()
+		_right_leg_outline_sprite.name = "RightLegOutlineSprite"
+		add_child(_right_leg_outline_sprite)
+
 	_body_sprite = get_node_or_null("BodySprite")
 	if not _body_sprite:
 		_body_sprite = Sprite3D.new()
@@ -90,13 +137,23 @@ func _ensure_placeholder_sprites() -> void:
 		_right_leg_sprite.name = "RightLegSprite"
 		add_child(_right_leg_sprite)
 
-	for sprite in [_body_sprite, _head_sprite, _left_leg_sprite, _right_leg_sprite]:
+	for sprite in [
+		_body_outline_sprite,
+		_head_outline_sprite,
+		_left_leg_outline_sprite,
+		_right_leg_outline_sprite,
+		_body_sprite,
+		_head_sprite,
+		_left_leg_sprite,
+		_right_leg_sprite
+	]:
 		sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 		sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 		sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
 		sprite.pixel_size = sprite_pixel_size
 
 	_layout_placeholder_sprites()
+	_apply_hover_outline_visibility()
 
 func _refresh_placeholder_textures() -> void:
 	_body_sprite.texture = _create_body_texture(body_sprite_size, body_color)
@@ -104,6 +161,7 @@ func _refresh_placeholder_textures() -> void:
 	var resolved_leg_color: Color = _resolve_leg_color()
 	_left_leg_sprite.texture = _create_leg_texture(leg_sprite_size, resolved_leg_color)
 	_right_leg_sprite.texture = _create_leg_texture(leg_sprite_size, resolved_leg_color)
+	_refresh_hover_outline_textures()
 
 func get_interaction_system() -> InteractionSystem:
 	return _interaction_system
@@ -235,3 +293,31 @@ func _layout_placeholder_sprites() -> void:
 	_right_leg_sprite.position = Vector3(leg_spacing * 0.5, leg_center_y, 0.0)
 	_body_sprite.position = Vector3(0.0, body_center_y, 0.0)
 	_head_sprite.position = Vector3(0.0, head_center_y, 0.0)
+
+	var outline_scale_vector := Vector3(hover_outline_scale, hover_outline_scale, 1.0)
+	_left_leg_outline_sprite.position = _left_leg_sprite.position + Vector3(0.0, 0.0, hover_outline_depth_offset)
+	_right_leg_outline_sprite.position = _right_leg_sprite.position + Vector3(0.0, 0.0, hover_outline_depth_offset)
+	_body_outline_sprite.position = _body_sprite.position + Vector3(0.0, 0.0, hover_outline_depth_offset)
+	_head_outline_sprite.position = _head_sprite.position + Vector3(0.0, 0.0, hover_outline_depth_offset)
+	_left_leg_outline_sprite.scale = outline_scale_vector
+	_right_leg_outline_sprite.scale = outline_scale_vector
+	_body_outline_sprite.scale = outline_scale_vector
+	_head_outline_sprite.scale = outline_scale_vector
+
+func _refresh_hover_outline_textures() -> void:
+	if _body_outline_sprite == null or _head_outline_sprite == null:
+		return
+	_body_outline_sprite.texture = _create_body_texture(body_sprite_size, _hover_outline_color)
+	_head_outline_sprite.texture = _create_head_texture(head_sprite_size, _hover_outline_color)
+	_left_leg_outline_sprite.texture = _create_leg_texture(leg_sprite_size, _hover_outline_color)
+	_right_leg_outline_sprite.texture = _create_leg_texture(leg_sprite_size, _hover_outline_color)
+
+func _apply_hover_outline_visibility() -> void:
+	for sprite in [
+		_body_outline_sprite,
+		_head_outline_sprite,
+		_left_leg_outline_sprite,
+		_right_leg_outline_sprite
+	]:
+		if sprite != null:
+			sprite.visible = _hover_outline_visible
