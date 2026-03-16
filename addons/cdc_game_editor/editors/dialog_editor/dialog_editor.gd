@@ -27,7 +27,6 @@ const DIALOG_DATA_DIR := "res://data/dialogues"
 const START_NODE_ID := "start"
 
 @onready var _dialog_id_input: LineEdit
-@onready var _file_dialog: FileDialog
 @onready var _open_dialog_popup: ConfirmationDialog
 @onready var _open_dialog_list: ItemList
 
@@ -46,6 +45,61 @@ func _get_property_panel_title() -> String:
 
 func _get_initial_status_text() -> String:
 	return "就绪"
+
+func _has_record_list() -> bool:
+	return true
+
+func _get_record_list_title() -> String:
+	return "对话列表"
+
+func _get_record_list_empty_text() -> String:
+	return "data/dialogues 为空"
+
+func _get_record_list_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var absolute_dir_path := ProjectSettings.globalize_path(DIALOG_DATA_DIR)
+	if not DirAccess.dir_exists_absolute(absolute_dir_path):
+		return entries
+
+	var dir := DirAccess.open(DIALOG_DATA_DIR)
+	if dir == null:
+		return entries
+
+	var file_names: Array[String] = []
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and file_name.ends_with(".json"):
+			file_names.append(file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	file_names.sort()
+	for dialog_file in file_names:
+		var dialog_id := dialog_file.get_basename()
+		entries.append({
+			"id": dialog_id,
+			"label": dialog_id
+		})
+
+	return entries
+
+func _get_record_list_selected_id() -> String:
+	return current_dialog_id
+
+func _is_record_list_entry_dirty(record_id: String) -> bool:
+	return has_unsaved_changes() and record_id == current_dialog_id
+
+func _on_record_list_item_selected(record_id: String) -> void:
+	var dialog_id := record_id.strip_edges()
+	if dialog_id.is_empty():
+		return
+	var path := _build_dialog_file_path(dialog_id)
+	if not FileAccess.file_exists(path):
+		_update_status("未找到对话文件: %s" % dialog_id)
+		_refresh_record_list()
+		return
+	_load_dialog(path)
 
 func _get_node_type_definitions() -> Array[Dictionary]:
 	return [
@@ -80,24 +134,17 @@ func _create_toolbar() -> void:
 	_add_toolbar_button("粘贴", _on_paste_nodes, "粘贴节点 (Ctrl+V)")
 	_add_toolbar_button("删除", _on_delete_selected, "删除选中节点 (Delete)")
 	_add_toolbar_separator()
-	_add_toolbar_button("导出JSON", _on_export_json, "导出为 JSON 格式")
-	_add_toolbar_button("导出GD", _on_export_gdscript, "导出为 GDScript 格式")
-	_add_toolbar_separator()
 	_add_toolbar_button("居中", _on_center_view, "居中视图")
 
 func _after_base_ready() -> void:
-	_setup_file_dialog()
 	_setup_open_dialog_popup()
+	_refresh_record_list()
 	if nodes.is_empty():
+		_begin_dirty_tracking_suspension()
 		_reset_dialog_graph(true)
+		_end_dirty_tracking_suspension()
+		_clear_dirty_state()
 		_update_status("已创建默认 Start 节点")
-
-func _setup_file_dialog() -> void:
-	_file_dialog = FileDialog.new()
-	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_file_dialog.add_filter("*.json; JSON 文件")
-	_file_dialog.add_filter("*.dlg; 对话文件")
-	add_child(_file_dialog)
 
 func _setup_open_dialog_popup() -> void:
 	_open_dialog_popup = ConfirmationDialog.new()
@@ -442,7 +489,11 @@ func _get_search_strings(data: Dictionary) -> Array[String]:
 	return values
 
 func _on_new_dialog() -> void:
+	_begin_dirty_tracking_suspension()
 	_reset_dialog_graph(true)
+	_end_dirty_tracking_suspension()
+	_mark_dirty()
+	_refresh_record_list()
 	_update_status("新建对话")
 
 func _reset_dialog_graph(create_default_start: bool) -> void:
@@ -461,20 +512,262 @@ func _on_open_dialog() -> void:
 	_open_dialog_popup.popup_centered(Vector2(760, 520))
 
 func _on_save_dialog() -> void:
+	_save_current_dialog()
+
+func _save_current_dialog() -> bool:
 	var dialog_id := current_dialog_id.strip_edges()
 	_set_dialog_id(dialog_id)
 
 	if not _is_valid_dialog_id(dialog_id):
 		_update_status("dialog_id 无效: 仅允许 a-z0-9_")
-		return
+		return false
 
 	if not _ensure_dialog_data_dir():
-		return
+		return false
 
 	var target_path := _build_dialog_file_path(dialog_id)
-	_save_dialog_to_path(target_path)
+	return _save_dialog_to_path(target_path)
+
+func _parse_position(value: Variant, fallback: Vector2) -> Vector2:
+	if value is Vector2:
+		return value
+	if value is Dictionary:
+		return Vector2(float(value.get("x", fallback.x)), float(value.get("y", fallback.y)))
+	return fallback
+
+func _serialize_position(value: Variant) -> Dictionary:
+	var position := value if value is Vector2 else Vector2.ZERO
+	return {
+		"x": position.x,
+		"y": position.y
+	}
+
+func _build_connections_from_node_fields(loaded_nodes: Array) -> Array[Dictionary]:
+	var built_connections: Array[Dictionary] = []
+	var seen: Dictionary = {}
+
+	for node_variant in loaded_nodes:
+		if not (node_variant is Dictionary):
+			continue
+		var node_data: Dictionary = node_variant
+		var from_id := str(node_data.get("id", "")).strip_edges()
+		if from_id.is_empty():
+			continue
+
+		match str(node_data.get("type", "")):
+			"dialog", "action":
+				var next_id := str(node_data.get("next", "")).strip_edges()
+				if not next_id.is_empty():
+					var key := "%s:%d:%s:%d" % [from_id, 0, next_id, 0]
+					if not seen.has(key):
+						seen[key] = true
+						built_connections.append({
+							"from": from_id,
+							"from_port": 0,
+							"to": next_id,
+							"to_port": 0
+						})
+			"choice":
+				var options: Array = node_data.get("options", [])
+				for i in range(options.size()):
+					var option: Dictionary = options[i]
+					var option_next := str(option.get("next", "")).strip_edges()
+					if option_next.is_empty():
+						continue
+					var option_key := "%s:%d:%s:%d" % [from_id, i, option_next, 0]
+					if seen.has(option_key):
+						continue
+					seen[option_key] = true
+					built_connections.append({
+						"from": from_id,
+						"from_port": i,
+						"to": option_next,
+						"to_port": 0
+					})
+			"condition":
+				var true_next := str(node_data.get("true_next", "")).strip_edges()
+				if not true_next.is_empty():
+					var true_key := "%s:%d:%s:%d" % [from_id, 0, true_next, 0]
+					if not seen.has(true_key):
+						seen[true_key] = true
+						built_connections.append({
+							"from": from_id,
+							"from_port": 0,
+							"to": true_next,
+							"to_port": 0
+						})
+
+				var false_next := str(node_data.get("false_next", "")).strip_edges()
+				if not false_next.is_empty():
+					var false_key := "%s:%d:%s:%d" % [from_id, 1, false_next, 0]
+					if not seen.has(false_key):
+						seen[false_key] = true
+						built_connections.append({
+							"from": from_id,
+							"from_port": 1,
+							"to": false_next,
+							"to_port": 0
+						})
+
+	return built_connections
+
+func _normalize_loaded_connections(loaded_nodes: Array, loaded_connections: Array) -> Array[Dictionary]:
+	var normalized_connections: Array[Dictionary] = []
+	var seen: Dictionary = {}
+
+	for conn_variant in loaded_connections:
+		if not (conn_variant is Dictionary):
+			continue
+		var from_id := str(conn_variant.get("from", "")).strip_edges()
+		var to_id := str(conn_variant.get("to", "")).strip_edges()
+		if from_id.is_empty() or to_id.is_empty():
+			continue
+		var from_port := int(conn_variant.get("from_port", 0))
+		var to_port := int(conn_variant.get("to_port", 0))
+		var key := "%s:%d:%s:%d" % [from_id, from_port, to_id, to_port]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		normalized_connections.append({
+			"from": from_id,
+			"from_port": from_port,
+			"to": to_id,
+			"to_port": to_port
+		})
+
+	if normalized_connections.is_empty():
+		return _build_connections_from_node_fields(loaded_nodes)
+
+	return normalized_connections
+
+func _normalize_loaded_nodes(loaded_nodes: Array, loaded_connections: Array) -> Array[Dictionary]:
+	var normalized_nodes: Array[Dictionary] = []
+	var node_map: Dictionary = {}
+	var missing_position_ids: Dictionary = {}
+	var unique_positions: Dictionary = {}
+
+	for node_variant in loaded_nodes:
+		if not (node_variant is Dictionary):
+			continue
+		var node_data: Dictionary = node_variant.duplicate(true)
+		var node_id := str(node_data.get("id", "")).strip_edges()
+		if node_id.is_empty():
+			continue
+
+		if node_data.has("position"):
+			var parsed_position := _parse_position(node_data.get("position"), Vector2.ZERO)
+			node_data["position"] = parsed_position
+			unique_positions["%.3f,%.3f" % [parsed_position.x, parsed_position.y]] = true
+		else:
+			missing_position_ids[node_id] = true
+
+		normalized_nodes.append(node_data)
+		node_map[node_id] = node_data
+
+	var should_layout_all := normalized_nodes.size() > 1 and (
+		missing_position_ids.size() == normalized_nodes.size()
+		or unique_positions.size() <= 1
+	)
+	var should_layout_missing := should_layout_all or missing_position_ids.size() > 0
+	if not should_layout_missing:
+		return normalized_nodes
+
+	var adjacency: Dictionary = {}
+	for conn in loaded_connections:
+		if not (conn is Dictionary):
+			continue
+		var from_id := str(conn.get("from", "")).strip_edges()
+		var to_id := str(conn.get("to", "")).strip_edges()
+		if from_id.is_empty() or to_id.is_empty():
+			continue
+		if not adjacency.has(from_id):
+			adjacency[from_id] = []
+		var next_nodes: Array = adjacency[from_id]
+		if not next_nodes.has(to_id):
+			next_nodes.append(to_id)
+			adjacency[from_id] = next_nodes
+
+	var start_id := START_NODE_ID
+	if not node_map.has(start_id):
+		start_id = ""
+		for node_data in normalized_nodes:
+			if bool(node_data.get("is_start", false)):
+				start_id = str(node_data.get("id", ""))
+				break
+		if start_id.is_empty() and not normalized_nodes.is_empty():
+			start_id = str(normalized_nodes[0].get("id", ""))
+
+	var depth_map: Dictionary = {}
+	var ordered_by_depth: Dictionary = {}
+	var queue: Array[String] = []
+	if not start_id.is_empty():
+		queue.append(start_id)
+		depth_map[start_id] = 0
+
+	while not queue.is_empty():
+		var current_id := queue.pop_front()
+		var current_depth := int(depth_map.get(current_id, 0))
+		if not ordered_by_depth.has(current_depth):
+			ordered_by_depth[current_depth] = []
+		var current_layer: Array = ordered_by_depth[current_depth]
+		if not current_layer.has(current_id):
+			current_layer.append(current_id)
+			ordered_by_depth[current_depth] = current_layer
+
+		for next_id_variant in adjacency.get(current_id, []):
+			var next_id := str(next_id_variant)
+			if next_id.is_empty() or not node_map.has(next_id):
+				continue
+			var next_depth := current_depth + 1
+			if not depth_map.has(next_id) or int(depth_map[next_id]) < next_depth:
+				depth_map[next_id] = next_depth
+				queue.append(next_id)
+
+	var disconnected_depth := 0
+	for depth_variant in ordered_by_depth.keys():
+		disconnected_depth = maxi(disconnected_depth, int(depth_variant) + 1)
+	for node_data in normalized_nodes:
+		var node_id := str(node_data.get("id", ""))
+		if depth_map.has(node_id):
+			continue
+		depth_map[node_id] = disconnected_depth
+		ordered_by_depth[disconnected_depth] = [node_id]
+		disconnected_depth += 1
+
+	var depth_keys: Array = ordered_by_depth.keys()
+	depth_keys.sort()
+	var layout_origin := Vector2(160, 180)
+	var column_spacing := 320.0
+	var row_spacing := 190.0
+
+	for depth_variant in depth_keys:
+		var depth := int(depth_variant)
+		var layer_ids: Array = ordered_by_depth[depth]
+		for i in range(layer_ids.size()):
+			var node_id := str(layer_ids[i])
+			if not node_map.has(node_id):
+				continue
+			if not should_layout_all and not missing_position_ids.has(node_id):
+				continue
+
+			var centered_index := float(i) - float(layer_ids.size() - 1) / 2.0
+			var positioned_node: Dictionary = node_map[node_id]
+			positioned_node["position"] = Vector2(
+				layout_origin.x + float(depth) * column_spacing,
+				layout_origin.y + centered_index * row_spacing
+			)
+			node_map[node_id] = positioned_node
+
+	for i in range(normalized_nodes.size()):
+		var node_data: Dictionary = normalized_nodes[i]
+		var node_id := str(node_data.get("id", ""))
+		if node_map.has(node_id):
+			normalized_nodes[i] = node_map[node_id]
+
+	return normalized_nodes
 
 func _load_dialog(path: String) -> void:
+	_begin_dirty_tracking_suspension()
 	_reset_dialog_graph(false)
 
 	var validation := JSON_VALIDATOR.validate_file(path, {
@@ -498,17 +791,20 @@ func _load_dialog(path: String) -> void:
 		]
 	})
 	if not bool(validation.get("ok", false)):
+		_end_dirty_tracking_suspension()
 		_update_status(str(validation.get("message", "[JSON] Unknown validation error")))
 		return
 
 	var root_data: Variant = validation.get("data", {})
 	if not (root_data is Dictionary):
+		_end_dirty_tracking_suspension()
 		_update_status("[JSON] %s | Invalid validator result: data must be Dictionary" % path)
 		return
 	var data: Dictionary = root_data
 
 	var loaded_nodes: Array = data.get("nodes", [])
-	var loaded_connections: Array = data.get("connections", [])
+	var loaded_connections: Array[Dictionary] = _normalize_loaded_connections(loaded_nodes, data.get("connections", []))
+	var normalized_nodes: Array[Dictionary] = _normalize_loaded_nodes(loaded_nodes, loaded_connections)
 	var loaded_dialog_id := str(data.get("dialog_id", "")).strip_edges()
 	if loaded_dialog_id.is_empty():
 		loaded_dialog_id = path.get_file().get_basename()
@@ -516,7 +812,7 @@ func _load_dialog(path: String) -> void:
 	_set_dialog_id(loaded_dialog_id)
 	current_file_path = path
 
-	for node_data in loaded_nodes:
+	for node_data in normalized_nodes:
 		_create_node_internal(node_data)
 
 	connections = loaded_connections
@@ -529,8 +825,11 @@ func _load_dialog(path: String) -> void:
 		)
 
 	_ensure_start_node()
+	_end_dirty_tracking_suspension()
 
 	dialog_loaded.emit(current_dialog_id)
+	_clear_dirty_state()
+	_refresh_record_list()
 	_update_status("Loaded: %s" % current_dialog_id)
 
 func _normalize_pasted_node_data(data: Dictionary) -> Dictionary:
@@ -562,14 +861,20 @@ func _on_delete_nodes_request(nodes_to_delete: Array) -> void:
 
 	super._on_delete_nodes_request(filtered_nodes)
 
-func _save_dialog_to_path(path: String, persist_as_current: bool = true) -> void:
+func _save_dialog_to_path(path: String) -> bool:
 	_sync_node_positions_from_graph()
 
 	var dialog_id := current_dialog_id if not current_dialog_id.is_empty() else "dialog_%d" % Time.get_ticks_msec()
 	var previous_file_path := current_file_path
+	var serialized_nodes: Array[Dictionary] = []
+	for node_variant in nodes.values():
+		var node_data: Dictionary = node_variant.duplicate(true)
+		node_data["position"] = _serialize_position(node_data.get("position", Vector2.ZERO))
+		serialized_nodes.append(node_data)
+
 	var data: Dictionary = {
 		"dialog_id": dialog_id,
-		"nodes": nodes.values(),
+		"nodes": serialized_nodes,
 		"connections": connections
 	}
 
@@ -578,74 +883,19 @@ func _save_dialog_to_path(path: String, persist_as_current: bool = true) -> void
 	if file:
 		file.store_string(json)
 		file.close()
-		if persist_as_current:
-			_remove_replaced_dialog_file(previous_file_path, path)
-			current_file_path = path
-			dialog_saved.emit(dialog_id)
-			_update_status("已保存 %s" % path)
-		else:
-			_update_status("已导出 %s" % path)
+		_remove_replaced_dialog_file(previous_file_path, path)
+		current_file_path = path
+		dialog_saved.emit(dialog_id)
+		_clear_dirty_state()
+		_refresh_record_list()
+		_update_status("已保存 %s" % path)
+		return true
 	else:
 		_update_status("无法保存文件")
+		return false
 
-func _on_export_json() -> void:
-	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_file_dialog.current_file = "%s.json" % (current_dialog_id if not current_dialog_id.is_empty() else "dialog_export")
-	_file_dialog.file_selected.connect(func(path: String): _save_dialog_to_path(path, false), CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
-
-func _on_export_gdscript() -> void:
-	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_file_dialog.current_file = "dialog_data.gd"
-	_file_dialog.file_selected.connect(func(path: String):
-		var output := _build_gdscript()
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file:
-			file.store_string(output)
-			file.close()
-			_update_status("已导出 GDScript")
-	, CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
-
-func _build_gdscript() -> String:
-	_sync_node_positions_from_graph()
-
-	var lines: Array[String] = []
-	lines.append("# Auto-generated dialog data")
-	lines.append("# 生成时间: %s" % Time.get_datetime_string_from_system())
-	lines.append("")
-	lines.append("const DIALOGS = {")
-
-	var dialog_key := current_dialog_id if not current_dialog_id.is_empty() else "dialog_001"
-	lines.append('\t"%s": {' % dialog_key)
-	lines.append('\t\t"nodes": [')
-
-	for node_id in nodes:
-		var node_data: Dictionary = nodes[node_id]
-		lines.append('\t\t\t{')
-		for key in node_data:
-			var value: Variant = node_data[key]
-			if value is String:
-				lines.append('\t\t\t\t"%s": "%s",' % [key, value])
-			else:
-				lines.append('\t\t\t\t"%s": %s,' % [key, str(value)])
-		lines.append('\t\t\t},')
-
-	lines.append('\t\t],')
-	lines.append('\t\t"connections": [')
-	for conn in connections:
-		lines.append('\t\t\t{')
-		lines.append('\t\t\t\t"from": "%s",' % conn.from)
-		lines.append('\t\t\t\t"to": "%s",' % conn.to)
-		lines.append('\t\t\t},')
-	lines.append('\t\t],')
-	lines.append('\t}')
-	lines.append('}')
-	lines.append("")
-	lines.append("static func get_dialog(dialog_id: String):")
-	lines.append("\treturn DIALOGS.get(dialog_id, {})")
-
-	return "\n".join(lines)
+func _save_before_close() -> bool:
+	return _save_current_dialog()
 
 func get_current_dialog_id() -> String:
 	return current_dialog_id

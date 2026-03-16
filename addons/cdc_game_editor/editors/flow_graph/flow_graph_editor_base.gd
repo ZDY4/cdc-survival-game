@@ -2,6 +2,7 @@
 extends Control
 
 signal selection_changed(selected_nodes: Array)
+signal dirty_state_changed(is_dirty: bool)
 
 const FLOW_GRAPH_CANVAS_SCRIPT := preload("res://addons/cdc_game_editor/editors/flow_graph/flow_graph_canvas.gd")
 const FLOW_GRAPH_NODE_SCRIPT := preload("res://addons/cdc_game_editor/editors/flow_graph/flow_graph_node.gd")
@@ -12,10 +13,15 @@ const PROPERTY_PANEL_SCRIPT := preload("res://addons/cdc_game_editor/utils/prope
 @onready var _graph_edit
 @onready var _property_panel
 @onready var _main_split: HSplitContainer
+@onready var _content_split: HSplitContainer
+@onready var _record_list_container: VBoxContainer
+@onready var _record_list_title: Label
+@onready var _record_list: ItemList
 @onready var _right_container: VBoxContainer
 @onready var _toolbar: HBoxContainer
 @onready var _search_box: LineEdit
 @onready var _status_bar: Label
+@onready var _close_confirmation_dialog: ConfirmationDialog
 
 var nodes: Dictionary = {}
 var connections: Array[Dictionary] = []
@@ -27,6 +33,10 @@ var _pending_property_panel_data: Dictionary = {}
 var _undo_redo_helper: RefCounted
 var _clipboard: RefCounted
 var editor_plugin = null
+var _record_list_refreshing: bool = false
+var _dirty: bool = false
+var _dirty_tracking_suspension: int = 0
+var _pending_close_callback: Callable = Callable()
 
 func _ready() -> void:
 	_clipboard = CLIPBOARD_SCRIPT.get_instance()
@@ -58,7 +68,32 @@ func _setup_ui() -> void:
 	var left_container := VBoxContainer.new()
 	left_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_main_split.add_child(left_container)
+
+	if _has_record_list():
+		_content_split = HSplitContainer.new()
+		_content_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_content_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_main_split.add_child(_content_split)
+
+		_record_list_container = VBoxContainer.new()
+		_record_list_container.custom_minimum_size = Vector2(_get_record_list_width(), 0)
+		_record_list_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_content_split.add_child(_record_list_container)
+
+		_record_list_title = Label.new()
+		_record_list_title.text = _get_record_list_title()
+		_record_list_container.add_child(_record_list_title)
+
+		_record_list = ItemList.new()
+		_record_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_record_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_record_list.item_selected.connect(_on_record_list_index_selected)
+		_record_list.item_activated.connect(_on_record_list_index_activated)
+		_record_list_container.add_child(_record_list)
+
+		_content_split.add_child(left_container)
+	else:
+		_main_split.add_child(left_container)
 
 	var search_container := HBoxContainer.new()
 	search_container.custom_minimum_size = Vector2(0, 30)
@@ -112,6 +147,17 @@ func _setup_ui() -> void:
 	_status_bar.text = _get_initial_status_text()
 	add_child(_status_bar)
 
+	_close_confirmation_dialog = ConfirmationDialog.new()
+	_close_confirmation_dialog.title = "未保存更改"
+	_close_confirmation_dialog.dialog_text = _get_unsaved_changes_dialog_text()
+	_close_confirmation_dialog.get_ok_button().text = "保存并关闭"
+	_close_confirmation_dialog.get_cancel_button().text = "取消"
+	_close_confirmation_dialog.add_button("不保存", true, "discard")
+	_close_confirmation_dialog.confirmed.connect(_on_close_dialog_confirmed)
+	_close_confirmation_dialog.canceled.connect(_on_close_dialog_canceled)
+	_close_confirmation_dialog.custom_action.connect(_on_close_dialog_custom_action)
+	add_child(_close_confirmation_dialog)
+
 func _create_toolbar() -> void:
 	_add_toolbar_button("复制", _on_copy_nodes, "复制选中节点 (Ctrl+C)")
 	_add_toolbar_button("粘贴", _on_paste_nodes, "粘贴节点 (Ctrl+V)")
@@ -145,6 +191,94 @@ func _get_editor_name() -> String:
 
 func _get_side_panel_width() -> int:
 	return 340
+
+func _has_record_list() -> bool:
+	return false
+
+func _get_record_list_title() -> String:
+	return "记录列表"
+
+func _get_record_list_empty_text() -> String:
+	return "暂无数据"
+
+func _get_record_list_width() -> int:
+	return 240
+
+func _get_min_graph_width() -> int:
+	return 640
+
+func _get_record_list_entries() -> Array[Dictionary]:
+	return []
+
+func _get_record_list_selected_id() -> String:
+	return ""
+
+func _is_record_list_entry_dirty(_record_id: String) -> bool:
+	return false
+
+func _on_record_list_item_selected(_record_id: String) -> void:
+	pass
+
+func _on_record_list_item_activated(record_id: String) -> void:
+	_on_record_list_item_selected(record_id)
+
+func _refresh_record_list() -> void:
+	if _record_list == null:
+		return
+
+	_record_list_refreshing = true
+	_record_list.clear()
+
+	var entries: Array[Dictionary] = _get_record_list_entries()
+	var selected_id: String = _get_record_list_selected_id()
+	var selected_index := -1
+
+	for entry in entries:
+		var record_id := str(entry.get("id", "")).strip_edges()
+		var label := str(entry.get("label", record_id)).strip_edges()
+		if _is_record_list_entry_dirty(record_id):
+			label += " *"
+		if record_id.is_empty() or label.is_empty():
+			continue
+		_record_list.add_item(label)
+		var item_index := _record_list.get_item_count() - 1
+		_record_list.set_item_metadata(item_index, record_id)
+		if record_id == selected_id:
+			selected_index = item_index
+
+	if _record_list.get_item_count() == 0:
+		_record_list.add_item(_get_record_list_empty_text())
+		_record_list.set_item_metadata(0, "")
+
+	if selected_index >= 0:
+		_record_list.select(selected_index)
+
+	if _record_list_title:
+		_record_list_title.text = "%s (%d)" % [_get_record_list_title(), entries.size()]
+
+	_record_list_refreshing = false
+
+func _on_record_list_index_selected(index: int) -> void:
+	if _record_list_refreshing:
+		return
+	var record_id := _get_record_list_id(index)
+	if record_id.is_empty():
+		return
+	_on_record_list_item_selected(record_id)
+
+func _on_record_list_index_activated(index: int) -> void:
+	if _record_list_refreshing:
+		return
+	var record_id := _get_record_list_id(index)
+	if record_id.is_empty():
+		return
+	_on_record_list_item_activated(record_id)
+
+func _get_record_list_id(index: int) -> String:
+	if _record_list == null or index < 0 or index >= _record_list.get_item_count():
+		return ""
+	var metadata: Variant = _record_list.get_item_metadata(index)
+	return str(metadata).strip_edges()
 
 func _add_toolbar_button(text: String, callback: Callable, tooltip: String = "") -> Button:
 	var btn := Button.new()
@@ -196,6 +330,7 @@ func _create_node(node_type: String, position: Vector2 = Vector2.ZERO, data: Dic
 		_undo_redo_helper.commit_action()
 
 	_create_node_internal(node_data)
+	_mark_dirty()
 	_update_status("创建%s" % str(_get_node_type_config(node_type).get("name", "节点")))
 	return node_id
 
@@ -280,6 +415,7 @@ func _on_connection_request(from_node: StringName, from_port: int, to_node: Stri
 	connections.append(conn_data)
 	_on_connection_added(conn_data)
 	_update_node_connection(from, from_port, to, to_port)
+	_mark_dirty()
 
 func _on_disconnection_request(from_node: StringName, from_port: int, to_node: StringName, to_port: int) -> void:
 	_graph_edit.disconnect_node(from_node, from_port, to_node, to_port)
@@ -292,6 +428,7 @@ func _on_disconnection_request(from_node: StringName, from_port: int, to_node: S
 			connections.remove_at(i)
 			_on_connection_removed(conn)
 			_update_node_disconnection(from, from_port, to, to_port)
+			_mark_dirty()
 			break
 
 func _on_connection_added(_conn: Dictionary) -> void:
@@ -409,6 +546,7 @@ func _on_delete_nodes_request(nodes_to_delete: Array) -> void:
 		_remove_node(node_id)
 
 	_clear_selection_state()
+	_mark_dirty()
 	_update_status("已删除 %d 个节点" % ids_to_delete.size())
 
 func _on_delete_selected() -> void:
@@ -430,6 +568,7 @@ func _on_node_data_changed(node_id: String, new_data: Dictionary) -> void:
 		_refresh_graph_node(node, new_data)
 	if node_id == selected_node_id and _inspected_node_id == node_id and not is_position_only_update:
 		_queue_property_panel_update(new_data)
+	_after_node_data_changed(node_id, previous_data, new_data, is_position_only_update)
 
 func _update_property_panel(data: Dictionary) -> void:
 	_property_panel.clear()
@@ -522,6 +661,8 @@ func _on_paste_nodes() -> void:
 			var normalized := _normalize_pasted_node_data(data)
 			if not normalized.is_empty():
 				_create_node_internal(normalized)
+		if not pasted.is_empty():
+			_mark_dirty()
 		_update_status("已粘贴 %d 个节点" % pasted.size())
 	else:
 		var pasted = _clipboard.paste_node()
@@ -531,6 +672,7 @@ func _on_paste_nodes() -> void:
 		if normalized.is_empty():
 			return
 		_create_node_internal(normalized)
+		_mark_dirty()
 		_update_status("已粘贴节点")
 
 func _on_undo() -> void:
@@ -579,7 +721,67 @@ func get_connections_count() -> int:
 	return connections.size()
 
 func has_unsaved_changes() -> bool:
-	return not nodes.is_empty()
+	return _dirty
+
+func _set_dirty_state(is_dirty: bool) -> void:
+	if _dirty == is_dirty:
+		return
+	_dirty = is_dirty
+	dirty_state_changed.emit(_dirty)
+	_refresh_record_list()
+
+func _mark_dirty() -> void:
+	if _dirty_tracking_suspension > 0:
+		return
+	_set_dirty_state(true)
+
+func _clear_dirty_state() -> void:
+	_set_dirty_state(false)
+
+func _begin_dirty_tracking_suspension() -> void:
+	_dirty_tracking_suspension += 1
+
+func _end_dirty_tracking_suspension() -> void:
+	_dirty_tracking_suspension = maxi(_dirty_tracking_suspension - 1, 0)
+
+func request_window_close(on_close: Callable) -> void:
+	if not has_unsaved_changes():
+		if on_close.is_valid():
+			on_close.call()
+		return
+
+	_pending_close_callback = on_close
+	_close_confirmation_dialog.dialog_text = _get_unsaved_changes_dialog_text()
+	_close_confirmation_dialog.popup_centered(Vector2i(420, 180))
+
+func _get_unsaved_changes_dialog_text() -> String:
+	return "当前编辑器有未保存的更改，是否先保存？"
+
+func _save_before_close() -> bool:
+	return false
+
+func _after_node_data_changed(_node_id: String, previous_data: Dictionary, new_data: Dictionary, _is_position_only_update: bool) -> void:
+	if previous_data != new_data:
+		_mark_dirty()
+
+func _on_close_dialog_confirmed() -> void:
+	if not _save_before_close():
+		return
+	_finish_pending_close()
+
+func _on_close_dialog_custom_action(action: StringName) -> void:
+	if String(action) != "discard":
+		return
+	_finish_pending_close()
+
+func _on_close_dialog_canceled() -> void:
+	_pending_close_callback = Callable()
+
+func _finish_pending_close() -> void:
+	var callback := _pending_close_callback
+	_pending_close_callback = Callable()
+	if callback.is_valid():
+		callback.call()
 
 func _sync_node_positions_from_graph() -> void:
 	if not _graph_edit:
@@ -626,12 +828,23 @@ func _update_main_split_layout() -> void:
 		return
 
 	var side_panel_width := _get_side_panel_width()
-	var min_graph_width := 640
+	var min_graph_width := _get_min_graph_width()
+	if _has_record_list():
+		min_graph_width += 220
 	var max_side_panel_width := maxi(260, total_width - min_graph_width)
 	side_panel_width = mini(side_panel_width, max_side_panel_width)
 
 	var split_offset := maxi(420, total_width - side_panel_width)
 	_main_split.split_offset = split_offset
+
+	if _content_split and is_instance_valid(_content_split):
+		var content_width := int(_content_split.size.x)
+		if content_width <= 0:
+			content_width = split_offset
+		var record_list_width := _get_record_list_width()
+		var max_record_list_width := maxi(180, content_width - _get_min_graph_width())
+		record_list_width = mini(record_list_width, max_record_list_width)
+		_content_split.split_offset = maxi(180, record_list_width)
 
 func _is_position_only_update(previous_data: Dictionary, new_data: Dictionary) -> bool:
 	if previous_data.is_empty():

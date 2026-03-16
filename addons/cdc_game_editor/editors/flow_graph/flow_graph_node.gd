@@ -123,11 +123,13 @@ func _on_dragged(_from: Vector2, to: Vector2) -> void:
 	if node_data.get("position", Vector2.ZERO) == to:
 		return
 	node_data["position"] = to
+	data_changed.emit(str(name), node_data.duplicate(true))
 
 func _on_position_offset_changed() -> void:
 	if node_data.get("position", Vector2.ZERO) == position_offset:
 		return
 	node_data["position"] = position_offset
+	data_changed.emit(str(name), node_data.duplicate(true))
 
 func _has_property(property_name: String) -> bool:
 	for property_info_variant in get_property_list():

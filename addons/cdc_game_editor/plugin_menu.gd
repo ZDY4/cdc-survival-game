@@ -407,6 +407,13 @@ func _create_editor_window(editor_key: String) -> bool:
 	return true
 
 func _on_editor_window_close_requested(editor_key: String) -> void:
+	var editor: Object = _editor_instances.get(editor_key, null)
+	if editor and editor.has_method("request_window_close"):
+		editor.call("request_window_close", Callable(self, "_hide_editor_window").bind(editor_key))
+		return
+	_hide_editor_window(editor_key)
+
+func _hide_editor_window(editor_key: String) -> void:
 	var editor_window: Window = _editor_windows.get(editor_key)
 	if editor_window:
 		editor_window.hide()

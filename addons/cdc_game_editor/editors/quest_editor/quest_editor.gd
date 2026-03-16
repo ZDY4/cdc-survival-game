@@ -51,6 +51,9 @@ var _editor_mode: String = MODE_RELATIONSHIP
 var _current_quest_id: String = ""
 var _focused_relationship_quest_id: String = ""
 var _validation_errors: Dictionary = {}
+var _dirty_quest_ids: Dictionary = {}
+var _persisted_quest_ids: Dictionary = {}
+var _deleted_persisted_quest_ids: Dictionary = {}
 
 
 func _get_editor_name() -> String:
@@ -67,6 +70,55 @@ func _get_property_panel_title() -> String:
 
 func _get_initial_status_text() -> String:
 	return "关系图模式 - 0 个任务"
+
+func _has_record_list() -> bool:
+	return true
+
+func _get_record_list_title() -> String:
+	return "Quest 列表"
+
+func _get_record_list_empty_text() -> String:
+	return "data/quests 为空"
+
+func _get_record_list_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var quest_ids: Array = _quests.keys()
+	quest_ids.sort()
+	for quest_id_variant in quest_ids:
+		var quest_id := str(quest_id_variant)
+		var quest: Dictionary = _quests.get(quest_id, {})
+		var title := str(quest.get("title", quest_id)).strip_edges()
+		var label := quest_id
+		if not title.is_empty() and title != quest_id:
+			label = "%s | %s" % [quest_id, title]
+		entries.append({
+			"id": quest_id,
+			"label": label
+		})
+	return entries
+
+func _get_record_list_selected_id() -> String:
+	if _editor_mode == MODE_FLOW and not _current_quest_id.is_empty():
+		return _current_quest_id
+	if not selected_node_id.is_empty() and _quests.has(selected_node_id):
+		return selected_node_id
+	return _focused_relationship_quest_id
+
+func _is_record_list_entry_dirty(record_id: String) -> bool:
+	return _dirty_quest_ids.has(record_id)
+
+func _on_record_list_item_selected(record_id: String) -> void:
+	var quest_id := record_id.strip_edges()
+	if quest_id.is_empty() or not _quests.has(quest_id):
+		return
+	if quest_id != _current_quest_id:
+		_show_flow_mode(quest_id)
+
+func _on_record_list_item_activated(record_id: String) -> void:
+	var quest_id := record_id.strip_edges()
+	if quest_id.is_empty() or not _quests.has(quest_id):
+		return
+	_show_flow_mode(quest_id)
 
 
 func _get_node_type_definitions() -> Array[Dictionary]:
@@ -122,6 +174,55 @@ func _get_flow_node_definitions() -> Array[Dictionary]:
 	]
 
 
+func _recalculate_dirty_state() -> void:
+	_set_dirty_state(not _dirty_quest_ids.is_empty() or not _deleted_persisted_quest_ids.is_empty())
+
+
+func _mark_quest_dirty(quest_id: String) -> void:
+	var normalized_id := quest_id.strip_edges()
+	if normalized_id.is_empty():
+		return
+	_dirty_quest_ids[normalized_id] = true
+	_recalculate_dirty_state()
+	_refresh_record_list()
+
+
+func _move_dirty_quest_id(old_id: String, new_id: String) -> void:
+	var old_key := old_id.strip_edges()
+	var new_key := new_id.strip_edges()
+	if old_key.is_empty() or new_key.is_empty():
+		return
+	_dirty_quest_ids.erase(old_key)
+	_dirty_quest_ids[new_key] = true
+	if _persisted_quest_ids.has(old_key):
+		_deleted_persisted_quest_ids[old_key] = true
+	_recalculate_dirty_state()
+	_refresh_record_list()
+
+
+func _handle_deleted_quest(quest_id: String) -> void:
+	var normalized_id := quest_id.strip_edges()
+	if normalized_id.is_empty():
+		return
+	_dirty_quest_ids.erase(normalized_id)
+	if _persisted_quest_ids.has(normalized_id):
+		_deleted_persisted_quest_ids[normalized_id] = true
+	else:
+		_deleted_persisted_quest_ids.erase(normalized_id)
+	_recalculate_dirty_state()
+	_refresh_record_list()
+
+
+func _reset_dirty_tracking_to_persisted_state() -> void:
+	_dirty_quest_ids.clear()
+	_deleted_persisted_quest_ids.clear()
+	_persisted_quest_ids.clear()
+	for quest_id_variant in _quests.keys():
+		_persisted_quest_ids[str(quest_id_variant)] = true
+	_clear_dirty_state()
+	_refresh_record_list()
+
+
 func _on_mode_button_pressed() -> void:
 	if _editor_mode == MODE_FLOW:
 		_show_relationship_mode(_current_quest_id)
@@ -136,17 +237,22 @@ func _on_graph_node_double_clicked(node_id: String) -> void:
 
 
 func _load_quests_from_directory() -> void:
+	_begin_dirty_tracking_suspension()
 	_quests.clear()
 	_validation_errors.clear()
 
 	var absolute_dir_path := ProjectSettings.globalize_path(QUEST_DATA_DIR)
 	if not DirAccess.dir_exists_absolute(absolute_dir_path):
+		_end_dirty_tracking_suspension()
+		_reset_dirty_tracking_to_persisted_state()
 		_update_status("未找到任务目录: %s" % QUEST_DATA_DIR)
 		_show_relationship_mode("")
 		return
 
 	var dir := DirAccess.open(QUEST_DATA_DIR)
 	if dir == null:
+		_end_dirty_tracking_suspension()
+		_reset_dirty_tracking_to_persisted_state()
 		_update_status("无法读取任务目录: %s" % QUEST_DATA_DIR)
 		return
 
@@ -173,6 +279,9 @@ func _load_quests_from_directory() -> void:
 
 	_validate_all()
 	_show_relationship_mode("")
+	_end_dirty_tracking_suspension()
+	_reset_dirty_tracking_to_persisted_state()
+	_refresh_record_list()
 	quest_loaded.emit(_current_quest_id)
 
 
@@ -334,6 +443,7 @@ func _show_relationship_mode(focus_quest_id: String) -> void:
 	_update_toolbar_state()
 	if not focus_quest_id.is_empty():
 		_select_display_node(focus_quest_id)
+	_refresh_record_list()
 	_update_status("关系图模式 - %d 个任务" % _quests.size())
 
 
@@ -356,6 +466,7 @@ func _show_flow_mode(quest_id: String, selected_flow_node_id: String = "") -> vo
 	else:
 		_refresh_property_panel_for_current_mode()
 
+	_refresh_record_list()
 	_update_status("单任务模式 - %s" % quest_id)
 
 
@@ -798,6 +909,7 @@ func _on_property_changed(property_name: String, new_value: Variant, _old_value:
 	_validate_quest(_current_quest_id)
 	_refresh_property_panel_for_current_mode()
 	_update_validation_panel()
+	_mark_quest_dirty(_current_quest_id)
 
 
 func _update_selected_flow_node_property(property_name: String, new_value: Variant) -> void:
@@ -904,6 +1016,7 @@ func _update_current_flow_node(node_id: String, node_data: Dictionary, rebuild_g
 	quest["flow"] = flow
 	_quests[_current_quest_id] = quest
 	_validate_quest(_current_quest_id)
+	_mark_quest_dirty(_current_quest_id)
 
 	if rebuild_graph:
 		_prune_invalid_flow_connections()
@@ -943,15 +1056,27 @@ func _change_quest_id(old_id: String, new_id: String) -> void:
 		other["prerequisites"] = prerequisites
 		_quests[quest_id] = other
 
+	_move_dirty_quest_id(old_id, new_id)
 	_current_quest_id = new_id
 	_validate_all()
 	_refresh_property_panel_for_current_mode()
 	_update_validation_panel()
+	_refresh_record_list()
 	_update_status("已修改任务ID: %s" % new_id)
 
 
 func _refresh_property_panel_for_current_mode() -> void:
 	_queue_property_panel_update({})
+
+
+func _after_node_data_changed(node_id: String, previous_data: Dictionary, new_data: Dictionary, is_position_only_update: bool) -> void:
+	super._after_node_data_changed(node_id, previous_data, new_data, is_position_only_update)
+	if previous_data == new_data:
+		return
+	if _editor_mode == MODE_RELATIONSHIP and _quests.has(node_id):
+		_mark_quest_dirty(node_id)
+	elif _editor_mode == MODE_FLOW and not _current_quest_id.is_empty():
+		_mark_quest_dirty(_current_quest_id)
 
 
 func _select_display_node(node_id: String) -> void:
@@ -970,6 +1095,7 @@ func _on_connection_request(from_node: StringName, from_port: int, to_node: Stri
 		return
 	super._on_connection_request(from_node, from_port, to_node, to_port)
 	_sync_flow_connections_to_store()
+	_mark_quest_dirty(_current_quest_id)
 
 
 func _on_disconnection_request(from_node: StringName, from_port: int, to_node: StringName, to_port: int) -> void:
@@ -978,6 +1104,7 @@ func _on_disconnection_request(from_node: StringName, from_port: int, to_node: S
 		return
 	super._on_disconnection_request(from_node, from_port, to_node, to_port)
 	_sync_flow_connections_to_store()
+	_mark_quest_dirty(_current_quest_id)
 
 
 func _on_add_node_requested(node_type: String, graph_position: Vector2, pending_connection: Dictionary = {}) -> void:
@@ -986,6 +1113,7 @@ func _on_add_node_requested(node_type: String, graph_position: Vector2, pending_
 		return
 	super._on_add_node_requested(node_type, graph_position, pending_connection)
 	_sync_flow_nodes_to_store()
+	_mark_quest_dirty(_current_quest_id)
 
 
 func _on_delete_selected() -> void:
@@ -996,6 +1124,7 @@ func _on_delete_selected() -> void:
 	_sync_displayed_graph_to_store()
 	_validate_quest(_current_quest_id)
 	_update_validation_panel()
+	_mark_quest_dirty(_current_quest_id)
 
 
 func _on_paste_nodes() -> void:
@@ -1004,6 +1133,7 @@ func _on_paste_nodes() -> void:
 		return
 	super._on_paste_nodes()
 	_sync_flow_nodes_to_store()
+	_mark_quest_dirty(_current_quest_id)
 
 
 func _normalize_pasted_node_data(data: Dictionary) -> Dictionary:
@@ -1059,6 +1189,7 @@ func _on_new_quest() -> void:
 	var quest_id := "quest_%d" % Time.get_ticks_msec()
 	_quests[quest_id] = _build_new_quest(quest_id)
 	_validate_quest(quest_id)
+	_mark_quest_dirty(quest_id)
 	_show_flow_mode(quest_id)
 
 
@@ -1101,6 +1232,7 @@ func _on_delete_current_quest() -> void:
 	var deleted_quest_id := _current_quest_id
 	_quests.erase(deleted_quest_id)
 	_validation_errors.erase(deleted_quest_id)
+	_handle_deleted_quest(deleted_quest_id)
 	_current_quest_id = ""
 	_show_relationship_mode("")
 	_update_status("已删除任务: %s" % deleted_quest_id)
@@ -1209,9 +1341,13 @@ func _get_output_port_count(node_data: Dictionary) -> int:
 
 
 func _on_save_quests() -> void:
+	_save_all_quests()
+
+
+func _save_all_quests() -> bool:
 	_sync_displayed_graph_to_store()
 	if not _ensure_quest_dir():
-		return
+		return false
 
 	var quest_ids: Array = _quests.keys()
 	quest_ids.sort()
@@ -1240,7 +1376,10 @@ func _on_save_quests() -> void:
 
 	var emitted_quest_id := _current_quest_id if not _current_quest_id.is_empty() else _focused_relationship_quest_id
 	quest_saved.emit(emitted_quest_id)
+	_reset_dirty_tracking_to_persisted_state()
+	_refresh_record_list()
 	_update_status("已保存 %d 个任务" % _quests.size())
+	return true
 
 
 func _ensure_quest_dir() -> bool:
@@ -1285,6 +1424,10 @@ func _serialize_position(position_value: Variant) -> Dictionary:
 
 func _on_load_quests() -> void:
 	_load_quests_from_directory()
+
+
+func _save_before_close() -> bool:
+	return _save_all_quests()
 
 
 func _validate_quest(quest_id: String) -> bool:
