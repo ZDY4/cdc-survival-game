@@ -10,6 +10,7 @@ const Interactable = preload("res://modules/interaction/interactable.gd")
 const PathPreviewSystem = preload("res://systems/path_preview_system.gd")
 const PathPreview = preload("res://systems/path_preview.gd")
 const GridHoverCornerOverlay = preload("res://systems/grid_hover_corner_overlay.gd")
+const InteractionContextMenu = preload("res://ui/interaction_context_menu.gd")
 
 signal move_requested(world_pos: Vector3)
 signal movement_completed
@@ -26,6 +27,7 @@ var _path_preview_system: PathPreviewSystem = null
 var _navigator: GridNavigator = null
 var _path_preview: PathPreview = null
 var _hover_corner_overlay: GridHoverCornerOverlay = null
+var _interaction_context_menu: InteractionContextMenu = null
 var _is_interaction_in_progress: bool = false
 var _is_dialog_active: bool = false
 var _interaction_state_tag_applied: bool = false
@@ -34,6 +36,8 @@ var _interaction_target_state_tag_applied: bool = false
 var _active_hover_cursor: Texture2D = null
 var _active_hover_hotspot: Vector2 = Vector2.ZERO
 var _hover_cursor_update_timer: float = 0.0
+var _pending_interaction_target: Node = null
+var _pending_interaction_options: Array[InteractionOption] = []
 
 @export var max_preview_path_points: int = 200
 @export var max_preview_distance: float = 40.0
@@ -54,6 +58,7 @@ func _ready() -> void:
 	_setup_equipment_system()
 	_setup_vision_system()
 	_setup_path_preview_system()
+	_setup_interaction_context_menu()
 	_setup_dialog_state_tracking()
 
 	if not _grid_world:
@@ -197,8 +202,11 @@ func handle_secondary_input(event: InputEvent) -> bool:
 	var interaction_system := get_interaction_system()
 	if not interaction_system or not _scene_root:
 		return true
+	var viewport := _scene_root.get_viewport()
+	if viewport and _is_hovering_blocking_ui(viewport):
+		return true
 	var screen_pos := interaction_system.get_screen_position(event)
-	call_deferred("_show_interaction_options", screen_pos, interaction_system, _scene_root)
+	_show_interaction_options(screen_pos, interaction_system, _scene_root)
 	return true
 
 func cancel_movement() -> void:
@@ -238,45 +246,43 @@ func _on_movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_in
 	movement_step_completed.emit(grid_pos, world_pos, step_index, total_steps)
 
 func _show_interaction_options(screen_pos: Vector2, interaction_system: InteractionSystem, scene_root: Node) -> void:
-	if not interaction_system or not scene_root or not DialogModule:
+	if not interaction_system or not scene_root or not _interaction_context_menu:
 		return
 	var hit := interaction_system.raycast_screen_position(scene_root, screen_pos)
 	if hit.is_empty():
+		_finalize_interaction_menu_close()
 		return
 
 	var interactable := _resolve_interactable_from_hit(hit)
 	if not interactable:
+		_finalize_interaction_menu_close()
 		return
 	if not interactable.has_method("get_available_options"):
+		_finalize_interaction_menu_close()
 		return
 
 	var options: Array = interactable.get_available_options()
 	if options.is_empty():
+		_finalize_interaction_menu_close()
 		return
 
 	var option_names: Array[String] = []
+	var available_options: Array[InteractionOption] = []
 	for option in options:
-		if option:
-			option_names.append(option.get_option_name(interactable))
+		var interaction_option := option as InteractionOption
+		if interaction_option == null:
+			continue
+		option_names.append(interaction_option.get_option_name(interactable))
+		available_options.append(interaction_option)
 	if option_names.is_empty():
+		_finalize_interaction_menu_close()
 		return
 
+	_pending_interaction_target = interactable
+	_pending_interaction_options = available_options
 	_set_interaction_target_from_interactable(interactable)
+	_interaction_context_menu.show_options(screen_pos, option_names)
 	_set_interaction_in_progress(true)
-	var chosen_index: int = await DialogModule.show_choices(option_names)
-	_set_interaction_in_progress(false)
-	if chosen_index < 0 or chosen_index >= options.size():
-		return
-	var chosen = options[chosen_index]
-	if not chosen:
-		return
-	_set_interaction_target_from_interactable(interactable)
-	if interactable.has_method("execute_option"):
-		interactable.execute_option(chosen)
-	elif interactable.has_method("_execute_option"):
-		interactable._execute_option(chosen)
-	if not is_movement_input_blocked():
-		_set_interaction_target_actor(null)
 
 func _setup_dialog_state_tracking() -> void:
 	if not DialogModule:
@@ -356,6 +362,17 @@ func _setup_path_preview_system() -> void:
 	move_requested.connect(_path_preview_system.on_move_requested)
 	movement_completed.connect(_path_preview_system.on_movement_completed)
 	_apply_preview_settings()
+
+func _setup_interaction_context_menu() -> void:
+	if _interaction_context_menu != null:
+		return
+	_interaction_context_menu = InteractionContextMenu.new()
+	_interaction_context_menu.name = "InteractionContextMenu"
+	add_child(_interaction_context_menu)
+	if not _interaction_context_menu.option_selected.is_connected(_on_interaction_menu_option_selected):
+		_interaction_context_menu.option_selected.connect(_on_interaction_menu_option_selected)
+	if not _interaction_context_menu.menu_closed.is_connected(_on_interaction_menu_closed):
+		_interaction_context_menu.menu_closed.connect(_on_interaction_menu_closed)
 
 func _initialize_path_preview_system() -> void:
 	if not _scene_root or not _path_preview_system:
@@ -512,6 +529,37 @@ func _apply_hover_cursor(cursor_texture: Texture2D, hotspot: Vector2) -> void:
 		return
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
 
+func _on_interaction_menu_option_selected(index: int) -> void:
+	var interactable := _pending_interaction_target
+	if interactable == null or not is_instance_valid(interactable):
+		_finalize_interaction_menu_close()
+		return
+	if index < 0 or index >= _pending_interaction_options.size():
+		_finalize_interaction_menu_close()
+		return
+
+	var chosen := _pending_interaction_options[index]
+	if chosen == null:
+		_finalize_interaction_menu_close()
+		return
+
+	_set_interaction_target_from_interactable(interactable)
+	if interactable.has_method("execute_option"):
+		interactable.execute_option(chosen)
+	elif interactable.has_method("_execute_option"):
+		interactable._execute_option(chosen)
+	_finalize_interaction_menu_close()
+
+func _on_interaction_menu_closed() -> void:
+	_finalize_interaction_menu_close()
+
+func _finalize_interaction_menu_close() -> void:
+	_pending_interaction_target = null
+	_pending_interaction_options.clear()
+	_set_interaction_in_progress(false)
+	if not is_movement_input_blocked():
+		_set_interaction_target_actor(null)
+
 func _try_interact_screen_position(
 	screen_pos: Vector2,
 	interaction_system: InteractionSystem,
@@ -616,5 +664,5 @@ func _find_interactable_component(node: Node) -> Interactable:
 
 func _is_secondary_pressed(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
-		return event.button_index == MOUSE_BUTTON_RIGHT and event.pressed
+		return event.button_index == MOUSE_BUTTON_RIGHT and not event.pressed
 	return false

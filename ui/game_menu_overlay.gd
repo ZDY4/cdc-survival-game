@@ -124,9 +124,11 @@ func _input(event: InputEvent) -> void:
 func _build_overlay() -> void:
 	_menu_root = Control.new()
 	_menu_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_menu_root)
 
 	_status_label = Label.new()
+	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.anchor_left = 0.5
 	_status_label.anchor_right = 0.5

@@ -4,6 +4,8 @@
 [ext_resource type="Script" uid="uid://dow247j7enhrh" path="res://systems/spawn/ai_spawn_point.gd" id="2_7y8c1"]
 [ext_resource type="Script" uid="uid://dkonul44dxcvu" path="res://systems/fog_of_war_adapter.gd" id="3_fow1"]
 [ext_resource type="Script" uid="uid://btvu5utkorymk" path="res://systems/camera_controller_3d.gd" id="4_cam"]
+[ext_resource type="PackedScene" path="res://modules/interaction/pickup.tscn" id="5_pickup"]
+[ext_resource type="Script" uid="uid://5n0amu5c5jgc" path="res://systems/spawn/player_spawn_point.gd" id="6_player_spawn"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_1"]
 size = Vector3(100, 0.1, 100)
@@ -22,6 +24,7 @@ script = ExtResource("4_cam")
 [node name="GridFloor" type="StaticBody3D" parent="." unique_id=698765607]
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="GridFloor" unique_id=1711515553]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.10968971, -0.018777847, -0.0004711151)
 mesh = SubResource("BoxMesh_1")
 skeleton = NodePath("../..")
 
@@ -32,23 +35,43 @@ script = ExtResource("3_fow1")
 map_id = "game_world_3d"
 bounds_node = NodePath("GridFloor/MeshInstance3D")
 
+[node name="PlayerSpawn" type="Marker3D" parent="." unique_id=905004213]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0, 0.5)
+script = ExtResource("6_player_spawn")
+
 [node name="MerchantSpawn" type="Marker3D" parent="." unique_id=834371492]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 0, 3.5)
 script = ExtResource("2_7y8c1")
 spawn_id = "gw3d_merchant_spawn"
 character_id = "trader_lao_wang"
 
 [node name="CivilianSpawn" type="Marker3D" parent="." unique_id=542957242]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0, 2.5)
 script = ExtResource("2_7y8c1")
 spawn_id = "gw3d_civilian_spawn"
 character_id = "survivor_xiao_ming"
 
 [node name="EnemySpawn" type="Marker3D" parent="." unique_id=284197626]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, -5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 0, -4.5)
 script = ExtResource("2_7y8c1")
 spawn_id = "gw3d_enemy_spawn"
 character_id = "zombie_walker"
 respawn_enabled = true
 respawn_delay = 20.0
 spawn_radius = 2.0
+
+[node name="PickupMedkit" parent="." unique_id=154335612 instance=ExtResource("5_pickup")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.25, 1)
+item_id = "1005"
+
+[node name="PickupCannedFood" parent="." unique_id=776297760 instance=ExtResource("5_pickup")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.25, 1)
+item_id = "1007"
+min_count = 2
+max_count = 4
+
+[node name="PickupScrapMetal" parent="." unique_id=482756856 instance=ExtResource("5_pickup")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 3)
+item_id = "1010"
+min_count = 3
+max_count = 6

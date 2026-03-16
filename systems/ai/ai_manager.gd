@@ -97,9 +97,16 @@ func spawn_actor(character_id: String, world_pos: Vector3, context: Dictionary =
 			return existing
 		active_actors.erase(spawn_id)
 
+	var spawn_world_pos: Vector3 = _snap_world_pos_to_grid(world_pos)
 	var character_data: Dictionary = _get_character_data_internal(resolved_id)
 	var relation_result: Dictionary = _relation_resolver.resolve_for_player(resolved_id, character_data)
-	var actor: Node3D = _spawn_character_actor(resolved_id, character_data, relation_result, world_pos, spawn_id)
+	var actor: Node3D = _spawn_character_actor(
+		resolved_id,
+		character_data,
+		relation_result,
+		spawn_world_pos,
+		spawn_id
+	)
 	if not actor:
 		return null
 
@@ -318,6 +325,14 @@ func _get_character_data_internal(character_id: String) -> Dictionary:
 	if data is Dictionary:
 		return (data as Dictionary).duplicate(true)
 	return {}
+
+func _snap_world_pos_to_grid(world_pos: Vector3) -> Vector3:
+	if not GridMovementSystem or not GridMovementSystem.has_method("snap_to_grid"):
+		return world_pos
+
+	var snapped_world_pos: Vector3 = GridMovementSystem.snap_to_grid(world_pos)
+	snapped_world_pos.y = world_pos.y
+	return snapped_world_pos
 
 func _get_blocker_cells() -> Array[Vector3i]:
 	var cells: Array[Vector3i] = []

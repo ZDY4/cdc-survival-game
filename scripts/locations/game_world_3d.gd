@@ -47,7 +47,7 @@ func _spawn_player() -> void:
 		_player = PlayerController.new()
 
 	add_child(_player)
-	_player.global_position = Vector3(0, 0, 0)
+	_player.global_position = _resolve_player_spawn_position(_player.global_position)
 	_player.set_grid_world(GridMovementSystem.grid_world)
 	GameState.player_position_3d = _player.global_position
 
@@ -77,4 +77,20 @@ func get_player() -> PlayerController:
 
 func get_camera() -> CameraController3D:
 	return _camera_controller
+
+func _resolve_player_spawn_position(fallback_world_pos: Vector3) -> Vector3:
+	var spawn_world_pos: Vector3 = fallback_world_pos
+	var player_spawn_node := get_node_or_null("PlayerSpawn")
+	if player_spawn_node:
+		if player_spawn_node.has_method("get_spawn_position"):
+			spawn_world_pos = player_spawn_node.get_spawn_position()
+		elif player_spawn_node is Node3D:
+			spawn_world_pos = player_spawn_node.global_position
+
+	if not GridMovementSystem or not GridMovementSystem.has_method("snap_to_grid"):
+		return spawn_world_pos
+
+	var snapped_world_pos: Vector3 = GridMovementSystem.snap_to_grid(spawn_world_pos)
+	snapped_world_pos.y = spawn_world_pos.y
+	return snapped_world_pos
 

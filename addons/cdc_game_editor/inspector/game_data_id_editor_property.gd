@@ -55,33 +55,64 @@ func _reload_options() -> void:
 		return
 
 	var current_value: String = _get_current_property_value()
-	var ids: Array[String] = _fetch_data_ids()
+	var entries: Array[Dictionary] = _fetch_data_entries()
 	_is_refreshing = true
 	_option_button.clear()
 	_option_button.add_item("<None>")
 	_option_button.set_item_metadata(0, "")
 
 	var index: int = 1
-	for id in ids:
-		_option_button.add_item(id)
-		_option_button.set_item_metadata(index, id)
+	var known_ids: Array[String] = []
+	for entry in entries:
+		var id_text: String = str(entry.get("id", "")).strip_edges()
+		if id_text.is_empty():
+			continue
+		var label_text: String = str(entry.get("label", id_text)).strip_edges()
+		if label_text.is_empty():
+			label_text = id_text
+		_option_button.add_item(label_text)
+		_option_button.set_item_metadata(index, id_text)
+		known_ids.append(id_text)
 		index += 1
 
-	if not current_value.is_empty() and not ids.has(current_value):
+	if not current_value.is_empty() and not known_ids.has(current_value):
 		_option_button.add_item("%s (missing)" % current_value)
 		_option_button.set_item_metadata(index, current_value)
 
 	_is_refreshing = false
 
-func _fetch_data_ids() -> Array[String]:
+func _fetch_data_entries() -> Array[Dictionary]:
+	if _plugin_menu and _plugin_menu.has_method("get_data_id_entries"):
+		var entry_result: Variant = _plugin_menu.call("get_data_id_entries", _data_kind)
+		if entry_result is Array:
+			var entries: Array[Dictionary] = []
+			for value in entry_result:
+				if value is Dictionary:
+					var entry: Dictionary = value
+					var id_text: String = str(entry.get("id", "")).strip_edges()
+					if id_text.is_empty():
+						continue
+					var label_text: String = str(entry.get("label", id_text)).strip_edges()
+					entries.append({
+						"id": id_text,
+						"label": label_text if not label_text.is_empty() else id_text
+					})
+			if not entries.is_empty():
+				return entries
+
 	if _plugin_menu and _plugin_menu.has_method("get_data_ids"):
 		var result: Variant = _plugin_menu.call("get_data_ids", _data_kind)
 		if result is Array:
-			var ids: Array[String] = []
+			var fallback_entries: Array[Dictionary] = []
 			for value in result:
-				ids.append(str(value))
-			ids.sort()
-			return ids
+				var id_text: String = str(value).strip_edges()
+				if id_text.is_empty():
+					continue
+				fallback_entries.append({
+					"id": id_text,
+					"label": id_text
+				})
+			return fallback_entries
 	return []
 
 func _get_current_property_value() -> String:
