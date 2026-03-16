@@ -1,27 +1,86 @@
 {
-  "quest_id": "zombie_hunter",
-  "prerequisites": [
-    "first_explore"
-  ],
-  "description": "在街道上击败3只僵尸",
-  "title": "僵尸猎人",
-  "rewards": {
-    "items": [
-      {
-        "id": 1006,
-        "count": 3
-      }
-    ],
-    "experience": 200,
-    "unlock_location": "hospital"
-  },
-  "objectives": [
-    {
-      "description": "击败僵尸",
-      "target": 3,
-      "current": 0,
-      "enemy_type": "zombie",
-      "type": "kill"
-    }
-  ]
+	"quest_id": "zombie_hunter",
+	"title": "僵尸猎人",
+	"description": "在街道上击败3只僵尸",
+	"prerequisites": [
+		"first_explore"
+	],
+	"time_limit": -1,
+	"flow": {
+		"start_node_id": "start",
+		"nodes": {
+			"start": {
+				"id": "start",
+				"type": "start",
+				"position": {
+					"x": 120,
+					"y": 160
+				}
+			},
+			"step_1": {
+				"id": "step_1",
+				"type": "objective",
+				"position": {
+					"x": 420,
+					"y": 160
+				},
+				"objective_type": "kill",
+				"description": "击败僵尸",
+				"enemy_type": "zombie",
+				"count": 3
+			},
+			"reward_1": {
+				"id": "reward_1",
+				"type": "reward",
+				"position": {
+					"x": 720,
+					"y": 160
+				},
+				"rewards": {
+					"items": [
+						{
+							"id": 1006,
+							"count": 3
+						}
+					],
+					"experience": 200,
+					"unlock_location": "hospital"
+				}
+			},
+			"end": {
+				"id": "end",
+				"type": "end",
+				"position": {
+					"x": 1020,
+					"y": 160
+				}
+			}
+		},
+		"connections": [
+			{
+				"from": "start",
+				"to": "step_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_1",
+				"to": "reward_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "reward_1",
+				"to": "end",
+				"from_port": 0,
+				"to_port": 0
+			}
+		]
+	},
+	"_editor": {
+		"relationship_position": {
+			"x": 700,
+			"y": 120
+		}
+	}
 }

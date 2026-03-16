@@ -1,39 +1,121 @@
 {
-  "quest_id": "find_medicine",
-  "prerequisites": [
-    "zombie_hunter"
-  ],
-  "description": "前往废弃医院，搜索医疗物资",
-  "title": "寻找药品",
-  "rewards": {
-    "items": [
-      {
-        "id": 1005,
-        "count": 2
-      }
-    ],
-    "experience": 300,
-    "skill_points": 1
-  },
-  "objectives": [
-    {
-      "description": "前往医院",
-      "target": "hospital",
-      "current": false,
-      "type": "travel"
-    },
-    {
-      "description": "搜索医院",
-      "target": 2,
-      "current": 0,
-      "type": "search"
-    },
-    {
-      "description": "获得急救包",
-      "target": 1,
-      "current": 0,
-      "item_id": 1005,
-      "type": "collect"
-    }
-  ]
+	"quest_id": "find_medicine",
+	"title": "寻找药品",
+	"description": "前往废弃医院，搜索医疗物资",
+	"prerequisites": [
+		"zombie_hunter"
+	],
+	"time_limit": -1,
+	"flow": {
+		"start_node_id": "start",
+		"nodes": {
+			"start": {
+				"id": "start",
+				"type": "start",
+				"position": {
+					"x": 120,
+					"y": 160
+				}
+			},
+			"step_1": {
+				"id": "step_1",
+				"type": "objective",
+				"position": {
+					"x": 420,
+					"y": 160
+				},
+				"objective_type": "travel",
+				"description": "前往医院",
+				"target": "hospital",
+				"count": 1
+			},
+			"step_2": {
+				"id": "step_2",
+				"type": "objective",
+				"position": {
+					"x": 720,
+					"y": 160
+				},
+				"objective_type": "search",
+				"description": "搜索医院",
+				"count": 2
+			},
+			"step_3": {
+				"id": "step_3",
+				"type": "objective",
+				"position": {
+					"x": 1020,
+					"y": 160
+				},
+				"objective_type": "collect",
+				"description": "获得急救包",
+				"item_id": 1005,
+				"count": 1
+			},
+			"reward_1": {
+				"id": "reward_1",
+				"type": "reward",
+				"position": {
+					"x": 1320,
+					"y": 160
+				},
+				"rewards": {
+					"items": [
+						{
+							"id": 1005,
+							"count": 2
+						}
+					],
+					"experience": 300,
+					"skill_points": 1
+				}
+			},
+			"end": {
+				"id": "end",
+				"type": "end",
+				"position": {
+					"x": 1620,
+					"y": 160
+				}
+			}
+		},
+		"connections": [
+			{
+				"from": "start",
+				"to": "step_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_1",
+				"to": "step_2",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_2",
+				"to": "step_3",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_3",
+				"to": "reward_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "reward_1",
+				"to": "end",
+				"from_port": 0,
+				"to_port": 0
+			}
+		]
+	},
+	"_editor": {
+		"relationship_position": {
+			"x": 980,
+			"y": 120
+		}
+	}
 }

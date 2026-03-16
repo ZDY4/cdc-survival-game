@@ -94,17 +94,17 @@ func _add_quest_item(quest: Dictionary):
 	quest_list.add_child(separator)
 
 func _on_quest_started(quest_id: String):
-	var quest = QuestSystem.QUESTS.get(quest_id, {})
+	var quest = QuestSystem.get_quest_template(quest_id) if QuestSystem.has_method("get_quest_template") else QuestSystem.QUESTS.get(quest_id, {})
 	_show_notification("新任务", quest.get("title", "未知任务"))
 	if is_visible:
 		_update_quest_display()
 
-func _on_quest_updated(quest_id: String):
+func _on_quest_updated(quest_id: String, _progress: Dictionary = {}):
 	if is_visible:
 		_update_quest_display()
 
-func _on_quest_completed(quest_id: String):
-	var quest = QuestSystem.QUESTS.get(quest_id, {})
+func _on_quest_completed(quest_id: String, _rewards: Dictionary = {}):
+	var quest = QuestSystem.get_quest_template(quest_id) if QuestSystem.has_method("get_quest_template") else QuestSystem.QUESTS.get(quest_id, {})
 	_show_notification("任务完成", quest.get("title", "未知任务"))
 	if is_visible:
 		_update_quest_display()

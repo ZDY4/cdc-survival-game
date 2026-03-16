@@ -1,33 +1,104 @@
 {
-  "quest_id": "find_food",
-  "prerequisites": [
-    "first_explore"
-  ],
-  "description": "前往超市寻找10罐食物",
-  "title": "食物短缺",
-  "rewards": {
-    "items": [
-      {
-        "id": 1008,
-        "count": 5
-      }
-    ],
-    "experience": 300,
-    "skill_points": 2
-  },
-  "objectives": [
-    {
-      "description": "前往超市",
-      "target": "supermarket",
-      "current": false,
-      "type": "travel"
-    },
-    {
-      "description": "收集罐头",
-      "target": 10,
-      "current": 0,
-      "item_id": 1007,
-      "type": "collect"
-    }
-  ]
+	"quest_id": "find_food",
+	"title": "食物短缺",
+	"description": "前往超市寻找10罐食物",
+	"prerequisites": [
+		"first_explore"
+	],
+	"time_limit": -1,
+	"flow": {
+		"start_node_id": "start",
+		"nodes": {
+			"start": {
+				"id": "start",
+				"type": "start",
+				"position": {
+					"x": 120,
+					"y": 160
+				}
+			},
+			"step_1": {
+				"id": "step_1",
+				"type": "objective",
+				"position": {
+					"x": 420,
+					"y": 160
+				},
+				"objective_type": "travel",
+				"description": "前往超市",
+				"target": "supermarket",
+				"count": 1
+			},
+			"step_2": {
+				"id": "step_2",
+				"type": "objective",
+				"position": {
+					"x": 720,
+					"y": 160
+				},
+				"objective_type": "collect",
+				"description": "收集罐头",
+				"item_id": 1007,
+				"count": 10
+			},
+			"reward_1": {
+				"id": "reward_1",
+				"type": "reward",
+				"position": {
+					"x": 1020,
+					"y": 160
+				},
+				"rewards": {
+					"items": [
+						{
+							"id": 1008,
+							"count": 5
+						}
+					],
+					"experience": 300,
+					"skill_points": 2
+				}
+			},
+			"end": {
+				"id": "end",
+				"type": "end",
+				"position": {
+					"x": 1320,
+					"y": 160
+				}
+			}
+		},
+		"connections": [
+			{
+				"from": "start",
+				"to": "step_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_1",
+				"to": "step_2",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_2",
+				"to": "reward_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "reward_1",
+				"to": "end",
+				"from_port": 0,
+				"to_port": 0
+			}
+		]
+	},
+	"_editor": {
+		"relationship_position": {
+			"x": 700,
+			"y": 340
+		}
+	}
 }

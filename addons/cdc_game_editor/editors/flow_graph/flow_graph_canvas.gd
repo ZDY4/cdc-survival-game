@@ -101,7 +101,12 @@ func get_selected_nodes() -> Array[GraphNode]:
 
 func clear_graph() -> void:
 	for conn in get_connection_list():
-		disconnect_node(StringName(conn.from), conn.from_port, StringName(conn.to), conn.to_port)
+		disconnect_node(
+			StringName(str(conn.get("from", ""))),
+			int(conn.get("from_port", 0)),
+			StringName(str(conn.get("to", ""))),
+			int(conn.get("to_port", 0))
+		)
 
 	for child in get_children():
 		if child is GraphNode:

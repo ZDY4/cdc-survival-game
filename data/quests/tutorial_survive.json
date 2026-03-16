@@ -1,24 +1,82 @@
 {
-  "quest_id": "tutorial_survive",
-  "rewards": {
-    "items": [
-      {
-        "id": 1007,
-        "count": 2
-      }
-    ],
-    "experience": 50
-  },
-  "description": "在安全屋休息一晚，恢复你的状态",
-  "prerequisites": [],
-  "time_limit": -1,
-  "title": "第一课：生存",
-  "objectives": [
-    {
-      "description": "在安全屋睡觉",
-      "target": 1,
-      "current": 0,
-      "type": "sleep"
-    }
-  ]
+	"quest_id": "tutorial_survive",
+	"title": "第一课：生存",
+	"description": "在安全屋休息一晚，恢复你的状态",
+	"prerequisites": [],
+	"time_limit": -1,
+	"flow": {
+		"start_node_id": "start",
+		"nodes": {
+			"start": {
+				"id": "start",
+				"type": "start",
+				"position": {
+					"x": 120,
+					"y": 160
+				}
+			},
+			"step_1": {
+				"id": "step_1",
+				"type": "objective",
+				"position": {
+					"x": 420,
+					"y": 160
+				},
+				"objective_type": "sleep",
+				"description": "在安全屋睡觉",
+				"count": 1
+			},
+			"reward_1": {
+				"id": "reward_1",
+				"type": "reward",
+				"position": {
+					"x": 720,
+					"y": 160
+				},
+				"rewards": {
+					"items": [
+						{
+							"id": 1007,
+							"count": 2
+						}
+					],
+					"experience": 50
+				}
+			},
+			"end": {
+				"id": "end",
+				"type": "end",
+				"position": {
+					"x": 1020,
+					"y": 160
+				}
+			}
+		},
+		"connections": [
+			{
+				"from": "start",
+				"to": "step_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_1",
+				"to": "reward_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "reward_1",
+				"to": "end",
+				"from_port": 0,
+				"to_port": 0
+			}
+		]
+	},
+	"_editor": {
+		"relationship_position": {
+			"x": 140,
+			"y": 120
+		}
+	}
 }

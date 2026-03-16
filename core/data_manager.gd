@@ -163,8 +163,159 @@ func _normalize_quest_data(raw_quest: Dictionary, fallback_quest_id: String) -> 
 		quest_id = fallback_quest_id.strip_edges()
 
 	normalized_quest["quest_id"] = quest_id
+	if not normalized_quest.has("flow"):
+		normalized_quest = _migrate_legacy_quest_data(normalized_quest, quest_id)
 	normalized_quest.erase("_editor")
 	return normalized_quest
+
+
+func _migrate_legacy_quest_data(raw_quest: Dictionary, quest_id: String) -> Dictionary:
+	var quest: Dictionary = raw_quest.duplicate(true)
+	var relationship_position := _extract_relationship_position(quest.get("_editor", {}))
+	var flow_nodes: Dictionary = {}
+	var flow_connections: Array[Dictionary] = []
+	var current_x := 120.0
+	var current_y := 160.0
+
+	flow_nodes["start"] = {
+		"id": "start",
+		"type": "start",
+		"position": {"x": current_x, "y": current_y}
+	}
+
+	var previous_node_id := "start"
+	var step_index := 1
+	for objective_variant in quest.get("objectives", []):
+		if not (objective_variant is Dictionary):
+			continue
+
+		current_x += 300.0
+		var objective_data: Dictionary = objective_variant
+		var node_id := "step_%d" % step_index
+		var node_data: Dictionary = {
+			"id": node_id,
+			"type": "objective",
+			"position": {"x": current_x, "y": current_y},
+			"objective_type": str(objective_data.get("type", "collect")),
+			"description": str(objective_data.get("description", ""))
+		}
+		_apply_legacy_objective_fields(node_data, objective_data)
+		flow_nodes[node_id] = node_data
+		flow_connections.append({
+			"from": previous_node_id,
+			"to": node_id,
+			"from_port": 0,
+			"to_port": 0
+		})
+		previous_node_id = node_id
+		step_index += 1
+
+	var rewards: Dictionary = quest.get("rewards", {})
+	if not _is_reward_data_empty(rewards):
+		current_x += 300.0
+		var reward_node_id := "reward_1"
+		flow_nodes[reward_node_id] = {
+			"id": reward_node_id,
+			"type": "reward",
+			"position": {"x": current_x, "y": current_y},
+			"rewards": rewards.duplicate(true)
+		}
+		flow_connections.append({
+			"from": previous_node_id,
+			"to": reward_node_id,
+			"from_port": 0,
+			"to_port": 0
+		})
+		previous_node_id = reward_node_id
+
+	current_x += 300.0
+	flow_nodes["end"] = {
+		"id": "end",
+		"type": "end",
+		"position": {"x": current_x, "y": current_y}
+	}
+	flow_connections.append({
+		"from": previous_node_id,
+		"to": "end",
+		"from_port": 0,
+		"to_port": 0
+	})
+
+	quest.erase("objectives")
+	quest.erase("rewards")
+	quest["flow"] = {
+		"start_node_id": "start",
+		"nodes": flow_nodes,
+		"connections": flow_connections
+	}
+	quest["_editor"] = {
+		"relationship_position": relationship_position
+	}
+	return quest
+
+
+func _apply_legacy_objective_fields(node_data: Dictionary, objective_data: Dictionary) -> void:
+	var objective_type := str(node_data.get("objective_type", ""))
+	var target_value: Variant = objective_data.get("target", null)
+	if objective_data.has("count"):
+		node_data["count"] = max(int(objective_data.get("count", 1)), 1)
+
+	match objective_type:
+		"travel":
+			node_data["target"] = str(target_value)
+			node_data["count"] = 1
+		"search", "sleep", "survive", "build":
+			node_data["count"] = max(int(target_value), 1) if target_value != null else int(node_data.get("count", 1))
+			if objective_data.has("structure_id"):
+				node_data["structure_id"] = objective_data.get("structure_id")
+		"collect", "craft":
+			node_data["count"] = max(int(target_value), 1) if target_value != null else int(node_data.get("count", 1))
+			if objective_data.has("item_id"):
+				node_data["item_id"] = objective_data.get("item_id")
+		"kill":
+			node_data["count"] = max(int(target_value), 1) if target_value != null else int(node_data.get("count", 1))
+			if objective_data.has("enemy_type"):
+				node_data["enemy_type"] = objective_data.get("enemy_type")
+		_:
+			if target_value != null:
+				if target_value is String:
+					node_data["target"] = target_value
+				else:
+					node_data["count"] = max(int(target_value), 1)
+
+
+func _extract_relationship_position(editor_meta: Variant) -> Dictionary:
+	var default_position := {"x": 320.0, "y": 200.0}
+	if not (editor_meta is Dictionary):
+		return default_position
+
+	var meta_dict: Dictionary = editor_meta
+	var position_data: Variant = meta_dict.get("relationship_position", meta_dict.get("position", {}))
+	if not (position_data is Dictionary):
+		return default_position
+
+	return {
+		"x": float(position_data.get("x", default_position["x"])),
+		"y": float(position_data.get("y", default_position["y"]))
+	}
+
+
+func _is_reward_data_empty(rewards: Dictionary) -> bool:
+	if rewards.is_empty():
+		return true
+	if rewards.get("items", []).size() > 0:
+		return false
+	if int(rewards.get("experience", 0)) > 0:
+		return false
+	if int(rewards.get("skill_points", 0)) > 0:
+		return false
+	if rewards.has("unlock_location") and not str(rewards.get("unlock_location", "")).is_empty():
+		return false
+	if rewards.has("unlock_recipes") and rewards.get("unlock_recipes", []).size() > 0:
+		return false
+	if rewards.has("title") and not str(rewards.get("title", "")).is_empty():
+		return false
+	return true
 
 
 ## 加载JSON文件

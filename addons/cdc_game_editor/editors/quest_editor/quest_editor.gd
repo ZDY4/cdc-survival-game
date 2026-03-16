@@ -1,843 +1,154 @@
 @tool
 extends "res://addons/cdc_game_editor/editors/flow_graph/flow_graph_editor_base.gd"
-## 任务编辑器
-## 基于共享 Flow Graph 编辑器，使用任务节点和依赖连线来编辑任务链。
 
 signal quest_saved(quest_id: String)
 signal quest_loaded(quest_id: String)
 signal validation_errors_found(errors: Array[String])
 
-const OBJECTIVE_TYPES = {
-	"collect": "收集物品",
-	"kill": "击败敌人",
-	"location": "到达地点",
-	"talk": "与NPC对话",
-	"custom": "Custom"
-}
-
-const QUEST_NODE_COLOR := Color(0.3, 0.55, 0.85)
-const QUEST_STATUS_COLORS = {
-	"valid": Color(0.2, 0.8, 0.2),
-	"warning": Color(0.9, 0.6, 0.2),
-	"error": Color(0.9, 0.2, 0.2)
-}
-
-const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
 const QUEST_DATA_DIR := "res://data/quests"
 
-@onready var _file_dialog: FileDialog
-@onready var _validation_panel: VBoxContainer
+const MODE_RELATIONSHIP := "relationship"
+const MODE_FLOW := "flow"
 
-var current_file_path: String = ""
+const QUEST_NODE_COLOR := Color(0.28, 0.52, 0.82)
+const FLOW_NODE_COLORS := {
+	"start": Color(0.22, 0.66, 0.38),
+	"objective": Color(0.24, 0.56, 0.92),
+	"dialog": Color(0.87, 0.54, 0.22),
+	"choice": Color(0.88, 0.72, 0.26),
+	"reward": Color(0.45, 0.7, 0.34),
+	"end": Color(0.78, 0.28, 0.26)
+}
+
+const NODE_TYPE_NAMES := {
+	"quest": "任务",
+	"start": "开始",
+	"objective": "目标",
+	"dialog": "对话",
+	"choice": "选择",
+	"reward": "奖励",
+	"end": "结束"
+}
+
+const OBJECTIVE_TYPES := {
+	"travel": "前往地点",
+	"search": "搜索",
+	"collect": "收集",
+	"kill": "击杀",
+	"sleep": "休息",
+	"survive": "生存",
+	"craft": "制造",
+	"build": "建造"
+}
+
+@onready var _validation_panel: VBoxContainer
+@onready var _mode_button: Button
+@onready var _new_button: Button
+@onready var _delete_quest_button: Button
+
+var _quests: Dictionary = {}
+var _editor_mode: String = MODE_RELATIONSHIP
+var _current_quest_id: String = ""
+var _focused_relationship_quest_id: String = ""
 var _validation_errors: Dictionary = {}
+
 
 func _get_editor_name() -> String:
 	return "任务编辑器"
 
+
 func _get_search_placeholder() -> String:
-	return "搜索任务..."
+	return "搜索任务或节点..."
+
 
 func _get_property_panel_title() -> String:
-	return "Quest Properties"
+	return "Quest Editor"
+
 
 func _get_initial_status_text() -> String:
-	return "Ready - 0 quests"
+	return "关系图模式 - 0 个任务"
+
 
 func _get_node_type_definitions() -> Array[Dictionary]:
-	return [
-		{"type": "quest", "name": "任务节点", "color": QUEST_NODE_COLOR}
-	]
+	return _get_relationship_node_definitions()
+
 
 func _create_toolbar() -> void:
-	_add_toolbar_button("新建", _on_new_quest, "新建任务 (Ctrl+N)")
-	_add_toolbar_button("删除", _on_delete_selected, "删除选中任务 (Delete)")
+	_mode_button = _add_toolbar_button("关系图模式", _on_mode_button_pressed, "切换关系图 / 返回关系图")
 	_add_toolbar_separator()
-	_add_toolbar_button("撤销", _on_undo, "撤销 (Ctrl+Z)")
-	_add_toolbar_button("重做", _on_redo, "重做 (Ctrl+Y)")
+	_new_button = _add_toolbar_button("新建 Quest", _on_new_quest, "创建任务并进入单任务模式")
+	_delete_quest_button = _add_toolbar_button("删除 Quest", _on_delete_current_quest, "仅在单任务模式删除当前任务")
 	_add_toolbar_separator()
-	_add_toolbar_button("保存", _on_save_quests, "将每个任务分别保存到 data/quests 目录 (Ctrl+S)")
-	_add_toolbar_button("加载", _on_load_quests, "从 data/quests 目录加载任务，必要时兼容旧版 quests.json")
-	_add_toolbar_separator()
+	_add_toolbar_button("保存", _on_save_quests, "保存所有任务到 data/quests")
+	_add_toolbar_button("加载", _on_load_quests, "重新加载任务文件")
 	_add_toolbar_button("验证", _on_validate_all, "验证所有任务")
-	_add_toolbar_button("导出GD", _on_export_gdscript, "导出为 GDScript")
 	_add_toolbar_separator()
-	_add_toolbar_button("居中", _on_center_view, "居中视图")
+	_add_toolbar_button("居中", _on_center_view, "居中当前图")
+
 
 func _after_base_ready() -> void:
-	_setup_file_dialog()
 	_setup_validation_panel()
-	_load_quests_from_project_data()
+	if _graph_edit and _graph_edit.has_signal("node_double_clicked"):
+		_graph_edit.node_double_clicked.connect(_on_graph_node_double_clicked)
+	_load_quests_from_directory()
 
-func _setup_file_dialog() -> void:
-	_file_dialog = FileDialog.new()
-	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_file_dialog.add_filter("*.json; JSON 文件")
-	_file_dialog.add_filter("*.quest; 任务文件")
-	add_child(_file_dialog)
 
 func _setup_validation_panel() -> void:
 	_validation_panel = VBoxContainer.new()
 	_validation_panel.visible = false
 	_right_container.add_child(_validation_panel)
 
-	var validation_title := Label.new()
-	validation_title.text = "⚠️ 验证问题"
-	validation_title.add_theme_color_override("font_color", Color(0.9, 0.6, 0.2))
-	_validation_panel.add_child(validation_title)
+	var title := Label.new()
+	title.text = "验证问题"
+	title.add_theme_color_override("font_color", Color(0.92, 0.58, 0.2))
+	_validation_panel.add_child(title)
 	_validation_panel.add_child(HSeparator.new())
 
-func _load_quests_from_project_data() -> void:
-	if not _load_from_directory(QUEST_DATA_DIR):
-		_update_status("未找到任务目录或目录为空: %s" % QUEST_DATA_DIR)
 
-func _ensure_quest_data_dir() -> bool:
-	var absolute_dir_path := ProjectSettings.globalize_path(QUEST_DATA_DIR)
-	if DirAccess.dir_exists_absolute(absolute_dir_path):
-		return true
-	var create_error := DirAccess.make_dir_recursive_absolute(absolute_dir_path)
-	if create_error != OK:
-		_update_status("无法创建目录: %s" % QUEST_DATA_DIR)
-		return false
-	return true
-
-func _is_valid_quest_file_id(quest_id: String) -> bool:
-	if quest_id.is_empty():
-		return false
-
-	var invalid_chars := ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
-	for invalid_char in invalid_chars:
-		if quest_id.contains(str(invalid_char)):
-			return false
-	return true
-
-func _build_quest_file_path(quest_id: String) -> String:
-	return "%s/%s.json" % [QUEST_DATA_DIR, quest_id]
-
-func _serialize_quest_for_storage(quest_id: String, quest: Dictionary) -> Dictionary:
-	var serialized_quest: Dictionary = quest.duplicate(true)
-	var position: Vector2 = serialized_quest.get("position", Vector2.ZERO)
-
-	serialized_quest.erase("id")
-	serialized_quest.erase("type")
-	serialized_quest.erase("position")
-	serialized_quest["quest_id"] = quest_id
-	serialized_quest["_editor"] = {
-		"position": {"x": position.x, "y": position.y},
-		"node_type": "quest"
-	}
-	return serialized_quest
-
-func _generate_node_id(_node_type: String = "quest") -> String:
-	return "quest_%d" % Time.get_ticks_msec()
-
-func _build_new_quest_data(quest_id: String, position: Vector2) -> Dictionary:
-	return {
-		"id": quest_id,
-		"quest_id": quest_id,
-		"type": "quest",
-		"position": position,
-		"title": "New Quest",
-		"description": "任务描述",
-		"objectives": [],
-		"rewards": {
-			"items": [],
-			"experience": 0
-		},
-		"prerequisites": [],
-		"time_limit": -1,
-		"_status": "draft"
-	}
-
-func _apply_type_defaults(data: Dictionary, _node_type: String) -> void:
-	if not data.has("quest_id"):
-		data["quest_id"] = str(data.get("id", _generate_node_id()))
-	if not data.has("title"):
-		data["title"] = "New Quest"
-	if not data.has("description"):
-		data["description"] = "任务描述"
-	if not data.has("objectives"):
-		data["objectives"] = []
-	if not data.has("rewards"):
-		data["rewards"] = {"items": [], "experience": 0}
-	var rewards: Dictionary = data.get("rewards", {})
-	if not rewards.has("items"):
-		rewards["items"] = []
-	if not rewards.has("experience"):
-		rewards["experience"] = 0
-	data["rewards"] = rewards
-	if not data.has("prerequisites"):
-		data["prerequisites"] = []
-	if not data.has("time_limit"):
-		data["time_limit"] = -1
-	if not data.has("_status"):
-		data["_status"] = "draft"
-
-func _populate_node_preview(node, data: Dictionary) -> void:
-	var quest_id := str(data.get("quest_id", data.get("id", "")))
-	node.add_text_row(quest_id, Color.GRAY)
-	node.add_separator()
-	node.add_text_row(str(data.get("title", "Unnamed Quest")))
-	node.add_text_row(_truncate_text(str(data.get("description", "")), 60), Color.WHITE, Vector2(180, 40), true, HORIZONTAL_ALIGNMENT_LEFT)
-	node.add_text_row("Objectives: %d" % int(data.get("objectives", []).size()), Color.LIGHT_BLUE)
-
-	var rewards: Dictionary = data.get("rewards", {})
-	var exp := int(rewards.get("experience", 0))
-	var items: Array = rewards.get("items", [])
-	if items.size() > 0:
-		node.add_text_row("奖励: %d经验 + %d物品" % [exp, items.size()], Color.GREEN)
-	else:
-		node.add_text_row("奖励: %d经验" % exp, Color.GREEN)
-
-func _configure_node_ports(node, _data: Dictionary) -> void:
-	node.add_input_port()
-	node.add_output_port()
-
-func _truncate_text(text: String, max_length: int) -> String:
-	if text.length() <= max_length:
-		return text
-	return text.substr(0, max_length - 3) + "..."
-
-func _get_search_strings(data: Dictionary) -> Array[String]:
-	var values: Array[String] = [
-		str(data.get("id", "")),
-		str(data.get("quest_id", "")),
-		str(data.get("title", "")),
-		str(data.get("description", ""))
+func _get_relationship_node_definitions() -> Array[Dictionary]:
+	return [
+		{"type": "quest", "name": "任务", "color": QUEST_NODE_COLOR}
 	]
 
-	for obj in data.get("objectives", []):
-		values.append(str(obj.get("description", "")))
-		values.append(str(obj.get("target", "")))
 
-	return values
+func _get_flow_node_definitions() -> Array[Dictionary]:
+	return [
+		{"type": "start", "name": NODE_TYPE_NAMES.start, "color": FLOW_NODE_COLORS.start},
+		{"type": "objective", "name": NODE_TYPE_NAMES.objective, "color": FLOW_NODE_COLORS.objective},
+		{"type": "dialog", "name": NODE_TYPE_NAMES.dialog, "color": FLOW_NODE_COLORS.dialog},
+		{"type": "choice", "name": NODE_TYPE_NAMES.choice, "color": FLOW_NODE_COLORS.choice},
+		{"type": "reward", "name": NODE_TYPE_NAMES.reward, "color": FLOW_NODE_COLORS.reward},
+		{"type": "end", "name": NODE_TYPE_NAMES.end, "color": FLOW_NODE_COLORS.end}
+	]
 
-func _normalize_pasted_node_data(data: Dictionary) -> Dictionary:
-	var normalized := data.duplicate(true)
-	var new_quest_id := _generate_node_id("quest")
-	normalized.id = new_quest_id
-	normalized.quest_id = new_quest_id
-	normalized.prerequisites = []
-	return normalized
 
-func _on_new_quest() -> void:
-	var quest_id := _generate_node_id("quest")
-	var position = _graph_edit.scroll_offset + _graph_edit.size / 2 - Vector2(100, 50)
-	var quest_data := _build_new_quest_data(quest_id, position)
-	_create_node("quest", position, quest_data)
-	_select_quest(quest_id)
-	_validate_quest(quest_id)
-	_update_status("创建了新任务: %s" % quest_id)
+func _on_mode_button_pressed() -> void:
+	if _editor_mode == MODE_FLOW:
+		_show_relationship_mode(_current_quest_id)
 
-func _select_quest(quest_id: String) -> void:
-	selected_node_id = quest_id
-	_inspected_node_id = quest_id
-	var quest = nodes.get(quest_id, {})
-	if not quest.is_empty():
-		_queue_property_panel_update(quest)
-		_update_validation_panel()
 
-	var graph_node = _graph_edit.get_node_or_null(quest_id)
-	if graph_node and graph_node is GraphNode:
-		graph_node.selected = true
-
-func _update_property_panel(quest: Dictionary) -> void:
-	_property_panel.clear()
-	if quest.is_empty():
+func _on_graph_node_double_clicked(node_id: String) -> void:
+	if _editor_mode != MODE_RELATIONSHIP:
 		return
-
-	_property_panel.add_string_property("quest_id", "任务ID:", str(quest.get("quest_id", "")), false, "Unique identifier")
-	_property_panel.add_string_property("title", "任务标题:", str(quest.get("title", "")), false, "显示名称")
-	_property_panel.add_string_property("description", "任务描述:", str(quest.get("description", "")), true, "详细描述...")
-	_property_panel.add_separator()
-
-	var rewards: Dictionary = quest.get("rewards", {})
-	_property_panel.add_number_property("experience", "经验值:", int(rewards.get("experience", 0)), 0, 999999, 10, false)
-	_property_panel.add_number_property("time_limit", "时间限制(秒):", int(quest.get("time_limit", -1)), -1, 999999, 1, false)
-	_property_panel.add_separator()
-	_property_panel.add_custom_control(_create_objectives_editor(quest))
-	_property_panel.add_separator()
-	_property_panel.add_custom_control(_create_rewards_editor(quest))
-	_property_panel.add_separator()
-	_property_panel.add_custom_control(_create_prerequisites_editor(quest))
-
-func _create_objectives_editor(quest: Dictionary) -> Control:
-	var container := VBoxContainer.new()
-
-	var label := Label.new()
-	label.text = "📋 任务目标 (%d)" % quest.get("objectives", []).size()
-	label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
-	container.add_child(label)
-
-	var list_container := VBoxContainer.new()
-	container.add_child(list_container)
-	_refresh_objectives_list(list_container, quest)
-
-	var add_btn := Button.new()
-	add_btn.text = "+ 添加目标"
-	add_btn.pressed.connect(func(): _add_objective(quest, list_container))
-	container.add_child(add_btn)
-
-	return container
-
-func _refresh_objectives_list(container: VBoxContainer, quest: Dictionary) -> void:
-	for child in container.get_children():
-		child.queue_free()
-
-	var objectives: Array = quest.get("objectives", [])
-	for i in range(objectives.size()):
-		container.add_child(_create_objective_row(quest, i, objectives[i], container))
-
-func _create_objective_row(quest: Dictionary, index: int, obj: Dictionary, list_container: VBoxContainer) -> Control:
-	var panel := PanelContainer.new()
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_bottom", 8)
-	panel.add_child(margin)
-
-	var vbox := VBoxContainer.new()
-	margin.add_child(vbox)
-
-	var top_row := HBoxContainer.new()
-	vbox.add_child(top_row)
-
-	var type_option := OptionButton.new()
-	for key in OBJECTIVE_TYPES:
-		type_option.add_item(OBJECTIVE_TYPES[key], type_option.item_count)
-		type_option.set_item_metadata(type_option.item_count - 1, key)
-		if key == obj.get("type", "collect"):
-			type_option.selected = type_option.item_count - 1
-	type_option.item_selected.connect(func(i: int):
-		var type_key = type_option.get_item_metadata(i)
-		_on_objective_field_changed(quest, index, "type", type_key)
-	)
-	top_row.add_child(type_option)
-
-	var target_edit := LineEdit.new()
-	target_edit.text = str(obj.get("target", ""))
-	target_edit.placeholder_text = "目标ID"
-	target_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	target_edit.text_changed.connect(func(v: String): _on_objective_field_changed(quest, index, "target", v))
-	top_row.add_child(target_edit)
-
-	var count_spin := SpinBox.new()
-	count_spin.min_value = 1
-	count_spin.max_value = 999
-	count_spin.value = float(obj.get("count", 1))
-	count_spin.value_changed.connect(func(v: float): _on_objective_field_changed(quest, index, "count", int(v)))
-	top_row.add_child(count_spin)
-
-	var desc_row := HBoxContainer.new()
-	vbox.add_child(desc_row)
-
-	var desc_edit := LineEdit.new()
-	desc_edit.text = str(obj.get("description", ""))
-	desc_edit.placeholder_text = "目标描述"
-	desc_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	desc_edit.text_changed.connect(func(v: String): _on_objective_field_changed(quest, index, "description", v))
-	desc_row.add_child(desc_edit)
-
-	var del_btn := Button.new()
-	del_btn.text = "×"
-	del_btn.tooltip_text = "删除目标"
-	del_btn.pressed.connect(func(): _remove_objective(quest, index, list_container))
-	desc_row.add_child(del_btn)
-
-	return panel
-
-func _on_objective_field_changed(quest: Dictionary, index: int, field: String, value: Variant) -> void:
-	var objectives: Array = quest.get("objectives", [])
-	if index < objectives.size():
-		objectives[index][field] = value
-		quest["objectives"] = objectives
-		_on_node_data_changed(str(quest.get("id", "")), quest)
-		_validate_quest(str(quest.get("id", "")))
-		_update_validation_panel()
-
-func _add_objective(quest: Dictionary, list_container: VBoxContainer) -> void:
-	var objectives: Array = quest.get("objectives", [])
-	objectives.append({
-		"type": "collect",
-		"target": "",
-		"count": 1,
-		"description": "New objective"
-	})
-	quest["objectives"] = objectives
-	_refresh_objectives_list(list_container, quest)
-	_on_node_data_changed(str(quest.get("id", "")), quest)
-	_validate_quest(str(quest.get("id", "")))
-	_update_validation_panel()
-
-func _remove_objective(quest: Dictionary, index: int, list_container: VBoxContainer) -> void:
-	var objectives: Array = quest.get("objectives", [])
-	if index < objectives.size():
-		objectives.remove_at(index)
-		quest["objectives"] = objectives
-		_refresh_objectives_list(list_container, quest)
-		_on_node_data_changed(str(quest.get("id", "")), quest)
-		_validate_quest(str(quest.get("id", "")))
-		_update_validation_panel()
-
-func _create_rewards_editor(quest: Dictionary) -> Control:
-	var container := VBoxContainer.new()
-
-	var label := Label.new()
-	label.text = "🎁 物品奖励"
-	label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
-	container.add_child(label)
-
-	var list := VBoxContainer.new()
-	container.add_child(list)
-	_refresh_rewards_list(list, quest)
-
-	var add_btn := Button.new()
-	add_btn.text = "+ 添加物品"
-	add_btn.pressed.connect(func(): _add_reward_item(quest, list))
-	container.add_child(add_btn)
-
-	return container
-
-func _create_reward_row(quest: Dictionary, index: int, item: Dictionary, list: VBoxContainer) -> Control:
-	var row := HBoxContainer.new()
-
-	var id_edit := LineEdit.new()
-	id_edit.text = str(item.get("id", ""))
-	id_edit.placeholder_text = "物品ID"
-	id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	id_edit.text_changed.connect(func(v: String):
-		_update_reward_item_field(quest, index, "id", v)
-	)
-	row.add_child(id_edit)
-
-	var count_spin := SpinBox.new()
-	count_spin.min_value = 1
-	count_spin.max_value = 999
-	count_spin.value = float(item.get("count", 1))
-	count_spin.value_changed.connect(func(v: float):
-		_update_reward_item_field(quest, index, "count", int(v))
-	)
-	row.add_child(count_spin)
-
-	var del_btn := Button.new()
-	del_btn.text = "×"
-	del_btn.pressed.connect(func(): _remove_reward_item(quest, index, list))
-	row.add_child(del_btn)
-
-	return row
-
-func _add_reward_item(quest: Dictionary, list: VBoxContainer) -> void:
-	var rewards: Dictionary = quest.get("rewards", {})
-	var items: Array = rewards.get("items", [])
-	items.append({"id": "", "count": 1})
-	rewards["items"] = items
-	quest["rewards"] = rewards
-	_refresh_rewards_list(list, quest)
-	_on_node_data_changed(str(quest.get("id", "")), quest)
-
-func _remove_reward_item(quest: Dictionary, index: int, list: VBoxContainer) -> void:
-	var rewards: Dictionary = quest.get("rewards", {})
-	var items: Array = rewards.get("items", [])
-	if index < items.size():
-		items.remove_at(index)
-		rewards["items"] = items
-		quest["rewards"] = rewards
-		_refresh_rewards_list(list, quest)
-		_on_node_data_changed(str(quest.get("id", "")), quest)
-
-func _refresh_rewards_list(list: VBoxContainer, quest: Dictionary) -> void:
-	for child in list.get_children():
-		child.queue_free()
-
-	var items: Array = quest.get("rewards", {}).get("items", [])
-	for i in range(items.size()):
-		list.add_child(_create_reward_row(quest, i, items[i], list))
-
-func _create_prerequisites_editor(quest: Dictionary) -> Control:
-	var container := VBoxContainer.new()
-
-	var label := Label.new()
-	label.text = "🔗 前置任务"
-	label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
-	container.add_child(label)
-
-	var prereq_list := VBoxContainer.new()
-	container.add_child(prereq_list)
-	_refresh_prereq_list(prereq_list, quest)
-
-	var add_btn := Button.new()
-	add_btn.text = "+ 添加前置任务"
-	add_btn.pressed.connect(func(): _show_prereq_selector(quest, prereq_list))
-	container.add_child(add_btn)
-
-	return container
-
-func _refresh_prereq_list(list: VBoxContainer, quest: Dictionary) -> void:
-	for child in list.get_children():
-		child.queue_free()
-
-	for prereq_id in quest.get("prerequisites", []):
-		var row := HBoxContainer.new()
-
-		var id_label := Label.new()
-		id_label.text = str(prereq_id)
-		id_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(id_label)
-
-		var del_btn := Button.new()
-		del_btn.text = "×"
-		del_btn.pressed.connect(func(): _remove_prereq(quest, str(prereq_id), list))
-		row.add_child(del_btn)
-
-		list.add_child(row)
-
-func _show_prereq_selector(quest: Dictionary, list: VBoxContainer) -> void:
-	var popup := PopupPanel.new()
-	popup.size = Vector2(400, 300)
-
-	var vbox := VBoxContainer.new()
-	popup.add_child(vbox)
-
-	var title := Label.new()
-	title.text = "选择前置任务"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(title)
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(scroll)
-
-	var item_list := ItemList.new()
-	item_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(item_list)
-
-	for quest_id in nodes.keys():
-		var prerequisites: Array = quest.get("prerequisites", [])
-		if quest_id != str(quest.get("quest_id", "")) and not prerequisites.has(quest_id):
-			var q: Dictionary = nodes[quest_id]
-			var idx := item_list.add_item("%s - %s" % [quest_id, str(q.get("title", ""))])
-			item_list.set_item_metadata(idx, quest_id)
-
-	var btn_box := HBoxContainer.new()
-	btn_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_child(btn_box)
-
-	var confirm_btn := Button.new()
-	confirm_btn.text = "确认"
-	confirm_btn.pressed.connect(func():
-		var selected := item_list.get_selected_items()
-		if selected.size() > 0:
-			var prereq_id = str(item_list.get_item_metadata(selected[0]))
-			_add_prereq(quest, prereq_id, list)
-		popup.queue_free()
-	)
-	btn_box.add_child(confirm_btn)
-
-	add_child(popup)
-	popup.popup_centered()
-
-func _add_prereq(quest: Dictionary, prereq_id: String, list: VBoxContainer) -> void:
-	var prerequisites: Array = quest.get("prerequisites", [])
-	if not prerequisites.has(prereq_id):
-		prerequisites.append(prereq_id)
-		quest["prerequisites"] = prerequisites
-		_refresh_prereq_list(list, quest)
-		_rebuild_connections_from_prerequisites()
-		_on_node_data_changed(str(quest.get("id", "")), quest)
-		_validate_quest(str(quest.get("id", "")))
-		_update_validation_panel()
-
-func _remove_prereq(quest: Dictionary, prereq_id: String, list: VBoxContainer) -> void:
-	var prerequisites: Array = quest.get("prerequisites", [])
-	prerequisites.erase(prereq_id)
-	quest["prerequisites"] = prerequisites
-	_refresh_prereq_list(list, quest)
-	_rebuild_connections_from_prerequisites()
-	_on_node_data_changed(str(quest.get("id", "")), quest)
-	_validate_quest(str(quest.get("id", "")))
-	_update_validation_panel()
-
-func _on_property_changed(property_name: String, new_value: Variant, _old_value: Variant) -> void:
-	if selected_node_id.is_empty():
+	if not _quests.has(node_id):
 		return
+	_show_flow_mode(node_id)
 
-	var quest: Dictionary = nodes.get(selected_node_id, {})
-	if quest.is_empty():
-		return
 
-	if property_name == "experience":
-		var rewards: Dictionary = quest.get("rewards", {})
-		rewards["experience"] = int(new_value)
-		quest["rewards"] = rewards
-	elif property_name == "time_limit":
-		quest["time_limit"] = int(new_value)
-	elif property_name == "quest_id":
-		var new_id := str(new_value).strip_edges()
-		if new_id.is_empty() or new_id == selected_node_id:
-			return
-		if nodes.has(new_id):
-			_update_status("任务ID已存在: %s" % new_id)
-			return
-		_change_quest_id(selected_node_id, new_id)
-		return
-	else:
-		quest[property_name] = new_value
-
-	_on_node_data_changed(str(quest.get("id", "")), quest)
-	_validate_quest(str(quest.get("id", "")))
-	_update_validation_panel()
-
-func _change_quest_id(old_id: String, new_id: String) -> void:
-	if not nodes.has(old_id) or nodes.has(new_id):
-		return
-
-	var quest: Dictionary = nodes[old_id]
-	quest["id"] = new_id
-	quest["quest_id"] = new_id
-
-	nodes.erase(old_id)
-	nodes[new_id] = quest
-
-	if _validation_errors.has(old_id):
-		_validation_errors[new_id] = _validation_errors[old_id]
-		_validation_errors.erase(old_id)
-
-	for quest_id in nodes.keys():
-		var other: Dictionary = nodes[quest_id]
-		var prerequisites: Array = other.get("prerequisites", [])
-		for i in range(prerequisites.size()):
-			if str(prerequisites[i]) == old_id:
-				prerequisites[i] = new_id
-				other["prerequisites"] = prerequisites
-				_on_node_data_changed(str(other.get("id", "")), other)
-
-	var graph_node = _graph_edit.get_node_or_null(old_id)
-	if graph_node:
-		graph_node.name = new_id
-		graph_node.title = str(quest.get("title", ""))
-
-	selected_node_id = new_id
-	_inspected_node_id = new_id
-	_rebuild_connections_from_prerequisites()
-	_on_node_data_changed(new_id, quest)
-	_validate_quest(new_id)
-	_update_validation_panel()
-	_update_status("已修改任务ID: %s" % new_id)
-
-func _update_node_connection(from_id: String, _from_port: int, to_id: String, _to_port: int) -> void:
-	var target: Dictionary = nodes.get(to_id, {})
-	if target.is_empty():
-		return
-
-	var prerequisites: Array = target.get("prerequisites", [])
-	if not prerequisites.has(from_id):
-		prerequisites.append(from_id)
-		target["prerequisites"] = prerequisites
-		_on_node_data_changed(to_id, target)
-		_validate_quest(to_id)
-		_update_validation_panel()
-
-func _update_node_disconnection(from_id: String, _from_port: int, to_id: String, _to_port: int) -> void:
-	var target: Dictionary = nodes.get(to_id, {})
-	if target.is_empty():
-		return
-
-	var prerequisites: Array = target.get("prerequisites", [])
-	prerequisites.erase(from_id)
-	target["prerequisites"] = prerequisites
-	_on_node_data_changed(to_id, target)
-	_validate_quest(to_id)
-	_update_validation_panel()
-
-func _on_node_removed(node_id: String, _removed_data: Dictionary) -> void:
-	_validation_errors.erase(node_id)
-
-	for quest_id in nodes.keys():
-		var other: Dictionary = nodes[quest_id]
-		var prerequisites: Array = other.get("prerequisites", [])
-		if prerequisites.has(node_id):
-			prerequisites.erase(node_id)
-			other["prerequisites"] = prerequisites
-			_on_node_data_changed(str(other.get("id", "")), other)
-			_validate_quest(str(other.get("id", "")))
-
-	if selected_node_id == node_id:
-		_clear_selection_state()
-	_update_validation_panel()
-
-func _rebuild_connections_from_prerequisites() -> void:
-	for conn in _graph_edit.get_connection_list():
-		_graph_edit.disconnect_node(StringName(conn.from), int(conn.from_port), StringName(conn.to), int(conn.to_port))
-
-	connections.clear()
-
-	for quest_id in nodes.keys():
-		var quest: Dictionary = nodes[quest_id]
-		for prereq_id in quest.get("prerequisites", []):
-			var prerequisite := str(prereq_id)
-			if not nodes.has(prerequisite):
-				continue
-
-			var conn := {
-				"from": prerequisite,
-				"from_port": 0,
-				"to": quest_id,
-				"to_port": 0
-			}
-			connections.append(conn)
-			_graph_edit.connect_node(StringName(prerequisite), 0, StringName(quest_id), 0)
-
-func _validate_quest(quest_id: String) -> bool:
-	var quest: Dictionary = nodes.get(quest_id, {})
-	if quest.is_empty():
-		return false
-
-	var errors: Array[String] = []
-	if quest_id.is_empty():
-		errors.append("任务ID不能为空")
-	if str(quest.get("title", "")).is_empty():
-		errors.append("任务标题不能为空")
-
-	var objectives: Array = quest.get("objectives", [])
-	if objectives.is_empty():
-		errors.append("At least one objective is required")
-
-	for i in range(objectives.size()):
-		var obj: Variant = objectives[i]
-		if not (obj is Dictionary):
-			errors.append("目标 #%d 数据格式无效" % (i + 1))
-			continue
-		if not obj.has("target"):
-			errors.append("目标 #%d 缺少目标ID" % (i + 1))
-			continue
-		var target: Variant = obj.get("target")
-		if target == null:
-			errors.append("目标 #%d 缺少目标ID" % (i + 1))
-		elif target is String and target.strip_edges().is_empty():
-			errors.append("目标 #%d 缺少目标ID" % (i + 1))
-
-	for prereq in quest.get("prerequisites", []):
-		if not nodes.has(str(prereq)):
-			errors.append("Prerequisite quest '%s' does not exist" % str(prereq))
-
-	_validation_errors[quest_id] = errors
-	return errors.is_empty()
-
-func _validate_all() -> Array[String]:
-	var all_errors: Array[String] = []
-	for quest_id in nodes.keys():
-		if not _validate_quest(quest_id):
-			for error in _validation_errors[quest_id]:
-				all_errors.append("%s: %s" % [quest_id, error])
-	validation_errors_found.emit(all_errors)
-	return all_errors
-
-func _on_validate_all() -> void:
-	var errors := _validate_all()
-	_update_validation_panel()
-	if errors.is_empty():
-		_update_status("所有任务验证通过")
-	else:
-		_update_status("Found %d validation issues" % errors.size())
-
-func _update_validation_panel() -> void:
-	if selected_node_id.is_empty():
-		_validation_panel.visible = false
-		return
-
-	var errors: Array = _validation_errors.get(selected_node_id, [])
-	if errors.is_empty():
-		_validation_panel.visible = false
-		return
-
-	_validation_panel.visible = true
-	while _validation_panel.get_child_count() > 2:
-		_validation_panel.remove_child(_validation_panel.get_child(2))
-
-	for error in errors:
-		var label := Label.new()
-		label.text = str(error)
-		label.add_theme_color_override("font_color", QUEST_STATUS_COLORS.error)
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_validation_panel.add_child(label)
-
-func _clear_editor_state() -> void:
-	current_file_path = ""
-	nodes.clear()
-	connections.clear()
+func _load_quests_from_directory() -> void:
+	_quests.clear()
 	_validation_errors.clear()
-	_graph_edit.clear_graph()
-	_clear_selection_state()
-	_update_validation_panel()
 
-func _on_save_quests() -> void:
-	if not _ensure_quest_data_dir():
-		return
-
-	_save_to_directory(QUEST_DATA_DIR)
-
-func _save_to_directory(path: String) -> void:
-	current_file_path = path
-	_sync_node_positions_from_graph()
-
-	var quest_ids: Array = nodes.keys()
-	quest_ids.sort()
-	var invalid_ids: Array[String] = []
-	for quest_id in quest_ids:
-		if not _is_valid_quest_file_id(str(quest_id)):
-			invalid_ids.append(str(quest_id))
-
-	if not invalid_ids.is_empty():
-		_update_status("任务ID不能作为文件名: %s" % ", ".join(invalid_ids))
-		return
-
-	var save_failed := false
-	for quest_id in quest_ids:
-		var quest: Dictionary = nodes[quest_id]
-		var json := JSON.stringify(_serialize_quest_for_storage(str(quest_id), quest), "\t")
-		var quest_file_path := _build_quest_file_path(str(quest_id))
-		var file := FileAccess.open(quest_file_path, FileAccess.WRITE)
-		if file == null:
-			save_failed = true
-			push_warning("无法保存任务文件: %s" % quest_file_path)
-			continue
-		file.store_string(json)
-		file.close()
-
-	if save_failed:
-		_update_status("部分任务文件保存失败")
-		return
-
-	var dir := DirAccess.open(path)
-	if dir != null:
-		dir.list_dir_begin()
-		var file_name := dir.get_next()
-		while not file_name.is_empty():
-			if not dir.current_is_dir() and file_name.ends_with(".json"):
-				var existing_quest_id := file_name.trim_suffix(".json")
-				if not nodes.has(existing_quest_id):
-					dir.remove(file_name)
-			file_name = dir.get_next()
-		dir.list_dir_end()
-
-	quest_saved.emit(selected_node_id)
-	_update_status("已保存 %d 个任务到 %s" % [quest_ids.size(), path])
-
-func _on_load_quests() -> void:
-	if not _load_from_directory(QUEST_DATA_DIR):
-		_update_status("未找到有效任务文件: %s" % QUEST_DATA_DIR)
-
-func _load_from_directory(directory_path: String) -> bool:
-	var absolute_dir_path := ProjectSettings.globalize_path(directory_path)
+	var absolute_dir_path := ProjectSettings.globalize_path(QUEST_DATA_DIR)
 	if not DirAccess.dir_exists_absolute(absolute_dir_path):
-		return false
+		_update_status("未找到任务目录: %s" % QUEST_DATA_DIR)
+		_show_relationship_mode("")
+		return
 
-	var dir := DirAccess.open(directory_path)
+	var dir := DirAccess.open(QUEST_DATA_DIR)
 	if dir == null:
-		_update_status("无法读取目录: %s" % directory_path)
-		return false
+		_update_status("无法读取任务目录: %s" % QUEST_DATA_DIR)
+		return
 
 	var file_names: Array[String] = []
 	dir.list_dir_begin()
@@ -849,166 +160,1323 @@ func _load_from_directory(directory_path: String) -> bool:
 	dir.list_dir_end()
 
 	file_names.sort()
-	if file_names.is_empty():
-		return false
-
-	_clear_editor_state()
-
-	var loaded_count := 0
-	for file_index in range(file_names.size()):
-		var quest_file_name := file_names[file_index]
-		var quest_file_path := "%s/%s" % [directory_path, quest_file_name]
-		var validation := JSON_VALIDATOR.validate_file(quest_file_path, {
-			"root_type": JSON_VALIDATOR.TYPE_DICTIONARY
-		})
-		if not bool(validation.get("ok", false)):
-			push_warning(str(validation.get("message", "[JSON] Unknown validation error")))
+	for i in range(file_names.size()):
+		var quest_file_path := "%s/%s" % [QUEST_DATA_DIR, file_names[i]]
+		var raw_data := _load_json_file(quest_file_path)
+		if not (raw_data is Dictionary):
+			push_warning("[QuestEditor] 跳过无效任务文件: %s" % quest_file_path)
 			continue
-
-		var loaded_quest: Variant = validation.get("data", {})
-		if not (loaded_quest is Dictionary):
-			push_warning("[JSON] %s | Invalid validator result: data must be Dictionary" % quest_file_path)
-			continue
-
-		var quest_id := str((loaded_quest as Dictionary).get("quest_id", "")).strip_edges()
+		var quest_id := str(raw_data.get("quest_id", file_names[i].get_basename())).strip_edges()
 		if quest_id.is_empty():
-			quest_id = quest_file_name.get_basename()
+			continue
+		_quests[quest_id] = _normalize_loaded_quest(raw_data, quest_id, i)
 
-		var node_data := _quest_to_node_data(quest_id, loaded_quest as Dictionary, loaded_count)
-		_create_node_internal(node_data)
-		loaded_count += 1
+	_validate_all()
+	_show_relationship_mode("")
+	quest_loaded.emit(_current_quest_id)
 
-	if loaded_count == 0:
-		_clear_editor_state()
-		_update_status("未找到有效任务文件: %s" % directory_path)
-		return false
 
-	current_file_path = directory_path
-	_rebuild_connections_from_prerequisites()
+func _normalize_loaded_quest(raw_quest: Dictionary, quest_id: String, index: int) -> Dictionary:
+	var quest: Dictionary = raw_quest.duplicate(true)
+	quest["quest_id"] = quest_id
+	if not quest.has("flow"):
+		quest = _migrate_legacy_quest(quest, quest_id)
 
-	for quest_id in nodes.keys():
-		_validate_quest(quest_id)
+	if not quest.has("title"):
+		quest["title"] = quest_id
+	if not quest.has("description"):
+		quest["description"] = ""
+	if not quest.has("prerequisites"):
+		quest["prerequisites"] = []
+	if not quest.has("time_limit"):
+		quest["time_limit"] = -1
+	if not quest.has("_editor"):
+		quest["_editor"] = {}
 
-	quest_loaded.emit(selected_node_id)
-	_update_status("已从 %s 加载 %d 个任务" % [directory_path, loaded_count])
-	return true
+	var editor_meta: Dictionary = quest.get("_editor", {})
+	var default_relationship_position := Vector2(320.0 + float(index % 4) * 260.0, 200.0 + float(index / 4) * 180.0)
+	editor_meta["relationship_position"] = _parse_position(
+		editor_meta.get("relationship_position", editor_meta.get("position", {})),
+		default_relationship_position
+	)
+	quest["_editor"] = editor_meta
 
-func _quest_to_node_data(quest_id: String, raw_quest: Dictionary, index: int) -> Dictionary:
-	var quest := raw_quest.duplicate(true)
-	var default_position := Vector2(float(index % 4) * 280.0, float(index / 4) * 180.0)
-	var editor_meta: Variant = quest.get("_editor", {})
-	var position := default_position
-	if editor_meta is Dictionary:
-		var pos_data: Variant = editor_meta.get("position", {})
-		if pos_data is Dictionary:
-			position = Vector2(float(pos_data.get("x", default_position.x)), float(pos_data.get("y", default_position.y)))
-
-	quest.erase("_editor")
-	quest["id"] = quest_id
-	quest["quest_id"] = str(quest.get("quest_id", quest_id))
-	quest["type"] = "quest"
-	quest["position"] = position
-	quest["title"] = str(quest.get("title", "Untitled Quest"))
-
-	_apply_type_defaults(quest, "quest")
+	var flow: Dictionary = quest.get("flow", {})
+	var flow_nodes: Dictionary = flow.get("nodes", {})
+	var normalized_nodes: Dictionary = {}
+	for node_id_variant in flow_nodes.keys():
+		var node_id := str(node_id_variant)
+		var node: Dictionary = flow_nodes[node_id].duplicate(true)
+		node["id"] = str(node.get("id", node_id))
+		node["position"] = _parse_position(node.get("position", {}), Vector2(120.0, 160.0))
+		normalized_nodes[node_id] = node
+	flow["nodes"] = normalized_nodes
+	if not flow.has("connections"):
+		flow["connections"] = []
+	if not flow.has("start_node_id"):
+		flow["start_node_id"] = "start"
+	quest["flow"] = flow
 	return quest
 
-func _on_export_gdscript() -> void:
-	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_file_dialog.current_file = "quest_data.gd"
-	_file_dialog.file_selected.connect(func(path: String):
-		var output := _build_gdscript()
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file:
-			file.store_string(output)
-			file.close()
-			_update_status("已导出 GDScript")
-	, CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
 
-func _build_gdscript() -> String:
+func _migrate_legacy_quest(raw_quest: Dictionary, quest_id: String) -> Dictionary:
+	var quest: Dictionary = raw_quest.duplicate(true)
+	var relationship_position := _parse_position(
+		quest.get("_editor", {}).get("relationship_position", quest.get("_editor", {}).get("position", {})),
+		Vector2(320, 200)
+	)
+
+	var flow_nodes: Dictionary = {}
+	var flow_connections: Array[Dictionary] = []
+	var current_x := 120.0
+	var y := 160.0
+	flow_nodes["start"] = {
+		"id": "start",
+		"type": "start",
+		"position": Vector2(current_x, y)
+	}
+
+	var previous_node_id := "start"
+	var step_index := 1
+	for objective_variant in quest.get("objectives", []):
+		if not (objective_variant is Dictionary):
+			continue
+		current_x += 300.0
+		var objective_data: Dictionary = objective_variant
+		var node_id := "step_%d" % step_index
+		var node_data: Dictionary = {
+			"id": node_id,
+			"type": "objective",
+			"position": Vector2(current_x, y),
+			"objective_type": str(objective_data.get("type", "collect")),
+			"description": str(objective_data.get("description", ""))
+		}
+		_apply_legacy_objective_fields(node_data, objective_data)
+		flow_nodes[node_id] = node_data
+		flow_connections.append({"from": previous_node_id, "to": node_id, "from_port": 0, "to_port": 0})
+		previous_node_id = node_id
+		step_index += 1
+
+	var rewards: Dictionary = quest.get("rewards", {})
+	if not _is_reward_empty(rewards):
+		current_x += 300.0
+		var reward_node_id := "reward_1"
+		flow_nodes[reward_node_id] = {
+			"id": reward_node_id,
+			"type": "reward",
+			"position": Vector2(current_x, y),
+			"rewards": rewards.duplicate(true)
+		}
+		flow_connections.append({"from": previous_node_id, "to": reward_node_id, "from_port": 0, "to_port": 0})
+		previous_node_id = reward_node_id
+
+	current_x += 300.0
+	flow_nodes["end"] = {
+		"id": "end",
+		"type": "end",
+		"position": Vector2(current_x, y)
+	}
+	flow_connections.append({"from": previous_node_id, "to": "end", "from_port": 0, "to_port": 0})
+
+	quest.erase("objectives")
+	quest.erase("rewards")
+	quest["flow"] = {
+		"start_node_id": "start",
+		"nodes": flow_nodes,
+		"connections": flow_connections
+	}
+	quest["_editor"] = {"relationship_position": relationship_position}
+	quest["quest_id"] = quest_id
+	return quest
+
+
+func _apply_legacy_objective_fields(node_data: Dictionary, objective_data: Dictionary) -> void:
+	var objective_type := str(node_data.get("objective_type", ""))
+	var target_value: Variant = objective_data.get("target", null)
+	match objective_type:
+		"travel":
+			node_data["target"] = str(target_value)
+			node_data["count"] = 1
+		"search", "sleep", "survive", "build":
+			node_data["count"] = max(int(target_value), 1) if target_value != null else 1
+			if objective_data.has("structure_id"):
+				node_data["structure_id"] = str(objective_data.get("structure_id", ""))
+		"collect", "craft":
+			node_data["count"] = max(int(target_value), 1) if target_value != null else 1
+			if objective_data.has("item_id"):
+				node_data["item_id"] = str(objective_data.get("item_id", ""))
+		"kill":
+			node_data["count"] = max(int(target_value), 1) if target_value != null else 1
+			if objective_data.has("enemy_type"):
+				node_data["enemy_type"] = str(objective_data.get("enemy_type", ""))
+		_:
+			if target_value is String:
+				node_data["target"] = str(target_value)
+			elif target_value != null:
+				node_data["count"] = max(int(target_value), 1)
+
+
+func _parse_position(value: Variant, fallback: Vector2) -> Vector2:
+	if value is Vector2:
+		return value
+	if value is Dictionary:
+		return Vector2(float(value.get("x", fallback.x)), float(value.get("y", fallback.y)))
+	return fallback
+
+
+func _show_relationship_mode(focus_quest_id: String) -> void:
+	_sync_displayed_graph_to_store()
+	_editor_mode = MODE_RELATIONSHIP
+	_current_quest_id = ""
+	_focused_relationship_quest_id = focus_quest_id
+	_set_node_type_menu(_get_relationship_node_definitions())
+	_rebuild_display_graph()
+	_update_toolbar_state()
+	if not focus_quest_id.is_empty():
+		_select_display_node(focus_quest_id)
+	_update_status("关系图模式 - %d 个任务" % _quests.size())
+
+
+func _show_flow_mode(quest_id: String, selected_flow_node_id: String = "") -> void:
+	if not _quests.has(quest_id):
+		return
+	_sync_displayed_graph_to_store()
+	_editor_mode = MODE_FLOW
+	_current_quest_id = quest_id
+	_set_node_type_menu(_get_flow_node_definitions())
+	_rebuild_display_graph()
+	_update_toolbar_state()
+
+	var flow: Dictionary = _quests[quest_id].get("flow", {})
+	var start_node_id := selected_flow_node_id
+	if start_node_id.is_empty():
+		start_node_id = str(flow.get("start_node_id", "start"))
+	if nodes.has(start_node_id):
+		_select_display_node(start_node_id)
+	else:
+		_refresh_property_panel_for_current_mode()
+
+	_update_status("单任务模式 - %s" % quest_id)
+
+
+func _rebuild_display_graph() -> void:
+	nodes.clear()
+	connections.clear()
+	_graph_edit.clear_graph()
+	_clear_selection_state()
+
+	if _editor_mode == MODE_RELATIONSHIP:
+		var quest_ids: Array = _quests.keys()
+		quest_ids.sort()
+		for quest_id_variant in quest_ids:
+			var quest_id := str(quest_id_variant)
+			_create_node_internal(_build_relationship_node_data(quest_id))
+
+		for quest_id_variant in quest_ids:
+			var quest_id := str(quest_id_variant)
+			var quest: Dictionary = _quests[quest_id]
+			for prereq_variant in quest.get("prerequisites", []):
+				var prereq_id := str(prereq_variant)
+				if not _quests.has(prereq_id):
+					continue
+				var conn := {"from": prereq_id, "to": quest_id, "from_port": 0, "to_port": 0}
+				connections.append(conn)
+				_graph_edit.connect_node(StringName(prereq_id), 0, StringName(quest_id), 0)
+	else:
+		var quest: Dictionary = _quests.get(_current_quest_id, {})
+		var flow: Dictionary = quest.get("flow", {})
+		var flow_nodes: Dictionary = flow.get("nodes", {})
+		var flow_node_ids: Array = flow_nodes.keys()
+		flow_node_ids.sort()
+		for node_id_variant in flow_node_ids:
+			var node_id := str(node_id_variant)
+			_create_node_internal(flow_nodes[node_id].duplicate(true))
+
+		for conn_variant in flow.get("connections", []):
+			if not (conn_variant is Dictionary):
+				continue
+			var conn: Dictionary = conn_variant
+			connections.append(conn.duplicate(true))
+			_graph_edit.connect_node(
+				StringName(str(conn.get("from", ""))),
+				int(conn.get("from_port", 0)),
+				StringName(str(conn.get("to", ""))),
+				int(conn.get("to_port", 0))
+			)
+
+	for graph_node in _graph_edit.get_all_nodes():
+		_disable_graph_node_close(graph_node)
+
+	_refresh_property_panel_for_current_mode()
+	_update_validation_panel()
+
+
+func _build_relationship_node_data(quest_id: String) -> Dictionary:
+	var quest: Dictionary = _quests[quest_id]
+	var relationship_position: Vector2 = quest.get("_editor", {}).get("relationship_position", Vector2.ZERO)
+	return {
+		"id": quest_id,
+		"type": "quest",
+		"title": str(quest.get("title", quest_id)),
+		"quest_id": quest_id,
+		"description": str(quest.get("description", "")),
+		"position": relationship_position,
+		"step_count": _get_step_count(quest),
+		"prerequisite_count": quest.get("prerequisites", []).size()
+	}
+
+
+func _refresh_graph_node(node, data: Dictionary) -> void:
+	super._refresh_graph_node(node, data)
+	_disable_graph_node_close(node)
+
+
+func _disable_graph_node_close(graph_node: GraphNode) -> void:
+	if graph_node == null:
+		return
+	if graph_node.has_method("_has_property") and graph_node.call("_has_property", "show_close_button"):
+		graph_node.set("show_close_button", false)
+	elif graph_node.has_method("_has_property") and graph_node.call("_has_property", "show_close"):
+		graph_node.set("show_close", false)
+	elif graph_node.has_method("_has_property") and graph_node.call("_has_property", "close_button_enabled"):
+		graph_node.set("close_button_enabled", false)
+
+
+func _populate_node_preview(node, data: Dictionary) -> void:
+	if _editor_mode == MODE_RELATIONSHIP:
+		node.add_text_row(str(data.get("quest_id", data.get("id", ""))), Color.GRAY)
+		node.add_separator()
+		node.add_text_row(str(data.get("title", "Untitled Quest")))
+		node.add_text_row(_truncate_text(str(data.get("description", "")), 60), Color.WHITE, Vector2(180, 40), true, HORIZONTAL_ALIGNMENT_LEFT)
+		node.add_text_row("步骤: %d" % int(data.get("step_count", 0)), Color.LIGHT_BLUE)
+		node.add_text_row("前置任务: %d" % int(data.get("prerequisite_count", 0)), Color.GREEN)
+		return
+
+	var node_type := str(data.get("type", ""))
+	match node_type:
+		"start":
+			node.add_text_row("任务开始", Color.WHITE)
+		"objective":
+			node.add_text_row(OBJECTIVE_TYPES.get(str(data.get("objective_type", "")), str(data.get("objective_type", ""))), Color.WHITE)
+			node.add_text_row(_truncate_text(str(data.get("description", "")), 50), Color.LIGHT_GRAY, Vector2(180, 36), true, HORIZONTAL_ALIGNMENT_LEFT)
+			node.add_text_row(_describe_objective_target(data), Color.LIGHT_BLUE)
+		"dialog":
+			node.add_text_row("dialog_id", Color.GRAY)
+			node.add_text_row(str(data.get("dialog_id", "")), Color.WHITE)
+			node.add_text_row("分支: %d" % max(_get_dialog_output_count(data), 1), Color.LIGHT_BLUE)
+		"choice":
+			node.add_text_row("Quest Choice", Color.WHITE)
+			node.add_text_row("选项数: %d" % data.get("options", []).size(), Color.LIGHT_BLUE)
+		"reward":
+			node.add_text_row("奖励节点", Color.WHITE)
+			node.add_text_row(_summarize_rewards(data.get("rewards", {})), Color.GREEN, Vector2(180, 36), true, HORIZONTAL_ALIGNMENT_LEFT)
+		"end":
+			node.add_text_row("任务结束", Color.WHITE)
+
+
+func _configure_node_ports(node, data: Dictionary) -> void:
+	var node_type := str(data.get("type", ""))
+	if _editor_mode == MODE_RELATIONSHIP:
+		node.add_input_port()
+		node.add_output_port()
+		return
+
+	match node_type:
+		"start":
+			node.add_output_port()
+		"objective":
+			node.add_input_port()
+			node.add_output_port()
+		"dialog":
+			node.add_input_port()
+			for _i in range(max(_get_dialog_output_count(data), 1)):
+				node.add_output_port()
+		"choice":
+			node.add_input_port()
+			for _i in range(max(data.get("options", []).size(), 1)):
+				node.add_output_port()
+		"reward":
+			node.add_input_port()
+			node.add_output_port()
+		"end":
+			node.add_input_port()
+
+
+func _describe_objective_target(node_data: Dictionary) -> String:
+	var objective_type := str(node_data.get("objective_type", ""))
+	match objective_type:
+		"travel", "search":
+			if node_data.has("target") and not str(node_data.get("target", "")).is_empty():
+				return "目标: %s" % str(node_data.get("target", ""))
+			return "次数: %d" % int(node_data.get("count", 1))
+		"collect", "craft":
+			return "物品 %s x%d" % [str(node_data.get("item_id", "")), int(node_data.get("count", 1))]
+		"kill":
+			return "敌人 %s x%d" % [str(node_data.get("enemy_type", "")), int(node_data.get("count", 1))]
+		"build":
+			if node_data.has("structure_id") and not str(node_data.get("structure_id", "")).is_empty():
+				return "建筑 %s x%d" % [str(node_data.get("structure_id", "")), int(node_data.get("count", 1))]
+			return "建造 x%d" % int(node_data.get("count", 1))
+		_:
+			return "次数: %d" % int(node_data.get("count", 1))
+
+
+func _get_dialog_output_count(node_data: Dictionary) -> int:
+	return max(node_data.get("branch_labels", []).size(), 1)
+
+
+func _summarize_rewards(rewards: Dictionary) -> String:
+	var parts: Array[String] = []
+	if rewards.get("items", []).size() > 0:
+		parts.append("%d 件物品" % rewards.get("items", []).size())
+	if int(rewards.get("experience", 0)) > 0:
+		parts.append("%d 经验" % int(rewards.get("experience", 0)))
+	if int(rewards.get("skill_points", 0)) > 0:
+		parts.append("%d 技能点" % int(rewards.get("skill_points", 0)))
+	if rewards.has("unlock_location") and not str(rewards.get("unlock_location", "")).is_empty():
+		parts.append("解锁地点")
+	if parts.is_empty():
+		return "无奖励"
+	return ", ".join(parts)
+
+
+func _truncate_text(text: String, max_length: int) -> String:
+	if text.length() <= max_length:
+		return text
+	return text.substr(0, max_length - 3) + "..."
+
+
+func _update_property_panel(_data: Dictionary) -> void:
+	_property_panel.clear()
+	if _editor_mode == MODE_RELATIONSHIP:
+		_update_relationship_property_panel()
+	else:
+		_update_flow_property_panel()
+
+
+func _update_relationship_property_panel() -> void:
+	_property_panel.add_readonly_label("mode", "模式:", "关系图模式（只读）")
+	_property_panel.add_separator()
+	if selected_node_id.is_empty() or not _quests.has(selected_node_id):
+		_property_panel.add_readonly_label("hint", "说明:", "双击任务节点进入单任务编辑")
+		return
+
+	var quest: Dictionary = _quests[selected_node_id]
+	_property_panel.add_readonly_label("quest_id", "任务ID:", selected_node_id)
+	_property_panel.add_readonly_label("title", "标题:", str(quest.get("title", "")))
+	_property_panel.add_readonly_label("description", "描述:", str(quest.get("description", "")))
+	_property_panel.add_readonly_label("steps", "步骤数:", str(_get_step_count(quest)))
+	_property_panel.add_readonly_label("prerequisites", "前置任务:", _format_prerequisites(quest.get("prerequisites", [])))
+
+
+func _update_flow_property_panel() -> void:
+	var quest: Dictionary = _quests.get(_current_quest_id, {})
+	if quest.is_empty():
+		_property_panel.add_readonly_label("empty", "任务:", "未选择")
+		return
+
+	_property_panel.add_readonly_label("mode", "模式:", "单任务模式")
+	_property_panel.add_string_property("quest_quest_id", "任务ID:", str(quest.get("quest_id", "")), false, "唯一任务ID")
+	_property_panel.add_string_property("quest_title", "任务标题:", str(quest.get("title", "")))
+	_property_panel.add_string_property("quest_description", "任务描述:", str(quest.get("description", "")), true, "任务说明")
+	_property_panel.add_number_property("quest_time_limit", "时间限制:", int(quest.get("time_limit", -1)), -1, 999999, 1, false)
+	_property_panel.add_readonly_label("quest_prerequisites", "前置任务:", _format_prerequisites(quest.get("prerequisites", [])))
+	_property_panel.add_separator()
+
+	var selected_node: Dictionary = nodes.get(selected_node_id, {})
+	if selected_node.is_empty():
+		_property_panel.add_readonly_label("select_hint", "节点:", "请选择一个步骤节点")
+		return
+
+	_property_panel.add_readonly_label("node_id", "节点ID:", str(selected_node.get("id", "")))
+	_property_panel.add_readonly_label("node_type", "节点类型:", NODE_TYPE_NAMES.get(str(selected_node.get("type", "")), str(selected_node.get("type", ""))))
+
+	match str(selected_node.get("type", "")):
+		"objective":
+			_property_panel.add_enum_property("node_objective_type", "目标类型:", OBJECTIVE_TYPES, str(selected_node.get("objective_type", "travel")))
+			_property_panel.add_string_property("node_description", "目标描述:", str(selected_node.get("description", "")), true, "例如：前往超市")
+			_property_panel.add_string_property("node_target", "目标参数:", str(selected_node.get("target", "")), false, "地点/通用目标")
+			_property_panel.add_number_property("node_count", "数量:", int(selected_node.get("count", 1)), 1, 9999, 1, false)
+			_property_panel.add_string_property("node_item_id", "物品ID:", str(selected_node.get("item_id", "")))
+			_property_panel.add_string_property("node_enemy_type", "敌人类型:", str(selected_node.get("enemy_type", "")))
+			_property_panel.add_string_property("node_structure_id", "建筑ID:", str(selected_node.get("structure_id", "")))
+		"dialog":
+			_property_panel.add_string_property("node_dialog_id", "dialog_id:", str(selected_node.get("dialog_id", "")))
+			_property_panel.add_separator()
+			_property_panel.add_custom_control(_create_string_array_editor("分支标签", selected_node.get("branch_labels", []), _on_dialog_branch_labels_changed))
+		"choice":
+			_property_panel.add_custom_control(_create_choice_options_editor(selected_node))
+		"reward":
+			var rewards: Dictionary = selected_node.get("rewards", {})
+			_property_panel.add_number_property("node_reward_experience", "经验:", int(rewards.get("experience", 0)), 0, 999999, 10, false)
+			_property_panel.add_number_property("node_reward_skill_points", "技能点:", int(rewards.get("skill_points", 0)), 0, 9999, 1, false)
+			_property_panel.add_string_property("node_reward_unlock_location", "解锁地点:", str(rewards.get("unlock_location", "")))
+			_property_panel.add_string_property("node_reward_title", "称号:", str(rewards.get("title", "")))
+			_property_panel.add_string_property("node_reward_unlock_recipes", "解锁配方:", ", ".join(Array(rewards.get("unlock_recipes", []))), false, "逗号分隔")
+			_property_panel.add_separator()
+			_property_panel.add_custom_control(_create_reward_items_editor(selected_node))
+		"start", "end":
+			_property_panel.add_readonly_label("node_hint", "说明:", "该节点没有额外可编辑属性")
+
+
+func _create_string_array_editor(title: String, values: Array, callback: Callable) -> Control:
+	var container := VBoxContainer.new()
+	var label := Label.new()
+	label.text = title
+	container.add_child(label)
+
+	for i in range(values.size()):
+		var row := HBoxContainer.new()
+		var edit := LineEdit.new()
+		edit.text = str(values[i])
+		edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		edit.text_changed.connect(func(v: String):
+			var updated := values.duplicate()
+			updated[i] = v
+			callback.call(updated)
+		)
+		row.add_child(edit)
+
+		var del_btn := Button.new()
+		del_btn.text = "×"
+		del_btn.pressed.connect(func():
+			var updated := values.duplicate()
+			updated.remove_at(i)
+			callback.call(updated)
+		)
+		row.add_child(del_btn)
+		container.add_child(row)
+
+	var add_btn := Button.new()
+	add_btn.text = "+ 添加"
+	add_btn.pressed.connect(func():
+		var updated := values.duplicate()
+		updated.append("")
+		callback.call(updated)
+	)
+	container.add_child(add_btn)
+	return container
+
+
+func _create_choice_options_editor(node_data: Dictionary) -> Control:
+	var container := VBoxContainer.new()
+	var label := Label.new()
+	label.text = "选项"
+	container.add_child(label)
+
+	var options: Array = node_data.get("options", [])
+	for i in range(options.size()):
+		var option_data: Dictionary = options[i]
+		var row := HBoxContainer.new()
+
+		var id_edit := LineEdit.new()
+		id_edit.text = str(option_data.get("id", ""))
+		id_edit.placeholder_text = "option_id"
+		id_edit.custom_minimum_size = Vector2(120, 0)
+		id_edit.text_changed.connect(func(v: String):
+			var updated := options.duplicate(true)
+			updated[i]["id"] = v
+			_update_choice_options(updated)
+		)
+		row.add_child(id_edit)
+
+		var text_edit := LineEdit.new()
+		text_edit.text = str(option_data.get("text", ""))
+		text_edit.placeholder_text = "显示文本"
+		text_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text_edit.text_changed.connect(func(v: String):
+			var updated := options.duplicate(true)
+			updated[i]["text"] = v
+			_update_choice_options(updated)
+		)
+		row.add_child(text_edit)
+
+		var del_btn := Button.new()
+		del_btn.text = "×"
+		del_btn.pressed.connect(func():
+			var updated := options.duplicate(true)
+			updated.remove_at(i)
+			_update_choice_options(updated)
+		)
+		row.add_child(del_btn)
+		container.add_child(row)
+
+	var add_btn := Button.new()
+	add_btn.text = "+ 添加选项"
+	add_btn.pressed.connect(func():
+		var updated := options.duplicate(true)
+		updated.append({
+			"id": "option_%d" % updated.size(),
+			"text": "新选项"
+		})
+		_update_choice_options(updated)
+	)
+	container.add_child(add_btn)
+	return container
+
+
+func _create_reward_items_editor(node_data: Dictionary) -> Control:
+	var container := VBoxContainer.new()
+	var label := Label.new()
+	label.text = "物品奖励"
+	container.add_child(label)
+
+	var rewards: Dictionary = node_data.get("rewards", {})
+	var items: Array = rewards.get("items", [])
+	for i in range(items.size()):
+		var item_data: Dictionary = items[i]
+		var row := HBoxContainer.new()
+
+		var id_edit := LineEdit.new()
+		id_edit.text = str(item_data.get("id", ""))
+		id_edit.placeholder_text = "item_id"
+		id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		id_edit.text_changed.connect(func(v: String):
+			var updated := items.duplicate(true)
+			updated[i]["id"] = v
+			_update_reward_items(updated)
+		)
+		row.add_child(id_edit)
+
+		var count_spin := SpinBox.new()
+		count_spin.min_value = 1
+		count_spin.max_value = 9999
+		count_spin.value = float(item_data.get("count", 1))
+		count_spin.value_changed.connect(func(v: float):
+			var updated := items.duplicate(true)
+			updated[i]["count"] = int(v)
+			_update_reward_items(updated)
+		)
+		row.add_child(count_spin)
+
+		var del_btn := Button.new()
+		del_btn.text = "×"
+		del_btn.pressed.connect(func():
+			var updated := items.duplicate(true)
+			updated.remove_at(i)
+			_update_reward_items(updated)
+		)
+		row.add_child(del_btn)
+		container.add_child(row)
+
+	var add_btn := Button.new()
+	add_btn.text = "+ 添加物品"
+	add_btn.pressed.connect(func():
+		var updated := items.duplicate(true)
+		updated.append({"id": "", "count": 1})
+		_update_reward_items(updated)
+	)
+	container.add_child(add_btn)
+	return container
+
+
+func _on_property_changed(property_name: String, new_value: Variant, _old_value: Variant) -> void:
+	if _editor_mode != MODE_FLOW or _current_quest_id.is_empty():
+		return
+
+	var quest: Dictionary = _quests.get(_current_quest_id, {})
+	if quest.is_empty():
+		return
+
+	match property_name:
+		"quest_quest_id":
+			_change_quest_id(_current_quest_id, str(new_value).strip_edges())
+			return
+		"quest_title":
+			quest["title"] = str(new_value)
+			_quests[_current_quest_id] = quest
+		"quest_description":
+			quest["description"] = str(new_value)
+			_quests[_current_quest_id] = quest
+		"quest_time_limit":
+			quest["time_limit"] = int(new_value)
+			_quests[_current_quest_id] = quest
+		_:
+			_update_selected_flow_node_property(property_name, new_value)
+			return
+
+	_validate_quest(_current_quest_id)
+	_refresh_property_panel_for_current_mode()
+	_update_validation_panel()
+
+
+func _update_selected_flow_node_property(property_name: String, new_value: Variant) -> void:
+	if selected_node_id.is_empty():
+		return
+	var node_data: Dictionary = _get_current_flow_node(selected_node_id)
+	if node_data.is_empty():
+		return
+
+	match property_name:
+		"node_objective_type":
+			node_data["objective_type"] = str(new_value)
+		"node_description":
+			node_data["description"] = str(new_value)
+		"node_target":
+			node_data["target"] = str(new_value)
+		"node_count":
+			node_data["count"] = int(new_value)
+		"node_item_id":
+			if str(new_value).is_empty():
+				node_data.erase("item_id")
+			else:
+				node_data["item_id"] = str(new_value)
+		"node_enemy_type":
+			if str(new_value).is_empty():
+				node_data.erase("enemy_type")
+			else:
+				node_data["enemy_type"] = str(new_value)
+		"node_structure_id":
+			if str(new_value).is_empty():
+				node_data.erase("structure_id")
+			else:
+				node_data["structure_id"] = str(new_value)
+		"node_dialog_id":
+			node_data["dialog_id"] = str(new_value)
+		"node_reward_experience", "node_reward_skill_points", "node_reward_unlock_location", "node_reward_title", "node_reward_unlock_recipes":
+			var rewards: Dictionary = node_data.get("rewards", {})
+			match property_name:
+				"node_reward_experience":
+					rewards["experience"] = int(new_value)
+				"node_reward_skill_points":
+					rewards["skill_points"] = int(new_value)
+				"node_reward_unlock_location":
+					if str(new_value).is_empty():
+						rewards.erase("unlock_location")
+					else:
+						rewards["unlock_location"] = str(new_value)
+				"node_reward_title":
+					if str(new_value).is_empty():
+						rewards.erase("title")
+					else:
+						rewards["title"] = str(new_value)
+				"node_reward_unlock_recipes":
+					var recipes: Array[String] = []
+					for part in str(new_value).split(","):
+						var recipe_id := part.strip_edges()
+						if not recipe_id.is_empty():
+							recipes.append(recipe_id)
+					if recipes.is_empty():
+						rewards.erase("unlock_recipes")
+					else:
+						rewards["unlock_recipes"] = recipes
+			node_data["rewards"] = rewards
+		_:
+			return
+
+	_update_current_flow_node(selected_node_id, node_data)
+
+
+func _on_dialog_branch_labels_changed(updated_values: Array) -> void:
+	if selected_node_id.is_empty():
+		return
+	var node_data := _get_current_flow_node(selected_node_id)
+	node_data["branch_labels"] = updated_values
+	_update_current_flow_node(selected_node_id, node_data, true)
+
+
+func _update_choice_options(updated_options: Array) -> void:
+	if selected_node_id.is_empty():
+		return
+	var node_data := _get_current_flow_node(selected_node_id)
+	node_data["options"] = updated_options
+	_update_current_flow_node(selected_node_id, node_data, true)
+
+
+func _update_reward_items(updated_items: Array) -> void:
+	if selected_node_id.is_empty():
+		return
+	var node_data := _get_current_flow_node(selected_node_id)
+	var rewards: Dictionary = node_data.get("rewards", {})
+	rewards["items"] = updated_items
+	node_data["rewards"] = rewards
+	_update_current_flow_node(selected_node_id, node_data)
+
+
+func _update_current_flow_node(node_id: String, node_data: Dictionary, rebuild_graph: bool = false) -> void:
+	if _editor_mode != MODE_FLOW or _current_quest_id.is_empty():
+		return
+	var quest: Dictionary = _quests.get(_current_quest_id, {})
+	var flow: Dictionary = quest.get("flow", {})
+	var flow_nodes: Dictionary = flow.get("nodes", {})
+	flow_nodes[node_id] = node_data
+	flow["nodes"] = flow_nodes
+	quest["flow"] = flow
+	_quests[_current_quest_id] = quest
+	_validate_quest(_current_quest_id)
+
+	if rebuild_graph:
+		_prune_invalid_flow_connections()
+		_show_flow_mode(_current_quest_id, node_id)
+	else:
+		nodes[node_id] = node_data
+		_on_node_data_changed(node_id, node_data)
+		_update_validation_panel()
+
+
+func _get_current_flow_node(node_id: String) -> Dictionary:
+	if _current_quest_id.is_empty():
+		return {}
+	var quest: Dictionary = _quests.get(_current_quest_id, {})
+	return quest.get("flow", {}).get("nodes", {}).get(node_id, {}).duplicate(true)
+
+
+func _change_quest_id(old_id: String, new_id: String) -> void:
+	if new_id.is_empty() or new_id == old_id:
+		return
+	if _quests.has(new_id):
+		_update_status("任务ID已存在: %s" % new_id)
+		return
+
+	var quest: Dictionary = _quests[old_id]
+	quest["quest_id"] = new_id
+	_quests.erase(old_id)
+	_quests[new_id] = quest
+
+	for quest_id_variant in _quests.keys():
+		var quest_id := str(quest_id_variant)
+		var other: Dictionary = _quests[quest_id]
+		var prerequisites: Array = other.get("prerequisites", [])
+		for i in range(prerequisites.size()):
+			if str(prerequisites[i]) == old_id:
+				prerequisites[i] = new_id
+		other["prerequisites"] = prerequisites
+		_quests[quest_id] = other
+
+	_current_quest_id = new_id
+	_validate_all()
+	_refresh_property_panel_for_current_mode()
+	_update_validation_panel()
+	_update_status("已修改任务ID: %s" % new_id)
+
+
+func _refresh_property_panel_for_current_mode() -> void:
+	_queue_property_panel_update({})
+
+
+func _select_display_node(node_id: String) -> void:
+	selected_node_id = node_id
+	_inspected_node_id = node_id
+	var graph_node: Node = _graph_edit.get_node_or_null(node_id)
+	if graph_node and graph_node is GraphNode:
+		graph_node.selected = true
+	_queue_property_panel_update(nodes.get(node_id, {}))
+	_update_validation_panel()
+
+
+func _on_connection_request(from_node: StringName, from_port: int, to_node: StringName, to_port: int) -> void:
+	if _editor_mode == MODE_RELATIONSHIP:
+		_update_status("关系图模式只读，不能修改依赖关系")
+		return
+	super._on_connection_request(from_node, from_port, to_node, to_port)
+	_sync_flow_connections_to_store()
+
+
+func _on_disconnection_request(from_node: StringName, from_port: int, to_node: StringName, to_port: int) -> void:
+	if _editor_mode == MODE_RELATIONSHIP:
+		_update_status("关系图模式只读，不能修改依赖关系")
+		return
+	super._on_disconnection_request(from_node, from_port, to_node, to_port)
+	_sync_flow_connections_to_store()
+
+
+func _on_add_node_requested(node_type: String, graph_position: Vector2, pending_connection: Dictionary = {}) -> void:
+	if _editor_mode != MODE_FLOW:
+		_update_status("关系图模式只读，不能新增流程节点")
+		return
+	super._on_add_node_requested(node_type, graph_position, pending_connection)
+	_sync_flow_nodes_to_store()
+
+
+func _on_delete_selected() -> void:
+	if _editor_mode != MODE_FLOW:
+		_update_status("关系图模式只读，不能删除任务或节点")
+		return
+	super._on_delete_selected()
+	_sync_displayed_graph_to_store()
+	_validate_quest(_current_quest_id)
+	_update_validation_panel()
+
+
+func _on_paste_nodes() -> void:
+	if _editor_mode != MODE_FLOW:
+		_update_status("关系图模式只读，不能粘贴节点")
+		return
+	super._on_paste_nodes()
+	_sync_flow_nodes_to_store()
+
+
+func _normalize_pasted_node_data(data: Dictionary) -> Dictionary:
+	if _editor_mode != MODE_FLOW:
+		return {}
+	var normalized := data.duplicate(true)
+	normalized["id"] = _generate_node_id(str(normalized.get("type", "node")))
+	normalized["position"] = normalized.get("position", Vector2.ZERO) + Vector2(40, 40)
+	return normalized
+
+
+func _generate_node_id(node_type: String = "node") -> String:
+	return "%s_%d" % [node_type, Time.get_ticks_msec()]
+
+
+func _apply_type_defaults(data: Dictionary, node_type: String) -> void:
+	if _editor_mode == MODE_RELATIONSHIP:
+		return
+
+	data["type"] = node_type
+	if not data.has("id"):
+		data["id"] = _generate_node_id(node_type)
+	if not data.has("position"):
+		data["position"] = Vector2.ZERO
+	match node_type:
+		"start":
+			data["id"] = "start" if str(data.get("id", "")).is_empty() else data["id"]
+		"objective":
+			if not data.has("objective_type"):
+				data["objective_type"] = "travel"
+			if not data.has("description"):
+				data["description"] = "新的任务步骤"
+			if not data.has("count"):
+				data["count"] = 1
+		"dialog":
+			if not data.has("dialog_id"):
+				data["dialog_id"] = ""
+			if not data.has("branch_labels"):
+				data["branch_labels"] = []
+		"choice":
+			if not data.has("options"):
+				data["options"] = [{"id": "option_0", "text": "新选项"}]
+		"reward":
+			if not data.has("rewards"):
+				data["rewards"] = {"items": [], "experience": 0, "skill_points": 0}
+
+
+func _on_new_quest() -> void:
+	if _editor_mode != MODE_RELATIONSHIP:
+		_update_status("请先返回关系图模式再创建新 Quest")
+		return
+
+	var quest_id := "quest_%d" % Time.get_ticks_msec()
+	_quests[quest_id] = _build_new_quest(quest_id)
+	_validate_quest(quest_id)
+	_show_flow_mode(quest_id)
+
+
+func _build_new_quest(quest_id: String) -> Dictionary:
+	return {
+		"quest_id": quest_id,
+		"title": "New Quest",
+		"description": "任务描述",
+		"prerequisites": [],
+		"time_limit": -1,
+		"flow": {
+			"start_node_id": "start",
+			"nodes": {
+				"start": {
+					"id": "start",
+					"type": "start",
+					"position": Vector2(120, 180)
+				},
+				"end": {
+					"id": "end",
+					"type": "end",
+					"position": Vector2(420, 180)
+				}
+			},
+			"connections": [
+				{"from": "start", "to": "end", "from_port": 0, "to_port": 0}
+			]
+		},
+		"_editor": {
+			"relationship_position": Vector2(320, 200)
+		}
+	}
+
+
+func _on_delete_current_quest() -> void:
+	if _editor_mode != MODE_FLOW or _current_quest_id.is_empty():
+		_update_status("只有单任务模式可以删除 Quest")
+		return
+
+	var deleted_quest_id := _current_quest_id
+	_quests.erase(deleted_quest_id)
+	_validation_errors.erase(deleted_quest_id)
+	_current_quest_id = ""
+	_show_relationship_mode("")
+	_update_status("已删除任务: %s" % deleted_quest_id)
+
+
+func _get_search_strings(data: Dictionary) -> Array[String]:
+	var values: Array[String] = [
+		str(data.get("id", "")),
+		str(data.get("quest_id", "")),
+		str(data.get("title", "")),
+		str(data.get("description", "")),
+		str(data.get("dialog_id", "")),
+		str(data.get("objective_type", ""))
+	]
+	for option_variant in data.get("options", []):
+		if option_variant is Dictionary:
+			values.append(str(option_variant.get("id", "")))
+			values.append(str(option_variant.get("text", "")))
+	return values
+
+
+func _sync_displayed_graph_to_store() -> void:
 	_sync_node_positions_from_graph()
+	if _editor_mode == MODE_RELATIONSHIP:
+		_sync_relationship_positions_to_store()
+	else:
+		_sync_flow_nodes_to_store()
+		_sync_flow_connections_to_store()
 
-	var lines: Array[String] = []
-	lines.append("# Auto-generated quest data")
-	lines.append("# 生成时间: %s" % Time.get_datetime_string_from_system())
-	lines.append("")
-	lines.append("const QUESTS = {")
 
-	var quest_ids: Array = nodes.keys()
+func _sync_relationship_positions_to_store() -> void:
+	for quest_id_variant in nodes.keys():
+		var quest_id := str(quest_id_variant)
+		if not _quests.has(quest_id):
+			continue
+		var relationship_node: Dictionary = nodes[quest_id]
+		var quest: Dictionary = _quests[quest_id]
+		var editor_meta: Dictionary = quest.get("_editor", {})
+		editor_meta["relationship_position"] = relationship_node.get("position", Vector2.ZERO)
+		quest["_editor"] = editor_meta
+		_quests[quest_id] = quest
+
+
+func _sync_flow_nodes_to_store() -> void:
+	if _editor_mode != MODE_FLOW or _current_quest_id.is_empty() or not _quests.has(_current_quest_id):
+		return
+	var quest: Dictionary = _quests[_current_quest_id]
+	var flow: Dictionary = quest.get("flow", {})
+	var flow_nodes: Dictionary = {}
+	for node_id_variant in nodes.keys():
+		var node_id := str(node_id_variant)
+		flow_nodes[node_id] = nodes[node_id].duplicate(true)
+	flow["nodes"] = flow_nodes
+	quest["flow"] = flow
+	_quests[_current_quest_id] = quest
+
+
+func _sync_flow_connections_to_store() -> void:
+	if _editor_mode != MODE_FLOW or _current_quest_id.is_empty() or not _quests.has(_current_quest_id):
+		return
+	var quest: Dictionary = _quests[_current_quest_id]
+	var flow: Dictionary = quest.get("flow", {})
+	var stored_connections: Array[Dictionary] = []
+	for conn_variant in connections:
+		if conn_variant is Dictionary:
+			stored_connections.append(conn_variant.duplicate(true))
+	flow["connections"] = stored_connections
+	quest["flow"] = flow
+	_quests[_current_quest_id] = quest
+
+
+func _prune_invalid_flow_connections() -> void:
+	if _editor_mode != MODE_FLOW or _current_quest_id.is_empty():
+		return
+	var flow: Dictionary = _quests[_current_quest_id].get("flow", {})
+	var flow_nodes: Dictionary = flow.get("nodes", {})
+	var valid_connections: Array[Dictionary] = []
+	for conn_variant in flow.get("connections", []):
+		if not (conn_variant is Dictionary):
+			continue
+		var conn: Dictionary = conn_variant
+		var from_id := str(conn.get("from", ""))
+		var to_id := str(conn.get("to", ""))
+		if not flow_nodes.has(from_id) or not flow_nodes.has(to_id):
+			continue
+		var from_node: Dictionary = flow_nodes[from_id]
+		if int(conn.get("from_port", 0)) >= _get_output_port_count(from_node):
+			continue
+		valid_connections.append(conn)
+	flow["connections"] = valid_connections
+	var quest: Dictionary = _quests[_current_quest_id]
+	quest["flow"] = flow
+	_quests[_current_quest_id] = quest
+
+
+func _get_output_port_count(node_data: Dictionary) -> int:
+	match str(node_data.get("type", "")):
+		"dialog":
+			return max(_get_dialog_output_count(node_data), 1)
+		"choice":
+			return max(node_data.get("options", []).size(), 1)
+		"end":
+			return 0
+		_:
+			return 1
+
+
+func _on_save_quests() -> void:
+	_sync_displayed_graph_to_store()
+	if not _ensure_quest_dir():
+		return
+
+	var quest_ids: Array = _quests.keys()
 	quest_ids.sort()
-	for quest_id in quest_ids:
-		var quest: Dictionary = nodes[quest_id]
-		lines.append('\t"%s": {' % quest_id)
-		lines.append('\t\t"quest_id": "%s",' % quest_id)
-		lines.append('\t\t"title": "%s",' % str(quest.get("title", "")))
-		lines.append('\t\t"description": "%s",' % str(quest.get("description", "")))
-		lines.append('\t\t"objectives": [')
-		for obj in quest.get("objectives", []):
-			lines.append('\t\t\t{')
-			lines.append('\t\t\t\t"type": "%s",' % str(obj.get("type", "")))
-			lines.append('\t\t\t\t"target": "%s",' % str(obj.get("target", "")))
-			lines.append('\t\t\t\t"count": %d,' % int(obj.get("count", 1)))
-			lines.append('\t\t\t\t"description": "%s"' % str(obj.get("description", "")))
-			lines.append('\t\t\t},')
-		lines.append('\t\t],')
-		lines.append('\t\t"rewards": {')
-		lines.append('\t\t\t"items": [')
-		for item in quest.get("rewards", {}).get("items", []):
-			lines.append('\t\t\t\t{"id": "%s", "count": %d},' % [str(item.get("id", "")), int(item.get("count", 1))])
-		lines.append('\t\t\t],')
-		lines.append('\t\t\t"experience": %d' % int(quest.get("rewards", {}).get("experience", 0)))
-		lines.append('\t\t},')
-		lines.append('\t\t"prerequisites": %s,' % str(quest.get("prerequisites", [])))
-		lines.append('\t\t"time_limit": %d' % int(quest.get("time_limit", -1)))
-		lines.append('\t},')
+	for quest_id_variant in quest_ids:
+		var quest_id := str(quest_id_variant)
+		var quest: Dictionary = _quests[quest_id]
+		var quest_file_path := "%s/%s.json" % [QUEST_DATA_DIR, quest_id]
+		var file := FileAccess.open(quest_file_path, FileAccess.WRITE)
+		if file == null:
+			push_warning("[QuestEditor] 无法保存任务文件: %s" % quest_file_path)
+			continue
+		file.store_string(JSON.stringify(_serialize_quest_for_storage(quest_id, quest), "\t"))
+		file.close()
 
-	lines.append('}')
-	lines.append("")
-	lines.append("static func get_quest(quest_id: String):")
-	lines.append("\treturn QUESTS.get(quest_id, null)")
-	return "\n".join(lines)
+	var dir := DirAccess.open(QUEST_DATA_DIR)
+	if dir != null:
+		dir.list_dir_begin()
+		var file_name := dir.get_next()
+		while not file_name.is_empty():
+			if not dir.current_is_dir() and file_name.ends_with(".json"):
+				var existing_id := file_name.trim_suffix(".json")
+				if not _quests.has(existing_id):
+					dir.remove(file_name)
+			file_name = dir.get_next()
+		dir.list_dir_end()
+
+	var emitted_quest_id := _current_quest_id if not _current_quest_id.is_empty() else _focused_relationship_quest_id
+	quest_saved.emit(emitted_quest_id)
+	_update_status("已保存 %d 个任务" % _quests.size())
+
+
+func _ensure_quest_dir() -> bool:
+	var absolute_dir_path := ProjectSettings.globalize_path(QUEST_DATA_DIR)
+	if DirAccess.dir_exists_absolute(absolute_dir_path):
+		return true
+	return DirAccess.make_dir_recursive_absolute(absolute_dir_path) == OK
+
+
+func _serialize_quest_for_storage(quest_id: String, quest: Dictionary) -> Dictionary:
+	var serialized: Dictionary = {
+		"quest_id": quest_id,
+		"title": str(quest.get("title", "")),
+		"description": str(quest.get("description", "")),
+		"prerequisites": quest.get("prerequisites", []).duplicate(),
+		"time_limit": int(quest.get("time_limit", -1)),
+		"flow": {
+			"start_node_id": str(quest.get("flow", {}).get("start_node_id", "start")),
+			"nodes": {},
+			"connections": quest.get("flow", {}).get("connections", []).duplicate(true)
+		},
+		"_editor": {
+			"relationship_position": _serialize_position(quest.get("_editor", {}).get("relationship_position", Vector2.ZERO))
+		}
+	}
+
+	var serialized_nodes: Dictionary = {}
+	for node_id_variant in quest.get("flow", {}).get("nodes", {}).keys():
+		var node_id := str(node_id_variant)
+		var node_data: Dictionary = quest.get("flow", {}).get("nodes", {})[node_id].duplicate(true)
+		node_data["position"] = _serialize_position(node_data.get("position", Vector2.ZERO))
+		node_data.erase("title")
+		serialized_nodes[node_id] = node_data
+	serialized["flow"]["nodes"] = serialized_nodes
+	return serialized
+
+
+func _serialize_position(position_value: Variant) -> Dictionary:
+	var position := position_value if position_value is Vector2 else Vector2.ZERO
+	return {"x": position.x, "y": position.y}
+
+
+func _on_load_quests() -> void:
+	_load_quests_from_directory()
+
+
+func _validate_quest(quest_id: String) -> bool:
+	if not _quests.has(quest_id):
+		return false
+	var quest: Dictionary = _quests[quest_id]
+	var errors: Array[String] = []
+
+	if quest_id.is_empty():
+		errors.append("任务ID不能为空")
+	if str(quest.get("title", "")).strip_edges().is_empty():
+		errors.append("任务标题不能为空")
+
+	for prereq_variant in quest.get("prerequisites", []):
+		var prereq_id := str(prereq_variant)
+		if not _quests.has(prereq_id):
+			errors.append("前置任务不存在: %s" % prereq_id)
+
+	var flow: Dictionary = quest.get("flow", {})
+	var flow_nodes: Dictionary = flow.get("nodes", {})
+	var start_count := 0
+	var end_count := 0
+	for node_id_variant in flow_nodes.keys():
+		var node_id := str(node_id_variant)
+		var node: Dictionary = flow_nodes[node_id]
+		match str(node.get("type", "")):
+			"start":
+				start_count += 1
+			"end":
+				end_count += 1
+			"objective":
+				if str(node.get("objective_type", "")).is_empty():
+					errors.append("%s: objective_type 不能为空" % node_id)
+			"dialog":
+				if str(node.get("dialog_id", "")).strip_edges().is_empty():
+					errors.append("%s: dialog_id 不能为空" % node_id)
+			"choice":
+				if node.get("options", []).is_empty():
+					errors.append("%s: choice 至少要有一个选项" % node_id)
+
+	if start_count != 1:
+		errors.append("每个 Quest 必须且只能有一个 start 节点")
+	if end_count < 1:
+		errors.append("每个 Quest 至少需要一个 end 节点")
+
+	var start_node_id := str(flow.get("start_node_id", "start"))
+	if not flow_nodes.has(start_node_id):
+		errors.append("flow.start_node_id 指向不存在的节点")
+	elif str(flow_nodes[start_node_id].get("type", "")) != "start":
+		errors.append("flow.start_node_id 必须指向 start 节点")
+
+	for conn_variant in flow.get("connections", []):
+		if not (conn_variant is Dictionary):
+			errors.append("存在无效连接数据")
+			continue
+		var conn: Dictionary = conn_variant
+		if not flow_nodes.has(str(conn.get("from", ""))) or not flow_nodes.has(str(conn.get("to", ""))):
+			errors.append("连接引用了不存在的节点")
+
+	_validation_errors[quest_id] = errors
+	return errors.is_empty()
+
+
+func _validate_all() -> Array[String]:
+	var all_errors: Array[String] = []
+	var quest_ids: Array = _quests.keys()
+	quest_ids.sort()
+	for quest_id_variant in quest_ids:
+		var quest_id := str(quest_id_variant)
+		_validate_quest(quest_id)
+		for error in _validation_errors.get(quest_id, []):
+			all_errors.append("%s: %s" % [quest_id, error])
+	validation_errors_found.emit(all_errors)
+	return all_errors
+
+
+func _on_validate_all() -> void:
+	var errors := _validate_all()
+	_update_validation_panel()
+	if errors.is_empty():
+		_update_status("所有任务验证通过")
+	else:
+		_update_status("发现 %d 个验证问题" % errors.size())
+
+
+func _update_validation_panel() -> void:
+	if _validation_panel == null:
+		return
+	while _validation_panel.get_child_count() > 2:
+		var child := _validation_panel.get_child(2)
+		_validation_panel.remove_child(child)
+		child.queue_free()
+
+	var quest_id := _current_quest_id if _editor_mode == MODE_FLOW else selected_node_id
+	var errors: Array = _validation_errors.get(quest_id, [])
+	_validation_panel.visible = not errors.is_empty()
+	for error_variant in errors:
+		var label := Label.new()
+		label.text = str(error_variant)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+		_validation_panel.add_child(label)
+
+
+func _format_prerequisites(prerequisites: Array) -> String:
+	if prerequisites.is_empty():
+		return "无"
+	var parts: Array[String] = []
+	for prereq_variant in prerequisites:
+		parts.append(str(prereq_variant))
+	return ", ".join(parts)
+
+
+func _get_step_count(quest: Dictionary) -> int:
+	return quest.get("flow", {}).get("nodes", {}).size()
+
+
+func _load_json_file(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return null
+	var json_text := file.get_as_text()
+	file.close()
+	var json := JSON.new()
+	if json.parse(json_text) != OK:
+		push_warning("[QuestEditor] JSON 解析失败: %s" % path)
+		return null
+	return json.data
+
+
+func _is_reward_empty(rewards: Dictionary) -> bool:
+	if rewards.is_empty():
+		return true
+	if rewards.get("items", []).size() > 0:
+		return false
+	if int(rewards.get("experience", 0)) > 0:
+		return false
+	if int(rewards.get("skill_points", 0)) > 0:
+		return false
+	if rewards.has("unlock_location") and not str(rewards.get("unlock_location", "")).is_empty():
+		return false
+	if rewards.has("unlock_recipes") and rewards.get("unlock_recipes", []).size() > 0:
+		return false
+	if rewards.has("title") and not str(rewards.get("title", "")).is_empty():
+		return false
+	return true
+
+
+func _update_toolbar_state() -> void:
+	if _mode_button:
+		_mode_button.text = "返回关系图" if _editor_mode == MODE_FLOW else "关系图模式"
+		_mode_button.disabled = _editor_mode == MODE_RELATIONSHIP
+	if _new_button:
+		_new_button.disabled = _editor_mode != MODE_RELATIONSHIP
+	if _delete_quest_button:
+		_delete_quest_button.disabled = _editor_mode != MODE_FLOW
+
 
 func _input(event: InputEvent) -> void:
 	super._input(event)
 	if not visible:
 		return
-
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
 			KEY_N when event.ctrl_pressed:
 				_on_new_quest()
 			KEY_S when event.ctrl_pressed:
 				_on_save_quests()
+			KEY_ESCAPE:
+				if _editor_mode == MODE_FLOW:
+					_show_relationship_mode(_current_quest_id)
+
 
 func focus_record(record_id: String) -> bool:
 	var target_id := record_id.strip_edges()
-	if target_id.is_empty():
+	if target_id.is_empty() or not _quests.has(target_id):
+		_update_status("未找到任务: %s" % record_id)
 		return false
-	if not nodes.has(target_id):
-		_update_status("未找到任务: %s" % target_id)
-		return false
-
-	_select_quest(target_id)
+	_show_relationship_mode(target_id)
 	_graph_edit.center_view()
-	_update_status("已定位任务: %s" % target_id)
 	return true
 
+
 func get_current_quest_id() -> String:
-	return selected_node_id
+	return _current_quest_id if not _current_quest_id.is_empty() else selected_node_id
+
 
 func get_quests_count() -> int:
-	return nodes.size()
+	return _quests.size()
+
 
 func get_validation_errors() -> Dictionary:
 	return _validation_errors
-
-func _update_reward_item_field(quest: Dictionary, index: int, field: String, value: Variant) -> void:
-	var rewards: Dictionary = quest.get("rewards", {})
-	var items: Array = rewards.get("items", [])
-	if index >= items.size():
-		return
-	items[index][field] = value
-	rewards["items"] = items
-	quest["rewards"] = rewards
-	_on_node_data_changed(str(quest.get("id", "")), quest)

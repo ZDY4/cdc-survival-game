@@ -1,31 +1,102 @@
 {
-  "quest_id": "first_explore",
-  "prerequisites": [
-    "tutorial_survive"
-  ],
-  "description": "前往废弃街道探索，至少搜索一次",
-  "title": "初次探索",
-  "rewards": {
-    "items": [
-      {
-        "id": 1008,
-        "count": 1
-      }
-    ],
-    "experience": 100
-  },
-  "objectives": [
-    {
-      "description": "前往废弃街道",
-      "target": "street_a",
-      "current": false,
-      "type": "travel"
-    },
-    {
-      "description": "搜索废弃街道",
-      "target": 1,
-      "current": 0,
-      "type": "search"
-    }
-  ]
+	"quest_id": "first_explore",
+	"title": "初次探索",
+	"description": "前往废弃街道探索，至少搜索一次",
+	"prerequisites": [
+		"tutorial_survive"
+	],
+	"time_limit": -1,
+	"flow": {
+		"start_node_id": "start",
+		"nodes": {
+			"start": {
+				"id": "start",
+				"type": "start",
+				"position": {
+					"x": 120,
+					"y": 160
+				}
+			},
+			"step_1": {
+				"id": "step_1",
+				"type": "objective",
+				"position": {
+					"x": 420,
+					"y": 160
+				},
+				"objective_type": "travel",
+				"description": "前往废弃街道",
+				"target": "street_a",
+				"count": 1
+			},
+			"step_2": {
+				"id": "step_2",
+				"type": "objective",
+				"position": {
+					"x": 720,
+					"y": 160
+				},
+				"objective_type": "search",
+				"description": "搜索废弃街道",
+				"count": 1
+			},
+			"reward_1": {
+				"id": "reward_1",
+				"type": "reward",
+				"position": {
+					"x": 1020,
+					"y": 160
+				},
+				"rewards": {
+					"items": [
+						{
+							"id": 1008,
+							"count": 1
+						}
+					],
+					"experience": 100
+				}
+			},
+			"end": {
+				"id": "end",
+				"type": "end",
+				"position": {
+					"x": 1320,
+					"y": 160
+				}
+			}
+		},
+		"connections": [
+			{
+				"from": "start",
+				"to": "step_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_1",
+				"to": "step_2",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "step_2",
+				"to": "reward_1",
+				"from_port": 0,
+				"to_port": 0
+			},
+			{
+				"from": "reward_1",
+				"to": "end",
+				"from_port": 0,
+				"to_port": 0
+			}
+		]
+	},
+	"_editor": {
+		"relationship_position": {
+			"x": 420,
+			"y": 120
+		}
+	}
 }
