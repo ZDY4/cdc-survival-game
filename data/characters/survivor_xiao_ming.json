@@ -42,7 +42,7 @@
 	},
 	"social": {
 		"title": "年轻幸存者",
-		"dialog_tree_id": "",
+		"dialog_id": "",
 		"mood": {
 			"friendliness": 70,
 			"trust": 30,

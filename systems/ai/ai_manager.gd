@@ -10,8 +10,8 @@ const CharacterRelationResolver = preload("res://systems/character_relation_reso
 const GameWorldMerchantTradeComponent = preload("res://modules/npc/components/game_world_merchant_trade_component.gd")
 const VisionSystemScript = preload("res://systems/vision_system.gd")
 const Interactable = preload("res://modules/interaction/interactable.gd")
-const NPCInteractionOption = preload("res://modules/interaction/options/npc_interaction_option.gd")
 const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
+const TalkInteractionOption = preload("res://modules/interaction/options/talk_interaction_option.gd")
 
 signal actor_spawned(spawn_id: String, actor: Node3D)
 signal actor_despawned(spawn_id: String)
@@ -59,8 +59,6 @@ const DEFAULT_AI_BY_BEHAVIOR := {
 
 var character_database: Dictionary = {}
 var active_actors: Dictionary = {}  # spawn_id -> Node3D
-var active_npc_actors: Dictionary = {}  # character_id -> Node3D
-var active_npc_trade_components: Dictionary = {}  # character_id -> NPCTradeComponent
 
 var _relation_resolver: CharacterRelationResolver = CharacterRelationResolver.new()
 
@@ -129,8 +127,8 @@ func despawn_actor(spawn_id: String) -> void:
 
 	if actor and is_instance_valid(actor):
 		var character_id: String = str(actor.get_meta("character_id", ""))
-		if not character_id.is_empty():
-			unregister_npc_actor(character_id)
+		if not character_id.is_empty() and not bool(actor.get_meta("allow_attack", false)):
+			npc_despawned.emit(character_id)
 		actor.queue_free()
 
 	actor_despawned.emit(spawn_id)
@@ -197,11 +195,17 @@ func _spawn_character_actor(
 	ai_controller.initialize(actor, movement_component, world_pos, character_id, ai_config)
 
 	if allow_interaction:
+		var social: Dictionary = character_data.get("social", {})
+		var visual: Dictionary = character_data.get("visual", {})
 		var interactable := Interactable.new()
 		interactable.name = "Interactable"
 		interactable.set_meta("npc_id", character_id)
-		var npc_option := NPCInteractionOption.new()
-		interactable.set_options([npc_option])
+		interactable.set_meta("character_id", character_id)
+		var talk_option := TalkInteractionOption.new()
+		talk_option.dialog_id = str(social.get("dialog_id", ""))
+		talk_option.speaker_name = str(character_data.get("name", character_id))
+		talk_option.portrait_path = str(visual.get("portrait_path", ""))
+		interactable.set_options([talk_option])
 		actor.add_child(interactable)
 
 	var trade_component: NPCTradeComponent = null
@@ -209,9 +213,6 @@ func _spawn_character_actor(
 		trade_component = GameWorldMerchantTradeComponent.new()
 		actor.add_child(trade_component)
 		trade_component.initialize_with_data(character_data)
-
-	if allow_interaction:
-		register_npc_actor(character_id, actor, trade_component)
 
 	return actor
 
@@ -257,65 +258,8 @@ func _build_ai_config(character_data: Dictionary, relation_result: Dictionary) -
 	config["allow_attack"] = allow_attack
 	return config
 
-func register_npc_actor(character_id: String, actor: Node3D, trade_component: NPCTradeComponent = null) -> void:
-	if character_id.is_empty() or not actor:
-		return
-	active_npc_actors[character_id] = actor
-	if trade_component:
-		active_npc_trade_components[character_id] = trade_component
-
-func unregister_npc_actor(character_id: String) -> void:
-	if character_id.is_empty():
-		return
-	active_npc_actors.erase(character_id)
-	active_npc_trade_components.erase(character_id)
-	npc_despawned.emit(character_id)
-
 func get_character_data(character_id: String) -> Dictionary:
 	return _get_character_data_internal(character_id)
-
-func start_npc_interaction(character_id: String) -> bool:
-	var data: Dictionary = _get_character_data_internal(character_id)
-	if data.is_empty():
-		return false
-	if not DialogModule:
-		push_warning("[AIManager] DialogModule unavailable; cannot start interaction: %s" % character_id)
-		return false
-
-	var relation_result: Dictionary = _relation_resolver.resolve_for_player(character_id, data)
-	if not bool(relation_result.get("allow_interaction", false)):
-		DialogModule.show_dialog("对方对你充满敌意，不愿交谈。", str(data.get("name", "陌生人")))
-		await DialogModule.dialog_finished
-		return false
-
-	var speaker: String = str(data.get("name", character_id))
-	var greeting := "你好，我是%s。" % speaker
-	if bool(relation_result.get("allow_trade", false)):
-		greeting = "需要补给吗？我这里还能交易。"
-	DialogModule.show_dialog(greeting, speaker)
-	await DialogModule.dialog_finished
-
-	if bool(relation_result.get("allow_trade", false)):
-		var choice: int = await DialogModule.show_choices(["交易", "闲聊", "离开"])
-		match choice:
-			0:
-				var trade_component: NPCTradeComponent = active_npc_trade_components.get(character_id, null)
-				if trade_component:
-					var opened: bool = await trade_component.open_trade_ui()
-					if not opened:
-						DialogModule.show_dialog("现在无法交易。", speaker)
-						await DialogModule.dialog_finished
-			1:
-				DialogModule.show_dialog("夜晚外出要小心。", speaker)
-				await DialogModule.dialog_finished
-			_:
-				DialogModule.show_dialog("保重。", speaker)
-				await DialogModule.dialog_finished
-	else:
-		DialogModule.show_dialog("别走太远，外面很危险。", speaker)
-		await DialogModule.dialog_finished
-
-	return true
 
 func _get_character_data_internal(character_id: String) -> Dictionary:
 	var resolved_id: String = character_id.strip_edges()
@@ -352,8 +296,8 @@ func _on_actor_tree_exited(spawn_id: String) -> void:
 
 	if actor:
 		var character_id: String = str(actor.get_meta("character_id", ""))
-		if not character_id.is_empty():
-			unregister_npc_actor(character_id)
+		if not character_id.is_empty() and not bool(actor.get_meta("allow_attack", false)):
+			npc_despawned.emit(character_id)
 
 	actor_despawned.emit(spawn_id)
 	if actor and bool(actor.get_meta("allow_attack", false)):

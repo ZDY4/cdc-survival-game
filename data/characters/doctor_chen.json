@@ -42,7 +42,7 @@
 	},
 	"social": {
 		"title": "战地医生",
-		"dialog_tree_id": "",
+		"dialog_id": "doctor_chen",
 		"mood": {
 			"friendliness": 80,
 			"trust": 60,

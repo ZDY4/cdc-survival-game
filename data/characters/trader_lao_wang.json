@@ -42,7 +42,7 @@
 	},
 	"social": {
 		"title": "废土商人",
-		"dialog_tree_id": "trader_lao_wang_dialog",
+		"dialog_id": "trader_lao_wang",
 		"mood": {
 			"friendliness": 60,
 			"trust": 40,

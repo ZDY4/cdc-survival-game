@@ -1,0 +1,50 @@
+{
+	"dialog_id": "trader_lao_wang",
+	"nodes": [
+		{
+			"id": "start",
+			"type": "dialog",
+			"title": "Start",
+			"speaker": "老王",
+			"text": "要看看货吗？今天刚整理出一批还算像样的物资。",
+			"portrait": "res://assets/portraits/trader_lao_wang.png",
+			"is_start": true,
+			"next": "choice_1"
+		},
+		{
+			"id": "choice_1",
+			"type": "choice",
+			"options": [
+				{
+					"text": "交易",
+					"next": "trade_action"
+				},
+				{
+					"text": "离开",
+					"next": "leave_end"
+				}
+			]
+		},
+		{
+			"id": "trade_action",
+			"type": "action",
+			"actions": [
+				{
+					"type": "open_trade"
+				}
+			],
+			"next": "trade_end"
+		},
+		{
+			"id": "trade_end",
+			"type": "end",
+			"end_type": "trade"
+		},
+		{
+			"id": "leave_end",
+			"type": "end",
+			"end_type": "leave"
+		}
+	],
+	"connections": []
+}

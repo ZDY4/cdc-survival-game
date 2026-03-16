@@ -42,7 +42,7 @@
 	},
 	"social": {
 		"title": "掠夺者头目",
-		"dialog_tree_id": "",
+		"dialog_id": "",
 		"mood": {
 			"friendliness": 30,
 			"trust": 10,

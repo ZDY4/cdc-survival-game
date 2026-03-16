@@ -61,7 +61,7 @@
 	},
 	"social": {
 		"title": "",
-		"dialog_tree_id": "",
+		"dialog_id": "",
 		"mood": {
 			"friendliness": 0,
 			"trust": 0,

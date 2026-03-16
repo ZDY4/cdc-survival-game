@@ -179,7 +179,7 @@ func _convert_npc(npc_id: String, npc: Dictionary) -> Dictionary:
 		},
 		"social": {
 			"title": str(npc.get("title", "")),
-			"dialog_tree_id": str(npc.get("dialog_tree_id", "")),
+			"dialog_id": "",
 			"mood": {
 				"friendliness": int(mood.get("friendliness", 50)),
 				"trust": int(mood.get("trust", 30)),
@@ -279,7 +279,7 @@ func _convert_enemy(enemy_id: String, enemy: Dictionary) -> Dictionary:
 		},
 		"social": {
 			"title": "",
-			"dialog_tree_id": "",
+			"dialog_id": "",
 			"mood": {
 				"friendliness": 0,
 				"trust": 0,

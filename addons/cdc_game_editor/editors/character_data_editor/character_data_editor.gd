@@ -99,7 +99,7 @@ func _setup_ui() -> void:
 	_add_number_field(form, "level", "等级", 1, 100, 1)
 	_add_string_field(form, "identity.camp_id", "阵营ID")
 	_add_string_field(form, "social.title", "称号")
-	_add_string_field(form, "social.dialog_tree_id", "对话树ID")
+	_add_string_field(form, "social.dialog_id", "对话ID")
 	_add_string_field(form, "combat.behavior", "行为")
 	_add_number_field(form, "combat.xp", "经验奖励", 0, 9999, 1)
 	_add_number_field(form, "combat.stats.hp", "HP", 1, 9999, 1)
@@ -284,7 +284,7 @@ func _create_default_character(character_id: String) -> Dictionary:
 		},
 		"social": {
 			"title": "",
-			"dialog_tree_id": "",
+			"dialog_id": "",
 			"mood": {
 				"friendliness": 50,
 				"trust": 30,

@@ -84,7 +84,7 @@ var combat: Dictionary = {
 }
 var social: Dictionary = {
 	"title": "",
-	"dialog_tree_id": "",
+	"dialog_id": "",
 	"mood": DEFAULT_SOCIAL_MOOD.duplicate(true),
 	"trade": DEFAULT_SOCIAL_TRADE.duplicate(true),
 	"recruitment": DEFAULT_SOCIAL_RECRUITMENT.duplicate(true),
@@ -147,7 +147,7 @@ func deserialize(data: Dictionary) -> void:
 
 	social = {
 		"title": "",
-		"dialog_tree_id": "",
+		"dialog_id": "",
 		"mood": DEFAULT_SOCIAL_MOOD.duplicate(true),
 		"trade": DEFAULT_SOCIAL_TRADE.duplicate(true),
 		"recruitment": DEFAULT_SOCIAL_RECRUITMENT.duplicate(true),
@@ -155,7 +155,7 @@ func deserialize(data: Dictionary) -> void:
 	}
 	var social_data: Dictionary = data.get("social", {})
 	social["title"] = str(social_data.get("title", ""))
-	social["dialog_tree_id"] = str(social_data.get("dialog_tree_id", ""))
+	social["dialog_id"] = str(social_data.get("dialog_id", ""))
 	var mood_copy: Dictionary = DEFAULT_SOCIAL_MOOD.duplicate(true)
 	mood_copy.merge(social_data.get("mood", {}), true)
 	social["mood"] = mood_copy

@@ -67,10 +67,6 @@ var recruitment: Dictionary = {
 	"cost_money": 0               # 招募消耗金钱
 }
 
-# ========== 对话树 ==========
-var dialog_tree_id: String = ""             # 对话树ID
-var current_dialog_node: String = "start"   # 当前对话节点
-
 # ========== 记忆（影响对话） ==========
 var memory: Dictionary = {
 	"met_player": false,          # 是否见过玩家
@@ -136,8 +132,6 @@ func serialize() -> Dictionary:
 			"cost_items": recruitment.cost_items.duplicate(),
 			"cost_money": recruitment.cost_money
 		},
-		"dialog_tree_id": dialog_tree_id,
-		"current_dialog_node": current_dialog_node,
 		"memory": {
 			"met_player": memory.met_player,
 			"interaction_count": memory.interaction_count,
@@ -190,9 +184,6 @@ func deserialize(data: Dictionary):
 		trade_data.merge(data.trade_data, true)
 	if data.has("recruitment"):
 		recruitment.merge(data.recruitment, true)
-	
-	dialog_tree_id = data.get("dialog_tree_id", "")
-	current_dialog_node = data.get("current_dialog_node", "start")
 	
 	if data.has("memory"):
 		memory.merge(data.memory, true)
