@@ -1,0 +1,32 @@
+{
+  "id": "recipe_ammo_rifle",
+  "name": "步枪弹药",
+  "description": "制作步枪弹药",
+  "category": "ammo",
+  "output": {
+    "item_id": 1022,
+    "count": 5,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 2
+    },
+    {
+      "item_id": 1012,
+      "count": 1
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 5
+  },
+  "craft_time": 30.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

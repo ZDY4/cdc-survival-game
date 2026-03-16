@@ -1,0 +1,28 @@
+{
+  "id": "recipe_lockpick",
+  "name": "开锁器",
+  "description": "用于打开上锁的门和箱子",
+  "category": "tool",
+  "output": {
+    "item_id": 1150,
+    "count": 3,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 2
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "none",
+  "skill_requirements": {
+    "crafting": 2
+  },
+  "craft_time": 15.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

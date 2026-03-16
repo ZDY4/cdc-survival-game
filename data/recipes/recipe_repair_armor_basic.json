@@ -1,0 +1,35 @@
+{
+  "id": "recipe_repair_armor_basic",
+  "name": "基础护甲维修",
+  "description": "恢复护甲 30% 耐久",
+  "category": "repair",
+  "output": {
+    "item_id": 1153,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1011,
+      "count": 3
+    },
+    {
+      "item_id": 1010,
+      "count": 1
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 1
+  },
+  "craft_time": 20.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 0.8,
+  "is_repair": true,
+  "target_type": "armor",
+  "repair_amount": 30
+}

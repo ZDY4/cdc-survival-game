@@ -1,0 +1,32 @@
+{
+  "id": "recipe_fuel",
+  "name": "燃料",
+  "description": "制作可用于动力工具的燃料",
+  "category": "ammo",
+  "output": {
+    "item_id": 1147,
+    "count": 10,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 1
+    },
+    {
+      "item_id": 1012,
+      "count": 2
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 6
+  },
+  "craft_time": 40.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

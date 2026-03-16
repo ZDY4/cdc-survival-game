@@ -102,7 +102,7 @@
     "location": "factory",
     "hint": "工厂实验室",
     "type": "document",
-    "unlocks_craft": "antibody_serum"
+      "unlocks_craft": "recipe_antibody_serum"
   },
   "photo_survivors": {
     "id": "photo_survivors",

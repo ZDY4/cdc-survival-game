@@ -1,0 +1,28 @@
+{
+  "id": "recipe_baseball_bat",
+  "name": "棒球棍",
+  "description": "用废金属制作棒球棍",
+  "category": "weapon",
+  "output": {
+    "item_id": 1003,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 5
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [
+    1166
+  ],
+  "required_station": "workbench",
+  "skill_requirements": {},
+  "craft_time": 45.0,
+  "experience_reward": 8,
+  "unlock_conditions": [],
+  "is_default_unlocked": true,
+  "durability_influence": 1.0
+}

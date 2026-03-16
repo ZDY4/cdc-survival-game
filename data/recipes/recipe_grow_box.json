@@ -1,0 +1,28 @@
+{
+  "id": "recipe_grow_box",
+  "name": "种植箱",
+  "description": "搭建室内种植箱以稳定获取食物",
+  "category": "base",
+  "output": {
+    "item_id": 1157,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 5
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 2
+  },
+  "craft_time": 45.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

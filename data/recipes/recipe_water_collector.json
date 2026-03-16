@@ -1,0 +1,32 @@
+{
+  "id": "recipe_water_collector",
+  "name": "集水器",
+  "description": "自动收集雨水的基地设施",
+  "category": "base",
+  "output": {
+    "item_id": 1146,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 8
+    },
+    {
+      "item_id": 1012,
+      "count": 2
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 3
+  },
+  "craft_time": 60.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

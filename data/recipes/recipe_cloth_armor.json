@@ -1,0 +1,28 @@
+{
+  "id": "recipe_cloth_armor",
+  "name": "布甲",
+  "description": "基础护甲，轻便但防护有限",
+  "category": "armor",
+  "output": {
+    "item_id": 2004,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1011,
+      "count": 8
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 1
+  },
+  "craft_time": 40.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

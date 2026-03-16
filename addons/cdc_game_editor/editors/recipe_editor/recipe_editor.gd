@@ -1,13 +1,13 @@
 @tool
 extends Control
-## RecipeEditor - 配方编辑器
-## 用于创建和编辑游戏中的制作配
+## RecipeEditor - 目录化单文件配方编辑器
 
 signal recipe_saved(recipe_id: String)
 signal recipe_loaded(recipe_id: String)
 
-# 配方类别
-const RECIPE_CATEGORIES = {
+const RECIPE_DIR := "res://data/recipes"
+
+const RECIPE_CATEGORIES := {
 	"weapon": "武器",
 	"armor": "护甲",
 	"accessory": "饰品",
@@ -16,11 +16,12 @@ const RECIPE_CATEGORIES = {
 	"ammo": "弹药",
 	"tool": "工具",
 	"material": "材料加工",
+	"base": "基地",
+	"repair": "维修",
 	"misc": "杂项"
 }
 
-# 工作台类
-const STATION_TYPES = {
+const STATION_TYPES := {
 	"none": "None (Hand Craft)",
 	"workbench": "Workbench",
 	"forge": "锻造台",
@@ -29,261 +30,324 @@ const STATION_TYPES = {
 	"chemistry_lab": "Chemistry Lab"
 }
 
-const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
-
-# 数据
-var recipes: Dictionary = {}  # recipe_id -> recipe_data
+var recipes: Dictionary = {}
 var current_recipe_id: String = ""
 var editor_plugin: EditorPlugin = null
 
-# UI节点
-@onready var _recipe_list: ItemList
-@onready var _property_panel: VBoxContainer
-@onready var _toolbar: HBoxContainer
-@onready var _file_dialog: FileDialog
-@onready var _status_bar: Label
-@onready var _category_filter: OptionButton
-@onready var _search_box: LineEdit
-@onready var _stats_label: Label
-
-# UI元素引用
+var _recipe_file_paths: Dictionary = {}
+var _pending_old_paths: Dictionary = {}
 var _ui_elements: Dictionary = {}
 var _materials_container: VBoxContainer
 var _selected_category_filter: String = ""
 var _search_filter_text: String = ""
 
-func _ready():
+@onready var _recipe_list: ItemList
+@onready var _property_panel: VBoxContainer
+@onready var _toolbar: HBoxContainer
+@onready var _status_bar: Label
+@onready var _category_filter: OptionButton
+@onready var _search_box: LineEdit
+@onready var _stats_label: Label
+
+
+func _ready() -> void:
 	_setup_ui()
-	_setup_file_dialog()
-	_load_recipes_from_data_manager()
+	_load_recipes_from_directory()
 	_update_recipe_list()
 
-func _setup_ui():
+
+func _setup_ui() -> void:
 	anchors_preset = Control.PRESET_FULL_RECT
-	
-	# 工具栏
+
 	_toolbar = HBoxContainer.new()
 	_toolbar.custom_minimum_size = Vector2(0, 45)
 	_toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_toolbar.offset_top = 0
 	_toolbar.offset_bottom = 45
 	add_child(_toolbar)
-	
-	var new_btn = Button.new()
+
+	var new_btn := Button.new()
 	new_btn.text = "新建配方"
 	new_btn.pressed.connect(_on_new_recipe)
 	_toolbar.add_child(new_btn)
-	
-	var delete_btn = Button.new()
-	delete_btn.text = "删除"
-	delete_btn.pressed.connect(_on_delete_recipe)
-	_toolbar.add_child(delete_btn)
-	
-	_toolbar.add_child(VSeparator.new())
-	
-	var save_btn = Button.new()
-	save_btn.text = "保存"
-	save_btn.pressed.connect(_on_save_recipes)
-	_toolbar.add_child(save_btn)
-	
-	var load_btn = Button.new()
-	load_btn.text = "加载"
-	load_btn.pressed.connect(_on_load_recipes)
-	_toolbar.add_child(load_btn)
-	
-	_toolbar.add_child(VSeparator.new())
-	
-	var duplicate_btn = Button.new()
+
+	var duplicate_btn := Button.new()
 	duplicate_btn.text = "复制"
 	duplicate_btn.pressed.connect(_on_duplicate_recipe)
 	_toolbar.add_child(duplicate_btn)
-	
-	# 主分割
-	var main_split = HSplitContainer.new()
+
+	var delete_btn := Button.new()
+	delete_btn.text = "删除"
+	delete_btn.pressed.connect(_on_delete_recipe)
+	_toolbar.add_child(delete_btn)
+
+	_toolbar.add_child(VSeparator.new())
+
+	var save_btn := Button.new()
+	save_btn.text = "保存"
+	save_btn.pressed.connect(_on_save_recipes)
+	_toolbar.add_child(save_btn)
+
+	var reload_btn := Button.new()
+	reload_btn.text = "重新加载"
+	reload_btn.pressed.connect(_on_reload_recipes)
+	_toolbar.add_child(reload_btn)
+
+	var main_split := HSplitContainer.new()
 	main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
 	main_split.offset_top = 50
 	main_split.offset_bottom = -20
 	add_child(main_split)
-	
-	# 左侧：配方列
-	var left_panel = _create_recipe_list_panel()
+
+	var left_panel := _create_recipe_list_panel()
 	main_split.add_child(left_panel)
-	
-	# 右侧：属性面板
-	var scroll = ScrollContainer.new()
+
+	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	
+
 	_property_panel = VBoxContainer.new()
 	_property_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_property_panel.add_theme_constant_override("separation", 10)
 	scroll.add_child(_property_panel)
-	
 	main_split.add_child(scroll)
-	main_split.split_offset = 250
-	
-	# 状态栏
+	main_split.split_offset = 300
+
 	_status_bar = Label.new()
 	_status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_status_bar.offset_top = -20
 	_status_bar.offset_bottom = 0
-	_status_bar.offset_left = 0
-	_status_bar.offset_right = 0
-	_status_bar.text = "就绪"
 	add_child(_status_bar)
+	_status_bar.text = "就绪"
+
 
 func _create_recipe_list_panel() -> Control:
-	var panel = VBoxContainer.new()
-	panel.custom_minimum_size = Vector2(300, 0)
-	
-	var title = Label.new()
-	title.text = "📋 配方列表"
+	var panel := VBoxContainer.new()
+	panel.custom_minimum_size = Vector2(320, 0)
+
+	var title := Label.new()
+	title.text = "配方列表"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
 	panel.add_child(title)
-	
 	panel.add_child(HSeparator.new())
-	
-	# 类别过滤
-	var filter_hbox = HBoxContainer.new()
-	var filter_label = Label.new()
+
+	var filter_hbox := HBoxContainer.new()
+	var filter_label := Label.new()
 	filter_label.text = "类别:"
 	filter_hbox.add_child(filter_label)
-	
+
 	_category_filter = OptionButton.new()
 	_category_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_category_filter.add_item("全部")
 	_category_filter.set_item_metadata(0, "")
-	var idx = 1
-	for cat_key in RECIPE_CATEGORIES.keys():
-		_category_filter.add_item(RECIPE_CATEGORIES[cat_key])
-		_category_filter.set_item_metadata(idx, cat_key)
-		idx += 1
+	var index := 1
+	for category in RECIPE_CATEGORIES.keys():
+		_category_filter.add_item(RECIPE_CATEGORIES[category])
+		_category_filter.set_item_metadata(index, category)
+		index += 1
 	_category_filter.item_selected.connect(_on_category_filter_changed)
 	filter_hbox.add_child(_category_filter)
 	panel.add_child(filter_hbox)
-	
-	# 搜索
+
 	_search_box = LineEdit.new()
 	_search_box.placeholder_text = "搜索配方..."
 	_search_box.text_changed.connect(_on_search_changed)
 	panel.add_child(_search_box)
-	
-	# 配方列表
+
 	_recipe_list = ItemList.new()
 	_recipe_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_recipe_list.item_selected.connect(_on_recipe_selected)
 	panel.add_child(_recipe_list)
-	
-	# 统计
+
 	_stats_label = Label.new()
-	_stats_label.text = "Total: 0 / Filtered: 0"
 	panel.add_child(_stats_label)
-	
+
 	return panel
 
-func _setup_file_dialog():
-	_file_dialog = FileDialog.new()
-	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_file_dialog.add_filter("*.json; JSON文件")
-	add_child(_file_dialog)
 
-func _load_recipes_from_data_manager():
-	var data_manager = get_node_or_null("/root/DataManager")
-	if data_manager and data_manager.has_method("get_all_recipes"):
-		var manager_data: Variant = data_manager.get_all_recipes()
-		if manager_data is Dictionary:
-			recipes = manager_data
-			print("[RecipeEditor] Loaded %d recipes from DataManager" % recipes.size())
-			if not recipes.is_empty():
-				return
-		else:
-			push_warning("[RecipeEditor] Invalid recipe data from DataManager: expected Dictionary")
+func _load_recipes_from_directory() -> void:
+	recipes.clear()
+	_recipe_file_paths.clear()
+	_pending_old_paths.clear()
+	current_recipe_id = ""
 
-	var preferred_paths: Array[String] = [
-		"res://data/json/recipes.json",
-		"res://data/recipes.json"
-	]
-	var has_candidate_file := false
-	for path in preferred_paths:
-		if not FileAccess.file_exists(path):
+	var dir := DirAccess.open(RECIPE_DIR)
+	if dir == null:
+		var absolute_dir := ProjectSettings.globalize_path(RECIPE_DIR)
+		DirAccess.make_dir_recursive_absolute(absolute_dir)
+		dir = DirAccess.open(RECIPE_DIR)
+
+	if dir == null:
+		_update_status("无法打开配方目录: %s" % RECIPE_DIR)
+		return
+
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if dir.current_is_dir() or not file_name.ends_with(".json"):
+			file_name = dir.get_next()
 			continue
-		has_candidate_file = true
-		if _load_from_file(path):
-			return
 
-	if has_candidate_file:
-		_update_status("[JSON] project_data | No valid recipe JSON file found in project data paths")
+		var path := "%s/%s" % [RECIPE_DIR, file_name]
+		var recipe_data := _read_recipe_file(path)
+		if recipe_data.is_empty():
+			file_name = dir.get_next()
+			continue
 
-func _update_recipe_list(category_filter: String = "", search_filter: String = ""):
+		var recipe_id := str(recipe_data.get("id", file_name.trim_suffix(".json"))).strip_edges()
+		if recipe_id.is_empty():
+			file_name = dir.get_next()
+			continue
+
+		recipe_data["id"] = recipe_id
+		recipes[recipe_id] = recipe_data
+		_recipe_file_paths[recipe_id] = path
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	_update_status("已加载 %d 个配方" % recipes.size())
+
+
+func _read_recipe_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+
+	var content := FileAccess.get_file_as_string(path)
+	if content.is_empty():
+		return {}
+
+	var parsed: Variant = JSON.parse_string(content)
+	if not (parsed is Dictionary):
+		push_warning("[RecipeEditor] Invalid recipe JSON: %s" % path)
+		return {}
+
+	return _normalize_recipe_data(parsed as Dictionary)
+
+
+func _normalize_recipe_data(recipe_data: Dictionary) -> Dictionary:
+	var recipe := recipe_data.duplicate(true)
+	recipe["id"] = str(recipe.get("id", ""))
+	recipe["name"] = str(recipe.get("name", "New Recipe"))
+	recipe["description"] = str(recipe.get("description", ""))
+	recipe["category"] = str(recipe.get("category", "misc"))
+	recipe["required_station"] = str(recipe.get("required_station", "none"))
+	recipe["craft_time"] = float(recipe.get("craft_time", 10.0))
+	recipe["experience_reward"] = int(recipe.get("experience_reward", 0))
+	recipe["is_default_unlocked"] = bool(recipe.get("is_default_unlocked", true))
+	recipe["durability_influence"] = float(recipe.get("durability_influence", 1.0))
+	recipe["is_repair"] = bool(recipe.get("is_repair", false))
+	recipe["target_type"] = str(recipe.get("target_type", "any"))
+	recipe["repair_amount"] = int(recipe.get("repair_amount", 30))
+
+	var output: Dictionary = recipe.get("output", {}).duplicate(true) if recipe.get("output", {}) is Dictionary else {}
+	output["item_id"] = str(output.get("item_id", ""))
+	output["count"] = int(output.get("count", 1))
+	output["quality_bonus"] = int(output.get("quality_bonus", 0))
+	recipe["output"] = output
+
+	var normalized_materials: Array[Dictionary] = []
+	for material_variant in recipe.get("materials", []):
+		if not (material_variant is Dictionary):
+			continue
+		var material: Dictionary = material_variant.duplicate(true)
+		material["item_id"] = str(material.get("item_id", ""))
+		material["count"] = int(material.get("count", 1))
+		normalized_materials.append(material)
+	recipe["materials"] = normalized_materials
+
+	var required_tools: Array[String] = []
+	for tool_variant in recipe.get("required_tools", []):
+		required_tools.append(str(tool_variant))
+	recipe["required_tools"] = required_tools
+
+	var optional_tools: Array[String] = []
+	for tool_variant in recipe.get("optional_tools", []):
+		optional_tools.append(str(tool_variant))
+	recipe["optional_tools"] = optional_tools
+
+	var skill_requirements := {}
+	if recipe.get("skill_requirements", {}) is Dictionary:
+		for skill_key in recipe.get("skill_requirements", {}).keys():
+			skill_requirements[str(skill_key)] = int(recipe.get("skill_requirements", {}).get(skill_key, 0))
+	recipe["skill_requirements"] = skill_requirements
+
+	var unlock_conditions: Array[Dictionary] = []
+	for condition_variant in recipe.get("unlock_conditions", []):
+		if condition_variant is Dictionary:
+			unlock_conditions.append((condition_variant as Dictionary).duplicate(true))
+	recipe["unlock_conditions"] = unlock_conditions
+
+	return recipe
+
+
+func _update_recipe_list(category_filter: String = "", search_filter: String = "") -> void:
 	_recipe_list.clear()
-	_ui_elements.clear()
-	
-	var sorted_recipes = recipes.keys()
-	sorted_recipes.sort()
+
+	var sorted_recipe_ids: Array[String] = []
+	for recipe_variant in recipes.keys():
+		sorted_recipe_ids.append(str(recipe_variant))
+	sorted_recipe_ids.sort()
+
 	var filtered_count := 0
-	
-	for recipe_id in sorted_recipes:
-		var recipe = recipes[recipe_id]
-		var category = recipe.get("category", "misc")
-		var output_name = _get_output_item_name(recipe)
-		var display_text = "%s - %s -> %s" % [recipe_id, recipe.get("name", "Unnamed"), output_name]
-		
-		# 类别过滤
-		if not category_filter.is_empty() and category != category_filter:
+	for recipe_id in sorted_recipe_ids:
+		var recipe: Dictionary = recipes[recipe_id]
+		if not category_filter.is_empty() and str(recipe.get("category", "")) != category_filter:
 			continue
-		
-		# 搜索过滤
+
+		var output_name := _get_output_item_name(recipe)
 		if not search_filter.is_empty():
-			var search_lower = search_filter.to_lower()
-			if not recipe_id.to_lower().contains(search_lower) and \
-			   not recipe.get("name", "").to_lower().contains(search_lower) and \
-			   not output_name.to_lower().contains(search_lower):
+			var search_lower := search_filter.to_lower()
+			if not recipe_id.to_lower().contains(search_lower) \
+				and not str(recipe.get("name", "")).to_lower().contains(search_lower) \
+				and not output_name.to_lower().contains(search_lower):
 				continue
-		
-		var idx = _recipe_list.add_item(display_text)
-		_recipe_list.set_item_metadata(idx, recipe_id)
+
+		var display_text := "%s - %s -> %s" % [recipe_id, str(recipe.get("name", "Unnamed")), output_name]
+		var item_index := _recipe_list.add_item(display_text)
+		_recipe_list.set_item_metadata(item_index, recipe_id)
+		_apply_category_color(item_index, str(recipe.get("category", "")))
 		filtered_count += 1
-		
-		# 根据类别设置颜色
-		match category:
-			"weapon":
-				_recipe_list.set_item_custom_fg_color(idx, Color.RED)
-			"armor":
-				_recipe_list.set_item_custom_fg_color(idx, Color.BLUE)
-			"medical":
-				_recipe_list.set_item_custom_fg_color(idx, Color.GREEN)
-			"food":
-				_recipe_list.set_item_custom_fg_color(idx, Color.ORANGE)
-			"ammo":
-				_recipe_list.set_item_custom_fg_color(idx, Color.YELLOW)
-	
-	if _stats_label and is_instance_valid(_stats_label):
-		_stats_label.text = "Total: %d / Filtered: %d" % [recipes.size(), filtered_count]
+
+	_stats_label.text = "Total: %d / Filtered: %d" % [recipes.size(), filtered_count]
+
+
+func _apply_category_color(item_index: int, category: String) -> void:
+	match category:
+		"weapon":
+			_recipe_list.set_item_custom_fg_color(item_index, Color.RED)
+		"armor":
+			_recipe_list.set_item_custom_fg_color(item_index, Color.BLUE)
+		"medical":
+			_recipe_list.set_item_custom_fg_color(item_index, Color.GREEN)
+		"food":
+			_recipe_list.set_item_custom_fg_color(item_index, Color.ORANGE)
+		"ammo":
+			_recipe_list.set_item_custom_fg_color(item_index, Color.YELLOW)
+		"repair":
+			_recipe_list.set_item_custom_fg_color(item_index, Color.CYAN)
+
 
 func _get_output_item_name(recipe: Dictionary) -> String:
-	var output = recipe.get("output", {})
-	var item_id = output.get("item_id", "")
-	# 安全访问 ItemDatabase
-	var item_db = get_node_or_null("/root/ItemDatabase")
-	if item_db and item_db.has_method("get_item_name"):
-		return item_db.get_item_name(item_id)
+	var output: Dictionary = recipe.get("output", {})
+	var item_id := str(output.get("item_id", ""))
+	if ItemDatabase and ItemDatabase.has_method("get_item_name"):
+		return ItemDatabase.get_item_name(item_id)
 	return item_id
 
-func _on_category_filter_changed(index: int):
-	var category := ""
-	if _category_filter and index >= 0 and index < _category_filter.get_item_count():
-		category = str(_category_filter.get_item_metadata(index))
-	_selected_category_filter = category
+
+func _on_category_filter_changed(index: int) -> void:
+	_selected_category_filter = str(_category_filter.get_item_metadata(index))
 	_update_recipe_list(_selected_category_filter, _search_filter_text)
 
-func _on_search_changed(text: String):
+
+func _on_search_changed(text: String) -> void:
 	_search_filter_text = text.strip_edges()
 	_update_recipe_list(_selected_category_filter, _search_filter_text)
 
-func _on_new_recipe():
-	var recipe_id = "recipe_%d" % Time.get_ticks_msec()
-	var recipe_data = {
+
+func _on_new_recipe() -> void:
+	var recipe_id := "recipe_%d" % Time.get_ticks_msec()
+	recipes[recipe_id] = _normalize_recipe_data({
 		"id": recipe_id,
 		"name": "New Recipe",
 		"description": "",
@@ -299,425 +363,546 @@ func _on_new_recipe():
 		"required_station": "none",
 		"skill_requirements": {},
 		"craft_time": 10.0,
-		"experience_reward": 5,
+		"experience_reward": 0,
 		"unlock_conditions": [],
-		"is_default_unlocked": true
-	}
-	
-	recipes[recipe_id] = recipe_data
-	_update_recipe_list()
+		"is_default_unlocked": true,
+		"durability_influence": 1.0,
+		"is_repair": false,
+		"target_type": "any",
+		"repair_amount": 30
+	})
 	_select_recipe(recipe_id)
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
 	_update_status("创建了新配方: %s" % recipe_id)
 
-func _on_delete_recipe():
-	if current_recipe_id.is_empty():
+
+func _on_delete_recipe() -> void:
+	if current_recipe_id.is_empty() or not recipes.has(current_recipe_id):
 		return
-	
+
+	var file_path := str(_recipe_file_paths.get(current_recipe_id, _get_recipe_file_path(current_recipe_id)))
+	if FileAccess.file_exists(file_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(file_path))
+
+	var pending_old_path := str(_pending_old_paths.get(current_recipe_id, ""))
+	if not pending_old_path.is_empty() and FileAccess.file_exists(pending_old_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(pending_old_path))
+
 	recipes.erase(current_recipe_id)
+	_recipe_file_paths.erase(current_recipe_id)
+	_pending_old_paths.erase(current_recipe_id)
 	current_recipe_id = ""
-	_update_recipe_list()
 	_clear_property_panel()
-	_update_status("Deleted recipe")
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
+	_update_status("已删除配方")
 
-func _on_duplicate_recipe():
-	if current_recipe_id.is_empty():
+
+func _on_duplicate_recipe() -> void:
+	if current_recipe_id.is_empty() or not recipes.has(current_recipe_id):
 		return
-	
-	var source_recipe = recipes.get(current_recipe_id, {})
-	if source_recipe.is_empty():
-		return
-	
-	var new_id = "recipe_%d" % Time.get_ticks_msec()
-	var new_recipe = source_recipe.duplicate(true)
-	new_recipe.id = new_id
-	new_recipe.name = new_recipe.name + " (复制)"
-	
-	recipes[new_id] = new_recipe
-	_update_recipe_list()
+
+	var source_recipe: Dictionary = recipes[current_recipe_id].duplicate(true)
+	var new_id := "%s_copy_%d" % [current_recipe_id, Time.get_ticks_msec()]
+	source_recipe["id"] = new_id
+	source_recipe["name"] = "%s (复制)" % str(source_recipe.get("name", "Recipe"))
+	recipes[new_id] = source_recipe
 	_select_recipe(new_id)
-	_update_status("复制了配 %s" % new_id)
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
+	_update_status("复制了配方: %s" % new_id)
 
-func _on_recipe_selected(index: int):
-	var recipe_id = _recipe_list.get_item_metadata(index)
-	_select_recipe(recipe_id)
 
-func _select_recipe(recipe_id: String):
+func _on_save_recipes() -> void:
+	if current_recipe_id.is_empty():
+		var sorted_recipe_ids: Array[String] = []
+		for recipe_variant in recipes.keys():
+			sorted_recipe_ids.append(str(recipe_variant))
+		sorted_recipe_ids.sort()
+		for recipe_id in sorted_recipe_ids:
+			_save_recipe_to_disk(recipe_id)
+		_update_status("已保存全部配方")
+		return
+
+	_save_recipe_to_disk(current_recipe_id)
+
+
+func _save_recipe_to_disk(recipe_id: String) -> bool:
+	if not recipes.has(recipe_id):
+		return false
+
+	var absolute_dir := ProjectSettings.globalize_path(RECIPE_DIR)
+	DirAccess.make_dir_recursive_absolute(absolute_dir)
+
+	var recipe: Dictionary = _normalize_recipe_data(recipes[recipe_id])
+	recipe["id"] = recipe_id
+	recipes[recipe_id] = recipe
+
+	var target_path := _get_recipe_file_path(recipe_id)
+	var old_path := str(_pending_old_paths.get(recipe_id, _recipe_file_paths.get(recipe_id, "")))
+	var file := FileAccess.open(target_path, FileAccess.WRITE)
+	if file == null:
+		_update_status("保存失败: %s" % target_path)
+		return false
+
+	file.store_string(JSON.stringify(recipe, "\t"))
+	file.close()
+
+	if not old_path.is_empty() and old_path != target_path and FileAccess.file_exists(old_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(old_path))
+
+	_recipe_file_paths[recipe_id] = target_path
+	_pending_old_paths.erase(recipe_id)
+	recipe_saved.emit(recipe_id)
+	_update_status("已保存: %s" % target_path)
+	return true
+
+
+func _on_reload_recipes() -> void:
+	var selected_id := current_recipe_id
+	_load_recipes_from_directory()
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
+	if not selected_id.is_empty() and recipes.has(selected_id):
+		_select_recipe(selected_id)
+	elif not recipes.is_empty():
+		_select_recipe(str(recipes.keys()[0]))
+
+
+func _get_recipe_file_path(recipe_id: String) -> String:
+	return "%s/%s.json" % [RECIPE_DIR, recipe_id]
+
+
+func _on_recipe_selected(index: int) -> void:
+	_select_recipe(str(_recipe_list.get_item_metadata(index)))
+
+
+func _select_recipe(recipe_id: String) -> void:
 	current_recipe_id = recipe_id
-	var recipe = recipes.get(recipe_id)
-	if recipe:
+	var recipe: Dictionary = recipes.get(recipe_id, {})
+	if not recipe.is_empty():
 		_update_property_panel(recipe)
 
-func _clear_property_panel():
+
+func _clear_property_panel() -> void:
 	for child in _property_panel.get_children():
 		child.queue_free()
-
-func _update_property_panel(recipe: Dictionary):
-	_clear_property_panel()
 	_ui_elements.clear()
-	
-	# 基础信息
-	_add_section_label("📋 基础信息")
-	_add_string_field("id", "配方 ID:", recipe.get("id", ""), false)
-	_add_string_field("name", "显示名称:", recipe.get("name", ""))
-	_add_string_field("description", "描述:", recipe.get("description", ""), true)
-	_add_enum_field("category", "类别:", RECIPE_CATEGORIES, recipe.get("category", "misc"))
-	_add_bool_field("is_default_unlocked", "默认解锁:", recipe.get("is_default_unlocked", true))
-	
+
+
+func _update_property_panel(recipe: Dictionary) -> void:
+	_clear_property_panel()
+
+	_add_section_label("基础信息")
+	_add_line_field("id", "配方 ID:", str(recipe.get("id", "")), true)
+	_add_line_field("name", "显示名称:", str(recipe.get("name", "")))
+	_add_multiline_field("description", "描述:", str(recipe.get("description", "")))
+	_add_enum_field("category", "类别:", RECIPE_CATEGORIES, str(recipe.get("category", "misc")))
+	_add_bool_field("is_default_unlocked", "默认解锁:", bool(recipe.get("is_default_unlocked", true)))
+
 	_add_separator()
-	
-	# 产出
-	_add_section_label("📦 产出")
-	var output = recipe.get("output", {})
-	_add_string_field("output_item_id", "产出物品ID:", output.get("item_id", ""))
-	_add_number_field("output_count", "产出数量:", output.get("count", 1), 1, 999, 1)
-	_add_number_field("output_quality", "品质加成:", output.get("quality_bonus", 0), 0, 10, 1)
-	
+	_add_section_label("产出")
+	var output: Dictionary = recipe.get("output", {})
+	_add_line_field("output_item_id", "产出物品 ID:", str(output.get("item_id", "")))
+	_add_number_field("output_count", "产出数量:", float(output.get("count", 1)), 1, 999, 1)
+	_add_number_field("output_quality", "品质加成:", float(output.get("quality_bonus", 0)), 0, 10, 1)
+
 	_add_separator()
-	
-	# 材料
-	_add_section_label("🔧 材料")
+	_add_section_label("材料")
 	_add_materials_editor(recipe.get("materials", []))
-	
+
 	_add_separator()
-	
-	# 工具
-	_add_section_label("🛠工具")
+	_add_section_label("工具")
 	_add_string_array_field("required_tools", "必需工具:", recipe.get("required_tools", []))
-	_add_string_array_field("optional_tools", "工", recipe.get("optional_tools", []))
-	
+	_add_string_array_field("optional_tools", "可选工具:", recipe.get("optional_tools", []))
+
 	_add_separator()
-	
-	# 工作台和
-	_add_section_label("Requirements")
-	_add_enum_field("required_station", "工作", STATION_TYPES, recipe.get("required_station", "none"))
-	_add_number_field("craft_time", "制作时间(:", recipe.get("craft_time", 10.0), 0.0, 3600.0, 1.0)
-	_add_number_field("experience_reward", "经验奖励:", recipe.get("experience_reward", 5), 0, 9999, 1)
+	_add_section_label("制作要求")
+	_add_enum_field("required_station", "工作台:", STATION_TYPES, str(recipe.get("required_station", "none")))
+	_add_number_field("craft_time", "制作时间(秒):", float(recipe.get("craft_time", 10.0)), 0.0, 3600.0, 1.0)
+	_add_number_field("experience_reward", "经验奖励:", float(recipe.get("experience_reward", 0)), 0, 9999, 1)
+	_add_json_field("skill_requirements", "技能需求(JSON):", recipe.get("skill_requirements", {}), TYPE_DICTIONARY)
+	_add_json_field("unlock_conditions", "解锁条件(JSON):", recipe.get("unlock_conditions", []), TYPE_ARRAY)
 
-# ========== UI 辅助方法 ==========
+	_add_separator()
+	_add_section_label("特殊属性")
+	_add_bool_field("is_repair", "维修配方:", bool(recipe.get("is_repair", false)))
+	_add_line_field("target_type", "维修目标:", str(recipe.get("target_type", "any")))
+	_add_number_field("repair_amount", "维修百分比:", float(recipe.get("repair_amount", 30)), 0, 100, 1)
+	_add_number_field("durability_influence", "成功率修正:", float(recipe.get("durability_influence", 1.0)), 0.0, 1.5, 0.05)
 
-func _add_section_label(text: String):
-	var label = Label.new()
+	recipe_loaded.emit(current_recipe_id)
+
+
+func _add_section_label(text: String) -> void:
+	var label := Label.new()
 	label.text = text
 	label.add_theme_font_size_override("font_size", 14)
 	label.add_theme_color_override("font_color", Color.YELLOW)
 	_property_panel.add_child(label)
 
-func _add_separator():
+
+func _add_separator() -> void:
 	_property_panel.add_child(HSeparator.new())
 
-func _add_string_field(key: String, label_text: String, value: String, multiline: bool = false):
-	var hbox = HBoxContainer.new()
-	
-	var label = Label.new()
+
+func _add_line_field(key: String, label_text: String, value: String, commit_on_focus_exit: bool = false) -> void:
+	var row := HBoxContainer.new()
+	var label := Label.new()
 	label.text = label_text
-	label.custom_minimum_size = Vector2(120, 0)
-	hbox.add_child(label)
-	
-	var line_edit = LineEdit.new()
-	line_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.custom_minimum_size = Vector2(140, 0)
+	row.add_child(label)
+
+	var line_edit := LineEdit.new()
 	line_edit.text = value
-	line_edit.text_changed.connect(func(new_text): _on_field_changed(key, new_text))
-	
-	hbox.add_child(line_edit)
-	_property_panel.add_child(hbox)
+	line_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if commit_on_focus_exit:
+		line_edit.focus_exited.connect(func(): _on_field_commit(key, line_edit.text))
+		line_edit.text_submitted.connect(func(_text): _on_field_commit(key, line_edit.text))
+	else:
+		line_edit.text_changed.connect(func(new_text): _on_field_changed(key, new_text))
+	row.add_child(line_edit)
+	_property_panel.add_child(row)
 	_ui_elements[key] = line_edit
 
-func _add_number_field(key: String, label_text: String, value: float, min_val: float, max_val: float, step: float):
-	var hbox = HBoxContainer.new()
-	
-	var label = Label.new()
+
+func _add_multiline_field(key: String, label_text: String, value: String) -> void:
+	var box := VBoxContainer.new()
+	var label := Label.new()
 	label.text = label_text
-	label.custom_minimum_size = Vector2(120, 0)
-	hbox.add_child(label)
-	
-	var spin_box = SpinBox.new()
+	box.add_child(label)
+
+	var text_edit := TextEdit.new()
+	text_edit.custom_minimum_size = Vector2(0, 90)
+	text_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	text_edit.text = value
+	text_edit.focus_exited.connect(func(): _on_field_changed(key, text_edit.text))
+	box.add_child(text_edit)
+
+	_property_panel.add_child(box)
+	_ui_elements[key] = text_edit
+
+
+func _add_number_field(key: String, label_text: String, value: float, min_val: float, max_val: float, step: float) -> void:
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size = Vector2(140, 0)
+	row.add_child(label)
+
+	var spin_box := SpinBox.new()
 	spin_box.min_value = min_val
 	spin_box.max_value = max_val
 	spin_box.step = step
 	spin_box.value = value
 	spin_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spin_box.value_changed.connect(func(v): _on_field_changed(key, v))
-	
-	hbox.add_child(spin_box)
-	_property_panel.add_child(hbox)
+	spin_box.value_changed.connect(func(new_value): _on_field_changed(key, new_value))
+	row.add_child(spin_box)
+
+	_property_panel.add_child(row)
 	_ui_elements[key] = spin_box
 
-func _add_bool_field(key: String, label_text: String, value: bool):
-	var hbox = HBoxContainer.new()
-	
-	var label = Label.new()
+
+func _add_bool_field(key: String, label_text: String, value: bool) -> void:
+	var row := HBoxContainer.new()
+	var label := Label.new()
 	label.text = label_text
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox.add_child(label)
-	
-	var checkbox = CheckBox.new()
+	row.add_child(label)
+
+	var checkbox := CheckBox.new()
 	checkbox.button_pressed = value
-	checkbox.toggled.connect(func(v): _on_field_changed(key, v))
-	
-	hbox.add_child(checkbox)
-	_property_panel.add_child(hbox)
+	checkbox.toggled.connect(func(new_value): _on_field_changed(key, new_value))
+	row.add_child(checkbox)
+
+	_property_panel.add_child(row)
 	_ui_elements[key] = checkbox
 
-func _add_enum_field(key: String, label_text: String, options: Dictionary, value: String):
-	var hbox = HBoxContainer.new()
-	
-	var label = Label.new()
-	label.text = label_text
-	label.custom_minimum_size = Vector2(120, 0)
-	hbox.add_child(label)
-	
-	var option_btn = OptionButton.new()
-	option_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	
-	var index = 0
-	var selected_index = 0
-	for key_opt in options.keys():
-		option_btn.add_item(options[key_opt])
-		option_btn.set_item_metadata(index, key_opt)
-		if key_opt == value:
-			selected_index = index
-		index += 1
-	
-	option_btn.selected = selected_index
-	option_btn.item_selected.connect(func(idx): 
-		var selected_key = option_btn.get_item_metadata(idx)
-		_on_field_changed(key, selected_key)
-	)
-	
-	hbox.add_child(option_btn)
-	_property_panel.add_child(hbox)
-	_ui_elements[key] = option_btn
 
-func _add_materials_editor(materials: Array):
+func _add_enum_field(key: String, label_text: String, options: Dictionary, value: String) -> void:
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size = Vector2(140, 0)
+	row.add_child(label)
+
+	var option_button := OptionButton.new()
+	option_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var selected_index := 0
+	var option_index := 0
+	for option_key in options.keys():
+		option_button.add_item(str(options[option_key]))
+		option_button.set_item_metadata(option_index, option_key)
+		if option_key == value:
+			selected_index = option_index
+		option_index += 1
+	option_button.selected = selected_index
+	option_button.item_selected.connect(func(index): _on_field_changed(key, str(option_button.get_item_metadata(index))))
+	row.add_child(option_button)
+
+	_property_panel.add_child(row)
+	_ui_elements[key] = option_button
+
+
+func _add_json_field(key: String, label_text: String, value: Variant, expected_type: int) -> void:
+	var box := VBoxContainer.new()
+	var label := Label.new()
+	label.text = label_text
+	box.add_child(label)
+
+	var text_edit := TextEdit.new()
+	text_edit.custom_minimum_size = Vector2(0, 90)
+	text_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	text_edit.text = JSON.stringify(value, "\t")
+	text_edit.focus_exited.connect(func(): _on_json_field_changed(key, text_edit.text, expected_type))
+	box.add_child(text_edit)
+
+	_property_panel.add_child(box)
+	_ui_elements[key] = text_edit
+
+
+func _add_materials_editor(materials: Array) -> void:
+	var box := VBoxContainer.new()
+	var title := Label.new()
+	title.text = "材料列表"
+	box.add_child(title)
+
 	_materials_container = VBoxContainer.new()
-	_materials_container.name = "MaterialsContainer"
-	
-	# 显示当前材料
-	for i in range(materials.size()):
-		_create_material_row(_materials_container, i, materials[i], materials)
-	
-	# 添加按钮
-	var add_btn = Button.new()
+	box.add_child(_materials_container)
+	_property_panel.add_child(box)
+
+	_render_materials_editor(materials)
+
+
+func _render_materials_editor(materials: Array) -> void:
+	_clear_children(_materials_container)
+
+	for index in range(materials.size()):
+		var material: Dictionary = materials[index]
+		var row := HBoxContainer.new()
+
+		var item_edit := LineEdit.new()
+		item_edit.placeholder_text = "物品ID"
+		item_edit.text = str(material.get("item_id", ""))
+		item_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item_edit.text_changed.connect(func(new_text):
+			var recipe := recipes.get(current_recipe_id, {})
+			var updated_materials: Array = recipe.get("materials", [])
+			if index < updated_materials.size():
+				updated_materials[index]["item_id"] = new_text
+				_on_field_changed("materials", updated_materials)
+		)
+		row.add_child(item_edit)
+
+		var count_spin := SpinBox.new()
+		count_spin.min_value = 1
+		count_spin.max_value = 999
+		count_spin.step = 1
+		count_spin.value = float(material.get("count", 1))
+		count_spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		count_spin.value_changed.connect(func(new_value):
+			var recipe := recipes.get(current_recipe_id, {})
+			var updated_materials: Array = recipe.get("materials", [])
+			if index < updated_materials.size():
+				updated_materials[index]["count"] = int(new_value)
+				_on_field_changed("materials", updated_materials)
+		)
+		row.add_child(count_spin)
+
+		var delete_btn := Button.new()
+		delete_btn.text = "删除"
+		delete_btn.pressed.connect(func():
+			var recipe := recipes.get(current_recipe_id, {})
+			var updated_materials: Array = recipe.get("materials", []).duplicate(true)
+			if index < updated_materials.size():
+				updated_materials.remove_at(index)
+				_on_field_changed("materials", updated_materials)
+				_render_materials_editor(updated_materials)
+		)
+		row.add_child(delete_btn)
+
+		_materials_container.add_child(row)
+
+	var add_btn := Button.new()
 	add_btn.text = "+ 添加材料"
 	add_btn.pressed.connect(func():
-		materials.append({"item_id": "", "count": 1})
-		_create_material_row(_materials_container, materials.size() - 1, materials.back(), materials)
+		var recipe := recipes.get(current_recipe_id, {})
+		var updated_materials: Array = recipe.get("materials", []).duplicate(true)
+		updated_materials.append({"item_id": "", "count": 1})
+		_on_field_changed("materials", updated_materials)
+		_render_materials_editor(updated_materials)
 	)
 	_materials_container.add_child(add_btn)
-	
-	_property_panel.add_child(_materials_container)
 
-func _create_material_row(container: VBoxContainer, index: int, material: Dictionary, materials_ref: Array = []):
-	var row = HBoxContainer.new()
-	
-	var item_edit = LineEdit.new()
-	item_edit.placeholder_text = "物品ID"
-	item_edit.text = material.get("item_id", "")
-	item_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	item_edit.text_changed.connect(func(v): 
-		material.item_id = v
-		var target_materials = _resolve_materials_ref(materials_ref)
-		_on_field_changed("materials", target_materials)
-	)
-	row.add_child(item_edit)
-	
-	var count_spin = SpinBox.new()
-	count_spin.min_value = 1
-	count_spin.max_value = 999
-	count_spin.value = material.get("count", 1)
-	count_spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	count_spin.value_changed.connect(func(v):
-		material.count = int(v)
-		var target_materials = _resolve_materials_ref(materials_ref)
-		_on_field_changed("materials", target_materials)
-	)
-	row.add_child(count_spin)
-	
-	var del_btn = Button.new()
-	del_btn.text = "删除"
-	del_btn.pressed.connect(func():
-		var target_materials = _resolve_materials_ref(materials_ref)
-		var target_index = target_materials.find(material)
-		if target_index < 0:
-			target_index = index
-		if target_index >= 0 and target_index < target_materials.size():
-			target_materials.remove_at(target_index)
-		row.queue_free()
-		_on_field_changed("materials", target_materials)
-	)
-	row.add_child(del_btn)
-	
-	# 插入到添加按
-	var add_button_idx = container.get_child_count() - 1
-	container.add_child(row)
-	if add_button_idx >= 0:
-		container.move_child(row, add_button_idx)
 
-func _resolve_materials_ref(materials_ref: Array) -> Array:
-	if not materials_ref.is_empty():
-		return materials_ref
-	if current_recipe_id.is_empty() or not recipes.has(current_recipe_id):
-		return []
-	return recipes[current_recipe_id].get("materials", [])
-
-func _add_string_array_field(key: String, label_text: String, values: Array):
-	var vbox = VBoxContainer.new()
-	
-	var label = Label.new()
+func _add_string_array_field(key: String, label_text: String, values: Array) -> void:
+	var box := VBoxContainer.new()
+	var label := Label.new()
 	label.text = label_text
-	vbox.add_child(label)
-	
-	var list_container = VBoxContainer.new()
-	list_container.name = "List_" + key
-	
-	for i in range(values.size()):
-		_create_string_array_row(list_container, i, values[i], values)
-	
-	var add_btn = Button.new()
-	add_btn.text = "+ 添加"
-	add_btn.pressed.connect(func():
-		values.append("")
-		_create_string_array_row(list_container, values.size() - 1, "", values)
-	)
-	list_container.add_child(add_btn)
-	
-	vbox.add_child(list_container)
-	_property_panel.add_child(vbox)
+	box.add_child(label)
+
+	var list_container := VBoxContainer.new()
+	box.add_child(list_container)
+	_property_panel.add_child(box)
+
+	_render_string_array_field(key, values, list_container)
 	_ui_elements[key] = list_container
 
-func _create_string_array_row(container: VBoxContainer, index: int, value: String, array_ref: Array):
-	var row = HBoxContainer.new()
-	
-	var line_edit = LineEdit.new()
-	line_edit.text = value
-	line_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line_edit.text_changed.connect(func(v):
-		array_ref[index] = v
-		_on_field_changed(container.name.trim_prefix("List_"), array_ref)
-	)
-	row.add_child(line_edit)
-	
-	var del_btn = Button.new()
-	del_btn.text = "删除"
-	del_btn.pressed.connect(func():
-		array_ref.remove_at(index)
-		row.queue_free()
-	)
-	row.add_child(del_btn)
-	
-	# 插入到添加按
-	var add_button_idx = container.get_child_count() - 1
-	container.add_child(row)
-	if add_button_idx >= 0:
-		container.move_child(row, add_button_idx)
 
-func _on_field_changed(key: String, value: Variant):
-	if current_recipe_id.is_empty():
+func _render_string_array_field(key: String, values: Array, container: VBoxContainer) -> void:
+	_clear_children(container)
+
+	for index in range(values.size()):
+		var row := HBoxContainer.new()
+		var line_edit := LineEdit.new()
+		line_edit.text = str(values[index])
+		line_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line_edit.text_changed.connect(func(new_text):
+			var recipe := recipes.get(current_recipe_id, {})
+			var updated_values: Array = recipe.get(key, []).duplicate()
+			if index < updated_values.size():
+				updated_values[index] = new_text
+				_on_field_changed(key, updated_values)
+		)
+		row.add_child(line_edit)
+
+		var delete_btn := Button.new()
+		delete_btn.text = "删除"
+		delete_btn.pressed.connect(func():
+			var recipe := recipes.get(current_recipe_id, {})
+			var updated_values: Array = recipe.get(key, []).duplicate()
+			if index < updated_values.size():
+				updated_values.remove_at(index)
+				_on_field_changed(key, updated_values)
+				_render_string_array_field(key, updated_values, container)
+		)
+		row.add_child(delete_btn)
+
+		container.add_child(row)
+
+	var add_btn := Button.new()
+	add_btn.text = "+ 添加"
+	add_btn.pressed.connect(func():
+		var recipe := recipes.get(current_recipe_id, {})
+		var updated_values: Array = recipe.get(key, []).duplicate()
+		updated_values.append("")
+		_on_field_changed(key, updated_values)
+		_render_string_array_field(key, updated_values, container)
+	)
+	container.add_child(add_btn)
+
+
+func _on_field_commit(key: String, value: Variant) -> void:
+	if key == "id":
+		_commit_recipe_id_change(str(value))
 		return
-	
-	var recipe = recipes[current_recipe_id]
-	
-	# 处理特殊字段
-	if key == "id" and value != current_recipe_id and not value.is_empty() and not recipes.has(value):
-		recipes.erase(current_recipe_id)
-		recipe.id = value
-		recipes[value] = recipe
-		current_recipe_id = value
-		_update_recipe_list()
-	elif key == "output_item_id":
-		if not recipe.has("output"):
-			recipe.output = {}
-		recipe.output.item_id = value
-	elif key == "output_count":
-		if not recipe.has("output"):
-			recipe.output = {}
-		recipe.output.count = int(value)
-	elif key == "output_quality":
-		if not recipe.has("output"):
-			recipe.output = {}
-		recipe.output.quality_bonus = int(value)
-	else:
-		recipe[key] = value
-	
-	_update_status("已更 %s" % key)
+	_on_field_changed(key, value)
 
-# ========== 文件操作 ==========
 
-func _on_save_recipes():
-	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_file_dialog.current_file = "recipes.json"
-	_file_dialog.file_selected.connect(_save_to_file, CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
+func _commit_recipe_id_change(raw_value: String) -> void:
+	if current_recipe_id.is_empty() or not recipes.has(current_recipe_id):
+		return
 
-func _save_to_file(path: String):
-	var json = JSON.stringify(recipes, "\t")
-	var file = FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string(json)
-		file.close()
-		recipe_saved.emit(current_recipe_id)
-		_update_status("已保 %s (%d" % [path, recipes.size()])
-	else:
-		_update_status("保存失败")
+	var new_id := raw_value.strip_edges()
+	if new_id.is_empty() or new_id == current_recipe_id:
+		return
+	if recipes.has(new_id):
+		_update_status("配方 ID 已存在: %s" % new_id)
+		return
 
-func _on_load_recipes():
-	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	_file_dialog.file_selected.connect(_load_from_file, CONNECT_ONE_SHOT)
-	_file_dialog.popup_centered(Vector2(800, 600))
+	var recipe: Dictionary = recipes[current_recipe_id]
+	var old_id := current_recipe_id
+	var old_path := str(_recipe_file_paths.get(old_id, _get_recipe_file_path(old_id)))
+	recipes.erase(old_id)
+	_recipe_file_paths.erase(old_id)
+	recipe["id"] = new_id
+	recipes[new_id] = recipe
+	_pending_old_paths[new_id] = old_path
+	current_recipe_id = new_id
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
+	_select_recipe(new_id)
+	_update_status("已更新配方 ID: %s -> %s" % [old_id, new_id])
 
-func _load_from_file(path: String) -> bool:
-	var validation := JSON_VALIDATOR.validate_file(path, {
-		"root_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"wrapper_key": "recipes",
-		"wrapper_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"entry_type": JSON_VALIDATOR.TYPE_DICTIONARY,
-		"entry_label": "recipe"
-	})
-	if not bool(validation.get("ok", false)):
-		_update_status(str(validation.get("message", "[JSON] Unknown validation error")))
-		return false
 
-	var loaded_recipes: Variant = validation.get("data", {})
-	if not (loaded_recipes is Dictionary):
-		_update_status("[JSON] %s | Invalid validator result: data must be Dictionary" % path)
-		return false
-	recipes = loaded_recipes
+func _on_field_changed(key: String, value: Variant) -> void:
+	if current_recipe_id.is_empty() or not recipes.has(current_recipe_id):
+		return
 
-	_update_recipe_list()
-	_clear_property_panel()
-	recipe_loaded.emit(current_recipe_id)
-	_update_status("Loaded: %s (%d recipes)" % [path, recipes.size()])
-	return true
+	var recipe: Dictionary = recipes[current_recipe_id]
+	match key:
+		"output_item_id":
+			var output: Dictionary = recipe.get("output", {}).duplicate(true)
+			output["item_id"] = str(value)
+			recipe["output"] = output
+		"output_count":
+			var output_count: Dictionary = recipe.get("output", {}).duplicate(true)
+			output_count["count"] = int(value)
+			recipe["output"] = output_count
+		"output_quality":
+			var output_quality: Dictionary = recipe.get("output", {}).duplicate(true)
+			output_quality["quality_bonus"] = int(value)
+			recipe["output"] = output_quality
+		"craft_time", "durability_influence":
+			recipe[key] = float(value)
+		"experience_reward", "repair_amount":
+			recipe[key] = int(value)
+		_:
+			recipe[key] = value
 
-func _update_status(message: String):
+	recipes[current_recipe_id] = _normalize_recipe_data(recipe)
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
+	_update_status("已更新字段: %s" % key)
+
+
+func _on_json_field_changed(key: String, json_text: String, expected_type: int) -> void:
+	var trimmed := json_text.strip_edges()
+	var parsed: Variant = {} if expected_type == TYPE_DICTIONARY else []
+	if not trimmed.is_empty():
+		parsed = JSON.parse_string(trimmed)
+		if parsed == null:
+			_update_status("JSON 解析失败: %s" % key)
+			return
+		if typeof(parsed) != expected_type:
+			_update_status("JSON 类型错误: %s" % key)
+			return
+
+	_on_field_changed(key, parsed)
+
+
+func _update_status(message: String) -> void:
 	_status_bar.text = message
 	print("[RecipeEditor] %s" % message)
 
+
 func focus_record(record_id: String) -> bool:
-	var target_id: String = record_id.strip_edges()
+	var target_id := record_id.strip_edges()
 	if target_id.is_empty():
 		return false
 
-	_update_recipe_list()
+	_update_recipe_list(_selected_category_filter, _search_filter_text)
 	if not recipes.has(target_id):
 		_update_status("未找到配方: %s" % target_id)
 		return false
 
 	_select_recipe(target_id)
-	if _recipe_list:
-		for i in range(_recipe_list.get_item_count()):
-			if str(_recipe_list.get_item_metadata(i)) == target_id:
-				_recipe_list.select(i)
-				_recipe_list.ensure_current_is_visible()
-				break
+	for index in range(_recipe_list.get_item_count()):
+		if str(_recipe_list.get_item_metadata(index)) == target_id:
+			_recipe_list.select(index)
+			_recipe_list.ensure_current_is_visible()
+			break
 	_update_status("已定位配方: %s" % target_id)
 	return true
 
-# 公共方法
+
 func get_current_recipe_id() -> String:
 	return current_recipe_id
+
 
 func get_recipes_count() -> int:
 	return recipes.size()
 
 
+func _clear_children(node: Node) -> void:
+	if node == null:
+		return
+	for child in node.get_children():
+		child.queue_free()

@@ -1,0 +1,41 @@
+{
+  "id": "recipe_repair_advanced",
+  "name": "高级维修套件",
+  "description": "恢复任何装备 50% 耐久",
+  "category": "repair",
+  "output": {
+    "item_id": 1155,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 5
+    },
+    {
+      "item_id": 1011,
+      "count": 3
+    },
+    {
+      "item_id": 1144,
+      "count": 1
+    }
+  ],
+  "required_tools": [
+    1151
+  ],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 3
+  },
+  "craft_time": 60.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0,
+  "is_repair": true,
+  "target_type": "any",
+  "repair_amount": 50
+}

@@ -1,0 +1,28 @@
+{
+  "id": "recipe_ammo_shotgun",
+  "name": "霰弹",
+  "description": "制作霰弹枪弹药",
+  "category": "ammo",
+  "output": {
+    "item_id": 1021,
+    "count": 4,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 2
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 4
+  },
+  "craft_time": 25.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

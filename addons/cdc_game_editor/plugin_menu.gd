@@ -32,6 +32,8 @@ const DATA_KIND_RECIPE: String = "recipe"
 const DATA_KIND_SKILL: String = "skill"
 const DATA_KIND_EFFECT: String = "effect"
 const DATA_KIND_CHARACTER: String = "character"
+const DATA_KIND_NPC: String = "npc"
+const DATA_KIND_ENEMY: String = "enemy"
 
 const GAME_DATA_ID_INSPECTOR_PLUGIN_SCRIPT := preload(
 	"res://addons/cdc_game_editor/inspector/game_data_id_inspector_plugin.gd"
@@ -558,7 +560,7 @@ func get_data_ids(data_kind: String) -> Array[String]:
 		DATA_KIND_QUEST:
 			result = _load_ids_from_json_directory("res://data/quests")
 		DATA_KIND_RECIPE:
-			result = _load_ids_from_json_dict_files(["res://data/json/recipes.json", "res://data/recipes.json"])
+			result = _load_ids_from_json_directory("res://data/recipes")
 		DATA_KIND_ITEM:
 			var item_ids: Array[String] = _load_ids_from_json_directory("res://data/items")
 			if item_ids.is_empty():
@@ -589,7 +591,7 @@ func get_data_id_entries(data_kind: String) -> Array[Dictionary]:
 		DATA_KIND_QUEST:
 			return _load_named_entries_from_json_directory("res://data/quests", ["title", "name"])
 		DATA_KIND_RECIPE:
-			return _load_named_entries_from_json_dict_files(["res://data/json/recipes.json", "res://data/recipes.json"])
+			return _load_named_entries_from_json_directory("res://data/recipes")
 		DATA_KIND_SKILL:
 			return _load_named_entries_from_json_directory("res://data/skills")
 		DATA_KIND_EFFECT:

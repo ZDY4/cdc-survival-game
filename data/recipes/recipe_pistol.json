@@ -1,0 +1,36 @@
+{
+  "id": "recipe_pistol",
+  "name": "手枪",
+  "description": "制作基础手枪",
+  "category": "weapon",
+  "output": {
+    "item_id": 1004,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 12
+    },
+    {
+      "item_id": 1012,
+      "count": 3
+    }
+  ],
+  "required_tools": [
+    1151,
+    1166
+  ],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 2,
+    "engineering": 1
+  },
+  "craft_time": 100.0,
+  "experience_reward": 25,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

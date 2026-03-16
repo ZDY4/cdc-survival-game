@@ -1,0 +1,32 @@
+{
+  "id": "recipe_helmet",
+  "name": "简易头盔",
+  "description": "保护头部的基础护具",
+  "category": "armor",
+  "output": {
+    "item_id": 2001,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 5
+    },
+    {
+      "item_id": 1011,
+      "count": 3
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 2
+  },
+  "craft_time": 45.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

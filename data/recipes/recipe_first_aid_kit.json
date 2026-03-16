@@ -1,0 +1,32 @@
+{
+  "id": "recipe_first_aid_kit",
+  "name": "急救包",
+  "description": "用绷带和消毒剂制作急救包",
+  "category": "medical",
+  "output": {
+    "item_id": 1005,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1006,
+      "count": 2
+    },
+    {
+      "item_id": 1030,
+      "count": 1
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "medical": 1
+  },
+  "craft_time": 30.0,
+  "experience_reward": 15,
+  "unlock_conditions": [],
+  "is_default_unlocked": true,
+  "durability_influence": 1.0
+}

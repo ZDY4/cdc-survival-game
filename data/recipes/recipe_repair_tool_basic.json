@@ -1,0 +1,35 @@
+{
+  "id": "recipe_repair_tool_basic",
+  "name": "基础工具维修",
+  "description": "恢复工具 40% 耐久",
+  "category": "repair",
+  "output": {
+    "item_id": 1154,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 1
+    },
+    {
+      "item_id": 1100,
+      "count": 1
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "none",
+  "skill_requirements": {
+    "crafting": 1
+  },
+  "craft_time": 15.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 0.9,
+  "is_repair": true,
+  "target_type": "tool",
+  "repair_amount": 40
+}

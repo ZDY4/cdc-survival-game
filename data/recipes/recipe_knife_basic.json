@@ -1,0 +1,36 @@
+{
+  "id": "recipe_knife_basic",
+  "name": "基础小刀",
+  "description": "用废金属和电子元件制作小刀",
+  "category": "weapon",
+  "output": {
+    "item_id": 1002,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 3
+    },
+    {
+      "item_id": 1012,
+      "count": 1
+    }
+  ],
+  "required_tools": [
+    1151
+  ],
+  "optional_tools": [
+    1166
+  ],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 1
+  },
+  "craft_time": 30.0,
+  "experience_reward": 10,
+  "unlock_conditions": [],
+  "is_default_unlocked": true,
+  "durability_influence": 1.0
+}

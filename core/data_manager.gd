@@ -14,7 +14,7 @@ const QUEST_DATA_DIR := "res://data/quests"
 const DATA_PATHS = {
 	"clues": "res://data/json/clues.json",
 	"story_chapters": "res://data/json/story_chapters.json",
-	"recipes": "res://data/json/recipes.json",
+	"recipes": "res://data/recipes",
 	"characters": "res://data/characters",
 	"camp_relations": "res://data/json/camp_relations.json",
 	"effects": "res://data/json/effects",

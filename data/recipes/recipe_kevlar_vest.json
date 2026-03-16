@@ -1,0 +1,38 @@
+{
+  "id": "recipe_kevlar_vest",
+  "name": "凯夫拉背心",
+  "description": "防弹护甲，提供优秀的躯干防护",
+  "category": "armor",
+  "output": {
+    "item_id": 2007,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1011,
+      "count": 10
+    },
+    {
+      "item_id": 1010,
+      "count": 8
+    },
+    {
+      "item_id": 1012,
+      "count": 3
+    }
+  ],
+  "required_tools": [
+    1151
+  ],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 4
+  },
+  "craft_time": 90.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

@@ -1,0 +1,38 @@
+{
+  "id": "recipe_antibody_serum",
+  "name": "抗体血清",
+  "description": "利用抗生素、草药和消毒剂调制的实验性血清",
+  "category": "medical",
+  "output": {
+    "item_id": 1040,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1031,
+      "count": 2
+    },
+    {
+      "item_id": 1038,
+      "count": 3
+    },
+    {
+      "item_id": 1030,
+      "count": 1
+    }
+  ],
+  "required_tools": [
+    1151
+  ],
+  "optional_tools": [],
+  "required_station": "medical_station",
+  "skill_requirements": {
+    "medical": 3
+  },
+  "craft_time": 120.0,
+  "experience_reward": 30,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 0.95
+}

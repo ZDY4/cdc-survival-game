@@ -226,7 +226,7 @@ const CLUE_DATABASE: Dictionary = {
 		"location": "factory",
 		"chapter": "hope",
 		"hint": "工厂实验室",
-		"unlocks_craft": "antibody_serum"
+		"unlocks_craft": "recipe_antibody_serum"
 	},
 	"file_military_orders": {
 		"id": "file_military_orders",
@@ -377,9 +377,9 @@ func _process_clue_rewards(clue: Dictionary):
 	
 	# 解锁制作配方
 	if clue.has("unlocks_craft"):
-		var craft_id = clue.unlocks_craft
-		if CraftingModule:
-			CraftingModule.unlock_recipe(craft_id)
+		var craft_id = str(clue.unlocks_craft)
+		if CraftingSystem and CraftingSystem.has_method("unlock_recipe"):
+			CraftingSystem.unlock_recipe(craft_id)
 	
 	# 揭示战利品
 	if clue.has("reveals_loot"):

@@ -1,0 +1,28 @@
+{
+  "id": "recipe_barricade_wood",
+  "name": "木制路障",
+  "description": "用木材搭建简易防御路障",
+  "category": "base",
+  "output": {
+    "item_id": 1156,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 5
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 1
+  },
+  "craft_time": 30.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

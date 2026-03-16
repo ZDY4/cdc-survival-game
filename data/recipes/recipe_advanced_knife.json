@@ -1,0 +1,47 @@
+{
+  "id": "recipe_advanced_knife",
+  "name": "精制小刀",
+  "description": "使用更好的材料制作高品质小刀",
+  "category": "weapon",
+  "output": {
+    "item_id": 1002,
+    "count": 1,
+    "quality_bonus": 2
+  },
+  "materials": [
+    {
+      "item_id": 1106,
+      "count": 2
+    },
+    {
+      "item_id": 1012,
+      "count": 2
+    },
+    {
+      "item_id": 1144,
+      "count": 1
+    }
+  ],
+  "required_tools": [
+    1151,
+    1166
+  ],
+  "optional_tools": [
+    "grinder"
+  ],
+  "required_station": "forge",
+  "skill_requirements": {
+    "crafting": 3,
+    "engineering": 2
+  },
+  "craft_time": 60.0,
+  "experience_reward": 20,
+  "unlock_conditions": [
+    {
+      "type": "recipe",
+      "id": "recipe_knife_basic"
+    }
+  ],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}

@@ -1,0 +1,28 @@
+{
+  "id": "recipe_bandage_basic",
+  "name": "基础绷带",
+  "description": "用布料制作基础绷带",
+  "category": "medical",
+  "output": {
+    "item_id": 1006,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1011,
+      "count": 2
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [
+    "scissors"
+  ],
+  "required_station": "none",
+  "skill_requirements": {},
+  "craft_time": 10.0,
+  "experience_reward": 5,
+  "unlock_conditions": [],
+  "is_default_unlocked": true,
+  "durability_influence": 1.0
+}

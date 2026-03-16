@@ -1,0 +1,28 @@
+{
+  "id": "recipe_crowbar",
+  "name": "撬棍",
+  "description": "多功能工具武器，可用于撬锁和战斗",
+  "category": "weapon",
+  "output": {
+    "item_id": 1125,
+    "count": 1,
+    "quality_bonus": 0
+  },
+  "materials": [
+    {
+      "item_id": 1010,
+      "count": 12
+    }
+  ],
+  "required_tools": [],
+  "optional_tools": [],
+  "required_station": "workbench",
+  "skill_requirements": {
+    "crafting": 2
+  },
+  "craft_time": 75.0,
+  "experience_reward": 0,
+  "unlock_conditions": [],
+  "is_default_unlocked": false,
+  "durability_influence": 1.0
+}
