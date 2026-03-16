@@ -6,6 +6,9 @@ const PlayerController = preload("res://systems/player_controller.gd")
 const GridDebugController = preload("res://systems/grid_debug_controller.gd")
 const GridVisualizer = preload("res://systems/grid_visualizer.gd")
 const AISpawnSystem = preload("res://systems/spawn/ai_spawn_system.gd")
+const ShopComponentScript = preload("res://modules/npc/components/shop_component.gd")
+
+const MERCHANT_SPAWN_ID: String = "gw3d_merchant_spawn"
 
 @export var player_scene: PackedScene = null
 @export var grid_debug_default_visible: bool = false
@@ -16,6 +19,7 @@ const AISpawnSystem = preload("res://systems/spawn/ai_spawn_system.gd")
 
 @onready var _camera_controller: CameraController3D = $CameraController3D
 @onready var _grid_floor: StaticBody3D = $GridFloor
+@onready var _merchant_shop: ShopComponentScript = get_node_or_null("MerchantShop") as ShopComponentScript
 
 var _player: PlayerController = null
 var _grid_visualizer: GridVisualizer = null
@@ -61,6 +65,8 @@ func _setup_runtime_systems() -> void:
 	_spawn_system = AISpawnSystem.new()
 	add_child(_spawn_system)
 	_spawn_system.initialize(self)
+	_spawn_system.actor_spawned.connect(_on_actor_spawned)
+	_spawn_system.actor_despawned.connect(_on_actor_despawned)
 	_spawn_system.spawn_auto_points()
 
 	if _player:
@@ -77,6 +83,20 @@ func get_player() -> PlayerController:
 
 func get_camera() -> CameraController3D:
 	return _camera_controller
+
+func _on_actor_spawned(spawn_id: String, actor: Node3D) -> void:
+	if spawn_id != MERCHANT_SPAWN_ID:
+		return
+	if _merchant_shop == null:
+		return
+	_merchant_shop.bind_actor(actor)
+
+func _on_actor_despawned(spawn_id: String) -> void:
+	if spawn_id != MERCHANT_SPAWN_ID:
+		return
+	if _merchant_shop == null:
+		return
+	_merchant_shop.unbind_actor()
 
 func _resolve_player_spawn_position(fallback_world_pos: Vector3) -> Vector3:
 	var spawn_world_pos: Vector3 = fallback_world_pos

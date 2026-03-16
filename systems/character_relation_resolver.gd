@@ -13,22 +13,19 @@ func resolve_for_player(character_id: String, character_data: Dictionary) -> Dic
 	var base_score: int = _resolve_base_score(relations_config, player_camp, camp_id)
 	var relationship_bonus: int = _get_relationship_bonus(character_id)
 	var total_score: int = base_score + relationship_bonus
+	var forced_hostile: bool = _is_forced_hostile(character_id)
 
 	var attitude: String = "neutral"
-	if total_score >= FRIENDLY_THRESHOLD:
+	if forced_hostile:
+		attitude = "hostile"
+	elif total_score >= FRIENDLY_THRESHOLD:
 		attitude = "friendly"
 	elif total_score <= HOSTILE_THRESHOLD:
 		attitude = "hostile"
 
-	var social: Dictionary = character_data.get("social", {})
-	var capabilities: Dictionary = social.get("capabilities", {})
-	var trade_data: Dictionary = social.get("trade", {})
-	var can_interact: bool = bool(capabilities.get("can_interact", true))
-	var can_trade_capability: bool = bool(capabilities.get("can_trade", false))
-	var trade_enabled: bool = bool(trade_data.get("enabled", false))
 	var allow_attack: bool = attitude == "hostile"
-	var allow_interaction: bool = can_interact and attitude != "hostile"
-	var allow_trade: bool = can_trade_capability and trade_enabled and attitude == "friendly"
+	var allow_interaction: bool = attitude != "hostile"
+	var allow_trade: bool = attitude != "hostile"
 
 	return {
 		"character_id": character_id,
@@ -36,6 +33,7 @@ func resolve_for_player(character_id: String, character_data: Dictionary) -> Dic
 		"base_score": base_score,
 		"relationship_bonus": relationship_bonus,
 		"total_score": total_score,
+		"is_forced_hostile": forced_hostile,
 		"resolved_attitude": attitude,
 		"allow_attack": allow_attack,
 		"allow_interaction": allow_interaction,
@@ -55,6 +53,13 @@ func _get_relationship_bonus(character_id: String) -> int:
 	if GameStateManager and GameStateManager.has_method("get_relationship"):
 		return int(GameStateManager.get_relationship(character_id))
 	return 0
+
+func _is_forced_hostile(character_id: String) -> bool:
+	if character_id.is_empty():
+		return false
+	if GameStateManager and GameStateManager.has_method("is_character_forced_hostile"):
+		return bool(GameStateManager.is_character_forced_hostile(character_id))
+	return false
 
 func _get_camp_relations_config() -> Dictionary:
 	if DataManager and DataManager.has_method("get_camp_relations"):

@@ -14,6 +14,7 @@ var current_chapter: String = "chapter_1"
 var game_flags: Dictionary = {}      # 游戏标记系统
 var choice_history: Array = []        # 玩家选择历史
 var relationship_points: Dictionary = {}  # NPC好感度
+var forced_hostile_characters: Dictionary = {}  # 强制敌对角色
 var discovered_locations: Array = []  # 已发现地点
 var unlocked_content: Array = []      # 已解锁内容
 var play_time: float = 0.0           # 游戏时长
@@ -301,12 +302,29 @@ func modify_relationship(npc_id: String, change: int):
 	
 	print("[GameState] Relationship: %s %d -> %d" % [npc_id, old_value, relationship_points[npc_id]])
 
+func set_character_hostile(npc_id: String, hostile: bool = true):
+	if npc_id.is_empty():
+		return
+	if hostile:
+		forced_hostile_characters[npc_id] = true
+	else:
+		forced_hostile_characters.erase(npc_id)
+	relationship_changed.emit(npc_id, get_relationship(npc_id), 0)
+	print("[GameState] Hostility override: %s -> %s" % [npc_id, str(hostile)])
+
+func is_character_forced_hostile(npc_id: String) -> bool:
+	if npc_id.is_empty():
+		return false
+	return bool(forced_hostile_characters.get(npc_id, false))
+
 # 获取好感度
 func get_relationship(npc_id: String):
 	return relationship_points.get(npc_id, 0)
 
 # 获取关系等级描述
 func get_relationship_level(npc_id: String):
+	if is_character_forced_hostile(npc_id):
+		return "敌对"
 	var points = get_relationship(npc_id)
 	
 	if points >= 80: return "崇拜"
@@ -502,6 +520,7 @@ func get_save_data():
 		"flags": game_flags,
 		"choice_history": choice_history,
 		"relationships": relationship_points,
+		"forced_hostile_characters": forced_hostile_characters,
 		"discovered_locations": discovered_locations,
 		"play_time": play_time
 	}
@@ -512,6 +531,7 @@ func load_save_data(data: Dictionary):
 	game_flags = data.get("flags", {})
 	choice_history = data.get("choice_history", [])
 	relationship_points = data.get("relationships", {})
+	forced_hostile_characters = data.get("forced_hostile_characters", {})
 	discovered_locations = data.get("discovered_locations", [])
 	play_time = data.get("play_time", 0.0)
 	

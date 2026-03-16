@@ -39,6 +39,11 @@ func initialize(
 
 	_apply_config(ai_config)
 
+func refresh_runtime_config(ai_config: Dictionary) -> void:
+	_apply_config(ai_config)
+	if not _allow_attack and _movement_component and _movement_component.has_method("cancel"):
+		_movement_component.cancel()
+
 func _process(_delta: float) -> void:
 	if not _owner_node or not _movement_component:
 		return

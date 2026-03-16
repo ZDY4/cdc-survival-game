@@ -105,11 +105,6 @@ func _setup_ui() -> void:
 	_add_number_field(form, "combat.stats.hp", "HP", 1, 9999, 1)
 	_add_number_field(form, "combat.stats.damage", "伤害", 0, 999, 1)
 	_add_number_field(form, "combat.stats.defense", "防御", 0, 999, 1)
-	_add_checkbox_field(form, "social.capabilities.can_interact", "可交互")
-	_add_checkbox_field(form, "social.capabilities.can_trade", "可交易")
-	_add_checkbox_field(form, "social.capabilities.can_give_quest", "可发布任务")
-	_add_checkbox_field(form, "social.capabilities.can_recruit", "可招募")
-	_add_checkbox_field(form, "social.trade.enabled", "交易启用")
 
 	_status_bar = Label.new()
 	_status_bar.set_anchors_preset(PRESET_BOTTOM_WIDE)
@@ -290,29 +285,6 @@ func _create_default_character(character_id: String) -> Dictionary:
 				"trust": 30,
 				"fear": 0,
 				"anger": 0
-			},
-			"trade": {
-				"enabled": false,
-				"buy_price_modifier": 1.0,
-				"sell_price_modifier": 1.0,
-				"money": 0,
-				"inventory": []
-			},
-			"recruitment": {
-				"enabled": false,
-				"min_charisma": 0,
-				"min_friendliness": 70,
-				"min_trust": 50,
-				"required_quests": [],
-				"required_items": [],
-				"cost_items": [],
-				"cost_money": 0
-			},
-			"capabilities": {
-				"can_interact": true,
-				"can_trade": false,
-				"can_give_quest": false,
-				"can_recruit": false
 			}
 		}
 	}

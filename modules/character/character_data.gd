@@ -37,32 +37,6 @@ const DEFAULT_SOCIAL_MOOD := {
 	"anger": 0
 }
 
-const DEFAULT_SOCIAL_TRADE := {
-	"enabled": false,
-	"buy_price_modifier": 1.0,
-	"sell_price_modifier": 1.0,
-	"money": 0,
-	"inventory": []
-}
-
-const DEFAULT_SOCIAL_RECRUITMENT := {
-	"enabled": false,
-	"min_charisma": 0,
-	"min_friendliness": 70,
-	"min_trust": 50,
-	"required_quests": [],
-	"required_items": [],
-	"cost_items": [],
-	"cost_money": 0
-}
-
-const DEFAULT_SOCIAL_CAPABILITIES := {
-	"can_interact": true,
-	"can_trade": false,
-	"can_give_quest": false,
-	"can_recruit": false
-}
-
 var id: String = ""
 var name: String = ""
 var description: String = ""
@@ -85,10 +59,7 @@ var combat: Dictionary = {
 var social: Dictionary = {
 	"title": "",
 	"dialog_id": "",
-	"mood": DEFAULT_SOCIAL_MOOD.duplicate(true),
-	"trade": DEFAULT_SOCIAL_TRADE.duplicate(true),
-	"recruitment": DEFAULT_SOCIAL_RECRUITMENT.duplicate(true),
-	"capabilities": DEFAULT_SOCIAL_CAPABILITIES.duplicate(true)
+	"mood": DEFAULT_SOCIAL_MOOD.duplicate(true)
 }
 
 func serialize() -> Dictionary:
@@ -148,10 +119,7 @@ func deserialize(data: Dictionary) -> void:
 	social = {
 		"title": "",
 		"dialog_id": "",
-		"mood": DEFAULT_SOCIAL_MOOD.duplicate(true),
-		"trade": DEFAULT_SOCIAL_TRADE.duplicate(true),
-		"recruitment": DEFAULT_SOCIAL_RECRUITMENT.duplicate(true),
-		"capabilities": DEFAULT_SOCIAL_CAPABILITIES.duplicate(true)
+		"mood": DEFAULT_SOCIAL_MOOD.duplicate(true)
 	}
 	var social_data: Dictionary = data.get("social", {})
 	social["title"] = str(social_data.get("title", ""))
@@ -159,15 +127,6 @@ func deserialize(data: Dictionary) -> void:
 	var mood_copy: Dictionary = DEFAULT_SOCIAL_MOOD.duplicate(true)
 	mood_copy.merge(social_data.get("mood", {}), true)
 	social["mood"] = mood_copy
-	var trade_copy: Dictionary = DEFAULT_SOCIAL_TRADE.duplicate(true)
-	trade_copy.merge(social_data.get("trade", {}), true)
-	social["trade"] = trade_copy
-	var recruitment_copy: Dictionary = DEFAULT_SOCIAL_RECRUITMENT.duplicate(true)
-	recruitment_copy.merge(social_data.get("recruitment", {}), true)
-	social["recruitment"] = recruitment_copy
-	var capabilities_copy: Dictionary = DEFAULT_SOCIAL_CAPABILITIES.duplicate(true)
-	capabilities_copy.merge(social_data.get("capabilities", {}), true)
-	social["capabilities"] = capabilities_copy
 
 func get_display_name() -> String:
 	var title: String = str(social.get("title", ""))

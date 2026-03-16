@@ -2,7 +2,7 @@ extends "res://core/base_module.gd"
 # 注意: 作为 Autoload 单例，不使用 class_name
 
 const DialogUI = preload("res://modules/dialog/dialog_ui.gd")
-const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
+const ShopComponentScript = preload("res://modules/npc/components/shop_component.gd")
 const DIALOG_DATA_DIR := "res://data/dialogues"
 
 signal dialog_started(text: String, speaker: String)
@@ -121,16 +121,23 @@ func play_dialog_resource(dialog_id: String, context: Dictionary = {}) -> Dictio
 				await dialog_finished
 				current_node_id = _get_dialog_graph_next(dialog_data, dialog_nodes, current_node_id, 0)
 			"choice":
-				var choice_texts: Array[String] = []
-				for option_variant in node.get("options", []):
-					var option_data: Dictionary = option_variant
-					choice_texts.append(str(option_data.get("text", "选项")))
-				if choice_texts.is_empty():
+				var visible_choices: Array[Dictionary] = _build_visible_choice_entries(
+					dialog_data,
+					dialog_nodes,
+					current_node_id,
+					node,
+					context
+				)
+				if visible_choices.is_empty():
 					hide_dialog()
 					return fallback_result
-				var selected_index: int = await show_choices(choice_texts)
-				if selected_index < 0:
-					selected_index = 0
+				var choice_texts: Array[String] = []
+				for entry_variant in visible_choices:
+					choice_texts.append(str(entry_variant.get("text", "选项")))
+				var selected_visible_index: int = await show_choices(choice_texts)
+				if selected_visible_index < 0:
+					selected_visible_index = 0
+				var selected_index: int = int(visible_choices[selected_visible_index].get("original_index", 0))
 				current_node_id = _get_dialog_graph_next(dialog_data, dialog_nodes, current_node_id, selected_index)
 				if current_node_id.is_empty():
 					return {"selected_port": selected_index, "branch_key": selected_index}
@@ -214,27 +221,93 @@ func _execute_dialog_action(action: Dictionary, context: Dictionary) -> void:
 		_:
 			push_warning("[DialogModule] 未知对话动作类型: %s" % action_type)
 
-func _resolve_trade_component(context: Dictionary) -> NPCTradeComponent:
+func _build_visible_choice_entries(
+	dialog_data: Dictionary,
+	dialog_nodes: Dictionary,
+	node_id: String,
+	choice_node: Dictionary,
+	context: Dictionary
+) -> Array[Dictionary]:
+	var visible_entries: Array[Dictionary] = []
+	var options: Array = choice_node.get("options", [])
+	for option_index in range(options.size()):
+		var option_variant: Variant = options[option_index]
+		if not (option_variant is Dictionary):
+			continue
+		var option_data: Dictionary = option_variant
+		if not _should_show_choice_option(dialog_data, dialog_nodes, node_id, option_index, context):
+			continue
+		visible_entries.append({
+			"text": str(option_data.get("text", "选项")),
+			"original_index": option_index
+		})
+	return visible_entries
+
+func _should_show_choice_option(
+	dialog_data: Dictionary,
+	dialog_nodes: Dictionary,
+	node_id: String,
+	option_index: int,
+	context: Dictionary
+) -> bool:
+	var next_node_id: String = _get_dialog_graph_next(dialog_data, dialog_nodes, node_id, option_index)
+	if next_node_id.is_empty():
+		return true
+
+	var next_node: Dictionary = dialog_nodes.get(next_node_id, {})
+	if str(next_node.get("type", "")) != "action":
+		return true
+
+	for action_variant in next_node.get("actions", []):
+		if not (action_variant is Dictionary):
+			continue
+		var action_data: Dictionary = action_variant
+		if str(action_data.get("type", "")).strip_edges() != "open_trade":
+			continue
+		return _resolve_trade_component(context) != null
+
+	return true
+
+func _resolve_trade_component(context: Dictionary) -> ShopComponentScript:
 	var actor := context.get("actor", null) as Node
 	if actor != null:
+		var bound_component := _get_bound_trade_component(actor)
+		if bound_component != null:
+			return bound_component
 		var trade_component := _find_trade_component(actor)
 		if trade_component != null:
-			return trade_component
+			return _validate_trade_component(trade_component)
 
 	var interactable := context.get("interactable", null) as Node
 	var node := interactable
 	while node != null:
+		var bound_component := _get_bound_trade_component(node)
+		if bound_component != null:
+			return bound_component
 		var trade_component := _find_trade_component(node)
 		if trade_component != null:
-			return trade_component
+			return _validate_trade_component(trade_component)
 		node = node.get_parent()
 
 	return null
 
-func _find_trade_component(node: Node) -> NPCTradeComponent:
+func _get_bound_trade_component(node: Node) -> ShopComponentScript:
+	var bound_variant: Variant = node.get_meta("bound_trade_component", null)
+	if bound_variant is ShopComponentScript:
+		return _validate_trade_component(bound_variant as ShopComponentScript)
+	return null
+
+func _validate_trade_component(trade_component: ShopComponentScript) -> ShopComponentScript:
+	if trade_component == null:
+		return null
+	if trade_component.has_method("is_trade_available") and not bool(trade_component.call("is_trade_available")):
+		return null
+	return trade_component
+
+func _find_trade_component(node: Node) -> ShopComponentScript:
 	for child in node.get_children():
-		if child is NPCTradeComponent:
-			return child as NPCTradeComponent
+		if child is ShopComponentScript:
+			return child as ShopComponentScript
 	return null
 
 func _get_dialog_graph_next(dialog_data: Dictionary, dialog_nodes: Dictionary, from_node_id: String, from_port: int) -> String:

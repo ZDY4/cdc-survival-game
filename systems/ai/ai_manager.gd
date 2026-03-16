@@ -3,15 +3,14 @@ extends Node
 
 class_name AIManager
 
-const MovementComponent = preload("res://systems/movement_component.gd")
+const MovementComponentScript = preload("res://systems/movement_component.gd")
 const CharacterActorScript = preload("res://systems/character_actor.gd")
-const AIController = preload("res://systems/ai/ai_controller.gd")
-const CharacterRelationResolver = preload("res://systems/character_relation_resolver.gd")
-const GameWorldMerchantTradeComponent = preload("res://modules/npc/components/game_world_merchant_trade_component.gd")
+const AIControllerScript = preload("res://systems/ai/ai_controller.gd")
+const CharacterRelationResolverScript = preload("res://systems/character_relation_resolver.gd")
 const VisionSystemScript = preload("res://systems/vision_system.gd")
-const Interactable = preload("res://modules/interaction/interactable.gd")
-const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
-const TalkInteractionOption = preload("res://modules/interaction/options/talk_interaction_option.gd")
+const InteractableScript = preload("res://modules/interaction/interactable.gd")
+const TalkInteractionOptionScript = preload("res://modules/interaction/options/talk_interaction_option.gd")
+const AttackInteractionOptionScript = preload("res://modules/interaction/options/attack_interaction_option.gd")
 
 signal actor_spawned(spawn_id: String, actor: Node3D)
 signal actor_despawned(spawn_id: String)
@@ -60,13 +59,14 @@ const DEFAULT_AI_BY_BEHAVIOR := {
 var character_database: Dictionary = {}
 var active_actors: Dictionary = {}  # spawn_id -> Node3D
 
-var _relation_resolver: CharacterRelationResolver = CharacterRelationResolver.new()
+var _relation_resolver: CharacterRelationResolver = CharacterRelationResolverScript.new()
 
 func _ready() -> void:
 	if current and current != self:
 		push_warning("[AIManager] Multiple instances detected; replacing AIManager.current")
 	current = self
 	_load_character_database()
+	_connect_relationship_signals()
 
 func _exit_tree() -> void:
 	if current == self:
@@ -147,31 +147,10 @@ func _spawn_character_actor(
 	actor.position = world_pos
 	actor.initialize_from_character_data(character_id, character_data, relation_result, {"spawn_id": spawn_id})
 
-	var allow_attack: bool = bool(relation_result.get("allow_attack", false))
-	var allow_interaction: bool = bool(relation_result.get("allow_interaction", false))
-	var allow_trade: bool = bool(relation_result.get("allow_trade", false))
-
-	actor.set_meta("allow_attack", allow_attack)
-	actor.set_meta("allow_interaction", allow_interaction)
-	actor.set_meta("allow_trade", allow_trade)
-	actor.set_meta("spawn_id", spawn_id)
-
-	if allow_attack:
-		actor.collision_layer = 1 << 2
-		actor.collision_mask = 1
-		actor.add_to_group("enemy")
-		actor.set_meta("enemy_id", character_id)
-		enemy_spawned.emit(character_id, actor)
-	else:
-		actor.collision_layer = 1 << 1
-		actor.collision_mask = 0
-		actor.add_to_group("npc")
-		actor.set_meta("npc_id", character_id)
-		npc_spawned.emit(character_id, actor)
-
 	_add_common_actor_nodes(actor, character_data)
 
-	var movement_component := MovementComponent.new()
+	var movement_component := MovementComponentScript.new()
+	movement_component.name = "MovementComponent"
 	actor.add_child(movement_component)
 	if GridMovementSystem and GridMovementSystem.grid_world:
 		movement_component.initialize(actor, GridMovementSystem.grid_world)
@@ -190,29 +169,14 @@ func _spawn_character_actor(
 	vision_system.update_from_grid(GridMovementSystem.world_to_grid(world_pos))
 
 	var ai_config: Dictionary = _build_ai_config(character_data, relation_result)
-	var ai_controller := AIController.new()
+	var ai_controller := AIControllerScript.new()
+	ai_controller.name = "AIController"
 	actor.add_child(ai_controller)
 	ai_controller.initialize(actor, movement_component, world_pos, character_id, ai_config)
 
-	if allow_interaction:
-		var social: Dictionary = character_data.get("social", {})
-		var visual: Dictionary = character_data.get("visual", {})
-		var interactable := Interactable.new()
-		interactable.name = "Interactable"
-		interactable.set_meta("npc_id", character_id)
-		interactable.set_meta("character_id", character_id)
-		var talk_option := TalkInteractionOption.new()
-		talk_option.dialog_id = str(social.get("dialog_id", ""))
-		talk_option.speaker_name = str(character_data.get("name", character_id))
-		talk_option.portrait_path = str(visual.get("portrait_path", ""))
-		interactable.set_options([talk_option])
-		actor.add_child(interactable)
-
-	var trade_component: NPCTradeComponent = null
-	if allow_trade:
-		trade_component = GameWorldMerchantTradeComponent.new()
-		actor.add_child(trade_component)
-		trade_component.initialize_with_data(character_data)
+	var interactable := _ensure_interactable(actor)
+	_apply_actor_relation_state(actor, interactable, character_id, character_data, relation_result, spawn_id)
+	_emit_actor_spawn_signal(character_id, actor, relation_result)
 
 	return actor
 
@@ -258,6 +222,13 @@ func _build_ai_config(character_data: Dictionary, relation_result: Dictionary) -
 	config["allow_attack"] = allow_attack
 	return config
 
+func _connect_relationship_signals() -> void:
+	if GameStateManager == null or not GameStateManager.has_signal("relationship_changed"):
+		return
+	if GameStateManager.relationship_changed.is_connected(_on_relationship_changed):
+		return
+	GameStateManager.relationship_changed.connect(_on_relationship_changed)
+
 func get_character_data(character_id: String) -> Dictionary:
 	return _get_character_data_internal(character_id)
 
@@ -286,6 +257,129 @@ func _get_blocker_cells() -> Array[Vector3i]:
 			var world_pos: Vector3 = node.global_position
 			cells.append(GridMovementSystem.world_to_grid(world_pos))
 	return cells
+
+func _ensure_interactable(actor: Node3D) -> Interactable:
+	var existing := actor.get_node_or_null("Interactable")
+	if existing and existing is Interactable:
+		return existing as Interactable
+
+	var interactable := InteractableScript.new()
+	interactable.name = "Interactable"
+	actor.add_child(interactable)
+	return interactable
+
+func _build_interaction_options(
+	character_id: String,
+	character_data: Dictionary,
+	relation_result: Dictionary
+) -> Array[InteractionOption]:
+	var options: Array[InteractionOption] = []
+	var visual: Dictionary = character_data.get("visual", {})
+	var social: Dictionary = character_data.get("social", {})
+
+	if bool(relation_result.get("allow_interaction", false)):
+		var talk_option := TalkInteractionOptionScript.new()
+		talk_option.dialog_id = str(social.get("dialog_id", ""))
+		talk_option.speaker_name = str(character_data.get("name", character_id))
+		talk_option.portrait_path = str(visual.get("portrait_path", ""))
+		options.append(talk_option)
+
+	var attack_option := AttackInteractionOptionScript.new()
+	attack_option.enemy_id = character_id
+	attack_option.enemy_name = str(character_data.get("name", character_id))
+	options.append(attack_option)
+
+	return options
+
+func _apply_actor_relation_state(
+	actor: Node3D,
+	interactable: Interactable,
+	character_id: String,
+	character_data: Dictionary,
+	relation_result: Dictionary,
+	spawn_id: String
+) -> void:
+	var allow_attack: bool = bool(relation_result.get("allow_attack", false))
+	var allow_interaction: bool = bool(relation_result.get("allow_interaction", false))
+	var allow_trade: bool = bool(relation_result.get("allow_trade", false))
+
+	actor.set_meta("allow_attack", allow_attack)
+	actor.set_meta("allow_interaction", allow_interaction)
+	actor.set_meta("allow_trade", allow_trade)
+	actor.set_meta("spawn_id", spawn_id)
+	actor.set_meta("character_id", character_id)
+	actor.set_meta("character_data", character_data.duplicate(true))
+	actor.set_meta("relation_result", relation_result.duplicate(true))
+	actor.set_meta("resolved_attitude", str(relation_result.get("resolved_attitude", "neutral")))
+	if actor.has_method("refresh_relation_state"):
+		actor.refresh_relation_state(relation_result)
+
+	interactable.set_meta("character_id", character_id)
+	interactable.set_meta("relation_result", relation_result.duplicate(true))
+	interactable.set_meta("resolved_attitude", str(relation_result.get("resolved_attitude", "neutral")))
+	if allow_attack:
+		actor.collision_layer = 1 << 2
+		actor.collision_mask = 1
+		actor.remove_from_group("npc")
+		if not actor.is_in_group("enemy"):
+			actor.add_to_group("enemy")
+		actor.set_meta("enemy_id", character_id)
+		actor.remove_meta("npc_id")
+		interactable.set_meta("enemy_id", character_id)
+		interactable.remove_meta("npc_id")
+	else:
+		actor.collision_layer = 1 << 1
+		actor.collision_mask = 0
+		actor.remove_from_group("enemy")
+		if not actor.is_in_group("npc"):
+			actor.add_to_group("npc")
+		actor.set_meta("npc_id", character_id)
+		actor.remove_meta("enemy_id")
+		interactable.set_meta("npc_id", character_id)
+		interactable.remove_meta("enemy_id")
+
+	interactable.set_options(_build_interaction_options(character_id, character_data, relation_result))
+
+func _refresh_actor_relation(actor: Node3D, character_id: String, spawn_id: String) -> void:
+	if actor == null or not is_instance_valid(actor):
+		return
+	var current_data_variant: Variant = actor.get_meta("character_data", {})
+	var character_data: Dictionary = {}
+	if current_data_variant is Dictionary and not (current_data_variant as Dictionary).is_empty():
+		character_data = (current_data_variant as Dictionary).duplicate(true)
+	else:
+		character_data = _get_character_data_internal(character_id)
+	if character_data.is_empty():
+		return
+
+	var relation_result: Dictionary = _relation_resolver.resolve_for_player(character_id, character_data)
+	var interactable := _ensure_interactable(actor)
+	_apply_actor_relation_state(actor, interactable, character_id, character_data, relation_result, spawn_id)
+
+	var ai_controller := actor.get_node_or_null("AIController")
+	if ai_controller and ai_controller.has_method("refresh_runtime_config"):
+		var ai_config: Dictionary = _build_ai_config(character_data, relation_result)
+		ai_controller.refresh_runtime_config(ai_config)
+
+	var trade_component: Variant = actor.get_meta("bound_trade_component", null)
+	actor.set_meta("has_bound_trade_component", trade_component != null)
+
+func _emit_actor_spawn_signal(character_id: String, actor: Node3D, relation_result: Dictionary) -> void:
+	if bool(relation_result.get("allow_attack", false)):
+		enemy_spawned.emit(character_id, actor)
+		return
+	npc_spawned.emit(character_id, actor)
+
+func _on_relationship_changed(npc_id: String, _new_value: int, _change: int) -> void:
+	if npc_id.is_empty():
+		return
+	for spawn_id in active_actors.keys():
+		var actor: Node3D = active_actors[spawn_id]
+		if actor == null or not is_instance_valid(actor):
+			continue
+		if str(actor.get_meta("character_id", "")) != npc_id:
+			continue
+		_refresh_actor_relation(actor, npc_id, str(spawn_id))
 
 func _on_actor_tree_exited(spawn_id: String) -> void:
 	if not active_actors.has(spawn_id):

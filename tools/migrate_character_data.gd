@@ -118,11 +118,6 @@ func _write_default_camp_relations() -> void:
 
 func _convert_npc(npc_id: String, npc: Dictionary) -> Dictionary:
 	var mood: Dictionary = npc.get("mood", {})
-	var trade_data: Dictionary = npc.get("trade_data", {})
-	var recruitment_data: Dictionary = npc.get("recruitment", {})
-	var can_trade: bool = bool(npc.get("can_trade", false))
-	var can_give_quest: bool = bool(npc.get("can_give_quest", false))
-	var can_recruit: bool = bool(npc.get("can_recruit", false))
 	var camp_id: String = "survivor"
 	var npc_type: int = int(npc.get("npc_type", 0))
 	if npc_type == 2:
@@ -185,29 +180,6 @@ func _convert_npc(npc_id: String, npc: Dictionary) -> Dictionary:
 				"trust": int(mood.get("trust", 30)),
 				"fear": int(mood.get("fear", 0)),
 				"anger": int(mood.get("anger", 0))
-			},
-			"trade": {
-				"enabled": can_trade,
-				"buy_price_modifier": float(trade_data.get("buy_price_modifier", 1.0)),
-				"sell_price_modifier": float(trade_data.get("sell_price_modifier", 1.0)),
-				"money": int(trade_data.get("money", 0)),
-				"inventory": _normalize_trade_inventory(trade_data.get("inventory", []))
-			},
-			"recruitment": {
-				"enabled": can_recruit,
-				"min_charisma": int(recruitment_data.get("min_charisma", 0)),
-				"min_friendliness": int(recruitment_data.get("min_friendliness", 70)),
-				"min_trust": int(recruitment_data.get("min_trust", 50)),
-				"required_quests": recruitment_data.get("required_quests", []).duplicate(),
-				"required_items": recruitment_data.get("required_items", []).duplicate(true),
-				"cost_items": recruitment_data.get("cost_items", []).duplicate(true),
-				"cost_money": int(recruitment_data.get("cost_money", 0))
-			},
-			"capabilities": {
-				"can_interact": true,
-				"can_trade": can_trade,
-				"can_give_quest": can_give_quest,
-				"can_recruit": can_recruit
 			}
 		}
 	}
@@ -285,46 +257,6 @@ func _convert_enemy(enemy_id: String, enemy: Dictionary) -> Dictionary:
 				"trust": 0,
 				"fear": 0,
 				"anger": 90
-			},
-			"trade": {
-				"enabled": false,
-				"buy_price_modifier": 1.0,
-				"sell_price_modifier": 1.0,
-				"money": 0,
-				"inventory": []
-			},
-			"recruitment": {
-				"enabled": false,
-				"min_charisma": 0,
-				"min_friendliness": 100,
-				"min_trust": 100,
-				"required_quests": [],
-				"required_items": [],
-				"cost_items": [],
-				"cost_money": 0
-			},
-			"capabilities": {
-				"can_interact": false,
-				"can_trade": false,
-				"can_give_quest": false,
-				"can_recruit": false
 			}
 		}
 	}
-
-func _normalize_trade_inventory(inventory: Array) -> Array:
-	var result: Array = []
-	for entry in inventory:
-		if not (entry is Dictionary):
-			continue
-		var item_entry: Dictionary = entry
-		var item_value: Variant = item_entry.get("id", "")
-		var normalized_id: Variant = str(item_value)
-		if item_value is float or item_value is int:
-			normalized_id = int(item_value)
-		result.append({
-			"id": normalized_id,
-			"count": int(item_entry.get("count", 1)),
-			"price": int(item_entry.get("price", 0))
-		})
-	return result

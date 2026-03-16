@@ -1,95 +1,72 @@
 {
-	"id": "zombie_brute",
-	"name": "巨力僵尸",
-	"description": "体型巨大，攻击力强的僵尸",
-	"level": 3,
-	"identity": {
-		"camp_id": "infected"
-	},
-	"visual": {
-		"portrait_path": "",
-		"avatar_path": "",
-		"model_path": "",
-		"placeholder": {
-			"head_color": "#f5b6b6",
-			"body_color": "#b64545",
-			"leg_color": "#7d2f2f"
-		}
-	},
-	"combat": {
-		"stats": {
-			"hp": 50,
-			"max_hp": 50,
-			"damage": 8,
-			"defense": 3,
-			"speed": 2,
-			"accuracy": 50,
-			"crit_chance": 0.05,
-			"crit_damage": 1.5,
-			"evasion": 0.03
-		},
-		"ai": {
-			"aggro_range": 6.0,
-			"attack_range": 1.3,
-			"wander_radius": 4.0,
-			"leash_distance": 8.0,
-			"decision_interval": 0.8,
-			"attack_cooldown": 1.4
-		},
-		"behavior": "territorial",
-		"loot": [
-			{
-				"item_id": 1010,
-				"chance": 0.6,
-				"min": 2,
-				"max": 4
-			},
-			{
-				"item_id": 1006,
-				"chance": 0.3,
-				"min": 1,
-				"max": 2
-			},
-			{
-				"item_id": 1007,
-				"chance": 0.2,
-				"min": 1,
-				"max": 1
-			}
-		],
-		"xp": 30
-	},
-	"social": {
-		"title": "",
-		"dialog_id": "",
-		"mood": {
-			"friendliness": 0,
-			"trust": 0,
-			"fear": 0,
-			"anger": 90
-		},
-		"trade": {
-			"enabled": false,
-			"buy_price_modifier": 1.0,
-			"sell_price_modifier": 1.0,
-			"money": 0,
-			"inventory": []
-		},
-		"recruitment": {
-			"enabled": false,
-			"min_charisma": 0,
-			"min_friendliness": 100,
-			"min_trust": 100,
-			"required_quests": [],
-			"required_items": [],
-			"cost_items": [],
-			"cost_money": 0
-		},
-		"capabilities": {
-			"can_interact": false,
-			"can_trade": false,
-			"can_give_quest": false,
-			"can_recruit": false
-		}
-	}
+  "id": "zombie_brute",
+  "name": "巨力僵尸",
+  "description": "体型巨大，攻击力强的僵尸",
+  "level": 3,
+  "identity": {
+    "camp_id": "infected"
+  },
+  "visual": {
+    "portrait_path": "",
+    "avatar_path": "",
+    "model_path": "",
+    "placeholder": {
+      "head_color": "#f5b6b6",
+      "body_color": "#b64545",
+      "leg_color": "#7d2f2f"
+    }
+  },
+  "combat": {
+    "stats": {
+      "hp": 50,
+      "max_hp": 50,
+      "damage": 8,
+      "defense": 3,
+      "speed": 2,
+      "accuracy": 50,
+      "crit_chance": 0.05,
+      "crit_damage": 1.5,
+      "evasion": 0.03
+    },
+    "ai": {
+      "aggro_range": 6.0,
+      "attack_range": 1.3,
+      "wander_radius": 4.0,
+      "leash_distance": 8.0,
+      "decision_interval": 0.8,
+      "attack_cooldown": 1.4
+    },
+    "behavior": "territorial",
+    "loot": [
+      {
+        "item_id": 1010,
+        "chance": 0.6,
+        "min": 2,
+        "max": 4
+      },
+      {
+        "item_id": 1006,
+        "chance": 0.3,
+        "min": 1,
+        "max": 2
+      },
+      {
+        "item_id": 1007,
+        "chance": 0.2,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "xp": 30
+  },
+  "social": {
+    "title": "",
+    "dialog_id": "",
+    "mood": {
+      "friendliness": 0,
+      "trust": 0,
+      "fear": 0,
+      "anger": 90
+    }
+  }
 }

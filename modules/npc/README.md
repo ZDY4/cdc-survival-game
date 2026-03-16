@@ -1,5 +1,7 @@
 # NPC系统使用指南
 
+> 2026-03 更新: 角色数据中的交易/交互/任务/招募能力位已退场。交易改为由场景中的 `ShopComponent` 实例在运行时显式绑定角色；招募功能已下线。旧的情绪组件、记忆组件和招募组件也已移除，本文档中若出现这些概念，均以当前实现为准。
+
 ## 🎉 NPC系统已完成集成
 
 **创建日期**: 2026-02-21  
@@ -17,10 +19,8 @@ modules/npc/
 ├── npc_base.gd                        # NPC基类（场景实体）
 ├── components/
 │   ├── npc_dialog_component.gd       # 对话组件
-│   ├── npc_trade_component.gd        # 交易组件
-│   ├── npc_mood_component.gd         # 情绪组件
-│   ├── npc_memory_component.gd       # 记忆组件
-│   └── npc_recruitment_component.gd  # 招募组件
+│   ├── shop_component.gd             # 场景商店绑定组件
+│   └── shop_definition.gd            # 商店资源定义
 ├── ui/
 │   └── npc_trade_ui.gd               # 交易界面
 └── data/
@@ -63,7 +63,7 @@ func _ready():
 ### 2. 与NPC交互
 
 ```gdscript
-# 统一交互入口（会根据NPC能力进入交易/闲聊）
+# 统一交互入口（会根据关系和场景绑定商店决定是否出现交易）
 if AIManager.current:
     AIManager.current.start_npc_interaction("trader_lao_wang")
 ```
@@ -77,16 +77,12 @@ if npc_data:
     print("NPC: %s" % npc_data.get_display_name())
 ```
 
-### 4. 修改NPC情绪
+### 4. 调整角色社交心情
 
 ```gdscript
-var npc = AIManager.current.get_npc_data("trader_lao_wang") if AIManager.current else null
-if npc:
-    # 增加友好度
-    npc.change_mood("friendliness", 10)
-    
-    # 减少愤怒
-    npc.change_mood("anger", -5)
+var character = AIManager.current.get_character_data("trader_lao_wang") if AIManager.current else null
+if character:
+    character.social.mood = "friendly"
 ```
 
 ---
@@ -96,26 +92,26 @@ if npc:
 ### 1. 老王 (trader_lao_wang)
 - **类型**: 商人
 - **位置**: 安全屋
-- **功能**: 交易、发布任务、可招募
+- **功能**: 对话、交易
 - **特点**: 价格适中，货物齐全
 
 ### 2. 小明 (survivor_xiao_ming)
 - **类型**: 友好幸存者
 - **位置**: 安全屋
-- **功能**: 发布任务、可招募
-- **特点**: 年轻好奇，招募门槛低
+- **功能**: 对话
+- **特点**: 年轻好奇
 
 ### 3. 铁爪 (bandit_leader)
 - **类型**: 中立/敌对
 - **位置**: 街道B
-- **功能**: 交易（高价）、战斗
-- **特点**: 出售稀有物品，但价格昂贵
+- **功能**: 对话、战斗
+- **特点**: 可根据关系变化决定是否允许交互
 
 ### 4. 陈医生 (doctor_chen)
 - **类型**: 任务发布者/商人
 - **位置**: 安全屋
-- **功能**: 医疗、交易药品、发布任务、可招募
-- **特点**: 价格低，招募门槛高
+- **功能**: 医疗、交易药品、任务对话
+- **特点**: 价格低
 
 ---
 
@@ -132,32 +128,14 @@ if npc:
 - 对话树遍历
 - 条件检查（物品、任务、属性）
 - 技能检定（魅力、说服等）
-- 情绪影响
 - 事件触发（交易、战斗、任务）
 - 复用DialogModule显示
 
 ✅ **交易系统**
-- 以物易物
-- 动态价格（魅力、友好度影响）
+- 由场景商店实例驱动
+- 动态价格（角色心情可参与修正）
 - 库存管理
-- 补货机制
-
-✅ **招募系统**
-- 条件检查（任务、属性、友好度）
-- 成本扣除
-- 队伍集成
-
-✅ **情绪系统**
-- 4种情绪值（友好度、信任、恐惧、愤怒）
-- 情绪影响行为
-- 随时间自然变化
-- 态度判定（敌对/中立/友好）
-
-✅ **记忆系统**
-- 记录见面次数
-- 记录玩家行为
-- 记录分享的秘密
-- 影响对话内容
+- 资金与倍率由商店实例持有
 
 ✅ **数据集成**
 - JSON数据加载
@@ -186,18 +164,12 @@ if npc:
       "strength": 10,
       "charisma": 12
     },
-    "mood": {
-      "friendliness": 50,
-      "trust": 30
+    "social": {
+      "mood": "neutral",
+      "dialog_id": "my_new_npc_dialog"
     },
     "default_location": "safehouse",
-    "can_trade": true,
-    "can_recruit": false,
-    "trade_data": {
-      "inventory": [
-        {"id": "item_id", "count": 5, "price": 20}
-      ]
-    }
+    "faction": "survivors"
   }
 }
 ```
@@ -211,7 +183,7 @@ if AIManager.current:
 
 ### 创建对话树
 
-对话树可以直接在NPCBase的 `_create_default_dialog_tree()` 方法中定义，或通过编辑器创建JSON数据。
+对话树可以通过对话编辑器或 JSON 数据定义。
 
 ```gdscript
 func _create_custom_dialog_tree() -> Dictionary:
@@ -247,7 +219,7 @@ func _create_custom_dialog_tree() -> Dictionary:
 ### 中期（1周）
 1. **对话编辑器**: 在现有编辑器中添加对话树编辑功能
 2. **更多NPC**: 添加10-15个不同功能的NPC
-3. **NPC日程**: 实现NPC在不同时间出现在不同地点
+3. **场景商店扩展**: 为更多角色添加预置或运行时生成的商店实例
 
 ### 长期（2-4周）
 1. **队友AI**: 实现队友在战斗中的AI行为
@@ -262,7 +234,7 @@ func _create_custom_dialog_tree() -> Dictionary:
 1. 检查 `AIManager.current` 是否可用（是否已进入3D运行时场景）
 2. 检查 `data/json/npcs.json` 文件格式是否正确
 3. 查看Godot输出面板中的错误信息
-4. 确保所有组件都已正确附加到NPCBase场景
+4. 确保需要交易的角色已经绑定 `ShopComponent`
 
 ---
 

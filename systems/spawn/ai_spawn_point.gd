@@ -267,12 +267,6 @@ func _load_character_record(character_id_text: String) -> Dictionary:
 	return {}
 
 func _resolve_preview_color(record: Dictionary) -> Color:
-	var social: Dictionary = record.get("social", {})
-	var capabilities: Dictionary = social.get("capabilities", {})
-	var can_trade: bool = bool(capabilities.get("can_trade", false))
-	if can_trade:
-		return TRADER_PREVIEW_COLOR
-
 	var identity: Dictionary = record.get("identity", {})
 	var camp_id: String = str(identity.get("camp_id", "")).strip_edges().to_lower()
 	if camp_id == "infected" or camp_id == "raider":

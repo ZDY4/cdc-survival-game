@@ -4,11 +4,11 @@ extends Control
 
 class_name NPCTradeUI
 
-const NPCTradeComponent = preload("res://modules/npc/components/npc_trade_component.gd")
+const ShopComponentScript = preload("res://modules/npc/components/shop_component.gd")
 
 signal trade_finished
 
-var trade_component: NPCTradeComponent
+var trade_component: ShopComponentScript
 var npc_data: Dictionary = {}
 var total_profit: int = 0
 
@@ -21,7 +21,7 @@ var total_profit: int = 0
 @onready var confirm_button: Button
 @onready var cancel_button: Button
 
-func initialize(component: NPCTradeComponent, data: Dictionary):
+func initialize(component: ShopComponentScript, data: Dictionary) -> void:
 	trade_component = component
 	npc_data = data.duplicate(true)
 
@@ -233,9 +233,9 @@ func _get_social_dict() -> Dictionary:
 	return npc_data.get("social", {})
 
 func _get_trade_inventory() -> Array:
-	var social: Dictionary = _get_social_dict()
-	var trade: Dictionary = social.get("trade", {})
-	return trade.get("inventory", [])
+	if trade_component:
+		return trade_component.get_npc_inventory()
+	return []
 
 func _get_friendliness_label(friendliness: int) -> String:
 	if friendliness >= 80:

@@ -15,15 +15,25 @@ var _menu: PopupMenu = null
 var _menu_open: bool = false
 
 # 6. Public methods
-func show_options(screen_pos: Vector2, option_names: Array[String]) -> void:
-	if option_names.is_empty():
+func show_options(screen_pos: Vector2, option_items: Array[Dictionary]) -> void:
+	if option_items.is_empty():
 		hide_menu()
 		return
 
 	_ensure_menu()
 	_menu.clear()
-	for index in range(option_names.size()):
-		_menu.add_item(option_names[index], index)
+	for index in range(option_items.size()):
+		var item: Dictionary = option_items[index]
+		var item_text: String = str(item.get("text", "")).strip_edges()
+		if item_text.is_empty():
+			item_text = "交互"
+		_menu.add_item(item_text, index)
+
+		var item_color: Variant = item.get("color", null)
+		if item_color is Color:
+			var resolved_color: Color = item_color
+			if resolved_color.a > 0.0:
+				_menu.set_item_text_color(index, resolved_color)
 
 	_menu.reset_size()
 	var popup_size := _menu.size

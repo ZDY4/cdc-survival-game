@@ -1,92 +1,53 @@
 {
-	"id": "bandit_leader",
-	"name": "铁爪",
-	"description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的合作伙伴还算公平。",
-	"level": 8,
-	"identity": {
-		"camp_id": "raider"
-	},
-	"visual": {
-		"portrait_path": "res://assets/portraits/bandit.png",
-		"avatar_path": "",
-		"model_path": "",
-		"placeholder": {
-			"head_color": "#eecba0",
-			"body_color": "#6a9add",
-			"leg_color": "#3c5c90"
-		}
-	},
-	"combat": {
-		"stats": {
-			"hp": 120,
-			"max_hp": 120,
-			"damage": 15,
-			"defense": 8,
-			"speed": 7,
-			"accuracy": 70,
-			"crit_chance": 0.05,
-			"crit_damage": 1.5,
-			"evasion": 0.05
-		},
-		"ai": {
-			"aggro_range": 0.0,
-			"attack_range": 1.2,
-			"wander_radius": 3.0,
-			"leash_distance": 5.0,
-			"decision_interval": 1.2,
-			"attack_cooldown": 999.0
-		},
-		"behavior": "neutral",
-		"loot": [],
-		"xp": 40
-	},
-	"social": {
-		"title": "掠夺者头目",
-		"dialog_id": "",
-		"mood": {
-			"friendliness": 30,
-			"trust": 10,
-			"fear": 0,
-			"anger": 20
-		},
-		"trade": {
-			"enabled": true,
-			"buy_price_modifier": 1.5,
-			"sell_price_modifier": 0.5,
-			"money": 300,
-			"inventory": [
-				{
-					"id": 1021,
-					"count": 20,
-					"price": 15
-				},
-				{
-					"id": 1013,
-					"count": 1,
-					"price": 80
-				},
-				{
-					"id": 1039,
-					"count": 3,
-					"price": 60
-				}
-			]
-		},
-		"recruitment": {
-			"enabled": false,
-			"min_charisma": 0,
-			"min_friendliness": 70,
-			"min_trust": 50,
-			"required_quests": [],
-			"required_items": [],
-			"cost_items": [],
-			"cost_money": 0
-		},
-		"capabilities": {
-			"can_interact": true,
-			"can_trade": true,
-			"can_give_quest": false,
-			"can_recruit": false
-		}
-	}
+  "id": "bandit_leader",
+  "name": "铁爪",
+  "description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的合作伙伴还算公平。",
+  "level": 8,
+  "identity": {
+    "camp_id": "raider"
+  },
+  "visual": {
+    "portrait_path": "res://assets/portraits/bandit.png",
+    "avatar_path": "",
+    "model_path": "",
+    "placeholder": {
+      "head_color": "#eecba0",
+      "body_color": "#6a9add",
+      "leg_color": "#3c5c90"
+    }
+  },
+  "combat": {
+    "stats": {
+      "hp": 120,
+      "max_hp": 120,
+      "damage": 15,
+      "defense": 8,
+      "speed": 7,
+      "accuracy": 70,
+      "crit_chance": 0.05,
+      "crit_damage": 1.5,
+      "evasion": 0.05
+    },
+    "ai": {
+      "aggro_range": 0.0,
+      "attack_range": 1.2,
+      "wander_radius": 3.0,
+      "leash_distance": 5.0,
+      "decision_interval": 1.2,
+      "attack_cooldown": 999.0
+    },
+    "behavior": "neutral",
+    "loot": [],
+    "xp": 40
+  },
+  "social": {
+    "title": "掠夺者头目",
+    "dialog_id": "",
+    "mood": {
+      "friendliness": 30,
+      "trust": 10,
+      "fear": 0,
+      "anger": 20
+    }
+  }
 }
