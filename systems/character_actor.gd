@@ -7,6 +7,12 @@ const InteractionSystem = preload("res://systems/interaction_system.gd")
 const GameplayTagStackContainer = preload("res://addons/gameplay_tags/runtime/gameplay_tag_stack_container.gd")
 
 const STATE_INTERACTING_TAG_NAME: String = "State.Interacting"
+const VISUAL_ROOT_NAME: String = "VisualRoot"
+const ATTACK_LUNGE_DISTANCE_RATIO: float = 0.35
+const ATTACK_LUNGE_MIN_DISTANCE: float = 0.35
+const ATTACK_LUNGE_MAX_DISTANCE: float = 0.75
+const ATTACK_LUNGE_FORWARD_DURATION: float = 0.08
+const ATTACK_LUNGE_RETURN_DURATION: float = 0.12
 
 @export var head_color: Color = Color(0.95, 0.84, 0.70, 1.0)
 @export var body_color: Color = Color(0.30, 0.58, 0.90, 1.0)
@@ -20,6 +26,7 @@ const STATE_INTERACTING_TAG_NAME: String = "State.Interacting"
 @export var hover_outline_scale: float = 1.14
 @export var hover_outline_depth_offset: float = -0.002
 
+var _visual_root: Node3D = null
 var _head_sprite: Sprite3D = null
 var _body_sprite: Sprite3D = null
 var _left_leg_sprite: Sprite3D = null
@@ -37,6 +44,7 @@ var _character_data: Dictionary = {}
 var _resolver_result: Dictionary = {}
 var _hover_outline_visible: bool = false
 var _hover_outline_color: Color = Color(1.0, 1.0, 1.0, 1.0)
+var _attack_lunge_tween: Tween = null
 
 func _ready() -> void:
 	_setup_interaction_system()
@@ -89,53 +97,55 @@ func refresh_relation_state(resolver_result: Dictionary) -> void:
 	set_meta("resolved_attitude", str(_resolver_result.get("resolved_attitude", "neutral")))
 
 func _ensure_placeholder_sprites() -> void:
-	_body_outline_sprite = get_node_or_null("BodyOutlineSprite")
+	_ensure_visual_root()
+
+	_body_outline_sprite = _visual_root.get_node_or_null("BodyOutlineSprite")
 	if not _body_outline_sprite:
 		_body_outline_sprite = Sprite3D.new()
 		_body_outline_sprite.name = "BodyOutlineSprite"
-		add_child(_body_outline_sprite)
+		_visual_root.add_child(_body_outline_sprite)
 
-	_head_outline_sprite = get_node_or_null("HeadOutlineSprite")
+	_head_outline_sprite = _visual_root.get_node_or_null("HeadOutlineSprite")
 	if not _head_outline_sprite:
 		_head_outline_sprite = Sprite3D.new()
 		_head_outline_sprite.name = "HeadOutlineSprite"
-		add_child(_head_outline_sprite)
+		_visual_root.add_child(_head_outline_sprite)
 
-	_left_leg_outline_sprite = get_node_or_null("LeftLegOutlineSprite")
+	_left_leg_outline_sprite = _visual_root.get_node_or_null("LeftLegOutlineSprite")
 	if not _left_leg_outline_sprite:
 		_left_leg_outline_sprite = Sprite3D.new()
 		_left_leg_outline_sprite.name = "LeftLegOutlineSprite"
-		add_child(_left_leg_outline_sprite)
+		_visual_root.add_child(_left_leg_outline_sprite)
 
-	_right_leg_outline_sprite = get_node_or_null("RightLegOutlineSprite")
+	_right_leg_outline_sprite = _visual_root.get_node_or_null("RightLegOutlineSprite")
 	if not _right_leg_outline_sprite:
 		_right_leg_outline_sprite = Sprite3D.new()
 		_right_leg_outline_sprite.name = "RightLegOutlineSprite"
-		add_child(_right_leg_outline_sprite)
+		_visual_root.add_child(_right_leg_outline_sprite)
 
-	_body_sprite = get_node_or_null("BodySprite")
+	_body_sprite = _visual_root.get_node_or_null("BodySprite")
 	if not _body_sprite:
 		_body_sprite = Sprite3D.new()
 		_body_sprite.name = "BodySprite"
-		add_child(_body_sprite)
+		_visual_root.add_child(_body_sprite)
 
-	_head_sprite = get_node_or_null("HeadSprite")
+	_head_sprite = _visual_root.get_node_or_null("HeadSprite")
 	if not _head_sprite:
 		_head_sprite = Sprite3D.new()
 		_head_sprite.name = "HeadSprite"
-		add_child(_head_sprite)
+		_visual_root.add_child(_head_sprite)
 
-	_left_leg_sprite = get_node_or_null("LeftLegSprite")
+	_left_leg_sprite = _visual_root.get_node_or_null("LeftLegSprite")
 	if not _left_leg_sprite:
 		_left_leg_sprite = Sprite3D.new()
 		_left_leg_sprite.name = "LeftLegSprite"
-		add_child(_left_leg_sprite)
+		_visual_root.add_child(_left_leg_sprite)
 
-	_right_leg_sprite = get_node_or_null("RightLegSprite")
+	_right_leg_sprite = _visual_root.get_node_or_null("RightLegSprite")
 	if not _right_leg_sprite:
 		_right_leg_sprite = Sprite3D.new()
 		_right_leg_sprite.name = "RightLegSprite"
-		add_child(_right_leg_sprite)
+		_visual_root.add_child(_right_leg_sprite)
 
 	for sprite in [
 		_body_outline_sprite,
@@ -165,6 +175,52 @@ func _refresh_placeholder_textures() -> void:
 
 func get_interaction_system() -> InteractionSystem:
 	return _interaction_system
+
+func get_visual_root() -> Node3D:
+	_ensure_visual_root()
+	return _visual_root
+
+func get_damage_feedback_anchor() -> Node3D:
+	return get_visual_root()
+
+func get_hit_reaction_target() -> Node3D:
+	return get_visual_root()
+
+func play_attack_lunge(target_world_pos: Vector3) -> void:
+	var visual_root := get_visual_root()
+	if visual_root == null or not is_instance_valid(visual_root):
+		return
+
+	var lunge_direction := target_world_pos - global_position
+	lunge_direction.y = 0.0
+	if lunge_direction.length_squared() <= 0.0001:
+		return
+
+	if _attack_lunge_tween and _attack_lunge_tween.is_valid():
+		_attack_lunge_tween.kill()
+		visual_root.position = Vector3.ZERO
+
+	var lunge_distance := clampf(
+		lunge_direction.length() * ATTACK_LUNGE_DISTANCE_RATIO,
+		ATTACK_LUNGE_MIN_DISTANCE,
+		ATTACK_LUNGE_MAX_DISTANCE
+	)
+	var lunge_offset := lunge_direction.normalized() * lunge_distance
+
+	_attack_lunge_tween = create_tween()
+	_attack_lunge_tween.tween_property(
+		visual_root,
+		"position",
+		lunge_offset,
+		ATTACK_LUNGE_FORWARD_DURATION
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_attack_lunge_tween.tween_property(
+		visual_root,
+		"position",
+		Vector3.ZERO,
+		ATTACK_LUNGE_RETURN_DURATION
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await _attack_lunge_tween.finished
 
 func begin_interaction_state() -> void:
 	var interacting_tag: StringName = _resolve_interacting_tag()
@@ -197,6 +253,14 @@ func _setup_interaction_system() -> void:
 	_interaction_system = InteractionSystem.new()
 	_interaction_system.name = "InteractionSystem"
 	add_child(_interaction_system)
+
+func _ensure_visual_root() -> void:
+	_visual_root = get_node_or_null(VISUAL_ROOT_NAME) as Node3D
+	if _visual_root != null:
+		return
+	_visual_root = Node3D.new()
+	_visual_root.name = VISUAL_ROOT_NAME
+	add_child(_visual_root)
 
 func _resolve_interacting_tag() -> StringName:
 	if not String(_cached_interacting_tag).is_empty():

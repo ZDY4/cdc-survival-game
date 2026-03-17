@@ -45,6 +45,12 @@ func _ready() -> void:
 func refresh_from_item_data() -> void:
 	_refresh_pickup()
 
+func get_damage_feedback_anchor() -> Node3D:
+	return _visual_root
+
+func get_hit_reaction_target() -> Node3D:
+	return _visual_root
+
 # 7. Private methods
 func _schedule_refresh() -> void:
 	if not is_inside_tree():

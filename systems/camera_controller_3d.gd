@@ -10,6 +10,13 @@ var _current_zoom: float = 0.0
 var _target_zoom: float
 var _camera: Camera3D = null
 var _config_bound: bool = false
+var _follow_position: Vector3 = Vector3.ZERO
+var _shake_offset: Vector3 = Vector3.ZERO
+var _shake_time_remaining: float = 0.0
+var _shake_duration: float = 0.0
+var _shake_amplitude: float = 0.0
+var _shake_frequency: float = 1.0
+var _shake_elapsed: float = 0.0
 
 func _ready() -> void:
 	_camera = Camera3D.new()
@@ -31,6 +38,8 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	_update_zoom(delta)
 	_update_follow(delta)
+	_update_shake(delta)
+	global_position = _follow_position + _shake_offset
 
 func adjust_zoom(direction: int) -> void:
 	var min_value := _get_min_zoom_value()
@@ -46,17 +55,27 @@ func _update_zoom(delta: float) -> void:
 
 func _update_follow(delta: float) -> void:
 	if not target:
+		_follow_position = global_position - _shake_offset
 		return
 
 	var viewpoint_world := _get_viewpoint_world()
 	var desired_camera_pos := viewpoint_world + _get_arm_direction_world() * _config.arm_length
-	global_position = lerp(global_position, desired_camera_pos, _get_smoothing_weight(_config.follow_smoothing, delta))
+	_follow_position = lerp(_follow_position, desired_camera_pos, _get_smoothing_weight(_config.follow_smoothing, delta))
 
 func set_zoom(zoom: float) -> void:
 	_target_zoom = clamp(zoom, _get_min_zoom_value(), _get_max_zoom_value())
 
 func get_zoom() -> float:
 	return _current_zoom
+
+func play_shake(duration: float, amplitude: float, frequency: float = 1.0) -> void:
+	if duration <= 0.0 or amplitude <= 0.0:
+		return
+	_shake_time_remaining = duration
+	_shake_duration = duration
+	_shake_amplitude = max(_shake_amplitude, amplitude)
+	_shake_frequency = max(_shake_frequency, frequency)
+	_shake_elapsed = 0.0
 
 func _bind_config_service() -> void:
 	var config_service := _get_camera_config_service()
@@ -82,9 +101,31 @@ func _reload_config_from_service() -> void:
 	_current_zoom = _get_initial_zoom_value()
 	_target_zoom = _current_zoom
 	_apply_projection_settings()
+	_follow_position = global_position
 	if target:
 		var viewpoint_world := _get_viewpoint_world()
-		global_position = viewpoint_world + _get_arm_direction_world() * _config.arm_length
+		_follow_position = viewpoint_world + _get_arm_direction_world() * _config.arm_length
+		global_position = _follow_position
+
+func _update_shake(delta: float) -> void:
+	if _shake_time_remaining <= 0.0:
+		_shake_offset = Vector3.ZERO
+		_shake_amplitude = 0.0
+		_shake_frequency = 1.0
+		return
+
+	_shake_time_remaining = maxf(0.0, _shake_time_remaining - delta)
+	_shake_elapsed += delta
+	var progress := 1.0
+	if _shake_duration > 0.0:
+		progress = _shake_time_remaining / _shake_duration
+	var intensity := _shake_amplitude * progress
+	var t := _shake_elapsed * maxf(_shake_frequency, 0.01) * TAU
+	_shake_offset = Vector3(
+		sin(t * 2.7) * intensity,
+		cos(t * 3.9) * intensity * 0.65,
+		sin(t * 1.9) * intensity * 0.35
+	)
 
 func _get_initial_zoom_value() -> float:
 	if _config.projection_type == CameraConfig3D.ProjectionType.PERSPECTIVE:
