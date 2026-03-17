@@ -118,6 +118,17 @@ func is_character_id_valid(character_id: String) -> bool:
 		return false
 	return character_database.has(character_id)
 
+func find_active_actor_by_character_id(character_id: String) -> CharacterActor:
+	if character_id.is_empty():
+		return null
+	for actor_variant in active_actors.values():
+		var actor := actor_variant as CharacterActor
+		if actor == null or not is_instance_valid(actor):
+			continue
+		if str(actor.get_meta("character_id", "")) == character_id:
+			return actor
+	return null
+
 func despawn_actor(spawn_id: String) -> void:
 	if not active_actors.has(spawn_id):
 		return
@@ -129,6 +140,8 @@ func despawn_actor(spawn_id: String) -> void:
 		var character_id: String = str(actor.get_meta("character_id", ""))
 		if not character_id.is_empty() and not bool(actor.get_meta("allow_attack", false)):
 			npc_despawned.emit(character_id)
+		if TurnSystem:
+			TurnSystem.unregister_actor(actor)
 		actor.queue_free()
 
 	actor_despawned.emit(spawn_id)
@@ -176,6 +189,7 @@ func _spawn_character_actor(
 
 	var interactable := _ensure_interactable(actor)
 	_apply_actor_relation_state(actor, interactable, character_id, character_data, relation_result, spawn_id)
+	_register_actor_with_turn_system(actor, relation_result, spawn_id)
 	_emit_actor_spawn_signal(character_id, actor, relation_result)
 
 	return actor
@@ -195,6 +209,11 @@ func _add_common_actor_nodes(actor: Node3D, character_data: Dictionary) -> void:
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_label.font_size = 30
 	name_label.position = Vector3(0.0, 2.2, 0.0)
+	if actor.has_method("get_visual_root"):
+		var visual_root: Variant = actor.call("get_visual_root")
+		if visual_root is Node3D:
+			(visual_root as Node3D).add_child(name_label)
+			return
 	actor.add_child(name_label)
 
 func _resolve_character_display_name(character_data: Dictionary) -> String:
@@ -339,6 +358,7 @@ func _apply_actor_relation_state(
 		interactable.remove_meta("enemy_id")
 
 	interactable.set_options(_build_interaction_options(character_id, character_data, relation_result))
+	_register_actor_with_turn_system(actor, relation_result, spawn_id)
 
 func _refresh_actor_relation(actor: Node3D, character_id: String, spawn_id: String) -> void:
 	if actor == null or not is_instance_valid(actor):
@@ -392,7 +412,23 @@ func _on_actor_tree_exited(spawn_id: String) -> void:
 		var character_id: String = str(actor.get_meta("character_id", ""))
 		if not character_id.is_empty() and not bool(actor.get_meta("allow_attack", false)):
 			npc_despawned.emit(character_id)
+		if TurnSystem:
+			TurnSystem.unregister_actor(actor)
 
 	actor_despawned.emit(spawn_id)
 	if actor and bool(actor.get_meta("allow_attack", false)):
 		enemy_despawned.emit(spawn_id)
+
+func _register_actor_with_turn_system(actor: Node3D, relation_result: Dictionary, spawn_id: String) -> void:
+	if TurnSystem == null or actor == null or not is_instance_valid(actor):
+		return
+	var allow_attack: bool = bool(relation_result.get("allow_attack", false))
+	var group_id := "friendly"
+	var group_order := int(TurnSystem.DEFAULT_GROUP_ORDERS.get("friendly", 10))
+	var side := "friendly"
+	if allow_attack:
+		group_id = "hostile:%s" % spawn_id
+		group_order = 100 + int(actor.get_meta("turn_group_order", active_actors.size()))
+		side = "hostile"
+	TurnSystem.register_group(group_id, group_order)
+	TurnSystem.register_actor(actor, group_id, side)

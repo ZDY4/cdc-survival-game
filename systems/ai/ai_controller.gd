@@ -22,7 +22,7 @@ var _last_attack_time: float = -999.0
 var _target: Node3D = null
 
 func _ready() -> void:
-	set_process(true)
+	set_process(false)
 
 func initialize(
 		owner_node: Node3D,
@@ -43,23 +43,6 @@ func refresh_runtime_config(ai_config: Dictionary) -> void:
 	_apply_config(ai_config)
 	if not _allow_attack and _movement_component and _movement_component.has_method("cancel"):
 		_movement_component.cancel()
-
-func _process(_delta: float) -> void:
-	if not _owner_node or not _movement_component:
-		return
-
-	if CombatSystem and CombatSystem.has_method("is_in_combat") and CombatSystem.is_in_combat():
-		return
-
-	var now_s: float = float(Time.get_ticks_msec()) / 1000.0
-	if now_s - _last_decision_time < decision_interval:
-		return
-	_last_decision_time = now_s
-
-	_refresh_target()
-
-	_state = _decide_state()
-	_execute_state(now_s)
 
 func _apply_config(config: Dictionary) -> void:
 	if config.has("decision_interval"):
@@ -127,6 +110,34 @@ func _move_to(world_pos: Vector3) -> void:
 	if _movement_component.has_method("move_to"):
 		_movement_component.move_to(target_pos)
 
+func execute_turn_step() -> Dictionary:
+	if not _owner_node or not is_instance_valid(_owner_node):
+		return {"performed": false}
+	if _movement_component == null:
+		return {"performed": false}
+
+	var now_s: float = float(Time.get_ticks_msec()) / 1000.0
+	if now_s - _last_decision_time < decision_interval:
+		return {"performed": false}
+	_last_decision_time = now_s
+
+	_refresh_target()
+	_state = _decide_state()
+
+	match _state:
+		AIState.ATTACK:
+			return _perform_attack_step(now_s)
+		AIState.CHASE:
+			if _target and is_instance_valid(_target):
+				return await _perform_move_step(_target.global_position)
+		AIState.RETURN:
+			return await _perform_move_step(_spawn_pos)
+		AIState.WANDER:
+			return await _perform_wander_step()
+		_:
+			return {"performed": false}
+	return {"performed": false}
+
 func _wander() -> void:
 	if wander_radius <= 0.0:
 		return
@@ -146,3 +157,81 @@ func _try_attack(now_s: float) -> void:
 	if CombatSystem and CombatSystem.has_method("start_combat"):
 		CombatSystem.start_combat(_character_id)
 		_last_attack_time = now_s
+
+func _perform_attack_step(now_s: float) -> Dictionary:
+	if not _allow_attack:
+		return {"performed": false}
+	if _target == null or not is_instance_valid(_target):
+		return {"performed": false}
+	if now_s - _last_attack_time < attack_cooldown:
+		return {"performed": false}
+	if CombatSystem == null or not CombatSystem.has_method("perform_attack"):
+		return {"performed": false}
+
+	var attack_result: Variant = CombatSystem.perform_attack(_owner_node, _target)
+	if attack_result is Dictionary and bool((attack_result as Dictionary).get("success", false)):
+		_last_attack_time = now_s
+		return {"performed": true, "type": "attack"}
+	return {"performed": false}
+
+func _perform_wander_step() -> Dictionary:
+	if wander_radius <= 0.0:
+		return {"performed": false}
+	var offset := Vector2.RIGHT.rotated(randf() * TAU) * randf_range(0.0, wander_radius)
+	var target := _spawn_pos + Vector3(offset.x, 0.0, offset.y)
+	return await _perform_move_step(target)
+
+func _perform_move_step(world_pos: Vector3) -> Dictionary:
+	if _movement_component == null or not _movement_component.has_method("find_path") or TurnSystem == null:
+		return {"performed": false}
+	if not TurnSystem.has_method("get_actor_available_steps"):
+		return {"performed": false}
+
+	var available_steps: int = int(TurnSystem.get_actor_available_steps(_owner_node))
+	if available_steps <= 0:
+		return {"performed": false}
+
+	var target_pos := world_pos
+	if _owner_node:
+		target_pos.y = _owner_node.global_position.y
+	if GridMovementSystem and GridMovementSystem.has_method("snap_to_grid"):
+		target_pos = GridMovementSystem.snap_to_grid(target_pos)
+
+	var full_path: Variant = _movement_component.call("find_path", target_pos)
+	if not (full_path is Array) or (full_path as Array).is_empty():
+		return {"performed": false}
+
+	var path: Array[Vector3] = []
+	for point_variant in full_path:
+		if point_variant is Vector3:
+			path.append(point_variant)
+		if path.size() >= available_steps:
+			break
+	if path.is_empty():
+		return {"performed": false}
+
+	var start_result: Dictionary = TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+		"phase": TurnSystem.ACTION_PHASE_START,
+		"target_pos": target_pos
+	})
+	if not bool(start_result.get("success", false)):
+		return {"performed": false, "result": start_result}
+
+	if not bool(_movement_component.call("move_along_world_path", path)):
+		TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
+			"success": false
+		})
+		return {"performed": false}
+
+	await _movement_component.movement_step_completed
+	TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+		"phase": TurnSystem.ACTION_PHASE_STEP,
+		"steps": 1
+	})
+	await _movement_component.move_finished
+	TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+		"phase": TurnSystem.ACTION_PHASE_COMPLETE,
+		"success": true
+	})
+	return {"performed": true, "type": "move"}

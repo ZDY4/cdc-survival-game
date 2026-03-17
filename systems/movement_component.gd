@@ -42,9 +42,15 @@ func set_grid_world(grid_world: GridWorld) -> void:
 	_grid_world = grid_world
 
 func move_to(world_pos: Vector3) -> bool:
-	if not _owner_node or not _grid_world or not _navigator or not _grid_movement:
+	var path := find_path(world_pos)
+	if path.is_empty():
 		move_failed.emit(world_pos)
 		return false
+	return move_along_world_path(path)
+
+func find_path(world_pos: Vector3) -> Array[Vector3]:
+	if not _owner_node or not _grid_world or not _navigator or not _grid_movement:
+		return []
 
 	var start_pos := _owner_node.global_position
 	if ground_snap_enabled:
@@ -55,15 +61,24 @@ func move_to(world_pos: Vector3) -> bool:
 
 	var path := _navigator.find_path(start_pos, target_pos, _grid_world.is_walkable)
 	if path.is_empty():
-		move_failed.emit(target_pos)
-		return false
+		return []
 
 	for i in range(path.size()):
 		var point: Vector3 = path[i]
 		point.y = _resolve_ground_y(point, start_pos.y) if ground_snap_enabled else start_pos.y
 		path[i] = point
+	if not path.is_empty() and path[0].is_equal_approx(start_pos):
+		path.remove_at(0)
+	if path.is_empty():
+		return []
 
-	move_requested.emit(target_pos)
+	return path
+
+func move_along_world_path(path: Array[Vector3]) -> bool:
+	if not _owner_node or not _grid_movement or path.is_empty():
+		return false
+
+	move_requested.emit(path[path.size() - 1])
 	_grid_movement.move_along_path(path, _owner_node)
 	return true
 

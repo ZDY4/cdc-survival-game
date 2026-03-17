@@ -11,6 +11,7 @@ const PathPreview = preload("res://systems/path_preview.gd")
 const GridHoverCornerOverlay = preload("res://systems/grid_hover_corner_overlay.gd")
 const InteractionContextMenu = preload("res://ui/interaction_context_menu.gd")
 const PlayerInputComponent = preload("res://systems/player_input_component.gd")
+const WorldDamageTextController = preload("res://systems/world_damage_text_controller.gd")
 
 signal move_requested(world_pos: Vector3)
 signal movement_completed
@@ -20,6 +21,7 @@ signal movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_inde
 @onready var _collision: CollisionShape3D
 
 var _grid_world: GridWorld = null
+var _owns_grid_world: bool = false
 var _equipment_system: Node = null
 var _vision_system: Node = null
 var _scene_root: Node = null
@@ -29,6 +31,7 @@ var _path_preview: PathPreview = null
 var _hover_corner_overlay: GridHoverCornerOverlay = null
 var _interaction_context_menu: InteractionContextMenu = null
 var _input_component: PlayerInputComponent = null
+var _world_damage_text_controller: WorldDamageTextController = null
 var _is_interaction_in_progress: bool = false
 var _is_dialog_active: bool = false
 var _is_menu_input_blocked: bool = false
@@ -46,6 +49,8 @@ var _pending_execution_interactable: Node = null
 var _pending_execution_option: InteractionOption = null
 var _pending_execution_target_actor: CharacterActor = null
 var _pending_execution_destination: Vector3 = Vector3.ZERO
+var _active_move_action: bool = false
+var _active_move_steps_consumed: int = 0
 
 @export var max_preview_path_points: int = 200
 @export var max_preview_distance: float = 40.0
@@ -67,12 +72,17 @@ func _ready() -> void:
 	_setup_input_component()
 	_setup_path_preview_system()
 	_setup_interaction_context_menu()
+	_setup_world_damage_text_controller()
 	_setup_dialog_state_tracking()
 	_setup_console_state_tracking()
 
 	if not _grid_world:
-		_grid_world = GridWorld.new()
+		_create_fallback_grid_world()
 	_movement_component.set_grid_world(_grid_world)
+	call_deferred("_register_with_turn_system")
+
+func _exit_tree() -> void:
+	_unregister_from_turn_system()
 
 func _process(delta: float) -> void:
 	if _path_preview_system:
@@ -107,7 +117,7 @@ func is_movement_input_blocked() -> bool:
 	return _is_interaction_in_progress or _is_dialog_active or _is_console_input_blocked
 
 func is_world_input_blocked() -> bool:
-	return is_movement_input_blocked() or _is_menu_input_blocked
+	return is_movement_input_blocked() or _is_menu_input_blocked or _is_player_turn_blocked_by_combat()
 
 func is_console_input_blocked() -> bool:
 	return _is_console_input_blocked
@@ -172,7 +182,30 @@ func move_to(world_pos: Vector3) -> bool:
 		return false
 	if not _movement_component:
 		return false
-	return _movement_component.move_to(world_pos)
+	var path: Array[Vector3] = _movement_component.find_path(world_pos)
+	if path.is_empty():
+		return false
+
+	var available_steps: int = _resolve_available_move_steps()
+	if available_steps <= 0:
+		return false
+
+	var truncated_path: Array[Vector3] = []
+	for point in path:
+		truncated_path.append(point)
+		if truncated_path.size() >= available_steps:
+			break
+	if truncated_path.is_empty():
+		return false
+
+	var start_result := _begin_move_action(truncated_path[truncated_path.size() - 1])
+	if not bool(start_result.get("success", false)):
+		return false
+
+	if not _movement_component.move_along_world_path(truncated_path):
+		_complete_move_action(false)
+		return false
+	return true
 
 func move_to_screen_position(screen_pos: Vector2, interaction_system: InteractionSystem, scene_root: Node) -> bool:
 	if is_world_input_blocked():
@@ -259,7 +292,11 @@ func get_grid_world() -> GridWorld:
 	return _grid_world
 
 func set_grid_world(world: GridWorld) -> void:
+	if world == _grid_world:
+		return
+	_release_owned_grid_world()
 	_grid_world = world
+	_owns_grid_world = false
 	if _movement_component:
 		_movement_component.set_grid_world(world)
 	if _vision_system and _movement_component:
@@ -268,10 +305,14 @@ func set_grid_world(world: GridWorld) -> void:
 func get_vision_system() -> Node:
 	return _vision_system
 
+func get_world_damage_text_controller() -> WorldDamageTextController:
+	return _world_damage_text_controller
+
 func _on_move_requested(world_pos: Vector3) -> void:
 	move_requested.emit(world_pos)
 
 func _on_movement_finished() -> void:
+	_complete_move_action(true)
 	movement_completed.emit()
 	EventBus.emit(EventBus.EventType.PLAYER_MOVED, {
 		"position": global_position,
@@ -280,12 +321,21 @@ func _on_movement_finished() -> void:
 	_try_execute_pending_option()
 
 func _on_movement_cancelled() -> void:
+	_complete_move_action(false)
 	_clear_pending_option_execution()
 
 func _on_movement_failed(_target_pos: Vector3) -> void:
+	_complete_move_action(false)
 	_clear_pending_option_execution()
 
 func _on_movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int) -> void:
+	if _active_move_action and TurnSystem:
+		var step_result := TurnSystem.request_action(self, TurnSystem.ACTION_TYPE_MOVE, {
+			"phase": TurnSystem.ACTION_PHASE_STEP,
+			"steps": 1
+		})
+		if bool(step_result.get("success", false)):
+			_active_move_steps_consumed += 1
 	movement_step_completed.emit(grid_pos, world_pos, step_index, total_steps)
 
 func _show_interaction_options(screen_pos: Vector2, interaction_system: InteractionSystem, scene_root: Node) -> void:
@@ -438,6 +488,31 @@ func _setup_interaction_context_menu() -> void:
 		_interaction_context_menu.option_selected.connect(_on_interaction_menu_option_selected)
 	if not _interaction_context_menu.menu_closed.is_connected(_on_interaction_menu_closed):
 		_interaction_context_menu.menu_closed.connect(_on_interaction_menu_closed)
+
+func _setup_world_damage_text_controller() -> void:
+	if _world_damage_text_controller != null:
+		return
+	_world_damage_text_controller = WorldDamageTextController.new()
+	_world_damage_text_controller.name = "WorldDamageTextController"
+	add_child(_world_damage_text_controller)
+
+func _create_fallback_grid_world() -> void:
+	if _grid_world != null:
+		return
+	_grid_world = GridWorld.new()
+	_grid_world.name = "FallbackGridWorld"
+	add_child(_grid_world)
+	_owns_grid_world = true
+
+func _release_owned_grid_world() -> void:
+	if not _owns_grid_world:
+		return
+	if _grid_world != null and is_instance_valid(_grid_world):
+		if _grid_world.get_parent() == self:
+			remove_child(_grid_world)
+		_grid_world.queue_free()
+	_grid_world = null
+	_owns_grid_world = false
 
 func _initialize_path_preview_system() -> void:
 	if not _scene_root or not _path_preview_system:
@@ -798,7 +873,7 @@ func _begin_option_execution(interactable: Node, option: InteractionOption) -> b
 		return false
 
 	var destination: Vector3 = approach_data.get("destination", Vector3.ZERO)
-	if _movement_component == null or not _movement_component.move_to(destination):
+	if _movement_component == null or not move_to(destination):
 		if not is_movement_input_blocked():
 			_set_interaction_target_actor(null)
 		return false
@@ -815,10 +890,31 @@ func _execute_interaction_option(interactable: Node, option: InteractionOption) 
 
 	_clear_pending_option_execution(false)
 	_set_interaction_target_from_interactable(interactable)
-	if interactable.has_method("execute_option"):
-		interactable.execute_option(option)
-	elif interactable.has_method("_execute_option"):
-		interactable._execute_option(option)
+	if option.uses_external_action_flow(interactable):
+		if interactable.has_method("execute_option"):
+			interactable.execute_option(option)
+		elif interactable.has_method("_execute_option"):
+			interactable._execute_option(option)
+	else:
+		var action_type := option.get_action_type(interactable)
+		var start_result := {
+			"success": true
+		}
+		if TurnSystem:
+			start_result = TurnSystem.request_action(self, action_type, {
+				"phase": TurnSystem.ACTION_PHASE_START,
+				"interactable": interactable
+			})
+		if bool(start_result.get("success", false)):
+			if interactable.has_method("execute_option"):
+				interactable.execute_option(option)
+			elif interactable.has_method("_execute_option"):
+				interactable._execute_option(option)
+			if TurnSystem:
+				TurnSystem.request_action(self, action_type, {
+					"phase": TurnSystem.ACTION_PHASE_COMPLETE,
+					"success": true
+				})
 	if not is_movement_input_blocked():
 		_set_interaction_target_actor(null)
 
@@ -909,3 +1005,49 @@ func _collect_interaction_ring_cells(center: Vector3i, radius: int) -> Array[Vec
 				continue
 			cells.append(Vector3i(x, center.y, z))
 	return cells
+
+func _register_with_turn_system() -> void:
+	if TurnSystem == null:
+		return
+	TurnSystem.register_group("player", 0)
+	TurnSystem.register_actor(self, "player", "player")
+
+func _unregister_from_turn_system() -> void:
+	if TurnSystem == null:
+		return
+	TurnSystem.unregister_actor(self)
+
+func _is_player_turn_blocked_by_combat() -> bool:
+	if TurnSystem == null or not TurnSystem.has_method("is_player_input_allowed"):
+		return false
+	return not bool(TurnSystem.is_player_input_allowed(self))
+
+func _resolve_available_move_steps() -> int:
+	if TurnSystem == null or not TurnSystem.has_method("get_actor_available_steps"):
+		return 1
+	return int(TurnSystem.get_actor_available_steps(self))
+
+func _begin_move_action(target_pos: Vector3) -> Dictionary:
+	_active_move_action = false
+	_active_move_steps_consumed = 0
+	if TurnSystem == null:
+		_active_move_action = true
+		return {"success": true}
+	var start_result := TurnSystem.request_action(self, TurnSystem.ACTION_TYPE_MOVE, {
+		"phase": TurnSystem.ACTION_PHASE_START,
+		"target_pos": target_pos
+	})
+	if bool(start_result.get("success", false)):
+		_active_move_action = true
+	return start_result
+
+func _complete_move_action(success: bool) -> void:
+	if not _active_move_action:
+		return
+	if TurnSystem:
+		TurnSystem.request_action(self, TurnSystem.ACTION_TYPE_MOVE, {
+			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
+			"success": success
+		})
+	_active_move_action = false
+	_active_move_steps_consumed = 0

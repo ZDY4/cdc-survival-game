@@ -28,6 +28,12 @@ func get_priority(interactable: Node) -> int:
 func is_dangerous(interactable: Node) -> bool:
 	return not _is_hostile(interactable)
 
+func get_action_type(_interactable: Node) -> String:
+	return "attack"
+
+func uses_external_action_flow(_interactable: Node) -> bool:
+	return true
+
 func requires_proximity(_interactable: Node) -> bool:
 	return true
 
@@ -56,7 +62,11 @@ func execute(interactable: Node) -> void:
 			"damage": enemy_damage
 		}
 
-	if character_id.is_empty():
+	var target_actor := _resolve_actor(interactable)
+	var player_actor := _resolve_player_actor()
+	if target_actor != null and player_actor != null and CombatSystem and CombatSystem.has_method("perform_attack"):
+		CombatSystem.perform_attack(player_actor, target_actor)
+	elif character_id.is_empty():
 		if CombatModule and CombatModule.has_method("start_combat"):
 			CombatModule.start_combat(combat_data)
 	elif CombatSystem and CombatSystem.has_method("start_combat"):
@@ -147,6 +157,15 @@ func _resolve_actor(interactable: Node) -> Node3D:
 		if node is Node3D and node.has_meta("character_id"):
 			return node as Node3D
 		node = node.get_parent()
+	return null
+
+func _resolve_player_actor() -> Node3D:
+	var tree := Engine.get_main_loop()
+	if not (tree is SceneTree):
+		return null
+	var player_node := (tree as SceneTree).get_first_node_in_group("player")
+	if player_node is Node3D and is_instance_valid(player_node):
+		return player_node as Node3D
 	return null
 
 func _get_character_data(character_id: String) -> Dictionary:

@@ -37,6 +37,12 @@ func get_cursor_texture(_interactable: Node) -> Texture2D:
 func get_cursor_hotspot(_interactable: Node) -> Vector2:
 	return cursor_hotspot
 
+func get_action_type(_interactable: Node) -> String:
+	return "interact"
+
+func uses_external_action_flow(_interactable: Node) -> bool:
+	return false
+
 func requires_proximity(_interactable: Node) -> bool:
 	return false
 

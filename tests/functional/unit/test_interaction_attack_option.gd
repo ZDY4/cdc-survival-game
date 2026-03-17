@@ -33,6 +33,12 @@ static func run_tests(runner: TestRunner) -> void:
 		TestRunner.TestPriority.P1_MAJOR,
 		_test_forced_hostile_override
 	)
+	runner.register_test(
+		"interaction_attack_option_enters_combat_and_hands_off_to_turn_system",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_attack_option_enters_turn_system_combat
+	)
 
 static func _test_neutral_attack_option_behavior() -> void:
 	var fixture := _build_interactable_fixture("neutral")
@@ -91,6 +97,46 @@ static func _test_forced_hostile_override() -> void:
 	GameStateManager.set_character_hostile(character_id, false)
 	var neutral_result := resolver.resolve_for_player(character_id, character_data)
 	assert(str(neutral_result.get("resolved_attitude", "")) != "hostile", "Clearing hostile override should restore normal relation resolution")
+
+static func _test_attack_option_enters_turn_system_combat() -> void:
+	assert(TurnSystem != null, "TurnSystem autoload should exist for combat handoff test")
+	assert(CombatSystem != null, "CombatSystem autoload should exist for combat handoff test")
+	TurnSystem.reset_runtime_state()
+
+	var loop := Engine.get_main_loop()
+	assert(loop is SceneTree, "Main loop should be a SceneTree")
+	var tree: SceneTree = loop
+
+	var player := Node3D.new()
+	player.name = "PlayerDummy"
+	player.add_to_group("player")
+	tree.root.add_child(player)
+
+	var fixture := _build_interactable_fixture("hostile")
+	var actor: Node3D = fixture["actor"]
+	tree.root.add_child(actor)
+	await tree.process_frame
+
+	TurnSystem.register_group("player", 0)
+	TurnSystem.register_actor(player, "player", "player")
+	TurnSystem.register_group("hostile:test", 100)
+	TurnSystem.register_actor(actor, "hostile:test", "hostile")
+
+	var interactable: Interactable = fixture["interactable"]
+	var attack_option: AttackInteractionOption = _find_option(interactable.get_available_options(), "attack") as AttackInteractionOption
+	assert(attack_option != null, "Hostile fixture should expose an attack option")
+
+	attack_option.execute(interactable)
+	await tree.process_frame
+
+	assert(TurnSystem.is_in_combat(), "Executing the attack option should enter combat through CombatSystem")
+	assert(not TurnSystem.is_actor_current_turn(player), "After the player's attack resolves, TurnSystem should advance to the next combat actor")
+	assert(TurnSystem.get_current_actor() == actor, "The hostile target should own the follow-up combat turn")
+
+	TurnSystem.force_end_combat()
+	player.queue_free()
+	_cleanup_fixture(fixture)
+	await tree.process_frame
 
 static func _build_interactable_fixture(attitude: String) -> Dictionary:
 	var actor := Node3D.new()
