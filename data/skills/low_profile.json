@@ -1,0 +1,30 @@
+{
+	"name": "低姿潜行",
+	"icon": "",
+	"description": "切换到低姿潜行状态，降低被发现的概率。",
+	"tree_id": "survival",
+	"max_level": 3,
+	"prerequisites": [
+		"survival"
+	],
+	"attribute_requirements": {
+		"agility": 6
+	},
+	"id": "low_profile",
+	"gameplay_effect": {},
+	"activation": {
+		"mode": "toggle",
+		"cooldown": 1.0,
+		"effect": {
+			"is_infinite": true,
+			"category": "buff",
+			"modifiers": {
+				"detection_reduction": {
+					"base": 0.25,
+					"per_level": 0.05,
+					"max_value": 0.35
+				}
+			}
+		}
+	}
+}

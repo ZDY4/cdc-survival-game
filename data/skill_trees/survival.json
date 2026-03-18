@@ -4,7 +4,8 @@
   "skills": [
     "survival",
     "medicine",
-    "perception"
+    "perception",
+    "low_profile"
   ],
   "links": [
     {
@@ -14,6 +15,10 @@
     {
       "from": "survival",
       "to": "perception"
+    },
+    {
+      "from": "survival",
+      "to": "low_profile"
     }
   ],
   "layout": {
@@ -28,6 +33,10 @@
     "perception": {
       "x": 240,
       "y": -120
+    },
+    "low_profile": {
+      "x": 480,
+      "y": 0
     }
   },
   "id": "survival"

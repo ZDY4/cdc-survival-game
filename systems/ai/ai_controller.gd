@@ -15,6 +15,7 @@ var _movement_component: Node = null
 var _spawn_pos: Vector3 = Vector3.ZERO
 var _character_id: String = ""
 var _allow_attack: bool = false
+var _skill_runtime: Node = null
 
 var _state: int = AIState.IDLE
 var _last_decision_time: float = -999.0
@@ -29,13 +30,15 @@ func initialize(
 		movement_component: Node,
 		spawn_pos: Vector3,
 		character_id: String,
-		ai_config: Dictionary
+		ai_config: Dictionary,
+		skill_runtime: Node = null
 	) -> void:
 	_owner_node = owner_node
 	_movement_component = movement_component
 	_spawn_pos = spawn_pos
 	_character_id = character_id
 	_allow_attack = bool(ai_config.get("allow_attack", false))
+	_skill_runtime = skill_runtime
 
 	_apply_config(ai_config)
 
@@ -163,6 +166,10 @@ func _perform_attack_step(now_s: float) -> Dictionary:
 		return {"performed": false}
 	if _target == null or not is_instance_valid(_target):
 		return {"performed": false}
+	if _skill_runtime != null and _skill_runtime.has_method("try_activate_next_active_skill"):
+		var skill_result: Variant = _skill_runtime.call("try_activate_next_active_skill")
+		if skill_result is Dictionary and bool((skill_result as Dictionary).get("success", false)):
+			return {"performed": true, "type": "skill", "result": (skill_result as Dictionary).duplicate(true)}
 	if now_s - _last_attack_time < attack_cooldown:
 		return {"performed": false}
 	if CombatSystem == null or not CombatSystem.has_method("perform_attack"):

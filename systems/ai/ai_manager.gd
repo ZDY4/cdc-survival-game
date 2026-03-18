@@ -5,6 +5,7 @@ class_name AIManager
 
 const MovementComponentScript = preload("res://systems/movement_component.gd")
 const CharacterActorScript = preload("res://systems/character_actor.gd")
+const CharacterSkillRuntimeScript = preload("res://systems/character_skill_runtime.gd")
 const AIControllerScript = preload("res://systems/ai/ai_controller.gd")
 const CharacterRelationResolverScript = preload("res://systems/character_relation_resolver.gd")
 const VisionSystemScript = preload("res://systems/vision_system.gd")
@@ -181,11 +182,22 @@ func _spawn_character_actor(
 	vision_system.bind_to_movement_component(movement_component)
 	vision_system.update_from_grid(GridMovementSystem.world_to_grid(world_pos))
 
+	var skill_runtime := CharacterSkillRuntimeScript.new()
+	skill_runtime.name = "CharacterSkillRuntime"
+	actor.add_child(skill_runtime)
+	skill_runtime.initialize(
+		actor,
+		spawn_id,
+		character_data.get("skills", {}),
+		get_node_or_null("/root/SkillModule"),
+		get_node_or_null("/root/EffectSystem")
+	)
+
 	var ai_config: Dictionary = _build_ai_config(character_data, relation_result)
 	var ai_controller := AIControllerScript.new()
 	ai_controller.name = "AIController"
 	actor.add_child(ai_controller)
-	ai_controller.initialize(actor, movement_component, world_pos, character_id, ai_config)
+	ai_controller.initialize(actor, movement_component, world_pos, character_id, ai_config, skill_runtime)
 
 	var interactable := _ensure_interactable(actor)
 	_apply_actor_relation_state(actor, interactable, character_id, character_data, relation_result, spawn_id)

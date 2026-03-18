@@ -20,6 +20,10 @@ const DEBUG_OVERLAY_NAME: String = "DebugOverlay"
 	set = set_auto_rebuild
 @export var generate_collision: bool = true:
 	set = set_generate_collision
+@export var block_grid_navigation: bool = true:
+	set = set_block_grid_navigation
+@export var show_blocked_cells_in_editor: bool = true:
+	set = set_show_blocked_cells_in_editor
 @export var material_override: Material:
 	set = set_material_override
 
@@ -28,9 +32,13 @@ var _collision_root: StaticBody3D = null
 var _debug_overlay: MeshInstance3D = null
 var _last_warnings: PackedStringArray = PackedStringArray()
 var _last_build_info: Dictionary = {}
+var _last_collision_boxes: Array = []
+var _blocked_grid_cells: Array[Vector3i] = [Vector3i.ZERO]
+var _registered_grid_cells: Array[Vector3i] = [Vector3i.ZERO]
 var _pending_rebuild: bool = false
 
 func _enter_tree() -> void:
+	set_notify_transform(true)
 	_ensure_default_points()
 	_ensure_internal_nodes()
 	call_deferred("rebuild_geometry")
@@ -74,6 +82,19 @@ func set_generate_collision(value: bool) -> void:
 	_notify_editor_property_change()
 	_request_rebuild()
 
+func set_block_grid_navigation(value: bool) -> void:
+	block_grid_navigation = value
+	_notify_editor_property_change()
+	_update_blocked_grid_cells()
+	if Engine.is_editor_hint():
+		update_gizmos()
+
+func set_show_blocked_cells_in_editor(value: bool) -> void:
+	show_blocked_cells_in_editor = value
+	_notify_editor_property_change()
+	if Engine.is_editor_hint():
+		update_gizmos()
+
 func set_material_override(value: Material) -> void:
 	material_override = value
 	_notify_editor_property_change()
@@ -94,6 +115,9 @@ func get_debug_overlay() -> MeshInstance3D:
 
 func get_last_build_info() -> Dictionary:
 	return _last_build_info.duplicate(true)
+
+func get_blocked_grid_cells_copy() -> Array[Vector3i]:
+	return _blocked_grid_cells.duplicate()
 
 func get_control_point(index: int) -> Vector3:
 	if index < 0 or index >= control_points.size():
@@ -175,6 +199,7 @@ func rebuild_geometry() -> void:
 	var build_result: Dictionary = _build_geometry()
 	_last_build_info = build_result.get("build_info", {}).duplicate(true)
 	_last_warnings = PackedStringArray(build_result.get("warnings", PackedStringArray()))
+	_last_collision_boxes = build_result.get("collision_boxes", []).duplicate(true)
 	update_configuration_warnings()
 
 	var mesh: Mesh = build_result.get("mesh", null)
@@ -203,6 +228,7 @@ func rebuild_geometry() -> void:
 				collision_box.transform = box_data.get("transform", Transform3D.IDENTITY)
 				_collision_root.add_child(collision_box)
 
+	_update_blocked_grid_cells()
 	if Engine.is_editor_hint():
 		update_gizmos()
 	rebuilt.emit()
@@ -220,6 +246,18 @@ func _ensure_default_points() -> void:
 	if not control_points.is_empty():
 		return
 	control_points = _get_default_control_points()
+
+func _exit_tree() -> void:
+	_unregister_grid_obstacles()
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_TRANSFORM_CHANGED:
+		return
+	if _last_collision_boxes.is_empty():
+		return
+	_update_blocked_grid_cells()
+	if Engine.is_editor_hint():
+		update_gizmos()
 
 func _get_default_control_points() -> Array:
 	return [Vector3.ZERO, Vector3(4.0, 0.0, 0.0)]
@@ -299,3 +337,53 @@ func _build_debug_material() -> StandardMaterial3D:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	return material
+
+func _update_blocked_grid_cells() -> void:
+	_blocked_grid_cells.clear()
+	_unregister_grid_obstacles()
+	if not block_grid_navigation or _last_collision_boxes.is_empty():
+		return
+
+	_blocked_grid_cells = ProcGeometryUtils.collect_occupied_grid_cells_from_collision_boxes(
+		_last_collision_boxes,
+		global_transform,
+		_get_effective_grid_size()
+	)
+	_register_grid_obstacles()
+
+func _register_grid_obstacles() -> void:
+	if Engine.is_editor_hint():
+		return
+	if GridMovementSystem == null or not GridMovementSystem.has_method("register_obstacle"):
+		return
+	for cell in _blocked_grid_cells:
+		GridMovementSystem.register_obstacle(_grid_cell_to_world_center(cell))
+	_registered_grid_cells = _blocked_grid_cells.duplicate()
+
+func _unregister_grid_obstacles() -> void:
+	if Engine.is_editor_hint():
+		_registered_grid_cells.clear()
+		return
+	if GridMovementSystem == null or not GridMovementSystem.has_method("unregister_obstacle"):
+		_registered_grid_cells.clear()
+		return
+	for cell in _registered_grid_cells:
+		GridMovementSystem.unregister_obstacle(_grid_cell_to_world_center(cell))
+	_registered_grid_cells.clear()
+
+func _get_effective_grid_size() -> float:
+	if GridMovementSystem != null and GridMovementSystem.has_method("grid_to_world"):
+		var origin_world: Vector3 = GridMovementSystem.grid_to_world(Vector3i.ZERO)
+		var next_world: Vector3 = GridMovementSystem.grid_to_world(Vector3i(1, 0, 0))
+		var grid_size: float = origin_world.distance_to(next_world)
+		if grid_size > ProcGeometryUtils.EPSILON:
+			return grid_size
+	return 1.0
+
+func _grid_cell_to_world_center(cell: Vector3i) -> Vector3:
+	var grid_size: float = _get_effective_grid_size()
+	return Vector3(
+		(float(cell.x) + 0.5) * grid_size,
+		(float(cell.y) + 0.5) * grid_size,
+		(float(cell.z) + 0.5) * grid_size
+	)

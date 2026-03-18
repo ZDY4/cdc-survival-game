@@ -4,7 +4,8 @@
   "skills": [
     "combat",
     "athletics",
-    "stealth"
+    "stealth",
+    "adrenaline_rush"
   ],
   "links": [
     {
@@ -14,6 +15,10 @@
     {
       "from": "athletics",
       "to": "stealth"
+    },
+    {
+      "from": "combat",
+      "to": "adrenaline_rush"
     }
   ],
   "layout": {
@@ -28,6 +33,10 @@
     "stealth": {
       "x": 480,
       "y": 240
+    },
+    "adrenaline_rush": {
+      "x": 240,
+      "y": -120
     }
   },
   "id": "combat"

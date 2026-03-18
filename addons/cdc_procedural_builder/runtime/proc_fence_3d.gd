@@ -46,6 +46,26 @@ func _build_geometry() -> Dictionary:
 	var unique_posts: Dictionary = {}
 	var post_count: int = 0
 	var rail_box_width: float = maxf(maxf(post_size.x, post_size.z), rail_thickness)
+	var rail_strip_data: Dictionary = ProcGeometryUtils.build_polyline_strip(
+		control_points,
+		rail_box_width * 0.5,
+		closed
+	)
+	if rail_strip_data.is_empty():
+		warnings.append("Fence requires at least one non-zero-length segment.")
+		return {"mesh": null, "collision_boxes": [], "warnings": warnings, "build_info": {}}
+
+	for rail_index in range(rail_count):
+		var height_ratio: float = float(rail_index + 1) / float(rail_count + 1)
+		var rail_center_y: float = fence_height * height_ratio
+		var rail_inside_point: Vector3 = _compute_rail_inside_point(rail_strip_data, rail_center_y)
+		ProcGeometryUtils.add_polyline_prism(
+			surface_tool,
+			rail_strip_data,
+			rail_center_y - rail_thickness * 0.5,
+			rail_center_y + rail_thickness * 0.5,
+			rail_inside_point
+		)
 
 	for segment_index in range(get_segment_count()):
 		var segment_points: Array = get_segment_points(segment_index)
@@ -62,7 +82,6 @@ func _build_geometry() -> Dictionary:
 		for rail_index in range(rail_count):
 			var height_ratio: float = float(rail_index + 1) / float(rail_count + 1)
 			var rail_center: Vector3 = (start_point + end_point) * 0.5 + Vector3.UP * (fence_height * height_ratio)
-			ProcGeometryUtils.add_box_prism(surface_tool, rail_center, basis, rail_size)
 			collision_boxes.append({
 				"transform": Transform3D(basis, rail_center),
 				"size": rail_size
@@ -123,3 +142,16 @@ func _build_debug_mesh() -> ImmediateMesh:
 
 func _build_post_key(point: Vector3) -> String:
 	return "%.3f|%.3f|%.3f" % [point.x, point.y, point.z]
+
+func _compute_rail_inside_point(strip_data: Dictionary, rail_center_y: float) -> Vector3:
+	var strip_points: Array = strip_data.get("points", [])
+	if strip_points.is_empty():
+		return Vector3.UP * rail_center_y
+
+	var center: Vector3 = Vector3.ZERO
+	for point_variant in strip_points:
+		var point: Vector3 = point_variant
+		center += point
+	center /= float(strip_points.size())
+	center.y = rail_center_y
+	return center

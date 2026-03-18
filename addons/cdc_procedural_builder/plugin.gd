@@ -4,11 +4,12 @@ extends EditorPlugin
 const WALL_SCRIPT: Script = preload("res://addons/cdc_procedural_builder/runtime/proc_wall_3d.gd")
 const FENCE_SCRIPT: Script = preload("res://addons/cdc_procedural_builder/runtime/proc_fence_3d.gd")
 const HOUSE_SCRIPT: Script = preload("res://addons/cdc_procedural_builder/runtime/proc_house_3d.gd")
-const DOCK_SCRIPT: Script = preload("res://addons/cdc_procedural_builder/editor/procedural_builder_dock.gd")
+const INSPECTOR_PLUGIN_SCRIPT: Script = preload("res://addons/cdc_procedural_builder/editor/procedural_builder_inspector_plugin.gd")
 const GIZMO_SCRIPT: Script = preload("res://addons/cdc_procedural_builder/editor/procedural_builder_gizmo_plugin.gd")
 const NO_MESH_HIT_DISTANCE: float = INF
 
-var _dock: ProceduralBuilderDock = null
+var _inspector_plugin: ProceduralBuilderInspectorPlugin = null
+var _inspector_panel: ProceduralBuilderDock = null
 var _gizmo_plugin: ProceduralBuilderGizmoPlugin = null
 var _selection: EditorSelection = null
 var _current_generator: ProcShapeGenerator3D = null
@@ -22,17 +23,8 @@ func _enter_tree() -> void:
 	if _selection != null and not _selection.selection_changed.is_connected(_on_selection_changed):
 		_selection.selection_changed.connect(_on_selection_changed)
 
-	_dock = DOCK_SCRIPT.new()
-	_dock.control_point_selected.connect(_on_control_point_selected)
-	_dock.opening_selected.connect(_on_opening_selected)
-	_dock.add_point_requested.connect(_on_add_point_requested)
-	_dock.insert_point_requested.connect(_on_insert_point_requested)
-	_dock.remove_point_requested.connect(_on_remove_point_requested)
-	_dock.closed_toggled.connect(_on_closed_toggled)
-	_dock.add_opening_requested.connect(_on_add_opening_requested)
-	_dock.remove_opening_requested.connect(_on_remove_opening_requested)
-	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock)
-	_dock.hide()
+	_inspector_plugin = INSPECTOR_PLUGIN_SCRIPT.new(self)
+	add_inspector_plugin(_inspector_plugin)
 
 	_gizmo_plugin = GIZMO_SCRIPT.new(self)
 	add_node_3d_gizmo_plugin(_gizmo_plugin)
@@ -50,10 +42,10 @@ func _exit_tree() -> void:
 		remove_node_3d_gizmo_plugin(_gizmo_plugin)
 		_gizmo_plugin = null
 
-	if _dock != null:
-		remove_control_from_docks(_dock)
-		_dock.queue_free()
-		_dock = null
+	if _inspector_plugin != null:
+		remove_inspector_plugin(_inspector_plugin)
+		_inspector_plugin = null
+	_inspector_panel = null
 
 	if _selection != null and _selection.selection_changed.is_connected(_on_selection_changed):
 		_selection.selection_changed.disconnect(_on_selection_changed)
@@ -64,10 +56,9 @@ func _handles(object: Object) -> bool:
 func _edit(object: Object) -> void:
 	_set_current_generator(object as ProcShapeGenerator3D)
 
-func _make_visible(visible: bool) -> void:
-	if _dock == null:
-		return
-	_dock.visible = visible and _current_generator != null
+func _make_visible(_visible: bool) -> void:
+	# Inspector plugin visibility is managed by Godot based on the inspected object.
+	pass
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	if not (event is InputEventMouseButton):
@@ -90,8 +81,19 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 
 func select_control_point(index: int) -> void:
 	_selected_point_index = index
-	if _dock != null:
-		_dock.set_selected_point_index(index)
+	if _inspector_panel != null and is_instance_valid(_inspector_panel):
+		_inspector_panel.set_selected_point_index(index)
+
+func configure_inspector_panel(panel: ProceduralBuilderDock, generator: ProcShapeGenerator3D) -> void:
+	if panel == null:
+		return
+	_inspector_panel = panel
+	if not panel.tree_exited.is_connected(_on_inspector_panel_exited):
+		panel.tree_exited.connect(_on_inspector_panel_exited.bind(panel), CONNECT_ONE_SHOT)
+	_connect_panel_signals(panel)
+	panel.set_target(generator)
+	panel.set_selected_point_index(_selected_point_index)
+	panel.set_selected_opening_index(_selected_opening_index)
 
 func commit_control_point_move(generator: ProcShapeGenerator3D, handle_id: int, previous_value: Vector3, current_value: Vector3) -> void:
 	if generator == null or previous_value.is_equal_approx(current_value):
@@ -136,9 +138,7 @@ func _set_current_generator(generator: ProcShapeGenerator3D) -> void:
 	if _current_generator != null and not _current_generator.rebuilt.is_connected(_on_generator_rebuilt):
 		_current_generator.rebuilt.connect(_on_generator_rebuilt)
 
-	if _dock != null:
-		_dock.set_target(_current_generator)
-		_dock.visible = _current_generator != null
+	_refresh_inspector()
 
 func _select_generator(generator: ProcShapeGenerator3D) -> void:
 	if generator == null or _selection == null:
@@ -151,10 +151,10 @@ func _select_generator(generator: ProcShapeGenerator3D) -> void:
 func _refresh_from_generator(generator: ProcShapeGenerator3D = null) -> void:
 	if generator != null and generator != _current_generator:
 		return
-	if _dock != null:
-		_dock.set_target(_current_generator)
-		_dock.set_selected_point_index(_selected_point_index)
-		_dock.set_selected_opening_index(_selected_opening_index)
+	if _inspector_panel != null and is_instance_valid(_inspector_panel):
+		_inspector_panel.set_target(_current_generator)
+		_inspector_panel.set_selected_point_index(_selected_point_index)
+		_inspector_panel.set_selected_opening_index(_selected_opening_index)
 
 func _on_generator_rebuilt() -> void:
 	_refresh_from_generator(_current_generator)
@@ -363,3 +363,36 @@ func _intersect_triangle(a: Vector3, b: Vector3, c: Vector3, local_origin: Vecto
 
 	var world_hit: Vector3 = mesh_transform * local_hit
 	return world_hit.distance_to(mesh_transform * local_origin)
+
+func _connect_panel_signals(panel: ProceduralBuilderDock) -> void:
+	if not panel.control_point_selected.is_connected(_on_control_point_selected):
+		panel.control_point_selected.connect(_on_control_point_selected)
+	if not panel.opening_selected.is_connected(_on_opening_selected):
+		panel.opening_selected.connect(_on_opening_selected)
+	if not panel.add_point_requested.is_connected(_on_add_point_requested):
+		panel.add_point_requested.connect(_on_add_point_requested)
+	if not panel.insert_point_requested.is_connected(_on_insert_point_requested):
+		panel.insert_point_requested.connect(_on_insert_point_requested)
+	if not panel.remove_point_requested.is_connected(_on_remove_point_requested):
+		panel.remove_point_requested.connect(_on_remove_point_requested)
+	if not panel.closed_toggled.is_connected(_on_closed_toggled):
+		panel.closed_toggled.connect(_on_closed_toggled)
+	if not panel.add_opening_requested.is_connected(_on_add_opening_requested):
+		panel.add_opening_requested.connect(_on_add_opening_requested)
+	if not panel.remove_opening_requested.is_connected(_on_remove_opening_requested):
+		panel.remove_opening_requested.connect(_on_remove_opening_requested)
+
+func _on_inspector_panel_exited(panel: ProceduralBuilderDock) -> void:
+	if _inspector_panel == panel:
+		_inspector_panel = null
+
+func _refresh_inspector() -> void:
+	if _current_generator == null:
+		return
+	if _inspector_panel != null and is_instance_valid(_inspector_panel):
+		_refresh_from_generator(_current_generator)
+		return
+	var editor_interface: EditorInterface = get_editor_interface()
+	if editor_interface == null:
+		return
+	editor_interface.edit_node(_current_generator)

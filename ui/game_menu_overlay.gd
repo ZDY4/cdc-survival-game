@@ -1,6 +1,8 @@
 extends CanvasLayer
 
 const InputActions = preload("res://core/input_actions.gd")
+const SkillHotbar = preload("res://ui/skill_hotbar.gd")
+const SkillPanelItem = preload("res://ui/skill_panel_item.gd")
 
 signal request_close_all()
 
@@ -13,6 +15,7 @@ var _crafting_panel: PanelContainer = null
 var _settings_panel: PanelContainer = null
 var _world_map: CanvasLayer = null
 var _status_label: Label = null
+var _skill_hotbar: SkillHotbar = null
 
 var _inventory_equipment_box: VBoxContainer = null
 var _inventory_list_box: VBoxContainer = null
@@ -21,7 +24,7 @@ var _character_strength_label: Label = null
 var _character_agility_label: Label = null
 var _character_constitution_label: Label = null
 var _journal_list: VBoxContainer = null
-var _skills_list: VBoxContainer = null
+var _skills_list: GridContainer = null
 var _crafting_list: VBoxContainer = null
 
 var _controls_rows: Dictionary = {}
@@ -152,6 +155,10 @@ func _build_overlay() -> void:
 	_build_crafting_content(_crafting_panel)
 	_build_settings_content(_settings_panel)
 
+	_skill_hotbar = SkillHotbar.new()
+	_skill_hotbar.status_requested.connect(_status)
+	_menu_root.add_child(_skill_hotbar)
+
 func _create_panel(title: String) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(700, 440)
@@ -268,9 +275,23 @@ func _build_skills_content(panel: PanelContainer) -> void:
 	var content: VBoxContainer = _get_panel_content(panel)
 	if not content:
 		return
-	_skills_list = VBoxContainer.new()
+	var hint := Label.new()
+	hint.text = "拖拽技能到下方快捷栏，或右键技能添加到当前快捷栏。"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(hint)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(scroll)
+
+	_skills_list = GridContainer.new()
+	_skills_list.columns = 4
+	_skills_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_skills_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_skills_list)
+	_skills_list.add_theme_constant_override("h_separation", 10)
+	_skills_list.add_theme_constant_override("v_separation", 10)
+	scroll.add_child(_skills_list)
 
 func _build_crafting_content(panel: PanelContainer) -> void:
 	var content: VBoxContainer = _get_panel_content(panel)
@@ -509,15 +530,26 @@ func _refresh_skills() -> void:
 		empty.text = "暂无技能数据"
 		_skills_list.add_child(empty)
 		return
+
+	var skill_ids: Array[String] = []
 	for skill_id_variant in skills.keys():
-		var skill_id: String = str(skill_id_variant)
+		skill_ids.append(str(skill_id_variant))
+	skill_ids.sort_custom(func(a: String, b: String) -> bool:
+		var skill_a: Dictionary = skills.get(a, {})
+		var skill_b: Dictionary = skills.get(b, {})
+		var tree_a: String = str(skill_a.get("tree_id", ""))
+		var tree_b: String = str(skill_b.get("tree_id", ""))
+		if tree_a == tree_b:
+			return str(skill_a.get("name", a)) < str(skill_b.get("name", b))
+		return tree_a < tree_b
+	)
+
+	for skill_id in skill_ids:
 		var skill: Dictionary = skills[skill_id]
-		var line := Label.new()
-		line.text = "%s Lv.%d" % [
-			str(skill.get("name", skill_id)),
-			int(skill.get("current_level", 0))
-		]
-		_skills_list.add_child(line)
+		var item := SkillPanelItem.new()
+		item.configure(skill_id, skill)
+		item.add_to_hotbar_requested.connect(_on_skill_add_to_hotbar_requested)
+		_skills_list.add_child(item)
 
 func _refresh_crafting() -> void:
 	_clear_children(_crafting_list)
@@ -578,6 +610,13 @@ func _on_vsync_selected(_index: int, option: OptionButton) -> void:
 
 func _on_ui_scale_changed(value: float) -> void:
 	ControlSettingsService.set_display_setting("ui_scale", value)
+
+func _on_skill_add_to_hotbar_requested(skill_id: String) -> void:
+	if _skill_hotbar == null:
+		_status("快捷栏不可用")
+		return
+	_skill_hotbar.add_skill_to_active_group(skill_id)
+	_refresh_skills()
 
 func _on_add_strength() -> void:
 	_allocate_attribute("strength")

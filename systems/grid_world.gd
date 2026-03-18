@@ -5,19 +5,26 @@ const GridNavigator = preload("res://systems/grid_navigator.gd")
 
 const GRID_SIZE := 1.0
 
-var _obstacles: Array[Vector3i] = []
+var _obstacle_ref_counts: Dictionary = {}
 
 func register_obstacle(world_pos: Vector3) -> void:
     var grid_pos := GridNavigator.new().world_to_grid(world_pos)
-    if not grid_pos in _obstacles:
-        _obstacles.append(grid_pos)
+    var key := _build_obstacle_key(grid_pos)
+    _obstacle_ref_counts[key] = int(_obstacle_ref_counts.get(key, 0)) + 1
 
 func unregister_obstacle(world_pos: Vector3) -> void:
     var grid_pos := GridNavigator.new().world_to_grid(world_pos)
-    _obstacles.erase(grid_pos)
+    var key := _build_obstacle_key(grid_pos)
+    if not _obstacle_ref_counts.has(key):
+        return
+    var next_count: int = int(_obstacle_ref_counts.get(key, 0)) - 1
+    if next_count <= 0:
+        _obstacle_ref_counts.erase(key)
+        return
+    _obstacle_ref_counts[key] = next_count
 
 func is_walkable(grid_pos: Vector3i) -> bool:
-    return not grid_pos in _obstacles
+    return not _obstacle_ref_counts.has(_build_obstacle_key(grid_pos))
 
 func world_to_grid(world_pos: Vector3) -> Vector3i:
     return Vector3i(
@@ -38,7 +45,17 @@ func snap_to_grid(world_pos: Vector3) -> Vector3:
     return grid_to_world(grid_pos)
 
 func get_all_obstacles() -> Array[Vector3i]:
-    return _obstacles.duplicate()
+    var obstacles: Array[Vector3i] = [Vector3i.ZERO]
+    obstacles.clear()
+    for key in _obstacle_ref_counts.keys():
+        var parts: PackedStringArray = String(key).split("|")
+        if parts.size() != 3:
+            continue
+        obstacles.append(Vector3i(int(parts[0]), int(parts[1]), int(parts[2])))
+    return obstacles
 
 func clear_obstacles() -> void:
-    _obstacles.clear()
+    _obstacle_ref_counts.clear()
+
+func _build_obstacle_key(grid_pos: Vector3i) -> String:
+    return "%d|%d|%d" % [grid_pos.x, grid_pos.y, grid_pos.z]

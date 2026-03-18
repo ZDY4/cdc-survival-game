@@ -14,6 +14,7 @@ signal remove_opening_requested(index: int)
 var _target: ProcShapeGenerator3D = null
 var _selected_point_index: int = -1
 var _selected_opening_index: int = -1
+var _embedded_in_inspector: bool = false
 
 var _title_label: Label = null
 var _hint_label: Label = null
@@ -23,16 +24,22 @@ var _insert_point_button: Button = null
 var _remove_point_button: Button = null
 var _closed_toggle: CheckButton = null
 var _segment_info_label: Label = null
+var _grid_info_label: Label = null
 var _opening_section: VBoxContainer = null
 var _opening_list: ItemList = null
 var _add_opening_button: Button = null
 var _remove_opening_button: Button = null
 
 func _ready() -> void:
-	size_flags_vertical = Control.SIZE_EXPAND_FILL
-	custom_minimum_size = Vector2(280.0, 320.0)
+	_apply_layout_mode()
 	_build_ui()
 	refresh()
+
+func set_embedded_in_inspector(value: bool) -> void:
+	_embedded_in_inspector = value
+	_apply_layout_mode()
+	if _point_list != null:
+		_point_list.custom_minimum_size = Vector2(0.0, 120.0 if _embedded_in_inspector else 180.0)
 
 func set_target(generator: ProcShapeGenerator3D) -> void:
 	_target = generator
@@ -57,6 +64,7 @@ func refresh() -> void:
 		_hint_label.text = "Select a ProcWall3D, ProcFence3D, or ProcHouse3D node to edit control points."
 		_point_list.clear()
 		_segment_info_label.text = "Segment: no selection"
+		_grid_info_label.text = "Blocked Cells: no selection"
 		_closed_toggle.button_pressed = false
 		_closed_toggle.disabled = true
 		_opening_section.visible = false
@@ -67,6 +75,7 @@ func refresh() -> void:
 	_hint_label.text = "Drag handles in the 3D viewport or use the controls below."
 	_fill_point_list()
 	_fill_segment_info()
+	_fill_grid_info()
 
 	_closed_toggle.disabled = not _target._supports_closed_toggle() or _target._requires_closed_shape()
 	_closed_toggle.button_pressed = _target.closed or _target._requires_closed_shape()
@@ -94,7 +103,8 @@ func _build_ui() -> void:
 
 	_point_list = ItemList.new()
 	_point_list.select_mode = ItemList.SELECT_SINGLE
-	_point_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_point_list.size_flags_vertical = Control.SIZE_EXPAND_FILL if not _embedded_in_inspector else Control.SIZE_SHRINK_BEGIN
+	_point_list.custom_minimum_size = Vector2(0.0, 120.0 if _embedded_in_inspector else 180.0)
 	_point_list.item_selected.connect(_on_point_selected)
 	add_child(_point_list)
 
@@ -125,6 +135,10 @@ func _build_ui() -> void:
 	_segment_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_segment_info_label)
 
+	_grid_info_label = Label.new()
+	_grid_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	add_child(_grid_info_label)
+
 	_opening_section = VBoxContainer.new()
 	add_child(_opening_section)
 
@@ -134,7 +148,8 @@ func _build_ui() -> void:
 
 	_opening_list = ItemList.new()
 	_opening_list.select_mode = ItemList.SELECT_SINGLE
-	_opening_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_opening_list.size_flags_vertical = Control.SIZE_EXPAND_FILL if not _embedded_in_inspector else Control.SIZE_SHRINK_BEGIN
+	_opening_list.custom_minimum_size = Vector2(0.0, 100.0 if _embedded_in_inspector else 160.0)
 	_opening_list.item_selected.connect(_on_opening_selected)
 	_opening_section.add_child(_opening_list)
 
@@ -176,6 +191,16 @@ func _fill_segment_info() -> void:
 	var end_point: Vector3 = _target.control_points[next_index]
 	_segment_info_label.text = "Segment %d -> %d length: %.2f" % [_selected_point_index, next_index, start_point.distance_to(end_point)]
 
+func _fill_grid_info() -> void:
+	var blocked_cell_count: int = _target.get_blocked_grid_cells_copy().size()
+	var block_state: String = "on" if _target.block_grid_navigation else "off"
+	var preview_state: String = "on" if _target.show_blocked_cells_in_editor else "off"
+	_grid_info_label.text = "Blocked Cells: %d | Navigation Block: %s | Cell Preview: %s" % [
+		blocked_cell_count,
+		block_state,
+		preview_state
+	]
+
 func _fill_opening_list(house: ProcHouse3D) -> void:
 	_opening_list.clear()
 	for index in range(house.openings.size()):
@@ -213,3 +238,7 @@ func _on_remove_opening_pressed() -> void:
 	if _selected_opening_index < 0:
 		return
 	remove_opening_requested.emit(_selected_opening_index)
+
+func _apply_layout_mode() -> void:
+	size_flags_vertical = Control.SIZE_EXPAND_FILL if not _embedded_in_inspector else Control.SIZE_SHRINK_BEGIN
+	custom_minimum_size = Vector2(280.0, 320.0) if not _embedded_in_inspector else Vector2(0.0, 0.0)

@@ -29,6 +29,19 @@ func _build_geometry() -> Dictionary:
 
 	var surface_tool: SurfaceTool = SurfaceTool.new()
 	surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var strip_data: Dictionary = ProcGeometryUtils.build_polyline_strip(
+		control_points,
+		wall_thickness * 0.5,
+		closed,
+		wall_thickness * 0.5 if (cap_ends and not closed) else 0.0,
+		wall_thickness * 0.5 if (cap_ends and not closed) else 0.0
+	)
+	if strip_data.is_empty():
+		warnings.append("Wall requires at least one non-zero-length segment.")
+		return {"mesh": null, "collision_boxes": [], "warnings": warnings, "build_info": {}}
+
+	var inside_point: Vector3 = _compute_inside_point(strip_data)
+	ProcGeometryUtils.add_polyline_prism(surface_tool, strip_data, 0.0, wall_height, inside_point)
 
 	var collision_boxes: Array = []
 	for segment_index in range(get_segment_count()):
@@ -50,7 +63,6 @@ func _build_geometry() -> Dictionary:
 		var center: Vector3 = (adjusted_start + adjusted_end) * 0.5 + Vector3.UP * (wall_height * 0.5)
 		var size: Vector3 = Vector3(wall_thickness, wall_height, adjusted_start.distance_to(adjusted_end))
 
-		ProcGeometryUtils.add_box_prism(surface_tool, center, basis, size)
 		collision_boxes.append({
 			"transform": Transform3D(basis, center),
 			"size": size
@@ -83,3 +95,16 @@ func _build_debug_mesh() -> ImmediateMesh:
 		debug_mesh.surface_add_vertex(line_point + Vector3.UP * 0.05)
 	debug_mesh.surface_end()
 	return debug_mesh
+
+func _compute_inside_point(strip_data: Dictionary) -> Vector3:
+	var strip_points: Array = strip_data.get("points", [])
+	if strip_points.is_empty():
+		return Vector3.UP * (wall_height * 0.5)
+
+	var center: Vector3 = Vector3.ZERO
+	for point_variant in strip_points:
+		var point: Vector3 = point_variant
+		center += point
+	center /= float(strip_points.size())
+	center.y += wall_height * 0.5
+	return center

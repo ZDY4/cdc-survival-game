@@ -143,6 +143,7 @@ func save_game():
 	var equip_data: Dictionary = equip_system.get_save_data() if equip_system else gs.get_pending_equipment_save_data()
 	
 	var save_data = {
+		"game_state": gs.get_save_data() if gs.has_method("get_save_data") else {},
 		"player": {
 			"hp": gs.player_hp,
 			"max_hp": gs.player_max_hp,
@@ -206,9 +207,14 @@ func load_game(path: String = ""):
 	
 	if data.is_empty():
 		return false
-	
-	# 恢复玩家数据
-	if data.has("player"):
+
+	if data.has("game_state") and gs.has_method("load_save_data"):
+		var full_state: Variant = data.get("game_state", {})
+		if full_state is Dictionary:
+			gs.load_save_data(full_state)
+
+	# 兼容旧存档结构
+	if not data.has("game_state") and data.has("player"):
 		var p = data.player
 		gs.player_hp = p.get("hp", 100)
 		gs.player_max_hp = p.get("max_hp", 100)
@@ -218,8 +224,7 @@ func load_game(path: String = ""):
 		gs.player_mental = p.get("mental", 100)
 		gs.player_position = p.get("position", "safehouse")
 	
-	# 恢复背包
-	if data.has("inventory"):
+	if not data.has("game_state") and data.has("inventory"):
 		var inv = data.inventory
 		gs.inventory_items.clear()
 		var loaded_items = inv.get("items", [])
@@ -235,7 +240,7 @@ func load_game(path: String = ""):
 		else:
 			gs.set_pending_equipment_save_data(data.equipment)
 	
-	# 恢复世界状"	if data.has("world"):
+	if not data.has("game_state") and data.has("world"):
 		var w = data.world
 		gs.world_time = w.get("time", 8)
 		gs.world_day = w.get("day", 1)

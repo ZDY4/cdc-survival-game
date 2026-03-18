@@ -1,0 +1,31 @@
+{
+	"name": "肾上腺激发",
+	"icon": "",
+	"description": "短时间内激发求生本能，提高造成的伤害。",
+	"tree_id": "combat",
+	"max_level": 3,
+	"prerequisites": [
+		"combat"
+	],
+	"attribute_requirements": {
+		"strength": 6
+	},
+	"id": "adrenaline_rush",
+	"gameplay_effect": {},
+	"activation": {
+		"mode": "active",
+		"cooldown": 20.0,
+		"effect": {
+			"duration": 8.0,
+			"is_infinite": false,
+			"category": "buff",
+			"modifiers": {
+				"damage_bonus": {
+					"base": 0.25,
+					"per_level": 0.05,
+					"max_value": 0.35
+				}
+			}
+		}
+	}
+}

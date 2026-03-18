@@ -43,6 +43,10 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
+	if _handle_hotbar_input(event):
+		if get_viewport():
+			get_viewport().set_input_as_handled()
+		return
 	if _is_menu_input_blocked():
 		return
 	if not (event is InputEventKey):
@@ -64,6 +68,27 @@ func _unhandled_input(event: InputEvent) -> void:
 	_player.clear_world_input_feedback()
 	if get_viewport():
 		get_viewport().set_input_as_handled()
+
+func _handle_hotbar_input(event: InputEvent) -> bool:
+	if _is_menu_input_blocked() or _is_world_input_blocked():
+		return false
+	if not (event is InputEventKey):
+		return false
+
+	var key_event := event as InputEventKey
+	if key_event == null or not key_event.pressed or key_event.echo:
+		return false
+
+	var slot_index: int = InputActions.get_hotbar_slot_for_event(event)
+	if slot_index < 0:
+		return false
+
+	var skill_system: Node = get_node_or_null("/root/SkillSystem")
+	if skill_system == null or not skill_system.has_method("activate_hotbar_slot"):
+		return false
+
+	skill_system.activate_hotbar_slot(slot_index)
+	return true
 
 func _handle_zoom_input(event: InputEvent) -> bool:
 	if _is_world_input_blocked():

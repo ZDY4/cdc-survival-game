@@ -35,6 +35,7 @@ const REQUIRED_PROCEDURAL_BUILDER_FILES = [
     "addons/cdc_procedural_builder/plugin.cfg",
     "addons/cdc_procedural_builder/plugin.gd",
     "addons/cdc_procedural_builder/editor/procedural_builder_dock.gd",
+    "addons/cdc_procedural_builder/editor/procedural_builder_inspector_plugin.gd",
     "addons/cdc_procedural_builder/editor/procedural_builder_gizmo_plugin.gd",
     "addons/cdc_procedural_builder/runtime/proc_shape_generator_3d.gd",
     "addons/cdc_procedural_builder/runtime/proc_wall_3d.gd",

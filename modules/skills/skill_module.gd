@@ -3,39 +3,56 @@ extends "res://core/base_module.gd"
 ## 技能描述目录: res://data/skills/*.json
 ## 技能树配置目录: res://data/skill_trees/*.json
 
-# 1. Constants
 const SKILLS_DATA_DIR: String = "res://data/skills"
 const SKILL_TREES_DATA_DIR: String = "res://data/skill_trees"
+const HOTBAR_GROUP_COUNT: int = 5
+const HOTBAR_SLOT_COUNT: int = 10
+const PLAYER_ENTITY_ID: String = "player"
+const ACTIVATION_MODE_PASSIVE: String = "passive"
+const ACTIVATION_MODE_ACTIVE: String = "active"
+const ACTIVATION_MODE_TOGGLE: String = "toggle"
 
-# 2. Signals
 signal skill_learned(skill_id: String)
 signal skill_upgraded(skill_id: String, new_level: int)
 signal skill_points_changed(amount: int)
 signal skill_data_reloaded(skill_count: int, tree_count: int)
+signal hotbar_changed(group_index: int, slots: Array)
+signal hotbar_group_changed(group_index: int)
+signal skill_activation_succeeded(skill_id: String, result: Dictionary)
+signal skill_activation_failed(skill_id: String, reason: String)
+signal skill_toggle_changed(skill_id: String, active: bool)
 
-# 3. Public variables
 var skill_points: int = 0
-var learned_skills: Dictionary = {}  # skill_id -> level
+var learned_skills: Dictionary = {}
+var hotbar_groups: Array = []
+var active_hotbar_group: int = 0
 
-# 4. Private variables
-var _skills: Dictionary = {}  # skill_id -> skill config
-var _skill_trees: Dictionary = {}  # tree_id -> tree config
-var _active_effects: Dictionary = {}  # skill_id -> GameplayEffect
-var _total_effects: Dictionary = {}  # effect name -> combined number
+var _skills: Dictionary = {}
+var _skill_trees: Dictionary = {}
+var _active_effects: Dictionary = {}
+var _toggle_effects: Dictionary = {}
+var _total_effects: Dictionary = {}
+var _cooldown_remaining: Dictionary = {}
+var _active_toggles: Dictionary = {}
 var _effect_system: Node = null
 
-# 5. Lifecycle
+
 func _ready() -> void:
 	super._ready()
+	set_process(true)
 	call_deferred("_initialize_skill_framework")
+
+
+func _process(delta: float) -> void:
+	_tick_activation_cooldowns(delta)
 
 
 func _initialize_skill_framework() -> void:
 	_effect_system = get_node_or_null("/root/EffectSystem")
+	_ensure_hotbar_state()
 	reload_skill_data()
 
 
-# 6. Public methods
 func reload_skill_data() -> bool:
 	_skills = _load_skills_from_directory(SKILLS_DATA_DIR)
 	if _skills.is_empty():
@@ -43,7 +60,10 @@ func reload_skill_data() -> bool:
 		return false
 
 	_skill_trees = _load_skill_trees_from_directory(SKILL_TREES_DATA_DIR)
+	_ensure_hotbar_state()
 	_rebuild_all_effects()
+	_restore_toggle_effects()
+	_purge_invalid_hotbar_assignments()
 	skill_data_reloaded.emit(_skills.size(), _skill_trees.size())
 	return true
 
@@ -56,6 +76,8 @@ func reload_skill(skill_id: String) -> bool:
 
 	_skills[skill_id] = _normalize_skill(skill_id, data as Dictionary)
 	_refresh_skill_effect(skill_id)
+	_refresh_toggle_effect(skill_id)
+	_purge_invalid_hotbar_assignments()
 	skill_data_reloaded.emit(_skills.size(), _skill_trees.size())
 	return true
 
@@ -104,13 +126,13 @@ func get_can_learn_result(skill_id: String) -> Dictionary:
 	for prerequisite_id in prerequisites:
 		if get_skill_level(prerequisite_id) <= 0:
 			var prerequisite: Dictionary = _skills.get(prerequisite_id, {})
-			var prerequisite_name: String = prerequisite.get("name", prerequisite_id)
+			var prerequisite_name: String = str(prerequisite.get("name", prerequisite_id))
 			return {"can_learn": false, "reason": "需要先学习: %s" % prerequisite_name}
 
 	var requirements: Dictionary = skill.get("attribute_requirements", {})
 	for attribute_name in requirements.keys():
 		var required_value: int = int(requirements.get(attribute_name, 0))
-		var current_value: int = _get_attribute_value(attribute_name)
+		var current_value: int = _get_attribute_value(str(attribute_name))
 		if current_value < required_value:
 			return {
 				"can_learn": false,
@@ -126,7 +148,7 @@ func can_learn_skill(skill_id: String) -> bool:
 
 func learn_skill(skill_id: String) -> bool:
 	var check: Dictionary = get_can_learn_result(skill_id)
-	if not check.get("can_learn", false):
+	if not bool(check.get("can_learn", false)):
 		return false
 
 	var previous_level: int = get_skill_level(skill_id)
@@ -139,18 +161,24 @@ func learn_skill(skill_id: String) -> bool:
 	skill_upgraded.emit(skill_id, new_level)
 	skill_points_changed.emit(skill_points)
 	_refresh_skill_effect(skill_id)
+	_refresh_toggle_effect(skill_id)
 	return true
 
 
 func reset_skills() -> void:
 	var refunded_points: int = 0
-	for skill_id in learned_skills.keys():
-		refunded_points += int(learned_skills.get(skill_id, 0))
+	for skill_id_variant in learned_skills.keys():
+		refunded_points += int(learned_skills.get(skill_id_variant, 0))
 	learned_skills.clear()
 	_remove_all_skill_effects_from_system()
+	_remove_all_toggle_effects_from_system()
 	_active_effects.clear()
+	_toggle_effects.clear()
 	_total_effects.clear()
+	_cooldown_remaining.clear()
+	_active_toggles.clear()
 	skill_points += refunded_points
+	_purge_invalid_hotbar_assignments()
 	skill_points_changed.emit(skill_points)
 
 
@@ -161,7 +189,7 @@ func get_skill_level(skill_id: String) -> int:
 func get_skill_effect(skill_id: String) -> Dictionary:
 	var effect: Variant = _active_effects.get(skill_id, null)
 	if effect is GameplayEffect:
-		return effect.get_modifiers()
+		return (effect as GameplayEffect).get_modifiers()
 	if effect is Dictionary:
 		return effect as Dictionary
 	return {}
@@ -169,10 +197,10 @@ func get_skill_effect(skill_id: String) -> Dictionary:
 
 func get_total_effect(effect_name: String) -> float:
 	if _effect_system != null and _effect_system.has_method("get_total_modifiers"):
-		var modifiers: Dictionary = _effect_system.get_total_modifiers("player")
+		var modifiers: Dictionary = _effect_system.get_total_modifiers(PLAYER_ENTITY_ID)
 		var external_value: Variant = modifiers.get(effect_name, 0.0)
 		return float(external_value)
-	
+
 	var value: Variant = _total_effects.get(effect_name, 0.0)
 	if value is int:
 		return float(value)
@@ -212,23 +240,35 @@ func get_skill(skill_id: String) -> Dictionary:
 
 	var result: Dictionary = base_skill.duplicate(true)
 	result["current_level"] = get_skill_level(skill_id)
-	result["is_learned"] = result["current_level"] > 0
-	result["is_maxed"] = result["current_level"] >= int(base_skill.get("max_level", 1))
+	result["is_learned"] = int(result["current_level"]) > 0
+	result["is_maxed"] = int(result["current_level"]) >= int(base_skill.get("max_level", 1))
 	result["can_learn"] = can_learn_skill(skill_id)
 	result["active_effect"] = get_skill_effect(skill_id)
+	result["hotbar_eligible"] = is_hotbar_eligible(skill_id)
+	result["cooldown_remaining"] = get_skill_cooldown_remaining(skill_id)
+	result["toggle_active"] = is_skill_toggle_active(skill_id)
 	return result
+
+
+func get_skill_definition(skill_id: String) -> Dictionary:
+	var skill: Dictionary = _skills.get(skill_id, {})
+	if skill.is_empty():
+		return {}
+	return skill.duplicate(true)
 
 
 func get_all_skills() -> Dictionary:
 	var result: Dictionary = {}
-	for skill_id in _skills.keys():
+	for skill_id_variant in _skills.keys():
+		var skill_id: String = str(skill_id_variant)
 		result[skill_id] = get_skill(skill_id)
 	return result
 
 
 func get_available_skills() -> Array[Dictionary]:
 	var available: Array[Dictionary] = []
-	for skill_id in _skills.keys():
+	for skill_id_variant in _skills.keys():
+		var skill_id: String = str(skill_id_variant)
 		available.append(get_skill(skill_id))
 	return available
 
@@ -236,7 +276,8 @@ func get_available_skills() -> Array[Dictionary]:
 func get_skill_tree_data() -> Dictionary:
 	var trees: Dictionary = {}
 
-	for tree_id in _skill_trees.keys():
+	for tree_id_variant in _skill_trees.keys():
+		var tree_id: String = str(tree_id_variant)
 		var tree: Dictionary = _skill_trees.get(tree_id, {})
 		var tree_skills: Dictionary = {}
 		var skill_ids: Array[String] = _normalize_string_array(tree.get("skills", []))
@@ -252,10 +293,10 @@ func get_skill_tree_data() -> Dictionary:
 			"layout": tree.get("layout", {})
 		}
 
-	# 将未加入技能树的技能也放入对应 tree_id
-	for skill_id in _skills.keys():
+	for skill_id_variant in _skills.keys():
+		var skill_id: String = str(skill_id_variant)
 		var skill: Dictionary = _skills.get(skill_id, {})
-		var tree_id: String = skill.get("tree_id", "default")
+		var tree_id: String = str(skill.get("tree_id", "default"))
 		if not trees.has(tree_id):
 			trees[tree_id] = {
 				"name": tree_id,
@@ -274,10 +315,187 @@ func get_skill_tree_data() -> Dictionary:
 	return trees
 
 
+func get_skill_tree_definition(tree_id: String) -> Dictionary:
+	var tree: Dictionary = _skill_trees.get(tree_id, {})
+	if tree.is_empty():
+		return {}
+	return tree.duplicate(true)
+
+
+func is_hotbar_eligible(skill_id: String) -> bool:
+	if get_skill_level(skill_id) <= 0:
+		return false
+	var activation: Dictionary = _get_activation_config(skill_id)
+	return str(activation.get("mode", ACTIVATION_MODE_PASSIVE)) != ACTIVATION_MODE_PASSIVE
+
+
+func get_hotbar_groups() -> Array:
+	_ensure_hotbar_state()
+	return hotbar_groups.duplicate(true)
+
+
+func get_active_hotbar_group() -> int:
+	_ensure_hotbar_state()
+	return active_hotbar_group
+
+
+func set_active_hotbar_group(index: int) -> void:
+	_ensure_hotbar_state()
+	var normalized: int = _normalize_group_index(index)
+	if normalized == active_hotbar_group:
+		return
+	active_hotbar_group = normalized
+	hotbar_group_changed.emit(active_hotbar_group)
+
+
+func cycle_hotbar_group(delta: int) -> int:
+	set_active_hotbar_group(active_hotbar_group + delta)
+	return active_hotbar_group
+
+
+func assign_skill_to_hotbar(skill_id: String, group_index: int, slot_index: int) -> Dictionary:
+	_ensure_hotbar_state()
+	if not _skills.has(skill_id):
+		return {"success": false, "reason": "技能不存在"}
+	if not is_hotbar_eligible(skill_id):
+		return {"success": false, "reason": "只有已学习的主动/开启技能可加入快捷栏"}
+	if not _is_group_index_valid(group_index) or not _is_slot_index_valid(slot_index):
+		return {"success": false, "reason": "快捷栏位置无效"}
+
+	var slots: Array = hotbar_groups[group_index]
+	var existing_slot: int = _find_skill_in_group(skill_id, group_index)
+	if existing_slot >= 0:
+		if existing_slot == slot_index:
+			return {
+				"success": true,
+				"reason": "",
+				"action": "unchanged",
+				"group_index": group_index,
+				"slot_index": slot_index
+			}
+		return move_hotbar_skill(group_index, existing_slot, slot_index)
+
+	var previous_skill: String = str(slots[slot_index])
+	slots[slot_index] = skill_id
+	_emit_hotbar_changed(group_index)
+	return {
+		"success": true,
+		"reason": "",
+		"action": "assigned" if previous_skill.is_empty() else "replaced",
+		"group_index": group_index,
+		"slot_index": slot_index,
+		"replaced_skill_id": previous_skill
+	}
+
+
+func move_hotbar_skill(group_index: int, from_slot: int, to_slot: int) -> Dictionary:
+	_ensure_hotbar_state()
+	if not _is_group_index_valid(group_index):
+		return {"success": false, "reason": "快捷栏组无效"}
+	if not _is_slot_index_valid(from_slot) or not _is_slot_index_valid(to_slot):
+		return {"success": false, "reason": "快捷栏槽位无效"}
+
+	var slots: Array = hotbar_groups[group_index]
+	var source_skill: String = str(slots[from_slot])
+	if source_skill.is_empty():
+		return {"success": false, "reason": "源槽位为空"}
+	if from_slot == to_slot:
+		return {
+			"success": true,
+			"reason": "",
+			"action": "unchanged",
+			"group_index": group_index,
+			"slot_index": from_slot
+		}
+	var target_skill: String = str(slots[to_slot])
+	slots[to_slot] = source_skill
+	slots[from_slot] = target_skill
+	_emit_hotbar_changed(group_index)
+	return {
+		"success": true,
+		"reason": "",
+		"action": "moved" if target_skill.is_empty() else "swapped",
+		"group_index": group_index,
+		"from_slot": from_slot,
+		"to_slot": to_slot,
+		"target_skill_id": target_skill
+	}
+
+
+func clear_hotbar_slot(group_index: int, slot_index: int) -> void:
+	_ensure_hotbar_state()
+	if not _is_group_index_valid(group_index) or not _is_slot_index_valid(slot_index):
+		return
+	var slots: Array = hotbar_groups[group_index]
+	if str(slots[slot_index]).is_empty():
+		return
+	slots[slot_index] = ""
+	_emit_hotbar_changed(group_index)
+
+
+func activate_hotbar_slot(slot_index: int) -> Dictionary:
+	_ensure_hotbar_state()
+	if not _is_slot_index_valid(slot_index):
+		return {"success": false, "reason": "快捷栏槽位无效"}
+
+	var slots: Array = hotbar_groups[active_hotbar_group]
+	var skill_id: String = str(slots[slot_index])
+	if skill_id.is_empty():
+		return {"success": false, "reason": "槽位为空"}
+	if not is_hotbar_eligible(skill_id):
+		var ineligible_reason: String = "技能尚未学习或不可主动施放"
+		skill_activation_failed.emit(skill_id, ineligible_reason)
+		return {"success": false, "reason": ineligible_reason}
+
+	var cooldown_remaining: float = get_skill_cooldown_remaining(skill_id)
+	if cooldown_remaining > 0.0:
+		var cooldown_reason: String = "冷却中"
+		skill_activation_failed.emit(skill_id, cooldown_reason)
+		return {
+			"success": false,
+			"reason": cooldown_reason,
+			"skill_id": skill_id,
+			"cooldown_remaining": cooldown_remaining
+		}
+
+	var activation: Dictionary = _get_activation_config(skill_id)
+	var mode: String = str(activation.get("mode", ACTIVATION_MODE_PASSIVE))
+	var result: Dictionary = {}
+	match mode:
+		ACTIVATION_MODE_ACTIVE:
+			result = _activate_active_skill(skill_id)
+		ACTIVATION_MODE_TOGGLE:
+			result = _activate_toggle_skill(skill_id)
+		_:
+			result = {"success": false, "reason": "技能不支持快捷栏触发"}
+
+	if bool(result.get("success", false)):
+		skill_activation_succeeded.emit(skill_id, result)
+	else:
+		skill_activation_failed.emit(skill_id, str(result.get("reason", "触发失败")))
+	return result
+
+
+func get_skill_cooldown_remaining(skill_id: String) -> float:
+	return maxf(0.0, float(_cooldown_remaining.get(skill_id, 0.0)))
+
+
+func is_skill_toggle_active(skill_id: String) -> bool:
+	return bool(_active_toggles.get(skill_id, false))
+
+
 func serialize() -> Dictionary:
 	return {
 		"skill_points": skill_points,
-		"learned_skills": learned_skills.duplicate(true)
+		"learned_skills": learned_skills.duplicate(true),
+		"hotbar": {
+			"groups": hotbar_groups.duplicate(true),
+			"active_group": active_hotbar_group
+		},
+		"activation_state": {
+			"cooldowns": _cooldown_remaining.duplicate(true),
+			"active_toggles": _active_toggles.keys()
+		}
 	}
 
 
@@ -285,13 +503,21 @@ func deserialize(data: Dictionary) -> void:
 	skill_points = int(data.get("skill_points", 0))
 	var loaded_levels: Dictionary = data.get("learned_skills", {})
 	learned_skills.clear()
-	for skill_id in loaded_levels.keys():
-		learned_skills[skill_id] = maxi(0, int(loaded_levels.get(skill_id, 0)))
+	for skill_id_variant in loaded_levels.keys():
+		var skill_id: String = str(skill_id_variant)
+		learned_skills[skill_id] = maxi(0, int(loaded_levels.get(skill_id_variant, 0)))
+
+	_deserialize_hotbar_state(data.get("hotbar", {}))
+	_deserialize_activation_state(data.get("activation_state", {}))
 	_rebuild_all_effects()
+	_restore_toggle_effects()
+	_purge_invalid_hotbar_assignments()
 	skill_points_changed.emit(skill_points)
+	hotbar_group_changed.emit(active_hotbar_group)
+	for group_index in range(HOTBAR_GROUP_COUNT):
+		_emit_hotbar_changed(group_index)
 
 
-# 7. Private methods
 func _load_json(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
 		push_warning("[SkillModule] 数据文件不存在: %s" % path)
@@ -356,32 +582,13 @@ func _load_skill_trees_from_directory(directory_path: String) -> Dictionary:
 	return result
 
 
-func _extract_skills(doc: Dictionary) -> Dictionary:
-	var raw_skills: Dictionary = doc.get("skills", doc)
-	var result: Dictionary = {}
-	for skill_id in raw_skills.keys():
-		var value: Variant = raw_skills.get(skill_id, {})
-		if value is Dictionary:
-			result[skill_id] = _normalize_skill(skill_id, value as Dictionary)
-	return result
-
-
-func _extract_trees(doc: Dictionary) -> Dictionary:
-	var raw_trees: Dictionary = doc.get("trees", doc)
-	var result: Dictionary = {}
-	for tree_id in raw_trees.keys():
-		var value: Variant = raw_trees.get(tree_id, {})
-		if value is Dictionary:
-			result[tree_id] = _normalize_tree(tree_id, value as Dictionary)
-	return result
-
-
 func _normalize_skill(skill_id: String, data: Dictionary) -> Dictionary:
 	var prerequisites: Array[String] = _normalize_string_array(data.get("prerequisites", []))
 	var attribute_requirements: Dictionary = _normalize_int_dictionary(
 		data.get("attribute_requirements", {})
 	)
 	var effect_config: Dictionary = _normalize_effect_config(data)
+	var activation_config: Dictionary = _normalize_activation_config(data)
 
 	return {
 		"id": skill_id,
@@ -392,7 +599,8 @@ func _normalize_skill(skill_id: String, data: Dictionary) -> Dictionary:
 		"max_level": maxi(1, int(data.get("max_level", 1))),
 		"prerequisites": prerequisites,
 		"attribute_requirements": attribute_requirements,
-		"gameplay_effect": effect_config
+		"gameplay_effect": effect_config,
+		"activation": activation_config
 	}
 
 
@@ -433,89 +641,13 @@ func _normalize_int_dictionary(value: Variant) -> Dictionary:
 	return result
 
 
-func _rebuild_all_effects() -> void:
-	_remove_all_skill_effects_from_system()
-	_active_effects.clear()
-	_total_effects.clear()
-	for skill_id in _skills.keys():
-		_refresh_skill_effect(skill_id)
-
-
-func _refresh_skill_effect(skill_id: String) -> void:
-	var level: int = get_skill_level(skill_id)
-	var effect: GameplayEffect = null
-	if level > 0:
-		effect = _compute_effect(skill_id, level)
-	
-	var previous: Variant = _active_effects.get(skill_id, null)
-	if level <= 0 and previous is GameplayEffect and _effect_system != null:
-		_effect_system.remove_effect(previous.id, "player")
-	
-	_active_effects[skill_id] = effect
-	if effect != null and _effect_system != null:
-		_effect_system.upsert_gameplay_effect(effect, "player")
-	_recalculate_total_effects()
-
-
-func _compute_effect(skill_id: String, level: int) -> GameplayEffect:
-	var skill: Dictionary = _skills.get(skill_id, {})
-	if skill.is_empty():
-		return null
-
-	var config: Dictionary = skill.get("gameplay_effect", {})
-	var modifiers: Dictionary = _build_modifiers_from_config(config, level)
-	if modifiers.is_empty():
-		return null
-
-	var effect_def: Dictionary = config.duplicate(true)
-	effect_def["id"] = "skill_" + skill_id
-	effect_def["source_type"] = "skill"
-	effect_def["source_id"] = skill_id
-	if not effect_def.has("category"):
-		effect_def["category"] = "skill"
-	if not effect_def.has("is_infinite"):
-		effect_def["is_infinite"] = true
-	if not effect_def.has("is_stackable"):
-		effect_def["is_stackable"] = false
-	if not effect_def.has("max_stacks"):
-		effect_def["max_stacks"] = 1
-	if not effect_def.has("stack_mode"):
-		effect_def["stack_mode"] = "refresh"
-
-	effect_def["modifiers"] = modifiers
-
-	var effect := GameplayEffect.new()
-	effect.configure(effect_def)
-	return effect
-
-
-func _recalculate_total_effects() -> void:
-	_total_effects.clear()
-	for effect in _active_effects.values():
-		if effect is GameplayEffect:
-			var modifiers: Dictionary = effect.get_modifiers()
-			for key in modifiers.keys():
-				var value: Variant = modifiers.get(key, 0)
-				if value is int or value is float:
-					var current: float = float(_total_effects.get(key, 0.0))
-					_total_effects[key] = current + float(value)
-		elif effect is Dictionary:
-			var dictionary: Dictionary = effect
-			for key in dictionary.keys():
-				var value: Variant = dictionary.get(key, 0)
-				if value is int or value is float:
-					var current: float = float(_total_effects.get(key, 0.0))
-					_total_effects[key] = current + float(value)
-
-
 func _normalize_effect_config(data: Dictionary) -> Dictionary:
 	var config: Dictionary = {}
 	var raw: Variant = data.get("gameplay_effect", null)
 	if raw is Dictionary:
-		config = raw.duplicate(true)
+		config = (raw as Dictionary).duplicate(true)
 		return config
 
-	# 兼容旧字段：effect_params -> gameplay_effect.modifiers
 	var legacy_params: Variant = data.get("effect_params", {})
 	if not (legacy_params is Dictionary):
 		return config
@@ -544,18 +676,160 @@ func _normalize_effect_config(data: Dictionary) -> Dictionary:
 	return config
 
 
+func _normalize_activation_config(data: Dictionary) -> Dictionary:
+	var raw: Variant = data.get("activation", {})
+	var config: Dictionary = {}
+	if raw is Dictionary:
+		config = (raw as Dictionary).duplicate(true)
+
+	var mode: String = str(config.get("mode", ACTIVATION_MODE_PASSIVE)).to_lower()
+	if mode != ACTIVATION_MODE_ACTIVE and mode != ACTIVATION_MODE_TOGGLE:
+		mode = ACTIVATION_MODE_PASSIVE
+
+	var normalized: Dictionary = {
+		"mode": mode,
+		"cooldown": maxf(0.0, float(config.get("cooldown", 0.0))),
+		"effect": {}
+	}
+	var effect: Variant = config.get("effect", {})
+	if effect is Dictionary:
+		normalized["effect"] = (effect as Dictionary).duplicate(true)
+	if mode == ACTIVATION_MODE_PASSIVE:
+		normalized["cooldown"] = 0.0
+		normalized["effect"] = {}
+	return normalized
+
+
+func _rebuild_all_effects() -> void:
+	_remove_all_skill_effects_from_system()
+	_active_effects.clear()
+	_total_effects.clear()
+	for skill_id_variant in _skills.keys():
+		_refresh_skill_effect(str(skill_id_variant))
+	_recalculate_total_effects()
+
+
+func _refresh_skill_effect(skill_id: String) -> void:
+	var level: int = get_skill_level(skill_id)
+	var effect: GameplayEffect = null
+	if level > 0:
+		effect = _compute_effect(skill_id, level)
+
+	var previous: Variant = _active_effects.get(skill_id, null)
+	if level <= 0 and previous is GameplayEffect and _effect_system != null:
+		_effect_system.remove_effect((previous as GameplayEffect).id, PLAYER_ENTITY_ID)
+
+	_active_effects[skill_id] = effect
+	if effect != null and _effect_system != null:
+		_effect_system.upsert_gameplay_effect(effect, PLAYER_ENTITY_ID)
+	_recalculate_total_effects()
+
+
+func _refresh_toggle_effect(skill_id: String) -> void:
+	if not is_skill_toggle_active(skill_id):
+		return
+	if get_skill_level(skill_id) <= 0 or str(_get_activation_config(skill_id).get("mode", "")) != ACTIVATION_MODE_TOGGLE:
+		_deactivate_toggle_skill(skill_id)
+		return
+
+	var effect: GameplayEffect = _compute_activation_effect(skill_id)
+	if effect == null:
+		_deactivate_toggle_skill(skill_id)
+		return
+
+	_toggle_effects[skill_id] = effect
+	if _effect_system != null:
+		_effect_system.upsert_gameplay_effect(effect, PLAYER_ENTITY_ID)
+	_recalculate_total_effects()
+
+
+func _compute_effect(skill_id: String, level: int) -> GameplayEffect:
+	var skill: Dictionary = _skills.get(skill_id, {})
+	if skill.is_empty():
+		return null
+
+	var config: Dictionary = skill.get("gameplay_effect", {})
+	var modifiers: Dictionary = _build_modifiers_from_config(config, level)
+	if modifiers.is_empty():
+		return null
+
+	var effect_def: Dictionary = config.duplicate(true)
+	effect_def["id"] = "skill_%s" % skill_id
+	effect_def["source_type"] = "skill"
+	effect_def["source_id"] = skill_id
+	if not effect_def.has("category"):
+		effect_def["category"] = "skill"
+	if not effect_def.has("is_infinite"):
+		effect_def["is_infinite"] = true
+	if not effect_def.has("is_stackable"):
+		effect_def["is_stackable"] = false
+	if not effect_def.has("max_stacks"):
+		effect_def["max_stacks"] = 1
+	if not effect_def.has("stack_mode"):
+		effect_def["stack_mode"] = "refresh"
+
+	effect_def["modifiers"] = modifiers
+
+	var effect := GameplayEffect.new()
+	effect.configure(effect_def)
+	return effect
+
+
+func _compute_activation_effect(skill_id: String) -> GameplayEffect:
+	var level: int = get_skill_level(skill_id)
+	if level <= 0:
+		return null
+
+	var skill: Dictionary = _skills.get(skill_id, {})
+	if skill.is_empty():
+		return null
+
+	var activation: Dictionary = skill.get("activation", {})
+	var mode: String = str(activation.get("mode", ACTIVATION_MODE_PASSIVE))
+	if mode == ACTIVATION_MODE_PASSIVE:
+		return null
+
+	var config: Dictionary = (activation.get("effect", {}) as Dictionary).duplicate(true)
+	var modifiers: Dictionary = _build_modifiers_from_config(config, level)
+	if modifiers.is_empty():
+		return null
+
+	var effect_def: Dictionary = config.duplicate(true)
+	effect_def["id"] = "skill_activation_%s" % skill_id
+	effect_def["source_type"] = "skill_activation"
+	effect_def["source_id"] = skill_id
+	if not effect_def.has("category"):
+		effect_def["category"] = "skill_activation"
+	if not effect_def.has("is_stackable"):
+		effect_def["is_stackable"] = false
+	if not effect_def.has("max_stacks"):
+		effect_def["max_stacks"] = 1
+	if not effect_def.has("stack_mode"):
+		effect_def["stack_mode"] = "refresh"
+	if mode == ACTIVATION_MODE_TOGGLE and not effect_def.has("is_infinite"):
+		effect_def["is_infinite"] = true
+
+	effect_def["modifiers"] = modifiers
+
+	var effect := GameplayEffect.new()
+	effect.configure(effect_def)
+	return effect
+
+
 func _build_modifiers_from_config(config: Dictionary, level: int) -> Dictionary:
 	var result: Dictionary = {}
 	var raw: Variant = config.get("modifiers", config.get("stat_modifiers", {}))
 	if not (raw is Dictionary):
 		return result
 
-	for key in raw.keys():
-		var value: Variant = raw.get(key)
+	for key_variant in raw.keys():
+		var key: String = str(key_variant)
+		var value: Variant = raw.get(key_variant)
 		if value is Dictionary:
-			var base_value: float = float(value.get("base", 0.0))
-			var per_level: float = float(value.get("per_level", 0.0))
-			var max_value: float = float(value.get("max_value", 0.0))
+			var value_dict: Dictionary = value
+			var base_value: float = float(value_dict.get("base", 0.0))
+			var per_level: float = float(value_dict.get("per_level", 0.0))
+			var max_value: float = float(value_dict.get("max_value", 0.0))
 			var computed: float = base_value + per_level * float(level)
 			if max_value > 0.0:
 				computed = minf(computed, max_value)
@@ -565,12 +839,273 @@ func _build_modifiers_from_config(config: Dictionary, level: int) -> Dictionary:
 	return result
 
 
+func _recalculate_total_effects() -> void:
+	_total_effects.clear()
+	for effect in _active_effects.values():
+		_accumulate_effect_modifiers(effect)
+	for effect in _toggle_effects.values():
+		_accumulate_effect_modifiers(effect)
+
+
+func _accumulate_effect_modifiers(effect: Variant) -> void:
+	if effect is GameplayEffect:
+		var modifiers: Dictionary = (effect as GameplayEffect).get_modifiers()
+		for key_variant in modifiers.keys():
+			var key: String = str(key_variant)
+			var value: Variant = modifiers.get(key_variant, 0)
+			if value is int or value is float:
+				var current: float = float(_total_effects.get(key, 0.0))
+				_total_effects[key] = current + float(value)
+	elif effect is Dictionary:
+		var dictionary: Dictionary = effect
+		for key_variant in dictionary.keys():
+			var key: String = str(key_variant)
+			var value: Variant = dictionary.get(key_variant, 0)
+			if value is int or value is float:
+				var current: float = float(_total_effects.get(key, 0.0))
+				_total_effects[key] = current + float(value)
+
+
 func _remove_all_skill_effects_from_system() -> void:
 	if _effect_system == null:
 		return
 	for effect in _active_effects.values():
 		if effect is GameplayEffect:
-			_effect_system.remove_effect(effect.id, "player")
+			_effect_system.remove_effect((effect as GameplayEffect).id, PLAYER_ENTITY_ID)
+
+
+func _remove_all_toggle_effects_from_system() -> void:
+	if _effect_system == null:
+		return
+	for effect in _toggle_effects.values():
+		if effect is GameplayEffect:
+			_effect_system.remove_effect((effect as GameplayEffect).id, PLAYER_ENTITY_ID)
+
+
+func _activate_active_skill(skill_id: String) -> Dictionary:
+	var effect: GameplayEffect = _compute_activation_effect(skill_id)
+	if effect == null:
+		return {"success": false, "reason": "技能缺少主动效果配置", "skill_id": skill_id}
+	if _effect_system == null:
+		return {"success": false, "reason": "EffectSystem unavailable", "skill_id": skill_id}
+	if not _effect_system.apply_gameplay_effect(effect, PLAYER_ENTITY_ID):
+		return {"success": false, "reason": "主动效果应用失败", "skill_id": skill_id}
+
+	_start_skill_cooldown(skill_id)
+	return {
+		"success": true,
+		"reason": "",
+		"skill_id": skill_id,
+		"mode": ACTIVATION_MODE_ACTIVE,
+		"cooldown": get_skill_cooldown_remaining(skill_id)
+	}
+
+
+func _activate_toggle_skill(skill_id: String) -> Dictionary:
+	if is_skill_toggle_active(skill_id):
+		_deactivate_toggle_skill(skill_id)
+		return {
+			"success": true,
+			"reason": "",
+			"skill_id": skill_id,
+			"mode": ACTIVATION_MODE_TOGGLE,
+			"active": false
+		}
+
+	var effect: GameplayEffect = _compute_activation_effect(skill_id)
+	if effect == null:
+		return {"success": false, "reason": "技能缺少开启效果配置", "skill_id": skill_id}
+	if _effect_system == null:
+		return {"success": false, "reason": "EffectSystem unavailable", "skill_id": skill_id}
+	if not _effect_system.upsert_gameplay_effect(effect, PLAYER_ENTITY_ID):
+		return {"success": false, "reason": "开启效果应用失败", "skill_id": skill_id}
+
+	_toggle_effects[skill_id] = effect
+	_active_toggles[skill_id] = true
+	_start_skill_cooldown(skill_id)
+	_recalculate_total_effects()
+	skill_toggle_changed.emit(skill_id, true)
+	return {
+		"success": true,
+		"reason": "",
+		"skill_id": skill_id,
+		"mode": ACTIVATION_MODE_TOGGLE,
+		"active": true,
+		"cooldown": get_skill_cooldown_remaining(skill_id)
+	}
+
+
+func _deactivate_toggle_skill(skill_id: String) -> void:
+	var effect: Variant = _toggle_effects.get(skill_id, null)
+	if effect is GameplayEffect and _effect_system != null:
+		_effect_system.remove_effect((effect as GameplayEffect).id, PLAYER_ENTITY_ID)
+	_toggle_effects.erase(skill_id)
+	if _active_toggles.erase(skill_id):
+		skill_toggle_changed.emit(skill_id, false)
+	_recalculate_total_effects()
+
+
+func _restore_toggle_effects() -> void:
+	var active_skill_ids: Array = _active_toggles.keys()
+	_remove_all_toggle_effects_from_system()
+	_toggle_effects.clear()
+	for skill_id_variant in active_skill_ids:
+		var skill_id: String = str(skill_id_variant)
+		if get_skill_level(skill_id) <= 0:
+			_active_toggles.erase(skill_id)
+			continue
+		if str(_get_activation_config(skill_id).get("mode", ACTIVATION_MODE_PASSIVE)) != ACTIVATION_MODE_TOGGLE:
+			_active_toggles.erase(skill_id)
+			continue
+		var effect: GameplayEffect = _compute_activation_effect(skill_id)
+		if effect == null:
+			_active_toggles.erase(skill_id)
+			continue
+		_toggle_effects[skill_id] = effect
+		if _effect_system != null:
+			_effect_system.upsert_gameplay_effect(effect, PLAYER_ENTITY_ID)
+	_recalculate_total_effects()
+
+
+func _start_skill_cooldown(skill_id: String) -> void:
+	var activation: Dictionary = _get_activation_config(skill_id)
+	var duration: float = maxf(0.0, float(activation.get("cooldown", 0.0)))
+	if duration <= 0.0:
+		_cooldown_remaining.erase(skill_id)
+		return
+	_cooldown_remaining[skill_id] = duration
+
+
+func _tick_activation_cooldowns(delta: float) -> void:
+	if _cooldown_remaining.is_empty():
+		return
+
+	var keys: Array = _cooldown_remaining.keys()
+	for skill_id_variant in keys:
+		var skill_id: String = str(skill_id_variant)
+		var remaining: float = maxf(0.0, float(_cooldown_remaining.get(skill_id, 0.0)) - delta)
+		if remaining <= 0.0:
+			_cooldown_remaining.erase(skill_id)
+		else:
+			_cooldown_remaining[skill_id] = remaining
+
+
+func _get_activation_config(skill_id: String) -> Dictionary:
+	return _skills.get(skill_id, {}).get("activation", {})
+
+
+func _ensure_hotbar_state() -> void:
+	if hotbar_groups.size() != HOTBAR_GROUP_COUNT:
+		hotbar_groups.clear()
+		for _index in range(HOTBAR_GROUP_COUNT):
+			hotbar_groups.append(_create_empty_hotbar_group())
+		active_hotbar_group = 0
+		return
+
+	for group_index in range(HOTBAR_GROUP_COUNT):
+		var group_variant: Variant = hotbar_groups[group_index]
+		var normalized_group: Array = _create_empty_hotbar_group()
+		if group_variant is Array:
+			var group_array: Array = group_variant
+			for slot_index in range(mini(group_array.size(), HOTBAR_SLOT_COUNT)):
+				normalized_group[slot_index] = _normalize_hotbar_slot_value(group_array[slot_index])
+		hotbar_groups[group_index] = normalized_group
+
+	active_hotbar_group = _normalize_group_index(active_hotbar_group)
+
+
+func _create_empty_hotbar_group() -> Array:
+	var group: Array = []
+	for _index in range(HOTBAR_SLOT_COUNT):
+		group.append("")
+	return group
+
+
+func _normalize_hotbar_slot_value(value: Variant) -> String:
+	return str(value).strip_edges() if value != null else ""
+
+
+func _normalize_group_index(index: int) -> int:
+	return posmod(index, HOTBAR_GROUP_COUNT)
+
+
+func _is_group_index_valid(index: int) -> bool:
+	return index >= 0 and index < HOTBAR_GROUP_COUNT
+
+
+func _is_slot_index_valid(index: int) -> bool:
+	return index >= 0 and index < HOTBAR_SLOT_COUNT
+
+
+func _find_skill_in_group(skill_id: String, group_index: int) -> int:
+	if not _is_group_index_valid(group_index):
+		return -1
+	var slots: Array = hotbar_groups[group_index]
+	for slot_index in range(slots.size()):
+		if str(slots[slot_index]) == skill_id:
+			return slot_index
+	return -1
+
+
+func _emit_hotbar_changed(group_index: int) -> void:
+	if not _is_group_index_valid(group_index):
+		return
+	var slots: Array = (hotbar_groups[group_index] as Array).duplicate()
+	hotbar_changed.emit(group_index, slots)
+
+
+func _purge_invalid_hotbar_assignments() -> void:
+	_ensure_hotbar_state()
+	for group_index in range(HOTBAR_GROUP_COUNT):
+		var changed: bool = false
+		var seen_skills: Dictionary = {}
+		var slots: Array = hotbar_groups[group_index]
+		for slot_index in range(HOTBAR_SLOT_COUNT):
+			var skill_id: String = str(slots[slot_index])
+			if skill_id.is_empty():
+				continue
+			if not is_hotbar_eligible(skill_id) or seen_skills.has(skill_id):
+				slots[slot_index] = ""
+				changed = true
+				continue
+			seen_skills[skill_id] = true
+		if changed:
+			_emit_hotbar_changed(group_index)
+
+
+func _deserialize_hotbar_state(value: Variant) -> void:
+	hotbar_groups.clear()
+	active_hotbar_group = 0
+	if value is Dictionary:
+		var hotbar_data: Dictionary = value
+		var groups_value: Variant = hotbar_data.get("groups", [])
+		if groups_value is Array:
+			for group_variant in groups_value:
+				hotbar_groups.append(group_variant if group_variant is Array else [])
+		active_hotbar_group = int(hotbar_data.get("active_group", 0))
+	_ensure_hotbar_state()
+
+
+func _deserialize_activation_state(value: Variant) -> void:
+	_cooldown_remaining.clear()
+	_active_toggles.clear()
+	if not (value is Dictionary):
+		return
+
+	var activation_state: Dictionary = value
+	var cooldowns_value: Variant = activation_state.get("cooldowns", {})
+	if cooldowns_value is Dictionary:
+		var cooldowns_dict: Dictionary = cooldowns_value
+		for skill_id_variant in cooldowns_dict.keys():
+			var skill_id: String = str(skill_id_variant)
+			var remaining: float = maxf(0.0, float(cooldowns_dict.get(skill_id_variant, 0.0)))
+			if remaining > 0.0:
+				_cooldown_remaining[skill_id] = remaining
+
+	var toggles_value: Variant = activation_state.get("active_toggles", [])
+	if toggles_value is Array:
+		for skill_id_variant in toggles_value:
+			_active_toggles[str(skill_id_variant)] = true
 
 
 func _get_attribute_value(attribute_name: String) -> int:

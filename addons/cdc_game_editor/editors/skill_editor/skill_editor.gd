@@ -18,8 +18,11 @@ var _skill_tree_id_input: LineEdit
 var _max_level_input: SpinBox
 var _prerequisites_input: LineEdit
 var _attr_requirements_input: LineEdit
+var _activation_mode_input: LineEdit
+var _activation_cooldown_input: SpinBox
 var _description_input: TextEdit
 var _gameplay_effect_input: TextEdit
+var _activation_effect_input: TextEdit
 
 var _tree_selector: OptionButton
 var _new_tree_button: Button
@@ -156,6 +159,8 @@ func _build_ui() -> void:
 	_max_level_input = _add_spin_field(skill_grid, "最大等级", 1, 50, 1)
 	_prerequisites_input = _add_line_field(skill_grid, "前置技能(逗号)")
 	_attr_requirements_input = _add_line_field(skill_grid, "属性要求(strength:6)")
+	_activation_mode_input = _add_line_field(skill_grid, "激活模式(passive/active/toggle)")
+	_activation_cooldown_input = _add_spin_field(skill_grid, "冷却(秒)", 0, 999, 0.1)
 
 	right_vbox.add_child(_make_label("描述"))
 	_description_input = TextEdit.new()
@@ -168,6 +173,12 @@ func _build_ui() -> void:
 	_gameplay_effect_input.custom_minimum_size = Vector2(0, 140)
 	_gameplay_effect_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_vbox.add_child(_gameplay_effect_input)
+
+	right_vbox.add_child(_make_label("Activation Effect(JSON)"))
+	_activation_effect_input = TextEdit.new()
+	_activation_effect_input.custom_minimum_size = Vector2(0, 140)
+	_activation_effect_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_vbox.add_child(_activation_effect_input)
 
 	right_vbox.add_child(HSeparator.new())
 
@@ -230,8 +241,11 @@ func _connect_signals() -> void:
 	_max_level_input.value_changed.connect(func(_v: float): _mark_dirty())
 	_prerequisites_input.text_changed.connect(func(_t: String): _mark_dirty())
 	_attr_requirements_input.text_changed.connect(func(_t: String): _mark_dirty())
+	_activation_mode_input.text_changed.connect(func(_t: String): _mark_dirty())
+	_activation_cooldown_input.value_changed.connect(func(_v: float): _mark_dirty())
 	_description_input.text_changed.connect(_mark_dirty)
 	_gameplay_effect_input.text_changed.connect(_mark_dirty)
+	_activation_effect_input.text_changed.connect(_mark_dirty)
 	_tree_id_input.text_changed.connect(func(_t: String): _mark_dirty())
 	_tree_name_input.text_changed.connect(func(_t: String): _mark_dirty())
 	_tree_skills_input.text_changed.connect(func(_t: String): _mark_dirty())
@@ -330,7 +344,11 @@ func _fill_skill_form(skill_id: String) -> void:
 	_max_level_input.value = float(int(skill.get("max_level", 1)))
 	_prerequisites_input.text = _join_string_array(skill.get("prerequisites", []))
 	_attr_requirements_input.text = _format_attr_requirements(skill.get("attribute_requirements", {}))
+	var activation: Dictionary = skill.get("activation", {})
+	_activation_mode_input.text = str(activation.get("mode", "passive"))
+	_activation_cooldown_input.value = float(activation.get("cooldown", 0.0))
 	_gameplay_effect_input.text = JSON.stringify(skill.get("gameplay_effect", {}), "\t")
+	_activation_effect_input.text = JSON.stringify(activation.get("effect", {}), "\t")
 	_is_form_syncing = false
 
 
@@ -344,7 +362,10 @@ func _clear_skill_form() -> void:
 	_max_level_input.value = 1.0
 	_prerequisites_input.text = ""
 	_attr_requirements_input.text = ""
+	_activation_mode_input.text = "passive"
+	_activation_cooldown_input.value = 0.0
 	_gameplay_effect_input.text = "{}"
+	_activation_effect_input.text = "{}"
 	_is_form_syncing = false
 
 
@@ -385,7 +406,12 @@ func _on_new_skill_pressed() -> void:
 		"max_level": 1,
 		"prerequisites": [],
 		"attribute_requirements": {},
-		"gameplay_effect": {"modifiers": {"new_bonus": {"per_level": 0.1}}}
+		"gameplay_effect": {"modifiers": {"new_bonus": {"per_level": 0.1}}},
+		"activation": {
+			"mode": "passive",
+			"cooldown": 0.0,
+			"effect": {}
+		}
 	}
 	_refresh_skill_list()
 	var index: int = _find_item_list_index(_skill_list, new_id)
@@ -467,6 +493,17 @@ func _save_current_forms() -> bool:
 		if gameplay_effect == null or not (gameplay_effect is Dictionary):
 			_set_status("GameplayEffect 必须是合法JSON对象")
 			return false
+		var activation_effect: Variant = JSON.parse_string(_activation_effect_input.text)
+		if activation_effect == null or not (activation_effect is Dictionary):
+			_set_status("Activation Effect 必须是合法JSON对象")
+			return false
+
+		var activation_mode: String = _activation_mode_input.text.strip_edges().to_lower()
+		if activation_mode.is_empty():
+			activation_mode = "passive"
+		if not ["passive", "active", "toggle"].has(activation_mode):
+			_set_status("激活模式必须是 passive / active / toggle")
+			return false
 
 		var skill_data: Dictionary = {
 			"name": _skill_name_input.text.strip_edges(),
@@ -476,7 +513,12 @@ func _save_current_forms() -> bool:
 			"max_level": int(_max_level_input.value),
 			"prerequisites": _parse_csv(_prerequisites_input.text),
 			"attribute_requirements": _parse_attr_requirements(_attr_requirements_input.text),
-			"gameplay_effect": gameplay_effect
+			"gameplay_effect": gameplay_effect,
+			"activation": {
+				"mode": activation_mode,
+				"cooldown": float(_activation_cooldown_input.value),
+				"effect": activation_effect
+			}
 		}
 		_skills.erase(old_skill_id)
 		_skills[new_skill_id] = skill_data
@@ -640,8 +682,17 @@ func _rebuild_validation_errors() -> void:
 		if int(skill.get("max_level", 0)) <= 0:
 			_validation_errors.append("skill[%s]: max_level 必须 > 0" % skill_id)
 		var gameplay_effect: Variant = skill.get("gameplay_effect", {})
-		if not (gameplay_effect is Dictionary) or gameplay_effect.is_empty():
-			_validation_errors.append("skill[%s]: gameplay_effect 不能为空" % skill_id)
+		if not (gameplay_effect is Dictionary):
+			_validation_errors.append("skill[%s]: gameplay_effect 必须是对象" % skill_id)
+		var activation: Dictionary = skill.get("activation", {})
+		var activation_mode: String = str(activation.get("mode", "passive"))
+		if not ["passive", "active", "toggle"].has(activation_mode):
+			_validation_errors.append("skill[%s]: activation.mode 非法" % skill_id)
+		var activation_effect: Variant = activation.get("effect", {})
+		if not (activation_effect is Dictionary):
+			_validation_errors.append("skill[%s]: activation.effect 必须是对象" % skill_id)
+		elif activation_mode != "passive" and (activation_effect as Dictionary).is_empty():
+			_validation_errors.append("skill[%s]: 主动/开启技能需要 activation.effect" % skill_id)
 
 		var prerequisites: Array[String] = _parse_csv(_join_string_array(skill.get("prerequisites", [])))
 		for prerequisite in prerequisites:

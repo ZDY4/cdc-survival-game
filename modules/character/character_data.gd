@@ -37,6 +37,11 @@ const DEFAULT_SOCIAL_MOOD := {
 	"anger": 0
 }
 
+const DEFAULT_SKILLS := {
+	"initial_tree_ids": [],
+	"initial_skills_by_tree": {}
+}
+
 var id: String = ""
 var name: String = ""
 var description: String = ""
@@ -61,6 +66,7 @@ var social: Dictionary = {
 	"dialog_id": "",
 	"mood": DEFAULT_SOCIAL_MOOD.duplicate(true)
 }
+var skills: Dictionary = DEFAULT_SKILLS.duplicate(true)
 
 func serialize() -> Dictionary:
 	return {
@@ -71,7 +77,8 @@ func serialize() -> Dictionary:
 		"identity": identity.duplicate(true),
 		"visual": visual.duplicate(true),
 		"combat": combat.duplicate(true),
-		"social": social.duplicate(true)
+		"social": social.duplicate(true),
+		"skills": skills.duplicate(true)
 	}
 
 func deserialize(data: Dictionary) -> void:
@@ -127,6 +134,29 @@ func deserialize(data: Dictionary) -> void:
 	var mood_copy: Dictionary = DEFAULT_SOCIAL_MOOD.duplicate(true)
 	mood_copy.merge(social_data.get("mood", {}), true)
 	social["mood"] = mood_copy
+
+	skills = DEFAULT_SKILLS.duplicate(true)
+	var skills_data: Dictionary = data.get("skills", {})
+	var initial_tree_ids: Array[String] = []
+	var raw_tree_ids: Variant = skills_data.get("initial_tree_ids", [])
+	if raw_tree_ids is Array:
+		for tree_id_variant in raw_tree_ids:
+			initial_tree_ids.append(str(tree_id_variant))
+	skills["initial_tree_ids"] = initial_tree_ids
+
+	var initial_skills_by_tree: Dictionary = {}
+	var raw_skills_by_tree: Variant = skills_data.get("initial_skills_by_tree", {})
+	if raw_skills_by_tree is Dictionary:
+		var source: Dictionary = raw_skills_by_tree
+		for tree_id_variant in source.keys():
+			var tree_id: String = str(tree_id_variant)
+			var skill_ids: Array[String] = []
+			var tree_skills_variant: Variant = source.get(tree_id_variant, [])
+			if tree_skills_variant is Array:
+				for skill_id_variant in tree_skills_variant:
+					skill_ids.append(str(skill_id_variant))
+			initial_skills_by_tree[tree_id] = skill_ids
+	skills["initial_skills_by_tree"] = initial_skills_by_tree
 
 func get_display_name() -> String:
 	var title: String = str(social.get("title", ""))

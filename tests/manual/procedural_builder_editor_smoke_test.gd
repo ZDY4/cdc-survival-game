@@ -4,14 +4,17 @@ const WALL_SCRIPT_PATH: String = "res://addons/cdc_procedural_builder/runtime/pr
 const FENCE_SCRIPT_PATH: String = "res://addons/cdc_procedural_builder/runtime/proc_fence_3d.gd"
 const HOUSE_SCRIPT_PATH: String = "res://addons/cdc_procedural_builder/runtime/proc_house_3d.gd"
 const PLUGIN_PATH: String = "res://addons/cdc_procedural_builder/plugin.gd"
+const INSPECTOR_PLUGIN_PATH: String = "res://addons/cdc_procedural_builder/editor/procedural_builder_inspector_plugin.gd"
 const GIZMO_PLUGIN_PATH: String = "res://addons/cdc_procedural_builder/editor/procedural_builder_gizmo_plugin.gd"
 const DOCK_PATH: String = "res://addons/cdc_procedural_builder/editor/procedural_builder_dock.gd"
 
 func _ready() -> void:
 	_probe_script(PLUGIN_PATH)
+	_probe_script(INSPECTOR_PLUGIN_PATH)
 	_probe_script(GIZMO_PLUGIN_PATH)
 	_probe_script(DOCK_PATH)
 	_instantiate_dock()
+	_instantiate_inspector_plugin()
 
 	var wall: ProcWall3D = _instantiate_generator("SmokeWall", WALL_SCRIPT_PATH, [
 		Vector3.ZERO,
@@ -58,6 +61,12 @@ func _instantiate_dock() -> void:
 	var canvas_layer: CanvasLayer = CanvasLayer.new()
 	add_child(canvas_layer)
 	canvas_layer.add_child(dock)
+
+func _instantiate_inspector_plugin() -> void:
+	var inspector_script: Script = load(INSPECTOR_PLUGIN_PATH)
+	assert(inspector_script != null, "Failed to load procedural builder inspector plugin")
+	var inspector_plugin: Variant = inspector_script.new()
+	assert(inspector_plugin is EditorInspectorPlugin, "Procedural builder inspector plugin should extend EditorInspectorPlugin")
 
 func _instantiate_generator(node_name: String, script_path: String, points: Array[Vector3]) -> Variant:
 	var script: Script = load(script_path)
