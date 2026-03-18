@@ -571,25 +571,12 @@ func _ensure_actor_debug_label(actor: Node3D) -> Label3D:
 func _format_actor_debug_label(actor_entry: Dictionary) -> String:
 	var group_id: String = str(actor_entry.get("group_id", ""))
 	var ap_value: float = float(actor_entry.get("ap", 0.0))
-	var label_text: String = "%s | AP %.1f" % [group_id, ap_value]
-	if bool(actor_entry.get("is_current", false)):
-		label_text = "> " + label_text
-	elif bool(actor_entry.get("turn_open", false)):
-		label_text = "* " + label_text
-	return label_text
+	return "%s | AP %.1f" % [group_id, ap_value]
 
 func _resolve_actor_debug_label_color(actor_entry: Dictionary) -> Color:
-	if bool(actor_entry.get("is_current", false)):
-		return Color(1.0, 0.92, 0.45, 1.0)
-
-	var side: String = str(actor_entry.get("side", ""))
-	match side:
-		"player":
-			return Color(0.70, 0.90, 1.0, 1.0)
-		"hostile":
-			return Color(1.0, 0.55, 0.55, 1.0)
-		_:
-			return Color(0.70, 1.0, 0.75, 1.0)
+	if bool(actor_entry.get("turn_open", false)):
+		return Color(1.0, 1.0, 1.0, 1.0)
+	return Color(0.60, 0.60, 0.60, 1.0)
 
 func _debug_cleanup_stale_actor_labels(active_actor_ids: Dictionary) -> void:
 	for actor_key_variant in _debug_label_actor_ids.keys():
