@@ -5,7 +5,8 @@ const TestRunnerScript = preload("res://tests/utils/test_runner.gd")
 const DEFAULT_TEST_SCRIPTS: Array[String] = [
 	"res://tests/functional/unit/test_turn_system.gd",
 	"res://tests/functional/unit/test_player_controller.gd",
-	"res://tests/functional/unit/test_interaction_attack_option.gd"
+	"res://tests/functional/unit/test_interaction_attack_option.gd",
+	"res://tests/functional/unit/test_debug_console.gd"
 ]
 
 func _init() -> void:

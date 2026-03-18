@@ -19,6 +19,12 @@ static func run_tests(runner: TestRunner) -> void:
 		_test_autocomplete_candidates
 	)
 	runner.register_test(
+		"debug_console_autocomplete_panel_expands_above_input",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_autocomplete_panel_expands_above_input
+	)
+	runner.register_test(
 		"debug_console_autocomplete_tab_and_navigation_work_with_history",
 		TestRunner.TestLayer.FUNCTIONAL,
 		TestRunner.TestPriority.P1_MAJOR,
@@ -29,6 +35,18 @@ static func run_tests(runner: TestRunner) -> void:
 		TestRunner.TestLayer.FUNCTIONAL,
 		TestRunner.TestPriority.P1_MAJOR,
 		_test_autocomplete_clears_on_close
+	)
+	runner.register_test(
+		"debug_console_toggle_key_closes_console_while_input_has_focus",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_toggle_key_closes_console_from_input
+	)
+	runner.register_test(
+		"debug_console_hides_other_ui_while_visible",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_console_hides_other_ui
 	)
 
 static func _test_autocomplete_candidates() -> void:
@@ -82,6 +100,24 @@ static func _test_autocomplete_candidates() -> void:
 	debug_module.unregister_module("test_debug")
 	_reset_console(debug_module)
 
+static func _test_autocomplete_panel_expands_above_input() -> void:
+	var debug_module := _get_debug_module()
+	assert(debug_module != null, "DebugModule autoload should exist")
+	await _prepare_console(debug_module)
+
+	debug_module._input_line.text = "he"
+	debug_module._input_line.caret_column = debug_module._input_line.text.length()
+	debug_module._update_autocomplete()
+
+	assert(debug_module._autocomplete_panel.visible, "Autocomplete panel should be visible when candidates exist")
+	assert(
+		debug_module._autocomplete_panel.get_global_rect().position.y
+		< debug_module._input_line.get_global_rect().position.y,
+		"Autocomplete panel should expand upward and stay above the input line"
+	)
+
+	_reset_console(debug_module)
+
 static func _test_autocomplete_keyboard_behavior() -> void:
 	var debug_module := _get_debug_module()
 	assert(debug_module != null, "DebugModule autoload should exist")
@@ -113,6 +149,13 @@ static func _test_autocomplete_keyboard_behavior() -> void:
 	debug_module._input_line.caret_column = debug_module._input_line.text.length()
 	debug_module._update_autocomplete()
 	assert(debug_module._autocomplete_selection == 0, "Autocomplete should highlight the first item by default")
+	debug_module._on_input_line_gui_input(_build_key_event(KEY_UP))
+	assert(
+		debug_module._autocomplete_selection == debug_module._autocomplete_candidates.size() - 1,
+		"Up should wrap to the last autocomplete item when moving past the first item"
+	)
+	debug_module._on_input_line_gui_input(_build_key_event(KEY_DOWN))
+	assert(debug_module._autocomplete_selection == 0, "Down should wrap back to the first item after the last item")
 	debug_module._on_input_line_gui_input(_build_key_event(KEY_DOWN))
 	assert(debug_module._autocomplete_selection == 1, "Down should move autocomplete selection")
 	debug_module._on_input_line_gui_input(_build_key_event(KEY_UP))
@@ -154,6 +197,48 @@ static func _test_autocomplete_clears_on_close() -> void:
 	debug_module._set_console_visible(false)
 	assert(debug_module._autocomplete_candidates.is_empty(), "Closing console should clear autocomplete candidates")
 	assert(not debug_module._autocomplete_panel.visible, "Closing console should hide autocomplete panel")
+
+static func _test_toggle_key_closes_console_from_input() -> void:
+	var debug_module := _get_debug_module()
+	assert(debug_module != null, "DebugModule autoload should exist")
+	await _prepare_console(debug_module)
+
+	assert(debug_module.is_console_visible(), "Console should start visible for the toggle-close test")
+	debug_module._on_input_line_gui_input(_build_key_event(KEY_QUOTELEFT))
+	assert(not debug_module.is_console_visible(), "Pressing the toggle key while the input has focus should close the console")
+
+static func _test_console_hides_other_ui() -> void:
+	var debug_module := _get_debug_module()
+	assert(debug_module != null, "DebugModule autoload should exist")
+
+	var loop := Engine.get_main_loop()
+	assert(loop is SceneTree, "Main loop should be a SceneTree")
+	var tree: SceneTree = loop
+	assert(tree.root != null, "SceneTree root should exist")
+
+	var visible_ui := Control.new()
+	visible_ui.name = "VisibleTestUI"
+	visible_ui.visible = true
+	tree.root.add_child(visible_ui)
+
+	var hidden_ui := CanvasLayer.new()
+	hidden_ui.name = "HiddenTestUI"
+	hidden_ui.visible = false
+	tree.root.add_child(hidden_ui)
+	await tree.process_frame
+
+	await _prepare_console(debug_module)
+	assert(not visible_ui.visible, "Showing the debug console should hide other visible UI")
+	assert(not hidden_ui.visible, "UI that was already hidden should remain hidden while the console is open")
+	assert(debug_module._console_panel.visible, "The debug console itself should remain visible")
+
+	_reset_console(debug_module)
+	assert(visible_ui.visible, "Closing the debug console should restore previously visible UI")
+	assert(not hidden_ui.visible, "Closing the debug console should preserve UI that was hidden before opening")
+
+	visible_ui.queue_free()
+	hidden_ui.queue_free()
+	await tree.process_frame
 
 static func _get_debug_module() -> Node:
 	var loop := Engine.get_main_loop()

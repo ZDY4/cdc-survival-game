@@ -6,6 +6,8 @@ const MODULE_NAME: String = "DebugModule"
 const CONSOLE_HEIGHT: float = 240.0
 const MAX_LOG_LINES: int = 200
 const MAX_AUTOCOMPLETE_CANDIDATES: int = 8
+const CONSOLE_FONT_SIZE: int = 13
+const CONSOLE_DESCRIPTION_FONT_SIZE: int = 12
 
 # 2. Signals
 signal command_executed(command_name: String, success: bool, result: Dictionary)
@@ -32,6 +34,7 @@ var _command_history: Array[String] = []
 var _history_index: int = -1
 var _autocomplete_candidates: Array[Dictionary] = []
 var _autocomplete_selection: int = -1
+var _hidden_ui_states: Dictionary = {}
 
 # 5. Public methods
 func _ready() -> void:
@@ -350,23 +353,8 @@ func _setup_console_ui() -> void:
 	_output_log.fit_content = false
 	_output_log.scroll_following = true
 	_output_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_output_log.add_theme_font_size_override("normal_font_size", CONSOLE_FONT_SIZE)
 	layout.add_child(_output_log)
-
-	var input_row := HBoxContainer.new()
-	layout.add_child(input_row)
-
-	var prompt := Label.new()
-	prompt.text = ">"
-	input_row.add_child(prompt)
-
-	_input_line = LineEdit.new()
-	_input_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_input_line.placeholder_text = "Type command and press Enter (help)"
-	_input_line.text_changed.connect(_on_input_line_text_changed)
-	_input_line.text_submitted.connect(_on_command_submitted)
-	_input_line.gui_input.connect(_on_input_line_gui_input)
-	_input_line.focus_exited.connect(_on_input_line_focus_exited)
-	input_row.add_child(_input_line)
 
 	_autocomplete_panel = PanelContainer.new()
 	_autocomplete_panel.name = "DebugConsoleAutocomplete"
@@ -382,6 +370,7 @@ func _setup_console_ui() -> void:
 	_autocomplete_list.select_mode = ItemList.SELECT_SINGLE
 	_autocomplete_list.mouse_filter = Control.MOUSE_FILTER_STOP
 	_autocomplete_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_autocomplete_list.add_theme_font_size_override("font_size", CONSOLE_FONT_SIZE)
 	_autocomplete_list.item_selected.connect(_on_autocomplete_item_selected)
 	_autocomplete_list.item_clicked.connect(_on_autocomplete_item_clicked)
 	autocomplete_layout.add_child(_autocomplete_list)
@@ -389,11 +378,31 @@ func _setup_console_ui() -> void:
 	_autocomplete_description = Label.new()
 	_autocomplete_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_autocomplete_description.visible = false
+	_autocomplete_description.add_theme_font_size_override("font_size", CONSOLE_DESCRIPTION_FONT_SIZE)
 	autocomplete_layout.add_child(_autocomplete_description)
+
+	var input_row := HBoxContainer.new()
+	layout.add_child(input_row)
+
+	var prompt := Label.new()
+	prompt.text = ">"
+	prompt.add_theme_font_size_override("font_size", CONSOLE_FONT_SIZE)
+	input_row.add_child(prompt)
+
+	_input_line = LineEdit.new()
+	_input_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_input_line.placeholder_text = "Type command and press Enter (help)"
+	_input_line.add_theme_font_size_override("font_size", CONSOLE_FONT_SIZE)
+	_input_line.text_changed.connect(_on_input_line_text_changed)
+	_input_line.text_submitted.connect(_on_command_submitted)
+	_input_line.gui_input.connect(_on_input_line_gui_input)
+	_input_line.focus_exited.connect(_on_input_line_focus_exited)
+	input_row.add_child(_input_line)
 
 	_append_log_line("[Debug] Console ready. Press ` to toggle.")
 
 func _cleanup_console_ui() -> void:
+	_restore_non_console_ui_visibility()
 	if _console_layer and is_instance_valid(_console_layer):
 		_console_layer.queue_free()
 	_console_layer = null
@@ -410,6 +419,10 @@ func _set_console_visible(visible: bool) -> void:
 	if _is_console_visible == visible:
 		return
 	_is_console_visible = visible
+	if _is_console_visible:
+		_hide_non_console_ui()
+	else:
+		_restore_non_console_ui_visibility()
 	if _console_panel and is_instance_valid(_console_panel):
 		_console_panel.visible = _is_console_visible
 
@@ -422,6 +435,46 @@ func _set_console_visible(visible: bool) -> void:
 		_clear_autocomplete()
 
 	console_visibility_changed.emit(_is_console_visible)
+
+func _hide_non_console_ui() -> void:
+	_restore_non_console_ui_visibility()
+	if get_tree() == null or get_tree().root == null:
+		return
+
+	var ui_nodes: Array[Node] = []
+	_collect_non_console_ui_nodes(get_tree().root, ui_nodes)
+	for node in ui_nodes:
+		if node == null or not is_instance_valid(node):
+			continue
+		var instance_id: int = node.get_instance_id()
+		_hidden_ui_states[instance_id] = {
+			"node": node,
+			"visible": bool(node.get("visible"))
+		}
+		node.set("visible", false)
+
+func _restore_non_console_ui_visibility() -> void:
+	for state_variant in _hidden_ui_states.values():
+		var state: Dictionary = state_variant
+		var node: Node = state.get("node", null) as Node
+		if node == null or not is_instance_valid(node):
+			continue
+		node.set("visible", bool(state.get("visible", true)))
+	_hidden_ui_states.clear()
+
+func _collect_non_console_ui_nodes(node: Node, collected: Array[Node]) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	if _console_layer != null and is_instance_valid(_console_layer):
+		if node == _console_layer or _console_layer.is_ancestor_of(node):
+			return
+
+	if node is CanvasLayer or node is Control:
+		collected.append(node)
+
+	for child in node.get_children():
+		if child is Node:
+			_collect_non_console_ui_nodes(child, collected)
 
 func _on_command_submitted(command_text: String) -> void:
 	var normalized_command := command_text.strip_edges()
@@ -454,6 +507,15 @@ func _on_input_line_gui_input(event: InputEvent) -> void:
 	if key_event == null:
 		return
 	if not key_event.pressed or key_event.echo:
+		return
+
+	if _is_toggle_console_key(key_event):
+		_set_console_visible(false)
+		_input_line.accept_event()
+		return
+	if key_event.keycode == KEY_ESCAPE:
+		_set_console_visible(false)
+		_input_line.accept_event()
 		return
 
 	if key_event.keycode == KEY_TAB:
@@ -511,7 +573,7 @@ func _update_autocomplete() -> void:
 		_autocomplete_list.add_item(str(candidate.get("text", "")))
 
 	_autocomplete_selection = 0
-	_autocomplete_list.select(_autocomplete_selection)
+	_sync_autocomplete_selection()
 	_refresh_autocomplete_description()
 	_set_autocomplete_visible(true)
 
@@ -721,14 +783,22 @@ func _move_autocomplete_selection(direction: int) -> bool:
 	if _autocomplete_list == null or not is_instance_valid(_autocomplete_list):
 		return false
 
-	_autocomplete_selection = clampi(
-		maxi(_autocomplete_selection, 0) + direction,
-		0,
-		_autocomplete_candidates.size() - 1
-	)
-	_autocomplete_list.select(_autocomplete_selection)
+	var item_count: int = _autocomplete_candidates.size()
+	var start_index: int = maxi(_autocomplete_selection, 0)
+	_autocomplete_selection = posmod(start_index + direction, item_count)
+	_sync_autocomplete_selection()
 	_refresh_autocomplete_description()
 	return true
+
+func _sync_autocomplete_selection() -> void:
+	if _autocomplete_list == null or not is_instance_valid(_autocomplete_list):
+		return
+	if _autocomplete_candidates.is_empty():
+		return
+	if _autocomplete_selection < 0 or _autocomplete_selection >= _autocomplete_candidates.size():
+		return
+	_autocomplete_list.select(_autocomplete_selection)
+	_autocomplete_list.ensure_current_is_visible()
 
 func _refresh_autocomplete_description() -> void:
 	if _autocomplete_description == null or not is_instance_valid(_autocomplete_description):
