@@ -1,8 +1,6 @@
 extends Node
 
 signal config_changed
-
-const CameraConfig3D = preload("res://systems/camera_config_3d.gd")
 const DEFAULT_CONFIG_PATH: String = "res://config/camera/default_camera_3d.tres"
 const _OVERRIDABLE_KEYS: Array[String] = [
 	"projection_type",

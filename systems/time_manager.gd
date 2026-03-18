@@ -85,16 +85,17 @@ func _advance_minutes(minutes: int):
 	
 	var old_hour = current_hour
 	var old_day = current_day
+	var old_minute = current_minute
 	var was_night = is_night()
 	
 	# 计算新的时间
 	var total_minutes = current_minute + minutes
 	current_minute = total_minutes % MINUTES_PER_HOUR
-	var hours_added = total_minutes / MINUTES_PER_HOUR
+	var hours_added: int = floori(float(total_minutes) / float(MINUTES_PER_HOUR))
 	
 	var total_hours = current_hour + hours_added
 	current_hour = total_hours % HOURS_PER_DAY
-	var days_added = total_hours / HOURS_PER_DAY
+	var days_added: int = floori(float(total_hours) / float(HOURS_PER_DAY))
 	
 	current_day += days_added
 	
@@ -103,7 +104,7 @@ func _advance_minutes(minutes: int):
 		_apply_status_decay(hours_added)
 	
 	# 发送信号
-	var old_time = {"day": old_day, "hour": old_hour, "minute": current_minute}
+	var old_time = {"day": old_day, "hour": old_hour, "minute": old_minute}
 	var new_time = get_current_time_dict()
 	time_advanced.emit(old_time, new_time)
 	

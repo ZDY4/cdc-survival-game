@@ -2,8 +2,6 @@ extends Control
 
 class_name SkillHotbar
 
-const SkillHotbarSlot = preload("res://ui/skill_hotbar_slot.gd")
-
 signal status_requested(message: String)
 
 var _skill_system: Node = null

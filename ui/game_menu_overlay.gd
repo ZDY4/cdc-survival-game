@@ -1,8 +1,6 @@
 extends CanvasLayer
 
 const InputActions = preload("res://core/input_actions.gd")
-const SkillHotbar = preload("res://ui/skill_hotbar.gd")
-const SkillPanelItem = preload("res://ui/skill_panel_item.gd")
 
 signal request_close_all()
 
@@ -463,8 +461,8 @@ func _refresh_inventory() -> void:
 		var line := Label.new()
 		if equip_system and equip_system.has_method("get_equipped_data"):
 			var data: Dictionary = equip_system.get_equipped_data(slot)
-			var name: String = data.get("name", "空")
-			line.text = "%s: %s" % [slot, name]
+			var equipped_name: String = str(data.get("name", "空"))
+			line.text = "%s: %s" % [slot, equipped_name]
 		else:
 			line.text = "%s: -" % slot
 		_inventory_equipment_box.add_child(line)
@@ -474,9 +472,9 @@ func _refresh_inventory() -> void:
 	for item in GameState.inventory_items:
 		var item_id: String = str(item.get("id", ""))
 		var count: int = int(item.get("count", 1))
-		var name: String = ItemDatabase.get_item_name(item_id) if ItemDatabase else item_id
+		var item_name: String = ItemDatabase.get_item_name(item_id) if ItemDatabase else item_id
 		var line := Label.new()
-		line.text = "%s x%d" % [name, count]
+		line.text = "%s x%d" % [item_name, count]
 		_inventory_list_box.add_child(line)
 
 func _refresh_character() -> void:

@@ -1,8 +1,6 @@
 class_name GridWorld
 extends Node
 
-const GridNavigator = preload("res://systems/grid_navigator.gd")
-
 const GRID_SIZE := 1.0
 
 var _obstacle_ref_counts: Dictionary = {}

@@ -83,20 +83,20 @@ func get_audio_settings() -> Dictionary:
 func get_display_settings() -> Dictionary:
 	return _display.duplicate(true)
 
-func set_audio_setting(name: String, value: float) -> void:
-	if not _audio.has(name):
+func set_audio_setting(setting_name: String, value: float) -> void:
+	if not _audio.has(setting_name):
 		return
-	_audio[name] = clampf(value, 0.0, 1.0)
+	_audio[setting_name] = clampf(value, 0.0, 1.0)
 	_apply_audio()
 	_save_settings()
 
-func set_display_setting(name: String, value: Variant) -> void:
-	if not _display.has(name):
+func set_display_setting(setting_name: String, value: Variant) -> void:
+	if not _display.has(setting_name):
 		return
-	if name == "ui_scale":
-		_display[name] = clampf(float(value), 0.75, 1.5)
+	if setting_name == "ui_scale":
+		_display[setting_name] = clampf(float(value), 0.75, 1.5)
 	else:
-		_display[name] = value
+		_display[setting_name] = value
 	_apply_display()
 	_save_settings()
 

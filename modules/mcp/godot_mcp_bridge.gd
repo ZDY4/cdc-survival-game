@@ -45,7 +45,7 @@ func _start_server():
 		push_warning("[GodotMCPBridge] Unable to start server on any port")
 	_is_running = false
 
-func _process(delta: float):
+func _process(_delta: float):
 	if not _is_running:
 		return
 	
@@ -118,12 +118,16 @@ func _get_node_info(client: StreamPeerTCP, node_path: String):
 	var visible_value = null
 	if node.has_method("is_visible"):
 		visible_value = node.visible
-	
+
+	var position_value: Variant = null
+	if node is Node2D:
+		var node_2d: Node2D = node as Node2D
+		position_value = [node_2d.position.x, node_2d.position.y]
 	var info = {
 		"name": node.name,
 		"class": node.get_class(),
 		"visible": visible_value,
-		"position": [node.position.x, node.position.y] if node is Node2D else null
+		"position": position_value
 	}
 	_send_response(client, info)
 

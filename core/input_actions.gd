@@ -103,8 +103,9 @@ static func apply_binding(action_name: StringName, keycode: int, physical_keycod
 
 	InputMap.action_erase_events(action_name)
 	var key_event := InputEventKey.new()
-	key_event.keycode = keycode
-	key_event.physical_keycode = physical_keycode if physical_keycode >= 0 else keycode
+	key_event.keycode = keycode as Key
+	var resolved_physical_keycode: int = physical_keycode if physical_keycode >= 0 else keycode
+	key_event.physical_keycode = resolved_physical_keycode as Key
 	InputMap.action_add_event(action_name, key_event)
 
 

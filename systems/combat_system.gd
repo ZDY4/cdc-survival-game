@@ -224,8 +224,11 @@ func get_enemy_stats() -> Dictionary:
 	return _current_enemy.get("stats", {}).duplicate(true)
 
 func get_player_stats() -> Dictionary:
+	var attack_value: int = 10
+	if SkillModule:
+		attack_value += int(SkillModule.get_total_damage_bonus())
 	return {
-		"attack": 10 + SkillModule.get_total_damage_bonus() if SkillModule else 10,
+		"attack": attack_value,
 		"hp": GameState.player_hp,
 		"max_hp": GameState.player_max_hp
 	}
@@ -284,7 +287,7 @@ func _resolve_base_damage(actor: Node) -> int:
 	if actor.is_in_group("player"):
 		var base_damage: int = 10
 		if SkillModule:
-			base_damage += SkillModule.get_total_damage_bonus()
+			base_damage += int(SkillModule.get_total_damage_bonus())
 		return base_damage
 
 	var stats: Dictionary = _get_effective_actor_stats(actor)

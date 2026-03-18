@@ -1,8 +1,6 @@
 extends InteractionOption
 class_name TalkInteractionOption
 
-const CharacterRelationResolver = preload("res://systems/character_relation_resolver.gd")
-
 @export var speaker_name: String = "NPC"
 @export_multiline var dialogue_text: String = "你好。"
 @export var portrait_path: String = ""
@@ -42,7 +40,7 @@ func _is_non_ai_interaction_available() -> bool:
 		return true
 	return _dialog_resource_exists(resolved_dialog_id)
 
-func _is_ai_interaction_available(interactable: Node, character_id: String) -> bool:
+func _is_ai_interaction_available(_interactable: Node, character_id: String) -> bool:
 	var character_data := _get_character_data(character_id)
 	if character_data.is_empty():
 		return false
@@ -114,9 +112,12 @@ func _emit_interaction_event(
 	character_id: String = ""
 ) -> void:
 	if EventBus:
+		var interaction_target: String = character_id
+		if interaction_target.is_empty() and interactable:
+			interaction_target = str(interactable.name)
 		EventBus.emit(EventBus.EventType.SCENE_INTERACTION, {
 			"type": "talk",
-			"target": character_id if not character_id.is_empty() else interactable.name,
+			"target": interaction_target,
 			"speaker": resolved_speaker,
 			"dialog_id": resolved_dialog_id
 		})
@@ -155,7 +156,9 @@ func _resolve_ai_speaker_name(character_data: Dictionary, interactable: Node) ->
 	var character_name := str(character_data.get("name", "")).strip_edges()
 	if not character_name.is_empty():
 		return character_name
-	return interactable.name if interactable else speaker_name
+	if interactable:
+		return str(interactable.name)
+	return speaker_name
 
 func _resolve_ai_portrait_path(character_data: Dictionary) -> String:
 	if not portrait_path.strip_edges().is_empty():

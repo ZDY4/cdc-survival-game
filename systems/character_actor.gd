@@ -3,9 +3,6 @@ extends CharacterBody3D
 ## Shared runtime character base for player, NPC and enemy.
 ## Provides temporary 4-sprite placeholder visuals (head + body + legs).
 
-const InteractionSystem = preload("res://systems/interaction_system.gd")
-const GameplayTagStackContainer = preload("res://addons/gameplay_tags/runtime/gameplay_tag_stack_container.gd")
-
 const STATE_INTERACTING_TAG_NAME: String = "State.Interacting"
 const VISUAL_ROOT_NAME: String = "VisualRoot"
 const ATTACK_LUNGE_DISTANCE_RATIO: float = 0.35
@@ -57,8 +54,8 @@ func set_placeholder_colors(new_head_color: Color, new_body_color: Color) -> voi
 	if _head_sprite and _body_sprite and _left_leg_sprite and _right_leg_sprite:
 		_refresh_placeholder_textures()
 
-func set_hover_outline_visible(visible: bool) -> void:
-	_hover_outline_visible = visible
+func set_hover_outline_visible(hover_outline_visible: bool) -> void:
+	_hover_outline_visible = hover_outline_visible
 	_apply_hover_outline_visibility()
 
 func set_hover_outline_color(color: Color) -> void:

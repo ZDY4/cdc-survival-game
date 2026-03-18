@@ -4,8 +4,6 @@ extends Node
 ## 从JSON文件加载，支持热重载
 ## 注意: 作为Autoload单例，不使用class_name
 
-const ItemIdResolver = preload("res://core/item_id_resolver.gd")
-
 # ========== 信号 ==========
 signal items_reloaded()
 signal item_added(item_id: String)

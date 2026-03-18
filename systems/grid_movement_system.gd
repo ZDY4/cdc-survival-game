@@ -1,8 +1,5 @@
 extends Node
 
-const GridNavigator = preload("res://systems/grid_navigator.gd")
-const GridWorld = preload("res://systems/grid_world.gd")
-
 var navigator: GridNavigator
 var grid_world: GridWorld
 

@@ -148,7 +148,7 @@ func is_running() -> bool:
 func get_port() -> int:
 	return _port
 
-func _process(delta: float):
+func _process(_delta: float):
 	if not _is_server_running || not _server:
 		return
 	
@@ -276,46 +276,46 @@ func _execute_test_step(step: Dictionary):
 
 # ===== Action Registry =====
 
-func register_action(name: String, action_callable: Callable, meta: Dictionary = {}) -> void:
-	if name.is_empty():
+func register_action(action_name: String, action_callable: Callable, meta: Dictionary = {}) -> void:
+	if action_name.is_empty():
 		return
 	if not action_callable.is_valid():
-		push_error("[AITestBridge] Invalid action: " + name)
+		push_error("[AITestBridge] Invalid action: " + action_name)
 		return
-	_actions[name] = action_callable
-	_action_meta[name] = meta.duplicate()
+	_actions[action_name] = action_callable
+	_action_meta[action_name] = meta.duplicate()
 
-func unregister_action(name: String) -> void:
-	_actions.erase(name)
-	_action_meta.erase(name)
+func unregister_action(action_name: String) -> void:
+	_actions.erase(action_name)
+	_action_meta.erase(action_name)
 
 func get_registered_actions() -> Array[Dictionary]:
 	var actions: Array[Dictionary] = []
-	for name in _actions.keys():
+	for action_name in _actions.keys():
 		actions.append({
-			"name": name,
-			"meta": _action_meta.get(name, {})
+			"name": action_name,
+			"meta": _action_meta.get(action_name, {})
 		})
 	actions.sort_custom(func(a, b): return a["name"] < b["name"])
 	return actions
 
-func execute_action(name: String, params: Dictionary = {}) -> Dictionary:
+func execute_action(action_name: String, params: Dictionary = {}) -> Dictionary:
 	var result = {
 		"success": false,
-		"action": name,
+		"action": action_name,
 		"data": {},
 		"error": ""
 	}
-	
-	if not _actions.has(name):
-		result.error = "Unknown action: " + name
+
+	if not _actions.has(action_name):
+		result.error = "Unknown action: " + action_name
 		return result
-	
-	var callable: Callable = _actions[name]
+
+	var callable: Callable = _actions[action_name]
 	if not callable.is_valid():
-		result.error = "Action not available: " + name
+		result.error = "Action not available: " + action_name
 		return result
-	
+
 	var action_result = callable.call(params)
 	if typeof(action_result) == TYPE_DICTIONARY:
 		if action_result.has("success"):
@@ -326,9 +326,9 @@ func execute_action(name: String, params: Dictionary = {}) -> Dictionary:
 	else:
 		result.success = true
 		result.data = {"result": action_result}
-	
+
 	if _is_recording:
-		record_action({"action": name, "params": params, "success": result.success})
+		record_action({"action": action_name, "params": params, "success": result.success})
 	
 	return result
 
@@ -484,10 +484,12 @@ func _action_get_state():
 				"day": GameState.world_day,
 				"weather": GameState.world_weather
 			},
-			"scene": get_tree().current_scene.name if get_tree().current_scene else ""
+			"scene": ""
 		}
 	}
-	
+
+	if get_tree().current_scene:
+		state.data.scene = str(get_tree().current_scene.name)
 	_last_game_state = state.data
 	return state
 
@@ -528,10 +530,10 @@ func _action_travel(step: Dictionary):
 func _action_interact(step: Dictionary):
 	var target = step.get("target", "")
 	var result = {"success": false, "data": {"target": target}}
-	
+
 	# Simplified implementation: reuse click action
-	result = await _action_click(step)
-	
+	result = _action_click(step)
+
 	return result
 
 func _resolve_target_node(params: Dictionary) -> Node:
@@ -540,20 +542,20 @@ func _resolve_target_node(params: Dictionary) -> Node:
 		if not node_path.is_empty():
 			return get_node_or_null(node_path)
 	
-	var name := ""
+	var target_name := ""
 	if params.has("node_name"):
-		name = str(params.get("node_name", ""))
+		target_name = str(params.get("node_name", ""))
 	elif params.has("target"):
-		name = str(params.get("target", ""))
+		target_name = str(params.get("target", ""))
 	
-	if name.is_empty():
+	if target_name.is_empty():
 		return null
 	
 	var current_scene = get_tree().current_scene
 	if not current_scene:
 		return null
 	
-	return current_scene.find_child(name, true, false)
+	return current_scene.find_child(target_name, true, false)
 
 func _action_start_game(_params: Dictionary) -> Dictionary:
 	var result = {"success": false, "data": {}, "error": ""}
@@ -865,25 +867,25 @@ func _extract_http_body(data: String) -> String:
 func _handle_http_payload(payload: Variant) -> Dictionary:
 	if payload is Dictionary:
 		if payload.has("action"):
-			var name := str(payload.get("action", ""))
+			var action_name := str(payload.get("action", ""))
 			var params: Dictionary = {}
 			if payload.has("params") and payload.params is Dictionary:
 				params = payload.params
-			if name == "get_state":
+			if action_name == "get_state":
 				return _action_get_state()
-			var result = execute_action(name, params)
+			var result = execute_action(action_name, params)
 			return {"success": result.success, "result": result, "timestamp": Time.get_unix_time_from_system()}
 		
 		if payload.has("batch") and payload.batch is Array:
 			var results: Array = []
 			for item in payload.batch:
 				if item is Dictionary and item.has("action"):
-					var name = str(item.get("action", ""))
+					var action_name = str(item.get("action", ""))
 					var params = item.get("params", {})
-					if name == "get_state":
+					if action_name == "get_state":
 						results.append(_action_get_state())
 					else:
-						results.append(execute_action(name, params))
+						results.append(execute_action(action_name, params))
 				else:
 					results.append({"success": false, "error": "Invalid batch item"})
 			return {"success": true, "results": results, "timestamp": Time.get_unix_time_from_system()}
@@ -893,7 +895,7 @@ func _handle_http_payload(payload: Variant) -> Dictionary:
 	
 	return _action_get_state()
 
-func _collect_game_state(item: Dictionary = {}):
+func _collect_game_state(_item: Dictionary = {}):
 	var result = _action_get_state()
 	return result.data if result.success else {"error": "Failed to get state"}
 
@@ -937,7 +939,7 @@ func run_combat_test():
 	return await run_test_sequence("combat_system", sequence)
 
 ## Inventory system test
-func run_inventory_test(level: int = 1):
+func run_inventory_test(_level: int = 1):
 	var sequence = [
 		{"action": "set_state", "inventory": [{"id": "food_canned", "count": 3}]},
 		{"action": "verify", "check": "has_item", "expected": "food_canned", "critical": true}

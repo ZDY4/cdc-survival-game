@@ -1,10 +1,6 @@
 class_name MovementComponent
 extends Node
 
-const GridMovement = preload("res://systems/grid_movement.gd")
-const GridNavigator = preload("res://systems/grid_navigator.gd")
-const GridWorld = preload("res://systems/grid_world.gd")
-
 signal move_requested(world_pos: Vector3)
 signal move_started(path: Array[Vector3])
 signal move_finished
