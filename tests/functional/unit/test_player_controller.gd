@@ -138,8 +138,10 @@ static func _test_movement_truncates_to_available_ap() -> void:
 	await tree.process_frame
 
 	var target := Vector3(2.5, 0.0, 0.5)
+	assert(is_equal_approx(TurnSystem.get_actor_ap(player), 1.0), "Freshly registered player should begin with an opened first turn worth 1 AP")
+	assert(TurnSystem.get_actor_available_steps(player) == 1, "The opened first turn should immediately expose one movable step")
 	var started := player.move_to(target)
-	assert(started, "Movement should start when at least 1 AP is available")
+	assert(started, "The first move should start immediately from the opened initial turn")
 
 	await tree.create_timer(0.8).timeout
 

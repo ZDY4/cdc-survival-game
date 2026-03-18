@@ -20,6 +20,12 @@ class DummyAIController extends Node:
 
 static func run_tests(runner: TestRunner) -> void:
 	runner.register_test(
+		"turn_system_starts_initial_player_turn_on_registration",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_initial_player_turn_starts_on_registration
+	)
+	runner.register_test(
 		"turn_system_caps_and_carries_actor_ap",
 		TestRunner.TestLayer.FUNCTIONAL,
 		TestRunner.TestPriority.P1_MAJOR,
@@ -37,6 +43,12 @@ static func run_tests(runner: TestRunner) -> void:
 		TestRunner.TestPriority.P1_MAJOR,
 		_test_combat_turn_gating_and_attack_limit
 	)
+	runner.register_test(
+		"turn_system_debug_console_command_toggles_overlay",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P2_NORMAL,
+		_test_debug_console_command_toggles_overlay
+	)
 
 static func _test_ap_cap_and_carry() -> void:
 	assert(TurnSystem != null, "TurnSystem autoload should exist")
@@ -51,13 +63,13 @@ static func _test_ap_cap_and_carry() -> void:
 
 	TurnSystem.register_group("player", 0)
 	TurnSystem.register_actor(player, "player", "player")
-	TurnSystem.set_actor_ap(player, 0.5)
+	TurnSystem.set_actor_ap(player, 1.5)
 
 	var start_result: Dictionary = TurnSystem.request_action(player, TurnSystem.ACTION_TYPE_INTERACT, {
 		"phase": TurnSystem.ACTION_PHASE_START
 	})
 	assert(bool(start_result.get("success", false)), "Player should be able to start an AP-governed action")
-	assert(is_equal_approx(float(start_result.get("ap_before", 0.0)), 1.5), "Turn AP gain should cap at 1.5 AP")
+	assert(is_equal_approx(float(start_result.get("ap_before", 0.0)), 1.5), "An already-open player turn should expose the stored AP without adding another grant")
 
 	var complete_result: Dictionary = TurnSystem.request_action(player, TurnSystem.ACTION_TYPE_INTERACT, {
 		"phase": TurnSystem.ACTION_PHASE_COMPLETE,
@@ -77,6 +89,26 @@ static func _test_ap_cap_and_carry() -> void:
 		"phase": TurnSystem.ACTION_PHASE_COMPLETE,
 		"success": true
 	})
+	player.queue_free()
+	await tree.process_frame
+
+static func _test_initial_player_turn_starts_on_registration() -> void:
+	assert(TurnSystem != null, "TurnSystem autoload should exist")
+	TurnSystem.reset_runtime_state()
+
+	var tree := _get_tree()
+	var player := Node3D.new()
+	player.name = "InitialTurnPlayer"
+	player.add_to_group("player")
+	tree.root.add_child(player)
+	await tree.process_frame
+
+	TurnSystem.register_group("player", 0)
+	TurnSystem.register_actor(player, "player", "player")
+
+	assert(is_equal_approx(TurnSystem.get_actor_ap(player), 1.0), "Registering the player should immediately open the first non-combat turn and grant 1 AP")
+	assert(TurnSystem.get_actor_available_steps(player) == 1, "The opened initial turn should make one 1-AP action available immediately")
+
 	player.queue_free()
 	await tree.process_frame
 
@@ -180,6 +212,25 @@ static func _test_combat_turn_gating_and_attack_limit() -> void:
 	hostile_one.queue_free()
 	player.queue_free()
 	await tree.process_frame
+
+static func _test_debug_console_command_toggles_overlay() -> void:
+	assert(TurnSystem != null, "TurnSystem autoload should exist")
+	assert(DebugModule != null, "DebugModule autoload should exist")
+	TurnSystem.reset_runtime_state()
+
+	var off_result: Dictionary = DebugModule.execute_command("turn_debug off")
+	assert(bool(off_result.get("success", false)), "turn_debug off should execute successfully")
+	assert(not TurnSystem.is_debug_visible(), "turn_debug off should hide the TurnSystem debug overlay")
+
+	var on_result: Dictionary = DebugModule.execute_command("turn_debug on")
+	assert(bool(on_result.get("success", false)), "turn_debug on should execute successfully")
+	assert(TurnSystem.is_debug_visible(), "turn_debug on should show the TurnSystem debug overlay")
+
+	var status_result: Dictionary = DebugModule.get_debug_variable("turn.debug_visible")
+	assert(bool(status_result.get("success", false)), "The TurnSystem debug visibility variable should be registered")
+	assert(bool(status_result.get("value", false)), "The debug visibility variable should reflect the command result")
+
+	DebugModule.execute_command("turn_debug off")
 
 static func _get_tree() -> SceneTree:
 	var loop := Engine.get_main_loop()

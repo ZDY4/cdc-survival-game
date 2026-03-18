@@ -79,7 +79,7 @@ func _ready() -> void:
 	if not _grid_world:
 		_create_fallback_grid_world()
 	_movement_component.set_grid_world(_grid_world)
-	call_deferred("_register_with_turn_system")
+	_register_with_turn_system()
 
 func _exit_tree() -> void:
 	_unregister_from_turn_system()
@@ -182,24 +182,26 @@ func move_to(world_pos: Vector3) -> bool:
 		return false
 	if not _movement_component:
 		return false
-	var path: Array[Vector3] = _movement_component.find_path(world_pos)
-	if path.is_empty():
+	var full_path: Array[Vector3] = _movement_component.find_path(world_pos)
+	if full_path.is_empty():
+		return false
+
+	var start_result := _begin_move_action(full_path[full_path.size() - 1])
+	if not bool(start_result.get("success", false)):
 		return false
 
 	var available_steps: int = _resolve_available_move_steps()
 	if available_steps <= 0:
+		_complete_move_action(false)
 		return false
 
 	var truncated_path: Array[Vector3] = []
-	for point in path:
+	for point in full_path:
 		truncated_path.append(point)
 		if truncated_path.size() >= available_steps:
 			break
 	if truncated_path.is_empty():
-		return false
-
-	var start_result := _begin_move_action(truncated_path[truncated_path.size() - 1])
-	if not bool(start_result.get("success", false)):
+		_complete_move_action(false)
 		return false
 
 	if not _movement_component.move_along_world_path(truncated_path):

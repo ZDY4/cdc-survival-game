@@ -184,12 +184,6 @@ func _perform_wander_step() -> Dictionary:
 func _perform_move_step(world_pos: Vector3) -> Dictionary:
 	if _movement_component == null or not _movement_component.has_method("find_path") or TurnSystem == null:
 		return {"performed": false}
-	if not TurnSystem.has_method("get_actor_available_steps"):
-		return {"performed": false}
-
-	var available_steps: int = int(TurnSystem.get_actor_available_steps(_owner_node))
-	if available_steps <= 0:
-		return {"performed": false}
 
 	var target_pos := world_pos
 	if _owner_node:
@@ -201,6 +195,21 @@ func _perform_move_step(world_pos: Vector3) -> Dictionary:
 	if not (full_path is Array) or (full_path as Array).is_empty():
 		return {"performed": false}
 
+	var start_result: Dictionary = TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+		"phase": TurnSystem.ACTION_PHASE_START,
+		"target_pos": target_pos
+	})
+	if not bool(start_result.get("success", false)):
+		return {"performed": false, "result": start_result}
+
+	var available_steps: int = int(TurnSystem.get_actor_available_steps(_owner_node))
+	if available_steps <= 0:
+		TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
+			"success": false
+		})
+		return {"performed": false}
+
 	var path: Array[Vector3] = []
 	for point_variant in full_path:
 		if point_variant is Vector3:
@@ -208,14 +217,11 @@ func _perform_move_step(world_pos: Vector3) -> Dictionary:
 		if path.size() >= available_steps:
 			break
 	if path.is_empty():
+		TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
+			"success": false
+		})
 		return {"performed": false}
-
-	var start_result: Dictionary = TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
-		"phase": TurnSystem.ACTION_PHASE_START,
-		"target_pos": target_pos
-	})
-	if not bool(start_result.get("success", false)):
-		return {"performed": false, "result": start_result}
 
 	if not bool(_movement_component.call("move_along_world_path", path)):
 		TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {

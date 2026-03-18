@@ -32,6 +32,14 @@ const ACTION_CONCURRENCY_LIMITS: Dictionary = {
 	ACTION_TYPE_ATTACK: 1
 }
 
+const DEBUG_MODULE_ID: String = "turn_debug"
+const DEBUG_COMMAND_ID: String = "turn_debug"
+const DEBUG_VARIABLE_ID: String = "turn.debug_visible"
+const DEBUG_OVERLAY_NAME: String = "TurnDebugOverlay"
+const DEBUG_STATUS_LABEL_NAME: String = "TurnDebugStatusLabel"
+const DEBUG_ACTOR_LABEL_NAME: String = "TurnDebugLabel"
+const DEBUG_UPDATE_INTERVAL: float = 0.1
+
 var _actor_states: Dictionary = {}
 var _actor_keys_by_instance: Dictionary = {}
 var _group_orders: Dictionary = DEFAULT_GROUP_ORDERS.duplicate(true)
@@ -48,9 +56,32 @@ var _current_actor_key: String = ""
 var _world_cycle_running: bool = false
 var _pending_world_cycles: int = 0
 
+var _debug_visible: bool = false
+var _debug_refresh_timer: float = 0.0
+var _debug_overlay_requested: bool = false
+var _debug_overlay_layer: CanvasLayer = null
+var _debug_status_label: Label = null
+var _debug_label_actor_ids: Dictionary = {}
+
 func _ready() -> void:
 	register_group("player", int(DEFAULT_GROUP_ORDERS.get("player", 0)))
 	register_group("friendly", int(DEFAULT_GROUP_ORDERS.get("friendly", 10)))
+	_register_debug_entries()
+	set_process(false)
+
+func _exit_tree() -> void:
+	_unregister_debug_entries()
+	_destroy_debug_overlay()
+	_remove_all_debug_actor_labels()
+
+func _process(delta: float) -> void:
+	if not _debug_visible:
+		return
+	_debug_refresh_timer += delta
+	if _debug_refresh_timer < DEBUG_UPDATE_INTERVAL:
+		return
+	_debug_refresh_timer = 0.0
+	_refresh_debug_visuals()
 
 func register_group(group_id: String, order: int) -> void:
 	var resolved_group_id: String = group_id.strip_edges()
@@ -96,16 +127,20 @@ func register_actor(actor: Node, group_id: String, side: String) -> void:
 	_actor_states[state_key] = state
 	_actor_keys_by_instance[instance_id] = state_key
 	_cleanup_invalid_current_turn()
+	_maybe_start_initial_player_turn(state_key)
 
 func unregister_actor(actor: Node) -> void:
 	var state: Dictionary = _get_actor_state(actor)
 	if state.is_empty():
 		return
 
+	if actor is Node3D and is_instance_valid(actor):
+		_remove_actor_debug_label(actor as Node3D)
 	_release_action_slot_if_needed(str(state.get("key", "")))
 	var key: String = str(state.get("key", ""))
 	_actor_states.erase(key)
 	_actor_keys_by_instance.erase(actor.get_instance_id())
+	_debug_label_actor_ids.erase(key)
 
 	if key == _current_actor_key:
 		_current_actor_key = ""
@@ -245,6 +280,72 @@ func get_actor_group_id(actor: Node) -> String:
 		return ""
 	return str(state.get("group_id", ""))
 
+func is_debug_visible() -> bool:
+	return _debug_visible
+
+func set_debug_visible(visible: bool) -> void:
+	if _debug_visible == visible:
+		if visible:
+			_refresh_debug_visuals()
+		return
+
+	_debug_visible = visible
+	_debug_refresh_timer = DEBUG_UPDATE_INTERVAL
+	set_process(visible)
+
+	if visible:
+		_ensure_debug_overlay()
+		_refresh_debug_visuals()
+		return
+
+	if _debug_overlay_layer != null and is_instance_valid(_debug_overlay_layer):
+		_debug_overlay_layer.visible = false
+	_remove_all_debug_actor_labels()
+
+func toggle_debug_visible() -> bool:
+	set_debug_visible(not _debug_visible)
+	return _debug_visible
+
+func get_debug_snapshot() -> Dictionary:
+	var current_key: String = _resolve_debug_current_actor_key()
+	var current_group: String = _resolve_debug_current_group_id(current_key)
+	var current_actor_id: String = ""
+	if not current_key.is_empty():
+		var current_state: Dictionary = _actor_states.get(current_key, {})
+		current_actor_id = str(current_state.get("actor_id", ""))
+
+	var actors: Array[Dictionary] = []
+	for group_id in _get_sorted_group_ids():
+		for actor_key in _get_group_actor_keys(group_id):
+			var state: Dictionary = _actor_states.get(actor_key, {})
+			if state.is_empty():
+				continue
+			var actor: Node = state.get("actor", null) as Node
+			if actor == null or not is_instance_valid(actor):
+				continue
+			actors.append({
+				"key": actor_key,
+				"actor": actor,
+				"actor_id": str(state.get("actor_id", "")),
+				"group_id": str(state.get("group_id", "")),
+				"side": str(state.get("side", "")),
+				"ap": float(state.get("ap", 0.0)),
+				"turn_open": bool(state.get("turn_open", false)),
+				"is_current": actor_key == current_key
+			})
+
+	return {
+		"debug_visible": _debug_visible,
+		"combat_active": _combat_active,
+		"combat_turn_index": _combat_turn_counter,
+		"current_group_id": current_group,
+		"current_actor_id": current_actor_id,
+		"world_cycle_running": _world_cycle_running,
+		"pending_world_cycles": _pending_world_cycles,
+		"actor_count": actors.size(),
+		"actors": actors
+	}
+
 func reset_runtime_state() -> void:
 	_actor_states.clear()
 	_actor_keys_by_instance.clear()
@@ -258,8 +359,310 @@ func reset_runtime_state() -> void:
 	_pending_world_cycles = 0
 	_combat_active = false
 	_combat_turn_counter = 0
+	_remove_all_debug_actor_labels()
 	register_group("player", int(DEFAULT_GROUP_ORDERS.get("player", 0)))
 	register_group("friendly", int(DEFAULT_GROUP_ORDERS.get("friendly", 10)))
+
+func _maybe_start_initial_player_turn(actor_key: String) -> void:
+	if _combat_active:
+		return
+	var state: Dictionary = _actor_states.get(actor_key, {})
+	if state.is_empty():
+		return
+	if str(state.get("side", "")) != "player":
+		return
+	if bool(state.get("turn_open", false)):
+		return
+	if _has_open_player_turn():
+		return
+	_start_actor_turn(actor_key)
+
+func _has_open_player_turn() -> bool:
+	for state_variant in _actor_states.values():
+		var state: Dictionary = state_variant
+		if str(state.get("side", "")) != "player":
+			continue
+		if not bool(state.get("turn_open", false)):
+			continue
+		var actor: Node = state.get("actor", null) as Node
+		if actor == null or not is_instance_valid(actor):
+			continue
+		return true
+	return false
+
+func _register_debug_entries() -> void:
+	if not DebugModule:
+		return
+	_unregister_debug_entries()
+	DebugModule.register_module(DEBUG_MODULE_ID, {
+		"description": "TurnSystem debug overlay controls"
+	})
+	DebugModule.register_command(
+		DEBUG_MODULE_ID,
+		DEBUG_COMMAND_ID,
+		Callable(self, "_debug_cmd_turn"),
+		"Show or hide TurnSystem overlay and actor AP labels",
+		"%s [on|off|toggle|status]" % DEBUG_COMMAND_ID
+	)
+	DebugModule.register_variable(
+		DEBUG_MODULE_ID,
+		DEBUG_VARIABLE_ID,
+		Callable(self, "is_debug_visible"),
+		Callable(self, "_set_debug_visible_from_variant"),
+		"TurnSystem debug overlay visibility"
+	)
+
+func _unregister_debug_entries() -> void:
+	if not DebugModule:
+		return
+	DebugModule.unregister_variable(DEBUG_VARIABLE_ID)
+	DebugModule.unregister_command(DEBUG_COMMAND_ID)
+	DebugModule.unregister_module(DEBUG_MODULE_ID)
+
+func _set_debug_visible_from_variant(value: Variant) -> void:
+	var parsed_visible: bool = false
+	if value is bool:
+		parsed_visible = value
+	elif value is int:
+		parsed_visible = value != 0
+	elif value is float:
+		parsed_visible = value != 0.0
+	else:
+		var text_value: String = str(value).to_lower().strip_edges()
+		parsed_visible = text_value in ["on", "show", "true", "1", "yes"]
+	set_debug_visible(parsed_visible)
+
+func _debug_cmd_turn(args: Array[String]) -> Dictionary:
+	var action: String = "toggle"
+	if not args.is_empty():
+		action = args[0].to_lower()
+
+	match action:
+		"on", "show", "true", "1":
+			set_debug_visible(true)
+		"off", "hide", "false", "0":
+			set_debug_visible(false)
+		"toggle":
+			toggle_debug_visible()
+		"status":
+			pass
+		_:
+			return {
+				"success": false,
+				"error": "Usage: %s [on|off|toggle|status]" % DEBUG_COMMAND_ID
+			}
+
+	return {
+		"success": true,
+		"message": _format_turn_debug_status(get_debug_snapshot())
+	}
+
+func _ensure_debug_overlay() -> void:
+	if _debug_overlay_layer != null and is_instance_valid(_debug_overlay_layer):
+		_debug_overlay_layer.visible = _debug_visible
+		return
+	if _debug_overlay_requested:
+		return
+	_debug_overlay_requested = true
+	call_deferred("_create_debug_overlay")
+
+func _create_debug_overlay() -> void:
+	_debug_overlay_requested = false
+	if _debug_overlay_layer != null and is_instance_valid(_debug_overlay_layer):
+		_debug_overlay_layer.visible = _debug_visible
+		return
+	if get_tree() == null or get_tree().root == null:
+		return
+
+	var layer := CanvasLayer.new()
+	layer.name = DEBUG_OVERLAY_NAME
+	layer.layer = 100
+
+	var root_control := Control.new()
+	root_control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(root_control)
+
+	var margin := MarginContainer.new()
+	margin.anchor_left = 0.0
+	margin.anchor_top = 0.0
+	margin.anchor_right = 0.0
+	margin.anchor_bottom = 0.0
+	margin.offset_left = 12.0
+	margin.offset_top = 12.0
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_control.add_child(margin)
+
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(panel)
+
+	var label := Label.new()
+	label.name = DEBUG_STATUS_LABEL_NAME
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	panel.add_child(label)
+
+	get_tree().root.add_child(layer)
+	_debug_overlay_layer = layer
+	_debug_status_label = label
+	_debug_overlay_layer.visible = _debug_visible
+	if _debug_visible:
+		_refresh_debug_visuals()
+
+func _destroy_debug_overlay() -> void:
+	if _debug_overlay_layer != null and is_instance_valid(_debug_overlay_layer):
+		_debug_overlay_layer.queue_free()
+	_debug_overlay_layer = null
+	_debug_status_label = null
+	_debug_overlay_requested = false
+
+func _refresh_debug_visuals() -> void:
+	if not _debug_visible:
+		return
+	_ensure_debug_overlay()
+	var snapshot: Dictionary = get_debug_snapshot()
+	_refresh_debug_overlay_text(snapshot)
+	_refresh_debug_actor_labels(snapshot)
+
+func _refresh_debug_overlay_text(snapshot: Dictionary) -> void:
+	if _debug_status_label == null or not is_instance_valid(_debug_status_label):
+		return
+	_debug_status_label.text = _format_turn_debug_status(snapshot)
+	if _debug_overlay_layer != null and is_instance_valid(_debug_overlay_layer):
+		_debug_overlay_layer.visible = true
+
+func _refresh_debug_actor_labels(snapshot: Dictionary) -> void:
+	var seen_actor_ids: Dictionary = {}
+	var actor_entries: Array = snapshot.get("actors", [])
+	for actor_entry_variant in actor_entries:
+		var actor_entry: Dictionary = actor_entry_variant
+		var actor: Node = actor_entry.get("actor", null) as Node
+		if not (actor is Node3D) or not is_instance_valid(actor):
+			continue
+		var actor_key: String = str(actor_entry.get("key", ""))
+		seen_actor_ids[actor_key] = actor.get_instance_id()
+		var label: Label3D = _ensure_actor_debug_label(actor as Node3D)
+		if label == null:
+			continue
+		label.text = _format_actor_debug_label(actor_entry)
+		label.modulate = _resolve_actor_debug_label_color(actor_entry)
+		label.visible = true
+	_debug_cleanup_stale_actor_labels(seen_actor_ids)
+	_debug_label_actor_ids = seen_actor_ids
+
+func _ensure_actor_debug_label(actor: Node3D) -> Label3D:
+	var existing_label := actor.get_node_or_null(DEBUG_ACTOR_LABEL_NAME) as Label3D
+	if existing_label != null:
+		return existing_label
+
+	var label := Label3D.new()
+	label.name = DEBUG_ACTOR_LABEL_NAME
+	label.position = Vector3(0.0, 2.8, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 24
+	label.outline_size = 8
+	label.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	actor.add_child(label)
+	return label
+
+func _format_actor_debug_label(actor_entry: Dictionary) -> String:
+	var group_id: String = str(actor_entry.get("group_id", ""))
+	var ap_value: float = float(actor_entry.get("ap", 0.0))
+	var label_text: String = "%s | AP %.1f" % [group_id, ap_value]
+	if bool(actor_entry.get("is_current", false)):
+		label_text = "> " + label_text
+	elif bool(actor_entry.get("turn_open", false)):
+		label_text = "* " + label_text
+	return label_text
+
+func _resolve_actor_debug_label_color(actor_entry: Dictionary) -> Color:
+	if bool(actor_entry.get("is_current", false)):
+		return Color(1.0, 0.92, 0.45, 1.0)
+
+	var side: String = str(actor_entry.get("side", ""))
+	match side:
+		"player":
+			return Color(0.70, 0.90, 1.0, 1.0)
+		"hostile":
+			return Color(1.0, 0.55, 0.55, 1.0)
+		_:
+			return Color(0.70, 1.0, 0.75, 1.0)
+
+func _debug_cleanup_stale_actor_labels(active_actor_ids: Dictionary) -> void:
+	for actor_key_variant in _debug_label_actor_ids.keys():
+		var actor_key: String = str(actor_key_variant)
+		if active_actor_ids.has(actor_key):
+			continue
+		var actor_id: int = int(_debug_label_actor_ids.get(actor_key, 0))
+		var actor_variant: Variant = instance_from_id(actor_id)
+		if actor_variant is Node3D and is_instance_valid(actor_variant):
+			_remove_actor_debug_label(actor_variant as Node3D)
+
+func _remove_all_debug_actor_labels() -> void:
+	_debug_cleanup_stale_actor_labels({})
+	for state_variant in _actor_states.values():
+		var state: Dictionary = state_variant
+		var actor: Node = state.get("actor", null) as Node
+		if actor is Node3D and is_instance_valid(actor):
+			_remove_actor_debug_label(actor as Node3D)
+	_debug_label_actor_ids.clear()
+
+func _remove_actor_debug_label(actor: Node3D) -> void:
+	var label := actor.get_node_or_null(DEBUG_ACTOR_LABEL_NAME) as Label3D
+	if label == null:
+		return
+	if label.get_parent() != null:
+		label.get_parent().remove_child(label)
+	label.queue_free()
+
+func _format_turn_debug_status(snapshot: Dictionary) -> String:
+	var lines: Array[String] = []
+	lines.append("TurnSystem Debug")
+	lines.append("overlay=%s combat=%s actors=%d" % [
+		"on" if bool(snapshot.get("debug_visible", false)) else "off",
+		"on" if bool(snapshot.get("combat_active", false)) else "off",
+		int(snapshot.get("actor_count", 0))
+	])
+	lines.append("turn=%d current_group=%s current_actor=%s" % [
+		int(snapshot.get("combat_turn_index", 0)),
+		_value_or_dash(str(snapshot.get("current_group_id", ""))),
+		_value_or_dash(str(snapshot.get("current_actor_id", "")))
+	])
+	lines.append("world_cycle=%s pending=%d" % [
+		"running" if bool(snapshot.get("world_cycle_running", false)) else "idle",
+		int(snapshot.get("pending_world_cycles", 0))
+	])
+	return "\n".join(lines)
+
+func _resolve_debug_current_actor_key() -> String:
+	if _combat_active:
+		return _current_actor_key
+	for state_variant in _actor_states.values():
+		var state: Dictionary = state_variant
+		if str(state.get("side", "")) != "player":
+			continue
+		if not bool(state.get("turn_open", false)):
+			continue
+		var actor: Node = state.get("actor", null) as Node
+		if actor == null or not is_instance_valid(actor):
+			continue
+		return str(state.get("key", ""))
+	return ""
+
+func _resolve_debug_current_group_id(current_actor_key: String) -> String:
+	if not current_actor_key.is_empty():
+		var state: Dictionary = _actor_states.get(current_actor_key, {})
+		if not state.is_empty():
+			return str(state.get("group_id", ""))
+	return _current_group_id
+
+func _value_or_dash(value: String) -> String:
+	if value.strip_edges().is_empty():
+		return "-"
+	return value
 
 func _request_action_start(state: Dictionary, action_type: String, payload: Dictionary) -> Dictionary:
 	var actor: Node = state.get("actor", null) as Node
