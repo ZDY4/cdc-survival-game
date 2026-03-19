@@ -7,21 +7,178 @@ const WINDOW_CONTENT_SCRIPT_PATH: String = "res://addons/gameplay_tags/editor/ga
 const TOOL_MENU_ITEM_NAME: String = "Gameplay Tags"
 const DEFAULT_WINDOW_SIZE: Vector2i = Vector2i(1120, 760)
 const MIN_WINDOW_SIZE: Vector2i = Vector2i(820, 560)
+const EDITOR_MENU_ITEM_ID: int = 42001
+const EDITOR_MENU_LABELS: PackedStringArray = ["Editor", "编辑器"]
+const MENU_ATTACH_MAX_ATTEMPTS: int = 120
 
 var _window_content: Control = null
 var _editor_window: Window = null
 var _autoload_added_by_plugin: bool = false
 var _window_opened_once: bool = false
+var _editor_popup_menu: PopupMenu = null
+var _fallback_menu_button: MenuButton = null
+var _fallback_popup_menu: PopupMenu = null
+var _top_menu_bar: MenuBar = null
+var _menu_in_toolbar: bool = false
 
 func _enter_tree() -> void:
 	_ensure_autoload_singleton()
-	add_tool_menu_item(TOOL_MENU_ITEM_NAME, Callable(self, "_on_tool_menu_item_pressed"))
+	call_deferred("_initialize_menu_deferred")
 	call_deferred("_bind_manager_to_window")
 
 func _exit_tree() -> void:
-	remove_tool_menu_item(TOOL_MENU_ITEM_NAME)
+	_remove_editor_menu_item()
 	_cleanup_window()
 	_remove_autoload_singleton_if_needed()
+
+func _initialize_menu_deferred() -> void:
+	await _attach_menu_item_to_editor_menu()
+
+func _attach_menu_item_to_editor_menu() -> void:
+	for _attempt in range(MENU_ATTACH_MAX_ATTEMPTS):
+		if not is_inside_tree():
+			return
+		if _attach_to_editor_menu():
+			_menu_in_toolbar = false
+			return
+		await get_tree().process_frame
+
+	_create_fallback_menu_button()
+
+func _attach_to_editor_menu() -> bool:
+	var base_control: Control = get_editor_interface().get_base_control()
+	_top_menu_bar = _find_main_menu_bar(base_control)
+	var editor_popup: PopupMenu = _find_editor_popup_menu(base_control)
+	if editor_popup == null:
+		return false
+
+	if _editor_popup_menu != editor_popup and _editor_popup_menu and _editor_popup_menu.id_pressed.is_connected(_on_editor_menu_id_pressed):
+		_editor_popup_menu.id_pressed.disconnect(_on_editor_menu_id_pressed)
+
+	_editor_popup_menu = editor_popup
+	_remove_existing_editor_menu_item()
+	if not _editor_popup_menu.id_pressed.is_connected(_on_editor_menu_id_pressed):
+		_editor_popup_menu.id_pressed.connect(_on_editor_menu_id_pressed)
+	_editor_popup_menu.add_item(TOOL_MENU_ITEM_NAME, EDITOR_MENU_ITEM_ID)
+	return true
+
+func _create_fallback_menu_button() -> void:
+	if _fallback_menu_button:
+		return
+
+	_fallback_menu_button = MenuButton.new()
+	_fallback_menu_button.text = TOOL_MENU_ITEM_NAME
+	_fallback_menu_button.tooltip_text = "Open Gameplay Tags editor"
+	_fallback_popup_menu = _fallback_menu_button.get_popup()
+	_fallback_popup_menu.add_item(TOOL_MENU_ITEM_NAME, EDITOR_MENU_ITEM_ID)
+	_fallback_popup_menu.id_pressed.connect(_on_editor_menu_id_pressed)
+
+	var base_control: Control = get_editor_interface().get_base_control()
+	_top_menu_bar = _find_main_menu_bar(base_control)
+	if _top_menu_bar:
+		_top_menu_bar.add_child(_fallback_menu_button)
+		_top_menu_bar.move_child(_fallback_menu_button, _top_menu_bar.get_child_count() - 1)
+		return
+
+	add_control_to_container(CONTAINER_TOOLBAR, _fallback_menu_button)
+	_menu_in_toolbar = true
+
+func _remove_editor_menu_item() -> void:
+	if _editor_popup_menu:
+		_remove_existing_editor_menu_item()
+		if _editor_popup_menu.id_pressed.is_connected(_on_editor_menu_id_pressed):
+			_editor_popup_menu.id_pressed.disconnect(_on_editor_menu_id_pressed)
+
+	if _fallback_popup_menu and _fallback_popup_menu.id_pressed.is_connected(_on_editor_menu_id_pressed):
+		_fallback_popup_menu.id_pressed.disconnect(_on_editor_menu_id_pressed)
+
+	if _fallback_menu_button:
+		if _menu_in_toolbar:
+			remove_control_from_container(CONTAINER_TOOLBAR, _fallback_menu_button)
+		elif _top_menu_bar and _fallback_menu_button.get_parent() == _top_menu_bar:
+			_top_menu_bar.remove_child(_fallback_menu_button)
+		_fallback_menu_button.queue_free()
+
+	_fallback_menu_button = null
+	_fallback_popup_menu = null
+	_editor_popup_menu = null
+	_top_menu_bar = null
+	_menu_in_toolbar = false
+
+func _remove_existing_editor_menu_item() -> void:
+	if _editor_popup_menu == null:
+		return
+
+	var menu_item_index: int = _find_menu_item_index_by_id(_editor_popup_menu, EDITOR_MENU_ITEM_ID)
+	if menu_item_index >= 0:
+		_editor_popup_menu.remove_item(menu_item_index)
+
+func _find_menu_item_index_by_id(menu: PopupMenu, item_id: int) -> int:
+	for item_index in range(menu.item_count):
+		if menu.get_item_id(item_index) == item_id:
+			return item_index
+	return -1
+
+func _find_main_menu_bar(root: Node) -> MenuBar:
+	if root is MenuBar:
+		return root
+
+	for child in root.get_children():
+		var child_node: Node = child
+		var found: MenuBar = _find_main_menu_bar(child_node)
+		if found:
+			return found
+
+	return null
+
+func _find_editor_popup_menu(root: Node) -> PopupMenu:
+	var menu_button: MenuButton = _find_editor_menu_button(root)
+	if menu_button:
+		var popup_from_button: PopupMenu = menu_button.get_popup()
+		if popup_from_button:
+			return popup_from_button
+
+	return _find_editor_popup_node(root)
+
+func _find_editor_popup_node(root: Node) -> PopupMenu:
+	if root is PopupMenu:
+		var popup_menu: PopupMenu = root
+		if _is_editor_popup_menu(popup_menu):
+			return popup_menu
+
+	for child in root.get_children():
+		var child_node: Node = child
+		var found: PopupMenu = _find_editor_popup_node(child_node)
+		if found:
+			return found
+
+	return null
+
+func _find_editor_menu_button(root: Node) -> MenuButton:
+	if root is MenuButton:
+		var menu_button: MenuButton = root
+		if _is_editor_menu_button(menu_button):
+			return menu_button
+
+	for child in root.get_children():
+		var child_node: Node = child
+		var found: MenuButton = _find_editor_menu_button(child_node)
+		if found:
+			return found
+
+	return null
+
+func _is_editor_menu_button(menu_button: MenuButton) -> bool:
+	var menu_label: String = menu_button.text.strip_edges()
+	if EDITOR_MENU_LABELS.has(menu_label):
+		return true
+	return menu_button.name.to_lower().contains("editor")
+
+func _is_editor_popup_menu(popup_menu: PopupMenu) -> bool:
+	var popup_title: String = popup_menu.title.strip_edges()
+	if EDITOR_MENU_LABELS.has(popup_title):
+		return true
+	return popup_menu.name.to_lower().contains("editor")
 
 func _ensure_autoload_singleton() -> void:
 	var setting_key: String = "autoload/%s" % AUTOLOAD_NAME
@@ -46,7 +203,9 @@ func _remove_autoload_singleton_if_needed() -> void:
 	ProjectSettings.save()
 	_autoload_added_by_plugin = false
 
-func _on_tool_menu_item_pressed() -> void:
+func _on_editor_menu_id_pressed(menu_id: int) -> void:
+	if menu_id != EDITOR_MENU_ITEM_ID:
+		return
 	_open_window()
 
 func _open_window() -> void:
@@ -100,6 +259,12 @@ func _create_window() -> bool:
 	return true
 
 func _on_window_close_requested() -> void:
+	if _window_content and _window_content.has_method("request_window_close"):
+		_window_content.call("request_window_close", Callable(self, "_hide_editor_window"))
+		return
+	_hide_editor_window()
+
+func _hide_editor_window() -> void:
 	if _editor_window:
 		_editor_window.hide()
 
@@ -118,7 +283,7 @@ func _bind_manager_to_window() -> void:
 	if manager and manager.has_method("reload_tags"):
 		manager.call("reload_tags")
 
-	if _window_content.has_method("set_manager"):
+	if manager != null and _window_content.has_method("set_manager"):
 		_window_content.call("set_manager", manager)
 
 func _position_window_safely(editor_window: Window, requested_size: Vector2i) -> void:

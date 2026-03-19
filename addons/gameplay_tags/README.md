@@ -16,7 +16,7 @@ UE-style hierarchical gameplay tags for Godot, including runtime containers, que
 
 Default config path:
 
-`res://addons/gameplay_tags/config/gameplay_tags.ini`
+`res://config/gameplay_tags.ini`
 
 Example:
 

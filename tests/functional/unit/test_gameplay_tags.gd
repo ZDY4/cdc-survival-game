@@ -6,6 +6,7 @@ class_name FunctionalTest_GameplayTags
 
 const TEMP_CONFIG_PATH: String = "user://gameplay_tags_test.ini"
 const MANAGER_SCRIPT_PATH: String = "res://addons/gameplay_tags/runtime/gameplay_tags_manager.gd"
+const DEFAULT_CONFIG_PATH: String = "res://config/gameplay_tags.ini"
 const FUNCTIONAL_LAYER: int = 1
 const P0_CRITICAL: int = 0
 const P1_MAJOR: int = 1
@@ -44,6 +45,20 @@ static func run_tests(runner) -> void:
 		FUNCTIONAL_LAYER,
 		P1_MAJOR,
 		_test_stack_container
+	)
+
+	runner.register_test(
+		"gameplay_tags_default_config_path",
+		FUNCTIONAL_LAYER,
+		P1_MAJOR,
+		_test_default_config_path
+	)
+
+	runner.register_test(
+		"gameplay_tags_registry_validation",
+		FUNCTIONAL_LAYER,
+		P1_MAJOR,
+		_test_registry_validation
 	)
 
 static func _test_registry_load() -> void:
@@ -138,6 +153,21 @@ static func _test_stack_container() -> void:
 
 	var converted: GameplayTagContainer = stack_container.to_container()
 	assert(converted.is_empty(), "Converted container should be empty after stack clears")
+
+static func _test_default_config_path() -> void:
+	var manager: Object = _new_manager()
+	assert(
+		str(manager.call("get_default_config_path")) == DEFAULT_CONFIG_PATH,
+		"GameplayTags should default to the project config directory"
+	)
+
+static func _test_registry_validation() -> void:
+	var manager: Object = _new_manager()
+	manager.set("_explicit_tags", {&"Status.Burning": true, &"Bad Tag": true})
+
+	var issues: Array = manager.call("validate_registry")
+	assert(issues.size() == 1, "Validation should report malformed explicit tags")
+	assert(String(issues[0]).contains("Bad Tag"), "Validation should include the malformed tag name")
 
 static func _new_manager() -> Object:
 	var manager_script: Script = load(MANAGER_SCRIPT_PATH)

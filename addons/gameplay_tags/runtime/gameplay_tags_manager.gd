@@ -1,7 +1,7 @@
 extends Node
 ## GameplayTagsManager - Global hierarchical gameplay tag registry.
 
-const DEFAULT_CONFIG_PATH: String = "res://addons/gameplay_tags/config/gameplay_tags.ini"
+const DEFAULT_CONFIG_PATH: String = "res://config/gameplay_tags.ini"
 const TAGS_SECTION_NAME: String = "GameplayTags"
 const TAG_DECLARATION_KEY: String = "GameplayTagList"
 
@@ -22,7 +22,7 @@ func _init() -> void:
 		push_error("[GameplayTags] Failed to compile tag validation regex.")
 
 func _ready() -> void:
-	reload_tags(DEFAULT_CONFIG_PATH)
+	reload_tags()
 
 func request_tag(tag_name: String, error_if_not_found: bool = true) -> StringName:
 	var normalized: String = _normalize_tag_name(tag_name)
@@ -296,13 +296,34 @@ func get_parse_warnings() -> Array[String]:
 func get_loaded_config_path() -> String:
 	return _loaded_config_path
 
+func get_default_config_path() -> String:
+	return DEFAULT_CONFIG_PATH
+
+func validate_registry() -> Array[String]:
+	var issues: Array[String] = []
+	for explicit_tag in _explicit_tags.keys():
+		var tag_text: String = String(explicit_tag)
+		var normalized: String = _normalize_tag_name(tag_text)
+		if normalized.is_empty():
+			issues.append("Encountered an empty explicit tag entry.")
+			continue
+		if normalized != tag_text:
+			issues.append("Tag '%s' should be normalized to '%s'." % [tag_text, normalized])
+			continue
+		if not _is_valid_tag_format(tag_text):
+			issues.append("Tag '%s' has an invalid format." % tag_text)
+	return issues
+
 func get_last_error() -> String:
 	return _last_error
 
 func _resolve_config_path(config_path: String) -> String:
-	if config_path.strip_edges().is_empty():
+	var normalized_path: String = config_path.strip_edges()
+	if normalized_path.is_empty():
+		if _loaded_config_path.strip_edges().is_empty():
+			return DEFAULT_CONFIG_PATH
 		return _loaded_config_path
-	return config_path.strip_edges()
+	return normalized_path
 
 func _extract_tag_from_declaration(declaration: String) -> String:
 	var separator_index: int = declaration.find("=")
