@@ -53,11 +53,13 @@ func _get_configuration_warnings() -> PackedStringArray:
 
 func set_control_points(value: Array) -> void:
 	control_points = _sanitize_points(value)
+	if not can_use_closed_shape():
+		closed = _requires_closed_shape()
 	_notify_editor_property_change()
 	_request_rebuild()
 
 func set_closed(value: bool) -> void:
-	closed = value if _supports_closed_toggle() else _requires_closed_shape()
+	closed = _requires_closed_shape() or (value and can_edit_closed_state())
 	_notify_editor_property_change()
 	_request_rebuild()
 
@@ -126,6 +128,12 @@ func get_control_point(index: int) -> Vector3:
 
 func get_control_points_copy() -> Array:
 	return control_points.duplicate()
+
+func can_edit_closed_state() -> bool:
+	return _supports_closed_toggle() and not _requires_closed_shape() and control_points.size() >= 3
+
+func can_use_closed_shape() -> bool:
+	return _requires_closed_shape() or (_supports_closed_toggle() and control_points.size() >= 3)
 
 func get_minimum_point_count() -> int:
 	return 2
@@ -258,6 +266,13 @@ func _notification(what: int) -> void:
 	_update_blocked_grid_cells()
 	if Engine.is_editor_hint():
 		update_gizmos()
+
+func _validate_property(property: Dictionary) -> void:
+	if str(property.get("name", "")) != "closed":
+		return
+	if can_edit_closed_state():
+		return
+	property["usage"] = int(property.get("usage", PROPERTY_USAGE_DEFAULT)) | PROPERTY_USAGE_READ_ONLY
 
 func _get_default_control_points() -> Array:
 	return [Vector3.ZERO, Vector3(4.0, 0.0, 0.0)]

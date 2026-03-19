@@ -99,8 +99,11 @@ func _build_geometry() -> Dictionary:
 
 	ProcGeometryUtils.add_polygon_cap(surface_tool, ordered_points, triangulated, inside_point, true)
 
-	var roof_vertices: Array[Vector3] = _build_roof_vertices(ordered_points)
-	ProcGeometryUtils.add_polygon_cap(surface_tool, roof_vertices, triangulated, inside_point, false)
+	if roof_mode == RoofMode.GABLE:
+		_add_gable_roof(surface_tool, ordered_points)
+	else:
+		var roof_vertices: Array[Vector3] = _build_flat_roof_vertices(ordered_points)
+		ProcGeometryUtils.add_polygon_cap(surface_tool, roof_vertices, triangulated, _compute_roof_inside_point(ordered_points), false)
 
 	var edge_opening_map: Dictionary = _build_edge_opening_map(ordered_points, warnings)
 	var wall_piece_count: int = 0
@@ -159,9 +162,59 @@ func _ensure_ccw_points(points: Array) -> Array[Vector3]:
 		ccw_points.reverse()
 	return ccw_points
 
-func _build_roof_vertices(points: Array) -> Array[Vector3]:
+func _build_flat_roof_vertices(points: Array) -> Array[Vector3]:
 	var roof_vertices: Array[Vector3] = [Vector3.ZERO]
 	roof_vertices.clear()
+	for point in points:
+		roof_vertices.append(point + Vector3.UP * wall_height)
+	return roof_vertices
+
+func _add_gable_roof(surface_tool: SurfaceTool, points: Array[Vector3]) -> void:
+	if points.size() < 3:
+		return
+
+	var bounds: Dictionary = _compute_roof_bounds(points)
+	var bounds_min: Vector3 = bounds.get("min", Vector3.ZERO)
+	var bounds_max: Vector3 = bounds.get("max", Vector3.ZERO)
+	var span_x: float = maxf(bounds_max.x - bounds_min.x, ProcGeometryUtils.EPSILON)
+	var span_z: float = maxf(bounds_max.z - bounds_min.z, ProcGeometryUtils.EPSILON)
+	var ridge_on_x: bool = span_x >= span_z
+	var roof_inside_point: Vector3 = _compute_roof_inside_point(points)
+
+	for point_index in range(points.size()):
+		var next_index: int = (point_index + 1) % points.size()
+		var edge_start: Vector3 = points[point_index] + Vector3.UP * wall_height
+		var edge_end: Vector3 = points[next_index] + Vector3.UP * wall_height
+		var ridge_start: Vector3 = _project_point_to_roof_ridge(points[point_index], bounds_min, bounds_max, ridge_on_x)
+		var ridge_end: Vector3 = _project_point_to_roof_ridge(points[next_index], bounds_min, bounds_max, ridge_on_x)
+
+		if ridge_start.distance_to(ridge_end) <= ProcGeometryUtils.EPSILON:
+			ProcGeometryUtils.add_triangle(
+				surface_tool,
+				edge_start,
+				edge_end,
+				ridge_start,
+				Vector2(edge_start.x, edge_start.z),
+				Vector2(edge_end.x, edge_end.z),
+				Vector2(ridge_start.x, ridge_start.z),
+				roof_inside_point
+			)
+			continue
+
+		ProcGeometryUtils.add_quad(
+			surface_tool,
+			edge_start,
+			edge_end,
+			ridge_end,
+			ridge_start,
+			Vector2(edge_start.x, edge_start.z),
+			Vector2(edge_end.x, edge_end.z),
+			Vector2(ridge_end.x, ridge_end.z),
+			Vector2(ridge_start.x, ridge_start.z),
+			roof_inside_point
+		)
+
+func _compute_roof_bounds(points: Array[Vector3]) -> Dictionary:
 	var bounds_min: Vector3 = points[0]
 	var bounds_max: Vector3 = points[0]
 	for point in points:
@@ -169,21 +222,16 @@ func _build_roof_vertices(points: Array) -> Array[Vector3]:
 		bounds_min.z = minf(bounds_min.z, point.z)
 		bounds_max.x = maxf(bounds_max.x, point.x)
 		bounds_max.z = maxf(bounds_max.z, point.z)
+	return {
+		"min": bounds_min,
+		"max": bounds_max
+	}
 
-	var span_x: float = maxf(bounds_max.x - bounds_min.x, ProcGeometryUtils.EPSILON)
-	var span_z: float = maxf(bounds_max.z - bounds_min.z, ProcGeometryUtils.EPSILON)
-	var ridge_on_x: bool = span_x >= span_z
-	for point in points:
-		var roof_point: Vector3 = point + Vector3.UP * wall_height
-		if roof_mode == RoofMode.GABLE:
-			var ratio: float = 0.0
-			if ridge_on_x:
-				ratio = absf(((point.z - bounds_min.z) / span_z) * 2.0 - 1.0)
-			else:
-				ratio = absf(((point.x - bounds_min.x) / span_x) * 2.0 - 1.0)
-			roof_point.y += maxf(0.0, 1.0 - ratio) * roof_height
-		roof_vertices.append(roof_point)
-	return roof_vertices
+func _project_point_to_roof_ridge(point: Vector3, bounds_min: Vector3, bounds_max: Vector3, ridge_on_x: bool) -> Vector3:
+	var ridge_height: float = wall_height + roof_height
+	if ridge_on_x:
+		return Vector3(point.x, ridge_height, lerpf(bounds_min.z, bounds_max.z, 0.5))
+	return Vector3(lerpf(bounds_min.x, bounds_max.x, 0.5), ridge_height, point.z)
 
 func _compute_inside_point(points: Array[Vector3]) -> Vector3:
 	var center: Vector3 = Vector3.ZERO
@@ -192,6 +240,9 @@ func _compute_inside_point(points: Array[Vector3]) -> Vector3:
 	center /= float(maxi(points.size(), 1))
 	center.y = wall_height * 0.5
 	return center
+
+func _compute_roof_inside_point(points: Array[Vector3]) -> Vector3:
+	return ProcGeometryUtils.find_polygon_interior_point_xz(points, wall_height + roof_height * 0.5)
 
 func _build_edge_opening_map(points: Array[Vector3], warnings: PackedStringArray) -> Dictionary:
 	var opening_map: Dictionary = {}

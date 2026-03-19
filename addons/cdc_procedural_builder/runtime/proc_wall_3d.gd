@@ -100,6 +100,8 @@ func _compute_inside_point(strip_data: Dictionary) -> Vector3:
 	var strip_points: Array = strip_data.get("points", [])
 	if strip_points.is_empty():
 		return Vector3.UP * (wall_height * 0.5)
+	if bool(strip_data.get("closed", false)):
+		return ProcGeometryUtils.find_polygon_interior_point_xz(strip_points, wall_height * 0.5)
 
 	var center: Vector3 = Vector3.ZERO
 	for point_variant in strip_points:

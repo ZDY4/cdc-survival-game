@@ -77,8 +77,14 @@ func refresh() -> void:
 	_fill_segment_info()
 	_fill_grid_info()
 
-	_closed_toggle.disabled = not _target._supports_closed_toggle() or _target._requires_closed_shape()
+	_closed_toggle.disabled = not _target.can_edit_closed_state()
 	_closed_toggle.button_pressed = _target.closed or _target._requires_closed_shape()
+	if _target._requires_closed_shape():
+		_closed_toggle.tooltip_text = "This generator always uses a closed path."
+	elif not _target.can_edit_closed_state():
+		_closed_toggle.tooltip_text = "Closed Path requires at least 3 control points."
+	else:
+		_closed_toggle.tooltip_text = ""
 
 	var is_house: bool = _target is ProcHouse3D
 	_opening_section.visible = is_house

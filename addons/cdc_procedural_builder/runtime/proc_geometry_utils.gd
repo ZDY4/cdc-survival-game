@@ -52,6 +52,26 @@ static func triangulate_polygon_xz(points: Array[Vector3]) -> PackedInt32Array:
 		polygon.append(Vector2(point.x, point.z))
 	return Geometry2D.triangulate_polygon(polygon)
 
+static func find_polygon_interior_point_xz(points: Array[Vector3], y: float = 0.0) -> Vector3:
+	if points.is_empty():
+		return Vector3(0.0, y, 0.0)
+
+	var triangulated: PackedInt32Array = triangulate_polygon_xz(points)
+	for triangle_index in range(0, triangulated.size(), 3):
+		var a: Vector3 = points[triangulated[triangle_index]]
+		var b: Vector3 = points[triangulated[triangle_index + 1]]
+		var c: Vector3 = points[triangulated[triangle_index + 2]]
+		var triangle_center: Vector3 = (a + b + c) / 3.0
+		triangle_center.y = y
+		return triangle_center
+
+	var center: Vector3 = Vector3.ZERO
+	for point in points:
+		center += point
+	center /= float(points.size())
+	center.y = y
+	return center
+
 static func build_segment_basis(direction: Vector3) -> Basis:
 	var forward: Vector3 = direction.normalized()
 	if forward.length() <= EPSILON:
@@ -330,6 +350,9 @@ static func add_polygon_cap(surface_tool: SurfaceTool, vertices: Array[Vector3],
 			Vector2(c.x, c.z),
 			inside_point
 		)
+
+static func add_triangle(surface_tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, uv_a: Vector2, uv_b: Vector2, uv_c: Vector2, inside_point: Vector3) -> void:
+	_add_triangle(surface_tool, a, b, c, uv_a, uv_b, uv_c, inside_point)
 
 static func add_quad(surface_tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, uv_a: Vector2, uv_b: Vector2, uv_c: Vector2, uv_d: Vector2, inside_point: Vector3) -> void:
 	_add_triangle(surface_tool, a, b, c, uv_a, uv_b, uv_c, inside_point)

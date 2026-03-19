@@ -5,6 +5,7 @@ const WALL_SCRIPT_PATH: String = "res://addons/cdc_procedural_builder/runtime/pr
 const FENCE_SCRIPT_PATH: String = "res://addons/cdc_procedural_builder/runtime/proc_fence_3d.gd"
 const HOUSE_SCRIPT_PATH: String = "res://addons/cdc_procedural_builder/runtime/proc_house_3d.gd"
 const OPENING_SCRIPT_PATH: String = "res://addons/cdc_procedural_builder/runtime/house_opening_resource.gd"
+const GAME_WORLD_SCENE_PATH: String = "res://scenes/locations/game_world_3d.tscn"
 
 static func run_tests(runner: TestRunner) -> void:
 	runner.register_test(
@@ -75,6 +76,41 @@ static func run_tests(runner: TestRunner) -> void:
 		TestRunner.TestLayer.FUNCTIONAL,
 		TestRunner.TestPriority.P1_MAJOR,
 		_test_snap_step_applies_to_points
+	)
+
+	runner.register_test(
+		"procedural_house_gable_roof_adds_ridge_height",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_house_gable_roof_adds_ridge_height
+	)
+
+	runner.register_test(
+		"procedural_fence_post_height_uses_post_size",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_fence_post_height_uses_post_size
+	)
+
+	runner.register_test(
+		"procedural_concave_polygon_interior_point_stays_inside",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_concave_polygon_interior_point_stays_inside
+	)
+
+	runner.register_test(
+		"procedural_scene_instances_generate_expected_meshes",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_scene_instances_generate_expected_meshes
+	)
+
+	runner.register_test(
+		"procedural_two_point_paths_force_open_state",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_two_point_paths_force_open_state
 	)
 
 static func _test_wall_rebuild_updates_mesh_bounds() -> void:
@@ -275,6 +311,122 @@ static func _test_snap_step_applies_to_points() -> void:
 	assert(wall.get_control_point(0).is_equal_approx(Vector3(0.5, 0.0, 0.5)), "First point should snap to the configured grid")
 	assert(wall.get_control_point(1).is_equal_approx(Vector3(3.0, 0.0, 1.5)), "Second point should snap to the configured grid")
 
+static func _test_house_gable_roof_adds_ridge_height() -> void:
+	var house: ProcHouse3D = _new_script_instance(HOUSE_SCRIPT_PATH)
+	house.wall_height = 3.0
+	house.roof_height = 1.5
+	house.roof_mode = ProcHouse3D.RoofMode.GABLE
+	house.set_control_points([
+		Vector3(-3.0, 0.0, -2.0),
+		Vector3(3.0, 0.0, -2.0),
+		Vector3(3.0, 0.0, 2.0),
+		Vector3(-3.0, 0.0, 2.0)
+	])
+	house.rebuild_geometry()
+
+	var mesh: Mesh = house.get_preview_mesh_instance().mesh
+	assert(mesh != null, "Gable house should generate a mesh")
+	assert(_mesh_max_y(mesh) > house.wall_height + house.roof_height * 0.9, "Gable roof should raise the ridge above the wall top")
+
+static func _test_fence_post_height_uses_post_size() -> void:
+	var fence: ProcFence3D = _new_script_instance(FENCE_SCRIPT_PATH)
+	fence.fence_height = 2.0
+	fence.post_size = Vector3(0.2, 4.0, 0.2)
+	fence.rail_count = 1
+	fence.rail_thickness = 0.2
+	fence.set_control_points([
+		Vector3.ZERO,
+		Vector3(4.0, 0.0, 0.0)
+	])
+	fence.rebuild_geometry()
+
+	var mesh: Mesh = fence.get_preview_mesh_instance().mesh
+	assert(mesh != null, "Fence should generate a mesh when validating post height")
+	assert(_mesh_max_y(mesh) > 3.9, "Fence post mesh should use post_size.y instead of fence_height")
+
+static func _test_concave_polygon_interior_point_stays_inside() -> void:
+	var points: Array[Vector3] = [
+		Vector3(-3.0, 0.0, -3.0),
+		Vector3(3.0, 0.0, -3.0),
+		Vector3(3.0, 0.0, -1.0),
+		Vector3(-1.0, 0.0, -1.0),
+		Vector3(-1.0, 0.0, 1.0),
+		Vector3(3.0, 0.0, 1.0),
+		Vector3(3.0, 0.0, 3.0),
+		Vector3(-3.0, 0.0, 3.0)
+	]
+	var average_point: Vector3 = Vector3.ZERO
+	for point in points:
+		average_point += point
+	average_point /= float(points.size())
+
+	var polygon: PackedVector2Array = PackedVector2Array()
+	for point in points:
+		polygon.append(Vector2(point.x, point.z))
+
+	assert(not Geometry2D.is_point_in_polygon(Vector2(average_point.x, average_point.z), polygon), "Concave regression polygon should place the arithmetic mean outside the footprint")
+
+	var interior_point: Vector3 = ProcGeometryUtils.find_polygon_interior_point_xz(points, 1.0)
+	assert(Geometry2D.is_point_in_polygon(Vector2(interior_point.x, interior_point.z), polygon), "Interior point helper should stay inside a concave footprint")
+	assert(is_equal_approx(interior_point.y, 1.0), "Interior point helper should preserve the requested Y coordinate")
+
+static func _test_scene_instances_generate_expected_meshes() -> void:
+	var scene_resource: PackedScene = load(GAME_WORLD_SCENE_PATH)
+	assert(scene_resource != null, "Game world scene should load")
+
+	var scene_instance: Node = scene_resource.instantiate()
+	assert(scene_instance != null, "Game world scene should instantiate")
+
+	var wall: ProcWall3D = scene_instance.get_node_or_null("ProcWall3D")
+	var fence: ProcFence3D = scene_instance.get_node_or_null("ProcFence3D")
+	var house: ProcHouse3D = scene_instance.get_node_or_null("ProcHouse3D")
+	assert(wall != null, "Game world scene should include ProcWall3D")
+	assert(fence != null, "Game world scene should include ProcFence3D")
+	assert(house != null, "Game world scene should include ProcHouse3D")
+
+	wall.rebuild_geometry()
+	fence.rebuild_geometry()
+	house.rebuild_geometry()
+
+	assert(wall.get_preview_mesh_instance().mesh != null, "Scene wall should generate a preview mesh")
+	assert(fence.get_preview_mesh_instance().mesh != null, "Scene fence should generate a preview mesh")
+	assert(house.get_preview_mesh_instance().mesh != null, "Scene house should generate a preview mesh")
+	assert(wall.get_segment_count() == 4, "Scene wall should remain a closed four-segment loop")
+	assert(not fence.closed, "Scene fence should use an open path for its two-point layout")
+	assert(fence.get_segment_count() == 1, "Scene fence should generate a single visible segment")
+	assert(house.get_collision_root().get_child_count() == 1, "Scene house should still build a trimesh collision shape")
+
+	scene_instance.queue_free()
+
+static func _test_two_point_paths_force_open_state() -> void:
+	var wall: ProcWall3D = _new_script_instance(WALL_SCRIPT_PATH)
+	wall.set_control_points([
+		Vector3.ZERO,
+		Vector3(4.0, 0.0, 0.0)
+	])
+	assert(not wall.can_edit_closed_state(), "Two-point wall should not allow closed editing")
+	wall.set_closed(true)
+	assert(not wall.closed, "Two-point wall should force closed back to false")
+	assert(wall.get_segment_count() == 1, "Two-point wall should only expose one visible segment")
+
+	var wall_closed_property: Dictionary = {"name": "closed", "usage": PROPERTY_USAGE_DEFAULT}
+	wall._validate_property(wall_closed_property)
+	assert((int(wall_closed_property["usage"]) & PROPERTY_USAGE_READ_ONLY) != 0, "Two-point wall should expose closed as read-only in the inspector")
+
+	wall.append_control_point(Vector3(4.0, 0.0, 4.0))
+	assert(wall.can_edit_closed_state(), "Wall should allow closed editing once it has three points")
+	wall.set_closed(true)
+	assert(wall.closed, "Wall should allow closed once it has three points")
+
+	var fence: ProcFence3D = _new_script_instance(FENCE_SCRIPT_PATH)
+	fence.set_control_points([
+		Vector3.ZERO,
+		Vector3(5.0, 0.0, -1.0)
+	])
+	assert(not fence.can_edit_closed_state(), "Two-point fence should not allow closed editing")
+	fence.set_closed(true)
+	assert(not fence.closed, "Two-point fence should force closed back to false")
+
 static func _new_script_instance(path: String) -> Variant:
 	var script: Script = load(path)
 	assert(script != null, "Script should load: %s" % path)
@@ -290,6 +442,15 @@ static func _mesh_contains_vertex_near(mesh: Mesh, target: Vector3, tolerance: f
 			if vertex.distance_to(target) <= tolerance:
 				return true
 	return false
+
+static func _mesh_max_y(mesh: Mesh) -> float:
+	var max_y: float = -INF
+	for surface_index in range(mesh.get_surface_count()):
+		var surface_arrays: Array = mesh.surface_get_arrays(surface_index)
+		var vertices: PackedVector3Array = surface_arrays[Mesh.ARRAY_VERTEX]
+		for vertex in vertices:
+			max_y = maxf(max_y, vertex.y)
+	return max_y
 
 static func _blocked_cells_contains(cells: Array[Vector3i], target: Vector3i) -> bool:
 	for cell in cells:
