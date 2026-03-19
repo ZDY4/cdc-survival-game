@@ -6,6 +6,7 @@ signal quest_loaded(quest_id: String)
 signal validation_errors_found(errors: Array[String])
 
 const QUEST_DATA_DIR := "res://data/quests"
+const AI_GENERATE_PANEL_SCRIPT := preload("res://addons/cdc_game_editor/ai/ai_generate_panel.gd")
 
 const MODE_RELATIONSHIP := "relationship"
 const MODE_FLOW := "flow"
@@ -54,6 +55,8 @@ var _validation_errors: Dictionary = {}
 var _dirty_quest_ids: Dictionary = {}
 var _persisted_quest_ids: Dictionary = {}
 var _deleted_persisted_quest_ids: Dictionary = {}
+var _ai_panel: Window = null
+var _ai_provider_override: Variant = null
 
 
 func _get_editor_name() -> String:
@@ -130,6 +133,8 @@ func _create_toolbar() -> void:
 	_add_toolbar_separator()
 	_new_button = _add_toolbar_button("新建 Quest", _on_new_quest, "创建任务并进入单任务模式")
 	_delete_quest_button = _add_toolbar_button("删除 Quest", _on_delete_current_quest, "仅在单任务模式删除当前任务")
+	_add_toolbar_separator()
+	_add_toolbar_button("AI 生成", _open_ai_panel, "使用 AI 生成或调整任务")
 	_add_toolbar_separator()
 	_add_toolbar_button("保存", _on_save_quests, "保存所有任务到 data/quests")
 	_add_toolbar_button("加载", _on_load_quests, "重新加载任务文件")
@@ -1434,59 +1439,7 @@ func _validate_quest(quest_id: String) -> bool:
 	if not _quests.has(quest_id):
 		return false
 	var quest: Dictionary = _quests[quest_id]
-	var errors: Array[String] = []
-
-	if quest_id.is_empty():
-		errors.append("任务ID不能为空")
-	if str(quest.get("title", "")).strip_edges().is_empty():
-		errors.append("任务标题不能为空")
-
-	for prereq_variant in quest.get("prerequisites", []):
-		var prereq_id := str(prereq_variant)
-		if not _quests.has(prereq_id):
-			errors.append("前置任务不存在: %s" % prereq_id)
-
-	var flow: Dictionary = quest.get("flow", {})
-	var flow_nodes: Dictionary = flow.get("nodes", {})
-	var start_count := 0
-	var end_count := 0
-	for node_id_variant in flow_nodes.keys():
-		var node_id := str(node_id_variant)
-		var node: Dictionary = flow_nodes[node_id]
-		match str(node.get("type", "")):
-			"start":
-				start_count += 1
-			"end":
-				end_count += 1
-			"objective":
-				if str(node.get("objective_type", "")).is_empty():
-					errors.append("%s: objective_type 不能为空" % node_id)
-			"dialog":
-				if str(node.get("dialog_id", "")).strip_edges().is_empty():
-					errors.append("%s: dialog_id 不能为空" % node_id)
-			"choice":
-				if node.get("options", []).is_empty():
-					errors.append("%s: choice 至少要有一个选项" % node_id)
-
-	if start_count != 1:
-		errors.append("每个 Quest 必须且只能有一个 start 节点")
-	if end_count < 1:
-		errors.append("每个 Quest 至少需要一个 end 节点")
-
-	var start_node_id := str(flow.get("start_node_id", "start"))
-	if not flow_nodes.has(start_node_id):
-		errors.append("flow.start_node_id 指向不存在的节点")
-	elif str(flow_nodes[start_node_id].get("type", "")) != "start":
-		errors.append("flow.start_node_id 必须指向 start 节点")
-
-	for conn_variant in flow.get("connections", []):
-		if not (conn_variant is Dictionary):
-			errors.append("存在无效连接数据")
-			continue
-		var conn: Dictionary = conn_variant
-		if not flow_nodes.has(str(conn.get("from", ""))) or not flow_nodes.has(str(conn.get("to", ""))):
-			errors.append("连接引用了不存在的节点")
-
+	var errors: Array[String] = _validate_quest_record(quest_id, quest)
 	_validation_errors[quest_id] = errors
 	return errors.is_empty()
 
@@ -1623,3 +1576,138 @@ func get_quests_count() -> int:
 
 func get_validation_errors() -> Dictionary:
 	return _validation_errors
+
+
+func set_ai_provider_override(provider: Variant) -> void:
+	_ai_provider_override = provider
+	if _ai_panel and is_instance_valid(_ai_panel):
+		_ai_panel.set_provider_override(provider)
+
+
+func build_ai_seed_context() -> Dictionary:
+	var target_id := _current_quest_id
+	if target_id.is_empty():
+		target_id = selected_node_id if _quests.has(selected_node_id) else ""
+	return {
+		"target_id": target_id,
+		"current_record": _quests.get(target_id, {}).duplicate(true)
+	}
+
+
+func get_ai_validation_errors(draft: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var record := draft.get("record", {})
+	if not (record is Dictionary):
+		errors.append("record 必须是 Dictionary")
+		return errors
+
+	var target_id := str(draft.get("target_id", "")).strip_edges()
+	var operation := str(draft.get("operation", "")).strip_edges()
+	var quest_id := str(record.get("quest_id", "")).strip_edges()
+	if quest_id.is_empty():
+		errors.append("quest_id 不能为空")
+		return errors
+	if operation == "create" and _quests.has(quest_id):
+		errors.append("新建模式下不能复用已有任务 ID: %s" % quest_id)
+	if operation == "revise" and not target_id.is_empty() and quest_id != target_id:
+		errors.append("调整模式下 quest_id 必须保持为当前任务 ID")
+
+	var normalized := _normalize_loaded_quest((record as Dictionary).duplicate(true), quest_id, _quests.size())
+	errors.append_array(_validate_quest_record(quest_id, normalized))
+	return errors
+
+
+func apply_ai_draft(draft: Dictionary) -> bool:
+	var errors := get_ai_validation_errors(draft)
+	if not errors.is_empty():
+		_update_status(errors[0])
+		return false
+
+	var record: Dictionary = (draft.get("record", {}) as Dictionary).duplicate(true)
+	var quest_id := str(record.get("quest_id", "")).strip_edges()
+	var normalized := _normalize_loaded_quest(record, quest_id, _quests.size())
+	_quests[quest_id] = normalized
+	_validate_quest(quest_id)
+	_mark_quest_dirty(quest_id)
+	_show_flow_mode(quest_id)
+	_update_validation_panel()
+	_update_status("AI 草稿已应用到任务: %s" % quest_id)
+	return true
+
+
+func _open_ai_panel() -> void:
+	if _ai_panel == null or not is_instance_valid(_ai_panel):
+		_ai_panel = AI_GENERATE_PANEL_SCRIPT.new()
+		_ai_panel.editor_plugin = editor_plugin
+		add_child(_ai_panel)
+	_ai_panel.configure(self, editor_plugin, "quest", _ai_provider_override)
+	_ai_panel.open_panel()
+
+
+func _validate_quest_record(quest_id: String, quest: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	if quest_id.is_empty():
+		errors.append("任务ID不能为空")
+	if str(quest.get("title", "")).strip_edges().is_empty():
+		errors.append("任务标题不能为空")
+
+	for prereq_variant in quest.get("prerequisites", []):
+		var prereq_id := str(prereq_variant)
+		if not _quests.has(prereq_id) and prereq_id != quest_id:
+			errors.append("前置任务不存在: %s" % prereq_id)
+
+	var flow: Dictionary = quest.get("flow", {})
+	var flow_nodes: Dictionary = flow.get("nodes", {})
+	var start_count := 0
+	var end_count := 0
+	for node_id_variant in flow_nodes.keys():
+		var node_id := str(node_id_variant)
+		var node: Dictionary = flow_nodes[node_id]
+		match str(node.get("type", "")):
+			"start":
+				start_count += 1
+			"end":
+				end_count += 1
+			"objective":
+				if str(node.get("objective_type", "")).is_empty():
+					errors.append("%s: objective_type 不能为空" % node_id)
+				if str(node.get("objective_type", "")) == "collect":
+					var item_id_text := str(node.get("item_id", "")).strip_edges()
+					if item_id_text.is_empty() or not FileAccess.file_exists("res://data/items/%s.json" % item_id_text):
+						errors.append("%s: collect 节点引用了不存在的 item_id" % node_id)
+			"dialog":
+				var dialog_id := str(node.get("dialog_id", "")).strip_edges()
+				if dialog_id.is_empty():
+					errors.append("%s: dialog_id 不能为空" % node_id)
+				elif not FileAccess.file_exists("res://data/dialogues/%s.json" % dialog_id):
+					errors.append("%s: dialog_id 不存在 -> %s" % [node_id, dialog_id])
+			"choice":
+				if node.get("options", []).is_empty():
+					errors.append("%s: choice 至少要有一个选项" % node_id)
+			"reward":
+				for reward_item_variant in node.get("rewards", {}).get("items", []):
+					if reward_item_variant is Dictionary:
+						var reward_item_id := str((reward_item_variant as Dictionary).get("id", "")).strip_edges()
+						if reward_item_id.is_empty() or not FileAccess.file_exists("res://data/items/%s.json" % reward_item_id):
+							errors.append("%s: reward 节点引用了不存在的物品" % node_id)
+
+	if start_count != 1:
+		errors.append("每个 Quest 必须且只能有一个 start 节点")
+	if end_count < 1:
+		errors.append("每个 Quest 至少需要一个 end 节点")
+
+	var start_node_id := str(flow.get("start_node_id", "start"))
+	if not flow_nodes.has(start_node_id):
+		errors.append("flow.start_node_id 指向不存在的节点")
+	elif str(flow_nodes[start_node_id].get("type", "")) != "start":
+		errors.append("flow.start_node_id 必须指向 start 节点")
+
+	for conn_variant in flow.get("connections", []):
+		if not (conn_variant is Dictionary):
+			errors.append("存在无效连接数据")
+			continue
+		var conn: Dictionary = conn_variant
+		if not flow_nodes.has(str(conn.get("from", ""))) or not flow_nodes.has(str(conn.get("to", ""))):
+			errors.append("连接引用了不存在的节点")
+
+	return errors

@@ -50,6 +50,7 @@ const WEAPON_SUBTYPES = {
 }
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
+const AI_GENERATE_PANEL_SCRIPT = preload("res://addons/cdc_game_editor/ai/ai_generate_panel.gd")
 const ITEM_DATA_DIR := "res://data/items"
 
 # 节点引用
@@ -70,6 +71,8 @@ var current_file_path: String = ""
 var _validation_errors: Dictionary = {}
 var _dirty_item_ids: Dictionary = {}
 var _deleted_item_ids: Dictionary = {}
+var _ai_panel: Window = null
+var _ai_provider_override: Variant = null
 
 # 工具
 var _undo_redo_helper: RefCounted
@@ -145,6 +148,7 @@ func _create_toolbar():
 	_add_toolbar_button("保存", _on_save_items, "保存到文(Ctrl+S)")
 	_add_toolbar_button("刷新", _on_load_items, "重新加载物品目录")
 	_toolbar.add_child(VSeparator.new())
+	_add_toolbar_button("AI 生成", _open_ai_panel, "使用 AI 生成或调整物品数据")
 	_add_toolbar_button("Validate", _on_validate_all, "Validate all items")
 	_add_toolbar_button("导出", _on_export_data, "导出数据")
 
@@ -1023,4 +1027,99 @@ func get_items_by_type(item_type: String) -> Dictionary:
 		if item.get("type", "") == item_type:
 			result[item_id] = item
 	return result
+
+
+func set_ai_provider_override(provider: Variant) -> void:
+	_ai_provider_override = provider
+	if _ai_panel and is_instance_valid(_ai_panel):
+		_ai_panel.set_provider_override(provider)
+
+
+func build_ai_seed_context() -> Dictionary:
+	var current_record: Dictionary = (
+		items.get(current_item_id, {}).duplicate(true) if items.has(current_item_id) else {}
+	)
+	return {
+		"target_id": current_item_id,
+		"current_record": current_record,
+		"current_type": str(current_record.get("type", "")).strip_edges()
+	}
+
+
+func get_ai_validation_errors(draft: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var record: Variant = draft.get("record", {})
+	if not (record is Dictionary):
+		errors.append("record 必须是 Dictionary")
+		return errors
+
+	var operation := str(draft.get("operation", "")).strip_edges()
+	var target_id := str(draft.get("target_id", "")).strip_edges()
+	var item_id_text := str(record.get("id", "")).strip_edges()
+	if item_id_text.is_empty() or not item_id_text.is_valid_int() or int(item_id_text) <= 0:
+		errors.append("物品 ID 必须是正整数")
+		return errors
+
+	if operation == "create" and items.has(item_id_text):
+		errors.append("新建模式下不能复用已有物品 ID: %s" % item_id_text)
+	if operation == "revise" and not target_id.is_empty() and target_id != item_id_text:
+		errors.append("调整模式下 record.id 必须保持为当前物品 ID")
+
+	if str(record.get("name", "")).strip_edges().is_empty():
+		errors.append("物品名称不能为空")
+	if str(record.get("type", "")).strip_edges().is_empty():
+		errors.append("物品类型不能为空")
+	elif not ITEM_TYPES.has(str(record.get("type", ""))):
+		errors.append("未知物品类型: %s" % str(record.get("type", "")))
+
+	var effects: Variant = record.get("special_effects", [])
+	if not (effects is Array):
+		errors.append("special_effects 必须是数组")
+	var attributes_bonus: Variant = record.get("attributes_bonus", {})
+	if not (attributes_bonus is Dictionary):
+		errors.append("attributes_bonus 必须是对象")
+	return errors
+
+
+func apply_ai_draft(draft: Dictionary) -> bool:
+	var validation_errors := get_ai_validation_errors(draft)
+	if not validation_errors.is_empty():
+		_update_status(validation_errors[0])
+		return false
+
+	var record: Dictionary = (draft.get("record", {}) as Dictionary).duplicate(true)
+	var item_id := str(record.get("id", "")).strip_edges()
+	var existing_record: Dictionary = items.get(item_id, {}).duplicate(true)
+	if not existing_record.is_empty():
+		record = _deep_merge_dictionary(existing_record, record)
+	record["id"] = int(item_id)
+	items[item_id] = record
+	_dirty_item_ids[item_id] = true
+	_deleted_item_ids.erase(item_id)
+	_validate_item(item_id)
+	_update_item_list(_search_box.text, _category_filter.get_item_metadata(_category_filter.selected))
+	_update_stats()
+	_select_item(item_id)
+	_update_status("AI 草稿已应用到物品: %s" % item_id)
+	return true
+
+
+func _open_ai_panel() -> void:
+	if _ai_panel == null or not is_instance_valid(_ai_panel):
+		_ai_panel = AI_GENERATE_PANEL_SCRIPT.new()
+		_ai_panel.editor_plugin = editor_plugin
+		add_child(_ai_panel)
+	_ai_panel.configure(self, editor_plugin, "item", _ai_provider_override)
+	_ai_panel.open_panel()
+
+
+func _deep_merge_dictionary(base: Dictionary, override_data: Dictionary) -> Dictionary:
+	var merged: Dictionary = base.duplicate(true)
+	for key in override_data.keys():
+		var incoming: Variant = override_data[key]
+		if merged.has(key) and merged[key] is Dictionary and incoming is Dictionary:
+			merged[key] = _deep_merge_dictionary(merged[key], incoming)
+		else:
+			merged[key] = incoming
+	return merged
 

@@ -11,6 +11,7 @@ const MENU_CHARACTER_EDITOR: int = 4
 const MENU_RECIPE_EDITOR: int = 5
 const MENU_SKILL_EDITOR: int = 6
 const MENU_EFFECT_EDITOR: int = 7
+const MENU_AI_SETTINGS: int = 8
 const MENU_CDC_EDITORS_ROOT: int = 100
 
 const CDC_SUBMENU_NAME: String = "CDCEditorsSubmenu"
@@ -38,6 +39,7 @@ const DATA_KIND_ENEMY: String = "enemy"
 const GAME_DATA_ID_INSPECTOR_PLUGIN_SCRIPT := preload(
 	"res://addons/cdc_game_editor/inspector/game_data_id_inspector_plugin.gd"
 )
+const AI_SETTINGS_PANEL_SCRIPT := preload("res://addons/cdc_game_editor/ai/ai_settings_panel.gd")
 
 const EDITOR_CONFIGS: Dictionary = {
 	EDITOR_DIALOG: {
@@ -106,6 +108,7 @@ var _menu_in_toolbar: bool = false
 
 var _editor_instances: Dictionary = {}
 var _editor_windows: Dictionary = {}
+var _ai_settings_window: Window = null
 var _is_disabling: bool = false
 var _game_data_id_inspector_plugin: EditorInspectorPlugin = null
 
@@ -223,6 +226,8 @@ func _populate_cdc_menu(menu: PopupMenu) -> void:
 	menu.add_item("Effect Editor", MENU_EFFECT_EDITOR)
 	menu.add_item("Recipe Editor", MENU_RECIPE_EDITOR)
 	menu.add_item("Skill Editor", MENU_SKILL_EDITOR)
+	menu.add_separator()
+	menu.add_item("AI Settings", MENU_AI_SETTINGS)
 
 func _remove_existing_cdc_submenu() -> void:
 	if not _editor_popup_menu:
@@ -307,6 +312,8 @@ func _is_editor_popup_menu(popup_menu: PopupMenu) -> bool:
 func _on_cdc_menu_item_pressed(menu_id: int) -> void:
 	var editor_key: String = MENU_TO_EDITOR_KEY.get(menu_id, "")
 	if editor_key.is_empty():
+		if menu_id == MENU_AI_SETTINGS:
+			_open_ai_settings_window()
 		return
 	open_cdc_editor(editor_key)
 
@@ -425,6 +432,9 @@ func _cleanup_editor_windows() -> void:
 			editor_window.queue_free()
 	_editor_windows.clear()
 	_editor_instances.clear()
+	if _ai_settings_window:
+		_ai_settings_window.queue_free()
+		_ai_settings_window = null
 
 func _get_editor_window_size(editor_key: String) -> Vector2i:
 	var editor_config: Dictionary = EDITOR_CONFIGS.get(editor_key, {})
@@ -768,3 +778,24 @@ func _validation_result_has_errors(errors: Variant) -> bool:
 	if errors is Dictionary:
 		return not errors.is_empty()
 	return true
+
+
+func _open_ai_settings_window() -> void:
+	if _ai_settings_window == null or not is_instance_valid(_ai_settings_window):
+		var panel := AI_SETTINGS_PANEL_SCRIPT.new()
+		panel.editor_plugin = self
+		_ai_settings_window = Window.new()
+		_ai_settings_window.title = "CDC - AI Settings"
+		_ai_settings_window.min_size = Vector2i(640, 320)
+		_ai_settings_window.size = Vector2i(760, 360)
+		_ai_settings_window.popup_window = false
+		_ai_settings_window.transient = false
+		_ai_settings_window.close_requested.connect(func(): _ai_settings_window.hide())
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_ai_settings_window.add_child(panel)
+		get_editor_interface().get_base_control().add_child(_ai_settings_window)
+	_position_window_safely(_ai_settings_window, _ai_settings_window.size)
+	_ai_settings_window.show()
+	_ai_settings_window.grab_focus()

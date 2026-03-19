@@ -8,6 +8,7 @@ signal character_loaded(character_id: String)
 const CHARACTER_DIR: String = "res://data/characters"
 const SKILLS_DIR: String = "res://data/skills"
 const SKILL_TREES_DIR: String = "res://data/skill_trees"
+const AI_GENERATE_PANEL_SCRIPT := preload("res://addons/cdc_game_editor/ai/ai_generate_panel.gd")
 
 var editor_plugin: EditorPlugin = null
 
@@ -27,6 +28,8 @@ var _skill_tree_checkbox_map: Dictionary = {}
 var _skill_checkbox_map: Dictionary = {}
 var _initial_skill_tree_container: VBoxContainer
 var _initial_skill_groups_container: VBoxContainer
+var _ai_panel: Window = null
+var _ai_provider_override: Variant = null
 
 
 func _ready() -> void:
@@ -66,6 +69,11 @@ func _setup_ui() -> void:
 	reload_btn.text = "重新加载"
 	reload_btn.pressed.connect(_on_reload_characters)
 	toolbar.add_child(reload_btn)
+
+	var ai_btn := Button.new()
+	ai_btn.text = "AI 生成"
+	ai_btn.pressed.connect(_open_ai_panel)
+	toolbar.add_child(ai_btn)
 
 	var split := HSplitContainer.new()
 	split.set_anchors_preset(PRESET_FULL_RECT)
@@ -779,32 +787,7 @@ func get_validation_errors() -> Array[String]:
 	for character_id_variant in characters.keys():
 		var character_id: String = str(character_id_variant)
 		var record: Dictionary = _normalize_character_record(characters[character_id_variant])
-		var skills_block: Dictionary = record.get("skills", {})
-		var tree_ids: Array[String] = _normalize_string_array(skills_block.get("initial_tree_ids", []))
-		var skills_by_tree: Dictionary = skills_block.get("initial_skills_by_tree", {})
-		var selected_lookup: Dictionary = _build_global_selected_skill_lookup(skills_block)
-
-		for tree_id in tree_ids:
-			if not _skill_trees.has(tree_id):
-				errors.append("character[%s]: 初始技能树不存在 -> %s" % [character_id, tree_id])
-				continue
-			var tree_definition: Dictionary = _skill_trees.get(tree_id, {})
-			var tree_skill_lookup: Dictionary = {}
-			for tree_skill_id in _normalize_string_array(tree_definition.get("skills", [])):
-				tree_skill_lookup[tree_skill_id] = true
-			for skill_id in _normalize_string_array(skills_by_tree.get(tree_id, [])):
-				if not tree_skill_lookup.has(skill_id):
-					errors.append("character[%s]: 技能 %s 不属于技能树 %s" % [character_id, skill_id, tree_id])
-					continue
-				var skill_definition: Dictionary = _skill_definitions.get(skill_id, {})
-				if skill_definition.is_empty():
-					errors.append("character[%s]: 技能不存在 -> %s" % [character_id, skill_id])
-					continue
-				for prerequisite_id in _normalize_string_array(skill_definition.get("prerequisites", [])):
-					if not selected_lookup.has(prerequisite_id):
-						errors.append(
-							"character[%s]: 技能 %s 缺少前置技能 %s" % [character_id, skill_id, prerequisite_id]
-						)
+		errors.append_array(_get_character_validation_errors_for_record(character_id, record))
 	return errors
 
 
@@ -817,3 +800,110 @@ func focus_record(record_id: String) -> bool:
 			_character_list.select(i)
 			break
 	return true
+
+
+func set_ai_provider_override(provider: Variant) -> void:
+	_ai_provider_override = provider
+	if _ai_panel and is_instance_valid(_ai_panel):
+		_ai_panel.set_provider_override(provider)
+
+
+func build_ai_seed_context() -> Dictionary:
+	return {
+		"target_id": current_character_id,
+		"current_record": _get_current_record().duplicate(true)
+	}
+
+
+func get_ai_validation_errors(draft: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var record := draft.get("record", {})
+	if not (record is Dictionary):
+		errors.append("record 必须是 Dictionary")
+		return errors
+
+	var record_id := str(record.get("id", "")).strip_edges()
+	var operation := str(draft.get("operation", "")).strip_edges()
+	var target_id := str(draft.get("target_id", "")).strip_edges()
+	if record_id.is_empty():
+		errors.append("角色 ID 不能为空")
+		return errors
+	if operation == "create" and characters.has(record_id):
+		errors.append("新建模式下不能复用已有角色 ID: %s" % record_id)
+	if operation == "revise" and not target_id.is_empty() and record_id != target_id:
+		errors.append("调整模式下 record.id 必须保持为当前角色 ID")
+
+	errors.append_array(_get_character_validation_errors_for_record(record_id, _normalize_character_record(record)))
+	return errors
+
+
+func apply_ai_draft(draft: Dictionary) -> bool:
+	var errors := get_ai_validation_errors(draft)
+	if not errors.is_empty():
+		_update_status(errors[0])
+		return false
+
+	var record: Dictionary = _normalize_character_record((draft.get("record", {}) as Dictionary).duplicate(true))
+	var record_id := str(record.get("id", "")).strip_edges()
+	var existing: Dictionary = characters.get(record_id, {}).duplicate(true)
+	if not existing.is_empty():
+		record = _deep_merge_dictionary(existing, record)
+		record = _normalize_character_record(record)
+	characters[record_id] = record
+	current_character_id = record_id
+	_dirty = true
+	_update_character_list(_search_box.text)
+	_select_character(record_id)
+	_update_status("AI 草稿已应用到角色: %s" % record_id)
+	return true
+
+
+func _open_ai_panel() -> void:
+	if _ai_panel == null or not is_instance_valid(_ai_panel):
+		_ai_panel = AI_GENERATE_PANEL_SCRIPT.new()
+		_ai_panel.editor_plugin = editor_plugin
+		add_child(_ai_panel)
+	_ai_panel.configure(self, editor_plugin, "character", _ai_provider_override)
+	_ai_panel.open_panel()
+
+
+func _get_character_validation_errors_for_record(character_id: String, record: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var skills_block: Dictionary = record.get("skills", {})
+	var tree_ids: Array[String] = _normalize_string_array(skills_block.get("initial_tree_ids", []))
+	var skills_by_tree: Dictionary = skills_block.get("initial_skills_by_tree", {})
+	var selected_lookup: Dictionary = _build_global_selected_skill_lookup(skills_block)
+
+	for tree_id in tree_ids:
+		if not _skill_trees.has(tree_id):
+			errors.append("character[%s]: 初始技能树不存在 -> %s" % [character_id, tree_id])
+			continue
+		var tree_definition: Dictionary = _skill_trees.get(tree_id, {})
+		var tree_skill_lookup: Dictionary = {}
+		for tree_skill_id in _normalize_string_array(tree_definition.get("skills", [])):
+			tree_skill_lookup[tree_skill_id] = true
+		for skill_id in _normalize_string_array(skills_by_tree.get(tree_id, [])):
+			if not tree_skill_lookup.has(skill_id):
+				errors.append("character[%s]: 技能 %s 不属于技能树 %s" % [character_id, skill_id, tree_id])
+				continue
+			var skill_definition: Dictionary = _skill_definitions.get(skill_id, {})
+			if skill_definition.is_empty():
+				errors.append("character[%s]: 技能不存在 -> %s" % [character_id, skill_id])
+				continue
+			for prerequisite_id in _normalize_string_array(skill_definition.get("prerequisites", [])):
+				if not selected_lookup.has(prerequisite_id):
+					errors.append(
+						"character[%s]: 技能 %s 缺少前置技能 %s" % [character_id, skill_id, prerequisite_id]
+					)
+	return errors
+
+
+func _deep_merge_dictionary(base: Dictionary, override_data: Dictionary) -> Dictionary:
+	var merged: Dictionary = base.duplicate(true)
+	for key in override_data.keys():
+		var incoming: Variant = override_data[key]
+		if merged.has(key) and merged[key] is Dictionary and incoming is Dictionary:
+			merged[key] = _deep_merge_dictionary(merged[key], incoming)
+		else:
+			merged[key] = incoming
+	return merged
