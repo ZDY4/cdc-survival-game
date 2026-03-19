@@ -18,6 +18,9 @@ var _grid_world: GridWorld = null
 var _navigator: GridNavigator = null
 var _grid_movement: GridMovement = null
 var _owner_node: Node3D = null
+var _presented_move_active: bool = false
+var _presented_move_job_id: String = ""
+var _presented_move_token: int = 0
 
 func _ready() -> void:
 	_navigator = GridNavigator.new()
@@ -75,15 +78,93 @@ func move_along_world_path(path: Array[Vector3]) -> bool:
 		return false
 
 	move_requested.emit(path[path.size() - 1])
+	if ActionPresentationSystem != null and ActionPresentationSystem.has_method("play"):
+		return _start_presented_move(path)
 	_grid_movement.move_along_path(path, _owner_node)
 	return true
 
 func cancel() -> void:
+	if _presented_move_active:
+		_presented_move_token += 1
+		_presented_move_active = false
+		var actor: Node3D = _owner_node
+		_presented_move_job_id = ""
+		if ActionPresentationSystem != null and ActionPresentationSystem.has_method("cancel_jobs_for_actor") and actor != null:
+			ActionPresentationSystem.cancel_jobs_for_actor(actor, "move")
+		move_cancelled.emit()
+		return
 	if _grid_movement:
 		_grid_movement.cancel_movement()
 
 func is_moving() -> bool:
-	return _grid_movement != null and _grid_movement.is_moving()
+	return _presented_move_active or (_grid_movement != null and _grid_movement.is_moving())
+
+func _start_presented_move(path: Array[Vector3]) -> bool:
+	if _owner_node == null or not is_instance_valid(_owner_node) or path.is_empty():
+		return false
+	if _presented_move_active:
+		cancel()
+
+	_presented_move_active = true
+	_presented_move_job_id = ""
+	_presented_move_token += 1
+	var move_token: int = _presented_move_token
+	var move_path: Array[Vector3] = path.duplicate()
+	var from_pos: Vector3 = _owner_node.global_position
+	var to_pos: Vector3 = move_path[move_path.size() - 1]
+
+	move_started.emit(move_path.duplicate())
+	for step_index in range(move_path.size()):
+		var step_world_pos: Vector3 = move_path[step_index]
+		_owner_node.global_position = step_world_pos
+		_emit_step_completed(step_world_pos, step_index, move_path.size())
+
+	var handle: Variant = ActionPresentationSystem.play(_build_move_action_result(from_pos, to_pos, move_path))
+	if handle is Dictionary and bool((handle as Dictionary).get("started", false)):
+		_presented_move_job_id = str((handle as Dictionary).get("job_id", ""))
+		call_deferred("_await_presented_move_completion", move_token, _presented_move_job_id)
+		return true
+
+	_complete_presented_move(move_token, true)
+	return true
+
+func _await_presented_move_completion(move_token: int, job_id: String) -> void:
+	if job_id.is_empty() or ActionPresentationSystem == null or not ActionPresentationSystem.has_method("wait_for_job"):
+		_complete_presented_move(move_token, true)
+		return
+	var result: Dictionary = await ActionPresentationSystem.wait_for_job(job_id)
+	_complete_presented_move(move_token, not bool(result.get("cancelled", false)))
+
+func _complete_presented_move(move_token: int, success: bool) -> void:
+	if move_token != _presented_move_token:
+		return
+	_presented_move_active = false
+	_presented_move_job_id = ""
+	if success:
+		move_finished.emit()
+		return
+	move_cancelled.emit()
+
+func _build_move_action_result(from_pos: Vector3, to_pos: Vector3, path: Array[Vector3]) -> Dictionary:
+	var in_combat: bool = bool(TurnSystem != null and TurnSystem.has_method("is_in_combat") and TurnSystem.is_in_combat())
+	return {
+		"actor": _owner_node,
+		"action_type": "move",
+		"mode": "combat" if in_combat else "noncombat",
+		"wait_for_presentation": in_combat,
+		"presentation_policy": "FULL_BLOCKING" if in_combat else "FULL_NONBLOCKING",
+		"from_pos": from_pos,
+		"to_pos": to_pos,
+		"path": path.duplicate()
+	}
+
+func _emit_step_completed(world_pos: Vector3, step_index: int, total_steps: int) -> void:
+	var grid_pos := Vector3i.ZERO
+	if _grid_world:
+		grid_pos = _grid_world.world_to_grid(world_pos)
+	else:
+		grid_pos = GridMovementSystem.world_to_grid(world_pos)
+	movement_step_completed.emit(grid_pos, world_pos, step_index, total_steps)
 
 func _on_movement_started(path: Array[Vector3]) -> void:
 	move_started.emit(path)
@@ -95,12 +176,7 @@ func _on_movement_cancelled() -> void:
 	move_cancelled.emit()
 
 func _on_step_completed(world_pos: Vector3, step_index: int, total_steps: int) -> void:
-	var grid_pos := Vector3i.ZERO
-	if _grid_world:
-		grid_pos = _grid_world.world_to_grid(world_pos)
-	else:
-		grid_pos = GridMovementSystem.world_to_grid(world_pos)
-	movement_step_completed.emit(grid_pos, world_pos, step_index, total_steps)
+	_emit_step_completed(world_pos, step_index, total_steps)
 
 func _resolve_ground_y(world_pos: Vector3, fallback_y: float) -> float:
 	if not ground_snap_enabled or not _owner_node:

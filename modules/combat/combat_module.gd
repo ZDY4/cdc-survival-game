@@ -124,7 +124,8 @@ func perform_limb_attack(target_limb: int, weapon_type: String = "", use_aim: bo
 	action_completed.emit("limb_attack", result)
 	
 	# 结束回合
-	combat_system.end_turn()
+	if combat_system and combat_system.has_method("complete_player_turn"):
+		combat_system.complete_player_turn()
 	
 	return {"success": true, "result": result}
 
@@ -136,7 +137,7 @@ func perform_quick_attack(target_limb: int = -1) -> Dictionary:
 	action_started.emit("quick_attack", {"target_limb": target_limb})
 	
 	# 快速攻击：+20%命中率，-30%伤害
-	var base_result = combat_system.perform_limb_attack(target_limb)
+	var base_result = perform_limb_attack(target_limb)
 	
 	if base_result.success and base_result.has("result"):
 		# 调整伤害
@@ -167,7 +168,8 @@ func perform_heavy_attack(target_limb: int = -1) -> Dictionary:
 		_log_action("重击未命中！")
 		
 		# 重击未命中会损失下回合部分行动
-		combat_system.end_turn()
+		if combat_system and combat_system.has_method("complete_player_turn"):
+			combat_system.complete_player_turn()
 		return {"success": true, "hit": false}
 	
 	# 计算基础伤害
@@ -202,7 +204,8 @@ func perform_heavy_attack(target_limb: int = -1) -> Dictionary:
 	limb_hit.emit(target_limb, limb_result.damage, "heavy")
 	action_completed.emit("heavy_attack", result)
 	
-	combat_system.end_turn()
+	if combat_system and combat_system.has_method("complete_player_turn"):
+		combat_system.complete_player_turn()
 	
 	return {"success": true, "result": result}
 
@@ -244,7 +247,8 @@ func perform_limb_heal(limb: int, item_id: String) -> Dictionary:
 	action_completed.emit("limb_heal", result)
 	
 	# 治疗消耗回合
-	combat_system.end_turn()
+	if combat_system and combat_system.has_method("complete_player_turn"):
+		combat_system.complete_player_turn()
 	
 	return {"success": true, "result": result}
 

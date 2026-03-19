@@ -15,8 +15,6 @@ const ACTION_TYPE_MOVE: String = "move"
 const ACTION_TYPE_ATTACK: String = "attack"
 const ACTION_TYPE_INTERACT: String = "interact"
 const ACTION_TYPE_ITEM: String = "item"
-const ACTION_TYPE_DEFEND: String = "defend"
-const ACTION_TYPE_FLEE: String = "flee"
 
 const TURN_AP_GAIN: float = 1.0
 const TURN_AP_MAX: float = 1.5
@@ -236,6 +234,20 @@ func get_current_group_id() -> String:
 func get_current_turn_index() -> int:
 	return _combat_turn_counter
 
+func end_current_turn(actor: Node) -> bool:
+	var state: Dictionary = _get_actor_state(actor)
+	if state.is_empty():
+		return false
+	if not _combat_active:
+		return false
+	var actor_key: String = str(state.get("key", ""))
+	if actor_key != _current_actor_key:
+		return false
+	if _active_actor_actions.has(actor_key):
+		return false
+	_end_current_combat_turn()
+	return true
+
 func is_actor_current_turn(actor: Node) -> bool:
 	var state: Dictionary = _get_actor_state(actor)
 	if state.is_empty():
@@ -389,6 +401,19 @@ func _has_open_player_turn() -> bool:
 			continue
 		return true
 	return false
+
+func _start_next_noncombat_player_turn() -> void:
+	if _combat_active or _has_open_player_turn():
+		return
+	for group_id in _get_sorted_group_ids():
+		for actor_key in _get_group_actor_keys(group_id):
+			var state: Dictionary = _actor_states.get(actor_key, {})
+			if state.is_empty():
+				continue
+			if str(state.get("side", "")) != "player":
+				continue
+			_start_actor_turn(actor_key)
+			return
 
 func _register_debug_entries() -> void:
 	if not DebugModule:
@@ -803,9 +828,13 @@ func _run_world_cycle() -> void:
 	await _run_world_cycle_async()
 	_world_cycle_running = false
 	_reset_noncombat_turns()
+	if _combat_active:
+		return
 	if _pending_world_cycles > 0:
 		_pending_world_cycles = 0
 		call_deferred("_run_world_cycle")
+		return
+	_start_next_noncombat_player_turn()
 
 func _run_world_cycle_async() -> void:
 	for group_id in _get_sorted_group_ids():
@@ -842,8 +871,7 @@ func _execute_actor_turn_step(actor_key: String) -> bool:
 	if ai_controller == null or not ai_controller.has_method("execute_turn_step"):
 		return false
 	var result: Variant = ai_controller.call("execute_turn_step")
-	var result_object: Object = result as Object
-	if result_object != null and result_object.get_class() == "GDScriptFunctionState":
+	if result is Object and (result as Object).get_class() == "GDScriptFunctionState":
 		result = await result
 	if result is Dictionary:
 		return bool((result as Dictionary).get("performed", false))

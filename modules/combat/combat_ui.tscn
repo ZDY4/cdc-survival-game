@@ -124,20 +124,8 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "攻击"
 
-[node name="DefendButton" type="Button" parent="Background/ActionButtons"]
-custom_minimum_size = Vector2(140, 70)
-layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "防御"
-
 [node name="ItemButton" type="Button" parent="Background/ActionButtons"]
 custom_minimum_size = Vector2(140, 70)
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "物品"
-
-[node name="FleeButton" type="Button" parent="Background/ActionButtons"]
-custom_minimum_size = Vector2(140, 70)
-layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "逃跑"

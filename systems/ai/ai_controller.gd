@@ -177,6 +177,14 @@ func _perform_attack_step(now_s: float) -> Dictionary:
 
 	var attack_result: Variant = CombatSystem.perform_attack(_owner_node, _target)
 	if attack_result is Dictionary and bool((attack_result as Dictionary).get("success", false)):
+		var attack_payload: Dictionary = attack_result as Dictionary
+		var presentation_data: Dictionary = attack_payload.get("presentation", {}) as Dictionary
+		var presentation_job_id: String = str(attack_payload.get("presentation_job_id", ""))
+		if bool(presentation_data.get("wait_for_presentation", false)) \
+		and not presentation_job_id.is_empty() \
+		and ActionPresentationSystem != null \
+		and ActionPresentationSystem.has_method("wait_for_job"):
+			await ActionPresentationSystem.wait_for_job(presentation_job_id)
 		_last_attack_time = now_s
 		return {"performed": true, "type": "attack"}
 	return {"performed": false}
@@ -230,21 +238,57 @@ func _perform_move_step(world_pos: Vector3) -> Dictionary:
 		})
 		return {"performed": false}
 
-	if not bool(_movement_component.call("move_along_world_path", path)):
+	var from_pos: Vector3 = _owner_node.global_position
+	var final_pos: Vector3 = path[path.size() - 1]
+	_owner_node.global_position = final_pos
+	var step_result: Dictionary = TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
+		"phase": TurnSystem.ACTION_PHASE_STEP,
+		"steps": path.size()
+	})
+	if not bool(step_result.get("success", false)):
+		_owner_node.global_position = from_pos
 		TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
 			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
 			"success": false
 		})
-		return {"performed": false}
+		return {"performed": false, "result": step_result}
 
-	await _movement_component.movement_step_completed
-	TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
-		"phase": TurnSystem.ACTION_PHASE_STEP,
-		"steps": 1
-	})
-	await _movement_component.move_finished
+	var action_result: Dictionary = _build_move_action_result(from_pos, final_pos, path)
+	await _play_action_presentation(action_result)
 	TurnSystem.request_action(_owner_node, TurnSystem.ACTION_TYPE_MOVE, {
 		"phase": TurnSystem.ACTION_PHASE_COMPLETE,
 		"success": true
 	})
-	return {"performed": true, "type": "move"}
+	return {
+		"performed": true,
+		"type": "move",
+		"result": action_result
+	}
+
+func _build_move_action_result(from_pos: Vector3, to_pos: Vector3, path: Array[Vector3]) -> Dictionary:
+	var in_combat: bool = bool(TurnSystem != null and TurnSystem.is_in_combat())
+	return {
+		"actor": _owner_node,
+		"action_type": "move",
+		"mode": "combat" if in_combat else "noncombat",
+		"wait_for_presentation": in_combat,
+		"presentation_policy": "FULL_BLOCKING" if in_combat else "FULL_NONBLOCKING",
+		"from_pos": from_pos,
+		"to_pos": to_pos,
+		"path": path.duplicate()
+	}
+
+func _play_action_presentation(action_result: Dictionary) -> void:
+	if ActionPresentationSystem == null or not ActionPresentationSystem.has_method("play"):
+		return
+	var handle: Variant = ActionPresentationSystem.play(action_result)
+	if not (handle is Dictionary):
+		return
+	if not bool((handle as Dictionary).get("started", false)):
+		return
+	if not bool(action_result.get("wait_for_presentation", false)):
+		return
+	var job_id: String = str((handle as Dictionary).get("job_id", ""))
+	if job_id.is_empty() or not ActionPresentationSystem.has_method("wait_for_job"):
+		return
+	await ActionPresentationSystem.wait_for_job(job_id)

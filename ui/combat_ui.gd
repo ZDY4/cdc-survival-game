@@ -5,9 +5,7 @@ class_name CombatUI
 
 # ========== 信号 ==========
 signal attack_initiated(target_limb: int, attack_type: String)
-signal defend_initiated
 signal item_menu_requested
-signal flee_requested
 signal limb_targeting_started
 signal limb_targeting_cancelled
 
@@ -25,9 +23,7 @@ signal limb_targeting_cancelled
 
 # 动作按钮
 @onready var attack_btn: Button = $ActionPanel/ActionButtons/AttackButton
-@onready var defend_btn: Button = $ActionPanel/ActionButtons/DefendButton
 @onready var item_btn: Button = $ActionPanel/ActionButtons/ItemButton
-@onready var flee_btn: Button = $ActionPanel/ActionButtons/FleeButton
 
 # 部位选择按钮
 @onready var head_btn: Button = $LimbSelectionPanel/Buttons/HeadButton
@@ -93,14 +89,16 @@ func _setup_ui() -> void:
 func _connect_signals() -> void:
 	# 连接战斗系统信号
 	if combat_system:
-		combat_system.combat_started.connect(_on_combat_started)
-		combat_system.combat_ended.connect(_on_combat_ended)
-		combat_system.turn_started.connect(_on_turn_started)
-		combat_system.action_performed.connect(_on_action_performed)
-		combat_system.damage_dealt.connect(_on_damage_dealt)
-		combat_system.damage_taken.connect(_on_damage_taken)
-		combat_system.combat_log_message.connect(_on_combat_log_message)
-		combat_system.limb_target_selected.connect(_on_limb_target_selected)
+		if combat_system.has_signal("combat_started"):
+			combat_system.combat_started.connect(_on_combat_started)
+		if combat_system.has_signal("combat_ended"):
+			combat_system.combat_ended.connect(_on_combat_ended)
+		if combat_system.has_signal("turn_started"):
+			combat_system.turn_started.connect(_on_turn_started)
+		if combat_system.has_signal("player_action_executed"):
+			combat_system.player_action_executed.connect(_on_action_performed)
+		if combat_system.has_signal("damage_dealt"):
+			combat_system.damage_dealt.connect(_on_damage_dealt)
 	
 	# 连接部位系统信号
 	if limb_system:
@@ -121,12 +119,8 @@ func _connect_signals() -> void:
 	# 连接动作按钮
 	if attack_btn:
 		attack_btn.pressed.connect(_on_attack_pressed)
-	if defend_btn:
-		defend_btn.pressed.connect(_on_defend_pressed)
 	if item_btn:
 		item_btn.pressed.connect(_on_item_pressed)
-	if flee_btn:
-		flee_btn.pressed.connect(_on_flee_pressed)
 	
 	# 连接部位选择按钮
 	for limb in limb_buttons:
@@ -166,12 +160,8 @@ func _update_limb_button_labels() -> void:
 func _update_action_buttons(enabled: bool) -> void:
 	if attack_btn:
 		attack_btn.disabled = not enabled
-	if defend_btn:
-		defend_btn.disabled = not enabled
 	if item_btn:
 		item_btn.disabled = not enabled
-	if flee_btn:
-		flee_btn.disabled = not enabled
 
 # ========== 部位选择UI ==========
 func _show_limb_selection(attack_type: String = "normal") -> void:
@@ -220,14 +210,17 @@ func _execute_limb_attack(limb: int) -> void:
 			if combat_module:
 				combat_module.perform_heavy_attack(limb)
 			else:
-				combat_system.perform_attack(limb)
+				combat_system.player_attack("heavy")
 		"quick":
 			if combat_module:
 				combat_module.perform_quick_attack(limb)
 			else:
-				combat_system.perform_attack(limb)
+				combat_system.player_attack("quick")
 		_:
-			combat_system.perform_limb_attack(limb)
+			if combat_module:
+				combat_module.perform_limb_attack(limb)
+			else:
+				combat_system.player_attack()
 	
 	attack_initiated.emit(limb, selected_attack_type)
 
@@ -240,20 +233,10 @@ func _on_attack_pressed() -> void:
 		var target = LimbDamageSystem.LimbType.TORSO
 		if limb_system and auto_target_functional:
 			target = limb_system.get_random_functional_limb(false)
-		combat_system.perform_attack(target)
-
-func _on_defend_pressed() -> void:
-	if combat_system:
-		combat_system.perform_defend()
-	defend_initiated.emit()
+		_execute_limb_attack(target)
 
 func _on_item_pressed() -> void:
 	item_menu_requested.emit()
-
-func _on_flee_pressed() -> void:
-	if combat_system:
-		combat_system.perform_flee()
-	flee_requested.emit()
 
 func _on_limb_button_pressed(limb: int) -> void:
 	_execute_limb_attack(limb)
@@ -344,7 +327,8 @@ func _on_combat_ended(victory: bool) -> void:
 	await get_tree().create_timer(2.0).timeout
 	visible = false
 
-func _on_turn_started(is_player_turn: bool) -> void:
+func _on_turn_started(turn_owner: String, _turn_number: int) -> void:
+	var is_player_turn: bool = turn_owner == "player"
 	_update_action_buttons(is_player_turn)
 	
 	if is_player_turn:
@@ -360,23 +344,11 @@ func _on_action_performed(action: String, result: Dictionary) -> void:
 	if enemy_limb_ui:
 		enemy_limb_ui.refresh_display()
 
-func _on_damage_dealt(damage: int, is_critical: bool, target_limb: int) -> void:
-	# 伤害显示动画
-	if enemy_limb_ui:
-		enemy_limb_ui.select_limb(target_limb)
-		await get_tree().create_timer(0.5).timeout
-		enemy_limb_ui.clear_selection()
-
-func _on_damage_taken(damage: int, attacker_limb: int) -> void:
-	# 受到伤害动画
-	if player_limb_ui:
-		player_limb_ui.select_limb(attacker_limb)
-		await get_tree().create_timer(0.5).timeout
-		player_limb_ui.clear_selection()
-
-func _on_limb_target_selected(limb: int) -> void:
-	# 目标部位已选择
-	pass
+func _on_damage_dealt(target: String, damage: int, is_critical: bool) -> void:
+	if target != "enemy":
+		return
+	var log_type: String = "critical" if is_critical else "damage"
+	_add_log_message("造成 %d 伤害" % damage, log_type)
 
 func _on_limb_damaged(limb: int, state: int, is_player: bool) -> void:
 	if is_player:
@@ -442,8 +414,8 @@ func _add_log_message(message: String, type: String = "normal") -> void:
 			color = "lime"
 	
 	var timestamp = ""
-	if combat_system:
-		timestamp = "[Turn %d] " % combat_system.current_turn
+	if TurnSystem != null and TurnSystem.has_method("get_current_turn_index"):
+		timestamp = "[Turn %d] " % int(TurnSystem.get_current_turn_index())
 	
 	var formatted = "[color=%s]%s%s[/color]\n" % [color, timestamp, message]
 	combat_log.append_text(formatted)

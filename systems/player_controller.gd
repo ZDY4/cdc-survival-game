@@ -13,6 +13,10 @@ const InteractionContextMenu = preload("res://ui/interaction_context_menu.gd")
 const PlayerInputComponent = preload("res://systems/player_input_component.gd")
 const WorldDamageTextController = preload("res://systems/world_damage_text_controller.gd")
 
+const NAVIGATION_INTENT_NONE: String = ""
+const NAVIGATION_INTENT_GROUND_MOVE: String = "ground_move"
+const NAVIGATION_INTENT_INTERACTION: String = "interaction"
+
 signal move_requested(world_pos: Vector3)
 signal movement_completed
 signal movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int)
@@ -49,6 +53,14 @@ var _pending_execution_interactable: Node = null
 var _pending_execution_option: InteractionOption = null
 var _pending_execution_target_actor: CharacterActor = null
 var _pending_execution_destination: Vector3 = Vector3.ZERO
+var _navigation_intent_kind: String = NAVIGATION_INTENT_NONE
+var _navigation_intent_target_pos: Vector3 = Vector3.ZERO
+var _navigation_intent_path: Array[Vector3] = []
+var _navigation_intent_interactable: Node = null
+var _navigation_intent_option: InteractionOption = null
+var _navigation_intent_target_actor: CharacterActor = null
+var _keep_navigation_intent_after_cancel: bool = false
+var _auto_advancing_navigation_intent: bool = false
 var _active_move_action: bool = false
 var _active_move_steps_consumed: int = 0
 
@@ -129,7 +141,11 @@ func set_menu_input_blocked(blocked: bool) -> void:
 	if blocked and _interaction_context_menu != null:
 		_interaction_context_menu.hide_menu()
 	if blocked:
+		if is_moving():
+			cancel_movement(false)
 		clear_world_input_feedback()
+		return
+	call_deferred("_try_advance_navigation_intent")
 
 func _setup_collision() -> void:
 	_collision = CollisionShape3D.new()
@@ -182,6 +198,8 @@ func move_to(world_pos: Vector3) -> bool:
 		return false
 	if not _movement_component:
 		return false
+	_clear_navigation_intent()
+	_clear_pending_option_execution()
 	var full_path: Array[Vector3] = _movement_component.find_path(world_pos)
 	if full_path.is_empty():
 		return false
@@ -223,7 +241,11 @@ func move_to_screen_position(screen_pos: Vector2, interaction_system: Interactio
 	world_pos.y = global_position.y
 	var snapped_pos := GridMovementSystem.snap_to_grid(world_pos)
 	snapped_pos.y = global_position.y
-	var started := move_to(snapped_pos)
+	var started: bool = false
+	if TurnSystem != null and TurnSystem.is_in_combat():
+		started = move_to(snapped_pos)
+	else:
+		started = _queue_ground_navigation_intent(snapped_pos)
 	if not started:
 		return false
 
@@ -248,8 +270,10 @@ func handle_input(event: InputEvent) -> bool:
 	var screen_pos := interaction_system.get_screen_position(event)
 	if is_moving():
 		cancel_movement()
-		if _path_preview_system:
-			_path_preview_system.clear_active_move_target()
+		return true
+
+	if has_navigation_intent():
+		clear_navigation_intent()
 		return true
 
 	if _try_interact_screen_position(screen_pos, interaction_system, _scene_root):
@@ -280,9 +304,31 @@ func handle_secondary_input(event: InputEvent) -> bool:
 	_show_interaction_options(screen_pos, interaction_system, _scene_root)
 	return true
 
-func cancel_movement() -> void:
+func cancel_movement(clear_navigation_intent: bool = true) -> void:
+	_keep_navigation_intent_after_cancel = not clear_navigation_intent and has_navigation_intent()
+	if clear_navigation_intent:
+		_clear_navigation_intent()
+		_clear_pending_option_execution()
+	if _path_preview_system:
+		_path_preview_system.clear_active_move_target()
 	if _movement_component:
 		_movement_component.cancel()
+
+func has_navigation_intent() -> bool:
+	return _navigation_intent_kind != NAVIGATION_INTENT_NONE
+
+func get_navigation_intent_target() -> Vector3:
+	_refresh_navigation_intent_state()
+	return _navigation_intent_target_pos
+
+func get_navigation_intent_path() -> Array[Vector3]:
+	if not _refresh_navigation_intent_state():
+		return []
+	return _navigation_intent_path.duplicate()
+
+func clear_navigation_intent() -> void:
+	_clear_navigation_intent()
+	_clear_pending_option_execution()
 
 func is_moving() -> bool:
 	return _movement_component != null and _movement_component.is_moving()
@@ -310,11 +356,163 @@ func get_vision_system() -> Node:
 func get_world_damage_text_controller() -> WorldDamageTextController:
 	return _world_damage_text_controller
 
+func _queue_ground_navigation_intent(world_pos: Vector3) -> bool:
+	if _movement_component == null:
+		return false
+	var full_path: Array[Vector3] = _movement_component.find_path(world_pos)
+	if full_path.is_empty():
+		return false
+	_clear_pending_option_execution()
+	_set_interaction_target_actor(null)
+	_set_navigation_intent(
+		NAVIGATION_INTENT_GROUND_MOVE,
+		full_path[full_path.size() - 1],
+		full_path,
+		null,
+		null
+	)
+	call_deferred("_try_advance_navigation_intent")
+	return true
+
+func _set_navigation_intent(
+	intent_kind: String,
+	target_pos: Vector3,
+	path: Array[Vector3],
+	interactable: Node,
+	option: InteractionOption
+) -> void:
+	_clear_navigation_intent(false)
+	_navigation_intent_kind = intent_kind
+	_navigation_intent_target_pos = target_pos
+	_navigation_intent_path = path.duplicate()
+	_navigation_intent_interactable = interactable
+	_navigation_intent_option = option
+	_navigation_intent_target_actor = _resolve_character_actor_from_interactable(interactable)
+	if intent_kind == NAVIGATION_INTENT_INTERACTION and interactable != null:
+		_set_interaction_target_from_interactable(interactable)
+
+func _clear_navigation_intent(clear_target_actor: bool = true) -> void:
+	_navigation_intent_kind = NAVIGATION_INTENT_NONE
+	_navigation_intent_target_pos = Vector3.ZERO
+	_navigation_intent_path.clear()
+	_navigation_intent_interactable = null
+	_navigation_intent_option = null
+	_navigation_intent_target_actor = null
+	_auto_advancing_navigation_intent = false
+	_keep_navigation_intent_after_cancel = false
+	if clear_target_actor and not is_movement_input_blocked():
+		_set_interaction_target_actor(null)
+
+func _refresh_navigation_intent_state(clear_on_failure: bool = true) -> bool:
+	if not has_navigation_intent():
+		return false
+	match _navigation_intent_kind:
+		NAVIGATION_INTENT_GROUND_MOVE:
+			if _movement_component == null:
+				if clear_on_failure:
+					_clear_navigation_intent()
+				return false
+			var ground_path: Array[Vector3] = _movement_component.find_path(_navigation_intent_target_pos)
+			if ground_path.is_empty():
+				if clear_on_failure:
+					_clear_navigation_intent()
+				return false
+			_navigation_intent_path = ground_path
+			return true
+		NAVIGATION_INTENT_INTERACTION:
+			var interactable := _navigation_intent_interactable
+			var option := _navigation_intent_option
+			if interactable == null or not is_instance_valid(interactable) or option == null:
+				if clear_on_failure:
+					_clear_navigation_intent()
+				return false
+			if not option.is_available(interactable):
+				if clear_on_failure:
+					_clear_navigation_intent()
+				return false
+			_set_interaction_target_from_interactable(interactable)
+			if option.requires_proximity(interactable) and _is_option_in_range(interactable, option):
+				_navigation_intent_path.clear()
+				return true
+			var approach_data := _resolve_option_approach_data(interactable, option)
+			if not bool(approach_data.get("found", false)):
+				if clear_on_failure:
+					_clear_navigation_intent()
+				return false
+			_navigation_intent_target_pos = approach_data.get("destination", Vector3.ZERO)
+			_navigation_intent_path = _extract_vector3_array(approach_data.get("path", []))
+			return true
+		_:
+			if clear_on_failure:
+				_clear_navigation_intent()
+			return false
+
+func _extract_vector3_array(path_variant: Variant) -> Array[Vector3]:
+	var path: Array[Vector3] = []
+	if not (path_variant is Array):
+		return path
+	for point_variant in path_variant:
+		if point_variant is Vector3:
+			path.append(point_variant)
+	return path
+
+func _try_advance_navigation_intent() -> bool:
+	if _auto_advancing_navigation_intent or not has_navigation_intent():
+		return false
+	if is_moving() or is_world_input_blocked():
+		return false
+	if TurnSystem != null:
+		if TurnSystem.is_in_combat():
+			return false
+		if _resolve_available_move_steps() <= 0:
+			return false
+	if not _refresh_navigation_intent_state():
+		return false
+
+	if _navigation_intent_kind == NAVIGATION_INTENT_INTERACTION:
+		var interactable := _navigation_intent_interactable
+		var option := _navigation_intent_option
+		if interactable != null and is_instance_valid(interactable) and option != null and _is_option_in_range(interactable, option):
+			_auto_advancing_navigation_intent = true
+			_clear_navigation_intent(false)
+			_execute_interaction_option(interactable, option)
+			_auto_advancing_navigation_intent = false
+			return true
+
+	if _navigation_intent_path.is_empty():
+		_clear_navigation_intent()
+		return false
+
+	var next_step: Vector3 = _navigation_intent_path[0]
+	var start_result := _begin_move_action(next_step)
+	if not bool(start_result.get("success", false)):
+		return false
+	if not _movement_component.move_along_world_path([next_step]):
+		_complete_move_action(false)
+		_clear_navigation_intent()
+		return false
+	return true
+
+func _on_turn_system_actor_turn_started(actor: Node, _actor_id: String, _group_id: String, side: String, _current_ap: float) -> void:
+	if actor != self or side != "player":
+		return
+	if TurnSystem != null and TurnSystem.is_in_combat():
+		return
+	call_deferred("_try_advance_navigation_intent")
+
+func _on_turn_system_combat_state_changed(in_combat: bool) -> void:
+	if in_combat:
+		cancel_movement(true)
+		return
+	call_deferred("_try_advance_navigation_intent")
+
 func _on_move_requested(world_pos: Vector3) -> void:
 	move_requested.emit(world_pos)
 
 func _on_movement_finished() -> void:
+	_keep_navigation_intent_after_cancel = false
 	_complete_move_action(true)
+	_refresh_navigation_intent_state()
 	movement_completed.emit()
 	EventBus.emit(EventBus.EventType.PLAYER_MOVED, {
 		"position": global_position,
@@ -324,10 +522,18 @@ func _on_movement_finished() -> void:
 
 func _on_movement_cancelled() -> void:
 	_complete_move_action(false)
+	if _keep_navigation_intent_after_cancel:
+		_keep_navigation_intent_after_cancel = false
+		_refresh_navigation_intent_state(false)
+		return
 	_clear_pending_option_execution()
 
 func _on_movement_failed(_target_pos: Vector3) -> void:
 	_complete_move_action(false)
+	if _keep_navigation_intent_after_cancel:
+		_keep_navigation_intent_after_cancel = false
+		_refresh_navigation_intent_state(false)
+		return
 	_clear_pending_option_execution()
 
 func _on_movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int) -> void:
@@ -429,9 +635,10 @@ func _refresh_movement_block_state() -> void:
 	_sync_interaction_state_tags()
 	if not is_movement_input_blocked():
 		_update_hover_cursor()
+		call_deferred("_try_advance_navigation_intent")
 		return
 	if is_moving():
-		cancel_movement()
+		cancel_movement(false)
 	if _path_preview_system:
 		_path_preview_system.clear_active_move_target()
 	if _path_preview:
@@ -858,6 +1065,7 @@ func _begin_option_execution(interactable: Node, option: InteractionOption) -> b
 	if interactable == null or not is_instance_valid(interactable) or option == null:
 		return false
 
+	_clear_navigation_intent(false)
 	_clear_pending_option_execution(false)
 	_set_interaction_target_from_interactable(interactable)
 
@@ -873,6 +1081,17 @@ func _begin_option_execution(interactable: Node, option: InteractionOption) -> b
 		if not is_movement_input_blocked():
 			_set_interaction_target_actor(null)
 		return false
+
+	if TurnSystem == null or not TurnSystem.is_in_combat():
+		_set_navigation_intent(
+			NAVIGATION_INTENT_INTERACTION,
+			approach_data.get("destination", Vector3.ZERO),
+			_extract_vector3_array(approach_data.get("path", [])),
+			interactable,
+			option
+		)
+		call_deferred("_try_advance_navigation_intent")
+		return true
 
 	var destination: Vector3 = approach_data.get("destination", Vector3.ZERO)
 	if _movement_component == null or not move_to(destination):
@@ -890,6 +1109,7 @@ func _execute_interaction_option(interactable: Node, option: InteractionOption) 
 	if interactable == null or not is_instance_valid(interactable) or option == null:
 		return
 
+	_clear_navigation_intent(false)
 	_clear_pending_option_execution(false)
 	_set_interaction_target_from_interactable(interactable)
 	if option.uses_external_action_flow(interactable):
@@ -951,7 +1171,8 @@ func _resolve_option_approach_data(interactable: Node, option: InteractionOption
 		return {
 			"found": true,
 			"in_range": true,
-			"destination": global_position
+			"destination": global_position,
+			"path": []
 		}
 	if _navigator == null or _grid_world == null:
 		return {"found": false, "in_range": false}
@@ -987,7 +1208,8 @@ func _resolve_option_approach_data(interactable: Node, option: InteractionOption
 			return {
 				"found": true,
 				"in_range": false,
-				"destination": best_destination
+				"destination": best_destination,
+				"path": best_path.duplicate()
 			}
 
 	return {"found": false, "in_range": false}
@@ -1011,12 +1233,21 @@ func _collect_interaction_ring_cells(center: Vector3i, radius: int) -> Array[Vec
 func _register_with_turn_system() -> void:
 	if TurnSystem == null:
 		return
+	if TurnSystem.has_signal("actor_turn_started") and not TurnSystem.actor_turn_started.is_connected(_on_turn_system_actor_turn_started):
+		TurnSystem.actor_turn_started.connect(_on_turn_system_actor_turn_started)
+	if TurnSystem.has_signal("combat_state_changed") and not TurnSystem.combat_state_changed.is_connected(_on_turn_system_combat_state_changed):
+		TurnSystem.combat_state_changed.connect(_on_turn_system_combat_state_changed)
 	TurnSystem.register_group("player", 0)
 	TurnSystem.register_actor(self, "player", "player")
 
 func _unregister_from_turn_system() -> void:
 	if TurnSystem == null:
 		return
+	if TurnSystem.has_signal("actor_turn_started") and TurnSystem.actor_turn_started.is_connected(_on_turn_system_actor_turn_started):
+		TurnSystem.actor_turn_started.disconnect(_on_turn_system_actor_turn_started)
+	if TurnSystem.has_signal("combat_state_changed") and TurnSystem.combat_state_changed.is_connected(_on_turn_system_combat_state_changed):
+		TurnSystem.combat_state_changed.disconnect(_on_turn_system_combat_state_changed)
+	_clear_navigation_intent()
 	TurnSystem.unregister_actor(self)
 
 func _is_player_turn_blocked_by_combat() -> bool:

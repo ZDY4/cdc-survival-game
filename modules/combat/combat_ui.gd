@@ -3,17 +3,13 @@ extends Control
 class_name CombatUI
 
 signal attack_pressed()
-signal defend_pressed()
 signal item_pressed()
-signal flee_pressed()
 
 var _enemy_portrait: TextureRect
 var _enemy_hp_bar: ProgressBar
 var _player_hp_bar: ProgressBar
 var _attack_button: Button
-var _defend_button: Button
 var _item_button: Button
-var _flee_button: Button
 var _combat_log: RichTextLabel
 
 func _ready():
@@ -25,20 +21,14 @@ func _setup_nodes():
 	_enemy_hp_bar = get_node_or_null("Background/EnemyHPBar")
 	_player_hp_bar = get_node_or_null("Background/PlayerHPBar")
 	_attack_button = get_node_or_null("Background/ActionButtons/AttackButton")
-	_defend_button = get_node_or_null("Background/ActionButtons/DefendButton")
 	_item_button = get_node_or_null("Background/ActionButtons/ItemButton")
-	_flee_button = get_node_or_null("Background/ActionButtons/FleeButton")
 	_combat_log = get_node_or_null("Background/CombatLog")
 	
 	# Connect button signals
 	if _attack_button:
 		_attack_button.pressed.connect(_on_attack_pressed)
-	if _defend_button:
-		_defend_button.pressed.connect(_on_defend_pressed)
 	if _item_button:
 		_item_button.pressed.connect(_on_item_pressed)
-	if _flee_button:
-		_flee_button.pressed.connect(_on_flee_pressed)
 
 func show_combat(enemy_data: Dictionary = {}):
 	visible = true
@@ -78,11 +68,5 @@ func hide_combat():
 func _on_attack_pressed():
 	attack_pressed.emit()
 
-func _on_defend_pressed():
-	defend_pressed.emit()
-
 func _on_item_pressed():
 	item_pressed.emit()
-
-func _on_flee_pressed():
-	flee_pressed.emit()

@@ -349,18 +349,9 @@ func get_combat_choices(enemy_data: Dictionary) -> Array[Dictionary]:
 			"icon": "res://icons/attack.png"
 		},
 		{
-			"id": "combat_defend",
-			"text": "防御",
-			"icon": "res://icons/defend.png"
-		},
-		{
 			"id": "combat_item",
 			"text": "使用物品",
 			"condition": {"type": "has_item", "count": 1}
-		},
-		{
-			"id": "combat_flee",
-			"text": "逃跑"
 		}
 	]
 

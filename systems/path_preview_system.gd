@@ -66,6 +66,16 @@ func tick(delta: float) -> void:
     if _has_active_move_target and not _player.is_moving():
         clear_active_move_target()
 
+    if _player.has_navigation_intent():
+        var intent_path: Array[Vector3] = _player.get_navigation_intent_path()
+        if intent_path.size() > max_preview_path_points:
+            _hide_preview()
+        elif not intent_path.is_empty():
+            _update_preview_from_path(intent_path, "navigation_intent")
+        else:
+            _hide_preview()
+        return
+
     if _player.is_moving() and _has_active_move_target:
         _update_preview_to_target(_active_move_target, false, "move_target")
         return
@@ -132,6 +142,19 @@ func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, 
         _path_preview.show_path(path)
     else:
         _hide_preview()
+
+func _update_preview_from_path(path: Array[Vector3], mode: String) -> void:
+    if path.is_empty():
+        _hide_preview()
+        return
+
+    var player_grid := GridMovementSystem.world_to_grid(_player.global_position)
+    var target_grid := GridMovementSystem.world_to_grid(path[path.size() - 1])
+    var preview_signature := "%s|%s|%s|%d" % [mode, str(player_grid), str(target_grid), path.size()]
+    if preview_signature == _last_preview_signature:
+        return
+    _last_preview_signature = preview_signature
+    _path_preview.show_path(path)
 
 func _hide_preview() -> void:
     _path_preview.hide_path()

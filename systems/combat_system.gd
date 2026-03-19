@@ -1,7 +1,5 @@
 extends Node
 
-const HitReaction3D = preload("res://systems/hit_reaction_3d.gd")
-
 signal combat_started(enemy_data: Dictionary)
 signal turn_started(turn_owner: String, turn_number: int)
 signal player_action_executed(action: String, result: Dictionary)
@@ -9,7 +7,7 @@ signal enemy_action_executed(action: String, result: Dictionary)
 signal damage_dealt(target: String, amount: int, is_critical: bool)
 signal combat_ended(victory: bool, rewards: Dictionary)
 
-enum CombatState { IDLE, ACTIVE, VICTORY, DEFEAT, FLED }
+enum CombatState { IDLE, ACTIVE, VICTORY, DEFEAT }
 
 var _combat_state: CombatState = CombatState.IDLE
 var _current_enemy: Dictionary = {}
@@ -23,6 +21,7 @@ var _pending_rewards: Dictionary = {
 }
 
 var _runtime_actor_states: Dictionary = {}
+var _pending_presentation_actions: Dictionary = {}
 
 func _ready() -> void:
 	if TurnSystem:
@@ -30,6 +29,9 @@ func _ready() -> void:
 			TurnSystem.combat_state_changed.connect(_on_turn_system_combat_state_changed)
 		if TurnSystem.actor_turn_started.is_connected(_on_actor_turn_started) == false:
 			TurnSystem.actor_turn_started.connect(_on_actor_turn_started)
+	if ActionPresentationSystem:
+		if ActionPresentationSystem.presentation_completed.is_connected(_on_action_presentation_completed) == false:
+			ActionPresentationSystem.presentation_completed.connect(_on_action_presentation_completed)
 
 func start_combat(character_ref: Variant):
 	var player_actor: Node3D = get_player_actor()
@@ -74,22 +76,36 @@ func perform_attack(attacker: Node, target: Node, attack_type: String = "normal"
 	_action_in_progress = true
 	_refresh_current_enemy(target)
 
-	if attacker.has_method("play_attack_lunge") and target is Node3D:
-		attacker.call("play_attack_lunge", (target as Node3D).global_position)
-
 	var damage_result: Dictionary = _apply_attack(attacker, target, attack_type, target_part)
 	action_result.merge(damage_result, true)
+	var presentation_result: Dictionary = _build_attack_action_result(
+		attacker,
+		target,
+		attack_type,
+		target_part,
+		action_result
+	)
+	action_result["presentation"] = presentation_result.duplicate()
+	var handle: Dictionary = _start_action_presentation(presentation_result)
+	if bool(handle.get("started", false)) and bool(presentation_result.get("wait_for_presentation", false)):
+		var job_id: String = str(handle.get("job_id", ""))
+		if not job_id.is_empty():
+			_pending_presentation_actions[job_id] = {
+				"attacker": attacker,
+				"target": target,
+				"action_type": TurnSystem.ACTION_TYPE_ATTACK,
+				"success": bool(action_result.get("success", false)),
+				"entered_combat": bool(start_result.get("entered_combat", false))
+			}
+			action_result["presentation_job_id"] = job_id
+			return action_result
 
-	if TurnSystem:
-		TurnSystem.request_action(attacker, TurnSystem.ACTION_TYPE_ATTACK, {
-			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
-			"success": bool(action_result.get("success", false)),
-			"entered_combat": bool(start_result.get("entered_combat", false))
-		})
-		TurnSystem.exit_combat_if_resolved()
-
-	_action_in_progress = false
-	_refresh_current_enemy(target)
+	_finalize_attack_action(
+		attacker,
+		target,
+		bool(action_result.get("success", false)),
+		bool(start_result.get("entered_combat", false))
+	)
 	return action_result
 
 func player_attack(attack_type: String = "normal", target_part: String = "body"):
@@ -98,27 +114,6 @@ func player_attack(attack_type: String = "normal", target_part: String = "body")
 	if player_actor == null or enemy_actor == null:
 		return {"success": false, "reason": "enemy_not_found"}
 	return perform_attack(player_actor, enemy_actor, attack_type, target_part)
-
-func player_defend():
-	var player_actor: Node3D = get_player_actor()
-	if player_actor == null:
-		return {"success": false, "reason": "player_not_found"}
-	var start_result: Dictionary = {
-		"success": true
-	}
-	if TurnSystem:
-		start_result = TurnSystem.request_action(player_actor, TurnSystem.ACTION_TYPE_DEFEND, {
-			"phase": TurnSystem.ACTION_PHASE_START
-		})
-	if not bool(start_result.get("success", false)):
-		return start_result
-	if TurnSystem:
-		TurnSystem.request_action(player_actor, TurnSystem.ACTION_TYPE_DEFEND, {
-			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
-			"success": true
-		})
-	player_action_executed.emit("defend", {})
-	return {"success": true}
 
 func player_use_item(item_id: String):
 	var player_actor: Node3D = get_player_actor()
@@ -146,34 +141,6 @@ func player_use_item(item_id: String):
 	player_action_executed.emit("item", {"item": item_id})
 	return {"success": result != null}
 
-func player_flee():
-	var player_actor: Node3D = get_player_actor()
-	if player_actor == null:
-		return false
-	var start_result: Dictionary = {
-		"success": true
-	}
-	if TurnSystem:
-		start_result = TurnSystem.request_action(player_actor, TurnSystem.ACTION_TYPE_FLEE, {
-			"phase": TurnSystem.ACTION_PHASE_START
-		})
-	if not bool(start_result.get("success", false)):
-		return false
-	var flee_chance: float = clampf(0.5 + (float(GameState.player_stamina) / 100.0) * 0.2, 0.1, 0.9)
-	var success: bool = randf() < flee_chance
-	if success:
-		_combat_state = CombatState.FLED
-		if TurnSystem and TurnSystem.is_in_combat():
-			TurnSystem.force_end_combat()
-		combat_ended.emit(false, {})
-	else:
-		if TurnSystem:
-			TurnSystem.request_action(player_actor, TurnSystem.ACTION_TYPE_FLEE, {
-				"phase": TurnSystem.ACTION_PHASE_COMPLETE,
-				"success": true
-			})
-	return success
-
 func is_in_combat():
 	return TurnSystem != null and TurnSystem.is_in_combat()
 
@@ -184,8 +151,6 @@ func get_combat_state():
 				return "victory"
 			CombatState.DEFEAT:
 				return "defeat"
-			CombatState.FLED:
-				return "fled"
 			_:
 				return "idle"
 
@@ -206,19 +171,13 @@ func is_player_turn() -> bool:
 		return false
 	return TurnSystem.is_actor_current_turn(player_actor)
 
-func end_turn() -> void:
+func complete_player_turn() -> bool:
 	var player_actor: Node3D = _resolve_player_actor()
 	if player_actor == null or TurnSystem == null:
-		return
-	if not TurnSystem.is_actor_current_turn(player_actor):
-		return
-	TurnSystem.request_action(player_actor, TurnSystem.ACTION_TYPE_DEFEND, {
-		"phase": TurnSystem.ACTION_PHASE_START
-	})
-	TurnSystem.request_action(player_actor, TurnSystem.ACTION_TYPE_DEFEND, {
-		"phase": TurnSystem.ACTION_PHASE_COMPLETE,
-		"success": true
-	})
+		return false
+	if not TurnSystem.has_method("end_current_turn"):
+		return false
+	return bool(TurnSystem.end_current_turn(player_actor))
 
 func get_enemy_stats() -> Dictionary:
 	return _current_enemy.get("stats", {}).duplicate(true)
@@ -247,7 +206,6 @@ func _apply_attack(attacker: Node, target: Node, attack_type: String, target_par
 	else:
 		target_hp = _apply_damage_to_actor(target, damage)
 
-	_play_hit_feedback(target as Node3D, damage, is_critical)
 	damage_dealt.emit("player" if target.is_in_group("player") else "enemy", damage, is_critical)
 
 	var result: Dictionary = {
@@ -564,25 +522,6 @@ func _resolve_player_actor() -> Node3D:
 		return player_node as Node3D
 	return null
 
-func _resolve_world_damage_text_controller() -> Node:
-	var player_actor: Node3D = _resolve_player_actor()
-	if player_actor != null and player_actor.has_method("get_world_damage_text_controller"):
-		var controller: Variant = player_actor.call("get_world_damage_text_controller")
-		if controller is Node and is_instance_valid(controller):
-			return controller as Node
-	return null
-
-func _play_hit_feedback(target: Node3D, damage: int, is_critical: bool) -> void:
-	if target == null or not is_instance_valid(target):
-		return
-	var hit_reaction: Variant = HitReaction3D.get_or_create(target)
-	if hit_reaction != null:
-		hit_reaction.play_hit_shake()
-
-	var damage_text_controller: Node = _resolve_world_damage_text_controller()
-	if damage_text_controller != null and damage_text_controller.has_method("show_damage_number"):
-		damage_text_controller.show_damage_number(target, damage, is_critical)
-
 func _show_attack_dialog(attacker: Node, target: Node, damage: int, is_critical: bool) -> void:
 	if DialogModule == null:
 		return
@@ -595,6 +534,8 @@ func _show_attack_dialog(attacker: Node, target: Node, damage: int, is_critical:
 
 func _on_turn_system_combat_state_changed(in_combat: bool) -> void:
 	if in_combat:
+		if ActionPresentationSystem != null and ActionPresentationSystem.has_method("cancel_jobs_by_mode"):
+			ActionPresentationSystem.cancel_jobs_by_mode("noncombat")
 		_combat_state = CombatState.ACTIVE
 		_turn_count = 0
 		_last_combat_victory = false
@@ -605,6 +546,8 @@ func _on_turn_system_combat_state_changed(in_combat: bool) -> void:
 		combat_started.emit(_current_enemy.duplicate(true))
 		return
 
+	_pending_presentation_actions.clear()
+	_action_in_progress = false
 	if _combat_state == CombatState.ACTIVE:
 		if GameState.player_hp <= 0:
 			_combat_state = CombatState.DEFEAT
@@ -620,3 +563,58 @@ func _on_actor_turn_started(actor: Node, _actor_id: String, _group_id: String, s
 		return
 	_turn_count += 1
 	turn_started.emit("player" if side == "player" else "enemy", _turn_count)
+
+func _build_attack_action_result(
+	attacker: Node,
+	target: Node,
+	attack_type: String,
+	target_part: String,
+	action_result: Dictionary
+) -> Dictionary:
+	var target_node: Node3D = target as Node3D
+	return {
+		"actor": attacker,
+		"action_type": TurnSystem.ACTION_TYPE_ATTACK,
+		"mode": "combat" if is_in_combat() else "noncombat",
+		"wait_for_presentation": is_in_combat(),
+		"presentation_policy": "FULL_BLOCKING" if is_in_combat() else "FULL_NONBLOCKING",
+		"target": target,
+		"target_pos": target_node.global_position if target_node != null else Vector3.ZERO,
+		"damage": int(action_result.get("damage", 0)),
+		"is_critical": bool(action_result.get("is_critical", false)),
+		"metadata": {
+			"attack_type": attack_type,
+			"target_part": target_part
+		}
+	}
+
+func _start_action_presentation(action_result: Dictionary) -> Dictionary:
+	if ActionPresentationSystem == null or not ActionPresentationSystem.has_method("play"):
+		return {}
+	var result: Variant = ActionPresentationSystem.play(action_result)
+	if result is Dictionary:
+		return (result as Dictionary).duplicate()
+	return {}
+
+func _finalize_attack_action(attacker: Node, target: Node, success: bool, entered_combat: bool) -> void:
+	if TurnSystem:
+		TurnSystem.request_action(attacker, TurnSystem.ACTION_TYPE_ATTACK, {
+			"phase": TurnSystem.ACTION_PHASE_COMPLETE,
+			"success": success,
+			"entered_combat": entered_combat
+		})
+		TurnSystem.exit_combat_if_resolved()
+	_action_in_progress = false
+	_refresh_current_enemy(target)
+
+func _on_action_presentation_completed(job_id: String, _action_result: Dictionary) -> void:
+	if not _pending_presentation_actions.has(job_id):
+		return
+	var pending: Dictionary = _pending_presentation_actions[job_id]
+	_pending_presentation_actions.erase(job_id)
+	_finalize_attack_action(
+		pending.get("attacker", null) as Node,
+		pending.get("target", null) as Node,
+		bool(pending.get("success", false)),
+		bool(pending.get("entered_combat", false))
+	)
