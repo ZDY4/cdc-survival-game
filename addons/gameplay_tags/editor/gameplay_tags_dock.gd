@@ -3,6 +3,7 @@ extends VBoxContainer
 ## GameplayTagsDock - Editor UI for tag registry management and query preview.
 
 const DEFAULT_CONFIG_PATH: String = "res://addons/gameplay_tags/config/gameplay_tags.ini"
+const CONTENT_MINIMUM_SIZE: Vector2 = Vector2(720, 460)
 
 var _manager: Node = null
 var _selected_tag: StringName = StringName()
@@ -48,19 +49,28 @@ func set_manager(manager: Node) -> void:
 	_refresh_all()
 
 func _build_ui() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
+	custom_minimum_size = CONTENT_MINIMUM_SIZE
+
+	var header_panel := VBoxContainer.new()
+	header_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_child(header_panel)
 
 	var title_label: Label = Label.new()
 	title_label.text = "Gameplay Tags"
-	add_child(title_label)
+	header_panel.add_child(title_label)
 
 	_status_label = Label.new()
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_label.text = "Ready."
-	add_child(_status_label)
+	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_panel.add_child(_status_label)
 
 	var path_row: HBoxContainer = HBoxContainer.new()
-	add_child(path_row)
+	path_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_panel.add_child(path_row)
 
 	var path_label: Label = Label.new()
 	path_label.text = "Config"
@@ -82,7 +92,8 @@ func _build_ui() -> void:
 	path_row.add_child(save_button)
 
 	var tools_row: HBoxContainer = HBoxContainer.new()
-	add_child(tools_row)
+	tools_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_panel.add_child(tools_row)
 
 	_search_edit = LineEdit.new()
 	_search_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -105,22 +116,40 @@ func _build_ui() -> void:
 	remove_button.pressed.connect(_on_remove_pressed)
 	tools_row.add_child(remove_button)
 
+	var content_scroll := ScrollContainer.new()
+	content_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content_scroll.follow_focus = true
+	add_child(content_scroll)
+
+	var content_root := MarginContainer.new()
+	content_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content_root.add_theme_constant_override("margin_left", 4)
+	content_root.add_theme_constant_override("margin_right", 4)
+	content_root.add_theme_constant_override("margin_top", 4)
+	content_root.add_theme_constant_override("margin_bottom", 4)
+	content_scroll.add_child(content_root)
+
 	var split: HSplitContainer = HSplitContainer.new()
 	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	add_child(split)
+	split.custom_minimum_size = Vector2(0, 320)
+	content_root.add_child(split)
 
 	_tag_tree = Tree.new()
 	_tag_tree.hide_root = true
 	_tag_tree.columns = 1
 	_tag_tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tag_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_tag_tree.custom_minimum_size = Vector2(220, 280)
 	_tag_tree.item_selected.connect(_on_tree_item_selected)
 	split.add_child(_tag_tree)
 
 	var query_panel: VBoxContainer = VBoxContainer.new()
 	query_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	query_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	query_panel.custom_minimum_size = Vector2(280, 280)
 	split.add_child(query_panel)
 
 	var query_title: Label = Label.new()
@@ -140,7 +169,8 @@ func _build_ui() -> void:
 	query_panel.add_child(query_label)
 
 	_query_input = TextEdit.new()
-	_query_input.custom_minimum_size = Vector2(200, 180)
+	_query_input.custom_minimum_size = Vector2(0, 140)
+	_query_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_query_input.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_query_input.text = "{\n  \"type\": \"all_tags\",\n  \"tags\": [\"State.Combat\"],\n  \"expressions\": []\n}"
 	query_panel.add_child(_query_input)
