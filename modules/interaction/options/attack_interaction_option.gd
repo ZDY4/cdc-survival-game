@@ -35,7 +35,7 @@ func uses_external_action_flow(_interactable: Node) -> bool:
 	return true
 
 func requires_proximity(_interactable: Node) -> bool:
-	return true
+	return false
 
 func get_required_distance(interactable: Node) -> float:
 	return _resolve_attack_range(interactable)
@@ -64,8 +64,15 @@ func execute(interactable: Node) -> void:
 
 	var target_actor := _resolve_actor(interactable)
 	var player_actor := _resolve_player_actor()
-	if target_actor != null and player_actor != null and CombatSystem and CombatSystem.has_method("perform_attack"):
-		CombatSystem.perform_attack(player_actor, target_actor)
+	if target_actor != null and player_actor != null and CombatSystem and CombatSystem.has_method("begin_targeted_attack"):
+		var targeting_result: Dictionary = CombatSystem.begin_targeted_attack(player_actor, {
+			"preferred_cell": GridMovementSystem.world_to_grid(target_actor.global_position),
+			"target_actor": target_actor,
+			"attack_range_cells": maxi(1, int(ceil(_resolve_attack_range(interactable)))),
+			"scene_root": _resolve_scene_root(player_actor)
+		})
+		if bool(targeting_result.get("success", false)):
+			return
 	elif character_id.is_empty():
 		if CombatModule and CombatModule.has_method("start_combat"):
 			CombatModule.start_combat(combat_data)
@@ -77,7 +84,7 @@ func execute(interactable: Node) -> void:
 		event_target = str(interactable.name)
 	if EventBus:
 		EventBus.emit(EventBus.EventType.SCENE_INTERACTION, {
-			"type": "attack",
+			"type": "attack_targeting_started",
 			"target": event_target,
 			"data": combat_data
 		})
@@ -166,6 +173,16 @@ func _resolve_player_actor() -> Node3D:
 	var player_node := (tree as SceneTree).get_first_node_in_group("player")
 	if player_node is Node3D and is_instance_valid(player_node):
 		return player_node as Node3D
+	return null
+
+func _resolve_scene_root(player_actor: Node) -> Node:
+	if player_actor != null and is_instance_valid(player_actor) and player_actor.has_method("get_targeting_scene_root"):
+		var scene_root: Variant = player_actor.call("get_targeting_scene_root")
+		if scene_root is Node:
+			return scene_root as Node
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		return (loop as SceneTree).current_scene
 	return null
 
 func _get_character_data(character_id: String) -> Dictionary:

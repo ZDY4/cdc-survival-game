@@ -1,6 +1,8 @@
 class_name AIController
 extends Node
 
+const TargetAttackAbility = preload("res://systems/target_attack_ability.gd")
+
 enum AIState { IDLE, WANDER, CHASE, ATTACK, RETURN }
 
 @export var decision_interval: float = 0.8
@@ -167,15 +169,39 @@ func _perform_attack_step(now_s: float) -> Dictionary:
 	if _target == null or not is_instance_valid(_target):
 		return {"performed": false}
 	if _skill_runtime != null and _skill_runtime.has_method("try_activate_next_active_skill"):
-		var skill_result: Variant = _skill_runtime.call("try_activate_next_active_skill")
+		var preferred_cell := GridMovementSystem.world_to_grid(_target.global_position)
+		var skill_result: Variant = _skill_runtime.call("try_activate_next_active_skill", preferred_cell, _target)
 		if skill_result is Dictionary and bool((skill_result as Dictionary).get("success", false)):
 			return {"performed": true, "type": "skill", "result": (skill_result as Dictionary).duplicate(true)}
 	if now_s - _last_attack_time < attack_cooldown:
 		return {"performed": false}
-	if CombatSystem == null or not CombatSystem.has_method("perform_attack"):
+	if CombatSystem == null or not CombatSystem.has_method("begin_targeted_attack"):
 		return {"performed": false}
 
-	var attack_result: Variant = CombatSystem.perform_attack(_owner_node, _target)
+	var preferred_attack_cell := GridMovementSystem.world_to_grid(_target.global_position)
+	var session_result: Variant = CombatSystem.begin_targeted_attack(_owner_node, {
+		"ai": true,
+		"preferred_cell": preferred_attack_cell,
+		"target_actor": _target,
+		"attack_range_cells": maxi(1, int(ceil(attack_range)))
+	})
+	if not (session_result is Dictionary):
+		return {"performed": false}
+	var session_payload: Dictionary = session_result as Dictionary
+	if not bool(session_payload.get("success", false)):
+		return {"performed": false, "result": session_payload}
+	var attack_session: Dictionary = session_payload.get("session", {})
+	var attack_handler: TargetAttackAbility = attack_session.get("handler", null) as TargetAttackAbility
+	if attack_handler == null:
+		return {"performed": false}
+	var attack_preview_result: Dictionary = attack_handler.auto_select_for_ai(_owner_node, preferred_attack_cell, attack_session.get("context", {}))
+	if not bool(attack_preview_result.get("success", false)):
+		return {"performed": false, "result": attack_preview_result}
+
+	var attack_result: Variant = attack_handler.confirm_target(
+		attack_preview_result.get("preview", {}),
+		attack_session.get("context", {})
+	)
 	if attack_result is Dictionary and bool((attack_result as Dictionary).get("success", false)):
 		var attack_payload: Dictionary = attack_result as Dictionary
 		var presentation_data: Dictionary = attack_payload.get("presentation", {}) as Dictionary

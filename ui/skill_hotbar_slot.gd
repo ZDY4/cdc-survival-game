@@ -4,6 +4,9 @@ class_name SkillHotbarSlot
 
 signal drop_requested(slot_index: int, data: Dictionary)
 signal drag_cleared(group_index: int, slot_index: int)
+
+const DEFAULT_SLOT_SIZE: float = 56.0
+
 var slot_index: int = -1
 var group_index: int = 0
 var skill_id: String = ""
@@ -22,7 +25,7 @@ var _drag_slot_index: int = -1
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	custom_minimum_size = Vector2(48, 48)
+	set_slot_size(DEFAULT_SLOT_SIZE)
 	_build_ui()
 	_refresh_display()
 
@@ -40,6 +43,12 @@ func pulse_highlight() -> void:
 	modulate = Color(1.0, 0.95, 0.65, 1.0)
 	var tween := create_tween()
 	tween.tween_property(self, "modulate", Color.WHITE, 0.35)
+
+
+func set_slot_size(side_length: float) -> void:
+	var resolved_size: float = maxf(1.0, side_length)
+	custom_minimum_size = Vector2(resolved_size, resolved_size)
+
 
 func _get_drag_data(_at_position: Vector2) -> Variant:
 	if skill_id.is_empty():

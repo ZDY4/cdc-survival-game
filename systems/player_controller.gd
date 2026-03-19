@@ -129,7 +129,12 @@ func is_movement_input_blocked() -> bool:
 	return _is_interaction_in_progress or _is_dialog_active or _is_console_input_blocked
 
 func is_world_input_blocked() -> bool:
-	return is_movement_input_blocked() or _is_menu_input_blocked or _is_player_turn_blocked_by_combat()
+	return (
+		is_movement_input_blocked()
+		or _is_menu_input_blocked
+		or _is_player_turn_blocked_by_combat()
+		or _is_ability_targeting_active()
+	)
 
 func is_console_input_blocked() -> bool:
 	return _is_console_input_blocked
@@ -338,6 +343,15 @@ func get_grid_position() -> Vector3i:
 
 func get_grid_world() -> GridWorld:
 	return _grid_world
+
+func get_targeting_scene_root() -> Node:
+	return _scene_root
+
+func is_pointer_over_blocking_ui(viewport: Viewport = null) -> bool:
+	var resolved_viewport: Viewport = viewport
+	if resolved_viewport == null and _scene_root != null:
+		resolved_viewport = _scene_root.get_viewport()
+	return _is_hovering_blocking_ui(resolved_viewport)
 
 func set_grid_world(world: GridWorld) -> void:
 	if world == _grid_world:
@@ -901,6 +915,8 @@ func _is_hovering_blocking_ui(viewport: Viewport) -> bool:
 		return false
 	if _hover_corner_overlay and _hover_corner_overlay.owns_control(hovered):
 		return false
+	if AbilityTargetingSystem != null and AbilityTargetingSystem.has_method("owns_control") and AbilityTargetingSystem.owns_control(hovered):
+		return false
 
 	var control: Control = hovered
 	while control != null:
@@ -912,6 +928,9 @@ func _is_hovering_blocking_ui(viewport: Viewport) -> bool:
 		control = control.get_parent() as Control
 
 	return false
+
+func _is_ability_targeting_active() -> bool:
+	return AbilityTargetingSystem != null and AbilityTargetingSystem.has_method("is_targeting") and bool(AbilityTargetingSystem.is_targeting())
 
 func _apply_hover_cursor(cursor_texture: Texture2D, hotspot: Vector2) -> void:
 	if _active_hover_cursor == cursor_texture and _active_hover_hotspot.is_equal_approx(hotspot):

@@ -1,5 +1,7 @@
 extends Node
 
+const TargetAttackAbility = preload("res://systems/target_attack_ability.gd")
+
 signal combat_started(enemy_data: Dictionary)
 signal turn_started(turn_owner: String, turn_number: int)
 signal player_action_executed(action: String, result: Dictionary)
@@ -114,6 +116,45 @@ func player_attack(attack_type: String = "normal", target_part: String = "body")
 	if player_actor == null or enemy_actor == null:
 		return {"success": false, "reason": "enemy_not_found"}
 	return perform_attack(player_actor, enemy_actor, attack_type, target_part)
+
+
+func begin_targeted_attack(attacker: Node, context: Dictionary = {}) -> Dictionary:
+	if attacker == null or not is_instance_valid(attacker):
+		return {"success": false, "reason": "invalid_attacker"}
+
+	var handler: TargetAttackAbility = _create_target_attack_handler(attacker, context)
+	if handler == null:
+		return {"success": false, "reason": "attack_handler_unavailable"}
+
+	var targeting_context: Dictionary = context.duplicate(true)
+	targeting_context["caster"] = attacker
+	targeting_context["attack_range_cells"] = resolve_attack_range_cells(attacker, context)
+	targeting_context["scene_root"] = _resolve_scene_root(attacker, context)
+	var session: Dictionary = handler.begin_targeting(targeting_context)
+
+	if attacker.is_in_group("player") \
+	and not bool(context.get("ai", false)) \
+	and AbilityTargetingSystem != null \
+	and AbilityTargetingSystem.has_method("begin_attack_targeting"):
+		return AbilityTargetingSystem.begin_attack_targeting(handler, targeting_context)
+
+	return {
+		"success": true,
+		"state": "targeting_started",
+		"session": session
+	}
+
+
+func resolve_attack_range_cells(attacker: Node, context: Dictionary = {}) -> int:
+	if context.has("attack_range_cells"):
+		return maxi(1, int(context.get("attack_range_cells", 1)))
+	if attacker != null and attacker.is_in_group("player"):
+		var player_range: int = _resolve_player_attack_range(attacker)
+		if player_range > 0:
+			return player_range
+	if context.has("attack_range"):
+		return maxi(1, int(ceil(float(context.get("attack_range", 1.0)))))
+	return 1
 
 func player_use_item(item_id: String):
 	var player_actor: Node3D = get_player_actor()
@@ -515,6 +556,50 @@ func _calculate_character_loot(enemy_data: Dictionary) -> Array:
 			"amount": amount
 		})
 	return drops
+
+
+func _create_target_attack_handler(attacker: Node, context: Dictionary) -> TargetAttackAbility:
+	var handler := TargetAttackAbility.new()
+	handler.configure_attack({
+		"ability_id": str(context.get("ability_id", "basic_attack")),
+		"attack_range_cells": resolve_attack_range_cells(attacker, context),
+		"shape": str(context.get("shape", "single")),
+		"radius": int(context.get("radius", 0)),
+		"attack_type": str(context.get("attack_type", "normal")),
+		"target_part": str(context.get("target_part", "body"))
+	})
+	return handler
+
+
+func _resolve_player_attack_range(attacker: Node) -> int:
+	if attacker != null and attacker.has_node("EquipmentSystem"):
+		var equipment_system: Node = attacker.get_node_or_null("EquipmentSystem")
+		if equipment_system != null and equipment_system.has_method("calculate_combat_stats"):
+			var equipment_stats: Variant = equipment_system.call("calculate_combat_stats")
+			if equipment_stats is Dictionary:
+				return maxi(1, int((equipment_stats as Dictionary).get("range", 1)))
+			if equipment_system.has_method("get_equipped_data"):
+				var main_hand: Variant = equipment_system.call("get_equipped_data", "main_hand")
+				if main_hand is Dictionary:
+					var weapon_data: Dictionary = (main_hand as Dictionary).get("weapon_data", {})
+					return maxi(1, int(weapon_data.get("range", 1)))
+	return 1
+
+
+func _resolve_scene_root(attacker: Node, context: Dictionary) -> Node:
+	var provided_root: Node = context.get("scene_root", null) as Node
+	if provided_root != null and is_instance_valid(provided_root):
+		return provided_root
+	if attacker != null and is_instance_valid(attacker) and attacker.has_method("get_targeting_scene_root"):
+		var resolved_root: Variant = attacker.call("get_targeting_scene_root")
+		if resolved_root is Node and is_instance_valid(resolved_root):
+			return resolved_root as Node
+	if attacker != null and is_instance_valid(attacker) and attacker.get_tree() != null:
+		return attacker.get_tree().current_scene
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return null
+	return tree.current_scene
 
 func _resolve_player_actor() -> Node3D:
 	var player_node: Node = get_tree().get_first_node_in_group("player")

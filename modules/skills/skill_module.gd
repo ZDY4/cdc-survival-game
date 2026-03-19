@@ -3,6 +3,9 @@ extends "res://core/base_module.gd"
 ## 技能描述目录: res://data/skills/*.json
 ## 技能树配置目录: res://data/skill_trees/*.json
 
+const InputActions = preload("res://core/input_actions.gd")
+const TargetSkillBase = preload("res://systems/target_skill_base.gd")
+
 const SKILLS_DATA_DIR: String = "res://data/skills"
 const SKILL_TREES_DATA_DIR: String = "res://data/skill_trees"
 const HOTBAR_GROUP_COUNT: int = 5
@@ -21,6 +24,8 @@ signal hotbar_group_changed(group_index: int)
 signal skill_activation_succeeded(skill_id: String, result: Dictionary)
 signal skill_activation_failed(skill_id: String, reason: String)
 signal skill_toggle_changed(skill_id: String, active: bool)
+signal skill_targeting_started(skill_id: String, session: Dictionary)
+signal skill_targeting_cancelled(skill_id: String, reason: String)
 
 var skill_points: int = 0
 var learned_skills: Dictionary = {}
@@ -35,6 +40,7 @@ var _total_effects: Dictionary = {}
 var _cooldown_remaining: Dictionary = {}
 var _active_toggles: Dictionary = {}
 var _effect_system: Node = null
+var _targeted_skill_sessions: Dictionary = {}
 
 
 func _ready() -> void:
@@ -177,6 +183,7 @@ func reset_skills() -> void:
 	_total_effects.clear()
 	_cooldown_remaining.clear()
 	_active_toggles.clear()
+	_targeted_skill_sessions.clear()
 	skill_points += refunded_points
 	_purge_invalid_hotbar_assignments()
 	skill_points_changed.emit(skill_points)
@@ -463,7 +470,10 @@ func activate_hotbar_slot(slot_index: int) -> Dictionary:
 	var result: Dictionary = {}
 	match mode:
 		ACTIVATION_MODE_ACTIVE:
-			result = _activate_active_skill(skill_id)
+			if _is_targeted_activation(activation):
+				result = _start_targeted_skill_activation(skill_id, slot_index)
+			else:
+				result = _activate_active_skill(skill_id)
 		ACTIVATION_MODE_TOGGLE:
 			result = _activate_toggle_skill(skill_id)
 		_:
@@ -473,6 +483,63 @@ func activate_hotbar_slot(slot_index: int) -> Dictionary:
 		skill_activation_succeeded.emit(skill_id, result)
 	else:
 		skill_activation_failed.emit(skill_id, str(result.get("reason", "触发失败")))
+	return result
+
+
+func cast_targeted_skill(skill_id: String, preview: Dictionary) -> Dictionary:
+	var session: Dictionary = _get_targeted_skill_session(skill_id)
+	if session.is_empty():
+		return {"success": false, "reason": "missing_target_session", "skill_id": skill_id}
+	return execute_targeted_skill_preview(skill_id, preview, session.get("context", {}))
+
+
+func cancel_targeted_skill(skill_id: String, reason: String = "cancelled") -> void:
+	if not _targeted_skill_sessions.has(skill_id):
+		return
+	_targeted_skill_sessions.erase(skill_id)
+	skill_targeting_cancelled.emit(skill_id, reason)
+
+
+func get_targeted_skill_handler(skill_id: String) -> TargetSkillBase:
+	var skill_definition: Dictionary = get_skill_definition(skill_id)
+	if skill_definition.is_empty():
+		return null
+	return _create_targeted_skill_handler(skill_id, skill_definition)
+
+
+func execute_targeted_skill_preview(skill_id: String, preview: Dictionary, context: Dictionary) -> Dictionary:
+	if get_skill_level(skill_id) <= 0:
+		return {"success": false, "reason": "技能尚未学习", "skill_id": skill_id}
+	if get_skill_cooldown_remaining(skill_id) > 0.0:
+		return {
+			"success": false,
+			"reason": "冷却中",
+			"skill_id": skill_id,
+			"cooldown_remaining": get_skill_cooldown_remaining(skill_id)
+		}
+
+	var skill_definition: Dictionary = get_skill_definition(skill_id)
+	if skill_definition.is_empty():
+		return {"success": false, "reason": "技能不存在", "skill_id": skill_id}
+	var activation: Dictionary = skill_definition.get("activation", {})
+	if not _is_targeted_activation(activation):
+		return {"success": false, "reason": "技能不是目标型技能", "skill_id": skill_id}
+
+	var handler: TargetSkillBase = context.get("handler", null) as TargetSkillBase
+	if handler == null:
+		handler = _create_targeted_skill_handler(skill_id, skill_definition)
+	if handler == null:
+		return {"success": false, "reason": "目标处理器创建失败", "skill_id": skill_id}
+
+	var validation: Dictionary = handler.is_preview_valid(preview, context)
+	if not bool(validation.get("valid", false)):
+		return {"success": false, "reason": str(validation.get("reason", "invalid_preview")), "skill_id": skill_id}
+
+	var result: Dictionary = _apply_active_skill(skill_id)
+	if bool(result.get("success", false)):
+		result["preview"] = preview.duplicate(true)
+		result["state"] = "cast_confirmed"
+		_targeted_skill_sessions.erase(skill_id)
 	return result
 
 
@@ -509,6 +576,7 @@ func deserialize(data: Dictionary) -> void:
 
 	_deserialize_hotbar_state(data.get("hotbar", {}))
 	_deserialize_activation_state(data.get("activation_state", {}))
+	_targeted_skill_sessions.clear()
 	_rebuild_all_effects()
 	_restore_toggle_effects()
 	_purge_invalid_hotbar_assignments()
@@ -689,7 +757,8 @@ func _normalize_activation_config(data: Dictionary) -> Dictionary:
 	var normalized: Dictionary = {
 		"mode": mode,
 		"cooldown": maxf(0.0, float(config.get("cooldown", 0.0))),
-		"effect": {}
+		"effect": {},
+		"targeting": _normalize_targeting_config(config.get("targeting", {}))
 	}
 	var effect: Variant = config.get("effect", {})
 	if effect is Dictionary:
@@ -697,7 +766,25 @@ func _normalize_activation_config(data: Dictionary) -> Dictionary:
 	if mode == ACTIVATION_MODE_PASSIVE:
 		normalized["cooldown"] = 0.0
 		normalized["effect"] = {}
+		normalized["targeting"] = _normalize_targeting_config({})
 	return normalized
+
+
+func _normalize_targeting_config(value: Variant) -> Dictionary:
+	var targeting: Dictionary = {}
+	if value is Dictionary:
+		targeting = (value as Dictionary).duplicate(true)
+	var enabled: bool = bool(targeting.get("enabled", false))
+	var shape: String = str(targeting.get("shape", "single")).to_lower()
+	if shape not in ["single", "diamond", "square"]:
+		shape = "single"
+	return {
+		"enabled": enabled,
+		"range_cells": maxi(0, int(targeting.get("range_cells", 0))),
+		"shape": shape,
+		"radius": maxi(0, int(targeting.get("radius", 0))),
+		"handler_script": str(targeting.get("handler_script", ""))
+	}
 
 
 func _rebuild_all_effects() -> void:
@@ -882,7 +969,77 @@ func _remove_all_toggle_effects_from_system() -> void:
 			_effect_system.remove_effect((effect as GameplayEffect).id, PLAYER_ENTITY_ID)
 
 
+func _start_targeted_skill_activation(skill_id: String, slot_index: int) -> Dictionary:
+	if AbilityTargetingSystem == null or not AbilityTargetingSystem.has_method("begin_skill_targeting"):
+		return {"success": false, "reason": "AbilityTargetingSystem unavailable", "skill_id": skill_id}
+
+	var skill_definition: Dictionary = get_skill_definition(skill_id)
+	if skill_definition.is_empty():
+		return {"success": false, "reason": "技能不存在", "skill_id": skill_id}
+
+	var handler: TargetSkillBase = _create_targeted_skill_handler(skill_id, skill_definition)
+	if handler == null:
+		return {"success": false, "reason": "目标处理器创建失败", "skill_id": skill_id}
+
+	var context: Dictionary = _build_targeted_skill_context(skill_id, slot_index, handler)
+	var session_result: Dictionary = AbilityTargetingSystem.begin_skill_targeting(skill_id, handler, context)
+	if not bool(session_result.get("success", false)):
+		return session_result
+
+	_targeted_skill_sessions[skill_id] = {
+		"handler": handler,
+		"context": context.duplicate(true)
+	}
+	skill_targeting_started.emit(skill_id, session_result.get("session", {}))
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"mode": ACTIVATION_MODE_ACTIVE,
+		"state": "targeting_started",
+		"session": session_result.get("session", {})
+	}
+
+
+func _build_targeted_skill_context(skill_id: String, slot_index: int, handler: TargetSkillBase) -> Dictionary:
+	var caster: Node = _resolve_player_actor()
+	return {
+		"caster": caster,
+		"skill_id": skill_id,
+		"slot_index": slot_index,
+		"activation_action": str(InputActions.get_hotbar_action_for_slot(slot_index)),
+		"scene_root": _resolve_player_scene_root(caster),
+		"handler": handler
+	}
+
+
+func _create_targeted_skill_handler(skill_id: String, skill_definition: Dictionary) -> TargetSkillBase:
+	var activation: Dictionary = skill_definition.get("activation", {})
+	var targeting: Dictionary = activation.get("targeting", {})
+	var handler_script_path: String = str(targeting.get("handler_script", ""))
+	var handler: TargetSkillBase = null
+	if not handler_script_path.is_empty() and ResourceLoader.exists(handler_script_path):
+		var loaded_script: Variant = load(handler_script_path)
+		if loaded_script != null and loaded_script.has_method("new"):
+			var scripted_handler: Variant = loaded_script.new()
+			if scripted_handler is TargetSkillBase:
+				handler = scripted_handler as TargetSkillBase
+	if handler == null:
+		handler = TargetSkillBase.new()
+	handler.configure_from_skill(skill_id, skill_definition)
+	handler.bind_skill_module(self)
+	return handler
+
+
+func _is_targeted_activation(activation: Dictionary) -> bool:
+	var targeting: Dictionary = activation.get("targeting", {})
+	return bool(targeting.get("enabled", false))
+
+
 func _activate_active_skill(skill_id: String) -> Dictionary:
+	return _apply_active_skill(skill_id)
+
+
+func _apply_active_skill(skill_id: String) -> Dictionary:
 	var effect: GameplayEffect = _compute_activation_effect(skill_id)
 	if effect == null:
 		return {"success": false, "reason": "技能缺少主动效果配置", "skill_id": skill_id}
@@ -992,6 +1149,31 @@ func _tick_activation_cooldowns(delta: float) -> void:
 
 func _get_activation_config(skill_id: String) -> Dictionary:
 	return _skills.get(skill_id, {}).get("activation", {})
+
+
+func _get_targeted_skill_session(skill_id: String) -> Dictionary:
+	var session: Variant = _targeted_skill_sessions.get(skill_id, {})
+	if session is Dictionary:
+		return (session as Dictionary).duplicate(true)
+	return {}
+
+
+func _resolve_player_actor() -> Node:
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group("player")
+
+
+func _resolve_player_scene_root(player_actor: Node) -> Node:
+	if player_actor != null and is_instance_valid(player_actor) and player_actor.has_method("get_targeting_scene_root"):
+		var result: Variant = player_actor.call("get_targeting_scene_root")
+		if result is Node and is_instance_valid(result):
+			return result as Node
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return null
+	return tree.current_scene
 
 
 func _ensure_hotbar_state() -> void:

@@ -2,6 +2,8 @@ class_name CharacterSkillRuntime
 extends Node
 ## Runtime skill state for non-player actors.
 
+const TargetSkillBase = preload("res://systems/target_skill_base.gd")
+
 const ACTIVATION_MODE_PASSIVE: String = "passive"
 const ACTIVATION_MODE_ACTIVE: String = "active"
 const ACTIVATION_MODE_TOGGLE: String = "toggle"
@@ -10,6 +12,7 @@ var entity_id: String = ""
 
 var _effect_system: Node = null
 var _skill_source: Node = null
+var _owner_actor: Node = null
 var _learned_skill_ids: Array[String] = []
 var _active_skill_ids: Array[String] = []
 var _cooldown_remaining: Dictionary = {}
@@ -46,6 +49,7 @@ func initialize(
 	skill_source: Node,
 	effect_system: Node
 ) -> void:
+	_owner_actor = actor
 	_effect_system = effect_system
 	_skill_source = skill_source
 	entity_id = "actor:%s" % spawn_id.strip_edges()
@@ -101,7 +105,7 @@ func get_total_modifiers() -> Dictionary:
 	return (_effect_system.get_total_modifiers(entity_id) as Dictionary).duplicate(true)
 
 
-func try_activate_next_active_skill() -> Dictionary:
+func try_activate_next_active_skill(preferred_cell: Vector3i = Vector3i.ZERO, target_actor: Node = null) -> Dictionary:
 	if _active_skill_ids.is_empty():
 		return {"success": false, "reason": "no_active_skills"}
 
@@ -112,7 +116,11 @@ func try_activate_next_active_skill() -> Dictionary:
 		if get_cooldown_remaining(skill_id) > 0.0:
 			continue
 
-		var result: Dictionary = _activate_active_skill(skill_id)
+		var result: Dictionary = _activate_active_skill(skill_id, {
+			"caster": _owner_actor,
+			"preferred_cell": preferred_cell,
+			"target_actor": target_actor
+		})
 		if bool(result.get("success", false)):
 			_next_active_skill_index = posmod(index + 1, _active_skill_ids.size())
 			return result
@@ -212,13 +220,30 @@ func _activate_toggle_skill(skill_id: String, activate_on_init: bool = false) ->
 	return {"success": true, "skill_id": skill_id, "mode": ACTIVATION_MODE_TOGGLE, "active": true}
 
 
-func _activate_active_skill(skill_id: String) -> Dictionary:
+func _activate_active_skill(skill_id: String, context: Dictionary = {}) -> Dictionary:
 	var skill_definition: Dictionary = _get_skill_definition(skill_id)
 	if skill_definition.is_empty():
 		return {"success": false, "reason": "missing_skill_definition"}
 	var activation: Dictionary = _get_activation_config(skill_definition)
 	if str(activation.get("mode", ACTIVATION_MODE_PASSIVE)) != ACTIVATION_MODE_ACTIVE:
 		return {"success": false, "reason": "not_active_skill"}
+	if _is_targeted_activation(activation):
+		var handler: TargetSkillBase = _create_targeted_skill_handler(skill_id, skill_definition)
+		if handler == null:
+			return {"success": false, "reason": "missing_target_handler", "skill_id": skill_id}
+		var preferred_cell: Vector3i = _resolve_preferred_target_cell(context)
+		var selection: Dictionary = handler.auto_select_for_ai(
+			context.get("caster", _owner_actor) as Node,
+			preferred_cell,
+			context
+		)
+		if not bool(selection.get("success", false)):
+			return {
+				"success": false,
+				"reason": str(selection.get("reason", "invalid_target_preview")),
+				"skill_id": skill_id
+			}
+		return handler.confirm_target(selection.get("preview", {}), context)
 
 	var effect: GameplayEffect = _build_effect_from_config(
 		"character_skill_active_%s" % skill_id,
@@ -240,6 +265,89 @@ func _activate_active_skill(skill_id: String) -> Dictionary:
 		"mode": ACTIVATION_MODE_ACTIVE,
 		"cooldown": get_cooldown_remaining(skill_id)
 	}
+
+
+func execute_targeted_skill_preview(skill_id: String, preview: Dictionary, context: Dictionary) -> Dictionary:
+	var skill_definition: Dictionary = _get_skill_definition(skill_id)
+	if skill_definition.is_empty():
+		return {"success": false, "reason": "missing_skill_definition", "skill_id": skill_id}
+	if get_cooldown_remaining(skill_id) > 0.0:
+		return {
+			"success": false,
+			"reason": "cooldown_active",
+			"skill_id": skill_id,
+			"cooldown": get_cooldown_remaining(skill_id)
+		}
+
+	var activation: Dictionary = _get_activation_config(skill_definition)
+	if not _is_targeted_activation(activation):
+		return {"success": false, "reason": "not_targeted_skill", "skill_id": skill_id}
+
+	var handler: TargetSkillBase = context.get("handler", null) as TargetSkillBase
+	if handler == null:
+		handler = _create_targeted_skill_handler(skill_id, skill_definition)
+	if handler == null:
+		return {"success": false, "reason": "missing_target_handler", "skill_id": skill_id}
+
+	var validation: Dictionary = handler.is_preview_valid(preview, context)
+	if not bool(validation.get("valid", false)):
+		return {"success": false, "reason": str(validation.get("reason", "invalid_preview")), "skill_id": skill_id}
+
+	var effect: GameplayEffect = _build_effect_from_config(
+		"character_skill_active_%s" % skill_id,
+		skill_id,
+		activation.get("effect", {}),
+		false
+	)
+	if effect == null:
+		return {"success": false, "reason": "missing_active_effect", "skill_id": skill_id}
+	if _effect_system == null or not _effect_system.has_method("apply_gameplay_effect"):
+		return {"success": false, "reason": "effect_system_unavailable", "skill_id": skill_id}
+	if not _effect_system.apply_gameplay_effect(effect, entity_id):
+		return {"success": false, "reason": "effect_apply_failed", "skill_id": skill_id}
+
+	_start_cooldown(skill_id, activation)
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"mode": ACTIVATION_MODE_ACTIVE,
+		"state": "cast_confirmed",
+		"cooldown": get_cooldown_remaining(skill_id),
+		"preview": preview.duplicate(true)
+	}
+
+
+func _create_targeted_skill_handler(skill_id: String, skill_definition: Dictionary) -> TargetSkillBase:
+	var activation: Dictionary = _get_activation_config(skill_definition)
+	var targeting: Dictionary = activation.get("targeting", {})
+	var handler_script_path: String = str(targeting.get("handler_script", ""))
+	var handler: TargetSkillBase = null
+	if not handler_script_path.is_empty() and ResourceLoader.exists(handler_script_path):
+		var loaded_script: Variant = load(handler_script_path)
+		if loaded_script != null and loaded_script.has_method("new"):
+			var scripted_handler: Variant = loaded_script.new()
+			if scripted_handler is TargetSkillBase:
+				handler = scripted_handler as TargetSkillBase
+	if handler == null:
+		handler = TargetSkillBase.new()
+	handler.configure_from_skill(skill_id, skill_definition)
+	handler.bind_skill_runtime(self)
+	return handler
+
+
+func _resolve_preferred_target_cell(context: Dictionary) -> Vector3i:
+	var preferred: Variant = context.get("preferred_cell", null)
+	if preferred is Vector3i:
+		return preferred
+	var target_actor: Node = context.get("target_actor", null) as Node
+	if target_actor != null and is_instance_valid(target_actor) and target_actor is Node3D:
+		return GridMovementSystem.world_to_grid((target_actor as Node3D).global_position)
+	return Vector3i.ZERO
+
+
+func _is_targeted_activation(activation: Dictionary) -> bool:
+	var targeting: Dictionary = activation.get("targeting", {})
+	return bool(targeting.get("enabled", false))
 
 
 func _build_effect_from_config(

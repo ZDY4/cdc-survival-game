@@ -4,15 +4,33 @@ class_name SkillHotbar
 
 signal status_requested(message: String)
 
+const SLOT_COUNT: int = 10
+const HOTBAR_GROUP_COUNT: int = 5
+const HORIZONTAL_MARGIN: float = 16.0
+const PANEL_HORIZONTAL_PADDING: float = 10.0
+const PANEL_VERTICAL_PADDING: float = 8.0
+const ROOT_SEPARATION: int = 6
+const SLOT_SEPARATION: int = 5
+const NAV_BUTTON_WIDTH: float = 36.0
+const GROUP_LABEL_WIDTH: float = 52.0
+const MIN_SLOT_SIZE: float = 36.0
+const MAX_SLOT_SIZE: float = 64.0
+
 var _skill_system: Node = null
+var _panel: PanelContainer = null
+var _root: HBoxContainer = null
 var _group_label: Label = null
 var _slot_container: HBoxContainer = null
+var _previous_button: Button = null
+var _next_button: Button = null
 var _slots: Array[SkillHotbarSlot] = []
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_ui()
+	_connect_viewport_resize()
+	_update_layout()
 	_resolve_skill_system()
 	set_process(true)
 	_refresh_from_skill_system()
@@ -58,14 +76,8 @@ func add_skill_to_active_group(skill_id: String) -> void:
 
 
 func _build_ui() -> void:
-	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	offset_left = 70.0
-	offset_right = -70.0
-	offset_top = -88.0
-	offset_bottom = -18.0
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_panel = PanelContainer.new()
+	_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.08, 0.11, 0.86)
 	style.border_color = Color(0.29, 0.37, 0.43, 1.0)
@@ -77,38 +89,33 @@ func _build_ui() -> void:
 	style.corner_radius_top_right = 8
 	style.corner_radius_bottom_left = 8
 	style.corner_radius_bottom_right = 8
-	panel.add_theme_stylebox_override("panel", style)
-	add_child(panel)
+	_panel.add_theme_stylebox_override("panel", style)
+	add_child(_panel)
 
-	var root := HBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.offset_left = 10.0
-	root.offset_top = 8.0
-	root.offset_right = -10.0
-	root.offset_bottom = -8.0
-	root.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_theme_constant_override("separation", 6)
-	panel.add_child(root)
+	_root = HBoxContainer.new()
+	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.alignment = BoxContainer.ALIGNMENT_CENTER
+	_root.add_theme_constant_override("separation", ROOT_SEPARATION)
+	_panel.add_child(_root)
 
-	var prev_button := Button.new()
-	prev_button.text = "▲"
-	prev_button.tooltip_text = "上一组快捷栏"
-	prev_button.custom_minimum_size = Vector2(30, 48)
-	prev_button.pressed.connect(_on_previous_group_pressed)
-	root.add_child(prev_button)
+	_previous_button = Button.new()
+	_previous_button.text = "▲"
+	_previous_button.tooltip_text = "上一组快捷栏"
+	_previous_button.pressed.connect(_on_previous_group_pressed)
+	_root.add_child(_previous_button)
 
 	_group_label = Label.new()
-	_group_label.custom_minimum_size = Vector2(52, 0)
 	_group_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(_group_label)
+	_group_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_root.add_child(_group_label)
 
 	_slot_container = HBoxContainer.new()
 	_slot_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	_slot_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_slot_container.add_theme_constant_override("separation", 5)
-	root.add_child(_slot_container)
+	_slot_container.add_theme_constant_override("separation", SLOT_SEPARATION)
+	_root.add_child(_slot_container)
 
-	for slot_index in range(10):
+	for slot_index in range(SLOT_COUNT):
 		var slot := SkillHotbarSlot.new()
 		slot.slot_index = slot_index
 		slot.drop_requested.connect(_on_slot_drop_requested)
@@ -116,12 +123,66 @@ func _build_ui() -> void:
 		_slot_container.add_child(slot)
 		_slots.append(slot)
 
-	var next_button := Button.new()
-	next_button.text = "▼"
-	next_button.tooltip_text = "下一组快捷栏"
-	next_button.custom_minimum_size = Vector2(30, 48)
-	next_button.pressed.connect(_on_next_group_pressed)
-	root.add_child(next_button)
+	_next_button = Button.new()
+	_next_button.text = "▼"
+	_next_button.tooltip_text = "下一组快捷栏"
+	_next_button.pressed.connect(_on_next_group_pressed)
+	_root.add_child(_next_button)
+
+
+func _connect_viewport_resize() -> void:
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	if not viewport.size_changed.is_connected(_on_viewport_size_changed):
+		viewport.size_changed.connect(_on_viewport_size_changed)
+
+
+func _update_layout() -> void:
+	if _root == null or _slot_container == null:
+		return
+
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var reserved_width: float = (
+		HORIZONTAL_MARGIN * 2.0
+		+ PANEL_HORIZONTAL_PADDING * 2.0
+		+ NAV_BUTTON_WIDTH * 2.0
+		+ GROUP_LABEL_WIDTH
+		+ float(ROOT_SEPARATION * 3)
+		+ float(SLOT_SEPARATION * max(SLOT_COUNT - 1, 0))
+	)
+	var available_slot_width: float = maxf(0.0, viewport_size.x - reserved_width)
+	var slot_size: float = clampf(
+		floorf(available_slot_width / maxf(1.0, float(SLOT_COUNT))),
+		MIN_SLOT_SIZE,
+		MAX_SLOT_SIZE
+	)
+	var hotbar_height: float = slot_size + PANEL_VERTICAL_PADDING * 2.0
+
+	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	offset_left = HORIZONTAL_MARGIN
+	offset_right = -HORIZONTAL_MARGIN
+	offset_top = -hotbar_height
+	offset_bottom = 0.0
+
+	_root.offset_left = PANEL_HORIZONTAL_PADDING
+	_root.offset_top = PANEL_VERTICAL_PADDING
+	_root.offset_right = -PANEL_HORIZONTAL_PADDING
+	_root.offset_bottom = -PANEL_VERTICAL_PADDING
+
+	if _previous_button != null:
+		_previous_button.custom_minimum_size = Vector2(NAV_BUTTON_WIDTH, slot_size)
+	if _next_button != null:
+		_next_button.custom_minimum_size = Vector2(NAV_BUTTON_WIDTH, slot_size)
+	if _group_label != null:
+		_group_label.custom_minimum_size = Vector2(GROUP_LABEL_WIDTH, slot_size)
+
+	for slot in _slots:
+		slot.set_slot_size(slot_size)
+
+
+func _on_viewport_size_changed() -> void:
+	_update_layout()
 
 
 func _resolve_skill_system() -> void:
@@ -158,7 +219,7 @@ func _refresh_from_skill_system() -> void:
 
 	var groups: Array = _skill_system.get_hotbar_groups()
 	var group_index: int = int(_skill_system.get_active_hotbar_group())
-	_group_label.text = "%d/5" % [group_index + 1]
+	_group_label.text = "%d/%d" % [group_index + 1, HOTBAR_GROUP_COUNT]
 
 	var active_group: Array = []
 	if group_index >= 0 and group_index < groups.size():

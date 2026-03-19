@@ -18,6 +18,7 @@ const ACTION_HOTBAR_7: StringName = &"hotbar_slot_7"
 const ACTION_HOTBAR_8: StringName = &"hotbar_slot_8"
 const ACTION_HOTBAR_9: StringName = &"hotbar_slot_9"
 const ACTION_HOTBAR_10: StringName = &"hotbar_slot_10"
+const ACTION_ATTACK: StringName = &"attack_action"
 
 const MENU_ACTIONS: Array[StringName] = [
 	ACTION_MENU_INVENTORY,
@@ -42,7 +43,7 @@ const HOTBAR_ACTIONS: Array[StringName] = [
 	ACTION_HOTBAR_10
 ]
 
-const ALL_ACTIONS: Array[StringName] = MENU_ACTIONS + HOTBAR_ACTIONS
+const ALL_ACTIONS: Array[StringName] = MENU_ACTIONS + HOTBAR_ACTIONS + [ACTION_ATTACK]
 
 const REBINDABLE_ACTIONS: Array[StringName] = [
 	ACTION_MENU_INVENTORY,
@@ -60,7 +61,8 @@ const ACTION_LABELS: Dictionary = {
 	ACTION_MENU_JOURNAL: "任务面板",
 	ACTION_MENU_SKILLS: "技能面板",
 	ACTION_MENU_CRAFTING: "制造面板",
-	ACTION_MENU_SETTINGS: "设置面板"
+	ACTION_MENU_SETTINGS: "设置面板",
+	ACTION_ATTACK: "普通攻击"
 }
 
 const DEFAULT_BINDINGS: Dictionary = {
@@ -80,7 +82,8 @@ const DEFAULT_BINDINGS: Dictionary = {
 	ACTION_HOTBAR_7: KEY_7,
 	ACTION_HOTBAR_8: KEY_8,
 	ACTION_HOTBAR_9: KEY_9,
-	ACTION_HOTBAR_10: KEY_0
+	ACTION_HOTBAR_10: KEY_0,
+	ACTION_ATTACK: KEY_F
 }
 
 

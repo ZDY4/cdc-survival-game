@@ -80,6 +80,12 @@ static func run_tests(runner: TestRunner) -> void:
 		TestRunner.TestPriority.P1_MAJOR,
 		_test_interaction_navigation_auto_executes
 	)
+	runner.register_test(
+		"player_controller_blocks_world_input_while_ability_targeting_is_active",
+		TestRunner.TestLayer.FUNCTIONAL,
+		TestRunner.TestPriority.P1_MAJOR,
+		_test_targeting_blocks_world_input
+	)
 
 static func _test_console_visibility_blocks_character_input() -> void:
 	var loop := Engine.get_main_loop()
@@ -348,5 +354,66 @@ static func _test_interaction_navigation_auto_executes() -> void:
 	assert(not player.has_navigation_intent(), "The interaction navigation intent should clear after the interaction executes")
 
 	interactable.queue_free()
+	player.queue_free()
+	await tree.process_frame
+
+static func _test_targeting_blocks_world_input() -> void:
+	assert(SkillModule != null, "SkillModule autoload should exist")
+	assert(AbilityTargetingSystem != null, "AbilityTargetingSystem autoload should exist")
+
+	var loop := Engine.get_main_loop()
+	assert(loop is SceneTree, "Main loop should be a SceneTree")
+	var tree: SceneTree = loop
+	assert(tree.root != null, "SceneTree root should exist")
+
+	var snapshot: Dictionary = SkillModule.serialize()
+	var player := PlayerController.new()
+	tree.root.add_child(player)
+	await tree.process_frame
+	await tree.process_frame
+	player.set_interaction_context(tree.root)
+
+	SkillModule.reset_skills()
+	SkillModule.set_skill_points(20)
+	assert(SkillModule.learn_skill("combat"), "combat should be learnable for targeting test")
+	SkillModule._skills["targeted_player_controller_test"] = SkillModule._normalize_skill("targeted_player_controller_test", {
+		"name": "测试锁定技",
+		"tree_id": "combat",
+		"max_level": 1,
+		"prerequisites": ["combat"],
+		"activation": {
+			"mode": "active",
+			"cooldown": 3.0,
+			"effect": {
+				"duration": 2.0,
+				"is_infinite": false,
+				"category": "buff",
+				"modifiers": {
+					"damage_bonus": {
+						"base": 0.05
+					}
+				}
+			},
+			"targeting": {
+				"enabled": true,
+				"range_cells": 2,
+				"shape": "single",
+				"radius": 0,
+				"handler_script": ""
+			}
+		}
+	})
+	SkillModule.learned_skills["targeted_player_controller_test"] = 1
+	assert(bool(SkillModule.assign_skill_to_hotbar("targeted_player_controller_test", 0, 0).get("success", false)), "Targeted test skill should be assignable")
+
+	var activation_result: Dictionary = SkillModule.activate_hotbar_slot(0)
+	assert(bool(activation_result.get("success", false)), "Activating targeted test skill should start targeting")
+	assert(player.is_world_input_blocked(), "Player world input should be blocked while targeting is active")
+
+	AbilityTargetingSystem.cancel_targeting()
+	await tree.process_frame
+	assert(not player.is_world_input_blocked(), "Cancelling targeting should restore player world input")
+
+	SkillModule.deserialize(snapshot)
 	player.queue_free()
 	await tree.process_frame

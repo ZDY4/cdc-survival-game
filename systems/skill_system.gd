@@ -2,6 +2,8 @@ extends Node
 ## SkillSystem - 兼容层
 ## 为旧逻辑提供 /root/SkillSystem 入口，内部转发到 SkillModule。
 
+const TargetSkillBase = preload("res://systems/target_skill_base.gd")
+
 signal skill_learned(skill_id: String, skill_data: Dictionary)
 signal skill_points_changed(available_points: int)
 signal hotbar_changed(group_index: int, slots: Array)
@@ -9,6 +11,8 @@ signal hotbar_group_changed(group_index: int)
 signal skill_activation_succeeded(skill_id: String, result: Dictionary)
 signal skill_activation_failed(skill_id: String, reason: String)
 signal skill_toggle_changed(skill_id: String, active: bool)
+signal skill_targeting_started(skill_id: String, session: Dictionary)
+signal skill_targeting_cancelled(skill_id: String, reason: String)
 
 var _module: Node = null
 
@@ -26,6 +30,10 @@ func _ready() -> void:
 	_module.skill_activation_succeeded.connect(_on_skill_activation_succeeded)
 	_module.skill_activation_failed.connect(_on_skill_activation_failed)
 	_module.skill_toggle_changed.connect(_on_skill_toggle_changed)
+	if _module.has_signal("skill_targeting_started"):
+		_module.skill_targeting_started.connect(_on_skill_targeting_started)
+	if _module.has_signal("skill_targeting_cancelled"):
+		_module.skill_targeting_cancelled.connect(_on_skill_targeting_cancelled)
 
 
 func can_learn_skill(skill_id: String) -> Dictionary:
@@ -149,6 +157,23 @@ func activate_hotbar_slot(slot_index: int) -> Dictionary:
 	return _module.activate_hotbar_slot(slot_index)
 
 
+func cast_targeted_skill(skill_id: String, preview: Dictionary) -> Dictionary:
+	if _module == null or not _module.has_method("cast_targeted_skill"):
+		return {"success": false, "reason": "SkillModule unavailable"}
+	return _module.cast_targeted_skill(skill_id, preview)
+
+
+func cancel_targeted_skill(skill_id: String, reason: String = "cancelled") -> void:
+	if _module != null and _module.has_method("cancel_targeted_skill"):
+		_module.cancel_targeted_skill(skill_id, reason)
+
+
+func get_targeted_skill_handler(skill_id: String) -> TargetSkillBase:
+	if _module == null or not _module.has_method("get_targeted_skill_handler"):
+		return null
+	return _module.get_targeted_skill_handler(skill_id)
+
+
 func get_total_effect(effect_name: String) -> float:
 	if _module == null:
 		return 0.0
@@ -223,3 +248,11 @@ func _on_skill_activation_failed(skill_id: String, reason: String) -> void:
 
 func _on_skill_toggle_changed(skill_id: String, active: bool) -> void:
 	skill_toggle_changed.emit(skill_id, active)
+
+
+func _on_skill_targeting_started(skill_id: String, session: Dictionary) -> void:
+	skill_targeting_started.emit(skill_id, session)
+
+
+func _on_skill_targeting_cancelled(skill_id: String, reason: String) -> void:
+	skill_targeting_cancelled.emit(skill_id, reason)

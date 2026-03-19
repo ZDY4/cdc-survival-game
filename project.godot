@@ -68,6 +68,7 @@ GameplayTags="*res://addons/gameplay_tags/runtime/gameplay_tags_manager.gd"
 ControlSettingsService="*res://systems/control_settings_service.gd"
 MenuHotkeyService="*res://systems/menu_hotkey_service.gd"
 ActionPresentationSystem="*res://systems/action_presentation_system.gd"
+AbilityTargetingSystem="*res://systems/ability_targeting_system.gd"
 TurnSystem="*res://systems/turn_system.gd"
 
 [display]

@@ -22,6 +22,11 @@ func _input(event: InputEvent) -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
 
+	if _handle_targeting_input(event):
+		if get_viewport():
+			get_viewport().set_input_as_handled()
+		return
+
 	if _handle_zoom_input(event):
 		if get_viewport():
 			get_viewport().set_input_as_handled()
@@ -42,6 +47,10 @@ func _input(event: InputEvent) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _player == null or not is_instance_valid(_player):
+		return
+	if _handle_attack_input(event):
+		if get_viewport():
+			get_viewport().set_input_as_handled()
 		return
 	if _handle_hotbar_input(event):
 		if get_viewport():
@@ -69,9 +78,28 @@ func _unhandled_input(event: InputEvent) -> void:
 	if get_viewport():
 		get_viewport().set_input_as_handled()
 
-func _handle_hotbar_input(event: InputEvent) -> bool:
+func _handle_targeting_input(event: InputEvent) -> bool:
+	if AbilityTargetingSystem == null or not AbilityTargetingSystem.has_method("handle_input"):
+		return false
+	return bool(AbilityTargetingSystem.handle_input(event))
+
+func _handle_attack_input(event: InputEvent) -> bool:
+	if not _is_attack_event(event):
+		return false
+	if AbilityTargetingSystem != null and AbilityTargetingSystem.has_method("handle_attack_activation"):
+		if bool(AbilityTargetingSystem.handle_attack_activation()):
+			return true
 	if _is_menu_input_blocked() or _is_world_input_blocked():
 		return false
+	if CombatSystem == null or not CombatSystem.has_method("begin_targeted_attack"):
+		return false
+	return bool(CombatSystem.begin_targeted_attack(_player, {
+		"caster": _player,
+		"scene_root": _player.get_targeting_scene_root(),
+		"activation_action": str(InputActions.ACTION_ATTACK)
+	}).get("success", false))
+
+func _handle_hotbar_input(event: InputEvent) -> bool:
 	if not (event is InputEventKey):
 		return false
 
@@ -81,6 +109,11 @@ func _handle_hotbar_input(event: InputEvent) -> bool:
 
 	var slot_index: int = InputActions.get_hotbar_slot_for_event(event)
 	if slot_index < 0:
+		return false
+	if AbilityTargetingSystem != null and AbilityTargetingSystem.has_method("handle_hotbar_slot_activation"):
+		if bool(AbilityTargetingSystem.handle_hotbar_slot_activation(slot_index)):
+			return true
+	if _is_menu_input_blocked() or _is_world_input_blocked():
 		return false
 
 	var skill_system: Node = get_node_or_null("/root/SkillSystem")
@@ -161,3 +194,11 @@ func _sync_menu_input_block_state() -> void:
 	if menu_service and menu_service.has_method("is_any_menu_open"):
 		is_menu_open = bool(menu_service.is_any_menu_open())
 	_player.set_menu_input_blocked(is_menu_open)
+
+func _is_attack_event(event: InputEvent) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	if key_event == null or not key_event.pressed or key_event.echo:
+		return false
+	return event.is_action_pressed(InputActions.ACTION_ATTACK)
