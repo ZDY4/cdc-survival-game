@@ -55,6 +55,24 @@ var matched: bool = GameplayTags.evaluate_query(container, query)
 print("Matched: ", matched)
 ```
 
+## Inspector Selector
+
+The addon now includes an Inspector selector for exported gameplay tag fields.
+
+Single tag:
+
+```gdscript
+@export_custom(PROPERTY_HINT_NONE, "gameplay_tag") var required_tag: StringName = &""
+```
+
+Tag array:
+
+```gdscript
+@export_custom(PROPERTY_HINT_NONE, "gameplay_tags") var required_tags: Array[StringName] = []
+```
+
+These hints replace freeform text entry with a tag picker and an "Open Editor" shortcut to the Gameplay Tags dock.
+
 ## Notes
 
 - Autoload `GameplayTags` is registered when this plugin is enabled.

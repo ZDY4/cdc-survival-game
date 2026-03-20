@@ -6,6 +6,9 @@ class_name FunctionalTest_GameplayTags
 
 const TEMP_CONFIG_PATH: String = "user://gameplay_tags_test.ini"
 const MANAGER_SCRIPT_PATH: String = "res://addons/gameplay_tags/runtime/gameplay_tags_manager.gd"
+const DOCK_SCRIPT_PATH: String = "res://addons/gameplay_tags/editor/gameplay_tags_dock.gd"
+const INSPECTOR_PLUGIN_SCRIPT_PATH: String = "res://addons/gameplay_tags/editor/gameplay_tag_inspector_plugin.gd"
+const CHARACTER_ACTOR_SCRIPT_PATH: String = "res://systems/character_actor.gd"
 const DEFAULT_CONFIG_PATH: String = "res://config/gameplay_tags.ini"
 const FUNCTIONAL_LAYER: int = 1
 const P0_CRITICAL: int = 0
@@ -59,6 +62,34 @@ static func run_tests(runner) -> void:
 		FUNCTIONAL_LAYER,
 		P1_MAJOR,
 		_test_registry_validation
+	)
+
+	runner.register_test(
+		"gameplay_tags_editor_reference_hits",
+		FUNCTIONAL_LAYER,
+		P1_MAJOR,
+		_test_editor_reference_hits
+	)
+
+	runner.register_test(
+		"gameplay_tags_editor_replace_and_sibling",
+		FUNCTIONAL_LAYER,
+		P1_MAJOR,
+		_test_editor_replace_and_sibling
+	)
+
+	runner.register_test(
+		"gameplay_tags_inspector_hint_markers",
+		FUNCTIONAL_LAYER,
+		P1_MAJOR,
+		_test_inspector_hint_markers
+	)
+
+	runner.register_test(
+		"gameplay_tags_inspector_opt_in_field",
+		FUNCTIONAL_LAYER,
+		P1_MAJOR,
+		_test_inspector_opt_in_field
 	)
 
 static func _test_registry_load() -> void:
@@ -169,12 +200,99 @@ static func _test_registry_validation() -> void:
 	assert(issues.size() == 1, "Validation should report malformed explicit tags")
 	assert(String(issues[0]).contains("Bad Tag"), "Validation should include the malformed tag name")
 
+static func _test_editor_reference_hits() -> void:
+	var dock: Object = _new_dock()
+	var hits: Array = dock.call(
+		"_extract_reference_hits_from_text",
+		"res://tests/mock_reference.gd",
+		["Status", "Status.Burning"],
+		"tag = &\"Status.Burning\"\ncheck_parent = &\"Status\"\nignore = &\"Status.BurningExtra\""
+	)
+
+	assert(hits.size() == 2, "Reference scan should keep exact tag hits and ignore embedded suffixes")
+	assert(String((hits[0] as Dictionary).get("matched_tag", "")) == "Status.Burning")
+	assert(int((hits[0] as Dictionary).get("line", 0)) == 1)
+	assert(String((hits[1] as Dictionary).get("matched_tag", "")) == "Status")
+	assert(int((hits[1] as Dictionary).get("line", 0)) == 2)
+
+static func _test_editor_replace_and_sibling() -> void:
+	var dock: Object = _new_dock()
+	var replacement: Dictionary = dock.call(
+		"_replace_tag_references_in_text",
+		"value = &\"Status.Burning\"\nparent = &\"Status\"\nignore = &\"Status.BurningExtra\"",
+		[
+			{"old": "Status.Burning", "new": "Condition.Burning"},
+			{"old": "Status", "new": "Condition"}
+		]
+	)
+
+	assert(int(replacement.get("count", 0)) == 2, "Replace should only touch exact tag references")
+	assert(String(replacement.get("text", "")).contains("Condition.Burning"))
+	assert(String(replacement.get("text", "")).contains("Condition\""))
+	assert(String(replacement.get("text", "")).contains("Status.BurningExtra"))
+	assert(str(dock.call("_get_sibling_prefix", "Status.Burning")) == "Status.")
+	assert(str(dock.call("_get_sibling_prefix", "Status")) == "")
+
+static func _test_inspector_hint_markers() -> void:
+	var inspector_plugin: Object = _new_inspector_plugin()
+	assert(
+		str(inspector_plugin.call("_resolve_property_mode", TYPE_STRING_NAME, "gameplay_tag")) == "gameplay_tag"
+	)
+	assert(
+		str(inspector_plugin.call("_resolve_property_mode", TYPE_STRING, "gameplay_tag")) == "gameplay_tag"
+	)
+	assert(
+		str(inspector_plugin.call("_resolve_property_mode", TYPE_ARRAY, "gameplay_tags")) == "gameplay_tags"
+	)
+	assert(str(inspector_plugin.call("_extract_marker", "gameplay_tags,unused")) == "gameplay_tags")
+	assert(str(inspector_plugin.call("_resolve_property_mode", TYPE_ARRAY, "gameplay_tag")).is_empty())
+
+static func _test_inspector_opt_in_field() -> void:
+	var actor_script: Script = load(CHARACTER_ACTOR_SCRIPT_PATH)
+	assert(actor_script != null, "CharacterActor script should exist")
+	var actor_instance: Variant = actor_script.new()
+	assert(actor_instance != null, "CharacterActor instance should be creatable")
+
+	var found_property: bool = false
+	for property_info_variant in actor_instance.get_property_list():
+		if not (property_info_variant is Dictionary):
+			continue
+		var property_info: Dictionary = property_info_variant
+		if str(property_info.get("name", "")) != "interaction_state_tag":
+			continue
+		found_property = true
+		assert(
+			int(property_info.get("type", TYPE_NIL)) == TYPE_STRING_NAME,
+			"interaction_state_tag should remain a StringName export"
+		)
+		assert(
+			str(property_info.get("hint_string", "")) == "gameplay_tag",
+			"interaction_state_tag should opt into the gameplay tag inspector picker"
+		)
+		break
+
+	assert(found_property, "interaction_state_tag should be exposed in the inspector")
+
 static func _new_manager() -> Object:
 	var manager_script: Script = load(MANAGER_SCRIPT_PATH)
 	assert(manager_script != null, "GameplayTags manager script should exist")
 	var manager_instance: Variant = manager_script.new()
 	assert(manager_instance != null, "GameplayTags manager instance should be creatable")
 	return manager_instance
+
+static func _new_dock() -> Object:
+	var dock_script: Script = load(DOCK_SCRIPT_PATH)
+	assert(dock_script != null, "GameplayTags dock script should exist")
+	var dock_instance: Variant = dock_script.new()
+	assert(dock_instance != null, "GameplayTags dock instance should be creatable")
+	return dock_instance
+
+static func _new_inspector_plugin() -> Object:
+	var inspector_plugin_script: Script = load(INSPECTOR_PLUGIN_SCRIPT_PATH)
+	assert(inspector_plugin_script != null, "GameplayTags inspector plugin script should exist")
+	var inspector_plugin_instance: Variant = inspector_plugin_script.new()
+	assert(inspector_plugin_instance != null, "GameplayTags inspector plugin instance should be creatable")
+	return inspector_plugin_instance
 
 static func _write_temp_config(lines: Array[String]) -> void:
 	var file: FileAccess = FileAccess.open(TEMP_CONFIG_PATH, FileAccess.WRITE)

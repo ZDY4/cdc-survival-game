@@ -3,7 +3,7 @@ extends CharacterBody3D
 ## Shared runtime character base for player, NPC and enemy.
 ## Provides temporary 4-sprite placeholder visuals (head + body + legs).
 
-const STATE_INTERACTING_TAG_NAME: String = "State.Interacting"
+const DEFAULT_INTERACTION_STATE_TAG_NAME: StringName = &"State.Interacting"
 const VISUAL_ROOT_NAME: String = "VisualRoot"
 const ATTACK_LUNGE_DISTANCE_RATIO: float = 0.35
 const ATTACK_LUNGE_MIN_DISTANCE: float = 0.35
@@ -22,6 +22,7 @@ const ATTACK_LUNGE_RETURN_DURATION: float = 0.12
 @export var leg_height: float = 0.0
 @export var hover_outline_scale: float = 1.14
 @export var hover_outline_depth_offset: float = -0.002
+@export_custom(PROPERTY_HINT_NONE, "gameplay_tag") var interaction_state_tag: StringName = DEFAULT_INTERACTION_STATE_TAG_NAME
 
 var _visual_root: Node3D = null
 var _head_sprite: Sprite3D = null
@@ -270,11 +271,15 @@ func _resolve_interacting_tag() -> StringName:
 			push_warning("[CharacterActor] GameplayTags manager unavailable; interaction tag disabled.")
 		return StringName()
 
-	var requested_tag: StringName = manager.call("request_tag", STATE_INTERACTING_TAG_NAME, false)
+	var configured_tag_text: String = String(interaction_state_tag).strip_edges()
+	if configured_tag_text.is_empty():
+		return StringName()
+
+	var requested_tag: StringName = manager.call("request_tag", configured_tag_text, false)
 	if String(requested_tag).is_empty():
 		if not _warned_missing_gameplay_tags:
 			_warned_missing_gameplay_tags = true
-			push_warning("[CharacterActor] Tag '%s' is not registered." % STATE_INTERACTING_TAG_NAME)
+			push_warning("[CharacterActor] Tag '%s' is not registered." % configured_tag_text)
 		return StringName()
 
 	_cached_interacting_tag = requested_tag

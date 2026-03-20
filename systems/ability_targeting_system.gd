@@ -1,4 +1,3 @@
-class_name AbilityTargetingSystem
 extends Node
 
 const GridAreaOverlay = preload("res://systems/grid_area_overlay.gd")

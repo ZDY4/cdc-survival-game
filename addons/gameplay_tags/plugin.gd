@@ -4,6 +4,7 @@ extends EditorPlugin
 const AUTOLOAD_NAME: String = "GameplayTags"
 const MANAGER_SCRIPT_PATH: String = "res://addons/gameplay_tags/runtime/gameplay_tags_manager.gd"
 const WINDOW_CONTENT_SCRIPT_PATH: String = "res://addons/gameplay_tags/editor/gameplay_tags_dock.gd"
+const INSPECTOR_PLUGIN_SCRIPT := preload("res://addons/gameplay_tags/editor/gameplay_tag_inspector_plugin.gd")
 const TOOL_MENU_ITEM_NAME: String = "Gameplay Tags"
 const DEFAULT_WINDOW_SIZE: Vector2i = Vector2i(1120, 760)
 const MIN_WINDOW_SIZE: Vector2i = Vector2i(820, 560)
@@ -20,16 +21,31 @@ var _fallback_menu_button: MenuButton = null
 var _fallback_popup_menu: PopupMenu = null
 var _top_menu_bar: MenuBar = null
 var _menu_in_toolbar: bool = false
+var _inspector_plugin: EditorInspectorPlugin = null
 
 func _enter_tree() -> void:
 	_ensure_autoload_singleton()
+	_register_inspector_plugin()
 	call_deferred("_initialize_menu_deferred")
 	call_deferred("_bind_manager_to_window")
 
 func _exit_tree() -> void:
+	_unregister_inspector_plugin()
 	_remove_editor_menu_item()
 	_cleanup_window()
 	_remove_autoload_singleton_if_needed()
+
+func _register_inspector_plugin() -> void:
+	if _inspector_plugin:
+		return
+	_inspector_plugin = INSPECTOR_PLUGIN_SCRIPT.new(self)
+	add_inspector_plugin(_inspector_plugin)
+
+func _unregister_inspector_plugin() -> void:
+	if not _inspector_plugin:
+		return
+	remove_inspector_plugin(_inspector_plugin)
+	_inspector_plugin = null
 
 func _initialize_menu_deferred() -> void:
 	await _attach_menu_item_to_editor_menu()
@@ -208,6 +224,9 @@ func _on_editor_menu_id_pressed(menu_id: int) -> void:
 		return
 	_open_window()
 
+func open_gameplay_tags_editor() -> void:
+	_open_window()
+
 func _open_window() -> void:
 	if _editor_window == null:
 		if not _create_window():
@@ -330,3 +349,17 @@ func _get_manager_node() -> Node:
 	if tree == null or tree.root == null:
 		return null
 	return tree.root.get_node_or_null(AUTOLOAD_NAME)
+
+func get_gameplay_tag_entries() -> Array[String]:
+	var manager: Node = _get_manager_node()
+	if manager == null:
+		return []
+
+	var result: Array[String] = []
+	if manager.has_method("get_all_tags"):
+		for tag_name in manager.call("get_all_tags"):
+			var tag_text: String = String(tag_name).strip_edges()
+			if not tag_text.is_empty():
+				result.append(tag_text)
+	result.sort()
+	return result

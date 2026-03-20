@@ -9,6 +9,7 @@ const TREE_MENU_COPY_TAG: int = 1
 const TREE_MENU_USE_AS_CONTAINER: int = 2
 const TREE_MENU_USE_IN_QUERY: int = 3
 const TREE_MENU_ADD_CHILD: int = 4
+const TREE_MENU_ADD_SIBLING: int = 5
 const SEARCHABLE_REFERENCE_EXTENSIONS: PackedStringArray = [
 	"gd",
 	"tscn",
@@ -40,6 +41,10 @@ var _path_hint_label: Label = null
 var _search_edit: LineEdit = null
 var _tag_summary_label: Label = null
 var _tag_tree: Tree = null
+var _add_child_button: Button = null
+var _add_sibling_button: Button = null
+var _rename_button: Button = null
+var _remove_button: Button = null
 var _selected_tag_label: Label = null
 var _selected_kind_label: Label = null
 var _selected_parent_label: Label = null
@@ -47,18 +52,23 @@ var _validation_label: Label = null
 var _warnings_list: ItemList = null
 var _reference_summary_label: Label = null
 var _reference_list: ItemList = null
+var _use_container_button: Button = null
+var _use_query_button: Button = null
+var _find_references_button: Button = null
 var _container_input: LineEdit = null
 var _query_input: TextEdit = null
 var _query_result_label: Label = null
 
 var _add_dialog: ConfirmationDialog = null
 var _add_dialog_input: LineEdit = null
+var _rename_replace_checkbox: CheckBox = null
 var _remove_dialog: ConfirmationDialog = null
 var _rename_dialog: ConfirmationDialog = null
 var _rename_dialog_input: LineEdit = null
 var _rename_preview_label: Label = null
 var _close_confirmation_dialog: ConfirmationDialog = null
 var _tree_context_menu: PopupMenu = null
+var _reference_hits: Array[Dictionary] = []
 
 func _ready() -> void:
 	_build_ui()
@@ -216,20 +226,25 @@ func _build_ui() -> void:
 	add_button.pressed.connect(_on_add_pressed)
 	tools_row.add_child(add_button)
 
-	var add_child_button := Button.new()
-	add_child_button.text = "Add Child"
-	add_child_button.pressed.connect(_on_add_child_pressed)
-	tools_row.add_child(add_child_button)
+	_add_child_button = Button.new()
+	_add_child_button.text = "Add Child"
+	_add_child_button.pressed.connect(_on_add_child_pressed)
+	tools_row.add_child(_add_child_button)
 
-	var rename_button := Button.new()
-	rename_button.text = "Rename"
-	rename_button.pressed.connect(_on_rename_pressed)
-	tools_row.add_child(rename_button)
+	_add_sibling_button = Button.new()
+	_add_sibling_button.text = "Add Sibling"
+	_add_sibling_button.pressed.connect(_on_add_sibling_pressed)
+	tools_row.add_child(_add_sibling_button)
 
-	var remove_button := Button.new()
-	remove_button.text = "Remove"
-	remove_button.pressed.connect(_on_remove_pressed)
-	tools_row.add_child(remove_button)
+	_rename_button = Button.new()
+	_rename_button.text = "Rename"
+	_rename_button.pressed.connect(_on_rename_pressed)
+	tools_row.add_child(_rename_button)
+
+	_remove_button = Button.new()
+	_remove_button.text = "Remove"
+	_remove_button.pressed.connect(_on_remove_pressed)
+	tools_row.add_child(_remove_button)
 
 	_tag_summary_label = Label.new()
 	_tag_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -281,23 +296,23 @@ func _build_ui() -> void:
 	quick_actions.add_theme_constant_override("separation", 8)
 	right_box.add_child(quick_actions)
 
-	var use_container_button := Button.new()
-	use_container_button.text = "Use As Container"
-	use_container_button.tooltip_text = "Copy the selected tag into the container preview field."
-	use_container_button.pressed.connect(_on_use_selected_as_container_pressed)
-	quick_actions.add_child(use_container_button)
+	_use_container_button = Button.new()
+	_use_container_button.text = "Use As Container"
+	_use_container_button.tooltip_text = "Copy the selected tag into the container preview field."
+	_use_container_button.pressed.connect(_on_use_selected_as_container_pressed)
+	quick_actions.add_child(_use_container_button)
 
-	var use_query_button := Button.new()
-	use_query_button.text = "Use In Query"
-	use_query_button.tooltip_text = "Build a simple all_tags query using the selected tag."
-	use_query_button.pressed.connect(_on_use_selected_in_query_pressed)
-	quick_actions.add_child(use_query_button)
+	_use_query_button = Button.new()
+	_use_query_button.text = "Use In Query"
+	_use_query_button.tooltip_text = "Build a simple all_tags query using the selected tag."
+	_use_query_button.pressed.connect(_on_use_selected_in_query_pressed)
+	quick_actions.add_child(_use_query_button)
 
-	var find_references_button := Button.new()
-	find_references_button.text = "Find References"
-	find_references_button.tooltip_text = "Scan the project for files referencing the selected tag."
-	find_references_button.pressed.connect(_on_find_references_pressed)
-	quick_actions.add_child(find_references_button)
+	_find_references_button = Button.new()
+	_find_references_button.text = "Find References"
+	_find_references_button.tooltip_text = "Scan the project for files referencing the selected tag."
+	_find_references_button.pressed.connect(_on_find_references_pressed)
+	quick_actions.add_child(_find_references_button)
 
 	var warnings_panel := PanelContainer.new()
 	warnings_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -417,6 +432,10 @@ func _build_dialogs() -> void:
 	_rename_dialog_input = LineEdit.new()
 	_rename_dialog_input.text_changed.connect(_on_rename_input_changed)
 	rename_vbox.add_child(_rename_dialog_input)
+	_rename_replace_checkbox = CheckBox.new()
+	_rename_replace_checkbox.text = "Auto replace matched project text references"
+	_rename_replace_checkbox.toggled.connect(_on_rename_replace_toggled)
+	rename_vbox.add_child(_rename_replace_checkbox)
 	_rename_preview_label = Label.new()
 	_rename_preview_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rename_vbox.add_child(_rename_preview_label)
@@ -438,6 +457,7 @@ func _build_dialogs() -> void:
 	_tree_context_menu = PopupMenu.new()
 	_tree_context_menu.add_item("Copy Tag Name", TREE_MENU_COPY_TAG)
 	_tree_context_menu.add_item("Add Child Tag", TREE_MENU_ADD_CHILD)
+	_tree_context_menu.add_item("Add Sibling Tag", TREE_MENU_ADD_SIBLING)
 	_tree_context_menu.add_item("Use As Container", TREE_MENU_USE_AS_CONTAINER)
 	_tree_context_menu.add_item("Use In Query", TREE_MENU_USE_IN_QUERY)
 	_tree_context_menu.id_pressed.connect(_on_tree_context_menu_id_pressed)
@@ -457,6 +477,7 @@ func _refresh_all() -> void:
 	_refresh_status()
 	_refresh_selection_details()
 	_refresh_warnings_panel()
+	_refresh_action_states()
 
 func _refresh_tree() -> void:
 	if _tag_tree == null:
@@ -568,6 +589,7 @@ func _refresh_selection_details() -> void:
 		_selected_kind_label.text = "Kind: -"
 		_selected_parent_label.text = "Parents: -"
 		_clear_reference_results(true)
+		_refresh_action_states()
 		return
 
 	var selected_tag_text: String = String(_selected_tag)
@@ -576,6 +598,7 @@ func _refresh_selection_details() -> void:
 		_selected_kind_label.text = "Kind: -"
 		_selected_parent_label.text = "Parents: -"
 		_clear_reference_results(true)
+		_refresh_action_states()
 		return
 
 	var explicit_lookup: Dictionary = {}
@@ -596,6 +619,7 @@ func _refresh_selection_details() -> void:
 	_selected_kind_label.text = "Kind: %s" % ("Explicit" if explicit_lookup.has(selected_tag_text) else "Implicit parent")
 	_selected_parent_label.text = "Parents: %s" % parent_text
 	_clear_reference_results(false)
+	_refresh_action_states()
 
 func _refresh_warnings_panel() -> void:
 	if _validation_label == null or _warnings_list == null:
@@ -623,6 +647,7 @@ func _clear_reference_results(preserve_prompt: bool = true) -> void:
 	if _reference_summary_label == null or _reference_list == null:
 		return
 
+	_reference_hits.clear()
 	_reference_list.clear()
 	if preserve_prompt:
 		_reference_summary_label.text = "References: select a tag and scan the project."
@@ -633,19 +658,29 @@ func _clear_reference_results(preserve_prompt: bool = true) -> void:
 		else:
 			_reference_summary_label.text = "References: ready to scan '%s'." % selected_tag_text
 
-func _refresh_reference_results(tag_text: String, references: Array[String]) -> void:
+func _refresh_reference_results(tag_text: String, reference_hits: Array[Dictionary]) -> void:
 	if _reference_summary_label == null or _reference_list == null:
 		return
 
+	_reference_hits = reference_hits.duplicate(true)
 	_reference_list.clear()
-	if references.is_empty():
+	if reference_hits.is_empty():
 		_reference_summary_label.text = "References: no project files currently mention '%s'." % tag_text
 		_reference_list.add_item("No references found.")
 		return
 
-	_reference_summary_label.text = "References: %d file(s) mention '%s'." % [references.size(), tag_text]
-	for reference_path in references:
-		_reference_list.add_item(reference_path)
+	var file_count: int = _count_reference_files(reference_hits)
+	_reference_summary_label.text = "References: %d hit(s) across %d file(s) mention '%s'." % [
+		reference_hits.size(),
+		file_count,
+		tag_text
+	]
+	for hit in reference_hits:
+		var label_text: String = _format_reference_hit_label(hit)
+		_reference_list.add_item(label_text)
+		var item_index: int = _reference_list.item_count - 1
+		_reference_list.set_item_metadata(item_index, hit)
+		_reference_list.set_item_tooltip(item_index, _format_reference_hit_tooltip(hit))
 
 func _set_dirty_state(is_dirty: bool) -> void:
 	if _dirty == is_dirty:
@@ -754,6 +789,7 @@ func _on_tag_tree_gui_input(event: InputEvent) -> void:
 func _on_add_pressed() -> void:
 	if _add_dialog == null:
 		return
+	_add_dialog.title = "Add Gameplay Tag"
 	_add_dialog_input.text = ""
 	_add_dialog.popup_centered_ratio(0.3)
 
@@ -766,7 +802,23 @@ func _on_add_child_pressed() -> void:
 		_set_result_message("Result: Select a parent tag first.")
 		return
 
+	_add_dialog.title = "Add Child Gameplay Tag"
 	_add_dialog_input.text = "%s." % selected_tag_text
+	_add_dialog.popup_centered_ratio(0.3)
+	_add_dialog_input.grab_focus()
+	_add_dialog_input.caret_column = _add_dialog_input.text.length()
+
+func _on_add_sibling_pressed() -> void:
+	if _add_dialog == null:
+		return
+
+	var selected_tag_text: String = String(_selected_tag)
+	if selected_tag_text.is_empty():
+		_set_result_message("Result: Select a sibling target first.")
+		return
+
+	_add_dialog.title = "Add Sibling Gameplay Tag"
+	_add_dialog_input.text = _get_sibling_prefix(selected_tag_text)
 	_add_dialog.popup_centered_ratio(0.3)
 	_add_dialog_input.grab_focus()
 	_add_dialog_input.caret_column = _add_dialog_input.text.length()
@@ -784,6 +836,7 @@ func _on_rename_pressed() -> void:
 	if _rename_dialog == null:
 		return
 	_rename_dialog_input.text = String(_selected_tag)
+	_rename_replace_checkbox.button_pressed = false
 	_update_rename_preview(_rename_dialog_input.text)
 	_rename_dialog.popup_centered_ratio(0.3)
 
@@ -816,11 +869,25 @@ func _on_rename_dialog_confirmed() -> void:
 		_set_result_message("Result: GameplayTags manager is unavailable.")
 		return
 
-	var success: bool = bool(_manager.call("rename_tag", _selected_tag, _rename_dialog_input.text, true))
+	var old_tag_text: String = String(_selected_tag)
+	var new_tag_text: String = _rename_dialog_input.text.strip_edges()
+	var rename_mappings: Array[Dictionary] = _build_rename_reference_mappings(old_tag_text, new_tag_text)
+	var should_replace_references: bool = _rename_replace_checkbox != null and _rename_replace_checkbox.button_pressed
+	var success: bool = bool(_manager.call("rename_tag", _selected_tag, new_tag_text, true))
 	if success:
+		var replacement_message: String = ""
+		if should_replace_references and not rename_mappings.is_empty():
+			var replacement_result: Dictionary = _replace_reference_texts(rename_mappings)
+			replacement_message = " Updated %d text reference(s) in %d file(s)." % [
+				int(replacement_result.get("replacements", 0)),
+				int(replacement_result.get("files_updated", 0))
+			]
+			var failed_files: Array = replacement_result.get("failed_files", [])
+			if not failed_files.is_empty():
+				replacement_message += " Failed to write: %s." % ", ".join(PackedStringArray(failed_files))
 		_set_dirty_state(true)
-		_set_result_message("Result: Renamed '%s' -> '%s'." % [String(_selected_tag), _rename_dialog_input.text])
-		_selected_tag = StringName(_rename_dialog_input.text.strip_edges())
+		_set_result_message("Result: Renamed '%s' -> '%s'.%s" % [old_tag_text, new_tag_text, replacement_message])
+		_selected_tag = StringName(new_tag_text)
 		_refresh_all()
 		return
 
@@ -898,12 +965,15 @@ func _on_find_references_pressed() -> void:
 		_set_result_message("Result: Select a tag first.")
 		return
 
-	var references: Array[String] = _find_tag_references(selected_tag_text)
-	_refresh_reference_results(selected_tag_text, references)
+	var reference_hits: Array[Dictionary] = _find_tag_reference_hits_for_scope(selected_tag_text)
+	_refresh_reference_results(selected_tag_text, reference_hits)
 	_set_result_message("Result: Reference scan completed for '%s'." % selected_tag_text)
 
 func _on_rename_input_changed(new_text: String) -> void:
 	_update_rename_preview(new_text)
+
+func _on_rename_replace_toggled(_enabled: bool) -> void:
+	_update_rename_preview(_rename_dialog_input.text if _rename_dialog_input else "")
 
 func _on_tree_context_menu_id_pressed(menu_id: int) -> void:
 	match menu_id:
@@ -912,6 +982,8 @@ func _on_tree_context_menu_id_pressed(menu_id: int) -> void:
 			_set_result_message("Result: Tag name copied to clipboard.")
 		TREE_MENU_ADD_CHILD:
 			_on_add_child_pressed()
+		TREE_MENU_ADD_SIBLING:
+			_on_add_sibling_pressed()
 		TREE_MENU_USE_AS_CONTAINER:
 			_on_use_selected_as_container_pressed()
 		TREE_MENU_USE_IN_QUERY:
@@ -951,33 +1023,42 @@ func _update_rename_preview(candidate_name: String) -> void:
 		return
 
 	var affected_tags: Array[String] = _get_affected_explicit_tags(old_tag_text)
-	var references: Array[String] = _find_tag_references(old_tag_text)
+	var rename_mappings: Array[Dictionary] = _build_rename_reference_mappings(old_tag_text, normalized_new_name)
+	var reference_hits: Array[Dictionary] = _find_tag_reference_hits_for_terms(_rename_mapping_old_terms(rename_mappings))
 	var preview_lines: Array[String] = []
 	for affected_tag in affected_tags.slice(0, 3):
 		var suffix: String = affected_tag.substr(old_tag_text.length())
 		preview_lines.append("%s -> %s%s" % [affected_tag, normalized_new_name, suffix])
 	var preview_text: String = "Preview: %d explicit tag(s) will be renamed." % affected_tags.size()
-	preview_text += " Project references to update manually: %d." % references.size()
 	if not preview_lines.is_empty():
-		preview_text += " " + " | ".join(preview_lines)
+		preview_text += "\n" + "\n".join(preview_lines)
 	if affected_tags.size() > 3:
-		preview_text += " | ..."
-	if not references.is_empty():
-		preview_text += " Referenced by: %s" % ", ".join(references.slice(0, 3))
-		if references.size() > 3:
-			preview_text += ", ..."
+		preview_text += "\n..."
+	if reference_hits.is_empty():
+		preview_text += "\nProject references: no text hits detected."
+	else:
+		preview_text += "\nProject references: %d hit(s) across %d file(s)." % [
+			reference_hits.size(),
+			_count_reference_files(reference_hits)
+		]
+		preview_text += "\n" + "\n".join(_build_reference_hit_summary_lines(reference_hits, 4))
+		if reference_hits.size() > 4:
+			preview_text += "\n..."
+	preview_text += "\nAuto replace: %s." % (
+		"enabled" if _rename_replace_checkbox and _rename_replace_checkbox.button_pressed else "preview only"
+	)
 	_rename_preview_label.text = preview_text
 
 func _build_remove_preview_text(tag_text: String) -> String:
 	var affected_tags: Array[String] = _get_affected_explicit_tags(tag_text)
-	var references: Array[String] = _find_tag_references(tag_text)
+	var reference_hits: Array[Dictionary] = _find_tag_reference_hits_for_scope(tag_text)
 	if affected_tags.is_empty():
-		if references.is_empty():
+		if reference_hits.is_empty():
 			return "Remove '%s' and all descendants?" % tag_text
 		return "Remove '%s'? Project references found in %d file(s).\n%s" % [
 			tag_text,
-			references.size(),
-			"\n".join(references.slice(0, 5))
+			_count_reference_files(reference_hits),
+			"\n".join(_build_reference_hit_summary_lines(reference_hits, 5))
 		]
 
 	var preview_text: String = "Remove '%s'? This will delete %d explicit tag(s)." % [tag_text, affected_tags.size()]
@@ -986,10 +1067,13 @@ func _build_remove_preview_text(tag_text: String) -> String:
 		preview_text += "\n" + "\n".join(preview_lines)
 	if affected_tags.size() > 5:
 		preview_text += "\n..."
-	if not references.is_empty():
-		preview_text += "\nProject references found in %d file(s):" % references.size()
-		preview_text += "\n" + "\n".join(references.slice(0, 5))
-		if references.size() > 5:
+	if not reference_hits.is_empty():
+		preview_text += "\nProject references: %d hit(s) across %d file(s)." % [
+			reference_hits.size(),
+			_count_reference_files(reference_hits)
+		]
+		preview_text += "\n" + "\n".join(_build_reference_hit_summary_lines(reference_hits, 5))
+		if reference_hits.size() > 5:
 			preview_text += "\n..."
 	return preview_text
 
@@ -1005,13 +1089,19 @@ func _get_affected_explicit_tags(root_tag: String) -> Array[String]:
 	affected_tags.sort()
 	return affected_tags
 
-func _find_tag_references(tag_text: String) -> Array[String]:
-	var references: Array[String] = []
-	_scan_reference_directory("res://", tag_text, references)
-	references.sort()
-	return references
+func _find_tag_reference_hits_for_scope(tag_text: String) -> Array[Dictionary]:
+	return _find_tag_reference_hits_for_terms(_get_reference_scope_terms(tag_text))
 
-func _scan_reference_directory(directory_path: String, tag_text: String, references: Array[String]) -> void:
+func _find_tag_reference_hits_for_terms(tag_texts: Array[String]) -> Array[Dictionary]:
+	var normalized_terms: Array[String] = _sort_reference_terms(tag_texts)
+	if normalized_terms.is_empty():
+		return []
+
+	var reference_hits: Array[Dictionary] = []
+	_scan_reference_directory("res://", normalized_terms, reference_hits)
+	return _sort_reference_hits(reference_hits)
+
+func _scan_reference_directory(directory_path: String, tag_texts: Array[String], reference_hits: Array[Dictionary]) -> void:
 	var dir: DirAccess = DirAccess.open(directory_path)
 	if dir == null:
 		return
@@ -1028,15 +1118,15 @@ func _scan_reference_directory(directory_path: String, tag_text: String, referen
 		if dir.current_is_dir():
 			if _should_skip_reference_path(entry_path):
 				continue
-			_scan_reference_directory(entry_path, tag_text, references)
+			_scan_reference_directory(entry_path, tag_texts, reference_hits)
 			continue
 
 		if _should_skip_reference_path(entry_path):
 			continue
 		if not _is_reference_searchable_file(entry_path):
 			continue
-		if _file_contains_tag_reference(entry_path, tag_text):
-			references.append(entry_path)
+		for hit in _collect_file_reference_hits(entry_path, tag_texts):
+			reference_hits.append(hit)
 	dir.list_dir_end()
 
 func _should_skip_reference_path(path: String) -> bool:
@@ -1052,13 +1142,273 @@ func _is_reference_searchable_file(path: String) -> bool:
 	var extension: String = path.get_extension().to_lower()
 	return SEARCHABLE_REFERENCE_EXTENSIONS.has(extension)
 
-func _file_contains_tag_reference(path: String, tag_text: String) -> bool:
+func _collect_file_reference_hits(path: String, tag_texts: Array[String]) -> Array[Dictionary]:
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return false
+		return []
 
 	var contents: String = file.get_as_text()
-	return contents.contains(tag_text)
+	return _extract_reference_hits_from_text(path, tag_texts, contents)
+
+func _extract_reference_hits_from_text(path: String, tag_texts: Array[String], contents: String) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	if path.strip_edges().is_empty():
+		return hits
+
+	var normalized_terms: Array[String] = _sort_reference_terms(tag_texts)
+	if normalized_terms.is_empty():
+		return hits
+
+	var lines: PackedStringArray = contents.split("\n", false)
+	for line_index in range(lines.size()):
+		var raw_line: String = String(lines[line_index]).trim_suffix("\r")
+		for match in _find_tag_matches_in_line(raw_line, normalized_terms):
+			hits.append({
+				"path": path,
+				"line": line_index + 1,
+				"column": int(match.get("column", 1)),
+				"matched_tag": String(match.get("matched_tag", "")),
+				"snippet": _build_reference_snippet(raw_line)
+			})
+	return hits
+
+func _find_tag_matches_in_line(line: String, tag_texts: Array[String]) -> Array[Dictionary]:
+	var matches: Array[Dictionary] = []
+	if line.is_empty():
+		return matches
+
+	var index: int = 0
+	while index < line.length():
+		var matched_term: String = ""
+		for tag_text in tag_texts:
+			if line.substr(index).begins_with(tag_text) and _is_tag_reference_match(line, index, tag_text.length()):
+				matched_term = tag_text
+				break
+
+		if matched_term.is_empty():
+			index += 1
+			continue
+
+		matches.append({
+			"matched_tag": matched_term,
+			"column": index + 1
+		})
+		index += matched_term.length()
+
+	return matches
+
+func _is_tag_reference_match(line: String, start_index: int, length: int) -> bool:
+	var before_ok: bool = start_index == 0 or not _is_tag_reference_character(line.unicode_at(start_index - 1))
+	var end_index: int = start_index + length
+	var after_ok: bool = end_index >= line.length() or not _is_tag_reference_character(line.unicode_at(end_index))
+	return before_ok and after_ok
+
+func _is_tag_reference_character(codepoint: int) -> bool:
+	return (
+		(codepoint >= 48 and codepoint <= 57) or
+		(codepoint >= 65 and codepoint <= 90) or
+		(codepoint >= 97 and codepoint <= 122) or
+		codepoint == 95 or
+		codepoint == 46
+	)
+
+func _build_reference_snippet(line: String, max_length: int = 110) -> String:
+	var normalized: String = line.strip_edges()
+	if normalized.length() <= max_length:
+		return normalized
+	return "%s..." % normalized.substr(0, max_length - 3)
+
+func _sort_reference_terms(tag_texts: Array[String]) -> Array[String]:
+	var unique_terms: Dictionary = {}
+	for tag_text in tag_texts:
+		var normalized: String = tag_text.strip_edges()
+		if normalized.is_empty():
+			continue
+		unique_terms[normalized] = true
+
+	var result: Array[String] = []
+	for term in unique_terms.keys():
+		result.append(String(term))
+	result.sort_custom(func(a: String, b: String) -> bool:
+		if a.length() == b.length():
+			return a < b
+		return a.length() > b.length()
+	)
+	return result
+
+func _sort_reference_hits(reference_hits: Array[Dictionary]) -> Array[Dictionary]:
+	var sorted_hits: Array[Dictionary] = reference_hits.duplicate(true)
+	sorted_hits.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_path: String = String(a.get("path", ""))
+		var b_path: String = String(b.get("path", ""))
+		if a_path != b_path:
+			return a_path < b_path
+		var a_line: int = int(a.get("line", 0))
+		var b_line: int = int(b.get("line", 0))
+		if a_line != b_line:
+			return a_line < b_line
+		var a_column: int = int(a.get("column", 0))
+		var b_column: int = int(b.get("column", 0))
+		return a_column < b_column
+	)
+	return sorted_hits
+
+func _format_reference_hit_label(hit: Dictionary) -> String:
+	return "%s:%d | %s" % [
+		String(hit.get("path", "")),
+		int(hit.get("line", 0)),
+		String(hit.get("snippet", ""))
+	]
+
+func _format_reference_hit_tooltip(hit: Dictionary) -> String:
+	return "%s:%d:%d\nMatched Tag: %s\n%s" % [
+		String(hit.get("path", "")),
+		int(hit.get("line", 0)),
+		int(hit.get("column", 0)),
+		String(hit.get("matched_tag", "")),
+		String(hit.get("snippet", ""))
+	]
+
+func _build_reference_hit_summary_lines(reference_hits: Array[Dictionary], limit: int) -> Array[String]:
+	var result: Array[String] = []
+	for hit in reference_hits.slice(0, limit):
+		result.append(_format_reference_hit_label(hit))
+	return result
+
+func _count_reference_files(reference_hits: Array[Dictionary]) -> int:
+	var unique_paths: Dictionary = {}
+	for hit in reference_hits:
+		unique_paths[String(hit.get("path", ""))] = true
+	return unique_paths.size()
+
+func _get_reference_scope_terms(tag_text: String) -> Array[String]:
+	var scope_terms: Array[String] = [tag_text]
+	for affected_tag in _get_affected_explicit_tags(tag_text):
+		scope_terms.append(affected_tag)
+	return _sort_reference_terms(scope_terms)
+
+func _build_rename_reference_mappings(old_tag_text: String, new_tag_text: String) -> Array[Dictionary]:
+	var mappings: Array[Dictionary] = []
+	var seen_old_tags: Dictionary = {}
+	for source_tag in _get_reference_scope_terms(old_tag_text):
+		if seen_old_tags.has(source_tag):
+			continue
+		if source_tag != old_tag_text and not source_tag.begins_with("%s." % old_tag_text):
+			continue
+		var suffix: String = source_tag.substr(old_tag_text.length())
+		mappings.append({
+			"old": source_tag,
+			"new": "%s%s" % [new_tag_text, suffix]
+		})
+		seen_old_tags[source_tag] = true
+	return mappings
+
+func _rename_mapping_old_terms(rename_mappings: Array[Dictionary]) -> Array[String]:
+	var old_terms: Array[String] = []
+	for mapping in rename_mappings:
+		old_terms.append(String(mapping.get("old", "")))
+	return _sort_reference_terms(old_terms)
+
+func _replace_reference_texts(rename_mappings: Array[Dictionary]) -> Dictionary:
+	var searchable_files: Array[String] = []
+	_collect_reference_files("res://", searchable_files)
+
+	var files_updated: int = 0
+	var replacements: int = 0
+	var failed_files: Array[String] = []
+	for file_path in searchable_files:
+		var file: FileAccess = FileAccess.open(file_path, FileAccess.READ)
+		if file == null:
+			continue
+		var contents: String = file.get_as_text()
+		var replacement_result: Dictionary = _replace_tag_references_in_text(contents, rename_mappings)
+		var replacement_count: int = int(replacement_result.get("count", 0))
+		if replacement_count <= 0:
+			continue
+
+		var output_file: FileAccess = FileAccess.open(file_path, FileAccess.WRITE)
+		if output_file == null:
+			failed_files.append(file_path)
+			continue
+		output_file.store_string(String(replacement_result.get("text", contents)))
+		files_updated += 1
+		replacements += replacement_count
+
+	return {
+		"files_updated": files_updated,
+		"replacements": replacements,
+		"failed_files": failed_files
+	}
+
+func _collect_reference_files(directory_path: String, files: Array[String]) -> void:
+	var dir: DirAccess = DirAccess.open(directory_path)
+	if dir == null:
+		return
+
+	dir.list_dir_begin()
+	while true:
+		var entry_name: String = dir.get_next()
+		if entry_name.is_empty():
+			break
+		if entry_name == "." or entry_name == "..":
+			continue
+
+		var entry_path: String = "%s/%s" % [directory_path.trim_suffix("/"), entry_name]
+		if dir.current_is_dir():
+			if _should_skip_reference_path(entry_path):
+				continue
+			_collect_reference_files(entry_path, files)
+			continue
+
+		if _should_skip_reference_path(entry_path):
+			continue
+		if not _is_reference_searchable_file(entry_path):
+			continue
+		files.append(entry_path)
+	dir.list_dir_end()
+
+func _replace_tag_references_in_text(contents: String, rename_mappings: Array[Dictionary]) -> Dictionary:
+	var sorted_mappings: Array[Dictionary] = rename_mappings.duplicate(true)
+	sorted_mappings.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_old: String = String(a.get("old", ""))
+		var b_old: String = String(b.get("old", ""))
+		if a_old.length() == b_old.length():
+			return a_old < b_old
+		return a_old.length() > b_old.length()
+	)
+
+	var parts: Array[String] = []
+	var replacement_count: int = 0
+	var index: int = 0
+	while index < contents.length():
+		var matched_mapping: Dictionary = {}
+		for mapping in sorted_mappings:
+			var old_tag: String = String(mapping.get("old", ""))
+			if old_tag.is_empty():
+				continue
+			if contents.substr(index).begins_with(old_tag) and _is_tag_reference_match(contents, index, old_tag.length()):
+				matched_mapping = mapping
+				break
+
+		if matched_mapping.is_empty():
+			parts.append(contents.substr(index, 1))
+			index += 1
+			continue
+
+		parts.append(String(matched_mapping.get("new", "")))
+		index += String(matched_mapping.get("old", "")).length()
+		replacement_count += 1
+
+	return {
+		"text": "".join(PackedStringArray(parts)),
+		"count": replacement_count
+	}
+
+func _get_sibling_prefix(tag_text: String) -> String:
+	var split_index: int = tag_text.rfind(".")
+	if split_index < 0:
+		return ""
+	return tag_text.substr(0, split_index + 1)
 
 func _parse_csv_tags(csv_text: String) -> Array[StringName]:
 	var result: Array[StringName] = []
@@ -1096,8 +1446,50 @@ func _perform_save(show_feedback: bool = true) -> bool:
 		_set_dirty_state(false)
 	_refresh_all()
 	if show_feedback:
-		_set_result_message("Result: Save %s." % ("succeeded" if success else "failed"))
+		if success:
+			var explicit_count: int = 0
+			if _manager.has_method("get_explicit_tags"):
+				explicit_count = (_manager.call("get_explicit_tags") as Array).size()
+			_set_result_message("Result: Saved %d explicit tag(s) to %s." % [explicit_count, _path_edit.text.strip_edges()])
+		else:
+			_set_result_message("Result: Save failed.")
 	return success
+
+func _refresh_action_states() -> void:
+	var has_selection: bool = not String(_selected_tag).is_empty() and _manager != null
+	if _add_child_button:
+		_add_child_button.disabled = not has_selection
+	if _add_sibling_button:
+		_add_sibling_button.disabled = not has_selection
+	if _rename_button:
+		_rename_button.disabled = not has_selection
+	if _remove_button:
+		_remove_button.disabled = not has_selection
+	if _use_container_button:
+		_use_container_button.disabled = not has_selection
+	if _use_query_button:
+		_use_query_button.disabled = not has_selection
+	if _find_references_button:
+		_find_references_button.disabled = not has_selection
+	if _tree_context_menu == null:
+		return
+
+	for menu_index in range(_tree_context_menu.item_count):
+		var menu_id: int = _tree_context_menu.get_item_id(menu_index)
+		if menu_id == TREE_MENU_COPY_TAG:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_ADD_CHILD:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_ADD_SIBLING:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_USE_AS_CONTAINER:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_USE_IN_QUERY:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
 
 func _on_close_dialog_confirmed() -> void:
 	if not _perform_save(true):

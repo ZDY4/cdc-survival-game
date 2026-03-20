@@ -131,7 +131,7 @@ func execute_turn_step() -> Dictionary:
 
 	match _state:
 		AIState.ATTACK:
-			return _perform_attack_step(now_s)
+			return await _perform_attack_step(now_s)
 		AIState.CHASE:
 			if _target and is_instance_valid(_target):
 				return await _perform_move_step(_target.global_position)
