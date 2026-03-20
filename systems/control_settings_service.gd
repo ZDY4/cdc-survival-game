@@ -1,6 +1,7 @@
 extends Node
 
 const InputActions = preload("res://core/input_actions.gd")
+const ValueUtils = preload("res://core/value_utils.gd")
 
 const SETTINGS_DIR: String = "user://settings"
 const SETTINGS_PATH: String = "user://settings/controls.json"
@@ -56,8 +57,8 @@ func set_binding(action_name: StringName, keycode: int, physical_keycode: int = 
 	}
 	InputActions.apply_binding(
 		action_name,
-		int(_controls[action_name].keycode),
-		int(_controls[action_name].physical_keycode)
+		ValueUtils.to_int(_controls[action_name].keycode, KEY_NONE),
+		ValueUtils.to_int(_controls[action_name].physical_keycode, KEY_NONE)
 	)
 	_save_settings()
 	binding_changed.emit(action_name, get_binding(action_name))
@@ -68,7 +69,7 @@ func reset_defaults() -> void:
 	_controls.clear()
 	for action_variant in InputActions.DEFAULT_BINDINGS.keys():
 		var action_name: StringName = action_variant
-		var keycode: int = int(InputActions.DEFAULT_BINDINGS[action_name])
+		var keycode: int = ValueUtils.to_int(InputActions.DEFAULT_BINDINGS[action_name], KEY_NONE)
 		_controls[action_name] = {
 			"keycode": keycode,
 			"physical_keycode": keycode
@@ -124,8 +125,8 @@ func _load_or_initialize() -> void:
 		if binding_variant is Dictionary:
 			var binding: Dictionary = binding_variant
 			_controls[action_name] = {
-				"keycode": int(binding.get("keycode", InputActions.DEFAULT_BINDINGS.get(action_name, KEY_NONE))),
-				"physical_keycode": int(binding.get("physical_keycode", binding.get("keycode", KEY_NONE)))
+				"keycode": ValueUtils.to_int(binding.get("keycode", InputActions.DEFAULT_BINDINGS.get(action_name, KEY_NONE)), KEY_NONE),
+				"physical_keycode": ValueUtils.to_int(binding.get("physical_keycode", binding.get("keycode", KEY_NONE)), KEY_NONE)
 			}
 
 	var audio: Dictionary = data.get("audio", {})
@@ -159,13 +160,13 @@ func _apply_controls() -> void:
 	for action_variant in InputActions.MENU_ACTIONS:
 		var action_name: StringName = action_variant
 		var binding: Dictionary = _controls.get(action_name, {
-			"keycode": int(InputActions.DEFAULT_BINDINGS.get(action_name, KEY_NONE)),
-			"physical_keycode": int(InputActions.DEFAULT_BINDINGS.get(action_name, KEY_NONE))
+			"keycode": ValueUtils.to_int(InputActions.DEFAULT_BINDINGS.get(action_name, KEY_NONE), KEY_NONE),
+			"physical_keycode": ValueUtils.to_int(InputActions.DEFAULT_BINDINGS.get(action_name, KEY_NONE), KEY_NONE)
 		})
 		InputActions.apply_binding(
 			action_name,
-			int(binding.get("keycode", KEY_NONE)),
-			int(binding.get("physical_keycode", binding.get("keycode", KEY_NONE)))
+			ValueUtils.to_int(binding.get("keycode", KEY_NONE), KEY_NONE),
+			ValueUtils.to_int(binding.get("physical_keycode", binding.get("keycode", KEY_NONE)), KEY_NONE)
 		)
 
 func _apply_audio() -> void:
@@ -203,6 +204,6 @@ func _find_conflict_action(target_action: StringName, keycode: int) -> StringNam
 		if action_name == target_action:
 			continue
 		var binding: Dictionary = get_binding(action_name)
-		if int(binding.get("keycode", KEY_NONE)) == keycode:
+		if ValueUtils.to_int(binding.get("keycode", KEY_NONE), KEY_NONE) == keycode:
 			return action_name
 	return StringName()

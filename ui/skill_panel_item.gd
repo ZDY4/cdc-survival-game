@@ -2,6 +2,8 @@ extends PanelContainer
 
 class_name SkillPanelItem
 
+const ValueUtils = preload("res://core/value_utils.gd")
+
 signal add_to_hotbar_requested(skill_id: String)
 
 const MENU_ADD_TO_HOTBAR: int = 1
@@ -46,7 +48,7 @@ func _gui_input(event: InputEvent) -> void:
 	_popup_menu.clear()
 	_popup_menu.add_item("添加到快捷栏", MENU_ADD_TO_HOTBAR)
 	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
-	_popup_menu.popup(Rect2i(Vector2i(int(mouse_pos.x), int(mouse_pos.y)), Vector2i(1, 1)))
+	_popup_menu.popup(Rect2i(Vector2i(floori(mouse_pos.x), floori(mouse_pos.y)), Vector2i(1, 1)))
 	accept_event()
 
 
@@ -137,7 +139,7 @@ func _refresh_display() -> void:
 
 	var skill_name: String = str(skill_data.get("name", skill_id))
 	_title_label.text = skill_name
-	var current_level: int = int(skill_data.get("current_level", 0))
+	var current_level: int = ValueUtils.to_int(skill_data.get("current_level", 0))
 	var activation: Dictionary = skill_data.get("activation", {})
 	var activation_mode: String = str(activation.get("mode", "passive"))
 	_meta_label.text = "Lv.%d  %s" % [current_level, activation_mode]

@@ -1,16 +1,16 @@
 [gd_scene load_steps=17 format=3 uid="uid://c8yvxg3ulq3a2"]
 
-[ext_resource type="Script" uid="uid://4xfxuc73rlng" path="res://scripts/locations/game_world_3d.gd" id="1_abc12"]
-[ext_resource type="Script" uid="uid://dow247j7enhrh" path="res://systems/spawn/ai_spawn_point.gd" id="2_7y8c1"]
-[ext_resource type="Script" uid="uid://dkonul44dxcvu" path="res://systems/fog_of_war_adapter.gd" id="3_fow1"]
-[ext_resource type="Script" uid="uid://btvu5utkorymk" path="res://systems/camera_controller_3d.gd" id="4_cam"]
+[ext_resource type="Script" uid="uid://cwugfn6y8svxl" path="res://scripts/locations/game_world_3d.gd" id="1_abc12"]
+[ext_resource type="Script" uid="uid://cdjaprt0oxqma" path="res://systems/spawn/ai_spawn_point.gd" id="2_7y8c1"]
+[ext_resource type="Script" uid="uid://jbuyu6bnh5e1" path="res://systems/fog_of_war_adapter.gd" id="3_fow1"]
+[ext_resource type="Script" uid="uid://dg8mr0g8uqkfk" path="res://systems/camera_controller_3d.gd" id="4_cam"]
 [ext_resource type="PackedScene" path="res://modules/interaction/pickup.tscn" id="5_pickup"]
-[ext_resource type="Script" uid="uid://5n0amu5c5jgc" path="res://systems/spawn/player_spawn_point.gd" id="6_player_spawn"]
-[ext_resource type="Script" uid="uid://dl1l0ugcupgu8" path="res://modules/npc/components/shop_component.gd" id="7_shop_script"]
+[ext_resource type="Script" uid="uid://buopoyflrmcff" path="res://systems/spawn/player_spawn_point.gd" id="6_player_spawn"]
+[ext_resource type="Script" uid="uid://o1hqy14gc6d2" path="res://modules/npc/components/shop_component.gd" id="7_shop_script"]
 [ext_resource type="Resource" path="res://data/shops/trader_lao_wang_shop.tres" id="8_shop_data"]
-[ext_resource type="Script" uid="uid://b8b3jnxmcqbjx" path="res://addons/cdc_procedural_builder/runtime/proc_wall_3d.gd" id="9_bk5u6"]
-[ext_resource type="Script" uid="uid://dt3ufwv35m16d" path="res://addons/cdc_procedural_builder/runtime/proc_fence_3d.gd" id="10_tf1x7"]
-[ext_resource type="Script" uid="uid://cok4y15ppmlsq" path="res://addons/cdc_procedural_builder/runtime/proc_house_3d.gd" id="11_77dte"]
+[ext_resource type="Script" uid="uid://dg6yhld26da28" path="res://addons/cdc_procedural_builder/runtime/proc_wall_3d.gd" id="9_bk5u6"]
+[ext_resource type="Script" uid="uid://dkbch21lpjlov" path="res://addons/cdc_procedural_builder/runtime/proc_fence_3d.gd" id="10_tf1x7"]
+[ext_resource type="Script" uid="uid://bsoodw1l5xuks" path="res://addons/cdc_procedural_builder/runtime/proc_house_3d.gd" id="11_77dte"]
 [ext_resource type="PackedScene" path="res://modules/interaction/overworld_entry.tscn" id="12_overworld_entry"]
 [ext_resource type="PackedScene" path="res://modules/interaction/subscene_entry.tscn" id="13_subscene_entry"]
 
@@ -117,17 +117,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.434925, 0, 0)
 script = ExtResource("9_bk5u6")
 control_points = Array[Vector3]([Vector3(0, 0, 0), Vector3(5, 0, 0), Vector3(4, 0, -8), Vector3(0, 0, -8)])
 closed = true
-metadata/_custom_type_script = "uid://b8b3jnxmcqbjx"
+metadata/_custom_type_script = "uid://dg6yhld26da28"
 
 [node name="ProcFence3D" type="Node3D" parent="." unique_id=1075855961]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.682845, 0, 5.7727633)
 script = ExtResource("10_tf1x7")
 control_points = Array[Vector3]([Vector3(0, 0, 0), Vector3(5, 0, -1)])
-metadata/_custom_type_script = "uid://dt3ufwv35m16d"
+metadata/_custom_type_script = "uid://dkbch21lpjlov"
 
 [node name="ProcHouse3D" type="Node3D" parent="." unique_id=364471382]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.417878, -4.7683716e-07, 5.365991)
 script = ExtResource("11_77dte")
 control_points = Array[Vector3]([Vector3(-3, 0, -2), Vector3(3, 0, -2), Vector3(1, 0, 2), Vector3(-3, 0, 2)])
 closed = true
-metadata/_custom_type_script = "uid://cok4y15ppmlsq"
+metadata/_custom_type_script = "uid://bsoodw1l5xuks"

@@ -1,5 +1,6 @@
 extends Control
 class_name AttributeAllocationUI
+const ValueUtils = preload("res://core/value_utils.gd")
 # AttributeAllocationUI - 属性分配界面
 # 允许玩家分配属性点到力量/敏捷/体质
 
@@ -71,9 +72,9 @@ func show_ui():
 		return
 	
 	# 保存当前状态
-	temp_strength = int(attr_system.get_actor_attribute("player", "strength"))
-	temp_agility = int(attr_system.get_actor_attribute("player", "agility"))
-	temp_constitution = int(attr_system.get_actor_attribute("player", "constitution"))
+	temp_strength = ValueUtils.to_int(attr_system.get_actor_attribute("player", "strength"), temp_strength)
+	temp_agility = ValueUtils.to_int(attr_system.get_actor_attribute("player", "agility"), temp_agility)
+	temp_constitution = ValueUtils.to_int(attr_system.get_actor_attribute("player", "constitution"), temp_constitution)
 	
 	# 获取可用属性点
 	var points = xp_system.get_available_points()
@@ -100,16 +101,16 @@ func _update_display():
 	# 更新效果描述
 	if attr_system:
 		strength_effect.text = "+%d%%伤害, +%d负重" % [
-			int((temp_strength - 5) * 5),
+			ValueUtils.to_int((temp_strength - 5) * 5),
 			(temp_strength - 5) * 10
 		]
 		agility_effect.text = "+%d%%闪避, +%d%%暴击" % [
-			int((temp_agility - 5) * 2),
-			int((temp_agility - 5) * 1)
+			ValueUtils.to_int((temp_agility - 5) * 2),
+			ValueUtils.to_int((temp_agility - 5) * 1)
 		]
 		constitution_effect.text = "+%dHP, +%d%%减伤" % [
 			(temp_constitution - 5) * 10,
-			int((temp_constitution - 5) * 1)
+			ValueUtils.to_int((temp_constitution - 5) * 1)
 		]
 	
 	# 更新点数
@@ -117,9 +118,9 @@ func _update_display():
 	points_label.add_theme_color_override("font_color", Color.GREEN if temp_points > 0 else Color.GRAY)
 	
 	# 更新按钮状态
-	var current_strength: int = int(attr_system.get_actor_attribute("player", "strength"))
-	var current_agility: int = int(attr_system.get_actor_attribute("player", "agility"))
-	var current_constitution: int = int(attr_system.get_actor_attribute("player", "constitution"))
+	var current_strength: int = ValueUtils.to_int(attr_system.get_actor_attribute("player", "strength"), temp_strength)
+	var current_agility: int = ValueUtils.to_int(attr_system.get_actor_attribute("player", "agility"), temp_agility)
+	var current_constitution: int = ValueUtils.to_int(attr_system.get_actor_attribute("player", "constitution"), temp_constitution)
 	strength_minus.disabled = (temp_strength <= current_strength)
 	strength_plus.disabled = (temp_points <= 0 or temp_strength >= 20)
 	
@@ -140,7 +141,7 @@ func _on_strength_plus():
 		_update_display()
 
 func _on_strength_minus():
-	if temp_strength > int(attr_system.get_actor_attribute("player", "strength")):
+	if temp_strength > ValueUtils.to_int(attr_system.get_actor_attribute("player", "strength"), temp_strength):
 		temp_strength -= 1
 		temp_points += 1
 		_update_display()
@@ -152,7 +153,7 @@ func _on_agility_plus():
 		_update_display()
 
 func _on_agility_minus():
-	if temp_agility > int(attr_system.get_actor_attribute("player", "agility")):
+	if temp_agility > ValueUtils.to_int(attr_system.get_actor_attribute("player", "agility"), temp_agility):
 		temp_agility -= 1
 		temp_points += 1
 		_update_display()
@@ -164,28 +165,28 @@ func _on_constitution_plus():
 		_update_display()
 
 func _on_constitution_minus():
-	if temp_constitution > int(attr_system.get_actor_attribute("player", "constitution")):
+	if temp_constitution > ValueUtils.to_int(attr_system.get_actor_attribute("player", "constitution"), temp_constitution):
 		temp_constitution -= 1
 		temp_points += 1
 		_update_display()
 
 func _on_reset():
-	temp_strength = int(attr_system.get_actor_attribute("player", "strength"))
-	temp_agility = int(attr_system.get_actor_attribute("player", "agility"))
-	temp_constitution = int(attr_system.get_actor_attribute("player", "constitution"))
+	temp_strength = ValueUtils.to_int(attr_system.get_actor_attribute("player", "strength"), temp_strength)
+	temp_agility = ValueUtils.to_int(attr_system.get_actor_attribute("player", "agility"), temp_agility)
+	temp_constitution = ValueUtils.to_int(attr_system.get_actor_attribute("player", "constitution"), temp_constitution)
 	temp_points = original_points
 	_update_display()
 
 func _on_confirm():
-	var current_strength: int = int(attr_system.get_actor_attribute("player", "strength"))
-	var current_agility: int = int(attr_system.get_actor_attribute("player", "agility"))
-	var current_constitution: int = int(attr_system.get_actor_attribute("player", "constitution"))
+	var current_strength: int = ValueUtils.to_int(attr_system.get_actor_attribute("player", "strength"), temp_strength)
+	var current_agility: int = ValueUtils.to_int(attr_system.get_actor_attribute("player", "agility"), temp_agility)
+	var current_constitution: int = ValueUtils.to_int(attr_system.get_actor_attribute("player", "constitution"), temp_constitution)
 	var delta_map := {
 		"strength": maxi(0, temp_strength - current_strength),
 		"agility": maxi(0, temp_agility - current_agility),
 		"constitution": maxi(0, temp_constitution - current_constitution)
 	}
-	var points_spent: int = int(delta_map.get("strength", 0)) + int(delta_map.get("agility", 0)) + int(delta_map.get("constitution", 0))
+	var points_spent: int = ValueUtils.to_int(delta_map.get("strength", 0)) + ValueUtils.to_int(delta_map.get("agility", 0)) + ValueUtils.to_int(delta_map.get("constitution", 0))
 	var result: Dictionary = attr_system.allocate_player_attributes(delta_map)
 	if not bool(result.get("success", false)):
 		push_warning("[AttributeAllocationUI] 属性分配失败: %s" % str(result.get("reason", "unknown")))

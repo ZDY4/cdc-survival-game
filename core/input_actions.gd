@@ -1,5 +1,7 @@
 extends RefCounted
 
+const ValueUtils = preload("res://core/value_utils.gd")
+
 const ACTION_MENU_INVENTORY: StringName = &"menu_inventory"
 const ACTION_MENU_CHARACTER: StringName = &"menu_character"
 const ACTION_MENU_MAP: StringName = &"menu_map"
@@ -115,7 +117,7 @@ static func ensure_actions_registered() -> void:
 	for action_variant in DEFAULT_BINDINGS.keys():
 		var action_name: StringName = action_variant
 		if InputMap.action_get_events(action_name).is_empty():
-			var keycode: int = int(DEFAULT_BINDINGS[action_name])
+			var keycode: int = ValueUtils.to_int(DEFAULT_BINDINGS[action_name], KEY_NONE)
 			apply_binding(action_name, keycode, keycode)
 
 
@@ -137,11 +139,11 @@ static func get_current_binding(action_name: StringName) -> Dictionary:
 		if event is InputEventKey:
 			var key_event: InputEventKey = event as InputEventKey
 			return {
-				"keycode": int(key_event.keycode),
-				"physical_keycode": int(key_event.physical_keycode)
+				"keycode": ValueUtils.to_int(key_event.keycode, KEY_NONE),
+				"physical_keycode": ValueUtils.to_int(key_event.physical_keycode, KEY_NONE)
 			}
 
-	var default_key: int = int(DEFAULT_BINDINGS.get(action_name, KEY_NONE))
+	var default_key: int = ValueUtils.to_int(DEFAULT_BINDINGS.get(action_name, KEY_NONE), KEY_NONE)
 	return {
 		"keycode": default_key,
 		"physical_keycode": default_key

@@ -3,6 +3,8 @@ extends CanvasLayer
 
 class_name InteractionContextMenu
 
+const ValueUtils = preload("res://core/value_utils.gd")
+
 # 1. Constants
 const MENU_MIN_WIDTH: float = 180.0
 
@@ -40,8 +42,8 @@ func show_options(screen_pos: Vector2, option_items: Array[Dictionary]) -> void:
 	if popup_size.x < MENU_MIN_WIDTH:
 		popup_size.x = MENU_MIN_WIDTH
 	var popup_rect := Rect2i(
-		Vector2i(int(screen_pos.x), int(screen_pos.y)),
-		Vector2i(int(popup_size.x), max(1, int(popup_size.y)))
+		Vector2i(floori(screen_pos.x), floori(screen_pos.y)),
+		Vector2i(ValueUtils.to_int(popup_size.x), max(1, ValueUtils.to_int(popup_size.y, 1)))
 	)
 	_menu.popup(popup_rect)
 	_menu_open = true

@@ -50,5 +50,4 @@ __pycache__/
 # Local Godot UID backups
 .local_backup/
 
-# Godot UID cache files should not be versioned
-*.uid
+# Godot resource/script UID sidecar files should be versioned

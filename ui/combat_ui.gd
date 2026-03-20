@@ -1,8 +1,6 @@
 extends Control
 ## 战斗UI - 完整的战斗界面，集成部位伤害系统
 
-class_name CombatUI
-
 # ========== 信号 ==========
 signal attack_initiated(target_limb: int, attack_type: String)
 signal item_menu_requested

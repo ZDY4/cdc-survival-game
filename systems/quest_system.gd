@@ -1,6 +1,8 @@
 extends Node
 # QuestSystem - 步骤流任务系统
 
+const ValueUtils = preload("res://core/value_utils.gd")
+
 signal quest_started(quest_id: String)
 signal quest_updated(quest_id: String, progress: Dictionary)
 signal quest_completed(quest_id: String, rewards: Dictionary)
@@ -87,8 +89,8 @@ func start_quest(quest_id: String) -> bool:
 
 	active_quests[quest_id] = {
 		"id": quest_id,
-		"start_day": int(GameState.world_day) if GameState else 0,
-		"start_time": int(Time.get_unix_time_from_system()),
+		"start_day": ValueUtils.to_int(GameState.world_day) if GameState else 0,
+		"start_time": ValueUtils.to_int(Time.get_unix_time_from_system()),
 		"current_node_id": start_node_id,
 		"visited_nodes": [],
 		"completed_objectives": {},
@@ -182,7 +184,7 @@ func update_quest_progress(quest_id: String, objective_type: String, amount: int
 		return
 
 	var objective_state: Dictionary = quest_state.get("completed_objectives", {})
-	var current_value := int(objective_state.get(node_id, 0))
+	var current_value := ValueUtils.to_int(objective_state.get(node_id, 0))
 	var target_value := _get_objective_target(node)
 	var new_value: int = min(current_value + max(amount, 1), target_value)
 	if _is_boolean_objective(node):
@@ -344,7 +346,7 @@ func get_save_data() -> Dictionary:
 
 
 func load_save_data(data: Dictionary) -> void:
-	if int(data.get("save_format_version", 0)) != SAVE_FORMAT_VERSION:
+	if ValueUtils.to_int(data.get("save_format_version", 0)) != SAVE_FORMAT_VERSION:
 		active_quests.clear()
 		completed_quests.clear()
 		failed_quests.clear()
@@ -410,7 +412,7 @@ func _on_item_acquired(data: Dictionary) -> void:
 			continue
 		var item_data: Dictionary = item_variant
 		var item_id := str(item_data.get("id", ""))
-		var count := int(item_data.get("count", 1))
+		var count := ValueUtils.to_int(item_data.get("count", 1), 1)
 		for quest_id_variant in active_quests.keys():
 			var quest_id := str(quest_id_variant)
 			update_quest_progress(quest_id, "collect", count, {"item_id": item_id})
@@ -418,7 +420,7 @@ func _on_item_acquired(data: Dictionary) -> void:
 
 func _on_crafting_completed(data: Dictionary) -> void:
 	var result: Dictionary = data.get("result", {})
-	on_craft_completed(result.get("item", ""), int(result.get("count", 1)))
+	on_craft_completed(result.get("item", ""), ValueUtils.to_int(result.get("count", 1), 1))
 
 
 func _on_structure_built(structure_id: String, _position: Vector2) -> void:
@@ -446,7 +448,7 @@ func _get_next_node_id(quest_id: String, from_node_id: String, from_port: int = 
 		var conn: Dictionary = conn_variant
 		if str(conn.get("from", "")) != from_node_id:
 			continue
-		if int(conn.get("from_port", 0)) != from_port:
+		if ValueUtils.to_int(conn.get("from_port", 0)) != from_port:
 			continue
 		return str(conn.get("to", ""))
 	return ""
@@ -493,10 +495,10 @@ func _is_boolean_objective(node: Dictionary) -> bool:
 
 func _get_objective_target(node: Dictionary) -> int:
 	if node.has("count"):
-		return max(int(node.get("count", 1)), 1)
+		return max(ValueUtils.to_int(node.get("count", 1), 1), 1)
 	var target_value: Variant = node.get("target", 1)
 	if target_value is int or target_value is float:
-		return max(int(target_value), 1)
+		return max(ValueUtils.to_int(target_value, 1), 1)
 	return 1
 
 
@@ -593,8 +595,8 @@ func _merge_rewards(target: Dictionary, rewards: Dictionary) -> void:
 			items.append(item_variant)
 		target["items"] = items
 
-	target["experience"] = int(target.get("experience", 0)) + int(rewards.get("experience", 0))
-	target["skill_points"] = int(target.get("skill_points", 0)) + int(rewards.get("skill_points", 0))
+	target["experience"] = ValueUtils.to_int(target.get("experience", 0)) + ValueUtils.to_int(rewards.get("experience", 0))
+	target["skill_points"] = ValueUtils.to_int(target.get("skill_points", 0)) + ValueUtils.to_int(rewards.get("skill_points", 0))
 
 	if rewards.has("unlock_location"):
 		target["unlock_location"] = rewards.get("unlock_location")
@@ -615,14 +617,14 @@ func _give_rewards(rewards: Dictionary) -> void:
 				continue
 			var item_data: Dictionary = item_variant
 			if InventoryModule:
-				InventoryModule.add_item(str(item_data.get("id", "")), int(item_data.get("count", 1)))
+				InventoryModule.add_item(str(item_data.get("id", "")), ValueUtils.to_int(item_data.get("count", 1), 1))
 
 	if rewards.has("experience"):
-		print("[QuestSystem] 获得经验: %d" % int(rewards.get("experience", 0)))
+		print("[QuestSystem] 获得经验: %d" % ValueUtils.to_int(rewards.get("experience", 0)))
 
 	if rewards.has("skill_points"):
 		if SkillModule and SkillModule.has_method("add_skill_points"):
-			SkillModule.add_skill_points(int(rewards.get("skill_points", 0)))
+			SkillModule.add_skill_points(ValueUtils.to_int(rewards.get("skill_points", 0)))
 
 	if rewards.has("unlock_location") and MapModule and MapModule.has_method("unlock_location"):
 		MapModule.unlock_location(str(rewards.get("unlock_location", "")))
@@ -641,12 +643,12 @@ func _format_rewards(rewards: Dictionary) -> String:
 		if not (item_variant is Dictionary):
 			continue
 		var item_data: Dictionary = item_variant
-		lines.append("- %s x%d" % [str(item_data.get("id", "")), int(item_data.get("count", 1))])
+		lines.append("- %s x%d" % [str(item_data.get("id", "")), ValueUtils.to_int(item_data.get("count", 1), 1)])
 
-	if int(rewards.get("experience", 0)) > 0:
-		lines.append("- %d 经验" % int(rewards.get("experience", 0)))
-	if int(rewards.get("skill_points", 0)) > 0:
-		lines.append("- %d 技能点" % int(rewards.get("skill_points", 0)))
+	if ValueUtils.to_int(rewards.get("experience", 0)) > 0:
+		lines.append("- %d 经验" % ValueUtils.to_int(rewards.get("experience", 0)))
+	if ValueUtils.to_int(rewards.get("skill_points", 0)) > 0:
+		lines.append("- %d 技能点" % ValueUtils.to_int(rewards.get("skill_points", 0)))
 	if rewards.has("unlock_location"):
 		lines.append("- 解锁地点: %s" % str(rewards.get("unlock_location", "")))
 	if rewards.has("unlock_recipes"):
@@ -669,7 +671,7 @@ func _get_quest_progress(quest_id: String) -> Dictionary:
 	var progress: Dictionary = {}
 	match str(node.get("type", "")):
 		"objective":
-			var current_value := int(quest_state.get("completed_objectives", {}).get(node_id, 0))
+			var current_value := ValueUtils.to_int(quest_state.get("completed_objectives", {}).get(node_id, 0))
 			progress[0] = {
 				"description": str(node.get("description", node_id)),
 				"current": current_value,
@@ -710,7 +712,7 @@ func _get_quest_progress(quest_id: String) -> Dictionary:
 
 func _resolve_branch_port(node: Dictionary, branch_key: Variant) -> int:
 	if branch_key is int or branch_key is float:
-		return max(int(branch_key), 0)
+		return max(ValueUtils.to_int(branch_key), 0)
 
 	var branch_text := str(branch_key)
 	if branch_text.is_valid_int():
@@ -725,7 +727,7 @@ func _resolve_branch_port(node: Dictionary, branch_key: Variant) -> int:
 
 func _resolve_choice_option_port(node: Dictionary, option_id: Variant) -> int:
 	if option_id is int or option_id is float:
-		return max(int(option_id), 0)
+		return max(ValueUtils.to_int(option_id), 0)
 
 	var option_text := str(option_id)
 	if option_text.is_valid_int():
