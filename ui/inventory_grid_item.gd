@@ -3,6 +3,7 @@ extends PanelContainer
 class_name InventoryGridItem
 
 const ItemIdResolver = preload("res://core/item_id_resolver.gd")
+const ValueUtils = preload("res://core/value_utils.gd")
 
 signal item_hovered(instance_id: String)
 signal item_unhovered(instance_id: String)
@@ -114,7 +115,8 @@ func _refresh_display() -> void:
 
 	var item_name: String = str(item_data.get("name", item_entry.get("id", "")))
 	_title_label.text = item_name
-	_count_label.text = "x%d" % int(item_entry.get("count", 1)) if int(item_entry.get("count", 1)) > 1 else ""
+	var item_count: int = ValueUtils.to_int(item_entry.get("count", 1), 1)
+	_count_label.text = "x%d" % item_count if item_count > 1 else ""
 	_icon_rect.texture = _load_item_texture()
 	tooltip_text = "%s\n%s" % [item_name, str(item_data.get("description", ""))]
 	_refresh_style()

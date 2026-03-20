@@ -3,6 +3,7 @@ extends Control
 class_name InventoryGridView
 
 const InventoryGridItem = preload("res://ui/inventory_grid_item.gd")
+const ValueUtils = preload("res://core/value_utils.gd")
 
 signal item_hovered(instance_id: String)
 signal item_unhovered(instance_id: String)
@@ -137,14 +138,14 @@ func _rebuild_items(items: Array[Dictionary]) -> void:
 func _entry_position(entry: Dictionary) -> Vector2:
 	var grid_position: Dictionary = entry.get("grid_position", {})
 	return Vector2(
-		float(int(grid_position.get("x", 0))) * cell_size,
-		float(int(grid_position.get("y", 0))) * cell_size
+		float(ValueUtils.to_int(grid_position.get("x", 0))) * cell_size,
+		float(ValueUtils.to_int(grid_position.get("y", 0))) * cell_size
 	)
 
 
 func _position_to_cell(position: Vector2) -> Vector2i:
-	var clamped_x: int = maxi(0, mini(grid_width - 1, int(floor(position.x / cell_size))))
-	var clamped_y: int = maxi(0, mini(grid_height - 1, int(floor(position.y / cell_size))))
+	var clamped_x: int = maxi(0, mini(grid_width - 1, floori(position.x / cell_size)))
+	var clamped_y: int = maxi(0, mini(grid_height - 1, floori(position.y / cell_size)))
 	return Vector2i(clamped_x, clamped_y)
 
 

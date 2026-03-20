@@ -2,6 +2,8 @@ extends Node
 # CraftingSystem - 制作系统
 # 统一负责配方加载、解锁、制作队列与维修配方逻辑
 
+const ValueUtils = preload("res://core/value_utils.gd")
+
 signal crafting_started(recipe_id: String, craft_time: float)
 signal crafting_completed(item_id: String, count: int)
 signal crafting_failed(recipe_id: String, reason: String)
@@ -120,7 +122,7 @@ func preview_craft(recipe_id: String) -> Dictionary:
 		"recipe_id": recipe_id,
 		"name": str(recipe.get("name", recipe_id)),
 		"output_item": str(output.get("item_id", "")),
-		"output_count": int(output.get("count", 1)),
+		"output_count": ValueUtils.to_int(output.get("count", 1), 1),
 		"materials": recipe.get("materials", []).duplicate(true),
 		"craft_time": float(recipe.get("craft_time", 0.0)),
 		"can_craft": can_craft_simple(recipe_id)
@@ -173,7 +175,7 @@ func can_craft(recipe_id: String) -> Dictionary:
 	for material_variant in recipe.get("materials", []):
 		var material: Dictionary = material_variant
 		var material_id := _normalize_item_id(material.get("item_id", ""))
-		var material_count := int(material.get("count", 1))
+		var material_count := ValueUtils.to_int(material.get("count", 1), 1)
 		if not InventoryModule or not InventoryModule.has_item(material_id, material_count):
 			result["missing_materials"].append({
 				"item_id": material_id,
@@ -191,7 +193,7 @@ func can_craft(recipe_id: String) -> Dictionary:
 
 	for skill_name_variant in recipe.get("skill_requirements", {}).keys():
 		var skill_name := str(skill_name_variant)
-		var required_level := int(recipe.get("skill_requirements", {}).get(skill_name_variant, 0))
+		var required_level := ValueUtils.to_int(recipe.get("skill_requirements", {}).get(skill_name_variant, 0))
 		var current_level := _get_skill_level(skill_name)
 		if current_level < required_level:
 			result["missing_skills"].append({
@@ -250,7 +252,7 @@ func cancel_crafting(index: int) -> bool:
 	for material_variant in recipe.get("materials", []):
 		var material: Dictionary = material_variant
 		if InventoryModule:
-			InventoryModule.add_item(_normalize_item_id(material.get("item_id", "")), int(material.get("count", 1)))
+			InventoryModule.add_item(_normalize_item_id(material.get("item_id", "")), ValueUtils.to_int(material.get("count", 1), 1))
 
 	crafting_queue.remove_at(index)
 
@@ -368,7 +370,7 @@ func get_repair_recipes() -> Array[Dictionary]:
 				"id": recipe_id,
 				"name": str(recipe.get("name", recipe_id)),
 				"target_type": str(recipe.get("target_type", "any")),
-				"repair_amount": int(recipe.get("repair_amount", 30))
+				"repair_amount": ValueUtils.to_int(recipe.get("repair_amount", 30), 30)
 			})
 	return repair_recipes
 
@@ -382,7 +384,7 @@ func can_repair_item(item_id: String) -> Dictionary:
 	if bool(durability_info.get("broken", false)):
 		return {"can_repair": false, "reason": "物品已完全损坏"}
 
-	if int(durability_info.get("current", 0)) >= int(durability_info.get("max", 0)):
+	if ValueUtils.to_int(durability_info.get("current", 0)) >= ValueUtils.to_int(durability_info.get("max", 0)):
 		return {"can_repair": false, "reason": "物品完好"}
 
 	var item_data: Dictionary = ItemDurabilitySystem.ITEM_DURABILITY_DATA.get(normalized_item_id, {})
@@ -403,8 +405,8 @@ func can_repair_item(item_id: String) -> Dictionary:
 	return {
 		"can_repair": true,
 		"recipes": suitable_recipes,
-		"current_durability": int(durability_info.get("current", 0)),
-		"max_durability": int(durability_info.get("max", 0))
+		"current_durability": ValueUtils.to_int(durability_info.get("current", 0)),
+		"max_durability": ValueUtils.to_int(durability_info.get("max", 0))
 	}
 
 
@@ -414,7 +416,7 @@ func get_save_data() -> Dictionary:
 		var craft_item: Dictionary = craft_item_variant
 		queue_data.append({
 			"recipe_id": str(craft_item.get("recipe_id", "")),
-			"start_time": int(craft_item.get("start_time", 0)),
+			"start_time": ValueUtils.to_int(craft_item.get("start_time", 0)),
 			"target_item_id": str(craft_item.get("target_item_id", ""))
 		})
 
@@ -444,7 +446,7 @@ func load_save_data(data: Dictionary) -> void:
 		crafting_queue.append({
 			"recipe_id": recipe_id,
 			"recipe": RECIPES[recipe_id].duplicate(true),
-			"start_time": int(craft_item.get("start_time", 0)),
+			"start_time": ValueUtils.to_int(craft_item.get("start_time", 0)),
 			"target_item_id": str(craft_item.get("target_item_id", ""))
 		})
 
@@ -465,12 +467,12 @@ func _normalize_recipe_data(recipe_id: String, raw_recipe: Dictionary) -> Dictio
 	recipe["category"] = str(recipe.get("category", "misc"))
 	recipe["required_station"] = str(recipe.get("required_station", "none"))
 	recipe["craft_time"] = float(recipe.get("craft_time", 0.0))
-	recipe["experience_reward"] = int(recipe.get("experience_reward", 0))
+	recipe["experience_reward"] = ValueUtils.to_int(recipe.get("experience_reward", 0))
 	recipe["is_default_unlocked"] = bool(recipe.get("is_default_unlocked", false))
 	recipe["durability_influence"] = float(recipe.get("durability_influence", 1.0))
 	recipe["is_repair"] = bool(recipe.get("is_repair", false))
 	recipe["target_type"] = str(recipe.get("target_type", "any"))
-	recipe["repair_amount"] = int(recipe.get("repair_amount", recipe.get("output", {}).get("repair_amount", 30)))
+	recipe["repair_amount"] = ValueUtils.to_int(recipe.get("repair_amount", recipe.get("output", {}).get("repair_amount", 30)), 30)
 
 	var output: Dictionary = {}
 	var raw_output: Variant = recipe.get("output", {})
@@ -478,8 +480,8 @@ func _normalize_recipe_data(recipe_id: String, raw_recipe: Dictionary) -> Dictio
 		output = raw_output.duplicate(true)
 	output["item_id"] = _normalize_item_id(output.get("item_id", output.get("item", "")))
 	output["item"] = output["item_id"]
-	output["count"] = int(output.get("count", 1))
-	output["quality_bonus"] = int(output.get("quality_bonus", 0))
+	output["count"] = ValueUtils.to_int(output.get("count", 1), 1)
+	output["quality_bonus"] = ValueUtils.to_int(output.get("quality_bonus", 0))
 	recipe["output"] = output
 
 	var materials: Array[Dictionary] = []
@@ -491,14 +493,14 @@ func _normalize_recipe_data(recipe_id: String, raw_recipe: Dictionary) -> Dictio
 			var material: Dictionary = material_variant.duplicate(true)
 			material["item_id"] = _normalize_item_id(material.get("item_id", material.get("item", "")))
 			material["item"] = material["item_id"]
-			material["count"] = int(material.get("count", material.get("required", 1)))
+			material["count"] = ValueUtils.to_int(material.get("count", material.get("required", 1)), 1)
 			materials.append(material)
 	elif raw_materials is Dictionary:
 		for material_key in raw_materials.keys():
 			materials.append({
 				"item_id": _normalize_item_id(material_key),
 				"item": _normalize_item_id(material_key),
-				"count": int(raw_materials.get(material_key, 1))
+				"count": ValueUtils.to_int(raw_materials.get(material_key, 1), 1)
 			})
 	recipe["materials"] = materials
 
@@ -519,8 +521,8 @@ func _normalize_recipe_data(recipe_id: String, raw_recipe: Dictionary) -> Dictio
 	var raw_skill_requirements: Variant = recipe.get("skill_requirements", {})
 	if raw_skill_requirements is Dictionary:
 		for skill_key in raw_skill_requirements.keys():
-			skill_requirements[str(skill_key)] = int(raw_skill_requirements.get(skill_key, 0))
-	var legacy_required_level := int(recipe.get("required_level", 0))
+			skill_requirements[str(skill_key)] = ValueUtils.to_int(raw_skill_requirements.get(skill_key, 0))
+	var legacy_required_level := ValueUtils.to_int(recipe.get("required_level", 0))
 	if legacy_required_level > 0 and skill_requirements.is_empty():
 		skill_requirements["crafting"] = legacy_required_level
 	recipe["skill_requirements"] = skill_requirements
@@ -646,7 +648,7 @@ func _consume_materials(materials: Array) -> void:
 		if not (material_variant is Dictionary):
 			continue
 		var material: Dictionary = material_variant
-		InventoryModule.remove_item(_normalize_item_id(material.get("item_id", "")), int(material.get("count", 1)))
+		InventoryModule.remove_item(_normalize_item_id(material.get("item_id", "")), ValueUtils.to_int(material.get("count", 1), 1))
 
 
 func _start_next_craft() -> void:
@@ -675,7 +677,7 @@ func _finish_crafting() -> void:
 	var recipe: Dictionary = craft_item.get("recipe", {})
 	var output: Dictionary = recipe.get("output", {})
 	var output_item_id := _normalize_item_id(output.get("item_id", ""))
-	var output_count := int(output.get("count", 1))
+	var output_count := ValueUtils.to_int(output.get("count", 1), 1)
 
 	if bool(recipe.get("is_repair", false)):
 		_process_repair_result(recipe, str(craft_item.get("target_item_id", "")))
@@ -703,7 +705,7 @@ func _finish_crafting() -> void:
 
 func _process_craft_result(output: Dictionary) -> void:
 	var item_id := _normalize_item_id(output.get("item_id", ""))
-	var count := int(output.get("count", 1))
+	var count := ValueUtils.to_int(output.get("count", 1), 1)
 
 	if ItemDatabase and ItemDatabase.has_item(item_id) and ItemDatabase.get_item_type(item_id) == "ammo":
 		var equipment_system = GameState.get_equipment_system() if GameState else null
@@ -727,11 +729,11 @@ func _process_repair_result(recipe: Dictionary, target_item_id: String) -> void:
 
 func _get_skill_level(skill_name: String) -> int:
 	if SkillSystem and SkillSystem.has_method("get_skill_level"):
-		return int(SkillSystem.get_skill_level(skill_name))
+		return ValueUtils.to_int(SkillSystem.get_skill_level(skill_name))
 	if SkillModule and SkillModule.has_method("get_skill_level"):
-		return int(SkillModule.get_skill_level(skill_name))
+		return ValueUtils.to_int(SkillModule.get_skill_level(skill_name))
 	if skill_name == "crafting" and GameState:
-		return int(GameState.player_level)
+		return ValueUtils.to_int(GameState.player_level)
 	return 0
 
 

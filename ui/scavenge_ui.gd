@@ -1,5 +1,7 @@
 extends Control
 class_name ScavengeUI
+
+const ValueUtils = preload("res://core/value_utils.gd")
 # ScavengeUI - 搜刮系统UI
 # 工具选择、时间滑块、风险预览界面
 
@@ -122,7 +124,7 @@ func _update_tool_selection():
 		btn.button_pressed = (tool_id == _selected_tool)
 
 func _on_time_changed(value: float):
-	_selected_time = int(value)
+	_selected_time = ValueUtils.to_int(value, _selected_time)
 	match _selected_time:
 		2:
 			time_label.text = "快速搜索 (2小时)"
@@ -240,7 +242,7 @@ func _show_event(event_data: Dictionary):
 			var btn = Button.new()
 			var risk_text = ""
 			if choice.risk > 0:
-				risk_text = " [风险: %d%%]" % int(choice.risk * 100)
+				risk_text = " [风险: %d%%]" % ValueUtils.to_int(choice.risk * 100)
 			
 			btn.text = choice.text + risk_text
 			btn.pressed.connect(func(): _on_event_choice(choice, event_data))
@@ -324,5 +326,4 @@ func hide_ui():
 
 func _on_close_pressed():
 	hide_ui()
-
 

@@ -2,6 +2,7 @@ extends Node
 # GameState - 游戏全局状态管理
 # 最佳实践: 不使用 class_name，直接暴露变量
 const AttributeSystemScript = preload("res://systems/attribute_system.gd")
+const ValueUtils = preload("res://core/value_utils.gd")
 const OUTDOOR_ROOT_SCENE_PATH: String = "res://scenes/locations/game_world_root.tscn"
 const SCENE_KIND_OUTDOOR_ROOT: String = "outdoor_root"
 const SCENE_KIND_INTERIOR: String = "interior"
@@ -79,11 +80,11 @@ func get_player_stat(stat_name: String, default_value: Variant = 0.0) -> Variant
 	return snapshot.get(stat_name, default_value)
 
 func _get_player_resource_value_as_int(resource_key: String, default_value: float = 0.0) -> int:
-	return int(round(_get_player_resource_current(resource_key, default_value)))
+	return ValueUtils.to_int(round(_get_player_resource_current(resource_key, default_value)))
 
 
 func _get_player_attribute_value_as_int(attribute_key: String, default_value: Variant = 0) -> int:
-	return int(round(float(get_player_stat(attribute_key, default_value))))
+	return ValueUtils.to_int(round(float(get_player_stat(attribute_key, default_value))))
 
 var player_hunger: int = 100
 var player_thirst: int = 100
@@ -386,11 +387,11 @@ func _on_level_up(new_level: int, rewards: Dictionary):
 	
 	# 应用状态恢复
 	if rewards.has("hp_restored"):
-		heal_player(int(_get_player_attribute_value_as_int("max_hp", 100) * rewards.hp_restored / 100.0))
+		heal_player(ValueUtils.to_int(_get_player_attribute_value_as_int("max_hp", 100) * rewards.hp_restored / 100.0))
 	if rewards.has("stamina_restored"):
-		player_stamina = mini(100, player_stamina + int(100 * rewards.stamina_restored / 100.0))
+		player_stamina = mini(100, player_stamina + ValueUtils.to_int(100 * rewards.stamina_restored / 100.0))
 	if rewards.has("mental_restored"):
-		player_mental = mini(100, player_mental + int(100 * rewards.mental_restored / 100.0))
+		player_mental = mini(100, player_mental + ValueUtils.to_int(100 * rewards.mental_restored / 100.0))
 	
 	print("[GameState] 玩家升级到等级 %d" % new_level)
 
@@ -483,8 +484,8 @@ func damage_player(amount: int):
 	var snapshot: Dictionary = _get_player_snapshot()
 	var defense_value: float = float(snapshot.get("defense", 0.0))
 	var damage_reduction: float = float(snapshot.get("damage_reduction", 0.0))
-	var actual_damage := maxi(1, int(round(float(amount) - defense_value * 0.5)))
-	actual_damage = maxi(1, int(round(float(actual_damage) * (1.0 - damage_reduction))))
+	var actual_damage := maxi(1, ValueUtils.to_int(round(float(amount) - defense_value * 0.5)))
+	actual_damage = maxi(1, ValueUtils.to_int(round(float(actual_damage) * (1.0 - damage_reduction))))
 	_set_player_resource_current("hp", maxi(0, _get_player_resource_value_as_int("hp", 100.0) - actual_damage))
 
 	# 减少装备耐久
@@ -533,7 +534,7 @@ func add_item(item_id: String, count: int = 1) -> bool:
 				continue
 			if not str(entry.get("equipped_slot", "")).is_empty():
 				continue
-			var current_count: int = int(entry.get("count", 1))
+			var current_count: int = ValueUtils.to_int(entry.get("count", 1), 1)
 			var free_space: int = max_stack - current_count
 			if free_space <= 0:
 				continue
@@ -604,11 +605,11 @@ func remove_item(item_id: String, count: int = 1, include_equipped: bool = false
 		if remaining <= 0:
 			break
 		var entry: Dictionary = simulated_items[index]
-		var entry_count: int = int(entry.get("count", 1))
+		var entry_count: int = ValueUtils.to_int(entry.get("count", 1), 1)
 		var to_remove: int = mini(entry_count, remaining)
 		entry["count"] = entry_count - to_remove
 		remaining -= to_remove
-		if int(entry.get("count", 0)) <= 0:
+		if ValueUtils.to_int(entry.get("count", 0)) <= 0:
 			if not str(entry.get("equipped_slot", "")).is_empty():
 				equipped_removed.append({
 					"instance_id": str(entry.get("instance_id", "")),
@@ -653,7 +654,7 @@ func get_item_count(item_id: String, include_equipped: bool = true) -> int:
 			continue
 		if not include_equipped and not str(entry.get("equipped_slot", "")).is_empty():
 			continue
-		total += int(entry.get("count", 1))
+		total += ValueUtils.to_int(entry.get("count", 1), 1)
 	return total
 
 func get_inventory_dimensions() -> Vector2i:
@@ -735,15 +736,19 @@ func refresh_inventory_capacity(preserve_positions: bool = true, emit_event: boo
 	var capacity: Dictionary = _resolve_inventory_capacity()
 	var layout: Dictionary = _resolve_inventory_layout(
 		inventory_items.duplicate(true),
-		int(capacity.get("width", inventory_grid_width)),
-		int(capacity.get("height", inventory_grid_height)),
-		int(capacity.get("active_cells", inventory_max_slots)),
+		ValueUtils.to_int(capacity.get("width", inventory_grid_width), inventory_grid_width),
+		ValueUtils.to_int(capacity.get("height", inventory_grid_height), inventory_grid_height),
+		ValueUtils.to_int(capacity.get("active_cells", inventory_max_slots), inventory_max_slots),
 		preserve_positions
 	)
 	if not bool(layout.get("success", false)):
 		return false
 	inventory_items = layout.get("items", inventory_items)
-	_apply_inventory_capacity(int(layout.get("width", inventory_grid_width)), int(layout.get("height", inventory_grid_height)), int(layout.get("active_cells", inventory_max_slots)))
+	_apply_inventory_capacity(
+		ValueUtils.to_int(layout.get("width", inventory_grid_width), inventory_grid_width),
+		ValueUtils.to_int(layout.get("height", inventory_grid_height), inventory_grid_height),
+		ValueUtils.to_int(layout.get("active_cells", inventory_max_slots), inventory_max_slots)
+	)
 	if emit_event:
 		_emit_inventory_changed()
 	return true
@@ -787,7 +792,7 @@ func _build_inventory_entry(item_id: String, count: int, instance_seed: int) -> 
 func _normalize_inventory_entry(entry: Dictionary) -> void:
 	var resolved_id = _resolve_item_id(str(entry.get("id", "")))
 	entry["id"] = resolved_id
-	entry["count"] = maxi(1, int(entry.get("count", 1)))
+	entry["count"] = maxi(1, ValueUtils.to_int(entry.get("count", 1), 1))
 	if not entry.has("instance_id") or str(entry.get("instance_id", "")).is_empty():
 		entry["instance_id"] = "inv_%d" % _inventory_instance_counter
 		_inventory_instance_counter += 1
@@ -795,8 +800,8 @@ func _normalize_inventory_entry(entry: Dictionary) -> void:
 		entry["grid_position"] = {"x": -1, "y": -1}
 	var grid_position: Dictionary = entry.get("grid_position", {})
 	entry["grid_position"] = {
-		"x": int(grid_position.get("x", -1)),
-		"y": int(grid_position.get("y", -1))
+		"x": ValueUtils.to_int(grid_position.get("x", -1), -1),
+		"y": ValueUtils.to_int(grid_position.get("y", -1), -1)
 	}
 	entry["rotated"] = bool(entry.get("rotated", false))
 	entry["equipped_slot"] = str(entry.get("equipped_slot", ""))
@@ -818,9 +823,9 @@ func _resolve_inventory_capacity() -> Dictionary:
 		width = maxi(1, base_size.x)
 		var bonus_slots: int = 0
 		if equip_system.has_method("get_total_stats"):
-			bonus_slots = maxi(0, int(equip_system.get_total_stats().get("inventory_slots", 0)))
+			bonus_slots = maxi(0, ValueUtils.to_int(equip_system.get_total_stats().get("inventory_slots", 0)))
 		active_cells = maxi(1, base_size.x * base_size.y + bonus_slots)
-		height = maxi(base_size.y, int(ceili(float(active_cells) / float(width))))
+		height = maxi(base_size.y, ceili(float(active_cells) / float(width)))
 	return {
 		"width": width,
 		"height": height,
@@ -964,7 +969,10 @@ func _inventory_cell_index(cell: Vector2i, width: int) -> int:
 
 func _get_entry_grid_position(entry: Dictionary) -> Vector2i:
 	var position: Dictionary = entry.get("grid_position", {})
-	return Vector2i(int(position.get("x", -1)), int(position.get("y", -1)))
+	return Vector2i(
+		ValueUtils.to_int(position.get("x", -1), -1),
+		ValueUtils.to_int(position.get("y", -1), -1)
+	)
 
 func _refresh_inventory_instance_counter() -> void:
 	for entry_variant in inventory_items:
@@ -1131,10 +1139,10 @@ func load_save_data(data: Dictionary):
 	# 背包
 	set_inventory_from_save(
 		data.get("inventory_items", []),
-		int(data.get("inventory_max_slots", inventory_max_slots)),
-		int(data.get("inventory_grid_width", inventory_grid_width)),
-		int(data.get("inventory_grid_height", inventory_grid_height)),
-		int(data.get("inventory_instance_counter", _inventory_instance_counter))
+		ValueUtils.to_int(data.get("inventory_max_slots", inventory_max_slots), inventory_max_slots),
+		ValueUtils.to_int(data.get("inventory_grid_width", inventory_grid_width), inventory_grid_width),
+		ValueUtils.to_int(data.get("inventory_grid_height", inventory_grid_height), inventory_grid_height),
+		ValueUtils.to_int(data.get("inventory_instance_counter", _inventory_instance_counter), _inventory_instance_counter)
 	)
 	
 	# 世界状态

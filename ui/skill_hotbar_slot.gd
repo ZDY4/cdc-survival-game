@@ -2,6 +2,8 @@ extends PanelContainer
 
 class_name SkillHotbarSlot
 
+const ValueUtils = preload("res://core/value_utils.gd")
+
 signal drop_requested(slot_index: int, data: Dictionary)
 signal drag_cleared(group_index: int, slot_index: int)
 
@@ -31,8 +33,8 @@ func _ready() -> void:
 
 
 func configure(data: Dictionary) -> void:
-	slot_index = int(data.get("slot_index", slot_index))
-	group_index = int(data.get("group_index", group_index))
+	slot_index = ValueUtils.to_int(data.get("slot_index", slot_index), slot_index)
+	group_index = ValueUtils.to_int(data.get("group_index", group_index), group_index)
 	skill_id = str(data.get("skill_id", ""))
 	skill_data = (data.get("skill_data", {}) as Dictionary).duplicate(true)
 	if is_node_ready():

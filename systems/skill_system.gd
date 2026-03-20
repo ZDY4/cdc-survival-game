@@ -3,6 +3,7 @@ extends Node
 ## 为旧逻辑提供 /root/SkillSystem 入口，内部转发到 SkillModule。
 
 const TargetSkillBase = preload("res://systems/target_skill_base.gd")
+const ValueUtils = preload("res://core/value_utils.gd")
 
 signal skill_learned(skill_id: String, skill_data: Dictionary)
 signal skill_points_changed(available_points: int)
@@ -56,8 +57,8 @@ func learn_skill(skill_id: String) -> Dictionary:
 		"success": true,
 		"skill_id": skill_id,
 		"skill_name": skill_data.get("name", skill_id),
-		"new_level": int(skill_data.get("current_level", 0)),
-		"max_level": int(skill_data.get("max_level", 1)),
+		"new_level": ValueUtils.to_int(skill_data.get("current_level", 0)),
+		"max_level": ValueUtils.to_int(skill_data.get("max_level", 1), 1),
 		"effect": skill_data.get("active_effect", {})
 	}
 
@@ -120,7 +121,7 @@ func get_hotbar_groups() -> Array:
 func get_active_hotbar_group() -> int:
 	if _module == null:
 		return 0
-	return int(_module.get_active_hotbar_group())
+	return ValueUtils.to_int(_module.get_active_hotbar_group())
 
 
 func set_active_hotbar_group(index: int) -> void:
@@ -131,7 +132,7 @@ func set_active_hotbar_group(index: int) -> void:
 func cycle_hotbar_group(delta: int) -> int:
 	if _module == null:
 		return 0
-	return int(_module.cycle_hotbar_group(delta))
+	return ValueUtils.to_int(_module.cycle_hotbar_group(delta))
 
 
 func assign_skill_to_hotbar(skill_id: String, group_index: int, slot_index: int) -> Dictionary:

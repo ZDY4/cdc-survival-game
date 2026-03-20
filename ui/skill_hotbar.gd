@@ -2,6 +2,8 @@ extends Control
 
 class_name SkillHotbar
 
+const ValueUtils = preload("res://core/value_utils.gd")
+
 signal status_requested(message: String)
 
 const SLOT_COUNT: int = 10
@@ -52,7 +54,7 @@ func add_skill_to_active_group(skill_id: String) -> void:
 		status_requested.emit("该技能当前不能加入快捷栏")
 		return
 
-	var group_index: int = int(_skill_system.get_active_hotbar_group())
+	var group_index: int = ValueUtils.to_int(_skill_system.get_active_hotbar_group())
 	var groups: Array = _skill_system.get_hotbar_groups()
 	if group_index < 0 or group_index >= groups.size():
 		status_requested.emit("当前快捷栏组无效")
@@ -218,7 +220,7 @@ func _refresh_from_skill_system() -> void:
 		return
 
 	var groups: Array = _skill_system.get_hotbar_groups()
-	var group_index: int = int(_skill_system.get_active_hotbar_group())
+	var group_index: int = ValueUtils.to_int(_skill_system.get_active_hotbar_group())
 	_group_label.text = "%d/%d" % [group_index + 1, HOTBAR_GROUP_COUNT]
 
 	var active_group: Array = []
@@ -257,7 +259,7 @@ func _on_next_group_pressed() -> void:
 func _on_slot_drop_requested(slot_index: int, data: Dictionary) -> void:
 	if _skill_system == null:
 		return
-	var current_group: int = int(_skill_system.get_active_hotbar_group())
+	var current_group: int = ValueUtils.to_int(_skill_system.get_active_hotbar_group())
 	var payload_type: String = str(data.get("type", ""))
 	var result: Dictionary = {}
 
@@ -269,8 +271,8 @@ func _on_slot_drop_requested(slot_index: int, data: Dictionary) -> void:
 				slot_index
 			)
 		"hotbar_skill":
-			var source_group: int = int(data.get("group_index", current_group))
-			var source_slot: int = int(data.get("slot_index", -1))
+			var source_group: int = ValueUtils.to_int(data.get("group_index", current_group), current_group)
+			var source_slot: int = ValueUtils.to_int(data.get("slot_index", -1), -1)
 			if source_group == current_group:
 				result = _skill_system.move_hotbar_skill(current_group, source_slot, slot_index)
 			else:

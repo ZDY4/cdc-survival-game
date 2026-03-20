@@ -1,6 +1,7 @@
 extends Node
 
 const TargetAttackAbility = preload("res://systems/target_attack_ability.gd")
+const ValueUtils = preload("res://core/value_utils.gd")
 
 signal combat_started(enemy_data: Dictionary)
 signal turn_started(turn_owner: String, turn_number: int)
@@ -147,13 +148,13 @@ func begin_targeted_attack(attacker: Node, context: Dictionary = {}) -> Dictiona
 
 func resolve_attack_range_cells(attacker: Node, context: Dictionary = {}) -> int:
 	if context.has("attack_range_cells"):
-		return maxi(1, int(context.get("attack_range_cells", 1)))
+		return maxi(1, ValueUtils.to_int(context.get("attack_range_cells", 1), 1))
 	if attacker != null and attacker.is_in_group("player"):
 		var player_range: int = _resolve_player_attack_range(attacker)
 		if player_range > 0:
 			return player_range
 	if context.has("attack_range"):
-		return maxi(1, int(ceil(float(context.get("attack_range", 1.0)))))
+		return maxi(1, ceili(float(context.get("attack_range", 1.0))))
 	return 1
 
 func player_use_item(item_id: String):
@@ -226,9 +227,9 @@ func get_enemy_stats() -> Dictionary:
 func get_player_stats() -> Dictionary:
 	var snapshot: Dictionary = _get_effective_actor_stats(get_player_actor())
 	return {
-		"attack": int(snapshot.get("attack_power", 0)),
-		"hp": int(snapshot.get("hp", 0)),
-		"max_hp": int(snapshot.get("max_hp", 0))
+		"attack": ValueUtils.to_int(snapshot.get("attack_power", 0)),
+		"hp": ValueUtils.to_int(snapshot.get("hp", 0)),
+		"max_hp": ValueUtils.to_int(snapshot.get("max_hp", 0))
 	}
 
 func _apply_attack(attacker: Node, target: Node, attack_type: String, target_part: String) -> Dictionary:
@@ -236,12 +237,12 @@ func _apply_attack(attacker: Node, target: Node, attack_type: String, target_par
 	var damage: int = _calculate_damage(attacker, target, attack_type, target_part)
 	var is_critical: bool = randf() < _resolve_crit_chance(attacker)
 	if is_critical:
-		damage = int(round(damage * _resolve_crit_multiplier(attacker)))
+		damage = ValueUtils.to_int(round(damage * _resolve_crit_multiplier(attacker)))
 
 	var target_hp: int = 0
 	if target.is_in_group("player"):
 		GameState.damage_player(damage)
-		target_hp = int(GameState.get_player_attributes_snapshot().get("hp", 0))
+		target_hp = ValueUtils.to_int(GameState.get_player_attributes_snapshot().get("hp", 0))
 	else:
 		target_hp = _apply_damage_to_actor(target, damage)
 
@@ -288,15 +289,15 @@ func _calculate_damage(attacker: Node, target: Node, attack_type: String, target
 	var defense: float = float(target_stats.get("defense", 0.0))
 	var variance: float = randf_range(0.85, 1.15)
 	var resolved_damage: float = maxf(1.0, (base_damage * accuracy_factor * speed_factor - defense) * variance)
-	return max(1, int(round(resolved_damage)))
+	return max(1, ValueUtils.to_int(round(resolved_damage)))
 
 func _resolve_base_damage(actor: Node) -> int:
 	var stats: Dictionary = _get_effective_actor_stats(actor)
-	return int(stats.get("attack_power", 1))
+	return ValueUtils.to_int(stats.get("attack_power", 1), 1)
 
 func _resolve_defense(actor: Node) -> int:
 	var stats: Dictionary = _get_effective_actor_stats(actor)
-	return int(stats.get("defense", 0))
+	return ValueUtils.to_int(stats.get("defense", 0))
 
 func _resolve_crit_chance(actor: Node) -> float:
 	var stats: Dictionary = _get_effective_actor_stats(actor)
@@ -350,20 +351,20 @@ func _apply_damage_to_actor(actor: Node, damage: int) -> int:
 	var attributes: Dictionary = runtime_state.get("attributes", {})
 	var resources: Dictionary = attributes.get("resources", {})
 	var hp_resource: Dictionary = resources.get("hp", {}).duplicate(true)
-	var hp_value: int = int(hp_resource.get("current", 0))
+	var hp_value: int = ValueUtils.to_int(hp_resource.get("current", 0))
 	hp_resource["current"] = maxi(0, hp_value - damage)
 	resources["hp"] = hp_resource
 	attributes["resources"] = resources
 	runtime_state["attributes"] = attributes
 	actor.set_meta("attribute_container", attributes)
 	_runtime_actor_states[str(actor.get_instance_id())] = runtime_state.duplicate(true)
-	return int(hp_resource.get("current", 0))
+	return ValueUtils.to_int(hp_resource.get("current", 0))
 
 func _check_runtime_actor_death(target: Node, attacker: Node) -> void:
 	if target == null or not is_instance_valid(target):
 		return
 	if target.is_in_group("player"):
-		if int(GameState.get_player_attributes_snapshot().get("hp", 0)) > 0:
+		if ValueUtils.to_int(GameState.get_player_attributes_snapshot().get("hp", 0)) > 0:
 			return
 		_combat_state = CombatState.DEFEAT
 		combat_ended.emit(false, {})
@@ -371,7 +372,7 @@ func _check_runtime_actor_death(target: Node, attacker: Node) -> void:
 
 	var runtime_state: Dictionary = _ensure_actor_runtime_state(target)
 	var runtime_attributes: Dictionary = runtime_state.get("attributes", {})
-	var hp_value: int = int(((runtime_attributes.get("resources", {}) as Dictionary).get("hp", {}) as Dictionary).get("current", 0))
+	var hp_value: int = ValueUtils.to_int(((runtime_attributes.get("resources", {}) as Dictionary).get("hp", {}) as Dictionary).get("current", 0))
 	if hp_value > 0:
 		return
 
@@ -382,7 +383,7 @@ func _check_runtime_actor_death(target: Node, attacker: Node) -> void:
 
 	if attacker != null and attacker.is_in_group("player"):
 		_last_combat_victory = true
-		_pending_rewards["xp"] = int(_pending_rewards.get("xp", 0)) + int(rewards.get("xp", 0))
+		_pending_rewards["xp"] = ValueUtils.to_int(_pending_rewards.get("xp", 0)) + ValueUtils.to_int(rewards.get("xp", 0))
 		var reward_loot: Array = _pending_rewards.get("loot", [])
 		reward_loot.append_array(rewards.get("loot", []))
 		_pending_rewards["loot"] = reward_loot
@@ -391,9 +392,9 @@ func _build_victory_rewards(enemy_data: Dictionary) -> Dictionary:
 	var loot: Array = _calculate_character_loot(enemy_data)
 	for item in loot:
 		if InventoryModule:
-			InventoryModule.add_item(str(item.get("item", "")), int(item.get("amount", 1)))
+			InventoryModule.add_item(str(item.get("item", "")), ValueUtils.to_int(item.get("amount", 1), 1))
 	return {
-		"xp": int(enemy_data.get("xp", 10)),
+		"xp": ValueUtils.to_int(enemy_data.get("xp", 10), 10),
 		"loot": loot
 	}
 
@@ -474,14 +475,14 @@ func _build_runtime_enemy_from_character(character_id: String) -> Dictionary:
 		"id": str(character.get("id", character_id)),
 		"name": str(character.get("name", "未知敌人")),
 		"description": str(character.get("description", "")),
-		"level": int(character.get("level", 1)),
+		"level": ValueUtils.to_int(character.get("level", 1), 1),
 		"attributes": attributes.duplicate(true),
 		"behavior": str(combat.get("behavior", "passive")),
 		"special_abilities": combat.get("special_abilities", []).duplicate(),
 		"weaknesses": combat.get("weaknesses", []).duplicate(),
 		"resistances": combat.get("resistances", []).duplicate(),
 		"loot": combat.get("loot", []).duplicate(true),
-		"xp": int(combat.get("xp", 10))
+		"xp": ValueUtils.to_int(combat.get("xp", 10), 10)
 	}
 
 func _build_runtime_enemy_snapshot(target: Node) -> Dictionary:
@@ -527,8 +528,8 @@ func _calculate_character_loot(enemy_data: Dictionary) -> Array:
 		if randf() > chance:
 			continue
 		var item_id: Variant = entry.get("item_id", entry.get("item", ""))
-		var min_amount: int = int(entry.get("min", 1))
-		var max_amount: int = int(entry.get("max", min_amount))
+		var min_amount: int = ValueUtils.to_int(entry.get("min", 1), 1)
+		var max_amount: int = ValueUtils.to_int(entry.get("max", min_amount), min_amount)
 		var amount: int = randi_range(min_amount, max_amount)
 		drops.append({
 			"item": item_id,
@@ -543,7 +544,7 @@ func _create_target_attack_handler(attacker: Node, context: Dictionary) -> Targe
 		"ability_id": str(context.get("ability_id", "basic_attack")),
 		"attack_range_cells": resolve_attack_range_cells(attacker, context),
 		"shape": str(context.get("shape", "single")),
-		"radius": int(context.get("radius", 0)),
+		"radius": ValueUtils.to_int(context.get("radius", 0)),
 		"attack_type": str(context.get("attack_type", "normal")),
 		"target_part": str(context.get("target_part", "body"))
 	})
@@ -556,12 +557,12 @@ func _resolve_player_attack_range(attacker: Node) -> int:
 		if equipment_system != null and equipment_system.has_method("calculate_combat_stats"):
 			var equipment_stats: Variant = equipment_system.call("calculate_combat_stats")
 			if equipment_stats is Dictionary:
-				return maxi(1, int((equipment_stats as Dictionary).get("range", 1)))
+				return maxi(1, ValueUtils.to_int((equipment_stats as Dictionary).get("range", 1), 1))
 			if equipment_system.has_method("get_equipped_data"):
 				var main_hand: Variant = equipment_system.call("get_equipped_data", "main_hand")
 				if main_hand is Dictionary:
 					var weapon_data: Dictionary = (main_hand as Dictionary).get("weapon_data", {})
-					return maxi(1, int(weapon_data.get("range", 1)))
+					return maxi(1, ValueUtils.to_int(weapon_data.get("range", 1), 1))
 	return 1
 
 
@@ -613,7 +614,7 @@ func _on_turn_system_combat_state_changed(in_combat: bool) -> void:
 	_pending_presentation_actions.clear()
 	_action_in_progress = false
 	if _combat_state == CombatState.ACTIVE:
-		if int(GameState.get_player_attributes_snapshot().get("hp", 0)) <= 0:
+		if ValueUtils.to_int(GameState.get_player_attributes_snapshot().get("hp", 0)) <= 0:
 			_combat_state = CombatState.DEFEAT
 			combat_ended.emit(false, {})
 		elif _last_combat_victory:
@@ -644,7 +645,7 @@ func _build_attack_action_result(
 		"presentation_policy": "FULL_BLOCKING" if is_in_combat() else "FULL_NONBLOCKING",
 		"target": target,
 		"target_pos": target_node.global_position if target_node != null else Vector3.ZERO,
-		"damage": int(action_result.get("damage", 0)),
+		"damage": ValueUtils.to_int(action_result.get("damage", 0)),
 		"is_critical": bool(action_result.get("is_critical", false)),
 		"metadata": {
 			"attack_type": attack_type,

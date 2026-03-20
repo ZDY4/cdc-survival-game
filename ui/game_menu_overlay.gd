@@ -122,13 +122,13 @@ func _input(event: InputEvent) -> void:
 
 	var result: Dictionary = ControlSettingsService.set_binding(
 		_pending_rebind_action,
-		int(key_event.keycode),
-		int(key_event.physical_keycode)
+		_to_int(key_event.keycode),
+		_to_int(key_event.physical_keycode)
 	)
 	if result.get("success", false):
 		_status("已绑定%s: %s" % [
 			InputActions.get_action_label(_pending_rebind_action),
-			InputActions.keycode_to_text(int(key_event.keycode))
+			InputActions.keycode_to_text(_to_int(key_event.keycode))
 		])
 	else:
 		_status(str(result.get("reason", "绑定失败")))
@@ -139,6 +139,29 @@ func _input(event: InputEvent) -> void:
 		_pending_rebind_label = null
 	_refresh_controls_tab()
 	get_viewport().set_input_as_handled()
+
+func _to_int(value: Variant, default_value: int = 0) -> int:
+	if value == null:
+		return default_value
+
+	match typeof(value):
+		TYPE_INT:
+			return value
+		TYPE_FLOAT:
+			var numeric_value: float = value
+			return floori(numeric_value) if numeric_value >= 0.0 else ceili(numeric_value)
+		TYPE_BOOL:
+			return 1 if value else 0
+		TYPE_STRING, TYPE_STRING_NAME:
+			var text_value: String = str(value).strip_edges()
+			if text_value.is_empty():
+				return default_value
+			return text_value.to_int()
+		_:
+			var fallback_text: String = str(value).strip_edges()
+			if fallback_text.is_empty():
+				return default_value
+			return fallback_text.to_int()
 
 func _build_overlay() -> void:
 	_menu_root = Control.new()
@@ -570,7 +593,7 @@ func _refresh_inventory() -> void:
 		button.tooltip_text = str(item_data.get("description", "点击查看槽位详情")) if not item_data.is_empty() else "空槽位"
 
 	var dimensions: Vector2i = InventoryModule.get_inventory_dimensions() if InventoryModule and InventoryModule.has_method("get_inventory_dimensions") else Vector2i(5, 4)
-	var active_cells: int = InventoryModule.get_active_cell_count() if InventoryModule and InventoryModule.has_method("get_active_cell_count") else int(GameState.inventory_max_slots)
+	var active_cells: int = InventoryModule.get_active_cell_count() if InventoryModule and InventoryModule.has_method("get_active_cell_count") else _to_int(GameState.inventory_max_slots)
 	var visible_items: Array[Dictionary] = InventoryModule.get_visible_items() if InventoryModule and InventoryModule.has_method("get_visible_items") else GameState.inventory_items
 	var carry_text: String = ""
 	if CarrySystem:
@@ -611,7 +634,7 @@ func _refresh_inventory_detail() -> void:
 	var item_data: Dictionary = focus.get("item_data", {})
 	var entry: Dictionary = focus.get("entry", {})
 	var size_data: Vector2i = ItemDatabase.get_inventory_footprint(item_id) if ItemDatabase else Vector2i.ONE
-	var count: int = int(entry.get("count", 1))
+	var count: int = _to_int(entry.get("count", 1), 1)
 	var total_weight: float = ItemDatabase.get_item_weight(item_id) * count if ItemDatabase else 0.0
 	_inventory_detail_title.text = str(item_data.get("name", item_id))
 	_inventory_detail_meta.text = "数量 x%d  尺寸 %dx%d  重量 %.1f kg" % [count, size_data.x, size_data.y, total_weight]
@@ -849,15 +872,24 @@ func _refresh_character() -> void:
 		_character_points_label.text = "属性系统不可用"
 		return
 
-	var points: int = int(attr_system.get("available_points"))
+	var points: int = 0
+	if attr_system.has_method("get_available_points"):
+		points = _to_int(attr_system.get_available_points(), 0)
 	if xp_system and xp_system.has_method("get_available_points"):
-		var available: Dictionary = xp_system.get_available_points()
-		points = int(available.get("stat_points", points))
+		var available_points: Variant = xp_system.get_available_points()
+		if available_points is Dictionary:
+			points = _to_int((available_points as Dictionary).get("stat_points", points), points)
 
 	_character_points_label.text = "可用属性点: %d" % points
-	_character_strength_label.text = str(attr_system.get("strength"))
-	_character_agility_label.text = str(attr_system.get("agility"))
-	_character_constitution_label.text = str(attr_system.get("constitution"))
+	var snapshot: Dictionary = {}
+	if GameState and GameState.has_method("get_player_attributes_snapshot"):
+		snapshot = GameState.get_player_attributes_snapshot()
+	elif attr_system.has_method("get_actor_attributes_snapshot"):
+		snapshot = attr_system.get_actor_attributes_snapshot("player")
+
+	_character_strength_label.text = str(_to_int(snapshot.get("strength", 0)))
+	_character_agility_label.text = str(_to_int(snapshot.get("agility", 0)))
+	_character_constitution_label.text = str(_to_int(snapshot.get("constitution", 0)))
 
 func _refresh_journal() -> void:
 	_clear_children(_journal_list)
@@ -941,7 +973,7 @@ func _refresh_controls_tab() -> void:
 		var row_data: Dictionary = _controls_rows[action_name]
 		var label: Label = row_data.get("label")
 		var binding: Dictionary = ControlSettingsService.get_binding(action_name)
-		label.text = InputActions.keycode_to_text(int(binding.get("keycode", KEY_NONE)))
+		label.text = InputActions.keycode_to_text(_to_int(binding.get("keycode", KEY_NONE), KEY_NONE))
 
 func _begin_rebind(action_name: StringName) -> void:
 	_pending_rebind_action = action_name

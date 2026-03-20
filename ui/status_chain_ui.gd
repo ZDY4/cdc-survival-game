@@ -1,5 +1,7 @@
 extends Control
 class_name StatusChainUI
+
+const ValueUtils = preload("res://core/value_utils.gd")
 # StatusChainUI - 生存状态链可视化UI
 # 显示饥饿→体温→免疫力→恢复速度的影响链条
 
@@ -102,16 +104,16 @@ func _update_display():
 	# 更新体温
 	var temp = _survival_status.body_temperature
 	var temp_status = _survival_status.get_temperature_status()
-	_update_node("temperature", int(temp), "°C", temp_status)
+	_update_node("temperature", ValueUtils.to_int(temp), "°C", temp_status)
 	
 	# 更新免疫力
 	var immunity = _survival_status.immunity
 	var immunity_status = _survival_status.get_immunity_status()
-	_update_node("immunity", int(immunity), "%", immunity_status)
+	_update_node("immunity", ValueUtils.to_int(immunity), "%", immunity_status)
 	
 	# 更新恢复速度
 	var regen = _survival_status.get_combat_modifiers().get("damage_mult", 1.0)
-	var regen_percent = int((regen - 1.0) * 100)
+	var regen_percent = ValueUtils.to_int((regen - 1.0) * 100)
 	_update_node("regeneration", regen_percent, "%", _get_regen_status(regen))
 
 func _update_node(id: String, value: int, suffix: String, status: String):
