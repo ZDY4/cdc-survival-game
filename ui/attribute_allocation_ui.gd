@@ -71,9 +71,9 @@ func show_ui():
 		return
 	
 	# 保存当前状态
-	temp_strength = attr_system.strength
-	temp_agility = attr_system.agility
-	temp_constitution = attr_system.constitution
+	temp_strength = int(attr_system.get_actor_attribute("player", "strength"))
+	temp_agility = int(attr_system.get_actor_attribute("player", "agility"))
+	temp_constitution = int(attr_system.get_actor_attribute("player", "constitution"))
 	
 	# 获取可用属性点
 	var points = xp_system.get_available_points()
@@ -117,13 +117,16 @@ func _update_display():
 	points_label.add_theme_color_override("font_color", Color.GREEN if temp_points > 0 else Color.GRAY)
 	
 	# 更新按钮状态
-	strength_minus.disabled = (temp_strength <= attr_system.strength)
+	var current_strength: int = int(attr_system.get_actor_attribute("player", "strength"))
+	var current_agility: int = int(attr_system.get_actor_attribute("player", "agility"))
+	var current_constitution: int = int(attr_system.get_actor_attribute("player", "constitution"))
+	strength_minus.disabled = (temp_strength <= current_strength)
 	strength_plus.disabled = (temp_points <= 0 or temp_strength >= 20)
 	
-	agility_minus.disabled = (temp_agility <= attr_system.agility)
+	agility_minus.disabled = (temp_agility <= current_agility)
 	agility_plus.disabled = (temp_points <= 0 or temp_agility >= 20)
 	
-	constitution_minus.disabled = (temp_constitution <= attr_system.constitution)
+	constitution_minus.disabled = (temp_constitution <= current_constitution)
 	constitution_plus.disabled = (temp_points <= 0 or temp_constitution >= 20)
 	
 	confirm_button.disabled = (temp_points == original_points)  # 没有变化时禁用确认
@@ -137,7 +140,7 @@ func _on_strength_plus():
 		_update_display()
 
 func _on_strength_minus():
-	if temp_strength > attr_system.strength:
+	if temp_strength > int(attr_system.get_actor_attribute("player", "strength")):
 		temp_strength -= 1
 		temp_points += 1
 		_update_display()
@@ -149,7 +152,7 @@ func _on_agility_plus():
 		_update_display()
 
 func _on_agility_minus():
-	if temp_agility > attr_system.agility:
+	if temp_agility > int(attr_system.get_actor_attribute("player", "agility")):
 		temp_agility -= 1
 		temp_points += 1
 		_update_display()
@@ -161,34 +164,32 @@ func _on_constitution_plus():
 		_update_display()
 
 func _on_constitution_minus():
-	if temp_constitution > attr_system.constitution:
+	if temp_constitution > int(attr_system.get_actor_attribute("player", "constitution")):
 		temp_constitution -= 1
 		temp_points += 1
 		_update_display()
 
 func _on_reset():
-	temp_strength = attr_system.strength
-	temp_agility = attr_system.agility
-	temp_constitution = attr_system.constitution
+	temp_strength = int(attr_system.get_actor_attribute("player", "strength"))
+	temp_agility = int(attr_system.get_actor_attribute("player", "agility"))
+	temp_constitution = int(attr_system.get_actor_attribute("player", "constitution"))
 	temp_points = original_points
 	_update_display()
 
 func _on_confirm():
-	# 应用属性变化
-	var points_spent = original_points - temp_points
-	
-	# 分配属性点
-	while attr_system.strength < temp_strength:
-		xp_system.spend_stat_points(1)
-		attr_system.allocate_point("strength")
-	
-	while attr_system.agility < temp_agility:
-		xp_system.spend_stat_points(1)
-		attr_system.allocate_point("agility")
-	
-	while attr_system.constitution < temp_constitution:
-		xp_system.spend_stat_points(1)
-		attr_system.allocate_point("constitution")
+	var current_strength: int = int(attr_system.get_actor_attribute("player", "strength"))
+	var current_agility: int = int(attr_system.get_actor_attribute("player", "agility"))
+	var current_constitution: int = int(attr_system.get_actor_attribute("player", "constitution"))
+	var delta_map := {
+		"strength": maxi(0, temp_strength - current_strength),
+		"agility": maxi(0, temp_agility - current_agility),
+		"constitution": maxi(0, temp_constitution - current_constitution)
+	}
+	var points_spent: int = int(delta_map.get("strength", 0)) + int(delta_map.get("agility", 0)) + int(delta_map.get("constitution", 0))
+	var result: Dictionary = attr_system.allocate_player_attributes(delta_map)
+	if not bool(result.get("success", false)):
+		push_warning("[AttributeAllocationUI] 属性分配失败: %s" % str(result.get("reason", "unknown")))
+		return
 	
 	print("[AttributeAllocationUI] 已分配 %d 属性点" % points_spent)
 	

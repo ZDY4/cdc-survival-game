@@ -1,10 +1,81 @@
 extends Node
 # GameState - 游戏全局状态管理
 # 最佳实践: 不使用 class_name，直接暴露变量
+const AttributeSystemScript = preload("res://systems/attribute_system.gd")
 
 # ===== 玩家状态 =====
-var player_hp: int = 100
-var player_max_hp: int = 100
+var _player_attributes: Dictionary = {}
+
+func _build_default_player_attributes() -> Dictionary:
+	return AttributeSystemScript.create_player_default_container()
+
+
+func _ensure_player_attributes_initialized() -> void:
+	if _player_attributes.is_empty():
+		_player_attributes = _build_default_player_attributes()
+
+
+func _get_player_attributes_container() -> Dictionary:
+	_ensure_player_attributes_initialized()
+	if _attr_system and _attr_system.has_method("get_player_attributes_container"):
+		_player_attributes = _attr_system.get_player_attributes_container()
+	return _player_attributes.duplicate(true)
+
+
+func _set_player_attributes_container(container: Dictionary) -> void:
+	_player_attributes = AttributeSystemScript.normalize_attribute_container(container)
+	if _attr_system and _attr_system.has_method("set_player_attributes_container"):
+		_attr_system.set_player_attributes_container(_player_attributes)
+
+
+func _get_player_snapshot() -> Dictionary:
+	_ensure_player_attributes_initialized()
+	if _attr_system and _attr_system.has_method("get_actor_attributes_snapshot"):
+		return _attr_system.get_actor_attributes_snapshot("player")
+	return AttributeSystemScript.resolve_attribute_snapshot(_player_attributes)
+
+
+func _get_player_resource_current(resource_key: String, default_value: float = 0.0) -> float:
+	var container: Dictionary = _get_player_attributes_container()
+	var resources: Dictionary = container.get("resources", {})
+	if resources.get(resource_key, {}) is Dictionary:
+		return float((resources.get(resource_key, {}) as Dictionary).get("current", default_value))
+	return default_value
+
+
+func _set_player_resource_current(resource_key: String, value: Variant) -> void:
+	_ensure_player_attributes_initialized()
+	if _attr_system and _attr_system.has_method("set_player_resource_current"):
+		_attr_system.set_player_resource_current(resource_key, value)
+		_player_attributes = _attr_system.get_player_attributes_container()
+		return
+	if not _player_attributes["resources"].has(resource_key):
+		_player_attributes["resources"][resource_key] = {}
+	var max_value: float = 9999.0
+	if resource_key == "hp":
+		max_value = float(get_player_stat("max_hp", 100.0))
+	_player_attributes["resources"][resource_key]["current"] = clampf(float(value), 0.0, max_value)
+
+
+func get_player_attributes_container() -> Dictionary:
+	return _get_player_attributes_container()
+
+
+func get_player_attributes_snapshot() -> Dictionary:
+	return _get_player_snapshot()
+
+
+func get_player_stat(stat_name: String, default_value: Variant = 0.0) -> Variant:
+	var snapshot: Dictionary = _get_player_snapshot()
+	return snapshot.get(stat_name, default_value)
+
+func _get_player_resource_value_as_int(resource_key: String, default_value: float = 0.0) -> int:
+	return int(round(_get_player_resource_current(resource_key, default_value)))
+
+
+func _get_player_attribute_value_as_int(attribute_key: String, default_value: Variant = 0) -> int:
+	return int(round(float(get_player_stat(attribute_key, default_value))))
+
 var player_hunger: int = 100
 var player_thirst: int = 100
 var player_stamina: int = 100
@@ -12,8 +83,11 @@ var player_mental: int = 100
 var player_position: String = "safehouse"
 var player_position_3d: Vector3 = Vector3.ZERO
 var player_grid_position: Vector3i = Vector3i.ZERO
+var pending_location_id: String = ""
+var pending_entry_spawn_id: String = ""
+var pending_overworld_origin: String = ""
+var last_small_map_location: String = "safehouse"
 var is_player_moving: bool = false
-var player_defense: int = 0  # 装备提供的防御力
 
 # ===== 角色装备系统 =====
 signal equipment_system_ready(equipment_system: Node)
@@ -29,6 +103,28 @@ func save_3d_position(pos: Vector3, grid_pos: Vector3i) -> void:
 func get_saved_3d_position() -> Vector3:
 	return player_position_3d
 
+func set_pending_scene_entry(location_id: String, spawn_id: String, overworld_origin: String = "") -> void:
+	pending_location_id = location_id
+	pending_entry_spawn_id = spawn_id
+	pending_overworld_origin = overworld_origin
+
+func consume_pending_scene_entry() -> Dictionary:
+	var data := {
+		"location_id": pending_location_id,
+		"entry_spawn_id": pending_entry_spawn_id,
+		"overworld_origin": pending_overworld_origin
+	}
+	clear_pending_scene_entry()
+	return data
+
+func clear_pending_scene_entry() -> void:
+	pending_location_id = ""
+	pending_entry_spawn_id = ""
+	pending_overworld_origin = ""
+
+func set_pending_overworld_origin(location_id: String) -> void:
+	pending_overworld_origin = location_id
+
 # ===== 货币系统 =====
 var player_money: int = 0
 
@@ -39,19 +135,20 @@ var player_total_xp: int = 0
 var player_available_stat_points: int = 0
 var player_available_skill_points: int = 0
 
-# ===== 新系统：属性点 =====
-var player_strength: int = 5
-var player_agility: int = 5
-var player_constitution: int = 5
-
 # ===== 新系统：时间 =====
 var game_day: int = 1
 var game_hour: int = 8
 var game_minute: int = 0
 
 # ===== 背包状态 =====
+const DEFAULT_INVENTORY_GRID_WIDTH: int = 5
+const DEFAULT_INVENTORY_GRID_HEIGHT: int = 4
+
 var inventory_items: Array[Dictionary] = []
 var inventory_max_slots: int = 20
+var inventory_grid_width: int = DEFAULT_INVENTORY_GRID_WIDTH
+var inventory_grid_height: int = DEFAULT_INVENTORY_GRID_HEIGHT
+var _inventory_instance_counter: int = 1
 
 # ===== 世界状态（保留兼容旧代码）=====
 var world_time: int = 8:
@@ -81,6 +178,21 @@ var _attr_system: Node = null
 var _skill_system: Node = null
 var _risk_system: Node = null
 var _survival_status: Node = null
+
+
+func apply_player_attribute_delta(source: String, values: Variant) -> bool:
+	if _attr_system and _attr_system.has_method("apply_actor_attribute_delta"):
+		return _attr_system.apply_actor_attribute_delta("player", source, values)
+	return false
+
+
+func allocate_player_attributes(delta_map: Dictionary) -> Dictionary:
+	if _attr_system and _attr_system.has_method("allocate_player_attributes"):
+		var result: Dictionary = _attr_system.allocate_player_attributes(delta_map)
+		if bool(result.get("success", false)):
+			_player_attributes = _attr_system.get_player_attributes_container()
+		return result
+	return {"success": false, "reason": "attribute_system_missing"}
 
 func _resolve_item_id(item_id: String) -> String:
 	if ItemDatabase:
@@ -129,6 +241,7 @@ func consume_pending_ammo() -> Array[Dictionary]:
 
 func _ready():
 	print("[GameState] Initialized")
+	_ensure_player_attributes_initialized()
 	
 	# 延迟初始化，等待其他系统自动加载
 	call_deferred("_connect_systems")
@@ -148,7 +261,9 @@ func _connect_systems():
 		_xp_system.xp_gained.connect(_on_xp_gained)
 	
 	if _attr_system:
-		_attr_system.attribute_changed.connect(_on_attribute_changed)
+		if _attr_system.attribute_changed.is_connected(_on_attribute_changed) == false:
+			_attr_system.attribute_changed.connect(_on_attribute_changed)
+		_set_player_attributes_container(_player_attributes)
 	
 	if _survival_status:
 		_survival_status.status_warning_triggered.connect(_on_status_warning)
@@ -164,7 +279,7 @@ func _sync_to_systems():
 		_time_manager.set_time(game_day, game_hour, game_minute)
 	
 	if _attr_system:
-		_attr_system.set_attributes(player_strength, player_agility, player_constitution)
+		_set_player_attributes_container(_player_attributes)
 
 func _sync_from_systems():
 	# 从各系统同步数据到GameState
@@ -182,9 +297,7 @@ func _sync_from_systems():
 		player_available_skill_points = points.skill_points
 	
 	if _attr_system:
-		player_strength = _attr_system.strength
-		player_agility = _attr_system.agility
-		player_constitution = _attr_system.constitution
+		_player_attributes = _attr_system.get_player_attributes_container()
 
 # ===== 信号处理 =====
 
@@ -193,7 +306,7 @@ func _on_level_up(new_level: int, rewards: Dictionary):
 	
 	# 应用状态恢复
 	if rewards.has("hp_restored"):
-		heal_player(int(player_max_hp * rewards.hp_restored / 100.0))
+		heal_player(int(_get_player_attribute_value_as_int("max_hp", 100) * rewards.hp_restored / 100.0))
 	if rewards.has("stamina_restored"):
 		player_stamina = mini(100, player_stamina + int(100 * rewards.stamina_restored / 100.0))
 	if rewards.has("mental_restored"):
@@ -206,18 +319,7 @@ func _on_xp_gained(amount: int, source: String, total_xp: int):
 	player_total_xp += amount
 
 func _on_attribute_changed(attr_name: String, new_value: int, old_value: int):
-	# 更新GameState中的属性值
-	match attr_name:
-		"strength":
-			player_strength = new_value
-			# 更新最大负重等
-		"agility":
-			player_agility = new_value
-			# 更新闪避等
-		"constitution":
-			player_constitution = new_value
-			# 更新最大HP
-			_update_max_hp_from_constitution()
+	_player_attributes = _attr_system.get_player_attributes_container() if _attr_system else _player_attributes
 
 func _on_status_warning(warning_type: String, severity: String):
 	# 状态警告通过EventBus传播
@@ -226,16 +328,6 @@ func _on_status_warning(warning_type: String, severity: String):
 		"severity": severity,
 		"location": player_position
 	})
-
-func _update_max_hp_from_constitution():
-	if _attr_system:
-		var old_max = player_max_hp
-		player_max_hp = 100 + _attr_system.calculate_hp_bonus()
-		# 按比例调整当前HP
-		if old_max > 0:
-			player_hp = int(player_hp * player_max_hp / old_max)
-		else:
-			player_hp = player_max_hp
 
 # ===== 经验值接口 =====
 
@@ -308,25 +400,15 @@ func get_fatigue_status() -> String:
 # ===== 便捷方法 =====
 
 func damage_player(amount: int):
-	# 计算防御减免
-	var actual_damage = amount
-	if player_defense > 0:
-		actual_damage = maxi(1, amount - player_defense / 2)  # 每2点防御减免1点伤害
-	
-	# 检查装备的伤害减免效果
-	var equip_system = get_equipment_system()
-	if equip_system:
-		var equipment_stats = equip_system.get_total_stats()
-		if equipment_stats.damage_reduction > 0:
-			actual_damage = int(actual_damage * (1.0 - equipment_stats.damage_reduction))
-	
-	# 应用属性系统的伤害减免
-	if _attr_system:
-		actual_damage = int(actual_damage * (1.0 - _attr_system.calculate_damage_reduction()))
-	
-	player_hp = maxi(0, player_hp - actual_damage)
-	
+	var snapshot: Dictionary = _get_player_snapshot()
+	var defense_value: float = float(snapshot.get("defense", 0.0))
+	var damage_reduction: float = float(snapshot.get("damage_reduction", 0.0))
+	var actual_damage := maxi(1, int(round(float(amount) - defense_value * 0.5)))
+	actual_damage = maxi(1, int(round(float(actual_damage) * (1.0 - damage_reduction))))
+	_set_player_resource_current("hp", maxi(0, _get_player_resource_value_as_int("hp", 100.0) - actual_damage))
+
 	# 减少装备耐久
+	var equip_system = get_equipment_system()
 	if equip_system:
 		equip_system.on_damage_taken(actual_damage)
 	
@@ -334,65 +416,484 @@ func damage_player(amount: int):
 	if _survival_status:
 		_survival_status.immunity = maxf(0, _survival_status.immunity - 5.0)
 		_survival_status.fatigue = mini(_survival_status.FATIGUE_MAX, _survival_status.fatigue + 10)
-	
-	EventBus.emit(EventBus.EventType.PLAYER_HURT, {"hp": player_hp, "damage": actual_damage})
+
+	EventBus.emit(EventBus.EventType.PLAYER_HURT, {"hp": _get_player_resource_value_as_int("hp", 100.0), "damage": actual_damage})
 
 func heal_player(amount: int):
-	player_hp = mini(player_max_hp, player_hp + amount)
-	EventBus.emit(EventBus.EventType.PLAYER_HEALED, {"hp": player_hp, "amount": amount})
+	_set_player_resource_current(
+		"hp",
+		mini(
+			_get_player_attribute_value_as_int("max_hp", 100),
+			_get_player_resource_value_as_int("hp", 100.0) + amount
+		)
+	)
+	EventBus.emit(EventBus.EventType.PLAYER_HEALED, {"hp": _get_player_resource_value_as_int("hp", 100.0), "amount": amount})
 
-func add_item(item_id: String, count: int = 1):
+func add_item(item_id: String, count: int = 1) -> bool:
 	var resolved_id = _resolve_item_id(str(item_id))
-	# 应用拾荒技能加成
+	if resolved_id.is_empty() or count <= 0:
+		return false
+
 	if _skill_system and _skill_system.get_loot_bonus_chance() > 0:
 		if randf() < _skill_system.get_loot_bonus_chance():
 			count += 1
 			print("[GameState] 拾荒技能触发，额外获得1个物品")
-	
-	# 查找是否已存在
-	for item in inventory_items:
-		var existing_id = _resolve_item_id(str(item.id))
-		if existing_id != item.id:
-			item.id = existing_id
-		if existing_id == resolved_id:
-			item.count += count
-			EventBus.emit(EventBus.EventType.INVENTORY_CHANGED, {})
-			return true
-	
-	# 检查背包空间
-	if inventory_items.size() >= inventory_max_slots:
+
+	var simulated_items: Array[Dictionary] = inventory_items.duplicate(true)
+	var simulated_counter: int = _inventory_instance_counter
+	var remaining: int = count
+	var is_stackable: bool = ItemDatabase.is_stackable(resolved_id) if ItemDatabase else true
+	var max_stack: int = maxi(1, ItemDatabase.get_max_stack(resolved_id) if ItemDatabase else 99)
+
+	if is_stackable:
+		for entry_variant in simulated_items:
+			var entry: Dictionary = entry_variant
+			_normalize_inventory_entry(entry)
+			if str(entry.get("id", "")) != resolved_id:
+				continue
+			if not str(entry.get("equipped_slot", "")).is_empty():
+				continue
+			var current_count: int = int(entry.get("count", 1))
+			var free_space: int = max_stack - current_count
+			if free_space <= 0:
+				continue
+			var to_add: int = mini(remaining, free_space)
+			entry["count"] = current_count + to_add
+			remaining -= to_add
+			if remaining <= 0:
+				break
+
+	while remaining > 0:
+		var stack_count: int = mini(remaining, max_stack if is_stackable else 1)
+		simulated_items.append(_build_inventory_entry(resolved_id, stack_count, simulated_counter))
+		simulated_counter += 1
+		remaining -= stack_count
+
+	var layout: Dictionary = _resolve_inventory_layout(
+		simulated_items,
+		inventory_grid_width,
+		inventory_grid_height,
+		inventory_max_slots,
+		true
+	)
+	if not bool(layout.get("success", false)):
 		return false
-	
-	inventory_items.append({"id": resolved_id, "count": count})
-	EventBus.emit(EventBus.EventType.INVENTORY_CHANGED, {})
+
+	inventory_items = layout.get("items", simulated_items)
+	_inventory_instance_counter = simulated_counter
+	_apply_inventory_capacity(layout.get("width", inventory_grid_width), layout.get("height", inventory_grid_height), layout.get("active_cells", inventory_max_slots))
+	_emit_inventory_changed()
 	return true
 
-func remove_item(item_id: String, count: int = 1):
+func remove_item(item_id: String, count: int = 1, include_equipped: bool = false) -> bool:
 	var resolved_id = _resolve_item_id(str(item_id))
-	for i in range(inventory_items.size()):
-		var existing_id = _resolve_item_id(str(inventory_items[i].id))
-		if existing_id != inventory_items[i].id:
-			inventory_items[i].id = existing_id
-		if existing_id == resolved_id:
-			inventory_items[i].count -= count
-			if inventory_items[i].count <= 0:
-				inventory_items.remove_at(i)
-			EventBus.emit(EventBus.EventType.INVENTORY_CHANGED, {})
+	if resolved_id.is_empty() or count <= 0:
+		return false
+	if get_item_count(resolved_id, include_equipped) < count:
+		return false
+
+	var simulated_items: Array[Dictionary] = inventory_items.duplicate(true)
+	var remaining: int = count
+	var equipped_removed: Array[Dictionary] = []
+	var visible_order: Array[int] = []
+	var equipped_order: Array[int] = []
+
+	for i in range(simulated_items.size()):
+		var entry: Dictionary = simulated_items[i]
+		_normalize_inventory_entry(entry)
+		var is_equipped: bool = not str(entry.get("equipped_slot", "")).is_empty()
+		if str(entry.get("id", "")) != resolved_id:
+			continue
+		if is_equipped and not include_equipped:
+			continue
+		if not is_equipped:
+			visible_order.append(i)
+	for i in range(simulated_items.size()):
+		var entry: Dictionary = simulated_items[i]
+		_normalize_inventory_entry(entry)
+		if str(entry.get("id", "")) != resolved_id:
+			continue
+		var is_equipped: bool = not str(entry.get("equipped_slot", "")).is_empty()
+		if is_equipped and include_equipped:
+			equipped_order.append(i)
+
+	visible_order.reverse()
+	equipped_order.reverse()
+	var removal_order: Array[int] = visible_order + equipped_order
+	for index in removal_order:
+		if remaining <= 0:
+			break
+		var entry: Dictionary = simulated_items[index]
+		var entry_count: int = int(entry.get("count", 1))
+		var to_remove: int = mini(entry_count, remaining)
+		entry["count"] = entry_count - to_remove
+		remaining -= to_remove
+		if int(entry.get("count", 0)) <= 0:
+			if not str(entry.get("equipped_slot", "")).is_empty():
+				equipped_removed.append({
+					"instance_id": str(entry.get("instance_id", "")),
+					"slot": str(entry.get("equipped_slot", "")),
+					"item_id": str(entry.get("id", ""))
+				})
+			simulated_items.remove_at(index)
+
+	var layout: Dictionary = _resolve_inventory_layout(
+		simulated_items,
+		inventory_grid_width,
+		inventory_grid_height,
+		inventory_max_slots,
+		true
+	)
+	if not bool(layout.get("success", false)):
+		return false
+
+	inventory_items = layout.get("items", simulated_items)
+	for removed_entry in equipped_removed:
+		var equip_system = get_equipment_system()
+		if equip_system and equip_system.has_method("on_inventory_item_removed"):
+			equip_system.on_inventory_item_removed(
+				str(removed_entry.get("instance_id", "")),
+				str(removed_entry.get("slot", "")),
+				str(removed_entry.get("item_id", ""))
+			)
+	_apply_inventory_capacity(layout.get("width", inventory_grid_width), layout.get("height", inventory_grid_height), layout.get("active_cells", inventory_max_slots))
+	_emit_inventory_changed()
+	return true
+
+func has_item(item_id: String, count: int = 1, include_equipped: bool = true) -> bool:
+	return get_item_count(item_id, include_equipped) >= count
+
+func get_item_count(item_id: String, include_equipped: bool = true) -> int:
+	var resolved_id = _resolve_item_id(str(item_id))
+	var total: int = 0
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
+		if str(entry.get("id", "")) != resolved_id:
+			continue
+		if not include_equipped and not str(entry.get("equipped_slot", "")).is_empty():
+			continue
+		total += int(entry.get("count", 1))
+	return total
+
+func get_inventory_dimensions() -> Vector2i:
+	return Vector2i(inventory_grid_width, inventory_grid_height)
+
+func get_visible_inventory_items() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
+		if not str(entry.get("equipped_slot", "")).is_empty():
+			continue
+		result.append(entry.duplicate(true))
+	return result
+
+func get_inventory_item(instance_id: String) -> Dictionary:
+	if instance_id.is_empty():
+		return {}
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
+		if str(entry.get("instance_id", "")) == instance_id:
+			return entry
+	return {}
+
+func find_first_available_item_instance(item_id: String) -> String:
+	var resolved_id = _resolve_item_id(str(item_id))
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
+		if str(entry.get("id", "")) != resolved_id:
+			continue
+		if not str(entry.get("equipped_slot", "")).is_empty():
+			continue
+		return str(entry.get("instance_id", ""))
+	return ""
+
+func get_equipped_item_instance(slot: String) -> String:
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
+		if str(entry.get("equipped_slot", "")) == slot:
+			return str(entry.get("instance_id", ""))
+	return ""
+
+func set_inventory_item_equipped_slot(instance_id: String, slot: String) -> bool:
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
+		if str(entry.get("instance_id", "")) != instance_id:
+			continue
+		entry["equipped_slot"] = slot
+		return true
+	return false
+
+func move_item_instance(instance_id: String, target_cell: Vector2i) -> bool:
+	if instance_id.is_empty():
+		return false
+	var active_cells: int = inventory_max_slots
+	var entry := get_inventory_item(instance_id)
+	if entry.is_empty():
+		return false
+	if not str(entry.get("equipped_slot", "")).is_empty():
+		return false
+	if not _can_place_entry_at(entry, target_cell, inventory_grid_width, inventory_grid_height, active_cells, instance_id):
+		return false
+	for entry_variant in inventory_items:
+		var inventory_entry: Dictionary = entry_variant
+		if str(inventory_entry.get("instance_id", "")) == instance_id:
+			inventory_entry["grid_position"] = {
+				"x": target_cell.x,
+				"y": target_cell.y
+			}
+			_emit_inventory_changed()
 			return true
 	return false
 
-func has_item(item_id: String, count: int = 1):
-	var resolved_id = _resolve_item_id(str(item_id))
-	for item in inventory_items:
-		var existing_id = _resolve_item_id(str(item.id))
-		if existing_id != item.id:
-			item.id = existing_id
-		if existing_id == resolved_id and item.count >= count:
-			return true
-	return false
+func refresh_inventory_capacity(preserve_positions: bool = true, emit_event: bool = true) -> bool:
+	var capacity: Dictionary = _resolve_inventory_capacity()
+	var layout: Dictionary = _resolve_inventory_layout(
+		inventory_items.duplicate(true),
+		int(capacity.get("width", inventory_grid_width)),
+		int(capacity.get("height", inventory_grid_height)),
+		int(capacity.get("active_cells", inventory_max_slots)),
+		preserve_positions
+	)
+	if not bool(layout.get("success", false)):
+		return false
+	inventory_items = layout.get("items", inventory_items)
+	_apply_inventory_capacity(int(layout.get("width", inventory_grid_width)), int(layout.get("height", inventory_grid_height)), int(layout.get("active_cells", inventory_max_slots)))
+	if emit_event:
+		_emit_inventory_changed()
+	return true
+
+func set_inventory_from_save(
+	items: Array,
+	active_cells: int = DEFAULT_INVENTORY_GRID_WIDTH * DEFAULT_INVENTORY_GRID_HEIGHT,
+	grid_width: int = DEFAULT_INVENTORY_GRID_WIDTH,
+	grid_height: int = DEFAULT_INVENTORY_GRID_HEIGHT,
+	instance_counter: int = 1
+) -> void:
+	inventory_items.clear()
+	for entry_variant in items:
+		if entry_variant is Dictionary:
+			var entry: Dictionary = (entry_variant as Dictionary).duplicate(true)
+			_normalize_inventory_entry(entry)
+			inventory_items.append(entry)
+	_inventory_instance_counter = maxi(1, instance_counter)
+	_apply_inventory_capacity(maxi(1, grid_width), maxi(1, grid_height), maxi(1, active_cells))
+	_refresh_inventory_instance_counter()
+	var layout: Dictionary = _resolve_inventory_layout(
+		inventory_items.duplicate(true),
+		inventory_grid_width,
+		inventory_grid_height,
+		inventory_max_slots,
+		true
+	)
+	if bool(layout.get("success", false)):
+		inventory_items = layout.get("items", inventory_items)
+
+func _build_inventory_entry(item_id: String, count: int, instance_seed: int) -> Dictionary:
+	return {
+		"instance_id": "inv_%d" % instance_seed,
+		"id": item_id,
+		"count": count,
+		"grid_position": {"x": -1, "y": -1},
+		"rotated": false,
+		"equipped_slot": ""
+	}
+
+func _normalize_inventory_entry(entry: Dictionary) -> void:
+	var resolved_id = _resolve_item_id(str(entry.get("id", "")))
+	entry["id"] = resolved_id
+	entry["count"] = maxi(1, int(entry.get("count", 1)))
+	if not entry.has("instance_id") or str(entry.get("instance_id", "")).is_empty():
+		entry["instance_id"] = "inv_%d" % _inventory_instance_counter
+		_inventory_instance_counter += 1
+	if not entry.has("grid_position") or not (entry.get("grid_position", {}) is Dictionary):
+		entry["grid_position"] = {"x": -1, "y": -1}
+	var grid_position: Dictionary = entry.get("grid_position", {})
+	entry["grid_position"] = {
+		"x": int(grid_position.get("x", -1)),
+		"y": int(grid_position.get("y", -1))
+	}
+	entry["rotated"] = bool(entry.get("rotated", false))
+	entry["equipped_slot"] = str(entry.get("equipped_slot", ""))
+
+func _emit_inventory_changed() -> void:
+	if EventBus:
+		EventBus.emit(EventBus.EventType.INVENTORY_CHANGED, {})
+
+func _resolve_inventory_capacity() -> Dictionary:
+	var width: int = inventory_grid_width
+	var height: int = inventory_grid_height
+	var active_cells: int = inventory_max_slots
+	var equip_system = get_equipment_system()
+	if equip_system and ItemDatabase:
+		var base_size: Vector2i = ItemDatabase.get_default_inventory_grid_size()
+		var backpack_id = str(equip_system.get_equipped("back"))
+		if not backpack_id.is_empty():
+			base_size = ItemDatabase.get_backpack_grid_size(backpack_id)
+		width = maxi(1, base_size.x)
+		var bonus_slots: int = 0
+		if equip_system.has_method("get_total_stats"):
+			bonus_slots = maxi(0, int(equip_system.get_total_stats().get("inventory_slots", 0)))
+		active_cells = maxi(1, base_size.x * base_size.y + bonus_slots)
+		height = maxi(base_size.y, int(ceili(float(active_cells) / float(width))))
+	return {
+		"width": width,
+		"height": height,
+		"active_cells": active_cells
+	}
+
+func _apply_inventory_capacity(width: int, height: int, active_cells: int) -> void:
+	inventory_grid_width = maxi(1, width)
+	inventory_grid_height = maxi(1, height)
+	inventory_max_slots = maxi(1, active_cells)
+
+func _resolve_inventory_layout(
+	items: Array[Dictionary],
+	width: int,
+	height: int,
+	active_cells: int,
+	preserve_positions: bool
+) -> Dictionary:
+	var occupancy: Dictionary = {}
+	var deferred_entries: Array[Dictionary] = []
+	if preserve_positions:
+		for entry_variant in items:
+			var entry: Dictionary = entry_variant
+			_normalize_inventory_entry(entry)
+			if not str(entry.get("equipped_slot", "")).is_empty():
+				continue
+			var position := _get_entry_grid_position(entry)
+			if _can_place_entry_at(entry, position, width, height, active_cells, str(entry.get("instance_id", "")), occupancy):
+				_occupy_entry(entry, occupancy, width)
+			else:
+				entry["grid_position"] = {"x": -1, "y": -1}
+				deferred_entries.append(entry)
+	else:
+		for entry_variant in items:
+			var entry: Dictionary = entry_variant
+			_normalize_inventory_entry(entry)
+			if not str(entry.get("equipped_slot", "")).is_empty():
+				continue
+			entry["grid_position"] = {"x": -1, "y": -1}
+			deferred_entries.append(entry)
+
+	deferred_entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var size_a: Vector2i = ItemDatabase.get_inventory_footprint(str(a.get("id", ""))) if ItemDatabase else Vector2i.ONE
+		var size_b: Vector2i = ItemDatabase.get_inventory_footprint(str(b.get("id", ""))) if ItemDatabase else Vector2i.ONE
+		var area_a: int = size_a.x * size_a.y
+		var area_b: int = size_b.x * size_b.y
+		if area_a == area_b:
+			if size_a.y == size_b.y:
+				return str(a.get("id", "")) < str(b.get("id", ""))
+			return size_a.y > size_b.y
+		return area_a > area_b
+	)
+
+	for entry in deferred_entries:
+		var fit_position: Vector2i = _find_first_fit_position(entry, occupancy, width, height, active_cells)
+		if fit_position.x < 0 or fit_position.y < 0:
+			return {"success": false}
+		entry["grid_position"] = {
+			"x": fit_position.x,
+			"y": fit_position.y
+		}
+		_occupy_entry(entry, occupancy, width)
+
+	return {
+		"success": true,
+		"items": items,
+		"width": width,
+		"height": height,
+		"active_cells": active_cells
+	}
+
+func _find_first_fit_position(
+	entry: Dictionary,
+	occupancy: Dictionary,
+	width: int,
+	height: int,
+	active_cells: int
+) -> Vector2i:
+	for y in range(height):
+		for x in range(width):
+			var candidate := Vector2i(x, y)
+			if _can_place_entry_at(entry, candidate, width, height, active_cells, str(entry.get("instance_id", "")), occupancy):
+				return candidate
+	return Vector2i(-1, -1)
+
+func _can_place_entry_at(
+	entry: Dictionary,
+	position: Vector2i,
+	width: int,
+	height: int,
+	active_cells: int,
+	ignore_instance_id: String = "",
+	occupancy_override: Dictionary = {}
+) -> bool:
+	if position.x < 0 or position.y < 0:
+		return false
+	var occupancy: Dictionary = occupancy_override if not occupancy_override.is_empty() else _build_inventory_occupancy(ignore_instance_id)
+	var footprint: Vector2i = ItemDatabase.get_inventory_footprint(str(entry.get("id", ""))) if ItemDatabase else Vector2i.ONE
+	for local_y in range(footprint.y):
+		for local_x in range(footprint.x):
+			var cell := Vector2i(position.x + local_x, position.y + local_y)
+			if not _is_inventory_cell_active(cell, width, height, active_cells):
+				return false
+			var cell_key: int = _inventory_cell_index(cell, width)
+			if occupancy.has(cell_key):
+				var occupied_by: String = str(occupancy.get(cell_key, ""))
+				if ignore_instance_id.is_empty() or occupied_by != ignore_instance_id:
+					return false
+	return true
+
+func _build_inventory_occupancy(ignore_instance_id: String = "") -> Dictionary:
+	var occupancy: Dictionary = {}
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
+		if not str(entry.get("equipped_slot", "")).is_empty():
+			continue
+		if str(entry.get("instance_id", "")) == ignore_instance_id:
+			continue
+		var position := _get_entry_grid_position(entry)
+		if position.x < 0 or position.y < 0:
+			continue
+		_occupy_entry(entry, occupancy, inventory_grid_width)
+	return occupancy
+
+func _occupy_entry(entry: Dictionary, occupancy: Dictionary, width: int) -> void:
+	var position := _get_entry_grid_position(entry)
+	var footprint: Vector2i = ItemDatabase.get_inventory_footprint(str(entry.get("id", ""))) if ItemDatabase else Vector2i.ONE
+	for local_y in range(footprint.y):
+		for local_x in range(footprint.x):
+			var cell := Vector2i(position.x + local_x, position.y + local_y)
+			occupancy[_inventory_cell_index(cell, width)] = str(entry.get("instance_id", ""))
+
+func _is_inventory_cell_active(cell: Vector2i, width: int, height: int, active_cells: int) -> bool:
+	if cell.x < 0 or cell.y < 0 or cell.x >= width or cell.y >= height:
+		return false
+	return _inventory_cell_index(cell, width) < active_cells
+
+func _inventory_cell_index(cell: Vector2i, width: int) -> int:
+	return cell.y * width + cell.x
+
+func _get_entry_grid_position(entry: Dictionary) -> Vector2i:
+	var position: Dictionary = entry.get("grid_position", {})
+	return Vector2i(int(position.get("x", -1)), int(position.get("y", -1)))
+
+func _refresh_inventory_instance_counter() -> void:
+	for entry_variant in inventory_items:
+		var entry: Dictionary = entry_variant
+		_normalize_inventory_entry(entry)
 
 func travel_to(location_id: String):
 	player_position = location_id
+	last_small_map_location = location_id
 	
 	# 通知风险系统
 	if _risk_system:
@@ -435,28 +936,26 @@ func set_money(amount: int):
 
 func get_save_data() -> Dictionary:
 	_sync_from_systems()
+	_player_attributes = _get_player_attributes_container()
 	
 	var save_data = {
 		# 基础状态
-		"player_hp": player_hp,
-		"player_max_hp": player_max_hp,
+		"player_attributes": _player_attributes.duplicate(true),
 		"player_hunger": player_hunger,
 		"player_thirst": player_thirst,
 		"player_stamina": player_stamina,
 		"player_mental": player_mental,
 		"player_position": player_position,
-		"player_defense": player_defense,
+		"pending_location_id": pending_location_id,
+		"pending_entry_spawn_id": pending_entry_spawn_id,
+		"pending_overworld_origin": pending_overworld_origin,
+		"last_small_map_location": last_small_map_location,
 		"player_money": player_money,
 		
 		# 等级与经验
 		"player_level": player_level,
 		"player_xp": player_xp,
 		"player_total_xp": player_total_xp,
-		
-		# 属性
-		"player_strength": player_strength,
-		"player_agility": player_agility,
-		"player_constitution": player_constitution,
 		
 		# 时间
 		"game_day": game_day,
@@ -465,6 +964,10 @@ func get_save_data() -> Dictionary:
 		
 		# 背包
 		"inventory_items": inventory_items,
+		"inventory_max_slots": inventory_max_slots,
+		"inventory_grid_width": inventory_grid_width,
+		"inventory_grid_height": inventory_grid_height,
+		"inventory_instance_counter": _inventory_instance_counter,
 		
 		# 世界状态
 		"world_weather": world_weather,
@@ -479,7 +982,6 @@ func get_save_data() -> Dictionary:
 		"systems": {
 			"time_manager": _time_manager.serialize() if _time_manager else {},
 			"xp_system": _xp_system.serialize() if _xp_system else {},
-			"attr_system": _attr_system.serialize() if _attr_system else {},
 			"skill_system": _skill_system.serialize() if _skill_system else {},
 			"risk_system": _risk_system.serialize() if _risk_system else {}
 		}
@@ -493,25 +995,22 @@ func get_save_data() -> Dictionary:
 
 func load_save_data(data: Dictionary):
 	# 基础状态
-	player_hp = data.get("player_hp", 100)
-	player_max_hp = data.get("player_max_hp", 100)
 	player_hunger = data.get("player_hunger", 100)
 	player_thirst = data.get("player_thirst", 100)
 	player_stamina = data.get("player_stamina", 100)
 	player_mental = data.get("player_mental", 100)
 	player_position = data.get("player_position", "safehouse")
-	player_defense = data.get("player_defense", 0)
+	pending_location_id = data.get("pending_location_id", "")
+	pending_entry_spawn_id = data.get("pending_entry_spawn_id", "")
+	pending_overworld_origin = data.get("pending_overworld_origin", "")
+	last_small_map_location = data.get("last_small_map_location", player_position)
 	player_money = data.get("player_money", 0)
 	
 	# 等级与经验
 	player_level = data.get("player_level", 1)
 	player_xp = data.get("player_xp", 0)
 	player_total_xp = data.get("player_total_xp", 0)
-	
-	# 属性
-	player_strength = data.get("player_strength", 5)
-	player_agility = data.get("player_agility", 5)
-	player_constitution = data.get("player_constitution", 5)
+	_player_attributes = AttributeSystemScript.normalize_attribute_container(data.get("player_attributes", {}))
 	
 	# 时间
 	game_day = data.get("game_day", 1)
@@ -519,11 +1018,13 @@ func load_save_data(data: Dictionary):
 	game_minute = data.get("game_minute", 0)
 	
 	# 背包
-	inventory_items = data.get("inventory_items", [])
-	for item in inventory_items:
-		if item.has("id"):
-			var resolved_id = _resolve_item_id(str(item.id))
-			item.id = resolved_id
+	set_inventory_from_save(
+		data.get("inventory_items", []),
+		int(data.get("inventory_max_slots", inventory_max_slots)),
+		int(data.get("inventory_grid_width", inventory_grid_width)),
+		int(data.get("inventory_grid_height", inventory_grid_height)),
+		int(data.get("inventory_instance_counter", _inventory_instance_counter))
+	)
 	
 	# 世界状态
 	world_weather = data.get("world_weather", "clear")
@@ -541,8 +1042,6 @@ func load_save_data(data: Dictionary):
 		_time_manager.deserialize(systems_data.time_manager)
 	if _xp_system and systems_data.has("xp_system"):
 		_xp_system.deserialize(systems_data.xp_system)
-	if _attr_system and systems_data.has("attr_system"):
-		_attr_system.deserialize(systems_data.attr_system)
 	if _skill_system and systems_data.has("skill_system"):
 		_skill_system.deserialize(systems_data.skill_system)
 	if _risk_system and systems_data.has("risk_system"):
@@ -552,5 +1051,6 @@ func load_save_data(data: Dictionary):
 	
 	# 再次同步以确保一致性
 	_sync_to_systems()
+	refresh_inventory_capacity(true, false)
 	
 	print("[GameState] 存档数据已加载")

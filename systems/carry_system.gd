@@ -49,12 +49,9 @@ const BACKPACKS = {
 const DEFAULT_ITEM_WEIGHT = 0.1
 
 # 基础负重配置
-const BASE_CARRY_WEIGHT = 30.0      # 基础负重 30kg
-const STRENGTH_CARRY_BONUS = 3.0    # 每点力量 +3kg
-
 # 当前状"
 var _current_weight: float = 0.0
-var _max_carry_weight: float = BASE_CARRY_WEIGHT
+var _max_carry_weight: float = 0.0
 var _current_encumbrance: int = EncumbranceLevel.LIGHT
 
 func _ready():
@@ -66,12 +63,8 @@ func _ready():
 
 ## 重新计算最大负"
 func _recalculate_max_weight():
-	var base = BASE_CARRY_WEIGHT
-	var strength_bonus = _get_strength_bonus()
-	var backpack_bonus = _get_backpack_bonus()
-	var equipment_bonus = _get_equipment_bonus()
-	
-	_max_carry_weight = base + strength_bonus + backpack_bonus + equipment_bonus
+	var snapshot: Dictionary = GameState.get_player_attributes_snapshot() if GameState else {}
+	_max_carry_weight = float(snapshot.get("carry_weight", 0.0))
 	
 	# 检查负重等级变"
 	_update_encumbrance_level()
@@ -98,28 +91,6 @@ func _recalculate_current_weight():
 		weight_changed.emit(_current_weight, _max_carry_weight, ratio)
 	
 	_update_encumbrance_level()
-
-## 获取力量加成
-func _get_strength_bonus():
-	if GameState.has_method("get_player_stat"):
-		var strength = GameState.get_player_stat("strength")
-		return strength * STRENGTH_CARRY_BONUS
-	return 0.0
-
-## 获取背包加成
-func _get_backpack_bonus():
-	return 0.0
-
-## 获取装备负重加成
-func _get_equipment_bonus():
-	var bonus = 0.0
-	
-	# 使用统一装备系统
-	var equip_system = GameState.get_equipment_system() if GameState else null
-	if equip_system:
-		bonus = equip_system.calculate_carry_bonus()
-	
-	return bonus
 
 ## 获取装备重量
 func _get_equipment_weight():
@@ -218,6 +189,9 @@ func get_encumbrance_name():
 
 ## 获取物品重量
 func get_item_weight(item_id: String):
+	if ItemDatabase and ItemDatabase.has_method("get_item_weight"):
+		return float(ItemDatabase.get_item_weight(item_id))
+
 	# 优先从统一装备系统查询
 	var equip_system = GameState.get_equipment_system() if GameState else null
 	if equip_system:
@@ -331,7 +305,7 @@ func get_save_data():
 
 func load_save_data(data: Dictionary):
 	_current_weight = data.get("current_weight", 0.0)
-	_max_carry_weight = data.get("max_carry_weight", BASE_CARRY_WEIGHT)
+	_max_carry_weight = data.get("max_carry_weight", 0.0)
 	_update_encumbrance_level()
 	print("[CarrySystem] 负重数据已加")
 

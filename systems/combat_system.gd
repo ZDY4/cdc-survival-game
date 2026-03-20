@@ -224,13 +224,11 @@ func get_enemy_stats() -> Dictionary:
 	return _current_enemy.get("stats", {}).duplicate(true)
 
 func get_player_stats() -> Dictionary:
-	var attack_value: int = 10
-	if SkillModule:
-		attack_value += int(SkillModule.get_total_damage_bonus())
+	var snapshot: Dictionary = _get_effective_actor_stats(get_player_actor())
 	return {
-		"attack": attack_value,
-		"hp": GameState.player_hp,
-		"max_hp": GameState.player_max_hp
+		"attack": int(snapshot.get("attack_power", 0)),
+		"hp": int(snapshot.get("hp", 0)),
+		"max_hp": int(snapshot.get("max_hp", 0))
 	}
 
 func _apply_attack(attacker: Node, target: Node, attack_type: String, target_part: String) -> Dictionary:
@@ -243,7 +241,7 @@ func _apply_attack(attacker: Node, target: Node, attack_type: String, target_par
 	var target_hp: int = 0
 	if target.is_in_group("player"):
 		GameState.damage_player(damage)
-		target_hp = GameState.player_hp
+		target_hp = int(GameState.get_player_attributes_snapshot().get("hp", 0))
 	else:
 		target_hp = _apply_damage_to_actor(target, damage)
 
@@ -266,50 +264,45 @@ func _apply_attack(attacker: Node, target: Node, attack_type: String, target_par
 	return result
 
 func _calculate_damage(attacker: Node, target: Node, attack_type: String, target_part: String) -> int:
-	var base_damage: int = _resolve_base_damage(attacker)
+	var attacker_stats: Dictionary = _get_effective_actor_stats(attacker)
+	var target_stats: Dictionary = _get_effective_actor_stats(target)
+	var base_damage: float = float(attacker_stats.get("attack_power", 1.0))
 	match attack_type:
 		"heavy":
-			base_damage = int(round(base_damage * 1.5))
+			base_damage *= 1.5
 		"quick":
-			base_damage = int(round(base_damage * 0.7))
+			base_damage *= 0.7
 		"headshot":
-			base_damage = int(round(base_damage * 2.0))
+			base_damage *= 2.0
 
 	if target_part == "head":
-		base_damage = int(round(base_damage * 1.2))
+		base_damage *= 1.2
 
-	var defense: int = _resolve_defense(target)
+	var accuracy_factor: float = clampf(
+		float(attacker_stats.get("accuracy", 70.0)) / 100.0 - float(target_stats.get("evasion", 0.0)) * 0.5,
+		0.25,
+		1.5
+	)
+	var speed_delta: float = float(attacker_stats.get("speed", 5.0)) - float(target_stats.get("speed", 5.0))
+	var speed_factor: float = clampf(1.0 + speed_delta * 0.03, 0.7, 1.3)
+	var defense: float = float(target_stats.get("defense", 0.0))
 	var variance: float = randf_range(0.85, 1.15)
-	return max(1, int(round((base_damage - defense) * variance)))
+	var resolved_damage: float = maxf(1.0, (base_damage * accuracy_factor * speed_factor - defense) * variance)
+	return max(1, int(round(resolved_damage)))
 
 func _resolve_base_damage(actor: Node) -> int:
-	if actor.is_in_group("player"):
-		var base_damage: int = 10
-		if SkillModule:
-			base_damage += int(SkillModule.get_total_damage_bonus())
-		return base_damage
-
 	var stats: Dictionary = _get_effective_actor_stats(actor)
-	return int(stats.get("damage", 3))
+	return int(stats.get("attack_power", 1))
 
 func _resolve_defense(actor: Node) -> int:
-	if actor.is_in_group("player"):
-		var player_defense: int = int(GameState.player_defense)
-		if AttributeSystem:
-			player_defense += int(round(AttributeSystem.calculate_damage_reduction() * 10.0))
-		return player_defense
 	var stats: Dictionary = _get_effective_actor_stats(actor)
 	return int(stats.get("defense", 0))
 
 func _resolve_crit_chance(actor: Node) -> float:
-	if actor.is_in_group("player"):
-		return 0.15
 	var stats: Dictionary = _get_effective_actor_stats(actor)
 	return float(stats.get("crit_chance", 0.05))
 
 func _resolve_crit_multiplier(actor: Node) -> float:
-	if actor.is_in_group("player"):
-		return 1.5
 	var stats: Dictionary = _get_effective_actor_stats(actor)
 	return float(stats.get("crit_damage", 1.5))
 
@@ -318,28 +311,35 @@ func _ensure_actor_runtime_state(actor: Node) -> Dictionary:
 		return {}
 	var key: String = str(actor.get_instance_id())
 	if _runtime_actor_states.has(key):
-		return (_runtime_actor_states[key] as Dictionary).duplicate(true)
+		var cached_state: Dictionary = (_runtime_actor_states[key] as Dictionary).duplicate(true)
+		if cached_state.has("attributes"):
+			actor.set_meta("attribute_container", cached_state.get("attributes", {}))
+		return cached_state
 
 	var character_id: String = str(actor.get_meta("character_id", ""))
 	var enemy_data: Dictionary = _build_runtime_enemy_from_character(character_id)
 	if enemy_data.is_empty():
+		var fallback_attributes: Dictionary = AttributeSystem.create_default_container({}, ["base", "combat"], {"hp": 10})
+		fallback_attributes["sets"]["combat"] = {
+			"max_hp": 10,
+			"attack_power": 3,
+			"defense": 0,
+			"speed": 4,
+			"accuracy": 60,
+			"crit_chance": 0.05,
+			"crit_damage": 1.5,
+			"evasion": 0.0
+		}
+		fallback_attributes["resources"]["hp"] = {"current": 10}
 		enemy_data = {
 			"id": character_id,
 			"name": actor.name,
-			"stats": {
-				"hp": 10,
-				"max_hp": 10,
-				"damage": 3,
-				"defense": 0,
-				"speed": 4,
-				"crit_chance": 0.05,
-				"crit_damage": 1.5
-			},
-			"current_hp": 10,
+			"attributes": fallback_attributes,
 			"behavior": "neutral",
 			"loot": [],
 			"xp": 10
 		}
+	actor.set_meta("attribute_container", enemy_data.get("attributes", {}))
 	_runtime_actor_states[key] = enemy_data.duplicate(true)
 	return enemy_data.duplicate(true)
 
@@ -347,22 +347,32 @@ func _apply_damage_to_actor(actor: Node, damage: int) -> int:
 	var runtime_state: Dictionary = _ensure_actor_runtime_state(actor)
 	if runtime_state.is_empty():
 		return 0
-	runtime_state["current_hp"] = maxi(0, int(runtime_state.get("current_hp", 0)) - damage)
+	var attributes: Dictionary = runtime_state.get("attributes", {})
+	var resources: Dictionary = attributes.get("resources", {})
+	var hp_resource: Dictionary = resources.get("hp", {}).duplicate(true)
+	var hp_value: int = int(hp_resource.get("current", 0))
+	hp_resource["current"] = maxi(0, hp_value - damage)
+	resources["hp"] = hp_resource
+	attributes["resources"] = resources
+	runtime_state["attributes"] = attributes
+	actor.set_meta("attribute_container", attributes)
 	_runtime_actor_states[str(actor.get_instance_id())] = runtime_state.duplicate(true)
-	return int(runtime_state.get("current_hp", 0))
+	return int(hp_resource.get("current", 0))
 
 func _check_runtime_actor_death(target: Node, attacker: Node) -> void:
 	if target == null or not is_instance_valid(target):
 		return
 	if target.is_in_group("player"):
-		if GameState.player_hp > 0:
+		if int(GameState.get_player_attributes_snapshot().get("hp", 0)) > 0:
 			return
 		_combat_state = CombatState.DEFEAT
 		combat_ended.emit(false, {})
 		return
 
 	var runtime_state: Dictionary = _ensure_actor_runtime_state(target)
-	if int(runtime_state.get("current_hp", 0)) > 0:
+	var runtime_attributes: Dictionary = runtime_state.get("attributes", {})
+	var hp_value: int = int(((runtime_attributes.get("resources", {}) as Dictionary).get("hp", {}) as Dictionary).get("current", 0))
+	if hp_value > 0:
 		return
 
 	var rewards: Dictionary = _build_victory_rewards(runtime_state)
@@ -451,32 +461,21 @@ func _build_runtime_enemy_from_character(character_id: String) -> Dictionary:
 	var character_data: Variant = DataManager.get_character(character_id)
 	if not (character_data is Dictionary):
 		return {}
-	var character: Dictionary = character_data
+	var character: Dictionary = (character_data as Dictionary).duplicate(true)
 	if character.is_empty():
+		return {}
+	if not character.has("attributes"):
 		return {}
 
 	var combat: Dictionary = character.get("combat", {})
-	var stats_data: Dictionary = combat.get("stats", {})
-	var hp: int = int(stats_data.get("hp", 10))
-	var max_hp: int = int(stats_data.get("max_hp", hp))
-	var normalized_stats: Dictionary = {
-		"hp": hp,
-		"max_hp": max_hp,
-		"damage": int(stats_data.get("damage", 3)),
-		"defense": int(stats_data.get("defense", 0)),
-		"speed": int(stats_data.get("speed", 5)),
-		"accuracy": int(stats_data.get("accuracy", 60)),
-		"crit_chance": float(stats_data.get("crit_chance", 0.05)),
-		"crit_damage": float(stats_data.get("crit_damage", 1.5))
-	}
+	var attributes: Dictionary = AttributeSystem.normalize_attribute_container(character.get("attributes", {}))
 
 	return {
 		"id": str(character.get("id", character_id)),
 		"name": str(character.get("name", "未知敌人")),
 		"description": str(character.get("description", "")),
 		"level": int(character.get("level", 1)),
-		"stats": normalized_stats,
-		"current_hp": hp,
+		"attributes": attributes.duplicate(true),
 		"behavior": str(combat.get("behavior", "passive")),
 		"special_abilities": combat.get("special_abilities", []).duplicate(),
 		"weaknesses": combat.get("weaknesses", []).duplicate(),
@@ -489,40 +488,20 @@ func _build_runtime_enemy_snapshot(target: Node) -> Dictionary:
 	var runtime_state: Dictionary = _ensure_actor_runtime_state(target)
 	var snapshot: Dictionary = runtime_state.duplicate(true)
 	snapshot["stats"] = _get_effective_actor_stats(target)
-	snapshot["current_hp"] = int(runtime_state.get("current_hp", 0))
 	return snapshot
 
 func _get_effective_actor_stats(actor: Node) -> Dictionary:
+	if actor != null and actor.is_in_group("player"):
+		return GameState.get_player_attributes_snapshot()
+
 	var runtime_state: Dictionary = _ensure_actor_runtime_state(actor)
-	var base_stats: Dictionary = runtime_state.get("stats", {})
-	var effective_stats: Dictionary = base_stats.duplicate(true)
-	if effective_stats.is_empty():
-		return effective_stats
-
-	var modifiers: Dictionary = _get_actor_skill_modifiers(actor)
-	if modifiers.is_empty():
-		return effective_stats
-
-	var base_damage: float = float(base_stats.get("damage", 0.0))
-	var damage_bonus: float = float(modifiers.get("damage_bonus", 0.0))
-	var flat_damage_bonus: float = float(modifiers.get("damage", 0.0))
-	effective_stats["damage"] = maxi(
-		0,
-		int(round(base_damage * (1.0 + damage_bonus) + flat_damage_bonus))
-	)
-	effective_stats["defense"] = maxi(
-		0,
-		int(round(
-			float(base_stats.get("defense", 0.0))
-			+ float(modifiers.get("defense", 0.0))
-			+ float(modifiers.get("damage_reduction", 0.0)) * 10.0
-		))
-	)
-	effective_stats["crit_chance"] = float(base_stats.get("crit_chance", 0.05)) + float(modifiers.get("crit_chance", 0.0))
-	effective_stats["crit_damage"] = float(base_stats.get("crit_damage", 1.5)) + float(modifiers.get("crit_damage", 0.0))
-	effective_stats["accuracy"] = float(base_stats.get("accuracy", 60.0)) + float(modifiers.get("accuracy", 0.0))
-	effective_stats["evasion"] = float(base_stats.get("evasion", 0.0)) + float(modifiers.get("evasion", 0.0))
-	return effective_stats
+	var attributes: Dictionary = runtime_state.get("attributes", {})
+	if attributes.is_empty():
+		return {}
+	actor.set_meta("attribute_container", attributes)
+	if AttributeSystem and AttributeSystem.has_method("get_actor_attributes_snapshot"):
+		return AttributeSystem.get_actor_attributes_snapshot(actor)
+	return AttributeSystem.resolve_attribute_snapshot(attributes)
 
 func _get_actor_skill_modifiers(actor: Node) -> Dictionary:
 	var skill_runtime: Node = _get_actor_skill_runtime(actor)
@@ -634,7 +613,7 @@ func _on_turn_system_combat_state_changed(in_combat: bool) -> void:
 	_pending_presentation_actions.clear()
 	_action_in_progress = false
 	if _combat_state == CombatState.ACTIVE:
-		if GameState.player_hp <= 0:
+		if int(GameState.get_player_attributes_snapshot().get("hp", 0)) <= 0:
 			_combat_state = CombatState.DEFEAT
 			combat_ended.emit(false, {})
 		elif _last_combat_victory:

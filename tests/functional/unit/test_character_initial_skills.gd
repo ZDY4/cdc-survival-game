@@ -43,6 +43,8 @@ static func _test_character_data_round_trip() -> void:
 
 	var serialized: Dictionary = data.serialize()
 	assert(serialized.has("skills"), "CharacterData serialization should include skills block")
+	assert(serialized.has("attributes"), "CharacterData serialization should include unified attributes block")
+	assert(serialized["attributes"].get("sets", {}).has("base"), "CharacterData should preserve the required base attribute set")
 	assert(
 		serialized["skills"]["initial_tree_ids"] == ["combat", "survival"],
 		"CharacterData should preserve selected initial tree ids"
@@ -72,6 +74,8 @@ static func _test_character_editor_initial_skills() -> void:
 	editor._update_character_list()
 	editor._select_character(record["id"])
 	await tree.process_frame
+	assert(editor._attribute_set_checkbox_map.has("base"), "Character editor should build definition-driven attribute set toggles")
+	assert(editor._attribute_field_controls.has("combat::attack_power"), "Character editor should render combat attributes from definitions")
 
 	editor._on_initial_tree_toggled(true, "combat")
 	await tree.process_frame
@@ -140,25 +144,37 @@ static func _test_character_skill_runtime_and_ai() -> void:
 	CombatSystem._runtime_actor_states[str(actor.get_instance_id())] = {
 		"id": "runtime_skill_test",
 		"name": "Runtime Skill Test",
-		"stats": {
-			"hp": 30,
-			"max_hp": 30,
-			"damage": 20,
-			"defense": 2,
-			"speed": 5,
-			"accuracy": 70,
-			"crit_chance": 0.1,
-			"crit_damage": 1.5,
-			"evasion": 0.05
+		"attributes": {
+			"sets": {
+				"base": {
+					"strength": 5,
+					"agility": 5,
+					"constitution": 5
+				},
+				"combat": {
+					"max_hp": 30,
+					"attack_power": 20,
+					"defense": 2,
+					"speed": 5,
+					"accuracy": 70,
+					"crit_chance": 0.1,
+					"crit_damage": 1.5,
+					"evasion": 0.05
+				}
+			},
+			"resources": {
+				"hp": {
+					"current": 30
+				}
+			}
 		},
-		"current_hp": 30,
 		"behavior": "aggressive",
 		"loot": [],
 		"xp": 10
 	}
 
 	var passive_stats: Dictionary = CombatSystem._get_effective_actor_stats(actor)
-	assert(int(passive_stats.get("damage", 0)) > 20, "Passive combat bonuses should affect actor combat stats")
+	assert(int(passive_stats.get("attack_power", 0)) > 20, "Passive combat bonuses should affect actor combat stats")
 
 	var player := Node3D.new()
 	player.name = "RuntimeSkillTarget"
@@ -178,7 +194,7 @@ static func _test_character_skill_runtime_and_ai() -> void:
 
 	var active_stats: Dictionary = CombatSystem._get_effective_actor_stats(actor)
 	assert(
-		int(active_stats.get("damage", 0)) > int(passive_stats.get("damage", 0)),
+		int(active_stats.get("attack_power", 0)) > int(passive_stats.get("attack_power", 0)),
 		"Active skill bonuses should further increase runtime combat stats"
 	)
 

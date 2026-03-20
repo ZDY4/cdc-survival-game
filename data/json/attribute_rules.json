@@ -1,0 +1,96 @@
+{
+	"rules": [
+		{
+			"type": "flat_add",
+			"source": "constitution",
+			"target": "max_hp",
+			"scale": 10.0,
+			"source_offset": -5.0
+		},
+		{
+			"type": "flat_add",
+			"source": "constitution",
+			"target": "damage_reduction",
+			"scale": 0.01,
+			"source_offset": -5.0
+		},
+		{
+			"type": "flat_add",
+			"source": "constitution",
+			"target": "disease_resistance",
+			"scale": 0.05,
+			"source_offset": -5.0
+		},
+		{
+			"type": "flat_add",
+			"source": "strength",
+			"target": "attack_power",
+			"scale": 1.0,
+			"source_offset": -5.0
+		},
+		{
+			"type": "flat_add",
+			"source": "strength",
+			"target": "carry_weight",
+			"scale": 10.0,
+			"source_offset": -5.0
+		},
+		{
+			"type": "flat_add",
+			"source": "agility",
+			"target": "speed",
+			"scale": 0.5,
+			"source_offset": -5.0
+		},
+		{
+			"type": "flat_add",
+			"source": "agility",
+			"target": "crit_chance",
+			"scale": 0.01,
+			"source_offset": -5.0
+		},
+		{
+			"type": "flat_add",
+			"source": "agility",
+			"target": "evasion",
+			"scale": 0.02,
+			"source_offset": -5.0
+		},
+		{
+			"type": "resource_link",
+			"resource": "hp",
+			"max_attribute": "max_hp",
+			"preserve_ratio": true
+		},
+		{
+			"type": "clamp",
+			"target": "accuracy",
+			"min": 0.0,
+			"max": 100.0
+		},
+		{
+			"type": "clamp",
+			"target": "crit_chance",
+			"min": 0.0,
+			"max": 1.0
+		},
+		{
+			"type": "clamp",
+			"target": "crit_damage",
+			"min": 1.0,
+			"max": 5.0
+		},
+		{
+			"type": "clamp",
+			"target": "evasion",
+			"min": 0.0,
+			"max": 0.95
+		},
+		{
+			"type": "clamp",
+			"target": "damage_reduction",
+			"min": 0.0,
+			"max": 0.95
+		}
+	]
+}

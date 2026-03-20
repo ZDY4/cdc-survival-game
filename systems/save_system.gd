@@ -141,30 +141,10 @@ func save_game():
 		return false
 	var equip_system = gs.get_equipment_system()
 	var equip_data: Dictionary = equip_system.get_save_data() if equip_system else gs.get_pending_equipment_save_data()
-	
+
 	var save_data = {
 		"game_state": gs.get_save_data() if gs.has_method("get_save_data") else {},
-		"player": {
-			"hp": gs.player_hp,
-			"max_hp": gs.player_max_hp,
-			"hunger": gs.player_hunger,
-			"thirst": gs.player_thirst,
-			"stamina": gs.player_stamina,
-			"mental": gs.player_mental,
-			"position": gs.player_position
-		},
-		"inventory": {
-			"items": gs.inventory_items.duplicate(),
-			"max_slots": gs.inventory_max_slots
-		},
 		"equipment": equip_data,
-		"world": {
-			"time": gs.world_time,
-			"day": gs.world_day,
-			"weather": gs.world_weather,
-			"unlocked_locations": gs.world_unlocked_locations.duplicate(),
-			"fog_of_war_by_map": gs.fog_of_war_by_map.duplicate(true)
-		},
 		"timestamp": Time.get_unix_time_from_system()
 	}
 	
@@ -208,29 +188,15 @@ func load_game(path: String = ""):
 	if data.is_empty():
 		return false
 
-	if data.has("game_state") and gs.has_method("load_save_data"):
-		var full_state: Variant = data.get("game_state", {})
-		if full_state is Dictionary:
-			gs.load_save_data(full_state)
-
-	# 兼容旧存档结构
-	if not data.has("game_state") and data.has("player"):
-		var p = data.player
-		gs.player_hp = p.get("hp", 100)
-		gs.player_max_hp = p.get("max_hp", 100)
-		gs.player_hunger = p.get("hunger", 100)
-		gs.player_thirst = p.get("thirst", 100)
-		gs.player_stamina = p.get("stamina", 100)
-		gs.player_mental = p.get("mental", 100)
-		gs.player_position = p.get("position", "safehouse")
-	
-	if not data.has("game_state") and data.has("inventory"):
-		var inv = data.inventory
-		gs.inventory_items.clear()
-		var loaded_items = inv.get("items", [])
-		for item in loaded_items:
-			gs.inventory_items.append(item)
-		gs.inventory_max_slots = inv.get("max_slots", 20)
+	var full_state: Variant = data.get("game_state", {})
+	if not (full_state is Dictionary):
+		push_error("[SaveSystem] 不支持旧版存档：缺少 game_state")
+		return false
+	if not (full_state as Dictionary).has("player_attributes"):
+		push_error("[SaveSystem] 不支持旧版存档：缺少 game_state.player_attributes")
+		return false
+	if gs.has_method("load_save_data"):
+		gs.load_save_data(full_state)
 
 	# 恢复装备
 	if data.has("equipment"):
@@ -239,17 +205,6 @@ func load_game(path: String = ""):
 			equip_system.load_save_data(data.equipment)
 		else:
 			gs.set_pending_equipment_save_data(data.equipment)
-	
-	if not data.has("game_state") and data.has("world"):
-		var w = data.world
-		gs.world_time = w.get("time", 8)
-		gs.world_day = w.get("day", 1)
-		gs.world_weather = w.get("weather", "clear")
-		gs.world_unlocked_locations.clear()
-		var loaded_locations = w.get("unlocked_locations", ["safehouse"])
-		for location in loaded_locations:
-			gs.world_unlocked_locations.append(location)
-		gs.fog_of_war_by_map = w.get("fog_of_war_by_map", {})
 	
 	EventBus.emit(EventBus.EventType.GAME_LOADED, {})
 	return true
@@ -306,13 +261,17 @@ func get_save_info() -> Dictionary:
 		"timestamp": data.get("timestamp", 0)
 	}
 	
-	if data.has("player"):
-		info["hp"] = data.player.get("hp", 100)
-		info["day"] = data.player.get("position", "safehouse")
-	
-	if data.has("world"):
-		info["day"] = data.world.get("day", 1)
-		info["time"] = data.world.get("time", 8)
+	if data.has("game_state"):
+		var state: Dictionary = data.get("game_state", {})
+		var player_attributes: Dictionary = state.get("player_attributes", {})
+		var snapshot: Dictionary = AttributeSystem.resolve_attribute_snapshot(player_attributes)
+		info["hp"] = int(snapshot.get("hp", 100))
+		info["location"] = state.get("player_position", "safehouse")
+
+	if data.has("game_state"):
+		var full_state: Dictionary = data.get("game_state", {})
+		info["day"] = full_state.get("game_day", 1)
+		info["time"] = full_state.get("game_hour", 8)
 	
 	return info
 

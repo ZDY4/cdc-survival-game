@@ -43,8 +43,9 @@ func show_combat(enemy_data: Dictionary = {}):
 		_enemy_hp_bar.max_value = enemy_data.get("hp", 50)
 		_enemy_hp_bar.value = enemy_data.get("hp", 50)
 	if _player_hp_bar:
-		_player_hp_bar.max_value = GameState.player_max_hp
-		_player_hp_bar.value = GameState.player_hp
+		var player_snapshot: Dictionary = GameState.get_player_attributes_snapshot()
+		_player_hp_bar.max_value = float(player_snapshot.get("max_hp", 100))
+		_player_hp_bar.value = float(player_snapshot.get("hp", 100))
 	if _combat_log:
 		_combat_log.text = "Combat started! You encountered " + enemy_data.get("name", "Enemy") + "!"
 

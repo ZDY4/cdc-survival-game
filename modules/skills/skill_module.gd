@@ -1292,9 +1292,11 @@ func _deserialize_activation_state(value: Variant) -> void:
 
 func _get_attribute_value(attribute_name: String) -> int:
 	var attribute_system: Node = get_node_or_null("/root/AttributeSystem")
-	if attribute_system == null:
+	if attribute_system == null or not attribute_system.has_method("get_actor_attribute"):
 		return 0
-	var value: Variant = attribute_system.get(attribute_name)
+	var value: Variant = attribute_system.get_actor_attribute("player", attribute_name)
 	if value is int:
 		return value
+	if value is float:
+		return int(round(value))
 	return 0

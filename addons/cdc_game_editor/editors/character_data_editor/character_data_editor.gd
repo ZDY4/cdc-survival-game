@@ -1,6 +1,7 @@
 @tool
 extends Control
 ## CharacterDataEditor - Unified editor for character_data records.
+const AttributeSystemScript = preload("res://systems/attribute_system.gd")
 
 signal character_saved(character_id: String)
 signal character_loaded(character_id: String)
@@ -28,11 +29,19 @@ var _skill_tree_checkbox_map: Dictionary = {}
 var _skill_checkbox_map: Dictionary = {}
 var _initial_skill_tree_container: VBoxContainer
 var _initial_skill_groups_container: VBoxContainer
+var _attribute_sets_container: VBoxContainer
+var _attribute_editor_container: VBoxContainer
+var _attribute_preview_label: RichTextLabel
+var _attribute_set_checkbox_map: Dictionary = {}
+var _attribute_field_controls: Dictionary = {}
+var _resource_field_controls: Dictionary = {}
+var _attribute_definitions: Dictionary = {}
 var _ai_panel: Window = null
 var _ai_provider_override: Variant = null
 
 
 func _ready() -> void:
+	_attribute_definitions = AttributeSystemScript.load_definition_bundle()
 	_load_skill_reference_data()
 	_setup_ui()
 	_load_characters_from_files()
@@ -123,9 +132,30 @@ func _setup_ui() -> void:
 	_add_string_field(form, "social.dialog_id", "对话ID")
 	_add_string_field(form, "combat.behavior", "行为")
 	_add_number_field(form, "combat.xp", "经验奖励", 0, 9999, 1)
-	_add_number_field(form, "combat.stats.hp", "HP", 1, 9999, 1)
-	_add_number_field(form, "combat.stats.damage", "伤害", 0, 999, 1)
-	_add_number_field(form, "combat.stats.defense", "防御", 0, 999, 1)
+
+	form.add_child(HSeparator.new())
+	var attribute_title := Label.new()
+	attribute_title.text = "属性配置"
+	attribute_title.add_theme_font_size_override("font_size", 16)
+	form.add_child(attribute_title)
+
+	_attribute_sets_container = VBoxContainer.new()
+	_attribute_sets_container.add_theme_constant_override("separation", 4)
+	form.add_child(_attribute_sets_container)
+
+	_attribute_editor_container = VBoxContainer.new()
+	_attribute_editor_container.add_theme_constant_override("separation", 10)
+	form.add_child(_attribute_editor_container)
+
+	var preview_title := Label.new()
+	preview_title.text = "最终属性预览"
+	form.add_child(preview_title)
+
+	_attribute_preview_label = RichTextLabel.new()
+	_attribute_preview_label.fit_content = true
+	_attribute_preview_label.scroll_active = false
+	_attribute_preview_label.custom_minimum_size = Vector2(0, 140)
+	form.add_child(_attribute_preview_label)
 
 	form.add_child(HSeparator.new())
 	var tree_title := Label.new()
@@ -153,6 +183,7 @@ func _setup_ui() -> void:
 	_status_bar.text = "就绪"
 	add_child(_status_bar)
 
+	_rebuild_attribute_set_selector({})
 	_rebuild_skill_tree_selector()
 
 
@@ -262,6 +293,7 @@ func _load_characters_from_files() -> void:
 func _normalize_character_record(record: Dictionary) -> Dictionary:
 	var normalized: Dictionary = record.duplicate(true)
 	normalized["skills"] = _normalize_skills_block(normalized.get("skills", {}))
+	normalized["attributes"] = _normalize_attributes_block(normalized.get("attributes", {}))
 	return normalized
 
 
@@ -294,6 +326,198 @@ func _normalize_skills_block(value: Variant) -> Dictionary:
 	result["initial_skills_by_tree"] = initial_skills_by_tree
 	_sanitize_skills_block(result)
 	return result
+
+
+func _normalize_attributes_block(value: Variant) -> Dictionary:
+	return AttributeSystemScript.normalize_attribute_container(value, _attribute_definitions)
+
+
+func _rebuild_attribute_set_selector(record: Dictionary) -> void:
+	_clear_container(_attribute_sets_container)
+	_attribute_set_checkbox_map.clear()
+	var attributes: Dictionary = _normalize_attributes_block(record.get("attributes", {}))
+	var selected_sets: Dictionary = attributes.get("sets", {})
+	var set_definitions: Dictionary = AttributeSystemScript.get_attribute_set_definitions(_attribute_definitions)
+	var set_ids: Array = set_definitions.keys()
+	set_ids.sort()
+	for set_id_variant in set_ids:
+		var set_id: String = str(set_id_variant)
+		var set_def: Dictionary = set_definitions.get(set_id, {})
+		var checkbox := CheckBox.new()
+		checkbox.text = str(set_def.get("display_name", set_id))
+		checkbox.button_pressed = selected_sets.has(set_id)
+		checkbox.disabled = bool(set_def.get("required", false))
+		checkbox.toggled.connect(_on_attribute_set_toggled.bind(set_id))
+		_attribute_sets_container.add_child(checkbox)
+		_attribute_set_checkbox_map[set_id] = checkbox
+
+
+func _rebuild_attribute_editor(record: Dictionary) -> void:
+	_clear_container(_attribute_editor_container)
+	_attribute_field_controls.clear()
+	_resource_field_controls.clear()
+	var attributes: Dictionary = _normalize_attributes_block(record.get("attributes", {}))
+	var set_definitions: Dictionary = AttributeSystemScript.get_attribute_set_definitions(_attribute_definitions)
+	var catalog: Dictionary = AttributeSystemScript.get_attribute_catalog(_attribute_definitions)
+	var set_ids: Array = attributes.get("sets", {}).keys()
+	set_ids.sort()
+	for set_id_variant in set_ids:
+		var set_id: String = str(set_id_variant)
+		var set_def: Dictionary = set_definitions.get(set_id, {})
+		var panel := PanelContainer.new()
+		_attribute_editor_container.add_child(panel)
+		var group := VBoxContainer.new()
+		group.add_theme_constant_override("separation", 6)
+		panel.add_child(group)
+
+		var header := Label.new()
+		header.text = str(set_def.get("display_name", set_id))
+		header.add_theme_font_size_override("font_size", 15)
+		group.add_child(header)
+
+		for attribute_key_variant in set_def.get("attributes", []):
+			var attribute_key: String = str(attribute_key_variant)
+			var catalog_entry: Dictionary = catalog.get(attribute_key, {})
+			if catalog_entry.is_empty():
+				continue
+			var current_value: Variant = (attributes.get("sets", {}) as Dictionary).get(set_id, {}).get(attribute_key, catalog_entry.get("default", 0))
+			var row := HBoxContainer.new()
+			group.add_child(row)
+			var label := Label.new()
+			label.text = str(catalog_entry.get("display_name", attribute_key))
+			label.custom_minimum_size = Vector2(140, 0)
+			row.add_child(label)
+
+			var field := SpinBox.new()
+			field.size_flags_horizontal = SIZE_EXPAND_FILL
+			field.min_value = float(catalog_entry.get("min", 0.0))
+			field.max_value = float(catalog_entry.get("max", 9999.0))
+			field.step = 1.0 if str(catalog_entry.get("type", "float")) == "int" else 0.01
+			field.value = float(current_value)
+			field.value_changed.connect(_on_attribute_value_changed.bind(set_id, attribute_key))
+			row.add_child(field)
+			_attribute_field_controls["%s::%s" % [set_id, attribute_key]] = field
+
+	var resources_panel := PanelContainer.new()
+	_attribute_editor_container.add_child(resources_panel)
+	var resources_group := VBoxContainer.new()
+	resources_group.add_theme_constant_override("separation", 6)
+	resources_panel.add_child(resources_group)
+	var resources_header := Label.new()
+	resources_header.text = "资源初始值"
+	resources_header.add_theme_font_size_override("font_size", 15)
+	resources_group.add_child(resources_header)
+
+	for resource_key_variant in attributes.get("resources", {}).keys():
+		var resource_key: String = str(resource_key_variant)
+		var catalog_entry: Dictionary = catalog.get(resource_key, {})
+		if catalog_entry.is_empty():
+			continue
+		var row := HBoxContainer.new()
+		resources_group.add_child(row)
+		var label := Label.new()
+		label.text = str(catalog_entry.get("display_name", resource_key))
+		label.custom_minimum_size = Vector2(140, 0)
+		row.add_child(label)
+
+		var field := SpinBox.new()
+		field.size_flags_horizontal = SIZE_EXPAND_FILL
+		field.min_value = float(catalog_entry.get("min", 0.0))
+		field.max_value = float(catalog_entry.get("max", 9999.0))
+		field.step = 1.0 if str(catalog_entry.get("type", "float")) == "int" else 0.01
+		field.value = float((attributes.get("resources", {}) as Dictionary).get(resource_key, {}).get("current", catalog_entry.get("default", 0)))
+		field.value_changed.connect(_on_resource_value_changed.bind(resource_key))
+		row.add_child(field)
+		_resource_field_controls[resource_key] = field
+
+	_refresh_attribute_preview(record)
+
+
+func _refresh_attribute_preview(record: Dictionary) -> void:
+	if _attribute_preview_label == null:
+		return
+	var attributes: Dictionary = _normalize_attributes_block(record.get("attributes", {}))
+	var snapshot: Dictionary = AttributeSystemScript.resolve_attribute_snapshot(attributes, _attribute_definitions)
+	var lines: PackedStringArray = []
+	for key_variant in snapshot.keys():
+		var key: String = str(key_variant)
+		if key == "resources":
+			continue
+		var catalog_entry: Dictionary = AttributeSystemScript.get_attribute_catalog(_attribute_definitions).get(key, {})
+		if catalog_entry.is_empty() or not bool(catalog_entry.get("visible", true)):
+			continue
+		lines.append("%s: %s" % [str(catalog_entry.get("display_name", key)), str(snapshot.get(key))])
+	for resource_key_variant in snapshot.get("resources", {}).keys():
+		var resource_key: String = str(resource_key_variant)
+		var resource_state: Dictionary = snapshot.get("resources", {}).get(resource_key, {})
+		var catalog_entry: Dictionary = AttributeSystemScript.get_attribute_catalog(_attribute_definitions).get(resource_key, {})
+		lines.append("%s: %s / %s" % [
+			str(catalog_entry.get("display_name", resource_key)),
+			str(resource_state.get("current", 0)),
+			str(resource_state.get("max", 0))
+		])
+	_attribute_preview_label.text = "\n".join(lines)
+
+
+func _on_attribute_set_toggled(enabled: bool, set_id: String) -> void:
+	if _is_form_syncing:
+		return
+	var record: Dictionary = _get_current_record()
+	if record.is_empty():
+		return
+	var attributes: Dictionary = _normalize_attributes_block(record.get("attributes", {}))
+	var set_defs: Dictionary = AttributeSystemScript.get_attribute_set_definitions(_attribute_definitions)
+	var catalog: Dictionary = AttributeSystemScript.get_attribute_catalog(_attribute_definitions)
+	if enabled:
+		var authored_set: Dictionary = {}
+		for attribute_key_variant in set_defs.get(set_id, {}).get("attributes", []):
+			var attribute_key: String = str(attribute_key_variant)
+			var entry: Dictionary = catalog.get(attribute_key, {})
+			if entry.is_empty():
+				continue
+			authored_set[attribute_key] = entry.get("default", 0)
+		attributes["sets"][set_id] = authored_set
+	else:
+		(attributes.get("sets", {}) as Dictionary).erase(set_id)
+	record["attributes"] = attributes
+	characters[current_character_id] = record
+	_dirty = true
+	_rebuild_attribute_set_selector(record)
+	_rebuild_attribute_editor(record)
+
+
+func _on_attribute_value_changed(value: float, set_id: String, attribute_key: String) -> void:
+	if _is_form_syncing:
+		return
+	var record: Dictionary = _get_current_record()
+	if record.is_empty():
+		return
+	var attributes: Dictionary = _normalize_attributes_block(record.get("attributes", {}))
+	if not attributes["sets"].has(set_id):
+		attributes["sets"][set_id] = {}
+	var catalog_entry: Dictionary = AttributeSystemScript.get_attribute_catalog(_attribute_definitions).get(attribute_key, {})
+	var final_value: Variant = int(round(value)) if str(catalog_entry.get("type", "float")) == "int" else value
+	attributes["sets"][set_id][attribute_key] = final_value
+	record["attributes"] = attributes
+	characters[current_character_id] = record
+	_dirty = true
+	_refresh_attribute_preview(record)
+
+
+func _on_resource_value_changed(value: float, resource_key: String) -> void:
+	if _is_form_syncing:
+		return
+	var record: Dictionary = _get_current_record()
+	if record.is_empty():
+		return
+	var attributes: Dictionary = _normalize_attributes_block(record.get("attributes", {}))
+	var catalog_entry: Dictionary = AttributeSystemScript.get_attribute_catalog(_attribute_definitions).get(resource_key, {})
+	var final_value: Variant = int(round(value)) if str(catalog_entry.get("type", "float")) == "int" else value
+	attributes["resources"][resource_key] = {"current": final_value}
+	record["attributes"] = attributes
+	characters[current_character_id] = record
+	_dirty = true
+	_refresh_attribute_preview(record)
 
 
 func _update_character_list(filter: String = "") -> void:
@@ -334,6 +558,8 @@ func _refresh_fields(record: Dictionary) -> void:
 			(field as TextEdit).text = str(value)
 		elif field is SpinBox:
 			(field as SpinBox).value = float(value)
+	_rebuild_attribute_set_selector(record)
+	_rebuild_attribute_editor(record)
 	_rebuild_skill_tree_selector()
 	_refresh_skill_sections(record)
 	_is_form_syncing = false
@@ -456,11 +682,24 @@ func _on_new_character() -> void:
 
 
 func _create_default_character(character_id: String) -> Dictionary:
+	var attributes := AttributeSystemScript.create_default_container(_attribute_definitions, ["base", "combat"], {"hp": 50})
+	attributes["sets"]["combat"] = {
+		"max_hp": 50,
+		"attack_power": 5,
+		"defense": 2,
+		"speed": 5,
+		"accuracy": 70,
+		"crit_chance": 0.05,
+		"crit_damage": 1.5,
+		"evasion": 0.05
+	}
+	attributes["resources"]["hp"] = {"current": 50}
 	return {
 		"id": character_id,
 		"name": "新角色",
 		"description": "",
 		"level": 1,
+		"attributes": attributes,
 		"identity": {"camp_id": "neutral"},
 		"visual": {
 			"portrait_path": "",
@@ -473,17 +712,6 @@ func _create_default_character(character_id: String) -> Dictionary:
 			}
 		},
 		"combat": {
-			"stats": {
-				"hp": 50,
-				"max_hp": 50,
-				"damage": 5,
-				"defense": 2,
-				"speed": 5,
-				"accuracy": 70,
-				"crit_chance": 0.05,
-				"crit_damage": 1.5,
-				"evasion": 0.05
-			},
 			"ai": {
 				"aggro_range": 6.0,
 				"attack_range": 1.3,
@@ -869,10 +1097,12 @@ func _open_ai_panel() -> void:
 
 func _get_character_validation_errors_for_record(character_id: String, record: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
+	errors.append_array(_validate_character_attributes(character_id, record))
 	var skills_block: Dictionary = record.get("skills", {})
 	var tree_ids: Array[String] = _normalize_string_array(skills_block.get("initial_tree_ids", []))
 	var skills_by_tree: Dictionary = skills_block.get("initial_skills_by_tree", {})
 	var selected_lookup: Dictionary = _build_global_selected_skill_lookup(skills_block)
+	var snapshot: Dictionary = AttributeSystemScript.resolve_attribute_snapshot(record.get("attributes", {}), _attribute_definitions)
 
 	for tree_id in tree_ids:
 		if not _skill_trees.has(tree_id):
@@ -895,6 +1125,28 @@ func _get_character_validation_errors_for_record(character_id: String, record: D
 					errors.append(
 						"character[%s]: 技能 %s 缺少前置技能 %s" % [character_id, skill_id, prerequisite_id]
 					)
+			for attribute_name_variant in skill_definition.get("attribute_requirements", {}).keys():
+				var attribute_name: String = str(attribute_name_variant)
+				var required_value: float = float(skill_definition.get("attribute_requirements", {}).get(attribute_name_variant, 0))
+				var current_value: float = float(snapshot.get(attribute_name, 0.0))
+				if current_value < required_value:
+					errors.append(
+						"character[%s]: 技能 %s 的属性门槛未满足 %s >= %s" % [
+							character_id,
+							skill_id,
+							attribute_name,
+							str(required_value)
+						]
+					)
+	return errors
+
+
+func _validate_character_attributes(character_id: String, record: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var normalized_attributes: Dictionary = _normalize_attributes_block(record.get("attributes", {}))
+	record["attributes"] = normalized_attributes
+	for error in AttributeSystemScript.validate_attribute_container(normalized_attributes, _attribute_definitions):
+		errors.append("character[%s]: %s" % [character_id, error])
 	return errors
 
 

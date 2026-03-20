@@ -2,23 +2,12 @@ extends RefCounted
 ## CharacterData - Unified character data model for NPCs and enemies.
 
 class_name CharacterData
+const AttributeSystemScript = preload("res://systems/attribute_system.gd")
 
 const DEFAULT_PLACEHOLDER := {
 	"head_color": "#f2d6b2",
 	"body_color": "#5d90e0",
 	"leg_color": "#3c5c90"
-}
-
-const DEFAULT_COMBAT_STATS := {
-	"hp": 50,
-	"max_hp": 50,
-	"damage": 5,
-	"defense": 2,
-	"speed": 5,
-	"accuracy": 70,
-	"crit_chance": 0.05,
-	"crit_damage": 1.5,
-	"evasion": 0.05
 }
 
 const DEFAULT_COMBAT_AI := {
@@ -46,6 +35,7 @@ var id: String = ""
 var name: String = ""
 var description: String = ""
 var level: int = 1
+var attributes: Dictionary = AttributeSystemScript.create_default_container({}, ["base", "combat"], {"hp": 50})
 
 var identity: Dictionary = {"camp_id": "neutral"}
 var visual: Dictionary = {
@@ -55,7 +45,6 @@ var visual: Dictionary = {
 	"placeholder": DEFAULT_PLACEHOLDER.duplicate(true)
 }
 var combat: Dictionary = {
-	"stats": DEFAULT_COMBAT_STATS.duplicate(true),
 	"ai": DEFAULT_COMBAT_AI.duplicate(true),
 	"behavior": "neutral",
 	"loot": [],
@@ -74,6 +63,7 @@ func serialize() -> Dictionary:
 		"name": name,
 		"description": description,
 		"level": level,
+		"attributes": attributes.duplicate(true),
 		"identity": identity.duplicate(true),
 		"visual": visual.duplicate(true),
 		"combat": combat.duplicate(true),
@@ -86,6 +76,9 @@ func deserialize(data: Dictionary) -> void:
 	name = str(data.get("name", ""))
 	description = str(data.get("description", ""))
 	level = int(data.get("level", 1))
+	attributes = AttributeSystemScript.normalize_attribute_container(
+		data.get("attributes", AttributeSystemScript.create_default_container({}, ["base", "combat"], {"hp": 50}))
+	).duplicate(true)
 
 	var identity_data: Dictionary = data.get("identity", {})
 	identity = {"camp_id": str(identity_data.get("camp_id", "neutral"))}
@@ -106,7 +99,6 @@ func deserialize(data: Dictionary) -> void:
 	visual["placeholder"] = placeholder_copy
 
 	combat = {
-		"stats": DEFAULT_COMBAT_STATS.duplicate(true),
 		"ai": DEFAULT_COMBAT_AI.duplicate(true),
 		"behavior": "neutral",
 		"loot": [],
@@ -116,9 +108,6 @@ func deserialize(data: Dictionary) -> void:
 	combat["behavior"] = str(combat_data.get("behavior", "neutral"))
 	combat["xp"] = int(combat_data.get("xp", 10))
 	combat["loot"] = combat_data.get("loot", []).duplicate(true)
-	var stats_copy: Dictionary = DEFAULT_COMBAT_STATS.duplicate(true)
-	stats_copy.merge(combat_data.get("stats", {}), true)
-	combat["stats"] = stats_copy
 	var ai_copy: Dictionary = DEFAULT_COMBAT_AI.duplicate(true)
 	ai_copy.merge(combat_data.get("ai", {}), true)
 	combat["ai"] = ai_copy

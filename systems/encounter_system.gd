@@ -71,9 +71,11 @@ func _get_time_period() -> String:
 
 func _get_player_state() -> Dictionary:
 	var survival = get_node_or_null("/root/SurvivalStatusSystem")
+	var player_snapshot: Dictionary = GameState.get_player_attributes_snapshot()
+	var max_hp: float = maxf(1.0, float(player_snapshot.get("max_hp", 1.0)))
 	
 	return {
-		"hp_percent": float(GameState.player_hp) / GameState.player_max_hp,
+		"hp_percent": float(player_snapshot.get("hp", max_hp)) / max_hp,
 		"hunger": GameState.player_hunger,
 		"stamina": GameState.player_stamina,
 		"fatigue": survival.fatigue if survival else 0,
@@ -160,13 +162,13 @@ func perform_skill_check(check_type: String, difficulty: int = 10) -> Dictionary
 	match check_type:
 		"strength", "athletics":
 			if attr_system:
-				attribute_bonus = (attr_system.strength - 5) * 0.05
+				attribute_bonus = (float(attr_system.get_actor_attribute("player", "strength")) - 5.0) * 0.05
 			if skill_system and skill_system.has_method("get_skill_level"):
 				skill_bonus = skill_system.get_skill_level("athletics") * 0.1
 		
 		"agility", "stealth", "dodge":
 			if attr_system:
-				attribute_bonus = (attr_system.agility - 5) * 0.05
+				attribute_bonus = (float(attr_system.get_actor_attribute("player", "agility")) - 5.0) * 0.05
 			if skill_system:
 				skill_bonus = skill_system.get_skill_level("stealth") * 0.1
 		
@@ -188,7 +190,9 @@ func perform_skill_check(check_type: String, difficulty: int = 10) -> Dictionary
 		
 		"combat", "melee", "ranged":
 			if attr_system:
-				attribute_bonus = (attr_system.strength + attr_system.agility - 10) * 0.025
+				var strength_value: float = float(attr_system.get_actor_attribute("player", "strength"))
+				var agility_value: float = float(attr_system.get_actor_attribute("player", "agility"))
+				attribute_bonus = (strength_value + agility_value - 10.0) * 0.025
 			if skill_system:
 				skill_bonus = skill_system.get_skill_level("combat") * 0.1
 		

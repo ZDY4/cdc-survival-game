@@ -393,17 +393,30 @@ static func _test_combat_waits_for_blocking_presentation() -> void:
 	CombatSystem._runtime_actor_states[str(hostile.get_instance_id())] = {
 		"id": "presentation_hostile",
 		"name": "Presentation Hostile",
-		"stats": {
-			"hp": 50,
-			"max_hp": 50,
-			"damage": 1,
-			"defense": 0,
-			"speed": 1,
-			"accuracy": 60,
-			"crit_chance": 0.0,
-			"crit_damage": 1.5
+		"attributes": {
+			"sets": {
+				"base": {
+					"strength": 5,
+					"agility": 5,
+					"constitution": 5
+				},
+				"combat": {
+					"max_hp": 50,
+					"attack_power": 1,
+					"defense": 0,
+					"speed": 1,
+					"accuracy": 60,
+					"crit_chance": 0.0,
+					"crit_damage": 1.5,
+					"evasion": 0.0
+				}
+			},
+			"resources": {
+				"hp": {
+					"current": 50
+				}
+			}
 		},
-		"current_hp": 50,
 		"behavior": "hostile",
 		"loot": [],
 		"xp": 0

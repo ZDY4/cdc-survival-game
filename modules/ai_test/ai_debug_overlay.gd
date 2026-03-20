@@ -53,11 +53,12 @@ func _refresh_state():
 	_state_text.text = JSON.stringify(state, "\t")
 
 func _collect_game_state(item: Dictionary = {}):
+	var player_snapshot: Dictionary = GameState.get_player_attributes_snapshot()
 	var state = {
 		"timestamp": Time.get_unix_time_from_system(),
 		"player": {
-			"hp": GameState.player_hp,
-			"max_hp": GameState.player_max_hp,
+			"hp": int(player_snapshot.get("hp", 0)),
+			"max_hp": int(player_snapshot.get("max_hp", 1)),
 			"hunger": GameState.player_hunger,
 			"thirst": GameState.player_thirst,
 			"stamina": GameState.player_stamina,

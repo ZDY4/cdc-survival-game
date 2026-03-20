@@ -192,7 +192,7 @@ func _check_survival_status(type: String = ""):
         warning_triggered.emit("exhausted", "你精疲力竭，需要休息！")
     
     # 死亡检"
-    if GameState.player_hp <= 0:
+    if int(GameState.get_player_attributes_snapshot().get("hp", 0)) <= 0:
         var cause = _determine_death_cause()
         player_died.emit(cause)
 
@@ -306,7 +306,7 @@ func _process_diseases(type: String = ""):
 
 # 事件处理
 func _on_combat_ended(data: Dictionary):
-    if data.has("player_hp") && data.player_hp < 50:
+    if int(GameState.get_player_attributes_snapshot().get("hp", 0)) < 50:
         # 低血量时可能感染
         if randf() < 0.1 && not has_disease("infection"):
             add_disease("infection")

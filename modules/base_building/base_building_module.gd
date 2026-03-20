@@ -85,7 +85,8 @@ func get_available_structures() -> Array[Dictionary]:
 
 func sleep_at_base():
 	# 恢复玩家状态
-	GameState.player_hp = GameState.player_max_hp
+	var snapshot: Dictionary = GameState.get_player_attributes_snapshot()
+	GameState.heal_player(int(snapshot.get("max_hp", 0)))
 	GameState.player_mental = 100
 	GameState.player_stamina = 100
 	

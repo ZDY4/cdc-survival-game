@@ -353,8 +353,11 @@ func _action_set_state(step: Dictionary):
 	
 	# Set attributes
 	if step.has("hp"):
-		GameState.player_hp = step.hp
-		result.data.hp = step.hp
+		var player_snapshot: Dictionary = GameState.get_player_attributes_snapshot()
+		var target_hp: int = clampi(int(step.hp), 0, int(player_snapshot.get("max_hp", step.hp)))
+		if GameState.has_method("_set_player_resource_current"):
+			GameState._set_player_resource_current("hp", target_hp)
+		result.data.hp = target_hp
 	
 	if step.has("hunger"):
 		GameState.player_hunger = step.hunger
@@ -436,8 +439,9 @@ func _action_verify(step: Dictionary):
 			result.data.actual = scene_name
 		
 		"hp":
-			result.success = (GameState.player_hp == expected)
-			result.data.actual = GameState.player_hp
+			var player_snapshot: Dictionary = GameState.get_player_attributes_snapshot()
+			result.success = (int(player_snapshot.get("hp", 0)) == expected)
+			result.data.actual = int(player_snapshot.get("hp", 0))
 		
 		"has_item":
 			var has = InventoryModule.has_item(expected)
@@ -463,12 +467,13 @@ func _action_verify(step: Dictionary):
 	return result
 
 func _action_get_state():
+	var player_snapshot: Dictionary = GameState.get_player_attributes_snapshot()
 	var state = {
 		"success": true,
 		"data": {
 			"player": {
-				"hp": GameState.player_hp,
-				"max_hp": GameState.player_max_hp,
+				"hp": int(player_snapshot.get("hp", 0)),
+				"max_hp": int(player_snapshot.get("max_hp", 1)),
 				"hunger": GameState.player_hunger,
 				"thirst": GameState.player_thirst,
 				"stamina": GameState.player_stamina,

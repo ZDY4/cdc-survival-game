@@ -1,0 +1,136 @@
+{
+	"attributes": {
+		"hp": {
+			"display_name": "生命值",
+			"type": "int",
+			"default": 100,
+			"min": 0,
+			"max": 9999,
+			"visible": true,
+			"is_resource": true,
+			"is_combat": true,
+			"resource_max_key": "max_hp"
+		},
+		"max_hp": {
+			"display_name": "最大生命值",
+			"type": "int",
+			"default": 100,
+			"min": 1,
+			"max": 9999,
+			"visible": true,
+			"is_combat": true
+		},
+		"attack_power": {
+			"display_name": "攻击力",
+			"type": "int",
+			"default": 5,
+			"min": 0,
+			"max": 999,
+			"visible": true,
+			"is_combat": true
+		},
+		"defense": {
+			"display_name": "防御力",
+			"type": "int",
+			"default": 0,
+			"min": 0,
+			"max": 999,
+			"visible": true,
+			"is_combat": true
+		},
+		"strength": {
+			"display_name": "力量",
+			"type": "int",
+			"default": 5,
+			"min": 1,
+			"max": 99,
+			"visible": true
+		},
+		"agility": {
+			"display_name": "敏捷",
+			"type": "int",
+			"default": 5,
+			"min": 1,
+			"max": 99,
+			"visible": true
+		},
+		"constitution": {
+			"display_name": "体质",
+			"type": "int",
+			"default": 5,
+			"min": 1,
+			"max": 99,
+			"visible": true
+		},
+		"speed": {
+			"display_name": "速度",
+			"type": "float",
+			"default": 5.0,
+			"min": 0.0,
+			"max": 99.0,
+			"visible": true,
+			"is_combat": true
+		},
+		"accuracy": {
+			"display_name": "命中",
+			"type": "float",
+			"default": 70.0,
+			"min": 0.0,
+			"max": 100.0,
+			"visible": true,
+			"is_combat": true
+		},
+		"crit_chance": {
+			"display_name": "暴击率",
+			"type": "float",
+			"default": 0.05,
+			"min": 0.0,
+			"max": 1.0,
+			"visible": true,
+			"is_combat": true
+		},
+		"crit_damage": {
+			"display_name": "暴击伤害",
+			"type": "float",
+			"default": 1.5,
+			"min": 1.0,
+			"max": 5.0,
+			"visible": true,
+			"is_combat": true
+		},
+		"evasion": {
+			"display_name": "闪避",
+			"type": "float",
+			"default": 0.05,
+			"min": 0.0,
+			"max": 0.95,
+			"visible": true,
+			"is_combat": true
+		},
+		"damage_reduction": {
+			"display_name": "伤害减免",
+			"type": "float",
+			"default": 0.0,
+			"min": 0.0,
+			"max": 0.95,
+			"visible": false,
+			"is_combat": true
+		},
+		"carry_weight": {
+			"display_name": "负重",
+			"type": "float",
+			"default": 50.0,
+			"min": 0.0,
+			"max": 9999.0,
+			"visible": false
+		},
+		"disease_resistance": {
+			"display_name": "疾病抗性",
+			"type": "float",
+			"default": 0.0,
+			"min": 0.0,
+			"max": 1.0,
+			"visible": false
+		}
+	}
+}

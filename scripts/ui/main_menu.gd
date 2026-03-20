@@ -33,8 +33,8 @@ func _on_start_pressed():
 	# 重置游戏状态
 	_reset_game_state()
 	
-	# 进入3D游戏世界
-	get_tree().change_scene_to_file("res://scenes/locations/game_world_3d.tscn")
+	# 进入大地图世界入口
+	get_tree().change_scene_to_file("res://scenes/locations/game_overworld.tscn")
 
 func _on_continue_pressed():
 	print("[MainMenu] 继续游戏")
@@ -42,8 +42,7 @@ func _on_continue_pressed():
 	if SaveSystem.has_save():
 		if SaveSystem.load_latest_game():
 			print("[MainMenu] 存档加载成功")
-			# 3D统一世界入口：继续游戏固定进入game_world_3d
-			get_tree().change_scene_to_file("res://scenes/locations/game_world_3d.tscn")
+			get_tree().change_scene_to_file("res://scenes/locations/game_overworld.tscn")
 		else:
 			print("[MainMenu] 存档加载失败")
 			# 显示错误提示
@@ -55,16 +54,46 @@ func _on_exit_pressed():
 	get_tree().quit()
 
 func _reset_game_state(item: Dictionary = {}):
-	
-	GameState.player_hp = 100
-	GameState.player_max_hp = 100
+	var base_attributes := {
+		"sets": {
+			"base": {
+				"strength": 5,
+				"agility": 5,
+				"constitution": 5
+			},
+			"combat": {
+				"max_hp": 100,
+				"attack_power": 5,
+				"defense": 0,
+				"speed": 5,
+				"accuracy": 70,
+				"crit_chance": 0.05,
+				"crit_damage": 1.5,
+				"evasion": 0.05
+			}
+		},
+		"resources": {
+			"hp": {
+				"current": 100
+			}
+		}
+	}
+	if AttributeSystem:
+		if AttributeSystem.has_method("reset_player_attributes"):
+			AttributeSystem.reset_player_attributes()
+		AttributeSystem.set_player_attributes_container(base_attributes)
 	GameState.player_hunger = 100
 	GameState.player_thirst = 100
 	GameState.player_stamina = 100
 	GameState.player_mental = 100
 	GameState.player_position = "safehouse"
+	GameState.last_small_map_location = "safehouse"
+	GameState.clear_pending_scene_entry()
 	
-	GameState.inventory_items.clear()
+	if GameState.has_method("set_inventory_from_save"):
+		GameState.set_inventory_from_save([], 20, 5, 4, 1)
+	else:
+		GameState.inventory_items.clear()
 	InventoryModule.add_item("1008", 2)
 	InventoryModule.add_item("1007", 1)
 	InventoryModule.add_item("1006", 3)
@@ -86,7 +115,7 @@ func _reset_game_state(item: Dictionary = {}):
 	GameState.world_time = 8
 	GameState.world_day = 1
 	GameState.world_weather = "clear"
-	GameState.world_unlocked_locations = ["safehouse", "street_a"]
+	GameState.world_unlocked_locations = ["safehouse", "street_a", "street_b", "factory", "supermarket"]
 
 func _apply_safe_area():
 	# 移动端安全区域适配（刘海屏、圆角屏等）

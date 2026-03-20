@@ -1,6 +1,8 @@
 extends CanvasLayer
 
 const InputActions = preload("res://core/input_actions.gd")
+const InventoryGridView = preload("res://ui/inventory_grid_view.gd")
+const InventoryEquipmentSlotButton = preload("res://ui/inventory_equipment_slot_button.gd")
 
 signal request_close_all()
 
@@ -15,8 +17,19 @@ var _world_map: CanvasLayer = null
 var _status_label: Label = null
 var _skill_hotbar: SkillHotbar = null
 
-var _inventory_equipment_box: VBoxContainer = null
-var _inventory_list_box: VBoxContainer = null
+var _inventory_equipment_grid: GridContainer = null
+var _inventory_summary_label: Label = null
+var _inventory_grid_view: InventoryGridView = null
+var _inventory_detail_title: Label = null
+var _inventory_detail_meta: Label = null
+var _inventory_detail_description: Label = null
+var _inventory_action_button: Button = null
+var _inventory_organize_button: Button = null
+var _inventory_equipment_buttons: Dictionary = {}
+var _inventory_equipment_system: Node = null
+var _hovered_inventory_instance_id: String = ""
+var _selected_inventory_instance_id: String = ""
+var _selected_equipment_slot: String = ""
 var _character_points_label: Label = null
 var _character_strength_label: Label = null
 var _character_agility_label: Label = null
@@ -38,6 +51,11 @@ func _ready() -> void:
 	_build_overlay()
 	_hide_all_menus()
 	_load_world_map()
+	if EventBus and EventBus.has_method("subscribe"):
+		EventBus.subscribe(EventBus.EventType.INVENTORY_CHANGED, _on_inventory_event)
+	if GameState and GameState.has_signal("equipment_system_ready"):
+		GameState.equipment_system_ready.connect(_on_equipment_system_ready)
+	_bind_inventory_equipment_system()
 
 func open_menu(action_name: StringName) -> void:
 	if action_name == InputActions.ACTION_MENU_MAP:
@@ -140,6 +158,11 @@ func _build_overlay() -> void:
 	_menu_root.add_child(_status_label)
 
 	_inventory_panel = _create_panel("背包与装备")
+	_inventory_panel.custom_minimum_size = Vector2(1040, 620)
+	_inventory_panel.offset_left = -520
+	_inventory_panel.offset_top = -310
+	_inventory_panel.offset_right = 520
+	_inventory_panel.offset_bottom = 310
 	_character_panel = _create_panel("角色面板")
 	_journal_panel = _create_panel("任务面板")
 	_skills_panel = _create_panel("技能面板")
@@ -206,23 +229,101 @@ func _build_inventory_content(panel: PanelContainer) -> void:
 	var content: VBoxContainer = _get_panel_content(panel)
 	if not content:
 		return
+	var main_row := HBoxContainer.new()
+	main_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_row.add_theme_constant_override("separation", 16)
+	content.add_child(main_row)
+
+	var left_column := VBoxContainer.new()
+	left_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_column.add_theme_constant_override("separation", 10)
+	main_row.add_child(left_column)
+
 	var equipment_title := Label.new()
-	equipment_title.text = "装备（上）"
-	content.add_child(equipment_title)
+	equipment_title.text = "装备槽"
+	equipment_title.add_theme_font_size_override("font_size", 18)
+	left_column.add_child(equipment_title)
 
-	_inventory_equipment_box = VBoxContainer.new()
-	_inventory_equipment_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_inventory_equipment_box)
+	_inventory_equipment_grid = GridContainer.new()
+	_inventory_equipment_grid.columns = 5
+	_inventory_equipment_grid.add_theme_constant_override("h_separation", 8)
+	_inventory_equipment_grid.add_theme_constant_override("v_separation", 8)
+	left_column.add_child(_inventory_equipment_grid)
 
-	content.add_child(HSeparator.new())
+	var slot_order: Array[String] = [
+		"head", "body", "hands", "legs", "feet",
+		"back", "main_hand", "off_hand", "accessory_1", "accessory_2"
+	]
+	for slot in slot_order:
+		var slot_button := InventoryEquipmentSlotButton.new()
+		slot_button.configure(slot)
+		slot_button.custom_minimum_size = Vector2(96, 72)
+		slot_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		slot_button.pressed.connect(_on_equipment_slot_pressed.bind(slot))
+		slot_button.item_drop_requested.connect(_on_inventory_item_dropped_to_equipment)
+		slot_button.equipped_item_drop_requested.connect(_on_equipped_item_dropped_to_equipment)
+		_inventory_equipment_grid.add_child(slot_button)
+		_inventory_equipment_buttons[slot] = slot_button
+
+	_inventory_summary_label = Label.new()
+	_inventory_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left_column.add_child(_inventory_summary_label)
 
 	var inventory_title := Label.new()
-	inventory_title.text = "背包（下）"
-	content.add_child(inventory_title)
+	inventory_title.text = "拼图背包"
+	inventory_title.add_theme_font_size_override("font_size", 18)
+	left_column.add_child(inventory_title)
 
-	_inventory_list_box = VBoxContainer.new()
-	_inventory_list_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_inventory_list_box)
+	var inventory_scroll := ScrollContainer.new()
+	inventory_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_scroll.custom_minimum_size = Vector2(0, 330)
+	left_column.add_child(inventory_scroll)
+
+	_inventory_grid_view = InventoryGridView.new()
+	_inventory_grid_view.item_hovered.connect(_on_inventory_item_hovered)
+	_inventory_grid_view.item_unhovered.connect(_on_inventory_item_unhovered)
+	_inventory_grid_view.item_selected.connect(_on_inventory_item_selected)
+	_inventory_grid_view.grid_interaction.connect(_on_inventory_grid_interaction)
+	inventory_scroll.add_child(_inventory_grid_view)
+
+	var right_column := VBoxContainer.new()
+	right_column.custom_minimum_size = Vector2(260, 0)
+	right_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_column.add_theme_constant_override("separation", 10)
+	main_row.add_child(right_column)
+
+	var detail_title := Label.new()
+	detail_title.text = "物品详情"
+	detail_title.add_theme_font_size_override("font_size", 18)
+	right_column.add_child(detail_title)
+
+	_inventory_detail_title = Label.new()
+	_inventory_detail_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_inventory_detail_title.add_theme_font_size_override("font_size", 20)
+	right_column.add_child(_inventory_detail_title)
+
+	_inventory_detail_meta = Label.new()
+	_inventory_detail_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right_column.add_child(_inventory_detail_meta)
+
+	_inventory_detail_description = Label.new()
+	_inventory_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_inventory_detail_description.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_column.add_child(_inventory_detail_description)
+
+	_inventory_action_button = Button.new()
+	_inventory_action_button.text = "选择物品"
+	_inventory_action_button.disabled = true
+	_inventory_action_button.pressed.connect(_on_inventory_action_pressed)
+	right_column.add_child(_inventory_action_button)
+
+	_inventory_organize_button = Button.new()
+	_inventory_organize_button.text = "整理背包"
+	_inventory_organize_button.pressed.connect(_on_inventory_organize_pressed)
+	right_column.add_child(_inventory_organize_button)
 
 func _build_character_content(panel: PanelContainer) -> void:
 	var content: VBoxContainer = _get_panel_content(panel)
@@ -452,30 +553,294 @@ func _load_world_map() -> void:
 		_world_map.connect("map_closed", Callable(self, "_on_world_map_closed"))
 
 func _refresh_inventory() -> void:
-	_clear_children(_inventory_equipment_box)
-	_clear_children(_inventory_list_box)
-
-	var equip_system = GameState.get_equipment_system() if GameState else null
-	var slots: Array[String] = ["head", "body", "hands", "legs", "feet", "back", "main_hand", "off_hand"]
-	for slot in slots:
-		var line := Label.new()
-		if equip_system and equip_system.has_method("get_equipped_data"):
-			var data: Dictionary = equip_system.get_equipped_data(slot)
-			var equipped_name: String = str(data.get("name", "空"))
-			line.text = "%s: %s" % [slot, equipped_name]
-		else:
-			line.text = "%s: -" % slot
-		_inventory_equipment_box.add_child(line)
-
 	if not GameState:
 		return
-	for item in GameState.inventory_items:
-		var item_id: String = str(item.get("id", ""))
-		var count: int = int(item.get("count", 1))
-		var item_name: String = ItemDatabase.get_item_name(item_id) if ItemDatabase else item_id
-		var line := Label.new()
-		line.text = "%s x%d" % [item_name, count]
-		_inventory_list_box.add_child(line)
+	_validate_inventory_selection()
+
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	for slot in _inventory_equipment_buttons.keys():
+		var button: InventoryEquipmentSlotButton = _inventory_equipment_buttons[slot]
+		if button == null:
+			continue
+		var item_data: Dictionary = equip_system.get_equipped_data(slot) if equip_system and equip_system.has_method("get_equipped_data") else {}
+		var slot_name: String = equip_system.SLOT_NAMES.get(slot, slot) if equip_system else str(slot)
+		var item_name: String = str(item_data.get("name", "空"))
+		button.set_equipped_item(str(item_data.get("id", "")), str(item_data.get("instance_id", "")))
+		button.text = "%s\n%s" % [slot_name, item_name]
+		button.tooltip_text = str(item_data.get("description", "点击查看槽位详情")) if not item_data.is_empty() else "空槽位"
+
+	var dimensions: Vector2i = InventoryModule.get_inventory_dimensions() if InventoryModule and InventoryModule.has_method("get_inventory_dimensions") else Vector2i(5, 4)
+	var active_cells: int = InventoryModule.get_active_cell_count() if InventoryModule and InventoryModule.has_method("get_active_cell_count") else int(GameState.inventory_max_slots)
+	var visible_items: Array[Dictionary] = InventoryModule.get_visible_items() if InventoryModule and InventoryModule.has_method("get_visible_items") else GameState.inventory_items
+	var carry_text: String = ""
+	if CarrySystem:
+		carry_text = "  负重 %.1f / %.1f kg" % [CarrySystem.get_current_weight(), CarrySystem.get_max_carry_weight()]
+	var backpack_name: String = "无背包"
+	if equip_system:
+		var backpack_id: String = str(equip_system.get_equipped("back"))
+		if not backpack_id.is_empty():
+			backpack_name = ItemDatabase.get_item_name(backpack_id)
+	_inventory_summary_label.text = "%s  格子 %dx%d  已启用 %d 格%s" % [
+		backpack_name,
+		dimensions.x,
+		dimensions.y,
+		active_cells,
+		carry_text
+	]
+
+	if _inventory_grid_view:
+		_inventory_grid_view.configure(dimensions.x, dimensions.y, active_cells, visible_items)
+		_inventory_grid_view.set_selected_instance(_selected_inventory_instance_id)
+
+	_refresh_inventory_detail()
+
+func _refresh_inventory_detail() -> void:
+	if _inventory_detail_title == null:
+		return
+
+	var focus: Dictionary = _get_inventory_focus_data()
+	if focus.is_empty():
+		_inventory_detail_title.text = "将鼠标移到物品上查看详情"
+		_inventory_detail_meta.text = ""
+		_inventory_detail_description.text = "左键选择物品，拖拽到其他空格可重新摆放，也可以直接拖到装备槽穿戴。已装备物品也能拖回背包或拖到其他装备槽调整。"
+		_inventory_action_button.text = "选择物品"
+		_inventory_action_button.disabled = true
+		return
+
+	var item_id: String = str(focus.get("item_id", ""))
+	var item_data: Dictionary = focus.get("item_data", {})
+	var entry: Dictionary = focus.get("entry", {})
+	var size_data: Vector2i = ItemDatabase.get_inventory_footprint(item_id) if ItemDatabase else Vector2i.ONE
+	var count: int = int(entry.get("count", 1))
+	var total_weight: float = ItemDatabase.get_item_weight(item_id) * count if ItemDatabase else 0.0
+	_inventory_detail_title.text = str(item_data.get("name", item_id))
+	_inventory_detail_meta.text = "数量 x%d  尺寸 %dx%d  重量 %.1f kg" % [count, size_data.x, size_data.y, total_weight]
+	var description := str(item_data.get("description", ""))
+	var bonuses: Dictionary = item_data.get("attributes_bonus", {})
+	if not bonuses.is_empty():
+		var bonus_parts: Array[String] = []
+		for key in bonuses.keys():
+			bonus_parts.append("%s %+s" % [str(key), str(bonuses[key])])
+		description += "\n\n属性: %s" % ", ".join(PackedStringArray(bonus_parts))
+	_inventory_detail_description.text = description
+
+	var action_state: Dictionary = _get_inventory_action_state(focus)
+	_inventory_action_button.text = str(action_state.get("label", "无可用操作"))
+	_inventory_action_button.disabled = not bool(action_state.get("enabled", false))
+
+func _get_inventory_focus_data() -> Dictionary:
+	var instance_id: String = _hovered_inventory_instance_id if not _hovered_inventory_instance_id.is_empty() else _selected_inventory_instance_id
+	if not instance_id.is_empty() and GameState and GameState.has_method("get_inventory_item"):
+		var entry: Dictionary = GameState.get_inventory_item(instance_id)
+		if not entry.is_empty():
+			var item_id: String = str(entry.get("id", ""))
+			return {
+				"kind": "inventory",
+				"entry": entry,
+				"item_id": item_id,
+				"item_data": ItemDatabase.get_item(item_id) if ItemDatabase else {}
+			}
+
+	if not _selected_equipment_slot.is_empty():
+		var equip_system = GameState.get_equipment_system() if GameState else null
+		if equip_system and equip_system.has_method("get_equipped_data"):
+			var item_data: Dictionary = equip_system.get_equipped_data(_selected_equipment_slot)
+			if not item_data.is_empty():
+				return {
+					"kind": "equipment",
+					"slot": _selected_equipment_slot,
+					"entry": item_data,
+					"item_id": str(item_data.get("id", "")),
+					"item_data": item_data
+				}
+	return {}
+
+func _get_inventory_action_state(focus: Dictionary) -> Dictionary:
+	if focus.is_empty():
+		return {"label": "选择物品", "enabled": false}
+	var item_id: String = str(focus.get("item_id", ""))
+	var item_data: Dictionary = focus.get("item_data", {})
+	var kind: String = str(focus.get("kind", ""))
+	if kind == "equipment":
+		return {
+			"label": "卸下",
+			"enabled": true
+		}
+	if bool(item_data.get("usable", false)):
+		return {
+			"label": "使用",
+			"enabled": true
+		}
+	if bool(item_data.get("equippable", false)):
+		return {
+			"label": "装备",
+			"enabled": not _resolve_target_slot(item_id).is_empty()
+		}
+	return {"label": "无可用操作", "enabled": false}
+
+func _validate_inventory_selection() -> void:
+	if not _selected_inventory_instance_id.is_empty():
+		var selected_entry: Dictionary = GameState.get_inventory_item(_selected_inventory_instance_id) if GameState and GameState.has_method("get_inventory_item") else {}
+		if selected_entry.is_empty() or not str(selected_entry.get("equipped_slot", "")).is_empty():
+			_selected_inventory_instance_id = ""
+	if not _hovered_inventory_instance_id.is_empty():
+		var hovered_entry: Dictionary = GameState.get_inventory_item(_hovered_inventory_instance_id) if GameState and GameState.has_method("get_inventory_item") else {}
+		if hovered_entry.is_empty() or not str(hovered_entry.get("equipped_slot", "")).is_empty():
+			_hovered_inventory_instance_id = ""
+	if not _selected_equipment_slot.is_empty():
+		var equip_system = GameState.get_equipment_system() if GameState else null
+		if equip_system == null or str(equip_system.get_equipped(_selected_equipment_slot)).is_empty():
+			_selected_equipment_slot = ""
+
+func _on_inventory_item_hovered(instance_id: String) -> void:
+	_hovered_inventory_instance_id = instance_id
+	_refresh_inventory_detail()
+
+func _on_inventory_item_unhovered(instance_id: String) -> void:
+	if _hovered_inventory_instance_id == instance_id:
+		_hovered_inventory_instance_id = ""
+	_refresh_inventory_detail()
+
+func _on_inventory_item_selected(instance_id: String) -> void:
+	_selected_inventory_instance_id = instance_id
+	_selected_equipment_slot = ""
+	_refresh_inventory_detail()
+
+func _on_equipment_slot_pressed(slot: String) -> void:
+	_selected_equipment_slot = slot
+	_selected_inventory_instance_id = ""
+	_refresh_inventory_detail()
+
+func _on_inventory_action_pressed() -> void:
+	var focus: Dictionary = _get_inventory_focus_data()
+	if focus.is_empty():
+		return
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	var item_id: String = str(focus.get("item_id", ""))
+	match str(focus.get("kind", "")):
+		"equipment":
+			if equip_system and equip_system.has_method("unequip"):
+				if equip_system.unequip(str(focus.get("slot", ""))):
+					_status("已卸下 %s" % ItemDatabase.get_item_name(item_id))
+				else:
+					_status("当前没有足够空间卸下该装备")
+		"inventory":
+			var item_data: Dictionary = focus.get("item_data", {})
+			var entry: Dictionary = focus.get("entry", {})
+			if bool(item_data.get("usable", false)):
+				if InventoryModule and InventoryModule.use_item(item_id):
+					_status("已使用 %s" % ItemDatabase.get_item_name(item_id))
+				else:
+					_status("无法使用该物品")
+			elif bool(item_data.get("equippable", false)) and equip_system and equip_system.has_method("equip"):
+				var target_slot: String = _resolve_target_slot(item_id)
+				if target_slot.is_empty():
+					_status("当前没有可用装备槽")
+				elif equip_system.has_method("equip_instance") and equip_system.equip_instance(str(entry.get("instance_id", "")), target_slot):
+					_status("已装备 %s" % ItemDatabase.get_item_name(item_id))
+				elif equip_system.equip(item_id, target_slot):
+					_status("已装备 %s" % ItemDatabase.get_item_name(item_id))
+				else:
+					_status("装备失败，可能空间不足或槽位不匹配")
+	_refresh_inventory()
+
+func _on_inventory_item_dropped_to_equipment(slot: String, instance_id: String) -> void:
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system == null or not equip_system.has_method("equip_instance"):
+		_status("装备系统不可用")
+		return
+
+	var entry: Dictionary = GameState.get_inventory_item(instance_id) if GameState and GameState.has_method("get_inventory_item") else {}
+	var item_id: String = str(entry.get("id", ""))
+	if item_id.is_empty():
+		_status("找不到要装备的物品")
+		return
+
+	if equip_system.equip_instance(instance_id, slot):
+		_hovered_inventory_instance_id = ""
+		_selected_inventory_instance_id = ""
+		_selected_equipment_slot = slot
+		_status("已装备 %s" % ItemDatabase.get_item_name(item_id))
+	else:
+		_status("无法装备到该槽位")
+	_refresh_inventory()
+
+func _on_equipped_item_dropped_to_equipment(target_slot: String, source_slot: String) -> void:
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system == null or not equip_system.has_method("move_equipped_item"):
+		_status("装备系统不可用")
+		return
+
+	if equip_system.move_equipped_item(source_slot, target_slot):
+		_selected_equipment_slot = target_slot
+		_hovered_inventory_instance_id = ""
+		_selected_inventory_instance_id = ""
+		_status("已调整装备槽位")
+	else:
+		_status("无法移动到该装备槽")
+	_refresh_inventory()
+
+func _on_inventory_organize_pressed() -> void:
+	if GameState and GameState.has_method("refresh_inventory_capacity"):
+		if GameState.refresh_inventory_capacity(false):
+			_status("背包已整理")
+		else:
+			_status("背包空间不足，无法整理")
+	_refresh_inventory()
+
+func _on_inventory_grid_interaction(message: String) -> void:
+	_status(message)
+	_refresh_inventory()
+
+func _on_inventory_event(_payload: Dictionary) -> void:
+	if _inventory_panel and _inventory_panel.visible:
+		_refresh_inventory()
+
+func _on_equipment_system_ready(_system: Node) -> void:
+	_bind_inventory_equipment_system()
+	if _inventory_panel and _inventory_panel.visible:
+		_refresh_inventory()
+
+func _bind_inventory_equipment_system() -> void:
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system == null or equip_system == _inventory_equipment_system:
+		return
+	_inventory_equipment_system = equip_system
+	if equip_system.has_signal("item_equipped"):
+		equip_system.item_equipped.connect(_on_inventory_equipment_slot_changed)
+	if equip_system.has_signal("item_unequipped"):
+		equip_system.item_unequipped.connect(_on_inventory_equipment_slot_changed)
+	if equip_system.has_signal("item_broken"):
+		equip_system.item_broken.connect(_on_inventory_equipment_slot_changed)
+	if equip_system.has_signal("durability_changed"):
+		equip_system.durability_changed.connect(_on_inventory_equipment_durability_changed)
+	if equip_system.has_signal("ammo_changed"):
+		equip_system.ammo_changed.connect(_on_inventory_equipment_ammo_changed)
+
+func _on_inventory_equipment_slot_changed(_slot: String, _item_id: String) -> void:
+	if _inventory_panel and _inventory_panel.visible:
+		_refresh_inventory()
+
+func _on_inventory_equipment_durability_changed(_slot: String, _durability_percent: float) -> void:
+	if _inventory_panel and _inventory_panel.visible:
+		_refresh_inventory()
+
+func _on_inventory_equipment_ammo_changed(_ammo_type: String, _current: int, _max_ammo: int) -> void:
+	if _inventory_panel and _inventory_panel.visible:
+		_refresh_inventory()
+
+func _resolve_target_slot(item_id: String) -> String:
+	var equip_system = GameState.get_equipment_system() if GameState else null
+	if equip_system == null:
+		return ""
+	var slot: String = ItemDatabase.get_equip_slot(item_id) if ItemDatabase else ""
+	if slot == "accessory":
+		if str(equip_system.get_equipped("accessory_1")).is_empty():
+			return "accessory_1"
+		if str(equip_system.get_equipped("accessory_2")).is_empty():
+			return "accessory_2"
+		return "accessory_1"
+	return slot
 
 func _refresh_character() -> void:
 	var attr_system: Node = get_node_or_null("/root/AttributeSystem")
@@ -627,22 +992,14 @@ func _on_add_constitution() -> void:
 
 func _allocate_attribute(attribute_name: String) -> void:
 	var attr_system: Node = get_node_or_null("/root/AttributeSystem")
-	var xp_system: Node = get_node_or_null("/root/ExperienceSystem")
 	if not attr_system:
 		return
 
-	if xp_system and xp_system.has_method("spend_stat_points"):
-		if not xp_system.spend_stat_points(1):
-			_status("属性点不足")
-			return
-		attr_system.add_attribute_points(1)
-
-	var success: bool = bool(attr_system.allocate_point(attribute_name))
-	if success:
+	var result: Dictionary = attr_system.allocate_player_attributes({attribute_name: 1})
+	if bool(result.get("success", false)):
 		_status("已提升%s" % attribute_name)
 	else:
-		if xp_system and xp_system.has_method("refund_stat_points"):
-			xp_system.refund_stat_points(1)
+		_status("属性提升失败: %s" % str(result.get("reason", "unknown")))
 	_refresh_character()
 
 func _hide_all_menus() -> void:
@@ -650,6 +1007,9 @@ func _hide_all_menus() -> void:
 	if _pending_rebind_label:
 		_pending_rebind_label.text = ""
 		_pending_rebind_label = null
+	_hovered_inventory_instance_id = ""
+	_selected_inventory_instance_id = ""
+	_selected_equipment_slot = ""
 	_hide_all_panels()
 	if _world_map and _world_map.visible:
 		_world_map.call("hide_map")

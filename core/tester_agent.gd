@@ -549,9 +549,10 @@ func _test_quest_system():
 func _test_hp_zero():
 	var result = {"success": true, "error": ""}
 	
-	GameState.player_hp = 0
+	if GameState.has_method("_set_player_resource_current"):
+		GameState._set_player_resource_current("hp", 0)
 	# 检查游戏是否正确处理死亡状态
-	if GameState.player_hp != 0:
+	if int(GameState.get_player_attributes_snapshot().get("hp", 0)) != 0:
 		result.success = false
 		result.error = "HP为0时状态异常"
 	
@@ -577,9 +578,10 @@ func _test_negative_stats():
 	var result = {"success": true, "error": ""}
 	
 	# 测试负数处理
-	GameState.player_hp = -10
+	if GameState.has_method("_set_player_resource_current"):
+		GameState._set_player_resource_current("hp", -10)
 	# 游戏应该自动修正为0或保持最小值
-	if GameState.player_hp < 0:
+	if int(GameState.get_player_attributes_snapshot().get("hp", 0)) < 0:
 		result.warnings.append("HP可以为负数，建议添加保护")
 	
 	return result

@@ -154,7 +154,9 @@ func _calculate_infection_risk():
 	var immunity_factor = maxf(0, 1.0 - (immunity / 100.0))
 	
 	# 受伤增加风险
-	var hp_percent = float(GameState.player_hp) / float(GameState.player_max_hp)
+	var player_snapshot: Dictionary = GameState.get_player_attributes_snapshot()
+	var max_hp: float = maxf(1.0, float(player_snapshot.get("max_hp", 1.0)))
+	var hp_percent = float(player_snapshot.get("hp", max_hp)) / max_hp
 	var injury_factor = maxf(0, 1.0 - hp_percent)
 	
 	# 环境风险 (取决于地点)

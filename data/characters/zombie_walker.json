@@ -17,17 +17,6 @@
     }
   },
   "combat": {
-    "stats": {
-      "hp": 25,
-      "max_hp": 25,
-      "damage": 4,
-      "defense": 1,
-      "speed": 3,
-      "accuracy": 60,
-      "crit_chance": 0.05,
-      "crit_damage": 1.5,
-      "evasion": 0.03
-    },
     "ai": {
       "aggro_range": 5.0,
       "attack_range": 1.2,
@@ -61,6 +50,30 @@
       "trust": 0,
       "fear": 0,
       "anger": 90
+    }
+  },
+  "attributes": {
+    "sets": {
+      "base": {
+        "strength": 5,
+        "agility": 5,
+        "constitution": 5
+      },
+      "combat": {
+        "max_hp": 25,
+        "attack_power": 4,
+        "defense": 1,
+        "speed": 3.0,
+        "accuracy": 60.0,
+        "crit_chance": 0.05,
+        "crit_damage": 1.5,
+        "evasion": 0.03
+      }
+    },
+    "resources": {
+      "hp": {
+        "current": 25
+      }
     }
   }
 }

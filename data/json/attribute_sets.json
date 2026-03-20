@@ -1,0 +1,40 @@
+{
+	"sets": {
+		"base": {
+			"display_name": "基础属性",
+			"required": true,
+			"attributes": [
+				"strength",
+				"agility",
+				"constitution"
+			]
+		},
+		"combat": {
+			"display_name": "战斗属性",
+			"required": false,
+			"attributes": [
+				"max_hp",
+				"attack_power",
+				"defense",
+				"speed",
+				"accuracy",
+				"crit_chance",
+				"crit_damage",
+				"evasion"
+			]
+		},
+		"survival": {
+			"display_name": "生存属性",
+			"required": false,
+			"attributes": [
+				"carry_weight",
+				"disease_resistance"
+			]
+		},
+		"social": {
+			"display_name": "社交属性",
+			"required": false,
+			"attributes": []
+		}
+	}
+}

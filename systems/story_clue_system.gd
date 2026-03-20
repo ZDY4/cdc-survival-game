@@ -547,8 +547,14 @@ func reset_for_new_game():
 	# 应用多周目奖励
 	var bonus = get_new_game_plus_bonus()
 	if GameState:
-		GameState.player_max_hp += bonus.extra_hp
-		GameState.player_hp = GameState.player_max_hp
+		if bonus.extra_hp > 0 and GameState.has_method("apply_player_attribute_delta"):
+			GameState.apply_player_attribute_delta("story_clue_ngp", {
+				"flat": {
+					"max_hp": bonus.extra_hp
+				}
+			})
+		var snapshot: Dictionary = GameState.get_player_attributes_snapshot()
+		GameState.heal_player(int(snapshot.get("max_hp", 0)))
 
 # ===== 序列化 =====
 func serialize() -> Dictionary:

@@ -36,16 +36,28 @@ signal durability_changed(slot: String, durability_percent: float)
 signal ammo_changed(ammo_type: String, current: int, max_ammo: int)
 
 var _equipped_items: Dictionary = {
-	"head": null,
-	"body": null,
-	"hands": null,
-	"legs": null,
-	"feet": null,
-	"back": null,
-	"main_hand": null,
-	"off_hand": null,
-	"accessory_1": null,
-	"accessory_2": null
+	"head": "",
+	"body": "",
+	"hands": "",
+	"legs": "",
+	"feet": "",
+	"back": "",
+	"main_hand": "",
+	"off_hand": "",
+	"accessory_1": "",
+	"accessory_2": ""
+}
+var _equipped_instance_ids: Dictionary = {
+	"head": "",
+	"body": "",
+	"hands": "",
+	"legs": "",
+	"feet": "",
+	"back": "",
+	"main_hand": "",
+	"off_hand": "",
+	"accessory_1": "",
+	"accessory_2": ""
 }
 var _item_instances: Dictionary = {}
 
@@ -83,56 +95,231 @@ func equip(item_id: String, slot: String = ""):
 		print("[Equipment] 物品不存在: " + item_id)
 		return false
 	
-	var item_data = ItemDatabase.get_item(resolved_id)
-	var target_slot = slot if slot != "" else item_data.slot
-	
-	# 检查槽位是否匹配
-	if item_data.slot != target_slot && not _is_compatible_slot(item_data.slot, target_slot):
-		print("[Equipment] 物品不能装备到该槽位: " + item_id + " -> " + target_slot)
+	var target_instance_id: String = ""
+	if resolved_id != "1001":
+		if not GameState or not GameState.has_method("find_first_available_item_instance"):
+			return false
+		target_instance_id = GameState.find_first_available_item_instance(resolved_id)
+		if target_instance_id.is_empty():
+			print("[Equipment] 没有该物品: " + item_id)
+			return false
+
+	return _equip_resolved_item(resolved_id, target_instance_id, slot)
+
+func equip_instance(instance_id: String, slot: String = "") -> bool:
+	if instance_id.is_empty() or GameState == null or not GameState.has_method("get_inventory_item"):
 		return false
-	
+
+	var entry: Dictionary = GameState.get_inventory_item(instance_id)
+	if entry.is_empty():
+		return false
+	if not str(entry.get("equipped_slot", "")).is_empty():
+		return false
+
+	var item_id: String = str(entry.get("id", ""))
+	if item_id.is_empty():
+		return false
+	return _equip_resolved_item(item_id, instance_id, slot)
+
+func _equip_resolved_item(item_id: String, instance_id: String, slot: String = "") -> bool:
+	var resolved_id = ItemDatabase.resolve_item_id(item_id)
+	if not ItemDatabase.has_item(resolved_id):
+		return false
+
+	var item_data = ItemDatabase.get_item(resolved_id)
+	var target_slot: String = slot if not slot.is_empty() else str(item_data.get("slot", ""))
+
+	# 检查槽位是否匹配
+	var item_slot: String = str(item_data.get("slot", ""))
+	if item_slot != target_slot and not _is_compatible_slot(item_slot, target_slot):
+		print("[Equipment] 物品不能装备到该槽位: " + resolved_id + " -> " + target_slot)
+		return false
+
 	# 检查等级要求
-	var required_level = item_data.get("level_requirement", item_data.get("required_level", 0))
+	var required_level: int = int(item_data.get("level_requirement", item_data.get("required_level", 0)))
 	if required_level > _get_player_level():
 		print("[Equipment] 等级不足")
 		return false
+	if resolved_id != "1001" and instance_id.is_empty():
+		return false
 
-	# 检查是否拥有（拳头例外）
-	if resolved_id != "1001":
-		if not InventoryModule.has_item(item_id) and not InventoryModule.has_item(resolved_id):
-			print("[Equipment] 没有该物品: " + item_id)
-			return false
-	
-	# 卸下当前装备
-	if _equipped_items[target_slot]:
-		unequip(target_slot)
-	
-	# 装备新物品
-	return _equip_item_internal(target_slot, resolved_id)
+	var inventory_snapshot: Array[Dictionary] = GameState.inventory_items.duplicate(true) if GameState else []
+	var equipped_snapshot: Dictionary = _equipped_items.duplicate(true)
+	var instance_snapshot: Dictionary = _equipped_instance_ids.duplicate(true)
+	var durability_snapshot: Dictionary = _item_instances.duplicate(true)
 
+	var previous_item_id: String = str(_equipped_items.get(target_slot, ""))
+	var previous_instance_id: String = str(_equipped_instance_ids.get(target_slot, ""))
+	if not previous_instance_id.is_empty() and GameState:
+		GameState.set_inventory_item_equipped_slot(previous_instance_id, "")
+
+	_set_slot_assignment(target_slot, resolved_id, instance_id)
+	if not instance_id.is_empty() and GameState:
+		GameState.set_inventory_item_equipped_slot(instance_id, target_slot)
+	_ensure_item_instance(instance_id, resolved_id)
+
+	if GameState and not GameState.refresh_inventory_capacity(true, false):
+		GameState.inventory_items = inventory_snapshot
+		_equipped_items = equipped_snapshot
+		_equipped_instance_ids = instance_snapshot
+		_item_instances = durability_snapshot
+		return false
+
+	if not previous_item_id.is_empty():
+		item_unequipped.emit(target_slot, previous_item_id)
+	item_equipped.emit(target_slot, resolved_id)
+	print("[Equipment] 装备: " + resolved_id + " to " + target_slot)
+
+	if CarrySystem:
+		CarrySystem.on_equipment_changed()
+	_apply_stats_to_game_state()
+	return true
 ## 卸下装备
 func unequip(slot: String):
 	if not _equipped_items.has(slot):
 		return false
 	
-	var current_id = _equipped_items[slot]
+	var current_id = str(_equipped_items.get(slot, ""))
+	var current_instance_id = str(_equipped_instance_ids.get(slot, ""))
 	if not current_id:
 		return true  # 本来就没有装备
-	
-	# 如果是主手武器，切换到拳头
+
+	var inventory_snapshot: Array[Dictionary] = GameState.inventory_items.duplicate(true) if GameState else []
+	var equipped_snapshot: Dictionary = _equipped_items.duplicate(true)
+	var instance_snapshot: Dictionary = _equipped_instance_ids.duplicate(true)
+
+	if not current_instance_id.is_empty() and GameState:
+		GameState.set_inventory_item_equipped_slot(current_instance_id, "")
+
 	if slot == "main_hand":
-		_equip_item_internal("main_hand", "1001")
+		_set_slot_assignment("main_hand", "1001", "")
 	else:
-		_equipped_items[slot] = null
-	
+		_set_slot_assignment(slot, "", "")
+
+	if GameState and not GameState.refresh_inventory_capacity(true, false):
+		GameState.inventory_items = inventory_snapshot
+		_equipped_items = equipped_snapshot
+		_equipped_instance_ids = instance_snapshot
+		return false
+
 	item_unequipped.emit(slot, current_id)
+	if slot == "main_hand":
+		item_equipped.emit("main_hand", "1001")
 	print("[Equipment] 卸下: " + current_id + " from " + slot)
+	if CarrySystem:
+		CarrySystem.on_equipment_changed()
+	_apply_stats_to_game_state()
+	return true
+
+func unequip_to_cell(slot: String, target_cell: Vector2i) -> bool:
+	if not _equipped_items.has(slot):
+		return false
+
+	var current_id: String = str(_equipped_items.get(slot, ""))
+	var current_instance_id: String = str(_equipped_instance_ids.get(slot, ""))
+	if current_id.is_empty() or current_instance_id.is_empty():
+		return false
+
+	var inventory_snapshot: Array[Dictionary] = GameState.inventory_items.duplicate(true) if GameState else []
+	var equipped_snapshot: Dictionary = _equipped_items.duplicate(true)
+	var instance_snapshot: Dictionary = _equipped_instance_ids.duplicate(true)
+
+	if GameState:
+		GameState.set_inventory_item_equipped_slot(current_instance_id, "")
+
+	if slot == "main_hand":
+		_set_slot_assignment("main_hand", "1001", "")
+	else:
+		_set_slot_assignment(slot, "", "")
+
+	if GameState == null or not GameState.refresh_inventory_capacity(true, false):
+		if GameState:
+			GameState.inventory_items = inventory_snapshot
+		_equipped_items = equipped_snapshot
+		_equipped_instance_ids = instance_snapshot
+		return false
+
+	if not GameState.move_item_instance(current_instance_id, target_cell):
+		GameState.inventory_items = inventory_snapshot
+		_equipped_items = equipped_snapshot
+		_equipped_instance_ids = instance_snapshot
+		return false
+
+	item_unequipped.emit(slot, current_id)
+	if slot == "main_hand":
+		item_equipped.emit("main_hand", "1001")
+	print("[Equipment] 卸下到背包: " + current_id + " from " + slot)
+	if CarrySystem:
+		CarrySystem.on_equipment_changed()
+	_apply_stats_to_game_state()
+	return true
+
+func move_equipped_item(source_slot: String, target_slot: String) -> bool:
+	if not _equipped_items.has(source_slot) or not _equipped_items.has(target_slot):
+		return false
+	if source_slot == target_slot:
+		return true
+
+	var source_item_id: String = str(_equipped_items.get(source_slot, ""))
+	var source_instance_id: String = str(_equipped_instance_ids.get(source_slot, ""))
+	if source_item_id.is_empty() or source_instance_id.is_empty():
+		return false
+	if not _can_item_fit_slot(source_item_id, target_slot):
+		return false
+
+	var target_item_id: String = str(_equipped_items.get(target_slot, ""))
+	var target_instance_id: String = str(_equipped_instance_ids.get(target_slot, ""))
+	var can_swap: bool = not target_item_id.is_empty() and not target_instance_id.is_empty() and _can_item_fit_slot(target_item_id, source_slot)
+
+	var inventory_snapshot: Array[Dictionary] = GameState.inventory_items.duplicate(true) if GameState else []
+	var equipped_snapshot: Dictionary = _equipped_items.duplicate(true)
+	var instance_snapshot: Dictionary = _equipped_instance_ids.duplicate(true)
+
+	if GameState:
+		GameState.set_inventory_item_equipped_slot(source_instance_id, "")
+		if not target_instance_id.is_empty():
+			GameState.set_inventory_item_equipped_slot(target_instance_id, "")
+
+	_set_slot_assignment(target_slot, source_item_id, source_instance_id)
+	if GameState:
+		GameState.set_inventory_item_equipped_slot(source_instance_id, target_slot)
+
+	if can_swap:
+		_set_slot_assignment(source_slot, target_item_id, target_instance_id)
+		if GameState:
+			GameState.set_inventory_item_equipped_slot(target_instance_id, source_slot)
+	else:
+		if source_slot == "main_hand":
+			_set_slot_assignment("main_hand", "1001", "")
+		else:
+			_set_slot_assignment(source_slot, "", "")
+
+	if GameState == null or not GameState.refresh_inventory_capacity(true, false):
+		if GameState:
+			GameState.inventory_items = inventory_snapshot
+		_equipped_items = equipped_snapshot
+		_equipped_instance_ids = instance_snapshot
+		return false
+
+	item_unequipped.emit(source_slot, source_item_id)
+	if not target_item_id.is_empty():
+		item_unequipped.emit(target_slot, target_item_id)
+	if can_swap:
+		item_equipped.emit(source_slot, target_item_id)
+	elif source_slot == "main_hand":
+		item_equipped.emit("main_hand", "1001")
+	item_equipped.emit(target_slot, source_item_id)
+	print("[Equipment] 装备槽调整: " + source_slot + " -> " + target_slot)
+
+	if CarrySystem:
+		CarrySystem.on_equipment_changed()
 	_apply_stats_to_game_state()
 	return true
 
 ## 获取当前装备
 func get_equipped(slot: String):
-	return _equipped_items.get(slot, "")
+	var value = _equipped_items.get(slot, "")
+	return "" if value == null else str(value)
 
 ## 兼容旧接口
 func get_equipped_item(slot: String):
@@ -144,7 +331,7 @@ func get_item_data(item_id: String):
 
 ## 获取槽位中的完整数据
 func get_equipped_data(slot: String):
-	var item_id = _equipped_items.get(slot, "")
+	var item_id = str(_equipped_items.get(slot, ""))
 	if not item_id:
 		return {}
 	
@@ -152,8 +339,11 @@ func get_equipped_data(slot: String):
 	base_data.id = item_id
 	
 	# 添加实例数据（耐久等）
-	if _item_instances.has(item_id):
-		base_data.current_durability = _item_instances[item_id].durability
+	var instance_id: String = str(_equipped_instance_ids.get(slot, ""))
+	if not instance_id.is_empty():
+		base_data.instance_id = instance_id
+	if _item_instances.has(instance_id):
+		base_data.current_durability = _item_instances[instance_id].durability
 	
 	return base_data
 
@@ -219,11 +409,12 @@ func calculate_carry_bonus():
 
 ## 消耗耐久
 func consume_durability(slot: String, amount: int = 1):
-	var item_id = _equipped_items.get(slot, "")
-	if not item_id || not _item_instances.has(item_id):
+	var item_id = str(_equipped_items.get(slot, ""))
+	var instance_id = str(_equipped_instance_ids.get(slot, ""))
+	if item_id.is_empty() or instance_id.is_empty() or not _item_instances.has(instance_id):
 		return
 	
-	var instance = _item_instances[item_id]
+	var instance = _item_instances[instance_id]
 	instance.durability = maxi(0, instance.durability - amount)
 	
 	var max_dur = ItemDatabase.get_max_durability(item_id)
@@ -237,7 +428,8 @@ func consume_durability(slot: String, amount: int = 1):
 
 ## 修复装备
 func repair(slot: String):
-	var item_id = _equipped_items.get(slot, "")
+	var item_id = str(_equipped_items.get(slot, ""))
+	var instance_id = str(_equipped_instance_ids.get(slot, ""))
 	if not item_id:
 		return false
 	
@@ -260,16 +452,18 @@ func repair(slot: String):
 			InventoryModule.remove_item(material_id, material.count)
 	
 	# 恢复耐久
-	if not _item_instances.has(item_id):
-		_item_instances[item_id] = {"durability": max_durability}
+	if instance_id.is_empty():
+		return false
+	if not _item_instances.has(instance_id):
+		_item_instances[instance_id] = {"durability": max_durability}
 	else:
-		_item_instances[item_id].durability = max_durability
+		_item_instances[instance_id].durability = max_durability
 	
 	print("[Equipment] 修复: " + item_id)
 	return true
 
 ## 修复指定物品（不要求已装备）
-func repair_item(item_id: String):
+func repair_item(item_id: String, instance_id: String = ""):
 	var resolved_id = ItemDatabase.resolve_item_id(item_id)
 	if not ItemDatabase.has_item(resolved_id):
 		return false
@@ -289,7 +483,12 @@ func repair_item(item_id: String):
 		else:
 			InventoryModule.remove_item(material_id, material.count)
 	
-	_item_instances[resolved_id] = {"durability": max_durability}
+	var resolved_instance_id: String = instance_id
+	if resolved_instance_id.is_empty():
+		resolved_instance_id = _find_instance_for_item(resolved_id)
+	if resolved_instance_id.is_empty():
+		return false
+	_item_instances[resolved_instance_id] = {"durability": max_durability}
 	return true
 
 # ===== 弹药系统 =====
@@ -369,6 +568,34 @@ func get_total_stats():
 	
 	return stats
 
+func get_attribute_modifier_payload() -> Dictionary:
+	var total_stats: Dictionary = get_total_stats()
+	var combat_stats: Dictionary = calculate_combat_stats()
+	var flat: Dictionary = {
+		"attack_power": float(total_stats.get("damage", 0)),
+		"defense": float(total_stats.get("defense", 0)),
+		"accuracy": float(total_stats.get("accuracy", 0)),
+		"crit_chance": float(total_stats.get("crit_chance", 0.0)),
+		"max_hp": float(total_stats.get("max_hp", 0)),
+		"damage_reduction": float(total_stats.get("damage_reduction", 0.0)),
+		"carry_weight": float(total_stats.get("carry_bonus", 0.0))
+	}
+	var crit_multiplier: float = float(combat_stats.get("crit_multiplier", 1.5))
+	if crit_multiplier > 1.5:
+		flat["crit_damage"] = crit_multiplier - 1.5
+	var mult: Dictionary = {}
+	if float(total_stats.get("speed_bonus", 0.0)) != 0.0:
+		mult["speed"] = float(mult.get("speed", 0.0)) + float(total_stats.get("speed_bonus", 0.0))
+	if float(total_stats.get("speed_penalty", 0.0)) != 0.0:
+		mult["speed"] = float(mult.get("speed", 0.0)) - float(total_stats.get("speed_penalty", 0.0))
+	if float(total_stats.get("melee_damage", 0.0)) != 0.0:
+		mult["attack_power"] = float(mult.get("attack_power", 0.0)) + float(total_stats.get("melee_damage", 0.0))
+	return {
+		"flat": flat,
+		"mult": mult,
+		"resources": {}
+	}
+
 ## 当受到伤害时（消耗装备耐久）
 func on_damage_taken(damage: int):
 	var slots = ["head", "body", "hands", "legs", "feet"]
@@ -406,25 +633,13 @@ func reload_weapon():
 
 # ===== 私有方法 =====
 
-func _equip_item_internal(slot: String, item_id: String):
-	_equipped_items[slot] = item_id
-	
-	# 初始化实例数据
-	if not _item_instances.has(item_id):
-		var max_dur = ItemDatabase.get_max_durability(item_id)
-		_item_instances[item_id] = {
-			"durability": max_dur if max_dur > 0 else -1,
-			"enhancements": []
-		}
-	
+func _equip_item_internal(slot: String, item_id: String, instance_id: String = ""):
+	_set_slot_assignment(slot, item_id, instance_id)
+	_ensure_item_instance(instance_id, item_id)
 	item_equipped.emit(slot, item_id)
-	print("[Equipment] 装备: " + item_id + " to " + slot)
-	
-	# 更新负重系统
 	if CarrySystem:
 		CarrySystem.on_equipment_changed()
 	_apply_stats_to_game_state()
-	
 	return true
 
 func _is_compatible_slot(item_slot: String, target_slot: String):
@@ -435,6 +650,12 @@ func _is_compatible_slot(item_slot: String, target_slot: String):
 	if item_slot == "accessory" && target_slot in ["accessory_1", "accessory_2"]:
 		return true
 	return item_slot == target_slot
+
+func _can_item_fit_slot(item_id: String, target_slot: String) -> bool:
+	if item_id.is_empty():
+		return false
+	var item_slot: String = ItemDatabase.get_equip_slot(item_id)
+	return _is_compatible_slot(item_slot, target_slot)
 
 func _item_broken(slot: String, item_id: String):
 	item_broken.emit(slot, item_id)
@@ -462,27 +683,79 @@ func _get_attributes_bonus(item_data: Dictionary) -> Dictionary:
 	return {}
 
 func _apply_stats_to_game_state():
-	var stats = get_total_stats()
 	if GameState:
-		GameState.player_defense = int(stats.get("defense", 0))
-		GameState.inventory_max_slots = 20 + int(stats.get("inventory_slots", 0))
-		var old_max = GameState.player_max_hp
-		GameState.player_max_hp = 100 + int(stats.get("max_hp", 0))
-		if GameState.player_max_hp > 0:
-			GameState.player_hp = mini(GameState.player_hp, GameState.player_max_hp)
+		GameState.apply_player_attribute_delta("equipment_system", get_attribute_modifier_payload())
+		if GameState.has_method("refresh_inventory_capacity"):
+			GameState.refresh_inventory_capacity(true, false)
+
+func _set_slot_assignment(slot: String, item_id: String, instance_id: String) -> void:
+	_equipped_items[slot] = item_id
+	_equipped_instance_ids[slot] = instance_id
+
+func _ensure_item_instance(instance_id: String, item_id: String) -> void:
+	if instance_id.is_empty() or item_id.is_empty():
+		return
+	if _item_instances.has(instance_id):
+		return
+
+	var max_dur = ItemDatabase.get_max_durability(item_id)
+	var legacy_key = item_id if _item_instances.has(item_id) else ""
+	if not legacy_key.is_empty():
+		var legacy_data: Dictionary = _item_instances.get(legacy_key, {}).duplicate(true)
+		_item_instances.erase(legacy_key)
+		_item_instances[instance_id] = {
+			"durability": int(legacy_data.get("durability", max_dur if max_dur > 0 else -1)),
+			"enhancements": legacy_data.get("enhancements", []).duplicate(true)
+		}
+		return
+
+	_item_instances[instance_id] = {
+		"durability": max_dur if max_dur > 0 else -1,
+		"enhancements": []
+	}
+
+func _find_instance_for_item(item_id: String) -> String:
+	for slot in _equipped_items.keys():
+		if str(_equipped_items.get(slot, "")) == item_id:
+			return str(_equipped_instance_ids.get(slot, ""))
+	if GameState and GameState.has_method("find_first_available_item_instance"):
+		return str(GameState.find_first_available_item_instance(item_id))
+	return ""
+
+func on_inventory_item_removed(instance_id: String, slot: String, item_id: String) -> void:
+	if instance_id.is_empty() or slot.is_empty():
+		return
+	if str(_equipped_instance_ids.get(slot, "")) != instance_id:
+		return
+	if slot == "main_hand":
+		_set_slot_assignment("main_hand", "1001", "")
+		item_equipped.emit("main_hand", "1001")
+	else:
+		_set_slot_assignment(slot, "", "")
+	item_unequipped.emit(slot, item_id)
+	if CarrySystem:
+		CarrySystem.on_equipment_changed()
+	_apply_stats_to_game_state()
 
 # ===== 存档接口 =====
 
 func get_save_data():
 	return {
 		"equipped_items": _equipped_items.duplicate(),
+		"equipped_instance_ids": _equipped_instance_ids.duplicate(),
 		"item_instances": _item_instances.duplicate(),
 		"current_ammo": _current_ammo.duplicate()
 	}
 
 func load_save_data(data: Dictionary):
 	_equipped_items = data.get("equipped_items", _equipped_items)
+	_equipped_instance_ids = data.get("equipped_instance_ids", _equipped_instance_ids)
 	_item_instances = data.get("item_instances", {})
+	for slot in _equipped_items.keys():
+		var raw_item = _equipped_items.get(slot, "")
+		_equipped_items[slot] = "" if raw_item == null else str(raw_item)
+		var raw_instance = _equipped_instance_ids.get(slot, "")
+		_equipped_instance_ids[slot] = "" if raw_instance == null else str(raw_instance)
 	var loaded_ammo: Dictionary = data.get("current_ammo", _current_ammo)
 	_current_ammo = {}
 	for ammo_key in loaded_ammo.keys():
@@ -491,7 +764,26 @@ func load_save_data(data: Dictionary):
 	
 	# 确保主手有武器
 	if not _equipped_items.get("main_hand"):
-		_equip_item_internal("main_hand", "1001")
+		_set_slot_assignment("main_hand", "1001", "")
+
+	for slot in _equipped_items.keys():
+		var item_id: String = str(_equipped_items.get(slot, ""))
+		if item_id.is_empty() or item_id == "1001":
+			_equipped_instance_ids[slot] = ""
+			continue
+		var instance_id: String = str(_equipped_instance_ids.get(slot, ""))
+		if instance_id.is_empty() and GameState and GameState.has_method("get_equipped_item_instance"):
+			instance_id = str(GameState.get_equipped_item_instance(slot))
+		if instance_id.is_empty() and GameState and GameState.has_method("find_first_available_item_instance"):
+			instance_id = str(GameState.find_first_available_item_instance(item_id))
+		_equipped_instance_ids[slot] = instance_id
+		if not instance_id.is_empty() and GameState and GameState.has_method("set_inventory_item_equipped_slot"):
+			GameState.set_inventory_item_equipped_slot(instance_id, slot)
+		_ensure_item_instance(instance_id, item_id)
+
+	if GameState and GameState.has_method("refresh_inventory_capacity"):
+		GameState.refresh_inventory_capacity(true, false)
+	_apply_stats_to_game_state()
 	
 	print("[EquipmentSystem] 装备数据已加载")
 

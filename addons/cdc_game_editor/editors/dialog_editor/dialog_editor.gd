@@ -289,7 +289,7 @@ func _apply_type_defaults(data: Dictionary, node_type: String) -> void:
 				]
 		"condition":
 			if not data.has("condition"):
-				data.condition = "GameState.player_hp > 50"
+				data.condition = "GameState.get_player_attributes_snapshot().get(\"hp\", 0) > 50"
 			if not data.has("true_next"):
 				data.true_next = ""
 			if not data.has("false_next"):

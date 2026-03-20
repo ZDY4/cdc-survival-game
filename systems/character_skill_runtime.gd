@@ -159,6 +159,8 @@ func _resolve_initial_skills(skills_config: Dictionary) -> Array[String]:
 				continue
 			if not _is_skill_unlock_valid(skill_id, selected_skill_ids, {}):
 				continue
+			if not _meets_attribute_requirements(skill_id):
+				continue
 			seen_skill_ids[skill_id] = true
 			result.append(skill_id)
 	return result
@@ -179,6 +181,24 @@ func _is_skill_unlock_valid(skill_id: String, selected_skill_ids: Dictionary, vi
 		if not selected_skill_ids.has(prerequisite_id):
 			return false
 		if not _is_skill_unlock_valid(prerequisite_id, selected_skill_ids, visited):
+			return false
+	return true
+
+
+func _meets_attribute_requirements(skill_id: String) -> bool:
+	var skill_definition: Dictionary = _get_skill_definition(skill_id)
+	if skill_definition.is_empty():
+		return false
+	var requirements: Variant = skill_definition.get("attribute_requirements", {})
+	if not (requirements is Dictionary):
+		return true
+	if AttributeSystem == null or not AttributeSystem.has_method("get_actor_attribute"):
+		return true
+	for attribute_name_variant in (requirements as Dictionary).keys():
+		var attribute_name: String = str(attribute_name_variant)
+		var required_value: float = float((requirements as Dictionary).get(attribute_name_variant, 0))
+		var current_value: float = float(AttributeSystem.get_actor_attribute(_owner_actor, attribute_name))
+		if current_value < required_value:
 			return false
 	return true
 
