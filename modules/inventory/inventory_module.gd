@@ -110,6 +110,39 @@ func get_items() -> Array[Dictionary]:
 		return []
 	return GameState.inventory_items.duplicate()
 
+func get_visible_items() -> Array[Dictionary]:
+	if not GameState or not GameState.has_method("get_visible_inventory_items"):
+		return get_items()
+	return GameState.get_visible_inventory_items()
+
+func get_all_items() -> Array[String]:
+	var unique_ids: Array[String] = []
+	for item in get_items():
+		var item_id := str(item.get("id", ""))
+		if item_id.is_empty() or unique_ids.has(item_id):
+			continue
+		unique_ids.append(item_id)
+	unique_ids.sort()
+	return unique_ids
+
+func get_inventory_dimensions() -> Vector2i:
+	if not GameState or not GameState.has_method("get_inventory_dimensions"):
+		return Vector2i(5, 4)
+	return GameState.get_inventory_dimensions()
+
+func get_active_cell_count() -> int:
+	if not GameState:
+		return 0
+	return int(GameState.inventory_max_slots)
+
+func move_item_instance(instance_id: String, target_cell: Vector2i) -> bool:
+	if not GameState or not GameState.has_method("move_item_instance"):
+		return false
+	var moved: bool = GameState.move_item_instance(instance_id, target_cell)
+	if moved:
+		weight_changed.emit(get_inventory_weight(), get_max_weight())
+	return moved
+
 ## 获取物品名称
 func get_item_display_name(item_id: String) -> String:
 	return ItemDatabase.get_item_name(str(item_id))
@@ -249,6 +282,8 @@ func clear_inventory():
 		return
 	
 	GameState.inventory_items.clear()
+	if GameState.has_method("refresh_inventory_capacity"):
+		GameState.refresh_inventory_capacity(false, false)
 	weight_changed.emit(0.0, get_max_weight())
 	print("[InventoryModule] 背包已清空")
 

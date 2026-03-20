@@ -33,6 +33,12 @@ enum ItemRarity {
 var _items: Dictionary = {}  # item_id -> item_data
 
 const ITEM_ID_ALIASES: Dictionary = ItemIdResolver.ITEM_ID_ALIASES
+const DEFAULT_INVENTORY_GRID_SIZE: Vector2i = Vector2i(5, 4)
+const DEFAULT_BACKPACK_GRID_SIZES: Dictionary = {
+	"2018": Vector2i(6, 5),
+	"2019": Vector2i(8, 6),
+	"2020": Vector2i(10, 7)
+}
 
 func resolve_item_id(item_id: String) -> String:
 	return ItemIdResolver.resolve_item_id(item_id, _items)
@@ -79,6 +85,10 @@ func _validate_and_fix_item(item_data: Dictionary) -> Dictionary:
 		"usable": false,
 		"equippable": false,
 		"slot": "",
+		"inventory_width": 0,
+		"inventory_height": 0,
+		"inventory_grid_width": 0,
+		"inventory_grid_height": 0,
 		"special_effects": [],
 		"attributes_bonus": {}
 	}
@@ -179,6 +189,85 @@ func is_stackable(item_id: String) -> bool:
 func get_max_stack(item_id: String) -> int:
 	var item = get_item(item_id)
 	return item.get("max_stack", 99)
+
+## 获取背包/物品在拼图背包中的占用尺寸
+func get_inventory_footprint(item_id: String) -> Vector2i:
+	var item = get_item(item_id)
+	var width = int(item.get("inventory_width", 0))
+	var height = int(item.get("inventory_height", 0))
+	if width > 0 and height > 0:
+		return Vector2i(width, height)
+
+	var item_type = str(item.get("type", "misc"))
+	var subtype = str(item.get("subtype", "")).to_lower()
+	var resolved_id = resolve_item_id(item_id)
+
+	if resolved_id in ["1005", "2018", "2019", "2020"]:
+		return Vector2i(2, 2) if resolved_id == "1005" else Vector2i(2, 3)
+	if resolved_id in ["1004", "2001", "2002", "2003", "2004", "2005", "2013", "2014"]:
+		return Vector2i(2, 2)
+	if resolved_id in ["2006", "2007", "2008", "2009"]:
+		return Vector2i(2, 3)
+	if resolved_id in ["1003", "1013", "1014", "1050", "1125"]:
+		return Vector2i(1, 3)
+	if resolved_id in ["1018", "1019", "1020"]:
+		return Vector2i(2, 3)
+	if resolved_id in ["2010", "2011", "2012", "2015", "2016", "2017"]:
+		return Vector2i(2, 1)
+	if item_type == "weapon":
+		match subtype:
+			"dagger", "knife":
+				return Vector2i(1, 2)
+			"pistol", "handgun":
+				return Vector2i(2, 1)
+			"bat", "club", "pipe_wrench", "machete", "spear":
+				return Vector2i(1, 3)
+			"shotgun", "rifle", "assault_rifle", "chainsaw":
+				return Vector2i(2, 3)
+			_:
+				return Vector2i(2, 2)
+	if item_type == "armor":
+		match str(item.get("slot", "")):
+			"head":
+				return Vector2i(2, 2)
+			"body":
+				return Vector2i(2, 3)
+			"hands", "feet":
+				return Vector2i(2, 1)
+			"legs":
+				return Vector2i(2, 2)
+			"back":
+				return Vector2i(2, 3)
+			_:
+				return Vector2i(2, 2)
+	if item_type == "consumable":
+		match subtype:
+			"healing":
+				return Vector2i(2, 2)
+			"food", "drink":
+				return Vector2i(1, 1)
+			_:
+				return Vector2i(1, 1)
+	if item_type in ["ammo", "material", "accessory"]:
+		return Vector2i(1, 1)
+	return Vector2i(1, 1)
+
+## 获取当前背包装备提供的格子尺寸
+func get_backpack_grid_size(item_id: String) -> Vector2i:
+	if str(item_id).strip_edges().is_empty():
+		return DEFAULT_INVENTORY_GRID_SIZE
+	var item = get_item(item_id)
+	var width = int(item.get("inventory_grid_width", 0))
+	var height = int(item.get("inventory_grid_height", 0))
+	if width > 0 and height > 0:
+		return Vector2i(width, height)
+	var resolved_id = resolve_item_id(item_id)
+	if DEFAULT_BACKPACK_GRID_SIZES.has(resolved_id):
+		return DEFAULT_BACKPACK_GRID_SIZES[resolved_id]
+	return DEFAULT_INVENTORY_GRID_SIZE
+
+func get_default_inventory_grid_size() -> Vector2i:
+	return DEFAULT_INVENTORY_GRID_SIZE
 
 ## 检查是否可装备
 func is_equippable(item_id: String) -> bool:

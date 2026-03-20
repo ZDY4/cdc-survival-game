@@ -12,6 +12,8 @@
   "icon_path": "res://assets/icons/items/medkit.png",
   "equippable": false,
   "slot": "",
+  "inventory_width": 2,
+  "inventory_height": 2,
   "level_requirement": 0,
   "durability": -1,
   "max_durability": -1,
