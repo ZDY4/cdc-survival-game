@@ -288,7 +288,7 @@ func _apply_preview_visual(preview_data: Dictionary) -> void:
 	if mesh == null:
 		mesh = CapsuleMesh.new()
 		mesh.radius = 0.22
-		mesh.mid_height = 0.55
+		mesh.height = 0.55
 		_preview_mesh.mesh = mesh
 
 	var material := _preview_mesh.material_override as StandardMaterial3D

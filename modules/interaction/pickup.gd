@@ -80,7 +80,11 @@ func _apply_pickup_option(item_state: Dictionary) -> void:
 	pickup_option.min_count = max(1, min(min_count, max_count))
 	pickup_option.max_count = max(pickup_option.min_count, max(min_count, max_count))
 	pickup_option.pickup_root_path = PICKUP_ROOT_PATH
-	_interactable.set_options([pickup_option])
+
+	# Interactable is not a tool script, so the editor only has a placeholder
+	# instance for it. Skip runtime option wiring while previewing in-editor.
+	if not Engine.is_editor_hint():
+		_interactable.set_options([pickup_option])
 	_set_generated_interaction_name(_build_interaction_name(item_state))
 
 func _apply_visual_state(item_state: Dictionary) -> void:

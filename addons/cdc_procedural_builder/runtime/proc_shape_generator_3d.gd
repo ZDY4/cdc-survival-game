@@ -387,6 +387,10 @@ func _unregister_grid_obstacles() -> void:
 	_registered_grid_cells.clear()
 
 func _get_effective_grid_size() -> float:
+	# In the editor, GridMovementSystem is a placeholder instance because the
+	# autoload is not a tool script. Avoid calling into it from @tool code.
+	if Engine.is_editor_hint():
+		return 1.0
 	if GridMovementSystem != null and GridMovementSystem.has_method("grid_to_world"):
 		var origin_world: Vector3 = GridMovementSystem.grid_to_world(Vector3i.ZERO)
 		var next_world: Vector3 = GridMovementSystem.grid_to_world(Vector3i(1, 0, 0))
