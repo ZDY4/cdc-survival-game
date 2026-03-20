@@ -29,6 +29,7 @@ func _setup_ui():
 	# 连接按钮信号
 	travel_button.pressed.connect(_on_travel_pressed)
 	close_button.pressed.connect(_on_close_pressed)
+	travel_button.text = "改用场景内入口"
 	
 	# 连接地点选择信号
 	location_selected.connect(_on_location_selected)
@@ -87,7 +88,7 @@ func _update_info_panel(dest_name: String, cost: Dictionary):
 		travel_button.disabled = true
 	else:
 		food_label.modulate = Color.WHITE
-		travel_button.disabled = false
+		travel_button.disabled = true
 	
 	# 风险
 	var risk = cost.risk_level
@@ -106,17 +107,12 @@ func _update_info_panel(dest_name: String, cost: Dictionary):
 		_: risk_label.modulate = Color(0.9, 0.2, 0.2)
 
 func _on_travel_pressed():
-	if _selected_location.is_empty():
-		return
-	
-	var current = GameState.player_position if GameState else "safehouse"
-	
-	# 执行移动
-	if MapModule:
-		var success = MapModule.travel_to(_selected_location)
-		if success:
-			travel_confirmed.emit(current, _selected_location)
-			hide_map()
+	if DialogModule:
+		DialogModule.show_dialog(
+			"正式旅行已切换为独立的大地图场景，请在小地图内通过交互点进入大地图后移动。",
+			"地图提示",
+			""
+		)
 
 func _on_close_pressed():
 	map_closed.emit()

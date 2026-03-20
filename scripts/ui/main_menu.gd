@@ -33,8 +33,7 @@ func _on_start_pressed():
 	# 重置游戏状态
 	_reset_game_state()
 	
-	# 进入大地图世界入口
-	get_tree().change_scene_to_file("res://scenes/locations/game_overworld.tscn")
+	get_tree().change_scene_to_file(GameState.get_active_scene_path())
 
 func _on_continue_pressed():
 	print("[MainMenu] 继续游戏")
@@ -42,7 +41,7 @@ func _on_continue_pressed():
 	if SaveSystem.has_save():
 		if SaveSystem.load_latest_game():
 			print("[MainMenu] 存档加载成功")
-			get_tree().change_scene_to_file("res://scenes/locations/game_overworld.tscn")
+			get_tree().change_scene_to_file(GameState.get_active_scene_path())
 		else:
 			print("[MainMenu] 存档加载失败")
 			# 显示错误提示
@@ -87,8 +86,8 @@ func _reset_game_state(item: Dictionary = {}):
 	GameState.player_stamina = 100
 	GameState.player_mental = 100
 	GameState.player_position = "safehouse"
-	GameState.last_small_map_location = "safehouse"
-	GameState.clear_pending_scene_entry()
+	GameState.reset_world_runtime("safehouse", "default_spawn")
+	GameState.set_overworld_cell(Vector2i.ZERO)
 	
 	if GameState.has_method("set_inventory_from_save"):
 		GameState.set_inventory_from_save([], 20, 5, 4, 1)

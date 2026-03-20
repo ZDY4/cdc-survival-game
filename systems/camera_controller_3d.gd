@@ -4,6 +4,7 @@ extends Node3D
 const CameraConfig3D = preload("res://systems/camera_config_3d.gd")
 
 @export var target: Node3D = null
+@export var make_current_on_ready: bool = true
 
 var _config: CameraConfig3D = CameraConfig3D.new()
 var _current_zoom: float = 0.0
@@ -21,7 +22,8 @@ var _shake_elapsed: float = 0.0
 func _ready() -> void:
 	_camera = Camera3D.new()
 	add_child(_camera)
-	_camera.make_current()
+	if make_current_on_ready:
+		_camera.make_current()
 	_camera.near = 0.05
 	_camera.far = 2000.0
 

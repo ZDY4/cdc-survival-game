@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://c8yvxg3ulq3a2"]
+[gd_scene load_steps=17 format=3 uid="uid://c8yvxg3ulq3a2"]
 
 [ext_resource type="Script" uid="uid://4xfxuc73rlng" path="res://scripts/locations/game_world_3d.gd" id="1_abc12"]
 [ext_resource type="Script" uid="uid://dow247j7enhrh" path="res://systems/spawn/ai_spawn_point.gd" id="2_7y8c1"]
@@ -11,6 +11,8 @@
 [ext_resource type="Script" uid="uid://b8b3jnxmcqbjx" path="res://addons/cdc_procedural_builder/runtime/proc_wall_3d.gd" id="9_bk5u6"]
 [ext_resource type="Script" uid="uid://dt3ufwv35m16d" path="res://addons/cdc_procedural_builder/runtime/proc_fence_3d.gd" id="10_tf1x7"]
 [ext_resource type="Script" uid="uid://cok4y15ppmlsq" path="res://addons/cdc_procedural_builder/runtime/proc_house_3d.gd" id="11_77dte"]
+[ext_resource type="PackedScene" path="res://modules/interaction/overworld_entry.tscn" id="12_overworld_entry"]
+[ext_resource type="PackedScene" path="res://modules/interaction/subscene_entry.tscn" id="13_subscene_entry"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_1"]
 size = Vector3(100, 0.1, 100)
@@ -31,6 +33,7 @@ shadow_bias = 0.05
 
 [node name="CameraController3D" type="Node3D" parent="." unique_id=1214266619]
 script = ExtResource("4_cam")
+make_current_on_ready = false
 
 [node name="GridFloor" type="StaticBody3D" parent="." unique_id=698765607]
 
@@ -52,6 +55,12 @@ bounds_node = NodePath("GridFloor/MeshInstance3D")
 [node name="PlayerSpawn" type="Marker3D" parent="." unique_id=905004213]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0, 0.5)
 script = ExtResource("6_player_spawn")
+spawn_id = "default_spawn"
+
+[node name="InteriorReturnSpawn" type="Marker3D" parent="." unique_id=1905004214]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 0, 6.5)
+script = ExtResource("6_player_spawn")
+spawn_id = "safehouse_house_exit"
 
 [node name="MerchantSpawn" type="Marker3D" parent="." unique_id=834371492]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 0, 3.5)
@@ -93,6 +102,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 3)
 item_id = "1010"
 min_count = 3
 max_count = 6
+
+[node name="OverworldEntry" parent="." unique_id=998100201 instance=ExtResource("12_overworld_entry")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0, 4.5)
+
+[node name="SubsceneEntry" parent="." unique_id=998100202 instance=ExtResource("13_subscene_entry")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 0, 6.5)
+prompt_text = "进入安全屋室内"
+target_location_id = "safehouse_interior"
+return_spawn_id = "safehouse_house_exit"
 
 [node name="ProcWall3D" type="Node3D" parent="." unique_id=804942544]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.434925, 0, 0)

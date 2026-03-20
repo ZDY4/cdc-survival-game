@@ -4,6 +4,8 @@ extends Marker3D
 
 const GridNavigator = preload("res://systems/grid_navigator.gd")
 
+@export var spawn_id: String = "default_spawn"
+
 func _enter_tree() -> void:
 	if Engine.is_editor_hint():
 		set_process(true)
@@ -20,6 +22,11 @@ func _process(_delta: float) -> void:
 
 func get_spawn_position() -> Vector3:
 	return _snap_world_pos_to_grid(global_position)
+
+func matches_spawn_id(candidate_spawn_id: String) -> bool:
+	if candidate_spawn_id.strip_edges().is_empty():
+		return false
+	return spawn_id.strip_edges() == candidate_spawn_id.strip_edges()
 
 func _snap_marker_to_grid() -> void:
 	if not is_inside_tree():

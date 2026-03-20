@@ -2,6 +2,15 @@ extends Node
 # GameState - 游戏全局状态管理
 # 最佳实践: 不使用 class_name，直接暴露变量
 const AttributeSystemScript = preload("res://systems/attribute_system.gd")
+const OUTDOOR_ROOT_SCENE_PATH: String = "res://scenes/locations/game_world_root.tscn"
+const SCENE_KIND_OUTDOOR_ROOT: String = "outdoor_root"
+const SCENE_KIND_INTERIOR: String = "interior"
+const SCENE_KIND_DUNGEON: String = "dungeon"
+const WORLD_MODE_LOCAL: String = "LOCAL"
+const WORLD_MODE_ZOOMING_OUT: String = "ZOOMING_OUT"
+const WORLD_MODE_OVERWORLD: String = "OVERWORLD"
+const WORLD_MODE_TRAVELING: String = "TRAVELING"
+const WORLD_MODE_ZOOMING_IN: String = "ZOOMING_IN"
 
 # ===== 玩家状态 =====
 var _player_attributes: Dictionary = {}
@@ -83,10 +92,17 @@ var player_mental: int = 100
 var player_position: String = "safehouse"
 var player_position_3d: Vector3 = Vector3.ZERO
 var player_grid_position: Vector3i = Vector3i.ZERO
-var pending_location_id: String = ""
-var pending_entry_spawn_id: String = ""
-var pending_overworld_origin: String = ""
-var last_small_map_location: String = "safehouse"
+var player_local_position: Vector3 = Vector3(0.5, 0.0, 0.5)
+var world_mode: String = WORLD_MODE_OVERWORLD
+var active_scene_kind: String = SCENE_KIND_OUTDOOR_ROOT
+var active_outdoor_location_id: String = "safehouse"
+var active_outdoor_spawn_id: String = "default_spawn"
+var overworld_pawn_cell: Vector2i = Vector2i.ZERO
+var camera_zoom_level: float = 11.0
+var current_subscene_location_id: String = ""
+var return_outdoor_location_id: String = ""
+var return_outdoor_spawn_id: String = "default_spawn"
+var outdoor_resume_mode: String = WORLD_MODE_LOCAL
 var is_player_moving: bool = false
 
 # ===== 角色装备系统 =====
@@ -99,31 +115,95 @@ var _pending_ammo: Array[Dictionary] = []
 func save_3d_position(pos: Vector3, grid_pos: Vector3i) -> void:
 	player_position_3d = pos
 	player_grid_position = grid_pos
+	player_local_position = pos
 
 func get_saved_3d_position() -> Vector3:
 	return player_position_3d
 
-func set_pending_scene_entry(location_id: String, spawn_id: String, overworld_origin: String = "") -> void:
-	pending_location_id = location_id
-	pending_entry_spawn_id = spawn_id
-	pending_overworld_origin = overworld_origin
+func save_local_player_position(local_pos: Vector3) -> void:
+	player_local_position = local_pos
 
-func consume_pending_scene_entry() -> Dictionary:
-	var data := {
-		"location_id": pending_location_id,
-		"entry_spawn_id": pending_entry_spawn_id,
-		"overworld_origin": pending_overworld_origin
-	}
-	clear_pending_scene_entry()
-	return data
+func set_world_mode(mode: String) -> void:
+	world_mode = mode
 
-func clear_pending_scene_entry() -> void:
-	pending_location_id = ""
-	pending_entry_spawn_id = ""
-	pending_overworld_origin = ""
+func set_camera_zoom_level(value: float) -> void:
+	camera_zoom_level = value
 
-func set_pending_overworld_origin(location_id: String) -> void:
-	pending_overworld_origin = location_id
+func set_overworld_cell(cell: Vector2i) -> void:
+	overworld_pawn_cell = cell
+
+func set_active_outdoor_context(location_id: String, spawn_id: String = "default_spawn") -> void:
+	active_scene_kind = SCENE_KIND_OUTDOOR_ROOT
+	active_outdoor_location_id = location_id
+	active_outdoor_spawn_id = spawn_id
+	player_position = location_id
+	current_subscene_location_id = ""
+
+func set_active_subscene_context(
+	location_id: String,
+	scene_kind: String,
+	return_location_id: String,
+	return_spawn_id: String
+) -> void:
+	active_scene_kind = scene_kind
+	current_subscene_location_id = location_id
+	return_outdoor_location_id = return_location_id
+	return_outdoor_spawn_id = return_spawn_id
+	outdoor_resume_mode = WORLD_MODE_LOCAL
+	player_position = location_id
+
+func restore_outdoor_from_subscene() -> void:
+	active_scene_kind = SCENE_KIND_OUTDOOR_ROOT
+	current_subscene_location_id = ""
+	if not return_outdoor_location_id.is_empty():
+		active_outdoor_location_id = return_outdoor_location_id
+	if not return_outdoor_spawn_id.is_empty():
+		active_outdoor_spawn_id = return_outdoor_spawn_id
+	player_position = active_outdoor_location_id
+	world_mode = outdoor_resume_mode
+
+func reset_world_runtime(start_location_id: String = "safehouse", start_spawn_id: String = "default_spawn") -> void:
+	active_scene_kind = SCENE_KIND_OUTDOOR_ROOT
+	world_mode = WORLD_MODE_OVERWORLD
+	active_outdoor_location_id = start_location_id
+	active_outdoor_spawn_id = start_spawn_id
+	current_subscene_location_id = ""
+	return_outdoor_location_id = ""
+	return_outdoor_spawn_id = start_spawn_id
+	outdoor_resume_mode = WORLD_MODE_LOCAL
+	overworld_pawn_cell = Vector2i.ZERO
+	camera_zoom_level = 11.0
+	player_position = start_location_id
+	player_position_3d = Vector3.ZERO
+	player_grid_position = Vector3i.ZERO
+	player_local_position = Vector3(0.5, 0.0, 0.5)
+
+func get_active_scene_path() -> String:
+	if active_scene_kind == SCENE_KIND_OUTDOOR_ROOT:
+		return OUTDOOR_ROOT_SCENE_PATH
+	if current_subscene_location_id.is_empty():
+		return OUTDOOR_ROOT_SCENE_PATH
+	if MapModule != null and MapModule.has_method("get_location_scene_path"):
+		return MapModule.get_location_scene_path(current_subscene_location_id)
+	return OUTDOOR_ROOT_SCENE_PATH
+
+func _deserialize_vector3(value: Variant, fallback: Vector3) -> Vector3:
+	var decoded: Variant = str_to_var(str(value))
+	if decoded is Vector3:
+		return decoded
+	return fallback
+
+func _deserialize_vector3i(value: Variant, fallback: Vector3i) -> Vector3i:
+	var decoded: Variant = str_to_var(str(value))
+	if decoded is Vector3i:
+		return decoded
+	return fallback
+
+func _deserialize_vector2i(value: Variant, fallback: Vector2i) -> Vector2i:
+	var decoded: Variant = str_to_var(str(value))
+	if decoded is Vector2i:
+		return decoded
+	return fallback
 
 # ===== 货币系统 =====
 var player_money: int = 0
@@ -893,7 +973,8 @@ func _refresh_inventory_instance_counter() -> void:
 
 func travel_to(location_id: String):
 	player_position = location_id
-	last_small_map_location = location_id
+	active_outdoor_location_id = location_id
+	active_scene_kind = SCENE_KIND_OUTDOOR_ROOT
 	
 	# 通知风险系统
 	if _risk_system:
@@ -946,10 +1027,19 @@ func get_save_data() -> Dictionary:
 		"player_stamina": player_stamina,
 		"player_mental": player_mental,
 		"player_position": player_position,
-		"pending_location_id": pending_location_id,
-		"pending_entry_spawn_id": pending_entry_spawn_id,
-		"pending_overworld_origin": pending_overworld_origin,
-		"last_small_map_location": last_small_map_location,
+		"player_position_3d": var_to_str(player_position_3d),
+		"player_grid_position": var_to_str(player_grid_position),
+		"player_local_position": var_to_str(player_local_position),
+		"world_mode": world_mode,
+		"active_scene_kind": active_scene_kind,
+		"active_outdoor_location_id": active_outdoor_location_id,
+		"active_outdoor_spawn_id": active_outdoor_spawn_id,
+		"overworld_pawn_cell": var_to_str(overworld_pawn_cell),
+		"camera_zoom_level": camera_zoom_level,
+		"current_subscene_location_id": current_subscene_location_id,
+		"return_outdoor_location_id": return_outdoor_location_id,
+		"return_outdoor_spawn_id": return_outdoor_spawn_id,
+		"outdoor_resume_mode": outdoor_resume_mode,
 		"player_money": player_money,
 		
 		# 等级与经验
@@ -1000,10 +1090,31 @@ func load_save_data(data: Dictionary):
 	player_stamina = data.get("player_stamina", 100)
 	player_mental = data.get("player_mental", 100)
 	player_position = data.get("player_position", "safehouse")
-	pending_location_id = data.get("pending_location_id", "")
-	pending_entry_spawn_id = data.get("pending_entry_spawn_id", "")
-	pending_overworld_origin = data.get("pending_overworld_origin", "")
-	last_small_map_location = data.get("last_small_map_location", player_position)
+	player_position_3d = _deserialize_vector3(
+		data.get("player_position_3d", var_to_str(Vector3.ZERO)),
+		Vector3.ZERO
+	)
+	player_grid_position = _deserialize_vector3i(
+		data.get("player_grid_position", var_to_str(Vector3i.ZERO)),
+		Vector3i.ZERO
+	)
+	player_local_position = _deserialize_vector3(
+		data.get("player_local_position", var_to_str(Vector3(0.5, 0.0, 0.5))),
+		Vector3(0.5, 0.0, 0.5)
+	)
+	world_mode = str(data.get("world_mode", WORLD_MODE_OVERWORLD))
+	active_scene_kind = str(data.get("active_scene_kind", SCENE_KIND_OUTDOOR_ROOT))
+	active_outdoor_location_id = str(data.get("active_outdoor_location_id", player_position))
+	active_outdoor_spawn_id = str(data.get("active_outdoor_spawn_id", "default_spawn"))
+	overworld_pawn_cell = _deserialize_vector2i(
+		data.get("overworld_pawn_cell", var_to_str(Vector2i.ZERO)),
+		Vector2i.ZERO
+	)
+	camera_zoom_level = float(data.get("camera_zoom_level", 11.0))
+	current_subscene_location_id = str(data.get("current_subscene_location_id", ""))
+	return_outdoor_location_id = str(data.get("return_outdoor_location_id", active_outdoor_location_id))
+	return_outdoor_spawn_id = str(data.get("return_outdoor_spawn_id", "default_spawn"))
+	outdoor_resume_mode = str(data.get("outdoor_resume_mode", WORLD_MODE_LOCAL))
 	player_money = data.get("player_money", 0)
 	
 	# 等级与经验

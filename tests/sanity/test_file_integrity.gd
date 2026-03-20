@@ -27,7 +27,9 @@ const REQUIRED_MODULES = [
 # 必需场景
 const REQUIRED_SCENES = [
     "scenes/ui/main_menu.tscn",
+    "scenes/locations/game_world_root.tscn",
     "scenes/locations/game_world_3d.tscn",
+    "scenes/interiors/safehouse_interior.tscn",
     "modules/dialog/dialog_ui.tscn"
 ]
 
