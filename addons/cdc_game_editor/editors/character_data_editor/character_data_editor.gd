@@ -10,6 +10,10 @@ const CHARACTER_DIR: String = "res://data/characters"
 const SKILLS_DIR: String = "res://data/skills"
 const SKILL_TREES_DIR: String = "res://data/skill_trees"
 const AI_GENERATE_PANEL_SCRIPT := preload("res://addons/cdc_game_editor/ai/ai_generate_panel.gd")
+const LEFT_PANEL_MIN_WIDTH := 220
+const LEFT_PANEL_MAX_WIDTH := 300
+const LEFT_PANEL_DEFAULT_RATIO := 0.24
+const RIGHT_PANEL_MIN_WIDTH := 560
 
 var editor_plugin: EditorPlugin = null
 
@@ -38,6 +42,8 @@ var _resource_field_controls: Dictionary = {}
 var _attribute_definitions: Dictionary = {}
 var _ai_panel: Window = null
 var _ai_provider_override: Variant = null
+var _main_split: HSplitContainer
+var _split_layout_initialized: bool = false
 
 
 func _ready() -> void:
@@ -46,16 +52,26 @@ func _ready() -> void:
 	_setup_ui()
 	_load_characters_from_files()
 	_update_character_list()
+	resized.connect(_on_editor_resized)
+	call_deferred("_apply_split_layout")
 
 
 func _setup_ui() -> void:
 	anchors_preset = PRESET_FULL_RECT
+	size_flags_horizontal = SIZE_EXPAND_FILL
+	size_flags_vertical = SIZE_EXPAND_FILL
+
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(PRESET_FULL_RECT)
+	root.size_flags_horizontal = SIZE_EXPAND_FILL
+	root.size_flags_vertical = SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 8)
+	add_child(root)
 
 	var toolbar := HBoxContainer.new()
-	toolbar.custom_minimum_size = Vector2(0, 45)
-	toolbar.set_anchors_preset(PRESET_TOP_WIDE)
-	toolbar.offset_bottom = 45
-	add_child(toolbar)
+	toolbar.custom_minimum_size = Vector2(0, 42)
+	toolbar.size_flags_horizontal = SIZE_EXPAND_FILL
+	root.add_child(toolbar)
 
 	var new_btn := Button.new()
 	new_btn.text = "新建角色"
@@ -84,18 +100,18 @@ func _setup_ui() -> void:
 	ai_btn.pressed.connect(_open_ai_panel)
 	toolbar.add_child(ai_btn)
 
-	var split := HSplitContainer.new()
-	split.set_anchors_preset(PRESET_FULL_RECT)
-	split.offset_top = 50
-	split.offset_bottom = -20
-	add_child(split)
+	_main_split = HSplitContainer.new()
+	_main_split.size_flags_horizontal = SIZE_EXPAND_FILL
+	_main_split.size_flags_vertical = SIZE_EXPAND_FILL
+	root.add_child(_main_split)
 
 	var left_panel := VBoxContainer.new()
-	left_panel.custom_minimum_size = Vector2(280, 0)
-	split.add_child(left_panel)
+	left_panel.custom_minimum_size = Vector2(LEFT_PANEL_MIN_WIDTH, 0)
+	left_panel.size_flags_vertical = SIZE_EXPAND_FILL
+	_main_split.add_child(left_panel)
 
 	var title := Label.new()
-	title.text = "Character 列表"
+	title.text = "角色列表"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
 	left_panel.add_child(title)
@@ -103,10 +119,12 @@ func _setup_ui() -> void:
 
 	_search_box = LineEdit.new()
 	_search_box.placeholder_text = "搜索角色..."
+	_search_box.size_flags_horizontal = SIZE_EXPAND_FILL
 	_search_box.text_changed.connect(_on_search_changed)
 	left_panel.add_child(_search_box)
 
 	_character_list = ItemList.new()
+	_character_list.size_flags_horizontal = SIZE_EXPAND_FILL
 	_character_list.size_flags_vertical = SIZE_EXPAND_FILL
 	_character_list.item_selected.connect(_on_character_selected)
 	left_panel.add_child(_character_list)
@@ -114,10 +132,11 @@ func _setup_ui() -> void:
 	var right_scroll := ScrollContainer.new()
 	right_scroll.size_flags_horizontal = SIZE_EXPAND_FILL
 	right_scroll.size_flags_vertical = SIZE_EXPAND_FILL
-	split.add_child(right_scroll)
+	_main_split.add_child(right_scroll)
 
 	var form := VBoxContainer.new()
 	form.name = "Form"
+	form.custom_minimum_size = Vector2(RIGHT_PANEL_MIN_WIDTH, 0)
 	form.size_flags_horizontal = SIZE_EXPAND_FILL
 	form.size_flags_vertical = SIZE_EXPAND_FILL
 	form.add_theme_constant_override("separation", 8)
@@ -178,10 +197,10 @@ func _setup_ui() -> void:
 	form.add_child(_initial_skill_groups_container)
 
 	_status_bar = Label.new()
-	_status_bar.set_anchors_preset(PRESET_BOTTOM_WIDE)
-	_status_bar.offset_top = -20
+	_status_bar.size_flags_horizontal = SIZE_EXPAND_FILL
+	_status_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_bar.text = "就绪"
-	add_child(_status_bar)
+	root.add_child(_status_bar)
 
 	_rebuild_attribute_set_selector({})
 	_rebuild_skill_tree_selector()
@@ -192,6 +211,8 @@ func _add_string_field(parent: VBoxContainer, key: String, label_text: String) -
 	var label := Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(140, 0)
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(label)
 
 	var field := LineEdit.new()
@@ -205,6 +226,8 @@ func _add_string_field(parent: VBoxContainer, key: String, label_text: String) -
 func _add_multiline_field(parent: VBoxContainer, key: String, label_text: String) -> void:
 	var label := Label.new()
 	label.text = label_text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
 	parent.add_child(label)
 
 	var field := TextEdit.new()
@@ -227,12 +250,15 @@ func _add_number_field(
 	var label := Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(140, 0)
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(label)
 
 	var field := SpinBox.new()
 	field.min_value = min_value
 	field.max_value = max_value
 	field.step = step
+	field.size_flags_horizontal = SIZE_EXPAND_FILL
 	field.value_changed.connect(_on_number_field_changed.bind(key))
 	row.add_child(field)
 	parent.add_child(row)
@@ -386,6 +412,8 @@ func _rebuild_attribute_editor(record: Dictionary) -> void:
 			var label := Label.new()
 			label.text = str(catalog_entry.get("display_name", attribute_key))
 			label.custom_minimum_size = Vector2(140, 0)
+			label.size_flags_horizontal = SIZE_EXPAND_FILL
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			row.add_child(label)
 
 			var field := SpinBox.new()
@@ -418,6 +446,8 @@ func _rebuild_attribute_editor(record: Dictionary) -> void:
 		var label := Label.new()
 		label.text = str(catalog_entry.get("display_name", resource_key))
 		label.custom_minimum_size = Vector2(140, 0)
+		label.size_flags_horizontal = SIZE_EXPAND_FILL
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
 
 		var field := SpinBox.new()
@@ -1004,6 +1034,29 @@ func _clear_container(container: Control) -> void:
 func _update_status(message: String) -> void:
 	if _status_bar:
 		_status_bar.text = message
+
+
+func _on_editor_resized() -> void:
+	call_deferred("_apply_split_layout")
+
+
+func _apply_split_layout() -> void:
+	if _main_split == null or not is_instance_valid(_main_split):
+		return
+
+	var available_width := int(size.x)
+	if available_width <= 0:
+		return
+
+	var min_left_width := LEFT_PANEL_MIN_WIDTH
+	var max_left_width := min(LEFT_PANEL_MAX_WIDTH, max(min_left_width, available_width - RIGHT_PANEL_MIN_WIDTH))
+	var default_left_width := int(round(float(available_width) * LEFT_PANEL_DEFAULT_RATIO))
+	if not _split_layout_initialized:
+		_main_split.split_offset = clampi(default_left_width, min_left_width, max_left_width)
+		_split_layout_initialized = true
+		return
+
+	_main_split.split_offset = clampi(_main_split.split_offset, min_left_width, max_left_width)
 
 
 func has_unsaved_changes() -> bool:

@@ -1,7 +1,7 @@
 @tool
 extends Control
 ## 物品编辑器
-## 用于创建和理游戏中的所有物品数
+## 用于创建和管理游戏中的所有物品数据
 
 signal item_saved(item_id: String)
 signal item_loaded(item_id: String)
@@ -52,6 +52,11 @@ const WEAPON_SUBTYPES = {
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
 const AI_GENERATE_PANEL_SCRIPT = preload("res://addons/cdc_game_editor/ai/ai_generate_panel.gd")
 const ITEM_DATA_DIR := "res://data/items"
+const LEFT_PANEL_MIN_WIDTH := 220
+const LEFT_PANEL_MAX_WIDTH := 300
+const LEFT_PANEL_DEFAULT_RATIO := 0.24
+const RIGHT_PANEL_MIN_WIDTH := 520
+const ICON_PREVIEW_SIZE := Vector2(80, 80)
 
 # 节点引用
 @onready var _item_list: ItemList
@@ -63,6 +68,7 @@ const ITEM_DATA_DIR := "res://data/items"
 @onready var _status_bar: Label
 @onready var _validation_panel: VBoxContainer
 @onready var _stats_label: Label
+@onready var _main_split: HSplitContainer
 
 # 数据
 var items: Dictionary = {}  # item_id -> item_data
@@ -76,6 +82,7 @@ var _ai_provider_override: Variant = null
 
 # 工具
 var _undo_redo_helper: RefCounted
+var _split_layout_initialized: bool = false
 
 # 编辑器插件引
 var editor_plugin: EditorPlugin = null:
@@ -87,11 +94,13 @@ var editor_plugin: EditorPlugin = null:
 func _ready():
 	_setup_ui()
 	_setup_file_dialog()
+	resized.connect(_on_editor_resized)
 	_load_items_from_project_data()
 	if items.is_empty():
 		_load_default_items()
 	_update_item_list()
 	_update_stats()
+	call_deferred("_apply_split_layout")
 
 func _load_items_from_project_data() -> void:
 	if not _load_from_directory(ITEM_DATA_DIR):
@@ -99,44 +108,43 @@ func _load_items_from_project_data() -> void:
 
 func _setup_ui():
 	anchors_preset = Control.PRESET_FULL_RECT
-	
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var root = VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 8)
+	add_child(root)
+
 	# 工具栏
 	_toolbar = HBoxContainer.new()
-	_toolbar.custom_minimum_size = Vector2(0, 45)
-	_toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_toolbar.offset_top = 0
-	_toolbar.offset_bottom = 45
-	add_child(_toolbar)
+	_toolbar.custom_minimum_size = Vector2(0, 42)
+	_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_child(_toolbar)
 	_create_toolbar()
-	
+
 	# 主分割
-	var main_split = HSplitContainer.new()
-	main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
-	main_split.offset_top = 50
-	main_split.offset_bottom = -20
-	main_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	add_child(main_split)
-	
-	# 左侧面板：物品列+ 过滤
+	_main_split = HSplitContainer.new()
+	_main_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(_main_split)
+
+	# 左侧面板：物品列表 + 过滤
 	var left_panel = _create_left_panel()
-	main_split.add_child(left_panel)
-	
-	# 右侧面板：属性编
+	_main_split.add_child(left_panel)
+
+	# 右侧面板：属性编辑
 	var right_panel = _create_right_panel()
-	main_split.add_child(right_panel)
-	
-	main_split.split_offset = 280
-	
+	_main_split.add_child(right_panel)
+
 	# 状态栏
 	_status_bar = Label.new()
-	_status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_status_bar.offset_top = -20
-	_status_bar.offset_bottom = 0
-	_status_bar.offset_left = 0
-	_status_bar.offset_right = 0
-	_status_bar.text = "Ready - 0 items"
-	add_child(_status_bar)
+	_status_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_status_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_bar.text = "就绪 - 0 个物品"
+	root.add_child(_status_bar)
 
 func _create_toolbar():
 	_add_toolbar_button("新建", _on_new_item, "新建物品 (Ctrl+N)")
@@ -145,27 +153,29 @@ func _create_toolbar():
 	_add_toolbar_button("撤销", _on_undo, "撤销 (Ctrl+Z)")
 	_add_toolbar_button("重做", _on_redo, "重做 (Ctrl+Y)")
 	_toolbar.add_child(VSeparator.new())
-	_add_toolbar_button("保存", _on_save_items, "保存到文(Ctrl+S)")
+	_add_toolbar_button("保存", _on_save_items, "保存到物品目录 (Ctrl+S)")
 	_add_toolbar_button("刷新", _on_load_items, "重新加载物品目录")
 	_toolbar.add_child(VSeparator.new())
 	_add_toolbar_button("AI 生成", _open_ai_panel, "使用 AI 生成或调整物品数据")
-	_add_toolbar_button("Validate", _on_validate_all, "Validate all items")
+	_add_toolbar_button("校验", _on_validate_all, "校验全部物品")
 	_add_toolbar_button("导出", _on_export_data, "导出数据")
 
 func _add_toolbar_button(text: String, callback: Callable, tooltip: String = ""):
 	var btn = Button.new()
 	btn.text = text
 	btn.tooltip_text = tooltip
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.pressed.connect(callback)
 	_toolbar.add_child(btn)
 
 func _create_left_panel() -> Control:
 	var panel = VBoxContainer.new()
-	panel.custom_minimum_size = Vector2(280, 0)
-	
+	panel.custom_minimum_size = Vector2(LEFT_PANEL_MIN_WIDTH, 0)
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
 	# 标题
 	var title = Label.new()
-	title.text = "📦 物品列表"
+	title.text = "物品列表"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
 	panel.add_child(title)
@@ -194,43 +204,51 @@ func _create_left_panel() -> Control:
 	
 	# 搜索
 	_search_box = LineEdit.new()
-	_search_box.placeholder_text = "🔍 搜索物品..."
+	_search_box.placeholder_text = "搜索物品名称或 ID..."
+	_search_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search_box.text_changed.connect(_on_search_changed)
 	panel.add_child(_search_box)
-	
+
 	# 物品列表
 	_item_list = ItemList.new()
+	_item_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_item_list.item_selected.connect(_on_item_selected)
 	panel.add_child(_item_list)
-	
+
 	# 统计信息
 	_stats_label = Label.new()
 	_stats_label.name = "StatsLabel"
-	_stats_label.text = "总计: 0 | 武器: 0 | 护甲: 0 | 消耗品: 0"
+	_stats_label.text = "总计: 0 | 武器: 0 | 护甲: 0 | 消耗品: 0 | 材料: 0"
 	_stats_label.add_theme_color_override("font_color", Color.GRAY)
+	_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stats_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_child(_stats_label)
-	
+
 	return panel
 
 func _create_right_panel() -> Control:
 	var container = VBoxContainer.new()
-	container.custom_minimum_size = Vector2(400, 0)
-	
-	# 属面
+	container.custom_minimum_size = Vector2(RIGHT_PANEL_MIN_WIDTH, 0)
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	# 属性面板
 	_property_panel = preload("res://addons/cdc_game_editor/utils/property_panel.gd").new()
+	_property_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_property_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_property_panel.panel_title = "Item Properties"
+	_property_panel.panel_title = "物品属性"
 	_property_panel.property_changed.connect(_on_property_changed)
 	container.add_child(_property_panel)
-	
+
 	# 验证错误面板
 	_validation_panel = VBoxContainer.new()
+	_validation_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_validation_panel.visible = false
 	container.add_child(_validation_panel)
-	
+
 	var validation_title = Label.new()
-	validation_title.text = "⚠️ 验证问题"
+	validation_title.text = "验证问题"
 	validation_title.add_theme_color_override("font_color", Color(0.9, 0.6, 0.2))
 	_validation_panel.add_child(validation_title)
 	_validation_panel.add_child(HSeparator.new())
@@ -263,13 +281,14 @@ func _input(event: InputEvent):
 
 # 默认物品数据
 func _load_default_items():
-	# 如果还没有物品，加载些默认示
+	# 如果还没有物品，加载一些默认示例
 	if items.is_empty():
 		items = {
 			"1001": {
 				"id": 1001,
 				"name": "拳头",
 				"description": "Basic melee attack",
+				"icon_path": "",
 				"type": "weapon",
 				"slot": "main_hand",
 				"subtype": "unarmed",
@@ -299,6 +318,7 @@ func _on_new_item():
 		"id": item_id_int,
 		"name": "New Item",
 		"description": "物品描述",
+		"icon_path": "",
 		"type": "misc",
 		"rarity": "common",
 		"weight": 0.0,
@@ -368,7 +388,7 @@ func _on_delete_item():
 		_undo_redo_helper.commit_action()
 	
 	_remove_item(item_id)
-	_update_status("删除了物 %s" % item_id)
+	_update_status("删除了物品: %s" % item_id)
 
 func _on_item_selected(index: int):
 	var item_id = _item_list.get_item_metadata(index)
@@ -459,7 +479,9 @@ func _update_property_panel(item: Dictionary):
 	_property_panel.add_number_property("id", "物品ID:", int(item.get("id", 0)), 1, 99999999, 1, false)
 	_property_panel.add_string_property("name", "物品名称:", item.get("name", ""), false, "物品名称")
 	_property_panel.add_string_property("description", "描述:", item.get("description", ""), true, "物品描述...")
-	
+	_property_panel.add_string_property("icon_path", "图片路径:", item.get("icon_path", ""), false, "res://assets/icons/...")
+	_property_panel.add_custom_control(_create_icon_preview(item))
+
 	_property_panel.add_separator()
 	
 	# 类型和稀有度
@@ -472,7 +494,7 @@ func _update_property_panel(item: Dictionary):
 	_property_panel.add_number_property("weight", "重量:", item.get("weight", 0.0), 0.0, 1000.0, 0.1, true)
 	_property_panel.add_number_property("durability", "当前耐久:", item.get("durability", 100), -1, 9999, 1, false)
 	_property_panel.add_number_property("max_durability", "最大耐久:", item.get("max_durability", 100), 1, 9999, 1, false)
-	_property_panel.add_number_property("required_level", "求等", item.get("required_level", 0), 0, 100, 1, false)
+	_property_panel.add_number_property("required_level", "需求等级:", item.get("required_level", 0), 0, 100, 1, false)
 	
 	_property_panel.add_separator()
 	
@@ -501,16 +523,18 @@ func _update_property_panel(item: Dictionary):
 
 func _create_weapon_data_editor(item: Dictionary) -> Control:
 	var container = VBoxContainer.new()
-	
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var label = Label.new()
-	label.text = "Weapon Properties"
+	label.text = "武器属性"
 	label.add_theme_color_override("font_color", Color(0.8, 0.6, 0.4))
 	container.add_child(label)
-	
+
 	var weapon_data = item.get("weapon_data", {})
-	
+
 	var grid = GridContainer.new()
 	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container.add_child(grid)
 	
 	_add_number_field(grid, "伤害:", weapon_data.get("damage", 0), func(v): 
@@ -528,12 +552,12 @@ func _create_weapon_data_editor(item: Dictionary) -> Control:
 		item.weapon_data.range = int(v)
 	)
 	
-	_add_number_field(grid, "耐力消", weapon_data.get("stamina_cost", 0), func(v): 
+	_add_number_field(grid, "耐力消耗:", weapon_data.get("stamina_cost", 0), func(v): 
 		if not item.has("weapon_data"): item["weapon_data"] = {}
 		item.weapon_data.stamina_cost = int(v)
 	)
-	
-	_add_number_field(grid, "暴击%):", weapon_data.get("crit_chance", 0.05) * 100, func(v): 
+
+	_add_number_field(grid, "暴击率(%):", weapon_data.get("crit_chance", 0.05) * 100, func(v): 
 		if not item.has("weapon_data"): item["weapon_data"] = {}
 		item.weapon_data.crit_chance = float(v) / 100.0
 	, true)
@@ -547,9 +571,10 @@ func _create_weapon_data_editor(item: Dictionary) -> Control:
 
 func _create_armor_data_editor(item: Dictionary) -> Control:
 	var container = VBoxContainer.new()
-	
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var label = Label.new()
-	label.text = "Armor Properties"
+	label.text = "护甲属性"
 	label.add_theme_color_override("font_color", Color(0.4, 0.6, 0.8))
 	container.add_child(label)
 	
@@ -557,9 +582,10 @@ func _create_armor_data_editor(item: Dictionary) -> Control:
 	
 	var grid = GridContainer.new()
 	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container.add_child(grid)
-	
-	_add_number_field(grid, "防御", armor_data.get("defense", 0), func(v): 
+
+	_add_number_field(grid, "防御:", armor_data.get("defense", 0), func(v): 
 		if not item.has("armor_data"): item["armor_data"] = {}
 		item.armor_data.defense = int(v)
 	)
@@ -573,9 +599,10 @@ func _create_armor_data_editor(item: Dictionary) -> Control:
 
 func _create_consumable_editor(item: Dictionary) -> Control:
 	var container = VBoxContainer.new()
-	
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var label = Label.new()
-	label.text = "🧪 消耗品效果"
+	label.text = "消耗品效果"
 	label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.6))
 	container.add_child(label)
 	
@@ -583,9 +610,10 @@ func _create_consumable_editor(item: Dictionary) -> Control:
 	
 	var grid = GridContainer.new()
 	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container.add_child(grid)
-	
-	_add_number_field(grid, "生命值恢", consumable_data.get("hp_restore", 0), func(v): 
+
+	_add_number_field(grid, "生命值恢复:", consumable_data.get("hp_restore", 0), func(v): 
 		if not item.has("consumable_data"): item["consumable_data"] = {}
 		item.consumable_data.hp_restore = int(v)
 	)
@@ -595,7 +623,7 @@ func _create_consumable_editor(item: Dictionary) -> Control:
 		item.consumable_data.stamina_restore = int(v)
 	)
 	
-	_add_number_field(grid, "持续时间(:", consumable_data.get("duration", 0), func(v): 
+	_add_number_field(grid, "持续时间(秒):", consumable_data.get("duration", 0), func(v): 
 		if not item.has("consumable_data"): item["consumable_data"] = {}
 		item.consumable_data.duration = int(v)
 	)
@@ -604,7 +632,8 @@ func _create_consumable_editor(item: Dictionary) -> Control:
 
 func _create_effects_editor(item: Dictionary) -> Control:
 	var container = VBoxContainer.new()
-	
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var label = Label.new()
 	label.text = "特殊效果"
 	label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.4))
@@ -642,14 +671,65 @@ func _create_effects_editor(item: Dictionary) -> Control:
 	
 	return container
 
+func _create_icon_preview(item: Dictionary) -> Control:
+	var container = VBoxContainer.new()
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var label = Label.new()
+	label.text = "图片预览"
+	label.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+	container.add_child(label)
+
+	var row = HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 12)
+	container.add_child(row)
+
+	var preview_frame = PanelContainer.new()
+	preview_frame.custom_minimum_size = ICON_PREVIEW_SIZE
+	row.add_child(preview_frame)
+
+	var preview_center = CenterContainer.new()
+	preview_frame.add_child(preview_center)
+
+	var preview_texture = TextureRect.new()
+	preview_texture.custom_minimum_size = ICON_PREVIEW_SIZE - Vector2(12, 12)
+	preview_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview_center.add_child(preview_texture)
+
+	var info_label = Label.new()
+	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(info_label)
+
+	var icon_path: String = str(item.get("icon_path", "")).strip_edges()
+	var preview_texture_resource: Texture2D = null
+	if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
+		preview_texture_resource = load(icon_path) as Texture2D
+	preview_texture.texture = preview_texture_resource
+
+	if icon_path.is_empty():
+		info_label.text = "当前未配置图片路径。"
+	elif preview_texture_resource == null:
+		info_label.text = "无法加载图片资源：%s" % icon_path
+	else:
+		info_label.text = icon_path
+
+	return container
+
 func _add_number_field(parent: Control, label: String, value: float, callback: Callable, is_float: bool = false):
 	var lbl = Label.new()
 	lbl.text = label
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(lbl)
-	
+
 	var spin = SpinBox.new()
 	spin.value = value
 	spin.allow_greater = true
+	spin.allow_lesser = true
+	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if is_float:
 		spin.step = 0.1
 		spin.value_changed.connect(func(v):
@@ -714,11 +794,11 @@ func _mark_all_items_dirty() -> void:
 		_dirty_item_ids[str(item_key)] = true
 	_deleted_item_ids.clear()
 
-# 属变
+# 属性变更
 func _on_property_changed(property_name: String, new_value: Variant, old_value: Variant):
 	if current_item_id.is_empty():
 		return
-	
+
 	var item = items[current_item_id]
 	
 	# ID变更特殊处理
@@ -738,9 +818,12 @@ func _on_property_changed(property_name: String, new_value: Variant, old_value: 
 	else:
 		item[property_name] = new_value
 		_mark_current_item_dirty()
-	
+
 	_validate_item(current_item_id)
 	_update_item_list(_search_box.text, _category_filter.get_item_metadata(_category_filter.selected))
+	if property_name == "type" or property_name == "icon_path":
+		_update_property_panel(item)
+	_update_validation_panel()
 
 func _change_item_id(old_id: String, new_id: String):
 	if items.has(old_id) and not items.has(new_id):
@@ -783,7 +866,7 @@ func _validate_item(item_id: String) -> bool:
 		errors.append("物品名称不能为空")
 	
 	if item.get("weight", 0.0) < 0:
-		errors.append("Weight cannot be negative")
+		errors.append("重量不能为负数")
 	
 	_validation_errors[item_id] = errors
 	return errors.is_empty()
@@ -797,9 +880,9 @@ func _on_validate_all():
 	_update_validation_panel()
 	
 	if error_count == 0:
-		_update_status("有物品验证过")
+		_update_status("所有物品都通过校验")
 	else:
-		_update_status("Found %d validation issues" % error_count)
+		_update_status("发现 %d 个校验问题" % error_count)
 
 func _update_validation_panel():
 	if current_item_id.is_empty():
@@ -836,7 +919,7 @@ func _on_save_items():
 
 func _on_load_items():
 	if not _load_from_directory(ITEM_DATA_DIR):
-		_update_status("[JSON] %s | Reload failed" % ITEM_DATA_DIR)
+		_update_status("[JSON] %s | 重新加载失败" % ITEM_DATA_DIR)
 
 func _load_from_directory(dir_path: String) -> bool:
 	var absolute_dir_path := ProjectSettings.globalize_path(dir_path)
@@ -894,7 +977,7 @@ func _load_from_directory(dir_path: String) -> bool:
 	_update_stats()
 	_property_panel.clear()
 	item_loaded.emit(current_item_id)
-	_update_status("Loaded directory: %s" % dir_path)
+	_update_status("已加载目录: %s" % dir_path)
 	return true
 
 func _save_to_directory(dir_path: String) -> bool:
@@ -972,7 +1055,7 @@ func _export_to_gdscript(path: String):
 		file.store_string("\n".join(lines))
 		file.close()
 		items_exported.emit(path)
-		_update_status("已出GDScript")
+		_update_status("已导出 GDScript 数据")
 
 # 撤销/重做
 func _on_undo():
@@ -990,8 +1073,29 @@ func _on_redo():
 		_update_stats()
 
 func _update_status(message: String):
-	_status_bar.text = "%s - Total %d items" % [message, items.size()]
+	_status_bar.text = "%s - 共 %d 个物品" % [message, items.size()]
 	print("物品编辑器 %s" % message)
+
+func _on_editor_resized() -> void:
+	call_deferred("_apply_split_layout")
+
+func _apply_split_layout() -> void:
+	if _main_split == null or not is_instance_valid(_main_split):
+		return
+
+	var available_width := int(size.x)
+	if available_width <= 0:
+		return
+
+	var min_left_width := LEFT_PANEL_MIN_WIDTH
+	var max_left_width := min(LEFT_PANEL_MAX_WIDTH, max(min_left_width, available_width - RIGHT_PANEL_MIN_WIDTH))
+	var default_left_width := int(round(float(available_width) * LEFT_PANEL_DEFAULT_RATIO))
+	if not _split_layout_initialized:
+		_main_split.split_offset = clampi(default_left_width, min_left_width, max_left_width)
+		_split_layout_initialized = true
+		return
+
+	_main_split.split_offset = clampi(_main_split.split_offset, min_left_width, max_left_width)
 
 func focus_record(record_id: String) -> bool:
 	var target_id: String = record_id.strip_edges()
@@ -1122,4 +1226,3 @@ func _deep_merge_dictionary(base: Dictionary, override_data: Dictionary) -> Dict
 		else:
 			merged[key] = incoming
 	return merged
-

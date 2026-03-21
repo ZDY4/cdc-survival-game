@@ -6,6 +6,10 @@ signal recipe_saved(recipe_id: String)
 signal recipe_loaded(recipe_id: String)
 
 const RECIPE_DIR := "res://data/recipes"
+const LEFT_PANEL_MIN_WIDTH := 220
+const LEFT_PANEL_MAX_WIDTH := 320
+const LEFT_PANEL_DEFAULT_RATIO := 0.25
+const RIGHT_PANEL_MIN_WIDTH := 520
 
 const RECIPE_CATEGORIES := {
 	"weapon": "武器",
@@ -48,22 +52,34 @@ var _search_filter_text: String = ""
 @onready var _category_filter: OptionButton
 @onready var _search_box: LineEdit
 @onready var _stats_label: Label
+@onready var _main_split: HSplitContainer
+var _split_layout_initialized: bool = false
 
 
 func _ready() -> void:
 	_setup_ui()
+	resized.connect(_on_editor_resized)
 	_load_recipes_from_directory()
 	_update_recipe_list()
+	call_deferred("_apply_split_layout")
 
 
 func _setup_ui() -> void:
 	anchors_preset = Control.PRESET_FULL_RECT
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 8)
+	add_child(root)
 
 	_toolbar = HBoxContainer.new()
-	_toolbar.custom_minimum_size = Vector2(0, 45)
-	_toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_toolbar.offset_bottom = 45
-	add_child(_toolbar)
+	_toolbar.custom_minimum_size = Vector2(0, 42)
+	_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_child(_toolbar)
 
 	var new_btn := Button.new()
 	new_btn.text = "新建配方"
@@ -92,14 +108,13 @@ func _setup_ui() -> void:
 	reload_btn.pressed.connect(_on_reload_recipes)
 	_toolbar.add_child(reload_btn)
 
-	var main_split := HSplitContainer.new()
-	main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
-	main_split.offset_top = 50
-	main_split.offset_bottom = -20
-	add_child(main_split)
+	_main_split = HSplitContainer.new()
+	_main_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(_main_split)
 
 	var left_panel := _create_recipe_list_panel()
-	main_split.add_child(left_panel)
+	_main_split.add_child(left_panel)
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -109,20 +124,19 @@ func _setup_ui() -> void:
 	_property_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_property_panel.add_theme_constant_override("separation", 10)
 	scroll.add_child(_property_panel)
-	main_split.add_child(scroll)
-	main_split.split_offset = 300
+	_main_split.add_child(scroll)
 
 	_status_bar = Label.new()
-	_status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_status_bar.offset_top = -20
-	_status_bar.offset_bottom = 0
-	add_child(_status_bar)
+	_status_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_status_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	root.add_child(_status_bar)
 	_status_bar.text = "就绪"
 
 
 func _create_recipe_list_panel() -> Control:
 	var panel := VBoxContainer.new()
-	panel.custom_minimum_size = Vector2(320, 0)
+	panel.custom_minimum_size = Vector2(LEFT_PANEL_MIN_WIDTH, 0)
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var title := Label.new()
 	title.text = "配方列表"
@@ -151,15 +165,19 @@ func _create_recipe_list_panel() -> Control:
 
 	_search_box = LineEdit.new()
 	_search_box.placeholder_text = "搜索配方..."
+	_search_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search_box.text_changed.connect(_on_search_changed)
 	panel.add_child(_search_box)
 
 	_recipe_list = ItemList.new()
+	_recipe_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_recipe_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_recipe_list.item_selected.connect(_on_recipe_selected)
 	panel.add_child(_recipe_list)
 
 	_stats_label = Label.new()
+	_stats_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	panel.add_child(_stats_label)
 
 	return panel
@@ -308,7 +326,7 @@ func _update_recipe_list(category_filter: String = "", search_filter: String = "
 		_apply_category_color(item_index, str(recipe.get("category", "")))
 		filtered_count += 1
 
-	_stats_label.text = "Total: %d / Filtered: %d" % [recipes.size(), filtered_count]
+	_stats_label.text = "总计: %d | 当前筛选: %d" % [recipes.size(), filtered_count]
 
 
 func _apply_category_color(item_index: int, category: String) -> void:
@@ -548,6 +566,8 @@ func _add_line_field(key: String, label_text: String, value: String, commit_on_f
 	var label := Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(140, 0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(label)
 
 	var line_edit := LineEdit.new()
@@ -567,6 +587,8 @@ func _add_multiline_field(key: String, label_text: String, value: String) -> voi
 	var box := VBoxContainer.new()
 	var label := Label.new()
 	label.text = label_text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(label)
 
 	var text_edit := TextEdit.new()
@@ -586,6 +608,8 @@ func _add_number_field(key: String, label_text: String, value: float, min_val: f
 	var label := Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(140, 0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(label)
 
 	var spin_box := SpinBox.new()
@@ -606,6 +630,7 @@ func _add_bool_field(key: String, label_text: String, value: bool) -> void:
 	var label := Label.new()
 	label.text = label_text
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(label)
 
 	var checkbox := CheckBox.new()
@@ -622,6 +647,8 @@ func _add_enum_field(key: String, label_text: String, options: Dictionary, value
 	var label := Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(140, 0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(label)
 
 	var option_button := OptionButton.new()
@@ -646,6 +673,8 @@ func _add_json_field(key: String, label_text: String, value: Variant, expected_t
 	var box := VBoxContainer.new()
 	var label := Label.new()
 	label.text = label_text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(label)
 
 	var text_edit := TextEdit.new()
@@ -871,6 +900,29 @@ func _on_json_field_changed(key: String, json_text: String, expected_type: int) 
 func _update_status(message: String) -> void:
 	_status_bar.text = message
 	print("[RecipeEditor] %s" % message)
+
+
+func _on_editor_resized() -> void:
+	call_deferred("_apply_split_layout")
+
+
+func _apply_split_layout() -> void:
+	if _main_split == null or not is_instance_valid(_main_split):
+		return
+
+	var available_width := int(size.x)
+	if available_width <= 0:
+		return
+
+	var min_left_width := LEFT_PANEL_MIN_WIDTH
+	var max_left_width := min(LEFT_PANEL_MAX_WIDTH, max(min_left_width, available_width - RIGHT_PANEL_MIN_WIDTH))
+	var default_left_width := int(round(float(available_width) * LEFT_PANEL_DEFAULT_RATIO))
+	if not _split_layout_initialized:
+		_main_split.split_offset = clampi(default_left_width, min_left_width, max_left_width)
+		_split_layout_initialized = true
+		return
+
+	_main_split.split_offset = clampi(_main_split.split_offset, min_left_width, max_left_width)
 
 
 func focus_record(record_id: String) -> bool:

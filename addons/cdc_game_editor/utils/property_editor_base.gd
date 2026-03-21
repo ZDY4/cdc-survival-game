@@ -77,6 +77,7 @@ func _create_label(text: String) -> Label:
 	var label = Label.new()
 	label.text = text if not text.is_empty() else property_label
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
 
 ## 创建分隔线

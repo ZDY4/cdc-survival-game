@@ -121,11 +121,13 @@ func _create_toolbar() -> void:
 
 	var id_label := Label.new()
 	id_label.text = "dialog_id:"
+	id_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_toolbar.add_child(id_label)
 
 	_dialog_id_input = LineEdit.new()
 	_dialog_id_input.placeholder_text = "npc_guard_intro"
-	_dialog_id_input.custom_minimum_size = Vector2(220, 0)
+	_dialog_id_input.custom_minimum_size = Vector2(160, 0)
+	_dialog_id_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_dialog_id_input.tooltip_text = "仅允许 a-z 0-9 和下划线(_)"
 	_dialog_id_input.text_changed.connect(_on_dialog_id_text_changed)
 	_toolbar.add_child(_dialog_id_input)
@@ -159,7 +161,7 @@ func _setup_open_dialog_popup() -> void:
 	add_child(_open_dialog_popup)
 
 	var container := VBoxContainer.new()
-	container.custom_minimum_size = Vector2(700, 420)
+	container.custom_minimum_size = Vector2(560, 360)
 	_open_dialog_popup.add_child(container)
 
 	_open_dialog_list = ItemList.new()

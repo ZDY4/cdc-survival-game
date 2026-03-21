@@ -4,6 +4,10 @@ extends Control
 
 const SKILLS_DIR: String = "res://data/skills"
 const SKILL_TREES_DIR: String = "res://data/skill_trees"
+const LEFT_PANEL_MIN_WIDTH := 220
+const LEFT_PANEL_MAX_WIDTH := 300
+const LEFT_PANEL_DEFAULT_RATIO := 0.24
+const RIGHT_PANEL_MIN_WIDTH := 520
 
 var editor_plugin: EditorPlugin = null
 
@@ -36,6 +40,8 @@ var _tree_links_input: TextEdit
 var _save_button: Button
 var _reload_button: Button
 var _status_label: Label
+var _split: HSplitContainer
+var _right_vbox: VBoxContainer
 
 var _skills: Dictionary = {}
 var _trees: Dictionary = {}
@@ -47,12 +53,15 @@ var _dirty_tree_ids: Array[String] = []
 var _validation_errors: Array = []
 var _has_unsaved_changes: bool = false
 var _is_form_syncing: bool = false
+var _split_layout_initialized: bool = false
 
 
 func _ready() -> void:
 	_build_ui()
 	_connect_signals()
 	_reload_all()
+	resized.connect(_on_editor_resized)
+	call_deferred("_apply_split_layout")
 
 
 func has_unsaved_changes() -> bool:
@@ -93,19 +102,20 @@ func _build_ui() -> void:
 	toolbar.add_child(spacer)
 
 	_status_label = Label.new()
+	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_label.text = "就绪"
 	toolbar.add_child(_status_label)
 
-	var split: HSplitContainer = HSplitContainer.new()
-	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.split_offset = 280
-	root.add_child(split)
+	_split = HSplitContainer.new()
+	_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(_split)
 
 	var left_panel: VBoxContainer = VBoxContainer.new()
-	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_panel.custom_minimum_size = Vector2(LEFT_PANEL_MIN_WIDTH, 0)
 	left_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_child(left_panel)
+	_split.add_child(left_panel)
 
 	var skill_title: Label = Label.new()
 	skill_title.text = "技能列表"
@@ -133,24 +143,24 @@ func _build_ui() -> void:
 	var right_scroll: ScrollContainer = ScrollContainer.new()
 	right_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_child(right_scroll)
+	_split.add_child(right_scroll)
 
-	var right_vbox: VBoxContainer = VBoxContainer.new()
-	right_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_vbox.custom_minimum_size = Vector2(800, 700)
-	right_vbox.add_theme_constant_override("separation", 10)
-	right_scroll.add_child(right_vbox)
+	_right_vbox = VBoxContainer.new()
+	_right_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_right_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_right_vbox.custom_minimum_size = Vector2(RIGHT_PANEL_MIN_WIDTH, 0)
+	_right_vbox.add_theme_constant_override("separation", 10)
+	right_scroll.add_child(_right_vbox)
 
 	var skill_section_title: Label = Label.new()
 	skill_section_title.text = "技能配置"
 	skill_section_title.add_theme_font_size_override("font_size", 16)
-	right_vbox.add_child(skill_section_title)
+	_right_vbox.add_child(skill_section_title)
 
 	var skill_grid: GridContainer = GridContainer.new()
 	skill_grid.columns = 2
 	skill_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(skill_grid)
+	_right_vbox.add_child(skill_grid)
 
 	_skill_id_input = _add_line_field(skill_grid, "技能ID")
 	_skill_name_input = _add_line_field(skill_grid, "名字")
@@ -162,33 +172,33 @@ func _build_ui() -> void:
 	_activation_mode_input = _add_line_field(skill_grid, "激活模式(passive/active/toggle)")
 	_activation_cooldown_input = _add_spin_field(skill_grid, "冷却(秒)", 0, 999, 0.1)
 
-	right_vbox.add_child(_make_label("描述"))
+	_right_vbox.add_child(_make_label("描述"))
 	_description_input = TextEdit.new()
 	_description_input.custom_minimum_size = Vector2(0, 100)
 	_description_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(_description_input)
+	_right_vbox.add_child(_description_input)
 
-	right_vbox.add_child(_make_label("GameplayEffect(JSON)"))
+	_right_vbox.add_child(_make_label("GameplayEffect(JSON)"))
 	_gameplay_effect_input = TextEdit.new()
 	_gameplay_effect_input.custom_minimum_size = Vector2(0, 140)
 	_gameplay_effect_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(_gameplay_effect_input)
+	_right_vbox.add_child(_gameplay_effect_input)
 
-	right_vbox.add_child(_make_label("Activation Effect(JSON)"))
+	_right_vbox.add_child(_make_label("Activation Effect(JSON)"))
 	_activation_effect_input = TextEdit.new()
 	_activation_effect_input.custom_minimum_size = Vector2(0, 140)
 	_activation_effect_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(_activation_effect_input)
+	_right_vbox.add_child(_activation_effect_input)
 
-	right_vbox.add_child(HSeparator.new())
+	_right_vbox.add_child(HSeparator.new())
 
 	var tree_section_title: Label = Label.new()
 	tree_section_title.text = "技能树配置"
 	tree_section_title.add_theme_font_size_override("font_size", 16)
-	right_vbox.add_child(tree_section_title)
+	_right_vbox.add_child(tree_section_title)
 
 	var tree_toolbar: HBoxContainer = HBoxContainer.new()
-	right_vbox.add_child(tree_toolbar)
+	_right_vbox.add_child(tree_toolbar)
 
 	_tree_selector = OptionButton.new()
 	_tree_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -205,23 +215,23 @@ func _build_ui() -> void:
 	var tree_grid: GridContainer = GridContainer.new()
 	tree_grid.columns = 2
 	tree_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(tree_grid)
+	_right_vbox.add_child(tree_grid)
 
 	_tree_id_input = _add_line_field(tree_grid, "技能树ID")
 	_tree_name_input = _add_line_field(tree_grid, "名字")
 	_tree_skills_input = _add_line_field(tree_grid, "技能ID列表(逗号)")
 
-	right_vbox.add_child(_make_label("技能树描述"))
+	_right_vbox.add_child(_make_label("技能树描述"))
 	_tree_description_input = TextEdit.new()
 	_tree_description_input.custom_minimum_size = Vector2(0, 100)
 	_tree_description_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(_tree_description_input)
+	_right_vbox.add_child(_tree_description_input)
 
-	right_vbox.add_child(_make_label("连线(每行: from -> to)"))
+	_right_vbox.add_child(_make_label("连线(每行: from -> to)"))
 	_tree_links_input = TextEdit.new()
 	_tree_links_input.custom_minimum_size = Vector2(0, 120)
 	_tree_links_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.add_child(_tree_links_input)
+	_right_vbox.add_child(_tree_links_input)
 
 
 func _connect_signals() -> void:
@@ -858,4 +868,29 @@ func _add_spin_field(grid: GridContainer, label_text: String, min_v: float, max_
 func _make_label(text: String) -> Label:
 	var label: Label = Label.new()
 	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return label
+
+
+func _on_editor_resized() -> void:
+	call_deferred("_apply_split_layout")
+
+
+func _apply_split_layout() -> void:
+	if _split == null or not is_instance_valid(_split):
+		return
+
+	var available_width := int(size.x)
+	if available_width <= 0:
+		return
+
+	var min_left_width := LEFT_PANEL_MIN_WIDTH
+	var max_left_width := min(LEFT_PANEL_MAX_WIDTH, max(min_left_width, available_width - RIGHT_PANEL_MIN_WIDTH))
+	var default_left_width := int(round(float(available_width) * LEFT_PANEL_DEFAULT_RATIO))
+	if not _split_layout_initialized:
+		_split.split_offset = clampi(default_left_width, min_left_width, max_left_width)
+		_split_layout_initialized = true
+		return
+
+	_split.split_offset = clampi(_split.split_offset, min_left_width, max_left_width)

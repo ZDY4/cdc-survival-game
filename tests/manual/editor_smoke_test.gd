@@ -2,6 +2,11 @@ extends Control
 
 const DIALOG_EDITOR_PATH := "res://addons/cdc_game_editor/editors/dialog_editor/dialog_editor.gd"
 const QUEST_EDITOR_PATH := "res://addons/cdc_game_editor/editors/quest_editor/quest_editor.gd"
+const ITEM_EDITOR_PATH := "res://addons/cdc_game_editor/editors/item_editor/item_editor.gd"
+const SKILL_EDITOR_PATH := "res://addons/cdc_game_editor/editors/skill_editor/skill_editor.gd"
+const EFFECT_EDITOR_PATH := "res://addons/cdc_game_editor/editors/effect_editor/effect_editor.gd"
+const RECIPE_EDITOR_PATH := "res://addons/cdc_game_editor/editors/recipe_editor/recipe_editor.gd"
+const CHARACTER_EDITOR_PATH := "res://addons/cdc_game_editor/editors/character_data_editor/character_data_editor.gd"
 const FLOW_GRAPH_BASE_PATH := "res://addons/cdc_game_editor/editors/flow_graph/flow_graph_editor_base.gd"
 const FLOW_GRAPH_CANVAS_PATH := "res://addons/cdc_game_editor/editors/flow_graph/flow_graph_canvas.gd"
 const FLOW_GRAPH_NODE_PATH := "res://addons/cdc_game_editor/editors/flow_graph/flow_graph_node.gd"
@@ -12,6 +17,11 @@ func _ready() -> void:
 	_probe_script(FLOW_GRAPH_NODE_PATH)
 	_probe_script(DIALOG_EDITOR_PATH)
 	_probe_script(QUEST_EDITOR_PATH)
+	_probe_script(ITEM_EDITOR_PATH)
+	_probe_script(SKILL_EDITOR_PATH)
+	_probe_script(EFFECT_EDITOR_PATH)
+	_probe_script(RECIPE_EDITOR_PATH)
+	_probe_script(CHARACTER_EDITOR_PATH)
 
 	var dialog_result := _instantiate_editor("dialog_editor", DIALOG_EDITOR_PATH, Vector2(0, 0), Vector2(960, 540))
 	var quest_result := _instantiate_editor("quest_editor", QUEST_EDITOR_PATH, Vector2(960, 0), Vector2(960, 540))

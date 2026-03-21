@@ -1,7 +1,7 @@
 @tool
 extends Control
 ## EffectEditor - 效果编辑器
-## 用于创建和编辑游戏中的效果（buffs/debuffs
+## 用于创建和编辑游戏中的效果（buffs/debuffs）
 
 signal effect_saved(effect_id: String)
 signal effect_loaded(effect_id: String)
@@ -14,6 +14,10 @@ const EFFECT_CATEGORIES = {
 }
 
 const DEFAULT_EFFECTS_DIR := "res://data/json/effects"
+const LEFT_PANEL_MIN_WIDTH := 220
+const LEFT_PANEL_MAX_WIDTH := 300
+const LEFT_PANEL_DEFAULT_RATIO := 0.23
+const RIGHT_PANEL_MIN_WIDTH := 500
 
 # 叠加模式
 const STACK_MODES = {
@@ -52,6 +56,8 @@ const AVAILABLE_STATS = [
 @onready var _toolbar: HBoxContainer
 @onready var _file_dialog: FileDialog
 @onready var _status_bar: Label
+@onready var _stats_label: Label
+@onready var _main_split: HSplitContainer
 
 # 数据
 var effects: Dictionary = {}  # effect_id -> effect_data
@@ -63,20 +69,33 @@ var _ui_elements: Dictionary = {}
 
 # 编辑器插件引
 var editor_plugin: EditorPlugin = null
+var _split_layout_initialized: bool = false
 
 func _ready():
 	_setup_ui()
 	_setup_file_dialog()
 	_try_load_default_effects()
 	_update_effect_list()
+	resized.connect(_on_editor_resized)
+	call_deferred("_apply_split_layout")
 
 func _setup_ui():
 	anchors_preset = Control.PRESET_FULL_RECT
-	
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var root = VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 8)
+	add_child(root)
+
 	# 工具栏
 	_toolbar = HBoxContainer.new()
-	_toolbar.custom_minimum_size = Vector2(0, 45)
-	add_child(_toolbar)
+	_toolbar.custom_minimum_size = Vector2(0, 42)
+	_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_child(_toolbar)
 	
 	var new_btn = Button.new()
 	new_btn.text = "新建效果"
@@ -99,33 +118,32 @@ func _setup_ui():
 	load_btn.text = "加载"
 	load_btn.pressed.connect(_on_load_effects)
 	_toolbar.add_child(load_btn)
-	
+
 	# 主分割
-	var main_split = HSplitContainer.new()
-	main_split.position = Vector2(0, 50)
-	main_split.size = Vector2(size.x, size.y - 70)
-	add_child(main_split)
+	_main_split = HSplitContainer.new()
+	_main_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(_main_split)
 	
-	# 左侧：效果列
+	# 左侧：效果列表
 	var left_panel = _create_effect_list_panel()
-	main_split.add_child(left_panel)
+	_main_split.add_child(left_panel)
 	
 	# 右侧：属性面板
 	var right_panel = _create_property_panel()
-	main_split.add_child(right_panel)
-	
-	main_split.split_offset = 250
-	
+	_main_split.add_child(right_panel)
+
 	# 状态栏
 	_status_bar = Label.new()
-	_status_bar.position = Vector2(0, size.y - 20)
-	_status_bar.size = Vector2(size.x, 20)
+	_status_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_status_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_bar.text = "就绪"
-	add_child(_status_bar)
+	root.add_child(_status_bar)
 
 func _create_effect_list_panel() -> Control:
 	var panel = VBoxContainer.new()
-	panel.custom_minimum_size = Vector2(280, 0)
+	panel.custom_minimum_size = Vector2(LEFT_PANEL_MIN_WIDTH, 0)
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
 	var title = Label.new()
 	title.text = "效果列表"
@@ -147,20 +165,23 @@ func _create_effect_list_panel() -> Control:
 	# 搜索
 	_search_box = LineEdit.new()
 	_search_box.placeholder_text = "搜索效果..."
+	_search_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search_box.text_changed.connect(_on_search_changed)
 	panel.add_child(_search_box)
 	
 	# 效果列表
 	_effect_list = ItemList.new()
+	_effect_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_effect_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_effect_list.item_selected.connect(_on_effect_selected)
 	panel.add_child(_effect_list)
 	
 	# 统计
-	var stats = Label.new()
-	stats.name = "StatsLabel"
-	stats.text = "Total: 0 effects"
-	panel.add_child(stats)
+	_stats_label = Label.new()
+	_stats_label.text = "总计: 0"
+	_stats_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(_stats_label)
 	
 	return panel
 
@@ -170,6 +191,7 @@ func _create_property_panel() -> Control:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
 	_property_panel = VBoxContainer.new()
+	_property_panel.custom_minimum_size = Vector2(RIGHT_PANEL_MIN_WIDTH, 0)
 	_property_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_property_panel.add_theme_constant_override("separation", 10)
 	scroll.add_child(_property_panel)
@@ -224,9 +246,8 @@ func _update_effect_list(category_filter: String = "", search_filter: String = "
 			"neutral":
 				_effect_list.set_item_custom_fg_color(idx, Color.GRAY)
 	
-	var stats_label = get_node_or_null("StatsLabel")
-	if stats_label:
-		stats_label.text = "Total: %d effects" % effects.size()
+	if _stats_label:
+		_stats_label.text = "总计: %d | 当前筛选: %d" % [effects.size(), _effect_list.get_item_count()]
 
 func _on_category_filter_changed(index: int):
 	var category = ""
@@ -279,7 +300,7 @@ func _on_delete_effect():
 	current_effect_id = ""
 	_update_effect_list()
 	_clear_property_panel()
-	_update_status("Deleted effect")
+	_update_status("已删除效果")
 
 func _on_effect_selected(index: int):
 	var effect_id = _effect_list.get_item_metadata(index)
@@ -311,15 +332,15 @@ func _update_property_panel(effect: Dictionary):
 	
 	# 持续时间
 	_add_section_label("⏱️ 持续时间")
-	_add_number_field("duration", "持续时间(:", effect.get("duration", 60.0), 0.0, 99999.0, 1.0)
+	_add_number_field("duration", "持续时间(秒):", effect.get("duration", 60.0), 0.0, 99999.0, 1.0)
 	_add_bool_field("is_infinite", "无限持续时间:", effect.get("is_infinite", false))
 	
 	_add_separator()
 	
 	# 叠加设置
 	_add_section_label("🔢 叠加设置")
-	_add_bool_field("is_stackable", "???:", effect.get("is_stackable", false))
-	_add_number_field("max_stacks", "大叠加层", effect.get("max_stacks", 1), 1, 100, 1)
+	_add_bool_field("is_stackable", "允许叠加:", effect.get("is_stackable", false))
+	_add_number_field("max_stacks", "最大叠加层数:", effect.get("max_stacks", 1), 1, 100, 1)
 	_add_enum_field("stack_mode", "叠加模式:", STACK_MODES, effect.get("stack_mode", "refresh"))
 	
 	_add_separator()
@@ -337,8 +358,8 @@ func _update_property_panel(effect: Dictionary):
 	_add_separator()
 	
 	# 高级设置
-	_add_section_label("⚙️ 高级设置")
-	_add_number_field("tick_interval", "触发间隔(:", effect.get("tick_interval", 0.0), 0.0, 60.0, 0.1)
+	_add_section_label("高级设置")
+	_add_number_field("tick_interval", "触发间隔(秒):", effect.get("tick_interval", 0.0), 0.0, 60.0, 0.1)
 	_add_string_field("visual_effect", "视觉特效:", effect.get("visual_effect", ""))
 	_add_string_field("color_tint", "屏幕色调:", effect.get("color_tint", ""), false, "#FF0000")
 
@@ -349,23 +370,29 @@ func _add_section_label(text: String):
 	label.text = text
 	label.add_theme_font_size_override("font_size", 14)
 	label.add_theme_color_override("font_color", Color.YELLOW)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_property_panel.add_child(label)
 
 func _add_separator():
 	_property_panel.add_child(HSeparator.new())
 
 func _add_string_field(key: String, label_text: String, value: String, multiline: bool = false, placeholder: String = ""):
-	var hbox = HBoxContainer.new()
-	
+	var container: Control = HBoxContainer.new()
 	var label = Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(120, 0)
-	hbox.add_child(label)
-	
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
 	var line_edit = LineEdit.new()
 	if multiline:
+		container = VBoxContainer.new()
+		container.add_child(label)
 		line_edit = TextEdit.new()
 		line_edit.custom_minimum_size = Vector2(0, 60)
+	else:
+		container.add_child(label)
 	line_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	line_edit.text = value
 	line_edit.placeholder_text = placeholder
@@ -376,8 +403,8 @@ func _add_string_field(key: String, label_text: String, value: String, multiline
 	else:
 		line_edit.text_changed.connect(func(new_text): _on_field_changed(key, new_text))
 	
-	hbox.add_child(line_edit)
-	_property_panel.add_child(hbox)
+	container.add_child(line_edit)
+	_property_panel.add_child(container)
 	_ui_elements[key] = line_edit
 
 func _add_number_field(key: String, label_text: String, value: float, min_val: float, max_val: float, step: float):
@@ -386,6 +413,8 @@ func _add_number_field(key: String, label_text: String, value: float, min_val: f
 	var label = Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(120, 0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hbox.add_child(label)
 	
 	var spin_box = SpinBox.new()
@@ -406,6 +435,7 @@ func _add_bool_field(key: String, label_text: String, value: bool):
 	var label = Label.new()
 	label.text = label_text
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hbox.add_child(label)
 	
 	var checkbox = CheckBox.new()
@@ -422,6 +452,8 @@ func _add_enum_field(key: String, label_text: String, options: Dictionary, value
 	var label = Label.new()
 	label.text = label_text
 	label.custom_minimum_size = Vector2(120, 0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hbox.add_child(label)
 	
 	var option_btn = OptionButton.new()
@@ -493,6 +525,7 @@ func _create_stat_modifier_row(container: VBoxContainer, stat_name: String, valu
 	var stat_label = Label.new()
 	stat_label.text = stat_name
 	stat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(stat_label)
 	
 	var value_label = Label.new()
@@ -571,7 +604,7 @@ func _on_field_changed(key: String, value: Variant):
 	else:
 		effect[key] = value
 	
-	_update_status("已更 %s" % key)
+	_update_status("已更新字段: %s" % key)
 
 # ========== 文件操作 ==========
 
@@ -667,6 +700,27 @@ func _load_from_directory(path: String):
 func _update_status(message: String):
 	_status_bar.text = message
 	print("[EffectEditor] %s" % message)
+
+func _on_editor_resized() -> void:
+	call_deferred("_apply_split_layout")
+
+func _apply_split_layout() -> void:
+	if _main_split == null or not is_instance_valid(_main_split):
+		return
+
+	var available_width := int(size.x)
+	if available_width <= 0:
+		return
+
+	var min_left_width := LEFT_PANEL_MIN_WIDTH
+	var max_left_width := min(LEFT_PANEL_MAX_WIDTH, max(min_left_width, available_width - RIGHT_PANEL_MIN_WIDTH))
+	var default_left_width := int(round(float(available_width) * LEFT_PANEL_DEFAULT_RATIO))
+	if not _split_layout_initialized:
+		_main_split.split_offset = clampi(default_left_width, min_left_width, max_left_width)
+		_split_layout_initialized = true
+		return
+
+	_main_split.split_offset = clampi(_main_split.split_offset, min_left_width, max_left_width)
 
 func focus_record(record_id: String) -> bool:
 	var target_id: String = record_id.strip_edges()

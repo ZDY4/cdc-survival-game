@@ -9,6 +9,8 @@ const FLOW_GRAPH_NODE_SCRIPT := preload("res://addons/cdc_game_editor/editors/fl
 const CLIPBOARD_SCRIPT := preload("res://addons/cdc_game_editor/utils/editor_clipboard.gd")
 const UNDO_REDO_HELPER_SCRIPT := preload("res://addons/cdc_game_editor/utils/undo_redo_helper.gd")
 const PROPERTY_PANEL_SCRIPT := preload("res://addons/cdc_game_editor/utils/property_panel.gd")
+const MIN_RECORD_LIST_WIDTH := 180
+const MIN_SIDE_PANEL_WIDTH := 280
 
 @onready var _graph_edit
 @onready var _property_panel
@@ -48,22 +50,26 @@ func _ready() -> void:
 
 func _setup_ui() -> void:
 	anchors_preset = Control.PRESET_FULL_RECT
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 8)
+	add_child(root)
 
 	_toolbar = HBoxContainer.new()
-	_toolbar.custom_minimum_size = Vector2(0, 45)
-	_toolbar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_toolbar.offset_top = 0
-	_toolbar.offset_bottom = 45
-	add_child(_toolbar)
+	_toolbar.custom_minimum_size = Vector2(0, 42)
+	_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_child(_toolbar)
 	_create_toolbar()
 
 	_main_split = HSplitContainer.new()
-	_main_split.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_main_split.offset_top = 50
-	_main_split.offset_bottom = -20
 	_main_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	add_child(_main_split)
+	root.add_child(_main_split)
 
 	var left_container := VBoxContainer.new()
 	left_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -133,19 +139,17 @@ func _setup_ui() -> void:
 
 	_property_panel = PROPERTY_PANEL_SCRIPT.new()
 	_property_panel.custom_minimum_size = Vector2(320, 0)
+	_property_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_property_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_property_panel.panel_title = _get_property_panel_title()
 	_property_panel.property_changed.connect(_on_property_changed)
 	_right_container.add_child(_property_panel)
 
 	_status_bar = Label.new()
-	_status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_status_bar.offset_top = -20
-	_status_bar.offset_bottom = 0
-	_status_bar.offset_left = 0
-	_status_bar.offset_right = 0
+	_status_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_status_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_bar.text = _get_initial_status_text()
-	add_child(_status_bar)
+	root.add_child(_status_bar)
 
 	_close_confirmation_dialog = ConfirmationDialog.new()
 	_close_confirmation_dialog.title = "未保存更改"
@@ -284,6 +288,7 @@ func _add_toolbar_button(text: String, callback: Callable, tooltip: String = "")
 	var btn := Button.new()
 	btn.text = text
 	btn.tooltip_text = tooltip
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.pressed.connect(callback)
 	_toolbar.add_child(btn)
 	return btn
@@ -830,11 +835,16 @@ func _update_main_split_layout() -> void:
 	var side_panel_width := _get_side_panel_width()
 	var min_graph_width := _get_min_graph_width()
 	if _has_record_list():
-		min_graph_width += 220
-	var max_side_panel_width := maxi(260, total_width - min_graph_width)
-	side_panel_width = mini(side_panel_width, max_side_panel_width)
+		min_graph_width += MIN_RECORD_LIST_WIDTH
+	var max_side_panel_width := maxi(MIN_SIDE_PANEL_WIDTH, total_width - min_graph_width)
+	side_panel_width = clampi(side_panel_width, MIN_SIDE_PANEL_WIDTH, max_side_panel_width)
+	if _right_container and is_instance_valid(_right_container):
+		_right_container.custom_minimum_size = Vector2(side_panel_width, 0)
 
-	var split_offset := maxi(420, total_width - side_panel_width)
+	var desired_content_width := total_width - side_panel_width
+	var min_content_width := mini(420, maxi(220, total_width - MIN_SIDE_PANEL_WIDTH))
+	var max_content_width := maxi(min_content_width, total_width - MIN_SIDE_PANEL_WIDTH)
+	var split_offset := clampi(desired_content_width, min_content_width, max_content_width)
 	_main_split.split_offset = split_offset
 
 	if _content_split and is_instance_valid(_content_split):
@@ -842,9 +852,11 @@ func _update_main_split_layout() -> void:
 		if content_width <= 0:
 			content_width = split_offset
 		var record_list_width := _get_record_list_width()
-		var max_record_list_width := maxi(180, content_width - _get_min_graph_width())
-		record_list_width = mini(record_list_width, max_record_list_width)
-		_content_split.split_offset = maxi(180, record_list_width)
+		var max_record_list_width := maxi(MIN_RECORD_LIST_WIDTH, content_width - _get_min_graph_width())
+		record_list_width = clampi(record_list_width, MIN_RECORD_LIST_WIDTH, max_record_list_width)
+		if _record_list_container and is_instance_valid(_record_list_container):
+			_record_list_container.custom_minimum_size = Vector2(record_list_width, 0)
+		_content_split.split_offset = record_list_width
 
 func _is_position_only_update(previous_data: Dictionary, new_data: Dictionary) -> bool:
 	if previous_data.is_empty():
