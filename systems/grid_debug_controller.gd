@@ -1,6 +1,8 @@
 class_name GridDebugController
 extends Node
 
+const GridVisualizerScript = preload("res://systems/grid_visualizer.gd")
+
 const GRID_MODULE_ID := "grid_debug"
 const GRID_COMMAND_ID := "grid_debug"
 const GRID_VARIABLE_ID := "grid.debug_visible"
@@ -8,10 +10,10 @@ const GRID_FLOOR_COLLISION_NAME := "GridFloorCollision"
 const GRID_FLOOR_SIZE := Vector3(100, 0.1, 100)
 const GRID_FLOOR_OFFSET := Vector3(0, -0.05, 0)
 
-var _grid_visualizer: GridVisualizer = null
+var _grid_visualizer: Node = null
 var _grid_floor: StaticBody3D = null
 
-func initialize(grid_visualizer: GridVisualizer, grid_floor: StaticBody3D, default_visible: bool) -> void:
+func initialize(grid_visualizer: Node, grid_floor: StaticBody3D, default_visible: bool) -> void:
 	_grid_visualizer = grid_visualizer
 	_grid_floor = grid_floor
 	_setup_grid_floor_collision()

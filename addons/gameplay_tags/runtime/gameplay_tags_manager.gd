@@ -1,6 +1,8 @@
 extends Node
 ## GameplayTagsManager - Global hierarchical gameplay tag registry.
 
+const GameplayTagContainerScript = preload("res://addons/gameplay_tags/runtime/gameplay_tag_container.gd")
+const GameplayTagQueryScript = preload("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd")
 const DEFAULT_CONFIG_PATH: String = "res://config/gameplay_tags.ini"
 const TAGS_SECTION_NAME: String = "GameplayTags"
 const TAG_DECLARATION_KEY: String = "GameplayTagList"
@@ -60,14 +62,16 @@ func matches_tag(tag_a: StringName, tag_b: StringName, exact: bool = false) -> b
 		return a_text == b_text
 	return a_text == b_text or a_text.begins_with("%s." % b_text)
 
-func make_container(tags: Array[StringName]) -> GameplayTagContainer:
-	var container: GameplayTagContainer = GameplayTagContainer.new()
+func make_container(tags: Array[StringName]):
+	var container = GameplayTagContainerScript.new()
 	for tag_name in tags:
 		container.add_tag(tag_name)
 	return container
 
-func evaluate_query(container: GameplayTagContainer, query: GameplayTagQuery) -> bool:
+func evaluate_query(container, query) -> bool:
 	if container == null or query == null:
+		return false
+	if not (container is GameplayTagContainerScript) or not (query is GameplayTagQueryScript):
 		return false
 	return query.evaluate(container)
 

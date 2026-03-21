@@ -1,6 +1,7 @@
 extends Node
 
 const GridAreaOverlay = preload("res://systems/grid_area_overlay.gd")
+const TargetAbilityBase = preload("res://systems/target_ability_base.gd")
 
 signal targeting_started(session: Dictionary)
 signal targeting_confirmed(result: Dictionary)

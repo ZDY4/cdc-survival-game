@@ -4,6 +4,11 @@ extends Node3D
 const CameraController3D = preload("res://systems/camera_controller_3d.gd")
 const CameraConfig3D = preload("res://systems/camera_config_3d.gd")
 const GameWorld3D = preload("res://scripts/locations/game_world_3d.gd")
+const Interactable = preload("res://modules/interaction/interactable.gd")
+const EnterOutdoorLocationInteractionOption = preload("res://modules/interaction/options/enter_outdoor_location_interaction_option.gd")
+const HoverOutline3D = preload("res://systems/hover_outline_3d.gd")
+const OverworldGridWorld = preload("res://systems/overworld_grid_world.gd")
+const PlayerController = preload("res://systems/player_controller.gd")
 
 const LOCATION_MARKER_GROUP: StringName = &"overworld_location_marker"
 const MARKER_Y: float = 0.35
@@ -15,6 +20,10 @@ const MODE_ZOOMING_IN: String = "ZOOMING_IN"
 const TRANSITION_DURATION: float = 0.35
 const LOCAL_ZOOM: float = 7.5
 const OVERWORLD_ZOOM: float = 15.5
+const OVERWORLD_PREVIEW_MAX_POINTS: int = 200
+const OVERWORLD_PREVIEW_DISTANCE: float = 80.0
+const OVERWORLD_INTERACTION_MIN_RADIUS: int = 1
+const OVERWORLD_INTERACTION_MAX_RADIUS: int = 2
 
 @export var pawn_move_speed: float = 4.5
 
@@ -22,26 +31,23 @@ const OVERWORLD_ZOOM: float = 15.5
 @onready var _focus_anchor: Node3D = $FocusAnchor
 @onready var _overworld_layer: Node3D = $OverworldLayer
 @onready var _locations_root: Node3D = $OverworldLayer/LocationsRoot
-@onready var _pawn: Node3D = $OverworldLayer/OverworldPawn
+@onready var _pawn_anchor: Node3D = $OverworldLayer/OverworldPawn
 @onready var _location_instances: Node3D = $LocationInstances
 @onready var _status_panel: Control = $CanvasLayer/PanelContainer
 @onready var _status_label: Label = $CanvasLayer/PanelContainer/VBoxContainer/StatusLabel
 @onready var _location_label: Label = $CanvasLayer/PanelContainer/VBoxContainer/LocationLabel
 
-var _walkable_cells: Dictionary = {}
+var _overworld_grid_world: OverworldGridWorld = null
+var _overworld_player: PlayerController = null
 var _location_nodes: Dictionary = {}
 var _active_outdoor_scene: GameWorld3D = null
 var _active_outdoor_location_id: String = "safehouse"
-var _travel_path: Array[Vector3] = []
-var _travel_target_location_id: String = ""
-var _travel_step_index: int = 0
-var _is_traveling: bool = false
 var _transition_locked: bool = false
 
 func _ready() -> void:
 	add_to_group("world_root")
 	_apply_camera_profile()
-	_build_walkable_cells()
+	_setup_overworld_player()
 	_build_location_markers()
 	_restore_from_game_state()
 
@@ -49,45 +55,21 @@ func _exit_tree() -> void:
 	if CameraConfigService != null and CameraConfigService.has_method("clear_runtime_override"):
 		CameraConfigService.clear_runtime_override()
 
-func _process(delta: float) -> void:
-	if not _is_traveling:
-		return
-	_advance_travel(delta)
-
-func _unhandled_input(event: InputEvent) -> void:
-	if _transition_locked or _is_traveling:
-		return
-	if GameState == null or GameState.world_mode != MODE_OVERWORLD:
-		return
-	if not (event is InputEventMouseButton):
-		return
-	var mouse_button := event as InputEventMouseButton
-	if mouse_button.button_index != MOUSE_BUTTON_LEFT or not mouse_button.pressed:
-		return
-	if _is_menu_overlay_open():
-		return
-	var hit := _raycast_mouse(mouse_button.position)
-	if hit.is_empty():
-		return
-	var location_id := _resolve_location_id_from_hit(hit)
-	if location_id.is_empty():
-		return
-	if travel_to_location(location_id) and get_viewport() != null:
-		get_viewport().set_input_as_handled()
-
 func request_enter_overworld() -> bool:
-	if _transition_locked or _is_traveling:
+	if _transition_locked:
 		return false
 	if GameState == null or GameState.world_mode != MODE_LOCAL:
 		return false
 	call_deferred("_run_enter_overworld_sequence")
 	return true
 
-func travel_to_location(location_id: String) -> bool:
-	if _transition_locked or _is_traveling or MapModule == null:
+func request_enter_outdoor_location(location_id: String) -> bool:
+	if _transition_locked or MapModule == null:
+		return false
+	if location_id.is_empty() or not MapModule.is_outdoor_location(location_id):
 		return false
 	if location_id == _active_outdoor_location_id:
-		call_deferred("_run_enter_local_sequence")
+		_run_enter_local_sequence()
 		return true
 
 	var validation := MapModule.can_travel_to_outdoor(location_id, true)
@@ -95,35 +77,20 @@ func travel_to_location(location_id: String) -> bool:
 		_update_status(str(validation.get("message", "当前无法前往该地点。")))
 		return false
 
-	var reachable_locations: Array[String] = MapModule.get_reachable_outdoor_locations(_active_outdoor_location_id)
-	if location_id not in reachable_locations:
-		_update_status("当前无法从这里直达该地点。")
+	if not MapModule.travel_to(location_id, true):
+		_update_status("进入地点失败。")
 		return false
 
-	var from_cell := get_current_overworld_cell()
-	var to_cell := MapModule.get_location_overworld_cell(location_id)
-	var cell_path: Array[Vector2i] = MapModule.find_overworld_path(from_cell, to_cell)
-	if cell_path.size() <= 1:
-		_update_status("没有找到通往该地点的大地图路径。")
-		return false
-
-	_travel_path.clear()
-	for cell in cell_path:
-		_travel_path.append(_cell_to_world(cell))
-	if not _travel_path.is_empty() and _travel_path[0].distance_to(_pawn.global_position) <= 0.01:
-		_travel_path.remove_at(0)
-	if _travel_path.is_empty():
-		return false
-
-	_travel_target_location_id = location_id
-	_travel_step_index = 0
-	_is_traveling = true
-	_transition_locked = true
-	GameState.set_world_mode(MODE_TRAVELING)
-	_update_status("正在前往 %s..." % MapModule.get_location_name(location_id))
+	var entry_spawn_id := MapModule.get_location_entry_spawn_id(location_id)
+	_load_outdoor_scene(location_id, entry_spawn_id)
+	_refresh_marker_state()
+	_run_enter_local_sequence()
 	return true
 
 func get_current_overworld_cell() -> Vector2i:
+	if _overworld_player != null and is_instance_valid(_overworld_player):
+		var player_grid := GridMovementSystem.world_to_grid(_overworld_player.global_position)
+		return Vector2i(player_grid.x, player_grid.z)
 	if GameState != null and GameState.overworld_pawn_cell != Vector2i.ZERO:
 		return GameState.overworld_pawn_cell
 	return MapModule.get_location_overworld_cell(_active_outdoor_location_id)
@@ -147,6 +114,40 @@ func _restore_from_game_state() -> void:
 		_enter_overworld_immediate()
 	else:
 		_enter_local_immediate()
+
+func _setup_overworld_player() -> void:
+	if _overworld_player != null:
+		return
+
+	_overworld_grid_world = OverworldGridWorld.new()
+	_overworld_grid_world.name = "OverworldGridWorld"
+	add_child(_overworld_grid_world)
+	_refresh_overworld_walkable_cells()
+
+	_overworld_player = PlayerController.new()
+	_overworld_player.name = "OverworldPlayer"
+	_overworld_layer.add_child(_overworld_player)
+	_overworld_player.set_grid_world(_overworld_grid_world)
+	_overworld_player.set_interaction_context(self)
+	_overworld_player.configure_path_preview_settings(
+		OVERWORLD_PREVIEW_MAX_POINTS,
+		OVERWORLD_PREVIEW_DISTANCE,
+		OVERWORLD_INTERACTION_MIN_RADIUS,
+		OVERWORLD_INTERACTION_MAX_RADIUS
+	)
+	_overworld_player.movement_step_completed.connect(_on_overworld_player_movement_step_completed)
+	_overworld_player.movement_completed.connect(_on_overworld_player_movement_completed)
+	_set_overworld_player_active(false)
+	if _pawn_anchor != null:
+		_pawn_anchor.visible = false
+
+func _refresh_overworld_walkable_cells() -> void:
+	if _overworld_grid_world == null or MapModule == null:
+		return
+	var walkable_cells: Array[Vector2i] = MapModule.get_overworld_walkable_cells()
+	for location_id in MapModule.get_outdoor_location_ids():
+		walkable_cells.append(MapModule.get_location_overworld_cell(location_id))
+	_overworld_grid_world.set_walkable_cells(walkable_cells)
 
 func _load_outdoor_scene(location_id: String, spawn_id: String) -> void:
 	var scene_path := MapModule.get_location_scene_path(location_id)
@@ -181,6 +182,8 @@ func _load_outdoor_scene(location_id: String, spawn_id: String) -> void:
 func _enter_local_immediate() -> void:
 	if _active_outdoor_scene == null:
 		return
+	_save_overworld_player_state()
+	_set_overworld_player_active(false)
 	_overworld_layer.visible = false
 	_status_panel.visible = false
 	_active_outdoor_scene.visible = true
@@ -206,25 +209,27 @@ func _enter_overworld_immediate() -> void:
 	var current_cell := MapModule.get_location_overworld_cell(_active_outdoor_location_id)
 	if GameState != null and GameState.overworld_pawn_cell != Vector2i.ZERO:
 		current_cell = GameState.overworld_pawn_cell
-	_pawn.global_position = _cell_to_world(current_cell)
+	_set_overworld_player_cell(current_cell)
+	_set_overworld_player_active(true)
 	_overworld_layer.visible = true
 	_status_panel.visible = true
 	if GameState != null:
 		GameState.set_world_mode(MODE_OVERWORLD)
 		GameState.set_overworld_cell(current_cell)
 		GameState.set_camera_zoom_level(OVERWORLD_ZOOM)
-	_camera_controller.target = _pawn
+	_camera_controller.target = _overworld_player
 	_camera_controller.set_zoom(OVERWORLD_ZOOM)
 	_refresh_marker_state()
-	_update_status("左键点击一个已解锁的露天地点即可移动并进入该地点。")
+	_update_status("左键点击地面自由移动，点击地点标记会像小地图一样靠近后进入。")
 
 func _run_enter_overworld_sequence() -> void:
-	if _transition_locked or _active_outdoor_scene == null:
+	if _transition_locked or _active_outdoor_scene == null or _overworld_player == null:
 		return
 	_transition_locked = true
 	GameState.set_world_mode(MODE_ZOOMING_OUT)
 	_focus_anchor.global_position = _active_outdoor_scene.get_runtime_focus_position()
-	_pawn.global_position = _cell_to_world(MapModule.get_location_overworld_cell(_active_outdoor_location_id))
+	_set_overworld_player_cell(MapModule.get_location_overworld_cell(_active_outdoor_location_id))
+	_set_overworld_player_active(true)
 	_overworld_layer.visible = true
 	_status_panel.visible = true
 	_camera_controller.target = _focus_anchor
@@ -233,16 +238,16 @@ func _run_enter_overworld_sequence() -> void:
 	_active_outdoor_scene.set_detail_level(GameWorld3D.DETAIL_REDUCED)
 
 	var tween := create_tween()
-	tween.tween_property(_focus_anchor, "global_position", _pawn.global_position, TRANSITION_DURATION)
+	tween.tween_property(_focus_anchor, "global_position", _overworld_player.global_position, TRANSITION_DURATION)
 	await tween.finished
 
 	_active_outdoor_scene.set_detail_level(GameWorld3D.DETAIL_PROXY_ONLY)
-	_camera_controller.target = _pawn
+	_camera_controller.target = _overworld_player
 	GameState.set_world_mode(MODE_OVERWORLD)
-	GameState.set_overworld_cell(MapModule.get_location_overworld_cell(_active_outdoor_location_id))
+	_save_overworld_player_state()
 	GameState.set_camera_zoom_level(OVERWORLD_ZOOM)
 	_refresh_marker_state()
-	_update_status("左键点击一个已解锁的露天地点即可移动并进入该地点。")
+	_update_status("左键点击地面自由移动，点击地点标记会像小地图一样靠近后进入。")
 	_transition_locked = false
 
 func _run_enter_local_sequence() -> void:
@@ -259,7 +264,8 @@ func _run_enter_local_sequence() -> void:
 		_transition_locked = false
 		return
 
-	_focus_anchor.global_position = _pawn.global_position
+	_save_overworld_player_state()
+	_focus_anchor.global_position = _overworld_player.global_position if _overworld_player != null else _focus_anchor.global_position
 	_camera_controller.target = _focus_anchor
 	_camera_controller.set_zoom(LOCAL_ZOOM)
 
@@ -267,6 +273,7 @@ func _run_enter_local_sequence() -> void:
 	tween.tween_property(_focus_anchor, "global_position", target_player.global_position, TRANSITION_DURATION)
 	await tween.finished
 
+	_set_overworld_player_active(false)
 	_overworld_layer.visible = false
 	_status_panel.visible = false
 	_camera_controller.target = target_player
@@ -276,45 +283,6 @@ func _run_enter_local_sequence() -> void:
 	_update_location_label()
 	_update_status("当前处于 %s，小地图交互点可返回大地图。" % MapModule.get_location_name(_active_outdoor_location_id))
 	_transition_locked = false
-
-func _advance_travel(delta: float) -> void:
-	if _travel_step_index >= _travel_path.size():
-		_finish_travel()
-		return
-	var next_point := _travel_path[_travel_step_index]
-	_pawn.global_position = _pawn.global_position.move_toward(next_point, pawn_move_speed * delta)
-	if _pawn.global_position.distance_to(next_point) <= 0.02:
-		_pawn.global_position = next_point
-		_travel_step_index += 1
-
-func _finish_travel() -> void:
-	_is_traveling = false
-	var target_location_id := _travel_target_location_id
-	_travel_path.clear()
-	_travel_step_index = 0
-	_travel_target_location_id = ""
-
-	if not MapModule.travel_to(target_location_id, true):
-		_transition_locked = false
-		_update_status("进入地点失败。")
-		return
-
-	var entry_spawn_id := MapModule.get_location_entry_spawn_id(target_location_id)
-	GameState.set_active_outdoor_context(target_location_id, entry_spawn_id)
-	GameState.set_overworld_cell(MapModule.get_location_overworld_cell(target_location_id))
-	_load_outdoor_scene(target_location_id, entry_spawn_id)
-	_refresh_marker_state()
-	_transition_locked = false
-	call_deferred("_run_enter_local_sequence")
-
-func _build_walkable_cells() -> void:
-	_walkable_cells.clear()
-	if MapModule == null:
-		return
-	for cell in MapModule.get_overworld_walkable_cells():
-		_walkable_cells[_cell_key(cell)] = true
-	for location_id in MapModule.get_outdoor_location_ids():
-		_walkable_cells[_cell_key(MapModule.get_location_overworld_cell(location_id))] = true
 
 func _build_location_markers() -> void:
 	_location_nodes.clear()
@@ -361,12 +329,27 @@ func _create_location_marker(location_id: String, location_data: Dictionary) -> 
 	label.text = str(location_data.get("name", location_id))
 	marker.add_child(label)
 
+	var interactable := Interactable.new()
+	interactable.name = "Interactable"
+	interactable.interaction_name = "进入%s" % str(location_data.get("name", location_id))
+	interactable.hover_outline_target_path = NodePath("../HoverOutline3D")
+	marker.add_child(interactable)
+
+	var option: Resource = EnterOutdoorLocationInteractionOption.new()
+	option.display_name = "进入%s" % str(location_data.get("name", location_id))
+	option.target_location_id = location_id
+	interactable.set_options([option])
+
+	var hover_outline := HoverOutline3D.new()
+	hover_outline.name = "HoverOutline3D"
+	hover_outline.target_node_paths = [NodePath("../MarkerMesh"), NodePath("../MarkerLabel")]
+	marker.add_child(hover_outline)
+
 	return marker
 
 func _refresh_marker_state() -> void:
 	if MapModule == null:
 		return
-	var reachable_locations: Array[String] = MapModule.get_reachable_outdoor_locations(_active_outdoor_location_id)
 	for location_id in _location_nodes.keys():
 		var marker := _location_nodes[location_id] as StaticBody3D
 		if marker == null:
@@ -377,7 +360,7 @@ func _refresh_marker_state() -> void:
 		if location_id == _active_outdoor_location_id:
 			marker_color = Color(0.15, 0.75, 1.0)
 		elif MapModule.is_location_unlocked(location_id):
-			marker_color = Color(0.20, 0.78, 0.28) if location_id in reachable_locations else Color(0.82, 0.66, 0.25)
+			marker_color = Color(0.20, 0.78, 0.28)
 		if mesh_instance != null:
 			mesh_instance.material_override = _build_marker_material(marker_color)
 		if label != null:
@@ -396,39 +379,12 @@ func _build_marker_material(albedo_color: Color) -> StandardMaterial3D:
 	material.roughness = 0.35
 	return material
 
-func _raycast_mouse(screen_pos: Vector2) -> Dictionary:
-	var viewport := get_viewport()
-	if viewport == null:
-		return {}
-	var camera := viewport.get_camera_3d()
-	if camera == null:
-		return {}
-	var from := camera.project_ray_origin(screen_pos)
-	var to := from + camera.project_ray_normal(screen_pos) * 1000.0
-	var query := PhysicsRayQueryParameters3D.new()
-	query.from = from
-	query.to = to
-	return get_world_3d().direct_space_state.intersect_ray(query)
-
-func _resolve_location_id_from_hit(hit: Dictionary) -> String:
-	if not hit.has("collider"):
-		return ""
-	var node := hit.collider as Node
-	while node != null:
-		if node.has_meta("location_id"):
-			return str(node.get_meta("location_id"))
-		node = node.get_parent()
-	return ""
-
 func _cell_to_world(cell: Vector2i) -> Vector3:
 	return Vector3(float(cell.x) + 0.5, 0.0, float(cell.y) + 0.5)
 
 func _get_outdoor_scene_origin(location_id: String) -> Vector3:
 	var cell := MapModule.get_location_world_origin_cell(location_id)
 	return Vector3(float(cell.x), 0.0, float(cell.y))
-
-func _cell_key(cell: Vector2i) -> String:
-	return "%d|%d" % [cell.x, cell.y]
 
 func _update_status(message: String) -> void:
 	if _status_label != null:
@@ -438,6 +394,40 @@ func _is_menu_overlay_open() -> bool:
 	if MenuHotkeyService != null and MenuHotkeyService.has_method("is_any_menu_open"):
 		return bool(MenuHotkeyService.is_any_menu_open())
 	return false
+
+func _set_overworld_player_active(active: bool) -> void:
+	if _overworld_player == null:
+		return
+	_overworld_player.visible = active
+	_overworld_player.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+	if not active:
+		_overworld_player.clear_world_input_feedback()
+
+func _set_overworld_player_cell(cell: Vector2i) -> void:
+	if _overworld_player == null:
+		return
+	if _overworld_player.is_moving():
+		_overworld_player.cancel_movement()
+	_overworld_player.global_position = _cell_to_world(cell)
+	_save_overworld_player_state()
+
+func _save_overworld_player_state() -> void:
+	if GameState == null or _overworld_player == null:
+		return
+	GameState.set_overworld_cell(get_current_overworld_cell())
+
+func _on_overworld_player_movement_step_completed(
+	grid_pos: Vector3i,
+	_world_pos: Vector3,
+	_step_index: int,
+	_total_steps: int
+) -> void:
+	if GameState == null:
+		return
+	GameState.set_overworld_cell(Vector2i(grid_pos.x, grid_pos.z))
+
+func _on_overworld_player_movement_completed() -> void:
+	_save_overworld_player_state()
 
 func _apply_camera_profile() -> void:
 	if CameraConfigService == null or not CameraConfigService.has_method("set_runtime_override"):

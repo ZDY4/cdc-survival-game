@@ -1,12 +1,14 @@
-extends InteractionOption
+extends "res://modules/interaction/options/interaction_option.gd"
 class_name TalkInteractionOption
+
+const CharacterRelationResolver = preload("res://systems/character_relation_resolver.gd")
 
 @export var speaker_name: String = "NPC"
 @export_multiline var dialogue_text: String = "你好。"
 @export var portrait_path: String = ""
 @export var dialog_id: String = ""
 
-var _relation_resolver: CharacterRelationResolver = CharacterRelationResolver.new()
+var _relation_resolver = CharacterRelationResolver.new()
 
 func _init() -> void:
 	option_id = "talk"
@@ -140,9 +142,23 @@ func _resolve_character_id(interactable: Node) -> String:
 func _get_character_data(character_id: String) -> Dictionary:
 	if character_id.is_empty():
 		return {}
-	if AIManager.current and AIManager.current.has_method("get_character_data"):
-		return AIManager.current.get_character_data(character_id)
+	var ai_manager: Node = _resolve_ai_manager()
+	if ai_manager != null and ai_manager.has_method("get_character_data"):
+		var data: Variant = ai_manager.call("get_character_data", character_id)
+		if data is Dictionary:
+			return data
 	return {}
+
+func _resolve_ai_manager() -> Node:
+	var loop := Engine.get_main_loop()
+	if not (loop is SceneTree):
+		return null
+	var tree := loop as SceneTree
+	if tree.current_scene != null:
+		var matches: Array[Node] = tree.current_scene.find_children("*", "AIManager", true, false)
+		if not matches.is_empty():
+			return matches[0]
+	return null
 
 func _resolve_ai_dialog_id(character_data: Dictionary) -> String:
 	if not dialog_id.strip_edges().is_empty():

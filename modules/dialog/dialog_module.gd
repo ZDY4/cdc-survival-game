@@ -1,6 +1,7 @@
 extends "res://core/base_module.gd"
 # 注意: 作为 Autoload 单例，不使用 class_name
 const ShopComponentScript = preload("res://modules/npc/components/shop_component.gd")
+const DialogUI = preload("res://modules/dialog/dialog_ui.gd")
 const DIALOG_DATA_DIR := "res://data/dialogues"
 
 signal dialog_started(text: String, speaker: String)

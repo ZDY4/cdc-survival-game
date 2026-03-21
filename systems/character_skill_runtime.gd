@@ -3,6 +3,7 @@ extends Node
 ## Runtime skill state for non-player actors.
 
 const TargetSkillBase = preload("res://systems/target_skill_base.gd")
+const GameplayEffect = preload("res://core/gameplay_effect.gd")
 
 const ACTIVATION_MODE_PASSIVE: String = "passive"
 const ACTIVATION_MODE_ACTIVE: String = "active"

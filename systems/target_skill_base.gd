@@ -1,5 +1,5 @@
 class_name TargetSkillBase
-extends TargetAbilityBase
+extends "res://systems/target_ability_base.gd"
 
 var _skill_id: String = ""
 var _skill_definition: Dictionary = {}

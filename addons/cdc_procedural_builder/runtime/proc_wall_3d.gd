@@ -1,6 +1,6 @@
 @tool
 class_name ProcWall3D
-extends ProcShapeGenerator3D
+extends "res://addons/cdc_procedural_builder/runtime/proc_shape_generator_3d.gd"
 
 @export_range(0.5, 12.0, 0.1, "or_greater") var wall_height: float = 2.8:
 	set = set_wall_height

@@ -1,4 +1,4 @@
-extends InteractionOption
+extends "res://modules/interaction/options/interaction_option.gd"
 class_name AttackInteractionOption
 
 const CharacterRelationResolverScript = preload("res://systems/character_relation_resolver.gd")
@@ -13,7 +13,7 @@ const CharacterRelationResolverScript = preload("res://systems/character_relatio
 @export var enemy_damage: int = 5
 @export var custom_enemy_data: Dictionary = {}
 
-var _relation_resolver: CharacterRelationResolver = CharacterRelationResolverScript.new()
+var _relation_resolver = CharacterRelationResolverScript.new()
 
 func _init() -> void:
 	option_id = "attack"
@@ -188,6 +188,20 @@ func _resolve_scene_root(player_actor: Node) -> Node:
 func _get_character_data(character_id: String) -> Dictionary:
 	if character_id.is_empty():
 		return {}
-	if AIManager.current and AIManager.current.has_method("get_character_data"):
-		return AIManager.current.get_character_data(character_id)
+	var ai_manager: Node = _resolve_ai_manager()
+	if ai_manager != null and ai_manager.has_method("get_character_data"):
+		var data: Variant = ai_manager.call("get_character_data", character_id)
+		if data is Dictionary:
+			return data
 	return {}
+
+func _resolve_ai_manager() -> Node:
+	var loop := Engine.get_main_loop()
+	if not (loop is SceneTree):
+		return null
+	var tree := loop as SceneTree
+	if tree.current_scene != null:
+		var matches: Array[Node] = tree.current_scene.find_children("*", "AIManager", true, false)
+		if not matches.is_empty():
+			return matches[0]
+	return null

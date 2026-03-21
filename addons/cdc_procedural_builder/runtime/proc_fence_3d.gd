@@ -1,6 +1,6 @@
 @tool
 class_name ProcFence3D
-extends ProcShapeGenerator3D
+extends "res://addons/cdc_procedural_builder/runtime/proc_shape_generator_3d.gd"
 
 @export_range(0.5, 6.0, 0.1, "or_greater") var fence_height: float = 2.0:
 	set = set_fence_height

@@ -1,5 +1,5 @@
 class_name TargetAttackAbility
-extends TargetAbilityBase
+extends "res://systems/target_ability_base.gd"
 
 var attack_range_cells: int = 1
 var attack_type: String = "normal"

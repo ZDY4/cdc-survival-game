@@ -1,4 +1,4 @@
-extends InteractionOption
+extends "res://modules/interaction/options/interaction_option.gd"
 class_name EnterSubsceneInteractionOption
 
 @export var target_location_id: String = ""

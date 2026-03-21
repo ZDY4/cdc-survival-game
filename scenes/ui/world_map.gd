@@ -3,7 +3,9 @@ class_name WorldMap
 ## 大地图场景
 ## 包含背景图和拖放的 MapLocation Actor
 
-signal location_selected(location_id: String, button: MapLocation)
+const MapLocationScript = preload("res://modules/map/map_location.gd")
+
+signal location_selected(location_id: String, button: Node)
 signal travel_confirmed(from_id: String, to_id: String)
 signal map_closed
 
@@ -18,7 +20,7 @@ signal map_closed
 @onready var close_button: Button = $CloseButton
 
 var _selected_location: String = ""
-var _current_location_button: MapLocation = null
+var _current_location_button: Node = null
 
 func _ready():
 	_setup_ui()
@@ -37,10 +39,10 @@ func _setup_ui():
 ## 刷新所有地点显示（用于解锁状态变化）
 func _refresh_locations():
 	for child in locations_container.get_children():
-		if child is MapLocation:
+		if child is MapLocationScript:
 			child.refresh()
 
-func _on_location_selected(location_id: String, button: MapLocation):
+func _on_location_selected(location_id: String, button: Node):
 	_selected_location = location_id
 	_current_location_button = button
 	
@@ -133,7 +135,7 @@ func _highlight_current_location():
 	var current = GameState.player_position if GameState else "safehouse"
 	
 	for child in locations_container.get_children():
-		if child is MapLocation:
+		if child is MapLocationScript:
 			if child.location_id == current:
 				# 添加高亮效果
 				child.modulate = Color(1.2, 1.2, 1.2)

@@ -2,6 +2,7 @@ extends Node
 
 const TargetAttackAbility = preload("res://systems/target_attack_ability.gd")
 const ValueUtils = preload("res://core/value_utils.gd")
+const AIManager = preload("res://systems/ai/ai_manager.gd")
 
 signal combat_started(enemy_data: Dictionary)
 signal turn_started(turn_owner: String, turn_number: int)
@@ -407,8 +408,9 @@ func _refresh_current_enemy(target: Node) -> void:
 func _resolve_current_enemy_actor() -> Node3D:
 	if _current_character_id.is_empty():
 		return _resolve_first_hostile_actor()
-	if AIManager.current and AIManager.current.has_method("find_active_actor_by_character_id"):
-		var actor: Variant = AIManager.current.find_active_actor_by_character_id(_current_character_id)
+	var ai_manager: Node = AIManager.current as Node
+	if ai_manager != null and ai_manager.has_method("find_active_actor_by_character_id"):
+		var actor: Variant = ai_manager.call("find_active_actor_by_character_id", _current_character_id)
 		if actor is Node3D and is_instance_valid(actor):
 			return actor as Node3D
 	return _resolve_first_hostile_actor()
@@ -419,8 +421,9 @@ func _resolve_target_actor(character_ref: Variant) -> Node3D:
 	var character_id: String = _resolve_character_id(character_ref)
 	if character_id.is_empty():
 		return null
-	if AIManager.current and AIManager.current.has_method("find_active_actor_by_character_id"):
-		var actor: Variant = AIManager.current.find_active_actor_by_character_id(character_id)
+	var ai_manager: Node = AIManager.current as Node
+	if ai_manager != null and ai_manager.has_method("find_active_actor_by_character_id"):
+		var actor: Variant = ai_manager.call("find_active_actor_by_character_id", character_id)
 		if actor is Node3D and is_instance_valid(actor):
 			return actor as Node3D
 	return null
