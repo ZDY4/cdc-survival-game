@@ -3,6 +3,7 @@ extends Control
 class_name SkillHotbar
 
 const ValueUtils = preload("res://core/value_utils.gd")
+const SkillHotbarSlotScript = preload("res://ui/skill_hotbar_slot.gd")
 
 signal status_requested(message: String)
 
@@ -25,7 +26,7 @@ var _group_label: Label = null
 var _slot_container: HBoxContainer = null
 var _previous_button: Button = null
 var _next_button: Button = null
-var _slots: Array[SkillHotbarSlot] = []
+var _slots: Array = []
 
 
 func _ready() -> void:
@@ -118,7 +119,7 @@ func _build_ui() -> void:
 	_root.add_child(_slot_container)
 
 	for slot_index in range(SLOT_COUNT):
-		var slot := SkillHotbarSlot.new()
+		var slot = SkillHotbarSlotScript.new()
 		slot.slot_index = slot_index
 		slot.drop_requested.connect(_on_slot_drop_requested)
 		slot.drag_cleared.connect(_on_slot_drag_cleared)

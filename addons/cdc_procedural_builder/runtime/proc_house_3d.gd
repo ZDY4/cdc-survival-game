@@ -1,6 +1,6 @@
 @tool
 class_name ProcHouse3D
-extends ProcShapeGenerator3D
+extends "res://addons/cdc_procedural_builder/runtime/proc_shape_generator_3d.gd"
 
 enum RoofMode {
 	FLAT,

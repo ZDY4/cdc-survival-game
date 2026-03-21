@@ -3,6 +3,8 @@ extends CanvasLayer
 const InputActions = preload("res://core/input_actions.gd")
 const InventoryGridView = preload("res://ui/inventory_grid_view.gd")
 const InventoryEquipmentSlotButton = preload("res://ui/inventory_equipment_slot_button.gd")
+const SkillHotbarScript = preload("res://ui/skill_hotbar.gd")
+const SkillPanelItemScript = preload("res://ui/skill_panel_item.gd")
 
 signal request_close_all()
 
@@ -15,7 +17,7 @@ var _crafting_panel: PanelContainer = null
 var _settings_panel: PanelContainer = null
 var _world_map: CanvasLayer = null
 var _status_label: Label = null
-var _skill_hotbar: SkillHotbar = null
+var _skill_hotbar: Control = null
 
 var _inventory_equipment_grid: GridContainer = null
 var _inventory_summary_label: Label = null
@@ -199,7 +201,7 @@ func _build_overlay() -> void:
 	_build_crafting_content(_crafting_panel)
 	_build_settings_content(_settings_panel)
 
-	_skill_hotbar = SkillHotbar.new()
+	_skill_hotbar = SkillHotbarScript.new()
 	_skill_hotbar.status_requested.connect(_status)
 	_menu_root.add_child(_skill_hotbar)
 
@@ -941,7 +943,7 @@ func _refresh_skills() -> void:
 
 	for skill_id in skill_ids:
 		var skill: Dictionary = skills[skill_id]
-		var item := SkillPanelItem.new()
+		var item: Control = SkillPanelItemScript.new()
 		item.configure(skill_id, skill)
 		item.add_to_hotbar_requested.connect(_on_skill_add_to_hotbar_requested)
 		_skills_list.add_child(item)

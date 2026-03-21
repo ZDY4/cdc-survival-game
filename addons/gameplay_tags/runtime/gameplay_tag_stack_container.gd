@@ -3,6 +3,8 @@ extends RefCounted
 
 class_name GameplayTagStackContainer
 
+const GameplayTagContainerScript = preload("res://addons/gameplay_tags/runtime/gameplay_tag_container.gd")
+
 var _tag_stacks: Dictionary = {}
 
 func add_stack(tag: StringName, count: int = 1) -> int:
@@ -88,8 +90,8 @@ func get_explicit_tags() -> Array[StringName]:
 		result.append(StringName(tag_text))
 	return result
 
-func to_container() -> GameplayTagContainer:
-	var container: GameplayTagContainer = GameplayTagContainer.new()
+func to_container():
+	var container = GameplayTagContainerScript.new()
 	for tag_name in _tag_stacks.keys():
 		if int(_tag_stacks[tag_name]) > 0:
 			container.add_tag(tag_name)

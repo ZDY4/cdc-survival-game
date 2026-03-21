@@ -5,6 +5,7 @@ extends "res://core/base_module.gd"
 
 const InputActions = preload("res://core/input_actions.gd")
 const TargetSkillBase = preload("res://systems/target_skill_base.gd")
+const GameplayEffect = preload("res://core/gameplay_effect.gd")
 
 const SKILLS_DATA_DIR: String = "res://data/skills"
 const SKILL_TREES_DATA_DIR: String = "res://data/skill_trees"

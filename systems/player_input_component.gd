@@ -2,6 +2,7 @@ class_name PlayerInputComponent
 extends Node
 
 const InputActions = preload("res://core/input_actions.gd")
+const PlayerController = preload("res://systems/player_controller.gd")
 
 var _player: PlayerController = null
 

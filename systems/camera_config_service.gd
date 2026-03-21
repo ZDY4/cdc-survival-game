@@ -1,6 +1,7 @@
 extends Node
 
 signal config_changed
+const CameraConfig3DScript = preload("res://systems/camera_config_3d.gd")
 const DEFAULT_CONFIG_PATH: String = "res://config/camera/default_camera_3d.tres"
 const _OVERRIDABLE_KEYS: Array[String] = [
 	"projection_type",
@@ -18,18 +19,18 @@ const _OVERRIDABLE_KEYS: Array[String] = [
 	"follow_smoothing"
 ]
 
-var _base_config: CameraConfig3D = null
-var _effective_config: CameraConfig3D = null
+var _base_config: Resource = null
+var _effective_config: Resource = null
 var _runtime_override: Dictionary = {}
 
 func _ready() -> void:
 	_base_config = _load_base_config()
 	_rebuild_effective_config()
 
-func get_effective_config() -> CameraConfig3D:
+func get_effective_config() -> Resource:
 	if not _effective_config:
 		_rebuild_effective_config()
-	return _effective_config.duplicate(true) as CameraConfig3D
+	return _effective_config.duplicate(true)
 
 func set_runtime_override(override_values: Dictionary) -> void:
 	_runtime_override.clear()
@@ -48,21 +49,21 @@ func clear_runtime_override() -> void:
 	_rebuild_effective_config()
 	config_changed.emit()
 
-func _load_base_config() -> CameraConfig3D:
+func _load_base_config() -> Resource:
 	var loaded: Resource = load(DEFAULT_CONFIG_PATH)
-	if loaded and loaded is CameraConfig3D:
-		return loaded as CameraConfig3D
+	if loaded and loaded is CameraConfig3DScript:
+		return loaded
 	push_error("CameraConfigService: Failed to load %s, using in-memory defaults" % DEFAULT_CONFIG_PATH)
-	return CameraConfig3D.new()
+	return CameraConfig3DScript.new()
 
 func _rebuild_effective_config() -> void:
 	if not _base_config:
-		_base_config = CameraConfig3D.new()
-	_effective_config = _base_config.duplicate(true) as CameraConfig3D
+		_base_config = CameraConfig3DScript.new()
+	_effective_config = _base_config.duplicate(true)
 	_apply_runtime_override(_effective_config)
 	_sanitize_config(_effective_config)
 
-func _apply_runtime_override(config: CameraConfig3D) -> void:
+func _apply_runtime_override(config: Resource) -> void:
 	for key in _runtime_override.keys():
 		var value: Variant = _runtime_override[key]
 		match key:
@@ -93,7 +94,7 @@ func _apply_runtime_override(config: CameraConfig3D) -> void:
 			"follow_smoothing":
 				config.follow_smoothing = _to_float(value, config.follow_smoothing)
 
-func _sanitize_config(config: CameraConfig3D) -> void:
+func _sanitize_config(config: Resource) -> void:
 	if config.min_zoom > config.max_zoom:
 		var tmp_zoom: float = config.min_zoom
 		config.min_zoom = config.max_zoom
@@ -108,16 +109,16 @@ func _sanitize_config(config: CameraConfig3D) -> void:
 	config.zoom_speed = maxf(config.zoom_speed, 0.01)
 	config.zoom_smoothing = clamp(config.zoom_smoothing, 0.01, 1.0)
 	config.follow_smoothing = clamp(config.follow_smoothing, 0.01, 1.0)
-	config.projection_type = clampi(config.projection_type, CameraConfig3D.ProjectionType.ORTHOGRAPHIC, CameraConfig3D.ProjectionType.PERSPECTIVE)
+	config.projection_type = clampi(config.projection_type, CameraConfig3DScript.ProjectionType.ORTHOGRAPHIC, CameraConfig3DScript.ProjectionType.PERSPECTIVE)
 
 func _to_projection_type(value: Variant, fallback: int) -> int:
 	if value is int:
-		return clampi(value, CameraConfig3D.ProjectionType.ORTHOGRAPHIC, CameraConfig3D.ProjectionType.PERSPECTIVE)
+		return clampi(value, CameraConfig3DScript.ProjectionType.ORTHOGRAPHIC, CameraConfig3DScript.ProjectionType.PERSPECTIVE)
 	var text := str(value).to_lower().strip_edges()
 	if text in ["orthographic", "ortho", "0"]:
-		return CameraConfig3D.ProjectionType.ORTHOGRAPHIC
+		return CameraConfig3DScript.ProjectionType.ORTHOGRAPHIC
 	if text in ["perspective", "persp", "1"]:
-		return CameraConfig3D.ProjectionType.PERSPECTIVE
+		return CameraConfig3DScript.ProjectionType.PERSPECTIVE
 	return fallback
 
 func _to_float(value: Variant, fallback: float) -> float:

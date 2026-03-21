@@ -9,7 +9,9 @@ const VisionSystemScript = preload("res://systems/vision_system.gd")
 const PathPreviewSystem = preload("res://systems/path_preview_system.gd")
 const PathPreview = preload("res://systems/path_preview.gd")
 const GridHoverCornerOverlay = preload("res://systems/grid_hover_corner_overlay.gd")
+const InteractableScript = preload("res://modules/interaction/interactable.gd")
 const InteractionContextMenu = preload("res://ui/interaction_context_menu.gd")
+const InteractionOptionScript = preload("res://modules/interaction/options/interaction_option.gd")
 const PlayerInputComponent = preload("res://systems/player_input_component.gd")
 const WorldDamageTextController = preload("res://systems/world_damage_text_controller.gd")
 
@@ -48,16 +50,16 @@ var _active_hover_cursor: Texture2D = null
 var _active_hover_hotspot: Vector2 = Vector2.ZERO
 var _hover_cursor_update_timer: float = 0.0
 var _pending_interaction_target: Node = null
-var _pending_interaction_options: Array[InteractionOption] = []
+var _pending_interaction_options: Array = []
 var _pending_execution_interactable: Node = null
-var _pending_execution_option: InteractionOption = null
+var _pending_execution_option = null
 var _pending_execution_target_actor: CharacterActor = null
 var _pending_execution_destination: Vector3 = Vector3.ZERO
 var _navigation_intent_kind: String = NAVIGATION_INTENT_NONE
 var _navigation_intent_target_pos: Vector3 = Vector3.ZERO
 var _navigation_intent_path: Array[Vector3] = []
 var _navigation_intent_interactable: Node = null
-var _navigation_intent_option: InteractionOption = null
+var _navigation_intent_option = null
 var _navigation_intent_target_actor: CharacterActor = null
 var _keep_navigation_intent_after_cancel: bool = false
 var _auto_advancing_navigation_intent: bool = false
@@ -232,13 +234,13 @@ func move_to(world_pos: Vector3) -> bool:
 		return false
 	return true
 
-func move_to_screen_position(screen_pos: Vector2, interaction_system: InteractionSystem, scene_root: Node) -> bool:
+func move_to_screen_position(screen_pos: Vector2, interaction_system: Node, scene_root: Node) -> bool:
 	if is_world_input_blocked():
 		return false
 	if not interaction_system or not scene_root or not _grid_world:
 		return false
 
-	var ground_hit := interaction_system.raycast_screen_position(scene_root, screen_pos, true, 1)
+	var ground_hit: Dictionary = interaction_system.raycast_screen_position(scene_root, screen_pos, true, 1)
 	if ground_hit.is_empty():
 		return false
 
@@ -272,7 +274,7 @@ func handle_input(event: InputEvent) -> bool:
 	if not interaction_system.is_primary_pressed(event):
 		return false
 
-	var screen_pos := interaction_system.get_screen_position(event)
+	var screen_pos: Vector2 = interaction_system.get_screen_position(event)
 	if is_moving():
 		cancel_movement()
 		return true
@@ -305,7 +307,7 @@ func handle_secondary_input(event: InputEvent) -> bool:
 	var viewport := _scene_root.get_viewport()
 	if viewport and _is_hovering_blocking_ui(viewport):
 		return true
-	var screen_pos := interaction_system.get_screen_position(event)
+	var screen_pos: Vector2 = interaction_system.get_screen_position(event)
 	_show_interaction_options(screen_pos, interaction_system, _scene_root)
 	return true
 
@@ -393,7 +395,7 @@ func _set_navigation_intent(
 	target_pos: Vector3,
 	path: Array[Vector3],
 	interactable: Node,
-	option: InteractionOption
+	option
 ) -> void:
 	_clear_navigation_intent(false)
 	_navigation_intent_kind = intent_kind
@@ -434,8 +436,8 @@ func _refresh_navigation_intent_state(clear_on_failure: bool = true) -> bool:
 			_navigation_intent_path = ground_path
 			return true
 		NAVIGATION_INTENT_INTERACTION:
-			var interactable := _navigation_intent_interactable
-			var option := _navigation_intent_option
+			var interactable: Node = _navigation_intent_interactable
+			var option: Variant = _navigation_intent_option
 			if interactable == null or not is_instance_valid(interactable) or option == null:
 				if clear_on_failure:
 					_clear_navigation_intent()
@@ -484,8 +486,8 @@ func _try_advance_navigation_intent() -> bool:
 		return false
 
 	if _navigation_intent_kind == NAVIGATION_INTENT_INTERACTION:
-		var interactable := _navigation_intent_interactable
-		var option := _navigation_intent_option
+		var interactable: Node = _navigation_intent_interactable
+		var option: Variant = _navigation_intent_option
 		if interactable != null and is_instance_valid(interactable) and option != null and _is_option_in_range(interactable, option):
 			_auto_advancing_navigation_intent = true
 			_clear_navigation_intent(false)
@@ -560,10 +562,10 @@ func _on_movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_in
 			_active_move_steps_consumed += 1
 	movement_step_completed.emit(grid_pos, world_pos, step_index, total_steps)
 
-func _show_interaction_options(screen_pos: Vector2, interaction_system: InteractionSystem, scene_root: Node) -> void:
+func _show_interaction_options(screen_pos: Vector2, interaction_system: Node, scene_root: Node) -> void:
 	if not interaction_system or not scene_root or not _interaction_context_menu:
 		return
-	var hit := interaction_system.raycast_screen_position(scene_root, screen_pos)
+	var hit: Dictionary = interaction_system.raycast_screen_position(scene_root, screen_pos)
 	if hit.is_empty():
 		_finalize_interaction_menu_close()
 		return
@@ -582,16 +584,15 @@ func _show_interaction_options(screen_pos: Vector2, interaction_system: Interact
 		return
 
 	var option_items: Array[Dictionary] = []
-	var available_options: Array[InteractionOption] = []
+	var available_options: Array = []
 	for option in options:
-		var interaction_option := option as InteractionOption
-		if interaction_option == null:
+		if option == null or not (option is InteractionOptionScript):
 			continue
 		option_items.append({
-			"text": interaction_option.get_option_name(interactable),
-			"color": interaction_option.get_display_color(interactable)
+			"text": option.get_option_name(interactable),
+			"color": option.get_display_color(interactable)
 		})
-		available_options.append(interaction_option)
+		available_options.append(option)
 	if option_items.is_empty():
 		_finalize_interaction_menu_close()
 		return
@@ -804,7 +805,7 @@ func _update_hover_cursor() -> void:
 		return
 
 	var mouse_pos := viewport.get_mouse_position()
-	var hit := interaction_system.raycast_screen_position(_scene_root, mouse_pos)
+	var hit: Dictionary = interaction_system.raycast_screen_position(_scene_root, mouse_pos)
 	if hit.is_empty():
 		_apply_hover_cursor(null, Vector2.ZERO)
 		_clear_hover_outline_target()
@@ -823,20 +824,20 @@ func _update_hover_cursor() -> void:
 		_update_hover_overlay_from_mouse(interaction_system, viewport)
 		return
 
-	var option: InteractionOption = interactable.get_primary_option()
+	var option = interactable.get_primary_option()
 	if not option:
 		_apply_hover_cursor(null, Vector2.ZERO)
 		_clear_hover_outline_target()
 		_update_hover_overlay_from_mouse(interaction_system, viewport)
 		return
 
-	var cursor_texture := option.get_cursor_texture(interactable)
-	var cursor_hotspot := option.get_cursor_hotspot(interactable)
+	var cursor_texture: Texture2D = option.get_cursor_texture(interactable)
+	var cursor_hotspot: Vector2 = option.get_cursor_hotspot(interactable)
 	_apply_hover_cursor(cursor_texture, cursor_hotspot)
 	_update_hover_outline_target(interactable, option)
 	_update_hover_overlay_from_mouse(interaction_system, viewport)
 
-func _update_hover_overlay_from_mouse(interaction_system: InteractionSystem, viewport: Viewport) -> void:
+func _update_hover_overlay_from_mouse(interaction_system: Node, viewport: Viewport) -> void:
 	if not _hover_corner_overlay or not _scene_root or not interaction_system or not viewport:
 		return
 	var camera := viewport.get_camera_3d()
@@ -844,7 +845,7 @@ func _update_hover_overlay_from_mouse(interaction_system: InteractionSystem, vie
 		_hide_hover_overlay()
 		return
 	var mouse_pos := viewport.get_mouse_position()
-	var ground_hit := interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
+	var ground_hit: Dictionary = interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
 	if ground_hit.is_empty() or not ground_hit.has("position"):
 		_hide_hover_overlay()
 		return
@@ -865,14 +866,14 @@ func _hide_hover_overlay() -> void:
 	if _hover_corner_overlay:
 		_hover_corner_overlay.hide_cell()
 
-func _update_hover_outline_target(interactable: Node, option: InteractionOption) -> void:
+func _update_hover_outline_target(interactable: Node, option) -> void:
 	var outline_target := _resolve_hover_outline_target(interactable)
 	if outline_target == null:
 		_clear_hover_outline_target()
 		return
 	var outline_color := Color(1.0, 1.0, 1.0, 1.0)
 	if option.is_dangerous(interactable):
-		outline_color = InteractionOption.DANGEROUS_DISPLAY_COLOR
+		outline_color = InteractionOptionScript.DANGEROUS_DISPLAY_COLOR
 	_set_hover_outline_target(outline_target, outline_color)
 
 func _set_hover_outline_target(outline_target: Node, outline_color: Color) -> void:
@@ -951,7 +952,7 @@ func _on_interaction_menu_option_selected(index: int) -> void:
 		_finalize_interaction_menu_close()
 		return
 
-	var chosen := _pending_interaction_options[index]
+	var chosen: Variant = _pending_interaction_options[index]
 	if chosen == null:
 		_finalize_interaction_menu_close()
 		return
@@ -971,12 +972,12 @@ func _finalize_interaction_menu_close() -> void:
 
 func _try_interact_screen_position(
 	screen_pos: Vector2,
-	interaction_system: InteractionSystem,
+	interaction_system: Node,
 	scene_root: Node
 ) -> bool:
 	if not interaction_system or not scene_root:
 		return false
-	var hit := interaction_system.raycast_screen_position(scene_root, screen_pos)
+	var hit: Dictionary = interaction_system.raycast_screen_position(scene_root, screen_pos)
 	if hit.is_empty():
 		return false
 
@@ -985,7 +986,7 @@ func _try_interact_screen_position(
 		return false
 
 	if interactable.has_method("get_primary_option"):
-		var primary_option: InteractionOption = interactable.get_primary_option()
+		var primary_option = interactable.get_primary_option()
 		if primary_option:
 			return _begin_option_execution(interactable, primary_option)
 	if interactable.has_method("interact_primary"):
@@ -1039,8 +1040,8 @@ func _resolve_character_actor_from_interactable(interactable: Node) -> Character
 func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
 	if not hit.has("collider"):
 		return null
-	var node := hit.collider as Node
-	var component := _find_interactable_component(node)
+	var node: Node = hit.collider as Node
+	var component: Node = _find_interactable_component(node)
 	if component != null:
 		return component
 	while node != null:
@@ -1057,20 +1058,20 @@ func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
 		node = node.get_parent()
 	return null
 
-func _find_interactable_component(node: Node) -> Interactable:
+func _find_interactable_component(node: Node) -> Node:
 	if not node:
 		return null
-	if node is Interactable:
+	if node is InteractableScript:
 		return node
 	for child in node.get_children():
-		if child is Interactable:
+		if child is InteractableScript:
 			return child
 	var current := node.get_parent()
 	while current != null:
-		if current is Interactable:
+		if current is InteractableScript:
 			return current
 		for child in current.get_children():
-			if child is Interactable:
+			if child is InteractableScript:
 				return child
 		current = current.get_parent()
 	return null
@@ -1080,7 +1081,7 @@ func _is_secondary_pressed(event: InputEvent) -> bool:
 		return event.button_index == MOUSE_BUTTON_RIGHT and not event.pressed
 	return false
 
-func _begin_option_execution(interactable: Node, option: InteractionOption) -> bool:
+func _begin_option_execution(interactable: Node, option) -> bool:
 	if interactable == null or not is_instance_valid(interactable) or option == null:
 		return false
 
@@ -1124,7 +1125,7 @@ func _begin_option_execution(interactable: Node, option: InteractionOption) -> b
 	_pending_execution_destination = destination
 	return true
 
-func _execute_interaction_option(interactable: Node, option: InteractionOption) -> void:
+func _execute_interaction_option(interactable: Node, option) -> void:
 	if interactable == null or not is_instance_valid(interactable) or option == null:
 		return
 
@@ -1137,7 +1138,7 @@ func _execute_interaction_option(interactable: Node, option: InteractionOption) 
 		elif interactable.has_method("_execute_option"):
 			interactable._execute_option(option)
 	else:
-		var action_type := option.get_action_type(interactable)
+		var action_type: String = option.get_action_type(interactable)
 		var start_result := {
 			"success": true
 		}
@@ -1171,8 +1172,8 @@ func _try_execute_pending_option() -> void:
 	if _pending_execution_option == null:
 		return
 
-	var interactable := _pending_execution_interactable
-	var option := _pending_execution_option
+	var interactable: Node = _pending_execution_interactable
+	var option: Variant = _pending_execution_option
 	if interactable == null or not is_instance_valid(interactable):
 		_clear_pending_option_execution()
 		return
@@ -1185,7 +1186,7 @@ func _try_execute_pending_option() -> void:
 
 	_execute_interaction_option(interactable, option)
 
-func _resolve_option_approach_data(interactable: Node, option: InteractionOption) -> Dictionary:
+func _resolve_option_approach_data(interactable: Node, option) -> Dictionary:
 	if _is_option_in_range(interactable, option):
 		return {
 			"found": true,
@@ -1196,8 +1197,8 @@ func _resolve_option_approach_data(interactable: Node, option: InteractionOption
 	if _navigator == null or _grid_world == null:
 		return {"found": false, "in_range": false}
 
-	var anchor_pos := option.get_interaction_anchor_position(interactable)
-	var required_distance := maxf(0.0, option.get_required_distance(interactable))
+	var anchor_pos: Vector3 = option.get_interaction_anchor_position(interactable)
+	var required_distance: float = maxf(0.0, option.get_required_distance(interactable))
 	var player_grid := get_grid_position()
 	var anchor_grid := GridMovementSystem.world_to_grid(anchor_pos)
 	anchor_grid.y = player_grid.y
@@ -1211,12 +1212,12 @@ func _resolve_option_approach_data(interactable: Node, option: InteractionOption
 				continue
 			var candidate_world := GridMovementSystem.grid_to_world(candidate_grid)
 			candidate_world.y = global_position.y
-			var anchor_world := anchor_pos
+			var anchor_world: Vector3 = anchor_pos
 			anchor_world.y = candidate_world.y
 			if candidate_world.distance_to(anchor_world) > required_distance + 0.05:
 				continue
 
-			var path := _navigator.find_path(global_position, candidate_world, _grid_world.is_walkable)
+			var path: Array[Vector3] = _navigator.find_path(global_position, candidate_world, _grid_world.is_walkable)
 			if path.size() <= 1:
 				continue
 			if best_path.is_empty() or path.size() < best_path.size():
@@ -1233,8 +1234,8 @@ func _resolve_option_approach_data(interactable: Node, option: InteractionOption
 
 	return {"found": false, "in_range": false}
 
-func _is_option_in_range(interactable: Node, option: InteractionOption) -> bool:
-	var anchor_pos := option.get_interaction_anchor_position(interactable)
+func _is_option_in_range(interactable: Node, option) -> bool:
+	var anchor_pos: Vector3 = option.get_interaction_anchor_position(interactable)
 	var player_pos := global_position
 	player_pos.y = anchor_pos.y
 	return player_pos.distance_to(anchor_pos) <= option.get_required_distance(interactable) + 0.05

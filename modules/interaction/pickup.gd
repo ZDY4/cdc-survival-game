@@ -3,6 +3,8 @@ extends StaticBody3D
 ## Reusable drag-and-drop pickup object for 3D scenes.
 
 const ItemIdResolver = preload("res://core/item_id_resolver.gd")
+const InteractableScript = preload("res://modules/interaction/interactable.gd")
+const PickupInteractionOptionScript = preload("res://modules/interaction/options/pickup_interaction_option.gd")
 
 # 1. Constants
 const INVALID_ITEM_TEXT: String = "未设置 item_id"
@@ -29,7 +31,7 @@ const MAX_ICON_WIDTH: float = 1.2
 @onready var _visual_root: Node3D = get_node_or_null("VisualRoot") as Node3D
 @onready var _icon_mesh: MeshInstance3D = get_node_or_null("VisualRoot/IconMesh") as MeshInstance3D
 @onready var _fallback_label: Label3D = get_node_or_null("FallbackLabel") as Label3D
-@onready var _interactable: Interactable = get_node_or_null("Interactable") as Interactable
+@onready var _interactable: Node = get_node_or_null("Interactable") as Node
 
 # 4. Private variables
 var _refresh_queued: bool = false
@@ -74,7 +76,7 @@ func _apply_pickup_option(item_state: Dictionary) -> void:
 	if _interactable == null:
 		return
 
-	var pickup_option := PickupInteractionOption.new()
+	var pickup_option: Resource = PickupInteractionOptionScript.new()
 	var resolved_item_id: String = str(item_state.get("resolved_item_id", ""))
 	pickup_option.item_id = resolved_item_id
 	pickup_option.min_count = max(1, min(min_count, max_count))

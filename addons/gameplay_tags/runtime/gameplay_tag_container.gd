@@ -62,8 +62,8 @@ func get_explicit_tags() -> Array[StringName]:
 		result.append(StringName(tag_text))
 	return result
 
-func duplicate_container() -> GameplayTagContainer:
-	var result: GameplayTagContainer = GameplayTagContainer.new()
+func duplicate_container():
+	var result = self.get_script().new()
 	for tag_name in _explicit_tags.keys():
 		result.add_tag(tag_name)
 	return result

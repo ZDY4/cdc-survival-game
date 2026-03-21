@@ -10,6 +10,7 @@ const ATTACK_LUNGE_MIN_DISTANCE: float = 0.35
 const ATTACK_LUNGE_MAX_DISTANCE: float = 0.75
 const ATTACK_LUNGE_FORWARD_DURATION: float = 0.08
 const ATTACK_LUNGE_RETURN_DURATION: float = 0.12
+const InteractionSystemScript = preload("res://systems/interaction_system.gd")
 
 @export var head_color: Color = Color(0.95, 0.84, 0.70, 1.0)
 @export var body_color: Color = Color(0.30, 0.58, 0.90, 1.0)
@@ -33,8 +34,8 @@ var _head_outline_sprite: Sprite3D = null
 var _body_outline_sprite: Sprite3D = null
 var _left_leg_outline_sprite: Sprite3D = null
 var _right_leg_outline_sprite: Sprite3D = null
-var _interaction_system: InteractionSystem = null
-var _gameplay_tag_stack: GameplayTagStackContainer = GameplayTagStackContainer.new()
+var _interaction_system: Node = null
+var _gameplay_tag_stacks: Dictionary = {}
 var _cached_interacting_tag: StringName = StringName()
 var _warned_missing_gameplay_tags: bool = false
 var _character_id: String = ""
@@ -171,7 +172,7 @@ func _refresh_placeholder_textures() -> void:
 	_right_leg_sprite.texture = _create_leg_texture(leg_sprite_size, resolved_leg_color)
 	_refresh_hover_outline_textures()
 
-func get_interaction_system() -> InteractionSystem:
+func get_interaction_system() -> Node:
 	return _interaction_system
 
 func get_visual_root() -> Node3D:
@@ -224,31 +225,48 @@ func begin_interaction_state() -> void:
 	var interacting_tag: StringName = _resolve_interacting_tag()
 	if String(interacting_tag).is_empty():
 		return
-	_gameplay_tag_stack.add_stack(interacting_tag, 1)
+	var current_count: int = int(_gameplay_tag_stacks.get(interacting_tag, 0))
+	_gameplay_tag_stacks[interacting_tag] = current_count + 1
 
 func end_interaction_state() -> void:
 	var interacting_tag: StringName = _resolve_interacting_tag()
 	if String(interacting_tag).is_empty():
 		return
-	if _gameplay_tag_stack.get_stack_count(interacting_tag) <= 0:
+	var current_count: int = int(_gameplay_tag_stacks.get(interacting_tag, 0))
+	if current_count <= 0:
 		return
-	_gameplay_tag_stack.remove_stack(interacting_tag, 1)
+	if current_count == 1:
+		_gameplay_tag_stacks.erase(interacting_tag)
+		return
+	_gameplay_tag_stacks[interacting_tag] = current_count - 1
 
 func is_interacting_state() -> bool:
 	var interacting_tag: StringName = _resolve_interacting_tag()
 	if String(interacting_tag).is_empty():
 		return false
-	return _gameplay_tag_stack.get_stack_count(interacting_tag) > 0
+	return int(_gameplay_tag_stacks.get(interacting_tag, 0)) > 0
 
 func has_gameplay_tag(tag: StringName, exact: bool = false) -> bool:
-	return _gameplay_tag_stack.has_tag(tag, exact)
+	if exact:
+		return int(_gameplay_tag_stacks.get(tag, 0)) > 0
+
+	var requested_tag_text: String = String(tag)
+	for existing_tag in _gameplay_tag_stacks.keys():
+		if int(_gameplay_tag_stacks.get(existing_tag, 0)) <= 0:
+			continue
+		var existing_tag_text: String = String(existing_tag)
+		if existing_tag_text == requested_tag_text:
+			return true
+		if existing_tag_text.begins_with(requested_tag_text + "."):
+			return true
+	return false
 
 func _setup_interaction_system() -> void:
 	var existing := get_node_or_null("InteractionSystem")
-	if existing and existing is InteractionSystem:
-		_interaction_system = existing
+	if existing and existing is InteractionSystemScript:
+		_interaction_system = existing as Node
 		return
-	_interaction_system = InteractionSystem.new()
+	_interaction_system = InteractionSystemScript.new()
 	_interaction_system.name = "InteractionSystem"
 	add_child(_interaction_system)
 

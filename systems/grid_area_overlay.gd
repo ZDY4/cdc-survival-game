@@ -1,6 +1,8 @@
 class_name GridAreaOverlay
 extends CanvasLayer
 
+const GridNavigator = preload("res://systems/grid_navigator.gd")
+
 @export var overlay_layer: int = 110
 @export var range_fill_color: Color = Color(0.25, 0.55, 0.95, 0.12)
 @export var range_outline_color: Color = Color(0.45, 0.75, 1.0, 0.35)

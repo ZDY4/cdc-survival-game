@@ -3,26 +3,28 @@ extends Node3D
 
 class_name Interactable
 
+const InteractionOptionScript = preload("res://modules/interaction/options/interaction_option.gd")
+
 # 2. Exports
 @export var interaction_name: String = ""
-@export var options: Array[InteractionOption] = []
+@export var options: Array = []
 @export var hover_outline_target_path: NodePath = NodePath()
 
 # 4. Private variables
-var _runtime_options: Array[InteractionOption] = []
+var _runtime_options: Array = []
 
 # 5. Signals
 signal interacted
 
 # 6. Public methods
-func set_options(new_options: Array[InteractionOption]) -> void:
+func set_options(new_options: Array) -> void:
 	options = new_options
 	_build_runtime_options()
 
 func get_interaction_name() -> String:
 	if not interaction_name.is_empty():
 		return interaction_name
-	var primary_option := get_primary_option()
+	var primary_option: Variant = get_primary_option()
 	if primary_option:
 		return primary_option.get_option_name(self)
 	return name
@@ -30,8 +32,8 @@ func get_interaction_name() -> String:
 func get_available_options() -> Array:
 	return _get_available_options()
 
-func get_primary_option() -> InteractionOption:
-	var available := _get_available_options()
+func get_primary_option():
+	var available: Array = _get_available_options()
 	if available.is_empty():
 		return null
 	return available[0]
@@ -46,25 +48,25 @@ func get_hover_outline_target() -> Node:
 		return parent
 	return self
 
-func execute_option(option: InteractionOption) -> void:
+func execute_option(option) -> void:
 	_execute_option(option)
 
 func _get_available_options() -> Array:
 	if _runtime_options.is_empty() and not options.is_empty():
 		_build_runtime_options()
-	var available: Array[InteractionOption] = []
+	var available: Array = []
 	for option in _runtime_options:
 		if option and option.is_available(self):
 			available.append(option)
-	available.sort_custom(func(a: InteractionOption, b: InteractionOption): return a.get_priority(self) > b.get_priority(self))
+	available.sort_custom(func(a, b): return a.get_priority(self) > b.get_priority(self))
 	return available
 
-func _execute_option(option: InteractionOption) -> void:
+func _execute_option(option) -> void:
 	if option:
 		option.execute(self)
 
 func interact_primary() -> bool:
-	var primary_option := get_primary_option()
+	var primary_option: Variant = get_primary_option()
 	if primary_option == null:
 		return false
 	_execute_option(primary_option)
@@ -91,6 +93,8 @@ func _build_runtime_options() -> void:
 	for option in options:
 		if not option:
 			continue
-		var copy := option.duplicate(true) as InteractionOption
+		var copy: Variant = option.duplicate(true)
+		if copy == null or not (copy is InteractionOptionScript):
+			continue
 		if copy:
 			_runtime_options.append(copy)

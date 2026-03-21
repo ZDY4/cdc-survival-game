@@ -6,6 +6,7 @@ const GridNavigator = preload("res://systems/grid_navigator.gd")
 const PathPreview = preload("res://systems/path_preview.gd")
 const GridHoverCornerOverlay = preload("res://systems/grid_hover_corner_overlay.gd")
 const InteractionSystem = preload("res://systems/interaction_system.gd")
+const InteractableScript = preload("res://modules/interaction/interactable.gd")
 
 @export var max_preview_path_points: int = 200
 @export var max_preview_distance: float = 40.0
@@ -16,7 +17,7 @@ const InteractionSystem = preload("res://systems/interaction_system.gd")
 @export var hover_overlay_world_y_offset: float = 0.03
 
 var _scene_root: Node3D = null
-var _interaction_system: InteractionSystem = null
+var _interaction_system: Node = null
 var _navigator: GridNavigator = null
 var _player: PlayerController = null
 var _path_preview: PathPreview = null
@@ -30,7 +31,7 @@ var _has_active_move_target: bool = false
 
 func initialize(
     scene_root: Node3D,
-    interaction_system: InteractionSystem,
+    interaction_system: Node,
     navigator: GridNavigator,
     player: PlayerController,
     path_preview: PathPreview,
@@ -80,8 +81,8 @@ func tick(delta: float) -> void:
         _update_preview_to_target(_active_move_target, false, "move_target")
         return
 
-    var mouse_pos := _scene_root.get_viewport().get_mouse_position()
-    var hover_hit := _interaction_system.raycast_screen_position(_scene_root, mouse_pos)
+    var mouse_pos: Vector2 = _scene_root.get_viewport().get_mouse_position()
+    var hover_hit: Dictionary = _interaction_system.raycast_screen_position(_scene_root, mouse_pos)
     if not hover_hit.is_empty():
         var interactable := _resolve_interactable_from_hit(hover_hit)
         if interactable != null:
@@ -91,7 +92,7 @@ func tick(delta: float) -> void:
                 _update_preview_to_target(interaction_target, true, "interactable")
                 return
 
-    var ground_hit := _interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
+    var ground_hit: Dictionary = _interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
     if ground_hit.is_empty():
         _hide_preview()
         return
@@ -130,7 +131,7 @@ func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, 
         return
     _last_preview_signature = preview_signature
 
-    var path := _navigator.find_path(
+    var path: Array[Vector3] = _navigator.find_path(
         _player.global_position,
         preview_target,
         GridMovementSystem.grid_world.is_walkable
@@ -184,8 +185,8 @@ func _update_hover_overlay() -> void:
         _hide_hover_overlay()
         return
 
-    var mouse_pos := viewport.get_mouse_position()
-    var ground_hit := _interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
+    var mouse_pos: Vector2 = viewport.get_mouse_position()
+    var ground_hit: Dictionary = _interaction_system.raycast_screen_position(_scene_root, mouse_pos, true, 1)
     if ground_hit.is_empty() or not ground_hit.has("position"):
         _hide_hover_overlay()
         return
@@ -215,8 +216,8 @@ func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
     if not hit.has("collider"):
         return null
 
-    var node := hit.collider as Node
-    var component := _find_interactable_component(node)
+    var node: Node = hit.collider as Node
+    var component: Node = _find_interactable_component(node)
     if component != null:
         return component
 
@@ -235,20 +236,20 @@ func _resolve_interactable_from_hit(hit: Dictionary) -> Node:
 
     return null
 
-func _find_interactable_component(node: Node) -> Interactable:
+func _find_interactable_component(node: Node) -> Node:
     if not node:
         return null
-    if node is Interactable:
+    if node is InteractableScript:
         return node
     for child in node.get_children():
-        if child is Interactable:
+        if child is InteractableScript:
             return child
     var current := node.get_parent()
     while current != null:
-        if current is Interactable:
+        if current is InteractableScript:
             return current
         for child in current.get_children():
-            if child is Interactable:
+            if child is InteractableScript:
                 return child
         current = current.get_parent()
     return null
@@ -262,7 +263,7 @@ func _find_nearest_interaction_target(interactable: Node, hit_position: Vector3)
     var max_radius: int = interaction_preview_max_radius
     var required_distance: float = -1.0
     if interactable.has_method("get_primary_option"):
-        var primary_option: InteractionOption = interactable.get_primary_option()
+        var primary_option = interactable.get_primary_option()
         if primary_option != null and primary_option.requires_proximity(interactable):
             anchor_pos = primary_option.get_interaction_anchor_position(interactable)
             required_distance = maxf(0.0, primary_option.get_required_distance(interactable))
@@ -316,4 +317,3 @@ func _collect_ring_cells(center: Vector3i, radius: int) -> Array[Vector3i]:
                 continue
             cells.append(Vector3i(x, center.y, z))
     return cells
-

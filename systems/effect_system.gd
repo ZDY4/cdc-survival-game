@@ -3,6 +3,8 @@ extends Node
 ## 管理所有 buffs/debuffs 和状态效果
 ## 支持持续时间、叠加、属性修改
 
+const GameplayEffect = preload("res://core/gameplay_effect.gd")
+
 # ========== 信号 ==========
 signal effect_applied(entity_id: String, effect_id: String, stacks: int)
 signal effect_removed(entity_id: String, effect_id: String)

@@ -60,7 +60,7 @@ const DEFAULT_AI_BY_BEHAVIOR := {
 var character_database: Dictionary = {}
 var active_actors: Dictionary = {}  # spawn_id -> Node3D
 
-var _relation_resolver: CharacterRelationResolver = CharacterRelationResolverScript.new()
+var _relation_resolver = CharacterRelationResolverScript.new()
 
 func _ready() -> void:
 	if current and current != self:
@@ -119,11 +119,11 @@ func is_character_id_valid(character_id: String) -> bool:
 		return false
 	return character_database.has(character_id)
 
-func find_active_actor_by_character_id(character_id: String) -> CharacterActor:
+func find_active_actor_by_character_id(character_id: String) -> Node3D:
 	if character_id.is_empty():
 		return null
 	for actor_variant in active_actors.values():
-		var actor := actor_variant as CharacterActor
+		var actor := actor_variant as Node3D
 		if actor == null or not is_instance_valid(actor):
 			continue
 		if str(actor.get_meta("character_id", "")) == character_id:
@@ -289,10 +289,10 @@ func _get_blocker_cells() -> Array[Vector3i]:
 			cells.append(GridMovementSystem.world_to_grid(world_pos))
 	return cells
 
-func _ensure_interactable(actor: Node3D) -> Interactable:
+func _ensure_interactable(actor: Node3D) -> Node:
 	var existing := actor.get_node_or_null("Interactable")
-	if existing and existing is Interactable:
-		return existing as Interactable
+	if existing and existing is InteractableScript:
+		return existing as Node
 
 	var interactable := InteractableScript.new()
 	interactable.name = "Interactable"
@@ -303,8 +303,8 @@ func _build_interaction_options(
 	character_id: String,
 	character_data: Dictionary,
 	relation_result: Dictionary
-) -> Array[InteractionOption]:
-	var options: Array[InteractionOption] = []
+) -> Array:
+	var options: Array = []
 	var visual: Dictionary = character_data.get("visual", {})
 	var social: Dictionary = character_data.get("social", {})
 
@@ -324,7 +324,7 @@ func _build_interaction_options(
 
 func _apply_actor_relation_state(
 	actor: Node3D,
-	interactable: Interactable,
+	interactable: Node,
 	character_id: String,
 	character_data: Dictionary,
 	relation_result: Dictionary,

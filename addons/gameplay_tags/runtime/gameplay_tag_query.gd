@@ -3,6 +3,8 @@ extends RefCounted
 
 class_name GameplayTagQuery
 
+const GameplayTagContainerScript = preload("res://addons/gameplay_tags/runtime/gameplay_tag_container.gd")
+
 const EXPR_ANY_TAGS: String = "any_tags"
 const EXPR_ALL_TAGS: String = "all_tags"
 const EXPR_NO_TAGS: String = "no_tags"
@@ -22,60 +24,62 @@ func _init(expression: Dictionary = {}) -> void:
 	else:
 		_root_expression = _sanitize_expression(expression)
 
-static func any_tags_match(tags: Array[StringName]) -> GameplayTagQuery:
-	return GameplayTagQuery.new({
+static func any_tags_match(tags: Array[StringName]):
+	return load("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd").new({
 		"type": EXPR_ANY_TAGS,
 		"tags": _tags_to_serializable(tags),
 		"expressions": []
 	})
 
-static func all_tags_match(tags: Array[StringName]) -> GameplayTagQuery:
-	return GameplayTagQuery.new({
+static func all_tags_match(tags: Array[StringName]):
+	return load("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd").new({
 		"type": EXPR_ALL_TAGS,
 		"tags": _tags_to_serializable(tags),
 		"expressions": []
 	})
 
-static func no_tags_match(tags: Array[StringName]) -> GameplayTagQuery:
-	return GameplayTagQuery.new({
+static func no_tags_match(tags: Array[StringName]):
+	return load("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd").new({
 		"type": EXPR_NO_TAGS,
 		"tags": _tags_to_serializable(tags),
 		"expressions": []
 	})
 
-static func any_expr_match(expressions: Array[GameplayTagQuery]) -> GameplayTagQuery:
-	return GameplayTagQuery.new({
+static func any_expr_match(expressions: Array) -> Variant:
+	return load("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd").new({
 		"type": EXPR_ANY_EXPR,
 		"tags": [],
 		"expressions": _expressions_to_serializable(expressions)
 	})
 
-static func all_expr_match(expressions: Array[GameplayTagQuery]) -> GameplayTagQuery:
-	return GameplayTagQuery.new({
+static func all_expr_match(expressions: Array) -> Variant:
+	return load("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd").new({
 		"type": EXPR_ALL_EXPR,
 		"tags": [],
 		"expressions": _expressions_to_serializable(expressions)
 	})
 
-static func no_expr_match(expressions: Array[GameplayTagQuery]) -> GameplayTagQuery:
-	return GameplayTagQuery.new({
+static func no_expr_match(expressions: Array) -> Variant:
+	return load("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd").new({
 		"type": EXPR_NO_EXPR,
 		"tags": [],
 		"expressions": _expressions_to_serializable(expressions)
 	})
 
-static func from_dict(data: Dictionary) -> GameplayTagQuery:
-	return GameplayTagQuery.new(data)
+static func from_dict(data: Dictionary) -> Variant:
+	return load("res://addons/gameplay_tags/runtime/gameplay_tag_query.gd").new(data)
 
 func to_dict() -> Dictionary:
 	return _root_expression.duplicate(true)
 
-func evaluate(container: GameplayTagContainer) -> bool:
+func evaluate(container) -> bool:
 	if container == null:
+		return false
+	if not (container is GameplayTagContainerScript):
 		return false
 	return _evaluate_expression(_root_expression, container)
 
-func _evaluate_expression(expression: Dictionary, container: GameplayTagContainer) -> bool:
+func _evaluate_expression(expression: Dictionary, container) -> bool:
 	var expression_type: String = str(expression.get("type", EXPR_ALL_TAGS))
 	var tags: Array[StringName] = _parse_tags(expression.get("tags", []))
 	var sub_expressions: Array = expression.get("expressions", [])
@@ -172,7 +176,7 @@ static func _tags_to_serializable(tags: Array[StringName]) -> Array[String]:
 		result.append(String(tag_name))
 	return result
 
-static func _expressions_to_serializable(expressions: Array[GameplayTagQuery]) -> Array[Dictionary]:
+static func _expressions_to_serializable(expressions: Array) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for expression in expressions:
 		if expression != null:
