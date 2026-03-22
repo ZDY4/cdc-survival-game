@@ -22,6 +22,9 @@ Thumbs.db
 # Worktrees
 .worktrees/
 
+# Codex local workspace state
+.codex/tmp/
+
 # Local lint/cache artifacts
 .gdlint
 nul
@@ -43,11 +46,26 @@ __pycache__/
 # Build artifacts
 *.pck
 *.wasm
+rust/target/
+tools/tauri_editor/node_modules/
+tools/tauri_editor/dist/
+tools/tauri_editor/.vite/
+tools/tauri_editor/src-tauri/target/
+native/jps_extension/.vs/
+native/jps_extension/build/
+native/jps_extension/build_nmake/
 
 # Local asset backup files
 *.backup
 
 # Local Godot UID backups
 .local_backup/
+
+# Local environment files
+tools/tauri_editor/.env
+tools/tauri_editor/.env.*
+
+# Rust lockfiles should be versioned for app crates
+!rust/Cargo.lock
 
 # Godot resource/script UID sidecar files should be versioned
