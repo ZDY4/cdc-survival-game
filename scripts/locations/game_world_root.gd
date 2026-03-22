@@ -89,7 +89,7 @@ func request_enter_outdoor_location(location_id: String) -> bool:
 
 func get_current_overworld_cell() -> Vector2i:
 	if _overworld_player != null and is_instance_valid(_overworld_player):
-		var player_grid := GridMovementSystem.world_to_grid(_overworld_player.global_position)
+		var player_grid := _overworld_player.get_grid_position()
 		return Vector2i(player_grid.x, player_grid.z)
 	if GameState != null and GameState.overworld_pawn_cell != Vector2i.ZERO:
 		return GameState.overworld_pawn_cell

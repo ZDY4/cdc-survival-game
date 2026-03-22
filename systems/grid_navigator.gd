@@ -8,43 +8,51 @@ const DIAGONAL_COST := 1.41421356237
 func find_path(start_pos: Vector3, end_pos: Vector3, is_walkable: Callable, max_nodes: int = 5000) -> Array[Vector3]:
     var start_grid := world_to_grid(start_pos)
     var end_grid := world_to_grid(end_pos)
-    
+    var grid_path := find_path_grid(start_grid, end_grid, is_walkable, max_nodes)
+    if grid_path.is_empty():
+        return []
+    var world_path: Array[Vector3] = []
+    for grid_pos in grid_path:
+        world_path.append(grid_to_world(grid_pos))
+    return world_path
+
+func find_path_grid(start_grid: Vector3i, end_grid: Vector3i, is_walkable: Callable, max_nodes: int = 5000) -> Array[Vector3i]:
     if not is_walkable.call(end_grid):
         push_warning("Target position not walkable: " + str(end_grid))
         return []
-    
+
     var open_set: Array[Vector3i] = [start_grid]
     var came_from: Dictionary = {}
     var g_score: Dictionary = {start_grid: 0.0}
     var f_score: Dictionary = {start_grid: _heuristic(start_grid, end_grid)}
     var nodes_visited := 0
-    
+
     while not open_set.is_empty():
         nodes_visited += 1
         if nodes_visited > max_nodes:
             push_warning("Pathfinding aborted: exceeded max_nodes (" + str(max_nodes) + ")")
             return []
         var current := _get_lowest_f_score(open_set, f_score)
-        
+
         if current == end_grid:
-            return _reconstruct_path(came_from, current)
-        
+            return _reconstruct_grid_path(came_from, current)
+
         open_set.erase(current)
-        
+
         for neighbor in _get_neighbors(current):
             if not _can_traverse(current, neighbor, is_walkable):
                 continue
 
             var tentative_g: float = g_score[current] + _movement_cost(current, neighbor)
-            
+
             if not g_score.has(neighbor) or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
                 f_score[neighbor] = tentative_g + _heuristic(neighbor, end_grid)
-                
+
                 if not neighbor in open_set:
                     open_set.append(neighbor)
-    
+
     return []
 
 func world_to_grid(world_pos: Vector3) -> Vector3i:
@@ -116,10 +124,16 @@ func _get_lowest_f_score(open_set: Array[Vector3i], f_score: Dictionary) -> Vect
     return lowest
 
 func _reconstruct_path(came_from: Dictionary, current: Vector3i) -> Array[Vector3]:
-    var path: Array[Vector3] = [grid_to_world(current)]
-    
+    var path: Array[Vector3] = []
+    for grid_pos in _reconstruct_grid_path(came_from, current):
+        path.append(grid_to_world(grid_pos))
+    return path
+
+func _reconstruct_grid_path(came_from: Dictionary, current: Vector3i) -> Array[Vector3i]:
+    var path: Array[Vector3i] = [current]
+
     while came_from.has(current):
         current = came_from[current]
-        path.insert(0, grid_to_world(current))
-    
+        path.insert(0, current)
+
     return path

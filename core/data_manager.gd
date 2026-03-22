@@ -169,7 +169,7 @@ func _normalize_quest_data(raw_quest: Dictionary, fallback_quest_id: String) -> 
 	return normalized_quest
 
 
-func _migrate_legacy_quest_data(raw_quest: Dictionary, quest_id: String) -> Dictionary:
+func _migrate_legacy_quest_data(raw_quest: Dictionary, _quest_id: String) -> Dictionary:
 	var quest: Dictionary = raw_quest.duplicate(true)
 	var relationship_position := _extract_relationship_position(quest.get("_editor", {}))
 	var flow_nodes: Dictionary = {}

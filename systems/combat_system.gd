@@ -1,8 +1,9 @@
 extends Node
 
-const TargetAttackAbility = preload("res://systems/target_attack_ability.gd")
+const AttributeSystemScript = preload("res://systems/attribute_system.gd")
+const TargetAttackAbilityScript = preload("res://systems/target_attack_ability.gd")
 const ValueUtils = preload("res://core/value_utils.gd")
-const AIManager = preload("res://systems/ai/ai_manager.gd")
+const AIManagerScript = preload("res://systems/ai/ai_manager.gd")
 
 signal combat_started(enemy_data: Dictionary)
 signal turn_started(turn_owner: String, turn_number: int)
@@ -321,7 +322,7 @@ func _ensure_actor_runtime_state(actor: Node) -> Dictionary:
 	var character_id: String = str(actor.get_meta("character_id", ""))
 	var enemy_data: Dictionary = _build_runtime_enemy_from_character(character_id)
 	if enemy_data.is_empty():
-		var fallback_attributes: Dictionary = AttributeSystem.create_default_container({}, ["base", "combat"], {"hp": 10})
+		var fallback_attributes: Dictionary = AttributeSystemScript.create_default_container({}, ["base", "combat"], {"hp": 10})
 		fallback_attributes["sets"]["combat"] = {
 			"max_hp": 10,
 			"attack_power": 3,
@@ -408,7 +409,7 @@ func _refresh_current_enemy(target: Node) -> void:
 func _resolve_current_enemy_actor() -> Node3D:
 	if _current_character_id.is_empty():
 		return _resolve_first_hostile_actor()
-	var ai_manager: Node = AIManager.current as Node
+	var ai_manager: Node = AIManagerScript.current as Node
 	if ai_manager != null and ai_manager.has_method("find_active_actor_by_character_id"):
 		var actor: Variant = ai_manager.call("find_active_actor_by_character_id", _current_character_id)
 		if actor is Node3D and is_instance_valid(actor):
@@ -421,7 +422,7 @@ func _resolve_target_actor(character_ref: Variant) -> Node3D:
 	var character_id: String = _resolve_character_id(character_ref)
 	if character_id.is_empty():
 		return null
-	var ai_manager: Node = AIManager.current as Node
+	var ai_manager: Node = AIManagerScript.current as Node
 	if ai_manager != null and ai_manager.has_method("find_active_actor_by_character_id"):
 		var actor: Variant = ai_manager.call("find_active_actor_by_character_id", character_id)
 		if actor is Node3D and is_instance_valid(actor):
@@ -472,7 +473,7 @@ func _build_runtime_enemy_from_character(character_id: String) -> Dictionary:
 		return {}
 
 	var combat: Dictionary = character.get("combat", {})
-	var attributes: Dictionary = AttributeSystem.normalize_attribute_container(character.get("attributes", {}))
+	var attributes: Dictionary = AttributeSystemScript.normalize_attribute_container(character.get("attributes", {}))
 
 	return {
 		"id": str(character.get("id", character_id)),
@@ -505,7 +506,7 @@ func _get_effective_actor_stats(actor: Node) -> Dictionary:
 	actor.set_meta("attribute_container", attributes)
 	if AttributeSystem and AttributeSystem.has_method("get_actor_attributes_snapshot"):
 		return AttributeSystem.get_actor_attributes_snapshot(actor)
-	return AttributeSystem.resolve_attribute_snapshot(attributes)
+	return AttributeSystemScript.resolve_attribute_snapshot(attributes)
 
 func _get_actor_skill_modifiers(actor: Node) -> Dictionary:
 	var skill_runtime: Node = _get_actor_skill_runtime(actor)
@@ -542,7 +543,7 @@ func _calculate_character_loot(enemy_data: Dictionary) -> Array:
 
 
 func _create_target_attack_handler(attacker: Node, context: Dictionary) -> TargetAttackAbility:
-	var handler := TargetAttackAbility.new()
+	var handler := TargetAttackAbilityScript.new()
 	handler.configure_attack({
 		"ability_id": str(context.get("ability_id", "basic_attack")),
 		"attack_range_cells": resolve_attack_range_cells(attacker, context),
@@ -626,7 +627,7 @@ func _on_turn_system_combat_state_changed(in_combat: bool) -> void:
 		else:
 			_combat_state = CombatState.IDLE
 
-func _on_actor_turn_started(actor: Node, _actor_id: String, _group_id: String, side: String, _current_ap: float) -> void:
+func _on_actor_turn_started(_actor: Node, _actor_id: String, _group_id: String, side: String, _current_ap: float) -> void:
 	if _combat_state != CombatState.ACTIVE:
 		return
 	_turn_count += 1

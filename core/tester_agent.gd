@@ -5,8 +5,6 @@ extends Node
 signal test_started(test_suite: String)
 signal test_progress(test_name: String, status: String, progress: float)
 signal test_completed(results: Dictionary)
-signal test_failed(test_name: String, error: String)
-
 # ===== 测试配置 =====
 const TEST_LEVELS = [
 	"syntax_check",      # 语法检查
@@ -20,8 +18,6 @@ const TEST_LEVELS = [
 ]
 
 # ===== 测试状态 =====
-var _current_test: Dictionary = {}
-var _test_results: Dictionary = {}
 var _is_running: bool = false
 
 func _ready():
@@ -414,8 +410,7 @@ func _get_all_gd_files() -> Array[String]:
 	# 简化实现，实际需要遍历项目目录
 	return [
 		"res://core/game_state.gd",
-		"res://core/game_state_manager.gd",
-		"res://core/choice_system.gd"
+		"res://core/game_state_manager.gd"
 	]
 
 func _get_all_tscn_files() -> Array[String]:
@@ -558,7 +553,7 @@ func _test_hp_zero():
 	
 	return result
 
-func _test_inventory_full(state: Dictionary):
+func _test_inventory_full(_state: Dictionary):
 	var result = {"success": true, "error": ""}
 	
 	# 填满背包

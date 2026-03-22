@@ -3,6 +3,8 @@ extends Node3D
 
 const CameraConfig3D = preload("res://systems/camera_config_3d.gd")
 
+signal view_rotation_changed(rotation_degrees: Vector3)
+
 @export var target: Node3D = null
 @export var make_current_on_ready: bool = true
 
@@ -70,6 +72,9 @@ func set_zoom(zoom: float) -> void:
 func get_zoom() -> float:
 	return _current_zoom
 
+func get_view_rotation_degrees() -> Vector3:
+	return rotation_degrees
+
 func play_shake(duration: float, amplitude: float, frequency: float = 1.0) -> void:
 	if duration <= 0.0 or amplitude <= 0.0:
 		return
@@ -99,7 +104,7 @@ func _reload_config_from_service() -> void:
 	if not config:
 		config = CameraConfig3D.new()
 	_config = config
-	rotation_degrees = _config.rotation
+	_apply_view_rotation(_config.rotation)
 	_current_zoom = _get_initial_zoom_value()
 	_target_zoom = _current_zoom
 	_apply_projection_settings()
@@ -108,6 +113,12 @@ func _reload_config_from_service() -> void:
 		var viewpoint_world := _get_viewpoint_world()
 		_follow_position = viewpoint_world + _get_arm_direction_world() * _config.arm_length
 		global_position = _follow_position
+
+func _apply_view_rotation(new_rotation_degrees: Vector3) -> void:
+	if rotation_degrees.is_equal_approx(new_rotation_degrees):
+		return
+	rotation_degrees = new_rotation_degrees
+	view_rotation_changed.emit(rotation_degrees)
 
 func _update_shake(delta: float) -> void:
 	if _shake_time_remaining <= 0.0:

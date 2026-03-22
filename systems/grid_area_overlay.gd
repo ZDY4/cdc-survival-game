@@ -1,7 +1,7 @@
 class_name GridAreaOverlay
 extends CanvasLayer
 
-const GridNavigator = preload("res://systems/grid_navigator.gd")
+const GridNavigatorScript = preload("res://systems/grid_navigator.gd")
 
 @export var overlay_layer: int = 110
 @export var range_fill_color: Color = Color(0.25, 0.55, 0.95, 0.12)
@@ -123,7 +123,7 @@ func owns_control(control: Control) -> bool:
 
 func _build_polygons(cells: Array[Vector3i], camera: Camera3D) -> Array[PackedVector2Array]:
 	var polygons: Array[PackedVector2Array] = []
-	var cell_size: float = float(GridNavigator.GRID_SIZE)
+	var cell_size: float = float(GridNavigatorScript.GRID_SIZE)
 	var half_cell: float = cell_size * 0.5
 	for cell in cells:
 		var world_center: Vector3 = GridMovementSystem.grid_to_world(cell)

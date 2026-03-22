@@ -149,7 +149,7 @@ func consume_durability(item_id: String, amount: int) -> bool:
 	var instance_id = _find_item_instance(item_id)
 	if instance_id.is_empty():
 		# 自动注册
-		var data = register_item(item_id)
+		register_item(item_id)
 		instance_id = _find_item_instance(item_id)
 	
 	return _consume_durability_internal(instance_id, amount)
@@ -362,7 +362,7 @@ func get_item_full_info(item_id: String) -> Dictionary:
 		"uses": _estimate_remaining_uses(item_id, data, durability_info.current)
 	}
 
-func _generate_item_description(item_id: String, data: Dictionary) -> String:
+func _generate_item_description(_item_id: String, data: Dictionary) -> String:
 	var desc = ""
 	
 	match data.get("type", "misc"):
@@ -387,7 +387,7 @@ func _generate_item_description(item_id: String, data: Dictionary) -> String:
 	
 	return desc
 
-func _estimate_remaining_uses(item_id: String, data: Dictionary, current: int) -> int:
+func _estimate_remaining_uses(_item_id: String, data: Dictionary, current: int) -> int:
 	var decay = data.get("decay_per_use", data.get("decay_per_hit", 1))
 	if decay <= 0:
 		return 999

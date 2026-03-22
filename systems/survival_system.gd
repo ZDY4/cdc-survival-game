@@ -116,7 +116,7 @@ func _update_survival_needs():
     _check_survival_status()
 
 # 更新体温
-func _update_body_temperature(type: String = ""):
+func _update_body_temperature(_type: String = ""):
     # 天气影响环境温度
     var weather_effects = {
         "clear": 0.0,
@@ -169,7 +169,7 @@ func _calculate_insulation():
     return insulation
 
 # 检查生存状"
-func _check_survival_status(type: String = ""):
+func _check_survival_status(_type: String = ""):
     # 饥饿检"
     if GameState.player_hunger <= THRESHOLDS.hunger.starving:
         GameState.damage_player(3)
@@ -281,7 +281,7 @@ func _get_disease_data(disease_id: String):
     }
     return diseases_db.get(disease_id, {})
 
-func _process_diseases(type: String = ""):
+func _process_diseases(_type: String = ""):
     for disease in diseases:
         disease.duration -= 1  # 每小时减"
         
@@ -305,7 +305,7 @@ func _process_diseases(type: String = ""):
             )
 
 # 事件处理
-func _on_combat_ended(data: Dictionary):
+func _on_combat_ended(_data: Dictionary):
     if int(GameState.get_player_attributes_snapshot().get("hp", 0)) < 50:
         # 低血量时可能感染
         if randf() < 0.1 && not has_disease("infection"):

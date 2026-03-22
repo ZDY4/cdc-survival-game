@@ -162,7 +162,6 @@ func play_bgm(bgm_name: String, fade_time: float = 2.0):
 		_fade_in_bgm(fade_time / 2.0)
 
 func _fade_out_bgm(duration: float):
-	var start_volume = _bgm_player.volume_db
 	var tween = create_tween()
 	tween.tween_property(_bgm_player, "volume_db", -80.0, duration)
 

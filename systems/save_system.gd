@@ -1,6 +1,8 @@
 extends Node
 # SaveSystem - 存档系统（支持Web和桌面平台）
 
+const AttributeSystemScript = preload("res://systems/attribute_system.gd")
+
 const SAVE_DIR: String = "user://saves/"
 const SAVE_FILE: String = "savegame.json"
 const SAVE_FILE_PREFIX: String = "save_"
@@ -264,7 +266,7 @@ func get_save_info() -> Dictionary:
 	if data.has("game_state"):
 		var state: Dictionary = data.get("game_state", {})
 		var player_attributes: Dictionary = state.get("player_attributes", {})
-		var snapshot: Dictionary = AttributeSystem.resolve_attribute_snapshot(player_attributes)
+		var snapshot: Dictionary = AttributeSystemScript.resolve_attribute_snapshot(player_attributes)
 		info["hp"] = int(snapshot.get("hp", 100))
 		info["location"] = state.get("player_position", "safehouse")
 

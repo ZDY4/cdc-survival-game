@@ -1,15 +1,17 @@
 class_name MovementComponent
 extends Node
 
-const GridWorld = preload("res://systems/grid_world.gd")
-const GridNavigator = preload("res://systems/grid_navigator.gd")
-const GridMovement = preload("res://systems/grid_movement.gd")
+const GridWorldScript = preload("res://systems/grid_world.gd")
+const GridNavigatorScript = preload("res://systems/grid_navigator.gd")
+const GridMovementScript = preload("res://systems/grid_movement.gd")
+const PathPlannerServiceScript = preload("res://systems/path_planner_service.gd")
 
 signal move_requested(world_pos: Vector3)
 signal move_started(path: Array[Vector3])
 signal move_finished
 signal move_cancelled
 signal move_failed(target_pos: Vector3)
+signal move_blocked(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int)
 signal movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int)
 
 @export var step_duration: float = 0.25
@@ -17,32 +19,44 @@ signal movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_inde
 @export_flags_3d_physics var ground_collision_mask: int = 1
 @export var ground_probe_height: float = 4.0
 @export var ground_probe_depth: float = 12.0
+@export var occupies_runtime_grid: bool = false
 
 var _grid_world: GridWorld = null
 var _navigator: GridNavigator = null
 var _grid_movement: GridMovement = null
 var _owner_node: Node3D = null
+var _path_planner_service: RefCounted = null
 var _presented_move_active: bool = false
 var _presented_move_job_id: String = ""
 var _presented_move_token: int = 0
 
 func _ready() -> void:
-	_navigator = GridNavigator.new()
-	_grid_movement = GridMovement.new()
+	_navigator = GridNavigatorScript.new()
+	_path_planner_service = PathPlannerServiceScript.new()
+	_grid_movement = GridMovementScript.new()
 	_grid_movement.step_duration = step_duration
 	add_child(_grid_movement)
 
 	_grid_movement.movement_started.connect(_on_movement_started)
 	_grid_movement.movement_finished.connect(_on_movement_finished)
 	_grid_movement.movement_cancelled.connect(_on_movement_cancelled)
+	_grid_movement.movement_blocked.connect(_on_movement_blocked)
 	_grid_movement.step_completed.connect(_on_step_completed)
 
 func initialize(owner_node: Node3D, grid_world: GridWorld) -> void:
 	_owner_node = owner_node
 	_grid_world = grid_world
+	_sync_runtime_occupancy(false)
+
+func _exit_tree() -> void:
+	_clear_runtime_occupancy()
 
 func set_grid_world(grid_world: GridWorld) -> void:
+	_clear_runtime_occupancy()
 	_grid_world = grid_world
+	if _path_planner_service != null:
+		_path_planner_service.clear_runtime_state()
+	_sync_runtime_occupancy(false)
 
 func move_to(world_pos: Vector3) -> bool:
 	var path := find_path(world_pos)
@@ -62,18 +76,26 @@ func find_path(world_pos: Vector3) -> Array[Vector3]:
 	var target_pos := world_pos
 	target_pos.y = _resolve_ground_y(world_pos, start_pos.y) if ground_snap_enabled else start_pos.y
 
-	var path := _navigator.find_path(start_pos, target_pos, _grid_world.is_walkable)
-	if path.is_empty():
+	var start_grid := _grid_world.world_to_grid(start_pos)
+	var target_grid := _grid_world.world_to_grid(target_pos)
+	var grid_path: Array[Vector3i] = []
+	if _path_planner_service != null:
+		grid_path = _path_planner_service.find_path_grid(start_grid, target_grid, _grid_world)
+	else:
+		grid_path = _navigator.find_path_grid(start_grid, target_grid, _grid_world.is_walkable_for_pathfinding)
+	if grid_path.is_empty():
 		return []
 
-	for i in range(path.size()):
-		var point: Vector3 = path[i]
-		point.y = _resolve_ground_y(point, start_pos.y) if ground_snap_enabled else start_pos.y
-		path[i] = point
-	if not path.is_empty() and path[0].is_equal_approx(start_pos):
-		path.remove_at(0)
-	if path.is_empty():
+	if not grid_path.is_empty() and grid_path[0] == start_grid:
+		grid_path.remove_at(0)
+	if grid_path.is_empty():
 		return []
+
+	var path: Array[Vector3] = []
+	for grid_pos in grid_path:
+		var point: Vector3 = _grid_world.grid_to_world(grid_pos)
+		point.y = _resolve_ground_y(point, start_pos.y) if ground_snap_enabled else start_pos.y
+		path.append(point)
 
 	return path
 
@@ -82,9 +104,16 @@ func move_along_world_path(path: Array[Vector3]) -> bool:
 		return false
 
 	move_requested.emit(path[path.size() - 1])
-	if ActionPresentationSystem != null and ActionPresentationSystem.has_method("play"):
+	var should_use_presented_move: bool = (
+		ActionPresentationSystem != null
+		and ActionPresentationSystem.has_method("play")
+		and TurnSystem != null
+		and TurnSystem.has_method("is_in_combat")
+		and TurnSystem.is_in_combat()
+	)
+	if should_use_presented_move:
 		return _start_presented_move(path)
-	_grid_movement.move_along_path(path, _owner_node)
+	_grid_movement.move_along_path(path, _owner_node, Callable(self, "_can_enter_world_position"))
 	return true
 
 func cancel() -> void:
@@ -163,6 +192,7 @@ func _build_move_action_result(from_pos: Vector3, to_pos: Vector3, path: Array[V
 	}
 
 func _emit_step_completed(world_pos: Vector3, step_index: int, total_steps: int) -> void:
+	_sync_runtime_occupancy(true, world_pos)
 	var grid_pos := Vector3i.ZERO
 	if _grid_world:
 		grid_pos = _grid_world.world_to_grid(world_pos)
@@ -178,6 +208,9 @@ func _on_movement_finished() -> void:
 
 func _on_movement_cancelled() -> void:
 	move_cancelled.emit()
+
+func _on_movement_blocked(world_pos: Vector3, step_index: int, total_steps: int) -> void:
+	_emit_move_blocked(world_pos, step_index, total_steps)
 
 func _on_step_completed(world_pos: Vector3, step_index: int, total_steps: int) -> void:
 	_emit_step_completed(world_pos, step_index, total_steps)
@@ -203,3 +236,28 @@ func _resolve_ground_y(world_pos: Vector3, fallback_y: float) -> float:
 	if hit.is_empty():
 		return fallback_y
 	return float(hit.position.y)
+
+func _can_enter_world_position(world_pos: Vector3) -> bool:
+	if _grid_world == null:
+		return true
+	var grid_pos: Vector3i = _grid_world.world_to_grid(world_pos)
+	return _grid_world.is_walkable_for_actor(grid_pos, _owner_node)
+
+func _emit_move_blocked(world_pos: Vector3, step_index: int, total_steps: int) -> void:
+	var grid_pos := Vector3i.ZERO
+	if _grid_world:
+		grid_pos = _grid_world.world_to_grid(world_pos)
+	else:
+		grid_pos = GridMovementSystem.world_to_grid(world_pos)
+	move_blocked.emit(grid_pos, world_pos, step_index, total_steps)
+
+func _sync_runtime_occupancy(use_world_pos: bool, world_pos: Vector3 = Vector3.ZERO) -> void:
+	if not occupies_runtime_grid or _grid_world == null or _owner_node == null or not is_instance_valid(_owner_node):
+		return
+	var resolved_world_pos: Vector3 = world_pos if use_world_pos else _owner_node.global_position
+	_grid_world.update_runtime_actor(_owner_node, resolved_world_pos)
+
+func _clear_runtime_occupancy() -> void:
+	if not occupies_runtime_grid or _grid_world == null or _owner_node == null:
+		return
+	_grid_world.unregister_runtime_actor(_owner_node)

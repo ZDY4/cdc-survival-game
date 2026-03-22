@@ -1,14 +1,14 @@
 extends Node
 
-const GridNavigator = preload("res://systems/grid_navigator.gd")
-const GridWorld = preload("res://systems/grid_world.gd")
+const GridNavigatorScript = preload("res://systems/grid_navigator.gd")
+const GridWorldScript = preload("res://systems/grid_world.gd")
 
 var navigator: GridNavigator
 var grid_world: GridWorld
 
 func _ready() -> void:
-    navigator = GridNavigator.new()
-    grid_world = GridWorld.new()
+    navigator = GridNavigatorScript.new()
+    grid_world = GridWorldScript.new()
     add_child(grid_world)
 
 func find_path(start: Vector3, end: Vector3) -> Array[Vector3]:

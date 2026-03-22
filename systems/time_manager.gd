@@ -13,8 +13,6 @@ signal day_changed(new_day: int)
 signal night_fallen(current_time: Dictionary)
 signal sunrise(current_time: Dictionary)
 signal hour_passed(hour: int)
-signal minute_passed(minute: int)
-
 # ===== 当前时间状态 =====
 var current_day: int = 1
 var current_hour: int = 8    # 游戏开始时间08:00

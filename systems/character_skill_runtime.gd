@@ -2,8 +2,8 @@ class_name CharacterSkillRuntime
 extends Node
 ## Runtime skill state for non-player actors.
 
-const TargetSkillBase = preload("res://systems/target_skill_base.gd")
-const GameplayEffect = preload("res://core/gameplay_effect.gd")
+const TargetSkillBaseScript = preload("res://systems/target_skill_base.gd")
+const GameplayEffectScript = preload("res://core/gameplay_effect.gd")
 
 const ACTIVATION_MODE_PASSIVE: String = "passive"
 const ACTIVATION_MODE_ACTIVE: String = "active"
@@ -350,7 +350,7 @@ func _create_targeted_skill_handler(skill_id: String, skill_definition: Dictiona
 			if scripted_handler is TargetSkillBase:
 				handler = scripted_handler as TargetSkillBase
 	if handler == null:
-		handler = TargetSkillBase.new()
+		handler = TargetSkillBaseScript.new()
 	handler.configure_from_skill(skill_id, skill_definition)
 	handler.bind_skill_runtime(self)
 	return handler
@@ -400,7 +400,7 @@ func _build_effect_from_config(
 		effect_definition["is_infinite"] = is_infinite_default
 	effect_definition["modifiers"] = modifiers
 
-	var effect := GameplayEffect.new()
+	var effect := GameplayEffectScript.new()
 	effect.configure(effect_definition)
 	return effect
 

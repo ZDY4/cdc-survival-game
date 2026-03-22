@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="CameraConfig3D" format=3 uid="uid://drwn8m2ho62f8"]
 
-[ext_resource type="Script" uid="uid://cm2n7alssxen4" path="res://systems/camera_config_3d.gd" id="1_camera_config"]
+[ext_resource type="Script" path="res://systems/camera_config_3d.gd" id="1_camera_config"]
 
 [resource]
 script = ExtResource("1_camera_config")

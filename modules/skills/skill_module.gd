@@ -4,8 +4,8 @@ extends "res://core/base_module.gd"
 ## 技能树配置目录: res://data/skill_trees/*.json
 
 const InputActions = preload("res://core/input_actions.gd")
-const TargetSkillBase = preload("res://systems/target_skill_base.gd")
-const GameplayEffect = preload("res://core/gameplay_effect.gd")
+const TargetSkillBaseScript = preload("res://systems/target_skill_base.gd")
+const GameplayEffectScript = preload("res://core/gameplay_effect.gd")
 
 const SKILLS_DATA_DIR: String = "res://data/skills"
 const SKILL_TREES_DATA_DIR: String = "res://data/skill_trees"
@@ -858,7 +858,7 @@ func _compute_effect(skill_id: String, level: int) -> GameplayEffect:
 
 	effect_def["modifiers"] = modifiers
 
-	var effect := GameplayEffect.new()
+	var effect := GameplayEffectScript.new()
 	effect.configure(effect_def)
 	return effect
 
@@ -899,7 +899,7 @@ func _compute_activation_effect(skill_id: String) -> GameplayEffect:
 
 	effect_def["modifiers"] = modifiers
 
-	var effect := GameplayEffect.new()
+	var effect := GameplayEffectScript.new()
 	effect.configure(effect_def)
 	return effect
 
@@ -1025,7 +1025,7 @@ func _create_targeted_skill_handler(skill_id: String, skill_definition: Dictiona
 			if scripted_handler is TargetSkillBase:
 				handler = scripted_handler as TargetSkillBase
 	if handler == null:
-		handler = TargetSkillBase.new()
+		handler = TargetSkillBaseScript.new()
 	handler.configure_from_skill(skill_id, skill_definition)
 	handler.bind_skill_module(self)
 	return handler

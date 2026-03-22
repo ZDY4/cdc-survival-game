@@ -1,7 +1,7 @@
 extends Node
 
-const GridAreaOverlay = preload("res://systems/grid_area_overlay.gd")
-const TargetAbilityBase = preload("res://systems/target_ability_base.gd")
+const GridAreaOverlayScript = preload("res://systems/grid_area_overlay.gd")
+const TargetAbilityBaseScript = preload("res://systems/target_ability_base.gd")
 
 signal targeting_started(session: Dictionary)
 signal targeting_confirmed(result: Dictionary)
@@ -251,7 +251,7 @@ func _update_overlay() -> void:
 
 func _ensure_overlay_attached() -> void:
 	if _overlay == null:
-		_overlay = GridAreaOverlay.new()
+		_overlay = GridAreaOverlayScript.new()
 		_overlay.name = "GridAreaOverlay"
 	var scene_root: Node = _resolve_scene_root()
 	if scene_root == null:

@@ -1,14 +1,14 @@
 extends "res://modules/interaction/options/interaction_option.gd"
 class_name TalkInteractionOption
 
-const CharacterRelationResolver = preload("res://systems/character_relation_resolver.gd")
+const CharacterRelationResolverScript = preload("res://systems/character_relation_resolver.gd")
 
 @export var speaker_name: String = "NPC"
 @export_multiline var dialogue_text: String = "你好。"
 @export var portrait_path: String = ""
 @export var dialog_id: String = ""
 
-var _relation_resolver = CharacterRelationResolver.new()
+var _relation_resolver = CharacterRelationResolverScript.new()
 
 func _init() -> void:
 	option_id = "talk"

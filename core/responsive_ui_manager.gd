@@ -77,7 +77,6 @@ func apply_mobile_button_style(button: Button, min_touch_size: Vector2 = Vector2
 		button.add_theme_font_size_override("font_size", 20)
 	
 	# 增加内边距
-	var base_padding = 12
 	button.add_theme_constant_override("icon_max_width", int(32 * _screen_scale))
 
 # 应用安全区域到Control节点

@@ -1,7 +1,7 @@
 class_name AIController
 extends Node
 
-const TargetAttackAbility = preload("res://systems/target_attack_ability.gd")
+const TargetAttackAbilityScript = preload("res://systems/target_attack_ability.gd")
 
 enum AIState { IDLE, WANDER, CHASE, ATTACK, RETURN }
 

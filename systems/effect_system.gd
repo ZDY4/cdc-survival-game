@@ -3,7 +3,7 @@ extends Node
 ## 管理所有 buffs/debuffs 和状态效果
 ## 支持持续时间、叠加、属性修改
 
-const GameplayEffect = preload("res://core/gameplay_effect.gd")
+const GameplayEffectScript = preload("res://core/gameplay_effect.gd")
 
 # ========== 信号 ==========
 signal effect_applied(entity_id: String, effect_id: String, stacks: int)
@@ -87,7 +87,7 @@ func apply_effect(effect_id: String, entity_id: String, stacks: int = 1) -> bool
 		push_error("[EffectSystem] 未找到效果定义: %s" % effect_id)
 		return false
 	
-	var effect := GameplayEffect.new()
+	var effect := GameplayEffectScript.new()
 	effect.configure(definition)
 	return apply_gameplay_effect(effect, entity_id, stacks)
 

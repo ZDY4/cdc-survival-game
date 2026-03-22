@@ -4,14 +4,10 @@ extends Node
 ## 从JSON文件加载，支持热重载
 ## 注意: 作为Autoload单例，不使用class_name
 
-const ItemIdResolver = preload("res://core/item_id_resolver.gd")
+const ItemIdResolverScript = preload("res://core/item_id_resolver.gd")
 
 # ========== 信号 ==========
 signal items_reloaded()
-signal item_added(item_id: String)
-signal item_updated(item_id: String)
-signal item_removed(item_id: String)
-
 # ========== 物品类型 ==========
 enum ItemType {
 	WEAPON,      # 武器
@@ -34,7 +30,7 @@ enum ItemRarity {
 # ========== 数据缓存 ==========
 var _items: Dictionary = {}  # item_id -> item_data
 
-const ITEM_ID_ALIASES: Dictionary = ItemIdResolver.ITEM_ID_ALIASES
+const ITEM_ID_ALIASES: Dictionary = ItemIdResolverScript.ITEM_ID_ALIASES
 const DEFAULT_INVENTORY_GRID_SIZE: Vector2i = Vector2i(5, 4)
 const DEFAULT_BACKPACK_GRID_SIZES: Dictionary = {
 	"2018": Vector2i(6, 5),
@@ -43,7 +39,7 @@ const DEFAULT_BACKPACK_GRID_SIZES: Dictionary = {
 }
 
 func resolve_item_id(item_id: String) -> String:
-	return ItemIdResolver.resolve_item_id(item_id, _items)
+	return ItemIdResolverScript.resolve_item_id(item_id, _items)
 
 # ========== 初始化 ==========
 func _ready():

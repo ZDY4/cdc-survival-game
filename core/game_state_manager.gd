@@ -97,7 +97,7 @@ func get_scene_history(limit: int = 5):
 
 # 设置标记
 func set_flag(flag_name: String, value: Variant = true):
-	var old_value = game_flags.get(flag_name)
+	var _old_value = game_flags.get(flag_name)
 	game_flags[flag_name] = value
 	
 	flag_changed.emit(flag_name, value)
@@ -292,7 +292,7 @@ func modify_relationship(npc_id: String, change: int):
 	if not relationship_points.has(npc_id):
 		relationship_points[npc_id] = 0
 	
-	var old_value = relationship_points[npc_id]
+	var _old_value = relationship_points[npc_id]
 	relationship_points[npc_id] += change
 	
 	# 限制范围 -100 到 100
@@ -300,7 +300,7 @@ func modify_relationship(npc_id: String, change: int):
 	
 	relationship_changed.emit(npc_id, relationship_points[npc_id], change)
 	
-	print("[GameState] Relationship: %s %d -> %d" % [npc_id, old_value, relationship_points[npc_id]])
+	print("[GameState] Relationship: %s %d -> %d" % [npc_id, _old_value, relationship_points[npc_id]])
 
 func set_character_hostile(npc_id: String, hostile: bool = true):
 	if npc_id.is_empty():
@@ -474,17 +474,17 @@ func get_current_chapter():
 
 # ===== 辅助方法 =====
 
-func _scene_exists(scene_id: String):
+func _scene_exists(_scene_id: String):
 	return true
 
-func _get_scene_data(scene_id: String):
+func _get_scene_data(_scene_id: String):
 	return {}
 
-func _execute_scene_entry(scene_data: Dictionary, transition_data: Dictionary):
+func _execute_scene_entry(scene_data: Dictionary, _transition_data: Dictionary):
 	if scene_data.has("entry_consequences"):
 		execute_consequences(scene_data.entry_consequences)
 
-func _check_flag_triggers(flag_name: String, flag_value: Variant):
+func _check_flag_triggers(_flag_name: String, _flag_value: Variant):
 	pass
 
 func _get_player_stat(stat_name: String):
@@ -495,10 +495,10 @@ func _get_player_stat(stat_name: String):
 		"luck": return 10
 	return 10
 
-func _modify_player_stat(stat_name: String, amount: int):
+func _modify_player_stat(_stat_name: String, _amount: int):
 	pass
 
-func _check_time_condition(condition: Dictionary):
+func _check_time_condition(_condition: Dictionary):
 	return true
 
 func _save_completion_data(ending: Dictionary):

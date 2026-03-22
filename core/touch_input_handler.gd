@@ -4,8 +4,6 @@ extends Node
 signal touch_pressed(position: Vector2)
 signal touch_released(position: Vector2)
 signal touch_dragged(position: Vector2, relative: Vector2)
-signal touch_cancelled
-
 var _is_touch_device: bool = false
 var _touch_positions: Dictionary = {}
 var _last_touch_position: Vector2 = Vector2.ZERO

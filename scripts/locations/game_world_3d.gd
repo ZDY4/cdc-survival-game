@@ -201,10 +201,12 @@ func _resolve_player_spawn_position(fallback_world_pos: Vector3) -> Vector3:
 		else:
 			spawn_world_pos = player_spawn_node.global_position
 
-	if not GridMovementSystem or not GridMovementSystem.has_method("snap_to_grid"):
+	if _player == null:
+		return spawn_world_pos
+	if not _player.has_method("snap_world_to_grid"):
 		return spawn_world_pos
 
-	var snapped_world_pos: Vector3 = GridMovementSystem.snap_to_grid(spawn_world_pos)
+	var snapped_world_pos: Vector3 = _player.snap_world_to_grid(spawn_world_pos)
 	snapped_world_pos.y = spawn_world_pos.y
 	return snapped_world_pos
 
@@ -239,7 +241,7 @@ func _save_player_runtime_state() -> void:
 		return
 	GameState.player_position = location_id
 	GameState.player_position_3d = _player.global_position
-	GameState.player_grid_position = GridMovementSystem.world_to_grid(_player.global_position)
+	GameState.player_grid_position = _player.get_grid_position()
 	GameState.player_local_position = to_local(_player.global_position)
 
 func _set_environment_visibility(active: bool) -> void:

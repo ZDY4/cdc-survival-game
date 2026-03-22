@@ -48,7 +48,7 @@ func tick(delta: float) -> void:
     if not _scene_root or not _interaction_system or not _navigator or not _player or not _path_preview:
         _hide_hover_overlay()
         return
-    if not GridMovementSystem or not GridMovementSystem.grid_world:
+    if _get_grid_walkable_callable().is_null():
         _hide_hover_overlay()
         return
     if _player.is_world_input_blocked():
@@ -77,8 +77,7 @@ func tick(delta: float) -> void:
             _hide_preview()
         return
 
-    if _player.is_moving() and _has_active_move_target:
-        _update_preview_to_target(_active_move_target, false, "move_target")
+    if _player.is_moving():
         return
 
     var mouse_pos: Vector2 = _scene_root.get_viewport().get_mouse_position()
@@ -124,8 +123,11 @@ func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, 
     var preview_target := target_world_pos
     preview_target.y = _player.global_position.y
 
-    var player_grid := GridMovementSystem.world_to_grid(_player.global_position)
-    var target_grid := GridMovementSystem.world_to_grid(preview_target)
+    var player_grid := _player.world_to_grid_pos(_player.global_position)
+    var target_grid := _player.world_to_grid_pos(preview_target)
+    if not _player.is_grid_position_walkable(target_grid):
+        _hide_preview()
+        return
     var preview_signature := "%s|%s|%s" % [mode, str(player_grid), str(target_grid)]
     if preview_signature == _last_preview_signature:
         return
@@ -134,7 +136,7 @@ func _update_preview_to_target(target_world_pos: Vector3, limit_distance: bool, 
     var path: Array[Vector3] = _navigator.find_path(
         _player.global_position,
         preview_target,
-        GridMovementSystem.grid_world.is_walkable
+        _get_grid_walkable_callable()
     )
 
     if path.size() > max_preview_path_points:
@@ -149,8 +151,8 @@ func _update_preview_from_path(path: Array[Vector3], mode: String) -> void:
         _hide_preview()
         return
 
-    var player_grid := GridMovementSystem.world_to_grid(_player.global_position)
-    var target_grid := GridMovementSystem.world_to_grid(path[path.size() - 1])
+    var player_grid := _player.world_to_grid_pos(_player.global_position)
+    var target_grid := _player.world_to_grid_pos(path[path.size() - 1])
     var preview_signature := "%s|%s|%s|%d" % [mode, str(player_grid), str(target_grid), path.size()]
     if preview_signature == _last_preview_signature:
         return
@@ -192,7 +194,7 @@ func _update_hover_overlay() -> void:
         return
 
     var hit_pos: Vector3 = ground_hit.position
-    var grid_pos := GridMovementSystem.world_to_grid(hit_pos)
+    var grid_pos := _player.world_to_grid_pos(hit_pos)
     var corner_y := hit_pos.y + hover_overlay_world_y_offset
     var corners_world := _compute_grid_cell_world_corners(grid_pos, corner_y)
     _hover_overlay.show_cell(corners_world, camera)
@@ -202,7 +204,7 @@ func _hide_hover_overlay() -> void:
         _hover_overlay.hide_cell()
 
 func _compute_grid_cell_world_corners(grid_pos: Vector3i, world_y: float) -> Array[Vector3]:
-    var center_world := GridMovementSystem.grid_to_world(grid_pos)
+    var center_world := _player.grid_to_world_pos(grid_pos)
     var half_cell := GridNavigator.GRID_SIZE * 0.5
     return [
         Vector3(center_world.x - half_cell, world_y, center_world.z - half_cell),
@@ -270,20 +272,20 @@ func _find_nearest_interaction_target(interactable: Node, hit_position: Vector3)
             min_radius = 1
             max_radius = max(1, int(ceil(required_distance / GridNavigator.GRID_SIZE)))
 
-    var player_grid := GridMovementSystem.world_to_grid(_player.global_position)
-    var anchor_grid := GridMovementSystem.world_to_grid(anchor_pos)
+    var player_grid := _player.world_to_grid_pos(_player.global_position)
+    var anchor_grid := _player.world_to_grid_pos(anchor_pos)
     anchor_grid.y = player_grid.y
 
-    var grid_world := GridMovementSystem.grid_world
+    var walkable := _get_grid_walkable_callable()
     for radius in range(min_radius, max_radius + 1):
         var ring_cells := _collect_ring_cells(anchor_grid, radius)
         var best_path: Array[Vector3] = []
         var best_world := Vector3.ZERO
 
         for candidate_grid in ring_cells:
-            if not grid_world.is_walkable(candidate_grid):
+            if not _player.is_grid_position_walkable(candidate_grid):
                 continue
-            var candidate_world := GridMovementSystem.grid_to_world(candidate_grid)
+            var candidate_world := _player.grid_to_world_pos(candidate_grid)
             if required_distance >= 0.0:
                 var anchor_world := anchor_pos
                 anchor_world.y = candidate_world.y
@@ -292,7 +294,7 @@ func _find_nearest_interaction_target(interactable: Node, hit_position: Vector3)
             var path := _navigator.find_path(
                 _player.global_position,
                 candidate_world,
-                grid_world.is_walkable
+                walkable
             )
             if path.size() <= 1:
                 continue
@@ -307,6 +309,11 @@ func _find_nearest_interaction_target(interactable: Node, hit_position: Vector3)
             }
 
     return {"found": false}
+
+func _get_grid_walkable_callable() -> Callable:
+    if _player == null:
+        return Callable()
+    return _player.get_grid_walkable_callable()
 
 func _collect_ring_cells(center: Vector3i, radius: int) -> Array[Vector3i]:
     var cells: Array[Vector3i] = []

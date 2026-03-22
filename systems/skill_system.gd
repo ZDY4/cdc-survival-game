@@ -2,7 +2,7 @@ extends Node
 ## SkillSystem - 兼容层
 ## 为旧逻辑提供 /root/SkillSystem 入口，内部转发到 SkillModule。
 
-const TargetSkillBase = preload("res://systems/target_skill_base.gd")
+const TargetSkillBaseScript = preload("res://systems/target_skill_base.gd")
 const ValueUtils = preload("res://core/value_utils.gd")
 
 signal skill_learned(skill_id: String, skill_data: Dictionary)
