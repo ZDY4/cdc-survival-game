@@ -6,7 +6,6 @@ func _init():
 	var files_to_check = [
 		"res://core/tester_agent.gd",
 		"res://modules/ai_test/ai_test_bridge.gd",
-		"res://systems/combat_penalty_system.gd",
 		"res://modules/combat/combat_module.gd"
 	]
 	
