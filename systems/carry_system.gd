@@ -115,6 +115,10 @@ func _get_inventory_weight():
 	
 	if InventoryModule.has_method("get_inventory_weight"):
 		weight = InventoryModule.get_inventory_weight()
+	elif GameState and GameState.has_method("get_player_inventory_component"):
+		var inventory_component = GameState.get_player_inventory_component()
+		if inventory_component != null and inventory_component.has_method("get_inventory_weight"):
+			weight = float(inventory_component.get_inventory_weight())
 	elif GameState.has("inventory_items"):
 		# 备用计算
 		for item in GameState.inventory_items:

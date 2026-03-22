@@ -65,18 +65,22 @@ var _keep_navigation_intent_after_cancel: bool = false
 var _auto_advancing_navigation_intent: bool = false
 var _active_move_action: bool = false
 var _active_move_steps_consumed: int = 0
+var _blocked_navigation_retry_pending: bool = false
+var _blocked_navigation_retry_timer: float = 0.0
 
 @export var max_preview_path_points: int = 200
 @export var max_preview_distance: float = 40.0
 @export var interaction_preview_min_radius: int = 1
 @export var interaction_preview_max_radius: int = 4
 @export var hover_cursor_update_interval: float = 0.05
+@export var blocked_navigation_retry_interval: float = 0.15
 
 @export var vision_radius_tiles: int = 10
 
 func _ready() -> void:
 	super()
 	add_to_group("player")
+	initialize_actor_components("player")
 	set_process(true)
 	set_placeholder_colors(Color(0.80, 0.90, 1.0, 1.0), Color(0.20, 0.60, 1.0, 1.0))
 	_setup_collision()
@@ -110,6 +114,13 @@ func _process(delta: float) -> void:
 		_interaction_target_state_tag_applied = false
 	if _hover_outline_target != null and not is_instance_valid(_hover_outline_target):
 		_hover_outline_target = null
+	if _blocked_navigation_retry_pending:
+		if is_moving() or is_world_input_blocked():
+			return
+		_blocked_navigation_retry_timer = maxf(0.0, _blocked_navigation_retry_timer - delta)
+		if _blocked_navigation_retry_timer <= 0.0:
+			_blocked_navigation_retry_pending = false
+			_try_advance_navigation_intent()
 
 func set_interaction_context(scene_root: Node) -> void:
 	_scene_root = scene_root
@@ -166,12 +177,14 @@ func _setup_collision() -> void:
 
 func _setup_movement_component() -> void:
 	_movement_component = MovementComponent.new()
+	_movement_component.occupies_runtime_grid = true
 	add_child(_movement_component)
 	_movement_component.initialize(self, _grid_world)
 	_movement_component.move_requested.connect(_on_move_requested)
 	_movement_component.move_finished.connect(_on_movement_finished)
 	_movement_component.move_cancelled.connect(_on_movement_cancelled)
 	_movement_component.move_failed.connect(_on_movement_failed)
+	_movement_component.move_blocked.connect(_on_movement_blocked)
 	_movement_component.movement_step_completed.connect(_on_movement_step_completed)
 
 func _setup_vision_system() -> void:
@@ -196,9 +209,14 @@ func _setup_input_component() -> void:
 	_input_component.initialize(self)
 
 func _setup_equipment_system() -> void:
+	_equipment_system = get_equipment_component()
+	if _equipment_system != null:
+		return
 	_equipment_system = EquipmentSystem.new()
 	_equipment_system.name = "EquipmentSystem"
-	call_deferred("add_child", _equipment_system)
+	add_child(_equipment_system)
+	if _equipment_system.has_method("initialize_for_actor"):
+		_equipment_system.initialize_for_actor("player", get_inventory_component())
 
 func move_to(world_pos: Vector3) -> bool:
 	if is_world_input_blocked():
@@ -246,7 +264,7 @@ func move_to_screen_position(screen_pos: Vector2, interaction_system: Node, scen
 
 	var world_pos: Vector3 = ground_hit.position
 	world_pos.y = global_position.y
-	var snapped_pos := GridMovementSystem.snap_to_grid(world_pos)
+	var snapped_pos := snap_world_to_grid(world_pos)
 	snapped_pos.y = global_position.y
 	var started: bool = false
 	if TurnSystem != null and TurnSystem.is_in_combat():
@@ -258,7 +276,7 @@ func move_to_screen_position(screen_pos: Vector2, interaction_system: Node, scen
 
 	EventBus.emit(EventBus.EventType.GRID_CLICKED, {
 		"world_position": snapped_pos,
-		"grid_position": GridMovementSystem.world_to_grid(snapped_pos)
+		"grid_position": world_to_grid_pos(snapped_pos)
 	})
 	return true
 
@@ -341,10 +359,52 @@ func is_moving() -> bool:
 	return _movement_component != null and _movement_component.is_moving()
 
 func get_grid_position() -> Vector3i:
-	return GridMovementSystem.world_to_grid(global_position)
+	return world_to_grid_pos(global_position)
 
 func get_grid_world() -> GridWorld:
 	return _grid_world
+
+func world_to_grid_pos(world_pos: Vector3) -> Vector3i:
+	if _grid_world != null:
+		return _grid_world.world_to_grid(world_pos)
+	if GridMovementSystem != null and GridMovementSystem.has_method("world_to_grid"):
+		return GridMovementSystem.world_to_grid(world_pos)
+	return Vector3i.ZERO
+
+func grid_to_world_pos(grid_pos: Vector3i) -> Vector3:
+	if _grid_world != null:
+		return _grid_world.grid_to_world(grid_pos)
+	if GridMovementSystem != null and GridMovementSystem.has_method("grid_to_world"):
+		return GridMovementSystem.grid_to_world(grid_pos)
+	return Vector3.ZERO
+
+func snap_world_to_grid(world_pos: Vector3) -> Vector3:
+	if _grid_world != null:
+		return _grid_world.snap_to_grid(world_pos)
+	if GridMovementSystem != null and GridMovementSystem.has_method("snap_to_grid"):
+		return GridMovementSystem.snap_to_grid(world_pos)
+	return world_pos
+
+func is_grid_position_walkable(grid_pos: Vector3i) -> bool:
+	if _grid_world != null:
+		return _grid_world.is_walkable_for_actor(grid_pos, self)
+	if GridMovementSystem != null and GridMovementSystem.grid_world != null:
+		return GridMovementSystem.grid_world.is_walkable(grid_pos)
+	return false
+
+func get_grid_walkable_callable() -> Callable:
+	if _grid_world != null:
+		return Callable(self, "_is_navigation_grid_walkable")
+	if GridMovementSystem != null and GridMovementSystem.grid_world != null:
+		return Callable(self, "_is_navigation_grid_walkable")
+	return Callable()
+
+func _is_navigation_grid_walkable(grid_pos: Vector3i) -> bool:
+	if _grid_world != null:
+		return _grid_world.is_walkable_for_actor(grid_pos, self)
+	if GridMovementSystem != null and GridMovementSystem.grid_world != null:
+		return GridMovementSystem.grid_world.is_walkable(grid_pos)
+	return false
 
 func get_targeting_scene_root() -> Node:
 	return _scene_root
@@ -416,6 +476,8 @@ func _clear_navigation_intent(clear_target_actor: bool = true) -> void:
 	_navigation_intent_target_actor = null
 	_auto_advancing_navigation_intent = false
 	_keep_navigation_intent_after_cancel = false
+	_blocked_navigation_retry_pending = false
+	_blocked_navigation_retry_timer = 0.0
 	if clear_target_actor and not is_movement_input_blocked():
 		_set_interaction_target_actor(null)
 
@@ -537,7 +599,8 @@ func _on_movement_finished() -> void:
 	_try_execute_pending_option()
 
 func _on_movement_cancelled() -> void:
-	_complete_move_action(false)
+	var action_should_commit: bool = _active_move_steps_consumed > 0
+	_complete_move_action(action_should_commit)
 	if _keep_navigation_intent_after_cancel:
 		_keep_navigation_intent_after_cancel = false
 		_refresh_navigation_intent_state(false)
@@ -551,6 +614,18 @@ func _on_movement_failed(_target_pos: Vector3) -> void:
 		_refresh_navigation_intent_state(false)
 		return
 	_clear_pending_option_execution()
+
+func _on_movement_blocked(_grid_pos: Vector3i, _world_pos: Vector3, _step_index: int, _total_steps: int) -> void:
+	var action_should_commit: bool = _active_move_steps_consumed > 0
+	_complete_move_action(action_should_commit)
+	if not has_navigation_intent():
+		_clear_pending_option_execution()
+		return
+	if not _refresh_navigation_intent_state(false):
+		_clear_navigation_intent()
+		_clear_pending_option_execution()
+		return
+	_schedule_blocked_navigation_retry()
 
 func _on_movement_step_completed(grid_pos: Vector3i, world_pos: Vector3, step_index: int, total_steps: int) -> void:
 	if _active_move_action and TurnSystem:
@@ -662,6 +737,10 @@ func _refresh_movement_block_state() -> void:
 		_path_preview_system.hide_hover_overlay()
 	_apply_hover_cursor(null, Vector2.ZERO)
 	_clear_hover_outline_target()
+
+func _schedule_blocked_navigation_retry() -> void:
+	_blocked_navigation_retry_pending = true
+	_blocked_navigation_retry_timer = maxf(0.01, blocked_navigation_retry_interval)
 
 func _sync_interaction_state_tags() -> void:
 	var blocked: bool = is_movement_input_blocked()
@@ -850,8 +929,8 @@ func _update_hover_overlay_from_mouse(interaction_system: Node, viewport: Viewpo
 		_hide_hover_overlay()
 		return
 	var hit_pos: Vector3 = ground_hit.position
-	var grid_pos := GridMovementSystem.world_to_grid(hit_pos)
-	var center_world := GridMovementSystem.grid_to_world(grid_pos)
+	var grid_pos := world_to_grid_pos(hit_pos)
+	var center_world := grid_to_world_pos(grid_pos)
 	var half_cell := GridNavigator.GRID_SIZE * 0.5
 	var world_y := hit_pos.y + 0.03
 	var corners_world: Array[Vector3] = [
@@ -1200,7 +1279,7 @@ func _resolve_option_approach_data(interactable: Node, option) -> Dictionary:
 	var anchor_pos: Vector3 = option.get_interaction_anchor_position(interactable)
 	var required_distance: float = maxf(0.0, option.get_required_distance(interactable))
 	var player_grid := get_grid_position()
-	var anchor_grid := GridMovementSystem.world_to_grid(anchor_pos)
+	var anchor_grid := world_to_grid_pos(anchor_pos)
 	anchor_grid.y = player_grid.y
 	var max_radius: int = max(1, int(ceil(required_distance / GridNavigator.GRID_SIZE)))
 
@@ -1208,16 +1287,20 @@ func _resolve_option_approach_data(interactable: Node, option) -> Dictionary:
 		var best_path: Array[Vector3] = []
 		var best_destination := Vector3.ZERO
 		for candidate_grid in _collect_interaction_ring_cells(anchor_grid, radius):
-			if not _grid_world.is_walkable(candidate_grid):
+			if not is_grid_position_walkable(candidate_grid):
 				continue
-			var candidate_world := GridMovementSystem.grid_to_world(candidate_grid)
+			var candidate_world := grid_to_world_pos(candidate_grid)
 			candidate_world.y = global_position.y
 			var anchor_world: Vector3 = anchor_pos
 			anchor_world.y = candidate_world.y
 			if candidate_world.distance_to(anchor_world) > required_distance + 0.05:
 				continue
 
-			var path: Array[Vector3] = _navigator.find_path(global_position, candidate_world, _grid_world.is_walkable)
+			var path: Array[Vector3] = _navigator.find_path(
+				global_position,
+				candidate_world,
+				get_grid_walkable_callable()
+			)
 			if path.size() <= 1:
 				continue
 			if best_path.is_empty() or path.size() < best_path.size():

@@ -10,7 +10,10 @@ const ATTACK_LUNGE_MIN_DISTANCE: float = 0.35
 const ATTACK_LUNGE_MAX_DISTANCE: float = 0.75
 const ATTACK_LUNGE_FORWARD_DURATION: float = 0.08
 const ATTACK_LUNGE_RETURN_DURATION: float = 0.12
+const CameraController3DScript = preload("res://systems/camera_controller_3d.gd")
 const InteractionSystemScript = preload("res://systems/interaction_system.gd")
+const InventoryComponentScript = preload("res://systems/inventory_component.gd")
+const EquipmentSystemScript = preload("res://systems/equipment_system.gd")
 
 @export var head_color: Color = Color(0.95, 0.84, 0.70, 1.0)
 @export var body_color: Color = Color(0.30, 0.58, 0.90, 1.0)
@@ -44,11 +47,20 @@ var _resolver_result: Dictionary = {}
 var _hover_outline_visible: bool = false
 var _hover_outline_color: Color = Color(1.0, 1.0, 1.0, 1.0)
 var _attack_lunge_tween: Tween = null
+var _camera_controller: CameraController3DScript = null
+var _camera_sync_retry_scheduled: bool = false
+var _actor_id: String = ""
+var _inventory_component: Node = null
+var _equipment_component: Node = null
 
 func _ready() -> void:
 	_setup_interaction_system()
 	_ensure_placeholder_sprites()
 	_refresh_placeholder_textures()
+	_bind_camera_pitch_sync()
+
+func _exit_tree() -> void:
+	_disconnect_camera_pitch_sync()
 
 func set_placeholder_colors(new_head_color: Color, new_body_color: Color) -> void:
 	head_color = new_head_color
@@ -81,6 +93,7 @@ func initialize_from_character_data(
 	set_meta("relation_result", _resolver_result.duplicate(true))
 	set_meta("spawn_id", str(context.get("spawn_id", "")))
 	set_meta("resolved_attitude", str(_resolver_result.get("resolved_attitude", "neutral")))
+	initialize_actor_components(_derive_actor_id(character_id, resolver_result, context), _character_data, _resolver_result, context)
 
 	var visual: Dictionary = _character_data.get("visual", {})
 	var placeholder: Dictionary = visual.get("placeholder", {})
@@ -89,6 +102,57 @@ func initialize_from_character_data(
 	var resolved_leg: Color = _parse_color(str(placeholder.get("leg_color", "")), Color(0.0, 0.0, 0.0, 0.0))
 	leg_color = resolved_leg
 	set_placeholder_colors(resolved_head, resolved_body)
+
+func initialize_actor_components(
+	actor_id: String,
+	character_data: Dictionary = {},
+	resolver_result: Dictionary = {},
+	context: Dictionary = {}
+) -> void:
+	_actor_id = actor_id.strip_edges()
+	if _actor_id.is_empty():
+		return
+	set_meta("actor_id", _actor_id)
+
+	var legacy_player_storage: bool = _actor_id == "player"
+	if _inventory_component == null or not is_instance_valid(_inventory_component):
+		_inventory_component = get_node_or_null("InventoryComponent")
+	if _inventory_component == null:
+		_inventory_component = InventoryComponentScript.new()
+		_inventory_component.name = "InventoryComponent"
+		add_child(_inventory_component)
+
+	var initial_inventory_state: Dictionary = _build_initial_inventory_state(character_data, context)
+	_inventory_component.initialize_for_actor(_actor_id, initial_inventory_state, legacy_player_storage)
+	if GameState:
+		GameState.register_actor_inventory_component(_actor_id, _inventory_component)
+		if legacy_player_storage:
+			GameState.set_player_inventory_component(_inventory_component)
+
+	if _equipment_component == null or not is_instance_valid(_equipment_component):
+		_equipment_component = get_node_or_null("EquipmentSystem")
+	if _equipment_component == null:
+		_equipment_component = EquipmentSystemScript.new()
+		_equipment_component.name = "EquipmentSystem"
+		add_child(_equipment_component)
+	if _equipment_component.has_method("initialize_for_actor"):
+		_equipment_component.initialize_for_actor(_actor_id, _inventory_component)
+	var initial_equipment_state: Dictionary = _build_initial_equipment_state(character_data, resolver_result, context)
+	if not initial_equipment_state.is_empty() and _equipment_component.has_method("load_save_data"):
+		var existing_state: Dictionary = {}
+		if GameState and GameState.has_method("get_actor_equipment_state"):
+			existing_state = GameState.get_actor_equipment_state(_actor_id)
+		if existing_state.is_empty():
+			_equipment_component.load_save_data(initial_equipment_state)
+
+func get_actor_id() -> String:
+	return _actor_id if not _actor_id.is_empty() else _character_id
+
+func get_inventory_component() -> Node:
+	return _inventory_component if _inventory_component != null and is_instance_valid(_inventory_component) else get_node_or_null("InventoryComponent")
+
+func get_equipment_component() -> Node:
+	return _equipment_component if _equipment_component != null and is_instance_valid(_equipment_component) else get_node_or_null("EquipmentSystem")
 
 func refresh_relation_state(resolver_result: Dictionary) -> void:
 	_resolver_result = resolver_result.duplicate(true)
@@ -278,6 +342,61 @@ func _ensure_visual_root() -> void:
 	_visual_root.name = VISUAL_ROOT_NAME
 	add_child(_visual_root)
 
+func _bind_camera_pitch_sync() -> void:
+	_camera_sync_retry_scheduled = false
+	var resolved_camera := _resolve_camera_controller()
+	if resolved_camera == null:
+		_schedule_camera_pitch_sync_retry()
+		return
+	if _camera_controller == resolved_camera:
+		_apply_camera_pitch_to_visual_root(_camera_controller.get_view_rotation_degrees())
+		return
+
+	_disconnect_camera_pitch_sync()
+	_camera_controller = resolved_camera
+	if not _camera_controller.view_rotation_changed.is_connected(_on_camera_view_rotation_changed):
+		_camera_controller.view_rotation_changed.connect(_on_camera_view_rotation_changed)
+	_apply_camera_pitch_to_visual_root(_camera_controller.get_view_rotation_degrees())
+
+func _schedule_camera_pitch_sync_retry() -> void:
+	if _camera_sync_retry_scheduled:
+		return
+	_camera_sync_retry_scheduled = true
+	call_deferred("_bind_camera_pitch_sync")
+
+func _disconnect_camera_pitch_sync() -> void:
+	if _camera_controller == null:
+		return
+	if is_instance_valid(_camera_controller) and _camera_controller.view_rotation_changed.is_connected(_on_camera_view_rotation_changed):
+		_camera_controller.view_rotation_changed.disconnect(_on_camera_view_rotation_changed)
+	_camera_controller = null
+
+func _resolve_camera_controller() -> CameraController3DScript:
+	var tree := get_tree()
+	if tree == null:
+		return null
+	var current_scene := tree.current_scene
+	if current_scene == null:
+		return null
+	if current_scene.has_method("get_camera"):
+		var camera_from_method: Variant = current_scene.call("get_camera")
+		if camera_from_method is CameraController3DScript:
+			return camera_from_method as CameraController3DScript
+	return current_scene.get_node_or_null("CameraController3D") as CameraController3DScript
+
+func _on_camera_view_rotation_changed(new_rotation_degrees: Vector3) -> void:
+	_apply_camera_pitch_to_visual_root(new_rotation_degrees)
+
+func _apply_camera_pitch_to_visual_root(camera_rotation_degrees: Vector3) -> void:
+	var visual_root := get_visual_root()
+	if visual_root == null or not is_instance_valid(visual_root):
+		return
+	var visual_rotation := visual_root.rotation_degrees
+	if is_equal_approx(visual_rotation.x, camera_rotation_degrees.x):
+		return
+	visual_rotation.x = camera_rotation_degrees.x
+	visual_root.rotation_degrees = visual_rotation
+
 func _resolve_interacting_tag() -> StringName:
 	if not String(_cached_interacting_tag).is_empty():
 		return _cached_interacting_tag
@@ -405,3 +524,58 @@ func _apply_hover_outline_visibility() -> void:
 	]:
 		if sprite != null:
 			sprite.visible = _hover_outline_visible
+
+func _derive_actor_id(character_id: String, resolver_result: Dictionary, context: Dictionary) -> String:
+	if character_id.strip_edges() == "player":
+		return "player"
+	var spawn_id: String = str(context.get("spawn_id", "")).strip_edges()
+	if bool(resolver_result.get("allow_attack", false)):
+		if not spawn_id.is_empty():
+			return "enemy:%s" % spawn_id
+		return "enemy:%s" % character_id.strip_edges()
+	return character_id.strip_edges()
+
+func _build_initial_inventory_state(character_data: Dictionary, _context: Dictionary) -> Dictionary:
+	if GameState and GameState.has_method("get_actor_inventory_state"):
+		var existing_state: Dictionary = GameState.get_actor_inventory_state(_actor_id)
+		if not existing_state.is_empty():
+			return existing_state
+
+	var raw_items: Array = []
+	if character_data.get("inventory", []) is Array:
+		raw_items = (character_data.get("inventory", []) as Array).duplicate(true)
+	var normalized_items: Array[Dictionary] = []
+	for entry_variant in raw_items:
+		if entry_variant is Dictionary:
+			var raw_entry: Dictionary = (entry_variant as Dictionary).duplicate(true)
+			normalized_items.append({
+				"id": str(raw_entry.get("id", "")),
+				"count": int(raw_entry.get("count", 1))
+			})
+	return {
+		"actor_id": _actor_id,
+		"inventory_items": normalized_items
+	}
+
+func _build_initial_equipment_state(character_data: Dictionary, _resolver_result: Dictionary, _context: Dictionary) -> Dictionary:
+	if GameState and GameState.has_method("get_actor_equipment_state"):
+		var existing_state: Dictionary = GameState.get_actor_equipment_state(_actor_id)
+		if not existing_state.is_empty():
+			return existing_state
+
+	var explicit_state: Variant = character_data.get("equipment", {})
+	if explicit_state is Dictionary:
+		var typed_state: Dictionary = (explicit_state as Dictionary).duplicate(true)
+		typed_state["actor_id"] = _actor_id
+		return typed_state
+
+	var equipped_items: Variant = character_data.get("equipped_items", {})
+	if equipped_items is Dictionary:
+		return {
+			"actor_id": _actor_id,
+			"equipped_items": (equipped_items as Dictionary).duplicate(true),
+			"equipped_instance_ids": (character_data.get("equipped_instance_ids", {}) as Dictionary).duplicate(true) if character_data.get("equipped_instance_ids", {}) is Dictionary else {},
+			"item_instances": (character_data.get("item_instances", {}) as Dictionary).duplicate(true) if character_data.get("item_instances", {}) is Dictionary else {},
+			"current_ammo": (character_data.get("current_ammo", {}) as Dictionary).duplicate(true) if character_data.get("current_ammo", {}) is Dictionary else {}
+		}
+	return {}

@@ -108,6 +108,9 @@ func get_item_count(item_id: String) -> int:
 func get_items() -> Array[Dictionary]:
 	if not GameState:
 		return []
+	var inventory_component = GameState.get_player_inventory_component() if GameState.has_method("get_player_inventory_component") else null
+	if inventory_component != null and inventory_component.has_method("get_items"):
+		return inventory_component.get_items()
 	return GameState.inventory_items.duplicate()
 
 func get_visible_items() -> Array[Dictionary]:
@@ -133,6 +136,9 @@ func get_inventory_dimensions() -> Vector2i:
 func get_active_cell_count() -> int:
 	if not GameState:
 		return 0
+	var inventory_component = GameState.get_player_inventory_component() if GameState.has_method("get_player_inventory_component") else null
+	if inventory_component != null and inventory_component.has_method("get_active_cell_count"):
+		return int(inventory_component.get_active_cell_count())
 	return int(GameState.inventory_max_slots)
 
 func move_item_instance(instance_id: String, target_cell: Vector2i) -> bool:
@@ -158,6 +164,9 @@ func get_item_icon(item_id: String) -> String:
 func get_inventory_weight() -> float:
 	if not GameState:
 		return 0.0
+	var inventory_component = GameState.get_player_inventory_component() if GameState.has_method("get_player_inventory_component") else null
+	if inventory_component != null and inventory_component.has_method("get_inventory_weight"):
+		return float(inventory_component.get_inventory_weight())
 	
 	var total = 0.0
 	for item in GameState.inventory_items:
@@ -280,10 +289,11 @@ func remove_items(items: Array[Dictionary]) -> Dictionary:
 func clear_inventory():
 	if not GameState:
 		return
-	
-	GameState.inventory_items.clear()
-	if GameState.has_method("refresh_inventory_capacity"):
-		GameState.refresh_inventory_capacity(false, false)
+	var inventory_component = GameState.get_player_inventory_component() if GameState.has_method("get_player_inventory_component") else null
+	if inventory_component != null and inventory_component.has_method("clear_inventory"):
+		inventory_component.clear_inventory()
+	elif GameState.has_method("set_inventory_from_save"):
+		GameState.set_inventory_from_save([], GameState.inventory_max_slots, GameState.inventory_grid_width, GameState.inventory_grid_height, 1)
 	weight_changed.emit(0.0, get_max_weight())
 	print("[InventoryModule] 背包已清空")
 

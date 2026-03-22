@@ -805,12 +805,21 @@ func deserialize(data: Dictionary) -> void:
 
 
 func _refresh_player_snapshot() -> void:
+	var previous_snapshot: Dictionary = _cached_player_snapshot.duplicate(true)
 	_cached_player_snapshot = resolve_attribute_snapshot(
 		_player_container,
 		_definitions,
 		_collect_modifier_payload_for_actor(PLAYER_ACTOR_ID)
 	)
 	_needs_player_recalculation = false
+	for attr_name_variant in _cached_player_snapshot.keys():
+		var attr_name: String = str(attr_name_variant)
+		if attr_name == "resources":
+			continue
+		var new_value: Variant = _cached_player_snapshot.get(attr_name_variant)
+		var old_value: Variant = previous_snapshot.get(attr_name_variant, null)
+		if old_value != new_value:
+			attribute_changed.emit(attr_name, new_value, old_value)
 	calculated_stats_updated.emit(_cached_player_snapshot.duplicate(true))
 	player_attributes_changed.emit(get_player_attributes_container(), _cached_player_snapshot.duplicate(true))
 
@@ -872,6 +881,13 @@ func _build_non_player_runtime_modifiers(actor_or_id: Variant) -> Dictionary:
 	}
 	if actor_or_id is Node:
 		var actor: Node = actor_or_id
+		if actor.has_method("get_equipment_component"):
+			var equipment_component: Variant = actor.get_equipment_component()
+			if equipment_component is Node and (equipment_component as Node).has_method("get_attribute_modifier_payload"):
+				_merge_modifier_payload(
+					payload,
+					_normalize_modifier_payload((equipment_component as Node).get_attribute_modifier_payload())
+				)
 		var runtime = actor.get_node_or_null("CharacterSkillRuntime")
 		if runtime != null and runtime.has_method("get_total_modifiers"):
 			var effect_modifiers: Variant = runtime.get_total_modifiers()
@@ -926,7 +942,20 @@ func _resolve_actor_key(actor_or_id: Variant) -> String:
 	if _is_player_actor_ref(actor_or_id):
 		return PLAYER_ACTOR_ID
 	if actor_or_id is Node:
-		return "actor:%s" % str((actor_or_id as Node).get_instance_id())
+		var actor_node: Node = actor_or_id as Node
+		if actor_node.has_method("get_actor_id"):
+			var actor_id: String = str(actor_node.get_actor_id()).strip_edges()
+			if not actor_id.is_empty():
+				return "actor:%s" % actor_id
+		if actor_node.has_meta("actor_id"):
+			var meta_actor_id: String = str(actor_node.get_meta("actor_id", "")).strip_edges()
+			if not meta_actor_id.is_empty():
+				return "actor:%s" % meta_actor_id
+		if actor_node.has_meta("character_id"):
+			var character_id: String = str(actor_node.get_meta("character_id", "")).strip_edges()
+			if not character_id.is_empty():
+				return "character:%s" % character_id
+		return "actor:%s" % str(actor_node.get_instance_id())
 	if actor_or_id is Dictionary:
 		var payload: Dictionary = actor_or_id
 		var dict_id: String = str(payload.get("id", payload.get("character_id", "")))

@@ -109,9 +109,14 @@ var is_player_moving: bool = false
 # ===== 角色装备系统 =====
 signal equipment_system_ready(equipment_system: Node)
 var _equipment_system: Node = null
+var _player_inventory_component: Node = null
 var _pending_equipment_save_data: Dictionary = {}
 var _pending_equips: Array[Dictionary] = []
 var _pending_ammo: Array[Dictionary] = []
+var _actor_inventory_components: Dictionary = {}
+var _actor_equipment_components: Dictionary = {}
+var _actor_inventory_states: Dictionary = {}
+var _actor_equipment_states: Dictionary = {}
 
 func save_3d_position(pos: Vector3, grid_pos: Vector3i) -> void:
 	player_position_3d = pos
@@ -285,7 +290,143 @@ func set_equipment_system(system: Node) -> void:
 	equipment_system_ready.emit(system)
 
 func get_equipment_system() -> Node:
+	if _equipment_system != null and is_instance_valid(_equipment_system):
+		return _equipment_system
+	var player_node := get_tree().get_first_node_in_group("player")
+	if player_node != null and player_node.has_method("get_equipment_component"):
+		_equipment_system = player_node.get_equipment_component()
 	return _equipment_system
+
+func set_player_inventory_component(component: Node) -> void:
+	_player_inventory_component = component
+	if component != null:
+		register_actor_inventory_component("player", component)
+		_sync_player_inventory_legacy_mirror_from_component()
+
+func get_player_inventory_component() -> Node:
+	if _player_inventory_component != null and is_instance_valid(_player_inventory_component):
+		return _player_inventory_component
+	var player_node := get_tree().get_first_node_in_group("player")
+	if player_node != null and player_node.has_method("get_inventory_component"):
+		_player_inventory_component = player_node.get_inventory_component()
+	return _player_inventory_component
+
+func register_actor_inventory_component(actor_id: String, component: Node) -> void:
+	var resolved_id := actor_id.strip_edges()
+	if resolved_id.is_empty() or component == null:
+		return
+	_actor_inventory_components[resolved_id] = component
+	if _actor_inventory_states.has(resolved_id) and component.has_method("deserialize"):
+		component.deserialize(_actor_inventory_states[resolved_id])
+	elif resolved_id == "player" and component.has_method("set_inventory_from_save"):
+		component.set_inventory_from_save(
+			inventory_items,
+			inventory_max_slots,
+			inventory_grid_width,
+			inventory_grid_height,
+			_inventory_instance_counter
+		)
+	_actor_inventory_states[resolved_id] = component.serialize() if component.has_method("serialize") else {}
+	if resolved_id == "player":
+		_player_inventory_component = component
+		_sync_player_inventory_legacy_mirror_from_component()
+
+func register_actor_equipment_component(actor_id: String, component: Node) -> void:
+	var resolved_id := actor_id.strip_edges()
+	if resolved_id.is_empty() or component == null:
+		return
+	_actor_equipment_components[resolved_id] = component
+	if _actor_equipment_states.has(resolved_id) and component.has_method("load_save_data"):
+		component.load_save_data(_actor_equipment_states[resolved_id])
+	elif resolved_id == "player":
+		var pending_save := consume_pending_equipment_save_data()
+		if not pending_save.is_empty() and component.has_method("load_save_data"):
+			component.load_save_data(pending_save)
+	_equipment_system = component if resolved_id == "player" else _equipment_system
+	_actor_equipment_states[resolved_id] = component.get_save_data() if component.has_method("get_save_data") else {}
+	if resolved_id == "player":
+		equipment_system_ready.emit(component)
+
+func get_actor_inventory_component(actor_id: String) -> Node:
+	var resolved_id := actor_id.strip_edges()
+	var component: Node = _actor_inventory_components.get(resolved_id, null)
+	if component != null and is_instance_valid(component):
+		return component
+	return null
+
+func get_actor_equipment_component(actor_id: String) -> Node:
+	var resolved_id := actor_id.strip_edges()
+	var component: Node = _actor_equipment_components.get(resolved_id, null)
+	if component != null and is_instance_valid(component):
+		return component
+	return null
+
+func get_actor_inventory_state(actor_id: String) -> Dictionary:
+	return (_actor_inventory_states.get(actor_id.strip_edges(), {}) as Dictionary).duplicate(true)
+
+func get_actor_equipment_state(actor_id: String) -> Dictionary:
+	return (_actor_equipment_states.get(actor_id.strip_edges(), {}) as Dictionary).duplicate(true)
+
+func set_actor_inventory_state(actor_id: String, state: Dictionary) -> void:
+	var resolved_id := actor_id.strip_edges()
+	if resolved_id.is_empty():
+		return
+	_actor_inventory_states[resolved_id] = state.duplicate(true)
+	var component := get_actor_inventory_component(resolved_id)
+	if component != null and component.has_method("deserialize"):
+		component.deserialize(state)
+	elif resolved_id == "player":
+		inventory_items = (state.get("inventory_items", []) as Array).duplicate(true) if state.get("inventory_items", []) is Array else []
+		inventory_max_slots = ValueUtils.to_int(state.get("inventory_max_slots", inventory_max_slots), inventory_max_slots)
+		inventory_grid_width = ValueUtils.to_int(state.get("inventory_grid_width", inventory_grid_width), inventory_grid_width)
+		inventory_grid_height = ValueUtils.to_int(state.get("inventory_grid_height", inventory_grid_height), inventory_grid_height)
+		_inventory_instance_counter = ValueUtils.to_int(state.get("inventory_instance_counter", _inventory_instance_counter), _inventory_instance_counter)
+	if resolved_id == "player":
+		_sync_player_inventory_legacy_mirror_from_component()
+
+func set_actor_equipment_state(actor_id: String, state: Dictionary) -> void:
+	var resolved_id := actor_id.strip_edges()
+	if resolved_id.is_empty():
+		return
+	_actor_equipment_states[resolved_id] = state.duplicate(true)
+	var component := get_actor_equipment_component(resolved_id)
+	if component != null and component.has_method("load_save_data"):
+		component.load_save_data(state)
+	elif resolved_id == "player":
+		set_pending_equipment_save_data(state)
+
+func on_actor_inventory_component_changed(actor_id: String, component: Node) -> void:
+	var resolved_id := actor_id.strip_edges()
+	if resolved_id.is_empty() or component == null or not component.has_method("serialize"):
+		return
+	_actor_inventory_states[resolved_id] = component.serialize()
+	if resolved_id == "player":
+		_sync_player_inventory_legacy_mirror_from_component()
+
+func on_actor_equipment_component_changed(actor_id: String, component: Node) -> void:
+	var resolved_id := actor_id.strip_edges()
+	if resolved_id.is_empty() or component == null or not component.has_method("get_save_data"):
+		return
+	_actor_equipment_states[resolved_id] = component.get_save_data()
+	if resolved_id == "player":
+		_equipment_system = component
+
+func _sync_player_inventory_legacy_mirror_from_component() -> void:
+	var component := get_player_inventory_component()
+	if component == null:
+		return
+	if component.has_method("get_items"):
+		inventory_items = component.get_items()
+	if component.has_method("get_active_cell_count"):
+		inventory_max_slots = int(component.get_active_cell_count())
+	if component.has_method("get_inventory_dimensions"):
+		var dimensions: Vector2i = component.get_inventory_dimensions()
+		inventory_grid_width = dimensions.x
+		inventory_grid_height = dimensions.y
+	if component.has_method("serialize"):
+		var state: Dictionary = component.serialize()
+		_inventory_instance_counter = ValueUtils.to_int(state.get("inventory_instance_counter", _inventory_instance_counter), _inventory_instance_counter)
+		_actor_inventory_states["player"] = state
 
 func set_pending_equipment_save_data(data: Dictionary) -> void:
 	_pending_equipment_save_data = data
@@ -395,11 +536,11 @@ func _on_level_up(new_level: int, rewards: Dictionary):
 	
 	print("[GameState] 玩家升级到等级 %d" % new_level)
 
-func _on_xp_gained(amount: int, source: String, total_xp: int):
+func _on_xp_gained(amount: int, _source: String, total_xp: int):
 	player_xp = total_xp
 	player_total_xp += amount
 
-func _on_attribute_changed(attr_name: String, new_value: int, old_value: int):
+func _on_attribute_changed(_attr_name: String, _new_value: int, _old_value: int):
 	_player_attributes = _attr_system.get_player_attributes_container() if _attr_system else _player_attributes
 
 func _on_status_warning(warning_type: String, severity: String):
@@ -520,6 +661,10 @@ func add_item(item_id: String, count: int = 1) -> bool:
 			count += 1
 			print("[GameState] 拾荒技能触发，额外获得1个物品")
 
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("add_item"):
+		return component.add_item(resolved_id, count)
+
 	var simulated_items: Array[Dictionary] = inventory_items.duplicate(true)
 	var simulated_counter: int = _inventory_instance_counter
 	var remaining: int = count
@@ -570,6 +715,9 @@ func remove_item(item_id: String, count: int = 1, include_equipped: bool = false
 	var resolved_id = _resolve_item_id(str(item_id))
 	if resolved_id.is_empty() or count <= 0:
 		return false
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("remove_item"):
+		return component.remove_item(resolved_id, count, include_equipped)
 	if get_item_count(resolved_id, include_equipped) < count:
 		return false
 
@@ -642,9 +790,15 @@ func remove_item(item_id: String, count: int = 1, include_equipped: bool = false
 	return true
 
 func has_item(item_id: String, count: int = 1, include_equipped: bool = true) -> bool:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("has_item"):
+		return component.has_item(item_id, count, include_equipped)
 	return get_item_count(item_id, include_equipped) >= count
 
 func get_item_count(item_id: String, include_equipped: bool = true) -> int:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("get_item_count"):
+		return int(component.get_item_count(item_id, include_equipped))
 	var resolved_id = _resolve_item_id(str(item_id))
 	var total: int = 0
 	for entry_variant in inventory_items:
@@ -658,9 +812,15 @@ func get_item_count(item_id: String, include_equipped: bool = true) -> int:
 	return total
 
 func get_inventory_dimensions() -> Vector2i:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("get_inventory_dimensions"):
+		return component.get_inventory_dimensions()
 	return Vector2i(inventory_grid_width, inventory_grid_height)
 
 func get_visible_inventory_items() -> Array[Dictionary]:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("get_visible_items"):
+		return component.get_visible_items()
 	var result: Array[Dictionary] = []
 	for entry_variant in inventory_items:
 		var entry: Dictionary = entry_variant
@@ -671,6 +831,9 @@ func get_visible_inventory_items() -> Array[Dictionary]:
 	return result
 
 func get_inventory_item(instance_id: String) -> Dictionary:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("get_inventory_item"):
+		return component.get_inventory_item(instance_id)
 	if instance_id.is_empty():
 		return {}
 	for entry_variant in inventory_items:
@@ -681,6 +844,9 @@ func get_inventory_item(instance_id: String) -> Dictionary:
 	return {}
 
 func find_first_available_item_instance(item_id: String) -> String:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("find_first_available_item_instance"):
+		return str(component.find_first_available_item_instance(item_id))
 	var resolved_id = _resolve_item_id(str(item_id))
 	for entry_variant in inventory_items:
 		var entry: Dictionary = entry_variant
@@ -693,6 +859,9 @@ func find_first_available_item_instance(item_id: String) -> String:
 	return ""
 
 func get_equipped_item_instance(slot: String) -> String:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("get_equipped_item_instance"):
+		return str(component.get_equipped_item_instance(slot))
 	for entry_variant in inventory_items:
 		var entry: Dictionary = entry_variant
 		_normalize_inventory_entry(entry)
@@ -701,6 +870,9 @@ func get_equipped_item_instance(slot: String) -> String:
 	return ""
 
 func set_inventory_item_equipped_slot(instance_id: String, slot: String) -> bool:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("set_inventory_item_equipped_slot"):
+		return component.set_inventory_item_equipped_slot(instance_id, slot)
 	for entry_variant in inventory_items:
 		var entry: Dictionary = entry_variant
 		_normalize_inventory_entry(entry)
@@ -711,6 +883,9 @@ func set_inventory_item_equipped_slot(instance_id: String, slot: String) -> bool
 	return false
 
 func move_item_instance(instance_id: String, target_cell: Vector2i) -> bool:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("move_item_instance"):
+		return component.move_item_instance(instance_id, target_cell)
 	if instance_id.is_empty():
 		return false
 	var active_cells: int = inventory_max_slots
@@ -733,6 +908,9 @@ func move_item_instance(instance_id: String, target_cell: Vector2i) -> bool:
 	return false
 
 func refresh_inventory_capacity(preserve_positions: bool = true, emit_event: bool = true) -> bool:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("refresh_inventory_capacity"):
+		return component.refresh_inventory_capacity(preserve_positions, emit_event)
 	var capacity: Dictionary = _resolve_inventory_capacity()
 	var layout: Dictionary = _resolve_inventory_layout(
 		inventory_items.duplicate(true),
@@ -760,6 +938,10 @@ func set_inventory_from_save(
 	grid_height: int = DEFAULT_INVENTORY_GRID_HEIGHT,
 	instance_counter: int = 1
 ) -> void:
+	var component := get_player_inventory_component()
+	if component != null and component.has_method("set_inventory_from_save"):
+		component.set_inventory_from_save(items, active_cells, grid_width, grid_height, instance_counter)
+		return
 	inventory_items.clear()
 	for entry_variant in items:
 		if entry_variant is Dictionary:
@@ -1026,6 +1208,17 @@ func set_money(amount: int):
 func get_save_data() -> Dictionary:
 	_sync_from_systems()
 	_player_attributes = _get_player_attributes_container()
+	_sync_player_inventory_legacy_mirror_from_component()
+	for actor_id_variant in _actor_inventory_components.keys():
+		var actor_id: String = str(actor_id_variant)
+		var component: Node = get_actor_inventory_component(actor_id)
+		if component != null and component.has_method("serialize"):
+			_actor_inventory_states[actor_id] = component.serialize()
+	for actor_id_variant in _actor_equipment_components.keys():
+		var actor_id: String = str(actor_id_variant)
+		var component: Node = get_actor_equipment_component(actor_id)
+		if component != null and component.has_method("get_save_data"):
+			_actor_equipment_states[actor_id] = component.get_save_data()
 	
 	var save_data = {
 		# 基础状态
@@ -1066,6 +1259,8 @@ func get_save_data() -> Dictionary:
 		"inventory_grid_width": inventory_grid_width,
 		"inventory_grid_height": inventory_grid_height,
 		"inventory_instance_counter": _inventory_instance_counter,
+		"actor_inventories": _actor_inventory_states.duplicate(true),
+		"actor_equipments": _actor_equipment_states.duplicate(true),
 		
 		# 世界状态
 		"world_weather": world_weather,
@@ -1135,15 +1330,43 @@ func load_save_data(data: Dictionary):
 	game_day = data.get("game_day", 1)
 	game_hour = data.get("game_hour", 8)
 	game_minute = data.get("game_minute", 0)
+
+	_actor_inventory_states.clear()
+	_actor_equipment_states.clear()
 	
-	# 背包
-	set_inventory_from_save(
-		data.get("inventory_items", []),
-		ValueUtils.to_int(data.get("inventory_max_slots", inventory_max_slots), inventory_max_slots),
-		ValueUtils.to_int(data.get("inventory_grid_width", inventory_grid_width), inventory_grid_width),
-		ValueUtils.to_int(data.get("inventory_grid_height", inventory_grid_height), inventory_grid_height),
-		ValueUtils.to_int(data.get("inventory_instance_counter", _inventory_instance_counter), _inventory_instance_counter)
-	)
+	var actor_inventories: Dictionary = {}
+	if data.get("actor_inventories", {}) is Dictionary:
+		actor_inventories = (data.get("actor_inventories", {}) as Dictionary).duplicate(true)
+	if not actor_inventories.has("player"):
+		actor_inventories["player"] = {
+			"actor_id": "player",
+			"inventory_items": data.get("inventory_items", []).duplicate(true) if data.get("inventory_items", []) is Array else [],
+			"inventory_max_slots": ValueUtils.to_int(data.get("inventory_max_slots", inventory_max_slots), inventory_max_slots),
+			"inventory_grid_width": ValueUtils.to_int(data.get("inventory_grid_width", inventory_grid_width), inventory_grid_width),
+			"inventory_grid_height": ValueUtils.to_int(data.get("inventory_grid_height", inventory_grid_height), inventory_grid_height),
+			"inventory_instance_counter": ValueUtils.to_int(data.get("inventory_instance_counter", _inventory_instance_counter), _inventory_instance_counter)
+		}
+	_actor_inventory_states = actor_inventories.duplicate(true)
+
+	if _actor_inventory_states.has("player"):
+		set_actor_inventory_state("player", _actor_inventory_states["player"])
+	else:
+		set_inventory_from_save(
+			data.get("inventory_items", []),
+			ValueUtils.to_int(data.get("inventory_max_slots", inventory_max_slots), inventory_max_slots),
+			ValueUtils.to_int(data.get("inventory_grid_width", inventory_grid_width), inventory_grid_width),
+			ValueUtils.to_int(data.get("inventory_grid_height", inventory_grid_height), inventory_grid_height),
+			ValueUtils.to_int(data.get("inventory_instance_counter", _inventory_instance_counter), _inventory_instance_counter)
+		)
+
+	var actor_equipments: Dictionary = {}
+	if data.get("actor_equipments", {}) is Dictionary:
+		actor_equipments = (data.get("actor_equipments", {}) as Dictionary).duplicate(true)
+	if not actor_equipments.has("player") and data.get("equipment", {}) is Dictionary:
+		actor_equipments["player"] = (data.get("equipment", {}) as Dictionary).duplicate(true)
+	_actor_equipment_states = actor_equipments.duplicate(true)
+	if _actor_equipment_states.has("player"):
+		set_pending_equipment_save_data(_actor_equipment_states["player"])
 	
 	# 世界状态
 	world_weather = data.get("world_weather", "clear")
