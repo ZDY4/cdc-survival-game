@@ -4,12 +4,24 @@ extends VBoxContainer
 
 const DEFAULT_CONFIG_PATH: String = "res://config/gameplay_tags.ini"
 const MANAGER_SCRIPT_PATH: String = "res://addons/gameplay_tags/runtime/gameplay_tags_manager.gd"
-const CONTENT_MINIMUM_SIZE: Vector2 = Vector2(860, 560)
+const CONTENT_MINIMUM_SIZE: Vector2 = Vector2(0, 0)
 const TREE_MENU_COPY_TAG: int = 1
 const TREE_MENU_USE_AS_CONTAINER: int = 2
 const TREE_MENU_USE_IN_QUERY: int = 3
 const TREE_MENU_ADD_CHILD: int = 4
 const TREE_MENU_ADD_SIBLING: int = 5
+const TREE_MENU_SHOW_DETAILS: int = 6
+const TREE_MENU_SHOW_WARNINGS: int = 7
+const TREE_MENU_FIND_REFERENCES: int = 8
+const TREE_MENU_RENAME: int = 9
+const TREE_MENU_REMOVE: int = 10
+const DETAILS_DIALOG_SIZE: Vector2i = Vector2i(420, 180)
+const WARNINGS_DIALOG_SIZE: Vector2i = Vector2i(520, 340)
+const REFERENCES_DIALOG_SIZE: Vector2i = Vector2i(700, 420)
+const QUERY_DIALOG_SIZE: Vector2i = Vector2i(640, 420)
+const ADD_DIALOG_SIZE: Vector2i = Vector2i(420, 140)
+const RENAME_DIALOG_SIZE: Vector2i = Vector2i(560, 320)
+const REMOVE_DIALOG_SIZE: Vector2i = Vector2i(560, 260)
 const SEARCHABLE_REFERENCE_EXTENSIONS: PackedStringArray = [
 	"gd",
 	"tscn",
@@ -38,6 +50,7 @@ var _pending_close_callback: Callable = Callable()
 var _status_label: Label = null
 var _path_edit: LineEdit = null
 var _path_hint_label: Label = null
+var _feedback_label: Label = null
 var _search_edit: LineEdit = null
 var _tag_summary_label: Label = null
 var _tag_tree: Tree = null
@@ -52,12 +65,13 @@ var _validation_label: Label = null
 var _warnings_list: ItemList = null
 var _reference_summary_label: Label = null
 var _reference_list: ItemList = null
-var _use_container_button: Button = null
-var _use_query_button: Button = null
-var _find_references_button: Button = null
 var _container_input: LineEdit = null
 var _query_input: TextEdit = null
 var _query_result_label: Label = null
+var _details_dialog: AcceptDialog = null
+var _warnings_dialog: AcceptDialog = null
+var _references_dialog: AcceptDialog = null
+var _query_dialog: AcceptDialog = null
 
 var _add_dialog: ConfirmationDialog = null
 var _add_dialog_input: LineEdit = null
@@ -173,22 +187,29 @@ func _build_ui() -> void:
 	_path_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_box.add_child(_path_hint_label)
 
-	var main_split := HSplitContainer.new()
-	main_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_split.split_offset = 420
-	root.add_child(main_split)
+	_feedback_label = Label.new()
+	_feedback_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_feedback_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_feedback_label.text = "Ready."
+	header_box.add_child(_feedback_label)
 
 	var left_panel := PanelContainer.new()
 	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_split.add_child(left_panel)
+	root.add_child(left_panel)
+
+	var left_scroll := ScrollContainer.new()
+	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	left_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	left_panel.add_child(left_scroll)
 
 	var left_box := VBoxContainer.new()
 	left_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_box.add_theme_constant_override("separation", 8)
-	left_panel.add_child(left_box)
+	left_scroll.add_child(left_box)
 
 	var library_title := Label.new()
 	library_title.text = "Tag Library"
@@ -210,9 +231,11 @@ func _build_ui() -> void:
 	collapse_button.pressed.connect(_on_collapse_all_pressed)
 	library_header.add_child(collapse_button)
 
-	var tools_row := HBoxContainer.new()
+	var tools_row := HFlowContainer.new()
 	tools_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tools_row.add_theme_constant_override("separation", 8)
+	tools_row.add_theme_constant_override("h_separation", 8)
+	tools_row.add_theme_constant_override("v_separation", 8)
 	left_box.add_child(tools_row)
 
 	_search_edit = LineEdit.new()
@@ -256,78 +279,48 @@ func _build_ui() -> void:
 	_tag_tree.columns = 1
 	_tag_tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tag_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_tag_tree.custom_minimum_size = Vector2(320, 320)
+	_tag_tree.custom_minimum_size = Vector2(0, 240)
 	_tag_tree.item_selected.connect(_on_tree_item_selected)
 	_tag_tree.gui_input.connect(_on_tag_tree_gui_input)
 	left_box.add_child(_tag_tree)
 
-	var right_panel := PanelContainer.new()
-	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_split.add_child(right_panel)
+	_build_dialogs()
 
-	var right_box := VBoxContainer.new()
-	right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_box.add_theme_constant_override("separation", 10)
-	right_panel.add_child(right_box)
+func _build_dialogs() -> void:
+	_details_dialog = AcceptDialog.new()
+	_details_dialog.title = "Tag Details"
+	add_child(_details_dialog)
 
-	var selection_title := Label.new()
-	selection_title.text = "Selected Tag"
-	right_box.add_child(selection_title)
+	var details_box := VBoxContainer.new()
+	details_box.custom_minimum_size = Vector2(380, 120)
+	details_box.add_theme_constant_override("separation", 8)
+	_details_dialog.add_child(details_box)
 
 	_selected_tag_label = Label.new()
 	_selected_tag_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_selected_tag_label.text = "No tag selected."
-	right_box.add_child(_selected_tag_label)
+	details_box.add_child(_selected_tag_label)
 
 	_selected_kind_label = Label.new()
 	_selected_kind_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_selected_kind_label.text = "Kind: -"
-	right_box.add_child(_selected_kind_label)
+	details_box.add_child(_selected_kind_label)
 
 	_selected_parent_label = Label.new()
 	_selected_parent_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_selected_parent_label.text = "Parents: -"
-	right_box.add_child(_selected_parent_label)
+	details_box.add_child(_selected_parent_label)
 
-	var quick_actions := HBoxContainer.new()
-	quick_actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	quick_actions.add_theme_constant_override("separation", 8)
-	right_box.add_child(quick_actions)
-
-	_use_container_button = Button.new()
-	_use_container_button.text = "Use As Container"
-	_use_container_button.tooltip_text = "Copy the selected tag into the container preview field."
-	_use_container_button.pressed.connect(_on_use_selected_as_container_pressed)
-	quick_actions.add_child(_use_container_button)
-
-	_use_query_button = Button.new()
-	_use_query_button.text = "Use In Query"
-	_use_query_button.tooltip_text = "Build a simple all_tags query using the selected tag."
-	_use_query_button.pressed.connect(_on_use_selected_in_query_pressed)
-	quick_actions.add_child(_use_query_button)
-
-	_find_references_button = Button.new()
-	_find_references_button.text = "Find References"
-	_find_references_button.tooltip_text = "Scan the project for files referencing the selected tag."
-	_find_references_button.pressed.connect(_on_find_references_pressed)
-	quick_actions.add_child(_find_references_button)
-
-	var warnings_panel := PanelContainer.new()
-	warnings_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	warnings_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_box.add_child(warnings_panel)
+	_warnings_dialog = AcceptDialog.new()
+	_warnings_dialog.title = "Warnings And Validation"
+	add_child(_warnings_dialog)
 
 	var warnings_box := VBoxContainer.new()
+	warnings_box.custom_minimum_size = Vector2(460, 260)
 	warnings_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	warnings_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	warnings_box.add_theme_constant_override("separation", 6)
-	warnings_panel.add_child(warnings_box)
-
-	var warnings_title := Label.new()
-	warnings_title.text = "Warnings And Validation"
-	warnings_box.add_child(warnings_title)
+	warnings_box.add_theme_constant_override("separation", 8)
+	_warnings_dialog.add_child(warnings_box)
 
 	_validation_label = Label.new()
 	_validation_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -337,23 +330,19 @@ func _build_ui() -> void:
 	_warnings_list = ItemList.new()
 	_warnings_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_warnings_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_warnings_list.custom_minimum_size = Vector2(0, 120)
+	_warnings_list.custom_minimum_size = Vector2(0, 180)
 	warnings_box.add_child(_warnings_list)
 
-	var references_panel := PanelContainer.new()
-	references_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	references_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_box.add_child(references_panel)
+	_references_dialog = AcceptDialog.new()
+	_references_dialog.title = "Project References"
+	add_child(_references_dialog)
 
 	var references_box := VBoxContainer.new()
+	references_box.custom_minimum_size = Vector2(620, 340)
 	references_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	references_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	references_box.add_theme_constant_override("separation", 6)
-	references_panel.add_child(references_box)
-
-	var references_title := Label.new()
-	references_title.text = "Project References"
-	references_box.add_child(references_title)
+	references_box.add_theme_constant_override("separation", 8)
+	_references_dialog.add_child(references_box)
 
 	_reference_summary_label = Label.new()
 	_reference_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -363,48 +352,49 @@ func _build_ui() -> void:
 	_reference_list = ItemList.new()
 	_reference_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_reference_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_reference_list.custom_minimum_size = Vector2(0, 120)
+	_reference_list.custom_minimum_size = Vector2(0, 220)
 	references_box.add_child(_reference_list)
 
-	var query_separator := HSeparator.new()
-	right_box.add_child(query_separator)
+	_query_dialog = AcceptDialog.new()
+	_query_dialog.title = "Query Preview"
+	add_child(_query_dialog)
 
-	var query_title := Label.new()
-	query_title.text = "Query Preview"
-	right_box.add_child(query_title)
+	var query_box := VBoxContainer.new()
+	query_box.custom_minimum_size = Vector2(580, 360)
+	query_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	query_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	query_box.add_theme_constant_override("separation", 8)
+	_query_dialog.add_child(query_box)
 
 	var container_label := Label.new()
 	container_label.text = "Container Tags (comma-separated)"
-	right_box.add_child(container_label)
+	query_box.add_child(container_label)
 
 	_container_input = LineEdit.new()
 	_container_input.placeholder_text = "State.Combat, Status.Burning"
-	right_box.add_child(_container_input)
+	query_box.add_child(_container_input)
 
 	var query_label := Label.new()
 	query_label.text = "Query JSON (Dictionary)"
-	right_box.add_child(query_label)
+	query_box.add_child(query_label)
 
 	_query_input = TextEdit.new()
-	_query_input.custom_minimum_size = Vector2(0, 220)
+	_query_input.custom_minimum_size = Vector2(0, 180)
 	_query_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_query_input.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_query_input.text = "{\n  \"type\": \"all_tags\",\n  \"tags\": [\"State.Combat\"],\n  \"expressions\": []\n}"
-	right_box.add_child(_query_input)
+	query_box.add_child(_query_input)
 
 	var evaluate_button := Button.new()
 	evaluate_button.text = "Evaluate Query"
 	evaluate_button.pressed.connect(_on_evaluate_query_pressed)
-	right_box.add_child(evaluate_button)
+	query_box.add_child(evaluate_button)
 
 	_query_result_label = Label.new()
 	_query_result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_query_result_label.text = "Result: -"
-	right_box.add_child(_query_result_label)
+	query_box.add_child(_query_result_label)
 
-	_build_dialogs()
-
-func _build_dialogs() -> void:
 	_add_dialog = ConfirmationDialog.new()
 	_add_dialog.title = "Add Gameplay Tag"
 	_add_dialog.confirmed.connect(_on_add_dialog_confirmed)
@@ -456,10 +446,17 @@ func _build_dialogs() -> void:
 
 	_tree_context_menu = PopupMenu.new()
 	_tree_context_menu.add_item("Copy Tag Name", TREE_MENU_COPY_TAG)
+	_tree_context_menu.add_separator()
+	_tree_context_menu.add_item("View Tag Details", TREE_MENU_SHOW_DETAILS)
+	_tree_context_menu.add_item("View Warnings And Validation", TREE_MENU_SHOW_WARNINGS)
+	_tree_context_menu.add_item("Find Project References", TREE_MENU_FIND_REFERENCES)
+	_tree_context_menu.add_item("Open Query Preview As Container", TREE_MENU_USE_AS_CONTAINER)
+	_tree_context_menu.add_item("Open Query Preview As Query", TREE_MENU_USE_IN_QUERY)
+	_tree_context_menu.add_separator()
 	_tree_context_menu.add_item("Add Child Tag", TREE_MENU_ADD_CHILD)
 	_tree_context_menu.add_item("Add Sibling Tag", TREE_MENU_ADD_SIBLING)
-	_tree_context_menu.add_item("Use As Container", TREE_MENU_USE_AS_CONTAINER)
-	_tree_context_menu.add_item("Use In Query", TREE_MENU_USE_IN_QUERY)
+	_tree_context_menu.add_item("Rename Tag", TREE_MENU_RENAME)
+	_tree_context_menu.add_item("Remove Tag", TREE_MENU_REMOVE)
 	_tree_context_menu.id_pressed.connect(_on_tree_context_menu_id_pressed)
 	add_child(_tree_context_menu)
 
@@ -791,7 +788,7 @@ func _on_add_pressed() -> void:
 		return
 	_add_dialog.title = "Add Gameplay Tag"
 	_add_dialog_input.text = ""
-	_add_dialog.popup_centered_ratio(0.3)
+	_add_dialog.popup_centered(ADD_DIALOG_SIZE)
 
 func _on_add_child_pressed() -> void:
 	if _add_dialog == null:
@@ -804,7 +801,7 @@ func _on_add_child_pressed() -> void:
 
 	_add_dialog.title = "Add Child Gameplay Tag"
 	_add_dialog_input.text = "%s." % selected_tag_text
-	_add_dialog.popup_centered_ratio(0.3)
+	_add_dialog.popup_centered(ADD_DIALOG_SIZE)
 	_add_dialog_input.grab_focus()
 	_add_dialog_input.caret_column = _add_dialog_input.text.length()
 
@@ -819,7 +816,7 @@ func _on_add_sibling_pressed() -> void:
 
 	_add_dialog.title = "Add Sibling Gameplay Tag"
 	_add_dialog_input.text = _get_sibling_prefix(selected_tag_text)
-	_add_dialog.popup_centered_ratio(0.3)
+	_add_dialog.popup_centered(ADD_DIALOG_SIZE)
 	_add_dialog_input.grab_focus()
 	_add_dialog_input.caret_column = _add_dialog_input.text.length()
 
@@ -838,7 +835,7 @@ func _on_rename_pressed() -> void:
 	_rename_dialog_input.text = String(_selected_tag)
 	_rename_replace_checkbox.button_pressed = false
 	_update_rename_preview(_rename_dialog_input.text)
-	_rename_dialog.popup_centered_ratio(0.3)
+	_rename_dialog.popup_centered(RENAME_DIALOG_SIZE)
 
 func _on_remove_pressed() -> void:
 	if String(_selected_tag).is_empty():
@@ -847,7 +844,7 @@ func _on_remove_pressed() -> void:
 	if _remove_dialog == null:
 		return
 	_remove_dialog.dialog_text = _build_remove_preview_text(String(_selected_tag))
-	_remove_dialog.popup_centered_ratio(0.3)
+	_remove_dialog.popup_centered(REMOVE_DIALOG_SIZE)
 
 func _on_add_dialog_confirmed() -> void:
 	if _manager == null or not _manager.has_method("add_explicit_tag"):
@@ -941,6 +938,8 @@ func _on_use_selected_as_container_pressed() -> void:
 		return
 
 	_container_input.text = selected_tag_text
+	if _query_dialog:
+		_query_dialog.popup_centered(QUERY_DIALOG_SIZE)
 	_set_result_message("Result: Selected tag copied into the container field.")
 
 func _on_use_selected_in_query_pressed() -> void:
@@ -957,6 +956,8 @@ func _on_use_selected_in_query_pressed() -> void:
 		},
 		"  "
 	)
+	if _query_dialog:
+		_query_dialog.popup_centered(QUERY_DIALOG_SIZE)
 	_set_result_message("Result: Query template updated from the selected tag.")
 
 func _on_find_references_pressed() -> void:
@@ -967,7 +968,22 @@ func _on_find_references_pressed() -> void:
 
 	var reference_hits: Array[Dictionary] = _find_tag_reference_hits_for_scope(selected_tag_text)
 	_refresh_reference_results(selected_tag_text, reference_hits)
+	if _references_dialog:
+		_references_dialog.popup_centered(REFERENCES_DIALOG_SIZE)
 	_set_result_message("Result: Reference scan completed for '%s'." % selected_tag_text)
+
+func _on_show_tag_details_pressed() -> void:
+	if String(_selected_tag).is_empty():
+		_set_result_message("Result: Select a tag first.")
+		return
+	_refresh_selection_details()
+	if _details_dialog:
+		_details_dialog.popup_centered(DETAILS_DIALOG_SIZE)
+
+func _on_show_warnings_pressed() -> void:
+	_refresh_warnings_panel()
+	if _warnings_dialog:
+		_warnings_dialog.popup_centered(WARNINGS_DIALOG_SIZE)
 
 func _on_rename_input_changed(new_text: String) -> void:
 	_update_rename_preview(new_text)
@@ -980,10 +996,20 @@ func _on_tree_context_menu_id_pressed(menu_id: int) -> void:
 		TREE_MENU_COPY_TAG:
 			DisplayServer.clipboard_set(String(_selected_tag))
 			_set_result_message("Result: Tag name copied to clipboard.")
+		TREE_MENU_SHOW_DETAILS:
+			_on_show_tag_details_pressed()
+		TREE_MENU_SHOW_WARNINGS:
+			_on_show_warnings_pressed()
+		TREE_MENU_FIND_REFERENCES:
+			_on_find_references_pressed()
 		TREE_MENU_ADD_CHILD:
 			_on_add_child_pressed()
 		TREE_MENU_ADD_SIBLING:
 			_on_add_sibling_pressed()
+		TREE_MENU_RENAME:
+			_on_rename_pressed()
+		TREE_MENU_REMOVE:
+			_on_remove_pressed()
 		TREE_MENU_USE_AS_CONTAINER:
 			_on_use_selected_as_container_pressed()
 		TREE_MENU_USE_IN_QUERY:
@@ -1420,6 +1446,8 @@ func _parse_csv_tags(csv_text: String) -> Array[StringName]:
 	return result
 
 func _set_result_message(message: String) -> void:
+	if _feedback_label:
+		_feedback_label.text = message
 	if _query_result_label:
 		_query_result_label.text = message
 
@@ -1465,12 +1493,6 @@ func _refresh_action_states() -> void:
 		_rename_button.disabled = not has_selection
 	if _remove_button:
 		_remove_button.disabled = not has_selection
-	if _use_container_button:
-		_use_container_button.disabled = not has_selection
-	if _use_query_button:
-		_use_query_button.disabled = not has_selection
-	if _find_references_button:
-		_find_references_button.disabled = not has_selection
 	if _tree_context_menu == null:
 		return
 
@@ -1483,6 +1505,21 @@ func _refresh_action_states() -> void:
 			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
 			continue
 		if menu_id == TREE_MENU_ADD_SIBLING:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_SHOW_DETAILS:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_SHOW_WARNINGS:
+			_tree_context_menu.set_item_disabled(menu_index, _manager == null)
+			continue
+		if menu_id == TREE_MENU_FIND_REFERENCES:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_RENAME:
+			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
+			continue
+		if menu_id == TREE_MENU_REMOVE:
 			_tree_context_menu.set_item_disabled(menu_index, not has_selection)
 			continue
 		if menu_id == TREE_MENU_USE_AS_CONTAINER:
