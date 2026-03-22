@@ -1,0 +1,14 @@
+[package]
+name = "bevy_server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+bevy_app.workspace = true
+bevy_ecs.workspace = true
+game_core = { path = "../../crates/game_core" }
+game_data = { path = "../../crates/game_data" }
+game_protocol = { path = "../../crates/game_protocol" }
+serde.workspace = true

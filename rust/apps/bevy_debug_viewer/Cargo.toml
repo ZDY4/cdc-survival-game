@@ -1,0 +1,11 @@
+[package]
+name = "bevy_debug_viewer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+bevy.workspace = true
+game_core = { path = "../../crates/game_core" }
+game_data = { path = "../../crates/game_data" }
