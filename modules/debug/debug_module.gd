@@ -6,8 +6,10 @@ const MODULE_NAME: String = "DebugModule"
 const CONSOLE_HEIGHT: float = 240.0
 const MAX_LOG_LINES: int = 200
 const MAX_AUTOCOMPLETE_CANDIDATES: int = 8
-const CONSOLE_FONT_SIZE: int = 13
-const CONSOLE_DESCRIPTION_FONT_SIZE: int = 12
+const CONSOLE_FONT_SIZE: int = 6
+const CONSOLE_DESCRIPTION_FONT_SIZE: int = 5
+const FPS_OVERLAY_LAYER: int = 120
+const FPS_OVERLAY_FONT_SIZE: int = 10
 
 # 2. Signals
 signal command_executed(command_name: String, success: bool, result: Dictionary)
@@ -35,18 +37,29 @@ var _history_index: int = -1
 var _autocomplete_candidates: Array[Dictionary] = []
 var _autocomplete_selection: int = -1
 var _hidden_ui_states: Dictionary = {}
+var _fps_overlay_requested: bool = false
+var _fps_overlay_layer: CanvasLayer = null
+var _fps_overlay_label: Label = null
+var _is_fps_visible: bool = false
 
 # 5. Public methods
 func _ready() -> void:
 	super._ready()
 	set_process_input(true)
+	set_process(true)
 	register_module("debug", {"description": "Runtime debug manager"})
 	_register_builtin_commands()
 	call_deferred("_setup_console_ui")
 
 func _exit_tree() -> void:
 	_cleanup_console_ui()
+	_destroy_fps_overlay()
 	_active_panels.clear()
+
+func _process(_delta: float) -> void:
+	if not _is_fps_visible:
+		return
+	_refresh_fps_overlay()
 
 func _input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
@@ -317,6 +330,9 @@ func log_message(message: String, is_error: bool = false) -> void:
 func is_console_visible() -> bool:
 	return _is_console_visible
 
+func is_fps_overlay_visible() -> bool:
+	return _is_fps_visible
+
 # 6. Private methods
 func _setup_console_ui() -> void:
 	if not get_tree() or not get_tree().root:
@@ -371,6 +387,19 @@ func _setup_console_ui() -> void:
 	_autocomplete_list.mouse_filter = Control.MOUSE_FILTER_STOP
 	_autocomplete_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_autocomplete_list.add_theme_font_size_override("font_size", CONSOLE_FONT_SIZE)
+	_autocomplete_list.add_theme_constant_override("v_separation", 0)
+	var autocomplete_list_panel := StyleBoxFlat.new()
+	autocomplete_list_panel.bg_color = Color(0, 0, 0, 0)
+	autocomplete_list_panel.border_width_left = 0
+	autocomplete_list_panel.border_width_top = 0
+	autocomplete_list_panel.border_width_right = 0
+	autocomplete_list_panel.border_width_bottom = 0
+	autocomplete_list_panel.content_margin_left = 0
+	autocomplete_list_panel.content_margin_top = 0
+	autocomplete_list_panel.content_margin_right = 0
+	autocomplete_list_panel.content_margin_bottom = 0
+	_autocomplete_list.add_theme_stylebox_override("panel", autocomplete_list_panel)
+	_autocomplete_list.add_theme_stylebox_override("focus", autocomplete_list_panel)
 	_autocomplete_list.item_selected.connect(_on_autocomplete_item_selected)
 	_autocomplete_list.item_clicked.connect(_on_autocomplete_item_clicked)
 	autocomplete_layout.add_child(_autocomplete_list)
@@ -414,6 +443,72 @@ func _cleanup_console_ui() -> void:
 	_autocomplete_description = null
 	_autocomplete_candidates.clear()
 	_autocomplete_selection = -1
+
+func _ensure_fps_overlay() -> void:
+	if _fps_overlay_layer != null and is_instance_valid(_fps_overlay_layer):
+		_fps_overlay_layer.visible = _is_fps_visible
+		_refresh_fps_overlay()
+		return
+	if _fps_overlay_requested:
+		return
+	_fps_overlay_requested = true
+	call_deferred("_create_fps_overlay")
+
+func _create_fps_overlay() -> void:
+	_fps_overlay_requested = false
+	if _fps_overlay_layer != null and is_instance_valid(_fps_overlay_layer):
+		_fps_overlay_layer.visible = _is_fps_visible
+		_refresh_fps_overlay()
+		return
+	if get_tree() == null or get_tree().root == null:
+		return
+
+	var layer := CanvasLayer.new()
+	layer.name = "DebugFpsOverlay"
+	layer.layer = FPS_OVERLAY_LAYER
+
+	var label := Label.new()
+	label.name = "FpsLabel"
+	label.anchor_left = 1.0
+	label.anchor_right = 1.0
+	label.offset_left = -92.0
+	label.offset_right = -12.0
+	label.offset_top = 8.0
+	label.offset_bottom = 28.0
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.add_theme_font_size_override("font_size", FPS_OVERLAY_FONT_SIZE)
+	label.text = "FPS: 0"
+	layer.add_child(label)
+
+	get_tree().root.add_child(layer)
+	_fps_overlay_layer = layer
+	_fps_overlay_label = label
+	_fps_overlay_layer.visible = _is_fps_visible
+	_refresh_fps_overlay()
+
+func _destroy_fps_overlay() -> void:
+	if _fps_overlay_layer != null and is_instance_valid(_fps_overlay_layer):
+		_fps_overlay_layer.queue_free()
+	_fps_overlay_layer = null
+	_fps_overlay_label = null
+	_fps_overlay_requested = false
+
+func _set_fps_overlay_visible(visible: bool) -> void:
+	if _is_fps_visible == visible:
+		if visible:
+			_ensure_fps_overlay()
+		return
+	_is_fps_visible = visible
+	if _is_fps_visible:
+		_ensure_fps_overlay()
+	else:
+		if _fps_overlay_layer != null and is_instance_valid(_fps_overlay_layer):
+			_fps_overlay_layer.visible = false
+
+func _refresh_fps_overlay() -> void:
+	if _fps_overlay_label == null or not is_instance_valid(_fps_overlay_label):
+		return
+	_fps_overlay_label.text = "FPS: %d" % Engine.get_frames_per_second()
 
 func _set_console_visible(visible: bool) -> void:
 	if _is_console_visible == visible:
@@ -629,6 +724,8 @@ func _build_autocomplete_candidates(context: Dictionary) -> Array[Dictionary]:
 		source_candidates = _build_command_candidates()
 	elif active_index == 1 and command_name in ["get", "set"]:
 		source_candidates = _build_variable_candidates()
+	elif command_name == "show" and active_index == 1:
+		source_candidates = _build_show_target_candidates()
 	elif command_name == "panel" and active_index == 1:
 		source_candidates = _build_panel_action_candidates()
 	elif command_name == "panel" and active_index == 2 and panel_action in ["open", "close"]:
@@ -674,6 +771,15 @@ func _build_variable_candidates() -> Array[Dictionary]:
 			"description": str(entry.get("description", ""))
 		})
 	return candidates
+
+func _build_show_target_candidates() -> Array[Dictionary]:
+	return [
+		{
+			"text": "fps",
+			"replacement": "fps",
+			"description": "Toggle the top-left FPS overlay"
+		}
+	]
 
 func _build_panel_action_candidates() -> Array[Dictionary]:
 	return [
@@ -934,16 +1040,119 @@ func _normalize_command_result(command_name: String, raw_result: Variant) -> Dic
 	return {"success": true, "message": str(raw_result)}
 
 func _parse_string_value(raw_value: String) -> Variant:
-	var lower := raw_value.to_lower()
+	var trimmed_value: String = raw_value.strip_edges()
+	var vector2_value: Variant = _try_parse_vector2(trimmed_value)
+	if vector2_value != null:
+		return vector2_value
+	var vector2i_value: Variant = _try_parse_vector2i(trimmed_value)
+	if vector2i_value != null:
+		return vector2i_value
+	var vector3_value: Variant = _try_parse_vector3(trimmed_value)
+	if vector3_value != null:
+		return vector3_value
+	var vector3i_value: Variant = _try_parse_vector3i(trimmed_value)
+	if vector3i_value != null:
+		return vector3i_value
+	var color_value: Variant = _try_parse_color(trimmed_value)
+	if color_value != null:
+		return color_value
+	var structured_value: Variant = _try_parse_structured_value(trimmed_value)
+	if structured_value != null:
+		return structured_value
+
+	var lower: String = trimmed_value.to_lower()
 	if lower in ["true", "on", "yes", "1"]:
 		return true
 	if lower in ["false", "off", "no", "0"]:
 		return false
-	if raw_value.is_valid_int():
-		return int(raw_value)
-	if raw_value.is_valid_float():
-		return float(raw_value)
-	return raw_value
+	if lower in ["null", "nil"]:
+		return null
+	if trimmed_value.is_valid_int():
+		return int(trimmed_value)
+	if trimmed_value.is_valid_float():
+		return float(trimmed_value)
+	return trimmed_value
+
+func _try_parse_structured_value(raw_value: String) -> Variant:
+	if raw_value.is_empty():
+		return null
+	if not (
+		(raw_value.begins_with("[") and raw_value.ends_with("]"))
+		or (raw_value.begins_with("{") and raw_value.ends_with("}"))
+	):
+		return null
+
+	var parsed_value: Variant = JSON.parse_string(raw_value)
+	return parsed_value
+
+func _try_parse_vector2(raw_value: String) -> Variant:
+	var components: PackedStringArray = _extract_constructor_components(raw_value, "vector2")
+	if components.size() != 2:
+		return null
+	if not components[0].is_valid_float() or not components[1].is_valid_float():
+		return null
+	return Vector2(float(components[0]), float(components[1]))
+
+func _try_parse_vector2i(raw_value: String) -> Variant:
+	var components: PackedStringArray = _extract_constructor_components(raw_value, "vector2i")
+	if components.size() != 2:
+		return null
+	if not components[0].is_valid_int() or not components[1].is_valid_int():
+		return null
+	return Vector2i(int(components[0]), int(components[1]))
+
+func _try_parse_vector3(raw_value: String) -> Variant:
+	var components: PackedStringArray = _extract_constructor_components(raw_value, "vector3")
+	if components.size() != 3:
+		return null
+	for component: String in components:
+		if not component.is_valid_float():
+			return null
+	return Vector3(float(components[0]), float(components[1]), float(components[2]))
+
+func _try_parse_vector3i(raw_value: String) -> Variant:
+	var components: PackedStringArray = _extract_constructor_components(raw_value, "vector3i")
+	if components.size() != 3:
+		return null
+	for component: String in components:
+		if not component.is_valid_int():
+			return null
+	return Vector3i(int(components[0]), int(components[1]), int(components[2]))
+
+func _try_parse_color(raw_value: String) -> Variant:
+	if Color.html_is_valid(raw_value):
+		return Color.html(raw_value)
+
+	var components: PackedStringArray = _extract_constructor_components(raw_value, "color")
+	if components.size() != 3 and components.size() != 4:
+		return null
+	for component: String in components:
+		if not component.is_valid_float():
+			return null
+
+	var alpha: float = 1.0
+	if components.size() == 4:
+		alpha = float(components[3])
+	return Color(float(components[0]), float(components[1]), float(components[2]), alpha)
+
+func _extract_constructor_components(raw_value: String, type_name: String) -> PackedStringArray:
+	var normalized_prefix: String = type_name.to_lower() + "("
+	var normalized_value: String = raw_value.to_lower()
+	if not normalized_value.begins_with(normalized_prefix) or not raw_value.ends_with(")"):
+		return PackedStringArray()
+
+	var inner_text: String = raw_value.substr(normalized_prefix.length(), raw_value.length() - normalized_prefix.length() - 1)
+	if inner_text.is_empty():
+		return PackedStringArray()
+
+	var raw_components: PackedStringArray = inner_text.split(",", false)
+	var components: PackedStringArray = PackedStringArray()
+	for component_variant in raw_components:
+		var component: String = str(component_variant).strip_edges()
+		if component.is_empty():
+			return PackedStringArray()
+		components.append(component)
+	return components
 
 func _register_builtin_commands() -> void:
 	register_command(
@@ -952,6 +1161,13 @@ func _register_builtin_commands() -> void:
 		Callable(self, "_cmd_help"),
 		"List available commands",
 		"help"
+	)
+	register_command(
+		"debug",
+		"show",
+		Callable(self, "_cmd_show"),
+		"Show or hide a supported debug overlay",
+		"show fps"
 	)
 	register_command(
 		"debug",
@@ -1011,6 +1227,24 @@ func _cmd_help(_args: Array[String]) -> Dictionary:
 		lines.append(line)
 
 	return {"success": true, "message": "\n".join(lines)}
+
+func _cmd_show(args: Array[String]) -> Dictionary:
+	if args.is_empty():
+		return {"success": false, "error": "Usage: show fps"}
+
+	var target: String = args[0].to_lower()
+	match target:
+		"fps":
+			_set_fps_overlay_visible(not _is_fps_visible)
+			return {
+				"success": true,
+				"message": "FPS overlay = %s (%d FPS)" % [
+					"on" if _is_fps_visible else "off",
+					Engine.get_frames_per_second()
+				]
+			}
+		_:
+			return {"success": false, "error": "Unknown show target: " + target}
 
 func _cmd_clear(_args: Array[String]) -> Dictionary:
 	_log_lines.clear()
