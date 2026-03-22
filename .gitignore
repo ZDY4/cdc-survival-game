@@ -42,6 +42,7 @@ __pycache__/
 *.bak
 *.swp
 *~
+*.tsbuildinfo
 
 # Build artifacts
 *.pck
@@ -50,7 +51,11 @@ rust/target/
 tools/tauri_editor/node_modules/
 tools/tauri_editor/dist/
 tools/tauri_editor/.vite/
+tools/tauri_editor/coverage/
+tools/tauri_editor/playwright-report/
 tools/tauri_editor/src-tauri/target/
+tools/tauri_editor/test-results/
+tools/npm-cache/
 native/jps_extension/.vs/
 native/jps_extension/build/
 native/jps_extension/build_nmake/
