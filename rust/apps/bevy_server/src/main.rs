@@ -442,6 +442,7 @@ mod tests {
                     CharacterResourcePool { current: 60.0 },
                 )]),
             },
+            interaction: None,
             life: None,
         }
     }

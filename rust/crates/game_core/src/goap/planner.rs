@@ -1,11 +1,16 @@
 use dogoap::prelude::{format_plan, get_effects_from_plan, make_plan};
 
 use super::actions::{build_action_set, build_start_state, parse_action_key, step_for_action};
-use super::goals::{goal_requirements, select_goal};
-use super::{NpcPlanRequest, NpcPlanResult};
+use super::goals::goal_requirements;
+use super::{NpcGoalKey, NpcPlanRequest, NpcPlanResult};
+use crate::utility::select_goal;
 
 pub fn build_plan(request: &NpcPlanRequest) -> NpcPlanResult {
     let selected_goal = select_goal(request);
+    build_plan_for_goal(request, selected_goal)
+}
+
+pub fn build_plan_for_goal(request: &NpcPlanRequest, selected_goal: NpcGoalKey) -> NpcPlanResult {
     let start = build_start_state(request);
     let goal = goal_requirements(request, selected_goal);
     let actions = build_action_set(request);

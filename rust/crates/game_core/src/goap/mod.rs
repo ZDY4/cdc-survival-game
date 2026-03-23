@@ -12,7 +12,7 @@ pub use offline_sim::{advance_offline_sim, NpcOfflineSimState, OfflineSimAdvance
 pub use plan_runtime::{
     tick_offline_action, ActionExecutionPhase, ActionTickResult, OfflineActionState,
 };
-pub use planner::build_plan;
+pub use planner::{build_plan, build_plan_for_goal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NpcFact {
