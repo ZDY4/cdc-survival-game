@@ -12,19 +12,21 @@ use game_bevy::{
 };
 use game_core::runtime::action_result_status;
 use game_core::{
-    ActorDebugState, SimulationCommand, SimulationCommandResult, SimulationEvent,
-    SimulationRuntime, SimulationSnapshot,
+    ActorDebugState, AutoMoveInterruptReason, PendingProgressionStep, ProgressionAdvanceResult,
+    SimulationCommand, SimulationCommandResult, SimulationEvent, SimulationRuntime,
+    SimulationSnapshot,
 };
 use game_data::{ActorId, ActorSide, GridCoord, MapObjectKind, WorldCoord};
 
 fn main() {
     let startup_config_path = RuntimeStartupConfigPath::default();
-    let startup_config = load_viewer_startup_config(&startup_config_path.0).unwrap_or_else(|error| {
-        panic!(
-            "failed to load bevy_debug_viewer config from {}: {error}",
-            startup_config_path.0.display()
-        )
-    });
+    let startup_config =
+        load_viewer_startup_config(&startup_config_path.0).unwrap_or_else(|error| {
+            panic!(
+                "failed to load bevy_debug_viewer config from {}: {error}",
+                startup_config_path.0.display()
+            )
+        });
     let definitions = load_character_definitions(&CharacterDefinitionPath::default().0)
         .unwrap_or_else(|error| panic!("failed to load character definitions for viewer: {error}"));
     let maps = load_map_definitions(&MapDefinitionPath::default().0)
@@ -58,9 +60,11 @@ fn main() {
                 handle_keyboard_input,
                 handle_mouse_wheel_zoom,
                 update_view_scale,
+                handle_camera_pan,
                 update_camera,
                 handle_mouse_input,
                 tick_runtime,
+                advance_runtime_progression,
                 collect_events,
                 sync_actor_labels,
                 update_hud,
@@ -111,13 +115,41 @@ impl Default for ViewerRenderConfig {
     }
 }
 
-#[derive(Resource, Debug, Default)]
+#[derive(Resource, Debug)]
 struct ViewerState {
     selected_actor: Option<ActorId>,
     hovered_grid: Option<GridCoord>,
     current_level: i32,
     auto_tick: bool,
+    end_turn_repeat_delay_sec: f32,
+    end_turn_repeat_interval_sec: f32,
+    end_turn_hold_sec: f32,
+    end_turn_repeat_elapsed_sec: f32,
+    min_progression_interval_sec: f32,
+    progression_elapsed_sec: f32,
+    camera_pan_offset: Vec2,
+    camera_drag_cursor: Option<Vec2>,
     status_line: String,
+}
+
+impl Default for ViewerState {
+    fn default() -> Self {
+        Self {
+            selected_actor: None,
+            hovered_grid: None,
+            current_level: 0,
+            auto_tick: false,
+            end_turn_repeat_delay_sec: 0.2,
+            end_turn_repeat_interval_sec: 0.1,
+            end_turn_hold_sec: 0.0,
+            end_turn_repeat_elapsed_sec: 0.0,
+            min_progression_interval_sec: 0.1,
+            progression_elapsed_sec: 0.0,
+            camera_pan_offset: Vec2::ZERO,
+            camera_drag_cursor: None,
+            status_line: String::new(),
+        }
+    }
 }
 
 #[derive(Component)]
@@ -135,6 +167,7 @@ fn setup_viewer(mut commands: Commands) {
     commands.spawn((Camera2d, ViewerCamera));
     commands.spawn((
         Text::new(""),
+        TextFont::from_font_size(11.2),
         Node {
             position_type: PositionType::Absolute,
             top: px(12),
@@ -178,12 +211,13 @@ fn update_camera(
     let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * cell_extent * 0.5;
     let center_y = (bounds.min_z + bounds.max_z + 1) as f32 * cell_extent * 0.5;
 
-    camera_transform.translation.x = center_x;
-    camera_transform.translation.y = center_y;
+    camera_transform.translation.x = center_x + viewer_state.camera_pan_offset.x;
+    camera_transform.translation.y = center_y + viewer_state.camera_pan_offset.y;
 }
 
 fn handle_keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
     mut render_config: ResMut<ViewerRenderConfig>,
@@ -206,6 +240,12 @@ fn handle_keyboard_input(
     if keys.just_pressed(KeyCode::Digit0) {
         render_config.zoom_factor = 1.0;
         viewer_state.status_line = "zoom reset".to_string();
+    }
+
+    if keys.just_pressed(KeyCode::KeyF) {
+        viewer_state.camera_pan_offset = Vec2::ZERO;
+        viewer_state.camera_drag_cursor = None;
+        viewer_state.status_line = "camera recentered".to_string();
     }
 
     let snapshot = runtime_state.runtime.snapshot();
@@ -244,17 +284,32 @@ fn handle_keyboard_input(
         }
     }
 
+    if keys.just_released(KeyCode::Space) {
+        viewer_state.end_turn_hold_sec = 0.0;
+        viewer_state.end_turn_repeat_elapsed_sec = 0.0;
+    }
+
     if keys.just_pressed(KeyCode::Space) {
-        if let Some(actor_id) = viewer_state.selected_actor {
-            let result = runtime_state
-                .runtime
-                .submit_command(SimulationCommand::EndTurn { actor_id });
-            viewer_state.status_line = command_result_status("end turn", result);
+        viewer_state.end_turn_hold_sec = 0.0;
+        viewer_state.end_turn_repeat_elapsed_sec = 0.0;
+        submit_end_turn(&mut runtime_state, &mut viewer_state);
+    } else if keys.pressed(KeyCode::Space) {
+        viewer_state.end_turn_hold_sec += time.delta_secs();
+        if viewer_state.end_turn_hold_sec >= viewer_state.end_turn_repeat_delay_sec {
+            viewer_state.end_turn_repeat_elapsed_sec += time.delta_secs();
+            while viewer_state.end_turn_repeat_elapsed_sec
+                >= viewer_state.end_turn_repeat_interval_sec
+            {
+                viewer_state.end_turn_repeat_elapsed_sec -=
+                    viewer_state.end_turn_repeat_interval_sec;
+                submit_end_turn(&mut runtime_state, &mut viewer_state);
+            }
         }
     }
 
     if keys.just_pressed(KeyCode::KeyE) {
         if let Some(actor_id) = viewer_state.selected_actor {
+            viewer_state.progression_elapsed_sec = 0.0;
             let result = runtime_state
                 .runtime
                 .submit_command(SimulationCommand::PerformInteract { actor_id });
@@ -301,6 +356,29 @@ fn handle_mouse_wheel_zoom(
     let zoom_multiplier = (1.0 + scroll_delta * 0.12).clamp(0.5, 2.0);
     render_config.zoom_factor = (render_config.zoom_factor * zoom_multiplier).clamp(0.5, 4.0);
     viewer_state.status_line = format!("zoom: {:.0}%", render_config.zoom_factor * 100.0);
+}
+
+fn handle_camera_pan(
+    window: Single<&Window>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut viewer_state: ResMut<ViewerState>,
+) {
+    if !buttons.pressed(MouseButton::Middle) {
+        viewer_state.camera_drag_cursor = None;
+        return;
+    }
+
+    let Some(cursor_position) = window.cursor_position() else {
+        viewer_state.camera_drag_cursor = None;
+        return;
+    };
+
+    if let Some(previous_cursor) = viewer_state.camera_drag_cursor.replace(cursor_position) {
+        viewer_state.camera_pan_offset += Vec2::new(
+            previous_cursor.x - cursor_position.x,
+            cursor_position.y - previous_cursor.y,
+        );
+    }
 }
 
 fn sync_actor_labels(
@@ -373,18 +451,19 @@ fn sync_actor_labels(
 
 fn handle_mouse_input(
     window: Single<&Window>,
-    camera_query: Single<(&Camera, &GlobalTransform)>,
+    camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
 ) {
     let (camera, camera_transform) = *camera_query;
+    let camera_transform = GlobalTransform::from(*camera_transform);
     let Some(cursor_position) = window.cursor_position() else {
         viewer_state.hovered_grid = None;
         return;
     };
-    let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_position) else {
+    let Ok(world_pos) = camera.viewport_to_world_2d(&camera_transform, cursor_position) else {
         viewer_state.hovered_grid = None;
         return;
     };
@@ -404,13 +483,36 @@ fn handle_mouse_input(
             viewer_state.status_line =
                 format!("selected actor {:?} ({:?})", actor.actor_id, actor.side);
         } else if let Some(actor_id) = viewer_state.selected_actor {
-            let result = runtime_state
-                .runtime
-                .submit_command(SimulationCommand::MoveActorTo {
-                    actor_id,
-                    goal: grid,
-                });
-            viewer_state.status_line = command_result_status("move", result);
+            let outcome = match runtime_state.runtime.issue_actor_move(actor_id, grid) {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    viewer_state.status_line = format!("move: path error={error}");
+                    return;
+                }
+            };
+
+            if outcome.plan.requested_steps() == 0 {
+                viewer_state.status_line = "move: already at target".to_string();
+                return;
+            }
+
+            viewer_state.progression_elapsed_sec = 0.0;
+
+            viewer_state.status_line =
+                if outcome.plan.is_truncated() && outcome.plan.resolved_steps() > 0 {
+                    format!(
+                        "move: queued toward ({}, {}, {}) via ({}, {}, {}) | {}",
+                        outcome.plan.requested_goal.x,
+                        outcome.plan.requested_goal.y,
+                        outcome.plan.requested_goal.z,
+                        outcome.plan.resolved_goal.x,
+                        outcome.plan.resolved_goal.y,
+                        outcome.plan.resolved_goal.z,
+                        action_result_status(&outcome.result)
+                    )
+                } else {
+                    format!("move: {}", action_result_status(&outcome.result))
+                };
         }
     }
 
@@ -420,6 +522,7 @@ fn handle_mouse_input(
             actor_at_cursor.as_ref().map(|actor| actor.actor_id),
         ) {
             if selected_actor != target_actor {
+                viewer_state.progression_elapsed_sec = 0.0;
                 let result =
                     runtime_state
                         .runtime
@@ -436,6 +539,38 @@ fn handle_mouse_input(
 fn tick_runtime(mut runtime_state: ResMut<ViewerRuntimeState>, viewer_state: Res<ViewerState>) {
     if viewer_state.auto_tick {
         runtime_state.runtime.tick();
+    }
+}
+
+fn submit_end_turn(runtime_state: &mut ViewerRuntimeState, viewer_state: &mut ViewerState) {
+    if let Some(actor_id) = viewer_state.selected_actor {
+        viewer_state.progression_elapsed_sec = 0.0;
+        let result = runtime_state
+            .runtime
+            .submit_command(SimulationCommand::EndTurn { actor_id });
+        viewer_state.status_line = command_result_status("end turn", result);
+    }
+}
+
+fn advance_runtime_progression(
+    time: Res<Time>,
+    mut runtime_state: ResMut<ViewerRuntimeState>,
+    mut viewer_state: ResMut<ViewerState>,
+) {
+    if !runtime_state.runtime.has_pending_progression() {
+        viewer_state.progression_elapsed_sec = 0.0;
+        return;
+    }
+
+    viewer_state.progression_elapsed_sec += time.delta_secs();
+    if viewer_state.progression_elapsed_sec < viewer_state.min_progression_interval_sec {
+        return;
+    }
+    viewer_state.progression_elapsed_sec = 0.0;
+
+    let result = runtime_state.runtime.advance_pending_progression();
+    if result.applied_step.is_some() {
+        viewer_state.status_line = progression_result_status(&result);
     }
 }
 
@@ -507,7 +642,11 @@ fn update_hud(
     let hover_summary = viewer_state
         .hovered_grid
         .map(|grid| {
-            let cell = snapshot.grid.map_cells.iter().find(|cell| cell.grid == grid);
+            let cell = snapshot
+                .grid
+                .map_cells
+                .iter()
+                .find(|cell| cell.grid == grid);
             let objects: Vec<String> = snapshot
                 .grid
                 .map_objects
@@ -531,6 +670,11 @@ fn update_hud(
         .unwrap_or_else(|| "hover: none".to_string());
 
     let path_summary = format!("path preview cells: {}", snapshot.path_preview.len());
+    let progression_summary = format!(
+        "pending progression: {:?} pending movement={}",
+        runtime_state.runtime.peek_pending_progression(),
+        runtime_state.runtime.pending_movement().is_some()
+    );
     let zoom_summary = format!(
         "zoom: {:.0}% ({:.1}px/cell)",
         render_config.zoom_factor * 100.0,
@@ -546,12 +690,13 @@ fn update_hud(
     };
 
     **hud_text = Text::new(format!(
-        "Bevy Debug Viewer\n\n{}\n{}\n{}\n{}\n{}\n{}\nauto_tick={}\nstatus={}\n\ncontrols:\n- left click select / move\n- right click attack target\n- mouse wheel zoom\n- PageUp/PageDown change level\n- Tab cycle actor on current level\n- E interact\n- Space end turn\n- A toggle auto tick\n- = zoom in\n- - zoom out\n- 0 reset zoom\n\n{}",
+        "Bevy Debug Viewer\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\nauto_tick={}\nstatus={}\n\ncontrols:\n- left click select / move\n- right click attack target\n- middle mouse drag pan camera\n- mouse wheel zoom\n- F recenter camera\n- PageUp/PageDown change level\n- Tab cycle actor on current level\n- E interact\n- Space end turn (hold to repeat)\n- A toggle auto tick\n- = zoom in\n- - zoom out\n- 0 reset zoom\n\n{}",
         selected_summary,
         current_turn,
         map_summary,
         hover_summary,
         path_summary,
+        progression_summary,
         zoom_summary,
         viewer_state.auto_tick,
         if viewer_state.status_line.is_empty() {
@@ -598,7 +743,10 @@ fn draw_world(
         .iter()
         .filter(|cell| cell.grid.y == viewer_state.current_level)
     {
-        let world = world_to_view_coord(runtime_state.runtime.grid_to_world(cell.grid), *render_config);
+        let world = world_to_view_coord(
+            runtime_state.runtime.grid_to_world(cell.grid),
+            *render_config,
+        );
         let color = if cell.blocks_movement {
             Color::srgba(0.52, 0.25, 0.22, 0.7)
         } else {
@@ -634,7 +782,11 @@ fn draw_world(
                 runtime_state.runtime.grid_to_world(*occupied_cell),
                 *render_config,
             );
-            gizmos.rect_2d(world, Vec2::splat(cell_extent * 0.72), color.with_alpha(0.34));
+            gizmos.rect_2d(
+                world,
+                Vec2::splat(cell_extent * 0.72),
+                color.with_alpha(0.34),
+            );
         }
 
         let anchor = world_to_view_coord(
@@ -810,6 +962,61 @@ fn command_result_status(label: &str, result: SimulationCommandResult) -> String
             Err(error) => format!("{label}: path error={error:?}"),
         },
         SimulationCommandResult::None => format!("{label}: ok"),
+    }
+}
+
+fn progression_result_status(result: &ProgressionAdvanceResult) -> String {
+    let step = result
+        .applied_step
+        .map(format_progression_step)
+        .unwrap_or("idle");
+
+    if result.interrupted {
+        return format!(
+            "progression: {} interrupted ({})",
+            step,
+            format_interrupt_reason(result.interrupt_reason)
+        );
+    }
+
+    if result.reached_goal {
+        if let Some(position) = result.final_position {
+            return format!(
+                "progression: {} reached goal at ({}, {}, {})",
+                step, position.x, position.y, position.z
+            );
+        }
+        return format!("progression: {} reached goal", step);
+    }
+
+    match result.final_position {
+        Some(position) => format!(
+            "progression: {} now at ({}, {}, {})",
+            step, position.x, position.y, position.z
+        ),
+        None => format!("progression: {}", step),
+    }
+}
+
+fn format_progression_step(step: PendingProgressionStep) -> &'static str {
+    match step {
+        PendingProgressionStep::EndCurrentCombatTurn => "end current combat turn",
+        PendingProgressionStep::RunNonCombatWorldCycle => "run non-combat world cycle",
+        PendingProgressionStep::StartNextNonCombatPlayerTurn => "start next non-combat player turn",
+        PendingProgressionStep::ContinuePendingMovement => "continue pending movement",
+    }
+}
+
+fn format_interrupt_reason(reason: Option<AutoMoveInterruptReason>) -> &'static str {
+    match reason {
+        Some(AutoMoveInterruptReason::ReachedGoal) => "reached_goal",
+        Some(AutoMoveInterruptReason::EnteredCombat) => "entered_combat",
+        Some(AutoMoveInterruptReason::TargetNotWalkable) => "target_not_walkable",
+        Some(AutoMoveInterruptReason::NoPath) => "no_path",
+        Some(AutoMoveInterruptReason::NoProgress) => "no_progress",
+        Some(AutoMoveInterruptReason::CancelledByNewCommand) => "cancelled_by_new_command",
+        Some(AutoMoveInterruptReason::UnknownActor) => "unknown_actor",
+        None => "unknown",
     }
 }
 
@@ -1105,5 +1312,4 @@ mod tests {
 
         assert_eq!(actor_label(&actor), "7");
     }
-
 }

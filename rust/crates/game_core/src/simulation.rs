@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 use game_data::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide,
@@ -9,6 +10,7 @@ use game_data::{
 
 use crate::actor::{ActorRecord, ActorRegistry, AiController};
 use crate::grid::{find_path_grid, find_path_world, GridPathfindingError, GridWorld};
+use crate::movement::{MovementPlan, MovementPlanError, PendingProgressionStep};
 use crate::turn::{ActiveActionState, ActiveActions, GroupOrderRegistry, TurnConfig, TurnRuntime};
 
 #[derive(Debug)]
@@ -202,6 +204,7 @@ pub struct Simulation {
     actors: ActorRegistry,
     ai_controllers: HashMap<ActorId, Box<dyn AiController>>,
     grid_world: GridWorld,
+    pending_progression: VecDeque<PendingProgressionStep>,
     next_actor_id: u64,
     next_registration_index: usize,
     events: Vec<SimulationEvent>,
@@ -217,6 +220,7 @@ impl Default for Simulation {
             actors: ActorRegistry::default(),
             ai_controllers: HashMap::new(),
             grid_world: GridWorld::default(),
+            pending_progression: VecDeque::new(),
             next_actor_id: 1,
             next_registration_index: 0,
             events: Vec::new(),
@@ -424,12 +428,43 @@ impl Simulation {
         (self.get_actor_ap(actor_id) / self.config.action_cost).floor() as i32
     }
 
+    pub fn can_actor_afford(
+        &self,
+        actor_id: ActorId,
+        action_type: ActionType,
+        steps: Option<u32>,
+    ) -> bool {
+        let payload = ActionRequest {
+            actor_id,
+            action_type,
+            phase: ActionPhase::Start,
+            steps,
+            target_actor: None,
+            success: true,
+        };
+        self.get_actor_ap(actor_id) >= self.resolve_action_cost(action_type, &payload)
+    }
+
     pub fn get_actor_side(&self, actor_id: ActorId) -> Option<ActorSide> {
         self.actors.get(actor_id).map(|actor| actor.side)
     }
 
+    pub fn get_actor_group_id(&self, actor_id: ActorId) -> Option<&str> {
+        self.actors
+            .get(actor_id)
+            .map(|actor| actor.group_id.as_str())
+    }
+
     pub fn actor_grid_position(&self, actor_id: ActorId) -> Option<GridCoord> {
         self.actors.get(actor_id).map(|actor| actor.grid_position)
+    }
+
+    pub fn is_actor_current_turn(&self, actor_id: ActorId) -> bool {
+        self.turn.combat_active && self.turn.current_actor_id == Some(actor_id)
+    }
+
+    pub fn is_actor_input_allowed(&self, actor_id: ActorId) -> bool {
+        !self.turn.combat_active || self.turn.current_actor_id == Some(actor_id)
     }
 
     pub fn current_actor(&self) -> Option<ActorId> {
@@ -442,6 +477,46 @@ impl Simulation {
 
     pub fn current_turn_index(&self) -> u64 {
         self.turn.combat_turn_index
+    }
+
+    pub fn has_pending_progression(&self) -> bool {
+        !self.pending_progression.is_empty()
+    }
+
+    pub fn peek_pending_progression(&self) -> Option<&PendingProgressionStep> {
+        self.pending_progression.front()
+    }
+
+    pub fn clear_pending_progression(&mut self) {
+        self.pending_progression.clear();
+    }
+
+    pub fn queue_pending_progression(&mut self, step: PendingProgressionStep) {
+        self.pending_progression.push_back(step);
+    }
+
+    pub(crate) fn pop_pending_progression(&mut self) -> Option<PendingProgressionStep> {
+        self.pending_progression.pop_front()
+    }
+
+    pub(crate) fn apply_pending_progression_step(&mut self, step: PendingProgressionStep) {
+        match step {
+            PendingProgressionStep::EndCurrentCombatTurn => {
+                self.end_current_combat_turn();
+                if self.turn.combat_active {
+                    if let Some(actor_id) = self.turn.current_actor_id {
+                        if self.get_actor_side(actor_id) != Some(ActorSide::Player) {
+                            self.run_combat_ai_turn(actor_id);
+                        }
+                    }
+                }
+            }
+            PendingProgressionStep::RunNonCombatWorldCycle => self.run_world_cycle(),
+            PendingProgressionStep::StartNextNonCombatPlayerTurn => {
+                self.start_next_noncombat_player_turn()
+            }
+            PendingProgressionStep::ContinuePendingMovement => {}
+        }
     }
 
     pub fn is_in_combat(&self) -> bool {
@@ -482,12 +557,14 @@ impl Simulation {
         self.grid_world
             .map_cell_entries()
             .into_iter()
-            .map(|(grid, cell): (GridCoord, MapCellDefinition)| MapCellDebugState {
-                grid,
-                blocks_movement: cell.blocks_movement,
-                blocks_sight: cell.blocks_sight,
-                terrain: cell.terrain,
-            })
+            .map(
+                |(grid, cell): (GridCoord, MapCellDefinition)| MapCellDebugState {
+                    grid,
+                    blocks_movement: cell.blocks_movement,
+                    blocks_sight: cell.blocks_sight,
+                    terrain: cell.terrain,
+                },
+            )
             .collect()
     }
 
@@ -528,10 +605,8 @@ impl Simulation {
                         if let Some(ai_spawn) = object.props.ai_spawn.as_ref() {
                             payload_summary
                                 .insert("spawn_id".to_string(), ai_spawn.spawn_id.clone());
-                            payload_summary.insert(
-                                "character_id".to_string(),
-                                ai_spawn.character_id.clone(),
-                            );
+                            payload_summary
+                                .insert("character_id".to_string(), ai_spawn.character_id.clone());
                         }
                     }
                 }
@@ -609,6 +684,38 @@ impl Simulation {
         goal: WorldCoord,
     ) -> Result<Vec<WorldCoord>, GridPathfindingError> {
         find_path_world(&self.grid_world, actor_id, start, goal)
+    }
+
+    pub fn plan_actor_movement(
+        &self,
+        actor_id: ActorId,
+        goal: GridCoord,
+    ) -> Result<MovementPlan, MovementPlanError> {
+        let Some(start) = self.actor_grid_position(actor_id) else {
+            return Err(MovementPlanError::UnknownActor { actor_id });
+        };
+
+        let requested_path = self
+            .find_path_grid(Some(actor_id), start, goal)
+            .map_err(MovementPlanError::from)?;
+        let available_steps = self.get_actor_available_steps(actor_id).max(0) as usize;
+        let resolved_step_count = requested_path.len().saturating_sub(1).min(available_steps);
+        let resolved_path = requested_path
+            .iter()
+            .copied()
+            .take(resolved_step_count + 1)
+            .collect::<Vec<_>>();
+        let resolved_goal = resolved_path.last().copied().unwrap_or(start);
+
+        Ok(MovementPlan {
+            actor_id,
+            start,
+            requested_goal: goal,
+            requested_path,
+            resolved_goal,
+            resolved_path,
+            available_steps,
+        })
     }
 
     pub fn request_action(&mut self, request: ActionRequest) -> ActionResult {
@@ -757,12 +864,13 @@ impl Simulation {
             if self.turn.current_actor_id != Some(actor_id) {
                 return self.reject_action("not_actor_turn", actor_id);
             }
-            self.end_current_combat_turn();
+            self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
         } else if self.get_actor_side(actor_id) == Some(ActorSide::Player) {
             if self.actor_turn_open(actor_id) {
                 self.end_actor_turn(actor_id);
             }
-            self.run_world_cycle();
+            self.queue_pending_progression(PendingProgressionStep::RunNonCombatWorldCycle);
+            self.queue_pending_progression(PendingProgressionStep::StartNextNonCombatPlayerTurn);
         } else if self.actor_turn_open(actor_id) {
             self.end_actor_turn(actor_id);
         }
@@ -923,11 +1031,14 @@ impl Simulation {
 
         if request.success {
             if self.turn.combat_active && self.turn.current_actor_id == Some(actor_id) {
-                self.end_current_combat_turn();
+                self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
             } else if !self.turn.combat_active
                 && self.get_actor_side(actor_id) == Some(ActorSide::Player)
             {
-                self.run_world_cycle();
+                self.queue_pending_progression(PendingProgressionStep::RunNonCombatWorldCycle);
+                self.queue_pending_progression(
+                    PendingProgressionStep::StartNextNonCombatPlayerTurn,
+                );
             }
         }
 
@@ -960,7 +1071,7 @@ impl Simulation {
             .any(|actor| actor.side == ActorSide::Player && actor.turn_open)
     }
 
-    fn actor_turn_open(&self, actor_id: ActorId) -> bool {
+    pub fn actor_turn_open(&self, actor_id: ActorId) -> bool {
         self.actors
             .get(actor_id)
             .map(|actor| actor.turn_open)
@@ -999,7 +1110,6 @@ impl Simulation {
         }
 
         self.reset_noncombat_turns();
-        self.start_next_noncombat_player_turn();
         self.events.push(SimulationEvent::WorldCycleCompleted);
     }
 
@@ -1090,10 +1200,6 @@ impl Simulation {
         self.turn.current_actor_id = Some(actor_id);
         self.turn.combat_turn_index += 1;
         self.start_actor_turn(actor_id);
-
-        if self.get_actor_side(actor_id) != Some(ActorSide::Player) {
-            self.run_combat_ai_turn(actor_id);
-        }
     }
 
     fn run_combat_ai_turn(&mut self, actor_id: ActorId) {
@@ -1111,7 +1217,11 @@ impl Simulation {
         }
 
         if self.turn.combat_active && self.turn.current_actor_id == Some(actor_id) {
-            self.end_current_combat_turn();
+            if self.pending_progression.back()
+                != Some(&PendingProgressionStep::EndCurrentCombatTurn)
+            {
+                self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
+            }
         }
     }
 
@@ -1312,8 +1422,19 @@ mod tests {
 
     use crate::actor::InteractOnceAiController;
     use crate::grid::GridPathfindingError;
+    use crate::movement::PendingProgressionStep;
 
     use super::{RegisterActor, Simulation};
+
+    fn advance_next_progression(simulation: &mut Simulation) -> Option<PendingProgressionStep> {
+        let step = simulation.pop_pending_progression()?;
+        simulation.apply_pending_progression_step(step);
+        Some(step)
+    }
+
+    fn advance_all_progression(simulation: &mut Simulation) {
+        while advance_next_progression(simulation).is_some() {}
+    }
 
     #[test]
     fn player_registration_opens_initial_turn() {
@@ -1390,7 +1511,16 @@ mod tests {
             success: true,
         });
         assert!(complete.success);
-        assert_eq!(complete.ap_after, 1.5);
+        assert_eq!(complete.ap_after, 0.5);
+        assert_eq!(
+            advance_next_progression(&mut simulation),
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert_eq!(
+            advance_next_progression(&mut simulation),
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+        assert_eq!(simulation.get_actor_ap(player), 1.5);
     }
 
     #[test]
@@ -1430,6 +1560,7 @@ mod tests {
             target_actor: None,
             success: true,
         });
+        advance_all_progression(&mut simulation);
         assert_eq!(simulation.get_actor_ap(friendly), 0.0);
         assert_eq!(simulation.get_actor_ap(player), 1.0);
     }
@@ -1501,6 +1632,10 @@ mod tests {
             target_actor: Some(hostile_one),
             success: true,
         });
+        assert_eq!(
+            advance_next_progression(&mut simulation),
+            Some(PendingProgressionStep::EndCurrentCombatTurn)
+        );
         assert_ne!(
             simulation.current_actor(),
             Some(player),
@@ -1580,10 +1715,13 @@ mod tests {
             &world,
             None,
             GridCoord::new(3, 0, 2),
-            GridCoord::new(6, 0, 2),
+            GridCoord::new(5, 0, 2),
         );
 
-        assert!(matches!(result, Err(GridPathfindingError::TargetNotWalkable)));
+        assert!(matches!(
+            result,
+            Err(GridPathfindingError::TargetNotWalkable)
+        ));
     }
 
     #[test]
