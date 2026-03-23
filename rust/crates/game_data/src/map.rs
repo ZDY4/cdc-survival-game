@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::interaction::{
+    default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,
+    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind,
+};
 use crate::GridCoord;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
@@ -122,11 +126,51 @@ pub struct MapPickupProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MapInteractiveProps {
     #[serde(default)]
+    pub display_name: String,
+    #[serde(default = "default_interaction_distance")]
+    pub interaction_distance: f32,
+    #[serde(default)]
     pub interaction_kind: String,
     #[serde(default)]
     pub target_id: Option<String>,
+    #[serde(default)]
+    pub options: Vec<InteractionOptionDefinition>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+impl MapInteractiveProps {
+    pub fn resolved_options(&self) -> Vec<InteractionOptionDefinition> {
+        if !self.options.is_empty() {
+            let mut options = self.options.clone();
+            for option in &mut options {
+                option.ensure_defaults();
+            }
+            return options;
+        }
+
+        let Some(kind) = parse_legacy_interaction_kind(&self.interaction_kind) else {
+            return Vec::new();
+        };
+
+        let mut option = InteractionOptionDefinition {
+            id: InteractionOptionId(default_option_id_for_kind(kind)),
+            display_name: if self.display_name.trim().is_empty() {
+                default_display_name_for_kind(kind).to_string()
+            } else {
+                self.display_name.clone()
+            },
+            priority: default_priority_for_kind(kind),
+            interaction_distance: self
+                .interaction_distance
+                .max(default_interaction_distance()),
+            kind,
+            target_id: self.target_id.clone().unwrap_or_default(),
+            ..InteractionOptionDefinition::default()
+        };
+        option.ensure_defaults();
+        vec![option]
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -313,7 +357,9 @@ pub enum MapDefinitionValidationError {
         width: u32,
         height: u32,
     },
-    #[error("blocking objects {first_object_id} and {second_object_id} overlap at ({x}, {y}, {z})")]
+    #[error(
+        "blocking objects {first_object_id} and {second_object_id} overlap at ({x}, {y}, {z})"
+    )]
     OverlappingBlockingObjects {
         first_object_id: String,
         second_object_id: String,
@@ -335,6 +381,24 @@ pub enum MapDefinitionValidationError {
     },
     #[error("interactive object {object_id} must define props.interactive.interaction_kind")]
     MissingInteractiveKind { object_id: String },
+    #[error(
+        "interactive object {object_id} option {option_id} uses an invalid distance {distance}"
+    )]
+    InvalidInteractionDistance {
+        object_id: String,
+        option_id: String,
+        distance: f32,
+    },
+    #[error("interactive object {object_id} option {option_id} pickup item_id must not be empty")]
+    MissingInteractionPickupItemId {
+        object_id: String,
+        option_id: String,
+    },
+    #[error("interactive object {object_id} option {option_id} target_id must not be empty")]
+    MissingInteractionTargetId {
+        object_id: String,
+        option_id: String,
+    },
     #[error("ai_spawn object {object_id} must define props.ai_spawn.spawn_id")]
     MissingAiSpawnId { object_id: String },
     #[error("duplicate ai spawn id {spawn_id}")]
@@ -523,8 +587,7 @@ pub fn validate_map_definition(
             }
 
             if object_effectively_blocks_movement(object) {
-                if let Some(first_object_id) =
-                    blocking_cells.insert(cell, object.object_id.clone())
+                if let Some(first_object_id) = blocking_cells.insert(cell, object.object_id.clone())
                 {
                     return Err(MapDefinitionValidationError::OverlappingBlockingObjects {
                         first_object_id,
@@ -556,10 +619,7 @@ pub fn expand_object_footprint(object: &MapObjectDefinition) -> Vec<GridCoord> {
     cells
 }
 
-pub fn rotated_footprint_size(
-    footprint: MapObjectFootprint,
-    rotation: MapRotation,
-) -> (u32, u32) {
+pub fn rotated_footprint_size(footprint: MapObjectFootprint, rotation: MapRotation) -> (u32, u32) {
     match rotation {
         MapRotation::North | MapRotation::South => (footprint.width, footprint.height),
         MapRotation::East | MapRotation::West => (footprint.height, footprint.width),
@@ -625,10 +685,14 @@ fn validate_object_payload(
                     object_id: object.object_id.clone(),
                 });
             };
-            if interactive.interaction_kind.trim().is_empty() {
+            let options = interactive.resolved_options();
+            if options.is_empty() {
                 return Err(MapDefinitionValidationError::MissingInteractiveKind {
                     object_id: object.object_id.clone(),
                 });
+            }
+            for option in options {
+                validate_interaction_option(&object.object_id, &option)?;
             }
         }
         MapObjectKind::AiSpawn => {
@@ -694,14 +758,76 @@ fn default_pickup_count() -> i32 {
     1
 }
 
+fn default_interaction_distance() -> f32 {
+    1.4
+}
+
+fn parse_legacy_interaction_kind(value: &str) -> Option<InteractionOptionKind> {
+    match value.trim() {
+        "talk" => Some(InteractionOptionKind::Talk),
+        "attack" => Some(InteractionOptionKind::Attack),
+        "pickup" => Some(InteractionOptionKind::Pickup),
+        "enter_subscene" => Some(InteractionOptionKind::EnterSubscene),
+        "enter_overworld" => Some(InteractionOptionKind::EnterOverworld),
+        "exit_to_outdoor" => Some(InteractionOptionKind::ExitToOutdoor),
+        "enter_outdoor_location" => Some(InteractionOptionKind::EnterOutdoorLocation),
+        _ => None,
+    }
+}
+
+fn validate_interaction_option(
+    object_id: &str,
+    option: &InteractionOptionDefinition,
+) -> Result<(), MapDefinitionValidationError> {
+    let option_id = if option.id.as_str().trim().is_empty() {
+        default_option_id_for_kind(option.kind)
+    } else {
+        option.id.as_str().to_string()
+    };
+
+    if option.interaction_distance < 0.0 {
+        return Err(MapDefinitionValidationError::InvalidInteractionDistance {
+            object_id: object_id.to_string(),
+            option_id,
+            distance: option.interaction_distance,
+        });
+    }
+
+    match option.kind {
+        InteractionOptionKind::Pickup => {
+            if option.item_id.trim().is_empty() {
+                return Err(
+                    MapDefinitionValidationError::MissingInteractionPickupItemId {
+                        object_id: object_id.to_string(),
+                        option_id,
+                    },
+                );
+            }
+        }
+        InteractionOptionKind::EnterSubscene
+        | InteractionOptionKind::EnterOverworld
+        | InteractionOptionKind::ExitToOutdoor
+        | InteractionOptionKind::EnterOutdoorLocation => {
+            if option.target_id.trim().is_empty() && option.target_map_id.trim().is_empty() {
+                return Err(MapDefinitionValidationError::MissingInteractionTargetId {
+                    object_id: object_id.to_string(),
+                    option_id,
+                });
+            }
+        }
+        InteractionOptionKind::Talk | InteractionOptionKind::Attack => {}
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         expand_object_footprint, load_map_library, validate_map_definition, MapAiSpawnProps,
         MapBuildingProps, MapCellDefinition, MapDefinition, MapDefinitionValidationError, MapId,
-        MapInteractiveProps, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint,
-        MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
-        MapValidationCatalog,
+        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
+        MapObjectProps, MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;

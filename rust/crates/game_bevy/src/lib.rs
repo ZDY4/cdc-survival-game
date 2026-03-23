@@ -481,6 +481,8 @@ fn register_actor_from_definition(
         side: actor_side_from_disposition(definition.faction.disposition),
         group_id: actor_group_id(definition),
         grid_position,
+        interaction: definition.interaction.clone(),
+        attack_range: definition.ai.attack_range,
         ai_controller: Some(Box::new(NoopAiController)),
     }
 }
@@ -979,6 +981,7 @@ startup_map =
                     CharacterResourcePool { current: 60.0 },
                 )]),
             },
+            interaction: None,
             life: None,
         }
     }

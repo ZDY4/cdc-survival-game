@@ -1,4 +1,6 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::PathBuf;
 
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
@@ -16,7 +18,10 @@ use game_core::{
     SimulationCommand, SimulationCommandResult, SimulationEvent, SimulationRuntime,
     SimulationSnapshot,
 };
-use game_data::{ActorId, ActorSide, GridCoord, MapObjectKind, WorldCoord};
+use game_data::{
+    ActorId, ActorSide, DialogueData, DialogueNode, GridCoord, InteractionExecutionResult,
+    InteractionPrompt, InteractionTargetId, MapObjectKind, WorldCoord,
+};
 
 fn main() {
     let startup_config_path = RuntimeStartupConfigPath::default();
@@ -66,6 +71,7 @@ fn main() {
                 tick_runtime,
                 advance_runtime_progression,
                 collect_events,
+                refresh_interaction_prompt,
                 sync_actor_labels,
                 update_hud,
                 draw_world,
@@ -118,6 +124,9 @@ impl Default for ViewerRenderConfig {
 #[derive(Resource, Debug)]
 struct ViewerState {
     selected_actor: Option<ActorId>,
+    focused_target: Option<InteractionTargetId>,
+    current_prompt: Option<InteractionPrompt>,
+    active_dialogue: Option<ActiveDialogueState>,
     hovered_grid: Option<GridCoord>,
     current_level: i32,
     auto_tick: bool,
@@ -136,6 +145,9 @@ impl Default for ViewerState {
     fn default() -> Self {
         Self {
             selected_actor: None,
+            focused_target: None,
+            current_prompt: None,
+            active_dialogue: None,
             hovered_grid: None,
             current_level: 0,
             auto_tick: false,
@@ -161,6 +173,14 @@ struct ViewerCamera;
 #[derive(Component)]
 struct ActorLabel {
     actor_id: ActorId,
+}
+
+#[derive(Debug, Clone)]
+struct ActiveDialogueState {
+    dialog_id: String,
+    data: DialogueData,
+    current_node_id: String,
+    target_name: String,
 }
 
 fn setup_viewer(mut commands: Commands) {
@@ -222,6 +242,22 @@ fn handle_keyboard_input(
     mut viewer_state: ResMut<ViewerState>,
     mut render_config: ResMut<ViewerRenderConfig>,
 ) {
+    if keys.just_pressed(KeyCode::Escape) {
+        viewer_state.active_dialogue = None;
+        viewer_state.status_line = "dialogue closed".to_string();
+    }
+
+    if viewer_state.active_dialogue.is_some() {
+        if keys.just_pressed(KeyCode::Enter) {
+            advance_dialogue(&mut viewer_state, None);
+        }
+
+        if let Some(index) = just_pressed_digit(&keys) {
+            advance_dialogue(&mut viewer_state, Some(index));
+        }
+        return;
+    }
+
     if keys.just_pressed(KeyCode::KeyA) {
         viewer_state.auto_tick = !viewer_state.auto_tick;
         viewer_state.status_line = format!("auto tick: {}", viewer_state.auto_tick);
@@ -308,12 +344,36 @@ fn handle_keyboard_input(
     }
 
     if keys.just_pressed(KeyCode::KeyE) {
-        if let Some(actor_id) = viewer_state.selected_actor {
-            viewer_state.progression_elapsed_sec = 0.0;
-            let result = runtime_state
-                .runtime
-                .submit_command(SimulationCommand::PerformInteract { actor_id });
-            viewer_state.status_line = command_result_status("interact", result);
+        if let (Some(actor_id), Some(target_id), Some(prompt)) = (
+            viewer_state.selected_actor,
+            viewer_state.focused_target.clone(),
+            viewer_state.current_prompt.clone(),
+        ) {
+            if let Some(option_id) = prompt.primary_option_id.clone() {
+                viewer_state.progression_elapsed_sec = 0.0;
+                let result = runtime_state
+                    .runtime
+                    .issue_interaction(actor_id, target_id, option_id);
+                apply_interaction_result(&mut viewer_state, result);
+            }
+        }
+    }
+
+    if let Some(index) = just_pressed_digit(&keys) {
+        if let (Some(actor_id), Some(target_id), Some(prompt)) = (
+            viewer_state.selected_actor,
+            viewer_state.focused_target.clone(),
+            viewer_state.current_prompt.clone(),
+        ) {
+            if let Some(option) = prompt.options.get(index) {
+                viewer_state.progression_elapsed_sec = 0.0;
+                let result = runtime_state.runtime.issue_interaction(
+                    actor_id,
+                    target_id,
+                    option.id.clone(),
+                );
+                apply_interaction_result(&mut viewer_state, result);
+            }
         }
     }
 }
@@ -476,12 +536,25 @@ fn handle_mouse_input(
 
     let snapshot = runtime_state.runtime.snapshot();
     let actor_at_cursor = actor_at_grid(&snapshot, grid);
+    let map_object_at_cursor = map_object_at_grid(&snapshot, grid);
 
     if buttons.just_pressed(MouseButton::Left) {
         if let Some(ref actor) = actor_at_cursor {
-            viewer_state.selected_actor = Some(actor.actor_id);
-            viewer_state.status_line =
-                format!("selected actor {:?} ({:?})", actor.actor_id, actor.side);
+            if actor.side == ActorSide::Player {
+                viewer_state.selected_actor = Some(actor.actor_id);
+                viewer_state.focused_target = None;
+                viewer_state.current_prompt = None;
+                viewer_state.status_line =
+                    format!("selected actor {:?} ({:?})", actor.actor_id, actor.side);
+            } else {
+                viewer_state.focused_target = Some(InteractionTargetId::Actor(actor.actor_id));
+                viewer_state.status_line =
+                    format!("focused actor target {:?} ({:?})", actor.actor_id, actor.side);
+            }
+        } else if let Some(object) = map_object_at_cursor.as_ref() {
+            viewer_state.focused_target =
+                Some(InteractionTargetId::MapObject(object.object_id.clone()));
+            viewer_state.status_line = format!("focused object {}", object.object_id);
         } else if let Some(actor_id) = viewer_state.selected_actor {
             let outcome = match runtime_state.runtime.issue_actor_move(actor_id, grid) {
                 Ok(outcome) => outcome,
@@ -497,6 +570,8 @@ fn handle_mouse_input(
             }
 
             viewer_state.progression_elapsed_sec = 0.0;
+            viewer_state.focused_target = None;
+            viewer_state.current_prompt = None;
 
             viewer_state.status_line =
                 if outcome.plan.is_truncated() && outcome.plan.resolved_steps() > 0 {
@@ -585,6 +660,21 @@ fn collect_events(mut runtime_state: ResMut<ViewerRuntimeState>) {
     }
 }
 
+fn refresh_interaction_prompt(
+    mut runtime_state: ResMut<ViewerRuntimeState>,
+    mut viewer_state: ResMut<ViewerState>,
+) {
+    let Some(actor_id) = viewer_state.selected_actor else {
+        viewer_state.current_prompt = None;
+        return;
+    };
+    let Some(target_id) = viewer_state.focused_target.clone() else {
+        viewer_state.current_prompt = None;
+        return;
+    };
+    viewer_state.current_prompt = runtime_state.runtime.query_interaction_prompt(actor_id, target_id);
+}
+
 fn update_hud(
     mut hud_text: Single<&mut Text, With<HudText>>,
     runtime_state: Res<ViewerRuntimeState>,
@@ -602,7 +692,7 @@ fn update_hud(
     let selected_summary = selected_actor
         .map(|actor| {
             format!(
-                "selected: {} ({:?}) {:?} group={} ap={:.1} steps={} grid=({}, {}, {})",
+                "selected actor: {} ({:?}) {:?} group={} ap={:.1} steps={} grid=({}, {}, {})",
                 actor_label(actor),
                 actor.actor_id,
                 actor.side,
@@ -614,7 +704,27 @@ fn update_hud(
                 actor.grid_position.z
             )
         })
-        .unwrap_or_else(|| "selected: none".to_string());
+        .unwrap_or_else(|| "selected actor: none".to_string());
+
+    let focused_target_summary = viewer_state
+        .focused_target
+        .as_ref()
+        .map(|target| match target {
+            InteractionTargetId::Actor(actor_id) => snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.actor_id == *actor_id)
+                .map(|actor| format!("focused target: {} ({:?})", actor_label(actor), actor.side))
+                .unwrap_or_else(|| format!("focused target: actor {:?}", actor_id)),
+            InteractionTargetId::MapObject(object_id) => snapshot
+                .grid
+                .map_objects
+                .iter()
+                .find(|object| object.object_id == *object_id)
+                .map(|object| format!("focused target: {} ({:?})", object.object_id, object.kind))
+                .unwrap_or_else(|| format!("focused target: object {}", object_id)),
+        })
+        .unwrap_or_else(|| "focused target: none".to_string());
 
     let current_turn = format!(
         "turn: combat={} current_actor={:?} current_group={:?} turn_index={}",
@@ -637,6 +747,19 @@ fn update_hud(
         viewer_state.current_level,
         snapshot.grid.default_level.unwrap_or(0),
         snapshot.grid.levels
+    );
+
+    let context_summary = format!(
+        "context: mode={:?} map={} outdoor={:?} subscene={:?} return_spawn={:?}",
+        snapshot.interaction_context.world_mode,
+        snapshot
+            .interaction_context
+            .current_map_id
+            .as_deref()
+            .unwrap_or("none"),
+        snapshot.interaction_context.active_outdoor_location_id,
+        snapshot.interaction_context.current_subscene_location_id,
+        snapshot.interaction_context.return_outdoor_spawn_id,
     );
 
     let hover_summary = viewer_state
@@ -680,6 +803,8 @@ fn update_hud(
         render_config.zoom_factor * 100.0,
         render_cell_extent(snapshot.grid.grid_size, *render_config)
     );
+    let interaction_summary = format_interaction_prompt(viewer_state.current_prompt.as_ref());
+    let dialogue_summary = format_dialogue_panel(viewer_state.active_dialogue.as_ref());
     let recent_events = if runtime_state.recent_events.is_empty() {
         "recent events:\n- none".to_string()
     } else {
@@ -690,10 +815,12 @@ fn update_hud(
     };
 
     **hud_text = Text::new(format!(
-        "Bevy Debug Viewer\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\nauto_tick={}\nstatus={}\n\ncontrols:\n- left click select / move\n- right click attack target\n- middle mouse drag pan camera\n- mouse wheel zoom\n- F recenter camera\n- PageUp/PageDown change level\n- Tab cycle actor on current level\n- E interact\n- Space end turn (hold to repeat)\n- A toggle auto tick\n- = zoom in\n- - zoom out\n- 0 reset zoom\n\n{}",
+        "Bevy Debug Viewer\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\nauto_tick={}\nstatus={}\n\n{}\n\n{}\n\ncontrols:\n- left click player to control it\n- left click NPC/object to focus interaction target\n- left click empty grid to move selected actor\n- right click hostile target to quick attack\n- E execute primary interaction\n- 1-9 choose interaction option or dialogue choice\n- Enter advance dialogue\n- Esc close dialogue\n- Space end turn (hold to repeat)\n- middle mouse drag pan camera\n- mouse wheel zoom\n- F recenter camera\n- PageUp/PageDown change level\n- Tab cycle actor on current level\n- A toggle auto tick\n- = zoom in\n- - zoom out\n- 0 reset zoom\n\n{}",
         selected_summary,
+        focused_target_summary,
         current_turn,
         map_summary,
+        context_summary,
         hover_summary,
         path_summary,
         progression_summary,
@@ -704,6 +831,8 @@ fn update_hud(
         } else {
             viewer_state.status_line.as_str()
         },
+        interaction_summary,
+        dialogue_summary,
         recent_events
     ));
 }
@@ -921,6 +1050,220 @@ fn actor_at_grid(snapshot: &SimulationSnapshot, grid: GridCoord) -> Option<Actor
         .cloned()
 }
 
+fn map_object_at_grid(
+    snapshot: &SimulationSnapshot,
+    grid: GridCoord,
+) -> Option<game_core::MapObjectDebugState> {
+    snapshot
+        .grid
+        .map_objects
+        .iter()
+        .find(|object| object.occupied_cells.contains(&grid))
+        .cloned()
+}
+
+fn just_pressed_digit(keys: &ButtonInput<KeyCode>) -> Option<usize> {
+    let bindings = [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
+    ];
+    bindings
+        .iter()
+        .position(|key| keys.just_pressed(*key))
+}
+
+fn apply_interaction_result(viewer_state: &mut ViewerState, result: InteractionExecutionResult) {
+    if let Some(prompt) = result.prompt.clone() {
+        viewer_state.current_prompt = Some(prompt);
+    }
+
+    if let Some(dialog_id) = result.dialogue_id.as_ref() {
+        if let Some(dialogue) = load_dialogue(dialog_id) {
+            let current_node_id = find_dialogue_start_node(&dialogue)
+                .map(|node| node.id.clone())
+                .unwrap_or_else(|| "start".to_string());
+            let target_name = viewer_state
+                .current_prompt
+                .as_ref()
+                .map(|prompt| prompt.target_name.clone())
+                .unwrap_or_else(|| dialog_id.clone());
+            viewer_state.active_dialogue = Some(ActiveDialogueState {
+                dialog_id: dialog_id.clone(),
+                data: dialogue,
+                current_node_id,
+                target_name,
+            });
+        }
+    } else if result.success && result.consumed_target {
+        viewer_state.focused_target = None;
+        viewer_state.current_prompt = None;
+    }
+
+    viewer_state.status_line = if result.approach_required {
+        match result.approach_goal {
+            Some(goal) => format!(
+                "interaction: approaching target via ({}, {}, {})",
+                goal.x, goal.y, goal.z
+            ),
+            None => "interaction: approaching target".to_string(),
+        }
+    } else if result.success {
+        if let Some(context) = result.context_snapshot {
+            format!(
+                "interaction: ok mode={:?} outdoor={:?} subscene={:?}",
+                context.world_mode,
+                context.active_outdoor_location_id,
+                context.current_subscene_location_id
+            )
+        } else if let Some(dialog_id) = result.dialogue_id {
+            format!("interaction: opened dialogue {}", dialog_id)
+        } else if let Some(action) = result.action_result {
+            format!("interaction: {}", action_result_status(&action))
+        } else {
+            "interaction: ok".to_string()
+        }
+    } else {
+        format!(
+            "interaction: {}",
+            result.reason.unwrap_or_else(|| "failed".to_string())
+        )
+    };
+}
+
+fn format_interaction_prompt(prompt: Option<&InteractionPrompt>) -> String {
+    let Some(prompt) = prompt else {
+        return "interaction target:\n- none".to_string();
+    };
+
+    let mut lines = vec![format!(
+        "interaction target:\n- {} @ ({}, {}, {})",
+        prompt.target_name, prompt.anchor_grid.x, prompt.anchor_grid.y, prompt.anchor_grid.z
+    )];
+    if prompt.options.is_empty() {
+        lines.push("- no available options".to_string());
+    } else {
+        for (index, option) in prompt.options.iter().enumerate() {
+            lines.push(format!(
+                "- {}. {} [{:?}] range={:.1}{}",
+                index + 1,
+                option.display_name,
+                option.kind,
+                option.interaction_distance,
+                if prompt.primary_option_id.as_ref() == Some(&option.id) {
+                    " primary"
+                } else {
+                    ""
+                }
+            ));
+        }
+    }
+    lines.join("\n")
+}
+
+fn format_dialogue_panel(dialogue: Option<&ActiveDialogueState>) -> String {
+    let Some(dialogue) = dialogue else {
+        return "dialogue:\n- inactive".to_string();
+    };
+    let Some(node) = current_dialogue_node(dialogue) else {
+        return format!("dialogue {}: invalid node {}", dialogue.dialog_id, dialogue.current_node_id);
+    };
+
+    let mut text = format!(
+        "dialogue {} with {}\n- node={} type={}",
+        dialogue.dialog_id, dialogue.target_name, node.id, node.node_type
+    );
+    if !node.speaker.trim().is_empty() {
+        text.push_str(&format!("\n- speaker={}", node.speaker));
+    }
+    if !node.text.trim().is_empty() {
+        text.push_str(&format!("\n- {}", node.text));
+    }
+    if node.node_type == "choice" {
+        for (index, option) in node.options.iter().enumerate() {
+            text.push_str(&format!("\n- {}. {}", index + 1, option.text));
+        }
+    } else {
+        text.push_str("\n- press Enter to continue");
+    }
+    text
+}
+
+fn current_dialogue_node(dialogue: &ActiveDialogueState) -> Option<&DialogueNode> {
+    dialogue
+        .data
+        .nodes
+        .iter()
+        .find(|node| node.id == dialogue.current_node_id)
+}
+
+fn find_dialogue_start_node(dialogue: &DialogueData) -> Option<&DialogueNode> {
+    dialogue
+        .nodes
+        .iter()
+        .find(|node| node.is_start)
+        .or_else(|| dialogue.nodes.first())
+}
+
+fn advance_dialogue(viewer_state: &mut ViewerState, choice_index: Option<usize>) {
+    let Some(dialogue) = viewer_state.active_dialogue.as_mut() else {
+        return;
+    };
+    let Some(node) = current_dialogue_node(dialogue).cloned() else {
+        viewer_state.active_dialogue = None;
+        return;
+    };
+
+    let next = match node.node_type.as_str() {
+        "choice" => choice_index
+            .and_then(|index| node.options.get(index))
+            .map(|option| option.next.clone()),
+        "dialog" | "action" => {
+            if node.next.trim().is_empty() {
+                None
+            } else {
+                Some(node.next.clone())
+            }
+        }
+        "end" => None,
+        _ => {
+            if node.next.trim().is_empty() {
+                None
+            } else {
+                Some(node.next.clone())
+            }
+        }
+    };
+
+    match next {
+        Some(next_id) if !next_id.trim().is_empty() => {
+            dialogue.current_node_id = next_id;
+        }
+        _ => {
+            viewer_state.active_dialogue = None;
+            viewer_state.status_line = "dialogue finished".to_string();
+        }
+    }
+}
+
+fn load_dialogue(dialog_id: &str) -> Option<DialogueData> {
+    let path = dialogue_path(dialog_id);
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn dialogue_path(dialog_id: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../data/dialogues")
+        .join(format!("{dialog_id}.json"))
+}
+
 fn actor_color(side: ActorSide) -> Color {
     match side {
         ActorSide::Player => Color::srgb(0.28, 0.72, 0.98),
@@ -961,6 +1304,22 @@ fn command_result_status(label: &str, result: SimulationCommandResult) -> String
             Ok(path) => format!("{label}: path cells={}", path.len()),
             Err(error) => format!("{label}: path error={error:?}"),
         },
+        SimulationCommandResult::InteractionPrompt(prompt) => {
+            format!("{label}: options={}", prompt.options.len())
+        }
+        SimulationCommandResult::InteractionExecution(result) => {
+            format!(
+                "{label}: {}",
+                if result.success {
+                    "ok".to_string()
+                } else {
+                    format!(
+                        "failed {}",
+                        result.reason.unwrap_or_else(|| "unknown".to_string())
+                    )
+                }
+            )
+        }
         SimulationCommandResult::None => format!("{label}: ok"),
     }
 }
@@ -1076,6 +1435,91 @@ fn format_event(event: SimulationEvent) -> String {
             actor_id,
             path_length,
         } => format!("path computed actor={:?} len={}", actor_id, path_length),
+        SimulationEvent::InteractionOptionsResolved {
+            actor_id,
+            target_id,
+            option_count,
+        } => format!(
+            "interaction options actor={:?} target={:?} count={}",
+            actor_id, target_id, option_count
+        ),
+        SimulationEvent::InteractionApproachPlanned {
+            actor_id,
+            target_id,
+            option_id,
+            goal,
+            path_length,
+        } => format!(
+            "interaction approach actor={:?} target={:?} option={} goal=({}, {}, {}) len={}",
+            actor_id, target_id, option_id, goal.x, goal.y, goal.z, path_length
+        ),
+        SimulationEvent::InteractionStarted {
+            actor_id,
+            target_id,
+            option_id,
+        } => format!(
+            "interaction started actor={:?} target={:?} option={}",
+            actor_id, target_id, option_id
+        ),
+        SimulationEvent::InteractionSucceeded {
+            actor_id,
+            target_id,
+            option_id,
+        } => format!(
+            "interaction ok actor={:?} target={:?} option={}",
+            actor_id, target_id, option_id
+        ),
+        SimulationEvent::InteractionFailed {
+            actor_id,
+            target_id,
+            option_id,
+            reason,
+        } => format!(
+            "interaction failed actor={:?} target={:?} option={} reason={}",
+            actor_id, target_id, option_id, reason
+        ),
+        SimulationEvent::DialogueStarted {
+            actor_id,
+            target_id,
+            dialogue_id,
+        } => format!(
+            "dialogue started actor={:?} target={:?} id={}",
+            actor_id, target_id, dialogue_id
+        ),
+        SimulationEvent::DialogueAdvanced {
+            actor_id,
+            dialogue_id,
+            node_id,
+        } => format!(
+            "dialogue advanced actor={:?} id={} node={}",
+            actor_id, dialogue_id, node_id
+        ),
+        SimulationEvent::SceneTransitionRequested {
+            actor_id,
+            option_id,
+            target_id,
+            world_mode,
+        } => format!(
+            "scene transition actor={:?} option={} target={} mode={:?}",
+            actor_id, option_id, target_id, world_mode
+        ),
+        SimulationEvent::PickupGranted {
+            actor_id,
+            target_id,
+            item_id,
+            count,
+        } => format!(
+            "pickup granted actor={:?} target={:?} item={} count={}",
+            actor_id, target_id, item_id, count
+        ),
+        SimulationEvent::RelationChanged {
+            actor_id,
+            target_id,
+            disposition,
+        } => format!(
+            "relation changed actor={:?} target={:?} side={:?}",
+            actor_id, target_id, disposition
+        ),
     }
 }
 
@@ -1221,6 +1665,7 @@ mod tests {
                 current_group_id: None,
                 current_turn_index: 0,
             },
+            interaction_context: game_data::InteractionContextSnapshot::default(),
             path_preview: Vec::new(),
         };
 
@@ -1257,6 +1702,7 @@ mod tests {
                 current_group_id: None,
                 current_turn_index: 0,
             },
+            interaction_context: game_data::InteractionContextSnapshot::default(),
             path_preview: Vec::new(),
         };
 

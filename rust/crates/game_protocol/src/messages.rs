@@ -1,5 +1,6 @@
 use game_data::{
-    ActionRequest, ActionResult, ActorId, ActorKind, GridCoord, TurnState, WorldCoord,
+    ActionRequest, ActionResult, ActorId, ActorKind, GridCoord, InteractionExecutionRequest,
+    InteractionExecutionResult, InteractionPrompt, InteractionTargetId, TurnState, WorldCoord,
 };
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +9,11 @@ pub enum ClientMessage {
     Ping,
     SubscribeWorldState,
     RequestAction(ActionRequest),
+    QueryInteractionOptions {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+    },
+    ExecuteInteraction(InteractionExecutionRequest),
     MoveActor {
         actor_id: ActorId,
         destination: WorldCoord,
@@ -27,6 +33,8 @@ pub enum ServerMessage {
         turn_state: TurnState,
     },
     ActionResult(ActionResult),
+    InteractionPrompt(InteractionPrompt),
+    InteractionExecution(InteractionExecutionResult),
     PathResult {
         path: Vec<GridCoord>,
     },

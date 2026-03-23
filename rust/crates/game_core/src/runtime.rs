@@ -1,9 +1,14 @@
-use game_data::{ActionResult, ActionType, ActorId, ActorSide, GridCoord, WorldCoord};
+use game_data::{
+    ActionResult, ActionType, ActorId, ActorSide, GridCoord, InteractionExecutionRequest,
+    InteractionExecutionResult, InteractionOptionId, InteractionPrompt, InteractionTargetId,
+    WorldCoord,
+};
 
 use crate::grid::GridPathfindingError;
 use crate::movement::{
     AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
-    PendingMovementIntent, PendingProgressionStep, ProgressionAdvanceResult,
+    PendingInteractionIntent, PendingMovementIntent, PendingProgressionStep,
+    ProgressionAdvanceResult,
 };
 use crate::simulation::{
     Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent, SimulationSnapshot,
@@ -13,6 +18,7 @@ use crate::simulation::{
 pub struct SimulationRuntime {
     simulation: Simulation,
     pending_movement: Option<PendingMovementIntent>,
+    pending_interaction: Option<PendingInteractionIntent>,
     path_preview: Vec<GridCoord>,
     tick_count: u64,
 }
@@ -28,6 +34,7 @@ impl SimulationRuntime {
         Self {
             simulation: Simulation::new(),
             pending_movement: None,
+            pending_interaction: None,
             path_preview: Vec::new(),
             tick_count: 0,
         }
@@ -37,6 +44,7 @@ impl SimulationRuntime {
         Self {
             simulation,
             pending_movement: None,
+            pending_interaction: None,
             path_preview: Vec::new(),
             tick_count: 0,
         }
@@ -142,6 +150,81 @@ impl SimulationRuntime {
         self.simulation.peek_pending_progression()
     }
 
+    pub fn pending_interaction(&self) -> Option<&PendingInteractionIntent> {
+        self.pending_interaction.as_ref()
+    }
+
+    pub fn query_interaction_prompt(
+        &mut self,
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+    ) -> Option<InteractionPrompt> {
+        self.simulation
+            .query_interaction_options(actor_id, &target_id)
+            .filter(|prompt| !prompt.options.is_empty())
+    }
+
+    pub fn issue_interaction(
+        &mut self,
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        option_id: InteractionOptionId,
+    ) -> InteractionExecutionResult {
+        self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
+        self.pending_interaction = None;
+
+        let request = InteractionExecutionRequest {
+            actor_id,
+            target_id: target_id.clone(),
+            option_id: option_id.clone(),
+        };
+        let result = match self
+            .simulation
+            .apply_command(SimulationCommand::ExecuteInteraction(request.clone()))
+        {
+            SimulationCommandResult::InteractionExecution(result) => result,
+            _ => InteractionExecutionResult {
+                success: false,
+                reason: Some("interaction_execution_unavailable".to_string()),
+                ..InteractionExecutionResult::default()
+            },
+        };
+
+        if result.approach_required {
+            if let Some(goal) = result.approach_goal {
+                match self.issue_actor_move(actor_id, goal) {
+                    Ok(outcome) if outcome.result.success => {
+                        self.pending_interaction = Some(PendingInteractionIntent {
+                            actor_id,
+                            target_id,
+                            option_id: option_id.as_str().to_string(),
+                            approach_goal: goal,
+                        });
+                    }
+                    Ok(outcome) => {
+                        return InteractionExecutionResult {
+                            success: false,
+                            reason: outcome.result.reason.clone(),
+                            prompt: result.prompt,
+                            action_result: Some(outcome.result),
+                            ..InteractionExecutionResult::default()
+                        };
+                    }
+                    Err(error) => {
+                        return InteractionExecutionResult {
+                            success: false,
+                            reason: Some(error.to_string()),
+                            prompt: result.prompt,
+                            ..InteractionExecutionResult::default()
+                        };
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
     pub fn plan_actor_movement(
         &self,
         actor_id: ActorId,
@@ -228,7 +311,11 @@ impl SimulationRuntime {
         };
 
         if step == PendingProgressionStep::ContinuePendingMovement {
-            return self.advance_pending_movement();
+            let result = self.advance_pending_movement();
+            if result.reached_goal {
+                self.execute_pending_interaction_after_movement();
+            }
+            return result;
         }
 
         self.simulation.apply_pending_progression_step(step);
@@ -272,6 +359,7 @@ impl SimulationRuntime {
         interrupt_reason: Option<AutoMoveInterruptReason>,
     ) {
         self.pending_movement = None;
+        self.pending_interaction = None;
         self.simulation.clear_pending_progression();
         if interrupt_reason.is_some() {
             self.path_preview.clear();
@@ -284,6 +372,8 @@ impl SimulationRuntime {
             SimulationCommand::MoveActorTo { .. }
                 | SimulationCommand::PerformAttack { .. }
                 | SimulationCommand::PerformInteract { .. }
+                | SimulationCommand::QueryInteractionOptions { .. }
+                | SimulationCommand::ExecuteInteraction(_)
                 | SimulationCommand::EndTurn { .. }
                 | SimulationCommand::EnterCombat { .. }
                 | SimulationCommand::RequestAction(_)
@@ -426,6 +516,21 @@ impl SimulationRuntime {
             interrupt_reason: reached_goal.then_some(AutoMoveInterruptReason::ReachedGoal),
             movement_outcome: Some(outcome),
         }
+    }
+
+    fn execute_pending_interaction_after_movement(&mut self) {
+        let Some(intent) = self.pending_interaction.clone() else {
+            return;
+        };
+        let request = InteractionExecutionRequest {
+            actor_id: intent.actor_id,
+            target_id: intent.target_id,
+            option_id: InteractionOptionId(intent.option_id),
+        };
+        let _ = self
+            .simulation
+            .apply_command(SimulationCommand::ExecuteInteraction(request));
+        self.pending_interaction = None;
     }
 }
 

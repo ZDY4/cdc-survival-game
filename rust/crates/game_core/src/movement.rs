@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use game_data::{ActionResult, ActorId, GridCoord, WorldCoord};
+use game_data::{ActionResult, ActorId, GridCoord, InteractionTargetId, WorldCoord};
 
 use crate::grid::{GridPathfindingError, GridWorld};
 
@@ -86,6 +86,14 @@ pub struct MovementCommandOutcome {
 pub struct PendingMovementIntent {
     pub actor_id: ActorId,
     pub requested_goal: GridCoord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingInteractionIntent {
+    pub actor_id: ActorId,
+    pub target_id: InteractionTargetId,
+    pub option_id: String,
+    pub approach_goal: GridCoord,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

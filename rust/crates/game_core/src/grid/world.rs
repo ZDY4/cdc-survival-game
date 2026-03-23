@@ -176,6 +176,40 @@ impl GridWorld {
         self.map_objects.values().cloned().collect()
     }
 
+    pub fn remove_map_object(&mut self, object_id: &str) -> Option<MapObjectDefinition> {
+        let removed = self.map_objects.remove(object_id)?;
+
+        for cell in expand_object_footprint(&removed) {
+            if let Some(object_ids) = self.map_object_cells.get_mut(&cell) {
+                object_ids.retain(|entry| entry != object_id);
+                if object_ids.is_empty() {
+                    self.map_object_cells.remove(&cell);
+                }
+            }
+
+            if object_effectively_blocks_movement(&removed) {
+                let still_blocked = self
+                    .map_object_cells
+                    .get(&cell)
+                    .into_iter()
+                    .flat_map(|ids| ids.iter())
+                    .filter_map(|id| self.map_objects.get(id))
+                    .any(object_effectively_blocks_movement);
+                if !still_blocked
+                    && !self
+                        .map_cells
+                        .get(&cell)
+                        .is_some_and(|cell| cell.blocks_movement)
+                {
+                    self.map_blocked_cells.remove(&cell);
+                }
+            }
+        }
+
+        self.topology_version = self.topology_version.saturating_add(1);
+        Some(removed)
+    }
+
     pub fn map_blocked_cells(&self, level: Option<i32>) -> Vec<GridCoord> {
         let mut cells: Vec<GridCoord> = self
             .map_blocked_cells
@@ -194,7 +228,8 @@ impl GridWorld {
             .copied()
             .unwrap_or(0)
             + 1;
-        self.manual_static_obstacle_ref_counts.insert(grid, next_count);
+        self.manual_static_obstacle_ref_counts
+            .insert(grid, next_count);
         self.topology_version = self.topology_version.saturating_add(1);
     }
 
@@ -217,7 +252,8 @@ impl GridWorld {
     }
 
     pub fn is_walkable_static(&self, grid: GridCoord) -> bool {
-        !self.manual_static_obstacle_ref_counts.contains_key(&grid) && !self.map_blocked_cells.contains(&grid)
+        !self.manual_static_obstacle_ref_counts.contains_key(&grid)
+            && !self.map_blocked_cells.contains(&grid)
     }
 
     pub fn is_walkable_dynamic(&self, grid: GridCoord) -> bool {

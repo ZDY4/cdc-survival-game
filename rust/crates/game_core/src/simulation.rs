@@ -4,8 +4,11 @@ use std::collections::VecDeque;
 
 use game_data::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide,
-    CharacterId, GridCoord, MapCellDefinition, MapId, MapObjectDefinition, MapObjectFootprint,
-    MapObjectKind, MapRotation, TurnState, WorldCoord,
+    CharacterId, CharacterInteractionProfile, GridCoord, InteractionContextSnapshot,
+    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionDefinition,
+    InteractionOptionId, InteractionOptionKind, InteractionPrompt, InteractionTargetId,
+    MapCellDefinition, MapId, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapRotation,
+    ResolvedInteractionOption, TurnState, WorldCoord, WorldMode,
 };
 
 use crate::actor::{ActorRecord, ActorRegistry, AiController};
@@ -21,6 +24,8 @@ pub struct RegisterActor {
     pub side: ActorSide,
     pub group_id: String,
     pub grid_position: GridCoord,
+    pub interaction: Option<CharacterInteractionProfile>,
+    pub attack_range: f32,
     pub ai_controller: Option<Box<dyn AiController>>,
 }
 
@@ -64,6 +69,11 @@ pub enum SimulationCommand {
     PerformInteract {
         actor_id: ActorId,
     },
+    QueryInteractionOptions {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+    },
+    ExecuteInteraction(InteractionExecutionRequest),
     EndTurn {
         actor_id: ActorId,
     },
@@ -79,6 +89,8 @@ pub enum SimulationCommandResult {
     None,
     Action(ActionResult),
     Path(Result<Vec<GridCoord>, GridPathfindingError>),
+    InteractionPrompt(InteractionPrompt),
+    InteractionExecution(InteractionExecutionResult),
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +134,61 @@ pub enum SimulationEvent {
     PathComputed {
         actor_id: Option<ActorId>,
         path_length: usize,
+    },
+    InteractionOptionsResolved {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        option_count: usize,
+    },
+    InteractionApproachPlanned {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        option_id: InteractionOptionId,
+        goal: GridCoord,
+        path_length: usize,
+    },
+    InteractionStarted {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        option_id: InteractionOptionId,
+    },
+    InteractionSucceeded {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        option_id: InteractionOptionId,
+    },
+    InteractionFailed {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        option_id: InteractionOptionId,
+        reason: String,
+    },
+    DialogueStarted {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        dialogue_id: String,
+    },
+    DialogueAdvanced {
+        actor_id: ActorId,
+        dialogue_id: String,
+        node_id: String,
+    },
+    SceneTransitionRequested {
+        actor_id: ActorId,
+        option_id: InteractionOptionId,
+        target_id: String,
+        world_mode: WorldMode,
+    },
+    PickupGranted {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        item_id: String,
+        count: i32,
+    },
+    RelationChanged {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        disposition: ActorSide,
     },
 }
 
@@ -192,6 +259,7 @@ pub struct SimulationSnapshot {
     pub actors: Vec<ActorDebugState>,
     pub grid: GridDebugState,
     pub combat: CombatDebugState,
+    pub interaction_context: InteractionContextSnapshot,
     pub path_preview: Vec<GridCoord>,
 }
 
@@ -202,6 +270,10 @@ pub struct Simulation {
     group_orders: GroupOrderRegistry,
     active_actions: ActiveActions,
     actors: ActorRegistry,
+    actor_interactions: HashMap<ActorId, CharacterInteractionProfile>,
+    actor_attack_ranges: HashMap<ActorId, f32>,
+    inventories: HashMap<ActorId, BTreeMap<String, i32>>,
+    interaction_context: InteractionContextSnapshot,
     ai_controllers: HashMap<ActorId, Box<dyn AiController>>,
     grid_world: GridWorld,
     pending_progression: VecDeque<PendingProgressionStep>,
@@ -218,6 +290,10 @@ impl Default for Simulation {
             group_orders: GroupOrderRegistry::default(),
             active_actions: ActiveActions::default(),
             actors: ActorRegistry::default(),
+            actor_interactions: HashMap::new(),
+            actor_attack_ranges: HashMap::new(),
+            inventories: HashMap::new(),
+            interaction_context: InteractionContextSnapshot::default(),
             ai_controllers: HashMap::new(),
             grid_world: GridWorld::default(),
             pending_progression: VecDeque::new(),
@@ -307,6 +383,24 @@ impl Simulation {
             SimulationCommand::PerformInteract { actor_id } => {
                 SimulationCommandResult::Action(self.perform_interact(actor_id))
             }
+            SimulationCommand::QueryInteractionOptions {
+                actor_id,
+                target_id,
+            } => {
+                let prompt = self.query_interaction_options(actor_id, &target_id);
+                if let Some(prompt) = prompt.as_ref() {
+                    self.events
+                        .push(SimulationEvent::InteractionOptionsResolved {
+                            actor_id,
+                            target_id: target_id.clone(),
+                            option_count: prompt.options.len(),
+                        });
+                }
+                SimulationCommandResult::InteractionPrompt(prompt.unwrap_or_default())
+            }
+            SimulationCommand::ExecuteInteraction(request) => {
+                SimulationCommandResult::InteractionExecution(self.execute_interaction(request))
+            }
             SimulationCommand::EndTurn { actor_id } => {
                 SimulationCommandResult::Action(self.end_turn(actor_id))
             }
@@ -345,6 +439,8 @@ impl Simulation {
             side,
             group_id,
             grid_position,
+            interaction,
+            attack_range,
             ai_controller,
         } = params;
         let actor_id = ActorId(self.next_actor_id);
@@ -377,6 +473,12 @@ impl Simulation {
             grid_position,
         });
         self.next_registration_index += 1;
+        if let Some(interaction) = interaction {
+            self.actor_interactions.insert(actor_id, interaction);
+        }
+        self.actor_attack_ranges
+            .insert(actor_id, attack_range.max(0.0));
+        self.inventories.entry(actor_id).or_default();
 
         if let Some(ai_controller) = ai_controller {
             self.ai_controllers.insert(actor_id, ai_controller);
@@ -398,6 +500,9 @@ impl Simulation {
         }
 
         self.actors.remove(actor_id);
+        self.actor_interactions.remove(&actor_id);
+        self.actor_attack_ranges.remove(&actor_id);
+        self.inventories.remove(&actor_id);
         self.ai_controllers.remove(&actor_id);
         self.active_actions.by_actor.remove(&actor_id);
         self.grid_world.unregister_runtime_actor(actor_id);
@@ -657,6 +762,7 @@ impl Simulation {
                 current_group_id: self.turn.current_group_id.clone(),
                 current_turn_index: self.turn.combat_turn_index,
             },
+            interaction_context: self.current_interaction_context(),
             path_preview,
         }
     }
@@ -849,6 +955,287 @@ impl Simulation {
             target_actor: None,
             success: true,
         })
+    }
+
+    pub fn query_interaction_options(
+        &self,
+        actor_id: ActorId,
+        target_id: &InteractionTargetId,
+    ) -> Option<InteractionPrompt> {
+        if !self.actors.contains(actor_id) {
+            return None;
+        }
+
+        let target = self.resolve_target_interaction_data(target_id)?;
+        let mut options: Vec<ResolvedInteractionOption> = target
+            .options
+            .into_iter()
+            .filter(|option| option.enabled && option.visible)
+            .map(|mut option| {
+                option.ensure_defaults();
+                self.resolve_interaction_option_view(target_id, option)
+            })
+            .collect();
+        options.sort_by(|left, right| {
+            right
+                .priority
+                .cmp(&left.priority)
+                .then_with(|| left.display_name.cmp(&right.display_name))
+        });
+        let primary_option_id = options.first().map(|option| option.id.clone());
+
+        Some(InteractionPrompt {
+            actor_id,
+            target_id: target_id.clone(),
+            target_name: target.target_name,
+            anchor_grid: target.anchor_grid,
+            options,
+            primary_option_id,
+        })
+    }
+
+    pub fn execute_interaction(
+        &mut self,
+        request: InteractionExecutionRequest,
+    ) -> InteractionExecutionResult {
+        let Some(prompt) = self.query_interaction_options(request.actor_id, &request.target_id)
+        else {
+            return InteractionExecutionResult {
+                success: false,
+                reason: Some("interaction_target_unavailable".to_string()),
+                ..InteractionExecutionResult::default()
+            };
+        };
+
+        let Some(option) = prompt
+            .options
+            .iter()
+            .find(|option| option.id == request.option_id)
+            .cloned()
+        else {
+            return InteractionExecutionResult {
+                success: false,
+                reason: Some("interaction_option_unavailable".to_string()),
+                prompt: Some(prompt),
+                ..InteractionExecutionResult::default()
+            };
+        };
+        let Some(option_definition) =
+            self.resolve_option_definition(&request.target_id, &option.id)
+        else {
+            return InteractionExecutionResult {
+                success: false,
+                reason: Some("interaction_option_unavailable".to_string()),
+                prompt: Some(prompt),
+                ..InteractionExecutionResult::default()
+            };
+        };
+
+        if option.requires_proximity {
+            match self.plan_interaction_approach(
+                request.actor_id,
+                &request.target_id,
+                option.interaction_distance,
+            ) {
+                Ok(Some((goal, path_length))) => {
+                    self.events
+                        .push(SimulationEvent::InteractionApproachPlanned {
+                            actor_id: request.actor_id,
+                            target_id: request.target_id.clone(),
+                            option_id: option.id.clone(),
+                            goal,
+                            path_length,
+                        });
+                    return InteractionExecutionResult {
+                        success: true,
+                        prompt: Some(prompt),
+                        approach_required: true,
+                        approach_goal: Some(goal),
+                        ..InteractionExecutionResult::default()
+                    };
+                }
+                Ok(None) => {}
+                Err(reason) => {
+                    self.events.push(SimulationEvent::InteractionFailed {
+                        actor_id: request.actor_id,
+                        target_id: request.target_id.clone(),
+                        option_id: option.id.clone(),
+                        reason: reason.clone(),
+                    });
+                    return InteractionExecutionResult {
+                        success: false,
+                        reason: Some(reason),
+                        prompt: Some(prompt),
+                        ..InteractionExecutionResult::default()
+                    };
+                }
+            }
+        }
+
+        self.events.push(SimulationEvent::InteractionStarted {
+            actor_id: request.actor_id,
+            target_id: request.target_id.clone(),
+            option_id: option.id.clone(),
+        });
+
+        match option.kind {
+            InteractionOptionKind::Attack => {
+                let InteractionTargetId::Actor(target_actor) = request.target_id else {
+                    return self.failed_interaction_execution(
+                        request.actor_id,
+                        prompt,
+                        option.id,
+                        "attack_target_invalid",
+                    );
+                };
+                let action = self.perform_attack(request.actor_id, target_actor);
+                if !action.success {
+                    return self.failed_interaction_action(
+                        request.actor_id,
+                        request.target_id,
+                        prompt,
+                        option.id,
+                        action,
+                    );
+                }
+                self.events.push(SimulationEvent::InteractionSucceeded {
+                    actor_id: request.actor_id,
+                    target_id: InteractionTargetId::Actor(target_actor),
+                    option_id: option.id.clone(),
+                });
+                InteractionExecutionResult {
+                    success: true,
+                    prompt: Some(prompt),
+                    action_result: Some(action),
+                    ..InteractionExecutionResult::default()
+                }
+            }
+            InteractionOptionKind::Talk => {
+                let action = self.perform_interact(request.actor_id);
+                if !action.success {
+                    return self.failed_interaction_action(
+                        request.actor_id,
+                        request.target_id,
+                        prompt,
+                        option.id,
+                        action,
+                    );
+                }
+                let dialogue_id = self
+                    .resolve_dialogue_id(&request.target_id, &option)
+                    .filter(|value| !value.trim().is_empty());
+                if let Some(dialogue_id) = dialogue_id.as_ref() {
+                    self.events.push(SimulationEvent::DialogueStarted {
+                        actor_id: request.actor_id,
+                        target_id: request.target_id.clone(),
+                        dialogue_id: dialogue_id.clone(),
+                    });
+                    self.events.push(SimulationEvent::DialogueAdvanced {
+                        actor_id: request.actor_id,
+                        dialogue_id: dialogue_id.clone(),
+                        node_id: "start".to_string(),
+                    });
+                }
+                self.events.push(SimulationEvent::InteractionSucceeded {
+                    actor_id: request.actor_id,
+                    target_id: request.target_id.clone(),
+                    option_id: option.id.clone(),
+                });
+                InteractionExecutionResult {
+                    success: true,
+                    prompt: Some(prompt),
+                    action_result: Some(action),
+                    dialogue_id,
+                    ..InteractionExecutionResult::default()
+                }
+            }
+            InteractionOptionKind::Pickup => {
+                let InteractionTargetId::MapObject(ref object_id) = request.target_id else {
+                    return self.failed_interaction_execution(
+                        request.actor_id,
+                        prompt,
+                        option.id,
+                        "pickup_target_invalid",
+                    );
+                };
+                let action = self.perform_interact(request.actor_id);
+                if !action.success {
+                    return self.failed_interaction_action(
+                        request.actor_id,
+                        request.target_id,
+                        prompt,
+                        option.id,
+                        action,
+                    );
+                }
+
+                let count = option_definition
+                    .max_count
+                    .max(option_definition.min_count)
+                    .max(1);
+                self.grid_world.remove_map_object(object_id);
+                *self
+                    .inventories
+                    .entry(request.actor_id)
+                    .or_default()
+                    .entry(option_definition.item_id.clone())
+                    .or_insert(0) += count;
+                self.events.push(SimulationEvent::PickupGranted {
+                    actor_id: request.actor_id,
+                    target_id: request.target_id.clone(),
+                    item_id: option_definition.item_id.clone(),
+                    count,
+                });
+                self.events.push(SimulationEvent::InteractionSucceeded {
+                    actor_id: request.actor_id,
+                    target_id: request.target_id.clone(),
+                    option_id: option.id.clone(),
+                });
+                InteractionExecutionResult {
+                    success: true,
+                    prompt: Some(prompt),
+                    action_result: Some(action),
+                    consumed_target: true,
+                    ..InteractionExecutionResult::default()
+                }
+            }
+            InteractionOptionKind::EnterSubscene
+            | InteractionOptionKind::EnterOverworld
+            | InteractionOptionKind::ExitToOutdoor
+            | InteractionOptionKind::EnterOutdoorLocation => {
+                let action = self.perform_interact(request.actor_id);
+                if !action.success {
+                    return self.failed_interaction_action(
+                        request.actor_id,
+                        request.target_id.clone(),
+                        prompt,
+                        option.id.clone(),
+                        action,
+                    );
+                }
+                let target_id = self.resolve_scene_target_id(&option_definition);
+                self.apply_scene_transition(&option_definition);
+                let context_snapshot = self.current_interaction_context();
+                self.events.push(SimulationEvent::SceneTransitionRequested {
+                    actor_id: request.actor_id,
+                    option_id: option.id.clone(),
+                    target_id,
+                    world_mode: context_snapshot.world_mode,
+                });
+                self.events.push(SimulationEvent::InteractionSucceeded {
+                    actor_id: request.actor_id,
+                    target_id: request.target_id.clone(),
+                    option_id: option.id.clone(),
+                });
+                InteractionExecutionResult {
+                    success: true,
+                    prompt: Some(prompt),
+                    action_result: Some(action),
+                    context_snapshot: Some(context_snapshot),
+                    ..InteractionExecutionResult::default()
+                }
+            }
+        }
     }
 
     pub fn end_turn(&mut self, actor_id: ActorId) -> ActionResult {
@@ -1048,6 +1435,380 @@ impl Simulation {
             total_consumed,
             false,
         )
+    }
+
+    fn current_interaction_context(&self) -> InteractionContextSnapshot {
+        let mut snapshot = self.interaction_context.clone();
+        if snapshot.current_map_id.is_none() {
+            snapshot.current_map_id = self
+                .grid_world
+                .map_id()
+                .map(|map_id| map_id.as_str().to_string());
+        }
+        snapshot
+    }
+
+    fn resolve_target_interaction_data(
+        &self,
+        target_id: &InteractionTargetId,
+    ) -> Option<TargetInteractionData> {
+        match target_id {
+            InteractionTargetId::Actor(target_actor) => {
+                let actor = self.actors.get(*target_actor)?;
+                let mut options = self
+                    .actor_interactions
+                    .get(target_actor)
+                    .map(|profile| profile.options.clone())
+                    .unwrap_or_default();
+                if options.is_empty() {
+                    options = self.default_actor_options(
+                        *target_actor,
+                        actor.side,
+                        actor.definition_id.as_ref(),
+                    );
+                }
+                Some(TargetInteractionData {
+                    target_name: actor.display_name.clone(),
+                    anchor_grid: actor.grid_position,
+                    options,
+                })
+            }
+            InteractionTargetId::MapObject(object_id) => {
+                let object = self.grid_world.map_object(object_id)?;
+                Some(TargetInteractionData {
+                    target_name: self.map_object_display_name(object),
+                    anchor_grid: object.anchor,
+                    options: self.map_object_options(object),
+                })
+            }
+        }
+    }
+
+    fn map_object_display_name(&self, object: &MapObjectDefinition) -> String {
+        match object.kind {
+            MapObjectKind::Pickup => object
+                .props
+                .pickup
+                .as_ref()
+                .map(|pickup| {
+                    if pickup.item_id.trim().is_empty() {
+                        object.object_id.clone()
+                    } else {
+                        format!("Pickup {}", pickup.item_id)
+                    }
+                })
+                .unwrap_or_else(|| object.object_id.clone()),
+            MapObjectKind::Interactive => object
+                .props
+                .interactive
+                .as_ref()
+                .map(|interactive| {
+                    if interactive.display_name.trim().is_empty() {
+                        object.object_id.clone()
+                    } else {
+                        interactive.display_name.clone()
+                    }
+                })
+                .unwrap_or_else(|| object.object_id.clone()),
+            _ => object.object_id.clone(),
+        }
+    }
+
+    fn map_object_options(&self, object: &MapObjectDefinition) -> Vec<InteractionOptionDefinition> {
+        match object.kind {
+            MapObjectKind::Pickup => object
+                .props
+                .pickup
+                .as_ref()
+                .map(|pickup| {
+                    vec![InteractionOptionDefinition {
+                        kind: InteractionOptionKind::Pickup,
+                        item_id: pickup.item_id.clone(),
+                        min_count: pickup.min_count.max(1),
+                        max_count: pickup.max_count.max(pickup.min_count.max(1)),
+                        ..InteractionOptionDefinition::default()
+                    }]
+                })
+                .unwrap_or_default(),
+            MapObjectKind::Interactive => object
+                .props
+                .interactive
+                .as_ref()
+                .map(|interactive| interactive.resolved_options())
+                .unwrap_or_default(),
+            MapObjectKind::Building | MapObjectKind::AiSpawn => Vec::new(),
+        }
+    }
+
+    fn default_actor_options(
+        &self,
+        actor_id: ActorId,
+        side: ActorSide,
+        definition_id: Option<&CharacterId>,
+    ) -> Vec<InteractionOptionDefinition> {
+        let mut options = Vec::new();
+        if side != ActorSide::Hostile {
+            let dialogue_id = definition_id
+                .map(CharacterId::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let mut talk = InteractionOptionDefinition {
+                kind: InteractionOptionKind::Talk,
+                dialogue_id,
+                priority: 800,
+                ..InteractionOptionDefinition::default()
+            };
+            talk.ensure_defaults();
+            options.push(talk);
+        }
+
+        if actor_id != ActorId(0) {
+            let mut attack = InteractionOptionDefinition {
+                kind: InteractionOptionKind::Attack,
+                dangerous: side != ActorSide::Hostile,
+                priority: if side == ActorSide::Hostile {
+                    1000
+                } else {
+                    -100
+                },
+                interaction_distance: self
+                    .actor_attack_ranges
+                    .get(&actor_id)
+                    .copied()
+                    .unwrap_or(1.2)
+                    .max(1.0),
+                ..InteractionOptionDefinition::default()
+            };
+            attack.ensure_defaults();
+            options.push(attack);
+        }
+
+        options
+    }
+
+    fn resolve_interaction_option_view(
+        &self,
+        target_id: &InteractionTargetId,
+        mut option: InteractionOptionDefinition,
+    ) -> ResolvedInteractionOption {
+        option.ensure_defaults();
+        if matches!(target_id, InteractionTargetId::Actor(actor_id) if self.get_actor_side(*actor_id) == Some(ActorSide::Hostile))
+            && option.kind == InteractionOptionKind::Attack
+        {
+            option.dangerous = false;
+            option.priority = option.priority.max(1000);
+        }
+        ResolvedInteractionOption {
+            id: option.id,
+            display_name: option.display_name,
+            description: option.description,
+            priority: option.priority,
+            dangerous: option.dangerous,
+            requires_proximity: option.requires_proximity,
+            interaction_distance: option.interaction_distance,
+            kind: option.kind,
+        }
+    }
+
+    fn resolve_option_definition(
+        &self,
+        target_id: &InteractionTargetId,
+        option_id: &InteractionOptionId,
+    ) -> Option<InteractionOptionDefinition> {
+        let target = self.resolve_target_interaction_data(target_id)?;
+        target
+            .options
+            .into_iter()
+            .map(|mut option| {
+                option.ensure_defaults();
+                option
+            })
+            .find(|option| &option.id == option_id)
+    }
+
+    fn resolve_dialogue_id(
+        &self,
+        target_id: &InteractionTargetId,
+        option: &ResolvedInteractionOption,
+    ) -> Option<String> {
+        let Some(definition) = self.resolve_option_definition(target_id, &option.id) else {
+            return None;
+        };
+        if !definition.dialogue_id.trim().is_empty() {
+            return Some(definition.dialogue_id);
+        }
+        match target_id {
+            InteractionTargetId::Actor(actor_id) => self
+                .actors
+                .get(*actor_id)
+                .and_then(|actor| actor.definition_id.as_ref())
+                .map(CharacterId::as_str)
+                .map(str::to_string),
+            InteractionTargetId::MapObject(object_id) => Some(object_id.clone()),
+        }
+    }
+
+    fn resolve_scene_target_id(&self, option: &InteractionOptionDefinition) -> String {
+        if !option.target_id.trim().is_empty() {
+            option.target_id.clone()
+        } else {
+            option.target_map_id.clone()
+        }
+    }
+
+    fn apply_scene_transition(&mut self, option: &InteractionOptionDefinition) {
+        self.interaction_context.current_map_id = self
+            .grid_world
+            .map_id()
+            .map(|map_id| map_id.as_str().to_string());
+        match option.kind {
+            InteractionOptionKind::EnterSubscene => {
+                self.interaction_context.current_subscene_location_id =
+                    Some(self.resolve_scene_target_id(option));
+                self.interaction_context.return_outdoor_spawn_id =
+                    if option.return_spawn_id.trim().is_empty() {
+                        None
+                    } else {
+                        Some(option.return_spawn_id.clone())
+                    };
+                self.interaction_context.world_mode = WorldMode::Interior;
+            }
+            InteractionOptionKind::EnterOverworld => {
+                self.interaction_context.active_outdoor_location_id = None;
+                self.interaction_context.current_subscene_location_id = None;
+                self.interaction_context.world_mode = WorldMode::Overworld;
+            }
+            InteractionOptionKind::ExitToOutdoor | InteractionOptionKind::EnterOutdoorLocation => {
+                self.interaction_context.active_outdoor_location_id =
+                    Some(self.resolve_scene_target_id(option));
+                self.interaction_context.current_subscene_location_id = None;
+                self.interaction_context.world_mode = WorldMode::Outdoor;
+            }
+            InteractionOptionKind::Talk
+            | InteractionOptionKind::Attack
+            | InteractionOptionKind::Pickup => {}
+        }
+    }
+
+    fn plan_interaction_approach(
+        &self,
+        actor_id: ActorId,
+        target_id: &InteractionTargetId,
+        interaction_distance: f32,
+    ) -> Result<Option<(GridCoord, usize)>, String> {
+        let Some(actor_grid) = self.actor_grid_position(actor_id) else {
+            return Err("unknown_actor".to_string());
+        };
+        let Some(target) = self.resolve_target_interaction_data(target_id) else {
+            return Err("interaction_target_unavailable".to_string());
+        };
+
+        if self.is_interaction_in_range(actor_grid, target.anchor_grid, interaction_distance) {
+            return Ok(None);
+        }
+
+        let max_radius =
+            ((interaction_distance / self.grid_world.grid_size()).ceil() as i32).max(1);
+        let mut best_goal = None;
+        let mut best_path_len = usize::MAX;
+
+        for radius in 1..=max_radius {
+            for candidate in collect_interaction_ring_cells(target.anchor_grid, radius) {
+                if candidate == actor_grid {
+                    continue;
+                }
+                if !self
+                    .grid_world
+                    .is_walkable_for_actor(candidate, Some(actor_id))
+                {
+                    continue;
+                }
+                if !self.is_interaction_in_range(
+                    candidate,
+                    target.anchor_grid,
+                    interaction_distance,
+                ) {
+                    continue;
+                }
+                let Ok(path) = self.find_path_grid(Some(actor_id), actor_grid, candidate) else {
+                    continue;
+                };
+                if path.len() <= 1 || path.len() >= best_path_len {
+                    continue;
+                }
+                best_goal = Some(candidate);
+                best_path_len = path.len();
+            }
+            if best_goal.is_some() {
+                break;
+            }
+        }
+
+        best_goal
+            .map(|goal| (goal, best_path_len))
+            .ok_or_else(|| "no_interaction_path".to_string())
+            .map(Some)
+    }
+
+    fn is_interaction_in_range(
+        &self,
+        actor_grid: GridCoord,
+        target_grid: GridCoord,
+        interaction_distance: f32,
+    ) -> bool {
+        let actor_world = self.grid_world.grid_to_world(actor_grid);
+        let target_world = self.grid_world.grid_to_world(target_grid);
+        let dx = actor_world.x - target_world.x;
+        let dz = actor_world.z - target_world.z;
+        (dx * dx + dz * dz).sqrt() <= interaction_distance + 0.05
+    }
+
+    fn failed_interaction_execution(
+        &mut self,
+        actor_id: ActorId,
+        prompt: InteractionPrompt,
+        option_id: InteractionOptionId,
+        reason: &str,
+    ) -> InteractionExecutionResult {
+        self.events.push(SimulationEvent::InteractionFailed {
+            actor_id,
+            target_id: prompt.target_id.clone(),
+            option_id,
+            reason: reason.to_string(),
+        });
+        InteractionExecutionResult {
+            success: false,
+            reason: Some(reason.to_string()),
+            prompt: Some(prompt),
+            ..InteractionExecutionResult::default()
+        }
+    }
+
+    fn failed_interaction_action(
+        &mut self,
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        prompt: InteractionPrompt,
+        option_id: InteractionOptionId,
+        action: ActionResult,
+    ) -> InteractionExecutionResult {
+        let reason = action
+            .reason
+            .clone()
+            .unwrap_or_else(|| "interaction_failed".to_string());
+        self.events.push(SimulationEvent::InteractionFailed {
+            actor_id,
+            target_id,
+            option_id,
+            reason: reason.clone(),
+        });
+        InteractionExecutionResult {
+            success: false,
+            reason: Some(reason),
+            prompt: Some(prompt),
+            action_result: Some(action),
+            ..InteractionExecutionResult::default()
+        }
     }
 
     fn maybe_start_initial_player_turn(&mut self, actor_id: ActorId) {
@@ -1411,13 +2172,35 @@ fn pathfinding_error_reason(error: &GridPathfindingError) -> &'static str {
     }
 }
 
+#[derive(Debug, Clone)]
+struct TargetInteractionData {
+    target_name: String,
+    anchor_grid: GridCoord,
+    options: Vec<InteractionOptionDefinition>,
+}
+
+fn collect_interaction_ring_cells(center: GridCoord, radius: i32) -> Vec<GridCoord> {
+    let mut cells = Vec::new();
+    for x in (center.x - radius)..=(center.x + radius) {
+        for z in (center.z - radius)..=(center.z + radius) {
+            if (x - center.x).abs() + (z - center.z).abs() != radius {
+                continue;
+            }
+            cells.push(GridCoord::new(x, center.y, z));
+        }
+    }
+    cells
+}
+
 #[cfg(test)]
 mod tests {
     use game_data::{
         ActionPhase, ActionRequest, ActionType, ActorKind, ActorSide, CharacterId, GridCoord,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLevelDefinition,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
-        MapSize, WorldCoord,
+        InteractionExecutionRequest, InteractionOptionId, InteractionOptionKind,
+        InteractionTargetId, MapBuildingProps, MapCellDefinition, MapDefinition, MapId,
+        MapInteractiveProps, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint,
+        MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, WorldCoord,
+        WorldMode,
     };
 
     use crate::actor::InteractOnceAiController;
@@ -1446,6 +2229,8 @@ mod tests {
             side: ActorSide::Player,
             group_id: "player".into(),
             grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         assert_eq!(simulation.get_actor_ap(player), 1.0);
@@ -1462,6 +2247,8 @@ mod tests {
             side: ActorSide::Friendly,
             group_id: "survivor".into(),
             grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
 
@@ -1489,6 +2276,8 @@ mod tests {
             side: ActorSide::Player,
             group_id: "player".into(),
             grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         simulation.set_actor_ap(player, 1.5);
@@ -1533,6 +2322,8 @@ mod tests {
             side: ActorSide::Player,
             group_id: "player".into(),
             grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         let friendly = simulation.register_actor(RegisterActor {
@@ -1542,6 +2333,8 @@ mod tests {
             side: ActorSide::Friendly,
             group_id: "friendly".into(),
             grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: Some(Box::new(InteractOnceAiController)),
         });
         simulation.request_action(ActionRequest {
@@ -1575,6 +2368,8 @@ mod tests {
             side: ActorSide::Player,
             group_id: "player".into(),
             grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         let hostile_one = simulation.register_actor(RegisterActor {
@@ -1584,6 +2379,8 @@ mod tests {
             side: ActorSide::Hostile,
             group_id: "hostile:one".into(),
             grid_position: GridCoord::new(4, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         let hostile_two = simulation.register_actor(RegisterActor {
@@ -1593,6 +2390,8 @@ mod tests {
             side: ActorSide::Hostile,
             group_id: "hostile:two".into(),
             grid_position: GridCoord::new(5, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         simulation.enter_combat(player, hostile_one);
@@ -1657,6 +2456,8 @@ mod tests {
             side: ActorSide::Player,
             group_id: "player".into(),
             grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         let hostile = simulation.register_actor(RegisterActor {
@@ -1666,12 +2467,152 @@ mod tests {
             side: ActorSide::Hostile,
             group_id: "hostile".into(),
             grid_position: GridCoord::new(3, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
             ai_controller: None,
         });
         simulation.enter_combat(player, hostile);
         assert!(simulation.is_in_combat());
         simulation.unregister_actor(hostile);
         assert!(!simulation.is_in_combat());
+    }
+
+    #[test]
+    fn friendly_actor_interaction_prompt_prefers_talk() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let trader = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "废土商人·老王".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "survivor".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let prompt = simulation
+            .query_interaction_options(player, &InteractionTargetId::Actor(trader))
+            .expect("friendly actor should expose options");
+
+        assert_eq!(prompt.options[0].kind, InteractionOptionKind::Talk);
+        assert!(prompt
+            .options
+            .iter()
+            .any(|option| option.kind == InteractionOptionKind::Attack));
+    }
+
+    #[test]
+    fn pickup_interaction_grants_inventory_and_consumes_target() {
+        let mut simulation = Simulation::new();
+        simulation.grid_world_mut().load_map(&sample_interaction_map_definition());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(1, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject("pickup".into()),
+            option_id: InteractionOptionId("pickup".into()),
+        });
+
+        assert!(result.success);
+        assert!(result.consumed_target);
+        assert!(simulation.grid_world().map_object("pickup").is_none());
+        assert_eq!(
+            simulation
+                .inventories
+                .get(&player)
+                .and_then(|items| items.get("1005"))
+                .copied(),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn talk_interaction_returns_dialogue_id() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let trader = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "废土商人·老王".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "survivor".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::Actor(trader),
+            option_id: InteractionOptionId("talk".into()),
+        });
+
+        assert!(result.success);
+        assert_eq!(result.dialogue_id.as_deref(), Some("trader_lao_wang"));
+    }
+
+    #[test]
+    fn scene_transition_interaction_updates_context_snapshot() {
+        let mut simulation = Simulation::new();
+        simulation.grid_world_mut().load_map(&sample_interaction_map_definition());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(4, 0, 7),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject("exit".into()),
+            option_id: InteractionOptionId("enter_outdoor_location".into()),
+        });
+
+        assert!(result.success);
+        assert_eq!(
+            simulation.interaction_context.active_outdoor_location_id.as_deref(),
+            Some("safehouse")
+        );
+        assert_eq!(simulation.interaction_context.world_mode, WorldMode::Outdoor);
     }
 
     #[test]
@@ -1858,6 +2799,62 @@ mod tests {
                     blocks_movement: false,
                     blocks_sight: false,
                     props: MapObjectProps::default(),
+                },
+            ],
+        }
+    }
+
+    fn sample_interaction_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("interaction_map".into()),
+            name: "Interaction".into(),
+            size: MapSize {
+                width: 12,
+                height: 12,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            objects: vec![
+                MapObjectDefinition {
+                    object_id: "pickup".into(),
+                    kind: MapObjectKind::Pickup,
+                    anchor: GridCoord::new(2, 0, 1),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    props: MapObjectProps {
+                        pickup: Some(MapPickupProps {
+                            item_id: "1005".into(),
+                            min_count: 1,
+                            max_count: 2,
+                            extra: std::collections::BTreeMap::new(),
+                        }),
+                        ..MapObjectProps::default()
+                    },
+                },
+                MapObjectDefinition {
+                    object_id: "exit".into(),
+                    kind: MapObjectKind::Interactive,
+                    anchor: GridCoord::new(5, 0, 7),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    props: MapObjectProps {
+                        interactive: Some(MapInteractiveProps {
+                            display_name: "Exit".into(),
+                            interaction_distance: 1.4,
+                            interaction_kind: "enter_outdoor_location".into(),
+                            target_id: Some("safehouse".into()),
+                            options: Vec::new(),
+                            extra: std::collections::BTreeMap::new(),
+                        }),
+                        ..MapObjectProps::default()
+                    },
                 },
             ],
         }

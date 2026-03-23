@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use game_core::{
-    build_plan, rebuild_facts, tick_offline_action, ActionExecutionPhase, NpcActionKey,
-    NpcFactInput, NpcGoalKey, NpcPlanRequest, NpcPlanStep, OfflineActionState,
+    build_plan_for_goal, rebuild_facts, select_goal, tick_offline_action, ActionExecutionPhase,
+    NpcActionKey, NpcFactInput, NpcGoalKey, NpcPlanRequest, NpcPlanStep, OfflineActionState,
 };
 use game_data::{
     CharacterLifeProfile, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay, SettlementDefinition,
@@ -375,7 +375,7 @@ fn plan_npc_life_system(
                 && schedule.on_shift
                 && active_guards < settlement.service_rules.min_guard_on_duty,
         });
-        let plan = build_plan(&NpcPlanRequest {
+        let plan_request = NpcPlanRequest {
             role: life.role,
             facts,
             home_anchor: Some(life.home_anchor.clone()),
@@ -388,8 +388,10 @@ fn plan_npc_life_system(
             meal_object_id: life.meal_object_id.clone(),
             leisure_object_id: life.leisure_object_id.clone(),
             patrol_route_id: life.duty_route_id.clone(),
-        });
-        current_goal.0 = Some(plan.selected_goal);
+        };
+        let selected_goal = select_goal(&plan_request);
+        let plan = build_plan_for_goal(&plan_request, selected_goal);
+        current_goal.0 = Some(selected_goal);
         current_plan.steps = plan.steps;
         current_plan.next_index = 0;
         current_plan.total_cost = plan.total_cost;
@@ -833,6 +835,7 @@ mod tests {
                 sets: BTreeMap::from([("base".into(), BTreeMap::from([("strength".into(), 5.0)]))]),
                 resources: BTreeMap::from([("hp".into(), CharacterResourcePool { current: 60.0 })]),
             },
+            interaction: None,
             life: Some(life),
         }
     }

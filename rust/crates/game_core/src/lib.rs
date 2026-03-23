@@ -8,17 +8,25 @@ pub mod movement;
 pub mod runtime;
 pub mod simulation;
 pub mod turn;
+pub mod utility;
 
 pub use actor::{AiController, AiStepResult, InteractOnceAiController, NoopAiController};
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
 pub use goap::{
-    advance_offline_sim, build_plan, rebuild_facts, tick_offline_action, ActionExecutionPhase,
-    ActionTickResult, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey, NpcOfflineSimState,
-    NpcPlanRequest, NpcPlanResult, NpcPlanStep, OfflineActionState, OfflineSimAdvanceResult,
+    advance_offline_sim, build_plan, build_plan_for_goal, rebuild_facts, tick_offline_action,
+    ActionExecutionPhase, ActionTickResult, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey,
+    NpcOfflineSimState, NpcPlanRequest, NpcPlanResult, NpcPlanStep, OfflineActionState,
+    OfflineSimAdvanceResult,
 };
 pub use movement::{
     AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
-    PendingMovementIntent, PendingProgressionStep, ProgressionAdvanceResult,
+    PendingInteractionIntent, PendingMovementIntent, PendingProgressionStep,
+    ProgressionAdvanceResult,
+};
+pub use game_data::{
+    InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
+    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind, InteractionPrompt,
+    InteractionTargetId, ResolvedInteractionOption, WorldMode,
 };
 pub use runtime::{action_result_status, SimulationRuntime};
 pub use simulation::{
@@ -26,6 +34,7 @@ pub use simulation::{
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
     SimulationSnapshot,
 };
+pub use utility::{score_goal, score_goals, select_goal, NpcGoalScore};
 
 pub struct GameCorePlugin;
 

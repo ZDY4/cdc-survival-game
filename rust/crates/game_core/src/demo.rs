@@ -23,6 +23,8 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         side: ActorSide::Player,
         group_id: "player".into(),
         grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
         ai_controller: None,
     });
     let friendly = simulation.register_actor(RegisterActor {
@@ -32,6 +34,8 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         side: ActorSide::Friendly,
         group_id: "friendly".into(),
         grid_position: GridCoord::new(1, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
         ai_controller: Some(Box::new(InteractOnceAiController)),
     });
     let hostile = simulation.register_actor(RegisterActor {
@@ -41,6 +45,8 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         side: ActorSide::Hostile,
         group_id: "hostile".into(),
         grid_position: GridCoord::new(4, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
         ai_controller: Some(Box::new(InteractOnceAiController)),
     });
 

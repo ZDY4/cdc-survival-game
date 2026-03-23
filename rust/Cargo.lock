@@ -611,6 +611,7 @@ dependencies = [
  "game_bevy",
  "game_core",
  "game_data",
+ "serde_json",
 ]
 
 [[package]]

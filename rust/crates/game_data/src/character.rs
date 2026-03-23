@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::interaction::CharacterInteractionProfile;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct CharacterId(pub String);
@@ -136,6 +138,8 @@ pub struct CharacterDefinition {
     pub combat: CharacterCombatProfile,
     pub ai: CharacterAiProfile,
     pub attributes: CharacterAttributeTemplate,
+    #[serde(default)]
+    pub interaction: Option<CharacterInteractionProfile>,
     #[serde(default)]
     pub life: Option<CharacterLifeProfile>,
 }
@@ -669,6 +673,7 @@ mod tests {
                 attack_cooldown: 1.0,
             },
             attributes: CharacterAttributeTemplate { sets, resources },
+            interaction: None,
             life: None,
         }
     }
