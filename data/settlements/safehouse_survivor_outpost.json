@@ -1,0 +1,89 @@
+{
+  "id": "safehouse_survivor_outpost",
+  "map_id": "safehouse_grid",
+  "anchors": [
+    {
+      "id": "guard_home_01",
+      "grid": { "x": 1, "y": 0, "z": 1 }
+    },
+    {
+      "id": "guard_home_02",
+      "grid": { "x": 2, "y": 0, "z": 1 }
+    },
+    {
+      "id": "north_gate",
+      "grid": { "x": 5, "y": 0, "z": 1 }
+    },
+    {
+      "id": "canteen_main",
+      "grid": { "x": 2, "y": 0, "z": 5 }
+    },
+    {
+      "id": "recreation_corner",
+      "grid": { "x": 6, "y": 0, "z": 5 }
+    },
+    {
+      "id": "alarm_bell",
+      "grid": { "x": 4, "y": 0, "z": 2 }
+    }
+  ],
+  "routes": [
+    {
+      "id": "guard_patrol_north",
+      "anchors": ["north_gate", "alarm_bell", "north_gate"]
+    }
+  ],
+  "smart_objects": [
+    {
+      "id": "guard_post_north",
+      "kind": "guard_post",
+      "anchor_id": "north_gate",
+      "capacity": 2,
+      "tags": ["north_gate", "guard"]
+    },
+    {
+      "id": "guard_bed_01",
+      "kind": "bed",
+      "anchor_id": "guard_home_01",
+      "capacity": 1,
+      "tags": ["guard"]
+    },
+    {
+      "id": "guard_bed_02",
+      "kind": "bed",
+      "anchor_id": "guard_home_02",
+      "capacity": 1,
+      "tags": ["guard"]
+    },
+    {
+      "id": "canteen_seat_01",
+      "kind": "canteen_seat",
+      "anchor_id": "canteen_main",
+      "capacity": 1,
+      "tags": ["meal"]
+    },
+    {
+      "id": "recreation_bench_01",
+      "kind": "recreation_spot",
+      "anchor_id": "recreation_corner",
+      "capacity": 1,
+      "tags": ["morale"]
+    },
+    {
+      "id": "alarm_bell_01",
+      "kind": "alarm_point",
+      "anchor_id": "alarm_bell",
+      "capacity": 1,
+      "tags": ["alert"]
+    }
+  ],
+  "service_rules": {
+    "min_guard_on_duty": 1,
+    "meal_windows": [
+      { "start_minute": 420, "end_minute": 480 },
+      { "start_minute": 720, "end_minute": 780 },
+      { "start_minute": 1080, "end_minute": 1140 }
+    ],
+    "quiet_hours": { "start_minute": 1320, "end_minute": 1440 }
+  }
+}

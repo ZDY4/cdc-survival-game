@@ -19,6 +19,7 @@ authors = ["CDC Survival Game Team"]
 bevy = { version = "0.18.1" }
 bevy_app = { version = "0.18.1", default-features = false, features = ["std"] }
 bevy_ecs = { version = "0.18.1", default-features = false, features = ["std", "multi_threaded"] }
+dogoap = { git = "https://github.com/victorb/dogoap.git", rev = "e429fd1c15b2eeb7e423609b3fdb954e1a5324da" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"

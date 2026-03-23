@@ -39,6 +39,92 @@ pub enum CharacterDisposition {
     Neutral,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NpcRole {
+    #[default]
+    Resident,
+    Guard,
+    Cook,
+    Doctor,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ScheduleDay {
+    #[default]
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday,
+}
+
+impl ScheduleDay {
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Monday => Self::Tuesday,
+            Self::Tuesday => Self::Wednesday,
+            Self::Wednesday => Self::Thursday,
+            Self::Thursday => Self::Friday,
+            Self::Friday => Self::Saturday,
+            Self::Saturday => Self::Sunday,
+            Self::Sunday => Self::Monday,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScheduleBlock {
+    pub day: ScheduleDay,
+    pub start_minute: u16,
+    pub end_minute: u16,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NeedProfile {
+    #[serde(default = "default_hunger_decay_per_hour")]
+    pub hunger_decay_per_hour: f32,
+    #[serde(default = "default_energy_decay_per_hour")]
+    pub energy_decay_per_hour: f32,
+    #[serde(default = "default_morale_decay_per_hour")]
+    pub morale_decay_per_hour: f32,
+    #[serde(default = "default_safety_bias")]
+    pub safety_bias: f32,
+}
+
+impl Default for NeedProfile {
+    fn default() -> Self {
+        Self {
+            hunger_decay_per_hour: default_hunger_decay_per_hour(),
+            energy_decay_per_hour: default_energy_decay_per_hour(),
+            morale_decay_per_hour: default_morale_decay_per_hour(),
+            safety_bias: default_safety_bias(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CharacterLifeProfile {
+    pub settlement_id: String,
+    pub role: NpcRole,
+    pub home_anchor: String,
+    #[serde(default)]
+    pub duty_route_id: String,
+    #[serde(default)]
+    pub schedule: Vec<ScheduleBlock>,
+    #[serde(default)]
+    pub smart_object_access: Vec<String>,
+    #[serde(default)]
+    pub need_profile: NeedProfile,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CharacterDefinition {
     pub id: CharacterId,
@@ -50,6 +136,8 @@ pub struct CharacterDefinition {
     pub combat: CharacterCombatProfile,
     pub ai: CharacterAiProfile,
     pub attributes: CharacterAttributeTemplate,
+    #[serde(default)]
+    pub life: Option<CharacterLifeProfile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -208,6 +296,18 @@ pub enum CharacterDefinitionValidationError {
     InvalidAiValue { field: &'static str, value: f32 },
     #[error("player archetype must use player disposition, got {disposition:?}")]
     InvalidPlayerDisposition { disposition: CharacterDisposition },
+    #[error("life settlement_id must not be empty")]
+    MissingLifeSettlementId,
+    #[error("life home_anchor must not be empty")]
+    MissingLifeHomeAnchor,
+    #[error("life schedule block {index} has invalid window {start_minute}..{end_minute}")]
+    InvalidScheduleWindow {
+        index: usize,
+        start_minute: u16,
+        end_minute: u16,
+    },
+    #[error("life need_profile field {field} must be >= 0, got {value}")]
+    InvalidNeedValue { field: &'static str, value: f32 },
 }
 
 pub fn validate_character_definition(
@@ -252,6 +352,38 @@ pub fn validate_character_definition(
                 disposition: definition.faction.disposition,
             },
         );
+    }
+
+    if let Some(life) = &definition.life {
+        if life.settlement_id.trim().is_empty() {
+            return Err(CharacterDefinitionValidationError::MissingLifeSettlementId);
+        }
+        if life.home_anchor.trim().is_empty() {
+            return Err(CharacterDefinitionValidationError::MissingLifeHomeAnchor);
+        }
+        validate_non_negative_need(
+            "hunger_decay_per_hour",
+            life.need_profile.hunger_decay_per_hour,
+        )?;
+        validate_non_negative_need(
+            "energy_decay_per_hour",
+            life.need_profile.energy_decay_per_hour,
+        )?;
+        validate_non_negative_need(
+            "morale_decay_per_hour",
+            life.need_profile.morale_decay_per_hour,
+        )?;
+        validate_non_negative_need("safety_bias", life.need_profile.safety_bias)?;
+
+        for (index, block) in life.schedule.iter().enumerate() {
+            if block.start_minute >= block.end_minute || block.end_minute > 24 * 60 {
+                return Err(CharacterDefinitionValidationError::InvalidScheduleWindow {
+                    index,
+                    start_minute: block.start_minute,
+                    end_minute: block.end_minute,
+                });
+            }
+        }
     }
 
     Ok(())
@@ -323,6 +455,33 @@ fn validate_ai_value(
     } else {
         Ok(())
     }
+}
+
+fn validate_non_negative_need(
+    field: &'static str,
+    value: f32,
+) -> Result<(), CharacterDefinitionValidationError> {
+    if value < 0.0 {
+        Err(CharacterDefinitionValidationError::InvalidNeedValue { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+const fn default_hunger_decay_per_hour() -> f32 {
+    4.0
+}
+
+const fn default_energy_decay_per_hour() -> f32 {
+    3.0
+}
+
+const fn default_morale_decay_per_hour() -> f32 {
+    1.5
+}
+
+const fn default_safety_bias() -> f32 {
+    0.5
 }
 
 #[cfg(test)]
@@ -510,6 +669,7 @@ mod tests {
                 attack_cooldown: 1.0,
             },
             attributes: CharacterAttributeTemplate { sets, resources },
+            life: None,
         }
     }
 

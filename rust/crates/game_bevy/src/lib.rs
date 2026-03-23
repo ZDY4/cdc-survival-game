@@ -6,12 +6,23 @@ use bevy_ecs::prelude::*;
 use game_core::simulation::Simulation;
 use game_core::{NoopAiController, RegisterActor, SimulationRuntime};
 use game_data::{
-    load_character_library, load_map_library, ActorKind, ActorSide, CharacterAiProfile,
-    CharacterArchetype, CharacterDefinition, CharacterDisposition, CharacterId, CharacterLibrary,
-    CharacterLoadError, CharacterLootEntry, CharacterPlaceholderColors, CharacterResourcePool,
-    GridCoord, MapId, MapLibrary, MapLoadError,
+    load_character_library, load_map_library, load_settlement_library, ActorKind, ActorSide,
+    CharacterAiProfile, CharacterArchetype, CharacterDefinition, CharacterDisposition, CharacterId,
+    CharacterLibrary, CharacterLoadError, CharacterLootEntry, CharacterPlaceholderColors,
+    CharacterResourcePool, GridCoord, MapId, MapLibrary, MapLoadError, SettlementLibrary,
+    SettlementLoadError,
 };
+use npc_life::LifeProfileComponent;
 use thiserror::Error;
+
+pub mod npc_life;
+
+pub use npc_life::{
+    CurrentAction, CurrentGoal, CurrentPlan, LifeProfileComponent as CharacterLifeProfileComponent,
+    NeedState, NpcLifePlugin, NpcLifeState, ReservationState, ScheduleState, SettlementContext,
+    SettlementDebugEntry, SettlementDebugSnapshot, SettlementSimulationPlugin, SimClock,
+    SmartObjectReservations, WorldAlertState,
+};
 
 #[derive(Resource, Debug, Clone)]
 pub struct CharacterDefinitionPath(pub PathBuf);
@@ -36,6 +47,18 @@ impl Default for MapDefinitionPath {
 
 #[derive(Resource, Debug, Clone)]
 pub struct MapDefinitions(pub MapLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct SettlementDefinitionPath(pub PathBuf);
+
+impl Default for SettlementDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/settlements"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct SettlementDefinitions(pub SettlementLibrary);
 
 #[derive(Resource, Debug, Clone)]
 pub struct RuntimeStartupConfigPath(pub PathBuf);
@@ -86,11 +109,8 @@ pub enum RuntimeBuildError {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RuntimeStartupConfigError {
-    #[error("failed to read runtime startup config {path}: {source}")]
-    ReadFile {
-        path: PathBuf,
-        source: String,
-    },
+    #[error("failed to read runtime startup config {path}: {message}")]
+    ReadFile { path: PathBuf, message: String },
     #[error("invalid config line {line_number}: {line}")]
     InvalidLine { line_number: usize, line: String },
 }
@@ -185,6 +205,12 @@ pub fn load_map_definitions(path: impl AsRef<Path>) -> Result<MapDefinitions, Ma
     Ok(MapDefinitions(load_map_library(path)?))
 }
 
+pub fn load_settlement_definitions(
+    path: impl AsRef<Path>,
+) -> Result<SettlementDefinitions, SettlementLoadError> {
+    Ok(SettlementDefinitions(load_settlement_library(path)?))
+}
+
 pub fn load_character_definitions_on_startup(
     mut commands: Commands,
     path: Res<CharacterDefinitionPath>,
@@ -202,6 +228,19 @@ pub fn load_map_definitions_on_startup(mut commands: Commands, path: Res<MapDefi
     let definitions = load_map_definitions(&path.0).unwrap_or_else(|error| {
         panic!(
             "failed to load map definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_settlement_definitions_on_startup(
+    mut commands: Commands,
+    path: Res<SettlementDefinitionPath>,
+) {
+    let definitions = load_settlement_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load settlement definitions from {}: {error}",
             path.0.display()
         )
     });
@@ -258,7 +297,7 @@ pub fn load_runtime_startup_config(
 
     let raw = fs::read_to_string(path).map_err(|error| RuntimeStartupConfigError::ReadFile {
         path: path.to_path_buf(),
-        source: error.to_string(),
+        message: error.to_string(),
     })?;
     parse_runtime_startup_config(&raw)
 }
@@ -398,7 +437,7 @@ fn spawn_character_entity(
         .cloned()
         .unwrap_or_default();
 
-    commands
+    let entity = commands
         .spawn(SpawnedCharacterBundle {
             definition_id: CharacterDefinitionId(definition.id.clone()),
             archetype: CharacterArchetypeComponent(definition.archetype),
@@ -422,7 +461,13 @@ fn spawn_character_entity(
             resources: ResourcePools(definition.attributes.resources.clone()),
             grid_position: GridPosition(grid_position),
         })
-        .id()
+        .id();
+
+    if let Some(life) = definition.life.clone() {
+        commands.entity(entity).insert(LifeProfileComponent(life));
+    }
+
+    entity
 }
 
 fn register_actor_from_definition(
@@ -485,9 +530,9 @@ mod tests {
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLibrary, CharacterLootEntry, CharacterPlaceholderColors,
         CharacterPresentation, CharacterProgression, CharacterResourcePool, GridCoord,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLibrary,
-        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-        MapObjectProps, MapRotation, MapSize,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLevelDefinition, MapLibrary,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
+        MapSize,
     };
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -518,7 +563,8 @@ mod tests {
             ],
         };
 
-        let runtime = build_runtime_from_seed(&library, &maps, &seed).expect("runtime should build");
+        let runtime =
+            build_runtime_from_seed(&library, &maps, &seed).expect("runtime should build");
         let snapshot = runtime.snapshot();
 
         let player = snapshot
@@ -552,7 +598,10 @@ mod tests {
         assert_eq!(enemy.kind, game_data::ActorKind::Enemy);
         assert_eq!(enemy.side, game_data::ActorSide::Hostile);
         assert_eq!(enemy.group_id, "infected");
-        assert_eq!(snapshot.grid.map_id.as_ref().map(MapId::as_str), Some("safehouse_grid"));
+        assert_eq!(
+            snapshot.grid.map_id.as_ref().map(MapId::as_str),
+            Some("safehouse_grid")
+        );
         assert_eq!(snapshot.grid.map_width, Some(12));
         assert_eq!(snapshot.grid.levels, vec![0, 1]);
         assert!(snapshot
@@ -574,9 +623,8 @@ mod tests {
             }],
         };
 
-        let error =
-            build_runtime_from_seed(&library, &maps, &seed)
-                .expect_err("missing definitions should fail");
+        let error = build_runtime_from_seed(&library, &maps, &seed)
+            .expect_err("missing definitions should fail");
         assert_eq!(
             error,
             RuntimeBuildError::UnknownCharacterDefinition {
@@ -595,8 +643,8 @@ mod tests {
             characters: Vec::new(),
         };
 
-        let error = build_runtime_from_seed(&library, &maps, &seed)
-            .expect_err("missing map should fail");
+        let error =
+            build_runtime_from_seed(&library, &maps, &seed).expect_err("missing map should fail");
         assert_eq!(
             error,
             RuntimeBuildError::UnknownMapDefinition {
@@ -743,12 +791,7 @@ startup_map =
         )
         .expect("blank startup_map should parse");
 
-        assert_eq!(
-            config,
-            RuntimeStartupConfig {
-                startup_map: None,
-            }
-        );
+        assert_eq!(config, RuntimeStartupConfig { startup_map: None });
     }
 
     #[test]
@@ -936,6 +979,7 @@ startup_map =
                     CharacterResourcePool { current: 60.0 },
                 )]),
             },
+            life: None,
         }
     }
 }

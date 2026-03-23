@@ -4,13 +4,15 @@ use bevy_ecs::prelude::*;
 use std::time::Duration;
 
 use game_bevy::{
-    build_runtime_from_seed, default_debug_seed, load_character_definitions_on_startup, load_map_definitions_on_startup,
-    load_runtime_startup_config_on_startup, resolve_startup_map_id,
+    build_runtime_from_seed, default_debug_seed, load_character_definitions_on_startup,
+    load_map_definitions_on_startup, load_runtime_startup_config_on_startup,
+    load_settlement_definitions_on_startup, resolve_startup_map_id,
     spawn_characters_from_definition, AiCombatProfile, BehaviorProfile, CampId,
     CharacterArchetypeComponent, CharacterDefinitionId, CharacterDefinitionPath,
     CharacterDefinitions, CharacterSpawnRejected, DisplayName, Disposition, GridPosition, Level,
-    LootTable, MapDefinitionPath, MapDefinitions, RuntimeStartupConfig,
-    RuntimeStartupConfigPath, SpawnCharacterRequest, XpReward,
+    LootTable, MapDefinitionPath, MapDefinitions, NpcLifePlugin, RuntimeStartupConfig,
+    RuntimeStartupConfigPath, SettlementDefinitionPath, SettlementSimulationPlugin,
+    SpawnCharacterRequest, XpReward,
 };
 use game_core::{GameCorePlugin, SimulationRuntime};
 use game_data::GameDataPlugin;
@@ -21,10 +23,17 @@ fn main() {
         .insert_resource(ServerConfig::default())
         .insert_resource(CharacterDefinitionPath::default())
         .insert_resource(MapDefinitionPath::default())
+        .insert_resource(SettlementDefinitionPath::default())
         .insert_resource(RuntimeStartupConfigPath::default())
         .add_plugins(TaskPoolPlugin::default())
         .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_millis(16)))
-        .add_plugins((GameDataPlugin, GameProtocolPlugin, GameCorePlugin))
+        .add_plugins((
+            GameDataPlugin,
+            GameProtocolPlugin,
+            GameCorePlugin,
+            SettlementSimulationPlugin,
+            NpcLifePlugin,
+        ))
         .add_message::<SpawnCharacterRequest>()
         .add_message::<CharacterSpawnRejected>()
         .add_systems(
@@ -32,6 +41,7 @@ fn main() {
             (
                 load_character_definitions_on_startup,
                 load_map_definitions_on_startup,
+                load_settlement_definitions_on_startup,
                 load_runtime_startup_config_on_startup,
                 startup_demo,
             )
@@ -81,21 +91,31 @@ fn startup_demo(
         "loaded {} character definitions from Rust game_data authority",
         definitions.0.len()
     );
-    println!("loaded {} map definitions from Rust game_data authority", maps.0.len());
+    println!(
+        "loaded {} map definitions from Rust game_data authority",
+        maps.0.len()
+    );
     match seed.map_id.as_ref() {
         Some(map_id) => {
             if maps.0.get(map_id).is_none() {
-                panic!("configured startup_map {} was not found in loaded map definitions", map_id);
+                panic!(
+                    "configured startup_map {} was not found in loaded map definitions",
+                    map_id
+                );
             }
-            println!("selected startup_map={} from shared bevy runtime config", map_id);
+            println!(
+                "selected startup_map={} from shared bevy runtime config",
+                map_id
+            );
         }
         None => {
             println!("selected startup_map=<none>; no map definitions available");
         }
     }
 
-    let runtime = build_runtime_from_seed(&definitions.0, &maps.0, &seed)
-        .unwrap_or_else(|error| panic!("failed to build bevy_server runtime from startup seed: {error}"));
+    let runtime = build_runtime_from_seed(&definitions.0, &maps.0, &seed).unwrap_or_else(|error| {
+        panic!("failed to build bevy_server runtime from startup seed: {error}")
+    });
     let snapshot = runtime.snapshot();
     println!(
         "initialized simulation runtime map_id={} size={}x{} levels={:?}",
@@ -205,9 +225,9 @@ mod tests {
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLibrary, CharacterLootEntry, CharacterPlaceholderColors,
         CharacterPresentation, CharacterProgression, CharacterResourcePool, GridCoord,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLibrary,
-        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-        MapObjectProps, MapRotation, MapSize,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLevelDefinition, MapLibrary,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
+        MapSize,
     };
     use std::collections::BTreeMap;
 
@@ -220,9 +240,7 @@ mod tests {
         app.insert_resource(ServerConfig::default());
         app.insert_resource(CharacterDefinitions(sample_character_library()));
         app.insert_resource(MapDefinitions(sample_map_library()));
-        app.insert_resource(RuntimeStartupConfig {
-            startup_map: None,
-        });
+        app.insert_resource(RuntimeStartupConfig { startup_map: None });
         app.insert_resource(CapturedRequests::default());
         app.add_message::<SpawnCharacterRequest>();
         app.add_systems(Startup, (startup_demo, capture_requests).chain());
@@ -262,7 +280,10 @@ mod tests {
         let runtime = app.world().resource::<ServerSimulationRuntime>();
         let snapshot = runtime.0.snapshot();
 
-        assert_eq!(snapshot.grid.map_id.as_ref().map(MapId::as_str), Some("safehouse_grid"));
+        assert_eq!(
+            snapshot.grid.map_id.as_ref().map(MapId::as_str),
+            Some("safehouse_grid")
+        );
         assert_eq!(snapshot.grid.map_width, Some(12));
         assert_eq!(snapshot.grid.map_height, Some(12));
     }
@@ -421,6 +442,7 @@ mod tests {
                     CharacterResourcePool { current: 60.0 },
                 )]),
             },
+            life: None,
         }
     }
 }

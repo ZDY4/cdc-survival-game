@@ -2191,6 +2191,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7a1e2f27636f116493b8b860f5546edb47c8d8f8ea73e1d2a20be88e28d1fea"
 
 [[package]]
+name = "deprecate-until"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d0795c0c5b2cab72b80d75b5cb08bde679e616c67e954669a2476668319ac3a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "semver",
+ "syn",
+]
+
+[[package]]
 name = "derive_more"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2253,6 +2265,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
+]
+
+[[package]]
+name = "dogoap"
+version = "0.6.0"
+source = "git+https://github.com/victorb/dogoap.git?rev=e429fd1c15b2eeb7e423609b3fdb954e1a5324da#e429fd1c15b2eeb7e423609b3fdb954e1a5324da"
+dependencies = [
+ "pathfinding",
 ]
 
 [[package]]
@@ -2561,6 +2581,7 @@ name = "game_core"
 version = "0.1.0"
 dependencies = [
  "bevy_app",
+ "dogoap",
  "game_data",
  "game_protocol",
 ]
@@ -2958,6 +2979,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "integer-sqrt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -3799,6 +3829,20 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
+name = "pathfinding"
+version = "4.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "835ad2773f8587ad2d90a0f7f0022ca743dfd5a6a24ea25062f3519c38d2fcfa"
+dependencies = [
+ "deprecate-until",
+ "indexmap",
+ "integer-sqrt",
+ "num-traits",
+ "rustc-hash 2.1.1",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "percent-encoding"

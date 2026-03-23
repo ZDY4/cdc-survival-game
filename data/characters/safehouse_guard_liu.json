@@ -1,0 +1,108 @@
+{
+  "id": "safehouse_guard_liu",
+  "archetype": "npc",
+  "identity": {
+    "display_name": "据点卫兵·刘山",
+    "description": "长期负责安全屋北门的值守和巡逻，对排班十分严格。"
+  },
+  "faction": {
+    "camp_id": "survivor",
+    "disposition": "friendly"
+  },
+  "presentation": {
+    "portrait_path": "",
+    "avatar_path": "",
+    "model_path": "",
+    "placeholder_colors": {
+      "head": "#d7b78d",
+      "body": "#3d6b7a",
+      "legs": "#2a3948"
+    }
+  },
+  "progression": {
+    "level": 3
+  },
+  "combat": {
+    "behavior": "neutral",
+    "xp_reward": 15,
+    "loot": []
+  },
+  "ai": {
+    "aggro_range": 0.0,
+    "attack_range": 1.2,
+    "wander_radius": 1.0,
+    "leash_distance": 2.0,
+    "decision_interval": 1.0,
+    "attack_cooldown": 999.0
+  },
+  "attributes": {
+    "sets": {
+      "base": {
+        "strength": 7.0,
+        "agility": 6.0,
+        "constitution": 7.0
+      },
+      "combat": {
+        "max_hp": 80.0,
+        "attack_power": 6.0,
+        "defense": 4.0,
+        "speed": 4.0
+      }
+    },
+    "resources": {
+      "hp": {
+        "current": 80.0
+      }
+    }
+  },
+  "life": {
+    "settlement_id": "safehouse_survivor_outpost",
+    "role": "guard",
+    "home_anchor": "guard_home_01",
+    "duty_route_id": "guard_patrol_north",
+    "schedule": [
+      {
+        "day": "monday",
+        "start_minute": 480,
+        "end_minute": 960,
+        "label": "白班执勤",
+        "tags": ["shift", "guard"]
+      },
+      {
+        "day": "tuesday",
+        "start_minute": 480,
+        "end_minute": 960,
+        "label": "白班执勤",
+        "tags": ["shift", "guard"]
+      },
+      {
+        "day": "wednesday",
+        "start_minute": 480,
+        "end_minute": 960,
+        "label": "白班执勤",
+        "tags": ["shift", "guard"]
+      },
+      {
+        "day": "thursday",
+        "start_minute": 480,
+        "end_minute": 960,
+        "label": "白班执勤",
+        "tags": ["shift", "guard"]
+      },
+      {
+        "day": "friday",
+        "start_minute": 480,
+        "end_minute": 960,
+        "label": "白班执勤",
+        "tags": ["shift", "guard"]
+      }
+    ],
+    "smart_object_access": ["guard_post", "bed", "canteen_seat", "recreation_spot", "alarm_point"],
+    "need_profile": {
+      "hunger_decay_per_hour": 4.5,
+      "energy_decay_per_hour": 3.0,
+      "morale_decay_per_hour": 1.2,
+      "safety_bias": 0.8
+    }
+  }
+}
