@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "地图碎片",
-  "subtype": "map",
-  "slot": "",
-  "weight": 0.1,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 10,
-  "value": 5,
-  "durability": -1,
-  "description": "零散的地图片段",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1131,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "地图碎片",
+  "description": "零散的地图片段",
+  "icon_path": "",
+  "value": 5,
+  "weight": 0.1,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 10
+    }
+  ]
 }

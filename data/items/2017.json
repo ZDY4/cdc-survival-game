@@ -2,37 +2,55 @@
   "id": 2017,
   "name": "战术靴",
   "description": "高科技战术靴，静音且舒适",
-  "type": "armor",
-  "subtype": "boots",
-  "rarity": "rare",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "feet",
-  "level_requirement": 4,
-  "durability": 60,
-  "max_durability": 60,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 4,
-    "speed_bonus": 0.15,
-    "noise_reduction": 0.5,
-    "stamina_efficiency": 0.2
-  },
-  "special_effects": [
-    "noise_reduction",
-    "stamina_efficiency"
-  ],
-  "repair_materials": [
-    {"item": 1011, "count": 4},
-    {"item": 1012, "count": 1}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "rare"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "feet"
+      ],
+      "level_requirement": 4,
+      "equip_effect_ids": [
+        "noise_reduction",
+        "stamina_efficiency"
+      ],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 60,
+      "max_durability": 60,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 4
+        },
+        {
+          "item_id": 1012,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "defense": 4.0,
+        "noise_reduction": 0.5,
+        "speed_bonus": 0.15,
+        "stamina_efficiency": 0.2
+      }
+    }
+  ]
 }
-
-

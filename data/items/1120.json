@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "基础工具",
-  "subtype": "tools",
-  "slot": "",
-  "weight": 0.4,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 50,
-  "value": 8,
-  "durability": -1,
-  "description": "基础工具组件",
-  "rarity": "common",
-  "stackable": true,
-  "type": "material",
   "id": 1120,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "基础工具",
+  "description": "基础工具组件",
+  "icon_path": "",
+  "value": 8,
+  "weight": 0.4,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 50
+    }
+  ]
 }

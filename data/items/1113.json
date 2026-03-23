@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "齿轮",
-  "subtype": "parts",
-  "slot": "",
-  "weight": 0.2,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 99,
-  "value": 6,
-  "durability": -1,
-  "description": "机械齿轮",
-  "rarity": "common",
-  "stackable": true,
-  "type": "material",
   "id": 1113,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "齿轮",
+  "description": "机械齿轮",
+  "icon_path": "",
+  "value": 6,
+  "weight": 0.2,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 99
+    }
+  ]
 }

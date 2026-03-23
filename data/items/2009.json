@@ -2,38 +2,55 @@
   "id": 2009,
   "name": "防化服",
   "description": "防护化学污染和辐射",
-  "type": "armor",
-  "subtype": "body",
-  "rarity": "rare",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "body",
-  "level_requirement": 4,
-  "durability": 50,
-  "max_durability": 50,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 4,
-    "insulation": 0.5,
-    "radiation_resistance": 0.8,
-    "disease_resistance": 0.5
-  },
-  "special_effects": [
-    "radiation_resistance",
-    "disease_resistance"
-  ],
-  "repair_materials": [
-    {"item": 1011, "count": 5},
-    {"item": 1030, "count": 1}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "rare"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "body"
+      ],
+      "level_requirement": 4,
+      "equip_effect_ids": [
+        "radiation_resistance",
+        "disease_resistance"
+      ],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 50,
+      "max_durability": 50,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 5
+        },
+        {
+          "item_id": 1030,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "defense": 4.0,
+        "disease_resistance": 0.5,
+        "insulation": 0.5,
+        "radiation_resistance": 0.8
+      }
+    }
+  ]
 }
-
-
-

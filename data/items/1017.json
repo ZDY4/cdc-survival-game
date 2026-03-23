@@ -2,50 +2,72 @@
   "id": 1017,
   "name": "弹弓",
   "description": "简易的远程武器",
-  "type": "weapon",
-  "subtype": "light",
-  "rarity": "common",
-  "weight": 0.2,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "res://assets/icons/weapons/slingshot.png",
-  "equippable": true,
-  "slot": "main_hand",
-  "level_requirement": 1,
-  "durability": 30,
-  "max_durability": 30,
-  "repairable": true,
-  "usable": false,
-  "weapon_data": {
-    "damage": 8,
-    "attack_speed": 1.0,
-    "range": 10,
-    "stamina_cost": 2,
-    "accuracy": 70,
-    "ammo_type": "1023",
-    "max_ammo": 1,
-    "reload_time": 1.0,
-    "crit_chance": 0.05,
-    "crit_multiplier": 1.5
-  },
-  "special_effects": [
-    "headshot_bonus"
+  "value": 0,
+  "weight": 0.2,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "main_hand"
+      ],
+      "level_requirement": 1,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 30,
+      "max_durability": 30,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1010,
+          "count": 2
+        }
+      ]
+    },
+    {
+      "kind": "weapon",
+      "subtype": "light",
+      "damage": 8,
+      "attack_speed": 1.0,
+      "range": 10,
+      "stamina_cost": 2,
+      "crit_chance": 0.05,
+      "crit_multiplier": 1.5,
+      "accuracy": 70,
+      "ammo_type": 1023,
+      "max_ammo": 1,
+      "reload_time": 1.0,
+      "on_hit_effect_ids": [
+        "headshot_bonus"
+      ]
+    },
+    {
+      "kind": "crafting",
+      "crafting_recipe": {
+        "materials": [
+          {
+            "item_id": 1010,
+            "count": 2
+          }
+        ],
+        "time": 20
+      },
+      "deconstruct_yield": []
+    }
   ],
   "effect_data": {
     "headshot_damage": 1.5
-  },
-  "attributes_bonus": {},
-  "repair_materials": [
-    {"item": 1010, "count": 2}
-  ],
-  "crafting_recipe": {
-    "materials": [
-      {"item": 1010, "count": 2}
-    ],
-    "time": 20
-  },
-  "deconstruct_yield": []
+  }
 }
-
-

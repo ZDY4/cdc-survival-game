@@ -2,35 +2,53 @@
   "id": 2007,
   "name": "战术背心",
   "description": "军用战术背心，轻便而坚固",
-  "type": "armor",
-  "subtype": "body",
-  "rarity": "rare",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "body",
-  "level_requirement": 4,
-  "durability": 80,
-  "max_durability": 80,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 10,
-    "insulation": 0.2,
-    "ammo_capacity": 20
-  },
-  "special_effects": [
-    "ammo_capacity"
-  ],
-  "repair_materials": [
-    {"item": 1010, "count": 6},
-    {"item": 1011, "count": 3}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "rare"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "body"
+      ],
+      "level_requirement": 4,
+      "equip_effect_ids": [
+        "ammo_capacity"
+      ],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 80,
+      "max_durability": 80,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1010,
+          "count": 6
+        },
+        {
+          "item_id": 1011,
+          "count": 3
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "ammo_capacity": 20.0,
+        "defense": 10.0,
+        "insulation": 0.2
+      }
+    }
+  ]
 }
-
-

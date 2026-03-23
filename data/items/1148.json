@@ -1,22 +1,19 @@
 {
-  "level_requirement": 0,
-  "max_stack": 5,
-  "description": "通往地铁区域的钥匙卡",
-  "repairable": false,
-  "durability": -1,
-  "usable": false,
-  "slot": "",
-  "name": "地铁钥匙卡",
   "id": 1148,
-  "type": "misc",
+  "name": "地铁钥匙卡",
+  "description": "通往地铁区域的钥匙卡",
+  "icon_path": "",
   "value": 30,
   "weight": 0.1,
-  "rarity": "common",
-  "special_effects": [],
-  "equippable": false,
-  "icon_path": "",
-  "attributes_bonus": {},
-  "stackable": true,
-  "max_durability": -1,
-  "subtype": "key"
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 5
+    }
+  ]
 }

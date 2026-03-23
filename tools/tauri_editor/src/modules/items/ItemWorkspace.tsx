@@ -6,25 +6,31 @@ import {
   NumberField,
   NumberMapField,
   SelectField,
+  type SelectOption,
   TextField,
   TextareaField,
-  TokenListField,
 } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
 import { ValidationPanel } from "../../components/ValidationPanel";
 import { invokeCommand } from "../../lib/tauri";
 import type {
-  ArmorData,
-  ConsumableData,
-  ItemData,
+  CraftingFragment,
+  CraftingRecipe,
+  ItemAmount,
+  ItemDefinition,
   ItemDocumentPayload,
+  ItemFragment,
   ItemWorkspacePayload,
   SaveItemsResult,
   ValidationIssue,
-  WeaponData,
 } from "../../types";
-import { createDefaultItem, KNOWN_ITEM_KEYS } from "./defaults";
+import {
+  createDefaultFragment,
+  createDefaultItem,
+  DEFAULT_RARITIES,
+  KNOWN_ITEM_KEYS,
+} from "./defaults";
 
 type EditableItemDocument = ItemDocumentPayload & {
   savedSnapshot: string;
@@ -39,6 +45,13 @@ type ItemWorkspaceProps = {
   onReload: () => Promise<void>;
 };
 
+type ItemTag = "weapon" | "armor" | "accessory" | "usable" | "material_or_misc";
+
+type FragmentOf<K extends ItemFragment["kind"]> = Extract<ItemFragment, { kind: K }>;
+
+const ARMOR_SLOTS = new Set(["head", "body", "hands", "legs", "feet", "back"]);
+const ACCESSORY_SLOTS = new Set(["accessory", "accessory_1", "accessory_2"]);
+
 function hydrateDocuments(documents: ItemDocumentPayload[]): EditableItemDocument[] {
   return documents.map((document) => ({
     ...document,
@@ -48,7 +61,7 @@ function hydrateDocuments(documents: ItemDocumentPayload[]): EditableItemDocumen
   }));
 }
 
-function getDirtyState(item: ItemData, savedSnapshot: string): boolean {
+function getDirtyState(item: ItemDefinition, savedSnapshot: string): boolean {
   return JSON.stringify(item) !== savedSnapshot;
 }
 
@@ -65,7 +78,7 @@ function getIssueCounts(issues: ValidationIssue[]) {
   return { errorCount, warningCount };
 }
 
-function getExtraFields(item: ItemData): Record<string, unknown> {
+function getExtraFields(item: ItemDefinition): Record<string, unknown> {
   const extra: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(item)) {
     if (!KNOWN_ITEM_KEYS.has(key)) {
@@ -75,7 +88,7 @@ function getExtraFields(item: ItemData): Record<string, unknown> {
   return extra;
 }
 
-function mergeExtraFields(item: ItemData, extra: Record<string, unknown>): ItemData {
+function mergeExtraFields(item: ItemDefinition, extra: Record<string, unknown>): ItemDefinition {
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(item)) {
     if (KNOWN_ITEM_KEYS.has(key)) {
@@ -85,7 +98,7 @@ function mergeExtraFields(item: ItemData, extra: Record<string, unknown>): ItemD
   for (const [key, value] of Object.entries(extra)) {
     next[key] = value;
   }
-  return next as ItemData;
+  return next as ItemDefinition;
 }
 
 function parseExtraJson(raw: string): Record<string, unknown> | null {
@@ -100,30 +113,594 @@ function parseExtraJson(raw: string): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
-function ensureWeaponData(item: ItemData): WeaponData {
+function getFragment<K extends ItemFragment["kind"]>(
+  item: ItemDefinition,
+  kind: K,
+): FragmentOf<K> | null {
+  const fragment = item.fragments.find(
+    (candidate): candidate is FragmentOf<K> => candidate.kind === kind,
+  );
+  return fragment ?? null;
+}
+
+function replaceFragment(item: ItemDefinition, fragment: ItemFragment): ItemDefinition {
+  const existingIndex = item.fragments.findIndex((candidate) => candidate.kind === fragment.kind);
+  if (existingIndex === -1) {
+    return {
+      ...item,
+      fragments: [...item.fragments, fragment],
+    };
+  }
+
+  const fragments = [...item.fragments];
+  fragments[existingIndex] = fragment;
   return {
-    damage: item.weapon_data?.damage ?? 0,
-    attack_speed: item.weapon_data?.attack_speed ?? 1,
-    range: item.weapon_data?.range ?? 1,
-    stamina_cost: item.weapon_data?.stamina_cost ?? 0,
-    crit_chance: item.weapon_data?.crit_chance ?? 0,
-    crit_multiplier: item.weapon_data?.crit_multiplier ?? 1.5,
+    ...item,
+    fragments,
   };
 }
 
-function ensureArmorData(item: ItemData): ArmorData {
+function removeFragment(item: ItemDefinition, kind: ItemFragment["kind"]): ItemDefinition {
   return {
-    defense: item.armor_data?.defense ?? 0,
-    damage_reduction: item.armor_data?.damage_reduction ?? 0,
+    ...item,
+    fragments: item.fragments.filter((fragment) => fragment.kind !== kind),
   };
 }
 
-function ensureConsumableData(item: ItemData): ConsumableData {
-  return {
-    health_restore: item.consumable_data?.health_restore ?? 0,
-    stamina_restore: item.consumable_data?.stamina_restore ?? 0,
-    duration: item.consumable_data?.duration ?? 0,
-  };
+function availableFragmentKinds(item: ItemDefinition, fragmentKinds: string[]) {
+  const existing = new Set(item.fragments.map((fragment) => fragment.kind));
+  return fragmentKinds.filter((kind) => !existing.has(kind as ItemFragment["kind"]));
+}
+
+function ensureCraftingRecipe(fragment: CraftingFragment): CraftingRecipe {
+  return (
+    fragment.crafting_recipe ?? {
+      materials: [],
+      time: 0,
+    }
+  );
+}
+
+function inferItemTags(item: ItemDefinition): ItemTag[] {
+  const tags: ItemTag[] = [];
+  const weapon = getFragment(item, "weapon");
+  const equip = getFragment(item, "equip");
+  const usable = getFragment(item, "usable");
+  const crafting = getFragment(item, "crafting");
+  const stacking = getFragment(item, "stacking");
+
+  if (weapon) {
+    tags.push("weapon");
+  }
+  if (equip && !weapon && equip.slots.some((slot) => ARMOR_SLOTS.has(slot))) {
+    tags.push("armor");
+  }
+  if (equip && equip.slots.some((slot) => ACCESSORY_SLOTS.has(slot))) {
+    tags.push("accessory");
+  }
+  if (usable) {
+    tags.push("usable");
+  }
+  if (!equip && !weapon && !usable && (crafting || stacking)) {
+    tags.push("material_or_misc");
+  }
+  if (tags.length === 0) {
+    tags.push("material_or_misc");
+  }
+
+  return tags;
+}
+
+function getPrimaryTag(item: ItemDefinition): ItemTag {
+  return inferItemTags(item)[0];
+}
+
+function getEconomyRarity(item: ItemDefinition): string {
+  return getFragment(item, "economy")?.rarity ?? "common";
+}
+
+function getKnownSubtype(item: ItemDefinition): string {
+  return getFragment(item, "weapon")?.subtype ?? getFragment(item, "usable")?.subtype ?? "";
+}
+
+function optionalNumberText(value: number | null | undefined): string {
+  return value == null ? "" : String(value);
+}
+
+function parseOptionalInteger(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function parseOptionalFloat(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function formatTag(tag: ItemTag): string {
+  switch (tag) {
+    case "material_or_misc":
+      return "material/misc";
+    default:
+      return tag;
+  }
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function buildItemReferenceOptions(documents: EditableItemDocument[]): SelectOption[] {
+  return documents
+    .slice()
+    .sort((left, right) => left.item.id - right.item.id)
+    .map((document) => ({
+      value: String(document.item.id),
+      label: `${document.item.id} · ${document.item.name || "Unnamed item"}`,
+    }));
+}
+
+function buildStringOptions(values: string[]): SelectOption[] {
+  return values.map((value) => ({
+    value,
+    label: value,
+  }));
+}
+
+function buildOptionLabelLookup(options: SelectOption[]): Record<string, string> {
+  return Object.fromEntries(options.map((option) => [option.value, option.label]));
+}
+
+type SummaryBadge = {
+  label: string;
+  tone: "muted" | "accent" | "warning" | "success";
+};
+
+function shortenLabel(label: string, maxLength = 28): string {
+  return label.length <= maxLength ? label : `${label.slice(0, maxLength - 1)}…`;
+}
+
+function summaryLabelFromLookup(
+  value: string,
+  lookup: Record<string, string>,
+  maxLength?: number,
+): string {
+  const resolved = lookup[value] ?? value;
+  return shortenLabel(resolved, maxLength);
+}
+
+function summarizeFragment(
+  fragment: ItemFragment,
+  itemLabelLookup: Record<string, string>,
+  effectLabelLookup: Record<string, string>,
+): SummaryBadge[] {
+  switch (fragment.kind) {
+    case "economy":
+      return [{ label: fragment.rarity || "common", tone: "accent" }];
+    case "stacking":
+      return [
+        {
+          label: fragment.stackable ? `stack x${fragment.max_stack}` : "single item",
+          tone: "muted",
+        },
+      ];
+    case "equip": {
+      const badges: SummaryBadge[] = [];
+      badges.push(...fragment.slots.slice(0, 3).map((slot) => ({ label: slot, tone: "muted" as const })));
+      if (fragment.slots.length > 3) {
+        badges.push({ label: `+${fragment.slots.length - 3} slots`, tone: "muted" });
+      }
+      if (fragment.level_requirement > 0) {
+        badges.push({ label: `lvl ${fragment.level_requirement}+`, tone: "accent" });
+      }
+      if (fragment.equip_effect_ids.length > 0) {
+        badges.push({
+          label: `equip ${summaryLabelFromLookup(fragment.equip_effect_ids[0] ?? "", effectLabelLookup)}`,
+          tone: "success",
+        });
+        if (fragment.equip_effect_ids.length > 1) {
+          badges.push({
+            label: `+${fragment.equip_effect_ids.length - 1} equip fx`,
+            tone: "success",
+          });
+        }
+      }
+      if (fragment.unequip_effect_ids.length > 0) {
+        badges.push({
+          label: `${fragment.unequip_effect_ids.length} unequip fx`,
+          tone: "warning",
+        });
+      }
+      return badges;
+    }
+    case "durability": {
+      const badges: SummaryBadge[] = [
+        {
+          label:
+            fragment.max_durability < 0
+              ? "unbreakable"
+              : `${fragment.durability}/${fragment.max_durability}`,
+          tone: "muted",
+        },
+      ];
+      if (fragment.repairable) {
+        badges.push({ label: "repairable", tone: "accent" });
+      }
+      if (fragment.repair_materials.length > 0) {
+        badges.push({
+          label: `${fragment.repair_materials.length} repair mats`,
+          tone: "success",
+        });
+      }
+      return badges;
+    }
+    case "attribute_modifiers": {
+      const entries = Object.entries(fragment.attributes);
+      const badges = entries.slice(0, 3).map(([key, value]) => ({
+        label: `${key} ${value >= 0 ? "+" : ""}${value}`,
+        tone: "accent" as const,
+      }));
+      if (entries.length > 3) {
+        badges.push({ label: `+${entries.length - 3} attrs`, tone: "accent" });
+      }
+      return badges;
+    }
+    case "weapon": {
+      const badges: SummaryBadge[] = [];
+      if (fragment.subtype) {
+        badges.push({ label: fragment.subtype, tone: "accent" });
+      }
+      badges.push({ label: `dmg ${fragment.damage}`, tone: "muted" });
+      badges.push({ label: `rng ${fragment.range}`, tone: "muted" });
+      if (fragment.ammo_type != null) {
+        badges.push({
+          label: `ammo ${summaryLabelFromLookup(String(fragment.ammo_type), itemLabelLookup, 24)}`,
+          tone: "warning",
+        });
+      }
+      if (fragment.on_hit_effect_ids.length > 0) {
+        badges.push({
+          label: `hit ${summaryLabelFromLookup(fragment.on_hit_effect_ids[0] ?? "", effectLabelLookup)}`,
+          tone: "success",
+        });
+        if (fragment.on_hit_effect_ids.length > 1) {
+          badges.push({
+            label: `+${fragment.on_hit_effect_ids.length - 1} hit fx`,
+            tone: "success",
+          });
+        }
+      }
+      return badges;
+    }
+    case "usable": {
+      const badges: SummaryBadge[] = [];
+      if (fragment.subtype) {
+        badges.push({ label: fragment.subtype, tone: "accent" });
+      }
+      badges.push({ label: `${fragment.uses} uses`, tone: "muted" });
+      badges.push({ label: `${fragment.use_time}s`, tone: "muted" });
+      badges.push({
+        label: fragment.consume_on_use ? "consumes" : "keeps item",
+        tone: fragment.consume_on_use ? "warning" : "success",
+      });
+      if (fragment.effect_ids.length > 0) {
+        badges.push({
+          label: summaryLabelFromLookup(fragment.effect_ids[0] ?? "", effectLabelLookup),
+          tone: "success",
+        });
+        if (fragment.effect_ids.length > 1) {
+          badges.push({ label: `+${fragment.effect_ids.length - 1} effects`, tone: "success" });
+        }
+      }
+      return badges;
+    }
+    case "crafting": {
+      const badges: SummaryBadge[] = [];
+      if (fragment.crafting_recipe) {
+        badges.push({
+          label: `${fragment.crafting_recipe.materials.length} recipe mats`,
+          tone: "accent",
+        });
+        badges.push({
+          label: `${fragment.crafting_recipe.time}s`,
+          tone: "muted",
+        });
+      }
+      if (fragment.deconstruct_yield.length > 0) {
+        badges.push({
+          label: `${fragment.deconstruct_yield.length} yield items`,
+          tone: "success",
+        });
+      }
+      return badges;
+    }
+    case "passive_effects": {
+      const badges: SummaryBadge[] = [];
+      if (fragment.effect_ids.length > 0) {
+        badges.push({
+          label: summaryLabelFromLookup(fragment.effect_ids[0] ?? "", effectLabelLookup),
+          tone: "success",
+        });
+        if (fragment.effect_ids.length > 1) {
+          badges.push({ label: `+${fragment.effect_ids.length - 1} passive fx`, tone: "success" });
+        }
+      }
+      return badges;
+    }
+    default:
+      return [];
+  }
+}
+
+type ChipListEditorProps = {
+  label: string;
+  hint?: string;
+  values: string[];
+  options: SelectOption[];
+  onChange: (values: string[]) => void;
+  allowCustom?: boolean;
+  emptyMessage?: string;
+};
+
+function ChipListEditor({
+  label,
+  hint,
+  values,
+  options,
+  onChange,
+  allowCustom = true,
+  emptyMessage = "Nothing selected yet.",
+}: ChipListEditorProps) {
+  const availableOptions = options.filter((option) => !values.includes(option.value));
+  const [selectedOption, setSelectedOption] = useState(availableOptions[0]?.value ?? "");
+  const [customValue, setCustomValue] = useState("");
+
+  useEffect(() => {
+    if (!selectedOption || values.includes(selectedOption)) {
+      setSelectedOption(availableOptions[0]?.value ?? "");
+    }
+  }, [availableOptions, selectedOption, values]);
+
+  function addSelectedOption() {
+    if (!selectedOption) {
+      return;
+    }
+    onChange([...values, selectedOption]);
+  }
+
+  function addCustomValue() {
+    const trimmed = customValue.trim();
+    if (!trimmed) {
+      return;
+    }
+    onChange(dedupeStrings([...values, trimmed]));
+    setCustomValue("");
+  }
+
+  function removeValue(target: string) {
+    onChange(values.filter((value) => value !== target));
+  }
+
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      <div className="picker-stack">
+        <div className="picker-controls">
+          <select
+            className="field-input"
+            value={selectedOption}
+            onChange={(event) => setSelectedOption(event.target.value)}
+          >
+            <option value="">Select option</option>
+            {availableOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={addSelectedOption}
+            disabled={!selectedOption}
+          >
+            Add
+          </button>
+        </div>
+
+        {allowCustom ? (
+          <div className="picker-controls">
+            <input
+              className="field-input"
+              type="text"
+              value={customValue}
+              placeholder="Add custom value"
+              onChange={(event) => setCustomValue(event.target.value)}
+            />
+            <button
+              type="button"
+              className="toolbar-button"
+              onClick={addCustomValue}
+              disabled={!customValue.trim()}
+            >
+              Add custom
+            </button>
+          </div>
+        ) : null}
+
+        {values.length > 0 ? (
+          <div className="picker-values">
+            {values.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className="picker-chip"
+                onClick={() => removeValue(value)}
+                title={`Remove ${value}`}
+              >
+                <span>{value}</span>
+                <span>Remove</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state picker-empty">
+            <p>{emptyMessage}</p>
+          </div>
+        )}
+      </div>
+      {hint ? <span className="field-hint">{hint}</span> : null}
+    </label>
+  );
+}
+
+type ItemAmountEditorProps = {
+  label: string;
+  hint?: string;
+  values: ItemAmount[];
+  itemOptions: SelectOption[];
+  onChange: (values: ItemAmount[]) => void;
+  emptyMessage?: string;
+};
+
+function ItemAmountEditor({
+  label,
+  hint,
+  values,
+  itemOptions,
+  onChange,
+  emptyMessage = "No item amounts configured.",
+}: ItemAmountEditorProps) {
+  const [draftItemId, setDraftItemId] = useState(itemOptions[0]?.value ?? "");
+  const [draftCount, setDraftCount] = useState("1");
+
+  useEffect(() => {
+    if (!draftItemId && itemOptions.length > 0) {
+      setDraftItemId(itemOptions[0]?.value ?? "");
+    }
+  }, [draftItemId, itemOptions]);
+
+  function updateAmount(index: number, next: ItemAmount) {
+    const updated = [...values];
+    updated[index] = next;
+    onChange(updated);
+  }
+
+  function removeAmount(index: number) {
+    onChange(values.filter((_, currentIndex) => currentIndex !== index));
+  }
+
+  function addAmount() {
+    const itemId = Number.parseInt(draftItemId, 10);
+    const count = Number.parseInt(draftCount, 10);
+    if (Number.isNaN(itemId) || Number.isNaN(count) || count <= 0) {
+      return;
+    }
+
+    const existingIndex = values.findIndex((value) => value.item_id === itemId);
+    if (existingIndex >= 0) {
+      const updated = [...values];
+      updated[existingIndex] = { item_id: itemId, count };
+      onChange(updated);
+    } else {
+      onChange([...values, { item_id: itemId, count }]);
+    }
+    setDraftCount("1");
+  }
+
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      <div className="picker-stack">
+        <div className="picker-controls picker-controls-wide">
+          <select
+            className="field-input"
+            value={draftItemId}
+            onChange={(event) => setDraftItemId(event.target.value)}
+          >
+            <option value="">Select item id</option>
+            {itemOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <input
+            className="field-input"
+            type="number"
+            min={1}
+            value={draftCount}
+            onChange={(event) => setDraftCount(event.target.value)}
+          />
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={addAmount}
+            disabled={!draftItemId}
+          >
+            Add
+          </button>
+        </div>
+
+        {values.length > 0 ? (
+          <div className="amount-list">
+            {values.map((amount, index) => (
+              <div className="amount-row" key={`${amount.item_id}-${index}`}>
+                <select
+                  className="field-input"
+                  value={String(amount.item_id)}
+                  onChange={(event) =>
+                    updateAmount(index, {
+                      ...amount,
+                      item_id: Number.parseInt(event.target.value, 10),
+                    })
+                  }
+                >
+                  {itemOptions.map((option) => (
+                    <option key={`${index}-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="field-input"
+                  type="number"
+                  min={1}
+                  value={amount.count}
+                  onChange={(event) =>
+                    updateAmount(index, {
+                      ...amount,
+                      count: Math.max(1, Number.parseInt(event.target.value, 10) || 1),
+                    })
+                  }
+                />
+                <button
+                  type="button"
+                  className="toolbar-button toolbar-danger"
+                  onClick={() => removeAmount(index)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state picker-empty">
+            <p>{emptyMessage}</p>
+          </div>
+        )}
+      </div>
+      {hint ? <span className="field-hint">{hint}</span> : null}
+    </label>
+  );
 }
 
 export function ItemWorkspace({
@@ -137,9 +714,12 @@ export function ItemWorkspace({
   );
   const [selectedKey, setSelectedKey] = useState(workspace.documents[0]?.documentKey ?? "");
   const [searchText, setSearchText] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [fragmentFilter, setFragmentFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [extraJsonDraft, setExtraJsonDraft] = useState("{}");
+  const [addFragmentKind, setAddFragmentKind] = useState("");
+  const [collapsedFragments, setCollapsedFragments] = useState<Record<string, boolean>>({});
   const deferredSearch = useDeferredValue(searchText);
 
   useEffect(() => {
@@ -149,8 +729,15 @@ export function ItemWorkspace({
 
   useEffect(() => {
     const selected = documents.find((document) => document.documentKey === selectedKey);
-    setExtraJsonDraft(JSON.stringify(getExtraFields(selected?.item ?? ({} as ItemData)), null, 2));
-  }, [documents, selectedKey]);
+    setExtraJsonDraft(
+      JSON.stringify(getExtraFields(selected?.item ?? createDefaultItem(0)), null, 2),
+    );
+    const firstAvailableKind =
+      selected != null
+        ? availableFragmentKinds(selected.item, workspace.catalogs.fragmentKinds)[0] ?? ""
+        : "";
+    setAddFragmentKind(firstAvailableKind);
+  }, [documents, selectedKey, workspace.catalogs.fragmentKinds]);
 
   useEffect(() => {
     const selected = documents.find((document) => document.documentKey === selectedKey);
@@ -178,14 +765,31 @@ export function ItemWorkspace({
   }, [canPersist, documents, selectedKey]);
 
   const filteredDocuments = documents.filter((document) => {
-    if (typeFilter && document.item.type !== typeFilter) {
+    const tags = inferItemTags(document.item);
+    if (tagFilter && !tags.includes(tagFilter as ItemTag)) {
+      return false;
+    }
+    if (
+      fragmentFilter &&
+      !document.item.fragments.some((fragment) => fragment.kind === fragmentFilter)
+    ) {
       return false;
     }
     if (!deferredSearch.trim()) {
       return true;
     }
-    const haystack =
-      `${document.item.id} ${document.item.name} ${document.item.type}`.toLowerCase();
+
+    const haystack = [
+      document.item.id,
+      document.item.name,
+      document.item.description,
+      getEconomyRarity(document.item),
+      getKnownSubtype(document.item),
+      ...tags,
+      ...document.item.fragments.map((fragment) => fragment.kind),
+    ]
+      .join(" ")
+      .toLowerCase();
     return haystack.includes(deferredSearch.trim().toLowerCase());
   });
 
@@ -203,7 +807,7 @@ export function ItemWorkspace({
     { errors: 0, warnings: 0 },
   );
 
-  function updateSelectedItem(transform: (item: ItemData) => ItemData) {
+  function updateSelectedItem(transform: (item: ItemDefinition) => ItemDefinition) {
     setDocuments((current) =>
       current.map((document) => {
         if (document.documentKey !== selectedKey) {
@@ -217,6 +821,19 @@ export function ItemWorkspace({
         };
       }),
     );
+  }
+
+  function updateSelectedFragment<K extends ItemFragment["kind"]>(
+    kind: K,
+    transform: (fragment: FragmentOf<K>) => FragmentOf<K>,
+  ) {
+    updateSelectedItem((item) => {
+      const current = getFragment(item, kind);
+      if (!current) {
+        return item;
+      }
+      return replaceFragment(item, transform(current));
+    });
   }
 
   function createDraft() {
@@ -237,6 +854,42 @@ export function ItemWorkspace({
     setDocuments((current) => [draft, ...current]);
     setSelectedKey(draft.documentKey);
     onStatusChange(`Created draft item ${nextId}.`);
+  }
+
+  function addFragment() {
+    if (!selectedDocument || !addFragmentKind) {
+      return;
+    }
+
+    updateSelectedItem((item) => {
+      const nextFragments = [...item.fragments];
+      if (addFragmentKind === "weapon" && !getFragment(item, "equip")) {
+        nextFragments.push(createDefaultFragment("equip"));
+      }
+      nextFragments.push(createDefaultFragment(addFragmentKind));
+      return {
+        ...item,
+        fragments: nextFragments,
+      };
+    });
+
+    setCollapsedFragments((current) => ({
+      ...current,
+      [`${selectedKey}:${addFragmentKind}`]: false,
+    }));
+    onStatusChange(`Added ${addFragmentKind} fragment.`);
+  }
+
+  function toggleFragment(kind: ItemFragment["kind"]) {
+    setCollapsedFragments((current) => ({
+      ...current,
+      [`${selectedKey}:${kind}`]: !current[`${selectedKey}:${kind}`],
+    }));
+  }
+
+  function deleteFragment(kind: ItemFragment["kind"]) {
+    updateSelectedItem((item) => removeFragment(item, kind));
+    onStatusChange(`Removed ${kind} fragment.`);
   }
 
   async function saveAll() {
@@ -381,6 +1034,447 @@ export function ItemWorkspace({
 
   const selectedIssues = selectedDocument?.validation ?? [];
   const selectedCounts = getIssueCounts(selectedIssues);
+  const selectedTags = selectedDocument ? inferItemTags(selectedDocument.item) : [];
+  const nextFragmentKinds = selectedDocument
+    ? availableFragmentKinds(selectedDocument.item, workspace.catalogs.fragmentKinds)
+    : [];
+  const itemReferenceOptions = buildItemReferenceOptions(documents);
+  const effectReferenceOptions = workspace.catalogs.effectEntries;
+  const equipmentSlotOptions = buildStringOptions(workspace.catalogs.equipmentSlots);
+  const itemLabelLookup = buildOptionLabelLookup(itemReferenceOptions);
+  const effectLabelLookup = buildOptionLabelLookup(effectReferenceOptions);
+
+  function renderFragmentEditor(fragment: ItemFragment) {
+    switch (fragment.kind) {
+      case "economy":
+        return (
+          <div className="form-grid">
+            <SelectField
+              label="Rarity"
+              value={fragment.rarity}
+              onChange={(value) =>
+                updateSelectedFragment("economy", (current) => ({ ...current, rarity: value }))
+              }
+              options={DEFAULT_RARITIES}
+              allowBlank={false}
+            />
+          </div>
+        );
+      case "stacking":
+        return (
+          <>
+            <div className="toggle-grid">
+              <CheckboxField
+                label="Stackable"
+                value={fragment.stackable}
+                onChange={(value) =>
+                  updateSelectedFragment("stacking", (current) => ({
+                    ...current,
+                    stackable: value,
+                    max_stack: value ? Math.max(current.max_stack, 1) : 1,
+                  }))
+                }
+              />
+            </div>
+            <div className="form-grid">
+              <NumberField
+                label="Max stack"
+                value={fragment.max_stack}
+                onChange={(value) =>
+                  updateSelectedFragment("stacking", (current) => ({
+                    ...current,
+                    max_stack: Math.max(1, value),
+                  }))
+                }
+                min={1}
+              />
+            </div>
+          </>
+        );
+      case "equip":
+        return (
+          <>
+            <div className="form-grid">
+              <NumberField
+                label="Level requirement"
+                value={fragment.level_requirement}
+                onChange={(value) =>
+                  updateSelectedFragment("equip", (current) => ({
+                    ...current,
+                    level_requirement: Math.max(0, value),
+                  }))
+                }
+                min={0}
+              />
+            </div>
+            <div className="form-grid">
+              <ChipListEditor
+                label="Slots"
+                hint={`Known slots: ${workspace.catalogs.equipmentSlots.join(", ")}`}
+                values={fragment.slots}
+                onChange={(value) =>
+                  updateSelectedFragment("equip", (current) => ({
+                    ...current,
+                    slots: dedupeStrings(value),
+                  }))
+                }
+                options={equipmentSlotOptions}
+                emptyMessage="No equip slots selected."
+              />
+              <ChipListEditor
+                label="Equip effects"
+                values={fragment.equip_effect_ids}
+                onChange={(value) =>
+                  updateSelectedFragment("equip", (current) => ({
+                    ...current,
+                    equip_effect_ids: dedupeStrings(value),
+                  }))
+                }
+                options={effectReferenceOptions}
+                emptyMessage="No equip effects configured."
+              />
+              <ChipListEditor
+                label="Unequip effects"
+                values={fragment.unequip_effect_ids}
+                onChange={(value) =>
+                  updateSelectedFragment("equip", (current) => ({
+                    ...current,
+                    unequip_effect_ids: dedupeStrings(value),
+                  }))
+                }
+                options={effectReferenceOptions}
+                emptyMessage="No unequip effects configured."
+              />
+            </div>
+          </>
+        );
+      case "durability":
+        return (
+          <>
+            <div className="form-grid">
+              <NumberField
+                label="Durability"
+                value={fragment.durability}
+                onChange={(value) =>
+                  updateSelectedFragment("durability", (current) => ({
+                    ...current,
+                    durability: value,
+                  }))
+                }
+              />
+              <NumberField
+                label="Max durability"
+                value={fragment.max_durability}
+                onChange={(value) =>
+                  updateSelectedFragment("durability", (current) => ({
+                    ...current,
+                    max_durability: value,
+                  }))
+                }
+              />
+            </div>
+            <div className="toggle-grid">
+              <CheckboxField
+                label="Repairable"
+                value={fragment.repairable}
+                onChange={(value) =>
+                  updateSelectedFragment("durability", (current) => ({
+                    ...current,
+                    repairable: value,
+                  }))
+                }
+              />
+            </div>
+            <ItemAmountEditor
+              label="Repair materials"
+              hint="Use item_id=count per line."
+              values={fragment.repair_materials}
+              onChange={(value) =>
+                updateSelectedFragment("durability", (current) => ({
+                  ...current,
+                  repair_materials: value,
+                }))
+              }
+              itemOptions={itemReferenceOptions}
+              emptyMessage="No repair materials configured."
+            />
+          </>
+        );
+      case "attribute_modifiers":
+        return (
+          <NumberMapField
+            label="Attributes"
+            value={fragment.attributes}
+            onChange={(value) =>
+              updateSelectedFragment("attribute_modifiers", (current) => ({
+                ...current,
+                attributes: value,
+              }))
+            }
+          />
+        );
+      case "weapon": {
+        const ammoTypeValue = fragment.ammo_type == null ? "" : String(fragment.ammo_type);
+        return (
+          <>
+            <div className="form-grid">
+              <SelectField
+                label="Subtype"
+                value={fragment.subtype}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({ ...current, subtype: value }))
+                }
+                options={workspace.catalogs.knownSubtypes}
+              />
+              <NumberField
+                label="Damage"
+                value={fragment.damage}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({ ...current, damage: value }))
+                }
+              />
+              <NumberField
+                label="Attack speed"
+                value={fragment.attack_speed}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    attack_speed: value,
+                  }))
+                }
+                step={0.1}
+              />
+              <NumberField
+                label="Range"
+                value={fragment.range}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({ ...current, range: value }))
+                }
+              />
+              <NumberField
+                label="Stamina cost"
+                value={fragment.stamina_cost}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    stamina_cost: value,
+                  }))
+                }
+              />
+              <NumberField
+                label="Crit chance"
+                value={fragment.crit_chance}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    crit_chance: value,
+                  }))
+                }
+                step={0.01}
+              />
+              <NumberField
+                label="Crit multiplier"
+                value={fragment.crit_multiplier}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    crit_multiplier: value,
+                  }))
+                }
+                step={0.1}
+              />
+              <TextField
+                label="Accuracy"
+                value={optionalNumberText(fragment.accuracy)}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    accuracy: parseOptionalInteger(value),
+                  }))
+                }
+                placeholder="Blank for none"
+              />
+              <SelectField
+                label="Ammo type"
+                value={ammoTypeValue}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    ammo_type: value ? Number.parseInt(value, 10) : null,
+                  }))
+                }
+                options={itemReferenceOptions}
+              />
+              <TextField
+                label="Max ammo"
+                value={optionalNumberText(fragment.max_ammo)}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    max_ammo: parseOptionalInteger(value),
+                  }))
+                }
+                placeholder="Blank for none"
+              />
+              <TextField
+                label="Reload time"
+                value={optionalNumberText(fragment.reload_time)}
+                onChange={(value) =>
+                  updateSelectedFragment("weapon", (current) => ({
+                    ...current,
+                    reload_time: parseOptionalFloat(value),
+                  }))
+                }
+                placeholder="Blank for none"
+              />
+            </div>
+            <ChipListEditor
+              label="On-hit effects"
+              values={fragment.on_hit_effect_ids}
+              onChange={(value) =>
+                updateSelectedFragment("weapon", (current) => ({
+                  ...current,
+                  on_hit_effect_ids: dedupeStrings(value),
+                }))
+              }
+              options={effectReferenceOptions}
+              emptyMessage="No on-hit effects configured."
+            />
+          </>
+        );
+      }
+      case "usable":
+        return (
+          <>
+            <div className="form-grid">
+              <SelectField
+                label="Subtype"
+                value={fragment.subtype}
+                onChange={(value) =>
+                  updateSelectedFragment("usable", (current) => ({ ...current, subtype: value }))
+                }
+                options={workspace.catalogs.knownSubtypes}
+              />
+              <NumberField
+                label="Use time"
+                value={fragment.use_time}
+                onChange={(value) =>
+                  updateSelectedFragment("usable", (current) => ({
+                    ...current,
+                    use_time: value,
+                  }))
+                }
+                step={0.1}
+              />
+              <NumberField
+                label="Uses"
+                value={fragment.uses}
+                onChange={(value) =>
+                  updateSelectedFragment("usable", (current) => ({ ...current, uses: value }))
+                }
+                min={1}
+              />
+            </div>
+            <div className="toggle-grid">
+              <CheckboxField
+                label="Consume on use"
+                value={fragment.consume_on_use}
+                onChange={(value) =>
+                  updateSelectedFragment("usable", (current) => ({
+                    ...current,
+                    consume_on_use: value,
+                  }))
+                }
+              />
+            </div>
+            <ChipListEditor
+              label="Effect ids"
+              values={fragment.effect_ids}
+              onChange={(value) =>
+                updateSelectedFragment("usable", (current) => ({
+                  ...current,
+                  effect_ids: dedupeStrings(value),
+                }))
+              }
+              options={effectReferenceOptions}
+              emptyMessage="No use effects configured."
+            />
+          </>
+        );
+      case "crafting": {
+        const recipe = ensureCraftingRecipe(fragment);
+        return (
+          <>
+            <div className="form-grid">
+              <NumberField
+                label="Craft time"
+                value={recipe.time}
+                onChange={(value) =>
+                  updateSelectedFragment("crafting", (current) => ({
+                    ...current,
+                    crafting_recipe: {
+                      ...ensureCraftingRecipe(current),
+                      time: value,
+                    },
+                  }))
+                }
+                min={0}
+              />
+            </div>
+            <div className="form-grid">
+              <ItemAmountEditor
+                label="Recipe materials"
+                hint="Pick item ids and quantities for crafting."
+                values={recipe.materials}
+                onChange={(value) =>
+                  updateSelectedFragment("crafting", (current) => ({
+                    ...current,
+                    crafting_recipe: {
+                      ...ensureCraftingRecipe(current),
+                      materials: value,
+                    },
+                  }))
+                }
+                itemOptions={itemReferenceOptions}
+                emptyMessage="No crafting materials configured."
+              />
+              <ItemAmountEditor
+                label="Deconstruct yield"
+                hint="Pick item ids and quantities yielded by deconstruction."
+                values={fragment.deconstruct_yield}
+                onChange={(value) =>
+                  updateSelectedFragment("crafting", (current) => ({
+                    ...current,
+                    deconstruct_yield: value,
+                  }))
+                }
+                itemOptions={itemReferenceOptions}
+                emptyMessage="No deconstruct yield configured."
+              />
+            </div>
+          </>
+        );
+      }
+      case "passive_effects":
+        return (
+          <ChipListEditor
+            label="Effect ids"
+            values={fragment.effect_ids}
+            onChange={(value) =>
+              updateSelectedFragment("passive_effects", (current) => ({
+                ...current,
+                effect_ids: dedupeStrings(value),
+              }))
+            }
+            options={effectReferenceOptions}
+            emptyMessage="No passive effects configured."
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
   return (
     <div className="workspace">
       <Toolbar actions={actions}>
@@ -404,19 +1498,26 @@ export function ItemWorkspace({
                 label="Search"
                 value={searchText}
                 onChange={setSearchText}
-                placeholder="Filter by id, name, or type"
+                placeholder="Filter by id, name, tag, or fragment"
               />
               <SelectField
-                label="Type filter"
-                value={typeFilter}
-                onChange={setTypeFilter}
-                options={workspace.catalogs.itemTypes}
+                label="Tag filter"
+                value={tagFilter}
+                onChange={setTagFilter}
+                options={["weapon", "armor", "accessory", "usable", "material_or_misc"]}
+              />
+              <SelectField
+                label="Fragment filter"
+                value={fragmentFilter}
+                onChange={setFragmentFilter}
+                options={workspace.catalogs.fragmentKinds}
               />
             </div>
 
             <div className="item-list">
               {filteredDocuments.map((document) => {
                 const counts = getIssueCounts(document.validation);
+                const tags = inferItemTags(document.item);
                 return (
                   <button
                     key={document.documentKey}
@@ -431,10 +1532,15 @@ export function ItemWorkspace({
                       {document.dirty ? <Badge tone="warning">Dirty</Badge> : null}
                     </div>
                     <p>
-                      #{document.item.id} · {document.item.type || "untyped"} ·{" "}
-                      {document.item.rarity || "common"}
+                      #{document.item.id} · {getPrimaryTag(document.item)} ·{" "}
+                      {getEconomyRarity(document.item)}
                     </p>
                     <div className="row-badges">
+                      {tags.map((tag) => (
+                        <Badge key={`${document.documentKey}-${tag}`} tone="muted">
+                          {formatTag(tag)}
+                        </Badge>
+                      ))}
                       {counts.errorCount > 0 ? (
                         <Badge tone="danger">{counts.errorCount} errors</Badge>
                       ) : null}
@@ -473,9 +1579,21 @@ export function ItemWorkspace({
                     </strong>
                   </article>
                 </div>
+                <div className="row-badges">
+                  {selectedTags.map((tag) => (
+                    <Badge key={`selected-${tag}`} tone="accent">
+                      {formatTag(tag)}
+                    </Badge>
+                  ))}
+                  {selectedDocument.item.fragments.map((fragment) => (
+                    <Badge key={`selected-kind-${fragment.kind}`} tone="muted">
+                      {fragment.kind}
+                    </Badge>
+                  ))}
+                </div>
               </PanelSection>
 
-              <PanelSection label="Basics" title="Core item fields">
+              <PanelSection label="Basics" title="Shared base properties">
                 <div className="form-grid">
                   <NumberField
                     label="ID"
@@ -490,30 +1608,6 @@ export function ItemWorkspace({
                     value={selectedDocument.item.name}
                     onChange={(value) => updateSelectedItem((item) => ({ ...item, name: value }))}
                   />
-                  <SelectField
-                    label="Type"
-                    value={selectedDocument.item.type}
-                    onChange={(value) => updateSelectedItem((item) => ({ ...item, type: value }))}
-                    options={workspace.catalogs.itemTypes}
-                    allowBlank={false}
-                  />
-                  <SelectField
-                    label="Subtype"
-                    value={selectedDocument.item.subtype}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, subtype: value }))
-                    }
-                    options={workspace.catalogs.subtypes}
-                  />
-                  <SelectField
-                    label="Rarity"
-                    value={selectedDocument.item.rarity}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, rarity: value }))
-                    }
-                    options={workspace.catalogs.rarities}
-                    allowBlank={false}
-                  />
                   <TextField
                     label="Icon path"
                     value={selectedDocument.item.icon_path}
@@ -521,6 +1615,19 @@ export function ItemWorkspace({
                       updateSelectedItem((item) => ({ ...item, icon_path: value }))
                     }
                     placeholder="res://assets/..."
+                  />
+                  <NumberField
+                    label="Value"
+                    value={selectedDocument.item.value}
+                    onChange={(value) => updateSelectedItem((item) => ({ ...item, value }))}
+                    min={0}
+                  />
+                  <NumberField
+                    label="Weight"
+                    value={selectedDocument.item.weight}
+                    onChange={(value) => updateSelectedItem((item) => ({ ...item, weight: value }))}
+                    step={0.1}
+                    min={0}
                   />
                 </div>
 
@@ -533,249 +1640,83 @@ export function ItemWorkspace({
                 />
               </PanelSection>
 
-              <PanelSection label="Economy & inventory" title="Rules and persistence fields">
-                <div className="form-grid">
-                  <NumberField
-                    label="Weight"
-                    value={selectedDocument.item.weight}
-                    onChange={(value) => updateSelectedItem((item) => ({ ...item, weight: value }))}
-                    step={0.1}
-                    min={0}
-                  />
-                  <NumberField
-                    label="Value"
-                    value={selectedDocument.item.value}
-                    onChange={(value) => updateSelectedItem((item) => ({ ...item, value }))}
-                  />
-                  <NumberField
-                    label="Max stack"
-                    value={selectedDocument.item.max_stack}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, max_stack: value }))
-                    }
-                    min={1}
-                  />
-                  <NumberField
-                    label="Level requirement"
-                    value={selectedDocument.item.level_requirement}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, level_requirement: value }))
-                    }
-                    min={0}
-                  />
-                  <NumberField
-                    label="Durability"
-                    value={selectedDocument.item.durability}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, durability: value }))
-                    }
-                  />
-                  <NumberField
-                    label="Max durability"
-                    value={selectedDocument.item.max_durability}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, max_durability: value }))
-                    }
-                  />
-                </div>
-
-                <div className="toggle-grid">
-                  <CheckboxField
-                    label="Stackable"
-                    value={selectedDocument.item.stackable}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, stackable: value }))
-                    }
-                  />
-                  <CheckboxField
-                    label="Equippable"
-                    value={selectedDocument.item.equippable}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, equippable: value }))
-                    }
-                  />
-                  <CheckboxField
-                    label="Usable"
-                    value={selectedDocument.item.usable}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, usable: value }))
-                    }
-                  />
-                  <CheckboxField
-                    label="Repairable"
-                    value={selectedDocument.item.repairable}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, repairable: value }))
-                    }
-                  />
-                </div>
-              </PanelSection>
-
-              <PanelSection label="Equipment" title="Slot and type-specific payload">
+              <PanelSection label="Fragments" title="Composable item behavior">
                 <div className="form-grid">
                   <SelectField
-                    label="Slot"
-                    value={selectedDocument.item.slot}
-                    onChange={(value) => updateSelectedItem((item) => ({ ...item, slot: value }))}
-                    options={workspace.catalogs.slots}
+                    label="Add fragment"
+                    value={addFragmentKind}
+                    onChange={setAddFragmentKind}
+                    options={nextFragmentKinds}
                   />
                 </div>
+                <button
+                  type="button"
+                  className="toolbar-button toolbar-accent"
+                  onClick={addFragment}
+                  disabled={!addFragmentKind}
+                >
+                  Add Fragment
+                </button>
 
-                {selectedDocument.item.type === "weapon" ? (
-                  <div className="form-grid">
-                    <NumberField
-                      label="Damage"
-                      value={ensureWeaponData(selectedDocument.item).damage}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          weapon_data: { ...ensureWeaponData(item), damage: value },
-                        }))
-                      }
-                    />
-                    <NumberField
-                      label="Attack speed"
-                      value={ensureWeaponData(selectedDocument.item).attack_speed}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          weapon_data: { ...ensureWeaponData(item), attack_speed: value },
-                        }))
-                      }
-                      step={0.1}
-                    />
-                    <NumberField
-                      label="Range"
-                      value={ensureWeaponData(selectedDocument.item).range}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          weapon_data: { ...ensureWeaponData(item), range: value },
-                        }))
-                      }
-                    />
-                    <NumberField
-                      label="Stamina cost"
-                      value={ensureWeaponData(selectedDocument.item).stamina_cost}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          weapon_data: { ...ensureWeaponData(item), stamina_cost: value },
-                        }))
-                      }
-                    />
-                    <NumberField
-                      label="Crit chance"
-                      value={ensureWeaponData(selectedDocument.item).crit_chance}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          weapon_data: { ...ensureWeaponData(item), crit_chance: value },
-                        }))
-                      }
-                      step={0.01}
-                    />
-                    <NumberField
-                      label="Crit multiplier"
-                      value={ensureWeaponData(selectedDocument.item).crit_multiplier}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          weapon_data: { ...ensureWeaponData(item), crit_multiplier: value },
-                        }))
-                      }
-                      step={0.1}
-                    />
-                  </div>
-                ) : null}
-
-                {selectedDocument.item.type === "armor" ? (
-                  <div className="form-grid">
-                    <NumberField
-                      label="Defense"
-                      value={ensureArmorData(selectedDocument.item).defense}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          armor_data: { ...ensureArmorData(item), defense: value },
-                        }))
-                      }
-                    />
-                    <NumberField
-                      label="Damage reduction"
-                      value={ensureArmorData(selectedDocument.item).damage_reduction}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          armor_data: { ...ensureArmorData(item), damage_reduction: value },
-                        }))
-                      }
-                      step={0.01}
-                    />
-                  </div>
-                ) : null}
-
-                {selectedDocument.item.type === "consumable" ? (
-                  <div className="form-grid">
-                    <NumberField
-                      label="Health restore"
-                      value={ensureConsumableData(selectedDocument.item).health_restore}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          consumable_data: { ...ensureConsumableData(item), health_restore: value },
-                        }))
-                      }
-                    />
-                    <NumberField
-                      label="Stamina restore"
-                      value={ensureConsumableData(selectedDocument.item).stamina_restore}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          consumable_data: {
-                            ...ensureConsumableData(item),
-                            stamina_restore: value,
-                          },
-                        }))
-                      }
-                    />
-                    <NumberField
-                      label="Duration"
-                      value={ensureConsumableData(selectedDocument.item).duration}
-                      onChange={(value) =>
-                        updateSelectedItem((item) => ({
-                          ...item,
-                          consumable_data: { ...ensureConsumableData(item), duration: value },
-                        }))
-                      }
-                    />
-                  </div>
-                ) : null}
+                <div className="item-list">
+                  {selectedDocument.item.fragments.map((fragment) => {
+                    const collapsed = Boolean(
+                      collapsedFragments[`${selectedKey}:${fragment.kind}`],
+                    );
+                    const summaryBadges = summarizeFragment(
+                      fragment,
+                      itemLabelLookup,
+                      effectLabelLookup,
+                    );
+                    return (
+                      <article className="panel panel-compact" key={fragment.kind}>
+                        <span className="section-label">Fragment</span>
+                        <div className="panel-body">
+                          <div className="item-row-top">
+                            <div className="fragment-card-main">
+                              <h3 className="panel-title">{fragment.kind}</h3>
+                              {summaryBadges.length > 0 ? (
+                                <div className="row-badges fragment-summary">
+                                  {summaryBadges.map((badge, index) => (
+                                    <Badge
+                                      key={`${fragment.kind}-summary-${index}`}
+                                      tone={badge.tone}
+                                    >
+                                      {badge.label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="row-badges">
+                              <button
+                                type="button"
+                                className="toolbar-button"
+                                onClick={() => toggleFragment(fragment.kind)}
+                              >
+                                {collapsed ? "Expand" : "Collapse"}
+                              </button>
+                              <button
+                                type="button"
+                                className="toolbar-button toolbar-danger"
+                                onClick={() => deleteFragment(fragment.kind)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                          {!collapsed ? renderFragmentEditor(fragment) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               </PanelSection>
 
-              <PanelSection label="Effects" title="Bonuses and extensibility hooks">
-                <div className="form-grid">
-                  <TokenListField
-                    label="Special effects"
-                    values={selectedDocument.item.special_effects}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, special_effects: value }))
-                    }
-                    placeholder="One effect id per line"
-                  />
-                  <NumberMapField
-                    label="Attribute bonuses"
-                    value={selectedDocument.item.attributes_bonus}
-                    onChange={(value) =>
-                      updateSelectedItem((item) => ({ ...item, attributes_bonus: value }))
-                    }
-                  />
-                </div>
-
+              <PanelSection label="Debug" title="Extra JSON">
                 <JsonField
-                  label="Extra JSON fields"
-                  hint="Unknown fields stay editable here so migration work does not drop existing data."
+                  label="Top-level extra fields"
+                  hint="Reserved for debugging. Known schema fields stay in the structured editor above."
                   value={extraJsonDraft}
                   onChange={(value) => {
                     setExtraJsonDraft(value);
@@ -804,6 +1745,19 @@ export function ItemWorkspace({
 
         <aside className="column">
           <ValidationPanel issues={selectedIssues} />
+
+          <PanelSection label="Catalogs" title="Fragment authoring context" compact>
+            <div className="row-badges">
+              <Badge tone="accent">{workspace.catalogs.fragmentKinds.length} fragment kinds</Badge>
+              <Badge tone="muted">{workspace.catalogs.effectIds.length} effects</Badge>
+              <Badge tone="muted">{workspace.catalogs.itemIds.length} item ids</Badge>
+            </div>
+            <ul className="domain-list">
+              {workspace.catalogs.fragmentKinds.map((kind) => (
+                <li key={kind}>{kind}</li>
+              ))}
+            </ul>
+          </PanelSection>
 
           <PanelSection label="Domains" title="Why this shell exists" compact>
             <ul className="domain-list">

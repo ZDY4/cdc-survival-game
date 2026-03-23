@@ -2,26 +2,21 @@
   "id": 1022,
   "name": "步枪弹药",
   "description": "步枪使用的弹药",
-  "type": "ammo",
-  "subtype": "rifle",
-  "rarity": "common",
-  "weight": 0.1,
-  "value": 3,
-  "stackable": true,
-  "max_stack": 50,
   "icon_path": "res://assets/icons/ammo/ammo_rifle.png",
-  "equippable": false,
-  "slot": "",
-  "level_requirement": 0,
-  "durability": -1,
-  "max_durability": -1,
-  "repairable": false,
-  "usable": false,
+  "value": 3,
+  "weight": 0.1,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 50
+    }
+  ],
   "ammo_data": {
     "caliber": "rifle"
-  },
-  "special_effects": [],
-  "attributes_bonus": {},
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  }
 }

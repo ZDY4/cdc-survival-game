@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "外科包",
-  "subtype": "medical",
-  "slot": "",
-  "weight": 0.8,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 5,
-  "value": 40,
-  "durability": -1,
-  "description": "包含基础外科工具",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1122,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "外科包",
+  "description": "包含基础外科工具",
+  "icon_path": "",
+  "value": 40,
+  "weight": 0.8,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 5
+    }
+  ]
 }

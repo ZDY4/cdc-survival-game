@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "腐烂的肉",
-  "subtype": "organic",
-  "slot": "",
-  "weight": 0.4,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 99,
-  "value": 1,
-  "durability": -1,
-  "description": "腐烂的肉块",
-  "rarity": "common",
-  "stackable": true,
-  "type": "material",
   "id": 1111,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "腐烂的肉",
+  "description": "腐烂的肉块",
+  "icon_path": "",
+  "value": 1,
+  "weight": 0.4,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 99
+    }
+  ]
 }

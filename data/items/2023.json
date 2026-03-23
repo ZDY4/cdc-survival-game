@@ -2,29 +2,36 @@
   "id": 2023,
   "name": "生存手表",
   "description": "显示更多生存信息",
-  "type": "accessory",
-  "subtype": "watch",
-  "rarity": "epic",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "accessory",
-  "level_requirement": 5,
-  "durability": -1,
-  "max_durability": -1,
-  "repairable": false,
-  "usable": false,
-  "attributes_bonus": {
-    "hunger_efficiency": 0.1,
-    "thirst_efficiency": 0.1
-  },
-  "special_effects": [
-    "survival_info"
-  ],
-  "repair_materials": [],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "epic"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "accessory"
+      ],
+      "level_requirement": 5,
+      "equip_effect_ids": [
+        "survival_info"
+      ],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "hunger_efficiency": 0.1,
+        "thirst_efficiency": 0.1
+      }
+    }
+  ]
 }

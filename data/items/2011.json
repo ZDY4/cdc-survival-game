@@ -2,35 +2,53 @@
   "id": 2011,
   "name": "战术手套",
   "description": "提升武器操作精度",
-  "type": "armor",
-  "subtype": "gloves",
-  "rarity": "uncommon",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "hands",
-  "level_requirement": 3,
-  "durability": 40,
-  "max_durability": 40,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 2,
-    "accuracy": 5,
-    "reload_speed": 0.2
-  },
-  "special_effects": [
-    "reload_speed"
-  ],
-  "repair_materials": [
-    {"item": 1011, "count": 3},
-    {"item": 1010, "count": 1}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "uncommon"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "hands"
+      ],
+      "level_requirement": 3,
+      "equip_effect_ids": [
+        "reload_speed"
+      ],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 40,
+      "max_durability": 40,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 3
+        },
+        {
+          "item_id": 1010,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "accuracy": 5.0,
+        "defense": 2.0,
+        "reload_speed": 0.2
+      }
+    }
+  ]
 }
-
-

@@ -23,63 +23,123 @@ export type ValidationIssue = {
   path?: string;
 };
 
+export type CatalogEntry = {
+  value: string;
+  label: string;
+};
+
 export type GraphPosition = {
   x: number;
   y: number;
 };
 
-export type WeaponData = {
+export type ItemAmount = {
+  item_id: number;
+  count: number;
+};
+
+export type CraftingRecipe = {
+  materials: ItemAmount[];
+  time: number;
+};
+
+export type EconomyFragment = {
+  kind: "economy";
+  rarity: string;
+};
+
+export type StackingFragment = {
+  kind: "stacking";
+  stackable: boolean;
+  max_stack: number;
+};
+
+export type EquipFragment = {
+  kind: "equip";
+  slots: string[];
+  level_requirement: number;
+  equip_effect_ids: string[];
+  unequip_effect_ids: string[];
+};
+
+export type DurabilityFragment = {
+  kind: "durability";
+  durability: number;
+  max_durability: number;
+  repairable: boolean;
+  repair_materials: ItemAmount[];
+};
+
+export type AttributeModifiersFragment = {
+  kind: "attribute_modifiers";
+  attributes: Record<string, number>;
+};
+
+export type WeaponFragment = {
+  kind: "weapon";
+  subtype: string;
   damage: number;
   attack_speed: number;
   range: number;
   stamina_cost: number;
   crit_chance: number;
   crit_multiplier: number;
+  accuracy?: number | null;
+  ammo_type?: number | null;
+  max_ammo?: number | null;
+  reload_time?: number | null;
+  on_hit_effect_ids: string[];
 };
 
-export type ArmorData = {
-  defense: number;
-  damage_reduction: number;
+export type UsableFragment = {
+  kind: "usable";
+  subtype: string;
+  use_time: number;
+  uses: number;
+  consume_on_use: boolean;
+  effect_ids: string[];
 };
 
-export type ConsumableData = {
-  health_restore: number;
-  stamina_restore: number;
-  duration: number;
+export type CraftingFragment = {
+  kind: "crafting";
+  crafting_recipe?: CraftingRecipe | null;
+  deconstruct_yield: ItemAmount[];
 };
 
-export type ItemData = {
+export type PassiveEffectsFragment = {
+  kind: "passive_effects";
+  effect_ids: string[];
+};
+
+export type ItemFragment =
+  | EconomyFragment
+  | StackingFragment
+  | EquipFragment
+  | DurabilityFragment
+  | AttributeModifiersFragment
+  | WeaponFragment
+  | UsableFragment
+  | CraftingFragment
+  | PassiveEffectsFragment;
+
+export type ItemDefinition = {
   id: number;
   name: string;
   description: string;
-  type: string;
-  subtype: string;
-  rarity: string;
-  weight: number;
-  value: number;
-  stackable: boolean;
-  max_stack: number;
   icon_path: string;
-  equippable: boolean;
-  slot: string;
-  level_requirement: number;
-  durability: number;
-  max_durability: number;
-  repairable: boolean;
-  usable: boolean;
-  weapon_data?: WeaponData | null;
-  armor_data?: ArmorData | null;
-  consumable_data?: ConsumableData | null;
-  special_effects: string[];
-  attributes_bonus: Record<string, number>;
+  value: number;
+  weight: number;
+  fragments: ItemFragment[];
   [key: string]: unknown;
 };
 
 export type ItemCatalogs = {
-  itemTypes: string[];
-  rarities: string[];
-  slots: string[];
-  subtypes: string[];
+  fragmentKinds: string[];
+  effectIds: string[];
+  effectEntries: CatalogEntry[];
+  equipmentSlots: string[];
+  knownSubtypes: string[];
+  itemIds: string[];
 };
 
 export type ItemDocumentPayload = {
@@ -87,7 +147,7 @@ export type ItemDocumentPayload = {
   originalId: number;
   fileName: string;
   relativePath: string;
-  item: ItemData;
+  item: ItemDefinition;
   validation: ValidationIssue[];
 };
 
@@ -292,4 +352,27 @@ export type MapWorkspacePayload = {
 export type SaveMapsResult = {
   savedIds: string[];
   deletedIds: string[];
+};
+
+export type MapEditorOpenDocumentPayload = {
+  documentKey: string;
+};
+
+export type MapEditorStateChangedPayload = {
+  documentKey: string;
+  mapId: string;
+  dirty: boolean;
+  errorCount: number;
+  warningCount: number;
+  objectCount: number;
+  level: number;
+};
+
+export type MapEditorSaveCompletePayload = {
+  savedIds: string[];
+  deletedIds: string[];
+};
+
+export type MapEditorSessionEndedPayload = {
+  documentKey?: string;
 };

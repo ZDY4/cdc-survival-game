@@ -2,31 +2,46 @@
   "id": 2013,
   "name": "牛仔裤",
   "description": "普通的牛仔裤",
-  "type": "armor",
-  "subtype": "pants",
-  "rarity": "common",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "legs",
-  "level_requirement": 0,
-  "durability": 20,
-  "max_durability": 20,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 1,
-    "insulation": 0.1
-  },
-  "special_effects": [],
-  "repair_materials": [
-    {"item": 1011, "count": 2}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "legs"
+      ],
+      "level_requirement": 0,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 20,
+      "max_durability": 20,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 2
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "defense": 1.0,
+        "insulation": 0.1
+      }
+    }
+  ]
 }
-
-

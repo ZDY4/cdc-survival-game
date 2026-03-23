@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "稀有战利品",
-  "subtype": "loot",
-  "slot": "",
-  "weight": 0.2,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 20,
-  "value": 50,
-  "durability": -1,
-  "description": "稀有且有价值的战利品",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1160,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "稀有战利品",
+  "description": "稀有且有价值的战利品",
+  "icon_path": "",
+  "value": 50,
+  "weight": 0.2,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 20
+    }
+  ]
 }

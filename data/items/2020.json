@@ -2,35 +2,49 @@
   "id": 2020,
   "name": "大背包",
   "description": "军用级背包，极大增加负重能力",
-  "type": "armor",
-  "subtype": "backpack",
-  "rarity": "rare",
-  "weight": 2.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "back",
-  "inventory_width": 2,
-  "inventory_height": 3,
-  "inventory_grid_width": 10,
-  "inventory_grid_height": 7,
-  "level_requirement": 4,
-  "durability": 70,
-  "max_durability": 70,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "carry_bonus": 20.0
-  },
-  "special_effects": [],
-  "repair_materials": [
-    {"item": 1011, "count": 7},
-    {"item": 1010, "count": 2}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 2.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "rare"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "back"
+      ],
+      "level_requirement": 4,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 70,
+      "max_durability": 70,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 7
+        },
+        {
+          "item_id": 1010,
+          "count": 2
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "carry_bonus": 20.0
+      }
+    }
+  ]
 }
-
-

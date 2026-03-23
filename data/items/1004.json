@@ -2,54 +2,73 @@
   "id": 1004,
   "name": "手枪",
   "description": "可靠的副武器",
-  "type": "weapon",
-  "subtype": "pistol",
-  "rarity": "uncommon",
-  "weight": 0.8,
-  "value": 250,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "res://assets/icons/weapons/pistol.png",
-  "equippable": true,
-  "slot": "main_hand",
-  "level_requirement": 3,
-  "durability": 100,
-  "max_durability": 100,
-  "repairable": true,
-  "usable": false,
-  "weapon_data": {
-    "damage": 25,
-    "attack_speed": 1.2,
-    "range": 25,
-    "accuracy": 80,
-    "stamina_cost": 3,
-    "crit_chance": 0.1,
-    "crit_multiplier": 2.0,
-    "ammo_type": 1009,
-    "max_ammo": 12,
-    "reload_time": 2.0
-  },
-  "special_effects": [
-    "headshot_bonus"
-  ],
-  "attributes_bonus": {},
-  "crafting_recipe": {
-    "materials": [
-      {
-        "item_id": 1010,
-        "count": 12
-      },
-      {
-        "item_id": 1012,
-        "count": 3
-      }
-    ],
-    "time": 100
-  },
-  "deconstruct_yield": [
+  "value": 250,
+  "weight": 0.8,
+  "fragments": [
     {
-      "item_id": 1010,
-      "count": 6
+      "kind": "economy",
+      "rarity": "uncommon"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "main_hand"
+      ],
+      "level_requirement": 3,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 100,
+      "max_durability": 100,
+      "repairable": true,
+      "repair_materials": []
+    },
+    {
+      "kind": "weapon",
+      "subtype": "pistol",
+      "damage": 25,
+      "attack_speed": 1.2,
+      "range": 25,
+      "stamina_cost": 3,
+      "crit_chance": 0.1,
+      "crit_multiplier": 2.0,
+      "accuracy": 80,
+      "ammo_type": 1009,
+      "max_ammo": 12,
+      "reload_time": 2.0,
+      "on_hit_effect_ids": [
+        "headshot_bonus"
+      ]
+    },
+    {
+      "kind": "crafting",
+      "crafting_recipe": {
+        "materials": [
+          {
+            "item_id": 1010,
+            "count": 12
+          },
+          {
+            "item_id": 1012,
+            "count": 3
+          }
+        ],
+        "time": 100
+      },
+      "deconstruct_yield": [
+        {
+          "item_id": 1010,
+          "count": 6
+        }
+      ]
     }
   ]
 }

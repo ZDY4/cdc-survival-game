@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "犬牙",
-  "subtype": "organic",
-  "slot": "",
-  "weight": 0.1,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 50,
-  "value": 3,
-  "durability": -1,
-  "description": "坚硬的动物牙齿，可用于制作",
-  "rarity": "common",
-  "stackable": true,
-  "type": "material",
   "id": 1158,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "犬牙",
+  "description": "坚硬的动物牙齿，可用于制作",
+  "icon_path": "",
+  "value": 3,
+  "weight": 0.1,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 50
+    }
+  ]
 }

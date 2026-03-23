@@ -2,45 +2,45 @@
   "id": 1005,
   "name": "急救包",
   "description": "恢复50点生命值",
-  "type": "consumable",
-  "subtype": "healing",
-  "rarity": "common",
-  "weight": 0.5,
-  "value": 100,
-  "stackable": true,
-  "max_stack": 10,
   "icon_path": "res://assets/icons/items/medkit.png",
-  "equippable": false,
-  "slot": "",
-  "inventory_width": 2,
-  "inventory_height": 2,
-  "level_requirement": 0,
-  "durability": -1,
-  "max_durability": -1,
-  "repairable": false,
-  "usable": true,
-  "consumable_data": {
-    "effects": {
-      "heal": 50
+  "value": 100,
+  "weight": 0.5,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
     },
-    "uses": 1,
-    "use_time": 3.0
-  },
-  "special_effects": [],
-  "attributes_bonus": {},
-  "crafting_recipe": {
-    "materials": [
-      {
-        "item_id": 1006,
-        "count": 2
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 10
+    },
+    {
+      "kind": "usable",
+      "subtype": "healing",
+      "use_time": 3.0,
+      "uses": 1,
+      "consume_on_use": true,
+      "effect_ids": [
+        "consume_health_50"
+      ]
+    },
+    {
+      "kind": "crafting",
+      "crafting_recipe": {
+        "materials": [
+          {
+            "item_id": 1006,
+            "count": 2
+          },
+          {
+            "item_id": 1033,
+            "count": 1
+          }
+        ],
+        "time": 60
       },
-      {
-        "item_id": 1033,
-        "count": 1
-      }
-    ],
-    "time": 60
-  },
-  "deconstruct_yield": []
+      "deconstruct_yield": []
+    }
+  ]
 }
-

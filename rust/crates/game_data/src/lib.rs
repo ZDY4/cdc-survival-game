@@ -1,5 +1,6 @@
 pub mod character;
 pub mod content;
+pub mod interaction;
 pub mod map;
 pub mod models;
 pub mod settlement;
@@ -21,6 +22,13 @@ pub use content::{
     EffectDefinitionValidationError, EffectLibrary, EffectLoadError, GameplayEffectData,
     ItemAmount, ItemDefinition, ItemDefinitionValidationError, ItemFragment, ItemLibrary,
     ItemLoadError, ItemValidationCatalog, LegacyItemMigrationError, MigratedItemArtifact,
+};
+pub use interaction::{
+    default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,
+    CharacterInteractionProfile, InteractionContextSnapshot, InteractionExecutionRequest,
+    InteractionExecutionResult, InteractionOptionDefinition, InteractionOptionId,
+    InteractionOptionKind, InteractionPrompt, InteractionTargetId, ResolvedInteractionOption,
+    WorldMode,
 };
 pub use map::{
     expand_object_footprint, load_map_library, load_map_library_with_catalog,

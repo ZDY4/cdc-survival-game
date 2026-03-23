@@ -1,0 +1,20 @@
+{
+  "id": "disease_resistance",
+  "name": "Placeholder disease_resistance",
+  "description": "Auto-generated placeholder effect for migrated item references.",
+  "category": "neutral",
+  "icon_path": "",
+  "color_tint": "",
+  "duration": 0.0,
+  "tick_interval": 0.0,
+  "is_infinite": false,
+  "is_stackable": false,
+  "max_stacks": 1,
+  "stack_mode": "refresh",
+  "stat_modifiers": {},
+  "special_effects": [
+    "disease_resistance"
+  ],
+  "visual_effect": "",
+  "gameplay_effect": null
+}

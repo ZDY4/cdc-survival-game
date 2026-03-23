@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "武器维修包",
-  "subtype": "repair",
-  "slot": "",
-  "weight": 0.3,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 10,
-  "value": 15,
-  "durability": -1,
-  "description": "用于修复武器的简易维修包",
-  "rarity": "common",
-  "stackable": true,
-  "type": "consumable",
   "id": 1152,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "武器维修包",
+  "description": "用于修复武器的简易维修包",
+  "icon_path": "",
+  "value": 15,
+  "weight": 0.3,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 10
+    }
+  ]
 }

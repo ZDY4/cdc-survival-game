@@ -2,26 +2,21 @@
   "id": 1021,
   "name": "霰弹弹药",
   "description": "霰弹枪使用的弹药",
-  "type": "ammo",
-  "subtype": "shotgun",
-  "rarity": "common",
-  "weight": 0.1,
-  "value": 2,
-  "stackable": true,
-  "max_stack": 50,
   "icon_path": "res://assets/icons/ammo/ammo_shotgun.png",
-  "equippable": false,
-  "slot": "",
-  "level_requirement": 0,
-  "durability": -1,
-  "max_durability": -1,
-  "repairable": false,
-  "usable": false,
+  "value": 2,
+  "weight": 0.1,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 50
+    }
+  ],
   "ammo_data": {
     "caliber": "shotgun"
-  },
-  "special_effects": [],
-  "attributes_bonus": {},
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  }
 }

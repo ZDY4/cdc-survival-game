@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "隐藏物资",
-  "subtype": "stash",
-  "slot": "",
-  "weight": 0.5,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 5,
-  "value": 20,
-  "durability": -1,
-  "description": "一小堆隐藏物资",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1141,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "隐藏物资",
+  "description": "一小堆隐藏物资",
+  "icon_path": "",
+  "value": 20,
+  "weight": 0.5,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 5
+    }
+  ]
 }

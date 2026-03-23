@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "学校地图",
-  "subtype": "map",
-  "slot": "",
-  "weight": 0.1,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 5,
-  "value": 10,
-  "durability": -1,
-  "description": "学校区域的地图",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1132,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "学校地图",
+  "description": "学校区域的地图",
+  "icon_path": "",
+  "value": 10,
+  "weight": 0.1,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 5
+    }
+  ]
 }

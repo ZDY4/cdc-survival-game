@@ -1,30 +1,29 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": true,
-  "name": "稀有药物",
-  "subtype": "medical",
-  "slot": "",
-  "weight": 0.2,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 5,
-  "value": 120,
-  "durability": -1,
-  "description": "珍稀药品，恢复效果更好",
-  "rarity": "common",
-  "stackable": true,
-  "consumable_data": {
-    "effects": {
-      "heal": 40,
-      "immunity": 15
-    },
-    "use_time": 2.5,
-    "uses": 1
-  },
-  "type": "consumable",
   "id": 1040,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "稀有药物",
+  "description": "珍稀药品，恢复效果更好",
+  "icon_path": "",
+  "value": 120,
+  "weight": 0.2,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 5
+    },
+    {
+      "kind": "usable",
+      "subtype": "medical",
+      "use_time": 2.5,
+      "uses": 1,
+      "consume_on_use": true,
+      "effect_ids": [
+        "consume_health_40_immunity_15"
+      ]
+    }
+  ]
 }

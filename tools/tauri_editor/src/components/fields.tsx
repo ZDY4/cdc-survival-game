@@ -21,10 +21,15 @@ type CheckboxFieldProps = BaseFieldProps & {
   onChange: (value: boolean) => void;
 };
 
+export type SelectOption = {
+  value: string;
+  label: string;
+};
+
 type SelectFieldProps = BaseFieldProps & {
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<string | SelectOption>;
   allowBlank?: boolean;
 };
 
@@ -149,6 +154,10 @@ export function SelectField({
   options,
   allowBlank = true,
 }: SelectFieldProps) {
+  const normalizedOptions = options.map((option) =>
+    typeof option === "string" ? { value: option, label: option } : option,
+  );
+
   return (
     <FieldFrame label={label} hint={hint}>
       <select
@@ -157,9 +166,9 @@ export function SelectField({
         onChange={(event) => onChange(event.target.value)}
       >
         {allowBlank ? <option value="">None</option> : null}
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+        {normalizedOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>

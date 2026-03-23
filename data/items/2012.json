@@ -2,34 +2,52 @@
   "id": 2012,
   "name": "动力手套",
   "description": "增强力量，提升近战伤害",
-  "type": "armor",
-  "subtype": "gloves",
-  "rarity": "rare",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "hands",
-  "level_requirement": 4,
-  "durability": 50,
-  "max_durability": 50,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 3,
-    "melee_damage": 0.15
-  },
-  "special_effects": [
-    "melee_damage"
-  ],
-  "repair_materials": [
-    {"item": 1010, "count": 4},
-    {"item": 1012, "count": 2}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "rare"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "hands"
+      ],
+      "level_requirement": 4,
+      "equip_effect_ids": [
+        "melee_damage"
+      ],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 50,
+      "max_durability": 50,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1010,
+          "count": 4
+        },
+        {
+          "item_id": 1012,
+          "count": 2
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "defense": 3.0,
+        "melee_damage": 0.15
+      }
+    }
+  ]
 }
-
-

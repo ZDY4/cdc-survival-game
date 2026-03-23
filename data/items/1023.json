@@ -2,26 +2,21 @@
   "id": 1023,
   "name": "石子",
   "description": "可用于弹弓的简易弹药",
-  "type": "ammo",
-  "subtype": "stone",
-  "rarity": "common",
-  "weight": 0.05,
-  "value": 1,
-  "stackable": true,
-  "max_stack": 99,
   "icon_path": "res://assets/icons/ammo/stone.png",
-  "equippable": false,
-  "slot": "",
-  "level_requirement": 0,
-  "durability": -1,
-  "max_durability": -1,
-  "repairable": false,
-  "usable": false,
+  "value": 1,
+  "weight": 0.05,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 99
+    }
+  ],
   "ammo_data": {
     "caliber": "stone"
-  },
-  "special_effects": [],
-  "attributes_bonus": {},
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  }
 }

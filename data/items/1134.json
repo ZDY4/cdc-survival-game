@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "文件资料",
-  "subtype": "document",
-  "slot": "",
-  "weight": 0.2,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 10,
-  "value": 10,
-  "durability": -1,
-  "description": "记录信息的文件",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1134,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "文件资料",
+  "description": "记录信息的文件",
+  "icon_path": "",
+  "value": 10,
+  "weight": 0.2,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 10
+    }
+  ]
 }

@@ -2,31 +2,46 @@
   "id": 2005,
   "name": "皮夹克",
   "description": "结实的皮夹克，提供基础防护",
-  "type": "armor",
-  "subtype": "body",
-  "rarity": "common",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "body",
-  "level_requirement": 1,
-  "durability": 40,
-  "max_durability": 40,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 3,
-    "insulation": 0.3
-  },
-  "special_effects": [],
-  "repair_materials": [
-    {"item": 1011, "count": 3}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "body"
+      ],
+      "level_requirement": 1,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 40,
+      "max_durability": 40,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 3
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "defense": 3.0,
+        "insulation": 0.3
+      }
+    }
+  ]
 }
-
-

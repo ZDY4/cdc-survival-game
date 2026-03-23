@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "种植箱",
-  "subtype": "structure",
-  "slot": "",
-  "weight": 4.0,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 5,
-  "value": 25,
-  "durability": -1,
-  "description": "用于栽种作物的小型箱体",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1157,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "种植箱",
+  "description": "用于栽种作物的小型箱体",
+  "icon_path": "",
+  "value": 25,
+  "weight": 4.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 5
+    }
+  ]
 }

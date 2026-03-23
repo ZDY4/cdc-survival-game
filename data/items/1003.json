@@ -2,31 +2,51 @@
   "id": 1003,
   "name": "棒球棒",
   "description": "结实的木棒，可以造成不错的伤害",
-  "type": "weapon",
-  "subtype": "blunt",
-  "rarity": "common",
-  "weight": 1.2,
-  "value": 80,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "res://assets/icons/weapons/baseball_bat.png",
-  "equippable": true,
-  "slot": "main_hand",
-  "level_requirement": 1,
-  "durability": 40,
-  "max_durability": 40,
-  "repairable": true,
-  "usable": false,
-  "weapon_data": {
-    "damage": 15,
-    "attack_speed": 0.9,
-    "range": 2,
-    "stamina_cost": 5,
-    "crit_chance": 0.1,
-    "crit_multiplier": 1.5
-  },
-  "special_effects": [
-    "stun"
-  ],
-  "attributes_bonus": {}
+  "value": 80,
+  "weight": 1.2,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "main_hand"
+      ],
+      "level_requirement": 1,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 40,
+      "max_durability": 40,
+      "repairable": true,
+      "repair_materials": []
+    },
+    {
+      "kind": "weapon",
+      "subtype": "blunt",
+      "damage": 15,
+      "attack_speed": 0.9,
+      "range": 2,
+      "stamina_cost": 5,
+      "crit_chance": 0.1,
+      "crit_multiplier": 1.5,
+      "accuracy": null,
+      "ammo_type": null,
+      "max_ammo": null,
+      "reload_time": null,
+      "on_hit_effect_ids": [
+        "stun"
+      ]
+    }
+  ]
 }

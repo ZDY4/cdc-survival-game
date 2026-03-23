@@ -273,6 +273,10 @@ button {
   align-items: start;
 }
 
+.map-library-grid {
+  grid-template-columns: 340px minmax(0, 1fr);
+}
+
 .column,
 .column-main {
   min-width: 0;
@@ -331,6 +335,56 @@ button {
 .field {
   display: grid;
   gap: 8px;
+}
+
+.picker-stack,
+.amount-list {
+  display: grid;
+  gap: 10px;
+}
+
+.picker-controls,
+.amount-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.picker-controls-wide,
+.amount-row {
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+}
+
+.picker-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.picker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+}
+
+.picker-chip span:last-child {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.picker-empty {
+  padding: 14px;
+}
+
+.picker-empty p {
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .field-input {
@@ -430,6 +484,19 @@ button {
   justify-content: space-between;
   gap: 10px;
   align-items: flex-start;
+}
+
+.fragment-card-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fragment-summary .badge {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-row p {
@@ -649,6 +716,75 @@ button {
   gap: 14px;
 }
 
+.map-editor-window {
+  min-height: 100vh;
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.map-editor-header,
+.map-editor-status,
+.modal-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+}
+
+.map-editor-header,
+.map-editor-status,
+.modal-card {
+  padding: 20px;
+}
+
+.map-editor-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.map-editor-header h1,
+.modal-card h2 {
+  margin: 0;
+}
+
+.map-editor-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.map-editor-status {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.map-editor-layout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
+  align-items: start;
+}
+
+.map-editor-layout-inspector-collapsed {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.stats-grid-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.map-editor-stage-focus {
+  min-height: 100%;
+}
+
 .map-canvas-meta {
   display: flex;
   gap: 10px;
@@ -668,6 +804,11 @@ button {
   overflow: auto;
 }
 
+.map-grid-canvas-focus {
+  min-height: 70vh;
+  max-height: none;
+}
+
 .map-grid-cell {
   aspect-ratio: 1;
   min-width: 24px;
@@ -677,6 +818,33 @@ button {
   color: var(--text-muted);
   font-size: 0.76rem;
   padding: 0;
+}
+
+.map-grid-cell-focus {
+  min-width: 32px;
+  border-radius: 10px;
+}
+
+.shortcut-hints {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.56);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 40;
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 14px;
 }
 
 .map-grid-cell-occupied {
@@ -701,6 +869,14 @@ button {
   .workspace-grid > .column:last-child {
     grid-column: 1 / -1;
   }
+
+  .map-editor-layout {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .map-editor-layout > .column:last-child {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -714,15 +890,22 @@ button {
   }
 
   .topbar,
-  .toolbar {
+  .toolbar,
+  .map-editor-header,
+  .map-editor-status {
     flex-direction: column;
     align-items: stretch;
   }
 
   .workspace-grid,
+  .map-library-grid,
+  .map-editor-layout,
   .form-grid,
   .toggle-grid,
   .stats-grid,
+  .picker-controls,
+  .picker-controls-wide,
+  .amount-row,
   .action-detail-grid {
     grid-template-columns: 1fr;
   }

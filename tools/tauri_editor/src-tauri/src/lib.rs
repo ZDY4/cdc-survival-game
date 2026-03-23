@@ -5,22 +5,25 @@ use std::{
 };
 
 use game_data::{
-    load_character_library, validate_map_definition, DialogueConnection, DialogueData,
-    ItemData, MapDefinition, MapValidationCatalog,
+    load_character_library, load_effect_library, validate_item_definition,
+    validate_map_definition, DialogueConnection, DialogueData, ItemDefinition,
+    ItemDefinitionValidationError, ItemFragment, ItemValidationCatalog, MapDefinition,
+    MapValidationCatalog,
 };
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_ITEM_TYPES: &[&str] = &[
+const DEFAULT_FRAGMENT_KINDS: &[&str] = &[
+    "economy",
+    "stacking",
+    "equip",
+    "durability",
+    "attribute_modifiers",
     "weapon",
-    "armor",
-    "consumable",
-    "material",
-    "misc",
-    "accessory",
-    "ammo",
+    "usable",
+    "crafting",
+    "passive_effects",
 ];
-const DEFAULT_RARITIES: &[&str] = &["common", "uncommon", "rare", "epic", "legendary"];
-const DEFAULT_SLOTS: &[&str] = &[
+const DEFAULT_EQUIPMENT_SLOTS: &[&str] = &[
     "head",
     "body",
     "hands",
@@ -33,7 +36,7 @@ const DEFAULT_SLOTS: &[&str] = &[
     "accessory_1",
     "accessory_2",
 ];
-const DEFAULT_SUBTYPES: &[&str] = &[
+const DEFAULT_KNOWN_SUBTYPES: &[&str] = &[
     "unarmed",
     "dagger",
     "sword",
@@ -111,11 +114,20 @@ struct ValidationIssue {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct CatalogEntry {
+    value: String,
+    label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ItemCatalogs {
-    item_types: Vec<String>,
-    rarities: Vec<String>,
-    slots: Vec<String>,
-    subtypes: Vec<String>,
+    fragment_kinds: Vec<String>,
+    effect_ids: Vec<String>,
+    effect_entries: Vec<CatalogEntry>,
+    equipment_slots: Vec<String>,
+    known_subtypes: Vec<String>,
+    item_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -125,7 +137,7 @@ struct ItemDocumentPayload {
     original_id: u32,
     file_name: String,
     relative_path: String,
-    item: ItemData,
+    item: ItemDefinition,
     validation: Vec<ValidationIssue>,
 }
 
@@ -143,7 +155,7 @@ struct ItemWorkspacePayload {
 #[serde(rename_all = "camelCase")]
 struct SaveItemDocumentInput {
     original_id: Option<u32>,
-    item: ItemData,
+    item: ItemDefinition,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -157,6 +169,13 @@ struct SaveItemsResult {
 #[serde(rename_all = "camelCase")]
 struct DeleteItemResult {
     deleted_id: u32,
+}
+
+#[derive(Debug, Clone)]
+struct ParsedItemDocument {
+    file_name: String,
+    relative_path: String,
+    item: ItemDefinition,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -263,8 +282,10 @@ fn get_editor_bootstrap() -> Result<EditorBootstrap, String> {
 
 #[tauri::command]
 fn load_item_workspace() -> Result<ItemWorkspacePayload, String> {
-    let documents = load_item_documents()?;
-    let catalogs = collect_catalogs(&documents);
+    let effect_library = load_effect_catalog()?;
+    let effect_ids = effect_library.ids();
+    let documents = load_item_documents_with_effects(&effect_ids)?;
+    let catalogs = collect_catalogs(&documents, &effect_library);
     let bootstrap = editor_bootstrap()?;
     let data_directory = to_forward_slashes(&item_data_dir()?);
     let item_count = documents.len();
@@ -279,8 +300,16 @@ fn load_item_workspace() -> Result<ItemWorkspacePayload, String> {
 }
 
 #[tauri::command]
-fn validate_item_document(item: ItemData) -> Vec<ValidationIssue> {
-    validate_item(&item)
+fn validate_item_document(item: ItemDefinition) -> Result<Vec<ValidationIssue>, String> {
+    let effect_ids = load_effect_catalog()?.ids();
+    let mut item_ids = BTreeSet::new();
+    for document in load_item_document_sources()? {
+        item_ids.insert(document.item.id);
+    }
+    item_ids.insert(item.id);
+
+    let catalog = ItemValidationCatalog { item_ids, effect_ids };
+    Ok(validate_item(&item, &catalog, false))
 }
 
 #[tauri::command]
@@ -293,12 +322,60 @@ fn save_item_documents(documents: Vec<SaveItemDocumentInput>) -> Result<SaveItem
     }
 
     let mut seen_ids = HashSet::new();
+    let mut seen_original_ids = HashSet::new();
     for document in &documents {
         if !seen_ids.insert(document.item.id) {
             return Err(format!("duplicate item id in save batch: {}", document.item.id));
         }
 
-        let issues = validate_item(&document.item);
+        if let Some(original_id) = document.original_id {
+            if !seen_original_ids.insert(original_id) {
+                return Err(format!(
+                    "duplicate original item id in save batch: {}",
+                    original_id
+                ));
+            }
+        }
+    }
+
+    let effect_ids = load_effect_catalog()?.ids();
+    let existing_documents = load_item_document_sources()?;
+    let skipped_original_ids: HashSet<u32> = documents
+        .iter()
+        .filter_map(|document| document.original_id)
+        .collect();
+    let mut final_items = BTreeMap::new();
+
+    for document in existing_documents {
+        if skipped_original_ids.contains(&document.item.id) {
+            continue;
+        }
+
+        if final_items.insert(document.item.id, document.item).is_some() {
+            return Err("existing item data contains duplicate ids".to_string());
+        }
+    }
+
+    for document in &documents {
+        if final_items
+            .insert(document.item.id, document.item.clone())
+            .is_some()
+        {
+            return Err(format!(
+                "item id {} conflicts with another item document",
+                document.item.id
+            ));
+        }
+    }
+
+    let catalog = ItemValidationCatalog {
+        item_ids: final_items.keys().copied().collect(),
+        effect_ids,
+    };
+
+    for document in &documents {
+        let issues = validate_item(&document.item, &catalog, false);
+
         if issues.iter().any(|issue| issue.severity == "error") {
             return Err(format!(
                 "item {} has validation errors and cannot be saved",
@@ -596,6 +673,47 @@ fn editor_bootstrap() -> Result<EditorBootstrap, String> {
 }
 
 fn load_item_documents() -> Result<Vec<ItemDocumentPayload>, String> {
+    let effect_ids = load_effect_catalog()?.ids();
+    load_item_documents_with_effects(&effect_ids)
+}
+
+fn load_item_documents_with_effects(
+    effect_ids: &BTreeSet<String>,
+) -> Result<Vec<ItemDocumentPayload>, String> {
+    let parsed_documents = load_item_document_sources()?;
+    let catalog = item_validation_catalog_from_documents(&parsed_documents, effect_ids);
+    let mut id_counts: BTreeMap<u32, usize> = BTreeMap::new();
+    for document in &parsed_documents {
+        *id_counts.entry(document.item.id).or_default() += 1;
+    }
+
+    let mut documents = parsed_documents
+        .into_iter()
+        .map(|document| {
+            let duplicate_id = id_counts.get(&document.item.id).copied().unwrap_or_default() > 1;
+            let validation = validate_item(&document.item, &catalog, duplicate_id);
+
+            ItemDocumentPayload {
+                document_key: document.file_name.clone(),
+                original_id: document.item.id,
+                file_name: document.file_name,
+                relative_path: document.relative_path,
+                item: document.item,
+                validation,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    documents.sort_by(|left, right| {
+        left.item
+            .id
+            .cmp(&right.item.id)
+            .then_with(|| left.file_name.cmp(&right.file_name))
+    });
+    Ok(documents)
+}
+
+fn load_item_document_sources() -> Result<Vec<ParsedItemDocument>, String> {
     let data_dir = item_data_dir()?;
     if !data_dir.exists() {
         return Ok(Vec::new());
@@ -617,9 +735,8 @@ fn load_item_documents() -> Result<Vec<ItemDocumentPayload>, String> {
 
         let raw = fs::read_to_string(&path)
             .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-        let item: ItemData = serde_json::from_str(&raw)
+        let item: ItemDefinition = serde_json::from_str(&raw)
             .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-        let validation = validate_item(&item);
         let file_name = path
             .file_name()
             .and_then(|value| value.to_str())
@@ -627,17 +744,13 @@ fn load_item_documents() -> Result<Vec<ItemDocumentPayload>, String> {
             .to_string();
         let relative_path = relative_to_repo(&path)?;
 
-        documents.push(ItemDocumentPayload {
-            document_key: item.id.to_string(),
-            original_id: item.id,
+        documents.push(ParsedItemDocument {
             file_name,
             relative_path,
             item,
-            validation,
         });
     }
 
-    documents.sort_by_key(|document| document.item.id);
     Ok(documents)
 }
 
@@ -745,32 +858,61 @@ fn load_map_documents(
     Ok(documents)
 }
 
-fn collect_catalogs(documents: &[ItemDocumentPayload]) -> ItemCatalogs {
-    let mut item_types = seeded_set(DEFAULT_ITEM_TYPES);
-    let mut rarities = seeded_set(DEFAULT_RARITIES);
-    let mut slots = seeded_set(DEFAULT_SLOTS);
-    let mut subtypes = seeded_set(DEFAULT_SUBTYPES);
+fn collect_catalogs(
+    documents: &[ItemDocumentPayload],
+    effect_library: &game_data::EffectLibrary,
+) -> ItemCatalogs {
+    let mut fragment_kinds = seeded_set(DEFAULT_FRAGMENT_KINDS);
+    let mut equipment_slots = seeded_set(DEFAULT_EQUIPMENT_SLOTS);
+    let mut known_subtypes = seeded_set(DEFAULT_KNOWN_SUBTYPES);
 
     for document in documents {
-        if !document.item.item_type.trim().is_empty() {
-            item_types.insert(document.item.item_type.clone());
-        }
-        if !document.item.rarity.trim().is_empty() {
-            rarities.insert(document.item.rarity.clone());
-        }
-        if !document.item.slot.trim().is_empty() {
-            slots.insert(document.item.slot.clone());
-        }
-        if !document.item.subtype.trim().is_empty() {
-            subtypes.insert(document.item.subtype.clone());
+        for fragment in &document.item.fragments {
+            fragment_kinds.insert(fragment.kind().to_string());
+
+            match fragment {
+                ItemFragment::Equip { slots, .. } => {
+                    for slot in slots {
+                        if !slot.trim().is_empty() {
+                            equipment_slots.insert(slot.clone());
+                        }
+                    }
+                }
+                ItemFragment::Weapon { subtype, .. } | ItemFragment::Usable { subtype, .. } => {
+                    if !subtype.trim().is_empty() {
+                        known_subtypes.insert(subtype.clone());
+                    }
+                }
+                ItemFragment::Economy { .. }
+                | ItemFragment::Stacking { .. }
+                | ItemFragment::Durability { .. }
+                | ItemFragment::AttributeModifiers { .. }
+                | ItemFragment::Crafting { .. }
+                | ItemFragment::PassiveEffects { .. } => {}
+            }
         }
     }
 
     ItemCatalogs {
-        item_types: item_types.into_iter().collect(),
-        rarities: rarities.into_iter().collect(),
-        slots: slots.into_iter().collect(),
-        subtypes: subtypes.into_iter().collect(),
+        fragment_kinds: fragment_kinds.into_iter().collect(),
+        effect_ids: effect_library.ids().into_iter().collect(),
+        effect_entries: effect_library
+            .iter()
+            .map(|(id, definition)| CatalogEntry {
+                value: id.clone(),
+                label: if definition.name.trim().is_empty() {
+                    id.clone()
+                } else {
+                    format!("{id} · {}", definition.name)
+                },
+            })
+            .collect(),
+        equipment_slots: equipment_slots.into_iter().collect(),
+        known_subtypes: known_subtypes.into_iter().collect(),
+        item_ids: documents
+            .iter()
+            .map(|document| document.item.id.to_string())
+            .collect(),
     }
 }
 
@@ -820,65 +962,101 @@ fn collect_map_catalogs(
     }
 }
 
-fn validate_item(item: &ItemData) -> Vec<ValidationIssue> {
+fn item_validation_catalog_from_documents(
+    documents: &[ParsedItemDocument],
+    effect_ids: &BTreeSet<String>,
+) -> ItemValidationCatalog {
+    ItemValidationCatalog {
+        item_ids: documents.iter().map(|document| document.item.id).collect(),
+        effect_ids: effect_ids.clone(),
+    }
+}
+
+fn validate_item(
+    item: &ItemDefinition,
+    catalog: &ItemValidationCatalog,
+    duplicate_id: bool,
+) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
 
-    if item.id == 0 {
-        issues.push(error("id", "Item id must be a positive integer."));
+    if duplicate_id {
+        issues.push(error("id", "Item id duplicates another item file."));
     }
-    if item.name.trim().is_empty() {
-        issues.push(error("name", "Item name cannot be empty."));
-    }
-    if item.item_type.trim().is_empty() {
-        issues.push(error("type", "Item type cannot be empty."));
-    }
-    if item.rarity.trim().is_empty() {
-        issues.push(error("rarity", "Item rarity cannot be empty."));
-    }
-    if item.weight < 0.0 {
-        issues.push(error("weight", "Item weight cannot be negative."));
-    }
-    if item.max_stack <= 0 {
-        issues.push(error("maxStack", "Max stack must be at least 1."));
-    }
-    if !item.stackable && item.max_stack != 1 {
-        issues.push(warning(
-            "maxStack",
-            "Non-stackable items usually use a max stack of 1.",
-        ));
-    }
-    if !item.slot.trim().is_empty() && !item.equippable {
-        issues.push(warning(
-            "slot",
-            "Slot is set but equippable is false. Check whether this item should be wearable.",
-        ));
-    }
-    if item.durability > item.max_durability && item.max_durability >= 0 {
-        issues.push(warning(
-            "durability",
-            "Current durability is higher than max durability.",
-        ));
-    }
-    if item.item_type == "weapon" && item.weapon_data.is_none() {
-        issues.push(warning(
-            "weaponData",
-            "Weapon items should usually define weapon_data.",
-        ));
-    }
-    if item.item_type == "armor" && item.armor_data.is_none() {
-        issues.push(warning(
-            "armorData",
-            "Armor items should usually define armor_data.",
-        ));
-    }
-    if item.item_type == "consumable" && item.consumable_data.is_none() {
-        issues.push(warning(
-            "consumableData",
-            "Consumable items should usually define consumable_data.",
-        ));
+
+    if let Err(error) = validate_item_definition(item, Some(catalog)) {
+        issues.push(item_validation_issue(error));
     }
 
     issues
+}
+
+fn item_validation_issue(validation_error: ItemDefinitionValidationError) -> ValidationIssue {
+    match validation_error {
+        ItemDefinitionValidationError::InvalidId => {
+            error("id", "Item id must be a positive integer.")
+        }
+        ItemDefinitionValidationError::MissingName { .. } => {
+            error("name", "Item name cannot be empty.")
+        }
+        ItemDefinitionValidationError::MissingFragments { .. } => {
+            error("fragments", "Item must define at least one fragment.")
+        }
+        ItemDefinitionValidationError::NegativeWeight { .. } => {
+            error("weight", "Item weight cannot be negative.")
+        }
+        ItemDefinitionValidationError::NegativeValue { .. } => {
+            error("value", "Item value cannot be negative.")
+        }
+        ItemDefinitionValidationError::DuplicateFragmentKind { kind, .. } => error(
+            "fragments",
+            format!("Fragment kind {kind} cannot appear more than once."),
+        ),
+        ItemDefinitionValidationError::EquipWithoutSlots { .. } => {
+            error("equip.slots", "Equip fragment must define at least one slot.")
+        }
+        ItemDefinitionValidationError::WeaponWithoutEquip { .. } => error(
+            "weapon",
+            "Weapon fragment requires an equip fragment on the same item.",
+        ),
+        ItemDefinitionValidationError::InvalidMaxStack { .. } => {
+            error("stacking.max_stack", "Stacking fragment must use max_stack >= 1.")
+        }
+        ItemDefinitionValidationError::InvalidNonStackableMaxStack { .. } => error(
+            "stacking.max_stack",
+            "Non-stackable items must use a max_stack of 1.",
+        ),
+        ItemDefinitionValidationError::DurabilityExceedsMax { .. } => error(
+            "durability",
+            "Durability cannot exceed max durability unless both use -1.",
+        ),
+        ItemDefinitionValidationError::UnknownEffectId {
+            fragment,
+            effect_id,
+            ..
+        } => error(
+            format!("{fragment}.effect_ids"),
+            format!("Unknown effect id: {effect_id}."),
+        ),
+        ItemDefinitionValidationError::UnknownItemId {
+            fragment,
+            referenced_item_id,
+            ..
+        } => error(
+            format!("{fragment}.item_ids"),
+            format!("Unknown item id reference: {referenced_item_id}."),
+        ),
+        ItemDefinitionValidationError::EmptyEquipSlot { .. } => {
+            error("equip.slots", "Equip slots cannot contain blank values.")
+        }
+        ItemDefinitionValidationError::EmptyEffectId { fragment, .. } => error(
+            format!("{fragment}.effect_ids"),
+            "Effect id lists cannot contain blank values.",
+        ),
+        ItemDefinitionValidationError::InvalidAmountEntry { fragment, .. } => error(
+            format!("{fragment}.amounts"),
+            "Item amount entries must reference a valid item id and a positive count.",
+        ),
+    }
 }
 
 fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
@@ -1064,18 +1242,6 @@ fn error(field: impl Into<String>, message: impl Into<String>) -> ValidationIssu
     }
 }
 
-fn warning(field: impl Into<String>, message: impl Into<String>) -> ValidationIssue {
-    ValidationIssue {
-        severity: "warning",
-        field: field.into(),
-        message: message.into(),
-        scope: None,
-        node_id: None,
-        edge_key: None,
-        path: None,
-    }
-}
-
 fn document_error(field: impl Into<String>, message: impl Into<String>) -> ValidationIssue {
     ValidationIssue {
         severity: "error",
@@ -1252,6 +1418,10 @@ fn item_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("items"))
 }
 
+fn effect_data_dir() -> Result<PathBuf, String> {
+    Ok(repo_root()?.join("data").join("json").join("effects"))
+}
+
 fn character_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("characters"))
 }
@@ -1274,6 +1444,15 @@ fn dialogue_file_path(dialog_id: &str) -> Result<PathBuf, String> {
 
 fn map_file_path(map_id: &str) -> Result<PathBuf, String> {
     Ok(map_data_dir()?.join(format!("{map_id}.json")))
+}
+
+fn load_effect_catalog() -> Result<game_data::EffectLibrary, String> {
+    let data_dir = effect_data_dir()?;
+    if !data_dir.exists() {
+        return Ok(game_data::EffectLibrary::default());
+    }
+
+    load_effect_library(&data_dir).map_err(|error| format!("failed to load effect catalog: {error}"))
 }
 
 fn load_character_ids() -> Result<BTreeSet<String>, String> {

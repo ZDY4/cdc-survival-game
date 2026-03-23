@@ -1,29 +1,29 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": true,
-  "name": "止痛药",
-  "subtype": "medical",
-  "slot": "",
-  "weight": 0.1,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 20,
-  "value": 25,
-  "durability": -1,
-  "description": "缓解疼痛并小幅恢复",
-  "rarity": "common",
-  "stackable": true,
-  "consumable_data": {
-    "effects": {
-      "heal": 10
-    },
-    "use_time": 1.5,
-    "uses": 1
-  },
-  "type": "consumable",
   "id": 1033,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "止痛药",
+  "description": "缓解疼痛并小幅恢复",
+  "icon_path": "",
+  "value": 25,
+  "weight": 0.1,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 20
+    },
+    {
+      "kind": "usable",
+      "subtype": "medical",
+      "use_time": 1.5,
+      "uses": 1,
+      "consume_on_use": true,
+      "effect_ids": [
+        "consume_health_10"
+      ]
+    }
+  ]
 }

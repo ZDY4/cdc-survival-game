@@ -2,54 +2,87 @@
   "id": 1016,
   "name": "电锯",
   "description": "恐怖的伤害，但需要燃料",
-  "type": "weapon",
-  "subtype": "heavy",
-  "rarity": "epic",
-  "weight": 4.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "res://assets/icons/weapons/chainsaw.png",
-  "equippable": true,
-  "slot": "main_hand",
-  "level_requirement": 6,
-  "durability": 100,
-  "max_durability": 100,
-  "repairable": true,
-  "usable": false,
-  "weapon_data": {
-    "damage": 50,
-    "attack_speed": 0.6,
-    "range": 2,
-    "stamina_cost": 15,
-    "crit_chance": 0.05,
-    "crit_multiplier": 3.0,
-    "fuel_consumption": 1
-  },
-  "special_effects": [
-    "bleeding",
-    "fear"
+  "value": 0,
+  "weight": 4.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "epic"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "main_hand"
+      ],
+      "level_requirement": 6,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 100,
+      "max_durability": 100,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1010,
+          "count": 10
+        },
+        {
+          "item_id": 1012,
+          "count": 3
+        }
+      ]
+    },
+    {
+      "kind": "weapon",
+      "subtype": "heavy",
+      "damage": 50,
+      "attack_speed": 0.6,
+      "range": 2,
+      "stamina_cost": 15,
+      "crit_chance": 0.05,
+      "crit_multiplier": 3.0,
+      "accuracy": null,
+      "ammo_type": null,
+      "max_ammo": null,
+      "reload_time": null,
+      "on_hit_effect_ids": [
+        "bleeding",
+        "fear"
+      ]
+    },
+    {
+      "kind": "crafting",
+      "crafting_recipe": {
+        "materials": [
+          {
+            "item_id": 1010,
+            "count": 20
+          },
+          {
+            "item_id": 1012,
+            "count": 5
+          },
+          {
+            "item_id": 1144,
+            "count": 3
+          }
+        ],
+        "time": 180
+      },
+      "deconstruct_yield": []
+    }
   ],
   "effect_data": {
     "bleeding_damage": 8,
     "bleeding_duration": 6,
     "fear_chance": 0.3
-  },
-  "attributes_bonus": {},
-  "repair_materials": [
-    {"item": 1010, "count": 10},
-    {"item": 1012, "count": 3}
-  ],
-  "crafting_recipe": {
-    "materials": [
-      {"item": 1010, "count": 20},
-      {"item": 1012, "count": 5},
-      {"item": 1144, "count": 3}
-    ],
-    "time": 180
-  },
-  "deconstruct_yield": []
+  }
 }
-
-
-

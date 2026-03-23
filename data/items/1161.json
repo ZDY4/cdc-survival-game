@@ -1,22 +1,19 @@
 {
-  "icon_path": "",
-  "max_durability": -1,
-  "usable": false,
-  "name": "贵重物品",
-  "subtype": "loot",
-  "slot": "",
-  "weight": 0.5,
-  "special_effects": [],
-  "equippable": false,
-  "repairable": false,
-  "max_stack": 10,
-  "value": 100,
-  "durability": -1,
-  "description": "可用于交易的贵重物品",
-  "rarity": "common",
-  "stackable": true,
-  "type": "misc",
   "id": 1161,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "贵重物品",
+  "description": "可用于交易的贵重物品",
+  "icon_path": "",
+  "value": 100,
+  "weight": 0.5,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 10
+    }
+  ]
 }

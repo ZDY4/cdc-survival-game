@@ -2,31 +2,46 @@
   "id": 2001,
   "name": "简易头盔",
   "description": "用废金属拼凑的防护头盔",
-  "type": "armor",
-  "subtype": "helmet",
-  "rarity": "common",
-  "weight": 1.5,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "head",
-  "level_requirement": 1,
-  "durability": 30,
-  "max_durability": 30,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 2,
-    "insulation": 0.1
-  },
-  "special_effects": [],
-  "repair_materials": [
-    {"item": 1010, "count": 2}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 1.5,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "head"
+      ],
+      "level_requirement": 1,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 30,
+      "max_durability": 30,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1010,
+          "count": 2
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "defense": 2.0,
+        "insulation": 0.1
+      }
+    }
+  ]
 }
-
-

@@ -1,30 +1,50 @@
 {
-  "icon_path": "",
-  "max_durability": 50,
-  "usable": false,
-  "name": "长矛",
-  "subtype": "pole",
-  "slot": "main_hand",
-  "weight": 1.0,
-  "special_effects": [],
-  "equippable": true,
-  "weapon_data": {
-    "range": 2,
-    "attack_speed": 0.9,
-    "damage": 14,
-    "crit_multiplier": 1.6,
-    "crit_chance": 0.08,
-    "stamina_cost": 4
-  },
-  "repairable": true,
-  "max_stack": 1,
-  "value": 30,
-  "durability": 50,
-  "description": "简易长矛，用于近战",
-  "rarity": "common",
-  "stackable": false,
-  "type": "weapon",
   "id": 1050,
-  "level_requirement": 0,
-  "attributes_bonus": {}
+  "name": "长矛",
+  "description": "简易长矛，用于近战",
+  "icon_path": "",
+  "value": 30,
+  "weight": 1.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "main_hand"
+      ],
+      "level_requirement": 0,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 50,
+      "max_durability": 50,
+      "repairable": true,
+      "repair_materials": []
+    },
+    {
+      "kind": "weapon",
+      "subtype": "pole",
+      "damage": 14,
+      "attack_speed": 0.9,
+      "range": 2,
+      "stamina_cost": 4,
+      "crit_chance": 0.08,
+      "crit_multiplier": 1.6,
+      "accuracy": null,
+      "ammo_type": null,
+      "max_ammo": null,
+      "reload_time": null,
+      "on_hit_effect_ids": []
+    }
+  ]
 }

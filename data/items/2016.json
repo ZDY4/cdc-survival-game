@@ -2,35 +2,53 @@
   "id": 2016,
   "name": "战斗靴",
   "description": "坚固的军靴",
-  "type": "armor",
-  "subtype": "boots",
-  "rarity": "uncommon",
-  "weight": 0.0,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "feet",
-  "level_requirement": 2,
-  "durability": 50,
-  "max_durability": 50,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "defense": 3,
-    "insulation": 0.2,
-    "stamina_efficiency": 0.15
-  },
-  "special_effects": [
-    "stamina_efficiency"
-  ],
-  "repair_materials": [
-    {"item": 1011, "count": 3},
-    {"item": 1010, "count": 1}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.0,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "uncommon"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "feet"
+      ],
+      "level_requirement": 2,
+      "equip_effect_ids": [
+        "stamina_efficiency"
+      ],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 50,
+      "max_durability": 50,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 3
+        },
+        {
+          "item_id": 1010,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "defense": 3.0,
+        "insulation": 0.2,
+        "stamina_efficiency": 0.15
+      }
+    }
+  ]
 }
-
-

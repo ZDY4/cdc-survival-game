@@ -2,34 +2,45 @@
   "id": 2018,
   "name": "小背包",
   "description": "简易布袋，增加负重能力",
-  "type": "armor",
-  "subtype": "backpack",
-  "rarity": "common",
-  "weight": 0.5,
-  "value": 0,
-  "stackable": false,
-  "max_stack": 1,
   "icon_path": "",
-  "equippable": true,
-  "slot": "back",
-  "inventory_width": 2,
-  "inventory_height": 3,
-  "inventory_grid_width": 6,
-  "inventory_grid_height": 5,
-  "level_requirement": 1,
-  "durability": 30,
-  "max_durability": 30,
-  "repairable": true,
-  "usable": false,
-  "attributes_bonus": {
-    "carry_bonus": 5.0
-  },
-  "special_effects": [],
-  "repair_materials": [
-    {"item": 1011, "count": 3}
-  ],
-  "crafting_recipe": null,
-  "deconstruct_yield": []
+  "value": 0,
+  "weight": 0.5,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "common"
+    },
+    {
+      "kind": "stacking",
+      "stackable": false,
+      "max_stack": 1
+    },
+    {
+      "kind": "equip",
+      "slots": [
+        "back"
+      ],
+      "level_requirement": 1,
+      "equip_effect_ids": [],
+      "unequip_effect_ids": []
+    },
+    {
+      "kind": "durability",
+      "durability": 30,
+      "max_durability": 30,
+      "repairable": true,
+      "repair_materials": [
+        {
+          "item_id": 1011,
+          "count": 3
+        }
+      ]
+    },
+    {
+      "kind": "attribute_modifiers",
+      "attributes": {
+        "carry_bonus": 5.0
+      }
+    }
+  ]
 }
-
-
