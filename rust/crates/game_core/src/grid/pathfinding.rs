@@ -43,7 +43,12 @@ pub fn find_path_world(
     start: WorldCoord,
     goal: WorldCoord,
 ) -> Result<Vec<WorldCoord>, GridPathfindingError> {
-    let path = find_path_grid(world, actor_id, world.world_to_grid(start), world.world_to_grid(goal))?;
+    let path = find_path_grid(
+        world,
+        actor_id,
+        world.world_to_grid(start),
+        world.world_to_grid(goal),
+    )?;
     Ok(path
         .into_iter()
         .map(|grid| world.grid_to_world(grid))
@@ -159,7 +164,10 @@ fn can_traverse(
     true
 }
 
-fn reconstruct_path(came_from: &HashMap<GridCoord, GridCoord>, current: GridCoord) -> Vec<GridCoord> {
+fn reconstruct_path(
+    came_from: &HashMap<GridCoord, GridCoord>,
+    current: GridCoord,
+) -> Vec<GridCoord> {
     let mut path = vec![current];
     let mut cursor = current;
     while let Some(previous) = came_from.get(&cursor).copied() {

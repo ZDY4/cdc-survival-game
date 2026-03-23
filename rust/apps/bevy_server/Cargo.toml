@@ -8,6 +8,7 @@ authors.workspace = true
 [dependencies]
 bevy_app.workspace = true
 bevy_ecs.workspace = true
+game_bevy = { path = "../../crates/game_bevy" }
 game_core = { path = "../../crates/game_core" }
 game_data = { path = "../../crates/game_data" }
 game_protocol = { path = "../../crates/game_protocol" }

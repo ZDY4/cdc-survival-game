@@ -34,6 +34,7 @@
 - 编辑器能力应逐步从 `addons/cdc_game_editor` 迁出，目标是独立桌面工具。
 - 游戏内容数据的结构定义必须逐步统一到共享 `Rust` 模型，作为内容 schema 与跨端交换结构的统一基准，避免多端重复定义。
 - 进程或模块间通信优先采用统一协议与 `IPC / TCP`，避免临时性私有耦合方案。
+- `game_bevy` 可以依赖 `Bevy` 和 `game_data` / `game_core`，用于承载多个 `Bevy` app 共享的运行时装配；但它不承载纯规则，也不替代 `game_core`。
 
 ## Bevy / Rust 约束
 
@@ -41,6 +42,7 @@
 - 不要把 `Godot` 侧现有节点脚本、全局管理器或大型面向对象控制器直接平移到 `Bevy`。
 - 放在 `rust/crates/game_data`、`rust/crates/game_protocol`、`rust/crates/game_core` 的共享层逻辑，应优先保持引擎无关或仅弱依赖特定引擎，以便被 `Bevy`、`Godot`、`Tauri` 编辑器共同复用。
 - 若一段规则既可以做成纯 `Rust` 规则库，也可以做成 `Bevy system`，优先将“规则本身”下沉到共享 `Rust` 层，再由 `Bevy` 负责 `ECS` 调度与运行时集成。
+- `Bevy` app 之间共享的运行时装配、定义到 `ECS` 的映射、定义到 `SimulationRuntime` seed 的集成，应优先放入共享 `Bevy` 层，而不是重复散落在各 app 本地模块中。
 
 ## 改动与迁移决策
 
@@ -104,19 +106,23 @@ cdc_survival_game/
 ├── rust/
 │   ├── crates/
 │   │   ├── game_data/
+│   │   ├── game_bevy/
 │   │   ├── game_protocol/
 │   │   └── game_core/
 │   └── apps/
-│       └── bevy_server/
+│       ├── bevy_server/
+│       └── bevy_debug_viewer/
 └── tests/
 ```
 
 目录使用建议：
 
 - `rust/crates/game_data`: 共享数据模型
+- `rust/crates/game_bevy`: `Bevy` app 共享运行时装配层
 - `rust/crates/game_protocol`: IPC/TCP 协议定义
 - `rust/crates/game_core`: 公共逻辑、校验、可复用规则
 - `rust/apps/bevy_server`: `Bevy` 逻辑核心
+- `rust/apps/bevy_debug_viewer`: `Bevy` 调试显示入口
 - `tools/tauri_editor`: 独立内容编辑器
 - `addons/`: 现有 `Godot` 插件，后续逐步瘦身而不是继续膨胀
 

@@ -1,55 +1,51 @@
 {
   "id": "survivor_xiao_ming",
-  "name": "小明",
-  "description": "末日爆发时还是个孩子，在安全屋长大。对世界充满好奇，渴望冒险。",
-  "level": 1,
+  "archetype": "npc",
   "identity": {
-    "camp_id": "survivor"
+    "display_name": "年轻幸存者·小明",
+    "description": "末日爆发时还是个孩子，在安全屋长大。对世界充满好奇，渴望冒险。"
   },
-  "visual": {
+  "faction": {
+    "camp_id": "survivor",
+    "disposition": "friendly"
+  },
+  "presentation": {
     "portrait_path": "res://assets/portraits/xiao_ming.png",
     "avatar_path": "",
     "model_path": "",
-    "placeholder": {
-      "head_color": "#eecba0",
-      "body_color": "#6a9add",
-      "leg_color": "#3c5c90"
+    "placeholder_colors": {
+      "head": "#eecba0",
+      "body": "#6a9add",
+      "legs": "#3c5c90"
     }
+  },
+  "progression": {
+    "level": 1
   },
   "combat": {
-    "ai": {
-      "aggro_range": 0.0,
-      "attack_range": 1.2,
-      "wander_radius": 3.0,
-      "leash_distance": 5.0,
-      "decision_interval": 1.2,
-      "attack_cooldown": 999.0
-    },
     "behavior": "neutral",
-    "loot": [],
-    "xp": 10
+    "xp_reward": 10,
+    "loot": []
   },
-  "social": {
-    "title": "年轻幸存者",
-    "dialog_id": "",
-    "mood": {
-      "friendliness": 70,
-      "trust": 30,
-      "fear": 10,
-      "anger": 0
-    }
+  "ai": {
+    "aggro_range": 0.0,
+    "attack_range": 1.2,
+    "wander_radius": 3.0,
+    "leash_distance": 5.0,
+    "decision_interval": 1.2,
+    "attack_cooldown": 999.0
   },
   "attributes": {
     "sets": {
       "base": {
-        "strength": 5,
-        "agility": 5,
-        "constitution": 5
+        "strength": 5.0,
+        "agility": 5.0,
+        "constitution": 5.0
       },
       "combat": {
-        "max_hp": 60,
-        "attack_power": 4,
-        "defense": 2,
+        "max_hp": 60.0,
+        "attack_power": 4.0,
+        "defense": 2.0,
         "speed": 4.0,
         "accuracy": 70.0,
         "crit_chance": 0.05,
@@ -59,7 +55,7 @@
     },
     "resources": {
       "hp": {
-        "current": 60
+        "current": 60.0
       }
     }
   }

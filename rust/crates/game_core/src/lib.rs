@@ -11,8 +11,9 @@ pub use actor::{AiController, AiStepResult, InteractOnceAiController, NoopAiCont
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
 pub use runtime::{action_result_status, SimulationRuntime};
 pub use simulation::{
-    ActorDebugState, CombatDebugState, GridDebugState, RegisterActor, Simulation,
-    SimulationCommand, SimulationCommandResult, SimulationEvent, SimulationSnapshot,
+    ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
+    RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
+    SimulationSnapshot,
 };
 
 pub struct GameCorePlugin;

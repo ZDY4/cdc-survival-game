@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 
 use game_data::{
-    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,
-    TurnState, WorldCoord,
+    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide,
+    CharacterId, GridCoord, MapCellDefinition, MapId, MapObjectDefinition, MapObjectFootprint,
+    MapObjectKind, MapRotation, TurnState, WorldCoord,
 };
 
 use crate::actor::{ActorRecord, ActorRegistry, AiController};
@@ -11,6 +13,8 @@ use crate::turn::{ActiveActionState, ActiveActions, GroupOrderRegistry, TurnConf
 
 #[derive(Debug)]
 pub struct RegisterActor {
+    pub definition_id: Option<CharacterId>,
+    pub display_name: String,
     pub kind: ActorKind,
     pub side: ActorSide,
     pub group_id: String,
@@ -20,19 +24,47 @@ pub struct RegisterActor {
 
 #[derive(Debug, Clone)]
 pub enum SimulationCommand {
-    RegisterGroup { group_id: String, order: i32 },
-    UnregisterActor { actor_id: ActorId },
-    SetActorAp { actor_id: ActorId, ap: f32 },
-    EnterCombat { trigger_actor: ActorId, target_actor: ActorId },
+    RegisterGroup {
+        group_id: String,
+        order: i32,
+    },
+    UnregisterActor {
+        actor_id: ActorId,
+    },
+    SetActorAp {
+        actor_id: ActorId,
+        ap: f32,
+    },
+    EnterCombat {
+        trigger_actor: ActorId,
+        target_actor: ActorId,
+    },
     ForceEndCombat,
     RequestAction(ActionRequest),
-    RegisterStaticObstacle { grid: GridCoord },
-    UnregisterStaticObstacle { grid: GridCoord },
-    UpdateActorGridPosition { actor_id: ActorId, grid: GridCoord },
-    MoveActorTo { actor_id: ActorId, goal: GridCoord },
-    PerformAttack { actor_id: ActorId, target_actor: ActorId },
-    PerformInteract { actor_id: ActorId },
-    EndTurn { actor_id: ActorId },
+    RegisterStaticObstacle {
+        grid: GridCoord,
+    },
+    UnregisterStaticObstacle {
+        grid: GridCoord,
+    },
+    UpdateActorGridPosition {
+        actor_id: ActorId,
+        grid: GridCoord,
+    },
+    MoveActorTo {
+        actor_id: ActorId,
+        goal: GridCoord,
+    },
+    PerformAttack {
+        actor_id: ActorId,
+        target_actor: ActorId,
+    },
+    PerformInteract {
+        actor_id: ActorId,
+    },
+    EndTurn {
+        actor_id: ActorId,
+    },
     FindPath {
         actor_id: Option<ActorId>,
         start: GridCoord,
@@ -49,21 +81,53 @@ pub enum SimulationCommandResult {
 
 #[derive(Debug, Clone)]
 pub enum SimulationEvent {
-    GroupRegistered { group_id: String, order: i32 },
-    ActorRegistered { actor_id: ActorId, group_id: String, side: ActorSide },
-    ActorUnregistered { actor_id: ActorId },
-    ActorTurnStarted { actor_id: ActorId, group_id: String, ap: f32 },
-    ActorTurnEnded { actor_id: ActorId, group_id: String, remaining_ap: f32 },
-    CombatStateChanged { in_combat: bool },
-    ActionRejected { actor_id: ActorId, action_type: ActionType, reason: String },
-    ActionResolved { actor_id: ActorId, action_type: ActionType, result: ActionResult },
+    GroupRegistered {
+        group_id: String,
+        order: i32,
+    },
+    ActorRegistered {
+        actor_id: ActorId,
+        group_id: String,
+        side: ActorSide,
+    },
+    ActorUnregistered {
+        actor_id: ActorId,
+    },
+    ActorTurnStarted {
+        actor_id: ActorId,
+        group_id: String,
+        ap: f32,
+    },
+    ActorTurnEnded {
+        actor_id: ActorId,
+        group_id: String,
+        remaining_ap: f32,
+    },
+    CombatStateChanged {
+        in_combat: bool,
+    },
+    ActionRejected {
+        actor_id: ActorId,
+        action_type: ActionType,
+        reason: String,
+    },
+    ActionResolved {
+        actor_id: ActorId,
+        action_type: ActionType,
+        result: ActionResult,
+    },
     WorldCycleCompleted,
-    PathComputed { actor_id: Option<ActorId>, path_length: usize },
+    PathComputed {
+        actor_id: Option<ActorId>,
+        path_length: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ActorDebugState {
     pub actor_id: ActorId,
+    pub definition_id: Option<CharacterId>,
+    pub display_name: String,
     pub kind: ActorKind,
     pub side: ActorSide,
     pub group_id: String,
@@ -77,10 +141,39 @@ pub struct ActorDebugState {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GridDebugState {
     pub grid_size: f32,
+    pub map_id: Option<MapId>,
+    pub map_width: Option<u32>,
+    pub map_height: Option<u32>,
+    pub default_level: Option<i32>,
+    pub levels: Vec<i32>,
     pub static_obstacles: Vec<GridCoord>,
+    pub map_blocked_cells: Vec<GridCoord>,
+    pub map_cells: Vec<MapCellDebugState>,
+    pub map_objects: Vec<MapObjectDebugState>,
     pub runtime_blocked_cells: Vec<GridCoord>,
     pub topology_version: u64,
     pub runtime_obstacle_version: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapCellDebugState {
+    pub grid: GridCoord,
+    pub blocks_movement: bool,
+    pub blocks_sight: bool,
+    pub terrain: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapObjectDebugState {
+    pub object_id: String,
+    pub kind: MapObjectKind,
+    pub anchor: GridCoord,
+    pub footprint: MapObjectFootprint,
+    pub rotation: MapRotation,
+    pub blocks_movement: bool,
+    pub blocks_sight: bool,
+    pub occupied_cells: Vec<GridCoord>,
+    pub payload_summary: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -241,13 +334,22 @@ impl Simulation {
     }
 
     pub fn register_actor(&mut self, params: RegisterActor) -> ActorId {
+        let RegisterActor {
+            definition_id,
+            display_name,
+            kind,
+            side,
+            group_id,
+            grid_position,
+            ai_controller,
+        } = params;
         let actor_id = ActorId(self.next_actor_id);
         self.next_actor_id += 1;
 
-        let group_id = if params.group_id.trim().is_empty() {
+        let group_id = if group_id.trim().is_empty() {
             "friendly".to_string()
         } else {
-            params.group_id
+            group_id
         };
 
         if !self.group_orders.orders.contains_key(&group_id) {
@@ -255,29 +357,31 @@ impl Simulation {
         }
 
         self.grid_world
-            .set_runtime_actor_grid(actor_id, params.grid_position);
+            .set_runtime_actor_grid(actor_id, grid_position);
 
         self.actors.insert(ActorRecord {
             actor_id,
-            kind: params.kind,
-            side: params.side,
+            definition_id,
+            display_name,
+            kind,
+            side,
             group_id: group_id.clone(),
             registration_index: self.next_registration_index,
             ap: 0.0,
             turn_open: false,
             in_combat: self.turn.combat_active,
-            grid_position: params.grid_position,
+            grid_position,
         });
         self.next_registration_index += 1;
 
-        if let Some(ai_controller) = params.ai_controller {
+        if let Some(ai_controller) = ai_controller {
             self.ai_controllers.insert(actor_id, ai_controller);
         }
 
         self.events.push(SimulationEvent::ActorRegistered {
             actor_id,
             group_id,
-            side: params.side,
+            side,
         });
 
         self.maybe_start_initial_player_turn(actor_id);
@@ -298,7 +402,8 @@ impl Simulation {
             self.turn.current_group_id = None;
         }
 
-        self.events.push(SimulationEvent::ActorUnregistered { actor_id });
+        self.events
+            .push(SimulationEvent::ActorUnregistered { actor_id });
         self.exit_combat_if_resolved();
     }
 
@@ -309,7 +414,10 @@ impl Simulation {
     }
 
     pub fn get_actor_ap(&self, actor_id: ActorId) -> f32 {
-        self.actors.get(actor_id).map(|actor| actor.ap).unwrap_or(0.0)
+        self.actors
+            .get(actor_id)
+            .map(|actor| actor.ap)
+            .unwrap_or(0.0)
     }
 
     pub fn get_actor_available_steps(&self, actor_id: ActorId) -> i32 {
@@ -354,6 +462,8 @@ impl Simulation {
             .values()
             .map(|actor| ActorDebugState {
                 actor_id: actor.actor_id,
+                definition_id: actor.definition_id.clone(),
+                display_name: actor.display_name.clone(),
                 kind: actor.kind,
                 side: actor.side,
                 group_id: actor.group_id.clone(),
@@ -368,13 +478,100 @@ impl Simulation {
         actors
     }
 
+    pub fn map_cell_debug_states(&self) -> Vec<MapCellDebugState> {
+        self.grid_world
+            .map_cell_entries()
+            .into_iter()
+            .map(|(grid, cell): (GridCoord, MapCellDefinition)| MapCellDebugState {
+                grid,
+                blocks_movement: cell.blocks_movement,
+                blocks_sight: cell.blocks_sight,
+                terrain: cell.terrain,
+            })
+            .collect()
+    }
+
+    pub fn map_object_debug_states(&self) -> Vec<MapObjectDebugState> {
+        self.grid_world
+            .map_object_entries()
+            .into_iter()
+            .map(|object: MapObjectDefinition| {
+                let mut payload_summary = BTreeMap::new();
+                match object.kind {
+                    MapObjectKind::Building => {
+                        if let Some(building) = object.props.building.as_ref() {
+                            payload_summary
+                                .insert("prefab_id".to_string(), building.prefab_id.clone());
+                        }
+                    }
+                    MapObjectKind::Pickup => {
+                        if let Some(pickup) = object.props.pickup.as_ref() {
+                            payload_summary.insert("item_id".to_string(), pickup.item_id.clone());
+                            payload_summary.insert(
+                                "count_range".to_string(),
+                                format!("{}..{}", pickup.min_count, pickup.max_count),
+                            );
+                        }
+                    }
+                    MapObjectKind::Interactive => {
+                        if let Some(interactive) = object.props.interactive.as_ref() {
+                            payload_summary.insert(
+                                "interaction_kind".to_string(),
+                                interactive.interaction_kind.clone(),
+                            );
+                            if let Some(target_id) = interactive.target_id.as_ref() {
+                                payload_summary.insert("target_id".to_string(), target_id.clone());
+                            }
+                        }
+                    }
+                    MapObjectKind::AiSpawn => {
+                        if let Some(ai_spawn) = object.props.ai_spawn.as_ref() {
+                            payload_summary
+                                .insert("spawn_id".to_string(), ai_spawn.spawn_id.clone());
+                            payload_summary.insert(
+                                "character_id".to_string(),
+                                ai_spawn.character_id.clone(),
+                            );
+                        }
+                    }
+                }
+
+                let occupied_cells = self
+                    .grid_world
+                    .map_object_footprint_cells(&object.object_id);
+                let blocks_movement = game_data::object_effectively_blocks_movement(&object);
+                let blocks_sight = game_data::object_effectively_blocks_sight(&object);
+                MapObjectDebugState {
+                    object_id: object.object_id,
+                    kind: object.kind,
+                    anchor: object.anchor,
+                    footprint: object.footprint,
+                    rotation: object.rotation,
+                    blocks_movement,
+                    blocks_sight,
+                    occupied_cells,
+                    payload_summary,
+                }
+            })
+            .collect()
+    }
+
     pub fn snapshot(&self, path_preview: Vec<GridCoord>) -> SimulationSnapshot {
+        let map_size = self.grid_world.map_size();
         SimulationSnapshot {
             turn: self.turn_state(),
             actors: self.actor_debug_states(),
             grid: GridDebugState {
                 grid_size: self.grid_world.grid_size(),
+                map_id: self.grid_world.map_id().cloned(),
+                map_width: map_size.map(|size| size.width),
+                map_height: map_size.map(|size| size.height),
+                default_level: self.grid_world.default_level(),
+                levels: self.grid_world.levels(),
                 static_obstacles: self.grid_world.static_obstacle_cells(),
+                map_blocked_cells: self.grid_world.map_blocked_cells(None),
+                map_cells: self.map_cell_debug_states(),
+                map_objects: self.map_object_debug_states(),
                 runtime_blocked_cells: self.grid_world.runtime_blocked_cells(),
                 topology_version: self.grid_world.topology_version(),
                 runtime_obstacle_version: self.grid_world.runtime_obstacle_version(),
@@ -417,7 +614,9 @@ impl Simulation {
     pub fn request_action(&mut self, request: ActionRequest) -> ActionResult {
         let actor_id = request.actor_id;
         let result = match request.phase {
-            ActionPhase::Start => self.request_action_start(actor_id, request.action_type, &request),
+            ActionPhase::Start => {
+                self.request_action_start(actor_id, request.action_type, &request)
+            }
             ActionPhase::Step => self.request_action_step(actor_id, request.action_type, &request),
             ActionPhase::Complete => {
                 self.request_action_complete(actor_id, request.action_type, &request)
@@ -929,7 +1128,9 @@ impl Simulation {
         let current_group = ordered_groups.get(start_group_index)?;
         if let Some(current_actor) = current_actor {
             let actor_ids = self.group_actor_ids(current_group);
-            if let Some(actor_index) = actor_ids.iter().position(|candidate| *candidate == current_actor)
+            if let Some(actor_index) = actor_ids
+                .iter()
+                .position(|candidate| *candidate == current_actor)
             {
                 for idx in (actor_index + 1)..actor_ids.len() {
                     return Some((current_group.clone(), actor_ids[idx]));
@@ -1102,7 +1303,12 @@ fn pathfinding_error_reason(error: &GridPathfindingError) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use game_data::{ActionPhase, ActionRequest, ActionType, ActorKind, ActorSide, GridCoord, WorldCoord};
+    use game_data::{
+        ActionPhase, ActionRequest, ActionType, ActorKind, ActorSide, CharacterId, GridCoord,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLevelDefinition,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
+        MapSize, WorldCoord,
+    };
 
     use crate::actor::InteractOnceAiController;
     use crate::grid::GridPathfindingError;
@@ -1113,6 +1319,8 @@ mod tests {
     fn player_registration_opens_initial_turn() {
         let mut simulation = Simulation::new();
         let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
             kind: ActorKind::Player,
             side: ActorSide::Player,
             group_id: "player".into(),
@@ -1124,9 +1332,38 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_exposes_definition_metadata() {
+        let mut simulation = Simulation::new();
+        let actor_id = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "废土商人·老王".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "survivor".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            ai_controller: None,
+        });
+
+        let snapshot = simulation.snapshot(Vec::new());
+        let actor = snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == actor_id)
+            .expect("actor should be present in snapshot");
+
+        assert_eq!(
+            actor.definition_id.as_ref().map(CharacterId::as_str),
+            Some("trader_lao_wang")
+        );
+        assert_eq!(actor.display_name, "废土商人·老王");
+    }
+
+    #[test]
     fn ap_carries_and_caps() {
         let mut simulation = Simulation::new();
         let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
             kind: ActorKind::Player,
             side: ActorSide::Player,
             group_id: "player".into(),
@@ -1160,6 +1397,8 @@ mod tests {
     fn world_cycle_runs_ai_and_reopens_player_turn() {
         let mut simulation = Simulation::new();
         let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
             kind: ActorKind::Player,
             side: ActorSide::Player,
             group_id: "player".into(),
@@ -1167,6 +1406,8 @@ mod tests {
             ai_controller: None,
         });
         let friendly = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Friendly".into(),
             kind: ActorKind::Npc,
             side: ActorSide::Friendly,
             group_id: "friendly".into(),
@@ -1197,6 +1438,8 @@ mod tests {
     fn combat_turn_gating_and_rotation_work() {
         let mut simulation = Simulation::new();
         let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
             kind: ActorKind::Player,
             side: ActorSide::Player,
             group_id: "player".into(),
@@ -1204,6 +1447,8 @@ mod tests {
             ai_controller: None,
         });
         let hostile_one = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile One".into(),
             kind: ActorKind::Enemy,
             side: ActorSide::Hostile,
             group_id: "hostile:one".into(),
@@ -1211,6 +1456,8 @@ mod tests {
             ai_controller: None,
         });
         let hostile_two = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile Two".into(),
             kind: ActorKind::Enemy,
             side: ActorSide::Hostile,
             group_id: "hostile:two".into(),
@@ -1269,6 +1516,8 @@ mod tests {
     fn combat_exits_when_hostiles_are_gone() {
         let mut simulation = Simulation::new();
         let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
             kind: ActorKind::Player,
             side: ActorSide::Player,
             group_id: "player".into(),
@@ -1276,6 +1525,8 @@ mod tests {
             ai_controller: None,
         });
         let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
             kind: ActorKind::Enemy,
             side: ActorSide::Hostile,
             group_id: "hostile".into(),
@@ -1294,7 +1545,10 @@ mod tests {
         let grid = world.world_to_grid(WorldCoord::new(0.6, 0.4, 1.8));
         assert_eq!(grid, GridCoord::new(0, 0, 1));
         assert_eq!(world.grid_to_world(grid), WorldCoord::new(0.5, 0.5, 1.5));
-        assert_eq!(world.snap_to_grid(WorldCoord::new(0.6, 0.4, 1.8)), WorldCoord::new(0.5, 0.5, 1.5));
+        assert_eq!(
+            world.snap_to_grid(WorldCoord::new(0.6, 0.4, 1.8)),
+            WorldCoord::new(0.5, 0.5, 1.5)
+        );
     }
 
     #[test]
@@ -1307,16 +1561,54 @@ mod tests {
     }
 
     #[test]
+    fn loaded_map_blocks_only_within_same_level() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_map_definition());
+
+        assert!(!world.is_walkable(GridCoord::new(5, 0, 2)));
+        assert!(world.is_walkable(GridCoord::new(5, 1, 2)));
+        assert_eq!(world.map_id().map(MapId::as_str), Some("sample_map"));
+        assert_eq!(world.levels(), vec![0, 1]);
+    }
+
+    #[test]
+    fn building_footprint_from_loaded_map_blocks_pathfinding() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_map_definition());
+
+        let result = crate::grid::find_path_grid(
+            &world,
+            None,
+            GridCoord::new(3, 0, 2),
+            GridCoord::new(6, 0, 2),
+        );
+
+        assert!(matches!(result, Err(GridPathfindingError::TargetNotWalkable)));
+    }
+
+    #[test]
+    fn non_blocking_pickup_does_not_block_pathfinding() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_map_definition());
+
+        let result = crate::grid::find_path_grid(
+            &world,
+            None,
+            GridCoord::new(0, 0, 0),
+            GridCoord::new(2, 0, 1),
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn runtime_occupancy_blocks_other_actors_but_not_self() {
         let mut world = crate::grid::GridWorld::default();
         let actor = game_data::ActorId(1);
         world.set_runtime_actor_grid(actor, GridCoord::new(2, 0, 2));
         assert!(!world.is_walkable(GridCoord::new(2, 0, 2)));
         assert!(world.is_walkable_for_actor(GridCoord::new(2, 0, 2), Some(actor)));
-        assert!(!world.is_walkable_for_actor(
-            GridCoord::new(2, 0, 2),
-            Some(game_data::ActorId(2))
-        ));
+        assert!(!world.is_walkable_for_actor(GridCoord::new(2, 0, 2), Some(game_data::ActorId(2))));
     }
 
     #[test]
@@ -1367,6 +1659,69 @@ mod tests {
             GridCoord::new(0, 0, 0),
             GridCoord::new(3, 0, 3),
         );
-        assert!(matches!(result, Err(GridPathfindingError::TargetNotWalkable)));
+        assert!(matches!(
+            result,
+            Err(GridPathfindingError::TargetNotWalkable)
+        ));
+    }
+
+    fn sample_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("sample_map".into()),
+            name: "Sample".into(),
+            size: MapSize {
+                width: 12,
+                height: 12,
+            },
+            default_level: 0,
+            levels: vec![
+                MapLevelDefinition {
+                    y: 0,
+                    cells: vec![MapCellDefinition {
+                        x: 8,
+                        z: 8,
+                        blocks_movement: true,
+                        blocks_sight: true,
+                        terrain: "pillar".into(),
+                        extra: std::collections::BTreeMap::new(),
+                    }],
+                },
+                MapLevelDefinition {
+                    y: 1,
+                    cells: Vec::new(),
+                },
+            ],
+            objects: vec![
+                MapObjectDefinition {
+                    object_id: "house".into(),
+                    kind: MapObjectKind::Building,
+                    anchor: GridCoord::new(4, 0, 2),
+                    footprint: MapObjectFootprint {
+                        width: 2,
+                        height: 2,
+                    },
+                    rotation: MapRotation::North,
+                    blocks_movement: true,
+                    blocks_sight: true,
+                    props: MapObjectProps {
+                        building: Some(MapBuildingProps {
+                            prefab_id: "safehouse_house".into(),
+                            extra: std::collections::BTreeMap::new(),
+                        }),
+                        ..MapObjectProps::default()
+                    },
+                },
+                MapObjectDefinition {
+                    object_id: "pickup".into(),
+                    kind: MapObjectKind::Pickup,
+                    anchor: GridCoord::new(2, 0, 1),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    props: MapObjectProps::default(),
+                },
+            ],
+        }
     }
 }

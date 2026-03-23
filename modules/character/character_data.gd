@@ -1,4 +1,8 @@
 extends RefCounted
+## DEPRECATED: Character definitions are now owned by Rust `game_data`
+## and persisted under `data/characters/*.json` using the Rust-first schema.
+## This file is kept only as a historical Godot-side model reference and should
+## not be extended or treated as the source of truth.
 ## CharacterData - Unified character data model for NPCs and enemies.
 
 class_name CharacterData

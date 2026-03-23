@@ -1,0 +1,13 @@
+[package]
+name = "game_bevy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+bevy_app.workspace = true
+bevy_ecs.workspace = true
+game_core = { path = "../game_core" }
+game_data = { path = "../game_data" }
+thiserror.workspace = true

@@ -608,6 +608,7 @@ name = "bevy_debug_viewer"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "game_bevy",
  "game_core",
  "game_data",
 ]
@@ -1328,6 +1329,7 @@ version = "0.1.0"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
+ "game_bevy",
  "game_core",
  "game_data",
  "game_protocol",
@@ -2541,6 +2543,17 @@ dependencies = [
  "futures-task",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "game_bevy"
+version = "0.1.0"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "game_core",
+ "game_data",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

@@ -17,6 +17,8 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         .register_static_obstacle(GridCoord::new(2, 0, 1));
 
     let player = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Demo Player".into(),
         kind: ActorKind::Player,
         side: ActorSide::Player,
         group_id: "player".into(),
@@ -24,6 +26,8 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         ai_controller: None,
     });
     let friendly = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Demo Friendly".into(),
         kind: ActorKind::Npc,
         side: ActorSide::Friendly,
         group_id: "friendly".into(),
@@ -31,6 +35,8 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         ai_controller: Some(Box::new(InteractOnceAiController)),
     });
     let hostile = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Demo Hostile".into(),
         kind: ActorKind::Enemy,
         side: ActorSide::Hostile,
         group_id: "hostile".into(),

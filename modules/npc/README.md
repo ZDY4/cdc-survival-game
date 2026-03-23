@@ -1,6 +1,7 @@
 # NPC系统使用指南
 
 > 2026-03 更新: 角色数据中的交易/交互/任务/招募能力位已退场。交易改为由场景中的 `ShopComponent` 实例在运行时显式绑定角色；招募功能已下线。旧的情绪组件、记忆组件和招募组件也已移除，本文档中若出现这些概念，均以当前实现为准。
+> 2026-03 角色定义迁移: `data/characters/*.json` 已改为由 `rust/crates/game_data` 定义的新 Rust schema 统一承载。`modules/character/character_data.gd` 与历史 `npc_data.gd` 不再是权威模型，也不保证兼容当前数据结构。
 
 ## 🎉 NPC系统已完成集成
 
@@ -15,7 +16,6 @@
 ### 核心架构
 ```
 modules/npc/
-├── npc_data.gd                        # NPC数据类
 ├── npc_base.gd                        # NPC基类（场景实体）
 ├── components/
 │   ├── npc_dialog_component.gd       # 对话组件
@@ -27,10 +27,10 @@ modules/npc/
     └── (使用全局 data/json/npcs.json)
 ```
 
-### 数据文件
+### 角色定义来源
 ```
-data/json/
-└── npcs.json                          # NPC数据定义
+rust/crates/game_data/src/character.rs # 角色 schema
+data/characters/*.json                 # 角色内容定义
 ```
 
 ### 集成修改

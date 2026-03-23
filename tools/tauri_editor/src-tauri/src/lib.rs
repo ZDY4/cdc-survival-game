@@ -4,7 +4,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use game_data::{DialogueConnection, DialogueData, DialogueNode, ItemData};
+use game_data::{
+    load_character_library, validate_map_definition, DialogueConnection, DialogueData,
+    ItemData, MapDefinition, MapValidationCatalog,
+};
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_ITEM_TYPES: &[&str] = &[
@@ -61,6 +64,19 @@ const DEFAULT_SUBTYPES: &[&str] = &[
     "misc",
 ];
 const DEFAULT_DIALOG_NODE_TYPES: &[&str] = &["dialog", "choice", "condition", "action", "end"];
+const DEFAULT_BUILDING_PREFABS: &[&str] = &[
+    "safehouse_house",
+    "safehouse_upper_room",
+    "street_block",
+    "warehouse_shell",
+];
+const DEFAULT_INTERACTION_KINDS: &[&str] = &[
+    "enter_outdoor_location",
+    "enter_subscene",
+    "pickup",
+    "dialogue",
+    "trade",
+];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -187,6 +203,56 @@ struct SaveDialoguesResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DeleteDialogueResult {
+    deleted_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MapCatalogs {
+    item_ids: Vec<String>,
+    character_ids: Vec<String>,
+    building_prefabs: Vec<String>,
+    interactive_kinds: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MapDocumentPayload {
+    document_key: String,
+    original_id: String,
+    file_name: String,
+    relative_path: String,
+    map: MapDefinition,
+    validation: Vec<ValidationIssue>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MapWorkspacePayload {
+    bootstrap: EditorBootstrap,
+    data_directory: String,
+    map_count: usize,
+    catalogs: MapCatalogs,
+    documents: Vec<MapDocumentPayload>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveMapDocumentInput {
+    original_id: Option<String>,
+    map: MapDefinition,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveMapsResult {
+    saved_ids: Vec<String>,
+    deleted_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteMapResult {
     deleted_id: String,
 }
 
@@ -387,6 +453,110 @@ fn delete_dialogue_document(dialog_id: String) -> Result<DeleteDialogueResult, S
     Ok(DeleteDialogueResult { deleted_id: dialog_id })
 }
 
+#[tauri::command]
+fn load_map_workspace() -> Result<MapWorkspacePayload, String> {
+    let item_documents = load_item_documents()?;
+    let character_ids = load_character_ids()?;
+    let validation_catalog = map_validation_catalog(&item_documents, &character_ids);
+    let documents = load_map_documents(&validation_catalog)?;
+    let bootstrap = editor_bootstrap()?;
+    let data_directory = to_forward_slashes(&map_data_dir()?);
+    let map_count = documents.len();
+    let catalogs = collect_map_catalogs(&documents, &validation_catalog);
+
+    Ok(MapWorkspacePayload {
+        bootstrap,
+        data_directory,
+        map_count,
+        catalogs,
+        documents,
+    })
+}
+
+#[tauri::command]
+fn validate_map_document(map: MapDefinition) -> Result<Vec<ValidationIssue>, String> {
+    let item_documents = load_item_documents()?;
+    let character_ids = load_character_ids()?;
+    let validation_catalog = map_validation_catalog(&item_documents, &character_ids);
+    Ok(validate_map(&map, &validation_catalog))
+}
+
+#[tauri::command]
+fn save_map_documents(documents: Vec<SaveMapDocumentInput>) -> Result<SaveMapsResult, String> {
+    if documents.is_empty() {
+        return Ok(SaveMapsResult {
+            saved_ids: Vec::new(),
+            deleted_ids: Vec::new(),
+        });
+    }
+
+    let item_documents = load_item_documents()?;
+    let character_ids = load_character_ids()?;
+    let validation_catalog = map_validation_catalog(&item_documents, &character_ids);
+    let mut seen_ids = HashSet::new();
+
+    for document in &documents {
+        let map_id = document.map.id.as_str().trim();
+        if map_id.is_empty() {
+            return Err("map id cannot be empty".to_string());
+        }
+        if !seen_ids.insert(map_id.to_string()) {
+            return Err(format!("duplicate map id in save batch: {map_id}"));
+        }
+
+        let issues = validate_map(&document.map, &validation_catalog);
+        if issues.iter().any(|issue| issue.severity == "error") {
+            return Err(format!("map {} has validation errors and cannot be saved", map_id));
+        }
+    }
+
+    let data_dir = map_data_dir()?;
+    fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("failed to create map directory: {error}"))?;
+
+    let mut saved_ids = Vec::new();
+    let mut deleted_ids = Vec::new();
+
+    for document in documents {
+        let map = document.map;
+        let target_path = map_file_path(map.id.as_str())?;
+        let json = serde_json::to_string_pretty(&map)
+            .map_err(|error| format!("failed to serialize map {}: {error}", map.id))?;
+        fs::write(&target_path, json)
+            .map_err(|error| format!("failed to write {}: {error}", target_path.display()))?;
+
+        if let Some(original_id) = document.original_id {
+            if original_id != map.id.as_str() {
+                let old_path = map_file_path(&original_id)?;
+                if old_path.exists() {
+                    fs::remove_file(&old_path).map_err(|error| {
+                        format!("failed to remove renamed map {}: {error}", original_id)
+                    })?;
+                    deleted_ids.push(original_id);
+                }
+            }
+        }
+
+        saved_ids.push(map.id.0);
+    }
+
+    Ok(SaveMapsResult {
+        saved_ids,
+        deleted_ids,
+    })
+}
+
+#[tauri::command]
+fn delete_map_document(map_id: String) -> Result<DeleteMapResult, String> {
+    let path = map_file_path(&map_id)?;
+    if path.exists() {
+        fs::remove_file(&path)
+            .map_err(|error| format!("failed to delete {}: {error}", path.display()))?;
+    }
+
+    Ok(DeleteMapResult { deleted_id: map_id })
+}
+
 fn editor_bootstrap() -> Result<EditorBootstrap, String> {
     let workspace_root = repo_root()?;
     let shared_rust_path = workspace_root.join("rust");
@@ -522,6 +692,59 @@ fn load_dialogue_documents() -> Result<Vec<DialogueDocumentPayload>, String> {
     Ok(documents)
 }
 
+fn load_map_documents(
+    validation_catalog: &MapValidationCatalog,
+) -> Result<Vec<MapDocumentPayload>, String> {
+    let data_dir = map_data_dir()?;
+    if !data_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = fs::read_dir(&data_dir)
+        .map_err(|error| format!("failed to read {}: {error}", data_dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to enumerate map directory: {error}"))?;
+
+    entries.sort_by_key(|entry| entry.file_name());
+
+    let mut documents = Vec::new();
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+
+        let raw = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let map: MapDefinition = serde_json::from_str(&raw)
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+        let validation = validate_map(&map, validation_catalog);
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let relative_path = relative_to_repo(&path)?;
+        let document_key = if map.id.as_str().trim().is_empty() {
+            file_name.clone()
+        } else {
+            map.id.as_str().to_string()
+        };
+
+        documents.push(MapDocumentPayload {
+            document_key,
+            original_id: map.id.as_str().to_string(),
+            file_name,
+            relative_path,
+            map,
+            validation,
+        });
+    }
+
+    documents.sort_by(|left, right| left.document_key.cmp(&right.document_key));
+    Ok(documents)
+}
+
 fn collect_catalogs(documents: &[ItemDocumentPayload]) -> ItemCatalogs {
     let mut item_types = seeded_set(DEFAULT_ITEM_TYPES);
     let mut rarities = seeded_set(DEFAULT_RARITIES);
@@ -564,6 +787,36 @@ fn collect_dialogue_catalogs(documents: &[DialogueDocumentPayload]) -> DialogueC
 
     DialogueCatalogs {
         node_types: node_types.into_iter().collect(),
+    }
+}
+
+fn collect_map_catalogs(
+    documents: &[MapDocumentPayload],
+    validation_catalog: &MapValidationCatalog,
+) -> MapCatalogs {
+    let mut building_prefabs = seeded_set(DEFAULT_BUILDING_PREFABS);
+    let mut interactive_kinds = seeded_set(DEFAULT_INTERACTION_KINDS);
+
+    for document in documents {
+        for object in &document.map.objects {
+            if let Some(building) = object.props.building.as_ref() {
+                if !building.prefab_id.trim().is_empty() {
+                    building_prefabs.insert(building.prefab_id.clone());
+                }
+            }
+            if let Some(interactive) = object.props.interactive.as_ref() {
+                if !interactive.interaction_kind.trim().is_empty() {
+                    interactive_kinds.insert(interactive.interaction_kind.clone());
+                }
+            }
+        }
+    }
+
+    MapCatalogs {
+        item_ids: validation_catalog.item_ids.iter().cloned().collect(),
+        character_ids: validation_catalog.character_ids.iter().cloned().collect(),
+        building_prefabs: building_prefabs.into_iter().collect(),
+        interactive_kinds: interactive_kinds.into_iter().collect(),
     }
 }
 
@@ -789,6 +1042,16 @@ fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
     issues
 }
 
+fn validate_map(
+    map: &MapDefinition,
+    validation_catalog: &MapValidationCatalog,
+) -> Vec<ValidationIssue> {
+    match validate_map_definition(map, Some(validation_catalog)) {
+        Ok(()) => Vec::new(),
+        Err(error) => vec![document_error("map", error.to_string())],
+    }
+}
+
 fn error(field: impl Into<String>, message: impl Into<String>) -> ValidationIssue {
     ValidationIssue {
         severity: "error",
@@ -989,8 +1252,16 @@ fn item_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("items"))
 }
 
+fn character_data_dir() -> Result<PathBuf, String> {
+    Ok(repo_root()?.join("data").join("characters"))
+}
+
 fn dialogue_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("dialogues"))
+}
+
+fn map_data_dir() -> Result<PathBuf, String> {
+    Ok(repo_root()?.join("data").join("maps"))
 }
 
 fn item_file_path(item_id: u32) -> Result<PathBuf, String> {
@@ -999,6 +1270,32 @@ fn item_file_path(item_id: u32) -> Result<PathBuf, String> {
 
 fn dialogue_file_path(dialog_id: &str) -> Result<PathBuf, String> {
     Ok(dialogue_data_dir()?.join(format!("{dialog_id}.json")))
+}
+
+fn map_file_path(map_id: &str) -> Result<PathBuf, String> {
+    Ok(map_data_dir()?.join(format!("{map_id}.json")))
+}
+
+fn load_character_ids() -> Result<BTreeSet<String>, String> {
+    let library = load_character_library(character_data_dir()?)
+        .map_err(|error| format!("failed to load character catalog: {error}"))?;
+    Ok(library
+        .iter()
+        .map(|(id, _)| id.as_str().to_string())
+        .collect())
+}
+
+fn map_validation_catalog(
+    item_documents: &[ItemDocumentPayload],
+    character_ids: &BTreeSet<String>,
+) -> MapValidationCatalog {
+    MapValidationCatalog {
+        item_ids: item_documents
+            .iter()
+            .map(|document| document.item.id.to_string())
+            .collect(),
+        character_ids: character_ids.clone(),
+    }
 }
 
 fn relative_to_repo(path: &Path) -> Result<String, String> {
@@ -1025,7 +1322,11 @@ pub fn run() {
             load_dialogue_workspace,
             validate_dialogue_document,
             save_dialogue_documents,
-            delete_dialogue_document
+            delete_dialogue_document,
+            load_map_workspace,
+            validate_map_document,
+            save_map_documents,
+            delete_map_document
         ])
         .run(tauri::generate_context!())
         .expect("error while running CDC content editor");

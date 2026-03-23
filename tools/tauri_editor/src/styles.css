@@ -644,6 +644,55 @@ button {
   padding: 10px 12px;
 }
 
+.map-editor-stage {
+  display: grid;
+  gap: 14px;
+}
+
+.map-canvas-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.map-grid-canvas {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(9, 12, 17, 0.96), rgba(14, 18, 24, 0.96)),
+    radial-gradient(circle at top, rgba(216, 161, 90, 0.08), transparent 24%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 720px;
+  overflow: auto;
+}
+
+.map-grid-cell {
+  aspect-ratio: 1;
+  min-width: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  padding: 0;
+}
+
+.map-grid-cell-occupied {
+  background: rgba(216, 161, 90, 0.12);
+  border-color: rgba(216, 161, 90, 0.28);
+  color: #f4efe4;
+}
+
+.map-grid-cell-selected {
+  box-shadow: inset 0 0 0 2px rgba(110, 197, 156, 0.75);
+}
+
+.map-grid-cell-preview {
+  box-shadow: inset 0 0 0 2px rgba(53, 149, 250, 0.72);
+}
+
 @media (max-width: 1320px) {
   .workspace-grid {
     grid-template-columns: 280px minmax(0, 1fr);

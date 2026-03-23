@@ -1,55 +1,51 @@
 {
   "id": "bandit_leader",
-  "name": "铁爪",
-  "description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的合作伙伴还算公平。",
-  "level": 8,
+  "archetype": "enemy",
   "identity": {
-    "camp_id": "raider"
+    "display_name": "掠夺者头目·铁爪",
+    "description": "带领一帮亡命之徒在废土上抢劫为生。心狠手辣，但对有用的合作伙伴还算公平。"
   },
-  "visual": {
+  "faction": {
+    "camp_id": "raider",
+    "disposition": "hostile"
+  },
+  "presentation": {
     "portrait_path": "res://assets/portraits/bandit.png",
     "avatar_path": "",
     "model_path": "",
-    "placeholder": {
-      "head_color": "#eecba0",
-      "body_color": "#6a9add",
-      "leg_color": "#3c5c90"
+    "placeholder_colors": {
+      "head": "#eecba0",
+      "body": "#6a9add",
+      "legs": "#3c5c90"
     }
+  },
+  "progression": {
+    "level": 8
   },
   "combat": {
-    "ai": {
-      "aggro_range": 0.0,
-      "attack_range": 1.2,
-      "wander_radius": 3.0,
-      "leash_distance": 5.0,
-      "decision_interval": 1.2,
-      "attack_cooldown": 999.0
-    },
     "behavior": "neutral",
-    "loot": [],
-    "xp": 40
+    "xp_reward": 40,
+    "loot": []
   },
-  "social": {
-    "title": "掠夺者头目",
-    "dialog_id": "",
-    "mood": {
-      "friendliness": 30,
-      "trust": 10,
-      "fear": 0,
-      "anger": 20
-    }
+  "ai": {
+    "aggro_range": 0.0,
+    "attack_range": 1.2,
+    "wander_radius": 3.0,
+    "leash_distance": 5.0,
+    "decision_interval": 1.2,
+    "attack_cooldown": 999.0
   },
   "attributes": {
     "sets": {
       "base": {
-        "strength": 5,
-        "agility": 5,
-        "constitution": 5
+        "strength": 5.0,
+        "agility": 5.0,
+        "constitution": 5.0
       },
       "combat": {
-        "max_hp": 120,
-        "attack_power": 15,
-        "defense": 8,
+        "max_hp": 120.0,
+        "attack_power": 15.0,
+        "defense": 8.0,
         "speed": 7.0,
         "accuracy": 70.0,
         "crit_chance": 0.05,
@@ -59,7 +55,7 @@
     },
     "resources": {
       "hp": {
-        "current": 120
+        "current": 120.0
       }
     }
   }

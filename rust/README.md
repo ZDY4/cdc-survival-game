@@ -7,8 +7,28 @@ This directory contains the incremental Rust-side architecture for the project.
 - `crates/game_data`: shared data models
 - `crates/game_protocol`: IPC protocol messages
 - `crates/game_core`: reusable gameplay logic
+- `crates/game_bevy`: shared Bevy runtime assembly
 - `apps/bevy_server`: headless Bevy runtime
 - `apps/bevy_debug_viewer`: windowed Bevy debug viewer
+
+## Character Definition Authority
+
+Character definitions now use Rust as the single source of truth:
+
+- Schema: `rust/crates/game_data/src/character.rs`
+- Content files: `data/characters/*.json`
+- Runtime loading: `game_data::load_character_library`
+- Bevy-side assembly: `rust/crates/game_bevy/src/lib.rs`
+
+The legacy Godot-side `CharacterData.gd` / `NPCData.gd` models are no longer
+authoritative and are not kept in sync with the Rust schema.
+
+## Runtime Assembly Layers
+
+- `game_data` owns content schema, loading, and validation.
+- `game_core` owns engine-agnostic simulation/runtime rules.
+- `game_bevy` owns shared Bevy app assembly, including definition-to-ECS and definition-to-runtime seed integration.
+- `bevy_server` and `bevy_debug_viewer` only own app entrypoints, reporting, and presentation.
 
 ## Intended next steps
 

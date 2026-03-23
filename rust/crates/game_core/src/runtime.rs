@@ -130,15 +130,12 @@ mod tests {
         let snapshot = runtime.snapshot();
         assert!(snapshot.combat.in_combat == false);
         assert_eq!(snapshot.actors.len(), 3);
-        assert!(snapshot
-            .actors
-            .iter()
-            .any(|actor| {
-                actor.actor_id == handles.player
-                    && actor.side == ActorSide::Player
-                    && actor.turn_open
-                    && (actor.ap - 1.0).abs() < f32::EPSILON
-            }));
+        assert!(snapshot.actors.iter().any(|actor| {
+            actor.actor_id == handles.player
+                && actor.side == ActorSide::Player
+                && actor.turn_open
+                && (actor.ap - 1.0).abs() < f32::EPSILON
+        }));
     }
 
     #[test]
@@ -165,6 +162,9 @@ mod tests {
                 .map(|actor| actor.grid_position),
             Some(GridCoord::new(0, 0, 1))
         );
-        assert_eq!(snapshot.path_preview.last().copied(), Some(GridCoord::new(0, 0, 1)));
+        assert_eq!(
+            snapshot.path_preview.last().copied(),
+            Some(GridCoord::new(0, 0, 1))
+        );
     }
 }

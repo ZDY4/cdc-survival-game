@@ -1,31 +1,30 @@
 {
   "id": "zombie_walker",
-  "name": "行尸",
-  "description": "缓慢移动的普通僵尸",
-  "level": 1,
+  "archetype": "enemy",
   "identity": {
-    "camp_id": "infected"
+    "display_name": "行尸",
+    "description": "缓慢移动的普通僵尸"
   },
-  "visual": {
+  "faction": {
+    "camp_id": "infected",
+    "disposition": "hostile"
+  },
+  "presentation": {
     "portrait_path": "",
     "avatar_path": "",
     "model_path": "",
-    "placeholder": {
-      "head_color": "#f5b6b6",
-      "body_color": "#b64545",
-      "leg_color": "#7d2f2f"
+    "placeholder_colors": {
+      "head": "#f5b6b6",
+      "body": "#b64545",
+      "legs": "#7d2f2f"
     }
   },
+  "progression": {
+    "level": 1
+  },
   "combat": {
-    "ai": {
-      "aggro_range": 5.0,
-      "attack_range": 1.2,
-      "wander_radius": 3.0,
-      "leash_distance": 6.0,
-      "decision_interval": 0.9,
-      "attack_cooldown": 2.2
-    },
     "behavior": "passive",
+    "xp_reward": 10,
     "loot": [
       {
         "item_id": 1010,
@@ -39,30 +38,27 @@
         "min": 1,
         "max": 1
       }
-    ],
-    "xp": 10
+    ]
   },
-  "social": {
-    "title": "",
-    "dialog_id": "",
-    "mood": {
-      "friendliness": 0,
-      "trust": 0,
-      "fear": 0,
-      "anger": 90
-    }
+  "ai": {
+    "aggro_range": 5.0,
+    "attack_range": 1.2,
+    "wander_radius": 3.0,
+    "leash_distance": 6.0,
+    "decision_interval": 0.9,
+    "attack_cooldown": 2.2
   },
   "attributes": {
     "sets": {
       "base": {
-        "strength": 5,
-        "agility": 5,
-        "constitution": 5
+        "strength": 5.0,
+        "agility": 5.0,
+        "constitution": 5.0
       },
       "combat": {
-        "max_hp": 25,
-        "attack_power": 4,
-        "defense": 1,
+        "max_hp": 25.0,
+        "attack_power": 4.0,
+        "defense": 1.0,
         "speed": 3.0,
         "accuracy": 60.0,
         "crit_chance": 0.05,
@@ -72,7 +68,7 @@
     },
     "resources": {
       "hp": {
-        "current": 25
+        "current": 25.0
       }
     }
   }

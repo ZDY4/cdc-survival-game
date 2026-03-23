@@ -8,7 +8,10 @@ pub enum ClientMessage {
     Ping,
     SubscribeWorldState,
     RequestAction(ActionRequest),
-    MoveActor { actor_id: ActorId, destination: WorldCoord },
+    MoveActor {
+        actor_id: ActorId,
+        destination: WorldCoord,
+    },
     FindPath {
         actor_id: Option<ActorId>,
         start: GridCoord,
@@ -24,7 +27,9 @@ pub enum ServerMessage {
         turn_state: TurnState,
     },
     ActionResult(ActionResult),
-    PathResult { path: Vec<GridCoord> },
+    PathResult {
+        path: Vec<GridCoord>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

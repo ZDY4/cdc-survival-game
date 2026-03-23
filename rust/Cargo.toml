@@ -2,6 +2,7 @@
 members = [
     "crates/game_core",
     "crates/game_data",
+    "crates/game_bevy",
     "crates/game_protocol",
     "apps/bevy_server",
     "apps/bevy_debug_viewer",

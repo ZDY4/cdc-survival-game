@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 
-use game_data::{ActionPhase, ActionRequest, ActionType, ActorId, ActorKind, ActorSide, GridCoord};
+use game_data::{
+    ActionPhase, ActionRequest, ActionType, ActorId, ActorKind, ActorSide, CharacterId, GridCoord,
+};
 
 use crate::simulation::Simulation;
 
 #[derive(Debug, Clone)]
 pub struct ActorRecord {
     pub actor_id: ActorId,
+    pub definition_id: Option<CharacterId>,
+    pub display_name: String,
     pub kind: ActorKind,
     pub side: ActorSide,
     pub group_id: String,
@@ -33,11 +37,8 @@ impl AiStepResult {
 }
 
 pub trait AiController: Send + Sync + std::fmt::Debug {
-    fn execute_turn_step(
-        &mut self,
-        actor_id: ActorId,
-        simulation: &mut Simulation,
-    ) -> AiStepResult;
+    fn execute_turn_step(&mut self, actor_id: ActorId, simulation: &mut Simulation)
+        -> AiStepResult;
 }
 
 #[derive(Debug, Default)]
