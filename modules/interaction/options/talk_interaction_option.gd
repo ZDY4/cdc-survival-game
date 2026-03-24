@@ -1,5 +1,9 @@
 extends "res://modules/interaction/options/interaction_option.gd"
 class_name TalkInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## Dialogue option execution is currently a Godot compatibility layer.
+## Avoid introducing new authoritative branching/state logic here; long-term
+## dialogue authority should be centralized in Rust runtime/protocol.
 
 const CharacterRelationResolverScript = preload("res://systems/character_relation_resolver.gd")
 

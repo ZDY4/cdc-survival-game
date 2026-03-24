@@ -2,6 +2,7 @@ mod ai_context;
 mod ai_provider;
 mod ai_review;
 mod ai_settings;
+mod editor_menu;
 mod narrative_app_settings;
 mod narrative_context;
 mod narrative_provider;
@@ -24,6 +25,7 @@ use game_data::{
     MapDefinition, MapValidationCatalog, SharedContentRegistry,
 };
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 use crate::ai_provider::{
     generate_dialogue_draft, generate_quest_draft, test_ai_provider,
@@ -2139,6 +2141,16 @@ pub(crate) fn to_forward_slashes(path: impl AsRef<Path>) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            editor_menu::apply_window_menu(&app.handle(), "main")?;
+            Ok(())
+        })
+        .on_page_load(|webview, _payload| {
+            let _ = editor_menu::apply_window_menu(&webview.app_handle(), webview.label());
+        })
+        .on_menu_event(|app, event| {
+            editor_menu::handle_editor_menu_event(app, event.id().as_ref());
+        })
         .invoke_handler(tauri::generate_handler![
             get_editor_bootstrap,
             load_shared_registry,

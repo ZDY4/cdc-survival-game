@@ -1,5 +1,9 @@
 extends "res://modules/interaction/options/interaction_option.gd"
 class_name AttackInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## This option is a temporary Godot-side compatibility bridge for attack entry.
+## Do not expand combat rule authority here. Long-term validation/resolution
+## should be handled by Rust runtime/protocol, while Godot consumes results.
 
 const CharacterRelationResolverScript = preload("res://systems/character_relation_resolver.gd")
 

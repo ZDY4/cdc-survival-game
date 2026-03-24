@@ -1,6 +1,10 @@
 @tool
 extends StaticBody3D
 class_name SubsceneEntry
+## LEGACY AUTHORITY BOUNDARY:
+## This scene entry node should stay as a front-end wiring shell. Do not place
+## long-term map travel authority here; defer authoritative decisions to shared
+## Rust runtime/protocol and keep this node focused on presentation setup.
 
 const EnterSubsceneInteractionOption = preload("res://modules/interaction/options/enter_subscene_interaction_option.gd")
 const InteractableScript = preload("res://modules/interaction/interactable.gd")

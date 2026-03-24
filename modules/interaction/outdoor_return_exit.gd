@@ -1,6 +1,10 @@
 @tool
 extends StaticBody3D
 class_name OutdoorReturnExit
+## LEGACY AUTHORITY BOUNDARY:
+## This exit node is a temporary Godot-side transition shell. Keep it focused
+## on local prompt wiring; avoid introducing new travel authority that should
+## be centralized in Rust runtime/protocol.
 
 const ExitToOutdoorInteractionOption = preload("res://modules/interaction/options/exit_to_outdoor_interaction_option.gd")
 

@@ -1,6 +1,10 @@
 @tool
 extends StaticBody3D
 ## Reusable drag-and-drop pickup object for 3D scenes.
+## LEGACY AUTHORITY BOUNDARY:
+## This node should remain a Godot presentation/placement shell for pickups.
+## Avoid expanding authoritative inventory transfer logic here; keep authority
+## migration moving toward shared Rust runtime/protocol paths.
 
 const ItemIdResolver = preload("res://core/item_id_resolver.gd")
 const InteractableScript = preload("res://modules/interaction/interactable.gd")

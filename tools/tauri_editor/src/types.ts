@@ -454,11 +454,41 @@ export type NarrativeDocTypeEntry = {
   directory: string;
 };
 
+export type NarrativePanelId =
+  | "document_overview"
+  | "ai_task"
+  | "ai_review"
+  | "manual_editor"
+  | "metadata"
+  | "workspace_context"
+  | "sync_tools"
+  | "provider_settings"
+  | "structuring_bundle"
+  | "prompt_debug";
+
+export type NarrativePanelLayoutItem = {
+  panelId: NarrativePanelId;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
+};
+
+export type NarrativeWorkspaceLayout = {
+  version: number;
+  items: NarrativePanelLayoutItem[];
+  collapsedPanels: NarrativePanelId[];
+  hiddenPanels: NarrativePanelId[];
+};
+
 export type NarrativeAppSettings = {
   recentWorkspaces: string[];
   lastWorkspace?: string | null;
   connectedProjectRoot?: string | null;
   recentProjectRoots: string[];
+  workspaceLayouts?: Record<string, NarrativeWorkspaceLayout>;
 };
 
 export type NarrativeExecutorMode = "desktop_local" | "cloud_mobile";

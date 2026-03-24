@@ -19,14 +19,21 @@ use game_data::{
 use npc_life::LifeProfileComponent;
 use thiserror::Error;
 
+pub mod bootstrap;
 pub mod npc_life;
+pub mod reservations;
 
+pub use bootstrap::{
+    build_default_startup_seed, build_runtime_from_default_startup_seed, load_runtime_bootstrap,
+    RuntimeBootstrapBundle, RuntimeBootstrapError,
+};
 pub use npc_life::{
     CurrentAction, CurrentGoal, CurrentPlan, LifeProfileComponent as CharacterLifeProfileComponent,
     NeedState, NpcLifePlugin, NpcLifeState, ReservationState, ScheduleState, SettlementContext,
     SettlementDebugEntry, SettlementDebugSnapshot, SettlementSimulationPlugin, SimClock,
-    SmartObjectReservations, WorldAlertState,
+    WorldAlertState,
 };
+pub use reservations::SmartObjectReservations;
 
 #[derive(Resource, Debug, Clone)]
 pub struct CharacterDefinitionPath(pub PathBuf);

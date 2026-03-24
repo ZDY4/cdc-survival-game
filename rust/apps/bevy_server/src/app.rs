@@ -1,0 +1,88 @@
+use std::time::Duration;
+
+use bevy_app::prelude::*;
+use bevy_app::{ScheduleRunnerPlugin, TaskPoolPlugin};
+use bevy_ecs::schedule::IntoScheduleConfigs;
+
+use crate::config::NpcDebugReportState;
+use crate::reporting::{report_npc_life_debug_snapshot, report_spawned_characters_and_exit};
+use crate::startup::startup_demo;
+use game_bevy::{
+    load_character_definitions_on_startup, load_effect_definitions_on_startup,
+    load_item_definitions_on_startup, load_map_definitions_on_startup,
+    load_quest_definitions_on_startup, load_recipe_definitions_on_startup,
+    load_runtime_startup_config_on_startup, load_settlement_definitions_on_startup,
+    load_shop_definitions_on_startup, load_skill_definitions_on_startup,
+    load_skill_tree_definitions_on_startup, spawn_characters_from_definition,
+    CharacterDefinitionPath, CharacterSpawnRejected, EffectDefinitionPath, ItemDefinitionPath,
+    MapDefinitionPath, NpcLifePlugin, QuestDefinitionPath, RecipeDefinitionPath,
+    RuntimeStartupConfigPath, SettlementDefinitionPath, SettlementSimulationPlugin,
+    ShopDefinitionPath, SkillDefinitionPath, SkillTreeDefinitionPath, SpawnCharacterRequest,
+};
+use game_core::GameCorePlugin;
+use game_data::GameDataPlugin;
+use game_protocol::GameProtocolPlugin;
+
+pub fn run() {
+    App::new()
+        .add_plugins(ServerAppPlugin)
+        .run();
+}
+
+struct ServerAppPlugin;
+
+impl Plugin for ServerAppPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(crate::config::ServerConfig::default())
+            .insert_resource(CharacterDefinitionPath::default())
+            .insert_resource(EffectDefinitionPath::default())
+            .insert_resource(ItemDefinitionPath::default())
+            .insert_resource(MapDefinitionPath::default())
+            .insert_resource(SettlementDefinitionPath::default())
+            .insert_resource(SkillDefinitionPath::default())
+            .insert_resource(SkillTreeDefinitionPath::default())
+            .insert_resource(RecipeDefinitionPath::default())
+            .insert_resource(QuestDefinitionPath::default())
+            .insert_resource(ShopDefinitionPath::default())
+            .insert_resource(RuntimeStartupConfigPath::default())
+            .insert_resource(NpcDebugReportState::default())
+            .add_plugins(TaskPoolPlugin::default())
+            .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_millis(16)))
+            .add_plugins((
+                GameDataPlugin,
+                GameProtocolPlugin,
+                GameCorePlugin,
+                SettlementSimulationPlugin,
+                NpcLifePlugin,
+            ))
+            .add_message::<SpawnCharacterRequest>()
+            .add_message::<CharacterSpawnRejected>()
+            .add_systems(
+                Startup,
+                (
+                    load_character_definitions_on_startup,
+                    load_effect_definitions_on_startup,
+                    load_item_definitions_on_startup,
+                    load_map_definitions_on_startup,
+                    load_settlement_definitions_on_startup,
+                    load_skill_definitions_on_startup,
+                    load_skill_tree_definitions_on_startup,
+                    load_recipe_definitions_on_startup,
+                    load_quest_definitions_on_startup,
+                    load_shop_definitions_on_startup,
+                    load_runtime_startup_config_on_startup,
+                    startup_demo,
+                )
+                    .chain(),
+            )
+            .add_systems(
+                Update,
+                (
+                    spawn_characters_from_definition,
+                    report_npc_life_debug_snapshot,
+                    report_spawned_characters_and_exit,
+                )
+                    .chain(),
+            );
+    }
+}

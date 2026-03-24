@@ -1,6 +1,10 @@
 @tool
 extends StaticBody3D
 class_name OverworldEntry
+## LEGACY AUTHORITY BOUNDARY:
+## This node is a compatibility front-end entrypoint for overworld transition.
+## Keep it limited to option/presentation wiring, and avoid adding new
+## authoritative travel/context logic on the Godot side.
 
 const EnterOverworldInteractionOption = preload("res://modules/interaction/options/enter_overworld_interaction_option.gd")
 const InteractableScript = preload("res://modules/interaction/interactable.gd")

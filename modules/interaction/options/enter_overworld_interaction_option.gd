@@ -1,5 +1,9 @@
 extends "res://modules/interaction/options/interaction_option.gd"
 class_name EnterOverworldInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## This is a temporary Godot-side travel option shim. Keep behavior limited to
+## client transition requests and UI feedback; avoid adding new authority logic
+## that should belong to Rust runtime/protocol.
 
 @export var required_distance: float = 1.4
 

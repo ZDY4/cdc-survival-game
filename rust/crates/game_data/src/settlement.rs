@@ -58,6 +58,7 @@ pub enum SmartObjectKind {
     Bed,
     CanteenSeat,
     RecreationSpot,
+    MedicalStation,
     #[default]
     AlarmPoint,
 }

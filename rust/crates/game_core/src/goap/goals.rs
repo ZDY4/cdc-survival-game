@@ -24,7 +24,8 @@ pub fn goal_requirements(request: &NpcPlanRequest, goal: NpcGoalKey) -> Goal {
                 }
             }
             NpcRole::Cook => Goal::new().with_req("meal_service_restocked", Compare::equals(true)),
-            NpcRole::Doctor | NpcRole::Resident => {
+            NpcRole::Doctor => Goal::new().with_req("patients_treated", Compare::equals(true)),
+            NpcRole::Resident => {
                 Goal::new().with_req("at_duty_area", Compare::equals(true))
             }
         },

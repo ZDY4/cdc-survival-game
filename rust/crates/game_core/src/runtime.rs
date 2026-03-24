@@ -4,7 +4,9 @@ use game_data::{
     ItemLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldCoord,
 };
 
-use crate::economy::HeadlessEconomyRuntime;
+use crate::economy::{
+    CraftOutcome, EconomyRuntimeError, HeadlessEconomyRuntime, TradeOutcome,
+};
 use crate::grid::GridPathfindingError;
 use crate::movement::{
     AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
@@ -111,6 +113,86 @@ impl SimulationRuntime {
 
     pub fn economy_mut(&mut self) -> &mut HeadlessEconomyRuntime {
         self.simulation.economy_mut()
+    }
+
+    pub fn equip_item(
+        &mut self,
+        actor_id: ActorId,
+        item_id: u32,
+        target_slot: Option<&str>,
+        items: &ItemLibrary,
+    ) -> Result<Option<u32>, EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .equip_item(actor_id, item_id, target_slot, items)
+    }
+
+    pub fn unequip_item(
+        &mut self,
+        actor_id: ActorId,
+        slot: &str,
+    ) -> Result<u32, EconomyRuntimeError> {
+        self.simulation.economy_mut().unequip_item(actor_id, slot)
+    }
+
+    pub fn reload_equipped_weapon(
+        &mut self,
+        actor_id: ActorId,
+        slot: &str,
+        items: &ItemLibrary,
+    ) -> Result<i32, EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .reload_equipped_weapon(actor_id, slot, items)
+    }
+
+    pub fn learn_skill(
+        &mut self,
+        actor_id: ActorId,
+        skill_id: &str,
+        skills: &SkillLibrary,
+    ) -> Result<i32, EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .learn_skill(actor_id, skill_id, skills)
+    }
+
+    pub fn craft_recipe(
+        &mut self,
+        actor_id: ActorId,
+        recipe_id: &str,
+        recipes: &RecipeLibrary,
+        items: &ItemLibrary,
+    ) -> Result<CraftOutcome, EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .craft_recipe(actor_id, recipe_id, recipes, items)
+    }
+
+    pub fn buy_item_from_shop(
+        &mut self,
+        actor_id: ActorId,
+        shop_id: &str,
+        item_id: u32,
+        count: i32,
+        items: &ItemLibrary,
+    ) -> Result<TradeOutcome, EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .buy_item_from_shop(actor_id, shop_id, item_id, count, items)
+    }
+
+    pub fn sell_item_to_shop(
+        &mut self,
+        actor_id: ActorId,
+        shop_id: &str,
+        item_id: u32,
+        count: i32,
+        items: &ItemLibrary,
+    ) -> Result<TradeOutcome, EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .sell_item_to_shop(actor_id, shop_id, item_id, count, items)
     }
 
     pub fn world_to_grid(&self, world: WorldCoord) -> GridCoord {
@@ -684,11 +766,13 @@ mod tests {
     use std::collections::BTreeMap;
 
     use game_data::{
-        ActionType, ActorKind, ActorSide, CharacterId, GridCoord, ItemDefinition, ItemLibrary,
+        ActionType, ActorKind, ActorSide, CharacterId, GridCoord, ItemDefinition, ItemFragment,
+        ItemLibrary,
         MapDefinition, MapId, MapInteractiveProps, MapLevelDefinition, MapObjectDefinition,
         MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
         QuestConnection, QuestDefinition, QuestFlow, QuestLibrary, QuestNode, QuestRewards,
-        RecipeLibrary,
+        RecipeDefinition, RecipeLibrary, RecipeMaterial, RecipeOutput, ShopDefinition,
+        ShopInventoryEntry, ShopLibrary, SkillDefinition, SkillLibrary,
     };
 
     use super::SimulationRuntime;
@@ -1012,6 +1096,111 @@ mod tests {
         assert_eq!(runtime.get_actor_current_xp(player), 35);
     }
 
+    #[test]
+    fn runtime_equip_reload_and_unequip_use_runtime_surface() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+
+        runtime.economy_mut().set_actor_level(handles.player, 8);
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1004, 1, &items)
+            .expect("pistol should be added");
+        runtime
+            .economy_mut()
+            .add_ammo(handles.player, 1009, 12, &items)
+            .expect("ammo should be added");
+
+        let previous = runtime
+            .equip_item(handles.player, 1004, Some("main_hand"), &items)
+            .expect("equip should succeed");
+        assert_eq!(previous, None);
+
+        let loaded = runtime
+            .reload_equipped_weapon(handles.player, "main_hand", &items)
+            .expect("reload should succeed");
+        assert_eq!(loaded, 6);
+
+        let profile = runtime
+            .economy()
+            .equipped_weapon(handles.player, "main_hand", &items)
+            .expect("weapon should resolve")
+            .expect("weapon should exist");
+        assert_eq!(profile.item_id, 1004);
+        assert_eq!(profile.ammo_loaded, 6);
+
+        let unequipped = runtime
+            .unequip_item(handles.player, "main_hand")
+            .expect("unequip should succeed");
+        assert_eq!(unequipped, 1004);
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1004"), 1);
+    }
+
+    #[test]
+    fn runtime_learn_skill_and_craft_use_runtime_surface() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        let skills = sample_runtime_skill_library();
+        let recipes = sample_runtime_recipe_library();
+
+        runtime
+            .economy_mut()
+            .set_actor_attribute(handles.player, "intelligence", 3);
+        runtime
+            .economy_mut()
+            .add_skill_points(handles.player, 1)
+            .expect("skill points should be granted");
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1001, 2, &items)
+            .expect("materials should be added");
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1002, 1, &items)
+            .expect("tool should be added");
+        runtime
+            .economy_mut()
+            .grant_station_tag(handles.player, "workbench")
+            .expect("station tag should be granted");
+
+        let level = runtime
+            .learn_skill(handles.player, "crafting_basics", &skills)
+            .expect("skill should be learnable");
+        assert_eq!(level, 1);
+
+        let outcome = runtime
+            .craft_recipe(handles.player, "bandage_recipe", &recipes, &items)
+            .expect("recipe should craft");
+        assert_eq!(outcome.output_item_id, 1003);
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1001"), 0);
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1003"), 1);
+    }
+
+    #[test]
+    fn runtime_buy_and_sell_use_runtime_surface() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        let shops = sample_runtime_shop_library();
+        runtime.set_shop_library(shops);
+        runtime
+            .economy_mut()
+            .grant_money(handles.player, 100)
+            .expect("money should be granted");
+
+        let buy = runtime
+            .buy_item_from_shop(handles.player, "safehouse_shop", 1031, 2, &items)
+            .expect("buy should succeed");
+        assert_eq!(buy.total_price, 30);
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1031"), 2);
+
+        let sell = runtime
+            .sell_item_to_shop(handles.player, "safehouse_shop", 1031, 1, &items)
+            .expect("sell should succeed");
+        assert_eq!(sell.total_price, 5);
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1031"), 1);
+        assert_eq!(runtime.economy().actor_money(handles.player), Some(75));
+    }
+
     fn sample_reward_item_library() -> ItemLibrary {
         ItemLibrary::from(BTreeMap::from([(
             1006,
@@ -1019,6 +1208,179 @@ mod tests {
                 id: 1006,
                 name: "Rewards".into(),
                 ..ItemDefinition::default()
+            },
+        )]))
+    }
+
+    fn sample_runtime_economy_item_library() -> ItemLibrary {
+        ItemLibrary::from(BTreeMap::from([
+            (
+                1001,
+                ItemDefinition {
+                    id: 1001,
+                    name: "Cloth".to_string(),
+                    value: 2,
+                    weight: 0.1,
+                    fragments: vec![ItemFragment::Stacking {
+                        stackable: true,
+                        max_stack: 99,
+                    }],
+                    ..ItemDefinition::default()
+                },
+            ),
+            (
+                1002,
+                ItemDefinition {
+                    id: 1002,
+                    name: "Knife".to_string(),
+                    value: 8,
+                    weight: 0.5,
+                    fragments: vec![
+                        ItemFragment::Stacking {
+                            stackable: false,
+                            max_stack: 1,
+                        },
+                        ItemFragment::Equip {
+                            slots: vec!["main_hand".to_string()],
+                            level_requirement: 1,
+                            equip_effect_ids: Vec::new(),
+                            unequip_effect_ids: Vec::new(),
+                        },
+                    ],
+                    ..ItemDefinition::default()
+                },
+            ),
+            (
+                1003,
+                ItemDefinition {
+                    id: 1003,
+                    name: "Bandage".to_string(),
+                    value: 12,
+                    weight: 0.2,
+                    fragments: vec![ItemFragment::Stacking {
+                        stackable: true,
+                        max_stack: 20,
+                    }],
+                    ..ItemDefinition::default()
+                },
+            ),
+            (
+                1004,
+                ItemDefinition {
+                    id: 1004,
+                    name: "Pistol".to_string(),
+                    value: 120,
+                    weight: 1.2,
+                    fragments: vec![
+                        ItemFragment::Equip {
+                            slots: vec!["main_hand".to_string()],
+                            level_requirement: 2,
+                            equip_effect_ids: Vec::new(),
+                            unequip_effect_ids: Vec::new(),
+                        },
+                        ItemFragment::Weapon {
+                            subtype: "pistol".to_string(),
+                            damage: 18,
+                            attack_speed: 1.0,
+                            range: 12,
+                            stamina_cost: 2,
+                            crit_chance: 0.1,
+                            crit_multiplier: 1.8,
+                            accuracy: Some(70),
+                            ammo_type: Some(1009),
+                            max_ammo: Some(6),
+                            reload_time: Some(1.5),
+                            on_hit_effect_ids: Vec::new(),
+                        },
+                    ],
+                    ..ItemDefinition::default()
+                },
+            ),
+            (
+                1009,
+                ItemDefinition {
+                    id: 1009,
+                    name: "Pistol Ammo".to_string(),
+                    value: 5,
+                    weight: 0.1,
+                    fragments: vec![ItemFragment::Stacking {
+                        stackable: true,
+                        max_stack: 50,
+                    }],
+                    ..ItemDefinition::default()
+                },
+            ),
+            (
+                1031,
+                ItemDefinition {
+                    id: 1031,
+                    name: "Antibiotics".to_string(),
+                    value: 10,
+                    weight: 0.2,
+                    fragments: vec![ItemFragment::Stacking {
+                        stackable: true,
+                        max_stack: 10,
+                    }],
+                    ..ItemDefinition::default()
+                },
+            ),
+        ]))
+    }
+
+    fn sample_runtime_skill_library() -> SkillLibrary {
+        SkillLibrary::from(BTreeMap::from([(
+            "crafting_basics".to_string(),
+            SkillDefinition {
+                id: "crafting_basics".to_string(),
+                name: "Crafting Basics".to_string(),
+                tree_id: "survival".to_string(),
+                max_level: 3,
+                prerequisites: Vec::new(),
+                attribute_requirements: BTreeMap::from([("intelligence".to_string(), 3)]),
+                ..SkillDefinition::default()
+            },
+        )]))
+    }
+
+    fn sample_runtime_recipe_library() -> RecipeLibrary {
+        RecipeLibrary::from(BTreeMap::from([(
+            "bandage_recipe".to_string(),
+            RecipeDefinition {
+                id: "bandage_recipe".to_string(),
+                name: "Craft Bandage".to_string(),
+                output: RecipeOutput {
+                    item_id: 1003,
+                    count: 1,
+                    quality_bonus: 0,
+                    extra: BTreeMap::new(),
+                },
+                materials: vec![RecipeMaterial {
+                    item_id: 1001,
+                    count: 2,
+                    extra: BTreeMap::new(),
+                }],
+                required_tools: vec!["1002".to_string()],
+                required_station: "workbench".to_string(),
+                skill_requirements: BTreeMap::from([("crafting_basics".to_string(), 1)]),
+                is_default_unlocked: true,
+                ..RecipeDefinition::default()
+            },
+        )]))
+    }
+
+    fn sample_runtime_shop_library() -> ShopLibrary {
+        ShopLibrary::from(BTreeMap::from([(
+            "safehouse_shop".to_string(),
+            ShopDefinition {
+                id: "safehouse_shop".to_string(),
+                buy_price_modifier: 1.5,
+                sell_price_modifier: 0.5,
+                money: 100,
+                inventory: vec![ShopInventoryEntry {
+                    item_id: 1031,
+                    count: 3,
+                    price: 15,
+                }],
             },
         )]))
     }

@@ -5,7 +5,11 @@ import { NumberField, SelectField, TextField } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { ValidationPanel } from "../../components/ValidationPanel";
 import { getRequestedDocumentKey } from "../../lib/editorSurface";
+import { openOrFocusMainEditor, openOrFocusNarrativeLab } from "../../lib/editorWindows";
 import { invokeCommand, isTauriRuntime } from "../../lib/tauri";
+import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
+import { useEditorMenuBridge } from "../../menu/menuBridge";
+import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type { MapEditorOpenDocumentPayload, MapRotation, MapWorkspacePayload } from "../../types";
 import { fallbackMapWorkspace } from "./fallback";
 import { MapObjectInspector } from "./MapObjectInspector";
@@ -24,6 +28,7 @@ export function MapEditorWindow() {
   const [canPersist, setCanPersist] = useState(false);
   const [status, setStatus] = useState("Loading map editor...");
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [statusBarVisible, setStatusBarVisible] = useState(true);
   const initialRequestRef = useRef<string | null>(getRequestedDocumentKey(window.location.search));
 
   async function loadWorkspace() {
@@ -44,6 +49,8 @@ export function MapEditorWindow() {
   useEffect(() => {
     void loadWorkspace();
   }, []);
+
+  useEditorMenuBridge(setStatus, true);
 
   const editor = useMapEditorState({
     workspace,
@@ -222,6 +229,74 @@ export function MapEditorWindow() {
     }
   }
 
+  useRegisterEditorMenuCommands({
+    [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: {
+      execute: () => {
+        editorRef.current.requestNewDraft();
+      },
+      isEnabled: () => !editor.busy,
+    },
+    [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: {
+      execute: async () => {
+        await handleSave();
+      },
+      isEnabled: () => !editor.busy && editor.dirtyCount > 0,
+    },
+    [EDITOR_MENU_COMMANDS.FILE_RELOAD]: {
+      execute: async () => {
+        await loadWorkspace();
+      },
+      isEnabled: () => !editor.busy && editor.dirtyCount === 0,
+    },
+    [EDITOR_MENU_COMMANDS.FILE_DELETE_CURRENT]: {
+      execute: async () => {
+        await handleDeleteCurrent();
+      },
+      isEnabled: () => !editor.busy && Boolean(editor.selectedDocument),
+    },
+    [EDITOR_MENU_COMMANDS.EDIT_VALIDATE_CURRENT]: {
+      execute: async () => {
+        await editor.validateCurrent();
+      },
+      isEnabled: () => !editor.busy && Boolean(editor.selectedDocument),
+    },
+    [EDITOR_MENU_COMMANDS.VIEW_TOGGLE_STATUS_BAR]: {
+      execute: () => {
+        setStatusBarVisible((current) => !current);
+      },
+    },
+    [EDITOR_MENU_COMMANDS.VIEW_TOGGLE_INSPECTOR]: {
+      execute: () => {
+        setInspectorCollapsed((current) => !current);
+      },
+    },
+    [EDITOR_MENU_COMMANDS.MODULE_ITEMS]: {
+      execute: async () => {
+        await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_ITEMS);
+      },
+    },
+    [EDITOR_MENU_COMMANDS.MODULE_DIALOGUES]: {
+      execute: async () => {
+        await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_DIALOGUES);
+      },
+    },
+    [EDITOR_MENU_COMMANDS.MODULE_QUESTS]: {
+      execute: async () => {
+        await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_QUESTS);
+      },
+    },
+    [EDITOR_MENU_COMMANDS.MODULE_MAPS]: {
+      execute: async () => {
+        await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_MAPS);
+      },
+    },
+    [EDITOR_MENU_COMMANDS.MODULE_NARRATIVE]: {
+      execute: async () => {
+        await openOrFocusNarrativeLab();
+      },
+    },
+  });
+
   const selectedDocument = editor.selectedDocument;
 
   return (
@@ -275,22 +350,24 @@ export function MapEditorWindow() {
         </div>
       </header>
 
-      <div className="map-editor-status">
-        <span className="status-dot" />
-        <span>{status}</span>
-        <div className="toolbar-summary">
-          <Badge tone="accent">{editor.documents.length} docs</Badge>
-          <Badge tone={editor.dirtyCount > 0 ? "warning" : "muted"}>
-            {editor.dirtyCount} dirty
-          </Badge>
-          <Badge tone={editor.totalIssues.errors > 0 ? "danger" : "success"}>
-            {editor.totalIssues.errors} errors
-          </Badge>
-          <Badge tone={editor.totalIssues.warnings > 0 ? "warning" : "muted"}>
-            {editor.totalIssues.warnings} warnings
-          </Badge>
+      {statusBarVisible ? (
+        <div className="map-editor-status">
+          <span className="status-dot" />
+          <span>{status}</span>
+          <div className="toolbar-summary">
+            <Badge tone="accent">{editor.documents.length} docs</Badge>
+            <Badge tone={editor.dirtyCount > 0 ? "warning" : "muted"}>
+              {editor.dirtyCount} dirty
+            </Badge>
+            <Badge tone={editor.totalIssues.errors > 0 ? "danger" : "success"}>
+              {editor.totalIssues.errors} errors
+            </Badge>
+            <Badge tone={editor.totalIssues.warnings > 0 ? "warning" : "muted"}>
+              {editor.totalIssues.warnings} warnings
+            </Badge>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div
         className={`map-editor-layout ${

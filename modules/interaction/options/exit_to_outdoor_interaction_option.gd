@@ -1,5 +1,9 @@
 extends InteractionOption
 class_name ExitToOutdoorInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## Exit travel wiring is kept as a Godot compatibility shell. Do not add new
+## authoritative travel/context rules here; long-term ownership belongs to
+## Rust runtime/protocol with Godot handling presentation and command dispatch.
 
 @export var required_distance: float = 1.4
 

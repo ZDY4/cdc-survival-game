@@ -58,5 +58,31 @@
         "current": 60.0
       }
     }
+  },
+  "life": {
+    "settlement_id": "safehouse_survivor_outpost",
+    "role": "doctor",
+    "home_anchor": "doctor_home_01",
+    "duty_route_id": "doctor_clinic_rounds",
+    "schedule": [
+      {
+        "day": "monday",
+        "start_minute": 540,
+        "end_minute": 1020,
+        "label": "诊所轮值",
+        "tags": ["shift", "doctor"]
+      }
+    ],
+    "smart_object_access": [
+      "bed",
+      "medical_station",
+      "recreation_spot"
+    ],
+    "need_profile": {
+      "hunger_decay_per_hour": 3.2,
+      "energy_decay_per_hour": 2.4,
+      "morale_decay_per_hour": 1.1,
+      "safety_bias": 0.6
+    }
   }
 }

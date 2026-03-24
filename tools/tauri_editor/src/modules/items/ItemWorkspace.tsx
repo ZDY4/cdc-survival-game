@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/Badge";
 import {
   CheckboxField,
@@ -14,6 +14,8 @@ import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
 import { ValidationPanel } from "../../components/ValidationPanel";
 import { invokeCommand } from "../../lib/tauri";
+import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
+import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   CraftingFragment,
   CraftingRecipe,
@@ -54,6 +56,184 @@ type FragmentOf<K extends ItemFragment["kind"]> = Extract<ItemFragment, { kind: 
 
 const ARMOR_SLOTS = new Set(["head", "body", "hands", "legs", "feet", "back"]);
 const ACCESSORY_SLOTS = new Set(["accessory", "accessory_1", "accessory_2"]);
+const COPY_SUFFIX = " (Copy)";
+
+type ItemTemplateId =
+  | "material_basic"
+  | "consumable_stackable"
+  | "weapon_melee"
+  | "weapon_ranged"
+  | "armor_basic"
+  | "accessory_basic"
+  | "crafting_material";
+
+type ItemTemplateDefinition = {
+  id: ItemTemplateId;
+  label: string;
+  build: (nextId: number) => ItemDefinition;
+};
+
+const ITEM_TEMPLATES: ItemTemplateDefinition[] = [
+  {
+    id: "material_basic",
+    label: "Basic material",
+    build: (nextId) => ({
+      ...createDefaultItem(nextId),
+      name: "Basic Material",
+      fragments: [
+        { kind: "economy", rarity: "common" },
+        { kind: "stacking", stackable: true, max_stack: 99 },
+      ],
+    }),
+  },
+  {
+    id: "consumable_stackable",
+    label: "Stackable consumable",
+    build: (nextId) => ({
+      ...createDefaultItem(nextId),
+      name: "Consumable Item",
+      fragments: [
+        { kind: "economy", rarity: "common" },
+        { kind: "stacking", stackable: true, max_stack: 20 },
+        {
+          kind: "usable",
+          subtype: "healing",
+          use_time: 1,
+          uses: 1,
+          consume_on_use: true,
+          effect_ids: [],
+        },
+      ],
+    }),
+  },
+  {
+    id: "weapon_melee",
+    label: "Melee weapon",
+    build: (nextId) => ({
+      ...createDefaultItem(nextId),
+      name: "Melee Weapon",
+      fragments: [
+        { kind: "economy", rarity: "common" },
+        { kind: "stacking", stackable: false, max_stack: 1 },
+        {
+          kind: "equip",
+          slots: ["main_hand"],
+          level_requirement: 0,
+          equip_effect_ids: [],
+          unequip_effect_ids: [],
+        },
+        {
+          kind: "weapon",
+          subtype: "sword",
+          damage: 12,
+          attack_speed: 1,
+          range: 1,
+          stamina_cost: 4,
+          crit_chance: 0.05,
+          crit_multiplier: 1.5,
+          accuracy: null,
+          ammo_type: null,
+          max_ammo: null,
+          reload_time: null,
+          on_hit_effect_ids: [],
+        },
+      ],
+    }),
+  },
+  {
+    id: "weapon_ranged",
+    label: "Ranged weapon",
+    build: (nextId) => ({
+      ...createDefaultItem(nextId),
+      name: "Ranged Weapon",
+      fragments: [
+        { kind: "economy", rarity: "uncommon" },
+        { kind: "stacking", stackable: false, max_stack: 1 },
+        {
+          kind: "equip",
+          slots: ["main_hand"],
+          level_requirement: 1,
+          equip_effect_ids: [],
+          unequip_effect_ids: [],
+        },
+        {
+          kind: "weapon",
+          subtype: "rifle",
+          damage: 20,
+          attack_speed: 0.9,
+          range: 6,
+          stamina_cost: 5,
+          crit_chance: 0.08,
+          crit_multiplier: 1.7,
+          accuracy: 85,
+          ammo_type: null,
+          max_ammo: 6,
+          reload_time: 1.5,
+          on_hit_effect_ids: [],
+        },
+      ],
+    }),
+  },
+  {
+    id: "armor_basic",
+    label: "Armor piece",
+    build: (nextId) => ({
+      ...createDefaultItem(nextId),
+      name: "Armor Piece",
+      fragments: [
+        { kind: "economy", rarity: "common" },
+        { kind: "stacking", stackable: false, max_stack: 1 },
+        {
+          kind: "equip",
+          slots: ["body"],
+          level_requirement: 0,
+          equip_effect_ids: [],
+          unequip_effect_ids: [],
+        },
+        { kind: "attribute_modifiers", attributes: { defense: 5 } },
+      ],
+    }),
+  },
+  {
+    id: "accessory_basic",
+    label: "Accessory",
+    build: (nextId) => ({
+      ...createDefaultItem(nextId),
+      name: "Accessory",
+      fragments: [
+        { kind: "economy", rarity: "uncommon" },
+        { kind: "stacking", stackable: false, max_stack: 1 },
+        {
+          kind: "equip",
+          slots: ["accessory"],
+          level_requirement: 0,
+          equip_effect_ids: [],
+          unequip_effect_ids: [],
+        },
+      ],
+    }),
+  },
+  {
+    id: "crafting_material",
+    label: "Crafting material",
+    build: (nextId) => ({
+      ...createDefaultItem(nextId),
+      name: "Crafting Material",
+      fragments: [
+        { kind: "economy", rarity: "common" },
+        { kind: "stacking", stackable: true, max_stack: 99 },
+        {
+          kind: "crafting",
+          crafting_recipe: {
+            materials: [],
+            time: 0,
+          },
+          deconstruct_yield: [],
+        },
+      ],
+    }),
+  },
+];
 
 function hydrateDocuments(documents: ItemDocumentPayload[]): EditableItemDocument[] {
   return documents.map((document) => ({
@@ -239,6 +419,36 @@ function formatTag(tag: ItemTag): string {
 
 function dedupeStrings(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function cloneItemDefinition(item: ItemDefinition): ItemDefinition {
+  return JSON.parse(JSON.stringify(item)) as ItemDefinition;
+}
+
+function findNextDraftId(documents: EditableItemDocument[]): number {
+  return documents.reduce((maxId, document) => Math.max(maxId, document.item.id), 1000) + 1;
+}
+
+function buildDraftDocument(item: ItemDefinition, nextId: number): EditableItemDocument {
+  return {
+    documentKey: `draft-${Date.now()}-${nextId}`,
+    originalId: nextId,
+    fileName: `${nextId}.json`,
+    relativePath: `data/items/${nextId}.json`,
+    item,
+    validation: [],
+    savedSnapshot: "",
+    dirty: true,
+    isDraft: true,
+  };
+}
+
+function buildCopyName(sourceName: string): string {
+  const trimmed = sourceName.trim();
+  if (!trimmed) {
+    return "Copied Item";
+  }
+  return trimmed.endsWith(COPY_SUFFIX) ? trimmed : `${trimmed}${COPY_SUFFIX}`;
 }
 
 function buildItemReferenceOptions(documents: EditableItemDocument[]): SelectOption[] {
@@ -863,6 +1073,8 @@ export function ItemWorkspace({
   const [addFragmentKind, setAddFragmentKind] = useState("");
   const [collapsedFragments, setCollapsedFragments] = useState<Record<string, boolean>>({});
   const [referenceFocus, setReferenceFocus] = useState<ReferenceFocus | null>(null);
+  const [newTemplateId, setNewTemplateId] = useState<ItemTemplateId>(ITEM_TEMPLATES[0].id);
+  const [cloneSourceKey, setCloneSourceKey] = useState("");
   const deferredSearch = useDeferredValue(searchText);
 
   useEffect(() => {
@@ -882,6 +1094,17 @@ export function ItemWorkspace({
         : "";
     setAddFragmentKind(firstAvailableKind);
   }, [documents, selectedKey, workspace.catalogs.fragmentKinds]);
+
+  useEffect(() => {
+    const candidate = documents.find((document) => document.documentKey !== selectedKey)?.documentKey;
+    if (!candidate) {
+      setCloneSourceKey("");
+      return;
+    }
+    if (!cloneSourceKey || cloneSourceKey === selectedKey || !documents.some((document) => document.documentKey === cloneSourceKey)) {
+      setCloneSourceKey(candidate);
+    }
+  }, [cloneSourceKey, documents, selectedKey]);
 
   useEffect(() => {
     const selected = documents.find((document) => document.documentKey === selectedKey);
@@ -981,23 +1204,75 @@ export function ItemWorkspace({
   }
 
   function createDraft() {
-    const nextId =
-      documents.reduce((maxId, document) => Math.max(maxId, document.item.id), 1000) + 1;
-    const draft: EditableItemDocument = {
-      documentKey: `draft-${Date.now()}`,
-      originalId: nextId,
-      fileName: `${nextId}.json`,
-      relativePath: `data/items/${nextId}.json`,
-      item: createDefaultItem(nextId),
-      validation: [],
-      savedSnapshot: "",
-      dirty: true,
-      isDraft: true,
-    };
+    const nextId = findNextDraftId(documents);
+    const draft = buildDraftDocument(createDefaultItem(nextId), nextId);
 
     setDocuments((current) => [draft, ...current]);
     setSelectedKey(draft.documentKey);
     onStatusChange(`Created draft item ${nextId}.`);
+  }
+
+  function createDraftFromTemplate() {
+    const nextId = findNextDraftId(documents);
+    const template = ITEM_TEMPLATES.find((entry) => entry.id === newTemplateId) ?? ITEM_TEMPLATES[0];
+    const draftItem = template.build(nextId);
+    const draft = buildDraftDocument(draftItem, nextId);
+
+    setDocuments((current) => [draft, ...current]);
+    setSelectedKey(draft.documentKey);
+    onStatusChange(`Created template draft ${nextId} from ${template.label}.`);
+  }
+
+  function duplicateCurrentItem() {
+    if (!selectedDocument) {
+      onStatusChange("Select an item first.");
+      return;
+    }
+    const nextId = findNextDraftId(documents);
+    const copied = cloneItemDefinition(selectedDocument.item);
+    const draftItem: ItemDefinition = {
+      ...copied,
+      id: nextId,
+      name: buildCopyName(copied.name),
+    };
+    const draft = buildDraftDocument(draftItem, nextId);
+
+    setDocuments((current) => [draft, ...current]);
+    setSelectedKey(draft.documentKey);
+    onStatusChange(`Duplicated item ${selectedDocument.item.id} into draft ${nextId}.`);
+  }
+
+  function cloneFragmentSetFromSource() {
+    if (!selectedDocument) {
+      onStatusChange("Select an item first.");
+      return;
+    }
+    if (!cloneSourceKey) {
+      onStatusChange("Choose a source item for fragment cloning.");
+      return;
+    }
+    const sourceDocument = documents.find((document) => document.documentKey === cloneSourceKey);
+    if (!sourceDocument) {
+      onStatusChange("Source item is no longer available.");
+      return;
+    }
+    if (sourceDocument.documentKey === selectedDocument.documentKey) {
+      onStatusChange("Choose a different source item.");
+      return;
+    }
+
+    const clonedFragments = cloneItemDefinition({
+      ...sourceDocument.item,
+      id: sourceDocument.item.id,
+    }).fragments;
+
+    updateSelectedItem((item) => ({
+      ...item,
+      fragments: clonedFragments,
+    }));
+    onStatusChange(
+      `Cloned ${clonedFragments.length} fragments from item ${sourceDocument.item.id} to ${selectedDocument.item.id}.`,
+    );
   }
 
   function addFragment() {
@@ -1179,6 +1454,17 @@ export function ItemWorkspace({
   const selectedIssues = selectedDocument?.validation ?? [];
   const selectedCounts = getIssueCounts(selectedIssues);
   const selectedTags = selectedDocument ? inferItemTags(selectedDocument.item) : [];
+  const templateOptions: SelectOption[] = ITEM_TEMPLATES.map((template) => ({
+    value: template.id,
+    label: template.label,
+  }));
+  const cloneSourceOptions: SelectOption[] = documents
+    .filter((document) => document.documentKey !== selectedKey)
+    .sort((left, right) => left.item.id - right.item.id)
+    .map((document) => ({
+      value: document.documentKey,
+      label: `${document.item.id} · ${document.item.name || "Unnamed item"}`,
+    }));
   const nextFragmentKinds = selectedDocument
     ? availableFragmentKinds(selectedDocument.item, workspace.catalogs.fragmentKinds)
     : [];
@@ -1197,6 +1483,44 @@ export function ItemWorkspace({
   const effectPreviewLookup: Record<string, EffectReferencePreview> = Object.fromEntries(
     effectPreviews.map((preview) => [preview.id, preview]),
   );
+
+  const menuCommands = useMemo(
+    () => ({
+      [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: {
+        execute: () => {
+          createDraft();
+        },
+        isEnabled: () => !busy,
+      },
+      [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: {
+        execute: async () => {
+          await saveAll();
+        },
+        isEnabled: () => !busy && dirtyCount > 0,
+      },
+      [EDITOR_MENU_COMMANDS.FILE_RELOAD]: {
+        execute: async () => {
+          await onReload();
+        },
+        isEnabled: () => !busy,
+      },
+      [EDITOR_MENU_COMMANDS.FILE_DELETE_CURRENT]: {
+        execute: async () => {
+          await deleteCurrent();
+        },
+        isEnabled: () => !busy && Boolean(selectedDocument),
+      },
+      [EDITOR_MENU_COMMANDS.EDIT_VALIDATE_CURRENT]: {
+        execute: async () => {
+          await validateCurrent();
+        },
+        isEnabled: () => !busy && Boolean(selectedDocument),
+      },
+    }),
+    [busy, deleteCurrent, dirtyCount, onReload, saveAll, selectedDocument, validateCurrent],
+  );
+
+  useRegisterEditorMenuCommands(menuCommands);
   const documentKeyByItemId: Record<string, string> = Object.fromEntries(
     documents.map((document) => [String(document.item.id), document.documentKey]),
   );
@@ -1859,6 +2183,57 @@ export function ItemWorkspace({
                       {fragment.kind}
                     </Badge>
                   ))}
+                </div>
+              </PanelSection>
+
+              <PanelSection label="Workflow" title="Templates and copy">
+                <div className="form-grid">
+                  <SelectField
+                    label="New from template"
+                    value={newTemplateId}
+                    onChange={(value) => setNewTemplateId(value as ItemTemplateId)}
+                    options={templateOptions}
+                    allowBlank={false}
+                  />
+                  <div>
+                    <button
+                      type="button"
+                      className="toolbar-button toolbar-accent"
+                      onClick={createDraftFromTemplate}
+                      disabled={busy}
+                    >
+                      New From Template
+                    </button>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      onClick={duplicateCurrentItem}
+                      disabled={busy || !selectedDocument}
+                    >
+                      Duplicate Current Item
+                    </button>
+                  </div>
+                </div>
+                <div className="form-grid">
+                  <SelectField
+                    label="Clone fragment set from"
+                    value={cloneSourceKey}
+                    onChange={setCloneSourceKey}
+                    options={cloneSourceOptions}
+                    hint="Copies fragment list only. Keeps current id, name, and base fields."
+                  />
+                  <div>
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      onClick={cloneFragmentSetFromSource}
+                      disabled={busy || !selectedDocument || !cloneSourceKey}
+                    >
+                      Clone Fragment Set
+                    </button>
+                  </div>
                 </div>
               </PanelSection>
 

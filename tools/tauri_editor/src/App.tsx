@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EditorShell } from "./components/EditorShell";
 import { detectCurrentSurface } from "./lib/editorSurface";
+import { openOrFocusMainEditor, openOrFocusNarrativeLab } from "./lib/editorWindows";
 import { invokeCommand, isTauriRuntime } from "./lib/tauri";
+import { useRegisterEditorMenuCommands } from "./menu/editorCommandRegistry";
+import { useEditorMenuBridge } from "./menu/menuBridge";
+import { EDITOR_MENU_COMMANDS } from "./menu/menuCommands";
 import { DialogueWorkspace } from "./modules/dialogues/DialogueWorkspace";
 import { fallbackDialogueWorkspace } from "./modules/dialogues/fallback";
 import { fallbackWorkspace } from "./modules/items/fallback";
@@ -27,6 +31,7 @@ const defaultNarrativeAppSettings: NarrativeAppSettings = {
   lastWorkspace: null,
   connectedProjectRoot: null,
   recentProjectRoots: [],
+  workspaceLayouts: {},
 };
 
 function App() {
@@ -48,6 +53,8 @@ function App() {
     surface === "narrative-lab" ? "narrative" : "items",
   );
   const [canPersist, setCanPersist] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [statusBarVisible, setStatusBarVisible] = useState(true);
 
   async function loadMainWorkspaces() {
     try {
@@ -211,6 +218,79 @@ function App() {
     void loadMainWorkspaces();
   }, [surface]);
 
+  useEditorMenuBridge(setStatus, surface !== "map-editor");
+
+  const shellMenuCommands = useMemo(() => {
+    if (surface === "map-editor") {
+      return {};
+    }
+
+    return {
+      [EDITOR_MENU_COMMANDS.VIEW_TOGGLE_SIDEBAR]: {
+        execute: () => {
+          setSidebarVisible((current) => !current);
+        },
+      },
+      [EDITOR_MENU_COMMANDS.VIEW_TOGGLE_STATUS_BAR]: {
+        execute: () => {
+          setStatusBarVisible((current) => !current);
+        },
+      },
+      [EDITOR_MENU_COMMANDS.MODULE_ITEMS]: {
+        execute: async () => {
+          if (surface === "narrative-lab") {
+            await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_ITEMS);
+            return;
+          }
+          setActiveModule("items");
+          setStatus("Switched to Items.");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.MODULE_DIALOGUES]: {
+        execute: async () => {
+          if (surface === "narrative-lab") {
+            await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_DIALOGUES);
+            return;
+          }
+          setActiveModule("dialogues");
+          setStatus("Switched to Dialogues.");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.MODULE_QUESTS]: {
+        execute: async () => {
+          if (surface === "narrative-lab") {
+            await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_QUESTS);
+            return;
+          }
+          setActiveModule("quests");
+          setStatus("Switched to Quests.");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.MODULE_MAPS]: {
+        execute: async () => {
+          if (surface === "narrative-lab") {
+            await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_MAPS);
+            return;
+          }
+          setActiveModule("maps");
+          setStatus("Switched to Maps.");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.MODULE_NARRATIVE]: {
+        execute: async () => {
+          if (surface === "narrative-lab") {
+            setStatus("Narrative Lab is already active.");
+            return;
+          }
+          await openOrFocusNarrativeLab();
+          setStatus("Opened Narrative Lab.");
+        },
+      },
+    };
+  }, [surface]);
+
+  useRegisterEditorMenuCommands(shellMenuCommands);
+
   if (surface === "map-editor") {
     return <MapEditorWindow />;
   }
@@ -218,8 +298,8 @@ function App() {
   if (surface === "narrative-lab") {
     return (
       <EditorShell
-        title="CDC Narrative Lab"
-        subtitle="Standalone markdown-first authoring workspace for outlines, scenes, branches, and character notes."
+        title="Narrative Lab"
+        subtitle="Markdown-first writing studio for outlines, scenes, branches, reviews, and AI-assisted revision."
         bootstrap={narrativeWorkspace.bootstrap}
         modules={[{ id: "narrative", label: "Narrative Lab", state: "active" as const }]}
         activeModule="narrative"
@@ -227,7 +307,17 @@ function App() {
         status={status}
         primaryMetaLabel="Workspace"
         secondaryMetaLabel="Project"
+        primaryMetaValue={narrativeWorkspace.workspaceRoot || "No workspace selected"}
+        secondaryMetaValue={
+          narrativeWorkspace.connectedProjectRoot || narrativeAppSettings.connectedProjectRoot || "Not connected"
+        }
         runtimeLabel={isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode"}
+        shellMode="narrative"
+        brandEyebrow="Narrative Studio"
+        topbarEyebrow="Workbench"
+        topbarHeadline="Write, review, and iterate on narrative documents in a dedicated standalone workspace."
+        showSidebar={sidebarVisible}
+        showStatusBar={statusBarVisible}
       >
         <NarrativeWorkspace
           workspace={narrativeWorkspace}
@@ -237,6 +327,7 @@ function App() {
           onReload={loadNarrativeWorkspaceOnly}
           onOpenWorkspace={openNarrativeWorkspace}
           onConnectProject={connectNarrativeProject}
+          onSaveAppSettings={saveNarrativeSettings}
         />
       </EditorShell>
     );
@@ -259,6 +350,8 @@ function App() {
       onModuleChange={setActiveModule}
       status={status}
       runtimeLabel={isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode"}
+      showSidebar={sidebarVisible}
+      showStatusBar={statusBarVisible}
     >
       {activeModule === "items" ? (
         <ItemWorkspace

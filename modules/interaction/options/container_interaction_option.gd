@@ -1,5 +1,9 @@
 extends InteractionOption
 class_name ContainerInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## Container interaction presentation can stay in Godot, but authoritative item
+## transfer and validation rules should migrate to Rust/shared protocol.
+## Keep this option focused on client UI and compatibility behavior.
 
 @export var container_title: String = "容器"
 @export var container_items: Array[Dictionary] = []

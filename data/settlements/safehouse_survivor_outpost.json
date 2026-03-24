@@ -33,6 +33,14 @@
     {
       "id": "kitchen_station",
       "grid": { "x": 3, "y": 0, "z": 5 }
+    },
+    {
+      "id": "doctor_home_01",
+      "grid": { "x": 1, "y": 0, "z": 3 }
+    },
+    {
+      "id": "clinic_room",
+      "grid": { "x": 5, "y": 0, "z": 4 }
     }
   ],
   "routes": [
@@ -43,6 +51,10 @@
     {
       "id": "cook_service_loop",
       "anchors": ["kitchen_station", "canteen_main", "kitchen_station"]
+    },
+    {
+      "id": "doctor_clinic_rounds",
+      "anchors": ["doctor_home_01", "clinic_room", "canteen_main", "clinic_room"]
     }
   ],
   "smart_objects": [
@@ -94,6 +106,20 @@
       "anchor_id": "cook_home_01",
       "capacity": 1,
       "tags": ["cook"]
+    },
+    {
+      "id": "doctor_bed_01",
+      "kind": "bed",
+      "anchor_id": "doctor_home_01",
+      "capacity": 1,
+      "tags": ["doctor"]
+    },
+    {
+      "id": "clinic_station_01",
+      "kind": "medical_station",
+      "anchor_id": "clinic_room",
+      "capacity": 1,
+      "tags": ["doctor", "clinic"]
     },
     {
       "id": "alarm_bell_01",

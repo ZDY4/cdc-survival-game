@@ -1,5 +1,9 @@
 class_name PlayerController
 extends "res://systems/character_actor.gd"
+## LEGACY AUTHORITY BOUNDARY:
+## This controller remains the Godot-side input/presentation bridge. Keep it
+## focused on hit detection, UI flow, and command dispatch. Avoid adding new
+## authoritative interaction/turn/combat rule decisions here.
 
 const GridWorld = preload("res://systems/grid_world.gd")
 const GridNavigator = preload("res://systems/grid_navigator.gd")

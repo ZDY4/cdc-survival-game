@@ -1,5 +1,9 @@
 extends "res://modules/interaction/options/interaction_option.gd"
 class_name PickupInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## Pickup option execution remains a transitional Godot path. Keep this file as
+## client-facing glue; authoritative inventory/item transfer validation should
+## move to Rust runtime/protocol instead of expanding local execute() logic.
 
 const ItemIdResolver = preload("res://core/item_id_resolver.gd")
 

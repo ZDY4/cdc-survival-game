@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod context;
 pub mod facts;
 pub mod goals;
 pub mod offline_sim;
@@ -8,11 +9,12 @@ pub mod planner;
 use game_data::NpcRole;
 
 pub use facts::rebuild_facts;
+pub use context::NpcPlanningContext;
 pub use offline_sim::{advance_offline_sim, NpcOfflineSimState, OfflineSimAdvanceResult};
 pub use plan_runtime::{
     tick_offline_action, ActionExecutionPhase, ActionTickResult, OfflineActionState,
 };
-pub use planner::{build_plan, build_plan_for_goal};
+pub use planner::{build_plan, build_plan_for_context, build_plan_for_goal, build_plan_for_goal_with_context};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NpcFact {
@@ -90,6 +92,7 @@ pub enum NpcActionKey {
     TravelToCanteen,
     EatMeal,
     RestockMealService,
+    TreatPatients,
     TravelToLeisure,
     Relax,
     TravelHome,
@@ -110,7 +113,7 @@ pub struct NpcPlanStep {
     pub expected_facts: Vec<NpcFact>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NpcPlanRequest {
     pub role: NpcRole,
     pub facts: Vec<NpcFact>,
@@ -123,6 +126,7 @@ pub struct NpcPlanRequest {
     pub bed_id: Option<String>,
     pub meal_object_id: Option<String>,
     pub leisure_object_id: Option<String>,
+    pub medical_station_id: Option<String>,
     pub patrol_route_id: Option<String>,
 }
 
@@ -140,6 +144,7 @@ impl Default for NpcPlanRequest {
             bed_id: None,
             meal_object_id: None,
             leisure_object_id: None,
+            medical_station_id: None,
             patrol_route_id: None,
         }
     }
@@ -160,9 +165,10 @@ mod tests {
     use game_data::NpcRole;
 
     use super::{
-        advance_offline_sim, build_plan, rebuild_facts, tick_offline_action, ActionExecutionPhase,
-        NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey, NpcOfflineSimState, NpcPlanRequest,
-        NpcPlanStep, OfflineActionState,
+        advance_offline_sim, build_plan, build_plan_for_goal_with_context, rebuild_facts,
+        tick_offline_action, ActionExecutionPhase, NpcActionKey, NpcFact, NpcFactInput,
+        NpcGoalKey, NpcOfflineSimState, NpcPlanRequest, NpcPlanStep, NpcPlanningContext,
+        OfflineActionState,
     };
 
     #[test]
@@ -207,6 +213,7 @@ mod tests {
             bed_id: Some("guard_bed".into()),
             meal_object_id: Some("seat_01".into()),
             leisure_object_id: Some("bench_01".into()),
+            medical_station_id: None,
             patrol_route_id: Some("guard_patrol".into()),
         });
 
@@ -235,6 +242,7 @@ mod tests {
             bed_id: Some("guard_bed".into()),
             meal_object_id: Some("seat_01".into()),
             leisure_object_id: Some("bench_01".into()),
+            medical_station_id: None,
             patrol_route_id: Some("guard_patrol".into()),
         });
 
@@ -259,6 +267,7 @@ mod tests {
             bed_id: Some("guard_bed".into()),
             meal_object_id: Some("seat_01".into()),
             leisure_object_id: Some("bench_01".into()),
+            medical_station_id: None,
             patrol_route_id: Some("guard_patrol".into()),
         });
 
@@ -283,6 +292,7 @@ mod tests {
             bed_id: Some("guard_bed".into()),
             meal_object_id: Some("seat_01".into()),
             leisure_object_id: Some("bench_01".into()),
+            medical_station_id: None,
             patrol_route_id: Some("guard_patrol".into()),
         });
 
@@ -315,6 +325,7 @@ mod tests {
             bed_id: Some("guard_bed".into()),
             meal_object_id: Some("seat_01".into()),
             leisure_object_id: Some("bench_01".into()),
+            medical_station_id: None,
             patrol_route_id: Some("guard_patrol".into()),
         });
 
@@ -339,6 +350,7 @@ mod tests {
             bed_id: Some("cook_bed".into()),
             meal_object_id: Some("kitchen_station".into()),
             leisure_object_id: Some("bench_01".into()),
+            medical_station_id: None,
             patrol_route_id: None,
         });
 
@@ -347,6 +359,61 @@ mod tests {
             .steps
             .iter()
             .any(|step| step.action == NpcActionKey::RestockMealService));
+    }
+
+    #[test]
+    fn doctor_shift_plan_treats_patients() {
+        let result = build_plan(&NpcPlanRequest {
+            role: NpcRole::Doctor,
+            facts: vec![NpcFact::OnShift],
+            home_anchor: Some("doctor_home".into()),
+            duty_anchor: Some("clinic".into()),
+            canteen_anchor: Some("canteen".into()),
+            leisure_anchor: Some("bench".into()),
+            alarm_anchor: Some("alarm".into()),
+            guard_post_id: None,
+            bed_id: Some("doctor_bed".into()),
+            meal_object_id: Some("seat_01".into()),
+            leisure_object_id: Some("bench_01".into()),
+            medical_station_id: Some("clinic_station".into()),
+            patrol_route_id: None,
+        });
+
+        assert_eq!(result.selected_goal, NpcGoalKey::SatisfyShift);
+        assert!(result
+            .steps
+            .iter()
+            .any(|step| step.action == NpcActionKey::TreatPatients));
+    }
+
+    #[test]
+    fn planning_context_overrides_travel_minutes() {
+        let request = NpcPlanRequest {
+            role: NpcRole::Doctor,
+            facts: vec![NpcFact::OnShift],
+            home_anchor: Some("doctor_home".into()),
+            duty_anchor: Some("clinic".into()),
+            canteen_anchor: Some("canteen".into()),
+            leisure_anchor: Some("bench".into()),
+            alarm_anchor: Some("alarm".into()),
+            guard_post_id: None,
+            bed_id: Some("doctor_bed".into()),
+            meal_object_id: Some("seat_01".into()),
+            leisure_object_id: Some("bench_01".into()),
+            medical_station_id: Some("clinic_station".into()),
+            patrol_route_id: None,
+        };
+        let mut context =
+            NpcPlanningContext::from_plan_request(&request).with_current_anchor(Some("doctor_home".into()));
+        context.register_reachable_anchor("clinic".into(), 35);
+
+        let result = build_plan_for_goal_with_context(&context, NpcGoalKey::SatisfyShift);
+        let travel = result
+            .steps
+            .iter()
+            .find(|step| step.action == NpcActionKey::TravelToDutyArea)
+            .expect("travel step should exist");
+        assert_eq!(travel.travel_minutes, 35);
     }
 
     #[test]

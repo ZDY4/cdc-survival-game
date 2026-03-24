@@ -2,6 +2,10 @@ class_name CharacterActor
 extends CharacterBody3D
 ## Shared runtime character base for player, NPC and enemy.
 ## Provides temporary 4-sprite placeholder visuals (head + body + legs).
+## LEGACY AUTHORITY BOUNDARY:
+## Actor-side interaction helpers are temporary compatibility glue for the
+## current Godot client. Avoid growing local authority here; future interaction
+## and simulation ownership should continue moving to Rust runtime/protocol.
 
 const DEFAULT_INTERACTION_STATE_TAG_NAME: StringName = &"State.Interacting"
 const VISUAL_ROOT_NAME: String = "VisualRoot"

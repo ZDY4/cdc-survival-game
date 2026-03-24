@@ -27,8 +27,9 @@ pub use game_data::{
 };
 pub use goap::{
     advance_offline_sim, build_plan, build_plan_for_goal, rebuild_facts, tick_offline_action,
-    ActionExecutionPhase, ActionTickResult, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey,
-    NpcOfflineSimState, NpcPlanRequest, NpcPlanResult, NpcPlanStep, OfflineActionState,
+    build_plan_for_context, build_plan_for_goal_with_context, ActionExecutionPhase,
+    ActionTickResult, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey, NpcOfflineSimState,
+    NpcPlanRequest, NpcPlanResult, NpcPlanStep, NpcPlanningContext, OfflineActionState,
     OfflineSimAdvanceResult,
 };
 pub use movement::{

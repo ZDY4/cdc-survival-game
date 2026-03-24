@@ -1,5 +1,9 @@
 extends Node3D
 ## Unified interactable component for 3D scenes.
+## LEGACY AUTHORITY BOUNDARY:
+## This component should remain a presentation/client container for options.
+## Do not expand authoritative interaction resolution here; long-term option
+## query/execution authority belongs to Rust runtime/protocol.
 
 class_name Interactable
 

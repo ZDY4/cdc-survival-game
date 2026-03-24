@@ -1,5 +1,9 @@
 extends "res://modules/interaction/options/interaction_option.gd"
 class_name EnterSubsceneInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## Subscene entry remains a compatibility option in Godot. Keep it as a thin
+## front-end trigger and avoid expanding map-context authority here; that
+## authority should converge to Rust runtime/protocol.
 
 @export var target_location_id: String = ""
 @export var return_spawn_id: String = "default_spawn"

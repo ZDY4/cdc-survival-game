@@ -8,6 +8,8 @@ import { GraphCanvas, type GraphCanvasHandle } from "../../graph-kit/GraphCanvas
 import { GraphToolbarActions } from "../../graph-kit/GraphToolbarActions";
 import type { GraphSelection } from "../../graph-kit/types";
 import { invokeCommand } from "../../lib/tauri";
+import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
+import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   AiConnectionTestResult,
   AiDraftPayload,
@@ -376,6 +378,13 @@ export function DialogueWorkspace({
 
   const selectedIssues = selectedDocument?.validation ?? [];
   const selectedCounts = getIssueCounts(selectedIssues);
+  const applyAutoLayout = () => {
+    updateSelectedDialog((dialog) => dialogueGraphAdapter.autoLayout(dialog));
+    onStatusChange("Applied deterministic auto layout.");
+  };
+  const deleteGraphSelection = () => {
+    graphRef.current?.deleteSelection();
+  };
 
   const actions = [
     {
@@ -426,6 +435,70 @@ export function DialogueWorkspace({
     },
   ];
 
+  const menuCommands = useMemo(
+    () => ({
+      [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: {
+        execute: () => {
+          createDraft();
+        },
+        isEnabled: () => !busy,
+      },
+      [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: {
+        execute: async () => {
+          await saveAll();
+        },
+        isEnabled: () => !busy && dirtyCount > 0,
+      },
+      [EDITOR_MENU_COMMANDS.FILE_RELOAD]: {
+        execute: async () => {
+          await onReload();
+        },
+        isEnabled: () => !busy,
+      },
+      [EDITOR_MENU_COMMANDS.FILE_DELETE_CURRENT]: {
+        execute: async () => {
+          await deleteCurrent();
+        },
+        isEnabled: () => !busy && Boolean(selectedDocument),
+      },
+      [EDITOR_MENU_COMMANDS.EDIT_VALIDATE_CURRENT]: {
+        execute: async () => {
+          await validateCurrent();
+        },
+        isEnabled: () => !busy && Boolean(selectedDocument),
+      },
+      [EDITOR_MENU_COMMANDS.EDIT_AUTO_LAYOUT]: {
+        execute: () => {
+          applyAutoLayout();
+        },
+        isEnabled: () => !busy && Boolean(selectedDocument),
+      },
+      [EDITOR_MENU_COMMANDS.EDIT_DELETE_SELECTION]: {
+        execute: () => {
+          deleteGraphSelection();
+        },
+        isEnabled: () => !busy && Boolean(selectedDocument),
+      },
+      [EDITOR_MENU_COMMANDS.AI_GENERATE]: {
+        execute: () => {
+          setAiOpen(true);
+        },
+        isEnabled: () => !busy,
+      },
+    }),
+    [
+      busy,
+      deleteCurrent,
+      dirtyCount,
+      onReload,
+      saveAll,
+      selectedDocument,
+      validateCurrent,
+    ],
+  );
+
+  useRegisterEditorMenuCommands(menuCommands);
+
   return (
     <div className="workspace">
       <Toolbar actions={actions}>
@@ -433,12 +506,9 @@ export function DialogueWorkspace({
           <GraphToolbarActions
             adapter={dialogueGraphAdapter}
             onAddNode={(type) => graphRef.current?.createNodeAtViewportCenter(type)}
-            onAutoLayout={() => {
-              updateSelectedDialog((dialog) => dialogueGraphAdapter.autoLayout(dialog));
-              onStatusChange("Applied deterministic auto layout.");
-            }}
+            onAutoLayout={applyAutoLayout}
             onCenterView={() => graphRef.current?.centerView()}
-            onDeleteSelection={() => graphRef.current?.deleteSelection()}
+            onDeleteSelection={deleteGraphSelection}
             disabled={busy}
           />
         ) : null}

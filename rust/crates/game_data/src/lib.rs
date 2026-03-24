@@ -1,4 +1,5 @@
 pub mod character;
+pub mod ai_content;
 pub mod content;
 pub mod content_registry;
 pub mod interaction;
@@ -12,6 +13,7 @@ pub mod skill;
 
 use bevy_app::prelude::*;
 
+pub use ai_content::{validate_ai_content, AiContentIssue, AiContentIssueSeverity};
 pub use character::{
     load_character_library, validate_character_definition, CharacterAiProfile, CharacterArchetype,
     CharacterAttributeTemplate, CharacterCombatProfile, CharacterDefinition,

@@ -4,13 +4,16 @@ import { Badge } from "../../components/Badge";
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
 import { TextField } from "../../components/fields";
-import { isTauriRuntime } from "../../lib/tauri";
+import { invokeCommand, isTauriRuntime } from "../../lib/tauri";
+import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
+import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   MapDocumentPayload,
   MapEditorSaveCompletePayload,
   MapEditorSessionEndedPayload,
   MapEditorStateChangedPayload,
   MapWorkspacePayload,
+  ValidationIssue,
 } from "../../types";
 import {
   MAP_EDITOR_SAVE_COMPLETE_EVENT,
@@ -168,6 +171,99 @@ export function MapLibraryWorkspace({
     const document = workspace.documents.find((entry) => entry.documentKey === documentKey);
     onStatusChange(`Opened map editor for ${document?.map.id ?? documentKey}.`);
   }
+
+  async function validateCurrent() {
+    if (!selectedDocument) {
+      onStatusChange("Select a map first.");
+      return;
+    }
+
+    if (!canPersist) {
+      const counts = getIssueCounts(selectedDocument.validation);
+      onStatusChange(
+        counts.errorCount + counts.warningCount === 0
+          ? "Current map looks clean in fallback mode."
+          : `Current map has ${counts.errorCount} errors and ${counts.warningCount} warnings.`,
+      );
+      return;
+    }
+
+    try {
+      const issues = await invokeCommand<ValidationIssue[]>("validate_map_document", {
+        map: selectedDocument.map,
+      });
+      const counts = getIssueCounts(issues);
+      setLiveSummaries((current) => ({
+        ...current,
+        [selectedDocument.documentKey]: {
+          ...(current[selectedDocument.documentKey] ?? buildSummary(selectedDocument)),
+          errorCount: counts.errorCount,
+          warningCount: counts.warningCount,
+        },
+      }));
+      onStatusChange(
+        counts.errorCount + counts.warningCount === 0
+          ? `Map ${selectedDocument.map.id} passed validation.`
+          : `Map ${selectedDocument.map.id} has ${counts.errorCount} errors and ${counts.warningCount} warnings.`,
+      );
+    } catch (error) {
+      onStatusChange(`Map validation failed: ${String(error)}`);
+    }
+  }
+
+  async function deleteCurrent() {
+    if (!selectedDocument) {
+      onStatusChange("Select a map first.");
+      return;
+    }
+
+    if (!canPersist) {
+      onStatusChange("Cannot delete project files in UI fallback mode.");
+      return;
+    }
+
+    try {
+      await invokeCommand("delete_map_document", {
+        mapId: selectedDocument.originalId,
+      });
+      setLiveSummaries((current) => {
+        const next = { ...current };
+        delete next[selectedDocument.documentKey];
+        return next;
+      });
+      await onReload();
+      onStatusChange(`Deleted map ${selectedDocument.originalId}.`);
+    } catch (error) {
+      onStatusChange(`Map delete failed: ${String(error)}`);
+    }
+  }
+
+  useRegisterEditorMenuCommands({
+    [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: {
+      execute: async () => {
+        await handleOpen(NEW_MAP_DOCUMENT_KEY);
+      },
+      isEnabled: () => isTauriRuntime(),
+    },
+    [EDITOR_MENU_COMMANDS.FILE_RELOAD]: {
+      execute: async () => {
+        setLiveSummaries({});
+        await onReload();
+      },
+    },
+    [EDITOR_MENU_COMMANDS.FILE_DELETE_CURRENT]: {
+      execute: async () => {
+        await deleteCurrent();
+      },
+      isEnabled: () => Boolean(selectedDocument) && canPersist,
+    },
+    [EDITOR_MENU_COMMANDS.EDIT_VALIDATE_CURRENT]: {
+      execute: async () => {
+        await validateCurrent();
+      },
+      isEnabled: () => Boolean(selectedDocument),
+    },
+  });
 
   const actions = [
     {

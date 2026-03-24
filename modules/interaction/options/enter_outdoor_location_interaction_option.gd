@@ -1,5 +1,9 @@
 extends "res://modules/interaction/options/interaction_option.gd"
 class_name EnterOutdoorLocationInteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## Travel option wiring remains a Godot-side compatibility path for now.
+## Do not grow map-travel authority here; final travel/context decisions should
+## come from Rust runtime/protocol and be consumed as client-side transitions.
 
 @export var target_location_id: String = ""
 @export var required_distance: float = 1.4

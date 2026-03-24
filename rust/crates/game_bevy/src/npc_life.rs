@@ -3,16 +3,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use game_core::{
-    build_plan_for_goal, rebuild_facts, score_goals, select_goal, tick_offline_action,
+    build_plan_for_goal_with_context, rebuild_facts, score_goals, select_goal, tick_offline_action,
     ActionExecutionPhase, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey, NpcGoalScore,
-    NpcPlanRequest, NpcPlanStep, OfflineActionState,
+    NpcPlanRequest, NpcPlanStep, NpcPlanningContext, OfflineActionState,
 };
 use game_data::{
     CharacterLifeProfile, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay, SettlementDefinition,
-    SettlementId, SmartObjectKind,
+    SettlementId, SmartObjectDefinition, SmartObjectKind,
 };
 
-use crate::SettlementDefinitions;
+use crate::{reservations::ReservationConflict, SettlementDefinitions, SmartObjectReservations};
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct LifeProfileComponent(pub CharacterLifeProfile);
@@ -118,9 +118,6 @@ pub struct SettlementContext {
     pub player_present: bool,
 }
 
-#[derive(Resource, Debug, Clone, PartialEq, Eq, Default)]
-pub struct SmartObjectReservations(pub BTreeMap<String, Entity>);
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlannedActionDebug {
     pub action: NpcActionKey,
@@ -181,6 +178,7 @@ impl Plugin for NpcLifePlugin {
             Update,
             (
                 initialize_npc_life_entities,
+                sync_reservation_catalog_system,
                 update_schedule_state_system,
                 update_need_state_system,
                 plan_npc_life_system,
@@ -223,7 +221,7 @@ fn initialize_npc_life_entities(
             Some(settlement) => settlement,
             None => continue,
         };
-        let duty_anchor = route_anchor(settlement, &profile.duty_route_id)
+        let duty_anchor = route_duty_anchor(settlement, &profile.home_anchor, &profile.duty_route_id)
             .or_else(|| default_duty_anchor_for_role(settlement, profile.role));
         let canteen_anchor = first_anchor_for_kind(settlement, SmartObjectKind::CanteenSeat);
         let leisure_anchor = first_anchor_for_kind(settlement, SmartObjectKind::RecreationSpot);
@@ -327,6 +325,7 @@ fn update_need_state_system(clock: Res<SimClock>, mut query: Query<&mut NeedStat
 
 fn plan_npc_life_system(
     settlements: Option<Res<SettlementDefinitions>>,
+    reservation_service: Res<SmartObjectReservations>,
     world_alert: Res<WorldAlertState>,
     mut queries: ParamSet<(
         Query<(Entity, &NpcLifeState, &ScheduleState, &CurrentAction)>,
@@ -373,7 +372,7 @@ fn plan_npc_life_system(
     }
 
     for (
-        _entity,
+        entity,
         mut life,
         need,
         schedule,
@@ -400,6 +399,68 @@ fn plan_npc_life_system(
             Some(settlement) => settlement,
             None => continue,
         };
+        let selected_guard_post_id = if life.role == NpcRole::Guard {
+            select_object_for_kind_for_role(
+                settlement,
+                SmartObjectKind::GuardPost,
+                life.role,
+                &reservation_service,
+                entity,
+            )
+            .map(|object| object.id.clone())
+        } else {
+            None
+        };
+        let selected_meal_object_id = select_object_for_kind_for_role(
+            settlement,
+            SmartObjectKind::CanteenSeat,
+            life.role,
+            &reservation_service,
+            entity,
+        )
+        .map(|object| object.id.clone());
+        let selected_leisure_object_id = select_object_for_kind_for_role(
+            settlement,
+            SmartObjectKind::RecreationSpot,
+            life.role,
+            &reservation_service,
+            entity,
+        )
+        .map(|object| object.id.clone());
+        let selected_medical_station_id = if life.role == NpcRole::Doctor {
+            select_object_for_kind_for_role(
+                settlement,
+                SmartObjectKind::MedicalStation,
+                life.role,
+                &reservation_service,
+                entity,
+            )
+            .map(|object| object.id.clone())
+        } else {
+            None
+        };
+        life.guard_post_id = selected_guard_post_id.clone();
+        life.meal_object_id = selected_meal_object_id.clone();
+        life.leisure_object_id = selected_leisure_object_id.clone();
+        if life.role == NpcRole::Guard {
+            life.duty_anchor = selected_guard_post_id
+                .as_deref()
+                .and_then(|object_id| object_anchor_id(settlement, object_id))
+                .or_else(|| life.duty_anchor.clone());
+        } else if life.role == NpcRole::Doctor {
+            life.duty_anchor = selected_medical_station_id
+                .as_deref()
+                .and_then(|object_id| object_anchor_id(settlement, object_id))
+                .or_else(|| life.duty_anchor.clone());
+        }
+        life.canteen_anchor = selected_meal_object_id
+            .as_deref()
+            .and_then(|object_id| object_anchor_id(settlement, object_id))
+            .or_else(|| life.canteen_anchor.clone());
+        life.leisure_anchor = selected_leisure_object_id
+            .as_deref()
+            .and_then(|object_id| object_anchor_id(settlement, object_id))
+            .or_else(|| life.leisure_anchor.clone());
         let active_guards = guard_coverage
             .get(&life.settlement_id)
             .copied()
@@ -437,14 +498,17 @@ fn plan_npc_life_system(
             canteen_anchor: life.canteen_anchor.clone(),
             leisure_anchor: life.leisure_anchor.clone(),
             alarm_anchor: life.alarm_anchor.clone(),
-            guard_post_id: life.guard_post_id.clone(),
+            guard_post_id: selected_guard_post_id,
             bed_id: life.bed_id.clone(),
-            meal_object_id: life.meal_object_id.clone(),
-            leisure_object_id: life.leisure_object_id.clone(),
+            meal_object_id: selected_meal_object_id,
+            leisure_object_id: selected_leisure_object_id,
+            medical_station_id: selected_medical_station_id,
             patrol_route_id: life.duty_route_id.clone(),
         };
         let selected_goal = select_goal(&plan_request);
-        let plan = build_plan_for_goal(&plan_request, selected_goal);
+        let planning_context =
+            build_planning_context(settlement, &plan_request, life.current_anchor.clone());
+        let plan = build_plan_for_goal_with_context(&planning_context, selected_goal);
         let mut goal_scores = score_goals(&plan_request);
         goal_scores.sort_by(|left, right| right.score.cmp(&left.score));
         let decision_summary = build_decision_summary(
@@ -498,13 +562,10 @@ fn execute_offline_actions_system(
             let action_state = current_action.0.as_mut().expect("action exists");
             if action_state.phase == ActionExecutionPhase::AcquireReservation {
                 if let Some(target) = action_state.step.reservation_target.clone() {
-                    if let Some(owner) = registry.0.get(&target) {
-                        if *owner != entity {
-                            action_state.fail();
-                            reservation_conflict = true;
-                        }
+                    if let Err(ReservationConflict { .. }) = registry.try_acquire(&target, entity) {
+                        action_state.fail();
+                        reservation_conflict = true;
                     } else {
-                        registry.0.insert(target.clone(), entity);
                         reservations.active.insert(target);
                     }
                 }
@@ -534,7 +595,7 @@ fn execute_offline_actions_system(
                 apply_action_effects(action, &mut need);
             }
             for released in tick.released_reservations {
-                registry.0.remove(&released);
+                registry.release(&released, entity);
                 reservations.active.remove(&released);
             }
             current_plan.next_index += 1;
@@ -632,12 +693,22 @@ fn advance_sim_clock_system(mut clock: ResMut<SimClock>) {
     }
 }
 
-fn route_anchor(settlement: &SettlementDefinition, route_id: &str) -> Option<String> {
+fn route_duty_anchor(
+    settlement: &SettlementDefinition,
+    home_anchor: &str,
+    route_id: &str,
+) -> Option<String> {
     settlement
         .routes
         .iter()
         .find(|route| route.id == route_id)
-        .and_then(|route| route.anchors.first().cloned())
+        .and_then(|route| {
+            route.anchors
+                .iter()
+                .find(|anchor| anchor.as_str() != home_anchor)
+                .cloned()
+                .or_else(|| route.anchors.first().cloned())
+        })
 }
 
 fn default_duty_anchor_for_role(
@@ -647,7 +718,7 @@ fn default_duty_anchor_for_role(
     match role {
         NpcRole::Guard => first_anchor_for_kind(settlement, SmartObjectKind::GuardPost),
         NpcRole::Cook => first_anchor_for_kind(settlement, SmartObjectKind::CanteenSeat),
-        NpcRole::Doctor => first_anchor_for_kind(settlement, SmartObjectKind::RecreationSpot),
+        NpcRole::Doctor => first_anchor_for_kind(settlement, SmartObjectKind::MedicalStation),
         NpcRole::Resident => None,
     }
 }
@@ -680,6 +751,59 @@ fn first_object_for_kind_for_role(
                 .find(|object| object.kind == kind)
         })
         .map(|object| object.id.clone())
+}
+
+fn select_object_for_kind_for_role<'a>(
+    settlement: &'a SettlementDefinition,
+    kind: SmartObjectKind,
+    role: NpcRole,
+    reservations: &SmartObjectReservations,
+    owner: Entity,
+) -> Option<&'a SmartObjectDefinition> {
+    let role_tag = role_tag(role);
+    select_available_object(
+        settlement
+            .smart_objects
+            .iter()
+            .filter(move |object| object.kind == kind && object.tags.iter().any(|tag| tag == role_tag)),
+        reservations,
+        owner,
+    )
+    .or_else(|| {
+        select_available_object(
+            settlement
+                .smart_objects
+                .iter()
+                .filter(move |object| object.kind == kind),
+            reservations,
+            owner,
+        )
+    })
+}
+
+fn select_available_object<'a>(
+    candidates: impl Iterator<Item = &'a SmartObjectDefinition>,
+    reservations: &SmartObjectReservations,
+    owner: Entity,
+) -> Option<&'a SmartObjectDefinition> {
+    let mut first_available = None;
+    for object in candidates {
+        if reservations.holds(&object.id, owner) {
+            return Some(object);
+        }
+        if first_available.is_none() && reservations.can_acquire(&object.id, owner) {
+            first_available = Some(object);
+        }
+    }
+    first_available
+}
+
+fn object_anchor_id(settlement: &SettlementDefinition, object_id: &str) -> Option<String> {
+    settlement
+        .smart_objects
+        .iter()
+        .find(|object| object.id == object_id)
+        .map(|object| object.anchor_id.clone())
 }
 
 fn role_tag(role: NpcRole) -> &'static str {
@@ -725,6 +849,9 @@ fn apply_action_effects(action: NpcActionKey, need: &mut NeedState) {
         NpcActionKey::Relax => {
             need.morale = (need.morale + 35.0).clamp(0.0, 100.0);
         }
+        NpcActionKey::TreatPatients => {
+            need.morale = (need.morale + 18.0).clamp(0.0, 100.0);
+        }
         _ => {}
     }
 }
@@ -757,11 +884,69 @@ fn build_decision_summary(
     )
 }
 
+fn sync_reservation_catalog_system(
+    settlements: Option<Res<SettlementDefinitions>>,
+    mut reservations: ResMut<SmartObjectReservations>,
+) {
+    let Some(settlements) = settlements else {
+        return;
+    };
+    reservations.sync_settlement_catalog(&settlements.0);
+}
+
+fn build_planning_context(
+    settlement: &SettlementDefinition,
+    request: &NpcPlanRequest,
+    current_anchor: Option<String>,
+) -> NpcPlanningContext {
+    let mut context =
+        NpcPlanningContext::from_plan_request(request).with_current_anchor(current_anchor.clone());
+    let Some(current_anchor) = current_anchor else {
+        return context;
+    };
+
+    let anchor_lookup: BTreeMap<&str, game_data::GridCoord> = settlement
+        .anchors
+        .iter()
+        .map(|anchor| (anchor.id.as_str(), anchor.grid))
+        .collect();
+
+    for anchor in [
+        request.home_anchor.as_deref(),
+        request.duty_anchor.as_deref(),
+        request.canteen_anchor.as_deref(),
+        request.leisure_anchor.as_deref(),
+        request.alarm_anchor.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if let Some(minutes) = travel_minutes_between_anchors(&anchor_lookup, &current_anchor, anchor) {
+            context.register_reachable_anchor(anchor.to_string(), minutes);
+        }
+    }
+
+    context
+}
+
+fn travel_minutes_between_anchors(
+    anchors: &BTreeMap<&str, game_data::GridCoord>,
+    from_anchor: &str,
+    to_anchor: &str,
+) -> Option<u32> {
+    let from = anchors.get(from_anchor)?;
+    let to = anchors.get(to_anchor)?;
+    let distance =
+        (from.x - to.x).abs() as u32 + (from.y - to.y).abs() as u32 + (from.z - to.z).abs() as u32;
+    Some(distance.saturating_mul(5))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
     use bevy_app::App;
+    use super::SimClock;
     use game_data::{
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
@@ -957,6 +1142,89 @@ mod tests {
         assert_eq!(entry.role, NpcRole::Cook);
     }
 
+    #[test]
+    fn doctor_uses_medical_station_and_records_treatment_plan() {
+        let mut app = App::new();
+        app.insert_resource(CharacterDefinitions(sample_characters()));
+        app.insert_resource(SettlementDefinitions(sample_settlements()));
+        app.add_plugins((SettlementSimulationPlugin, NpcLifePlugin));
+
+        let doctor = app
+            .world_mut()
+            .spawn((
+                CharacterDefinitionId(CharacterId("safehouse_doctor_test".into())),
+                LifeProfileComponent(sample_doctor_life()),
+            ))
+            .id();
+
+        for _ in 0..30 {
+            app.update();
+        }
+
+        let life = app
+            .world()
+            .entity(doctor)
+            .get::<NpcLifeState>()
+            .expect("life component");
+        assert_eq!(life.role, NpcRole::Doctor);
+        assert_eq!(life.duty_anchor.as_deref(), Some("clinic_room"));
+        assert_eq!(life.bed_id.as_deref(), Some("doctor_bed_01"));
+
+        let plan = app
+            .world()
+            .entity(doctor)
+            .get::<super::CurrentPlan>()
+            .expect("plan component");
+        assert!(plan
+            .steps
+            .iter()
+            .any(|step| step.action == game_core::NpcActionKey::TreatPatients));
+        assert!(plan
+            .steps
+            .iter()
+            .any(|step| step.target_anchor.as_deref() == Some("clinic_room")));
+
+        let snapshot = app.world().resource::<SettlementDebugSnapshot>();
+        let entry = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.entity == doctor)
+            .expect("doctor entry in debug snapshot");
+        assert_eq!(entry.role, NpcRole::Doctor);
+        assert!(!entry.goal_scores.is_empty());
+    }
+
+    #[test]
+    fn route_aware_travel_minutes_flow_into_online_plan_steps() {
+        let mut app = App::new();
+        app.insert_resource(CharacterDefinitions(sample_characters()));
+        app.insert_resource(SettlementDefinitions(sample_settlements()));
+        app.add_plugins((SettlementSimulationPlugin, NpcLifePlugin));
+        app.world_mut().resource_mut::<SimClock>().minute_of_day = 9 * 60;
+
+        let doctor = app
+            .world_mut()
+            .spawn((
+                CharacterDefinitionId(CharacterId("safehouse_doctor_test".into())),
+                LifeProfileComponent(sample_doctor_life()),
+            ))
+            .id();
+
+        app.update();
+
+        let plan = app
+            .world()
+            .entity(doctor)
+            .get::<super::CurrentPlan>()
+            .expect("plan component");
+        let travel = plan
+            .steps
+            .iter()
+            .find(|step| step.action == game_core::NpcActionKey::TravelToDutyArea)
+            .expect("travel to duty");
+        assert!(travel.travel_minutes > 0);
+    }
+
     fn sample_guard_life() -> CharacterLifeProfile {
         CharacterLifeProfile {
             settlement_id: "safehouse_survivor_outpost".into(),
@@ -1013,6 +1281,33 @@ mod tests {
         }
     }
 
+    fn sample_doctor_life() -> CharacterLifeProfile {
+        CharacterLifeProfile {
+            settlement_id: "safehouse_survivor_outpost".into(),
+            role: NpcRole::Doctor,
+            home_anchor: "doctor_home_01".into(),
+            duty_route_id: "doctor_clinic_rounds".into(),
+            schedule: vec![ScheduleBlock {
+                day: ScheduleDay::Monday,
+                start_minute: 9 * 60,
+                end_minute: 17 * 60,
+                label: "诊所轮值".into(),
+                tags: vec!["shift".into(), "doctor".into()],
+            }],
+            smart_object_access: vec![
+                "bed".into(),
+                "medical_station".into(),
+                "recreation_spot".into(),
+            ],
+            need_profile: NeedProfile {
+                hunger_decay_per_hour: 3.2,
+                energy_decay_per_hour: 2.4,
+                morale_decay_per_hour: 1.1,
+                safety_bias: 0.6,
+            },
+        }
+    }
+
     fn sample_characters() -> CharacterLibrary {
         let mut definitions = BTreeMap::new();
         definitions.insert(
@@ -1036,6 +1331,10 @@ mod tests {
         definitions.insert(
             CharacterId("safehouse_cook_test".into()),
             sample_character("safehouse_cook_test", sample_cook_life()),
+        );
+        definitions.insert(
+            CharacterId("safehouse_doctor_test".into()),
+            sample_character("safehouse_doctor_test", sample_doctor_life()),
         );
         CharacterLibrary::from(definitions)
     }
@@ -1122,6 +1421,14 @@ mod tests {
                     id: "kitchen_station".into(),
                     grid: game_data::GridCoord::new(3, 0, 5),
                 },
+                SettlementAnchorDefinition {
+                    id: "doctor_home_01".into(),
+                    grid: game_data::GridCoord::new(1, 0, 3),
+                },
+                SettlementAnchorDefinition {
+                    id: "clinic_room".into(),
+                    grid: game_data::GridCoord::new(5, 0, 4),
+                },
             ],
             routes: vec![
                 SettlementRouteDefinition {
@@ -1131,6 +1438,10 @@ mod tests {
                 SettlementRouteDefinition {
                     id: "cook_service_loop".into(),
                     anchors: vec!["kitchen_station".into(), "canteen_main".into()],
+                },
+                SettlementRouteDefinition {
+                    id: "doctor_clinic_rounds".into(),
+                    anchors: vec!["doctor_home_01".into(), "clinic_room".into(), "canteen_main".into()],
                 },
             ],
             smart_objects: vec![
@@ -1182,6 +1493,20 @@ mod tests {
                     anchor_id: "cook_home_01".into(),
                     capacity: 1,
                     tags: vec!["cook".into()],
+                },
+                SmartObjectDefinition {
+                    id: "doctor_bed_01".into(),
+                    kind: SmartObjectKind::Bed,
+                    anchor_id: "doctor_home_01".into(),
+                    capacity: 1,
+                    tags: vec!["doctor".into()],
+                },
+                SmartObjectDefinition {
+                    id: "clinic_station_01".into(),
+                    kind: SmartObjectKind::MedicalStation,
+                    anchor_id: "clinic_room".into(),
+                    capacity: 1,
+                    tags: vec!["doctor".into()],
                 },
                 SmartObjectDefinition {
                     id: "alarm_bell_01".into(),

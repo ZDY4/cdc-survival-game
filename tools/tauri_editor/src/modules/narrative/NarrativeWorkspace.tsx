@@ -1,38 +1,43 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
 import { Badge } from "../../components/Badge";
-import {
-  SelectField,
-  TextareaField,
-  TextField,
-  TokenListField,
-} from "../../components/fields";
+import { SelectField, TextareaField, TextField, TokenListField } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
 import { invokeCommand } from "../../lib/tauri";
+import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
+import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   AiConnectionTestResult,
   AiSettings,
   CloudWorkspaceMeta,
-  NarrativeAppSettings,
   NarrativeAction,
+  NarrativeAppSettings,
   NarrativeDocType,
   NarrativeDocumentPayload,
   NarrativeGenerateRequest,
   NarrativeGenerateResponse,
+  NarrativePanelId,
+  NarrativePanelLayoutItem,
+  NarrativeSelectionRange,
   NarrativeSyncSettings,
+  NarrativeWorkspaceLayout,
+  NarrativeWorkspacePayload,
   NarrativeWorkspaceSyncResult,
   ProjectContextSnapshotExportResult,
   ProjectContextSnapshotUploadResult,
-  NarrativeSelectionRange,
-  NarrativeWorkspacePayload,
   SaveNarrativeDocumentResult,
   StructuringBundlePayload,
 } from "../../types";
+import { applySelectionRange, narrativeDiffSummary, toUtf8SelectionRange } from "./narrativeEditing";
 import {
-  applySelectionRange,
-  narrativeDiffSummary,
-  toUtf8SelectionRange,
-} from "./narrativeEditing";
+  buildStackedLayout,
+  defaultNarrativeLayout,
+  NARRATIVE_CORE_PANELS,
+  normalizeNarrativeLayout,
+  sortLayoutItems,
+  togglePanelValue,
+} from "./workbench";
 import {
   defaultNarrativeMarkdown,
   defaultNarrativeTitle,
@@ -40,6 +45,8 @@ import {
   docTypeLabel,
   fallbackNarrativeMeta,
 } from "./narrativeTemplates";
+
+const ResponsiveGridLayout = WidthProvider(Responsive);
 
 type EditableNarrativeDocument = NarrativeDocumentPayload & {
   savedSnapshot: string;
@@ -55,15 +62,11 @@ type NarrativeWorkspaceProps = {
   onReload: () => Promise<void>;
   onOpenWorkspace: (workspaceRoot: string) => Promise<void>;
   onConnectProject: (projectRoot: string | null) => Promise<void>;
+  onSaveAppSettings: (settings: NarrativeAppSettings) => Promise<NarrativeAppSettings>;
 };
 
-const GENERATOR_BUTTONS: Array<{ label: string; docType: NarrativeDocType }> = [
-  { label: "生成项目大纲", docType: "project_brief" },
-  { label: "生成人物设定", docType: "character_card" },
-  { label: "生成章节大纲", docType: "chapter_outline" },
-  { label: "生成分支设计", docType: "branch_sheet" },
-  { label: "生成场景稿", docType: "scene_draft" },
-];
+type ReviewMode = "diff" | "draft" | "original";
+type NarrativeBreakpoint = "lg" | "md";
 
 const ACTION_OPTIONS: Array<{ value: NarrativeAction; label: string }> = [
   { value: "create", label: "创建文稿" },
@@ -72,6 +75,14 @@ const ACTION_OPTIONS: Array<{ value: NarrativeAction; label: string }> = [
   { value: "expand_selection", label: "扩写选中内容" },
   { value: "insert_after_selection", label: "在选中段后补写" },
   { value: "derive_new_doc", label: "派生为新文稿" },
+];
+
+const ADVANCED_PANELS: NarrativePanelId[] = [
+  "workspace_context",
+  "sync_tools",
+  "provider_settings",
+  "structuring_bundle",
+  "prompt_debug",
 ];
 
 function snapshotDocument(document: NarrativeDocumentPayload) {
@@ -107,6 +118,35 @@ function createFallbackDraft(docType: NarrativeDocType, slug: string): EditableN
   };
 }
 
+function toGridLayout(items: NarrativePanelLayoutItem[]): Layout[] {
+  return sortLayoutItems(items).map((item) => ({
+    i: item.panelId,
+    x: item.x,
+    y: item.y,
+    w: item.w,
+    h: item.h,
+    minW: item.minW,
+    minH: item.minH,
+  }));
+}
+
+function mergeGridLayout(
+  currentLayout: NarrativeWorkspaceLayout,
+  nextGridLayout: Layout[],
+): NarrativeWorkspaceLayout {
+  const byId = new Map(nextGridLayout.map((item) => [item.i, item]));
+  return {
+    ...currentLayout,
+    items: currentLayout.items.map((item) => {
+      const grid = byId.get(item.panelId);
+      if (!grid) {
+        return item;
+      }
+      return { ...item, x: grid.x, y: grid.y, w: grid.w, h: grid.h };
+    }),
+  };
+}
+
 export function NarrativeWorkspace({
   workspace,
   appSettings,
@@ -115,10 +155,9 @@ export function NarrativeWorkspace({
   onReload,
   onOpenWorkspace,
   onConnectProject,
+  onSaveAppSettings,
 }: NarrativeWorkspaceProps) {
-  const [documents, setDocuments] = useState<EditableNarrativeDocument[]>(
-    hydrateDocuments(workspace.documents),
-  );
+  const [documents, setDocuments] = useState<EditableNarrativeDocument[]>(hydrateDocuments(workspace.documents));
   const [selectedKey, setSelectedKey] = useState(workspace.documents[0]?.documentKey ?? "");
   const [searchText, setSearchText] = useState("");
   const [filterDocType, setFilterDocType] = useState("");
@@ -126,8 +165,7 @@ export function NarrativeWorkspace({
   const [aiAction, setAiAction] = useState<NarrativeAction>("create");
   const [userPrompt, setUserPrompt] = useState("");
   const [editorInstruction, setEditorInstruction] = useState("");
-  const [derivedTargetDocType, setDerivedTargetDocType] =
-    useState<NarrativeDocType>("branch_sheet");
+  const [derivedTargetDocType, setDerivedTargetDocType] = useState<NarrativeDocType>("branch_sheet");
   const [response, setResponse] = useState<NarrativeGenerateResponse | null>(null);
   const [lastRequest, setLastRequest] = useState<NarrativeGenerateRequest | null>(null);
   const [settings, setSettings] = useState<AiSettings | null>(null);
@@ -146,11 +184,29 @@ export function NarrativeWorkspace({
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
   const [workspaceInput, setWorkspaceInput] = useState(workspace.workspaceRoot || appSettings.lastWorkspace || "");
-  const [projectInput, setProjectInput] = useState(
-    workspace.connectedProjectRoot || appSettings.connectedProjectRoot || "",
-  );
+  const [projectInput, setProjectInput] = useState(workspace.connectedProjectRoot || appSettings.connectedProjectRoot || "");
+  const [reviewMode, setReviewMode] = useState<ReviewMode>("diff");
+  const [currentBreakpoint, setCurrentBreakpoint] = useState<NarrativeBreakpoint>("lg");
+  const [selectionExpanded, setSelectionExpanded] = useState(false);
+  const [reviewDetailsExpanded, setReviewDetailsExpanded] = useState(false);
+  const [agentDetailsExpanded, setAgentDetailsExpanded] = useState(false);
+  const [layoutState, setLayoutState] = useState<NarrativeWorkspaceLayout>(() => normalizeNarrativeLayout(defaultNarrativeLayout()));
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const deferredSearch = useDeferredValue(searchText);
+  const latestAppSettingsRef = useRef(appSettings);
+  const layoutSaveTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    latestAppSettingsRef.current = appSettings;
+  }, [appSettings]);
+
+  useEffect(() => {
+    return () => {
+      if (layoutSaveTimerRef.current !== null) {
+        window.clearTimeout(layoutSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setDocuments(hydrateDocuments(workspace.documents));
@@ -171,6 +227,7 @@ export function NarrativeWorkspace({
   useEffect(() => {
     setSelectionRange(null);
     setSelectionText("");
+    setReviewMode("diff");
   }, [selectedKey]);
 
   useEffect(() => {
@@ -180,6 +237,13 @@ export function NarrativeWorkspace({
   useEffect(() => {
     setProjectInput(workspace.connectedProjectRoot || appSettings.connectedProjectRoot || "");
   }, [appSettings.connectedProjectRoot, workspace.connectedProjectRoot]);
+
+  useEffect(() => {
+    const nextLayout = workspace.workspaceRoot
+      ? normalizeNarrativeLayout(appSettings.workspaceLayouts?.[workspace.workspaceRoot])
+      : normalizeNarrativeLayout(defaultNarrativeLayout());
+    setLayoutState(nextLayout);
+  }, [appSettings.workspaceLayouts, workspace.workspaceRoot]);
 
   const filteredDocuments = useMemo(
     () =>
@@ -196,11 +260,29 @@ export function NarrativeWorkspace({
     [deferredSearch, documents, filterDocType],
   );
 
-  const selectedDocument =
-    documents.find((document) => document.documentKey === selectedKey) ?? null;
+  const selectedDocument = documents.find((document) => document.documentKey === selectedKey) ?? null;
   const dirtyCount = documents.filter((document) => document.dirty).length;
   const hasSelection = Boolean(selectionText.trim()) && Boolean(selectionRange);
   const hasActiveWorkspace = Boolean(workspace.workspaceRoot.trim());
+  const hiddenPanels = layoutState.hiddenPanels;
+  const collapsedPanels = layoutState.collapsedPanels;
+  const visibleLayoutItems = useMemo(
+    () => layoutState.items.filter((item) => !hiddenPanels.includes(item.panelId)),
+    [hiddenPanels, layoutState.items],
+  );
+  const wideGridLayout = useMemo(() => toGridLayout(visibleLayoutItems), [visibleLayoutItems]);
+  const compactGridLayout = useMemo(
+    () => toGridLayout(buildStackedLayout(layoutState.items, hiddenPanels)),
+    [hiddenPanels, layoutState.items],
+  );
+  const gridLayouts = useMemo<Layouts>(
+    () => ({
+      lg: wideGridLayout,
+      md: compactGridLayout,
+    }),
+    [compactGridLayout, wideGridLayout],
+  );
+  const compactLayout = currentBreakpoint !== "lg";
 
   function updateSelectedDocument(
     transform: (document: NarrativeDocumentPayload) => NarrativeDocumentPayload,
@@ -293,9 +375,7 @@ export function NarrativeWorkspace({
       return;
     }
     if (selectedDocument.isDraft) {
-      const remaining = documents.filter(
-        (document) => document.documentKey !== selectedDocument.documentKey,
-      );
+      const remaining = documents.filter((document) => document.documentKey !== selectedDocument.documentKey);
       setDocuments(remaining);
       setSelectedKey(remaining[0]?.documentKey ?? "");
       onStatusChange("Removed unsaved narrative draft.");
@@ -334,9 +414,7 @@ export function NarrativeWorkspace({
     }
     const selected = document.markdown.slice(editor.selectionStart, editor.selectionEnd);
     setSelectionText(selected);
-    setSelectionRange(
-      toUtf8SelectionRange(document.markdown, editor.selectionStart, editor.selectionEnd),
-    );
+    setSelectionRange(toUtf8SelectionRange(document.markdown, editor.selectionStart, editor.selectionEnd));
   }
 
   async function testSettings() {
@@ -411,7 +489,10 @@ export function NarrativeWorkspace({
       const created = await invokeCommand<CloudWorkspaceMeta>("create_cloud_workspace", {
         input: { name: cloudWorkspaceName.trim() },
       });
-      setCloudWorkspaces((current) => [created, ...current.filter((entry) => entry.workspaceId !== created.workspaceId)]);
+      setCloudWorkspaces((current) => [
+        created,
+        ...current.filter((entry) => entry.workspaceId !== created.workspaceId),
+      ]);
       setSyncSettings((current) => ({
         ...(current ?? {
           serverUrl: "",
@@ -548,8 +629,7 @@ export function NarrativeWorkspace({
 
     setBusy(true);
     try {
-      const command =
-        aiAction === "create" ? "generate_narrative_draft" : "revise_narrative_draft";
+      const command = aiAction === "create" ? "generate_narrative_draft" : "revise_narrative_draft";
       const next = await invokeCommand<NarrativeGenerateResponse>(command, {
         workspaceRoot: workspace.workspaceRoot,
         projectRoot: workspace.connectedProjectRoot ?? null,
@@ -557,6 +637,7 @@ export function NarrativeWorkspace({
       });
       setResponse(next);
       setLastRequest(request);
+      setReviewMode("diff");
       onStatusChange(next.providerError || next.summary || "Narrative draft ready for review.");
     } catch (error) {
       onStatusChange(`Narrative generation failed: ${String(error)}`);
@@ -663,68 +744,1203 @@ export function NarrativeWorkspace({
           scope === "selection" ? "replace" : "insert_after",
         );
       }
-      return {
-        ...document,
-        markdown: nextMarkdown,
-      };
+      return { ...document, markdown: nextMarkdown };
     });
     setResponse(null);
     setLastRequest(null);
     onStatusChange("Applied AI draft to the editor. Remember to save.");
   }
 
-  const actions = [
-    ...GENERATOR_BUTTONS.map((item) => ({
-      id: `create-${item.docType}`,
-      label: item.label,
-      onClick: () => {
-        void createDraft(item.docType);
+  function queueLayoutSave(nextLayout: NarrativeWorkspaceLayout, immediate = false) {
+    if (!canPersist || !workspace.workspaceRoot) {
+      return;
+    }
+    if (layoutSaveTimerRef.current !== null) {
+      window.clearTimeout(layoutSaveTimerRef.current);
+      layoutSaveTimerRef.current = null;
+    }
+
+    const persist = () => {
+      const currentSettings = latestAppSettingsRef.current;
+      void onSaveAppSettings({
+        ...currentSettings,
+        workspaceLayouts: {
+          ...(currentSettings.workspaceLayouts ?? {}),
+          [workspace.workspaceRoot]: nextLayout,
+        },
+      }).catch((error) => {
+        onStatusChange(`Failed to save layout: ${String(error)}`);
+      });
+    };
+
+    if (immediate) {
+      persist();
+      return;
+    }
+
+    layoutSaveTimerRef.current = window.setTimeout(() => {
+      layoutSaveTimerRef.current = null;
+      persist();
+    }, 220);
+  }
+
+  function applyLayout(nextLayout: NarrativeWorkspaceLayout, immediate = false) {
+    setLayoutState(nextLayout);
+    queueLayoutSave(nextLayout, immediate);
+  }
+
+  function updateLayoutFromGrid(nextGridLayout: Layout[]) {
+    if (compactLayout) {
+      return;
+    }
+    applyLayout(mergeGridLayout(layoutState, nextGridLayout));
+  }
+
+  function togglePanelCollapsed(panelId: NarrativePanelId) {
+    applyLayout(
+      {
+        ...layoutState,
+        collapsedPanels: togglePanelValue(
+          layoutState.collapsedPanels,
+          panelId,
+          !layoutState.collapsedPanels.includes(panelId),
+        ),
       },
-      disabled: busy || !hasActiveWorkspace,
-    })),
+      true,
+    );
+  }
+
+  function setPanelHidden(panelId: NarrativePanelId, hidden: boolean) {
+    if (NARRATIVE_CORE_PANELS.has(panelId)) {
+      return;
+    }
+    applyLayout(
+      {
+        ...layoutState,
+        hiddenPanels: togglePanelValue(layoutState.hiddenPanels, panelId, hidden),
+      },
+      true,
+    );
+  }
+
+  function revealPanel(panelId: NarrativePanelId) {
+    applyLayout(
+      {
+        ...layoutState,
+        hiddenPanels: togglePanelValue(layoutState.hiddenPanels, panelId, false),
+        collapsedPanels: togglePanelValue(layoutState.collapsedPanels, panelId, false),
+      },
+      true,
+    );
+  }
+
+  function resetLayoutPositions() {
+    applyLayout(
+      normalizeNarrativeLayout({
+        ...layoutState,
+        items: defaultNarrativeLayout().items,
+      }),
+      true,
+    );
+  }
+
+  function restoreDefaultLayout() {
+    applyLayout(normalizeNarrativeLayout(defaultNarrativeLayout()), true);
+  }
+
+  function expandAllPanels() {
+    applyLayout({ ...layoutState, collapsedPanels: [] }, true);
+  }
+
+  function collapseAdvancedPanels() {
+    applyLayout(
+      {
+        ...layoutState,
+        collapsedPanels: ADVANCED_PANELS.filter((panelId) => !hiddenPanels.includes(panelId)),
+      },
+      true,
+    );
+  }
+
+  useRegisterEditorMenuCommands({
+    [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: {
+      execute: async () => {
+        await createDraft("scene_draft");
+      },
+      isEnabled: () => !busy && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: {
+      execute: async () => {
+        await saveAll();
+      },
+      isEnabled: () => !busy && dirtyCount > 0 && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.FILE_RELOAD]: {
+      execute: async () => {
+        await onReload();
+      },
+      isEnabled: () => !busy && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.FILE_DELETE_CURRENT]: {
+      execute: async () => {
+        await deleteCurrent();
+      },
+      isEnabled: () => !busy && Boolean(selectedDocument),
+    },
+    [EDITOR_MENU_COMMANDS.VIEW_RESET_LAYOUT]: {
+      execute: () => {
+        resetLayoutPositions();
+      },
+    },
+    [EDITOR_MENU_COMMANDS.VIEW_RESTORE_DEFAULT_LAYOUT]: {
+      execute: () => {
+        restoreDefaultLayout();
+      },
+    },
+    [EDITOR_MENU_COMMANDS.VIEW_COLLAPSE_ADVANCED_PANELS]: {
+      execute: () => {
+        collapseAdvancedPanels();
+      },
+    },
+    [EDITOR_MENU_COMMANDS.VIEW_EXPAND_ALL_PANELS]: {
+      execute: () => {
+        expandAllPanels();
+      },
+    },
+    [EDITOR_MENU_COMMANDS.AI_GENERATE]: {
+      execute: async () => {
+        await runGeneration();
+      },
+      isEnabled: () => !busy && Boolean(selectedDocument) && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.AI_TEST_PROVIDER_CONNECTION]: {
+      execute: async () => {
+        revealPanel("provider_settings");
+        await testSettings();
+      },
+      isEnabled: () => !settingsBusy && Boolean(settings),
+    },
+    [EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS]: {
+      execute: () => {
+        revealPanel("provider_settings");
+        onStatusChange("Opened AI provider settings.");
+      },
+    },
+    [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_PROJECT_BRIEF]: {
+      execute: async () => {
+        await createDraft("project_brief");
+      },
+      isEnabled: () => !busy && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHARACTER_CARD]: {
+      execute: async () => {
+        await createDraft("character_card");
+      },
+      isEnabled: () => !busy && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHAPTER_OUTLINE]: {
+      execute: async () => {
+        await createDraft("chapter_outline");
+      },
+      isEnabled: () => !busy && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_BRANCH_SHEET]: {
+      execute: async () => {
+        await createDraft("branch_sheet");
+      },
+      isEnabled: () => !busy && hasActiveWorkspace,
+    },
+    [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_SCENE_DRAFT]: {
+      execute: async () => {
+        await createDraft("scene_draft");
+      },
+      isEnabled: () => !busy && hasActiveWorkspace,
+    },
+  });
+
+  const actions = [
+    {
+      id: "ai-generate",
+      label: "AI Generate",
+      onClick: () => {
+        void runGeneration();
+      },
+      disabled: busy || !selectedDocument || !hasActiveWorkspace,
+    },
     {
       id: "save",
       label: "Save all",
       onClick: () => {
         void saveAll();
       },
+      tone: "accent" as const,
       disabled: busy || dirtyCount === 0 || !hasActiveWorkspace,
-    },
-    {
-      id: "reload",
-      label: "Reload",
-      onClick: () => {
-        void onReload();
-      },
-      disabled: busy || !hasActiveWorkspace,
-    },
-    {
-      id: "delete",
-      label: "Delete current",
-      onClick: () => {
-        void deleteCurrent();
-      },
-      tone: "danger" as const,
-      disabled: busy || !selectedDocument,
     },
   ];
 
-  return (
-    <div className="workspace">
-      <Toolbar actions={actions} />
+  const reviewBodyValue =
+    reviewMode === "draft"
+      ? response?.draftMarkdown ?? ""
+      : reviewMode === "original"
+        ? selectedDocument?.markdown ?? ""
+        : narrativeDiffSummary(selectedDocument?.markdown ?? "", response, selectionText);
 
-      <div className="workspace-grid narrative-grid">
-        <aside className="column">
+  const workbenchPanels = new Map<
+    NarrativePanelId,
+    {
+      label: string;
+      title: string;
+      canHide: boolean;
+      summary?: React.ReactNode;
+      compact?: boolean;
+      content: React.ReactNode;
+    }
+  >();
+
+  workbenchPanels.set("document_overview", {
+    label: "Document",
+    title: selectedDocument?.meta.title ?? "Current narrative document",
+    canHide: false,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone={selectedDocument?.dirty ? "warning" : "muted"}>
+          {selectedDocument?.dirty ? "Unsaved" : "Saved"}
+        </Badge>
+        <Badge tone="muted">{selectedDocument ? docTypeLabel(selectedDocument.meta.docType) : "Idle"}</Badge>
+      </div>
+    ),
+    content: selectedDocument ? (
+      <>
+        <div className="stats-grid narrative-stats-grid narrative-stats-grid-compact">
+          <article className="stat-card">
+            <span>Type</span>
+            <strong>{docTypeLabel(selectedDocument.meta.docType)}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Slug</span>
+            <strong>{selectedDocument.meta.slug}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Status</span>
+            <strong>{selectedDocument.meta.status || "draft"}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Selection</span>
+            <strong>{selectionText ? `${selectionText.length} chars` : "none"}</strong>
+          </article>
+        </div>
+        <div className="toolbar-summary">
+          <Badge tone={selectedDocument.validation.length ? "warning" : "success"}>
+            validation: {selectedDocument.validation.length}
+          </Badge>
+          <Badge tone="muted">tags: {selectedDocument.meta.tags.length}</Badge>
+          <Badge tone="muted">refs: {selectedDocument.meta.sourceRefs.length}</Badge>
+        </div>
+        <label className="field">
+          <span className="field-label">Path</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={selectedDocument.relativePath}
+          />
+        </label>
+      </>
+    ) : (
+      <div className="empty-state">
+        <Badge tone="muted">Idle</Badge>
+        <p>
+          {hasActiveWorkspace
+            ? "Select a narrative document or create one from the toolbar."
+            : "Open or create a workspace to start writing."}
+        </p>
+      </div>
+    ),
+  });
+
+  workbenchPanels.set("ai_task", {
+    label: "AI",
+    title: "Narrative operations",
+    canHide: false,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone={hasSelection ? "accent" : "muted"}>
+          {hasSelection ? "selection ready" : "full document"}
+        </Badge>
+        <Badge tone={selectedDocument ? "success" : "danger"}>
+          {selectedDocument ? selectedDocument.meta.slug : "no target"}
+        </Badge>
+      </div>
+    ),
+    content: (
+      <>
+        <div className="narrative-action-grid">
+          {ACTION_OPTIONS.map((option) => {
+            const disabled =
+              busy ||
+              !selectedDocument ||
+              !hasActiveWorkspace ||
+              ((option.value === "rewrite_selection" ||
+                option.value === "expand_selection" ||
+                option.value === "insert_after_selection") &&
+                !hasSelection);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`toolbar-button ${aiAction === option.value ? "toolbar-accent" : ""}`}
+                disabled={disabled}
+                onClick={() => setAiAction(option.value)}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <TextareaField
+          label="主提示词"
+          value={userPrompt}
+          onChange={setUserPrompt}
+          placeholder="描述这次想生成什么内容。"
+        />
+        <TextareaField
+          label="修改意见 / 编辑指令"
+          value={editorInstruction}
+          onChange={setEditorInstruction}
+          placeholder="说明你希望 AI 如何调整当前文稿或选区。"
+        />
+        {aiAction === "derive_new_doc" ? (
+          <SelectField
+            label="派生目标类型"
+            value={derivedTargetDocType}
+            onChange={(value) => setDerivedTargetDocType(value as NarrativeDocType)}
+            allowBlank={false}
+            options={workspace.docTypes}
+          />
+        ) : null}
+        <div className="toolbar-summary">
+          <Badge tone={selectionRange ? "accent" : "muted"}>
+            range: {selectionRange ? `${selectionRange.start}-${selectionRange.end}` : "none"}
+          </Badge>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => setSelectionExpanded((current) => !current)}
+            disabled={!selectionText}
+          >
+            {selectionExpanded ? "Hide selection" : "Show selection"}
+          </button>
+        </div>
+        {selectionExpanded && selectionText ? (
+          <label className="field">
+            <span className="field-label">Selected text</span>
+            <textarea
+              className="field-input field-textarea ai-readonly narrative-readonly-compact"
+              readOnly
+              value={selectionText}
+            />
+          </label>
+        ) : null}
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="toolbar-button toolbar-accent"
+            onClick={() => {
+              void runGeneration();
+            }}
+            disabled={busy || !selectedDocument || !hasActiveWorkspace}
+          >
+            生成草稿
+          </button>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => {
+              setResponse(null);
+              setLastRequest(null);
+            }}
+            disabled={busy}
+          >
+            丢弃草稿
+          </button>
+        </div>
+      </>
+    ),
+  });
+
+  workbenchPanels.set("ai_review", {
+    label: "Review",
+    title: "AI draft review",
+    canHide: false,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone={response?.riskLevel === "high" ? "danger" : "muted"}>
+          risk: {response?.riskLevel ?? "n/a"}
+        </Badge>
+        <Badge tone="muted">scope: {response?.changeScope ?? "n/a"}</Badge>
+        <Badge tone="muted">agents: {response?.agentRuns.length ?? 0}</Badge>
+      </div>
+    ),
+    content: response ? (
+      <>
+        <label className="field">
+          <span className="field-label">Summary</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={response.summary || response.providerError}
+          />
+        </label>
+        <div className="toolbar-actions">
+          {([
+            ["diff", "Diff"],
+            ["draft", "Draft"],
+            ["original", "Original"],
+          ] as Array<[ReviewMode, string]>).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              className={`toolbar-button ${reviewMode === mode ? "toolbar-accent" : ""}`}
+              onClick={() => setReviewMode(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="field">
+          <span className="field-label">
+            {reviewMode === "diff" ? "Diff preview" : reviewMode === "draft" ? "Draft markdown" : "Current markdown"}
+          </span>
+          <textarea
+            className="field-input field-textarea field-code ai-readonly narrative-review-output"
+            readOnly
+            value={reviewBodyValue}
+          />
+        </label>
+        <div className="toolbar-actions">
+          {response.changeScope === "document" ? (
+            <button type="button" className="toolbar-button toolbar-accent" onClick={() => void applyDraft("document")}>
+              替换整篇
+            </button>
+          ) : null}
+          {response.changeScope === "selection" ? (
+            <button type="button" className="toolbar-button toolbar-accent" onClick={() => void applyDraft("selection")}>
+              替换选区
+            </button>
+          ) : null}
+          {response.changeScope === "insertion" ? (
+            <button type="button" className="toolbar-button toolbar-accent" onClick={() => void applyDraft("insertion")}>
+              插入到选区后
+            </button>
+          ) : null}
+          {response.changeScope === "new_doc" ? (
+            <button type="button" className="toolbar-button toolbar-accent" onClick={() => void applyDraft("new_doc")}>
+              另存为新文稿
+            </button>
+          ) : null}
+        </div>
+        <div className="toolbar-actions">
+          <button type="button" className="toolbar-button" onClick={() => setReviewDetailsExpanded((current) => !current)}>
+            {reviewDetailsExpanded ? "Hide review notes" : "Show review notes"}
+          </button>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => setAgentDetailsExpanded((current) => !current)}
+            disabled={response.agentRuns.length === 0}
+          >
+            {agentDetailsExpanded ? "Hide agent runs" : "Show agent runs"}
+          </button>
+        </div>
+        {reviewDetailsExpanded ? (
+          <div className="field-grid">
+            <label className="field">
+              <span className="field-label">Review notes</span>
+              <textarea
+                className="field-input field-textarea ai-readonly narrative-readonly-compact"
+                readOnly
+                value={response.reviewNotes.join("\n")}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Synthesis notes</span>
+              <textarea
+                className="field-input field-textarea ai-readonly narrative-readonly-compact"
+                readOnly
+                value={response.synthesisNotes.join("\n")}
+              />
+            </label>
+          </div>
+        ) : null}
+        {agentDetailsExpanded ? (
+          <div className="agent-run-list">
+            {response.agentRuns.map((agentRun) => (
+              <article key={agentRun.agentId} className="agent-run-card">
+                <div className="agent-run-header">
+                  <strong>{agentRun.label}</strong>
+                  <div className="row-badges">
+                    <Badge tone={agentRun.status === "completed" ? "success" : "danger"}>{agentRun.status}</Badge>
+                    <Badge tone={agentRun.riskLevel === "high" ? "danger" : "muted"}>{agentRun.riskLevel}</Badge>
+                  </div>
+                </div>
+                <p className="agent-run-focus">{agentRun.focus}</p>
+                <label className="field">
+                  <span className="field-label">Agent summary</span>
+                  <textarea
+                    className="field-input field-textarea ai-readonly narrative-readonly-compact"
+                    readOnly
+                    value={agentRun.summary}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field-label">Agent notes</span>
+                  <textarea
+                    className="field-input field-textarea ai-readonly narrative-readonly-compact"
+                    readOnly
+                    value={agentRun.notes.join("\n")}
+                  />
+                </label>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </>
+    ) : (
+      <div className="empty-state">
+        <Badge tone="muted">Waiting</Badge>
+        <p>Run an AI action to review the generated draft here.</p>
+      </div>
+    ),
+  });
+
+  workbenchPanels.set("manual_editor", {
+    label: "Authoring",
+    title: selectedDocument ? "Manual editor" : "Editor",
+    canHide: true,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone={selectedDocument?.dirty ? "warning" : "muted"}>
+          {selectedDocument?.dirty ? "dirty" : "clean"}
+        </Badge>
+        <Badge tone="muted">{selectedDocument?.markdown.length ?? 0} chars</Badge>
+      </div>
+    ),
+    content: selectedDocument ? (
+      <div className="narrative-editor-grid">
+        <label className="field">
+          <span className="field-label">Markdown editor</span>
+          <textarea
+            ref={editorRef}
+            className="field-input field-textarea field-code narrative-editor"
+            value={selectedDocument.markdown}
+            onChange={(event) =>
+              updateSelectedDocument((document) => ({
+                ...document,
+                markdown: event.target.value,
+              }))
+            }
+            onSelect={updateSelectionFromEditor}
+            onKeyUp={updateSelectionFromEditor}
+            onMouseUp={updateSelectionFromEditor}
+          />
+        </label>
+        <div className="field">
+          <span className="field-label">Preview</span>
+          <pre className="readonly-box narrative-preview">{selectedDocument.markdown || "(empty document)"}</pre>
+        </div>
+      </div>
+    ) : (
+      <div className="empty-state">
+        <Badge tone="muted">No document</Badge>
+        <p>Select a narrative document to edit its markdown and preview.</p>
+      </div>
+    ),
+  });
+
+  workbenchPanels.set("metadata", {
+    label: "Metadata",
+    title: "Document metadata",
+    canHide: true,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone="muted">tags: {selectedDocument?.meta.tags.length ?? 0}</Badge>
+        <Badge tone="muted">related: {selectedDocument?.meta.relatedDocs.length ?? 0}</Badge>
+      </div>
+    ),
+    content: selectedDocument ? (
+      <>
+        <div className="form-grid">
+          <SelectField
+            label="Doc type"
+            value={selectedDocument.meta.docType}
+            onChange={(value) =>
+              updateSelectedDocument((document) => ({
+                ...document,
+                meta: { ...document.meta, docType: value as NarrativeDocType },
+              }))
+            }
+            allowBlank={false}
+            options={workspace.docTypes}
+          />
+          <TextField
+            label="Slug"
+            value={selectedDocument.meta.slug}
+            onChange={(value) =>
+              updateSelectedDocument((document) => ({
+                ...document,
+                meta: { ...document.meta, slug: value.trim() },
+              }))
+            }
+          />
+          <TextField
+            label="Title"
+            value={selectedDocument.meta.title}
+            onChange={(value) =>
+              updateSelectedDocument((document) => ({
+                ...document,
+                meta: { ...document.meta, title: value },
+              }))
+            }
+          />
+          <TextField
+            label="Status"
+            value={selectedDocument.meta.status}
+            onChange={(value) =>
+              updateSelectedDocument((document) => ({
+                ...document,
+                meta: { ...document.meta, status: value },
+              }))
+            }
+          />
+        </div>
+        <TokenListField
+          label="Tags"
+          values={selectedDocument.meta.tags}
+          onChange={(values) =>
+            updateSelectedDocument((document) => ({
+              ...document,
+              meta: { ...document.meta, tags: values },
+            }))
+          }
+        />
+        <TokenListField
+          label="Related docs"
+          values={selectedDocument.meta.relatedDocs}
+          onChange={(values) =>
+            updateSelectedDocument((document) => ({
+              ...document,
+              meta: { ...document.meta, relatedDocs: values },
+            }))
+          }
+        />
+        <TokenListField
+          label="Source refs"
+          values={selectedDocument.meta.sourceRefs}
+          onChange={(values) =>
+            updateSelectedDocument((document) => ({
+              ...document,
+              meta: { ...document.meta, sourceRefs: values },
+            }))
+          }
+        />
+      </>
+    ) : (
+      <div className="empty-state">
+        <Badge tone="muted">Idle</Badge>
+        <p>Choose a narrative document before editing metadata.</p>
+      </div>
+    ),
+  });
+
+  workbenchPanels.set("workspace_context", {
+    label: "Workspace",
+    title: "Workspace / Project Context",
+    canHide: true,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone={hasActiveWorkspace ? "accent" : "muted"}>
+          workspace: {workspace.workspaceName || "none"}
+        </Badge>
+        <Badge tone={workspace.connectedProjectRoot ? "success" : "muted"}>
+          project: {workspace.connectedProjectRoot ? "connected" : "none"}
+        </Badge>
+      </div>
+    ),
+    content: (
+      <>
+        <TextField
+          label="Workspace path"
+          value={workspaceInput}
+          onChange={setWorkspaceInput}
+          placeholder="D:/Writing/MyNarrativeLab"
+        />
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="toolbar-button toolbar-accent"
+            onClick={() => void handleWorkspaceSubmit()}
+            disabled={busy || !canPersist || !workspaceInput.trim()}
+          >
+            打开/创建工作区
+          </button>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => {
+              setWorkspaceInput(appSettings.lastWorkspace ?? "");
+            }}
+            disabled={busy || !appSettings.lastWorkspace}
+          >
+            恢复上次路径
+          </button>
+        </div>
+        <TextField
+          label="Connected project root"
+          value={projectInput}
+          onChange={setProjectInput}
+          placeholder="Optional game project root"
+        />
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => void handleProjectSubmit(projectInput)}
+            disabled={busy || !canPersist}
+          >
+            连接项目
+          </button>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => {
+              setProjectInput("");
+              void handleProjectSubmit(null);
+            }}
+            disabled={busy || !canPersist || !workspace.connectedProjectRoot}
+          >
+            断开项目
+          </button>
+        </div>
+        <label className="field">
+          <span className="field-label">Context status</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={workspace.projectContextStatus}
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Recent workspaces</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={appSettings.recentWorkspaces.join("\n")}
+          />
+        </label>
+        <div className="toolbar-actions">
+          {appSettings.recentWorkspaces.slice(0, 3).map((path) => (
+            <button
+              key={path}
+              type="button"
+              className="toolbar-button"
+              onClick={() => {
+                setWorkspaceInput(path);
+                void onOpenWorkspace(path).catch((error) => {
+                  onStatusChange(`Failed to open workspace: ${String(error)}`);
+                });
+              }}
+              disabled={busy || !canPersist}
+            >
+              {path.split("/")[path.split("/").length - 1] || path}
+            </button>
+          ))}
+        </div>
+        <label className="field">
+          <span className="field-label">Recent project roots</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={appSettings.recentProjectRoots.join("\n")}
+          />
+        </label>
+        <div className="toolbar-actions">
+          {appSettings.recentProjectRoots.slice(0, 3).map((path) => (
+            <button
+              key={path}
+              type="button"
+              className="toolbar-button"
+              onClick={() => {
+                setProjectInput(path);
+                void onConnectProject(path).catch((error) => {
+                  onStatusChange(`Failed to update project context: ${String(error)}`);
+                });
+              }}
+              disabled={busy || !canPersist}
+            >
+              {path.split("/")[path.split("/").length - 1] || path}
+            </button>
+          ))}
+        </div>
+      </>
+    ),
+  });
+
+  workbenchPanels.set("sync_tools", {
+    label: "Sync",
+    title: "Cloud sync / mobile handoff",
+    canHide: true,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone="accent">executor: desktop_local</Badge>
+        <Badge tone={syncResult?.conflictCount ? "warning" : "muted"}>
+          conflicts: {syncResult?.conflictCount ?? 0}
+        </Badge>
+      </div>
+    ),
+    content: (
+      <>
+        <TextField
+          label="Server URL"
+          value={syncSettings?.serverUrl ?? ""}
+          onChange={(value) =>
+            setSyncSettings((current) => ({
+              ...(current ?? {
+                serverUrl: "",
+                authToken: "",
+                workspaceId: "",
+                deviceLabel: "desktop-local",
+                lastSyncAt: null,
+                lastSyncStatus: "",
+              }),
+              serverUrl: value,
+            }))
+          }
+          placeholder="http://127.0.0.1:4852"
+        />
+        <TextField
+          label="Auth token"
+          value={syncSettings?.authToken ?? ""}
+          onChange={(value) =>
+            setSyncSettings((current) => ({
+              ...(current ?? {
+                serverUrl: "",
+                authToken: "",
+                workspaceId: "",
+                deviceLabel: "desktop-local",
+                lastSyncAt: null,
+                lastSyncStatus: "",
+              }),
+              authToken: value,
+            }))
+          }
+        />
+        <TextField
+          label="Cloud workspace ID"
+          value={syncSettings?.workspaceId ?? ""}
+          onChange={(value) =>
+            setSyncSettings((current) => ({
+              ...(current ?? {
+                serverUrl: "",
+                authToken: "",
+                workspaceId: "",
+                deviceLabel: "desktop-local",
+                lastSyncAt: null,
+                lastSyncStatus: "",
+              }),
+              workspaceId: value,
+            }))
+          }
+          placeholder="workspace-123"
+        />
+        <TextField
+          label="Device label"
+          value={syncSettings?.deviceLabel ?? "desktop-local"}
+          onChange={(value) =>
+            setSyncSettings((current) => ({
+              ...(current ?? {
+                serverUrl: "",
+                authToken: "",
+                workspaceId: "",
+                deviceLabel: "desktop-local",
+                lastSyncAt: null,
+                lastSyncStatus: "",
+              }),
+              deviceLabel: value,
+            }))
+          }
+        />
+        <div className="toolbar-actions">
+          <button type="button" className="toolbar-button" onClick={() => void refreshCloudWorkspaces()} disabled={syncBusy || !canPersist}>
+            刷新云工作区
+          </button>
+          <button type="button" className="toolbar-button toolbar-accent" onClick={() => void saveSyncSettings()} disabled={syncBusy || !canPersist}>
+            保存同步设置
+          </button>
+        </div>
+        <TextField
+          label="Create cloud workspace"
+          value={cloudWorkspaceName}
+          onChange={setCloudWorkspaceName}
+          placeholder="My Narrative Cloud"
+        />
+        <div className="toolbar-actions">
+          <button type="button" className="toolbar-button" onClick={() => void createCloudWorkspace()} disabled={syncBusy || !cloudWorkspaceName.trim()}>
+            创建云工作区
+          </button>
+          <button type="button" className="toolbar-button toolbar-accent" onClick={() => void syncWorkspaceNow()} disabled={syncBusy || !hasActiveWorkspace || !canPersist}>
+            Sync now
+          </button>
+        </div>
+        <div className="toolbar-actions">
+          <button type="button" className="toolbar-button" onClick={() => void exportProjectSnapshot()} disabled={syncBusy || !hasActiveWorkspace || !canPersist}>
+            导出项目快照
+          </button>
+          <button type="button" className="toolbar-button" onClick={() => void uploadProjectSnapshot()} disabled={syncBusy || !hasActiveWorkspace || !canPersist}>
+            上传项目快照
+          </button>
+        </div>
+        <label className="field">
+          <span className="field-label">Sync status</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={
+              syncStatus ||
+              syncSettings?.lastSyncStatus ||
+              "Cloud sync keeps shared copies in sync while desktop editing remains local-first."
+            }
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Known cloud workspaces</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={cloudWorkspaces.map((entry) => `${entry.name} (${entry.workspaceId})`).join("\n")}
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Pending operations</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={
+              syncResult
+                ? syncResult.pendingOperations
+                    .map((operation) => `${operation.kind} ${operation.slug} @${operation.baseRevision}`)
+                    .join("\n")
+                : ""
+            }
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Snapshot summary</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={
+              snapshotUpload?.snapshot.summary ??
+              snapshotExport?.snapshot.summary ??
+              syncResult?.projectSnapshot?.summary ??
+              ""
+            }
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Snapshot export path</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={snapshotUpload?.exportPath ?? snapshotExport?.exportPath ?? ""}
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Conflict notes</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={
+              syncResult?.conflicts
+                .map((conflict) => `${conflict.slug} -> ${conflict.conflictDocSlug}: ${conflict.message}`)
+                .join("\n") ?? ""
+            }
+          />
+        </label>
+      </>
+    ),
+  });
+
+  workbenchPanels.set("provider_settings", {
+    label: "AI",
+    title: "Provider settings",
+    canHide: true,
+    summary: settingsStatus ? <Badge tone="accent">{settingsStatus}</Badge> : undefined,
+    content: (
+      <>
+        <TextField
+          label="Base URL"
+          value={settings?.baseUrl ?? ""}
+          onChange={(value) =>
+            setSettings((current) => ({
+              ...(current ?? {
+                baseUrl: "",
+                model: "",
+                apiKey: "",
+                timeoutSec: 45,
+                maxContextRecords: 24,
+              }),
+              baseUrl: value,
+            }))
+          }
+        />
+        <TextField
+          label="Model"
+          value={settings?.model ?? ""}
+          onChange={(value) =>
+            setSettings((current) => ({
+              ...(current ?? {
+                baseUrl: "",
+                model: "",
+                apiKey: "",
+                timeoutSec: 45,
+                maxContextRecords: 24,
+              }),
+              model: value,
+            }))
+          }
+        />
+        <TextField
+          label="API Key"
+          value={settings?.apiKey ?? ""}
+          onChange={(value) =>
+            setSettings((current) => ({
+              ...(current ?? {
+                baseUrl: "",
+                model: "",
+                apiKey: "",
+                timeoutSec: 45,
+                maxContextRecords: 24,
+              }),
+              apiKey: value,
+            }))
+          }
+        />
+        <div className="toolbar-actions">
+          <button type="button" className="toolbar-button" onClick={() => void testSettings()} disabled={settingsBusy}>
+            Test connection
+          </button>
+          <button type="button" className="toolbar-button toolbar-accent" onClick={() => void saveSettings()} disabled={settingsBusy}>
+            Save settings
+          </button>
+        </div>
+        {settingsStatus ? <p className="field-hint">{settingsStatus}</p> : null}
+      </>
+    ),
+  });
+
+  workbenchPanels.set("structuring_bundle", {
+    label: "Stage 2",
+    title: "Structuring bundle",
+    canHide: true,
+    summary: (
+      <div className="toolbar-summary">
+        <Badge tone="muted">selected: {bundleSelection.length || (selectedDocument ? 1 : 0)}</Badge>
+        <Badge tone="muted">{bundleResult?.documentSlugs.length ?? 0} bundled</Badge>
+      </div>
+    ),
+    content: (
+      <>
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="toolbar-button toolbar-accent"
+            onClick={() => void prepareBundle()}
+            disabled={(!selectedDocument && bundleSelection.length === 0) || !hasActiveWorkspace}
+          >
+            Prepare structuring bundle
+          </button>
+        </div>
+        <label className="field">
+          <span className="field-label">Bundle summary</span>
+          <textarea className="field-input field-textarea ai-readonly narrative-readonly-compact" readOnly value={bundleResult?.summary ?? ""} />
+        </label>
+        <label className="field">
+          <span className="field-label">Export path</span>
+          <textarea className="field-input field-textarea ai-readonly narrative-readonly-compact" readOnly value={bundleResult?.exportPath ?? ""} />
+        </label>
+        <label className="field">
+          <span className="field-label">Generated at</span>
+          <textarea className="field-input field-textarea ai-readonly narrative-readonly-compact" readOnly value={bundleResult?.generatedAt ?? ""} />
+        </label>
+        <label className="field">
+          <span className="field-label">Suggested targets</span>
+          <textarea
+            className="field-input field-textarea ai-readonly narrative-readonly-compact"
+            readOnly
+            value={bundleResult ? bundleResult.suggestedTargets.join("\n") : ""}
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Combined markdown</span>
+          <textarea className="field-input field-textarea field-code ai-readonly" readOnly value={bundleResult?.combinedMarkdown ?? ""} />
+        </label>
+      </>
+    ),
+  });
+
+  workbenchPanels.set("prompt_debug", {
+    label: "Debug",
+    title: "Prompt debug",
+    canHide: true,
+    compact: true,
+    summary: response?.promptDebug ? <Badge tone="accent">available</Badge> : <Badge tone="muted">empty</Badge>,
+    content: (
+      <textarea
+        className="field-input field-textarea field-code ai-readonly"
+        readOnly
+        value={JSON.stringify(response?.promptDebug ?? {}, null, 2)}
+      />
+    ),
+  });
+
+  return (
+    <div className="workspace narrative-workspace">
+      <Toolbar actions={actions}>
+        <div className="toolbar-summary">
+          <Badge tone={hasActiveWorkspace ? "accent" : "warning"}>
+            {hasActiveWorkspace ? "workspace ready" : "workspace missing"}
+          </Badge>
+          <Badge tone="accent">{documents.length} docs</Badge>
+          <Badge tone={dirtyCount > 0 ? "warning" : "muted"}>{dirtyCount} dirty</Badge>
+          <Badge tone={compactLayout ? "warning" : "success"}>{compactLayout ? "stacked mode" : "drag layout"}</Badge>
+          <Badge tone={response?.providerError ? "danger" : response ? "success" : "muted"}>
+            {response?.providerError ? "review blocked" : response ? "draft ready" : "no draft"}
+          </Badge>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => {
+              revealPanel("provider_settings");
+              onStatusChange("Opened AI provider settings.");
+            }}
+          >
+            AI settings
+          </button>
+        </div>
+      </Toolbar>
+
+      <div className="narrative-shell">
+        <aside className="column narrative-index-column">
           <PanelSection
             label="Narrative Index"
             title={workspace.workspaceName ? `Narrative Lab · ${workspace.workspaceName}` : "Narrative Lab"}
+            summary={
+              <div className="toolbar-summary">
+                <Badge tone={hasActiveWorkspace ? "accent" : "muted"}>{hasActiveWorkspace ? "workspace ready" : "workspace missing"}</Badge>
+                <Badge tone="muted">{filteredDocuments.length} visible</Badge>
+              </div>
+            }
           >
-            <TextField
-              label="Search"
-              value={searchText}
-              onChange={setSearchText}
-              placeholder="Filter by slug, title, or type"
-            />
+            <TextField label="Search" value={searchText} onChange={setSearchText} placeholder="Filter by slug, title, or type" />
             <SelectField
               label="Doc type"
               value={filterDocType}
@@ -732,7 +1948,7 @@ export function NarrativeWorkspace({
               options={workspace.docTypes}
               hint={hasActiveWorkspace ? undefined : "Open a workspace to browse narrative documents."}
             />
-            <div className="item-list">
+            <div className="item-list narrative-item-list">
               {!hasActiveWorkspace ? (
                 <div className="empty-state">
                   <Badge tone="muted">Workspace</Badge>
@@ -783,871 +1999,60 @@ export function NarrativeWorkspace({
           </PanelSection>
         </aside>
 
-        <main className="column column-main">
-          {selectedDocument ? (
-            <>
-              <PanelSection label="Document" title={selectedDocument.meta.title}>
-                <div className="stats-grid narrative-stats-grid">
-                  <article className="stat-card">
-                    <span>Type</span>
-                    <strong>{docTypeLabel(selectedDocument.meta.docType)}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Slug</span>
-                    <strong>{selectedDocument.meta.slug}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Status</span>
-                    <strong>{selectedDocument.meta.status || "draft"}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Selection</span>
-                    <strong>{selectionText ? `${selectionText.length} chars` : "none"}</strong>
-                  </article>
-                </div>
-
-                <div className="narrative-editor-grid">
-                  <label className="field">
-                    <span className="field-label">Markdown editor</span>
-                    <textarea
-                      ref={editorRef}
-                      className="field-input field-textarea field-code narrative-editor"
-                      value={selectedDocument.markdown}
-                      onChange={(event) =>
-                        updateSelectedDocument((document) => ({
-                          ...document,
-                          markdown: event.target.value,
-                        }))
-                      }
-                      onSelect={updateSelectionFromEditor}
-                      onKeyUp={updateSelectionFromEditor}
-                      onMouseUp={updateSelectionFromEditor}
-                    />
-                  </label>
-
-                  <div className="field">
-                    <span className="field-label">Preview</span>
-                    <pre className="readonly-box narrative-preview">
-                      {selectedDocument.markdown || "(empty document)"}
-                    </pre>
-                  </div>
-                </div>
-              </PanelSection>
-
-              <PanelSection label="Metadata" title="Document metadata">
-                <div className="form-grid">
-                  <SelectField
-                    label="Doc type"
-                    value={selectedDocument.meta.docType}
-                    onChange={(value) =>
-                      updateSelectedDocument((document) => ({
-                        ...document,
-                        meta: { ...document.meta, docType: value as NarrativeDocType },
-                      }))
-                    }
-                    allowBlank={false}
-                    options={workspace.docTypes}
-                  />
-                  <TextField
-                    label="Slug"
-                    value={selectedDocument.meta.slug}
-                    onChange={(value) =>
-                      updateSelectedDocument((document) => ({
-                        ...document,
-                        meta: { ...document.meta, slug: value.trim() },
-                      }))
-                    }
-                  />
-                  <TextField
-                    label="Title"
-                    value={selectedDocument.meta.title}
-                    onChange={(value) =>
-                      updateSelectedDocument((document) => ({
-                        ...document,
-                        meta: { ...document.meta, title: value },
-                      }))
-                    }
-                  />
-                  <TextField
-                    label="Status"
-                    value={selectedDocument.meta.status}
-                    onChange={(value) =>
-                      updateSelectedDocument((document) => ({
-                        ...document,
-                        meta: { ...document.meta, status: value },
-                      }))
-                    }
-                  />
-                </div>
-                <TokenListField
-                  label="Tags"
-                  values={selectedDocument.meta.tags}
-                  onChange={(values) =>
-                    updateSelectedDocument((document) => ({
-                      ...document,
-                      meta: { ...document.meta, tags: values },
-                    }))
-                  }
-                />
-                <TokenListField
-                  label="Related docs"
-                  values={selectedDocument.meta.relatedDocs}
-                  onChange={(values) =>
-                    updateSelectedDocument((document) => ({
-                      ...document,
-                      meta: { ...document.meta, relatedDocs: values },
-                    }))
-                  }
-                />
-                <TokenListField
-                  label="Source refs"
-                  values={selectedDocument.meta.sourceRefs}
-                  onChange={(values) =>
-                    updateSelectedDocument((document) => ({
-                      ...document,
-                      meta: { ...document.meta, sourceRefs: values },
-                    }))
-                  }
-                />
-              </PanelSection>
-            </>
-          ) : (
-            <PanelSection
-              label="Selection"
-              title={hasActiveWorkspace ? "No narrative document selected" : "No workspace selected"}
-            >
-              <div className="empty-state">
-                <Badge tone="muted">Idle</Badge>
-                <p>
-                  {hasActiveWorkspace
-                    ? "Create a narrative draft from the toolbar to start authoring."
-                    : "Enter a workspace path on the right, then open it to begin authoring."}
-                </p>
-              </div>
-            </PanelSection>
-          )}
-        </main>
-
-        <aside className="column">
-          <PanelSection label="Workspace" title="Workspace / Project Context">
-            <TextField
-              label="Workspace path"
-              value={workspaceInput}
-              onChange={setWorkspaceInput}
-              placeholder="D:/Writing/MyNarrativeLab"
-            />
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button toolbar-accent"
-                onClick={() => {
-                  void handleWorkspaceSubmit();
-                }}
-                disabled={busy || !canPersist || !workspaceInput.trim()}
-              >
-                打开/创建工作区
-              </button>
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  setWorkspaceInput(appSettings.lastWorkspace ?? "");
-                }}
-                disabled={busy || !appSettings.lastWorkspace}
-              >
-                恢复上次路径
-              </button>
-            </div>
-            <TextField
-              label="Connected project root"
-              value={projectInput}
-              onChange={setProjectInput}
-              placeholder="Optional game project root"
-            />
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  void handleProjectSubmit(projectInput);
-                }}
-                disabled={busy || !canPersist}
-              >
-                连接项目
-              </button>
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  setProjectInput("");
-                  void handleProjectSubmit(null);
-                }}
-                disabled={busy || !canPersist || !workspace.connectedProjectRoot}
-              >
-                断开项目
-              </button>
-            </div>
-            <div className="toolbar-summary">
-              <Badge tone={hasActiveWorkspace ? "accent" : "muted"}>
-                workspace: {workspace.workspaceName || "none"}
-              </Badge>
-              <Badge tone={workspace.connectedProjectRoot ? "success" : "muted"}>
-                project: {workspace.connectedProjectRoot ? "connected" : "none"}
-              </Badge>
-            </div>
-            <label className="field">
-              <span className="field-label">Context status</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={workspace.projectContextStatus}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Recent workspaces</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={appSettings.recentWorkspaces.join("\n")}
-              />
-            </label>
-            <div className="toolbar-actions">
-              {appSettings.recentWorkspaces.slice(0, 3).map((path) => (
-                <button
-                  key={path}
-                  type="button"
-                  className="toolbar-button"
-                  onClick={() => {
-                    setWorkspaceInput(path);
-                    void onOpenWorkspace(path).catch((error) => {
-                      onStatusChange(`Failed to open workspace: ${String(error)}`);
-                    });
-                  }}
-                  disabled={busy || !canPersist}
-                >
-                  {path.split("/")[path.split("/").length - 1] || path}
-                </button>
-              ))}
-            </div>
-            <label className="field">
-              <span className="field-label">Recent project roots</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={appSettings.recentProjectRoots.join("\n")}
-              />
-            </label>
-            <div className="toolbar-actions">
-              {appSettings.recentProjectRoots.slice(0, 3).map((path) => (
-                <button
-                  key={path}
-                  type="button"
-                  className="toolbar-button"
-                  onClick={() => {
-                    setProjectInput(path);
-                    void onConnectProject(path).catch((error) => {
-                      onStatusChange(`Failed to update project context: ${String(error)}`);
-                    });
-                  }}
-                  disabled={busy || !canPersist}
-                >
-                  {path.split("/")[path.split("/").length - 1] || path}
-                </button>
-              ))}
-            </div>
-          </PanelSection>
-
-          <PanelSection label="Sync" title="Cloud sync / mobile handoff">
-            <TextField
-              label="Server URL"
-              value={syncSettings?.serverUrl ?? ""}
-              onChange={(value) =>
-                setSyncSettings((current) => ({
-                  ...(current ?? {
-                    serverUrl: "",
-                    authToken: "",
-                    workspaceId: "",
-                    deviceLabel: "desktop-local",
-                    lastSyncAt: null,
-                    lastSyncStatus: "",
-                  }),
-                  serverUrl: value,
-                }))
+        <section className="narrative-workbench-column">
+          <ResponsiveGridLayout
+            className="narrative-workbench"
+            layouts={gridLayouts}
+            breakpoints={{ lg: 1280, md: 0 }}
+            cols={{ lg: 12, md: 12 }}
+            rowHeight={28}
+            margin={[16, 16]}
+            containerPadding={[0, 0]}
+            onBreakpointChange={(breakpoint) => {
+              setCurrentBreakpoint((breakpoint === "lg" ? "lg" : "md") as NarrativeBreakpoint);
+            }}
+            isDraggable={!compactLayout}
+            isResizable={!compactLayout}
+            draggableHandle=".panel-drag-handle"
+            draggableCancel="input, textarea, select, option, pre, label, .field-input, .readonly-box"
+            onDragStop={(nextLayout) => updateLayoutFromGrid(nextLayout)}
+            onResizeStop={(nextLayout) => updateLayoutFromGrid(nextLayout)}
+            compactType="vertical"
+            preventCollision={false}
+            useCSSTransforms
+          >
+            {visibleLayoutItems.map((item) => {
+              const panel = workbenchPanels.get(item.panelId);
+              if (!panel) {
+                return null;
               }
-              placeholder="http://127.0.0.1:4852"
-            />
-            <TextField
-              label="Auth token"
-              value={syncSettings?.authToken ?? ""}
-              onChange={(value) =>
-                setSyncSettings((current) => ({
-                  ...(current ?? {
-                    serverUrl: "",
-                    authToken: "",
-                    workspaceId: "",
-                    deviceLabel: "desktop-local",
-                    lastSyncAt: null,
-                    lastSyncStatus: "",
-                  }),
-                  authToken: value,
-                }))
-              }
-            />
-            <TextField
-              label="Cloud workspace ID"
-              value={syncSettings?.workspaceId ?? ""}
-              onChange={(value) =>
-                setSyncSettings((current) => ({
-                  ...(current ?? {
-                    serverUrl: "",
-                    authToken: "",
-                    workspaceId: "",
-                    deviceLabel: "desktop-local",
-                    lastSyncAt: null,
-                    lastSyncStatus: "",
-                  }),
-                  workspaceId: value,
-                }))
-              }
-              placeholder="workspace-123"
-            />
-            <TextField
-              label="Device label"
-              value={syncSettings?.deviceLabel ?? "desktop-local"}
-              onChange={(value) =>
-                setSyncSettings((current) => ({
-                  ...(current ?? {
-                    serverUrl: "",
-                    authToken: "",
-                    workspaceId: "",
-                    deviceLabel: "desktop-local",
-                    lastSyncAt: null,
-                    lastSyncStatus: "",
-                  }),
-                  deviceLabel: value,
-                }))
-              }
-            />
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  void refreshCloudWorkspaces();
-                }}
-                disabled={syncBusy || !canPersist}
-              >
-                刷新云工作区
-              </button>
-              <button
-                type="button"
-                className="toolbar-button toolbar-accent"
-                onClick={() => {
-                  void saveSyncSettings();
-                }}
-                disabled={syncBusy || !canPersist}
-              >
-                保存同步设置
-              </button>
-            </div>
-            <TextField
-              label="Create cloud workspace"
-              value={cloudWorkspaceName}
-              onChange={setCloudWorkspaceName}
-              placeholder="My Narrative Cloud"
-            />
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  void createCloudWorkspace();
-                }}
-                disabled={syncBusy || !cloudWorkspaceName.trim()}
-              >
-                创建云工作区
-              </button>
-              <button
-                type="button"
-                className="toolbar-button toolbar-accent"
-                onClick={() => {
-                  void syncWorkspaceNow();
-                }}
-                disabled={syncBusy || !hasActiveWorkspace || !canPersist}
-              >
-                Sync now
-              </button>
-            </div>
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  void exportProjectSnapshot();
-                }}
-                disabled={syncBusy || !hasActiveWorkspace || !canPersist}
-              >
-                导出项目快照
-              </button>
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  void uploadProjectSnapshot();
-                }}
-                disabled={syncBusy || !hasActiveWorkspace || !canPersist}
-              >
-                上传项目快照
-              </button>
-            </div>
-            <div className="toolbar-summary">
-              <Badge tone="accent">executor: desktop_local</Badge>
-              <Badge tone={syncResult?.conflictCount ? "warning" : "muted"}>
-                conflicts: {syncResult?.conflictCount ?? 0}
-              </Badge>
-            </div>
-            <label className="field">
-              <span className="field-label">Sync status</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={
-                  syncStatus ||
-                  syncSettings?.lastSyncStatus ||
-                  "Cloud sync keeps shared copies in sync while desktop editing remains local-first."
-                }
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Known cloud workspaces</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={cloudWorkspaces.map((entry) => `${entry.name} (${entry.workspaceId})`).join("\n")}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Pending operations</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={
-                  syncResult
-                    ? syncResult.pendingOperations
-                        .map((operation) => `${operation.kind} ${operation.slug} @${operation.baseRevision}`)
-                        .join("\n")
-                    : ""
-                }
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Snapshot summary</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={
-                  snapshotUpload?.snapshot.summary ??
-                  snapshotExport?.snapshot.summary ??
-                  syncResult?.projectSnapshot?.summary ??
-                  ""
-                }
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Snapshot export path</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={snapshotUpload?.exportPath ?? snapshotExport?.exportPath ?? ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Conflict notes</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={
-                  syncResult?.conflicts
-                    .map((conflict) => `${conflict.slug} -> ${conflict.conflictDocSlug}: ${conflict.message}`)
-                    .join("\n") ?? ""
-                }
-              />
-            </label>
-          </PanelSection>
-
-          <PanelSection label="AI" title="Narrative operations">
-            <div className="narrative-action-grid">
-              {ACTION_OPTIONS.map((option) => {
-                const disabled =
-                  busy ||
-                  !selectedDocument ||
-                  !hasActiveWorkspace ||
-                  ((option.value === "rewrite_selection" ||
-                    option.value === "expand_selection" ||
-                    option.value === "insert_after_selection") &&
-                    !hasSelection);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`toolbar-button ${aiAction === option.value ? "toolbar-accent" : ""}`}
-                    disabled={disabled}
-                    onClick={() => setAiAction(option.value)}
+              return (
+                <div key={item.panelId} className="narrative-grid-item">
+                  <PanelSection
+                    label={panel.label}
+                    title={panel.title}
+                    compact={panel.compact}
+                    collapsible
+                    collapsed={collapsedPanels.includes(item.panelId)}
+                    onToggleCollapsed={() => togglePanelCollapsed(item.panelId)}
+                    summary={panel.summary}
+                    dragHandle={!compactLayout}
+                    className="narrative-panel"
+                    headerActions={
+                      panel.canHide ? (
+                        <button type="button" className="toolbar-button" onClick={() => setPanelHidden(item.panelId, true)}>
+                          Hide
+                        </button>
+                      ) : undefined
+                    }
                   >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-            <TextareaField
-              label="主提示词"
-              value={userPrompt}
-              onChange={setUserPrompt}
-              placeholder="描述这次想生成什么内容。"
-            />
-            <TextareaField
-              label="修改意见 / 编辑指令"
-              value={editorInstruction}
-              onChange={setEditorInstruction}
-              placeholder="说明你希望 AI 如何调整当前文稿或选区。"
-            />
-            {aiAction === "derive_new_doc" ? (
-              <SelectField
-                label="派生目标类型"
-                value={derivedTargetDocType}
-                onChange={(value) => setDerivedTargetDocType(value as NarrativeDocType)}
-                allowBlank={false}
-                options={workspace.docTypes}
-              />
-            ) : null}
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button toolbar-accent"
-                onClick={() => {
-                  void runGeneration();
-                }}
-                disabled={busy || !selectedDocument || !hasActiveWorkspace}
-              >
-                生成草稿
-              </button>
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  setResponse(null);
-                  setLastRequest(null);
-                }}
-                disabled={busy}
-              >
-                丢弃草稿
-              </button>
-            </div>
-          </PanelSection>
-
-          <PanelSection label="AI" title="Selection context">
-            <div className="toolbar-summary">
-              <Badge tone={hasSelection ? "accent" : "muted"}>
-                range: {selectionRange ? `${selectionRange.start}-${selectionRange.end}` : "none"}
-              </Badge>
-              <Badge tone={selectedDocument ? "muted" : "danger"}>
-                target: {selectedDocument?.meta.slug ?? "none"}
-              </Badge>
-            </div>
-            <label className="field">
-              <span className="field-label">Selected text</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={selectionText}
-              />
-            </label>
-          </PanelSection>
-
-          <PanelSection label="Review" title="AI draft review">
-            <div className="toolbar-summary">
-              <Badge tone="accent">engine: {response?.engineMode ?? "n/a"}</Badge>
-              <Badge tone="muted">
-                agents: {response?.agentRuns.length ?? 0}
-              </Badge>
-            </div>
-            <label className="field">
-              <span className="field-label">Summary</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={response?.summary ?? response?.providerError ?? ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Diff preview</span>
-              <textarea
-                className="field-input field-textarea field-code ai-readonly"
-                readOnly
-                value={narrativeDiffSummary(
-                  selectedDocument?.markdown ?? "",
-                  response,
-                  selectionText,
-                )}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Draft markdown</span>
-              <textarea
-                className="field-input field-textarea field-code ai-readonly"
-                readOnly
-                value={response?.draftMarkdown ?? ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Review notes</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={response ? response.reviewNotes.join("\n") : ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Synthesis notes</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={response ? response.synthesisNotes.join("\n") : ""}
-              />
-            </label>
-            <div className="agent-run-list">
-              {(response?.agentRuns ?? []).map((agentRun) => (
-                <article key={agentRun.agentId} className="agent-run-card">
-                  <div className="agent-run-header">
-                    <strong>{agentRun.label}</strong>
-                    <div className="row-badges">
-                      <Badge tone={agentRun.status === "completed" ? "success" : "danger"}>
-                        {agentRun.status}
-                      </Badge>
-                      <Badge tone={agentRun.riskLevel === "high" ? "danger" : "muted"}>
-                        {agentRun.riskLevel}
-                      </Badge>
-                    </div>
-                  </div>
-                  <p className="agent-run-focus">{agentRun.focus}</p>
-                  <label className="field">
-                    <span className="field-label">Agent summary</span>
-                    <textarea
-                      className="field-input field-textarea ai-readonly"
-                      readOnly
-                      value={agentRun.summary}
-                    />
-                  </label>
-                  <label className="field">
-                    <span className="field-label">Agent notes</span>
-                    <textarea
-                      className="field-input field-textarea ai-readonly"
-                      readOnly
-                      value={agentRun.notes.join("\n")}
-                    />
-                  </label>
-                  <label className="field">
-                    <span className="field-label">Agent draft</span>
-                    <textarea
-                      className="field-input field-textarea field-code ai-readonly"
-                      readOnly
-                      value={agentRun.draftMarkdown || agentRun.providerError}
-                    />
-                  </label>
-                </article>
-              ))}
-            </div>
-            <div className="toolbar-summary">
-              <Badge tone={response?.riskLevel === "high" ? "danger" : "muted"}>
-                risk: {response?.riskLevel ?? "n/a"}
-              </Badge>
-              <Badge tone="muted">scope: {response?.changeScope ?? "n/a"}</Badge>
-            </div>
-            <div className="toolbar-actions">
-              {response?.changeScope === "document" ? (
-                <button
-                  type="button"
-                  className="toolbar-button toolbar-accent"
-                  onClick={() => {
-                    void applyDraft("document");
-                  }}
-                >
-                  替换整篇
-                </button>
-              ) : null}
-              {response?.changeScope === "selection" ? (
-                <button
-                  type="button"
-                  className="toolbar-button toolbar-accent"
-                  onClick={() => {
-                    void applyDraft("selection");
-                  }}
-                >
-                  替换选区
-                </button>
-              ) : null}
-              {response?.changeScope === "insertion" ? (
-                <button
-                  type="button"
-                  className="toolbar-button toolbar-accent"
-                  onClick={() => {
-                    void applyDraft("insertion");
-                  }}
-                >
-                  插入到选区后
-                </button>
-              ) : null}
-              {response?.changeScope === "new_doc" ? (
-                <button
-                  type="button"
-                  className="toolbar-button toolbar-accent"
-                  onClick={() => {
-                    void applyDraft("new_doc");
-                  }}
-                >
-                  另存为新文稿
-                </button>
-              ) : null}
-            </div>
-          </PanelSection>
-
-          <PanelSection label="AI" title="Provider settings">
-            <TextField
-              label="Base URL"
-              value={settings?.baseUrl ?? ""}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...(current ?? {
-                    baseUrl: "",
-                    model: "",
-                    apiKey: "",
-                    timeoutSec: 45,
-                    maxContextRecords: 24,
-                  }),
-                  baseUrl: value,
-                }))
-              }
-            />
-            <TextField
-              label="Model"
-              value={settings?.model ?? ""}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...(current ?? {
-                    baseUrl: "",
-                    model: "",
-                    apiKey: "",
-                    timeoutSec: 45,
-                    maxContextRecords: 24,
-                  }),
-                  model: value,
-                }))
-              }
-            />
-            <TextField
-              label="API Key"
-              value={settings?.apiKey ?? ""}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...(current ?? {
-                    baseUrl: "",
-                    model: "",
-                    apiKey: "",
-                    timeoutSec: 45,
-                    maxContextRecords: 24,
-                  }),
-                  apiKey: value,
-                }))
-              }
-            />
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  void testSettings();
-                }}
-                disabled={settingsBusy}
-              >
-                Test connection
-              </button>
-              <button
-                type="button"
-                className="toolbar-button toolbar-accent"
-                onClick={() => {
-                  void saveSettings();
-                }}
-                disabled={settingsBusy}
-              >
-                Save settings
-              </button>
-            </div>
-            {settingsStatus ? <p className="field-hint">{settingsStatus}</p> : null}
-          </PanelSection>
-
-          <PanelSection label="Stage 2" title="Structuring bundle">
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className="toolbar-button toolbar-accent"
-                onClick={() => {
-                  void prepareBundle();
-                }}
-                disabled={(!selectedDocument && bundleSelection.length === 0) || !hasActiveWorkspace}
-              >
-                Prepare structuring bundle
-              </button>
-            </div>
-            <label className="field">
-              <span className="field-label">Bundle summary</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={bundleResult?.summary ?? ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Export path</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={bundleResult?.exportPath ?? ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Generated at</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={bundleResult?.generatedAt ?? ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Suggested targets</span>
-              <textarea
-                className="field-input field-textarea ai-readonly"
-                readOnly
-                value={bundleResult ? bundleResult.suggestedTargets.join("\n") : ""}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Combined markdown</span>
-              <textarea
-                className="field-input field-textarea field-code ai-readonly"
-                readOnly
-                value={bundleResult?.combinedMarkdown ?? ""}
-              />
-            </label>
-          </PanelSection>
-
-          <PanelSection label="Debug" title="Prompt debug" compact>
-            <textarea
-              className="field-input field-textarea field-code ai-readonly"
-              readOnly
-              value={JSON.stringify(response?.promptDebug ?? {}, null, 2)}
-            />
-          </PanelSection>
-        </aside>
+                    {panel.content}
+                  </PanelSection>
+                </div>
+              );
+            })}
+          </ResponsiveGridLayout>
+        </section>
       </div>
     </div>
   );
