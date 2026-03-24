@@ -1,0 +1,14 @@
+[package]
+name = "narrative_sync_server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+axum = "0.7"
+game_protocol = { path = "../../crates/game_protocol" }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

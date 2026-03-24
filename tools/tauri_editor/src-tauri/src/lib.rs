@@ -1,3 +1,16 @@
+mod ai_context;
+mod ai_provider;
+mod ai_review;
+mod ai_settings;
+mod narrative_app_settings;
+mod narrative_context;
+mod narrative_provider;
+mod narrative_review;
+mod narrative_sync;
+mod narrative_templates;
+mod narrative_workspace;
+mod quest_workspace;
+
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     fs,
@@ -5,12 +18,36 @@ use std::{
 };
 
 use game_data::{
-    load_character_library, load_effect_library, validate_item_definition,
-    validate_map_definition, DialogueConnection, DialogueData, ItemDefinition,
-    ItemDefinitionValidationError, ItemFragment, ItemValidationCatalog, MapDefinition,
-    MapValidationCatalog,
+    load_character_library, load_effect_library, load_shared_content_registry,
+    validate_item_definition, validate_map_definition, DialogueConnection, DialogueData,
+    ItemDefinition, ItemDefinitionValidationError, ItemFragment, ItemValidationCatalog,
+    MapDefinition, MapValidationCatalog, SharedContentRegistry,
 };
 use serde::{Deserialize, Serialize};
+
+use crate::ai_provider::{
+    generate_dialogue_draft, generate_quest_draft, test_ai_provider,
+};
+use crate::ai_settings::{load_ai_settings, save_ai_settings};
+use crate::narrative_app_settings::{
+    load_narrative_app_settings, save_narrative_app_settings,
+};
+use crate::narrative_provider::{
+    generate_narrative_draft, revise_narrative_draft,
+};
+use crate::narrative_sync::{
+    create_cloud_workspace, export_project_context_snapshot, list_cloud_workspaces,
+    load_narrative_sync_settings, save_narrative_sync_settings, sync_narrative_workspace,
+    upload_project_context_snapshot,
+};
+use crate::narrative_workspace::{
+    create_narrative_document, delete_narrative_document, load_narrative_document,
+    load_narrative_workspace, prepare_structuring_bundle, save_narrative_document,
+    summarize_narrative_document,
+};
+use crate::quest_workspace::{
+    delete_quest_document, load_quest_workspace, save_quest_documents, validate_quest_document,
+};
 
 const DEFAULT_FRAGMENT_KINDS: &[&str] = &[
     "economy",
@@ -83,33 +120,33 @@ const DEFAULT_INTERACTION_KINDS: &[&str] = &[
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MigrationStage {
-    id: &'static str,
-    title: &'static str,
-    description: &'static str,
+pub(crate) struct MigrationStage {
+    pub(crate) id: &'static str,
+    pub(crate) title: &'static str,
+    pub(crate) description: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct EditorBootstrap {
-    app_name: &'static str,
-    workspace_root: String,
-    shared_rust_path: String,
-    active_stage: &'static str,
-    stages: Vec<MigrationStage>,
-    editor_domains: Vec<&'static str>,
+pub(crate) struct EditorBootstrap {
+    pub(crate) app_name: &'static str,
+    pub(crate) workspace_root: String,
+    pub(crate) shared_rust_path: String,
+    pub(crate) active_stage: &'static str,
+    pub(crate) stages: Vec<MigrationStage>,
+    pub(crate) editor_domains: Vec<&'static str>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ValidationIssue {
-    severity: &'static str,
-    field: String,
-    message: String,
-    scope: Option<&'static str>,
-    node_id: Option<String>,
-    edge_key: Option<String>,
-    path: Option<String>,
+pub(crate) struct ValidationIssue {
+    pub(crate) severity: String,
+    pub(crate) field: String,
+    pub(crate) message: String,
+    pub(crate) scope: Option<String>,
+    pub(crate) node_id: Option<String>,
+    pub(crate) edge_key: Option<String>,
+    pub(crate) path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -315,6 +352,12 @@ struct DeleteMapResult {
 #[tauri::command]
 fn get_editor_bootstrap() -> Result<EditorBootstrap, String> {
     Ok(editor_bootstrap()?)
+}
+
+#[tauri::command]
+fn load_shared_registry() -> Result<SharedContentRegistry, String> {
+    load_shared_content_registry(repo_root()?)
+        .map_err(|error| format!("failed to load shared content registry: {error}"))
 }
 
 #[tauri::command]
@@ -671,7 +714,7 @@ fn delete_map_document(map_id: String) -> Result<DeleteMapResult, String> {
     Ok(DeleteMapResult { deleted_id: map_id })
 }
 
-fn editor_bootstrap() -> Result<EditorBootstrap, String> {
+pub(crate) fn editor_bootstrap() -> Result<EditorBootstrap, String> {
     let workspace_root = repo_root()?;
     let shared_rust_path = workspace_root.join("rust");
 
@@ -1644,7 +1687,7 @@ fn resolve_invalid_amount_path(item: &ItemDefinition, fragment: &str) -> String 
     format!("fragments.{fragment}.amounts")
 }
 
-fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
+pub(crate) fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
 
     if dialog.dialog_id.trim().is_empty() {
@@ -1829,7 +1872,7 @@ fn error_with_path(
     path: Option<String>,
 ) -> ValidationIssue {
     ValidationIssue {
-        severity: "error",
+        severity: "error".to_string(),
         field: field.into(),
         message: message.into(),
         scope: None,
@@ -1839,40 +1882,47 @@ fn error_with_path(
     }
 }
 
-fn document_error(field: impl Into<String>, message: impl Into<String>) -> ValidationIssue {
+pub(crate) fn document_error(
+    field: impl Into<String>,
+    message: impl Into<String>,
+) -> ValidationIssue {
     ValidationIssue {
-        severity: "error",
+        severity: "error".to_string(),
         field: field.into(),
         message: message.into(),
-        scope: Some("document"),
+        scope: Some("document".to_string()),
         node_id: None,
         edge_key: None,
         path: None,
     }
 }
 
-fn node_error(node_id: &str, field: impl Into<String>, message: impl Into<String>) -> ValidationIssue {
+pub(crate) fn node_error(
+    node_id: &str,
+    field: impl Into<String>,
+    message: impl Into<String>,
+) -> ValidationIssue {
     ValidationIssue {
-        severity: "error",
+        severity: "error".to_string(),
         field: field.into(),
         message: message.into(),
-        scope: Some("node"),
+        scope: Some("node".to_string()),
         node_id: Some(node_id.to_string()),
         edge_key: None,
         path: None,
     }
 }
 
-fn edge_error(
+pub(crate) fn edge_error(
     edge_key: String,
     field: impl Into<String>,
     message: impl Into<String>,
 ) -> ValidationIssue {
     ValidationIssue {
-        severity: "error",
+        severity: "error".to_string(),
         field: field.into(),
         message: message.into(),
-        scope: Some("edge"),
+        scope: Some("edge".to_string()),
         node_id: None,
         edge_key: Some(edge_key),
         path: None,
@@ -2074,7 +2124,7 @@ fn map_validation_catalog(
     }
 }
 
-fn relative_to_repo(path: &Path) -> Result<String, String> {
+pub(crate) fn relative_to_repo(path: &Path) -> Result<String, String> {
     let repo = repo_root()?;
     let relative = path
         .strip_prefix(&repo)
@@ -2082,7 +2132,7 @@ fn relative_to_repo(path: &Path) -> Result<String, String> {
     Ok(to_forward_slashes(relative))
 }
 
-fn to_forward_slashes(path: impl AsRef<Path>) -> String {
+pub(crate) fn to_forward_slashes(path: impl AsRef<Path>) -> String {
     path.as_ref().to_string_lossy().replace('\\', "/")
 }
 
@@ -2091,6 +2141,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_editor_bootstrap,
+            load_shared_registry,
             load_item_workspace,
             validate_item_document,
             save_item_documents,
@@ -2099,10 +2150,37 @@ pub fn run() {
             validate_dialogue_document,
             save_dialogue_documents,
             delete_dialogue_document,
+            load_quest_workspace,
+            validate_quest_document,
+            save_quest_documents,
+            delete_quest_document,
+            load_narrative_workspace,
+            load_narrative_document,
+            save_narrative_document,
+            create_narrative_document,
+            delete_narrative_document,
+            summarize_narrative_document,
+            prepare_structuring_bundle,
+            load_narrative_sync_settings,
+            save_narrative_sync_settings,
+            list_cloud_workspaces,
+            create_cloud_workspace,
+            sync_narrative_workspace,
+            export_project_context_snapshot,
+            upload_project_context_snapshot,
             load_map_workspace,
             validate_map_document,
             save_map_documents,
-            delete_map_document
+            delete_map_document,
+            load_ai_settings,
+            save_ai_settings,
+            load_narrative_app_settings,
+            save_narrative_app_settings,
+            test_ai_provider,
+            generate_dialogue_draft,
+            generate_quest_draft,
+            generate_narrative_draft,
+            revise_narrative_draft
         ])
         .run(tauri::generate_context!())
         .expect("error while running CDC content editor");

@@ -266,6 +266,364 @@ export type SaveDialoguesResult = {
   deletedIds: string[];
 };
 
+export type QuestChoiceOption = {
+  text: string;
+  next: string;
+  [key: string]: unknown;
+};
+
+export type QuestRewardItem = {
+  id: number;
+  count: number;
+  [key: string]: unknown;
+};
+
+export type QuestRewards = {
+  items: QuestRewardItem[];
+  experience: number;
+  skill_points: number;
+  unlock_location: string;
+  unlock_recipes: string[];
+  title: string;
+  [key: string]: unknown;
+};
+
+export type QuestNode = {
+  id: string;
+  type: string;
+  title?: string;
+  description?: string;
+  objective_type?: string;
+  target?: string;
+  item_id?: number | null;
+  count?: number;
+  dialog_id?: string;
+  options?: QuestChoiceOption[];
+  rewards?: QuestRewards;
+  position?: GraphPosition | null;
+  [key: string]: unknown;
+};
+
+export type QuestConnection = {
+  from: string;
+  from_port: number;
+  to: string;
+  to_port: number;
+  [key: string]: unknown;
+};
+
+export type QuestFlow = {
+  start_node_id: string;
+  nodes: Record<string, QuestNode>;
+  connections: QuestConnection[];
+  [key: string]: unknown;
+};
+
+export type QuestEditorMeta = {
+  relationship_position?: GraphPosition | null;
+  [key: string]: unknown;
+};
+
+export type QuestData = {
+  quest_id: string;
+  title: string;
+  description: string;
+  prerequisites: string[];
+  time_limit: number;
+  flow: QuestFlow;
+  _editor?: QuestEditorMeta | null;
+  [key: string]: unknown;
+};
+
+export type QuestCatalogs = {
+  nodeTypes: string[];
+  objectiveTypes: string[];
+  itemIds: string[];
+  dialogIds: string[];
+  questIds: string[];
+  locationIds: string[];
+  recipeIds: string[];
+};
+
+export type QuestDocumentPayload = {
+  documentKey: string;
+  originalId: string;
+  fileName: string;
+  relativePath: string;
+  quest: QuestData;
+  validation: ValidationIssue[];
+};
+
+export type QuestWorkspacePayload = {
+  bootstrap: EditorBootstrap;
+  dataDirectory: string;
+  questCount: number;
+  catalogs: QuestCatalogs;
+  documents: QuestDocumentPayload[];
+};
+
+export type SaveQuestsResult = {
+  savedIds: string[];
+  deletedIds: string[];
+};
+
+export type AiSettings = {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  timeoutSec: number;
+  maxContextRecords: number;
+};
+
+export type AiConnectionTestResult = {
+  ok: boolean;
+  error: string;
+};
+
+export type AiGenerateRequest<TRecord = Record<string, unknown>> = {
+  mode: "create" | "revise";
+  targetId: string;
+  userPrompt: string;
+  adjustmentPrompt: string;
+  currentRecord: TRecord;
+  previousDraft?: TRecord | null;
+  previousValidationErrors?: string[];
+};
+
+export type AiDraftPayload<TRecord = Record<string, unknown>> = {
+  recordType: string;
+  operation: "create" | "revise";
+  targetId: string;
+  summary: string;
+  warnings: string[];
+  record: TRecord;
+};
+
+export type AiDiffSummary = {
+  summaryLines: string[];
+  addedPaths: string[];
+  changedPaths: string[];
+  removedPaths: string[];
+  riskLevel: string;
+};
+
+export type AiGenerationResponse<TRecord = Record<string, unknown>> = {
+  draft: AiDraftPayload<TRecord> | null;
+  validationErrors: string[];
+  providerError: string;
+  diffSummary: AiDiffSummary;
+  reviewWarnings: string[];
+  promptDebug: Record<string, unknown>;
+  rawOutput: string;
+};
+
+export type NarrativeDocType =
+  | "project_brief"
+  | "world_bible"
+  | "faction_note"
+  | "character_card"
+  | "arc_outline"
+  | "chapter_outline"
+  | "branch_sheet"
+  | "scene_draft"
+  | "dialogue_tone_sheet";
+
+export type NarrativeDocumentMeta = {
+  docType: NarrativeDocType;
+  slug: string;
+  title: string;
+  status: string;
+  tags: string[];
+  relatedDocs: string[];
+  sourceRefs: string[];
+};
+
+export type NarrativeDocumentPayload = {
+  documentKey: string;
+  originalSlug: string;
+  fileName: string;
+  relativePath: string;
+  meta: NarrativeDocumentMeta;
+  markdown: string;
+  validation: ValidationIssue[];
+};
+
+export type NarrativeDocTypeEntry = {
+  value: NarrativeDocType;
+  label: string;
+  directory: string;
+};
+
+export type NarrativeAppSettings = {
+  recentWorkspaces: string[];
+  lastWorkspace?: string | null;
+  connectedProjectRoot?: string | null;
+  recentProjectRoots: string[];
+};
+
+export type NarrativeExecutorMode = "desktop_local" | "cloud_mobile";
+
+export type NarrativeSyncSettings = {
+  serverUrl: string;
+  authToken: string;
+  workspaceId: string;
+  deviceLabel: string;
+  lastSyncAt?: string | null;
+  lastSyncStatus: string;
+};
+
+export type CloudWorkspaceMeta = {
+  workspaceId: string;
+  name: string;
+  documentCount: number;
+  updatedAt: string;
+};
+
+export type PendingSyncOperation = {
+  operationId: string;
+  kind: string;
+  docId: string;
+  slug: string;
+  baseRevision: number;
+  queuedAt: string;
+};
+
+export type SyncConflictPayload = {
+  slug: string;
+  docId: string;
+  localRevision: number;
+  remoteRevision: number;
+  conflictDocSlug: string;
+  message: string;
+};
+
+export type ProjectContextSnapshot = {
+  snapshotId: string;
+  workspaceId: string;
+  projectRootFingerprint: string;
+  generatedAt: string;
+  summary: string;
+  sourceRefs: string[];
+  runtimeIndexes: Record<string, unknown>;
+  storyBackground: Record<string, unknown> | null;
+};
+
+export type ProjectContextSnapshotExportResult = {
+  snapshot: ProjectContextSnapshot;
+  exportPath: string;
+};
+
+export type ProjectContextSnapshotUploadResult = {
+  snapshot: ProjectContextSnapshot;
+  exportPath: string;
+  serverStatus: string;
+};
+
+export type NarrativeWorkspaceSyncResult = {
+  workspace: CloudWorkspaceMeta;
+  headRevision: number;
+  pushedCount: number;
+  pulledCount: number;
+  conflictCount: number;
+  conflicts: SyncConflictPayload[];
+  pendingOperations: PendingSyncOperation[];
+  projectSnapshot?: ProjectContextSnapshot | null;
+  executorMode: NarrativeExecutorMode;
+  syncStatus: string;
+};
+
+export type NarrativeWorkspacePayload = {
+  bootstrap: EditorBootstrap;
+  dataDirectory: string;
+  documentCount: number;
+  docTypes: NarrativeDocTypeEntry[];
+  documents: NarrativeDocumentPayload[];
+  workspaceRoot: string;
+  workspaceName: string;
+  connectedProjectRoot?: string | null;
+  projectContextStatus: string;
+};
+
+export type NarrativeAction =
+  | "create"
+  | "revise_document"
+  | "rewrite_selection"
+  | "expand_selection"
+  | "insert_after_selection"
+  | "derive_new_doc";
+
+export type NarrativeSelectionRange = {
+  start: number;
+  end: number;
+};
+
+export type NarrativeGenerateRequest = {
+  docType: NarrativeDocType;
+  targetSlug: string;
+  action: NarrativeAction;
+  userPrompt: string;
+  editorInstruction: string;
+  currentMarkdown: string;
+  selectedRange?: NarrativeSelectionRange | null;
+  selectedText?: string;
+  relatedDocSlugs: string[];
+  derivedTargetDocType?: NarrativeDocType | null;
+};
+
+export type NarrativeAgentRun = {
+  agentId: string;
+  label: string;
+  focus: string;
+  status: "completed" | "failed";
+  summary: string;
+  notes: string[];
+  riskLevel: string;
+  draftMarkdown: string;
+  rawOutput: string;
+  providerError: string;
+};
+
+export type NarrativeGenerateResponse = {
+  engineMode: "multi_agent";
+  draftMarkdown: string;
+  summary: string;
+  reviewNotes: string[];
+  riskLevel: string;
+  changeScope: "document" | "selection" | "insertion" | "new_doc";
+  promptDebug: Record<string, unknown>;
+  rawOutput: string;
+  usedContextRefs: string[];
+  diffPreview: string;
+  providerError: string;
+  synthesisNotes: string[];
+  agentRuns: NarrativeAgentRun[];
+};
+
+export type SaveNarrativeDocumentResult = {
+  savedSlug: string;
+  deletedSlug?: string | null;
+};
+
+export type NarrativeDocumentSummary = {
+  slug: string;
+  title: string;
+  headingCount: number;
+  headings: string[];
+  excerpt: string;
+};
+
+export type StructuringBundlePayload = {
+  documentSlugs: string[];
+  combinedMarkdown: string;
+  summary: string;
+  suggestedTargets: string[];
+  sourceRefs: string[];
+  workspaceRoot: string;
+  connectedProjectRoot?: string | null;
+  generatedAt: string;
+  exportPath?: string | null;
+};
+
 export type MapId = string;
 
 export type MapSize = {

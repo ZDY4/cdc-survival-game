@@ -847,6 +847,147 @@ button {
   gap: 14px;
 }
 
+.ai-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 6, 9, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.ai-modal {
+  width: min(1320px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  background: rgba(15, 20, 26, 0.96);
+  border: 1px solid var(--panel-border);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+
+.ai-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.ai-modal-header h3 {
+  margin: 0;
+}
+
+.ai-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ai-layout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
+  align-items: start;
+}
+
+.ai-column,
+.ai-column-wide,
+.field-grid,
+.ai-snapshot-grid {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.ai-column-wide {
+  align-content: start;
+}
+
+.field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-snapshot-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-readonly {
+  min-height: 180px;
+}
+
+.narrative-grid {
+  grid-template-columns: 320px minmax(0, 1.1fr) 360px;
+}
+
+.narrative-stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.narrative-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.narrative-editor {
+  min-height: 520px;
+  resize: vertical;
+}
+
+.narrative-preview {
+  min-height: 520px;
+  white-space: pre-wrap;
+  overflow: auto;
+  color: #f4efe4;
+}
+
+.narrative-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.narrative-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.agent-run-list {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-run-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 10px;
+}
+
+.agent-run-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.agent-run-focus {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
 .map-grid-cell-occupied {
   background: rgba(216, 161, 90, 0.12);
   border-color: rgba(216, 161, 90, 0.28);
@@ -900,9 +1041,13 @@ button {
   .workspace-grid,
   .map-library-grid,
   .map-editor-layout,
+  .ai-layout,
+  .narrative-editor-grid,
   .form-grid,
   .toggle-grid,
   .stats-grid,
+  .field-grid,
+  .ai-snapshot-grid,
   .picker-controls,
   .picker-controls-wide,
   .amount-row,

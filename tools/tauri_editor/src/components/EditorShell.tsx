@@ -16,6 +16,8 @@ type EditorShellProps = {
   onModuleChange: (moduleId: string) => void;
   status: string;
   runtimeLabel: string;
+  primaryMetaLabel?: string;
+  secondaryMetaLabel?: string;
   children: React.ReactNode;
 };
 
@@ -28,6 +30,8 @@ export function EditorShell({
   onModuleChange,
   status,
   runtimeLabel,
+  primaryMetaLabel = "Repo",
+  secondaryMetaLabel = "Rust",
   children,
 }: EditorShellProps) {
   return (
@@ -91,11 +95,11 @@ export function EditorShell({
           </div>
           <div className="workspace-meta">
             <div>
-              <span className="meta-label">Repo</span>
+              <span className="meta-label">{primaryMetaLabel}</span>
               <strong>{bootstrap.workspaceRoot}</strong>
             </div>
             <div>
-              <span className="meta-label">Rust</span>
+              <span className="meta-label">{secondaryMetaLabel}</span>
               <strong>{bootstrap.sharedRustPath}</strong>
             </div>
           </div>

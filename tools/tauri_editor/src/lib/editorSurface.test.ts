@@ -10,6 +10,14 @@ describe("editorSurface", () => {
     expect(resolveEditorSurface({ label: "map-editor" })).toBe("map-editor");
   });
 
+  it("prefers the dedicated narrative-lab surface from query string", () => {
+    expect(resolveEditorSurface({ search: "?surface=narrative-lab" })).toBe("narrative-lab");
+  });
+
+  it("falls back to narrative-lab surface when the current label is narrative-lab", () => {
+    expect(resolveEditorSurface({ label: "narrative-lab" })).toBe("narrative-lab");
+  });
+
   it("defaults to the main surface otherwise", () => {
     expect(resolveEditorSurface({ search: "?surface=main" })).toBe("main");
   });

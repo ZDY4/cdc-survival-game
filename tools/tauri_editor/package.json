@@ -8,7 +8,11 @@
     "build": "tsc && vite build",
     "test": "vitest run",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:data": "tauri dev",
+    "tauri:narrative": "tauri dev --config src-tauri/tauri.narrative.conf.json",
+    "tauri:build:data": "tauri build",
+    "tauri:build:narrative": "tauri build --config src-tauri/tauri.narrative.conf.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

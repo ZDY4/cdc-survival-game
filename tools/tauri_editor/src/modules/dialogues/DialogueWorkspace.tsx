@@ -9,12 +9,17 @@ import { GraphToolbarActions } from "../../graph-kit/GraphToolbarActions";
 import type { GraphSelection } from "../../graph-kit/types";
 import { invokeCommand } from "../../lib/tauri";
 import type {
+  AiConnectionTestResult,
+  AiDraftPayload,
+  AiGenerationResponse,
+  AiSettings,
   DialogueData,
   DialogueDocumentPayload,
   DialogueWorkspacePayload,
   SaveDialoguesResult,
   ValidationIssue,
 } from "../../types";
+import { AiGeneratePanel } from "../ai/AiGeneratePanel";
 import { DialogueInspector } from "./DialogueInspector";
 import { dialogueGraphAdapter } from "./dialogueGraphAdapter";
 
@@ -115,12 +120,14 @@ export function DialogueWorkspace({
   const [selectedKey, setSelectedKey] = useState(workspace.documents[0]?.documentKey ?? "");
   const [searchText, setSearchText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [selection, setSelection] = useState<GraphSelection>({
     nodeId: null,
     edgeId: null,
   });
   const graphRef = useRef<GraphCanvasHandle | null>(null);
   const deferredSearch = useDeferredValue(searchText);
+  const emptyDialogueRecord = useMemo(() => createDraftDialogue("dialog_draft"), []);
 
   useEffect(() => {
     setDocuments(hydrateDocuments(workspace.documents));
@@ -300,6 +307,53 @@ export function DialogueWorkspace({
     }
   }
 
+  function applyAiDraft(draft: AiDraftPayload<DialogueData>) {
+    const nextDialog = dialogueGraphAdapter.normalizeDocument(draft.record);
+    const existingDocument =
+      documents.find((document) => document.dialog.dialog_id === nextDialog.dialog_id) ?? null;
+    const targetKey =
+      draft.operation === "revise" && selectedDocument
+        ? selectedDocument.documentKey
+        : existingDocument?.documentKey ?? null;
+
+    if (targetKey) {
+      setDocuments((current) =>
+        current.map((document) =>
+          document.documentKey === targetKey
+            ? {
+                ...document,
+                dialog: nextDialog,
+                dirty: true,
+                validation: [],
+                isDraft: document.isDraft || draft.operation === "create",
+                fileName: `${nextDialog.dialog_id}.json`,
+                relativePath: `data/dialogues/${nextDialog.dialog_id}.json`,
+              }
+            : document,
+        ),
+      );
+      setSelectedKey(targetKey);
+    } else {
+      const draftDocument: EditableDialogueDocument = {
+        documentKey: `draft-${nextDialog.dialog_id}`,
+        originalId: nextDialog.dialog_id,
+        fileName: `${nextDialog.dialog_id}.json`,
+        relativePath: `data/dialogues/${nextDialog.dialog_id}.json`,
+        dialog: nextDialog,
+        validation: [],
+        savedSnapshot: "",
+        dirty: true,
+        isDraft: true,
+      };
+      setDocuments((current) => [draftDocument, ...current]);
+      setSelectedKey(draftDocument.documentKey);
+    }
+
+    setSelection({ nodeId: "start", edgeId: null });
+    setAiOpen(false);
+    onStatusChange(`AI draft applied to dialogue ${nextDialog.dialog_id}. Remember to save.`);
+  }
+
   function createDraft() {
     const nextId = `dialog_${Date.now()}`;
     const draftDialog = createDraftDialogue(nextId);
@@ -329,6 +383,12 @@ export function DialogueWorkspace({
       label: "New dialogue",
       onClick: createDraft,
       tone: "accent" as const,
+      disabled: busy,
+    },
+    {
+      id: "ai",
+      label: "AI generate",
+      onClick: () => setAiOpen(true),
       disabled: busy,
     },
     {
@@ -518,6 +578,31 @@ export function DialogueWorkspace({
           </PanelSection>
         </aside>
       </div>
+
+      {aiOpen ? (
+        <AiGeneratePanel<DialogueData>
+          open={aiOpen}
+          title="Dialogue AI Generate"
+          targetType="dialog"
+          targetId={selectedDocument?.dialog.dialog_id ?? ""}
+          currentRecord={selectedDocument?.dialog ?? emptyDialogueRecord}
+          emptyRecord={emptyDialogueRecord}
+          onClose={() => setAiOpen(false)}
+          onGenerate={(request) =>
+            invokeCommand<AiGenerationResponse<DialogueData>>("generate_dialogue_draft", {
+              request,
+            })
+          }
+          onLoadSettings={() => invokeCommand<AiSettings>("load_ai_settings")}
+          onSaveSettings={(settings) =>
+            invokeCommand<AiSettings>("save_ai_settings", { settings })
+          }
+          onTestSettings={(settings) =>
+            invokeCommand<AiConnectionTestResult>("test_ai_provider", { settings })
+          }
+          onApply={applyAiDraft}
+        />
+      ) : null}
     </div>
   );
 }
