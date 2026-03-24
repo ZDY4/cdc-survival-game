@@ -12,6 +12,11 @@ pub mod utility;
 
 pub use actor::{AiController, AiStepResult, InteractOnceAiController, NoopAiController};
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
+pub use game_data::{
+    InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
+    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind, InteractionPrompt,
+    InteractionTargetId, ResolvedInteractionOption, WorldMode,
+};
 pub use goap::{
     advance_offline_sim, build_plan, build_plan_for_goal, rebuild_facts, tick_offline_action,
     ActionExecutionPhase, ActionTickResult, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey,
@@ -23,18 +28,16 @@ pub use movement::{
     PendingInteractionIntent, PendingMovementIntent, PendingProgressionStep,
     ProgressionAdvanceResult,
 };
-pub use game_data::{
-    InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
-    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind, InteractionPrompt,
-    InteractionTargetId, ResolvedInteractionOption, WorldMode,
-};
 pub use runtime::{action_result_status, SimulationRuntime};
 pub use simulation::{
     ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
     SimulationSnapshot,
 };
-pub use utility::{score_goal, score_goals, select_goal, NpcGoalScore};
+pub use utility::{
+    score_goal, score_goal_for_context, score_goals, score_goals_for_context, select_goal,
+    select_goal_for_context, NpcGoalScore, NpcUtilityContext,
+};
 
 pub struct GameCorePlugin;
 

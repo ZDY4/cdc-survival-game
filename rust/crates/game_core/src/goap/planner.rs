@@ -3,10 +3,11 @@ use dogoap::prelude::{format_plan, get_effects_from_plan, make_plan};
 use super::actions::{build_action_set, build_start_state, parse_action_key, step_for_action};
 use super::goals::goal_requirements;
 use super::{NpcGoalKey, NpcPlanRequest, NpcPlanResult};
-use crate::utility::select_goal;
+use crate::utility::{select_goal_for_context, NpcUtilityContext};
 
 pub fn build_plan(request: &NpcPlanRequest) -> NpcPlanResult {
-    let selected_goal = select_goal(request);
+    let utility_context = NpcUtilityContext::from_plan_request(request);
+    let selected_goal = select_goal_for_context(&utility_context);
     build_plan_for_goal(request, selected_goal)
 }
 

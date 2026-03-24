@@ -1,4 +1,5 @@
 use dogoap::prelude::{Action, Compare, LocalState, Mutator};
+use game_data::NpcRole;
 
 use super::{NpcActionKey, NpcFact, NpcPlanRequest, NpcPlanStep};
 
@@ -47,15 +48,21 @@ pub fn build_action_set(request: &NpcPlanRequest) -> Vec<Action> {
     }
 
     if request.canteen_anchor.is_some() {
-        actions.push(
-            Action::new(action_name(NpcActionKey::TravelToCanteen))
-                .with_precondition(("meal_window_open", Compare::equals(true)))
-                .with_mutator(Mutator::set("at_canteen", true))
-                .with_mutator(Mutator::set("at_home", false))
-                .with_mutator(Mutator::set("at_duty_area", false))
-                .with_mutator(Mutator::set("has_reserved_meal_seat", true))
-                .set_cost(1),
-        );
+        let mut travel_to_canteen = Action::new(action_name(NpcActionKey::TravelToCanteen))
+            .with_mutator(Mutator::set("at_canteen", true))
+            .with_mutator(Mutator::set("at_home", false))
+            .with_mutator(Mutator::set("at_duty_area", false))
+            .with_mutator(Mutator::set("has_reserved_meal_seat", true))
+            .set_cost(1);
+        if request.role != NpcRole::Cook {
+            travel_to_canteen =
+                travel_to_canteen.with_precondition(("meal_window_open", Compare::equals(true)));
+        } else {
+            travel_to_canteen =
+                travel_to_canteen.with_precondition(("on_shift", Compare::equals(true)));
+        }
+        actions.push(travel_to_canteen);
+
         actions.push(
             Action::new(action_name(NpcActionKey::EatMeal))
                 .with_precondition(("at_canteen", Compare::equals(true)))
@@ -64,6 +71,16 @@ pub fn build_action_set(request: &NpcPlanRequest) -> Vec<Action> {
                 .with_mutator(Mutator::set("is_very_hungry", false))
                 .set_cost(2),
         );
+
+        if request.role == NpcRole::Cook {
+            actions.push(
+                Action::new(action_name(NpcActionKey::RestockMealService))
+                    .with_precondition(("on_shift", Compare::equals(true)))
+                    .with_precondition(("at_canteen", Compare::equals(true)))
+                    .with_mutator(Mutator::set("meal_service_restocked", true))
+                    .set_cost(2),
+            );
+        }
     }
 
     if request.leisure_anchor.is_some() {
@@ -161,6 +178,7 @@ pub fn build_start_state(request: &NpcPlanRequest) -> LocalState {
         "guard_duty_satisfied",
         "guard_coverage_secured",
         "patrol_completed",
+        "meal_service_restocked",
         "morale_recovered",
         "threat_resolved",
         "is_idle_safe",
@@ -201,6 +219,11 @@ pub fn step_for_action(action: NpcActionKey, request: &NpcPlanRequest) -> NpcPla
             Vec::new(),
         ),
         NpcActionKey::EatMeal => (
+            request.canteen_anchor.clone(),
+            request.meal_object_id.clone(),
+            Vec::new(),
+        ),
+        NpcActionKey::RestockMealService => (
             request.canteen_anchor.clone(),
             request.meal_object_id.clone(),
             Vec::new(),
@@ -257,6 +280,7 @@ pub fn action_name(action: NpcActionKey) -> &'static str {
         NpcActionKey::PatrolRoute => "patrol_route",
         NpcActionKey::TravelToCanteen => "travel_to_canteen",
         NpcActionKey::EatMeal => "eat_meal",
+        NpcActionKey::RestockMealService => "restock_meal_service",
         NpcActionKey::TravelToLeisure => "travel_to_leisure",
         NpcActionKey::Relax => "relax",
         NpcActionKey::TravelHome => "travel_home",
@@ -276,6 +300,7 @@ pub fn parse_action_key(name: &str) -> Option<NpcActionKey> {
         "patrol_route" => NpcActionKey::PatrolRoute,
         "travel_to_canteen" => NpcActionKey::TravelToCanteen,
         "eat_meal" => NpcActionKey::EatMeal,
+        "restock_meal_service" => NpcActionKey::RestockMealService,
         "travel_to_leisure" => NpcActionKey::TravelToLeisure,
         "relax" => NpcActionKey::Relax,
         "travel_home" => NpcActionKey::TravelHome,
@@ -296,6 +321,7 @@ fn action_timing(action: NpcActionKey) -> (u32, u32) {
         NpcActionKey::PatrolRoute => (0, 120),
         NpcActionKey::TravelToCanteen => (15, 0),
         NpcActionKey::EatMeal => (0, 30),
+        NpcActionKey::RestockMealService => (0, 45),
         NpcActionKey::TravelToLeisure => (15, 0),
         NpcActionKey::Relax => (0, 60),
         NpcActionKey::TravelHome => (15, 0),

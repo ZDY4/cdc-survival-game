@@ -89,6 +89,7 @@ pub enum NpcActionKey {
     PatrolRoute,
     TravelToCanteen,
     EatMeal,
+    RestockMealService,
     TravelToLeisure,
     Relax,
     TravelHome,
@@ -322,6 +323,30 @@ mod tests {
             .steps
             .iter()
             .any(|step| step.action == NpcActionKey::RespondAlarm));
+    }
+
+    #[test]
+    fn cook_shift_plan_restocks_meal_service() {
+        let result = build_plan(&NpcPlanRequest {
+            role: NpcRole::Cook,
+            facts: vec![NpcFact::OnShift],
+            home_anchor: Some("cook_home".into()),
+            duty_anchor: None,
+            canteen_anchor: Some("canteen".into()),
+            leisure_anchor: Some("bench".into()),
+            alarm_anchor: Some("alarm".into()),
+            guard_post_id: None,
+            bed_id: Some("cook_bed".into()),
+            meal_object_id: Some("kitchen_station".into()),
+            leisure_object_id: Some("bench_01".into()),
+            patrol_route_id: None,
+        });
+
+        assert_eq!(result.selected_goal, NpcGoalKey::SatisfyShift);
+        assert!(result
+            .steps
+            .iter()
+            .any(|step| step.action == NpcActionKey::RestockMealService));
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use dogoap::prelude::{Compare, Goal};
+use game_data::NpcRole;
 
 use super::{NpcFact, NpcGoalKey, NpcPlanRequest};
 
@@ -12,15 +13,21 @@ pub fn goal_requirements(request: &NpcPlanRequest, goal: NpcGoalKey) -> Goal {
                 Goal::new().with_req("is_rested", Compare::equals(true))
             }
         }
-        NpcGoalKey::SatisfyShift => {
-            if has_fact(request, NpcFact::GuardCoverageInsufficient)
-                || request.patrol_route_id.is_none()
-            {
-                Goal::new().with_req("guard_coverage_secured", Compare::equals(true))
-            } else {
-                Goal::new().with_req("patrol_completed", Compare::equals(true))
+        NpcGoalKey::SatisfyShift => match request.role {
+            NpcRole::Guard => {
+                if has_fact(request, NpcFact::GuardCoverageInsufficient)
+                    || request.patrol_route_id.is_none()
+                {
+                    Goal::new().with_req("guard_coverage_secured", Compare::equals(true))
+                } else {
+                    Goal::new().with_req("patrol_completed", Compare::equals(true))
+                }
             }
-        }
+            NpcRole::Cook => Goal::new().with_req("meal_service_restocked", Compare::equals(true)),
+            NpcRole::Doctor | NpcRole::Resident => {
+                Goal::new().with_req("at_duty_area", Compare::equals(true))
+            }
+        },
         NpcGoalKey::EatMeal => Goal::new().with_req("is_hungry", Compare::equals(false)),
         NpcGoalKey::Sleep => Goal::new().with_req("is_rested", Compare::equals(true)),
         NpcGoalKey::RecoverMorale => {
