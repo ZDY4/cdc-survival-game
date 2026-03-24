@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use game_core::{
-    build_plan_for_goal, rebuild_facts, select_goal, tick_offline_action, ActionExecutionPhase,
-    NpcActionKey, NpcFactInput, NpcGoalKey, NpcPlanRequest, NpcPlanStep, OfflineActionState,
+    build_plan_for_goal, rebuild_facts, score_goals, select_goal, tick_offline_action,
+    ActionExecutionPhase, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey, NpcGoalScore,
+    NpcPlanRequest, NpcPlanStep, OfflineActionState,
 };
 use game_data::{
     CharacterLifeProfile, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay, SettlementDefinition,
@@ -121,12 +122,48 @@ pub struct SettlementContext {
 pub struct SmartObjectReservations(pub BTreeMap<String, Entity>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedActionDebug {
+    pub action: NpcActionKey,
+    pub target_anchor: Option<String>,
+    pub reservation_target: Option<String>,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
+pub struct DecisionTrace {
+    pub facts: Vec<NpcFact>,
+    pub goal_scores: Vec<NpcGoalScore>,
+    pub selected_goal: Option<NpcGoalKey>,
+    pub decision_summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettlementDebugEntry {
     pub entity: Entity,
     pub settlement_id: String,
+    pub role: NpcRole,
     pub goal: Option<NpcGoalKey>,
+    pub selected_goal: Option<NpcGoalKey>,
     pub action: Option<NpcActionKey>,
+    pub action_phase: Option<ActionExecutionPhase>,
+    pub action_travel_remaining_minutes: Option<u32>,
+    pub action_perform_remaining_minutes: Option<u32>,
     pub schedule_label: String,
+    pub on_shift: bool,
+    pub shift_starting_soon: bool,
+    pub meal_window_open: bool,
+    pub quiet_hours: bool,
+    pub world_alert_active: bool,
+    pub replan_required: bool,
+    pub need_hunger: u8,
+    pub need_energy: u8,
+    pub need_morale: u8,
+    pub facts: Vec<NpcFact>,
+    pub goal_scores: Vec<NpcGoalScore>,
+    pub decision_summary: String,
+    pub plan_next_index: usize,
+    pub plan_total_steps: usize,
+    pub plan_total_cost: usize,
+    pub pending_plan: Vec<PlannedActionDebug>,
     pub current_anchor: Option<String>,
     pub reservations: Vec<String>,
 }
@@ -187,10 +224,15 @@ fn initialize_npc_life_entities(
             None => continue,
         };
         let duty_anchor = route_anchor(settlement, &profile.duty_route_id)
-            .or_else(|| first_anchor_for_kind(settlement, SmartObjectKind::GuardPost));
+            .or_else(|| default_duty_anchor_for_role(settlement, profile.role));
         let canteen_anchor = first_anchor_for_kind(settlement, SmartObjectKind::CanteenSeat);
         let leisure_anchor = first_anchor_for_kind(settlement, SmartObjectKind::RecreationSpot);
         let alarm_anchor = first_anchor_for_kind(settlement, SmartObjectKind::AlarmPoint);
+        let guard_post_id = if profile.role == NpcRole::Guard {
+            first_object_for_kind_for_role(settlement, SmartObjectKind::GuardPost, profile.role)
+        } else {
+            None
+        };
 
         commands.entity(entity).insert((
             NpcLifeState {
@@ -202,12 +244,21 @@ fn initialize_npc_life_entities(
                 canteen_anchor,
                 leisure_anchor,
                 alarm_anchor,
-                guard_post_id: first_object_for_kind(settlement, SmartObjectKind::GuardPost),
-                bed_id: first_object_for_kind(settlement, SmartObjectKind::Bed),
-                meal_object_id: first_object_for_kind(settlement, SmartObjectKind::CanteenSeat),
-                leisure_object_id: first_object_for_kind(
+                guard_post_id,
+                bed_id: first_object_for_kind_for_role(
+                    settlement,
+                    SmartObjectKind::Bed,
+                    profile.role,
+                ),
+                meal_object_id: first_object_for_kind_for_role(
+                    settlement,
+                    SmartObjectKind::CanteenSeat,
+                    profile.role,
+                ),
+                leisure_object_id: first_object_for_kind_for_role(
                     settlement,
                     SmartObjectKind::RecreationSpot,
+                    profile.role,
                 ),
                 current_anchor: Some(profile.home_anchor.clone()),
                 replan_required: true,
@@ -219,6 +270,7 @@ fn initialize_npc_life_entities(
             CurrentPlan::default(),
             CurrentAction::default(),
             ReservationState::default(),
+            DecisionTrace::default(),
         ));
     }
 }
@@ -287,6 +339,7 @@ fn plan_npc_life_system(
             &mut CurrentGoal,
             &mut CurrentPlan,
             &mut CurrentAction,
+            &mut DecisionTrace,
         )>,
     )>,
 ) {
@@ -328,6 +381,7 @@ fn plan_npc_life_system(
         mut current_goal,
         mut current_plan,
         mut current_action,
+        mut trace,
     ) in &mut queries.p1()
     {
         if world_alert.active && current_goal.0 != Some(NpcGoalKey::RespondThreat) {
@@ -391,12 +445,24 @@ fn plan_npc_life_system(
         };
         let selected_goal = select_goal(&plan_request);
         let plan = build_plan_for_goal(&plan_request, selected_goal);
+        let mut goal_scores = score_goals(&plan_request);
+        goal_scores.sort_by(|left, right| right.score.cmp(&left.score));
+        let decision_summary = build_decision_summary(
+            selected_goal,
+            &goal_scores,
+            &plan_request.facts,
+            plan.planned,
+        );
         current_goal.0 = Some(selected_goal);
         current_plan.steps = plan.steps;
         current_plan.next_index = 0;
         current_plan.total_cost = plan.total_cost;
         current_plan.debug_plan = plan.debug_plan;
         current_action.0 = None;
+        trace.facts = plan_request.facts;
+        trace.goal_scores = goal_scores;
+        trace.selected_goal = Some(selected_goal);
+        trace.decision_summary = decision_summary;
         life.replan_required = false;
     }
 }
@@ -481,24 +547,75 @@ fn execute_offline_actions_system(
 }
 
 fn refresh_debug_snapshot_system(
+    world_alert: Res<WorldAlertState>,
     mut snapshot: ResMut<SettlementDebugSnapshot>,
     query: Query<(
         Entity,
         &NpcLifeState,
+        &NeedState,
         &CurrentGoal,
+        &CurrentPlan,
         &CurrentAction,
         &ScheduleState,
         &ReservationState,
+        &DecisionTrace,
     )>,
 ) {
     let mut entries = Vec::new();
-    for (entity, life, goal, action, schedule, reservations) in &query {
+    for (entity, life, need, goal, plan, action, schedule, reservations, trace) in &query {
+        let (
+            action_key,
+            action_phase,
+            action_travel_remaining_minutes,
+            action_perform_remaining_minutes,
+        ) = if let Some(current_action) = action.0.as_ref() {
+            (
+                Some(current_action.step.action),
+                Some(current_action.phase),
+                Some(current_action.travel_remaining_minutes),
+                Some(current_action.perform_remaining_minutes),
+            )
+        } else {
+            (None, None, None, None)
+        };
+        let pending_plan = plan
+            .steps
+            .iter()
+            .skip(plan.next_index)
+            .take(4)
+            .map(|step| PlannedActionDebug {
+                action: step.action,
+                target_anchor: step.target_anchor.clone(),
+                reservation_target: step.reservation_target.clone(),
+            })
+            .collect();
         entries.push(SettlementDebugEntry {
             entity,
             settlement_id: life.settlement_id.clone(),
+            role: life.role,
             goal: goal.0,
-            action: action.0.as_ref().map(|current| current.step.action),
+            selected_goal: trace.selected_goal,
+            action: action_key,
+            action_phase,
+            action_travel_remaining_minutes,
+            action_perform_remaining_minutes,
             schedule_label: schedule.active_label.clone(),
+            on_shift: schedule.on_shift,
+            shift_starting_soon: schedule.shift_starting_soon,
+            meal_window_open: schedule.meal_window_open,
+            quiet_hours: schedule.quiet_hours,
+            world_alert_active: world_alert.active,
+            replan_required: life.replan_required,
+            need_hunger: quantize_need(need.hunger),
+            need_energy: quantize_need(need.energy),
+            need_morale: quantize_need(need.morale),
+            facts: trace.facts.clone(),
+            goal_scores: trace.goal_scores.clone(),
+            decision_summary: trace.decision_summary.clone(),
+            plan_next_index: plan.next_index,
+            plan_total_steps: plan.steps.len(),
+            plan_total_cost: plan.total_cost,
+            pending_plan,
             current_anchor: life.current_anchor.clone(),
             reservations: reservations.active.iter().cloned().collect(),
         });
@@ -523,6 +640,18 @@ fn route_anchor(settlement: &SettlementDefinition, route_id: &str) -> Option<Str
         .and_then(|route| route.anchors.first().cloned())
 }
 
+fn default_duty_anchor_for_role(
+    settlement: &SettlementDefinition,
+    role: NpcRole,
+) -> Option<String> {
+    match role {
+        NpcRole::Guard => first_anchor_for_kind(settlement, SmartObjectKind::GuardPost),
+        NpcRole::Cook => first_anchor_for_kind(settlement, SmartObjectKind::CanteenSeat),
+        NpcRole::Doctor => first_anchor_for_kind(settlement, SmartObjectKind::RecreationSpot),
+        NpcRole::Resident => None,
+    }
+}
+
 fn first_anchor_for_kind(
     settlement: &SettlementDefinition,
     kind: SmartObjectKind,
@@ -534,15 +663,32 @@ fn first_anchor_for_kind(
         .map(|object| object.anchor_id.clone())
 }
 
-fn first_object_for_kind(
+fn first_object_for_kind_for_role(
     settlement: &SettlementDefinition,
     kind: SmartObjectKind,
+    role: NpcRole,
 ) -> Option<String> {
+    let role_tag = role_tag(role);
     settlement
         .smart_objects
         .iter()
-        .find(|object| object.kind == kind)
+        .find(|object| object.kind == kind && object.tags.iter().any(|tag| tag == role_tag))
+        .or_else(|| {
+            settlement
+                .smart_objects
+                .iter()
+                .find(|object| object.kind == kind)
+        })
         .map(|object| object.id.clone())
+}
+
+fn role_tag(role: NpcRole) -> &'static str {
+    match role {
+        NpcRole::Resident => "resident",
+        NpcRole::Guard => "guard",
+        NpcRole::Cook => "cook",
+        NpcRole::Doctor => "doctor",
+    }
 }
 
 fn active_schedule_block(
@@ -583,6 +729,34 @@ fn apply_action_effects(action: NpcActionKey, need: &mut NeedState) {
     }
 }
 
+fn quantize_need(value: f32) -> u8 {
+    value.round().clamp(0.0, 100.0) as u8
+}
+
+fn build_decision_summary(
+    selected_goal: NpcGoalKey,
+    goal_scores: &[NpcGoalScore],
+    facts: &[NpcFact],
+    planned: bool,
+) -> String {
+    let top_scores: Vec<String> = goal_scores
+        .iter()
+        .take(3)
+        .map(|entry| format!("{:?}:{}", entry.goal, entry.score))
+        .collect();
+    let top_facts: Vec<String> = facts
+        .iter()
+        .take(5)
+        .map(|fact| format!("{fact:?}"))
+        .collect();
+    let plan_state = if planned { "planned" } else { "no_plan" };
+    format!(
+        "goal={selected_goal:?} state={plan_state} top_scores=[{}] facts=[{}]",
+        top_scores.join(","),
+        top_facts.join(",")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -600,7 +774,7 @@ mod tests {
 
     use super::{
         CurrentAction, CurrentGoal, LifeProfileComponent, NpcLifePlugin, NpcLifeState,
-        ReservationState, ScheduleState, SettlementSimulationPlugin,
+        ReservationState, ScheduleState, SettlementDebugSnapshot, SettlementSimulationPlugin,
     };
     use crate::{CharacterDefinitionId, CharacterDefinitions, SettlementDefinitions};
 
@@ -743,6 +917,46 @@ mod tests {
         assert_eq!(goal.0, Some(game_core::NpcGoalKey::RespondThreat));
     }
 
+    #[test]
+    fn cook_uses_role_tagged_objects_and_exposes_decision_trace() {
+        let mut app = App::new();
+        app.insert_resource(CharacterDefinitions(sample_characters()));
+        app.insert_resource(SettlementDefinitions(sample_settlements()));
+        app.add_plugins((SettlementSimulationPlugin, NpcLifePlugin));
+
+        let cook = app
+            .world_mut()
+            .spawn((
+                CharacterDefinitionId(CharacterId("safehouse_cook_test".into())),
+                LifeProfileComponent(sample_cook_life()),
+            ))
+            .id();
+
+        for _ in 0..40 {
+            app.update();
+        }
+
+        let life = app
+            .world()
+            .entity(cook)
+            .get::<NpcLifeState>()
+            .expect("life component");
+        assert_eq!(life.role, NpcRole::Cook);
+        assert_eq!(life.guard_post_id, None);
+        assert_eq!(life.bed_id.as_deref(), Some("cook_bed_01"));
+        assert_eq!(life.meal_object_id.as_deref(), Some("canteen_seat_cook_01"));
+
+        let snapshot = app.world().resource::<SettlementDebugSnapshot>();
+        let entry = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.entity == cook)
+            .expect("cook entry in debug snapshot");
+        assert!(!entry.goal_scores.is_empty());
+        assert!(!entry.decision_summary.is_empty());
+        assert_eq!(entry.role, NpcRole::Cook);
+    }
+
     fn sample_guard_life() -> CharacterLifeProfile {
         CharacterLifeProfile {
             settlement_id: "safehouse_survivor_outpost".into(),
@@ -772,6 +986,33 @@ mod tests {
         }
     }
 
+    fn sample_cook_life() -> CharacterLifeProfile {
+        CharacterLifeProfile {
+            settlement_id: "safehouse_survivor_outpost".into(),
+            role: NpcRole::Cook,
+            home_anchor: "cook_home_01".into(),
+            duty_route_id: "cook_service_loop".into(),
+            schedule: vec![ScheduleBlock {
+                day: ScheduleDay::Monday,
+                start_minute: 6 * 60,
+                end_minute: 14 * 60,
+                label: "厨房轮值".into(),
+                tags: vec!["shift".into(), "cook".into()],
+            }],
+            smart_object_access: vec![
+                "bed".into(),
+                "canteen_seat".into(),
+                "recreation_spot".into(),
+            ],
+            need_profile: NeedProfile {
+                hunger_decay_per_hour: 4.0,
+                energy_decay_per_hour: 2.8,
+                morale_decay_per_hour: 1.3,
+                safety_bias: 0.4,
+            },
+        }
+    }
+
     fn sample_characters() -> CharacterLibrary {
         let mut definitions = BTreeMap::new();
         definitions.insert(
@@ -791,6 +1032,10 @@ mod tests {
                     ..sample_guard_life()
                 },
             ),
+        );
+        definitions.insert(
+            CharacterId("safehouse_cook_test".into()),
+            sample_character("safehouse_cook_test", sample_cook_life()),
         );
         CharacterLibrary::from(definitions)
     }
@@ -869,11 +1114,25 @@ mod tests {
                     id: "alarm_bell".into(),
                     grid: game_data::GridCoord::new(4, 0, 2),
                 },
+                SettlementAnchorDefinition {
+                    id: "cook_home_01".into(),
+                    grid: game_data::GridCoord::new(3, 0, 2),
+                },
+                SettlementAnchorDefinition {
+                    id: "kitchen_station".into(),
+                    grid: game_data::GridCoord::new(3, 0, 5),
+                },
             ],
-            routes: vec![SettlementRouteDefinition {
-                id: "guard_patrol_north".into(),
-                anchors: vec!["north_gate".into(), "alarm_bell".into()],
-            }],
+            routes: vec![
+                SettlementRouteDefinition {
+                    id: "guard_patrol_north".into(),
+                    anchors: vec!["north_gate".into(), "alarm_bell".into()],
+                },
+                SettlementRouteDefinition {
+                    id: "cook_service_loop".into(),
+                    anchors: vec!["kitchen_station".into(), "canteen_main".into()],
+                },
+            ],
             smart_objects: vec![
                 SmartObjectDefinition {
                     id: "guard_post_north".into(),
@@ -904,11 +1163,25 @@ mod tests {
                     tags: vec!["meal".into()],
                 },
                 SmartObjectDefinition {
+                    id: "canteen_seat_cook_01".into(),
+                    kind: SmartObjectKind::CanteenSeat,
+                    anchor_id: "kitchen_station".into(),
+                    capacity: 1,
+                    tags: vec!["meal".into(), "cook".into()],
+                },
+                SmartObjectDefinition {
                     id: "recreation_bench_01".into(),
                     kind: SmartObjectKind::RecreationSpot,
                     anchor_id: "recreation_corner".into(),
                     capacity: 1,
                     tags: vec!["morale".into()],
+                },
+                SmartObjectDefinition {
+                    id: "cook_bed_01".into(),
+                    kind: SmartObjectKind::Bed,
+                    anchor_id: "cook_home_01".into(),
+                    capacity: 1,
+                    tags: vec!["cook".into()],
                 },
                 SmartObjectDefinition {
                     id: "alarm_bell_01".into(),

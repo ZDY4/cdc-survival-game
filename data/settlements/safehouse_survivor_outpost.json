@@ -25,12 +25,24 @@
     {
       "id": "alarm_bell",
       "grid": { "x": 4, "y": 0, "z": 2 }
+    },
+    {
+      "id": "cook_home_01",
+      "grid": { "x": 3, "y": 0, "z": 2 }
+    },
+    {
+      "id": "kitchen_station",
+      "grid": { "x": 3, "y": 0, "z": 5 }
     }
   ],
   "routes": [
     {
       "id": "guard_patrol_north",
       "anchors": ["north_gate", "alarm_bell", "north_gate"]
+    },
+    {
+      "id": "cook_service_loop",
+      "anchors": ["kitchen_station", "canteen_main", "kitchen_station"]
     }
   ],
   "smart_objects": [
@@ -63,11 +75,25 @@
       "tags": ["meal"]
     },
     {
+      "id": "canteen_seat_cook_01",
+      "kind": "canteen_seat",
+      "anchor_id": "kitchen_station",
+      "capacity": 1,
+      "tags": ["meal", "cook"]
+    },
+    {
       "id": "recreation_bench_01",
       "kind": "recreation_spot",
       "anchor_id": "recreation_corner",
       "capacity": 1,
       "tags": ["morale"]
+    },
+    {
+      "id": "cook_bed_01",
+      "kind": "bed",
+      "anchor_id": "cook_home_01",
+      "capacity": 1,
+      "tags": ["cook"]
     },
     {
       "id": "alarm_bell_01",

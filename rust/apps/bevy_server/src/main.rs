@@ -11,11 +11,11 @@ use game_bevy::{
     CharacterArchetypeComponent, CharacterDefinitionId, CharacterDefinitionPath,
     CharacterDefinitions, CharacterSpawnRejected, DisplayName, Disposition, GridPosition, Level,
     LootTable, MapDefinitionPath, MapDefinitions, NpcLifePlugin, RuntimeStartupConfig,
-    RuntimeStartupConfigPath, SettlementDefinitionPath, SettlementSimulationPlugin,
-    SpawnCharacterRequest, XpReward,
+    RuntimeStartupConfigPath, SettlementDebugSnapshot, SettlementDefinitionPath,
+    SettlementSimulationPlugin, SimClock, SpawnCharacterRequest, XpReward,
 };
 use game_core::{GameCorePlugin, SimulationRuntime};
-use game_data::GameDataPlugin;
+use game_data::{GameDataPlugin, GridCoord};
 use game_protocol::GameProtocolPlugin;
 
 fn main() {
@@ -25,6 +25,7 @@ fn main() {
         .insert_resource(MapDefinitionPath::default())
         .insert_resource(SettlementDefinitionPath::default())
         .insert_resource(RuntimeStartupConfigPath::default())
+        .insert_resource(NpcDebugReportState::default())
         .add_plugins(TaskPoolPlugin::default())
         .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_millis(16)))
         .add_plugins((
@@ -51,6 +52,7 @@ fn main() {
             Update,
             (
                 spawn_characters_from_definition,
+                report_npc_life_debug_snapshot,
                 report_spawned_characters_and_exit,
             )
                 .chain(),
@@ -71,6 +73,12 @@ impl Default for ServerConfig {
 
 #[derive(Resource, Debug)]
 struct ServerSimulationRuntime(pub SimulationRuntime);
+
+#[derive(Resource, Debug, Clone, Default)]
+struct NpcDebugReportState {
+    ticks: u32,
+    printed_frames: u32,
+}
 
 fn startup_demo(
     mut commands: Commands,
@@ -131,11 +139,101 @@ fn startup_demo(
     );
     commands.insert_resource(ServerSimulationRuntime(runtime));
 
-    for entry in seed.characters {
+    let mut total_requests = 0usize;
+    for entry in &seed.characters {
         requests.write(SpawnCharacterRequest {
-            definition_id: entry.definition_id,
+            definition_id: entry.definition_id.clone(),
             grid_position: entry.grid_position,
         });
+        total_requests += 1;
+    }
+
+    // Queue life-enabled NPCs so the server can emit runtime AI debug snapshots on startup.
+    let mut next_spawn_index: i32 = 0;
+    for (definition_id, definition) in definitions.0.iter() {
+        if definition.life.is_none() {
+            continue;
+        }
+        if seed
+            .characters
+            .iter()
+            .any(|entry| entry.definition_id == *definition_id)
+        {
+            continue;
+        }
+        requests.write(SpawnCharacterRequest {
+            definition_id: definition_id.clone(),
+            grid_position: GridCoord::new(8 + next_spawn_index, 0, 8),
+        });
+        next_spawn_index += 1;
+        total_requests += 1;
+    }
+
+    if next_spawn_index > 0 {
+        println!("queued {next_spawn_index} life-enabled npc spawns for AI debug visibility");
+    }
+    println!("startup queued total spawn requests={total_requests}");
+}
+
+fn report_npc_life_debug_snapshot(
+    mut debug_state: ResMut<NpcDebugReportState>,
+    clock: Res<SimClock>,
+    snapshot: Res<SettlementDebugSnapshot>,
+) {
+    debug_state.ticks += 1;
+    if snapshot.entries.is_empty() {
+        return;
+    }
+    if debug_state.printed_frames > 0 && debug_state.ticks % 10 != 0 {
+        return;
+    }
+    debug_state.printed_frames += 1;
+
+    println!(
+        "npc_debug_snapshot day={:?} minute={} entries={}",
+        clock.day,
+        clock.minute_of_day,
+        snapshot.entries.len(),
+    );
+    for entry in snapshot.entries.iter().take(6) {
+        let top_scores = entry
+            .goal_scores
+            .iter()
+            .take(3)
+            .map(|score| format!("{:?}:{}", score.goal, score.score))
+            .collect::<Vec<_>>()
+            .join(",");
+        let top_facts = entry
+            .facts
+            .iter()
+            .take(5)
+            .map(|fact| format!("{fact:?}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let pending = entry
+            .pending_plan
+            .iter()
+            .map(|step| format!("{:?}@{:?}", step.action, step.target_anchor))
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        println!(
+            "npc entity={:?} role={:?} goal={:?} action={:?}/{:?} anchor={:?} needs(h/e/m)={}/{}/{} on_shift={} replan={} top_scores=[{}] facts=[{}] pending=[{}] summary={}",
+            entry.entity,
+            entry.role,
+            entry.goal,
+            entry.action,
+            entry.action_phase,
+            entry.current_anchor,
+            entry.need_hunger,
+            entry.need_energy,
+            entry.need_morale,
+            entry.on_shift,
+            entry.replan_required,
+            top_scores,
+            top_facts,
+            pending,
+            entry.decision_summary,
+        );
     }
 }
 
@@ -155,46 +253,58 @@ fn report_spawned_characters_and_exit(
         &GridPosition,
     )>,
     mut rejections: MessageReader<CharacterSpawnRejected>,
+    debug_state: Res<NpcDebugReportState>,
+    snapshot: Res<SettlementDebugSnapshot>,
     mut already_reported: Local<bool>,
     mut app_exit: MessageWriter<AppExit>,
 ) {
-    if *already_reported {
-        return;
-    }
+    if !*already_reported {
+        let mut spawned_count = 0usize;
+        for (
+            entity,
+            definition_id,
+            archetype,
+            disposition,
+            camp_id,
+            display_name,
+            level,
+            behavior,
+            ai,
+            xp_reward,
+            loot,
+            grid_position,
+        ) in &spawned_characters
+        {
+            spawned_count += 1;
+            println!(
+                "spawned entity={entity:?} id={} archetype={:?} disposition={:?} camp={} name={} level={} grid=({}, {}, {}) behavior={} xp={} loot={} ai_attack_range={}",
+                definition_id.0,
+                archetype.0,
+                disposition.0,
+                camp_id.0,
+                display_name.0,
+                level.0,
+                grid_position.0.x,
+                grid_position.0.y,
+                grid_position.0.z,
+                behavior.0,
+                xp_reward.0,
+                loot.0.len(),
+                ai.0.attack_range,
+            );
+        }
 
-    let mut spawned_count = 0usize;
-    for (
-        entity,
-        definition_id,
-        archetype,
-        disposition,
-        camp_id,
-        display_name,
-        level,
-        behavior,
-        ai,
-        xp_reward,
-        loot,
-        grid_position,
-    ) in &spawned_characters
-    {
-        spawned_count += 1;
-        println!(
-            "spawned entity={entity:?} id={} archetype={:?} disposition={:?} camp={} name={} level={} grid=({}, {}, {}) behavior={} xp={} loot={} ai_attack_range={}",
-            definition_id.0,
-            archetype.0,
-            disposition.0,
-            camp_id.0,
-            display_name.0,
-            level.0,
-            grid_position.0.x,
-            grid_position.0.y,
-            grid_position.0.z,
-            behavior.0,
-            xp_reward.0,
-            loot.0.len(),
-            ai.0.attack_range,
-        );
+        for rejection in rejections.read() {
+            println!(
+                "character spawn rejected: definition_id={} reason={}",
+                rejection.definition_id, rejection.reason
+            );
+        }
+
+        if spawned_count > 0 {
+            *already_reported = true;
+        }
+        return;
     }
 
     for rejection in rejections.read() {
@@ -204,8 +314,13 @@ fn report_spawned_characters_and_exit(
         );
     }
 
-    if spawned_count > 0 {
-        *already_reported = true;
+    let enough_debug_cycles = debug_state.printed_frames >= 2;
+    let has_npc_debug_entries = !snapshot.entries.is_empty();
+    let timeout_reached = debug_state.ticks >= 600;
+    if (enough_debug_cycles && has_npc_debug_entries) || timeout_reached {
+        if timeout_reached && !has_npc_debug_entries {
+            println!("npc_debug_snapshot timeout reached without npc entries; shutting down");
+        }
         app_exit.write(AppExit::Success);
     }
 }
@@ -223,11 +338,12 @@ mod tests {
     use game_data::{
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
-        CharacterIdentity, CharacterLibrary, CharacterLootEntry, CharacterPlaceholderColors,
-        CharacterPresentation, CharacterProgression, CharacterResourcePool, GridCoord,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLevelDefinition, MapLibrary,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
-        MapSize,
+        CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterLootEntry,
+        CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
+        CharacterResourcePool, GridCoord, MapBuildingProps, MapCellDefinition, MapDefinition,
+        MapId, MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint,
+        MapObjectKind, MapObjectProps, MapRotation, MapSize, NeedProfile, NpcRole, ScheduleBlock,
+        ScheduleDay,
     };
     use std::collections::BTreeMap;
 
@@ -288,6 +404,30 @@ mod tests {
         assert_eq!(snapshot.grid.map_height, Some(12));
     }
 
+    #[test]
+    fn startup_demo_adds_life_enabled_npcs_for_debug_visibility() {
+        let mut app = App::new();
+        app.insert_resource(ServerConfig::default());
+        app.insert_resource(CharacterDefinitions(sample_character_library_with_life()));
+        app.insert_resource(MapDefinitions(sample_map_library()));
+        app.insert_resource(RuntimeStartupConfig { startup_map: None });
+        app.insert_resource(CapturedRequests::default());
+        app.add_message::<SpawnCharacterRequest>();
+        app.add_systems(Startup, (startup_demo, capture_requests).chain());
+
+        app.update();
+
+        let captured = app.world().resource::<CapturedRequests>();
+        let contains_guard = captured
+            .0
+            .iter()
+            .any(|request| request.definition_id.as_str() == "safehouse_guard_liu");
+        assert!(
+            contains_guard,
+            "life-enabled npc should be queued for debug"
+        );
+    }
+
     fn capture_requests(
         mut reader: MessageReader<SpawnCharacterRequest>,
         mut captured: ResMut<CapturedRequests>,
@@ -322,6 +462,43 @@ mod tests {
 
         let mut map = BTreeMap::new();
         for definition in definitions {
+            map.insert(definition.id.clone(), definition);
+        }
+        CharacterLibrary::from(map)
+    }
+
+    fn sample_character_library_with_life() -> CharacterLibrary {
+        let mut map = BTreeMap::new();
+        for definition in [
+            sample_definition(
+                "player",
+                CharacterArchetype::Player,
+                CharacterDisposition::Player,
+                "survivor",
+                "Rust Player",
+            ),
+            sample_definition(
+                "trader_lao_wang",
+                CharacterArchetype::Npc,
+                CharacterDisposition::Friendly,
+                "survivor",
+                "废土商人·老王",
+            ),
+            sample_definition(
+                "zombie_walker",
+                CharacterArchetype::Enemy,
+                CharacterDisposition::Hostile,
+                "infected",
+                "行尸",
+            ),
+            sample_definition_with_life(
+                "safehouse_guard_liu",
+                CharacterArchetype::Npc,
+                CharacterDisposition::Friendly,
+                "survivor",
+                "据点卫兵·刘山",
+            ),
+        ] {
             map.insert(definition.id.clone(), definition);
         }
         CharacterLibrary::from(map)
@@ -444,6 +621,38 @@ mod tests {
             },
             interaction: None,
             life: None,
+        }
+    }
+
+    fn sample_definition_with_life(
+        id: &str,
+        archetype: CharacterArchetype,
+        disposition: CharacterDisposition,
+        camp_id: &str,
+        display_name: &str,
+    ) -> CharacterDefinition {
+        CharacterDefinition {
+            life: Some(CharacterLifeProfile {
+                settlement_id: "safehouse_survivor_outpost".to_string(),
+                role: NpcRole::Guard,
+                home_anchor: "guard_home_01".to_string(),
+                duty_route_id: "guard_patrol_north".to_string(),
+                schedule: vec![ScheduleBlock {
+                    day: ScheduleDay::Monday,
+                    start_minute: 8 * 60,
+                    end_minute: 16 * 60,
+                    label: "白班执勤".to_string(),
+                    tags: vec!["shift".to_string(), "guard".to_string()],
+                }],
+                smart_object_access: vec!["guard_post".to_string(), "bed".to_string()],
+                need_profile: NeedProfile {
+                    hunger_decay_per_hour: 4.0,
+                    energy_decay_per_hour: 3.0,
+                    morale_decay_per_hour: 1.5,
+                    safety_bias: 0.7,
+                },
+            }),
+            ..sample_definition(id, archetype, disposition, camp_id, display_name)
         }
     }
 }
