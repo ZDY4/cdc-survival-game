@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { EditorShell } from "./components/EditorShell";
+import { detectCurrentSurface } from "./lib/editorSurface";
 import { invokeCommand, isTauriRuntime } from "./lib/tauri";
 import { DialogueWorkspace } from "./modules/dialogues/DialogueWorkspace";
 import { fallbackDialogueWorkspace } from "./modules/dialogues/fallback";
 import { fallbackWorkspace } from "./modules/items/fallback";
 import { ItemWorkspace } from "./modules/items/ItemWorkspace";
+import { MapEditorWindow } from "./modules/maps/MapEditorWindow";
+import { MapLibraryWorkspace } from "./modules/maps/MapLibraryWorkspace";
 import { fallbackMapWorkspace } from "./modules/maps/fallback";
-import { MapWorkspace } from "./modules/maps/MapWorkspace";
 import type {
   DialogueWorkspacePayload,
   ItemWorkspacePayload,
@@ -14,6 +16,7 @@ import type {
 } from "./types";
 
 function App() {
+  const surface = detectCurrentSurface();
   const [itemWorkspace, setItemWorkspace] = useState<ItemWorkspacePayload>(fallbackWorkspace);
   const [dialogueWorkspace, setDialogueWorkspace] = useState<DialogueWorkspacePayload>(
     fallbackDialogueWorkspace,
@@ -49,8 +52,15 @@ function App() {
   }
 
   useEffect(() => {
+    if (surface !== "main") {
+      return;
+    }
     void loadAllWorkspaces();
-  }, []);
+  }, [surface]);
+
+  if (surface === "map-editor") {
+    return <MapEditorWindow />;
+  }
 
   const modules = [
     { id: "items", label: "Items", state: "active" as const },
@@ -87,7 +97,7 @@ function App() {
         />
       ) : null}
       {activeModule === "maps" ? (
-        <MapWorkspace
+        <MapLibraryWorkspace
           workspace={mapWorkspace}
           canPersist={canPersist}
           onStatusChange={setStatus}

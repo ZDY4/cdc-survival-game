@@ -2,6 +2,12 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability set for the CDC content editor desktop window.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "windows": ["main", "map-editor"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-create",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-set-focus",
+    "core:window:allow-close"
+  ]
 }
