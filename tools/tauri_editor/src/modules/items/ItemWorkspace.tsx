@@ -17,11 +17,14 @@ import { invokeCommand } from "../../lib/tauri";
 import type {
   CraftingFragment,
   CraftingRecipe,
+  EffectReferencePreview,
   ItemAmount,
   ItemDefinition,
   ItemDocumentPayload,
   ItemFragment,
+  ItemReferencePreview,
   ItemWorkspacePayload,
+  ReferenceUsageEntry,
   SaveItemsResult,
   ValidationIssue,
 } from "../../types";
@@ -259,10 +262,70 @@ function buildOptionLabelLookup(options: SelectOption[]): Record<string, string>
   return Object.fromEntries(options.map((option) => [option.value, option.label]));
 }
 
+function normalizeIssuePath(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function issueMatchesAnyPath(issue: ValidationIssue, paths: string[]): boolean {
+  const issuePath = normalizeIssuePath(issue.path || issue.field);
+  if (!issuePath) {
+    return false;
+  }
+
+  for (const rawPath of paths) {
+    const path = normalizeIssuePath(rawPath);
+    if (!path) {
+      continue;
+    }
+    if (issuePath === path) {
+      return true;
+    }
+    if (issuePath.startsWith(`${path}.`) || issuePath.startsWith(`${path}[`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function collectIssuesByPaths(issues: ValidationIssue[], paths: string[]): ValidationIssue[] {
+  return issues.filter((issue) => issueMatchesAnyPath(issue, paths));
+}
+
+function buildIssueHint(
+  issues: ValidationIssue[],
+  paths: string[],
+  baseHint?: string,
+): string | undefined {
+  const matches = collectIssuesByPaths(issues, paths);
+  if (matches.length === 0) {
+    return baseHint;
+  }
+
+  const summary = matches
+    .slice(0, 2)
+    .map((issue) => issue.message)
+    .join(" ");
+  if (!baseHint) {
+    return `Issue: ${summary}`;
+  }
+  return `${baseHint} | Issue: ${summary}`;
+}
+
 type SummaryBadge = {
   label: string;
   tone: "muted" | "accent" | "warning" | "success";
 };
+
+type ReferenceFocus =
+  | {
+      kind: "item";
+      id: string;
+    }
+  | {
+      kind: "effect";
+      id: string;
+    };
 
 function shortenLabel(label: string, maxLength = 28): string {
   return label.length <= maxLength ? label : `${label.slice(0, maxLength - 1)}…`;
@@ -448,6 +511,7 @@ type ChipListEditorProps = {
   onChange: (values: string[]) => void;
   allowCustom?: boolean;
   emptyMessage?: string;
+  onInspectValue?: (value: string) => void;
 };
 
 function ChipListEditor({
@@ -458,16 +522,27 @@ function ChipListEditor({
   onChange,
   allowCustom = true,
   emptyMessage = "Nothing selected yet.",
+  onInspectValue,
 }: ChipListEditorProps) {
   const availableOptions = options.filter((option) => !values.includes(option.value));
+  const [filterText, setFilterText] = useState("");
   const [selectedOption, setSelectedOption] = useState(availableOptions[0]?.value ?? "");
   const [customValue, setCustomValue] = useState("");
+  const filteredOptions = availableOptions.filter((option) => {
+    const needle = filterText.trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+    return (
+      option.value.toLowerCase().includes(needle) || option.label.toLowerCase().includes(needle)
+    );
+  });
 
   useEffect(() => {
-    if (!selectedOption || values.includes(selectedOption)) {
-      setSelectedOption(availableOptions[0]?.value ?? "");
+    if (!selectedOption || values.includes(selectedOption) || !availableOptions.some((option) => option.value === selectedOption)) {
+      setSelectedOption(filteredOptions[0]?.value ?? availableOptions[0]?.value ?? "");
     }
-  }, [availableOptions, selectedOption, values]);
+  }, [availableOptions, filteredOptions, selectedOption, values]);
 
   function addSelectedOption() {
     if (!selectedOption) {
@@ -494,13 +569,23 @@ function ChipListEditor({
       <span className="field-label">{label}</span>
       <div className="picker-stack">
         <div className="picker-controls">
+          <input
+            className="field-input"
+            type="text"
+            value={filterText}
+            placeholder="Search references"
+            onChange={(event) => setFilterText(event.target.value)}
+          />
+        </div>
+
+        <div className="picker-controls">
           <select
             className="field-input"
             value={selectedOption}
             onChange={(event) => setSelectedOption(event.target.value)}
           >
             <option value="">Select option</option>
-            {availableOptions.map((option) => (
+            {filteredOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -514,6 +599,20 @@ function ChipListEditor({
           >
             Add
           </button>
+          {onInspectValue ? (
+            <button
+              type="button"
+              className="toolbar-button"
+              onClick={() => {
+                if (selectedOption) {
+                  onInspectValue(selectedOption);
+                }
+              }}
+              disabled={!selectedOption}
+            >
+              Inspect
+            </button>
+          ) : null}
         </div>
 
         {allowCustom ? (
@@ -569,6 +668,7 @@ type ItemAmountEditorProps = {
   itemOptions: SelectOption[];
   onChange: (values: ItemAmount[]) => void;
   emptyMessage?: string;
+  onInspectItem?: (itemId: string) => void;
 };
 
 function ItemAmountEditor({
@@ -578,9 +678,20 @@ function ItemAmountEditor({
   itemOptions,
   onChange,
   emptyMessage = "No item amounts configured.",
+  onInspectItem,
 }: ItemAmountEditorProps) {
+  const [filterText, setFilterText] = useState("");
   const [draftItemId, setDraftItemId] = useState(itemOptions[0]?.value ?? "");
   const [draftCount, setDraftCount] = useState("1");
+  const filteredItemOptions = itemOptions.filter((option) => {
+    const needle = filterText.trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+    return (
+      option.value.toLowerCase().includes(needle) || option.label.toLowerCase().includes(needle)
+    );
+  });
 
   useEffect(() => {
     if (!draftItemId && itemOptions.length > 0) {
@@ -620,6 +731,16 @@ function ItemAmountEditor({
     <label className="field">
       <span className="field-label">{label}</span>
       <div className="picker-stack">
+        <div className="picker-controls">
+          <input
+            className="field-input"
+            type="text"
+            value={filterText}
+            placeholder="Search item references"
+            onChange={(event) => setFilterText(event.target.value)}
+          />
+        </div>
+
         <div className="picker-controls picker-controls-wide">
           <select
             className="field-input"
@@ -627,7 +748,7 @@ function ItemAmountEditor({
             onChange={(event) => setDraftItemId(event.target.value)}
           >
             <option value="">Select item id</option>
-            {itemOptions.map((option) => (
+            {filteredItemOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -648,6 +769,20 @@ function ItemAmountEditor({
           >
             Add
           </button>
+          {onInspectItem ? (
+            <button
+              type="button"
+              className="toolbar-button"
+              onClick={() => {
+                if (draftItemId) {
+                  onInspectItem(draftItemId);
+                }
+              }}
+              disabled={!draftItemId}
+            >
+              Inspect
+            </button>
+          ) : null}
         </div>
 
         {values.length > 0 ? (
@@ -682,6 +817,13 @@ function ItemAmountEditor({
                     })
                   }
                 />
+                <button
+                  type="button"
+                  className="toolbar-button"
+                  onClick={() => onInspectItem?.(String(amount.item_id))}
+                >
+                  Inspect
+                </button>
                 <button
                   type="button"
                   className="toolbar-button toolbar-danger"
@@ -720,11 +862,13 @@ export function ItemWorkspace({
   const [extraJsonDraft, setExtraJsonDraft] = useState("{}");
   const [addFragmentKind, setAddFragmentKind] = useState("");
   const [collapsedFragments, setCollapsedFragments] = useState<Record<string, boolean>>({});
+  const [referenceFocus, setReferenceFocus] = useState<ReferenceFocus | null>(null);
   const deferredSearch = useDeferredValue(searchText);
 
   useEffect(() => {
     setDocuments(hydrateDocuments(workspace.documents));
     setSelectedKey(workspace.documents[0]?.documentKey ?? "");
+    setReferenceFocus(null);
   }, [workspace]);
 
   useEffect(() => {
@@ -1043,6 +1187,88 @@ export function ItemWorkspace({
   const equipmentSlotOptions = buildStringOptions(workspace.catalogs.equipmentSlots);
   const itemLabelLookup = buildOptionLabelLookup(itemReferenceOptions);
   const effectLabelLookup = buildOptionLabelLookup(effectReferenceOptions);
+  const itemPreviews = workspace.catalogs.itemPreviews ?? [];
+  const effectPreviews = workspace.catalogs.effectPreviews ?? [];
+  const itemUsedByMap = workspace.catalogs.itemUsedBy ?? {};
+  const effectUsedByMap = workspace.catalogs.effectUsedBy ?? {};
+  const itemPreviewLookup: Record<string, ItemReferencePreview> = Object.fromEntries(
+    itemPreviews.map((preview) => [preview.id, preview]),
+  );
+  const effectPreviewLookup: Record<string, EffectReferencePreview> = Object.fromEntries(
+    effectPreviews.map((preview) => [preview.id, preview]),
+  );
+  const documentKeyByItemId: Record<string, string> = Object.fromEntries(
+    documents.map((document) => [String(document.item.id), document.documentKey]),
+  );
+
+  function focusItemReference(value: string | number | null | undefined) {
+    if (value == null) {
+      return;
+    }
+    const id = String(value).trim();
+    if (!id || !itemPreviewLookup[id]) {
+      return;
+    }
+    setReferenceFocus({ kind: "item", id });
+  }
+
+  function focusEffectReference(value: string | null | undefined) {
+    const id = value?.trim() ?? "";
+    if (!id || !effectPreviewLookup[id]) {
+      return;
+    }
+    setReferenceFocus({ kind: "effect", id });
+  }
+
+  const focusedItemPreview =
+    referenceFocus?.kind === "item" ? itemPreviewLookup[referenceFocus.id] : undefined;
+  const focusedEffectPreview =
+    referenceFocus?.kind === "effect" ? effectPreviewLookup[referenceFocus.id] : undefined;
+  const focusedUsageEntries: ReferenceUsageEntry[] =
+    referenceFocus?.kind === "item"
+      ? itemUsedByMap[referenceFocus.id] ?? []
+      : referenceFocus?.kind === "effect"
+        ? effectUsedByMap[referenceFocus.id] ?? []
+        : [];
+
+  const issueHints = {
+    equipSlots: buildIssueHint(selectedIssues, ["fragments.equip.slots", "equip.slots"]),
+    equipEffects: buildIssueHint(selectedIssues, [
+      "fragments.equip.equip_effect_ids",
+      "equip.effect_ids",
+    ]),
+    unequipEffects: buildIssueHint(selectedIssues, [
+      "fragments.equip.unequip_effect_ids",
+      "equip.effect_ids",
+    ]),
+    weaponAmmoType: buildIssueHint(selectedIssues, [
+      "fragments.weapon.ammo_type",
+      "weapon.item_ids",
+    ]),
+    weaponOnHitEffects: buildIssueHint(selectedIssues, [
+      "fragments.weapon.on_hit_effect_ids",
+      "weapon.effect_ids",
+    ]),
+    usableEffects: buildIssueHint(selectedIssues, [
+      "fragments.usable.effect_ids",
+      "usable.effect_ids",
+    ]),
+    repairMaterials: buildIssueHint(selectedIssues, [
+      "fragments.durability.repair_materials",
+      "durability.amounts",
+      "durability.item_ids",
+    ]),
+    craftingRecipeMaterials: buildIssueHint(selectedIssues, [
+      "fragments.crafting.crafting_recipe.materials",
+      "crafting.amounts",
+      "crafting.item_ids",
+    ]),
+    deconstructYield: buildIssueHint(selectedIssues, [
+      "fragments.crafting.deconstruct_yield",
+      "crafting.amounts",
+      "crafting.item_ids",
+    ]),
+  };
 
   function renderFragmentEditor(fragment: ItemFragment) {
     switch (fragment.kind) {
@@ -1110,7 +1336,11 @@ export function ItemWorkspace({
             <div className="form-grid">
               <ChipListEditor
                 label="Slots"
-                hint={`Known slots: ${workspace.catalogs.equipmentSlots.join(", ")}`}
+                hint={buildIssueHint(
+                  selectedIssues,
+                  ["fragments.equip.slots", "equip.slots"],
+                  `Known slots: ${workspace.catalogs.equipmentSlots.join(", ")}`,
+                )}
                 values={fragment.slots}
                 onChange={(value) =>
                   updateSelectedFragment("equip", (current) => ({
@@ -1123,6 +1353,7 @@ export function ItemWorkspace({
               />
               <ChipListEditor
                 label="Equip effects"
+                hint={issueHints.equipEffects}
                 values={fragment.equip_effect_ids}
                 onChange={(value) =>
                   updateSelectedFragment("equip", (current) => ({
@@ -1132,9 +1363,11 @@ export function ItemWorkspace({
                 }
                 options={effectReferenceOptions}
                 emptyMessage="No equip effects configured."
+                onInspectValue={focusEffectReference}
               />
               <ChipListEditor
                 label="Unequip effects"
+                hint={issueHints.unequipEffects}
                 values={fragment.unequip_effect_ids}
                 onChange={(value) =>
                   updateSelectedFragment("equip", (current) => ({
@@ -1144,6 +1377,7 @@ export function ItemWorkspace({
                 }
                 options={effectReferenceOptions}
                 emptyMessage="No unequip effects configured."
+                onInspectValue={focusEffectReference}
               />
             </div>
           </>
@@ -1187,7 +1421,7 @@ export function ItemWorkspace({
             </div>
             <ItemAmountEditor
               label="Repair materials"
-              hint="Use item_id=count per line."
+              hint={issueHints.repairMaterials ?? "Use item_id=count per line."}
               values={fragment.repair_materials}
               onChange={(value) =>
                 updateSelectedFragment("durability", (current) => ({
@@ -1197,6 +1431,7 @@ export function ItemWorkspace({
               }
               itemOptions={itemReferenceOptions}
               emptyMessage="No repair materials configured."
+              onInspectItem={focusItemReference}
             />
           </>
         );
@@ -1296,6 +1531,7 @@ export function ItemWorkspace({
               />
               <SelectField
                 label="Ammo type"
+                hint={issueHints.weaponAmmoType}
                 value={ammoTypeValue}
                 onChange={(value) =>
                   updateSelectedFragment("weapon", (current) => ({
@@ -1305,6 +1541,16 @@ export function ItemWorkspace({
                 }
                 options={itemReferenceOptions}
               />
+              <div>
+                <button
+                  type="button"
+                  className="toolbar-button"
+                  onClick={() => focusItemReference(ammoTypeValue)}
+                  disabled={!ammoTypeValue}
+                >
+                  Inspect ammo reference
+                </button>
+              </div>
               <TextField
                 label="Max ammo"
                 value={optionalNumberText(fragment.max_ammo)}
@@ -1330,6 +1576,7 @@ export function ItemWorkspace({
             </div>
             <ChipListEditor
               label="On-hit effects"
+              hint={issueHints.weaponOnHitEffects}
               values={fragment.on_hit_effect_ids}
               onChange={(value) =>
                 updateSelectedFragment("weapon", (current) => ({
@@ -1339,6 +1586,7 @@ export function ItemWorkspace({
               }
               options={effectReferenceOptions}
               emptyMessage="No on-hit effects configured."
+              onInspectValue={focusEffectReference}
             />
           </>
         );
@@ -1389,6 +1637,7 @@ export function ItemWorkspace({
             </div>
             <ChipListEditor
               label="Effect ids"
+              hint={issueHints.usableEffects}
               values={fragment.effect_ids}
               onChange={(value) =>
                 updateSelectedFragment("usable", (current) => ({
@@ -1398,6 +1647,7 @@ export function ItemWorkspace({
               }
               options={effectReferenceOptions}
               emptyMessage="No use effects configured."
+              onInspectValue={focusEffectReference}
             />
           </>
         );
@@ -1424,7 +1674,10 @@ export function ItemWorkspace({
             <div className="form-grid">
               <ItemAmountEditor
                 label="Recipe materials"
-                hint="Pick item ids and quantities for crafting."
+                hint={
+                  issueHints.craftingRecipeMaterials ??
+                  "Pick item ids and quantities for crafting."
+                }
                 values={recipe.materials}
                 onChange={(value) =>
                   updateSelectedFragment("crafting", (current) => ({
@@ -1437,10 +1690,14 @@ export function ItemWorkspace({
                 }
                 itemOptions={itemReferenceOptions}
                 emptyMessage="No crafting materials configured."
+                onInspectItem={focusItemReference}
               />
               <ItemAmountEditor
                 label="Deconstruct yield"
-                hint="Pick item ids and quantities yielded by deconstruction."
+                hint={
+                  issueHints.deconstructYield ??
+                  "Pick item ids and quantities yielded by deconstruction."
+                }
                 values={fragment.deconstruct_yield}
                 onChange={(value) =>
                   updateSelectedFragment("crafting", (current) => ({
@@ -1450,6 +1707,7 @@ export function ItemWorkspace({
                 }
                 itemOptions={itemReferenceOptions}
                 emptyMessage="No deconstruct yield configured."
+                onInspectItem={focusItemReference}
               />
             </div>
           </>
@@ -1468,11 +1726,22 @@ export function ItemWorkspace({
             }
             options={effectReferenceOptions}
             emptyMessage="No passive effects configured."
+            onInspectValue={focusEffectReference}
           />
         );
       default:
         return null;
     }
+  }
+
+  function openUsageSource(entry: ReferenceUsageEntry) {
+    const key = documentKeyByItemId[String(entry.sourceItemId)];
+    if (!key) {
+      onStatusChange(`Source item ${entry.sourceItemId} is not available in current workspace.`);
+      return;
+    }
+    setSelectedKey(key);
+    onStatusChange(`Opened source item ${entry.sourceItemId} from Used By.`);
   }
 
   return (
@@ -1745,6 +2014,104 @@ export function ItemWorkspace({
 
         <aside className="column">
           <ValidationPanel issues={selectedIssues} />
+
+          <PanelSection label="Reference" title="Inspector and Used By" compact>
+            {focusedItemPreview ? (
+              <div className="issue-list">
+                <article className="issue">
+                  <div className="issue-head">
+                    <Badge tone="accent">item</Badge>
+                    <strong>
+                      {focusedItemPreview.id} · {focusedItemPreview.name || "Unnamed item"}
+                    </strong>
+                  </div>
+                  <p>
+                    value {focusedItemPreview.value} · weight {focusedItemPreview.weight}
+                  </p>
+                  <div className="row-badges">
+                    {focusedItemPreview.derivedTags.map((tag) => (
+                      <Badge key={`focus-item-tag-${tag}`} tone="muted">
+                        {tag}
+                      </Badge>
+                    ))}
+                    {focusedItemPreview.keyFragments.slice(0, 4).map((summary) => (
+                      <Badge key={`focus-item-frag-${summary}`} tone="accent">
+                        {summary}
+                      </Badge>
+                    ))}
+                  </div>
+                </article>
+              </div>
+            ) : null}
+
+            {focusedEffectPreview ? (
+              <div className="issue-list">
+                <article className="issue">
+                  <div className="issue-head">
+                    <Badge tone="success">effect</Badge>
+                    <strong>
+                      {focusedEffectPreview.id} · {focusedEffectPreview.name || "Unnamed effect"}
+                    </strong>
+                  </div>
+                  <p>
+                    {focusedEffectPreview.category} · duration {focusedEffectPreview.duration} ·
+                    stack {focusedEffectPreview.stackMode}
+                  </p>
+                  {focusedEffectPreview.description ? <p>{focusedEffectPreview.description}</p> : null}
+                  {Object.keys(focusedEffectPreview.resourceDeltas).length > 0 ? (
+                    <div className="row-badges">
+                      {Object.entries(focusedEffectPreview.resourceDeltas).map(([key, amount]) => (
+                        <Badge key={`focus-effect-delta-${key}`} tone="accent">
+                          {key} {amount >= 0 ? "+" : ""}
+                          {amount}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+              </div>
+            ) : null}
+
+            {referenceFocus == null ? (
+              <div className="empty-state">
+                <Badge tone="muted">Idle</Badge>
+                <p>Click Inspect in any reference field to view details and Used By info.</p>
+              </div>
+            ) : (
+              <div className="issue-list">
+                {focusedUsageEntries.length > 0 ? (
+                  focusedUsageEntries.map((entry, index) => (
+                    <article
+                      className="issue"
+                      key={`${entry.sourceItemId}-${entry.fragmentKind}-${entry.path}-${index}`}
+                    >
+                      <div className="issue-head">
+                        <Badge tone="warning">{entry.fragmentKind}</Badge>
+                        <strong>
+                          #{entry.sourceItemId} · {entry.sourceItemName || "Unnamed item"}
+                        </strong>
+                      </div>
+                      <p>
+                        {entry.note} · {entry.path}
+                      </p>
+                      <button
+                        type="button"
+                        className="toolbar-button"
+                        onClick={() => openUsageSource(entry)}
+                      >
+                        Open source item
+                      </button>
+                    </article>
+                  ))
+                ) : (
+                  <div className="empty-state">
+                    <Badge tone="success">No usage</Badge>
+                    <p>No reverse references found for this entry in current item workspace.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </PanelSection>
 
           <PanelSection label="Catalogs" title="Fragment authoring context" compact>
             <div className="row-badges">

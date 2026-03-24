@@ -121,10 +121,47 @@ struct CatalogEntry {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ItemReferencePreview {
+    id: String,
+    name: String,
+    value: i32,
+    weight: f32,
+    derived_tags: Vec<String>,
+    key_fragments: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EffectReferencePreview {
+    id: String,
+    name: String,
+    description: String,
+    category: String,
+    duration: f32,
+    stack_mode: String,
+    resource_deltas: BTreeMap<String, f32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReferenceUsageEntry {
+    source_item_id: u32,
+    source_item_name: String,
+    fragment_kind: String,
+    path: String,
+    note: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ItemCatalogs {
     fragment_kinds: Vec<String>,
     effect_ids: Vec<String>,
     effect_entries: Vec<CatalogEntry>,
+    effect_previews: Vec<EffectReferencePreview>,
+    item_previews: Vec<ItemReferencePreview>,
+    effect_used_by: BTreeMap<String, Vec<ReferenceUsageEntry>>,
+    item_used_by: BTreeMap<String, Vec<ReferenceUsageEntry>>,
     equipment_slots: Vec<String>,
     known_subtypes: Vec<String>,
     item_ids: Vec<String>,
@@ -893,9 +930,16 @@ fn collect_catalogs(
         }
     }
 
+    let effect_ids = effect_library.ids();
+    let effect_previews = build_effect_previews(effect_library);
+    let item_previews = build_item_previews(documents);
+    let (mut effect_used_by, mut item_used_by) = build_reference_indexes(documents);
+    sort_usage_map(&mut effect_used_by);
+    sort_usage_map(&mut item_used_by);
+
     ItemCatalogs {
         fragment_kinds: fragment_kinds.into_iter().collect(),
-        effect_ids: effect_library.ids().into_iter().collect(),
+        effect_ids: effect_ids.into_iter().collect(),
         effect_entries: effect_library
             .iter()
             .map(|(id, definition)| CatalogEntry {
@@ -907,12 +951,373 @@ fn collect_catalogs(
                 },
             })
             .collect(),
+        effect_previews,
+        item_previews,
+        effect_used_by,
+        item_used_by,
         equipment_slots: equipment_slots.into_iter().collect(),
         known_subtypes: known_subtypes.into_iter().collect(),
         item_ids: documents
             .iter()
             .map(|document| document.item.id.to_string())
             .collect(),
+    }
+}
+
+fn build_effect_previews(effect_library: &game_data::EffectLibrary) -> Vec<EffectReferencePreview> {
+    effect_library
+        .iter()
+        .map(|(id, effect)| EffectReferencePreview {
+            id: id.clone(),
+            name: effect.name.clone(),
+            description: effect.description.clone(),
+            category: effect.category.clone(),
+            duration: effect.duration,
+            stack_mode: effect.stack_mode.clone(),
+            resource_deltas: effect
+                .gameplay_effect
+                .as_ref()
+                .map(|value| value.resource_deltas.clone())
+                .unwrap_or_default(),
+        })
+        .collect()
+}
+
+fn build_item_previews(documents: &[ItemDocumentPayload]) -> Vec<ItemReferencePreview> {
+    let mut previews = documents
+        .iter()
+        .map(|document| {
+            let item = &document.item;
+            ItemReferencePreview {
+                id: item.id.to_string(),
+                name: item.name.clone(),
+                value: item.value,
+                weight: item.weight,
+                derived_tags: derive_item_tags(item),
+                key_fragments: summarize_item_fragments(item),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    previews.sort_by(|left, right| {
+        left.id
+            .parse::<u32>()
+            .unwrap_or_default()
+            .cmp(&right.id.parse::<u32>().unwrap_or_default())
+    });
+    previews
+}
+
+fn derive_item_tags(item: &ItemDefinition) -> Vec<String> {
+    let has_weapon = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Weapon { .. }));
+    let equip_slots = item.fragments.iter().find_map(|fragment| {
+        if let ItemFragment::Equip { slots, .. } = fragment {
+            Some(slots)
+        } else {
+            None
+        }
+    });
+    let has_usable = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Usable { .. }));
+    let has_crafting = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Crafting { .. }));
+    let has_stacking = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Stacking { .. }));
+
+    let mut tags = Vec::new();
+    if has_weapon {
+        tags.push("weapon".to_string());
+    }
+
+    if let Some(slots) = equip_slots {
+        if !has_weapon
+            && slots
+                .iter()
+                .any(|slot| matches!(slot.as_str(), "head" | "body" | "hands" | "legs" | "feet" | "back"))
+        {
+            tags.push("armor".to_string());
+        }
+        if slots
+            .iter()
+            .any(|slot| matches!(slot.as_str(), "accessory" | "accessory_1" | "accessory_2"))
+        {
+            tags.push("accessory".to_string());
+        }
+    }
+
+    if has_usable {
+        tags.push("usable".to_string());
+    }
+    if !has_weapon && !has_usable && equip_slots.is_none() && (has_crafting || has_stacking) {
+        tags.push("material_or_misc".to_string());
+    }
+    if tags.is_empty() {
+        tags.push("material_or_misc".to_string());
+    }
+    tags
+}
+
+fn summarize_item_fragments(item: &ItemDefinition) -> Vec<String> {
+    let mut summaries = Vec::new();
+    for fragment in &item.fragments {
+        let summary = match fragment {
+            ItemFragment::Economy { rarity } => format!("economy: {rarity}"),
+            ItemFragment::Stacking {
+                stackable,
+                max_stack,
+            } => {
+                if *stackable {
+                    format!("stacking: x{max_stack}")
+                } else {
+                    "stacking: single".to_string()
+                }
+            }
+            ItemFragment::Equip {
+                slots,
+                level_requirement,
+                ..
+            } => format!("equip: {} slots, lvl {}", slots.len(), level_requirement),
+            ItemFragment::Durability {
+                durability,
+                max_durability,
+                ..
+            } => format!("durability: {durability}/{max_durability}"),
+            ItemFragment::AttributeModifiers { attributes } => {
+                format!("attributes: {} entries", attributes.len())
+            }
+            ItemFragment::Weapon {
+                subtype,
+                damage,
+                on_hit_effect_ids,
+                ..
+            } => format!("weapon: {subtype}, dmg {damage}, {} hit fx", on_hit_effect_ids.len()),
+            ItemFragment::Usable {
+                subtype,
+                effect_ids,
+                ..
+            } => format!("usable: {subtype}, {} effects", effect_ids.len()),
+            ItemFragment::Crafting {
+                crafting_recipe,
+                deconstruct_yield,
+            } => format!(
+                "crafting: {} mats, {} yields",
+                crafting_recipe
+                    .as_ref()
+                    .map(|recipe| recipe.materials.len())
+                    .unwrap_or_default(),
+                deconstruct_yield.len()
+            ),
+            ItemFragment::PassiveEffects { effect_ids } => {
+                format!("passive_effects: {} effects", effect_ids.len())
+            }
+        };
+        summaries.push(summary);
+    }
+    summaries
+}
+
+fn build_reference_indexes(
+    documents: &[ItemDocumentPayload],
+) -> (
+    BTreeMap<String, Vec<ReferenceUsageEntry>>,
+    BTreeMap<String, Vec<ReferenceUsageEntry>>,
+) {
+    let mut effect_used_by: BTreeMap<String, Vec<ReferenceUsageEntry>> = BTreeMap::new();
+    let mut item_used_by: BTreeMap<String, Vec<ReferenceUsageEntry>> = BTreeMap::new();
+
+    for document in documents {
+        let item = &document.item;
+        let source_name = if item.name.trim().is_empty() {
+            format!("Item {}", item.id)
+        } else {
+            item.name.clone()
+        };
+
+        for fragment in &item.fragments {
+            match fragment {
+                ItemFragment::Equip {
+                    equip_effect_ids,
+                    unequip_effect_ids,
+                    ..
+                } => {
+                    for effect_id in equip_effect_ids {
+                        if effect_id.trim().is_empty() {
+                            continue;
+                        }
+                        push_usage(
+                            &mut effect_used_by,
+                            effect_id,
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "equip".to_string(),
+                                path: "fragments.equip.equip_effect_ids".to_string(),
+                                note: "equip effect".to_string(),
+                            },
+                        );
+                    }
+                    for effect_id in unequip_effect_ids {
+                        if effect_id.trim().is_empty() {
+                            continue;
+                        }
+                        push_usage(
+                            &mut effect_used_by,
+                            effect_id,
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "equip".to_string(),
+                                path: "fragments.equip.unequip_effect_ids".to_string(),
+                                note: "unequip effect".to_string(),
+                            },
+                        );
+                    }
+                }
+                ItemFragment::Durability {
+                    repair_materials, ..
+                } => {
+                    for entry in repair_materials {
+                        push_usage(
+                            &mut item_used_by,
+                            &entry.item_id.to_string(),
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "durability".to_string(),
+                                path: "fragments.durability.repair_materials".to_string(),
+                                note: format!("repair material x{}", entry.count),
+                            },
+                        );
+                    }
+                }
+                ItemFragment::Weapon {
+                    ammo_type,
+                    on_hit_effect_ids,
+                    ..
+                } => {
+                    if let Some(ammo_type) = ammo_type {
+                        push_usage(
+                            &mut item_used_by,
+                            &ammo_type.to_string(),
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "weapon".to_string(),
+                                path: "fragments.weapon.ammo_type".to_string(),
+                                note: "weapon ammo type".to_string(),
+                            },
+                        );
+                    }
+                    for effect_id in on_hit_effect_ids {
+                        if effect_id.trim().is_empty() {
+                            continue;
+                        }
+                        push_usage(
+                            &mut effect_used_by,
+                            effect_id,
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "weapon".to_string(),
+                                path: "fragments.weapon.on_hit_effect_ids".to_string(),
+                                note: "on-hit effect".to_string(),
+                            },
+                        );
+                    }
+                }
+                ItemFragment::Usable { effect_ids, .. } => {
+                    for effect_id in effect_ids {
+                        if effect_id.trim().is_empty() {
+                            continue;
+                        }
+                        push_usage(
+                            &mut effect_used_by,
+                            effect_id,
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "usable".to_string(),
+                                path: "fragments.usable.effect_ids".to_string(),
+                                note: "usable effect".to_string(),
+                            },
+                        );
+                    }
+                }
+                ItemFragment::Crafting {
+                    crafting_recipe,
+                    deconstruct_yield,
+                } => {
+                    if let Some(recipe) = crafting_recipe {
+                        for entry in &recipe.materials {
+                            push_usage(
+                                &mut item_used_by,
+                                &entry.item_id.to_string(),
+                                ReferenceUsageEntry {
+                                    source_item_id: item.id,
+                                    source_item_name: source_name.clone(),
+                                    fragment_kind: "crafting".to_string(),
+                                    path: "fragments.crafting.crafting_recipe.materials".to_string(),
+                                    note: format!("crafting material x{}", entry.count),
+                                },
+                            );
+                        }
+                    }
+                    for entry in deconstruct_yield {
+                        push_usage(
+                            &mut item_used_by,
+                            &entry.item_id.to_string(),
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "crafting".to_string(),
+                                path: "fragments.crafting.deconstruct_yield".to_string(),
+                                note: format!("deconstruct yield x{}", entry.count),
+                            },
+                        );
+                    }
+                }
+                ItemFragment::PassiveEffects { effect_ids } => {
+                    for effect_id in effect_ids {
+                        if effect_id.trim().is_empty() {
+                            continue;
+                        }
+                        push_usage(
+                            &mut effect_used_by,
+                            effect_id,
+                            ReferenceUsageEntry {
+                                source_item_id: item.id,
+                                source_item_name: source_name.clone(),
+                                fragment_kind: "passive_effects".to_string(),
+                                path: "fragments.passive_effects.effect_ids".to_string(),
+                                note: "passive effect".to_string(),
+                            },
+                        );
+                    }
+                }
+                ItemFragment::Economy { .. }
+                | ItemFragment::Stacking { .. }
+                | ItemFragment::AttributeModifiers { .. } => {}
+            }
+        }
+    }
+
+    (effect_used_by, item_used_by)
+}
+
+fn push_usage(
+    map: &mut BTreeMap<String, Vec<ReferenceUsageEntry>>,
+    key: &str,
+    entry: ReferenceUsageEntry,
+) {
+    map.entry(key.to_string()).or_default().push(entry);
+}
+
+fn sort_usage_map(map: &mut BTreeMap<String, Vec<ReferenceUsageEntry>>) {
+    for entries in map.values_mut() {
+        entries.sort_by(|left, right| {
+            left.source_item_id
+                .cmp(&right.source_item_id)
+                .then_with(|| left.fragment_kind.cmp(&right.fragment_kind))
+                .then_with(|| left.path.cmp(&right.path))
+                .then_with(|| left.note.cmp(&right.note))
+        });
     }
 }
 
@@ -980,83 +1385,263 @@ fn validate_item(
     let mut issues = Vec::new();
 
     if duplicate_id {
-        issues.push(error("id", "Item id duplicates another item file."));
+        issues.push(item_error(
+            "id",
+            "Item id duplicates another item file.",
+            "id",
+        ));
     }
 
     if let Err(error) = validate_item_definition(item, Some(catalog)) {
-        issues.push(item_validation_issue(error));
+        issues.push(item_validation_issue(item, error));
     }
 
     issues
 }
 
-fn item_validation_issue(validation_error: ItemDefinitionValidationError) -> ValidationIssue {
+fn item_validation_issue(
+    item: &ItemDefinition,
+    validation_error: ItemDefinitionValidationError,
+) -> ValidationIssue {
     match validation_error {
-        ItemDefinitionValidationError::InvalidId => {
-            error("id", "Item id must be a positive integer.")
-        }
-        ItemDefinitionValidationError::MissingName { .. } => {
-            error("name", "Item name cannot be empty.")
-        }
+        ItemDefinitionValidationError::InvalidId => item_error("id", "Item id must be a positive integer.", "id"),
+        ItemDefinitionValidationError::MissingName { .. } => item_error("name", "Item name cannot be empty.", "name"),
         ItemDefinitionValidationError::MissingFragments { .. } => {
-            error("fragments", "Item must define at least one fragment.")
+            item_error("fragments", "Item must define at least one fragment.", "fragments")
         }
         ItemDefinitionValidationError::NegativeWeight { .. } => {
-            error("weight", "Item weight cannot be negative.")
+            item_error("weight", "Item weight cannot be negative.", "weight")
         }
         ItemDefinitionValidationError::NegativeValue { .. } => {
-            error("value", "Item value cannot be negative.")
+            item_error("value", "Item value cannot be negative.", "value")
         }
-        ItemDefinitionValidationError::DuplicateFragmentKind { kind, .. } => error(
+        ItemDefinitionValidationError::DuplicateFragmentKind { kind, .. } => item_error(
             "fragments",
             format!("Fragment kind {kind} cannot appear more than once."),
+            &format!("fragments.{kind}"),
         ),
         ItemDefinitionValidationError::EquipWithoutSlots { .. } => {
-            error("equip.slots", "Equip fragment must define at least one slot.")
+            item_error(
+                "equip.slots",
+                "Equip fragment must define at least one slot.",
+                "fragments.equip.slots",
+            )
         }
-        ItemDefinitionValidationError::WeaponWithoutEquip { .. } => error(
+        ItemDefinitionValidationError::WeaponWithoutEquip { .. } => item_error(
             "weapon",
             "Weapon fragment requires an equip fragment on the same item.",
+            "fragments.weapon",
         ),
         ItemDefinitionValidationError::InvalidMaxStack { .. } => {
-            error("stacking.max_stack", "Stacking fragment must use max_stack >= 1.")
+            item_error(
+                "stacking.max_stack",
+                "Stacking fragment must use max_stack >= 1.",
+                "fragments.stacking.max_stack",
+            )
         }
-        ItemDefinitionValidationError::InvalidNonStackableMaxStack { .. } => error(
+        ItemDefinitionValidationError::InvalidNonStackableMaxStack { .. } => item_error(
             "stacking.max_stack",
             "Non-stackable items must use a max_stack of 1.",
+            "fragments.stacking.max_stack",
         ),
-        ItemDefinitionValidationError::DurabilityExceedsMax { .. } => error(
+        ItemDefinitionValidationError::DurabilityExceedsMax { .. } => item_error(
             "durability",
             "Durability cannot exceed max durability unless both use -1.",
+            "fragments.durability",
         ),
         ItemDefinitionValidationError::UnknownEffectId {
             fragment,
             effect_id,
             ..
-        } => error(
-            format!("{fragment}.effect_ids"),
-            format!("Unknown effect id: {effect_id}."),
-        ),
+        } => {
+            let path = resolve_effect_path(item, &fragment, &effect_id);
+            item_error(
+                format!("{fragment}.effect_ids"),
+                format!("Unknown effect id: {effect_id}."),
+                path.as_str(),
+            )
+        }
         ItemDefinitionValidationError::UnknownItemId {
             fragment,
             referenced_item_id,
             ..
-        } => error(
-            format!("{fragment}.item_ids"),
-            format!("Unknown item id reference: {referenced_item_id}."),
-        ),
-        ItemDefinitionValidationError::EmptyEquipSlot { .. } => {
-            error("equip.slots", "Equip slots cannot contain blank values.")
+        } => {
+            let path = resolve_item_reference_path(item, &fragment, referenced_item_id);
+            item_error(
+                format!("{fragment}.item_ids"),
+                format!("Unknown item id reference: {referenced_item_id}."),
+                path.as_str(),
+            )
         }
-        ItemDefinitionValidationError::EmptyEffectId { fragment, .. } => error(
-            format!("{fragment}.effect_ids"),
-            "Effect id lists cannot contain blank values.",
-        ),
-        ItemDefinitionValidationError::InvalidAmountEntry { fragment, .. } => error(
-            format!("{fragment}.amounts"),
-            "Item amount entries must reference a valid item id and a positive count.",
-        ),
+        ItemDefinitionValidationError::EmptyEquipSlot { .. } => {
+            item_error(
+                "equip.slots",
+                "Equip slots cannot contain blank values.",
+                "fragments.equip.slots",
+            )
+        }
+        ItemDefinitionValidationError::EmptyEffectId { fragment, .. } => {
+            let path = resolve_effect_path(item, &fragment, "");
+            item_error(
+                format!("{fragment}.effect_ids"),
+                "Effect id lists cannot contain blank values.",
+                path.as_str(),
+            )
+        }
+        ItemDefinitionValidationError::InvalidAmountEntry { fragment, .. } => {
+            let path = resolve_invalid_amount_path(item, &fragment);
+            item_error(
+                format!("{fragment}.amounts"),
+                "Item amount entries must reference a valid item id and a positive count.",
+                path.as_str(),
+            )
+        }
     }
+}
+
+fn resolve_effect_path(item: &ItemDefinition, fragment: &str, effect_id: &str) -> String {
+    let normalized = effect_id.trim();
+    for item_fragment in &item.fragments {
+        match item_fragment {
+            ItemFragment::Equip {
+                equip_effect_ids,
+                unequip_effect_ids,
+                ..
+            } if fragment == "equip" => {
+                if normalized.is_empty()
+                    || equip_effect_ids.iter().any(|value| value.trim() == normalized)
+                {
+                    return "fragments.equip.equip_effect_ids".to_string();
+                }
+                if unequip_effect_ids.iter().any(|value| value.trim() == normalized) {
+                    return "fragments.equip.unequip_effect_ids".to_string();
+                }
+                return "fragments.equip.equip_effect_ids".to_string();
+            }
+            ItemFragment::Weapon {
+                on_hit_effect_ids, ..
+            } if fragment == "weapon" => {
+                if normalized.is_empty()
+                    || on_hit_effect_ids
+                        .iter()
+                        .any(|value| value.trim() == normalized)
+                {
+                    return "fragments.weapon.on_hit_effect_ids".to_string();
+                }
+            }
+            ItemFragment::Usable { effect_ids, .. } if fragment == "usable" => {
+                if normalized.is_empty()
+                    || effect_ids.iter().any(|value| value.trim() == normalized)
+                {
+                    return "fragments.usable.effect_ids".to_string();
+                }
+            }
+            ItemFragment::PassiveEffects { effect_ids } if fragment == "passive_effects" => {
+                if normalized.is_empty()
+                    || effect_ids.iter().any(|value| value.trim() == normalized)
+                {
+                    return "fragments.passive_effects.effect_ids".to_string();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    format!("fragments.{fragment}.effect_ids")
+}
+
+fn resolve_item_reference_path(
+    item: &ItemDefinition,
+    fragment: &str,
+    referenced_item_id: u32,
+) -> String {
+    for item_fragment in &item.fragments {
+        match item_fragment {
+            ItemFragment::Weapon { ammo_type, .. } if fragment == "weapon" => {
+                if ammo_type == &Some(referenced_item_id) {
+                    return "fragments.weapon.ammo_type".to_string();
+                }
+            }
+            ItemFragment::Durability {
+                repair_materials, ..
+            } if fragment == "durability" => {
+                if repair_materials
+                    .iter()
+                    .any(|entry| entry.item_id == referenced_item_id)
+                {
+                    return "fragments.durability.repair_materials".to_string();
+                }
+            }
+            ItemFragment::Crafting {
+                crafting_recipe,
+                deconstruct_yield,
+            } if fragment == "crafting" => {
+                if crafting_recipe
+                    .as_ref()
+                    .map(|recipe| {
+                        recipe
+                            .materials
+                            .iter()
+                            .any(|entry| entry.item_id == referenced_item_id)
+                    })
+                    .unwrap_or(false)
+                {
+                    return "fragments.crafting.crafting_recipe.materials".to_string();
+                }
+                if deconstruct_yield
+                    .iter()
+                    .any(|entry| entry.item_id == referenced_item_id)
+                {
+                    return "fragments.crafting.deconstruct_yield".to_string();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    format!("fragments.{fragment}.item_ids")
+}
+
+fn resolve_invalid_amount_path(item: &ItemDefinition, fragment: &str) -> String {
+    for item_fragment in &item.fragments {
+        match item_fragment {
+            ItemFragment::Durability {
+                repair_materials, ..
+            } if fragment == "durability" => {
+                if repair_materials
+                    .iter()
+                    .any(|entry| entry.item_id == 0 || entry.count < 1)
+                {
+                    return "fragments.durability.repair_materials".to_string();
+                }
+            }
+            ItemFragment::Crafting {
+                crafting_recipe,
+                deconstruct_yield,
+            } if fragment == "crafting" => {
+                if crafting_recipe
+                    .as_ref()
+                    .map(|recipe| {
+                        recipe
+                            .materials
+                            .iter()
+                            .any(|entry| entry.item_id == 0 || entry.count < 1)
+                    })
+                    .unwrap_or(false)
+                {
+                    return "fragments.crafting.crafting_recipe.materials".to_string();
+                }
+                if deconstruct_yield
+                    .iter()
+                    .any(|entry| entry.item_id == 0 || entry.count < 1)
+                {
+                    return "fragments.crafting.deconstruct_yield".to_string();
+                }
+            }
+            _ => {}
+        }
+    }
+    format!("fragments.{fragment}.amounts")
 }
 
 fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
@@ -1230,7 +1815,19 @@ fn validate_map(
     }
 }
 
-fn error(field: impl Into<String>, message: impl Into<String>) -> ValidationIssue {
+fn item_error(
+    field: impl Into<String>,
+    message: impl Into<String>,
+    path: impl Into<String>,
+) -> ValidationIssue {
+    error_with_path(field, message, Some(path.into()))
+}
+
+fn error_with_path(
+    field: impl Into<String>,
+    message: impl Into<String>,
+    path: Option<String>,
+) -> ValidationIssue {
     ValidationIssue {
         severity: "error",
         field: field.into(),
@@ -1238,7 +1835,7 @@ fn error(field: impl Into<String>, message: impl Into<String>) -> ValidationIssu
         scope: None,
         node_id: None,
         edge_key: None,
-        path: None,
+        path,
     }
 }
 

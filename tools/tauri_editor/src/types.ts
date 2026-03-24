@@ -28,6 +28,33 @@ export type CatalogEntry = {
   label: string;
 };
 
+export type ItemReferencePreview = {
+  id: string;
+  name: string;
+  value: number;
+  weight: number;
+  derivedTags: string[];
+  keyFragments: string[];
+};
+
+export type EffectReferencePreview = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  duration: number;
+  stackMode: string;
+  resourceDeltas: Record<string, number>;
+};
+
+export type ReferenceUsageEntry = {
+  sourceItemId: number;
+  sourceItemName: string;
+  fragmentKind: string;
+  path: string;
+  note: string;
+};
+
 export type GraphPosition = {
   x: number;
   y: number;
@@ -137,6 +164,10 @@ export type ItemCatalogs = {
   fragmentKinds: string[];
   effectIds: string[];
   effectEntries: CatalogEntry[];
+  effectPreviews?: EffectReferencePreview[];
+  itemPreviews?: ItemReferencePreview[];
+  effectUsedBy?: Record<string, ReferenceUsageEntry[]>;
+  itemUsedBy?: Record<string, ReferenceUsageEntry[]>;
   equipmentSlots: string[];
   knownSubtypes: string[];
   itemIds: string[];
