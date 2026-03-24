@@ -3,14 +3,17 @@ use std::collections::{BinaryHeap, HashMap};
 
 use game_data::{ActorId, GridCoord, WorldCoord};
 
-use super::world::GridWorld;
+use super::world::{GridWalkability, GridWorld};
 
 const ORTHOGONAL_COST: i32 = 1000;
 const DIAGONAL_COST: i32 = 1414;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GridPathfindingError {
-    TargetNotWalkable,
+    TargetOutOfBounds,
+    TargetInvalidLevel,
+    TargetBlocked,
+    TargetOccupied,
     NoPath,
 }
 
@@ -61,8 +64,12 @@ pub fn find_path_grid(
     start: GridCoord,
     goal: GridCoord,
 ) -> Result<Vec<GridCoord>, GridPathfindingError> {
-    if !world.is_walkable_for_actor(goal, actor_id) {
-        return Err(GridPathfindingError::TargetNotWalkable);
+    match world.classify_walkability_for_actor(goal, actor_id) {
+        GridWalkability::Walkable => {}
+        GridWalkability::OutOfBounds => return Err(GridPathfindingError::TargetOutOfBounds),
+        GridWalkability::InvalidLevel => return Err(GridPathfindingError::TargetInvalidLevel),
+        GridWalkability::StaticBlocked => return Err(GridPathfindingError::TargetBlocked),
+        GridWalkability::Occupied => return Err(GridPathfindingError::TargetOccupied),
     }
 
     if start == goal {
@@ -144,7 +151,7 @@ fn can_traverse(
     from: GridCoord,
     to: GridCoord,
 ) -> bool {
-    if !world.is_walkable_for_actor(to, actor_id) {
+    if world.classify_walkability_for_actor(to, actor_id) != GridWalkability::Walkable {
         return false;
     }
 
@@ -153,10 +160,10 @@ fn can_traverse(
     if dx.abs() == 1 && dz.abs() == 1 {
         let horizontal = GridCoord::new(from.x + dx, from.y, from.z);
         let vertical = GridCoord::new(from.x, from.y, from.z + dz);
-        if !world.is_walkable_for_actor(horizontal, actor_id) {
+        if world.classify_walkability_for_actor(horizontal, actor_id) != GridWalkability::Walkable {
             return false;
         }
-        if !world.is_walkable_for_actor(vertical, actor_id) {
+        if world.classify_walkability_for_actor(vertical, actor_id) != GridWalkability::Walkable {
             return false;
         }
     }

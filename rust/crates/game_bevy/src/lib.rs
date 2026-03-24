@@ -4,13 +4,17 @@ use std::path::{Path, PathBuf};
 
 use bevy_ecs::prelude::*;
 use game_core::simulation::Simulation;
-use game_core::{NoopAiController, RegisterActor, SimulationRuntime};
+use game_core::{HeadlessEconomyRuntime, NoopAiController, RegisterActor, SimulationRuntime};
 use game_data::{
-    load_character_library, load_map_library, load_settlement_library, ActorKind, ActorSide,
-    CharacterAiProfile, CharacterArchetype, CharacterDefinition, CharacterDisposition, CharacterId,
-    CharacterLibrary, CharacterLoadError, CharacterLootEntry, CharacterPlaceholderColors,
-    CharacterResourcePool, GridCoord, MapId, MapLibrary, MapLoadError, SettlementLibrary,
-    SettlementLoadError,
+    load_character_library, load_effect_library, load_item_library, load_map_library,
+    load_quest_library, load_recipe_library, load_settlement_library, load_shop_library,
+    load_skill_library, load_skill_tree_library, ActorKind, ActorSide, CharacterAiProfile,
+    CharacterArchetype, CharacterDefinition, CharacterDisposition, CharacterId, CharacterLibrary,
+    CharacterLoadError, CharacterLootEntry, CharacterPlaceholderColors, CharacterResourcePool,
+    EffectLibrary, EffectLoadError, GridCoord, ItemLibrary, ItemLoadError, MapId, MapLibrary,
+    MapLoadError, QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError,
+    SettlementLibrary, SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary,
+    SkillLoadError, SkillTreeLibrary, SkillTreeLoadError,
 };
 use npc_life::LifeProfileComponent;
 use thiserror::Error;
@@ -59,6 +63,93 @@ impl Default for SettlementDefinitionPath {
 
 #[derive(Resource, Debug, Clone)]
 pub struct SettlementDefinitions(pub SettlementLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct EffectDefinitionPath(pub PathBuf);
+
+impl Default for EffectDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/json/effects"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct EffectDefinitions(pub EffectLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct ItemDefinitionPath(pub PathBuf);
+
+impl Default for ItemDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/items"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct ItemDefinitions(pub ItemLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct SkillDefinitionPath(pub PathBuf);
+
+impl Default for SkillDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/skills"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct SkillDefinitions(pub SkillLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct SkillTreeDefinitionPath(pub PathBuf);
+
+impl Default for SkillTreeDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/skill_trees"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct SkillTreeDefinitions(pub SkillTreeLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct RecipeDefinitionPath(pub PathBuf);
+
+impl Default for RecipeDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/recipes"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct RecipeDefinitions(pub RecipeLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct QuestDefinitionPath(pub PathBuf);
+
+impl Default for QuestDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/quests"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct QuestDefinitions(pub QuestLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct ShopDefinitionPath(pub PathBuf);
+
+impl Default for ShopDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/shops"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct ShopDefinitions(pub ShopLibrary);
+
+#[derive(Resource, Debug, Clone, Default)]
+pub struct ServerEconomyState(pub HeadlessEconomyRuntime);
 
 #[derive(Resource, Debug, Clone)]
 pub struct RuntimeStartupConfigPath(pub PathBuf);
@@ -201,6 +292,19 @@ pub fn load_character_definitions(
     Ok(CharacterDefinitions(load_character_library(path)?))
 }
 
+pub fn load_effect_definitions(
+    path: impl AsRef<Path>,
+) -> Result<EffectDefinitions, EffectLoadError> {
+    Ok(EffectDefinitions(load_effect_library(path)?))
+}
+
+pub fn load_item_definitions(
+    path: impl AsRef<Path>,
+    effects: Option<&EffectLibrary>,
+) -> Result<ItemDefinitions, ItemLoadError> {
+    Ok(ItemDefinitions(load_item_library(path, effects)?))
+}
+
 pub fn load_map_definitions(path: impl AsRef<Path>) -> Result<MapDefinitions, MapLoadError> {
     Ok(MapDefinitions(load_map_library(path)?))
 }
@@ -209,6 +313,30 @@ pub fn load_settlement_definitions(
     path: impl AsRef<Path>,
 ) -> Result<SettlementDefinitions, SettlementLoadError> {
     Ok(SettlementDefinitions(load_settlement_library(path)?))
+}
+
+pub fn load_skill_definitions(path: impl AsRef<Path>) -> Result<SkillDefinitions, SkillLoadError> {
+    Ok(SkillDefinitions(load_skill_library(path, None)?))
+}
+
+pub fn load_skill_tree_definitions(
+    path: impl AsRef<Path>,
+) -> Result<SkillTreeDefinitions, SkillTreeLoadError> {
+    Ok(SkillTreeDefinitions(load_skill_tree_library(path, None)?))
+}
+
+pub fn load_recipe_definitions(
+    path: impl AsRef<Path>,
+) -> Result<RecipeDefinitions, RecipeLoadError> {
+    Ok(RecipeDefinitions(load_recipe_library(path, None)?))
+}
+
+pub fn load_quest_definitions(path: impl AsRef<Path>) -> Result<QuestDefinitions, QuestLoadError> {
+    Ok(QuestDefinitions(load_quest_library(path, None)?))
+}
+
+pub fn load_shop_definitions(path: impl AsRef<Path>) -> Result<ShopDefinitions, ShopLoadError> {
+    Ok(ShopDefinitions(load_shop_library(path, None)?))
 }
 
 pub fn load_character_definitions_on_startup(
@@ -241,6 +369,84 @@ pub fn load_settlement_definitions_on_startup(
     let definitions = load_settlement_definitions(&path.0).unwrap_or_else(|error| {
         panic!(
             "failed to load settlement definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_effect_definitions_on_startup(mut commands: Commands, path: Res<EffectDefinitionPath>) {
+    let definitions = load_effect_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load effect definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_item_definitions_on_startup(
+    mut commands: Commands,
+    path: Res<ItemDefinitionPath>,
+    effects: Option<Res<EffectDefinitions>>,
+) {
+    let effect_library = effects.as_ref().map(|definitions| &definitions.0);
+    let definitions = load_item_definitions(&path.0, effect_library).unwrap_or_else(|error| {
+        panic!(
+            "failed to load item definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_skill_definitions_on_startup(mut commands: Commands, path: Res<SkillDefinitionPath>) {
+    let definitions = load_skill_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load skill definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_skill_tree_definitions_on_startup(
+    mut commands: Commands,
+    path: Res<SkillTreeDefinitionPath>,
+) {
+    let definitions = load_skill_tree_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load skill tree definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_recipe_definitions_on_startup(mut commands: Commands, path: Res<RecipeDefinitionPath>) {
+    let definitions = load_recipe_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load recipe definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_quest_definitions_on_startup(mut commands: Commands, path: Res<QuestDefinitionPath>) {
+    let definitions = load_quest_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load quest definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_shop_definitions_on_startup(mut commands: Commands, path: Res<ShopDefinitionPath>) {
+    let definitions = load_shop_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load shop definitions from {}: {error}",
             path.0.display()
         )
     });
@@ -380,10 +586,26 @@ pub fn build_simulation_from_seed(
                 definition_id: entry.definition_id.clone(),
             }
         })?;
-        simulation.register_actor(register_actor_from_definition(
+        let actor_id = simulation.register_actor(register_actor_from_definition(
             definition,
             entry.grid_position,
         ));
+        simulation.seed_actor_progression(
+            actor_id,
+            definition.progression.level as i32,
+            definition.combat.xp_reward,
+        );
+        simulation.seed_actor_combat_profile(
+            actor_id,
+            definition
+                .attributes
+                .sets
+                .get("combat")
+                .cloned()
+                .unwrap_or_default(),
+            definition.attributes.resources.clone(),
+        );
+        simulation.seed_actor_loot_table(actor_id, definition.combat.loot.clone());
     }
     Ok(simulation)
 }

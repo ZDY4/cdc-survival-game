@@ -826,8 +826,8 @@ mod tests {
     use super::{
         expand_object_footprint, load_map_library, validate_map_definition, MapAiSpawnProps,
         MapBuildingProps, MapCellDefinition, MapDefinition, MapDefinitionValidationError, MapId,
-        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-        MapObjectProps, MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
+        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+        MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;

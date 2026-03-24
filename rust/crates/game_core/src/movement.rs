@@ -8,7 +8,12 @@ use crate::grid::{GridPathfindingError, GridWorld};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MovementPlanError {
     UnknownActor { actor_id: ActorId },
-    TargetNotWalkable,
+    ActorNotPlayerControlled,
+    InputNotAllowed,
+    TargetOutOfBounds,
+    TargetInvalidLevel,
+    TargetBlocked,
+    TargetOccupied,
     NoPath,
 }
 
@@ -16,7 +21,12 @@ impl fmt::Display for MovementPlanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownActor { actor_id } => write!(f, "unknown actor: {:?}", actor_id),
-            Self::TargetNotWalkable => write!(f, "target not walkable"),
+            Self::ActorNotPlayerControlled => write!(f, "actor is not player controlled"),
+            Self::InputNotAllowed => write!(f, "actor input is not allowed"),
+            Self::TargetOutOfBounds => write!(f, "target out of bounds"),
+            Self::TargetInvalidLevel => write!(f, "target level is not available"),
+            Self::TargetBlocked => write!(f, "target blocked"),
+            Self::TargetOccupied => write!(f, "target occupied"),
             Self::NoPath => write!(f, "no path"),
         }
     }
@@ -27,7 +37,10 @@ impl Error for MovementPlanError {}
 impl From<GridPathfindingError> for MovementPlanError {
     fn from(value: GridPathfindingError) -> Self {
         match value {
-            GridPathfindingError::TargetNotWalkable => Self::TargetNotWalkable,
+            GridPathfindingError::TargetOutOfBounds => Self::TargetOutOfBounds,
+            GridPathfindingError::TargetInvalidLevel => Self::TargetInvalidLevel,
+            GridPathfindingError::TargetBlocked => Self::TargetBlocked,
+            GridPathfindingError::TargetOccupied => Self::TargetOccupied,
             GridPathfindingError::NoPath => Self::NoPath,
         }
     }
@@ -108,7 +121,12 @@ pub enum PendingProgressionStep {
 pub enum AutoMoveInterruptReason {
     ReachedGoal,
     EnteredCombat,
-    TargetNotWalkable,
+    ActorNotPlayerControlled,
+    InputNotAllowed,
+    TargetOutOfBounds,
+    TargetInvalidLevel,
+    TargetBlocked,
+    TargetOccupied,
     NoPath,
     NoProgress,
     CancelledByNewCommand,

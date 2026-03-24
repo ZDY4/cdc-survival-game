@@ -7,6 +7,15 @@ use game_data::{
 
 use super::math::{grid_to_world, world_to_grid, DEFAULT_GRID_SIZE};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GridWalkability {
+    Walkable,
+    OutOfBounds,
+    InvalidLevel,
+    StaticBlocked,
+    Occupied,
+}
+
 #[derive(Debug, Clone)]
 pub struct GridWorld {
     grid_size: f32,
@@ -138,6 +147,23 @@ impl GridWorld {
         self.levels.contains(&y)
     }
 
+    pub fn is_in_bounds(&self, grid: GridCoord) -> bool {
+        if let Some(size) = self.map_size {
+            if grid.x < 0 || grid.z < 0 {
+                return false;
+            }
+            if (grid.x as u32) >= size.width || (grid.z as u32) >= size.height {
+                return false;
+            }
+        }
+
+        if !self.levels.is_empty() && !self.levels.contains(&grid.y) {
+            return false;
+        }
+
+        true
+    }
+
     pub fn map_cell(&self, grid: GridCoord) -> Option<&MapCellDefinition> {
         self.map_cells.get(&grid)
     }
@@ -174,6 +200,31 @@ impl GridWorld {
 
     pub fn map_object_entries(&self) -> Vec<MapObjectDefinition> {
         self.map_objects.values().cloned().collect()
+    }
+
+    pub fn upsert_map_object(&mut self, object: MapObjectDefinition) {
+        if self.map_objects.contains_key(&object.object_id) {
+            let _ = self.remove_map_object(&object.object_id);
+        }
+
+        let object_id = object.object_id.clone();
+        for cell in expand_object_footprint(&object) {
+            self.map_object_cells
+                .entry(cell)
+                .or_default()
+                .push(object_id.clone());
+            if object_effectively_blocks_movement(&object) {
+                self.map_blocked_cells.insert(cell);
+            }
+        }
+
+        for object_ids in self.map_object_cells.values_mut() {
+            object_ids.sort();
+            object_ids.dedup();
+        }
+
+        self.map_objects.insert(object_id, object);
+        self.topology_version = self.topology_version.saturating_add(1);
     }
 
     pub fn remove_map_object(&mut self, object_id: &str) -> Option<MapObjectDefinition> {
@@ -252,8 +303,10 @@ impl GridWorld {
     }
 
     pub fn is_walkable_static(&self, grid: GridCoord) -> bool {
-        !self.manual_static_obstacle_ref_counts.contains_key(&grid)
-            && !self.map_blocked_cells.contains(&grid)
+        matches!(
+            self.classify_walkability_for_actor(grid, None),
+            GridWalkability::Walkable | GridWalkability::Occupied
+        )
     }
 
     pub fn is_walkable_dynamic(&self, grid: GridCoord) -> bool {
@@ -261,17 +314,43 @@ impl GridWorld {
     }
 
     pub fn is_walkable_for_actor(&self, grid: GridCoord, actor_id: Option<ActorId>) -> bool {
-        if !self.is_walkable_static(grid) {
-            return false;
+        self.classify_walkability_for_actor(grid, actor_id) == GridWalkability::Walkable
+    }
+
+    pub fn classify_walkability_for_actor(
+        &self,
+        grid: GridCoord,
+        actor_id: Option<ActorId>,
+    ) -> GridWalkability {
+        if let Some(size) = self.map_size {
+            if grid.x < 0 || grid.z < 0 {
+                return GridWalkability::OutOfBounds;
+            }
+            if (grid.x as u32) >= size.width || (grid.z as u32) >= size.height {
+                return GridWalkability::OutOfBounds;
+            }
+        }
+
+        if !self.levels.is_empty() && !self.levels.contains(&grid.y) {
+            return GridWalkability::InvalidLevel;
+        }
+
+        if self.manual_static_obstacle_ref_counts.contains_key(&grid)
+            || self.map_blocked_cells.contains(&grid)
+        {
+            return GridWalkability::StaticBlocked;
         }
 
         let Some(occupants) = self.runtime_occupants_by_cell.get(&grid) else {
-            return true;
+            return GridWalkability::Walkable;
         };
 
         match actor_id {
-            None => occupants.is_empty(),
-            Some(actor_id) => occupants.len() == 1 && occupants.contains(&actor_id),
+            None if occupants.is_empty() => GridWalkability::Walkable,
+            Some(actor_id) if occupants.len() == 1 && occupants.contains(&actor_id) => {
+                GridWalkability::Walkable
+            }
+            _ => GridWalkability::Occupied,
         }
     }
 

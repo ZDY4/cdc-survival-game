@@ -23,6 +23,8 @@ use game_data::{
     InteractionPrompt, InteractionTargetId, MapObjectKind, WorldCoord,
 };
 
+const VIEWER_FONT_PATH: &str = "fonts/NotoSansCJKsc-Regular.otf";
+
 fn main() {
     let startup_config_path = RuntimeStartupConfigPath::default();
     let startup_config =
@@ -40,16 +42,24 @@ fn main() {
     seed.map_id = resolve_startup_map_id(&maps.0, startup_config.startup_map);
     let runtime = build_runtime_from_seed(&definitions.0, &maps.0, &seed)
         .unwrap_or_else(|error| panic!("failed to build debug viewer runtime: {error}"));
+    let asset_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
 
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "CDC Survival Game - Bevy Debug Viewer".into(),
-                resolution: (1440, 900).into(),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "CDC Survival Game - Bevy Debug Viewer".into(),
+                        resolution: (1440, 900).into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: asset_dir.display().to_string(),
+                    ..default()
+                }),
+        )
         .insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)))
         .insert_resource(ViewerRuntimeState {
             runtime,
@@ -90,7 +100,94 @@ fn load_viewer_startup_config(
 #[derive(Resource, Debug)]
 struct ViewerRuntimeState {
     runtime: SimulationRuntime,
-    recent_events: Vec<String>,
+    recent_events: Vec<ViewerEventEntry>,
+}
+
+#[derive(Resource, Clone)]
+struct ViewerUiFont(Handle<Font>);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum ViewerHudPage {
+    #[default]
+    Overview,
+    SelectedActor,
+    World,
+    Interaction,
+    Events,
+}
+
+impl ViewerHudPage {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Overview => "Overview",
+            Self::SelectedActor => "Selected Actor",
+            Self::World => "World",
+            Self::Interaction => "Interaction",
+            Self::Events => "Events",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum HudEventFilter {
+    #[default]
+    All,
+    Combat,
+    Interaction,
+    World,
+}
+
+impl HudEventFilter {
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Combat => "Combat",
+            Self::Interaction => "Interaction",
+            Self::World => "World",
+        }
+    }
+
+    fn previous(self) -> Self {
+        match self {
+            Self::All => Self::World,
+            Self::Combat => Self::All,
+            Self::Interaction => Self::Combat,
+            Self::World => Self::Interaction,
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::All => Self::Combat,
+            Self::Combat => Self::Interaction,
+            Self::Interaction => Self::World,
+            Self::World => Self::All,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HudEventCategory {
+    Combat,
+    Interaction,
+    World,
+}
+
+impl HudEventCategory {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Combat => "Combat",
+            Self::Interaction => "Interaction",
+            Self::World => "World",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ViewerEventEntry {
+    category: HudEventCategory,
+    turn_index: u64,
+    text: String,
 }
 
 #[derive(Resource, Debug, Default)]
@@ -127,6 +224,10 @@ struct ViewerState {
     focused_target: Option<InteractionTargetId>,
     current_prompt: Option<InteractionPrompt>,
     active_dialogue: Option<ActiveDialogueState>,
+    hud_page: ViewerHudPage,
+    event_filter: HudEventFilter,
+    show_hud: bool,
+    show_controls: bool,
     hovered_grid: Option<GridCoord>,
     current_level: i32,
     auto_tick: bool,
@@ -148,6 +249,10 @@ impl Default for ViewerState {
             focused_target: None,
             current_prompt: None,
             active_dialogue: None,
+            hud_page: ViewerHudPage::Overview,
+            event_filter: HudEventFilter::All,
+            show_hud: true,
+            show_controls: false,
             hovered_grid: None,
             current_level: 0,
             auto_tick: false,
@@ -168,6 +273,9 @@ impl Default for ViewerState {
 struct HudText;
 
 #[derive(Component)]
+struct HudFooterText;
+
+#[derive(Component)]
 struct ViewerCamera;
 
 #[derive(Component)]
@@ -183,22 +291,31 @@ struct ActiveDialogueState {
     target_name: String,
 }
 
-fn setup_viewer(mut commands: Commands) {
+fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let ui_font = asset_server.load(VIEWER_FONT_PATH);
+    commands.insert_resource(ViewerUiFont(ui_font.clone()));
     commands.spawn((Camera2d, ViewerCamera));
-    commands.spawn((
-        Text::new(""),
-        TextFont::from_font_size(11.2),
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(12),
-            right: px(12),
-            width: px(420),
-            padding: UiRect::all(px(12)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.07, 0.09, 0.12, 0.92)),
-        HudText,
-    ));
+    commands
+        .spawn((
+            Text::new(""),
+            TextFont::from_font_size(11.2).with_font(ui_font.clone()),
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(12),
+                right: px(12),
+                width: px(420),
+                padding: UiRect::all(px(12)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.07, 0.09, 0.12, 0.92)),
+            HudText,
+        ))
+        .with_child((
+            TextSpan::new(""),
+            TextFont::from_font_size(9.0).with_font(ui_font.clone()),
+            TextColor(Color::srgba(0.79, 0.83, 0.88, 0.94)),
+            HudFooterText,
+        ));
 }
 
 fn prime_viewer_state(
@@ -214,9 +331,11 @@ fn prime_viewer_state(
         .map(|actor| actor.actor_id);
     viewer_state.current_level = snapshot.grid.default_level.unwrap_or(0);
     let initial_events = runtime_state.runtime.drain_events();
-    runtime_state
-        .recent_events
-        .extend(initial_events.into_iter().map(format_event));
+    runtime_state.recent_events.extend(
+        initial_events
+            .into_iter()
+            .map(|event| viewer_event_entry(event, snapshot.combat.current_turn_index)),
+    );
 }
 
 fn update_camera(
@@ -242,6 +361,43 @@ fn handle_keyboard_input(
     mut viewer_state: ResMut<ViewerState>,
     mut render_config: ResMut<ViewerRenderConfig>,
 ) {
+    if let Some(page) = just_pressed_hud_page(&keys) {
+        viewer_state.hud_page = page;
+        viewer_state.status_line = format!("hud page: {}", page.title());
+    }
+
+    if keys.just_pressed(KeyCode::KeyH) {
+        viewer_state.show_hud = !viewer_state.show_hud;
+        viewer_state.status_line = if viewer_state.show_hud {
+            "hud: visible".to_string()
+        } else {
+            "hud: hidden".to_string()
+        };
+    }
+
+    if keys.just_pressed(KeyCode::Slash) {
+        viewer_state.show_controls = !viewer_state.show_controls;
+        viewer_state.status_line = if viewer_state.show_controls {
+            "controls: expanded".to_string()
+        } else {
+            "controls: collapsed".to_string()
+        };
+    }
+
+    if viewer_state.hud_page == ViewerHudPage::Events {
+        if keys.just_pressed(KeyCode::BracketLeft) {
+            viewer_state.event_filter = viewer_state.event_filter.previous();
+            viewer_state.status_line =
+                format!("events filter: {}", viewer_state.event_filter.label());
+        }
+
+        if keys.just_pressed(KeyCode::BracketRight) {
+            viewer_state.event_filter = viewer_state.event_filter.next();
+            viewer_state.status_line =
+                format!("events filter: {}", viewer_state.event_filter.label());
+        }
+    }
+
     if keys.just_pressed(KeyCode::Escape) {
         viewer_state.active_dialogue = None;
         viewer_state.status_line = "dialogue closed".to_string();
@@ -328,8 +484,13 @@ fn handle_keyboard_input(
     if keys.just_pressed(KeyCode::Space) {
         viewer_state.end_turn_hold_sec = 0.0;
         viewer_state.end_turn_repeat_elapsed_sec = 0.0;
-        submit_end_turn(&mut runtime_state, &mut viewer_state);
+        if !cancel_pending_movement(&mut runtime_state, &mut viewer_state) {
+            submit_end_turn(&mut runtime_state, &mut viewer_state);
+        }
     } else if keys.pressed(KeyCode::Space) {
+        if runtime_state.runtime.pending_movement().is_some() {
+            return;
+        }
         viewer_state.end_turn_hold_sec += time.delta_secs();
         if viewer_state.end_turn_hold_sec >= viewer_state.end_turn_repeat_delay_sec {
             viewer_state.end_turn_repeat_elapsed_sec += time.delta_secs();
@@ -367,11 +528,10 @@ fn handle_keyboard_input(
         ) {
             if let Some(option) = prompt.options.get(index) {
                 viewer_state.progression_elapsed_sec = 0.0;
-                let result = runtime_state.runtime.issue_interaction(
-                    actor_id,
-                    target_id,
-                    option.id.clone(),
-                );
+                let result =
+                    runtime_state
+                        .runtime
+                        .issue_interaction(actor_id, target_id, option.id.clone());
                 apply_interaction_result(&mut viewer_state, result);
             }
         }
@@ -446,6 +606,7 @@ fn sync_actor_labels(
     runtime_state: Res<ViewerRuntimeState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
+    viewer_font: Res<ViewerUiFont>,
     mut label_entities: ResMut<ActorLabelEntities>,
     mut labels: Query<(&mut Text2d, &mut Transform, &mut TextColor, &ActorLabel)>,
 ) {
@@ -482,7 +643,7 @@ fn sync_actor_labels(
         let entity = commands
             .spawn((
                 Text2d::new(label),
-                TextFont::from_font_size(15.0),
+                TextFont::from_font_size(15.0).with_font(viewer_font.0.clone()),
                 TextLayout::new_with_justify(Justify::Center),
                 TextColor(color),
                 Text2dShadow::default(),
@@ -539,6 +700,10 @@ fn handle_mouse_input(
     let map_object_at_cursor = map_object_at_grid(&snapshot, grid);
 
     if buttons.just_pressed(MouseButton::Left) {
+        if cancel_pending_movement(&mut runtime_state, &mut viewer_state) {
+            return;
+        }
+
         if let Some(ref actor) = actor_at_cursor {
             if actor.side == ActorSide::Player {
                 viewer_state.selected_actor = Some(actor.actor_id);
@@ -548,14 +713,24 @@ fn handle_mouse_input(
                     format!("selected actor {:?} ({:?})", actor.actor_id, actor.side);
             } else {
                 viewer_state.focused_target = Some(InteractionTargetId::Actor(actor.actor_id));
-                viewer_state.status_line =
-                    format!("focused actor target {:?} ({:?})", actor.actor_id, actor.side);
+                viewer_state.status_line = format!(
+                    "focused actor target {:?} ({:?})",
+                    actor.actor_id, actor.side
+                );
             }
         } else if let Some(object) = map_object_at_cursor.as_ref() {
             viewer_state.focused_target =
                 Some(InteractionTargetId::MapObject(object.object_id.clone()));
             viewer_state.status_line = format!("focused object {}", object.object_id);
         } else if let Some(actor_id) = viewer_state.selected_actor {
+            if !runtime_state.runtime.is_grid_in_bounds(grid) {
+                viewer_state.status_line = format!(
+                    "move: target out of bounds ({}, {}, {})",
+                    grid.x, grid.y, grid.z
+                );
+                return;
+            }
+
             let outcome = match runtime_state.runtime.issue_actor_move(actor_id, grid) {
                 Ok(outcome) => outcome,
                 Err(error) => {
@@ -611,6 +786,27 @@ fn handle_mouse_input(
     }
 }
 
+fn cancel_pending_movement(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+) -> bool {
+    let Some(intent) = runtime_state.runtime.pending_movement().copied() else {
+        return false;
+    };
+    if runtime_state.runtime.get_actor_side(intent.actor_id) != Some(ActorSide::Player) {
+        return false;
+    }
+
+    runtime_state
+        .runtime
+        .clear_pending_movement(intent.actor_id);
+    viewer_state.progression_elapsed_sec = 0.0;
+    viewer_state.end_turn_hold_sec = 0.0;
+    viewer_state.end_turn_repeat_elapsed_sec = 0.0;
+    viewer_state.status_line = format!("move: cancelled actor {:?}", intent.actor_id);
+    true
+}
+
 fn tick_runtime(mut runtime_state: ResMut<ViewerRuntimeState>, viewer_state: Res<ViewerState>) {
     if viewer_state.auto_tick {
         runtime_state.runtime.tick();
@@ -650,10 +846,13 @@ fn advance_runtime_progression(
 }
 
 fn collect_events(mut runtime_state: ResMut<ViewerRuntimeState>) {
+    let turn_index = runtime_state.runtime.snapshot().combat.current_turn_index;
     for event in runtime_state.runtime.drain_events() {
-        runtime_state.recent_events.push(format_event(event));
+        runtime_state
+            .recent_events
+            .push(viewer_event_entry(event, turn_index));
     }
-    const MAX_EVENTS: usize = 12;
+    const MAX_EVENTS: usize = 48;
     if runtime_state.recent_events.len() > MAX_EVENTS {
         let overflow = runtime_state.recent_events.len() - MAX_EVENTS;
         runtime_state.recent_events.drain(0..overflow);
@@ -672,169 +871,49 @@ fn refresh_interaction_prompt(
         viewer_state.current_prompt = None;
         return;
     };
-    viewer_state.current_prompt = runtime_state.runtime.query_interaction_prompt(actor_id, target_id);
+    viewer_state.current_prompt = runtime_state
+        .runtime
+        .query_interaction_prompt(actor_id, target_id);
 }
 
 fn update_hud(
-    mut hud_text: Single<&mut Text, With<HudText>>,
+    hud_text: Single<(&mut Text, &mut Visibility), With<HudText>>,
+    mut hud_footer: Single<&mut TextSpan, With<HudFooterText>>,
     runtime_state: Res<ViewerRuntimeState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
 ) {
+    let (mut hud_text, mut visibility) = hud_text.into_inner();
+    if !viewer_state.show_hud {
+        *visibility = Visibility::Hidden;
+        *hud_text = Text::new("");
+        **hud_footer = TextSpan::new("");
+        return;
+    }
+
+    *visibility = Visibility::Visible;
     let snapshot = runtime_state.runtime.snapshot();
-    let selected_actor = viewer_state.selected_actor.and_then(|actor_id| {
-        snapshot
-            .actors
-            .iter()
-            .find(|actor| actor.actor_id == actor_id)
-    });
-
-    let selected_summary = selected_actor
-        .map(|actor| {
-            format!(
-                "selected actor: {} ({:?}) {:?} group={} ap={:.1} steps={} grid=({}, {}, {})",
-                actor_label(actor),
-                actor.actor_id,
-                actor.side,
-                actor.group_id,
-                actor.ap,
-                actor.available_steps,
-                actor.grid_position.x,
-                actor.grid_position.y,
-                actor.grid_position.z
-            )
-        })
-        .unwrap_or_else(|| "selected actor: none".to_string());
-
-    let focused_target_summary = viewer_state
-        .focused_target
-        .as_ref()
-        .map(|target| match target {
-            InteractionTargetId::Actor(actor_id) => snapshot
-                .actors
-                .iter()
-                .find(|actor| actor.actor_id == *actor_id)
-                .map(|actor| format!("focused target: {} ({:?})", actor_label(actor), actor.side))
-                .unwrap_or_else(|| format!("focused target: actor {:?}", actor_id)),
-            InteractionTargetId::MapObject(object_id) => snapshot
-                .grid
-                .map_objects
-                .iter()
-                .find(|object| object.object_id == *object_id)
-                .map(|object| format!("focused target: {} ({:?})", object.object_id, object.kind))
-                .unwrap_or_else(|| format!("focused target: object {}", object_id)),
-        })
-        .unwrap_or_else(|| "focused target: none".to_string());
-
-    let current_turn = format!(
-        "turn: combat={} current_actor={:?} current_group={:?} turn_index={}",
-        snapshot.combat.in_combat,
-        snapshot.combat.current_actor_id,
-        snapshot.combat.current_group_id,
-        snapshot.combat.current_turn_index
-    );
-
-    let map_summary = format!(
-        "map: id={} size={}x{} level={} default={} levels={:?}",
-        snapshot
-            .grid
-            .map_id
-            .as_ref()
-            .map(|map_id| map_id.as_str())
-            .unwrap_or("none"),
-        snapshot.grid.map_width.unwrap_or(0),
-        snapshot.grid.map_height.unwrap_or(0),
-        viewer_state.current_level,
-        snapshot.grid.default_level.unwrap_or(0),
-        snapshot.grid.levels
-    );
-
-    let context_summary = format!(
-        "context: mode={:?} map={} outdoor={:?} subscene={:?} return_spawn={:?}",
-        snapshot.interaction_context.world_mode,
-        snapshot
-            .interaction_context
-            .current_map_id
-            .as_deref()
-            .unwrap_or("none"),
-        snapshot.interaction_context.active_outdoor_location_id,
-        snapshot.interaction_context.current_subscene_location_id,
-        snapshot.interaction_context.return_outdoor_spawn_id,
-    );
-
-    let hover_summary = viewer_state
-        .hovered_grid
-        .map(|grid| {
-            let cell = snapshot
-                .grid
-                .map_cells
-                .iter()
-                .find(|cell| cell.grid == grid);
-            let objects: Vec<String> = snapshot
-                .grid
-                .map_objects
-                .iter()
-                .filter(|object| object.occupied_cells.contains(&grid))
-                .map(|object| format!("{}:{:?}", object.object_id, object.kind))
-                .collect();
-            format!(
-                "hover: ({}, {}, {}) cell={} objects={}",
-                grid.x,
-                grid.y,
-                grid.z,
-                cell.map(|entry| entry.terrain.as_str()).unwrap_or("none"),
-                if objects.is_empty() {
-                    "none".to_string()
-                } else {
-                    objects.join(", ")
-                }
-            )
-        })
-        .unwrap_or_else(|| "hover: none".to_string());
-
-    let path_summary = format!("path preview cells: {}", snapshot.path_preview.len());
-    let progression_summary = format!(
-        "pending progression: {:?} pending movement={}",
-        runtime_state.runtime.peek_pending_progression(),
-        runtime_state.runtime.pending_movement().is_some()
-    );
-    let zoom_summary = format!(
-        "zoom: {:.0}% ({:.1}px/cell)",
-        render_config.zoom_factor * 100.0,
-        render_cell_extent(snapshot.grid.grid_size, *render_config)
-    );
-    let interaction_summary = format_interaction_prompt(viewer_state.current_prompt.as_ref());
-    let dialogue_summary = format_dialogue_panel(viewer_state.active_dialogue.as_ref());
-    let recent_events = if runtime_state.recent_events.is_empty() {
-        "recent events:\n- none".to_string()
+    let header = format!("Bevy Debug Viewer · {}", viewer_state.hud_page.title());
+    let summary = format_status_summary(&snapshot, &runtime_state, &viewer_state, *render_config);
+    let page_body = match viewer_state.hud_page {
+        ViewerHudPage::Overview => {
+            format_overview_panel(&snapshot, &runtime_state, &viewer_state, *render_config)
+        }
+        ViewerHudPage::SelectedActor => {
+            format_selected_actor_panel(&snapshot, &runtime_state, &viewer_state)
+        }
+        ViewerHudPage::World => format_world_panel(&snapshot, &runtime_state, &viewer_state),
+        ViewerHudPage::Interaction => format_interaction_panel(&snapshot, &viewer_state),
+        ViewerHudPage::Events => format_events_panel(&runtime_state, viewer_state.event_filter),
+    };
+    let controls = if viewer_state.show_controls {
+        format!("\n\n{}", format_controls_help())
     } else {
-        format!(
-            "recent events:\n- {}",
-            runtime_state.recent_events.join("\n- ")
-        )
+        String::new()
     };
 
-    **hud_text = Text::new(format!(
-        "Bevy Debug Viewer\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\nauto_tick={}\nstatus={}\n\n{}\n\n{}\n\ncontrols:\n- left click player to control it\n- left click NPC/object to focus interaction target\n- left click empty grid to move selected actor\n- right click hostile target to quick attack\n- E execute primary interaction\n- 1-9 choose interaction option or dialogue choice\n- Enter advance dialogue\n- Esc close dialogue\n- Space end turn (hold to repeat)\n- middle mouse drag pan camera\n- mouse wheel zoom\n- F recenter camera\n- PageUp/PageDown change level\n- Tab cycle actor on current level\n- A toggle auto tick\n- = zoom in\n- - zoom out\n- 0 reset zoom\n\n{}",
-        selected_summary,
-        focused_target_summary,
-        current_turn,
-        map_summary,
-        context_summary,
-        hover_summary,
-        path_summary,
-        progression_summary,
-        zoom_summary,
-        viewer_state.auto_tick,
-        if viewer_state.status_line.is_empty() {
-            "idle"
-        } else {
-            viewer_state.status_line.as_str()
-        },
-        interaction_summary,
-        dialogue_summary,
-        recent_events
-    ));
+    *hud_text = Text::new(format!("{header}\n{}\n\n{page_body}{controls}", summary));
+    **hud_footer = TextSpan::new(format!("\n\n{}", footer_hint(viewer_state.hud_page)));
 }
 
 fn draw_world(
@@ -950,12 +1029,11 @@ fn draw_world(
         }
     }
 
-    let current_level_path: Vec<GridCoord> = snapshot
-        .path_preview
-        .iter()
-        .copied()
-        .filter(|grid| grid.y == viewer_state.current_level)
-        .collect();
+    let current_level_path: Vec<GridCoord> =
+        rendered_path_preview(&snapshot, runtime_state.runtime.pending_movement())
+            .into_iter()
+            .filter(|grid| grid.y == viewer_state.current_level)
+            .collect();
     for path_segment in current_level_path.windows(2) {
         let start = world_to_view_coord(
             runtime_state.runtime.grid_to_world(path_segment[0]),
@@ -1001,6 +1079,36 @@ fn actor_label(actor: &ActorDebugState) -> String {
     } else {
         actor.display_name.clone()
     }
+}
+
+fn rendered_path_preview(
+    snapshot: &SimulationSnapshot,
+    pending_movement: Option<&game_core::PendingMovementIntent>,
+) -> Vec<GridCoord> {
+    let Some(intent) = pending_movement else {
+        return snapshot.path_preview.clone();
+    };
+
+    let Some(current_position) = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == intent.actor_id)
+        .map(|actor| actor.grid_position)
+    else {
+        return snapshot.path_preview.clone();
+    };
+
+    let Some(current_index) = snapshot
+        .path_preview
+        .iter()
+        .position(|grid| *grid == current_position)
+    else {
+        return std::iter::once(current_position)
+            .chain(snapshot.path_preview.iter().copied())
+            .collect();
+    };
+
+    snapshot.path_preview[current_index..].to_vec()
 }
 
 fn fit_pixels_per_world_unit(
@@ -1062,6 +1170,851 @@ fn map_object_at_grid(
         .cloned()
 }
 
+fn just_pressed_hud_page(keys: &ButtonInput<KeyCode>) -> Option<ViewerHudPage> {
+    if keys.just_pressed(KeyCode::F1) {
+        Some(ViewerHudPage::Overview)
+    } else if keys.just_pressed(KeyCode::F2) {
+        Some(ViewerHudPage::SelectedActor)
+    } else if keys.just_pressed(KeyCode::F3) {
+        Some(ViewerHudPage::World)
+    } else if keys.just_pressed(KeyCode::F4) {
+        Some(ViewerHudPage::Interaction)
+    } else if keys.just_pressed(KeyCode::F5) {
+        Some(ViewerHudPage::Events)
+    } else {
+        None
+    }
+}
+
+fn selected_actor<'a>(
+    snapshot: &'a SimulationSnapshot,
+    viewer_state: &ViewerState,
+) -> Option<&'a ActorDebugState> {
+    viewer_state.selected_actor.and_then(|actor_id| {
+        snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == actor_id)
+    })
+}
+
+fn focused_target_summary(snapshot: &SimulationSnapshot, viewer_state: &ViewerState) -> String {
+    viewer_state
+        .focused_target
+        .as_ref()
+        .map(|target| match target {
+            InteractionTargetId::Actor(actor_id) => snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.actor_id == *actor_id)
+                .map(|actor| format!("{} ({:?})", actor_label(actor), actor.side))
+                .unwrap_or_else(|| format!("actor {:?}", actor_id)),
+            InteractionTargetId::MapObject(object_id) => snapshot
+                .grid
+                .map_objects
+                .iter()
+                .find(|object| object.object_id == *object_id)
+                .map(|object| format!("{} ({:?})", object.object_id, object.kind))
+                .unwrap_or_else(|| format!("object {}", object_id)),
+        })
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn actor_overview_summary(actor: &ActorDebugState) -> String {
+    format!(
+        "{} {:?} {:?} group={} ap={:.1} steps={} grid=({}, {}, {})",
+        actor_label(actor),
+        actor.actor_id,
+        actor.side,
+        actor.group_id,
+        actor.ap,
+        actor.available_steps,
+        actor.grid_position.x,
+        actor.grid_position.y,
+        actor.grid_position.z
+    )
+}
+
+fn format_status_summary(
+    snapshot: &SimulationSnapshot,
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &ViewerState,
+    render_config: ViewerRenderConfig,
+) -> String {
+    let selected = selected_actor(snapshot, viewer_state)
+        .map(actor_overview_summary)
+        .unwrap_or_else(|| "none".to_string());
+    let pending_path = rendered_path_preview(snapshot, runtime_state.runtime.pending_movement());
+    let zoom = format!(
+        "{:.0}% ({:.1}px/cell)",
+        render_config.zoom_factor * 100.0,
+        render_cell_extent(snapshot.grid.grid_size, render_config)
+    );
+
+    [
+        format!(
+            "status={} | auto_tick={} | zoom={}",
+            if viewer_state.status_line.is_empty() {
+                "idle"
+            } else {
+                viewer_state.status_line.as_str()
+            },
+            viewer_state.auto_tick,
+            zoom
+        ),
+        format!(
+            "combat={} actor={:?} group={:?} turn={} | pending={:?} move={} path={}",
+            snapshot.combat.in_combat,
+            snapshot.combat.current_actor_id,
+            snapshot.combat.current_group_id,
+            snapshot.combat.current_turn_index,
+            runtime_state.runtime.peek_pending_progression(),
+            runtime_state.runtime.pending_movement().is_some(),
+            pending_path.len()
+        ),
+        format!(
+            "map={} level={} mode={:?} | selected={} | target={}",
+            snapshot
+                .grid
+                .map_id
+                .as_ref()
+                .map(|map_id| map_id.as_str())
+                .unwrap_or("none"),
+            viewer_state.current_level,
+            snapshot.interaction_context.world_mode,
+            selected,
+            focused_target_summary(snapshot, viewer_state)
+        ),
+    ]
+    .join("\n")
+}
+
+fn format_overview_panel(
+    snapshot: &SimulationSnapshot,
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &ViewerState,
+    render_config: ViewerRenderConfig,
+) -> String {
+    let selected = selected_actor(snapshot, viewer_state)
+        .map(actor_overview_summary)
+        .unwrap_or_else(|| "none".to_string());
+    let recent_events: Vec<String> = runtime_state
+        .recent_events
+        .iter()
+        .rev()
+        .take(3)
+        .map(|entry| {
+            format!(
+                "[{} t={}] {}",
+                entry.category.label(),
+                entry.turn_index,
+                entry.text
+            )
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+
+    let sections = vec![
+        section(
+            "Overview",
+            vec![
+                format!(
+                    "map={} size={}x{} level={} default={} levels={:?}",
+                    snapshot
+                        .grid
+                        .map_id
+                        .as_ref()
+                        .map(|map_id| map_id.as_str())
+                        .unwrap_or("none"),
+                    snapshot.grid.map_width.unwrap_or(0),
+                    snapshot.grid.map_height.unwrap_or(0),
+                    viewer_state.current_level,
+                    snapshot.grid.default_level.unwrap_or(0),
+                    snapshot.grid.levels
+                ),
+                format!(
+                    "combat={} current_actor={:?} current_group={:?} turn_index={}",
+                    snapshot.combat.in_combat,
+                    snapshot.combat.current_actor_id,
+                    snapshot.combat.current_group_id,
+                    snapshot.combat.current_turn_index
+                ),
+                format!(
+                    "world_mode={:?} outdoor={:?} subscene={:?}",
+                    snapshot.interaction_context.world_mode,
+                    snapshot.interaction_context.active_outdoor_location_id,
+                    snapshot.interaction_context.current_subscene_location_id
+                ),
+            ],
+        ),
+        section("Selected", vec![format!("actor={selected}")]),
+        section(
+            "Focus",
+            vec![format!(
+                "target={}",
+                focused_target_summary(snapshot, viewer_state)
+            )],
+        ),
+        section(
+            "Runtime",
+            vec![
+                format!(
+                    "pending_progression={:?} pending_movement={}",
+                    runtime_state.runtime.peek_pending_progression(),
+                    runtime_state.runtime.pending_movement().is_some()
+                ),
+                format!(
+                    "path_preview={} hovered_grid={}",
+                    rendered_path_preview(snapshot, runtime_state.runtime.pending_movement()).len(),
+                    format_optional_grid(viewer_state.hovered_grid)
+                ),
+                format!(
+                    "zoom={:.0}% ({:.1}px/cell) auto_tick={}",
+                    render_config.zoom_factor * 100.0,
+                    render_cell_extent(snapshot.grid.grid_size, render_config),
+                    viewer_state.auto_tick
+                ),
+            ],
+        ),
+        section(
+            "Recent Events",
+            if recent_events.is_empty() {
+                vec!["none".to_string()]
+            } else {
+                recent_events
+            },
+        ),
+    ];
+
+    sections.join("\n\n")
+}
+
+fn format_selected_actor_panel(
+    snapshot: &SimulationSnapshot,
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &ViewerState,
+) -> String {
+    let Some(actor) = selected_actor(snapshot, viewer_state) else {
+        return section("Selected Actor", vec!["none".to_string()]);
+    };
+
+    let world = runtime_state.runtime.grid_to_world(actor.grid_position);
+    let mut lines = vec![
+        format!("name={} id={:?}", actor_label(actor), actor.actor_id),
+        format!(
+            "definition={} kind={:?} side={:?} group={}",
+            actor
+                .definition_id
+                .as_ref()
+                .map(|id| id.as_str())
+                .unwrap_or("none"),
+            actor.kind,
+            actor.side,
+            actor.group_id
+        ),
+        format!(
+            "grid=({}, {}, {}) world=({:.1}, {:.1}, {:.1})",
+            actor.grid_position.x,
+            actor.grid_position.y,
+            actor.grid_position.z,
+            world.x,
+            world.y,
+            world.z
+        ),
+        format!(
+            "ap={:.1} steps={} turn_open={} in_combat={} current_turn={}",
+            actor.ap,
+            actor.available_steps,
+            actor.turn_open,
+            actor.in_combat,
+            snapshot.combat.current_actor_id == Some(actor.actor_id)
+        ),
+        format!(
+            "focused_target={}",
+            focused_target_summary(snapshot, viewer_state)
+        ),
+    ];
+
+    if let Some(intent) = runtime_state.runtime.pending_movement() {
+        let pending_path =
+            rendered_path_preview(snapshot, runtime_state.runtime.pending_movement());
+        lines.push(format!(
+            "pending_move actor_match={} goal=({}, {}, {}) path_cells={}",
+            intent.actor_id == actor.actor_id,
+            intent.requested_goal.x,
+            intent.requested_goal.y,
+            intent.requested_goal.z,
+            pending_path.len()
+        ));
+    } else {
+        lines.push("pending_move=none".to_string());
+    }
+
+    if let Some(hover_grid) = viewer_state.hovered_grid {
+        let dx = (actor.grid_position.x - hover_grid.x).abs();
+        let dy = (actor.grid_position.y - hover_grid.y).abs();
+        let dz = (actor.grid_position.z - hover_grid.z).abs();
+        lines.push(format!(
+            "distance_to_hover manhattan={} chebyshev={} hover=({}, {}, {})",
+            dx + dy + dz,
+            dx.max(dy).max(dz),
+            hover_grid.x,
+            hover_grid.y,
+            hover_grid.z
+        ));
+    } else {
+        lines.push("distance_to_hover=none".to_string());
+    }
+
+    section("Selected Actor", lines)
+}
+
+fn format_world_panel(
+    snapshot: &SimulationSnapshot,
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &ViewerState,
+) -> String {
+    let level = viewer_state.current_level;
+    let actor_count = snapshot
+        .actors
+        .iter()
+        .filter(|actor| actor.grid_position.y == level)
+        .count();
+    let object_count = snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.anchor.y == level)
+        .count();
+    let static_obstacle_count = snapshot
+        .grid
+        .static_obstacles
+        .iter()
+        .filter(|grid| grid.y == level)
+        .count();
+    let runtime_blocked_count = snapshot
+        .grid
+        .runtime_blocked_cells
+        .iter()
+        .filter(|grid| grid.y == level)
+        .count();
+
+    let mut sections = vec![
+        section(
+            "World",
+            vec![
+                format!(
+                    "map={} grid_size={:.2} size={}x{} current_level={} default={} levels={:?}",
+                    snapshot
+                        .grid
+                        .map_id
+                        .as_ref()
+                        .map(|map_id| map_id.as_str())
+                        .unwrap_or("none"),
+                    snapshot.grid.grid_size,
+                    snapshot.grid.map_width.unwrap_or(0),
+                    snapshot.grid.map_height.unwrap_or(0),
+                    level,
+                    snapshot.grid.default_level.unwrap_or(0),
+                    snapshot.grid.levels
+                ),
+                format!(
+                    "topology_version={} runtime_obstacle_version={}",
+                    snapshot.grid.topology_version, snapshot.grid.runtime_obstacle_version
+                ),
+                format!(
+                    "actors={} objects={} static_obstacles={} runtime_blocked={}",
+                    actor_count, object_count, static_obstacle_count, runtime_blocked_count
+                ),
+            ],
+        ),
+        format_hover_section(snapshot, runtime_state, viewer_state),
+    ];
+
+    if let Some(grid) = viewer_state.hovered_grid {
+        if let Some(object) = map_object_at_grid(snapshot, grid) {
+            sections.push(section(
+                "Hovered Object",
+                vec![
+                    format!(
+                        "id={} kind={:?} anchor=({}, {}, {}) rotation={:?}",
+                        object.object_id,
+                        object.kind,
+                        object.anchor.x,
+                        object.anchor.y,
+                        object.anchor.z,
+                        object.rotation
+                    ),
+                    format!(
+                        "footprint={:?} occupied={}",
+                        object.footprint,
+                        format_grid_list(&object.occupied_cells)
+                    ),
+                    format!(
+                        "blocks_movement={} blocks_sight={}",
+                        object.blocks_movement, object.blocks_sight
+                    ),
+                    format!(
+                        "payload={}",
+                        format_payload_summary(&object.payload_summary)
+                    ),
+                ],
+            ));
+        }
+    }
+
+    sections.join("\n\n")
+}
+
+fn format_hover_section(
+    snapshot: &SimulationSnapshot,
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &ViewerState,
+) -> String {
+    let Some(grid) = viewer_state.hovered_grid else {
+        return section("Hover Cell", vec!["none".to_string()]);
+    };
+
+    let cell = snapshot
+        .grid
+        .map_cells
+        .iter()
+        .find(|cell| cell.grid == grid);
+    let actors = snapshot
+        .actors
+        .iter()
+        .filter(|actor| actor.grid_position == grid)
+        .map(|actor| format!("{} ({:?})", actor_label(actor), actor.side))
+        .collect::<Vec<_>>();
+    let objects = snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.occupied_cells.contains(&grid))
+        .map(|object| format!("{} ({:?})", object.object_id, object.kind))
+        .collect::<Vec<_>>();
+    let world = runtime_state.runtime.grid_to_world(grid);
+    let movement_reasons = movement_block_reasons(snapshot, grid);
+    let sight_reasons = sight_block_reasons(snapshot, grid);
+
+    section(
+        "Hover Cell",
+        vec![
+            format!(
+                "grid=({}, {}, {}) world=({:.1}, {:.1}, {:.1})",
+                grid.x, grid.y, grid.z, world.x, world.y, world.z
+            ),
+            format!(
+                "terrain={} blocks_movement={} blocks_sight={}",
+                cell.map(|entry| entry.terrain.as_str()).unwrap_or("none"),
+                cell.map(|entry| entry.blocks_movement).unwrap_or(false),
+                cell.map(|entry| entry.blocks_sight).unwrap_or(false)
+            ),
+            format!(
+                "map_blocked={} runtime_blocked={}",
+                snapshot.grid.map_blocked_cells.contains(&grid),
+                snapshot.grid.runtime_blocked_cells.contains(&grid)
+            ),
+            format!(
+                "movement={}",
+                if movement_reasons.is_empty() {
+                    "walkable".to_string()
+                } else {
+                    format!("blocked_by {}", movement_reasons.join(", "))
+                }
+            ),
+            format!(
+                "sight={}",
+                if sight_reasons.is_empty() {
+                    "clear".to_string()
+                } else {
+                    format!("blocked_by {}", sight_reasons.join(", "))
+                }
+            ),
+            format!("actors={}", format_string_list(&actors)),
+            format!("objects={}", format_string_list(&objects)),
+        ],
+    )
+}
+
+fn format_interaction_panel(snapshot: &SimulationSnapshot, viewer_state: &ViewerState) -> String {
+    let mut sections = vec![
+        section(
+            "Focused Target",
+            vec![format!(
+                "target={}",
+                focused_target_summary(snapshot, viewer_state)
+            )],
+        ),
+        format_prompt_section(viewer_state.current_prompt.as_ref()),
+        format_dialogue_section(viewer_state.active_dialogue.as_ref()),
+        section(
+            "Interaction Context",
+            vec![
+                format!(
+                    "mode={:?} map={}",
+                    snapshot.interaction_context.world_mode,
+                    snapshot
+                        .interaction_context
+                        .current_map_id
+                        .as_deref()
+                        .unwrap_or("none")
+                ),
+                format!(
+                    "outdoor={:?} subscene={:?}",
+                    snapshot.interaction_context.active_outdoor_location_id,
+                    snapshot.interaction_context.current_subscene_location_id
+                ),
+                format!(
+                    "return_spawn={:?}",
+                    snapshot.interaction_context.return_outdoor_spawn_id
+                ),
+            ],
+        ),
+    ];
+
+    sections.retain(|section| !section.is_empty());
+    sections.join("\n\n")
+}
+
+fn format_prompt_section(prompt: Option<&InteractionPrompt>) -> String {
+    let Some(prompt) = prompt else {
+        return section("Prompt", vec!["none".to_string()]);
+    };
+
+    let mut lines = vec![
+        format!(
+            "actor={:?} target={:?} target_name={}",
+            prompt.actor_id, prompt.target_id, prompt.target_name
+        ),
+        format!(
+            "anchor=({}, {}, {}) primary_option={}",
+            prompt.anchor_grid.x,
+            prompt.anchor_grid.y,
+            prompt.anchor_grid.z,
+            prompt
+                .primary_option_id
+                .as_ref()
+                .map(|id| id.0.as_str())
+                .unwrap_or("none")
+        ),
+    ];
+
+    if prompt.options.is_empty() {
+        lines.push("options=none".to_string());
+    } else {
+        lines.extend(prompt.options.iter().enumerate().map(|(index, option)| {
+            format!(
+                "{}. {} kind={:?} danger={} prox={} dist={:.1} pri={}{}",
+                index + 1,
+                option.display_name,
+                option.kind,
+                option.dangerous,
+                option.requires_proximity,
+                option.interaction_distance,
+                option.priority,
+                if prompt.primary_option_id.as_ref() == Some(&option.id) {
+                    " primary"
+                } else {
+                    ""
+                }
+            )
+        }));
+    }
+
+    section("Prompt", lines)
+}
+
+fn format_dialogue_section(dialogue: Option<&ActiveDialogueState>) -> String {
+    let Some(dialogue) = dialogue else {
+        return section("Dialogue", vec!["inactive".to_string()]);
+    };
+    let Some(node) = current_dialogue_node(dialogue) else {
+        return section(
+            "Dialogue",
+            vec![format!(
+                "invalid node dialog_id={} node_id={}",
+                dialogue.dialog_id, dialogue.current_node_id
+            )],
+        );
+    };
+
+    let mut lines = vec![
+        format!(
+            "dialog_id={} target={} node_id={} type={}",
+            dialogue.dialog_id, dialogue.target_name, node.id, node.node_type
+        ),
+        format!(
+            "speaker={}",
+            if node.speaker.trim().is_empty() {
+                "none"
+            } else {
+                node.speaker.as_str()
+            }
+        ),
+        format!("text={}", compact_text(&node.text)),
+    ];
+
+    if node.options.is_empty() {
+        lines.push("choices=none".to_string());
+    } else {
+        lines.push(format!("choices={}", node.options.len()));
+        lines.extend(
+            node.options
+                .iter()
+                .enumerate()
+                .map(|(index, option)| format!("{}. {}", index + 1, compact_text(&option.text))),
+        );
+    }
+
+    section("Dialogue", lines)
+}
+
+fn format_events_panel(runtime_state: &ViewerRuntimeState, event_filter: HudEventFilter) -> String {
+    let total_count = runtime_state.recent_events.len();
+    let combat_count = runtime_state
+        .recent_events
+        .iter()
+        .filter(|entry| entry.category == HudEventCategory::Combat)
+        .count();
+    let interaction_count = runtime_state
+        .recent_events
+        .iter()
+        .filter(|entry| entry.category == HudEventCategory::Interaction)
+        .count();
+    let world_count = runtime_state
+        .recent_events
+        .iter()
+        .filter(|entry| entry.category == HudEventCategory::World)
+        .count();
+    let events: Vec<String> = runtime_state
+        .recent_events
+        .iter()
+        .filter(|entry| event_matches_filter(entry, event_filter))
+        .rev()
+        .take(20)
+        .map(format_event_line)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+
+    section(
+        "Events",
+        if events.is_empty() {
+            vec![
+                format!("filter={} empty", event_filter.label()),
+                format!(
+                    "counts total={} combat={} interaction={} world={}",
+                    total_count, combat_count, interaction_count, world_count
+                ),
+            ]
+        } else {
+            std::iter::once(format!(
+                "filter={} visible={} total={} combat={} interaction={} world={}",
+                event_filter.label(),
+                events.len(),
+                total_count,
+                combat_count,
+                interaction_count,
+                world_count
+            ))
+            .chain(events)
+            .collect()
+        },
+    )
+}
+
+fn format_controls_help() -> String {
+    section(
+        "Controls",
+        vec![
+            "F1-F5 switch HUD page".to_string(),
+            "H toggle HUD".to_string(),
+            "/ toggle detailed help".to_string(),
+            "[ / ] switch event filter on Events page".to_string(),
+            "Left click cancels auto-move, selects actor, focuses target, or moves".to_string(),
+            "Right click hostile target quick attacks".to_string(),
+            "E execute primary interaction".to_string(),
+            "1-9 choose interaction option or dialogue choice".to_string(),
+            "Enter advance dialogue".to_string(),
+            "Esc close dialogue".to_string(),
+            "Space cancels auto-move, otherwise ends turn (hold to repeat)".to_string(),
+            "Middle mouse drag pans camera".to_string(),
+            "Mouse wheel zooms".to_string(),
+            "F recenter camera".to_string(),
+            "PageUp/PageDown change level".to_string(),
+            "Tab cycle actor on current level".to_string(),
+            "A toggle auto tick".to_string(),
+            "= zoom in, - zoom out, 0 reset zoom".to_string(),
+        ],
+    )
+}
+
+fn footer_hint(page: ViewerHudPage) -> &'static str {
+    match page {
+        ViewerHudPage::Overview => {
+            "F1-5切页 · H隐藏HUD · /帮助 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
+        }
+        ViewerHudPage::SelectedActor => {
+            "F1-5切页 · H隐藏HUD · /帮助 · Tab切换角色 · 左键选中/移动 · 右键快速攻击"
+        }
+        ViewerHudPage::World => {
+            "F1-5切页 · H隐藏HUD · /帮助 · 悬停看格子 · 中键拖拽 · 滚轮缩放 · F回中"
+        }
+        ViewerHudPage::Interaction => {
+            "F1-5切页 · H隐藏HUD · /帮助 · E主交互 · 1-9选项 · Enter推进 · Esc关闭"
+        }
+        ViewerHudPage::Events => "F1-5切页 · H隐藏HUD · /帮助 · [ / ]切过滤器",
+    }
+}
+
+fn section(title: &str, lines: Vec<String>) -> String {
+    let mut text = String::from(title);
+    for line in lines {
+        text.push_str("\n- ");
+        text.push_str(&line);
+    }
+    text
+}
+
+fn format_string_list(values: &[String]) -> String {
+    if values.is_empty() {
+        "none".to_string()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn format_event_line(entry: &ViewerEventEntry) -> String {
+    format!(
+        "{} · t={} · {}",
+        event_badge(entry.category),
+        entry.turn_index,
+        entry.text
+    )
+}
+
+fn event_badge(category: HudEventCategory) -> &'static str {
+    match category {
+        HudEventCategory::Combat => "COMBAT",
+        HudEventCategory::Interaction => "INTERACT",
+        HudEventCategory::World => "WORLD",
+    }
+}
+
+fn format_grid_list(values: &[GridCoord]) -> String {
+    if values.is_empty() {
+        "none".to_string()
+    } else {
+        values
+            .iter()
+            .map(|grid| format!("({}, {}, {})", grid.x, grid.y, grid.z))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn format_payload_summary(payload_summary: &std::collections::BTreeMap<String, String>) -> String {
+    if payload_summary.is_empty() {
+        "none".to_string()
+    } else {
+        payload_summary
+            .iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn format_optional_grid(grid: Option<GridCoord>) -> String {
+    grid.map(|grid| format!("({}, {}, {})", grid.x, grid.y, grid.z))
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn compact_text(text: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        "none".to_string()
+    } else {
+        trimmed.replace('\n', " / ")
+    }
+}
+
+fn movement_block_reasons(snapshot: &SimulationSnapshot, grid: GridCoord) -> Vec<String> {
+    let mut reasons = Vec::new();
+
+    if let Some(cell) = snapshot
+        .grid
+        .map_cells
+        .iter()
+        .find(|cell| cell.grid == grid)
+    {
+        if cell.blocks_movement {
+            reasons.push(format!("terrain:{}", cell.terrain));
+        }
+    }
+    if snapshot.grid.map_blocked_cells.contains(&grid) {
+        reasons.push("map_blocked_set".to_string());
+    }
+    if snapshot.grid.static_obstacles.contains(&grid) {
+        reasons.push("static_obstacle".to_string());
+    }
+
+    let actor_names: Vec<String> = snapshot
+        .actors
+        .iter()
+        .filter(|actor| actor.grid_position == grid)
+        .map(|actor| actor_label(actor))
+        .collect();
+    if !actor_names.is_empty() {
+        reasons.push(format!("runtime_actor:{}", actor_names.join("+")));
+    }
+
+    let blocking_objects: Vec<String> = snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.blocks_movement && object.occupied_cells.contains(&grid))
+        .map(|object| object.object_id.clone())
+        .collect();
+    if !blocking_objects.is_empty() {
+        reasons.push(format!("object:{}", blocking_objects.join("+")));
+    }
+
+    reasons
+}
+
+fn sight_block_reasons(snapshot: &SimulationSnapshot, grid: GridCoord) -> Vec<String> {
+    let mut reasons = Vec::new();
+
+    if let Some(cell) = snapshot
+        .grid
+        .map_cells
+        .iter()
+        .find(|cell| cell.grid == grid)
+    {
+        if cell.blocks_sight {
+            reasons.push(format!("terrain:{}", cell.terrain));
+        }
+    }
+
+    let blocking_objects: Vec<String> = snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.blocks_sight && object.occupied_cells.contains(&grid))
+        .map(|object| object.object_id.clone())
+        .collect();
+    if !blocking_objects.is_empty() {
+        reasons.push(format!("object:{}", blocking_objects.join("+")));
+    }
+
+    reasons
+}
+
 fn just_pressed_digit(keys: &ButtonInput<KeyCode>) -> Option<usize> {
     let bindings = [
         KeyCode::Digit1,
@@ -1074,9 +2027,7 @@ fn just_pressed_digit(keys: &ButtonInput<KeyCode>) -> Option<usize> {
         KeyCode::Digit8,
         KeyCode::Digit9,
     ];
-    bindings
-        .iter()
-        .position(|key| keys.just_pressed(*key))
+    bindings.iter().position(|key| keys.just_pressed(*key))
 }
 
 fn apply_interaction_result(viewer_state: &mut ViewerState, result: InteractionExecutionResult) {
@@ -1135,64 +2086,6 @@ fn apply_interaction_result(viewer_state: &mut ViewerState, result: InteractionE
             result.reason.unwrap_or_else(|| "failed".to_string())
         )
     };
-}
-
-fn format_interaction_prompt(prompt: Option<&InteractionPrompt>) -> String {
-    let Some(prompt) = prompt else {
-        return "interaction target:\n- none".to_string();
-    };
-
-    let mut lines = vec![format!(
-        "interaction target:\n- {} @ ({}, {}, {})",
-        prompt.target_name, prompt.anchor_grid.x, prompt.anchor_grid.y, prompt.anchor_grid.z
-    )];
-    if prompt.options.is_empty() {
-        lines.push("- no available options".to_string());
-    } else {
-        for (index, option) in prompt.options.iter().enumerate() {
-            lines.push(format!(
-                "- {}. {} [{:?}] range={:.1}{}",
-                index + 1,
-                option.display_name,
-                option.kind,
-                option.interaction_distance,
-                if prompt.primary_option_id.as_ref() == Some(&option.id) {
-                    " primary"
-                } else {
-                    ""
-                }
-            ));
-        }
-    }
-    lines.join("\n")
-}
-
-fn format_dialogue_panel(dialogue: Option<&ActiveDialogueState>) -> String {
-    let Some(dialogue) = dialogue else {
-        return "dialogue:\n- inactive".to_string();
-    };
-    let Some(node) = current_dialogue_node(dialogue) else {
-        return format!("dialogue {}: invalid node {}", dialogue.dialog_id, dialogue.current_node_id);
-    };
-
-    let mut text = format!(
-        "dialogue {} with {}\n- node={} type={}",
-        dialogue.dialog_id, dialogue.target_name, node.id, node.node_type
-    );
-    if !node.speaker.trim().is_empty() {
-        text.push_str(&format!("\n- speaker={}", node.speaker));
-    }
-    if !node.text.trim().is_empty() {
-        text.push_str(&format!("\n- {}", node.text));
-    }
-    if node.node_type == "choice" {
-        for (index, option) in node.options.iter().enumerate() {
-            text.push_str(&format!("\n- {}. {}", index + 1, option.text));
-        }
-    } else {
-        text.push_str("\n- press Enter to continue");
-    }
-    text
 }
 
 fn current_dialogue_node(dialogue: &ActiveDialogueState) -> Option<&DialogueNode> {
@@ -1370,7 +2263,12 @@ fn format_interrupt_reason(reason: Option<AutoMoveInterruptReason>) -> &'static 
     match reason {
         Some(AutoMoveInterruptReason::ReachedGoal) => "reached_goal",
         Some(AutoMoveInterruptReason::EnteredCombat) => "entered_combat",
-        Some(AutoMoveInterruptReason::TargetNotWalkable) => "target_not_walkable",
+        Some(AutoMoveInterruptReason::ActorNotPlayerControlled) => "actor_not_player_controlled",
+        Some(AutoMoveInterruptReason::InputNotAllowed) => "input_not_allowed",
+        Some(AutoMoveInterruptReason::TargetOutOfBounds) => "target_out_of_bounds",
+        Some(AutoMoveInterruptReason::TargetInvalidLevel) => "target_invalid_level",
+        Some(AutoMoveInterruptReason::TargetBlocked) => "target_blocked",
+        Some(AutoMoveInterruptReason::TargetOccupied) => "target_occupied",
         Some(AutoMoveInterruptReason::NoPath) => "no_path",
         Some(AutoMoveInterruptReason::NoProgress) => "no_progress",
         Some(AutoMoveInterruptReason::CancelledByNewCommand) => "cancelled_by_new_command",
@@ -1379,7 +2277,52 @@ fn format_interrupt_reason(reason: Option<AutoMoveInterruptReason>) -> &'static 
     }
 }
 
-fn format_event(event: SimulationEvent) -> String {
+fn viewer_event_entry(event: SimulationEvent, turn_index: u64) -> ViewerEventEntry {
+    let category = classify_event(&event);
+    let text = format_event_text(event);
+    ViewerEventEntry {
+        category,
+        turn_index,
+        text,
+    }
+}
+
+fn classify_event(event: &SimulationEvent) -> HudEventCategory {
+    match event {
+        SimulationEvent::ActorTurnStarted { .. }
+        | SimulationEvent::ActorTurnEnded { .. }
+        | SimulationEvent::CombatStateChanged { .. }
+        | SimulationEvent::ActionRejected { .. }
+        | SimulationEvent::ActionResolved { .. } => HudEventCategory::Combat,
+        SimulationEvent::InteractionOptionsResolved { .. }
+        | SimulationEvent::InteractionApproachPlanned { .. }
+        | SimulationEvent::InteractionStarted { .. }
+        | SimulationEvent::InteractionSucceeded { .. }
+        | SimulationEvent::InteractionFailed { .. }
+        | SimulationEvent::DialogueStarted { .. }
+        | SimulationEvent::DialogueAdvanced { .. }
+        | SimulationEvent::PickupGranted { .. }
+        | SimulationEvent::RelationChanged { .. } => HudEventCategory::Interaction,
+        SimulationEvent::GroupRegistered { .. }
+        | SimulationEvent::ActorRegistered { .. }
+        | SimulationEvent::ActorUnregistered { .. }
+        | SimulationEvent::ActorMoved { .. }
+        | SimulationEvent::WorldCycleCompleted
+        | SimulationEvent::PathComputed { .. }
+        | SimulationEvent::SceneTransitionRequested { .. } => HudEventCategory::World,
+    }
+}
+
+fn event_matches_filter(event: &ViewerEventEntry, filter: HudEventFilter) -> bool {
+    match filter {
+        HudEventFilter::All => true,
+        HudEventFilter::Combat => event.category == HudEventCategory::Combat,
+        HudEventFilter::Interaction => event.category == HudEventCategory::Interaction,
+        HudEventFilter::World => event.category == HudEventCategory::World,
+    }
+}
+
+fn format_event_text(event: SimulationEvent) -> String {
     match event {
         SimulationEvent::GroupRegistered { group_id, order } => {
             format!("group registered {group_id} -> {order}")
@@ -1431,6 +2374,16 @@ fn format_event(event: SimulationEvent) -> String {
             actor_id, action_type, result.ap_before, result.ap_after, result.consumed
         ),
         SimulationEvent::WorldCycleCompleted => "world cycle completed".to_string(),
+        SimulationEvent::ActorMoved {
+            actor_id,
+            from,
+            to,
+            step_index,
+            total_steps,
+        } => format!(
+            "actor moved {:?} ({}, {}, {}) -> ({}, {}, {}) step={}/{}",
+            actor_id, from.x, from.y, from.z, to.x, to.y, to.z, step_index, total_steps
+        ),
         SimulationEvent::PathComputed {
             actor_id,
             path_length,
@@ -1571,10 +2524,14 @@ fn grid_bounds(snapshot: &SimulationSnapshot, level: i32) -> GridBounds {
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_label, cycle_level, fit_pixels_per_world_unit, grid_bounds, view_to_world_coord,
-        world_to_view_coord, GridBounds, ViewerRenderConfig,
+        actor_label, classify_event, cycle_level, event_matches_filter, fit_pixels_per_world_unit,
+        footer_hint, format_event_line, grid_bounds, movement_block_reasons, view_to_world_coord,
+        world_to_view_coord, GridBounds, HudEventCategory, HudEventFilter, ViewerEventEntry,
+        ViewerHudPage, ViewerRenderConfig,
     };
-    use game_core::{ActorDebugState, CombatDebugState, GridDebugState, SimulationSnapshot};
+    use game_core::{
+        ActorDebugState, CombatDebugState, GridDebugState, SimulationEvent, SimulationSnapshot,
+    };
     use game_data::{ActorId, ActorKind, ActorSide, GridCoord, MapId, TurnState, WorldCoord};
 
     #[test]
@@ -1757,5 +2714,126 @@ mod tests {
         };
 
         assert_eq!(actor_label(&actor), "7");
+    }
+
+    #[test]
+    fn footer_hint_contains_global_shortcuts_and_page_specific_action() {
+        let overview_hint = footer_hint(ViewerHudPage::Overview);
+        let events_hint = footer_hint(ViewerHudPage::Events);
+
+        assert!(overview_hint.contains("F1-5切页"));
+        assert!(overview_hint.contains("A自动推进"));
+        assert!(events_hint.contains("切过滤器"));
+    }
+
+    #[test]
+    fn event_filter_matches_expected_categories() {
+        let combat = ViewerEventEntry {
+            category: classify_event(&SimulationEvent::CombatStateChanged { in_combat: true }),
+            turn_index: 3,
+            text: "combat state -> true".to_string(),
+        };
+        let interaction = ViewerEventEntry {
+            category: classify_event(&SimulationEvent::DialogueStarted {
+                actor_id: ActorId(1),
+                target_id: game_data::InteractionTargetId::MapObject("door".into()),
+                dialogue_id: "intro".into(),
+            }),
+            turn_index: 3,
+            text: "dialogue started".to_string(),
+        };
+
+        assert_eq!(combat.category, HudEventCategory::Combat);
+        assert!(event_matches_filter(&combat, HudEventFilter::Combat));
+        assert!(!event_matches_filter(&combat, HudEventFilter::Interaction));
+
+        assert_eq!(interaction.category, HudEventCategory::Interaction);
+        assert!(event_matches_filter(
+            &interaction,
+            HudEventFilter::Interaction
+        ));
+        assert!(event_matches_filter(&interaction, HudEventFilter::All));
+    }
+
+    #[test]
+    fn movement_block_reasons_explain_multiple_sources() {
+        let grid = GridCoord::new(2, 0, 1);
+        let snapshot = SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: vec![ActorDebugState {
+                actor_id: ActorId(9),
+                definition_id: None,
+                display_name: "守卫".into(),
+                kind: ActorKind::Npc,
+                side: ActorSide::Friendly,
+                group_id: "guard".into(),
+                ap: 1.0,
+                available_steps: 1,
+                turn_open: true,
+                in_combat: false,
+                grid_position: grid,
+            }],
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(6),
+                map_height: Some(6),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: vec![grid],
+                map_blocked_cells: vec![grid],
+                map_cells: vec![game_core::MapCellDebugState {
+                    grid,
+                    blocks_movement: true,
+                    blocks_sight: false,
+                    terrain: "wall".into(),
+                }],
+                map_objects: vec![game_core::MapObjectDebugState {
+                    object_id: "crate".into(),
+                    kind: game_data::MapObjectKind::Interactive,
+                    anchor: grid,
+                    footprint: game_data::MapObjectFootprint {
+                        width: 1,
+                        height: 1,
+                    },
+                    rotation: game_data::MapRotation::North,
+                    blocks_movement: true,
+                    blocks_sight: false,
+                    occupied_cells: vec![grid],
+                    payload_summary: std::collections::BTreeMap::new(),
+                }],
+                runtime_blocked_cells: vec![grid],
+                topology_version: 1,
+                runtime_obstacle_version: 2,
+            },
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: game_data::InteractionContextSnapshot::default(),
+            path_preview: Vec::new(),
+        };
+
+        let reasons = movement_block_reasons(&snapshot, grid).join(" | ");
+        assert!(reasons.contains("terrain:wall"));
+        assert!(reasons.contains("map_blocked_set"));
+        assert!(reasons.contains("static_obstacle"));
+        assert!(reasons.contains("runtime_actor:守卫"));
+        assert!(reasons.contains("object:crate"));
+    }
+
+    #[test]
+    fn formatted_event_line_starts_with_category_badge() {
+        let entry = ViewerEventEntry {
+            category: HudEventCategory::World,
+            turn_index: 12,
+            text: "world cycle completed".into(),
+        };
+
+        let line = format_event_line(&entry);
+        assert!(line.starts_with("WORLD"));
+        assert!(line.contains("t=12"));
     }
 }

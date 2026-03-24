@@ -2,16 +2,24 @@ use bevy_app::prelude::*;
 
 pub mod actor;
 pub mod demo;
+pub mod economy;
 pub mod goap;
 pub mod grid;
 pub mod movement;
 pub mod runtime;
 pub mod simulation;
+pub mod survival;
 pub mod turn;
 pub mod utility;
 
 pub use actor::{AiController, AiStepResult, InteractOnceAiController, NoopAiController};
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
+pub use economy::{
+    ActorEconomyState, CraftOutcome, EconomyRuntimeError, EquippedItemState,
+    EquippedWeaponProfile, HeadlessEconomyRuntime, MissingMaterial, MissingSkill,
+    RecipeCraftCheck, ShopRuntimeEntry, ShopRuntimeState as EconomyShopRuntimeState,
+    TradeOutcome,
+};
 pub use game_data::{
     InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
     InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind, InteractionPrompt,
@@ -33,6 +41,11 @@ pub use simulation::{
     ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
     SimulationSnapshot,
+};
+pub use survival::{
+    ActorSurvivalState, CraftingCheck, CraftingResult, MissingInventoryEntry,
+    MissingSkillRequirement, ShopInventoryState, ShopRuntimeState, SurvivalRuntime,
+    SurvivalRuntimeError, TradeQuote, TradeResult,
 };
 pub use utility::{
     score_goal, score_goal_for_context, score_goals, score_goals_for_context, select_goal,

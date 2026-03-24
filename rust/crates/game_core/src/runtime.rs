@@ -1,9 +1,10 @@
 use game_data::{
     ActionResult, ActionType, ActorId, ActorSide, GridCoord, InteractionExecutionRequest,
     InteractionExecutionResult, InteractionOptionId, InteractionPrompt, InteractionTargetId,
-    WorldCoord,
+    ItemLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldCoord,
 };
 
+use crate::economy::HeadlessEconomyRuntime;
 use crate::grid::GridPathfindingError;
 use crate::movement::{
     AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
@@ -50,6 +51,38 @@ impl SimulationRuntime {
         }
     }
 
+    pub fn set_item_library(&mut self, items: ItemLibrary) {
+        self.simulation.set_item_library(items);
+    }
+
+    pub fn set_quest_library(&mut self, quests: QuestLibrary) {
+        self.simulation.set_quest_library(quests);
+    }
+
+    pub fn set_skill_library(&mut self, skills: SkillLibrary) {
+        self.simulation.set_skill_library(skills);
+    }
+
+    pub fn set_recipe_library(&mut self, recipes: RecipeLibrary) {
+        self.simulation.set_recipe_library(recipes);
+    }
+
+    pub fn set_shop_library(&mut self, shops: ShopLibrary) {
+        self.simulation.set_shop_library(shops);
+    }
+
+    pub fn start_quest(&mut self, actor_id: ActorId, quest_id: &str) -> bool {
+        self.simulation.start_quest(actor_id, quest_id)
+    }
+
+    pub fn is_quest_active(&self, quest_id: &str) -> bool {
+        self.simulation.is_quest_active(quest_id)
+    }
+
+    pub fn is_quest_completed(&self, quest_id: &str) -> bool {
+        self.simulation.is_quest_completed(quest_id)
+    }
+
     pub fn tick(&mut self) {
         self.tick_count = self.tick_count.saturating_add(1);
     }
@@ -72,6 +105,14 @@ impl SimulationRuntime {
         self.simulation.snapshot(self.path_preview.clone())
     }
 
+    pub fn economy(&self) -> &HeadlessEconomyRuntime {
+        self.simulation.economy()
+    }
+
+    pub fn economy_mut(&mut self) -> &mut HeadlessEconomyRuntime {
+        self.simulation.economy_mut()
+    }
+
     pub fn world_to_grid(&self, world: WorldCoord) -> GridCoord {
         self.simulation.grid_world().world_to_grid(world)
     }
@@ -84,12 +125,32 @@ impl SimulationRuntime {
         self.simulation.actor_grid_position(actor_id)
     }
 
+    pub fn is_grid_in_bounds(&self, grid: GridCoord) -> bool {
+        self.simulation.grid_world().is_in_bounds(grid)
+    }
+
     pub fn get_actor_ap(&self, actor_id: ActorId) -> f32 {
         self.simulation.get_actor_ap(actor_id)
     }
 
     pub fn get_actor_available_steps(&self, actor_id: ActorId) -> i32 {
         self.simulation.get_actor_available_steps(actor_id)
+    }
+
+    pub fn get_actor_inventory_count(&self, actor_id: ActorId, item_id: &str) -> i32 {
+        self.simulation.inventory_count(actor_id, item_id)
+    }
+
+    pub fn get_actor_hit_points(&self, actor_id: ActorId) -> f32 {
+        self.simulation.actor_hit_points(actor_id)
+    }
+
+    pub fn get_actor_level(&self, actor_id: ActorId) -> i32 {
+        self.simulation.actor_level(actor_id)
+    }
+
+    pub fn get_actor_current_xp(&self, actor_id: ActorId) -> i32 {
+        self.simulation.actor_current_xp(actor_id)
     }
 
     pub fn can_actor_afford(
@@ -159,9 +220,19 @@ impl SimulationRuntime {
         actor_id: ActorId,
         target_id: InteractionTargetId,
     ) -> Option<InteractionPrompt> {
-        self.simulation
-            .query_interaction_options(actor_id, &target_id)
-            .filter(|prompt| !prompt.options.is_empty())
+        if self.ensure_player_input_actor(actor_id).is_err() {
+            return None;
+        }
+
+        match self.submit_command(SimulationCommand::QueryInteractionOptions {
+            actor_id,
+            target_id,
+        }) {
+            SimulationCommandResult::InteractionPrompt(prompt) if !prompt.options.is_empty() => {
+                Some(prompt)
+            }
+            _ => None,
+        }
     }
 
     pub fn issue_interaction(
@@ -170,6 +241,14 @@ impl SimulationRuntime {
         target_id: InteractionTargetId,
         option_id: InteractionOptionId,
     ) -> InteractionExecutionResult {
+        if let Err(error) = self.ensure_player_input_actor(actor_id) {
+            return InteractionExecutionResult {
+                success: false,
+                reason: Some(movement_plan_error_reason(&error).to_string()),
+                ..InteractionExecutionResult::default()
+            };
+        }
+
         self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
         self.pending_interaction = None;
 
@@ -230,6 +309,7 @@ impl SimulationRuntime {
         actor_id: ActorId,
         goal: GridCoord,
     ) -> Result<MovementPlan, MovementPlanError> {
+        self.ensure_player_input_actor(actor_id)?;
         self.simulation.plan_actor_movement(actor_id, goal)
     }
 
@@ -238,7 +318,7 @@ impl SimulationRuntime {
         actor_id: ActorId,
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
-        let plan = self.simulation.plan_actor_movement(actor_id, goal)?;
+        let plan = self.plan_actor_movement(actor_id, goal)?;
         self.path_preview = plan.requested_path.clone();
 
         let result = if plan.requested_steps() == 0 {
@@ -259,9 +339,8 @@ impl SimulationRuntime {
         actor_id: ActorId,
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
+        let plan = self.plan_actor_movement(actor_id, goal)?;
         self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
-
-        let plan = self.simulation.plan_actor_movement(actor_id, goal)?;
         self.path_preview = plan.requested_path.clone();
 
         if plan.requested_steps() == 0 {
@@ -372,7 +451,6 @@ impl SimulationRuntime {
             SimulationCommand::MoveActorTo { .. }
                 | SimulationCommand::PerformAttack { .. }
                 | SimulationCommand::PerformInteract { .. }
-                | SimulationCommand::QueryInteractionOptions { .. }
                 | SimulationCommand::ExecuteInteraction(_)
                 | SimulationCommand::EndTurn { .. }
                 | SimulationCommand::EnterCombat { .. }
@@ -532,12 +610,43 @@ impl SimulationRuntime {
             .apply_command(SimulationCommand::ExecuteInteraction(request));
         self.pending_interaction = None;
     }
+
+    fn ensure_player_input_actor(&self, actor_id: ActorId) -> Result<(), MovementPlanError> {
+        let Some(side) = self.simulation.get_actor_side(actor_id) else {
+            return Err(MovementPlanError::UnknownActor { actor_id });
+        };
+        if side != ActorSide::Player {
+            return Err(MovementPlanError::ActorNotPlayerControlled);
+        }
+        if !self.simulation.actor_turn_open(actor_id)
+            || !self.simulation.is_actor_input_allowed(actor_id)
+        {
+            return Err(MovementPlanError::InputNotAllowed);
+        }
+        Ok(())
+    }
 }
 
 pub fn pathfinding_error_reason(error: &GridPathfindingError) -> &'static str {
     match error {
-        GridPathfindingError::TargetNotWalkable => "target_not_walkable",
+        GridPathfindingError::TargetOutOfBounds => "target_out_of_bounds",
+        GridPathfindingError::TargetInvalidLevel => "target_invalid_level",
+        GridPathfindingError::TargetBlocked => "target_blocked",
+        GridPathfindingError::TargetOccupied => "target_occupied",
         GridPathfindingError::NoPath => "no_path",
+    }
+}
+
+pub fn movement_plan_error_reason(error: &MovementPlanError) -> &'static str {
+    match error {
+        MovementPlanError::UnknownActor { .. } => "unknown_actor",
+        MovementPlanError::ActorNotPlayerControlled => "actor_not_player_controlled",
+        MovementPlanError::InputNotAllowed => "input_not_allowed",
+        MovementPlanError::TargetOutOfBounds => "target_out_of_bounds",
+        MovementPlanError::TargetInvalidLevel => "target_invalid_level",
+        MovementPlanError::TargetBlocked => "target_blocked",
+        MovementPlanError::TargetOccupied => "target_occupied",
+        MovementPlanError::NoPath => "no_path",
     }
 }
 
@@ -558,18 +667,34 @@ pub fn action_result_status(result: &ActionResult) -> String {
 fn movement_plan_error_to_interrupt_reason(error: &MovementPlanError) -> AutoMoveInterruptReason {
     match error {
         MovementPlanError::UnknownActor { .. } => AutoMoveInterruptReason::UnknownActor,
-        MovementPlanError::TargetNotWalkable => AutoMoveInterruptReason::TargetNotWalkable,
+        MovementPlanError::ActorNotPlayerControlled => {
+            AutoMoveInterruptReason::ActorNotPlayerControlled
+        }
+        MovementPlanError::InputNotAllowed => AutoMoveInterruptReason::InputNotAllowed,
+        MovementPlanError::TargetOutOfBounds => AutoMoveInterruptReason::TargetOutOfBounds,
+        MovementPlanError::TargetInvalidLevel => AutoMoveInterruptReason::TargetInvalidLevel,
+        MovementPlanError::TargetBlocked => AutoMoveInterruptReason::TargetBlocked,
+        MovementPlanError::TargetOccupied => AutoMoveInterruptReason::TargetOccupied,
         MovementPlanError::NoPath => AutoMoveInterruptReason::NoPath,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use game_data::{ActionType, ActorSide, GridCoord};
+    use std::collections::BTreeMap;
 
+    use game_data::{
+        ActionType, ActorKind, ActorSide, CharacterId, GridCoord, ItemDefinition, ItemLibrary,
+        MapDefinition, MapId, MapInteractiveProps, MapLevelDefinition, MapObjectDefinition,
+        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
+        QuestConnection, QuestDefinition, QuestFlow, QuestLibrary, QuestNode, QuestRewards,
+        RecipeLibrary,
+    };
+
+    use super::SimulationRuntime;
     use crate::demo::create_demo_runtime;
     use crate::movement::{AutoMoveInterruptReason, PendingProgressionStep};
-    use crate::simulation::{SimulationCommand, SimulationCommandResult};
+    use crate::simulation::{RegisterActor, Simulation, SimulationCommand, SimulationCommandResult};
 
     #[test]
     fn demo_runtime_boots_with_player_turn_open() {
@@ -800,5 +925,245 @@ mod tests {
             runtime.peek_pending_progression(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
         );
+    }
+
+    #[test]
+    fn runtime_inventory_query_reads_through_simulation_economy() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_interaction_map_definition());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(1, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        let result = runtime.issue_interaction(
+            player,
+            game_data::InteractionTargetId::MapObject("pickup".into()),
+            game_data::InteractionOptionId("pickup".into()),
+        );
+
+        assert!(result.success);
+        assert_eq!(runtime.get_actor_inventory_count(player, "1005"), 2);
+    }
+
+    #[test]
+    fn runtime_start_quest_completes_kill_objective_and_rewards_actor() {
+        let mut simulation = Simulation::new();
+        simulation.set_item_library(sample_reward_item_library());
+        simulation.set_quest_library(sample_runtime_quest_library());
+        simulation.set_recipe_library(RecipeLibrary::default());
+
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.5,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("zombie_walker".into())),
+            display_name: "Zombie".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.0,
+            ai_controller: None,
+        });
+        simulation.seed_actor_progression(player, 1, 0);
+        simulation.seed_actor_progression(hostile, 1, 25);
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+        simulation.set_actor_resource(hostile, "hp", 5.0);
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        assert!(runtime.start_quest(player, "zombie_hunter"));
+        assert!(runtime.is_quest_active("zombie_hunter"));
+
+        let result = runtime.submit_command(SimulationCommand::PerformAttack {
+            actor_id: player,
+            target_actor: hostile,
+        });
+
+        match result {
+            SimulationCommandResult::Action(action) => assert!(action.success),
+            other => panic!("unexpected command result: {other:?}"),
+        }
+
+        assert!(runtime.is_quest_completed("zombie_hunter"));
+        assert_eq!(runtime.get_actor_inventory_count(player, "1006"), 3);
+        assert_eq!(runtime.get_actor_current_xp(player), 35);
+    }
+
+    fn sample_reward_item_library() -> ItemLibrary {
+        ItemLibrary::from(BTreeMap::from([(
+            1006,
+            ItemDefinition {
+                id: 1006,
+                name: "Rewards".into(),
+                ..ItemDefinition::default()
+            },
+        )]))
+    }
+
+    fn sample_runtime_quest_library() -> QuestLibrary {
+        QuestLibrary::from(BTreeMap::from([(
+            "zombie_hunter".to_string(),
+            QuestDefinition {
+                quest_id: "zombie_hunter".to_string(),
+                title: "僵尸猎人".to_string(),
+                description: "击败一只僵尸".to_string(),
+                flow: QuestFlow {
+                    start_node_id: "start".to_string(),
+                    nodes: BTreeMap::from([
+                        (
+                            "start".to_string(),
+                            QuestNode {
+                                id: "start".to_string(),
+                                node_type: "start".to_string(),
+                                ..QuestNode::default()
+                            },
+                        ),
+                        (
+                            "kill_one".to_string(),
+                            QuestNode {
+                                id: "kill_one".to_string(),
+                                node_type: "objective".to_string(),
+                                objective_type: "kill".to_string(),
+                                count: 1,
+                                extra: BTreeMap::from([(
+                                    "enemy_type".to_string(),
+                                    serde_json::Value::String("zombie".to_string()),
+                                )]),
+                                ..QuestNode::default()
+                            },
+                        ),
+                        (
+                            "reward".to_string(),
+                            QuestNode {
+                                id: "reward".to_string(),
+                                node_type: "reward".to_string(),
+                                rewards: QuestRewards {
+                                    items: vec![game_data::QuestRewardItem {
+                                        id: 1006,
+                                        count: 3,
+                                        extra: BTreeMap::new(),
+                                    }],
+                                    experience: 10,
+                                    ..QuestRewards::default()
+                                },
+                                ..QuestNode::default()
+                            },
+                        ),
+                        (
+                            "end".to_string(),
+                            QuestNode {
+                                id: "end".to_string(),
+                                node_type: "end".to_string(),
+                                ..QuestNode::default()
+                            },
+                        ),
+                    ]),
+                    connections: vec![
+                        QuestConnection {
+                            from: "start".to_string(),
+                            to: "kill_one".to_string(),
+                            from_port: 0,
+                            to_port: 0,
+                            extra: BTreeMap::new(),
+                        },
+                        QuestConnection {
+                            from: "kill_one".to_string(),
+                            to: "reward".to_string(),
+                            from_port: 0,
+                            to_port: 0,
+                            extra: BTreeMap::new(),
+                        },
+                        QuestConnection {
+                            from: "reward".to_string(),
+                            to: "end".to_string(),
+                            from_port: 0,
+                            to_port: 0,
+                            extra: BTreeMap::new(),
+                        },
+                    ],
+                    ..QuestFlow::default()
+                },
+                ..QuestDefinition::default()
+            },
+        )]))
+    }
+
+    fn sample_interaction_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("interaction_map".into()),
+            name: "Interaction".into(),
+            size: MapSize {
+                width: 12,
+                height: 12,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            objects: vec![
+                MapObjectDefinition {
+                    object_id: "pickup".into(),
+                    kind: MapObjectKind::Pickup,
+                    anchor: GridCoord::new(2, 0, 1),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    props: MapObjectProps {
+                        pickup: Some(MapPickupProps {
+                            item_id: "1005".into(),
+                            min_count: 1,
+                            max_count: 2,
+                            extra: BTreeMap::new(),
+                        }),
+                        ..MapObjectProps::default()
+                    },
+                },
+                MapObjectDefinition {
+                    object_id: "exit".into(),
+                    kind: MapObjectKind::Interactive,
+                    anchor: GridCoord::new(5, 0, 7),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    props: MapObjectProps {
+                        interactive: Some(MapInteractiveProps {
+                            display_name: "Exit".into(),
+                            interaction_distance: 1.4,
+                            interaction_kind: "enter_outdoor_location".into(),
+                            target_id: Some("safehouse".into()),
+                            options: Vec::new(),
+                            extra: BTreeMap::new(),
+                        }),
+                        ..MapObjectProps::default()
+                    },
+                },
+            ],
+        }
     }
 }

@@ -10,3 +10,5 @@ bevy_app.workspace = true
 dogoap.workspace = true
 game_data = { path = "../game_data" }
 game_protocol = { path = "../game_protocol" }
+serde_json = { workspace = true }
+thiserror.workspace = true

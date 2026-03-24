@@ -1,9 +1,14 @@
 pub mod character;
 pub mod content;
+pub mod content_registry;
 pub mod interaction;
 pub mod map;
 pub mod models;
+pub mod quest;
+pub mod recipe;
 pub mod settlement;
+pub mod shop;
+pub mod skill;
 
 use bevy_app::prelude::*;
 
@@ -22,6 +27,10 @@ pub use content::{
     EffectDefinitionValidationError, EffectLibrary, EffectLoadError, GameplayEffectData,
     ItemAmount, ItemDefinition, ItemDefinitionValidationError, ItemFragment, ItemLibrary,
     ItemLoadError, ItemValidationCatalog, LegacyItemMigrationError, MigratedItemArtifact,
+};
+pub use content_registry::{
+    load_shared_content_registry, ContentAuthorityKind, ContentDomainSummary, ContentReference,
+    ContentRegistryLoadError, SharedContentRegistry,
 };
 pub use interaction::{
     default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,
@@ -42,11 +51,34 @@ pub use models::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,
     TurnState, WorldCoord,
 };
+pub use quest::{
+    load_quest_library, validate_quest_definition, QuestChoiceOption, QuestConnection,
+    QuestDefinition, QuestDefinitionValidationError, QuestEditorMeta, QuestFlow, QuestLibrary,
+    QuestLoadError, QuestNode, QuestPosition, QuestRewardItem, QuestRewards,
+    QuestValidationCatalog,
+};
+pub use recipe::{
+    load_recipe_library, validate_recipe_definition, RecipeDefinition,
+    RecipeDefinitionValidationError, RecipeLibrary, RecipeLoadError, RecipeMaterial, RecipeOutput,
+    RecipeUnlockCondition, RecipeValidationCatalog,
+};
 pub use settlement::{
     load_settlement_library, validate_settlement_definition, ServiceRules,
     SettlementAnchorDefinition, SettlementDefinition, SettlementDefinitionValidationError,
     SettlementId, SettlementLibrary, SettlementLoadError, SettlementRouteDefinition,
     SmartObjectDefinition, SmartObjectKind, TimeWindow,
+};
+pub use shop::{
+    load_shop_library, validate_shop_definition, ShopDefinition, ShopDefinitionValidationError,
+    ShopInventoryEntry, ShopLibrary, ShopLoadError, ShopValidationCatalog,
+};
+pub use skill::{
+    load_skill_library, load_skill_tree_library, validate_skill_definition,
+    validate_skill_tree_definition, SkillActivationDefinition, SkillActivationEffect,
+    SkillDefinition, SkillDefinitionValidationError, SkillGameplayEffect, SkillLibrary,
+    SkillLoadError, SkillModifierDefinition, SkillTargetingDefinition, SkillTreeDefinition,
+    SkillTreeDefinitionValidationError, SkillTreeLibrary, SkillTreeLink, SkillTreeLoadError,
+    SkillTreePosition, SkillTreeValidationCatalog, SkillValidationCatalog,
 };
 
 pub struct GameDataPlugin;

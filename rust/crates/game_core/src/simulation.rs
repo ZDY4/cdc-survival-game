@@ -1,17 +1,22 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use game_data::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide,
-    CharacterId, CharacterInteractionProfile, GridCoord, InteractionContextSnapshot,
+    CharacterId, CharacterInteractionProfile, CharacterLootEntry, CharacterResourcePool, GridCoord,
+    InteractionContextSnapshot,
     InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionDefinition,
     InteractionOptionId, InteractionOptionKind, InteractionPrompt, InteractionTargetId,
-    MapCellDefinition, MapId, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapRotation,
-    ResolvedInteractionOption, TurnState, WorldCoord, WorldMode,
+    ItemLibrary, MapCellDefinition, MapId, MapObjectDefinition, MapObjectFootprint,
+    MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, ResolvedInteractionOption,
+    QuestLibrary, QuestNode, RecipeLibrary, ShopLibrary, SkillLibrary, TurnState, WorldCoord,
+    WorldMode,
 };
 
 use crate::actor::{ActorRecord, ActorRegistry, AiController};
+use crate::economy::HeadlessEconomyRuntime;
 use crate::grid::{find_path_grid, find_path_world, GridPathfindingError, GridWorld};
 use crate::movement::{MovementPlan, MovementPlanError, PendingProgressionStep};
 use crate::turn::{ActiveActionState, ActiveActions, GroupOrderRegistry, TurnConfig, TurnRuntime};
@@ -131,6 +136,13 @@ pub enum SimulationEvent {
         result: ActionResult,
     },
     WorldCycleCompleted,
+    ActorMoved {
+        actor_id: ActorId,
+        from: GridCoord,
+        to: GridCoord,
+        step_index: usize,
+        total_steps: usize,
+    },
     PathComputed {
         actor_id: Option<ActorId>,
         path_length: usize,
@@ -185,6 +197,50 @@ pub enum SimulationEvent {
         item_id: String,
         count: i32,
     },
+    ActorDamaged {
+        actor_id: ActorId,
+        target_actor: ActorId,
+        damage: f32,
+        remaining_hp: f32,
+    },
+    ActorDefeated {
+        actor_id: ActorId,
+        target_actor: ActorId,
+    },
+    LootDropped {
+        actor_id: ActorId,
+        target_actor: ActorId,
+        object_id: String,
+        item_id: u32,
+        count: i32,
+        grid: GridCoord,
+    },
+    ExperienceGranted {
+        actor_id: ActorId,
+        amount: i32,
+        total_xp: i32,
+    },
+    ActorLeveledUp {
+        actor_id: ActorId,
+        new_level: i32,
+        available_stat_points: i32,
+        available_skill_points: i32,
+    },
+    QuestStarted {
+        actor_id: ActorId,
+        quest_id: String,
+    },
+    QuestObjectiveProgressed {
+        actor_id: ActorId,
+        quest_id: String,
+        node_id: String,
+        current: i32,
+        target: i32,
+    },
+    QuestCompleted {
+        actor_id: ActorId,
+        quest_id: String,
+    },
     RelationChanged {
         actor_id: ActorId,
         target_id: InteractionTargetId,
@@ -205,6 +261,32 @@ pub struct ActorDebugState {
     pub turn_open: bool,
     pub in_combat: bool,
     pub grid_position: GridCoord,
+    pub level: i32,
+    pub current_xp: i32,
+    pub available_stat_points: i32,
+    pub available_skill_points: i32,
+    pub hp: f32,
+    pub max_hp: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ActorProgressionState {
+    pub level: i32,
+    pub current_xp: i32,
+    pub total_xp_earned: i32,
+    pub available_stat_points: i32,
+    pub available_skill_points: i32,
+    pub total_stat_points_earned: i32,
+    pub total_skill_points_earned: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuestRuntimeState {
+    pub quest_id: String,
+    pub owner_actor_id: ActorId,
+    pub current_node_id: String,
+    pub completed_objectives: BTreeMap<String, i32>,
+    pub granted_reward_nodes: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -272,7 +354,19 @@ pub struct Simulation {
     actors: ActorRegistry,
     actor_interactions: HashMap<ActorId, CharacterInteractionProfile>,
     actor_attack_ranges: HashMap<ActorId, f32>,
-    inventories: HashMap<ActorId, BTreeMap<String, i32>>,
+    actor_combat_attributes: HashMap<ActorId, BTreeMap<String, f32>>,
+    actor_resources: HashMap<ActorId, BTreeMap<String, f32>>,
+    actor_loot_tables: HashMap<ActorId, Vec<CharacterLootEntry>>,
+    actor_progression: HashMap<ActorId, ActorProgressionState>,
+    actor_xp_rewards: HashMap<ActorId, i32>,
+    quest_library: Option<QuestLibrary>,
+    skill_library: Option<SkillLibrary>,
+    recipe_library: Option<RecipeLibrary>,
+    shop_library: Option<ShopLibrary>,
+    active_quests: BTreeMap<String, QuestRuntimeState>,
+    completed_quests: BTreeSet<String>,
+    economy: HeadlessEconomyRuntime,
+    item_library: Option<ItemLibrary>,
     interaction_context: InteractionContextSnapshot,
     ai_controllers: HashMap<ActorId, Box<dyn AiController>>,
     grid_world: GridWorld,
@@ -292,7 +386,19 @@ impl Default for Simulation {
             actors: ActorRegistry::default(),
             actor_interactions: HashMap::new(),
             actor_attack_ranges: HashMap::new(),
-            inventories: HashMap::new(),
+            actor_combat_attributes: HashMap::new(),
+            actor_resources: HashMap::new(),
+            actor_loot_tables: HashMap::new(),
+            actor_progression: HashMap::new(),
+            actor_xp_rewards: HashMap::new(),
+            quest_library: None,
+            skill_library: None,
+            recipe_library: None,
+            shop_library: None,
+            active_quests: BTreeMap::new(),
+            completed_quests: BTreeSet::new(),
+            economy: HeadlessEconomyRuntime::default(),
+            item_library: None,
             interaction_context: InteractionContextSnapshot::default(),
             ai_controllers: HashMap::new(),
             grid_world: GridWorld::default(),
@@ -322,6 +428,186 @@ impl Simulation {
 
     pub fn drain_events(&mut self) -> Vec<SimulationEvent> {
         std::mem::take(&mut self.events)
+    }
+
+    pub fn economy(&self) -> &HeadlessEconomyRuntime {
+        &self.economy
+    }
+
+    pub fn economy_mut(&mut self) -> &mut HeadlessEconomyRuntime {
+        &mut self.economy
+    }
+
+    pub fn set_item_library(&mut self, items: ItemLibrary) {
+        self.item_library = Some(items);
+    }
+
+    pub fn set_quest_library(&mut self, quests: QuestLibrary) {
+        self.quest_library = Some(quests);
+    }
+
+    pub fn set_skill_library(&mut self, skills: SkillLibrary) {
+        self.skill_library = Some(skills);
+    }
+
+    pub fn set_recipe_library(&mut self, recipes: RecipeLibrary) {
+        let actor_ids: Vec<ActorId> = self.actors.ids().collect();
+        for actor_id in actor_ids {
+            self.economy.initialize_actor_defaults(actor_id, &recipes);
+        }
+        self.recipe_library = Some(recipes);
+    }
+
+    pub fn set_shop_library(&mut self, shops: ShopLibrary) {
+        self.economy.seed_shops_from_library(&shops);
+        self.shop_library = Some(shops);
+    }
+
+    pub fn start_quest(&mut self, actor_id: ActorId, quest_id: &str) -> bool {
+        if !self.actors.contains(actor_id) {
+            return false;
+        }
+        let Some((prerequisites, start_node_id)) = self
+            .quest_library
+            .as_ref()
+            .and_then(|library| library.get(quest_id))
+            .map(|quest| (quest.prerequisites.clone(), quest.flow.start_node_id.clone()))
+        else {
+            return false;
+        };
+        if self.active_quests.contains_key(quest_id) || self.completed_quests.contains(quest_id) {
+            return false;
+        }
+        if prerequisites
+            .iter()
+            .any(|prerequisite| !self.completed_quests.contains(prerequisite))
+        {
+            return false;
+        }
+
+        self.active_quests.insert(
+            quest_id.to_string(),
+            QuestRuntimeState {
+                quest_id: quest_id.to_string(),
+                owner_actor_id: actor_id,
+                current_node_id: start_node_id,
+                completed_objectives: BTreeMap::new(),
+                granted_reward_nodes: BTreeSet::new(),
+            },
+        );
+        self.events.push(SimulationEvent::QuestStarted {
+            actor_id,
+            quest_id: quest_id.to_string(),
+        });
+        self.advance_active_quest(quest_id);
+        true
+    }
+
+    pub fn seed_actor_progression(&mut self, actor_id: ActorId, level: i32, xp_reward: i32) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        let normalized_level = level.max(1);
+        self.actor_progression.insert(
+            actor_id,
+            ActorProgressionState {
+                level: normalized_level,
+                ..ActorProgressionState::default()
+            },
+        );
+        self.actor_xp_rewards.insert(actor_id, xp_reward.max(0));
+        self.economy.set_actor_level(actor_id, normalized_level);
+    }
+
+    pub fn actor_level(&self, actor_id: ActorId) -> i32 {
+        self.actor_progression
+            .get(&actor_id)
+            .map(|state| state.level.max(1))
+            .unwrap_or(1)
+    }
+
+    pub fn actor_current_xp(&self, actor_id: ActorId) -> i32 {
+        self.actor_progression
+            .get(&actor_id)
+            .map(|state| state.current_xp.max(0))
+            .unwrap_or(0)
+    }
+
+    pub fn is_quest_active(&self, quest_id: &str) -> bool {
+        self.active_quests.contains_key(quest_id)
+    }
+
+    pub fn is_quest_completed(&self, quest_id: &str) -> bool {
+        self.completed_quests.contains(quest_id)
+    }
+
+    pub fn seed_actor_combat_profile(
+        &mut self,
+        actor_id: ActorId,
+        combat_attributes: BTreeMap<String, f32>,
+        resources: BTreeMap<String, CharacterResourcePool>,
+    ) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        self.actor_combat_attributes.insert(actor_id, combat_attributes);
+        self.actor_resources.insert(
+            actor_id,
+            resources
+                .into_iter()
+                .map(|(key, pool)| (key, pool.current.max(0.0)))
+                .collect(),
+        );
+    }
+
+    pub fn set_actor_combat_attribute(
+        &mut self,
+        actor_id: ActorId,
+        attribute: impl Into<String>,
+        value: f32,
+    ) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        self.actor_combat_attributes
+            .entry(actor_id)
+            .or_default()
+            .insert(attribute.into(), value);
+    }
+
+    pub fn set_actor_resource(
+        &mut self,
+        actor_id: ActorId,
+        resource: impl Into<String>,
+        value: f32,
+    ) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        self.actor_resources
+            .entry(actor_id)
+            .or_default()
+            .insert(resource.into(), value.max(0.0));
+    }
+
+    pub fn seed_actor_loot_table(&mut self, actor_id: ActorId, loot: Vec<CharacterLootEntry>) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        self.actor_loot_tables.insert(actor_id, loot);
+    }
+
+    pub fn actor_hit_points(&self, actor_id: ActorId) -> f32 {
+        self.actor_resource_value(actor_id, "hp")
+    }
+
+    pub fn inventory_count(&self, actor_id: ActorId, item_id: &str) -> i32 {
+        item_id
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .and_then(|item_id| self.economy.inventory_count(actor_id, item_id))
+            .unwrap_or(0)
     }
 
     pub fn turn_state(&self) -> TurnState {
@@ -478,7 +764,10 @@ impl Simulation {
         }
         self.actor_attack_ranges
             .insert(actor_id, attack_range.max(0.0));
-        self.inventories.entry(actor_id).or_default();
+        self.economy.ensure_actor(actor_id);
+        if let Some(recipes) = self.recipe_library.as_ref() {
+            self.economy.initialize_actor_defaults(actor_id, recipes);
+        }
 
         if let Some(ai_controller) = ai_controller {
             self.ai_controllers.insert(actor_id, ai_controller);
@@ -502,7 +791,12 @@ impl Simulation {
         self.actors.remove(actor_id);
         self.actor_interactions.remove(&actor_id);
         self.actor_attack_ranges.remove(&actor_id);
-        self.inventories.remove(&actor_id);
+        self.actor_combat_attributes.remove(&actor_id);
+        self.actor_resources.remove(&actor_id);
+        self.actor_loot_tables.remove(&actor_id);
+        self.actor_progression.remove(&actor_id);
+        self.actor_xp_rewards.remove(&actor_id);
+        self.economy.remove_actor(actor_id);
         self.ai_controllers.remove(&actor_id);
         self.active_actions.by_actor.remove(&actor_id);
         self.grid_world.unregister_runtime_actor(actor_id);
@@ -652,6 +946,20 @@ impl Simulation {
                 turn_open: actor.turn_open,
                 in_combat: actor.in_combat,
                 grid_position: actor.grid_position,
+                level: self.actor_level(actor.actor_id),
+                current_xp: self.actor_current_xp(actor.actor_id),
+                available_stat_points: self
+                    .actor_progression
+                    .get(&actor.actor_id)
+                    .map(|state| state.available_stat_points)
+                    .unwrap_or(0),
+                available_skill_points: self
+                    .actor_progression
+                    .get(&actor.actor_id)
+                    .map(|state| state.available_skill_points)
+                    .unwrap_or(0),
+                hp: self.actor_hit_points(actor.actor_id),
+                max_hp: self.actor_max_hit_points(actor.actor_id),
             })
             .collect();
         actors.sort_by_key(|actor| actor.actor_id);
@@ -771,6 +1079,26 @@ impl Simulation {
         if let Some(actor) = self.actors.get_mut(actor_id) {
             actor.grid_position = grid;
             self.grid_world.set_runtime_actor_grid(actor_id, grid);
+        }
+    }
+
+    fn apply_actor_movement_path(&mut self, actor_id: ActorId, path: &[GridCoord]) {
+        let Some(mut previous) = path.first().copied() else {
+            return;
+        };
+        let total_steps = path.len().saturating_sub(1);
+
+        // Keep movement state observable per cell so later step hooks can interrupt cleanly.
+        for (step_index, next) in path.iter().copied().skip(1).enumerate() {
+            self.update_actor_grid_position(actor_id, next);
+            self.events.push(SimulationEvent::ActorMoved {
+                actor_id,
+                from: previous,
+                to: next,
+                step_index: step_index + 1,
+                total_steps,
+            });
+            previous = next;
         }
     }
 
@@ -900,7 +1228,7 @@ impl Simulation {
             return step_result;
         }
 
-        self.update_actor_grid_position(actor_id, goal);
+        self.apply_actor_movement_path(actor_id, &path);
         self.request_action(ActionRequest {
             actor_id,
             action_type: ActionType::Move,
@@ -912,6 +1240,13 @@ impl Simulation {
     }
 
     pub fn perform_attack(&mut self, actor_id: ActorId, target_actor: ActorId) -> ActionResult {
+        if !self.actors.contains(target_actor) {
+            return self.reject_action("unknown_target", actor_id);
+        }
+        if let Err(reason) = self.validate_attack_preconditions(actor_id, target_actor) {
+            return self.reject_action(reason, actor_id);
+        }
+
         let start_result = self.request_action(ActionRequest {
             actor_id,
             action_type: ActionType::Attack,
@@ -924,14 +1259,19 @@ impl Simulation {
             return start_result;
         }
 
-        self.request_action(ActionRequest {
+        let result = self.request_action(ActionRequest {
             actor_id,
             action_type: ActionType::Attack,
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: Some(target_actor),
             success: true,
-        })
+        });
+        if result.success {
+            self.apply_attack_damage(actor_id, target_actor);
+            self.apply_attack_equipment_costs(actor_id);
+        }
+        result
     }
 
     pub fn perform_interact(&mut self, actor_id: ActorId) -> ActionResult {
@@ -973,7 +1313,7 @@ impl Simulation {
             .filter(|option| option.enabled && option.visible)
             .map(|mut option| {
                 option.ensure_defaults();
-                self.resolve_interaction_option_view(target_id, option)
+                self.resolve_interaction_option_view(actor_id, target_id, option)
             })
             .collect();
         options.sort_by(|left, right| {
@@ -1173,13 +1513,32 @@ impl Simulation {
                     .max_count
                     .max(option_definition.min_count)
                     .max(1);
+                let pickup_item_id = match option_definition.item_id.trim().parse::<u32>() {
+                    Ok(item_id) => item_id,
+                    Err(_) => {
+                        return self.failed_interaction_execution(
+                            request.actor_id,
+                            prompt,
+                            option.id,
+                            "pickup_item_invalid",
+                        );
+                    }
+                };
                 self.grid_world.remove_map_object(object_id);
-                *self
-                    .inventories
-                    .entry(request.actor_id)
-                    .or_default()
-                    .entry(option_definition.item_id.clone())
-                    .or_insert(0) += count;
+                self.economy.ensure_actor(request.actor_id);
+                if let Err(error) = self
+                    .economy
+                    .add_item_unchecked(request.actor_id, pickup_item_id, count)
+                {
+                    let error_message = error.to_string();
+                    return self.failed_interaction_execution(
+                        request.actor_id,
+                        prompt,
+                        option.id,
+                        &error_message,
+                    );
+                }
+                self.advance_collect_quest_progress(request.actor_id, pickup_item_id, count);
                 self.events.push(SimulationEvent::PickupGranted {
                     actor_id: request.actor_id,
                     target_id: request.target_id.clone(),
@@ -1324,6 +1683,14 @@ impl Simulation {
         if !self.actor_turn_open(actor_id) {
             self.start_actor_turn(actor_id);
         }
+        if action_type == ActionType::Attack {
+            let Some(target_actor) = request.target_actor else {
+                return self.reject_action("missing_target_actor", actor_id);
+            };
+            if let Err(reason) = self.validate_attack_preconditions(actor_id, target_actor) {
+                return self.reject_action(reason, actor_id);
+            }
+        }
 
         let old_ap = self.get_actor_ap(actor_id);
         let action_cost = self.resolve_action_cost(action_type, request);
@@ -1348,6 +1715,452 @@ impl Simulation {
         }
 
         ActionResult::accepted(old_ap, old_ap, 0.0, entered_combat)
+    }
+
+    fn validate_attack_preconditions(
+        &self,
+        actor_id: ActorId,
+        target_actor: ActorId,
+    ) -> Result<(), &'static str> {
+        let Some(actor_grid) = self.actor_grid_position(actor_id) else {
+            return Err("unknown_actor");
+        };
+        let Some(target_grid) = self.actor_grid_position(target_actor) else {
+            return Err("unknown_target");
+        };
+        if !self.is_interaction_in_range(
+            actor_grid,
+            target_grid,
+            self.attack_interaction_distance(actor_id),
+        ) {
+            return Err("target_out_of_range");
+        }
+
+        let Some(items) = self.item_library.as_ref() else {
+            return Ok(());
+        };
+        let Ok(Some(weapon)) = self.economy.equipped_weapon(actor_id, "main_hand", items) else {
+            return Ok(());
+        };
+        if weapon.ammo_type.is_some() && weapon.max_ammo.unwrap_or(0) > 0 && weapon.ammo_loaded <= 0
+        {
+            return Err("weapon_unloaded");
+        }
+
+        Ok(())
+    }
+
+    fn apply_attack_equipment_costs(&mut self, actor_id: ActorId) {
+        let Some(items) = self.item_library.as_ref().cloned() else {
+            return;
+        };
+        let Ok(Some(weapon)) = self.economy.equipped_weapon(actor_id, "main_hand", &items) else {
+            return;
+        };
+
+        if weapon.ammo_type.is_some() && weapon.max_ammo.unwrap_or(0) > 0 {
+            let _ = self
+                .economy
+                .consume_equipped_ammo(actor_id, "main_hand", 1, &items);
+        }
+        if weapon.current_durability.is_some() {
+            let _ = self.economy.consume_equipped_durability(actor_id, "main_hand", 1);
+        }
+    }
+
+    fn apply_attack_damage(&mut self, actor_id: ActorId, target_actor: ActorId) {
+        if !self.actors.contains(target_actor) {
+            return;
+        }
+
+        let damage = self.resolve_attack_damage(actor_id, target_actor);
+        let current_hp = self.actor_hit_points(target_actor);
+        let next_hp = (current_hp - damage).max(0.0);
+        let defeat_position = self.actor_grid_position(target_actor);
+        self.actor_resources
+            .entry(target_actor)
+            .or_default()
+            .insert("hp".to_string(), next_hp);
+        self.events.push(SimulationEvent::ActorDamaged {
+            actor_id,
+            target_actor,
+            damage,
+            remaining_hp: next_hp,
+        });
+
+        if next_hp <= 0.0 {
+            self.award_kill_experience(actor_id, target_actor);
+            self.advance_kill_quest_progress(actor_id, target_actor);
+            self.events
+                .push(SimulationEvent::ActorDefeated { actor_id, target_actor });
+            if let Some(grid) = defeat_position {
+                self.spawn_loot_drops(actor_id, target_actor, grid);
+            }
+            self.unregister_actor(target_actor);
+        }
+    }
+
+    fn resolve_attack_damage(&self, actor_id: ActorId, target_actor: ActorId) -> f32 {
+        let weapon_profile = self
+            .item_library
+            .as_ref()
+            .and_then(|items| self.economy.equipped_weapon(actor_id, "main_hand", items).ok())
+            .flatten();
+        let attack_power = self.actor_combat_attribute_value(actor_id, "attack_power")
+            + self.actor_equipment_attribute_bonus(actor_id, "attack_power")
+            + weapon_profile
+                .as_ref()
+                .map(|weapon| weapon.damage.max(0) as f32)
+                .unwrap_or(0.0);
+        let accuracy = self.actor_combat_attribute_value(actor_id, "accuracy")
+            + self.actor_equipment_attribute_bonus(actor_id, "accuracy")
+            + weapon_profile
+                .as_ref()
+                .and_then(|weapon| weapon.accuracy)
+                .map(|value| value as f32)
+                .unwrap_or(0.0);
+        let crit_chance = (self.actor_combat_attribute_value(actor_id, "crit_chance")
+            + self.actor_equipment_attribute_bonus(actor_id, "crit_chance")
+            + weapon_profile
+                .as_ref()
+                .map(|weapon| weapon.crit_chance)
+                .unwrap_or(0.0))
+        .clamp(0.0, 1.0);
+        let crit_damage = weapon_profile
+            .as_ref()
+            .map(|weapon| weapon.crit_multiplier.max(1.0))
+            .unwrap_or_else(|| self.actor_combat_attribute_value(actor_id, "crit_damage").max(1.0));
+
+        let defense = (self.actor_combat_attribute_value(target_actor, "defense")
+            + self.actor_equipment_attribute_bonus(target_actor, "defense"))
+        .max(0.0);
+        let damage_reduction =
+            self.actor_combat_attribute_value(target_actor, "damage_reduction").clamp(0.0, 0.95);
+        let accuracy_multiplier = (accuracy / 100.0).clamp(0.25, 1.5);
+        let crit_multiplier = 1.0 + crit_chance * (crit_damage - 1.0);
+
+        let mut damage = ((attack_power.max(1.0) * accuracy_multiplier * crit_multiplier)
+            - defense)
+            .max(1.0);
+        damage *= 1.0 - damage_reduction;
+        damage.max(1.0).round()
+    }
+
+    fn spawn_loot_drops(&mut self, actor_id: ActorId, target_actor: ActorId, grid: GridCoord) {
+        let Some(loot_entries) = self.actor_loot_tables.get(&target_actor).cloned() else {
+            return;
+        };
+
+        for entry in loot_entries {
+            let count = self.resolve_loot_drop_count(target_actor, &entry);
+            if count <= 0 {
+                continue;
+            }
+
+            let object_id = format!("loot_{}_{}_{}", target_actor.0, entry.item_id, self.events.len());
+            self.grid_world.upsert_map_object(MapObjectDefinition {
+                object_id: object_id.clone(),
+                kind: MapObjectKind::Pickup,
+                anchor: grid,
+                footprint: MapObjectFootprint::default(),
+                rotation: MapRotation::North,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    pickup: Some(MapPickupProps {
+                        item_id: entry.item_id.to_string(),
+                        min_count: count,
+                        max_count: count,
+                        extra: BTreeMap::new(),
+                    }),
+                    ..MapObjectProps::default()
+                },
+            });
+            self.events.push(SimulationEvent::LootDropped {
+                actor_id,
+                target_actor,
+                object_id,
+                item_id: entry.item_id,
+                count,
+                grid,
+            });
+        }
+    }
+
+    fn resolve_loot_drop_count(&self, target_actor: ActorId, entry: &CharacterLootEntry) -> i32 {
+        if entry.max < entry.min || entry.max <= 0 || entry.chance <= 0.0 {
+            return 0;
+        }
+
+        let roll_seed = target_actor.0 ^ (entry.item_id as u64).wrapping_mul(1_103_515_245);
+        let chance_roll = (roll_seed % 10_000) as f32 / 10_000.0;
+        if chance_roll > entry.chance {
+            return 0;
+        }
+
+        let span = (entry.max - entry.min).max(0) as u64;
+        let count_roll = ((roll_seed / 97) % (span + 1)) as i32;
+        (entry.min + count_roll).max(0)
+    }
+
+    fn award_kill_experience(&mut self, actor_id: ActorId, target_actor: ActorId) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        let amount = self.actor_xp_rewards.get(&target_actor).copied().unwrap_or(0).max(0);
+        self.grant_experience(actor_id, amount);
+    }
+
+    fn advance_kill_quest_progress(&mut self, actor_id: ActorId, target_actor: ActorId) {
+        let enemy_type = self
+            .actors
+            .get(target_actor)
+            .and_then(|actor| actor.definition_id.as_ref())
+            .map(|definition_id| derive_enemy_type(definition_id.as_str()))
+            .unwrap_or_default();
+        self.advance_objective_progress(actor_id, "kill", 1, Some(0), Some(enemy_type), None);
+    }
+
+    fn advance_collect_quest_progress(&mut self, actor_id: ActorId, item_id: u32, count: i32) {
+        self.advance_objective_progress(actor_id, "collect", count.max(1), Some(item_id), None, None);
+    }
+
+    fn advance_objective_progress(
+        &mut self,
+        actor_id: ActorId,
+        objective_type: &str,
+        amount: i32,
+        item_id: Option<u32>,
+        enemy_type: Option<String>,
+        target_location: Option<String>,
+    ) {
+        let quest_ids: Vec<String> = self
+            .active_quests
+            .iter()
+            .filter(|(_, state)| state.owner_actor_id == actor_id)
+            .map(|(quest_id, _)| quest_id.clone())
+            .collect();
+
+        for quest_id in quest_ids {
+            let progress = {
+                let Some(node) = self.current_active_quest_node(&quest_id).cloned() else {
+                    continue;
+                };
+                if node.node_type != "objective" || node.objective_type != objective_type {
+                    continue;
+                }
+                if let Some(expected_item_id) = node.item_id {
+                    if item_id != Some(expected_item_id) {
+                        continue;
+                    }
+                }
+                if let Some(expected_enemy_type) = node.extra.get("enemy_type").and_then(|value| value.as_str()) {
+                    if enemy_type.as_deref() != Some(expected_enemy_type) {
+                        continue;
+                    }
+                }
+                if !target_location_matches(&node, target_location.as_deref()) {
+                    continue;
+                }
+
+                let target = objective_target(&node);
+                let state = self.active_quests.get_mut(&quest_id).expect("quest should exist");
+                let current = state
+                    .completed_objectives
+                    .get(&node.id)
+                    .copied()
+                    .unwrap_or(0);
+                let next = (current + amount).clamp(0, target);
+                if next == current {
+                    continue;
+                }
+                state.completed_objectives.insert(node.id.clone(), next);
+                Some((node.id.clone(), next, target))
+            };
+
+            let Some((node_id, current, target)) = progress else {
+                continue;
+            };
+            self.events.push(SimulationEvent::QuestObjectiveProgressed {
+                actor_id,
+                quest_id: quest_id.clone(),
+                node_id: node_id.clone(),
+                current,
+                target,
+            });
+            if current >= target {
+                self.advance_active_quest(&quest_id);
+            }
+        }
+    }
+
+    fn advance_active_quest(&mut self, quest_id: &str) {
+        loop {
+            let Some(node) = self.current_active_quest_node(quest_id).cloned() else {
+                return;
+            };
+            match node.node_type.as_str() {
+                "start" => {
+                    if !self.advance_quest_to_connection(quest_id, &node.id, 0) {
+                        return;
+                    }
+                }
+                "objective" => {
+                    let current = self
+                        .active_quests
+                        .get(quest_id)
+                        .and_then(|state| state.completed_objectives.get(&node.id).copied())
+                        .unwrap_or(0);
+                    if current < objective_target(&node) {
+                        return;
+                    }
+                    if !self.advance_quest_to_connection(quest_id, &node.id, 0) {
+                        return;
+                    }
+                }
+                "reward" => {
+                    self.grant_quest_reward_node(quest_id, &node);
+                    if !self.advance_quest_to_connection(quest_id, &node.id, 0) {
+                        return;
+                    }
+                }
+                "end" => {
+                    let Some(state) = self.active_quests.remove(quest_id) else {
+                        return;
+                    };
+                    self.completed_quests.insert(quest_id.to_string());
+                    self.events.push(SimulationEvent::QuestCompleted {
+                        actor_id: state.owner_actor_id,
+                        quest_id: quest_id.to_string(),
+                    });
+                    return;
+                }
+                _ => return,
+            }
+        }
+    }
+
+    fn advance_quest_to_connection(&mut self, quest_id: &str, from_node_id: &str, from_port: i32) -> bool {
+        let Some(next_node_id) = self
+            .quest_library
+            .as_ref()
+            .and_then(|library| library.get(quest_id))
+            .and_then(|quest| {
+                quest.flow.connections.iter().find_map(|connection| {
+                    (connection.from == from_node_id && connection.from_port == from_port)
+                        .then(|| connection.to.clone())
+                })
+            })
+        else {
+            return false;
+        };
+
+        let Some(state) = self.active_quests.get_mut(quest_id) else {
+            return false;
+        };
+        state.current_node_id = next_node_id;
+        true
+    }
+
+    fn current_active_quest_node(&self, quest_id: &str) -> Option<&QuestNode> {
+        let state = self.active_quests.get(quest_id)?;
+        let quest = self.quest_library.as_ref()?.get(quest_id)?;
+        quest.flow.nodes.get(&state.current_node_id)
+    }
+
+    fn grant_quest_reward_node(&mut self, quest_id: &str, node: &QuestNode) {
+        let actor_id = {
+            let Some(state) = self.active_quests.get_mut(quest_id) else {
+                return;
+            };
+            if !state.granted_reward_nodes.insert(node.id.clone()) {
+                return;
+            }
+            state.owner_actor_id
+        };
+        for reward_item in &node.rewards.items {
+            if reward_item.id == 0 || reward_item.count <= 0 {
+                continue;
+            }
+            if let Some(items) = self.item_library.as_ref() {
+                let _ = self
+                    .economy
+                    .add_item(actor_id, reward_item.id, reward_item.count, items);
+            } else {
+                let _ = self
+                    .economy
+                    .add_item_unchecked(actor_id, reward_item.id, reward_item.count);
+            }
+        }
+        if node.rewards.experience > 0 {
+            self.grant_experience(actor_id, node.rewards.experience);
+        }
+        if node.rewards.skill_points > 0 {
+            let _ = self
+                .economy
+                .add_skill_points(actor_id, node.rewards.skill_points);
+            if let Some(progression) = self.actor_progression.get_mut(&actor_id) {
+                progression.available_skill_points += node.rewards.skill_points;
+                progression.total_skill_points_earned += node.rewards.skill_points;
+            }
+        }
+        if let Some(recipes) = self.recipe_library.as_ref() {
+            for recipe_id in &node.rewards.unlock_recipes {
+                let _ = self.economy.unlock_recipe(actor_id, recipe_id.clone(), recipes);
+            }
+        }
+    }
+
+    fn grant_experience(&mut self, actor_id: ActorId, amount: i32) {
+        if amount <= 0 || !self.actors.contains(actor_id) {
+            return;
+        }
+
+        let (total_xp_after, level_up_event) = {
+            let state = self.actor_progression.entry(actor_id).or_insert_with(|| {
+                let level = self.economy.actor(actor_id).map(|actor| actor.level).unwrap_or(1).max(1);
+                ActorProgressionState {
+                    level,
+                    ..ActorProgressionState::default()
+                }
+            });
+            state.current_xp += amount;
+            state.total_xp_earned += amount;
+            let mut level_up_event = None;
+
+            while state.current_xp >= xp_to_next_level(state.level) {
+                let required = xp_to_next_level(state.level);
+                state.current_xp -= required;
+                state.level += 1;
+                state.available_stat_points += 3;
+                state.available_skill_points += 1;
+                state.total_stat_points_earned += 3;
+                state.total_skill_points_earned += 1;
+                let _ = self.economy.add_skill_points(actor_id, 1);
+                level_up_event = Some((
+                    state.level,
+                    state.available_stat_points,
+                    state.available_skill_points,
+                ));
+            }
+            let total_xp_after = state.current_xp;
+            self.economy.set_actor_level(actor_id, state.level);
+            (total_xp_after, level_up_event)
+        };
+
+        self.events.push(SimulationEvent::ExperienceGranted {
+            actor_id,
+            amount,
+            total_xp: total_xp_after,
+        });
+        if let Some((new_level, available_stat_points, available_skill_points)) = level_up_event {
+            self.events.push(SimulationEvent::ActorLeveledUp {
+                actor_id,
+                new_level,
+                available_stat_points,
+                available_skill_points,
+            });
+        }
     }
 
     fn request_action_step(
@@ -1588,10 +2401,14 @@ impl Simulation {
 
     fn resolve_interaction_option_view(
         &self,
+        actor_id: ActorId,
         target_id: &InteractionTargetId,
         mut option: InteractionOptionDefinition,
     ) -> ResolvedInteractionOption {
         option.ensure_defaults();
+        if option.kind == InteractionOptionKind::Attack {
+            option.interaction_distance = self.attack_interaction_distance(actor_id);
+        }
         if matches!(target_id, InteractionTargetId::Actor(actor_id) if self.get_actor_side(*actor_id) == Some(ActorSide::Hostile))
             && option.kind == InteractionOptionKind::Attack
         {
@@ -2064,6 +2881,61 @@ impl Simulation {
         }
     }
 
+    fn attack_interaction_distance(&self, actor_id: ActorId) -> f32 {
+        let default_range = self
+            .actor_attack_ranges
+            .get(&actor_id)
+            .copied()
+            .unwrap_or(1.2)
+            .max(1.0);
+        let Some(items) = self.item_library.as_ref() else {
+            return default_range;
+        };
+        match self.economy.equipped_weapon(actor_id, "main_hand", items) {
+            Ok(Some(weapon)) => (weapon.range as f32).max(1.0),
+            _ => default_range,
+        }
+    }
+
+    fn actor_combat_attribute_value(&self, actor_id: ActorId, attribute: &str) -> f32 {
+        self.actor_combat_attributes
+            .get(&actor_id)
+            .and_then(|attributes| attributes.get(attribute))
+            .copied()
+            .unwrap_or(0.0)
+    }
+
+    fn actor_equipment_attribute_bonus(&self, actor_id: ActorId, attribute: &str) -> f32 {
+        let Some(items) = self.item_library.as_ref() else {
+            return 0.0;
+        };
+        self.economy
+            .equipment_attribute_totals(actor_id, items)
+            .ok()
+            .and_then(|totals| totals.get(attribute).copied())
+            .unwrap_or(0.0)
+    }
+
+    fn actor_resource_value(&self, actor_id: ActorId, resource: &str) -> f32 {
+        self.actor_resources
+            .get(&actor_id)
+            .and_then(|resources| resources.get(resource))
+            .copied()
+            .unwrap_or_else(|| {
+                if resource == "hp" {
+                    self.actor_max_hit_points(actor_id)
+                } else {
+                    0.0
+                }
+            })
+    }
+
+    fn actor_max_hit_points(&self, actor_id: ActorId) -> f32 {
+        (self.actor_combat_attribute_value(actor_id, "max_hp")
+            + self.actor_equipment_attribute_bonus(actor_id, "max_hp"))
+        .max(1.0)
+    }
+
     fn validate_turn_access(&self, actor_id: ActorId) -> bool {
         if !self.turn.combat_active {
             return true;
@@ -2167,7 +3039,10 @@ impl Simulation {
 
 fn pathfinding_error_reason(error: &GridPathfindingError) -> &'static str {
     match error {
-        GridPathfindingError::TargetNotWalkable => "target_not_walkable",
+        GridPathfindingError::TargetOutOfBounds => "target_out_of_bounds",
+        GridPathfindingError::TargetInvalidLevel => "target_invalid_level",
+        GridPathfindingError::TargetBlocked => "target_blocked",
+        GridPathfindingError::TargetOccupied => "target_occupied",
         GridPathfindingError::NoPath => "no_path",
     }
 }
@@ -2192,15 +3067,40 @@ fn collect_interaction_ring_cells(center: GridCoord, radius: i32) -> Vec<GridCoo
     cells
 }
 
+fn xp_to_next_level(level: i32) -> i32 {
+    let normalized_level = level.max(1) as f32;
+    (100.0 * normalized_level.powf(1.2)).round() as i32
+}
+
+fn objective_target(node: &QuestNode) -> i32 {
+    node.count.max(1)
+}
+
+fn target_location_matches(node: &QuestNode, provided_location: Option<&str>) -> bool {
+    let expected = node.target.trim();
+    expected.is_empty() || provided_location == Some(expected)
+}
+
+fn derive_enemy_type(definition_id: &str) -> String {
+    definition_id
+        .split('_')
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use game_data::{
-        ActionPhase, ActionRequest, ActionType, ActorKind, ActorSide, CharacterId, GridCoord,
-        InteractionExecutionRequest, InteractionOptionId, InteractionOptionKind,
-        InteractionTargetId, MapBuildingProps, MapCellDefinition, MapDefinition, MapId,
-        MapInteractiveProps, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint,
-        MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, WorldCoord,
-        WorldMode,
+        ActionPhase, ActionRequest, ActionType, ActorKind, ActorSide, CharacterId,
+        CharacterLootEntry, GridCoord, InteractionExecutionRequest, InteractionOptionId,
+        InteractionOptionKind, InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapInteractiveProps,
+        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
+        MapObjectProps, MapPickupProps, MapRotation, MapSize, QuestConnection, QuestDefinition,
+        QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeLibrary, WorldCoord, WorldMode,
     };
 
     use crate::actor::InteractOnceAiController;
@@ -2378,7 +3278,7 @@ mod tests {
             kind: ActorKind::Enemy,
             side: ActorSide::Hostile,
             group_id: "hostile:one".into(),
-            grid_position: GridCoord::new(4, 0, 0),
+            grid_position: GridCoord::new(1, 0, 0),
             interaction: None,
             attack_range: 1.2,
             ai_controller: None,
@@ -2389,7 +3289,7 @@ mod tests {
             kind: ActorKind::Enemy,
             side: ActorSide::Hostile,
             group_id: "hostile:two".into(),
-            grid_position: GridCoord::new(5, 0, 0),
+            grid_position: GridCoord::new(2, 0, 0),
             interaction: None,
             attack_range: 1.2,
             ai_controller: None,
@@ -2443,6 +3343,331 @@ mod tests {
         assert!(
             simulation.current_turn_index() >= 1,
             "combat turn index should advance after a completed combat action"
+        );
+    }
+
+    #[test]
+    fn equipped_ranged_weapon_extends_attack_range_and_consumes_resources() {
+        let items = sample_combat_item_library();
+        let mut simulation = Simulation::new();
+        simulation.set_item_library(items.clone());
+
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Shooter".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Target".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(4, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        simulation.economy.set_actor_level(player, 8);
+        simulation
+            .economy
+            .add_item(player, 1004, 1, &items)
+            .expect("pistol should add");
+        simulation
+            .economy
+            .add_ammo(player, 1009, 6, &items)
+            .expect("ammo should add");
+        simulation
+            .economy
+            .equip_item(player, 1004, Some("main_hand"), &items)
+            .expect("pistol should equip");
+        simulation
+            .economy
+            .reload_equipped_weapon(player, "main_hand", &items)
+            .expect("reload should succeed");
+
+        let result = simulation.perform_attack(player, hostile);
+
+        assert!(result.success);
+        let weapon = simulation
+            .economy
+            .equipped_weapon(player, "main_hand", &items)
+            .expect("weapon should resolve")
+            .expect("weapon should remain equipped");
+        assert_eq!(weapon.ammo_loaded, 5);
+        assert_eq!(weapon.current_durability, Some(79));
+    }
+
+    #[test]
+    fn attack_damage_reduces_target_hit_points() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 20.0);
+        simulation.set_actor_resource(hostile, "hp", 20.0);
+        simulation.set_actor_combat_attribute(hostile, "defense", 2.0);
+
+        let result = simulation.perform_attack(player, hostile);
+
+        assert!(result.success);
+        assert_eq!(simulation.actor_hit_points(hostile), 12.0);
+        assert!(simulation.actors.contains(hostile));
+    }
+
+    #[test]
+    fn lethal_attack_unregisters_target_actor() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+        simulation.set_actor_resource(hostile, "hp", 5.0);
+
+        let result = simulation.perform_attack(player, hostile);
+
+        assert!(result.success);
+        assert!(!simulation.actors.contains(hostile));
+    }
+
+    #[test]
+    fn lethal_attack_spawns_runtime_pickup_loot() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+        simulation.set_actor_resource(hostile, "hp", 5.0);
+        simulation.seed_actor_loot_table(
+            hostile,
+            vec![CharacterLootEntry {
+                item_id: 1010,
+                chance: 1.0,
+                min: 2,
+                max: 2,
+            }],
+        );
+
+        let result = simulation.perform_attack(player, hostile);
+
+        assert!(result.success);
+        let loot_object = simulation
+            .grid_world()
+            .map_object_entries()
+            .into_iter()
+            .find(|object| object.object_id.starts_with("loot_"))
+            .expect("loot drop should be spawned");
+        assert_eq!(loot_object.kind, MapObjectKind::Pickup);
+        assert_eq!(loot_object.anchor, GridCoord::new(1, 0, 0));
+        assert_eq!(
+            loot_object
+                .props
+                .pickup
+                .as_ref()
+                .map(|pickup| (pickup.item_id.clone(), pickup.min_count, pickup.max_count)),
+            Some(("1010".to_string(), 2, 2))
+        );
+    }
+
+    #[test]
+    fn lethal_attack_grants_xp_and_levels_up_attacker() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.seed_actor_progression(player, 1, 0);
+        simulation.seed_actor_progression(hostile, 1, 100);
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+        simulation.set_actor_resource(hostile, "hp", 5.0);
+
+        let result = simulation.perform_attack(player, hostile);
+
+        assert!(result.success);
+        assert_eq!(simulation.actor_level(player), 2);
+        assert_eq!(simulation.actor_current_xp(player), 0);
+        assert_eq!(
+            simulation
+                .actor_progression
+                .get(&player)
+                .map(|state| (state.available_stat_points, state.available_skill_points)),
+            Some((3, 1))
+        );
+        assert_eq!(simulation.economy.actor(player).map(|state| state.level), Some(2));
+    }
+
+    #[test]
+    fn kill_objective_completes_quest_and_grants_reward() {
+        let mut simulation = Simulation::new();
+        simulation.set_quest_library(sample_quest_library());
+        simulation.set_recipe_library(RecipeLibrary::default());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("zombie_walker".into())),
+            display_name: "Zombie".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.seed_actor_progression(player, 1, 0);
+        simulation.seed_actor_progression(hostile, 1, 25);
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+        simulation.set_actor_resource(hostile, "hp", 5.0);
+
+        assert!(simulation.start_quest(player, "zombie_hunter"));
+
+        let result = simulation.perform_attack(player, hostile);
+
+        assert!(result.success);
+        assert!(simulation.completed_quests.contains("zombie_hunter"));
+        assert_eq!(simulation.inventory_count(player, "1006"), 3);
+        assert_eq!(simulation.actor_current_xp(player), 35);
+    }
+
+    #[test]
+    fn collect_objective_completes_after_pickup_and_grants_skill_points() {
+        let items = sample_combat_item_library();
+        let mut simulation = Simulation::new();
+        simulation.set_item_library(items);
+        simulation.set_quest_library(sample_quest_library());
+        simulation.set_recipe_library(RecipeLibrary::default());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_collect_quest_map_definition());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(1, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.seed_actor_progression(player, 1, 0);
+
+        assert!(simulation.start_quest(player, "collect_food"));
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject("food_pickup".into()),
+            option_id: InteractionOptionId("pickup".into()),
+        });
+
+        assert!(result.success);
+        assert!(simulation.completed_quests.contains("collect_food"));
+        assert_eq!(simulation.inventory_count(player, "1007"), 2);
+        assert_eq!(simulation.actor_current_xp(player), 50);
+        assert_eq!(
+            simulation.economy.actor(player).map(|state| state.skill_points),
+            Some(2)
         );
     }
 
@@ -2517,7 +3742,9 @@ mod tests {
     #[test]
     fn pickup_interaction_grants_inventory_and_consumes_target() {
         let mut simulation = Simulation::new();
-        simulation.grid_world_mut().load_map(&sample_interaction_map_definition());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_interaction_map_definition());
         let player = simulation.register_actor(RegisterActor {
             definition_id: Some(CharacterId("player".into())),
             display_name: "Player".into(),
@@ -2539,14 +3766,7 @@ mod tests {
         assert!(result.success);
         assert!(result.consumed_target);
         assert!(simulation.grid_world().map_object("pickup").is_none());
-        assert_eq!(
-            simulation
-                .inventories
-                .get(&player)
-                .and_then(|items| items.get("1005"))
-                .copied(),
-            Some(2)
-        );
+        assert_eq!(simulation.inventory_count(player, "1005"), 2);
     }
 
     #[test]
@@ -2588,7 +3808,9 @@ mod tests {
     #[test]
     fn scene_transition_interaction_updates_context_snapshot() {
         let mut simulation = Simulation::new();
-        simulation.grid_world_mut().load_map(&sample_interaction_map_definition());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_interaction_map_definition());
         let player = simulation.register_actor(RegisterActor {
             definition_id: Some(CharacterId("player".into())),
             display_name: "Player".into(),
@@ -2609,10 +3831,16 @@ mod tests {
 
         assert!(result.success);
         assert_eq!(
-            simulation.interaction_context.active_outdoor_location_id.as_deref(),
+            simulation
+                .interaction_context
+                .active_outdoor_location_id
+                .as_deref(),
             Some("safehouse")
         );
-        assert_eq!(simulation.interaction_context.world_mode, WorldMode::Outdoor);
+        assert_eq!(
+            simulation.interaction_context.world_mode,
+            WorldMode::Outdoor
+        );
     }
 
     #[test]
@@ -2648,6 +3876,20 @@ mod tests {
     }
 
     #[test]
+    fn loaded_map_enforces_bounds_from_map_size_and_levels() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_map_definition());
+
+        assert!(world.is_in_bounds(GridCoord::new(11, 0, 11)));
+        assert!(!world.is_in_bounds(GridCoord::new(12, 0, 11)));
+        assert!(!world.is_in_bounds(GridCoord::new(11, 0, 12)));
+        assert!(!world.is_in_bounds(GridCoord::new(-1, 0, 0)));
+        assert!(!world.is_in_bounds(GridCoord::new(0, 2, 0)));
+        assert!(!world.is_walkable(GridCoord::new(12, 0, 11)));
+        assert!(!world.is_walkable(GridCoord::new(0, 2, 0)));
+    }
+
+    #[test]
     fn building_footprint_from_loaded_map_blocks_pathfinding() {
         let mut world = crate::grid::GridWorld::default();
         world.load_map(&sample_map_definition());
@@ -2659,10 +3901,7 @@ mod tests {
             GridCoord::new(5, 0, 2),
         );
 
-        assert!(matches!(
-            result,
-            Err(GridPathfindingError::TargetNotWalkable)
-        ));
+        assert!(matches!(result, Err(GridPathfindingError::TargetBlocked)));
     }
 
     #[test]
@@ -2738,9 +3977,22 @@ mod tests {
             GridCoord::new(0, 0, 0),
             GridCoord::new(3, 0, 3),
         );
+        assert!(matches!(result, Err(GridPathfindingError::TargetBlocked)));
+    }
+
+    #[test]
+    fn pathfinding_rejects_out_of_bounds_target() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_map_definition());
+        let result = crate::grid::find_path_grid(
+            &world,
+            None,
+            GridCoord::new(0, 0, 0),
+            GridCoord::new(12, 0, 3),
+        );
         assert!(matches!(
             result,
-            Err(GridPathfindingError::TargetNotWalkable)
+            Err(GridPathfindingError::TargetOutOfBounds)
         ));
     }
 
@@ -2858,5 +4110,264 @@ mod tests {
                 },
             ],
         }
+    }
+
+    fn sample_collect_quest_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("collect_map".into()),
+            name: "Collect".into(),
+            size: MapSize {
+                width: 8,
+                height: 8,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            objects: vec![MapObjectDefinition {
+                object_id: "food_pickup".into(),
+                kind: MapObjectKind::Pickup,
+                anchor: GridCoord::new(2, 0, 1),
+                footprint: MapObjectFootprint::default(),
+                rotation: MapRotation::North,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    pickup: Some(MapPickupProps {
+                        item_id: "1007".into(),
+                        min_count: 2,
+                        max_count: 2,
+                        extra: BTreeMap::new(),
+                    }),
+                    ..MapObjectProps::default()
+                },
+            }],
+        }
+    }
+
+    fn sample_quest_library() -> QuestLibrary {
+        QuestLibrary::from(BTreeMap::from([
+            (
+                "zombie_hunter".to_string(),
+                QuestDefinition {
+                    quest_id: "zombie_hunter".to_string(),
+                    title: "僵尸猎人".to_string(),
+                    description: "击败一只僵尸".to_string(),
+                    flow: QuestFlow {
+                        start_node_id: "start".to_string(),
+                        nodes: BTreeMap::from([
+                            (
+                                "start".to_string(),
+                                QuestNode {
+                                    id: "start".to_string(),
+                                    node_type: "start".to_string(),
+                                    ..QuestNode::default()
+                                },
+                            ),
+                            (
+                                "kill_one".to_string(),
+                                QuestNode {
+                                    id: "kill_one".to_string(),
+                                    node_type: "objective".to_string(),
+                                    objective_type: "kill".to_string(),
+                                    count: 1,
+                                    extra: BTreeMap::from([(
+                                        "enemy_type".to_string(),
+                                        serde_json::Value::String("zombie".to_string()),
+                                    )]),
+                                    ..QuestNode::default()
+                                },
+                            ),
+                            (
+                                "reward".to_string(),
+                                QuestNode {
+                                    id: "reward".to_string(),
+                                    node_type: "reward".to_string(),
+                                    rewards: QuestRewards {
+                                        items: vec![game_data::QuestRewardItem {
+                                            id: 1006,
+                                            count: 3,
+                                            extra: BTreeMap::new(),
+                                        }],
+                                        experience: 10,
+                                        ..QuestRewards::default()
+                                    },
+                                    ..QuestNode::default()
+                                },
+                            ),
+                            (
+                                "end".to_string(),
+                                QuestNode {
+                                    id: "end".to_string(),
+                                    node_type: "end".to_string(),
+                                    ..QuestNode::default()
+                                },
+                            ),
+                        ]),
+                        connections: vec![
+                            QuestConnection {
+                                from: "start".to_string(),
+                                to: "kill_one".to_string(),
+                                from_port: 0,
+                                to_port: 0,
+                                extra: BTreeMap::new(),
+                            },
+                            QuestConnection {
+                                from: "kill_one".to_string(),
+                                to: "reward".to_string(),
+                                from_port: 0,
+                                to_port: 0,
+                                extra: BTreeMap::new(),
+                            },
+                            QuestConnection {
+                                from: "reward".to_string(),
+                                to: "end".to_string(),
+                                from_port: 0,
+                                to_port: 0,
+                                extra: BTreeMap::new(),
+                            },
+                        ],
+                        ..QuestFlow::default()
+                    },
+                    ..QuestDefinition::default()
+                },
+            ),
+            (
+                "collect_food".to_string(),
+                QuestDefinition {
+                    quest_id: "collect_food".to_string(),
+                    title: "搜集食物".to_string(),
+                    description: "捡起两份罐头".to_string(),
+                    flow: QuestFlow {
+                        start_node_id: "start".to_string(),
+                        nodes: BTreeMap::from([
+                            (
+                                "start".to_string(),
+                                QuestNode {
+                                    id: "start".to_string(),
+                                    node_type: "start".to_string(),
+                                    ..QuestNode::default()
+                                },
+                            ),
+                            (
+                                "collect".to_string(),
+                                QuestNode {
+                                    id: "collect".to_string(),
+                                    node_type: "objective".to_string(),
+                                    objective_type: "collect".to_string(),
+                                    item_id: Some(1007),
+                                    count: 2,
+                                    ..QuestNode::default()
+                                },
+                            ),
+                            (
+                                "reward".to_string(),
+                                QuestNode {
+                                    id: "reward".to_string(),
+                                    node_type: "reward".to_string(),
+                                    rewards: QuestRewards {
+                                        experience: 50,
+                                        skill_points: 2,
+                                        ..QuestRewards::default()
+                                    },
+                                    ..QuestNode::default()
+                                },
+                            ),
+                            (
+                                "end".to_string(),
+                                QuestNode {
+                                    id: "end".to_string(),
+                                    node_type: "end".to_string(),
+                                    ..QuestNode::default()
+                                },
+                            ),
+                        ]),
+                        connections: vec![
+                            QuestConnection {
+                                from: "start".to_string(),
+                                to: "collect".to_string(),
+                                from_port: 0,
+                                to_port: 0,
+                                extra: BTreeMap::new(),
+                            },
+                            QuestConnection {
+                                from: "collect".to_string(),
+                                to: "reward".to_string(),
+                                from_port: 0,
+                                to_port: 0,
+                                extra: BTreeMap::new(),
+                            },
+                            QuestConnection {
+                                from: "reward".to_string(),
+                                to: "end".to_string(),
+                                from_port: 0,
+                                to_port: 0,
+                                extra: BTreeMap::new(),
+                            },
+                        ],
+                        ..QuestFlow::default()
+                    },
+                    ..QuestDefinition::default()
+                },
+            ),
+        ]))
+    }
+
+    fn sample_combat_item_library() -> ItemLibrary {
+        ItemLibrary::from(BTreeMap::from([
+            (
+                1004,
+                ItemDefinition {
+                    id: 1004,
+                    name: "手枪".into(),
+                    value: 120,
+                    weight: 1.2,
+                    fragments: vec![
+                        ItemFragment::Equip {
+                            slots: vec!["main_hand".into()],
+                            level_requirement: 2,
+                            equip_effect_ids: Vec::new(),
+                            unequip_effect_ids: Vec::new(),
+                        },
+                        ItemFragment::Durability {
+                            durability: 80,
+                            max_durability: 80,
+                            repairable: true,
+                            repair_materials: Vec::new(),
+                        },
+                        ItemFragment::Weapon {
+                            subtype: "pistol".into(),
+                            damage: 18,
+                            attack_speed: 1.0,
+                            range: 12,
+                            stamina_cost: 2,
+                            crit_chance: 0.1,
+                            crit_multiplier: 1.8,
+                            accuracy: Some(70),
+                            ammo_type: Some(1009),
+                            max_ammo: Some(6),
+                            reload_time: Some(1.5),
+                            on_hit_effect_ids: Vec::new(),
+                        },
+                    ],
+                    ..ItemDefinition::default()
+                },
+            ),
+            (
+                1009,
+                ItemDefinition {
+                    id: 1009,
+                    name: "手枪弹药".into(),
+                    value: 5,
+                    weight: 0.1,
+                    fragments: vec![ItemFragment::Stacking {
+                        stackable: true,
+                        max_stack: 50,
+                    }],
+                    ..ItemDefinition::default()
+                },
+            ),
+        ]))
     }
 }
