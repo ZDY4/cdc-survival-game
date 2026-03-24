@@ -1,5 +1,10 @@
 extends Node
 ## AIManager - Unified runtime actor provider with character_data.
+## LEGACY AUTHORITY BOUNDARY:
+## This manager still assembles AI-related runtime pieces inside Godot. Do not
+## grow it into a long-term authority for NPC decision logic. Future ownership
+## belongs in Rust/Bevy, while Godot remains responsible for visual actor
+## assembly, hit mapping, and presentation bridging.
 
 class_name AIManager
 

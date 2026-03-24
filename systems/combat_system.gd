@@ -1,4 +1,8 @@
 extends Node
+## LEGACY AUTHORITY BOUNDARY:
+## Combat execution is still partially authoritative here, but new rules should
+## not be added to this file. Prefer moving damage, resolution, and validation
+## into Rust while keeping Godot focused on presentation hooks and client glue.
 
 const AttributeSystemScript = preload("res://systems/attribute_system.gd")
 const TargetAttackAbilityScript = preload("res://systems/target_attack_ability.gd")

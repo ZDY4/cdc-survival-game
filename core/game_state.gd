@@ -1,6 +1,12 @@
 extends Node
 # GameState - 游戏全局状态管理
 # 最佳实践: 不使用 class_name，直接暴露变量
+## LEGACY AUTHORITY BOUNDARY:
+## This file is still the Godot-side runtime authority for player/world state,
+## but it is a migration target rather than a long-term ownership point.
+## Do not expand gameplay rule ownership here. Prefer Rust `game_data` /
+## `game_core` for new shared state or deterministic rules, and keep Godot
+## changes focused on client presentation or compatibility bridging.
 const AttributeSystemScript = preload("res://systems/attribute_system.gd")
 const ValueUtils = preload("res://core/value_utils.gd")
 const OUTDOOR_ROOT_SCENE_PATH: String = "res://scenes/locations/game_world_root.tscn"

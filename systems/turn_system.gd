@@ -1,4 +1,8 @@
 extends Node
+## LEGACY AUTHORITY BOUNDARY:
+## Turn/AP authority still lives here for the current Godot runtime, but this
+## file is a migration target. Avoid adding new long-term combat turn logic in
+## GDScript; future authority belongs in Rust `game_core`.
 
 signal actor_turn_started(actor: Node, actor_id: String, group_id: String, side: String, current_ap: float)
 signal actor_turn_ended(actor: Node, actor_id: String, group_id: String, side: String, remaining_ap: float)

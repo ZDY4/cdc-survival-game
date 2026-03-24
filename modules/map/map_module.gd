@@ -1,4 +1,8 @@
 extends "res://core/base_module.gd"
+## LEGACY AUTHORITY BOUNDARY:
+## This module currently mixes map travel rules with Godot scene transition
+## orchestration. New travel/context rules should move into shared Rust logic;
+## Godot should keep only scene loading and presentation responsibilities.
 
 const GridNavigatorScript = preload("res://systems/grid_navigator.gd")
 

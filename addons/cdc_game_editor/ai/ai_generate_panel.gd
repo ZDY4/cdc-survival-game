@@ -8,9 +8,7 @@ const OPENAI_PROVIDER_SCRIPT := preload("res://addons/cdc_game_editor/ai/provide
 
 const ADAPTER_SCRIPTS := {
 	"item": preload("res://addons/cdc_game_editor/ai/adapters/item_ai_editor_adapter.gd"),
-	"character": preload("res://addons/cdc_game_editor/ai/adapters/character_ai_editor_adapter.gd"),
-	"dialog": preload("res://addons/cdc_game_editor/ai/adapters/dialog_ai_editor_adapter.gd"),
-	"quest": preload("res://addons/cdc_game_editor/ai/adapters/quest_ai_editor_adapter.gd")
+	"character": preload("res://addons/cdc_game_editor/ai/adapters/character_ai_editor_adapter.gd")
 }
 
 var editor_plugin: EditorPlugin = null

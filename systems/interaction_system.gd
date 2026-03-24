@@ -1,5 +1,10 @@
 class_name InteractionSystem
 extends Node
+## LEGACY AUTHORITY BOUNDARY:
+## This system is kept only as the current Godot-side interaction client path.
+## Do not expand local interaction authority here. Long-term interaction query
+## and execution must move behind Rust `game_core` + `game_protocol`, leaving
+## Godot responsible for hit detection, UI prompts, and presentation only.
 
 func is_primary_pressed(event: InputEvent) -> bool:
     if event is InputEventMouseButton:

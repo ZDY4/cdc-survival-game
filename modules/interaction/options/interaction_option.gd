@@ -1,5 +1,9 @@
 extends Resource
 class_name InteractionOption
+## LEGACY AUTHORITY BOUNDARY:
+## Interaction option resources remain as compatibility shims for the current
+## Godot client. New authoritative interaction behavior should be expressed in
+## shared Rust data/protocol instead of expanding local execute() rule logic.
 
 const DANGEROUS_DISPLAY_COLOR: Color = Color(0.86, 0.26, 0.26, 1.0)
 const NO_DISPLAY_COLOR: Color = Color(0.0, 0.0, 0.0, 0.0)

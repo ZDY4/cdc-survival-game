@@ -23,7 +23,6 @@ const NODE_TYPE_NAMES = {
 }
 
 const JSON_VALIDATOR = preload("res://addons/cdc_game_editor/utils/json_validator.gd")
-const AI_GENERATE_PANEL_SCRIPT = preload("res://addons/cdc_game_editor/ai/ai_generate_panel.gd")
 const DIALOG_DATA_DIR := "res://data/dialogues"
 const START_NODE_ID := "start"
 
@@ -34,8 +33,6 @@ const START_NODE_ID := "start"
 var current_dialog_id: String = ""
 var current_file_path: String = ""
 var _open_dialog_paths: Array[String] = []
-var _ai_panel: Window = null
-var _ai_provider_override: Variant = null
 
 func _get_editor_name() -> String:
 	return "对话编辑器"
@@ -117,7 +114,6 @@ func _create_toolbar() -> void:
 	_add_toolbar_button("新建", _on_new_dialog, "新建对话")
 	_add_toolbar_button("打开", _on_open_dialog, "打开对话文件")
 	_add_toolbar_button("保存", _on_save_dialog, "保存对话文件")
-	_add_toolbar_button("AI 生成", _open_ai_panel, "使用 AI 生成或调整对话")
 
 	var id_label := Label.new()
 	id_label.text = "dialog_id:"
@@ -906,129 +902,6 @@ func _save_before_close() -> bool:
 func get_current_dialog_id() -> String:
 	return current_dialog_id
 
-
-func set_ai_provider_override(provider: Variant) -> void:
-	_ai_provider_override = provider
-	if _ai_panel and is_instance_valid(_ai_panel):
-		_ai_panel.set_provider_override(provider)
-
-
-func build_ai_seed_context() -> Dictionary:
-	return {
-		"target_id": current_dialog_id,
-		"current_record": _build_dialog_record()
-	}
-
-
-func get_ai_validation_errors(draft: Dictionary) -> Array[String]:
-	var errors: Array[String] = []
-	var record := draft.get("record", {})
-	if not (record is Dictionary):
-		errors.append("record 必须是 Dictionary")
-		return errors
-
-	var dialog_id := str(record.get("dialog_id", "")).strip_edges()
-	var operation := str(draft.get("operation", "")).strip_edges()
-	var target_id := str(draft.get("target_id", "")).strip_edges()
-	if dialog_id.is_empty():
-		errors.append("dialog_id 不能为空")
-		return errors
-	if operation == "create" and FileAccess.file_exists(_build_dialog_file_path(dialog_id)):
-		errors.append("新建模式下不能复用已有 dialog_id: %s" % dialog_id)
-	if operation == "revise" and not target_id.is_empty() and dialog_id != target_id:
-		errors.append("调整模式下 dialog_id 必须保持为当前记录 ID")
-
-	var nodes_data: Variant = record.get("nodes", [])
-	var connections_data: Variant = record.get("connections", [])
-	if not (nodes_data is Array):
-		errors.append("nodes 必须是数组")
-		return errors
-	if not (connections_data is Array):
-		errors.append("connections 必须是数组")
-		return errors
-
-	var node_ids: Dictionary = {}
-	var start_count := 0
-	for node_variant in nodes_data:
-		if not (node_variant is Dictionary):
-			errors.append("nodes 内每一项都必须是对象")
-			continue
-		var node_data: Dictionary = node_variant
-		var node_id := str(node_data.get("id", "")).strip_edges()
-		if node_id.is_empty():
-			errors.append("存在缺少 id 的节点")
-			continue
-		if node_ids.has(node_id):
-			errors.append("节点 ID 重复: %s" % node_id)
-			continue
-		node_ids[node_id] = node_data
-		if _is_start_node(node_data):
-			start_count += 1
-	if start_count != 1:
-		errors.append("对话必须且只能有一个 Start 节点")
-
-	var expected_connections: Array[Dictionary] = _normalize_loaded_connections(nodes_data, connections_data)
-	var normalized_connections: Dictionary = {}
-	for conn_variant in expected_connections:
-		if not (conn_variant is Dictionary):
-			continue
-		var conn: Dictionary = conn_variant
-		var from_id := str(conn.get("from", "")).strip_edges()
-		var to_id := str(conn.get("to", "")).strip_edges()
-		if from_id.is_empty() or to_id.is_empty():
-			errors.append("存在无效连接")
-			continue
-		if not node_ids.has(from_id) or not node_ids.has(to_id):
-			errors.append("连接引用了不存在的节点: %s -> %s" % [from_id, to_id])
-		var connection_key := "%s:%d:%s:%d" % [
-			from_id,
-			int(conn.get("from_port", 0)),
-			to_id,
-			int(conn.get("to_port", 0))
-		]
-		normalized_connections[connection_key] = true
-
-	for node_id in node_ids.keys():
-		var node_data: Dictionary = node_ids[node_id]
-		match str(node_data.get("type", "")):
-			"dialog", "action":
-				var next_id := str(node_data.get("next", "")).strip_edges()
-				if not next_id.is_empty():
-					var next_key := "%s:%d:%s:%d" % [node_id, 0, next_id, 0]
-					if not normalized_connections.has(next_key):
-						errors.append("%s.next 与 connections 不一致" % node_id)
-			"choice":
-				var options: Array = node_data.get("options", [])
-				for i in range(options.size()):
-					var option: Dictionary = options[i]
-					var option_next := str(option.get("next", "")).strip_edges()
-					if option_next.is_empty():
-						continue
-					var option_key := "%s:%d:%s:%d" % [node_id, i, option_next, 0]
-					if not normalized_connections.has(option_key):
-						errors.append("%s.options[%d].next 与 connections 不一致" % [node_id, i])
-			"condition":
-				for port in [0, 1]:
-					var branch_id := str(
-						node_data.get("true_next" if port == 0 else "false_next", "")
-					).strip_edges()
-					if branch_id.is_empty():
-						continue
-					var branch_key := "%s:%d:%s:%d" % [node_id, port, branch_id, 0]
-					if not normalized_connections.has(branch_key):
-						errors.append("%s 条件分支与 connections 不一致" % node_id)
-	return errors
-
-
-func apply_ai_draft(draft: Dictionary) -> bool:
-	var validation_errors := get_ai_validation_errors(draft)
-	if not validation_errors.is_empty():
-		_update_status(validation_errors[0])
-		return false
-
-	var record: Dictionary = (draft.get("record", {}) as Dictionary).duplicate(true)
-	return _apply_dialog_record(record, str(draft.get("operation", "create")).strip_edges())
-
 func _create_start_node() -> void:
 	if _has_start_node():
 		return
@@ -1076,62 +949,3 @@ func _is_start_node(data: Dictionary) -> bool:
 	if data.is_empty():
 		return false
 	return bool(data.get("is_start", false)) or str(data.get("id", "")) == START_NODE_ID
-
-
-func _build_dialog_record() -> Dictionary:
-	_sync_node_positions_from_graph()
-	var serialized_nodes: Array[Dictionary] = []
-	for node_variant in nodes.values():
-		var node_data: Dictionary = (node_variant as Dictionary).duplicate(true)
-		node_data["position"] = _serialize_position(node_data.get("position", Vector2.ZERO))
-		serialized_nodes.append(node_data)
-	return {
-		"dialog_id": current_dialog_id,
-		"nodes": serialized_nodes,
-		"connections": connections.duplicate(true)
-	}
-
-
-func _apply_dialog_record(record: Dictionary, operation: String) -> bool:
-	var previous_dialog_id := current_dialog_id
-	var previous_file_path := current_file_path
-	_begin_dirty_tracking_suspension()
-	_reset_dialog_graph(false)
-
-	var nodes_data: Array = record.get("nodes", [])
-	var loaded_connections: Array[Dictionary] = _normalize_loaded_connections(
-		nodes_data,
-		record.get("connections", [])
-	)
-	var normalized_nodes: Array[Dictionary] = _normalize_loaded_nodes(nodes_data, loaded_connections)
-	var dialog_id := str(record.get("dialog_id", "")).strip_edges()
-	_set_dialog_id(dialog_id)
-	current_file_path = previous_file_path if operation == "revise" and dialog_id == previous_dialog_id else ""
-
-	for node_data in normalized_nodes:
-		_create_node_internal(node_data)
-
-	connections = loaded_connections
-	for conn_data in connections:
-		_graph_edit.connect_node(
-			StringName(str(conn_data.get("from", ""))),
-			int(conn_data.get("from_port", 0)),
-			StringName(str(conn_data.get("to", ""))),
-			int(conn_data.get("to_port", 0))
-		)
-
-	_ensure_start_node()
-	_end_dirty_tracking_suspension()
-	_mark_dirty()
-	_refresh_record_list()
-	_update_status("AI 草稿已应用到对话: %s" % dialog_id)
-	return true
-
-
-func _open_ai_panel() -> void:
-	if _ai_panel == null or not is_instance_valid(_ai_panel):
-		_ai_panel = AI_GENERATE_PANEL_SCRIPT.new()
-		_ai_panel.editor_plugin = editor_plugin
-		add_child(_ai_panel)
-	_ai_panel.configure(self, editor_plugin, "dialog", _ai_provider_override)
-	_ai_panel.open_panel()

@@ -1,4 +1,8 @@
 extends Node
+## LEGACY AUTHORITY BOUNDARY:
+## DataManager still loads and normalizes a large amount of content directly in
+## Godot. New shared schema, validation, indexing, and migration logic should
+## move into Rust `game_data` instead of growing here further.
 ## DataManager - 数据管理器
 ## 负责加载和管理所有JSON数据文件
 ## 将数据与逻辑分离，便于维护和修改
