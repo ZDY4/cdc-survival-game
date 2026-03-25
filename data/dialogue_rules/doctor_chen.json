@@ -1,0 +1,28 @@
+{
+  "dialogue_key": "doctor_chen",
+  "default_dialogue_id": "doctor_chen",
+  "variants": [
+    {
+      "dialogue_id": "doctor_chen_medical",
+      "when": {
+        "npc_role_in": ["doctor"],
+        "npc_on_shift": true,
+        "player_hp_ratio_max": 0.5
+      }
+    },
+    {
+      "dialogue_id": "doctor_chen_on_shift",
+      "when": {
+        "npc_role_in": ["doctor"],
+        "npc_on_shift": true
+      }
+    },
+    {
+      "dialogue_id": "doctor_chen_off_shift",
+      "when": {
+        "npc_role_in": ["doctor"],
+        "npc_on_shift": false
+      }
+    }
+  ]
+}

@@ -364,43 +364,25 @@ export function MapLibraryWorkspace({
 
         <main className="column column-main">
           {selectedDocument ? (
-            <PanelSection label="Overview" title={selectedDocument.map.id || "Unnamed map"}>
-              <div className="stats-grid">
-                <article className="stat-card">
-                  <span>Map ID</span>
-                  <strong>{selectedDocument.map.id}</strong>
-                </article>
-                <article className="stat-card">
-                  <span>Grid</span>
-                  <strong>
+            <PanelSection
+              label="Map"
+              title={selectedDocument.map.id || "Unnamed map"}
+              summary={
+                <div className="toolbar-summary">
+                  <Badge tone="muted">
                     {selectedDocument.map.size.width} x {selectedDocument.map.size.height}
-                  </strong>
-                </article>
-                <article className="stat-card">
-                  <span>Levels</span>
-                  <strong>{selectedDocument.map.levels.length}</strong>
-                </article>
-                <article className="stat-card">
-                  <span>Objects</span>
-                  <strong>{selectedDocument.map.objects.length}</strong>
-                </article>
-              </div>
-
-              <div className="list-summary">
-                <div className="summary-row">
-                  <div className="summary-row-main">
-                    <strong>File</strong>
-                    <p>{selectedDocument.relativePath}</p>
-                  </div>
-                  <Badge tone="muted">{selectedDocument.fileName}</Badge>
+                  </Badge>
+                  <Badge tone="muted">{selectedDocument.map.levels.length} levels</Badge>
+                  <Badge tone="muted">{selectedDocument.map.objects.length} objects</Badge>
                 </div>
-                <div className="summary-row">
-                  <div className="summary-row-main">
-                    <strong>Editing flow</strong>
-                    <p>Open the dedicated map window for placement, shortcuts, and focused inspection.</p>
-                  </div>
-                  <Badge tone="accent">Single editor window</Badge>
+              }
+            >
+              <div className="summary-row">
+                <div className="summary-row-main">
+                  <strong>File</strong>
+                  <p>{selectedDocument.relativePath}</p>
                 </div>
+                <Badge tone="muted">{selectedDocument.fileName}</Badge>
               </div>
 
               <div className="toolbar-summary">
@@ -411,17 +393,15 @@ export function MapLibraryWorkspace({
                     void handleOpen(selectedDocument.documentKey);
                   }}
                 >
-                  Open In Map Editor
+                  Open map editor
                 </button>
               </div>
             </PanelSection>
           ) : (
-            <PanelSection label="Selection" title="No map selected">
-              <div className="empty-state">
-                <Badge tone="muted">Idle</Badge>
-                <p>Select a map from the left panel to open the focused editor window.</p>
-              </div>
-            </PanelSection>
+            <div className="workspace-empty">
+              <Badge tone="muted">Map</Badge>
+              <p>Select a map from the left panel to open the focused editor window.</p>
+            </div>
           )}
         </main>
       </div>

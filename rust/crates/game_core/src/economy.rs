@@ -553,13 +553,12 @@ impl HeadlessEconomyRuntime {
             .actors
             .get_mut(&actor_id)
             .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
-        let equipped = actor
-            .equipped_slots
-            .remove(&normalized)
-            .ok_or_else(|| EconomyRuntimeError::EmptyEquipmentSlot {
+        let equipped = actor.equipped_slots.remove(&normalized).ok_or_else(|| {
+            EconomyRuntimeError::EmptyEquipmentSlot {
                 actor_id,
                 slot: normalized.clone(),
-            })?;
+            }
+        })?;
         *actor.inventory.entry(equipped.item_id).or_insert(0) += 1;
         Ok(equipped.item_id)
     }
@@ -672,7 +671,12 @@ impl HeadlessEconomyRuntime {
                     ammo_type,
                     max_ammo,
                     ..
-                }) => (equipped.item_id, *ammo_type, *max_ammo, equipped.ammo_loaded),
+                }) => (
+                    equipped.item_id,
+                    *ammo_type,
+                    *max_ammo,
+                    equipped.ammo_loaded,
+                ),
                 _ => {
                     return Err(EconomyRuntimeError::ItemNotWeapon {
                         item_id: equipped.item_id,
@@ -709,12 +713,7 @@ impl HeadlessEconomyRuntime {
             .actors
             .get_mut(&actor_id)
             .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
-        let reserve_after = actor
-            .ammo_reserves
-            .get(&ammo_type)
-            .copied()
-            .unwrap_or(0)
-            - to_load;
+        let reserve_after = actor.ammo_reserves.get(&ammo_type).copied().unwrap_or(0) - to_load;
         if reserve_after <= 0 {
             actor.ammo_reserves.remove(&ammo_type);
         } else {

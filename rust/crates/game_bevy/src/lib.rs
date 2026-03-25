@@ -4,17 +4,22 @@ use std::path::{Path, PathBuf};
 
 use bevy_ecs::prelude::*;
 use game_core::simulation::Simulation;
-use game_core::{HeadlessEconomyRuntime, NoopAiController, RegisterActor, SimulationRuntime};
+use game_core::{
+    FollowGridGoalAiController, HeadlessEconomyRuntime, NoopAiController, RegisterActor,
+    SimulationRuntime,
+};
 use game_data::{
     load_character_library, load_effect_library, load_item_library, load_map_library,
-    load_quest_library, load_recipe_library, load_settlement_library, load_shop_library,
-    load_skill_library, load_skill_tree_library, ActorKind, ActorSide, CharacterAiProfile,
-    CharacterArchetype, CharacterDefinition, CharacterDisposition, CharacterId, CharacterLibrary,
-    CharacterLoadError, CharacterLootEntry, CharacterPlaceholderColors, CharacterResourcePool,
-    EffectLibrary, EffectLoadError, GridCoord, ItemLibrary, ItemLoadError, MapId, MapLibrary,
-    MapLoadError, QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError,
-    SettlementLibrary, SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary,
-    SkillLoadError, SkillTreeLibrary, SkillTreeLoadError,
+    load_overworld_library, load_quest_library, load_recipe_library, load_settlement_library,
+    load_shop_library, load_skill_library, load_skill_tree_library, ActorId, ActorKind,
+    ActorSide, CharacterAiProfile, CharacterArchetype, CharacterDefinition,
+    CharacterDisposition, CharacterId, CharacterLibrary, CharacterLoadError,
+    CharacterLootEntry, CharacterPlaceholderColors, CharacterResourcePool, EffectLibrary,
+    EffectLoadError, GridCoord, ItemLibrary, ItemLoadError, MapId,
+    MapLibrary, MapLoadError, OverworldLibrary, OverworldLoadError, QuestLibrary,
+    QuestLoadError, RecipeLibrary, RecipeLoadError, SettlementLibrary, SettlementLoadError,
+    ShopLibrary, ShopLoadError, SkillLibrary, SkillLoadError, SkillTreeLibrary,
+    SkillTreeLoadError, WorldMode,
 };
 use npc_life::LifeProfileComponent;
 use thiserror::Error;
@@ -28,10 +33,11 @@ pub use bootstrap::{
     RuntimeBootstrapBundle, RuntimeBootstrapError,
 };
 pub use npc_life::{
-    CurrentAction, CurrentGoal, CurrentPlan, LifeProfileComponent as CharacterLifeProfileComponent,
-    NeedState, NpcLifePlugin, NpcLifeState, ReservationState, ScheduleState, SettlementContext,
-    SettlementDebugEntry, SettlementDebugSnapshot, SettlementSimulationPlugin, SimClock,
-    WorldAlertState,
+    BackgroundLifeState, CurrentAction, CurrentGoal, CurrentPlan,
+    LifeProfileComponent as CharacterLifeProfileComponent, NeedState, NpcLifePlugin,
+    NpcLifeState, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
+    SettlementContext, SettlementDebugEntry, SettlementDebugSnapshot,
+    SettlementSimulationPlugin, SimClock, WorldAlertState,
 };
 pub use reservations::SmartObjectReservations;
 
@@ -58,6 +64,18 @@ impl Default for MapDefinitionPath {
 
 #[derive(Resource, Debug, Clone)]
 pub struct MapDefinitions(pub MapLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct OverworldDefinitionPath(pub PathBuf);
+
+impl Default for OverworldDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/overworld"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct OverworldDefinitions(pub OverworldLibrary);
 
 #[derive(Resource, Debug, Clone)]
 pub struct SettlementDefinitionPath(pub PathBuf);
@@ -193,6 +211,11 @@ pub struct RuntimeSpawnEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RuntimeScenarioSeed {
     pub map_id: Option<MapId>,
+    pub start_world_mode: Option<WorldMode>,
+    pub start_location_id: Option<String>,
+    pub start_map_id: Option<MapId>,
+    pub start_entry_point_id: Option<String>,
+    pub unlocked_locations: Vec<String>,
     pub static_obstacles: Vec<GridCoord>,
     pub characters: Vec<RuntimeSpawnEntry>,
 }
@@ -203,6 +226,8 @@ pub enum RuntimeBuildError {
     UnknownCharacterDefinition { definition_id: CharacterId },
     #[error("unknown map definition: {map_id}")]
     UnknownMapDefinition { map_id: MapId },
+    #[error("invalid overworld seed: {message}")]
+    InvalidOverworldSeed { message: String },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -316,6 +341,12 @@ pub fn load_map_definitions(path: impl AsRef<Path>) -> Result<MapDefinitions, Ma
     Ok(MapDefinitions(load_map_library(path)?))
 }
 
+pub fn load_overworld_definitions(
+    path: impl AsRef<Path>,
+) -> Result<OverworldDefinitions, OverworldLoadError> {
+    Ok(OverworldDefinitions(load_overworld_library(path)?))
+}
+
 pub fn load_settlement_definitions(
     path: impl AsRef<Path>,
 ) -> Result<SettlementDefinitions, SettlementLoadError> {
@@ -363,6 +394,19 @@ pub fn load_map_definitions_on_startup(mut commands: Commands, path: Res<MapDefi
     let definitions = load_map_definitions(&path.0).unwrap_or_else(|error| {
         panic!(
             "failed to load map definitions from {}: {error}",
+            path.0.display()
+        )
+    });
+    commands.insert_resource(definitions);
+}
+
+pub fn load_overworld_definitions_on_startup(
+    mut commands: Commands,
+    path: Res<OverworldDefinitionPath>,
+) {
+    let definitions = load_overworld_definitions(&path.0).unwrap_or_else(|error| {
+        panic!(
+            "failed to load overworld definitions from {}: {error}",
             path.0.display()
         )
     });
@@ -571,17 +615,35 @@ pub fn spawn_characters_from_definition(
 pub fn build_simulation_from_seed(
     definitions: &CharacterLibrary,
     maps: &MapLibrary,
+    overworld: &OverworldLibrary,
     seed: &RuntimeScenarioSeed,
 ) -> Result<Simulation, RuntimeBuildError> {
     let mut simulation = Simulation::new();
-    if let Some(map_id) = seed.map_id.as_ref() {
-        let map = maps
-            .get(map_id)
-            .ok_or_else(|| RuntimeBuildError::UnknownMapDefinition {
-                map_id: map_id.clone(),
-            })?;
-        simulation.grid_world_mut().load_map(map);
+    simulation.set_map_library(maps.clone());
+    simulation.set_overworld_library(overworld.clone());
+
+    let requested_world_mode = seed.start_world_mode.unwrap_or({
+        if seed.start_location_id.is_some() || seed.start_map_id.is_some() || seed.map_id.is_some()
+        {
+            WorldMode::Outdoor
+        } else {
+            WorldMode::Unknown
+        }
+    });
+    let requested_map_id = seed.start_map_id.as_ref().or(seed.map_id.as_ref());
+
+    if !matches!(requested_world_mode, WorldMode::Overworld | WorldMode::Traveling) {
+        if let Some(map_id) = requested_map_id {
+            let map = maps
+                .get(map_id)
+                .ok_or_else(|| RuntimeBuildError::UnknownMapDefinition {
+                    map_id: map_id.clone(),
+                })?;
+            simulation.grid_world_mut().load_map(map);
+        }
     }
+
+    let mut player_actor_id = None;
     for obstacle in &seed.static_obstacles {
         simulation
             .grid_world_mut()
@@ -597,6 +659,9 @@ pub fn build_simulation_from_seed(
             definition,
             entry.grid_position,
         ));
+        if player_actor_id.is_none() && definition.archetype == CharacterArchetype::Player {
+            player_actor_id = Some(actor_id);
+        }
         simulation.seed_actor_progression(
             actor_id,
             definition.progression.level as i32,
@@ -614,22 +679,108 @@ pub fn build_simulation_from_seed(
         );
         simulation.seed_actor_loot_table(actor_id, definition.combat.loot.clone());
     }
+
+    for location_id in &seed.unlocked_locations {
+        match simulation.apply_command(game_core::SimulationCommand::UnlockLocation {
+            location_id: location_id.clone(),
+        }) {
+            game_core::SimulationCommandResult::OverworldState(Ok(_))
+            | game_core::SimulationCommandResult::None => {}
+            game_core::SimulationCommandResult::OverworldState(Err(message)) => {
+                return Err(RuntimeBuildError::InvalidOverworldSeed { message });
+            }
+            other => {
+                return Err(RuntimeBuildError::InvalidOverworldSeed {
+                    message: format!("unexpected unlock command result: {other:?}"),
+                });
+            }
+        }
+    }
+
+    if matches!(requested_world_mode, WorldMode::Overworld | WorldMode::Traveling) {
+        simulation
+            .seed_overworld_state(
+                requested_world_mode,
+                seed.start_location_id.clone(),
+                seed.start_entry_point_id.clone(),
+                Vec::<String>::new(),
+            )
+            .map_err(|message| RuntimeBuildError::InvalidOverworldSeed { message })?;
+    } else if let Some(location_id) = seed.start_location_id.as_ref() {
+        let Some(player_actor_id) = player_actor_id else {
+            return Err(RuntimeBuildError::InvalidOverworldSeed {
+                message: "missing_player_actor_for_location_start".to_string(),
+            });
+        };
+        match simulation.apply_command(game_core::SimulationCommand::EnterLocation {
+            actor_id: player_actor_id,
+            location_id: location_id.clone(),
+            entry_point_id: seed.start_entry_point_id.clone(),
+        }) {
+            game_core::SimulationCommandResult::LocationTransition(Ok(_)) => {}
+            game_core::SimulationCommandResult::LocationTransition(Err(message)) => {
+                return Err(RuntimeBuildError::InvalidOverworldSeed { message });
+            }
+            other => {
+                return Err(RuntimeBuildError::InvalidOverworldSeed {
+                    message: format!("unexpected enter location result: {other:?}"),
+                });
+            }
+        }
+    }
+
     Ok(simulation)
 }
 
 pub fn build_runtime_from_seed(
     definitions: &CharacterLibrary,
     maps: &MapLibrary,
+    overworld: &OverworldLibrary,
     seed: &RuntimeScenarioSeed,
 ) -> Result<SimulationRuntime, RuntimeBuildError> {
     Ok(SimulationRuntime::from_simulation(
-        build_simulation_from_seed(definitions, maps, seed)?,
+        build_simulation_from_seed(definitions, maps, overworld, seed)?,
     ))
+}
+
+pub fn register_runtime_actor_from_definition(
+    runtime: &mut SimulationRuntime,
+    definition: &CharacterDefinition,
+    grid_position: GridCoord,
+) -> ActorId {
+    let actor_id = runtime.register_actor(register_actor_from_definition(definition, grid_position));
+    runtime.seed_actor_progression(
+        actor_id,
+        definition.progression.level as i32,
+        definition.combat.xp_reward,
+    );
+    runtime.seed_actor_combat_profile(
+        actor_id,
+        definition
+            .attributes
+            .sets
+            .get("combat")
+            .cloned()
+            .unwrap_or_default(),
+        definition.attributes.resources.clone(),
+    );
+    runtime.seed_actor_loot_table(actor_id, definition.combat.loot.clone());
+    actor_id
 }
 
 pub fn default_debug_seed() -> RuntimeScenarioSeed {
     RuntimeScenarioSeed {
         map_id: Some(MapId("safehouse_grid".to_string())),
+        start_world_mode: Some(WorldMode::Outdoor),
+        start_location_id: Some("safehouse".to_string()),
+        start_map_id: Some(MapId("safehouse_grid".to_string())),
+        start_entry_point_id: Some("default_entry".to_string()),
+        unlocked_locations: vec![
+            "safehouse".to_string(),
+            "street_a".to_string(),
+            "street_b".to_string(),
+            "safehouse_interior".to_string(),
+        ],
         static_obstacles: Vec::new(),
         characters: vec![
             RuntimeSpawnEntry {
@@ -703,6 +854,12 @@ fn register_actor_from_definition(
     definition: &CharacterDefinition,
     grid_position: GridCoord,
 ) -> RegisterActor {
+    let ai_controller = if definition.life.is_some() {
+        Some(Box::new(FollowGridGoalAiController) as Box<_>)
+    } else {
+        Some(Box::new(NoopAiController) as Box<_>)
+    };
+
     RegisterActor {
         definition_id: Some(definition.id.clone()),
         display_name: definition.identity.display_name.clone(),
@@ -712,7 +869,7 @@ fn register_actor_from_definition(
         grid_position,
         interaction: definition.interaction.clone(),
         attack_range: definition.ai.attack_range,
-        ai_controller: Some(Box::new(NoopAiController)),
+        ai_controller,
     }
 }
 
@@ -761,9 +918,11 @@ mod tests {
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLibrary, CharacterLootEntry, CharacterPlaceholderColors,
         CharacterPresentation, CharacterProgression, CharacterResourcePool, GridCoord,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapLevelDefinition, MapLibrary,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
-        MapSize,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
+        MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
+        MapObjectProps, MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition,
+        OverworldEdgeDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
+        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -792,10 +951,11 @@ mod tests {
                     grid_position: GridCoord::new(4, 0, 0),
                 },
             ],
+            ..RuntimeScenarioSeed::default()
         };
 
-        let runtime =
-            build_runtime_from_seed(&library, &maps, &seed).expect("runtime should build");
+        let runtime = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+            .expect("runtime should build");
         let snapshot = runtime.snapshot();
 
         let player = snapshot
@@ -852,9 +1012,10 @@ mod tests {
                 definition_id: CharacterId("missing".into()),
                 grid_position: GridCoord::new(0, 0, 0),
             }],
+            ..RuntimeScenarioSeed::default()
         };
 
-        let error = build_runtime_from_seed(&library, &maps, &seed)
+        let error = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
             .expect_err("missing definitions should fail");
         assert_eq!(
             error,
@@ -872,10 +1033,11 @@ mod tests {
             map_id: Some(MapId("missing_map".into())),
             static_obstacles: Vec::new(),
             characters: Vec::new(),
+            ..RuntimeScenarioSeed::default()
         };
 
-        let error =
-            build_runtime_from_seed(&library, &maps, &seed).expect_err("missing map should fail");
+        let error = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+            .expect_err("missing map should fail");
         assert_eq!(
             error,
             RuntimeBuildError::UnknownMapDefinition {
@@ -979,6 +1141,10 @@ mod tests {
         assert_eq!(
             default_debug_seed().map_id.as_ref().map(MapId::as_str),
             Some("safehouse_grid")
+        );
+        assert_eq!(
+            default_debug_seed().start_location_id.as_deref(),
+            Some("safehouse")
         );
     }
 
@@ -1121,6 +1287,12 @@ startup_map =
                     cells: Vec::new(),
                 },
             ],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
             objects: vec![MapObjectDefinition {
                 object_id: "house".into(),
                 kind: MapObjectKind::Building,
@@ -1145,6 +1317,74 @@ startup_map =
         let mut maps = BTreeMap::new();
         maps.insert(definition.id.clone(), definition);
         MapLibrary::from(maps)
+    }
+
+    fn sample_overworld_library() -> OverworldLibrary {
+        let definition = OverworldDefinition {
+            id: OverworldId("main_overworld".into()),
+            locations: vec![
+                OverworldLocationDefinition {
+                    id: OverworldLocationId("safehouse".into()),
+                    name: "Safehouse".into(),
+                    description: String::new(),
+                    kind: OverworldLocationKind::Outdoor,
+                    map_id: MapId("safehouse_grid".into()),
+                    entry_point_id: "default_entry".into(),
+                    parent_outdoor_location_id: None,
+                    return_entry_point_id: None,
+                    default_unlocked: true,
+                    visible: true,
+                    overworld_cell: GridCoord::new(0, 0, 0),
+                    danger_level: 0,
+                    icon: String::new(),
+                    extra: BTreeMap::new(),
+                },
+                OverworldLocationDefinition {
+                    id: OverworldLocationId("street_a".into()),
+                    name: "Street A".into(),
+                    description: String::new(),
+                    kind: OverworldLocationKind::Outdoor,
+                    map_id: MapId("safehouse_grid".into()),
+                    entry_point_id: "default_entry".into(),
+                    parent_outdoor_location_id: None,
+                    return_entry_point_id: None,
+                    default_unlocked: true,
+                    visible: true,
+                    overworld_cell: GridCoord::new(-1, 0, 0),
+                    danger_level: 0,
+                    icon: String::new(),
+                    extra: BTreeMap::new(),
+                },
+            ],
+            edges: vec![OverworldEdgeDefinition {
+                from: OverworldLocationId("safehouse".into()),
+                to: OverworldLocationId("street_a".into()),
+                bidirectional: true,
+                travel_minutes: 30,
+                food_cost: 1,
+                stamina_cost: 1,
+                risk_level: 0.0,
+                route_cells: Vec::new(),
+                extra: BTreeMap::new(),
+            }],
+            walkable_cells: vec![
+                OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                },
+                OverworldCellDefinition {
+                    grid: GridCoord::new(-1, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                },
+            ],
+            travel_rules: OverworldTravelRuleSet::default(),
+        };
+
+        let mut definitions = BTreeMap::new();
+        definitions.insert(definition.id.clone(), definition);
+        OverworldLibrary::from(definitions)
     }
 
     fn sample_definition(

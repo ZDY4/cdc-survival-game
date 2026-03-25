@@ -7,12 +7,15 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    load_character_library, load_effect_library, load_item_library, load_map_library,
-    load_quest_library, load_recipe_library, load_settlement_library, load_shop_library,
-    load_skill_library, load_skill_tree_library, CharacterDefinition, ItemDefinition, ItemFragment,
-    MapDefinition, MapObjectKind, QuestDefinition, RecipeDefinition, RecipeValidationCatalog,
-    SettlementDefinition, ShopDefinition, ShopValidationCatalog, SkillDefinition,
-    SkillTreeDefinition, SkillTreeValidationCatalog, SkillValidationCatalog,
+    load_character_library, load_dialogue_library, load_dialogue_rule_library, load_effect_library,
+    load_item_library, load_map_library, load_overworld_library_with_catalog, load_quest_library,
+    load_recipe_library, load_settlement_library, load_shop_library, load_skill_library,
+    load_skill_tree_library, CharacterDefinition, DialogueRuleDefinition,
+    DialogueRuleValidationCatalog, ItemDefinition, ItemFragment, MapDefinition,
+    MapObjectKind, OverworldDefinition, OverworldValidationCatalog, QuestDefinition,
+    RecipeDefinition, RecipeValidationCatalog, SettlementDefinition, ShopDefinition,
+    ShopValidationCatalog, SkillDefinition, SkillTreeDefinition, SkillTreeValidationCatalog,
+    SkillValidationCatalog,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,8 +104,10 @@ pub fn load_shared_content_registry(
     let effects_dir = data_root.join("json").join("effects");
     let items_dir = data_root.join("items");
     let dialogues_dir = data_root.join("dialogues");
+    let dialogue_rules_dir = data_root.join("dialogue_rules");
     let quests_dir = data_root.join("quests");
     let maps_dir = data_root.join("maps");
+    let overworld_dir = data_root.join("overworld");
     let characters_dir = data_root.join("characters");
     let settlements_dir = data_root.join("settlements");
     let skills_dir = data_root.join("skills");
@@ -131,12 +136,57 @@ pub fn load_shared_content_registry(
             message: error.to_string(),
         }
     })?;
+    let dialogue_library = load_dialogue_library(&dialogues_dir).map_err(|error| {
+        ContentRegistryLoadError::DomainLoad {
+            domain: "dialogues",
+            path: dialogues_dir.clone(),
+            message: error.to_string(),
+        }
+    })?;
+    let dialogue_rule_library = load_dialogue_rule_library(
+        &dialogue_rules_dir,
+        Some(&DialogueRuleValidationCatalog {
+            dialogue_ids: dialogue_library.ids(),
+        }),
+    )
+    .map_err(|error| ContentRegistryLoadError::DomainLoad {
+        domain: "dialogue_rules",
+        path: dialogue_rules_dir.clone(),
+        message: error.to_string(),
+    })?;
     let map_library =
         load_map_library(&maps_dir).map_err(|error| ContentRegistryLoadError::DomainLoad {
             domain: "maps",
             path: maps_dir.clone(),
             message: error.to_string(),
         })?;
+    let overworld_library = load_overworld_library_with_catalog(
+        &overworld_dir,
+        Some(&OverworldValidationCatalog {
+            map_ids: map_library
+                .iter()
+                .map(|(map_id, _)| map_id.as_str().to_string())
+                .collect(),
+            map_entry_points_by_map: map_library
+                .iter()
+                .map(|(map_id, definition)| {
+                    (
+                        map_id.as_str().to_string(),
+                        definition
+                            .entry_points
+                            .iter()
+                            .map(|entry| entry.id.clone())
+                            .collect(),
+                    )
+                })
+                .collect(),
+        }),
+    )
+    .map_err(|error| ContentRegistryLoadError::DomainLoad {
+        domain: "overworld",
+        path: overworld_dir.clone(),
+        message: error.to_string(),
+    })?;
     let settlement_library = load_settlement_library(&settlements_dir).map_err(|error| {
         ContentRegistryLoadError::DomainLoad {
             domain: "settlements",
@@ -223,7 +273,14 @@ pub fn load_shared_content_registry(
             ContentAuthorityKind::RustSchema,
             PathBuf::from("data/dialogues"),
             "json",
-            scan_json_directory_ids(&dialogues_dir, "dialog_id")?,
+            dialogue_library.ids().into_iter().collect(),
+        ),
+        build_domain_summary(
+            "dialogue_rules",
+            ContentAuthorityKind::RustSchema,
+            PathBuf::from("data/dialogue_rules"),
+            "json",
+            dialogue_rule_library.ids().into_iter().collect(),
         ),
         build_domain_summary(
             "quests",
@@ -241,6 +298,13 @@ pub fn load_shared_content_registry(
                 .iter()
                 .map(|(id, _)| id.as_str().to_string())
                 .collect::<Vec<_>>(),
+        ),
+        build_domain_summary(
+            "overworld",
+            ContentAuthorityKind::RustSchema,
+            PathBuf::from("data/overworld"),
+            "json",
+            overworld_library.ids().into_iter().collect(),
         ),
         build_domain_summary(
             "characters",
@@ -338,6 +402,9 @@ pub fn load_shared_content_registry(
     for (character_id, definition) in character_library.iter() {
         collect_character_references(character_id.as_str(), definition, &mut references);
     }
+    for (dialogue_key, definition) in dialogue_rule_library.iter() {
+        collect_dialogue_rule_references(dialogue_key, definition, &mut references);
+    }
     for (skill_id, definition) in skill_library.iter() {
         collect_skill_references(skill_id, definition, &mut references);
     }
@@ -346,6 +413,9 @@ pub fn load_shared_content_registry(
     }
     for (map_id, definition) in map_library.iter() {
         collect_map_references(map_id.as_str(), definition, &mut references);
+    }
+    for (overworld_id, definition) in overworld_library.iter() {
+        collect_overworld_references(overworld_id.as_str(), definition, &mut references);
     }
     for (quest_id, definition) in quest_library.iter() {
         collect_quest_references(quest_id, definition, &mut references);
@@ -558,6 +628,31 @@ fn collect_character_references(
     }
 }
 
+fn collect_dialogue_rule_references(
+    dialogue_key: &str,
+    definition: &DialogueRuleDefinition,
+    references: &mut Vec<ContentReference>,
+) {
+    push_reference(
+        references,
+        "dialogue_rules",
+        dialogue_key,
+        "dialogues",
+        &definition.default_dialogue_id,
+        "default_dialogue_id",
+    );
+    for (index, variant) in definition.variants.iter().enumerate() {
+        push_reference(
+            references,
+            "dialogue_rules",
+            dialogue_key,
+            "dialogues",
+            &variant.dialogue_id,
+            &format!("variants[{index}].dialogue_id"),
+        );
+    }
+}
+
 fn collect_skill_references(
     skill_id: &str,
     definition: &SkillDefinition,
@@ -655,6 +750,51 @@ fn collect_map_references(
             }
             MapObjectKind::Building => {}
         }
+    }
+}
+
+fn collect_overworld_references(
+    overworld_id: &str,
+    definition: &OverworldDefinition,
+    references: &mut Vec<ContentReference>,
+) {
+    for location in &definition.locations {
+        push_reference(
+            references,
+            "overworld",
+            overworld_id,
+            "maps",
+            location.map_id.as_str(),
+            "locations.map_id",
+        );
+        if let Some(parent_id) = location.parent_outdoor_location_id.as_ref() {
+            push_reference(
+                references,
+                "overworld",
+                overworld_id,
+                "overworld_locations",
+                parent_id.as_str(),
+                "locations.parent_outdoor_location_id",
+            );
+        }
+    }
+    for edge in &definition.edges {
+        push_reference(
+            references,
+            "overworld",
+            overworld_id,
+            "overworld_locations",
+            edge.from.as_str(),
+            "edges.from",
+        );
+        push_reference(
+            references,
+            "overworld",
+            overworld_id,
+            "overworld_locations",
+            edge.to.as_str(),
+            "edges.to",
+        );
     }
 }
 
@@ -839,59 +979,6 @@ fn push_reference(
         target_id: normalized_target_id.to_string(),
         path: path.to_string(),
     });
-}
-
-fn scan_json_directory_ids(
-    dir: &Path,
-    id_field: &str,
-) -> Result<Vec<String>, ContentRegistryLoadError> {
-    if !dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut entries = fs::read_dir(dir)
-        .map_err(|source| ContentRegistryLoadError::ReadRawDir {
-            path: dir.to_path_buf(),
-            source,
-        })?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| ContentRegistryLoadError::ReadRawDir {
-            path: dir.to_path_buf(),
-            source,
-        })?;
-    entries.sort_by_key(|entry| entry.file_name());
-
-    let mut ids = Vec::new();
-    for entry in entries {
-        let path = entry.path();
-        if path.extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
-        let raw =
-            fs::read_to_string(&path).map_err(|source| ContentRegistryLoadError::ReadRawFile {
-                path: path.clone(),
-                source,
-            })?;
-        let parsed: Value = serde_json::from_str(&raw).map_err(|source| {
-            ContentRegistryLoadError::ParseRawFile {
-                path: path.clone(),
-                source,
-            }
-        })?;
-        let id = parsed
-            .get(id_field)
-            .and_then(value_to_string)
-            .unwrap_or_else(|| {
-                path.file_stem()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or_default()
-                    .to_string()
-            });
-        if !id.trim().is_empty() {
-            ids.push(id);
-        }
-    }
-    Ok(ids)
 }
 
 fn scan_json_file_ids(path: &Path) -> Result<Vec<String>, ContentRegistryLoadError> {

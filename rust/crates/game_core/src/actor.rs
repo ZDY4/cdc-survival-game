@@ -55,6 +55,31 @@ impl AiController for NoopAiController {
 }
 
 #[derive(Debug, Default)]
+pub struct FollowGridGoalAiController;
+
+impl AiController for FollowGridGoalAiController {
+    fn execute_turn_step(
+        &mut self,
+        actor_id: ActorId,
+        simulation: &mut Simulation,
+    ) -> AiStepResult {
+        let Some(goal) = simulation.autonomous_movement_goal(actor_id) else {
+            return AiStepResult::idle();
+        };
+
+        let Ok(outcome) = simulation.move_actor_to_reachable(actor_id, goal) else {
+            return AiStepResult::idle();
+        };
+
+        if outcome.result.success && outcome.plan.resolved_steps() > 0 {
+            AiStepResult::performed()
+        } else {
+            AiStepResult::idle()
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct InteractOnceAiController;
 
 impl AiController for InteractOnceAiController {
@@ -125,5 +150,40 @@ impl ActorRegistry {
 
     pub fn contains(&self, actor_id: ActorId) -> bool {
         self.actors.contains_key(&actor_id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FollowGridGoalAiController;
+    use crate::{AiController, RegisterActor, Simulation};
+    use game_data::{ActorKind, ActorSide, GridCoord};
+
+    #[test]
+    fn follow_grid_goal_ai_moves_actor_toward_registered_goal() {
+        let mut simulation = Simulation::new();
+
+        let actor_id = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "guard".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.0,
+            ai_controller: None,
+        });
+        simulation.set_actor_ap(actor_id, 2.0);
+        simulation.set_actor_autonomous_movement_goal(actor_id, GridCoord::new(2, 0, 0));
+
+        let mut controller = FollowGridGoalAiController;
+        let result = controller.execute_turn_step(actor_id, &mut simulation);
+
+        assert!(result.performed);
+        assert_eq!(
+            simulation.actor_grid_position(actor_id),
+            Some(GridCoord::new(1, 0, 0))
+        );
     }
 }

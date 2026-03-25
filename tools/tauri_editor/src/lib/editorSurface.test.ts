@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRequestedDocumentKey, resolveEditorSurface } from "./editorSurface";
+import { getRequestedDocumentKey, getRequestedSettingsSection, resolveEditorSurface } from "./editorSurface";
 
 describe("editorSurface", () => {
   it("prefers the dedicated map-editor surface from query string", () => {
@@ -18,6 +18,14 @@ describe("editorSurface", () => {
     expect(resolveEditorSurface({ label: "narrative-lab" })).toBe("narrative-lab");
   });
 
+  it("prefers the dedicated settings surface from query string", () => {
+    expect(resolveEditorSurface({ search: "?surface=settings&section=ai" })).toBe("settings");
+  });
+
+  it("falls back to settings surface when the current label is settings", () => {
+    expect(resolveEditorSurface({ label: "settings" })).toBe("settings");
+  });
+
   it("defaults to the main surface otherwise", () => {
     expect(resolveEditorSurface({ search: "?surface=main" })).toBe("main");
   });
@@ -26,5 +34,15 @@ describe("editorSurface", () => {
     expect(getRequestedDocumentKey("?surface=map-editor&documentKey=safehouse_grid")).toBe(
       "safehouse_grid",
     );
+  });
+
+  it("reads the requested settings section from the query string", () => {
+    expect(getRequestedSettingsSection("?surface=settings&section=narrative-sync")).toBe(
+      "narrative-sync",
+    );
+  });
+
+  it("falls back to ai settings section for invalid input", () => {
+    expect(getRequestedSettingsSection("?surface=settings&section=invalid")).toBe("ai");
   });
 });

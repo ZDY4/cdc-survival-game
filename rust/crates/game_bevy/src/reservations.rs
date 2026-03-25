@@ -14,14 +14,19 @@ impl SmartObjectReservations {
         self.capacities.clear();
         for (_settlement_id, settlement) in settlements.iter() {
             for object in &settlement.smart_objects {
-                self.capacities.insert(object.id.clone(), object.capacity.max(1));
+                self.capacities
+                    .insert(object.id.clone(), object.capacity.max(1));
             }
         }
         self.active
             .retain(|object_id, _owners| self.capacities.contains_key(object_id));
     }
 
-    pub fn try_acquire(&mut self, object_id: &str, owner: Entity) -> Result<(), ReservationConflict> {
+    pub fn try_acquire(
+        &mut self,
+        object_id: &str,
+        owner: Entity,
+    ) -> Result<(), ReservationConflict> {
         let capacity = self.capacities.get(object_id).copied().unwrap_or(1);
         let owners = self.active.entry(object_id.to_string()).or_default();
         if owners.contains(&owner) {

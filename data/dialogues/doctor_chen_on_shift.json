@@ -1,0 +1,50 @@
+{
+  "dialog_id": "doctor_chen_on_shift",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Clinic Shift",
+      "speaker": "陈医生",
+      "text": "我这边还在轮值。要补给就快一点，外面随时可能再送伤员进来。",
+      "portrait": "res://assets/portraits/doctor.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "交易",
+          "next": "trade_action"
+        },
+        {
+          "text": "离开",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

@@ -2680,9 +2680,10 @@ dependencies = [
  "bevy_app",
  "dogoap",
  "game_data",
- "game_protocol",
+ "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
@@ -2700,6 +2701,7 @@ name = "game_protocol"
 version = "0.1.0"
 dependencies = [
  "bevy_app",
+ "game_core",
  "game_data",
  "serde",
  "serde_json",

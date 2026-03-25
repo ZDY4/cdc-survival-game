@@ -12,7 +12,8 @@ pub fn build_action_set_for_context(context: &NpcPlanningContext) -> Vec<Action>
     let request = &context.request;
     let mut actions = common_life_actions(context);
 
-    if request.duty_anchor.is_some() && context.is_anchor_reachable(request.duty_anchor.as_deref()) {
+    if request.duty_anchor.is_some() && context.is_anchor_reachable(request.duty_anchor.as_deref())
+    {
         actions.push(
             Action::new(action_name(NpcActionKey::TravelToDutyArea))
                 .with_precondition(("at_duty_area", Compare::not_equals(true)))
@@ -251,7 +252,9 @@ fn common_life_actions(context: &NpcPlanningContext) -> Vec<Action> {
     let request = &context.request;
     let mut actions = Vec::new();
 
-    if request.canteen_anchor.is_some() && context.is_anchor_reachable(request.canteen_anchor.as_deref()) {
+    if request.canteen_anchor.is_some()
+        && context.is_anchor_reachable(request.canteen_anchor.as_deref())
+    {
         let mut travel_to_canteen = Action::new(action_name(NpcActionKey::TravelToCanteen))
             .with_mutator(Mutator::set("at_canteen", true))
             .with_mutator(Mutator::set("at_home", false))
@@ -277,7 +280,9 @@ fn common_life_actions(context: &NpcPlanningContext) -> Vec<Action> {
         );
     }
 
-    if request.leisure_anchor.is_some() && context.is_anchor_reachable(request.leisure_anchor.as_deref()) {
+    if request.leisure_anchor.is_some()
+        && context.is_anchor_reachable(request.leisure_anchor.as_deref())
+    {
         actions.push(
             Action::new(action_name(NpcActionKey::TravelToLeisure))
                 .with_mutator(Mutator::set("at_leisure", true))
@@ -293,7 +298,8 @@ fn common_life_actions(context: &NpcPlanningContext) -> Vec<Action> {
         );
     }
 
-    if request.home_anchor.is_some() && context.is_anchor_reachable(request.home_anchor.as_deref()) {
+    if request.home_anchor.is_some() && context.is_anchor_reachable(request.home_anchor.as_deref())
+    {
         actions.push(
             Action::new(action_name(NpcActionKey::TravelHome))
                 .with_precondition(("at_home", Compare::not_equals(true)))
@@ -323,7 +329,9 @@ fn common_life_actions(context: &NpcPlanningContext) -> Vec<Action> {
         );
     }
 
-    if request.alarm_anchor.is_some() && context.is_anchor_reachable(request.alarm_anchor.as_deref()) {
+    if request.alarm_anchor.is_some()
+        && context.is_anchor_reachable(request.alarm_anchor.as_deref())
+    {
         actions.push(
             Action::new(action_name(NpcActionKey::RaiseAlarm))
                 .with_precondition(("threat_detected", Compare::equals(true)))

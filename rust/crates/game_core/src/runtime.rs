@@ -1,12 +1,14 @@
-use game_data::{
-    ActionResult, ActionType, ActorId, ActorSide, GridCoord, InteractionExecutionRequest,
-    InteractionExecutionResult, InteractionOptionId, InteractionPrompt, InteractionTargetId,
-    ItemLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldCoord,
-};
+use std::collections::BTreeSet;
 
-use crate::economy::{
-    CraftOutcome, EconomyRuntimeError, HeadlessEconomyRuntime, TradeOutcome,
+use game_data::{
+    ActionResult, ActionType, ActorId, ActorSide, CharacterId, GridCoord,
+    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionId,
+    InteractionPrompt, InteractionTargetId, ItemLibrary, MapLibrary, OverworldLibrary,
+    QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldCoord, WorldMode,
 };
+use tracing::{info, warn};
+
+use crate::economy::{CraftOutcome, EconomyRuntimeError, HeadlessEconomyRuntime, TradeOutcome};
 use crate::grid::GridPathfindingError;
 use crate::movement::{
     AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
@@ -14,8 +16,10 @@ use crate::movement::{
     ProgressionAdvanceResult,
 };
 use crate::simulation::{
-    Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent, SimulationSnapshot,
+    RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
+    SimulationSnapshot,
 };
+use crate::{NpcBackgroundState, NpcRuntimeActionState};
 
 #[derive(Debug)]
 pub struct SimulationRuntime {
@@ -55,6 +59,61 @@ impl SimulationRuntime {
 
     pub fn set_item_library(&mut self, items: ItemLibrary) {
         self.simulation.set_item_library(items);
+    }
+
+    pub fn set_map_library(&mut self, maps: MapLibrary) {
+        self.simulation.set_map_library(maps);
+    }
+
+    pub fn set_overworld_library(&mut self, overworld: OverworldLibrary) {
+        self.simulation.set_overworld_library(overworld);
+    }
+
+    pub fn seed_overworld_state(
+        &mut self,
+        world_mode: WorldMode,
+        active_location_id: Option<String>,
+        entry_point_id: Option<String>,
+        unlocked_locations: impl IntoIterator<Item = String>,
+    ) -> Result<(), String> {
+        self.simulation.seed_overworld_state(
+            world_mode,
+            active_location_id,
+            entry_point_id,
+            unlocked_locations,
+        )
+    }
+
+    pub fn register_actor(&mut self, params: RegisterActor) -> ActorId {
+        self.simulation.register_actor(params)
+    }
+
+    pub fn unregister_actor(&mut self, actor_id: ActorId) {
+        self.clear_pending_movement_internal(None);
+        self.simulation.unregister_actor(actor_id);
+    }
+
+    pub fn seed_actor_progression(&mut self, actor_id: ActorId, level: i32, xp_reward: i32) {
+        self.simulation
+            .seed_actor_progression(actor_id, level, xp_reward);
+    }
+
+    pub fn seed_actor_combat_profile(
+        &mut self,
+        actor_id: ActorId,
+        combat_attributes: std::collections::BTreeMap<String, f32>,
+        resources: std::collections::BTreeMap<String, game_data::CharacterResourcePool>,
+    ) {
+        self.simulation
+            .seed_actor_combat_profile(actor_id, combat_attributes, resources);
+    }
+
+    pub fn seed_actor_loot_table(
+        &mut self,
+        actor_id: ActorId,
+        loot: Vec<game_data::CharacterLootEntry>,
+    ) {
+        self.simulation.seed_actor_loot_table(actor_id, loot);
     }
 
     pub fn set_quest_library(&mut self, quests: QuestLibrary) {
@@ -101,6 +160,10 @@ impl SimulationRuntime {
 
     pub fn drain_events(&mut self) -> Vec<SimulationEvent> {
         self.simulation.drain_events()
+    }
+
+    pub fn push_event(&mut self, event: SimulationEvent) {
+        self.simulation.push_event(event);
     }
 
     pub fn snapshot(&self) -> SimulationSnapshot {
@@ -253,6 +316,88 @@ impl SimulationRuntime {
         self.simulation.get_actor_group_id(actor_id)
     }
 
+    pub fn get_actor_definition_id(&self, actor_id: ActorId) -> Option<&CharacterId> {
+        self.simulation.get_actor_definition_id(actor_id)
+    }
+
+    pub fn set_actor_autonomous_movement_goal(&mut self, actor_id: ActorId, goal: GridCoord) {
+        self.simulation
+            .set_actor_autonomous_movement_goal(actor_id, goal);
+    }
+
+    pub fn clear_actor_autonomous_movement_goal(&mut self, actor_id: ActorId) {
+        self.simulation
+            .clear_actor_autonomous_movement_goal(actor_id);
+    }
+
+    pub fn get_actor_autonomous_movement_goal(&self, actor_id: ActorId) -> Option<GridCoord> {
+        self.simulation.get_actor_autonomous_movement_goal(actor_id)
+    }
+
+    pub fn set_actor_runtime_action_state(
+        &mut self,
+        actor_id: ActorId,
+        state: NpcRuntimeActionState,
+    ) {
+        self.simulation.set_actor_runtime_action_state(actor_id, state);
+    }
+
+    pub fn get_actor_runtime_action_state(
+        &self,
+        actor_id: ActorId,
+    ) -> Option<&NpcRuntimeActionState> {
+        self.simulation.get_actor_runtime_action_state(actor_id)
+    }
+
+    pub fn clear_actor_runtime_action_state(&mut self, actor_id: ActorId) {
+        self.simulation.clear_actor_runtime_action_state(actor_id);
+    }
+
+    pub fn export_actor_background_state(&self, actor_id: ActorId) -> Option<NpcBackgroundState> {
+        self.simulation.export_actor_background_state(actor_id)
+    }
+
+    pub fn import_actor_background_state(
+        &mut self,
+        actor_id: ActorId,
+        background: &NpcBackgroundState,
+    ) {
+        self.simulation.import_actor_background_state(actor_id, background);
+    }
+
+    pub fn active_quest_ids_for_actor(&self, actor_id: ActorId) -> BTreeSet<String> {
+        self.simulation.active_quest_ids_for_actor(actor_id)
+    }
+
+    pub fn completed_quest_ids(&self) -> BTreeSet<String> {
+        self.simulation.completed_quest_ids()
+    }
+
+    pub fn get_relationship_score(&self, actor_id: ActorId, target_actor_id: ActorId) -> i32 {
+        self.simulation
+            .get_relationship_score(actor_id, target_actor_id)
+    }
+
+    pub fn set_relationship_score(
+        &mut self,
+        actor_id: ActorId,
+        target_actor_id: ActorId,
+        score: i32,
+    ) -> i32 {
+        self.simulation
+            .set_relationship_score(actor_id, target_actor_id, score)
+    }
+
+    pub fn adjust_relationship_score(
+        &mut self,
+        actor_id: ActorId,
+        target_actor_id: ActorId,
+        delta: i32,
+    ) -> i32 {
+        self.simulation
+            .adjust_relationship_score(actor_id, target_actor_id, delta)
+    }
+
     pub fn actor_turn_open(&self, actor_id: ActorId) -> bool {
         self.simulation.actor_turn_open(actor_id)
     }
@@ -323,7 +468,15 @@ impl SimulationRuntime {
         target_id: InteractionTargetId,
         option_id: InteractionOptionId,
     ) -> InteractionExecutionResult {
+        info!(
+            "core.interaction.issue actor={actor_id:?} target={target_id:?} option_id={}",
+            option_id.as_str()
+        );
         if let Err(error) = self.ensure_player_input_actor(actor_id) {
+            warn!(
+                "core.interaction.issue_rejected actor={actor_id:?} target={target_id:?} option_id={} reason={error}",
+                option_id.as_str()
+            );
             return InteractionExecutionResult {
                 success: false,
                 reason: Some(movement_plan_error_reason(&error).to_string()),
@@ -339,30 +492,73 @@ impl SimulationRuntime {
             target_id: target_id.clone(),
             option_id: option_id.clone(),
         };
-        let result = match self
+        let command_result = self
             .simulation
-            .apply_command(SimulationCommand::ExecuteInteraction(request.clone()))
-        {
+            .apply_command(SimulationCommand::ExecuteInteraction(request.clone()));
+        let result = match command_result {
             SimulationCommandResult::InteractionExecution(result) => result,
-            _ => InteractionExecutionResult {
-                success: false,
-                reason: Some("interaction_execution_unavailable".to_string()),
-                ..InteractionExecutionResult::default()
-            },
+            _ => {
+                warn!(
+                    "core.interaction.issue_unavailable actor={actor_id:?} target={target_id:?} option_id={}",
+                    option_id.as_str()
+                );
+                InteractionExecutionResult {
+                    success: false,
+                    reason: Some("interaction_execution_unavailable".to_string()),
+                    ..InteractionExecutionResult::default()
+                }
+            }
         };
 
         if result.approach_required {
             if let Some(goal) = result.approach_goal {
+                info!(
+                    "core.interaction.approach_required actor={actor_id:?} target={target_id:?} option_id={} goal=({}, {}, {})",
+                    option_id.as_str(),
+                    goal.x,
+                    goal.y,
+                    goal.z
+                );
                 match self.issue_actor_move(actor_id, goal) {
                     Ok(outcome) if outcome.result.success => {
                         self.pending_interaction = Some(PendingInteractionIntent {
                             actor_id,
-                            target_id,
+                            target_id: target_id.clone(),
                             option_id: option_id.as_str().to_string(),
                             approach_goal: goal,
                         });
+                        info!(
+                            "core.interaction.approach_dispatched actor={actor_id:?} target={target_id:?} option_id={} resolved_goal=({}, {}, {})",
+                            option_id.as_str(),
+                            goal.x,
+                            goal.y,
+                            goal.z
+                        );
+                        if self.pending_movement.is_none() {
+                            info!(
+                                "core.interaction.approach_completed_immediately actor={actor_id:?} target={target_id:?} option_id={} goal=({}, {}, {})",
+                                option_id.as_str(),
+                                goal.x,
+                                goal.y,
+                                goal.z
+                            );
+                            if let Some(resumed_result) =
+                                self.execute_pending_interaction_after_movement()
+                            {
+                                return resumed_result;
+                            }
+                        }
                     }
                     Ok(outcome) => {
+                        warn!(
+                            "core.interaction.approach_failed actor={actor_id:?} target={target_id:?} option_id={} reason={}",
+                            option_id.as_str(),
+                            outcome
+                                .result
+                                .reason
+                                .as_deref()
+                                .unwrap_or("approach_move_rejected")
+                        );
                         return InteractionExecutionResult {
                             success: false,
                             reason: outcome.result.reason.clone(),
@@ -372,6 +568,10 @@ impl SimulationRuntime {
                         };
                     }
                     Err(error) => {
+                        warn!(
+                            "core.interaction.approach_failed actor={actor_id:?} target={target_id:?} option_id={} reason={error}",
+                            option_id.as_str()
+                        );
                         return InteractionExecutionResult {
                             success: false,
                             reason: Some(error.to_string()),
@@ -400,20 +600,10 @@ impl SimulationRuntime {
         actor_id: ActorId,
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
-        let plan = self.plan_actor_movement(actor_id, goal)?;
-        self.path_preview = plan.requested_path.clone();
-
-        let result = if plan.requested_steps() == 0 {
-            let ap = self.simulation.get_actor_ap(actor_id);
-            ActionResult::accepted(ap, ap, 0.0, self.simulation.is_in_combat())
-        } else if plan.resolved_steps() == 0 {
-            let ap = self.simulation.get_actor_ap(actor_id);
-            ActionResult::rejected("insufficient_ap", ap, ap, self.simulation.is_in_combat())
-        } else {
-            self.simulation.move_actor_to(actor_id, plan.resolved_goal)
-        };
-
-        Ok(MovementCommandOutcome { plan, result })
+        self.ensure_player_input_actor(actor_id)?;
+        let outcome = self.simulation.move_actor_to_reachable(actor_id, goal)?;
+        self.path_preview = outcome.plan.requested_path.clone();
+        Ok(outcome)
     }
 
     pub fn issue_actor_move(
@@ -474,7 +664,7 @@ impl SimulationRuntime {
         if step == PendingProgressionStep::ContinuePendingMovement {
             let result = self.advance_pending_movement();
             if result.reached_goal {
-                self.execute_pending_interaction_after_movement();
+                let _ = self.execute_pending_interaction_after_movement();
             }
             return result;
         }
@@ -678,19 +868,40 @@ impl SimulationRuntime {
         }
     }
 
-    fn execute_pending_interaction_after_movement(&mut self) {
+    fn execute_pending_interaction_after_movement(&mut self) -> Option<InteractionExecutionResult> {
         let Some(intent) = self.pending_interaction.clone() else {
-            return;
+            return None;
         };
+        info!(
+            "core.interaction.resume actor={:?} target={:?} option_id={} goal=({}, {}, {})",
+            intent.actor_id,
+            intent.target_id,
+            intent.option_id,
+            intent.approach_goal.x,
+            intent.approach_goal.y,
+            intent.approach_goal.z
+        );
+        let resume_target_id = intent.target_id.clone();
+        let resume_option_id = intent.option_id.clone();
         let request = InteractionExecutionRequest {
             actor_id: intent.actor_id,
-            target_id: intent.target_id,
-            option_id: InteractionOptionId(intent.option_id),
+            target_id: resume_target_id.clone(),
+            option_id: InteractionOptionId(resume_option_id.clone()),
         };
-        let _ = self
+        let result = self
             .simulation
             .apply_command(SimulationCommand::ExecuteInteraction(request));
         self.pending_interaction = None;
+        match result {
+            SimulationCommandResult::InteractionExecution(result) => Some(result),
+            _ => {
+                warn!(
+                    "core.interaction.resume_unavailable actor={:?} target={:?} option_id={}",
+                    intent.actor_id, resume_target_id, resume_option_id
+                );
+                None
+            }
+        }
     }
 
     fn ensure_player_input_actor(&self, actor_id: ActorId) -> Result<(), MovementPlanError> {
@@ -766,19 +977,21 @@ mod tests {
     use std::collections::BTreeMap;
 
     use game_data::{
-        ActionType, ActorKind, ActorSide, CharacterId, GridCoord, ItemDefinition, ItemFragment,
-        ItemLibrary,
-        MapDefinition, MapId, MapInteractiveProps, MapLevelDefinition, MapObjectDefinition,
-        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
-        QuestConnection, QuestDefinition, QuestFlow, QuestLibrary, QuestNode, QuestRewards,
-        RecipeDefinition, RecipeLibrary, RecipeMaterial, RecipeOutput, ShopDefinition,
-        ShopInventoryEntry, ShopLibrary, SkillDefinition, SkillLibrary,
+        ActionType, ActorKind, ActorSide, CharacterId, GridCoord, InteractionOptionId,
+        InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary, MapDefinition,
+        MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
+        MapRotation, MapSize, QuestConnection, QuestDefinition, QuestFlow, QuestLibrary,
+        QuestNode, QuestRewards, RecipeDefinition, RecipeLibrary, RecipeMaterial, RecipeOutput,
+        ShopDefinition, ShopInventoryEntry, ShopLibrary, SkillDefinition, SkillLibrary,
     };
 
     use super::SimulationRuntime;
     use crate::demo::create_demo_runtime;
     use crate::movement::{AutoMoveInterruptReason, PendingProgressionStep};
-    use crate::simulation::{RegisterActor, Simulation, SimulationCommand, SimulationCommandResult};
+    use crate::simulation::{
+        RegisterActor, Simulation, SimulationCommand, SimulationCommandResult,
+    };
 
     #[test]
     fn demo_runtime_boots_with_player_turn_open() {
@@ -1029,6 +1242,11 @@ mod tests {
             ai_controller: None,
         });
         let mut runtime = SimulationRuntime::from_simulation(simulation);
+        let set_ap = runtime.submit_command(SimulationCommand::SetActorAp {
+            actor_id: player,
+            ap: 2.0,
+        });
+        assert!(matches!(set_ap, SimulationCommandResult::None));
 
         let result = runtime.issue_interaction(
             player,
@@ -1038,6 +1256,48 @@ mod tests {
 
         assert!(result.success);
         assert_eq!(runtime.get_actor_inventory_count(player, "1005"), 2);
+    }
+
+    #[test]
+    fn issue_interaction_executes_immediately_after_synchronous_approach() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(2, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        let result = runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+
+        assert!(!result.approach_required);
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(1, 0, 1))
+        );
+        assert!(runtime.pending_interaction().is_none());
     }
 
     #[test]
@@ -1485,6 +1745,12 @@ mod tests {
             levels: vec![MapLevelDefinition {
                 y: 0,
                 cells: Vec::new(),
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(4, 0, 7),
+                facing: None,
+                extra: BTreeMap::new(),
             }],
             objects: vec![
                 MapObjectDefinition {

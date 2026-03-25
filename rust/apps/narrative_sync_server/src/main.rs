@@ -133,7 +133,9 @@ async fn list_workspaces(
     for entry in fs::read_dir(&state.data_root)
         .map_err(|error| AppError::internal(format!("failed to read data root: {error}")))?
     {
-        let entry = entry.map_err(|error| AppError::internal(format!("failed to enumerate data root: {error}")))?;
+        let entry = entry.map_err(|error| {
+            AppError::internal(format!("failed to enumerate data root: {error}"))
+        })?;
         let path = entry.path();
         if !path.is_dir() {
             continue;
@@ -410,24 +412,31 @@ fn mobile_ai_gateway_response(
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .build()
-        .map_err(|error| AppError::internal(format!("failed to build AI gateway client: {error}")))?;
+        .map_err(|error| {
+            AppError::internal(format!("failed to build AI gateway client: {error}"))
+        })?;
     let response = client
         .post(provider_url)
         .json(&payload.request)
         .send()
-        .map_err(|error| AppError::internal(format!("failed to call mobile AI gateway: {error}")))?;
+        .map_err(|error| {
+            AppError::internal(format!("failed to call mobile AI gateway: {error}"))
+        })?;
     let status = response.status();
-    let raw = response
-        .text()
-        .map_err(|error| AppError::internal(format!("failed to read AI gateway response: {error}")))?;
+    let raw = response.text().map_err(|error| {
+        AppError::internal(format!("failed to read AI gateway response: {error}"))
+    })?;
     if !status.is_success() {
-        return Err(AppError::internal(format!("mobile AI gateway returned {status}: {raw}")));
+        return Err(AppError::internal(format!(
+            "mobile AI gateway returned {status}: {raw}"
+        )));
     }
-    let parsed = serde_json::from_str::<serde_json::Value>(&raw)
-        .unwrap_or_else(|_| serde_json::json!(MobileAiGatewayResponse {
+    let parsed = serde_json::from_str::<serde_json::Value>(&raw).unwrap_or_else(|_| {
+        serde_json::json!(MobileAiGatewayResponse {
             ok: true,
             message: raw,
-        }));
+        })
+    });
     Ok(Json(parsed))
 }
 
@@ -487,7 +496,8 @@ fn apply_push_document(
                 local_revision: push.base_revision,
                 remote_revision: existing.revision,
                 conflict_doc_slug: conflict_slug,
-                message: "Remote revision advanced; stored local draft as conflict document.".to_string(),
+                message: "Remote revision advanced; stored local draft as conflict document."
+                    .to_string(),
             });
             return Ok(());
         }
@@ -533,7 +543,10 @@ fn load_or_init_workspace_record(
     Ok(record)
 }
 
-fn load_workspace_record(_state: &AppState, workspace_dir: &Path) -> Result<WorkspaceRecord, AppError> {
+fn load_workspace_record(
+    _state: &AppState,
+    workspace_dir: &Path,
+) -> Result<WorkspaceRecord, AppError> {
     if !workspace_dir.exists() {
         return Err(AppError::not_found("workspace not found"));
     }
@@ -542,16 +555,18 @@ fn load_workspace_record(_state: &AppState, workspace_dir: &Path) -> Result<Work
 
 fn load_workspace_record_from_dir(workspace_dir: &Path) -> Result<WorkspaceRecord, AppError> {
     let path = workspace_dir.join("workspace.json");
-    let raw = fs::read_to_string(&path)
-        .map_err(|error| AppError::internal(format!("failed to read {}: {error}", path.display())))?;
+    let raw = fs::read_to_string(&path).map_err(|error| {
+        AppError::internal(format!("failed to read {}: {error}", path.display()))
+    })?;
     serde_json::from_str(&raw)
         .map_err(|error| AppError::internal(format!("failed to parse {}: {error}", path.display())))
 }
 
 fn save_workspace_record(workspace_dir: &Path, record: &WorkspaceRecord) -> Result<(), AppError> {
     ensure_workspace_layout(workspace_dir)?;
-    let raw = serde_json::to_string_pretty(record)
-        .map_err(|error| AppError::internal(format!("failed to serialize workspace record: {error}")))?;
+    let raw = serde_json::to_string_pretty(record).map_err(|error| {
+        AppError::internal(format!("failed to serialize workspace record: {error}"))
+    })?;
     fs::write(workspace_dir.join("workspace.json"), raw)
         .map_err(|error| AppError::internal(format!("failed to write workspace record: {error}")))
 }
@@ -567,15 +582,19 @@ fn load_workspace_documents(
     for entry in fs::read_dir(&docs_dir)
         .map_err(|error| AppError::internal(format!("failed to read docs dir: {error}")))?
     {
-        let entry = entry.map_err(|error| AppError::internal(format!("failed to enumerate docs dir: {error}")))?;
+        let entry = entry.map_err(|error| {
+            AppError::internal(format!("failed to enumerate docs dir: {error}"))
+        })?;
         let path = entry.path();
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
             continue;
         }
-        let raw = fs::read_to_string(&path)
-            .map_err(|error| AppError::internal(format!("failed to read {}: {error}", path.display())))?;
-        let document: CloudNarrativeDocument = serde_json::from_str(&raw)
-            .map_err(|error| AppError::internal(format!("failed to parse {}: {error}", path.display())))?;
+        let raw = fs::read_to_string(&path).map_err(|error| {
+            AppError::internal(format!("failed to read {}: {error}", path.display()))
+        })?;
+        let document: CloudNarrativeDocument = serde_json::from_str(&raw).map_err(|error| {
+            AppError::internal(format!("failed to parse {}: {error}", path.display()))
+        })?;
         documents.insert(document.doc_id.clone(), document);
     }
     Ok(documents)
@@ -596,10 +615,12 @@ fn load_latest_snapshot_if_exists(
     if !path.exists() {
         return Ok(None);
     }
-    let raw = fs::read_to_string(&path)
-        .map_err(|error| AppError::internal(format!("failed to read {}: {error}", path.display())))?;
-    let snapshot = serde_json::from_str(&raw)
-        .map_err(|error| AppError::internal(format!("failed to parse {}: {error}", path.display())))?;
+    let raw = fs::read_to_string(&path).map_err(|error| {
+        AppError::internal(format!("failed to read {}: {error}", path.display()))
+    })?;
+    let snapshot = serde_json::from_str(&raw).map_err(|error| {
+        AppError::internal(format!("failed to parse {}: {error}", path.display()))
+    })?;
     Ok(Some(snapshot))
 }
 

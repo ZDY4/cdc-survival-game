@@ -1,0 +1,50 @@
+{
+  "dialog_id": "doctor_chen_medical",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Medical Priority",
+      "speaker": "陈医生",
+      "text": "先别逞强，你这伤势得马上处理。坐下，我先给你止血。",
+      "portrait": "res://assets/portraits/doctor.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "看看药品",
+          "next": "trade_action"
+        },
+        {
+          "text": "我还能撑住",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

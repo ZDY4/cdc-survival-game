@@ -303,9 +303,7 @@ export function MapEditorWindow() {
     <div className="map-editor-window">
       <header className="map-editor-header">
         <div>
-          <p className="eyebrow">Map Editor</p>
           <h1>{editor.selectedDocument?.map.id || "No map selected"}</h1>
-          <p className="shell-copy">Dedicated Tauri 2 window for focused map authoring.</p>
         </div>
         <div className="map-editor-header-actions">
           <button

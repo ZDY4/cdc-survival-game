@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    CharacterDefinition, CharacterId, CharacterLibrary, NpcRole, SettlementDefinition,
-    ScheduleDay, SettlementId, SettlementLibrary, SmartObjectKind,
+    CharacterDefinition, CharacterId, CharacterLibrary, NpcRole, ScheduleDay, SettlementDefinition,
+    SettlementId, SettlementLibrary, SmartObjectKind,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,7 +129,11 @@ fn validate_character_life_profile(
         return;
     };
 
-    if !settlement.anchors.iter().any(|anchor| anchor.id == life.home_anchor) {
+    if !settlement
+        .anchors
+        .iter()
+        .any(|anchor| anchor.id == life.home_anchor)
+    {
         issues.push(AiContentIssue::error(
             "missing_home_anchor",
             Some(settlement.id.as_str().to_string()),
@@ -239,7 +243,11 @@ fn validate_guard_coverage(
                             && life.schedule.iter().any(|block| {
                                 block.day == day
                                     && block.tags.iter().any(|tag| tag == "shift")
-                                    && minute_in_window(minute as u16, block.start_minute, block.end_minute)
+                                    && minute_in_window(
+                                        minute as u16,
+                                        block.start_minute,
+                                        block.end_minute,
+                                    )
                             })
                     })
                     .count() as u32;
@@ -279,9 +287,9 @@ mod tests {
         CharacterCombatProfile, CharacterDefinition, CharacterDisposition, CharacterFaction,
         CharacterId, CharacterIdentity, CharacterLibrary, CharacterLifeProfile,
         CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
-        CharacterResourcePool, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay,
-        ServiceRules, SettlementAnchorDefinition, SettlementDefinition, SettlementId,
-        SettlementLibrary, SettlementRouteDefinition, SmartObjectDefinition, SmartObjectKind,
+        CharacterResourcePool, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay, ServiceRules,
+        SettlementAnchorDefinition, SettlementDefinition, SettlementId, SettlementLibrary,
+        SettlementRouteDefinition, SmartObjectDefinition, SmartObjectKind,
     };
 
     #[test]
@@ -333,9 +341,15 @@ mod tests {
 
         let issues = validate_ai_content(&characters, &settlements);
 
-        assert!(issues.iter().any(|issue| issue.code == "missing_duty_route"));
-        assert!(issues.iter().any(|issue| issue.code == "missing_role_object"));
-        assert!(issues.iter().any(|issue| issue.code == "route_not_meaningful"));
+        assert!(issues
+            .iter()
+            .any(|issue| issue.code == "missing_duty_route"));
+        assert!(issues
+            .iter()
+            .any(|issue| issue.code == "missing_role_object"));
+        assert!(issues
+            .iter()
+            .any(|issue| issue.code == "route_not_meaningful"));
     }
 
     #[test]

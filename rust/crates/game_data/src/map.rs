@@ -45,6 +45,8 @@ pub struct MapDefinition {
     #[serde(default)]
     pub levels: Vec<MapLevelDefinition>,
     #[serde(default)]
+    pub entry_points: Vec<MapEntryPointDefinition>,
+    #[serde(default)]
     pub objects: Vec<MapObjectDefinition>,
 }
 
@@ -65,6 +67,16 @@ pub struct MapCellDefinition {
     pub blocks_sight: bool,
     #[serde(default)]
     pub terrain: String,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MapEntryPointDefinition {
+    pub id: String,
+    pub grid: GridCoord,
+    #[serde(default)]
+    pub facing: Option<String>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -315,6 +327,23 @@ pub enum MapDefinitionValidationError {
     MissingDefaultLevel { y: i32 },
     #[error("duplicate level y {y}")]
     DuplicateLevel { y: i32 },
+    #[error("entry point id must not be empty")]
+    MissingEntryPointId,
+    #[error("duplicate entry point id {entry_point_id}")]
+    DuplicateEntryPointId { entry_point_id: String },
+    #[error("entry point {entry_point_id} uses missing level {y}")]
+    UnknownEntryPointLevel { entry_point_id: String, y: i32 },
+    #[error(
+        "entry point {entry_point_id} grid ({x}, {y}, {z}) is outside map bounds {width}x{height}"
+    )]
+    EntryPointOutOfBounds {
+        entry_point_id: String,
+        x: i32,
+        y: i32,
+        z: i32,
+        width: u32,
+        height: u32,
+    },
     #[error("duplicate cell at ({x}, {y}, {z})")]
     DuplicateCell { x: u32, y: i32, z: u32 },
     #[error("cell ({x}, {y}, {z}) is outside map bounds {width}x{height}")]
@@ -503,6 +532,7 @@ pub fn validate_map_definition(
 
     let mut levels = BTreeSet::new();
     let mut seen_cells = HashSet::new();
+    let mut seen_entry_points = HashSet::new();
     for level in &definition.levels {
         if !levels.insert(level.y) {
             return Err(MapDefinitionValidationError::DuplicateLevel { y: level.y });
@@ -533,6 +563,33 @@ pub fn validate_map_definition(
         return Err(MapDefinitionValidationError::MissingDefaultLevel {
             y: definition.default_level,
         });
+    }
+
+    for entry_point in &definition.entry_points {
+        if entry_point.id.trim().is_empty() {
+            return Err(MapDefinitionValidationError::MissingEntryPointId);
+        }
+        if !seen_entry_points.insert(entry_point.id.clone()) {
+            return Err(MapDefinitionValidationError::DuplicateEntryPointId {
+                entry_point_id: entry_point.id.clone(),
+            });
+        }
+        if !levels.contains(&entry_point.grid.y) {
+            return Err(MapDefinitionValidationError::UnknownEntryPointLevel {
+                entry_point_id: entry_point.id.clone(),
+                y: entry_point.grid.y,
+            });
+        }
+        if !grid_in_bounds(entry_point.grid, definition.size) {
+            return Err(MapDefinitionValidationError::EntryPointOutOfBounds {
+                entry_point_id: entry_point.id.clone(),
+                x: entry_point.grid.x,
+                y: entry_point.grid.y,
+                z: entry_point.grid.z,
+                width: definition.size.width,
+                height: definition.size.height,
+            });
+        }
     }
 
     let mut seen_object_ids = HashSet::new();
@@ -825,9 +882,10 @@ fn validate_interaction_option(
 mod tests {
     use super::{
         expand_object_footprint, load_map_library, validate_map_definition, MapAiSpawnProps,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapDefinitionValidationError, MapId,
-        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
-        MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapDefinitionValidationError,
+        MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectDefinition,
+        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
+        MapValidationCatalog,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;
@@ -957,6 +1015,12 @@ mod tests {
                     cells: Vec::new(),
                 },
             ],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
             objects,
         }
     }

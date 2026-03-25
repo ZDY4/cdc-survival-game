@@ -37,11 +37,7 @@ fn main() {
         }
         println!(
             "[{}] {} settlement={:?} character={:?} {}",
-            issue.severity,
-            issue.code,
-            issue.settlement_id,
-            issue.character_id,
-            issue.message,
+            issue.severity, issue.code, issue.settlement_id, issue.character_id, issue.message,
         );
     }
 

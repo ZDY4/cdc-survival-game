@@ -688,14 +688,21 @@ fn format_ai_panel(runtime_state: &ViewerRuntimeState) -> String {
             .collect::<Vec<_>>()
             .join(", ");
         lines.push(format!(
-            "entity={:?} role={:?} goal={:?} action={:?}/{:?} anchor={:?} reservations={:?}",
+            "entity={:?} mode={:?} actor={:?} role={:?} goal={:?} action={:?}/{:?}",
             entry.entity,
+            entry.execution_mode,
+            entry.runtime_actor_id,
             entry.role,
             entry.goal,
             entry.action,
             entry.action_phase,
+        ));
+        lines.push(format!(
+            "anchor={:?} goal_grid={:?} reservations={:?} failure={:?}",
             entry.current_anchor,
-            entry.reservations
+            entry.runtime_goal_grid,
+            entry.reservations,
+            entry.last_failure_reason
         ));
         lines.push(format!(
             "needs(h/e/m)={}/{}/{} on_shift={} meal_window_open={} plan={}/{}",
@@ -722,11 +729,11 @@ fn format_controls_help() -> String {
             "H toggle HUD".to_string(),
             "/ toggle detailed help".to_string(),
             "[ / ] switch event filter on Events page".to_string(),
-            "Left click cancels auto-move, selects actor, executes target primary interaction, or moves".to_string(),
-            "Right click target opens the interaction list".to_string(),
-            "E execute primary interaction".to_string(),
-            "1-9 choose interaction option or dialogue choice".to_string(),
-            "Enter advance dialogue".to_string(),
+            "Left click cancels auto-move, selects actor, advances dialogue, or moves".to_string(),
+            "Right click target opens the interaction button menu".to_string(),
+            "Mouse click triggers scene interactions".to_string(),
+            "1-9 choose dialogue choice".to_string(),
+            "Space / Enter advance dialogue".to_string(),
             "Esc close dialogue".to_string(),
             "Space cancels auto-move, otherwise ends turn (hold to repeat)".to_string(),
             "Middle mouse drag pans camera".to_string(),
@@ -746,13 +753,13 @@ pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
             "F1-6切页 · H隐藏HUD · /帮助 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
         }
         ViewerHudPage::SelectedActor => {
-            "F1-6切页 · H隐藏HUD · /帮助 · Tab切换角色 · 左键选中/交互/移动 · 右键打开交互列表"
+            "F1-6切页 · H隐藏HUD · /帮助 · Tab切换角色 · 左键选中/交互/移动 · 右键打开交互菜单"
         }
         ViewerHudPage::World => {
             "F1-6切页 · H隐藏HUD · /帮助 · 悬停看格子 · 中键拖拽 · 滚轮缩放 · F回中"
         }
         ViewerHudPage::Interaction => {
-            "F1-6切页 · H隐藏HUD · /帮助 · 左键主交互 · 右键看列表 · E主交互 · 1-9选项"
+            "F1-6切页 · H隐藏HUD · /帮助 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
         }
         ViewerHudPage::Events => "F1-6切页 · H隐藏HUD · /帮助 · [ / ]切过滤器",
         ViewerHudPage::Ai => "F1-6切页 · H隐藏HUD · /帮助 · 查看 AI 目标 / 动作 / 预订 / 班次",

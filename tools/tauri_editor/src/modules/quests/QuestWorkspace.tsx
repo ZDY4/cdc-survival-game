@@ -19,13 +19,12 @@ import {
 } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
-import { ValidationPanel } from "../../components/ValidationPanel";
 import type { GraphSelection } from "../../graph-kit/types";
+import { openOrFocusSettingsWindow } from "../../lib/editorWindows";
 import { invokeCommand } from "../../lib/tauri";
 import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
 import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
-  AiConnectionTestResult,
   AiDraftPayload,
   AiGenerationResponse,
   AiSettings,
@@ -67,6 +66,7 @@ type QuestWorkspaceProps = {
 };
 
 type QuestViewMode = "relationship" | "flow";
+type QuestInspectorMode = "quest" | "node" | "validation";
 
 function createDraftQuest(nextId: string): QuestData {
   return questFlowGraphAdapter.normalizeDocument({
@@ -225,6 +225,7 @@ export function QuestWorkspace({
   const [searchText, setSearchText] = useState("");
   const [busy, setBusy] = useState(false);
   const [viewMode, setViewMode] = useState<QuestViewMode>("relationship");
+  const [inspectorMode, setInspectorMode] = useState<QuestInspectorMode>("quest");
   const [flowSelection, setFlowSelection] = useState<GraphSelection>({ nodeId: null, edgeId: null });
   const [relationshipSelection, setRelationshipSelection] = useState<GraphSelection>({
     nodeId: null,
@@ -245,6 +246,7 @@ export function QuestWorkspace({
     setSelectedKey(workspace.documents[0]?.documentKey ?? "");
     setFlowSelection({ nodeId: null, edgeId: null });
     setRelationshipSelection({ nodeId: null, edgeId: null });
+    setInspectorMode("quest");
   }, [workspace]);
 
   useEffect(() => {
@@ -274,6 +276,12 @@ export function QuestWorkspace({
       setSelectedKey(relationshipSelection.nodeId);
     }
   }, [relationshipSelection.nodeId, viewMode]);
+
+  useEffect(() => {
+    if (viewMode === "flow" && flowSelection.nodeId) {
+      setInspectorMode("node");
+    }
+  }, [flowSelection.nodeId, viewMode]);
 
   const filteredDocuments = useMemo(
     () =>
@@ -672,9 +680,376 @@ export function QuestWorkspace({
 
   function GraphLoadingFallback() {
     return (
-      <div className="empty-state">
-        <Badge tone="muted">Graph</Badge>
+      <div className="workspace-empty settings-empty-inline">
         <p>Loading graph editor...</p>
+      </div>
+    );
+  }
+
+  function renderQuestInspector() {
+    if (!selectedDocument) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <p>Select a quest to inspect its properties.</p>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <TextField
+          label="Quest ID"
+          value={selectedDocument.quest.quest_id}
+          onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, quest_id: value.trim() }))}
+        />
+        <TextField
+          label="Title"
+          value={selectedDocument.quest.title}
+          onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, title: value }))}
+        />
+        <TextareaField
+          label="Description"
+          value={selectedDocument.quest.description}
+          onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, description: value }))}
+        />
+        <TokenListField
+          label="Prerequisites"
+          values={selectedDocument.quest.prerequisites ?? []}
+          onChange={(values) =>
+            updateSelectedQuest((quest) => ({ ...quest, prerequisites: values.filter(Boolean) }))
+          }
+        />
+        <NumberField
+          label="Time limit"
+          value={selectedDocument.quest.time_limit}
+          onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, time_limit: value }))}
+        />
+        <div className="field-grid">
+          <NumberField
+            label="Relationship X"
+            value={selectedDocument.quest._editor?.relationship_position?.x ?? 0}
+            onChange={(value) =>
+              updateSelectedQuest((quest) => ({
+                ...quest,
+                _editor: {
+                  ...(quest._editor ?? {}),
+                  relationship_position: {
+                    x: value,
+                    y: quest._editor?.relationship_position?.y ?? 0,
+                  },
+                },
+              }))
+            }
+          />
+          <NumberField
+            label="Relationship Y"
+            value={selectedDocument.quest._editor?.relationship_position?.y ?? 0}
+            onChange={(value) =>
+              updateSelectedQuest((quest) => ({
+                ...quest,
+                _editor: {
+                  ...(quest._editor ?? {}),
+                  relationship_position: {
+                    x: quest._editor?.relationship_position?.x ?? 0,
+                    y: value,
+                  },
+                },
+              }))
+            }
+          />
+        </div>
+      </>
+    );
+  }
+
+  function renderNodeInspector() {
+    if (viewMode !== "flow") {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <p>Switch to Flow view to inspect quest nodes.</p>
+        </div>
+      );
+    }
+
+    if (!selectedDocument || !selectedNode) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <p>Select a node in the flow graph to edit it.</p>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <TextField
+          label="Node ID"
+          value={selectedNode.id}
+          onChange={(value) =>
+            updateSelectedQuest((quest) => {
+              const nextId = value.trim();
+              if (!nextId || nextId === selectedNode.id || quest.flow.nodes[nextId]) {
+                return quest;
+              }
+              const next = questFlowGraphAdapter.normalizeDocument(quest);
+              const node = { ...next.flow.nodes[selectedNode.id], id: nextId };
+              const nextNodes = { ...next.flow.nodes };
+              delete nextNodes[selectedNode.id];
+              nextNodes[nextId] = node;
+              const nextConnections = next.flow.connections.map((connection) => ({
+                ...connection,
+                from: connection.from === selectedNode.id ? nextId : connection.from,
+                to: connection.to === selectedNode.id ? nextId : connection.to,
+              }));
+              return {
+                ...next,
+                flow: {
+                  ...next.flow,
+                  start_node_id:
+                    next.flow.start_node_id === selectedNode.id ? nextId : next.flow.start_node_id,
+                  nodes: nextNodes,
+                  connections: nextConnections,
+                },
+              };
+            })
+          }
+        />
+        <TextField
+          label="Title"
+          value={selectedNode.title ?? ""}
+          onChange={(value) =>
+            updateSelectedQuest((quest) =>
+              updateQuestNode(quest, selectedNode.id, (node) => ({ ...node, title: value })),
+            )
+          }
+        />
+        {selectedNode.type === "objective" ? (
+          <>
+            <SelectField
+              label="Objective type"
+              allowBlank={false}
+              value={selectedNode.objective_type ?? "travel"}
+              options={workspace.catalogs.objectiveTypes}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    objective_type: value,
+                  })),
+                )
+              }
+            />
+            <TextareaField
+              label="Description"
+              value={selectedNode.description ?? ""}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    description: value,
+                  })),
+                )
+              }
+            />
+            <TextField
+              label="Target"
+              value={selectedNode.target ?? ""}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({ ...node, target: value })),
+                )
+              }
+            />
+            <NumberField
+              label="Item ID"
+              value={selectedNode.item_id ?? 0}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    item_id: value > 0 ? value : null,
+                  })),
+                )
+              }
+            />
+            <NumberField
+              label="Count"
+              value={selectedNode.count ?? 1}
+              min={1}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    count: Math.max(1, value),
+                  })),
+                )
+              }
+            />
+          </>
+        ) : null}
+        {selectedNode.type === "dialog" ? (
+          <>
+            <TextField
+              label="Dialog ID"
+              value={selectedNode.dialog_id ?? ""}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    dialog_id: value.trim(),
+                  })),
+                )
+              }
+            />
+            <TokenListField
+              label="Branch labels"
+              values={Array.isArray(selectedNode.branch_labels) ? (selectedNode.branch_labels as string[]) : []}
+              onChange={(values) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    branch_labels: values,
+                  })),
+                )
+              }
+            />
+          </>
+        ) : null}
+        {selectedNode.type === "choice" ? (
+          <TextareaField
+            label="Options"
+            hint="One per line: text => nextNodeId"
+            value={formatChoiceOptions(selectedNode.options)}
+            onChange={(value) =>
+              updateSelectedQuest((quest) =>
+                updateQuestNode(quest, selectedNode.id, (node) => ({
+                  ...node,
+                  options: parseChoiceOptions(value),
+                })),
+              )
+            }
+          />
+        ) : null}
+        {selectedNode.type === "reward" ? (
+          <>
+            <TextareaField
+              label="Reward items"
+              hint="One per line: itemId=count"
+              value={formatRewardItems(selectedNode)}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    rewards: {
+                      ...(node.rewards ?? defaultReward()),
+                      items: parseRewardItems(value),
+                    },
+                  })),
+                )
+              }
+            />
+            <NumberField
+              label="Experience"
+              value={selectedNode.rewards?.experience ?? 0}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    rewards: { ...(node.rewards ?? defaultReward()), experience: value },
+                  })),
+                )
+              }
+            />
+            <NumberField
+              label="Skill points"
+              value={selectedNode.rewards?.skill_points ?? 0}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    rewards: { ...(node.rewards ?? defaultReward()), skill_points: value },
+                  })),
+                )
+              }
+            />
+            <TextField
+              label="Unlock location"
+              value={selectedNode.rewards?.unlock_location ?? ""}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    rewards: {
+                      ...(node.rewards ?? defaultReward()),
+                      unlock_location: value.trim(),
+                    },
+                  })),
+                )
+              }
+            />
+            <TokenListField
+              label="Unlock recipes"
+              values={selectedNode.rewards?.unlock_recipes ?? []}
+              onChange={(values) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    rewards: { ...(node.rewards ?? defaultReward()), unlock_recipes: values },
+                  })),
+                )
+              }
+            />
+            <TextField
+              label="Reward title"
+              value={selectedNode.rewards?.title ?? ""}
+              onChange={(value) =>
+                updateSelectedQuest((quest) =>
+                  updateQuestNode(quest, selectedNode.id, (node) => ({
+                    ...node,
+                    rewards: { ...(node.rewards ?? defaultReward()), title: value },
+                  })),
+                )
+              }
+            />
+          </>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderValidationInspector() {
+    if (!selectedDocument) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <p>Select a quest to inspect validation.</p>
+        </div>
+      );
+    }
+
+    if (selectedIssues.length === 0) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <Badge tone="success">Clean</Badge>
+          <p>No validation issues for the current quest.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="issue-list">
+        {selectedIssues.map((issue, index) => (
+          <article className={`issue issue-${issue.severity}`} key={`${issue.field}-${index}`}>
+            <div className="issue-head">
+              <Badge tone={issue.severity === "error" ? "danger" : "warning"}>
+                {issue.severity}
+              </Badge>
+              <strong>{issue.field}</strong>
+              {issue.scope ? <Badge tone="muted">{issue.scope}</Badge> : null}
+              {issue.nodeId ? <Badge tone="accent">{issue.nodeId}</Badge> : null}
+              {issue.edgeKey ? <Badge tone="muted">{issue.edgeKey}</Badge> : null}
+            </div>
+            <p>{issue.message}</p>
+          </article>
+        ))}
       </div>
     );
   }
@@ -781,385 +1156,95 @@ export function QuestWorkspace({
 
         <main className="column column-main">
           {selectedDocument ? (
-            <>
-              <PanelSection label="Document" title={selectedDocument.quest.title || selectedDocument.quest.quest_id}>
-                <div className="stats-grid">
-                  <article className="stat-card">
-                    <span>Quest ID</span>
-                    <strong>{selectedDocument.quest.quest_id}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Title</span>
-                    <strong>{selectedDocument.quest.title || "Untitled"}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Nodes</span>
-                    <strong>{Object.keys(selectedDocument.quest.flow.nodes).length}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Validation</span>
-                    <strong>{selectedCounts.errorCount}E / {selectedCounts.warningCount}W</strong>
-                  </article>
+            <PanelSection
+              label={viewMode === "relationship" ? "Relationship graph" : "Flow graph"}
+              title={selectedDocument.quest.title || selectedDocument.quest.quest_id}
+              summary={
+                <div className="toolbar-summary">
+                  <Badge tone="muted">{selectedDocument.quest.quest_id}</Badge>
+                  <Badge tone="muted">{Object.keys(selectedDocument.quest.flow.nodes).length} nodes</Badge>
+                  <Badge tone={selectedCounts.errorCount > 0 ? "danger" : "muted"}>
+                    {selectedCounts.errorCount} errors
+                  </Badge>
                 </div>
-              </PanelSection>
-
-              <PanelSection
-                label={viewMode === "relationship" ? "Relationship graph" : "Flow graph"}
-                title={viewMode === "relationship" ? "Quest prerequisite map" : "Quest flow editor"}
-              >
-                <div className="graph-panel">
-                  {GraphCanvasComponent ? (
-                    viewMode === "relationship" ? (
-                      <GraphCanvasComponent
-                        ref={relationshipGraphRef}
-                        adapter={questRelationshipGraphAdapter}
-                        document={relationshipDocument}
-                        issues={selectedIssues}
-                        selection={relationshipSelection}
-                        onSelectionChange={setRelationshipSelection}
-                        onDocumentChange={updateAllFromRelationship}
-                      />
-                    ) : (
-                      <GraphCanvasComponent
-                        ref={flowGraphRef}
-                        adapter={questFlowGraphAdapter}
-                        document={selectedDocument.quest}
-                        issues={selectedIssues}
-                        selection={flowSelection}
-                        onSelectionChange={setFlowSelection}
-                        onDocumentChange={(quest) => updateSelectedQuest(() => quest)}
-                      />
-                    )
+              }
+            >
+              <div className="graph-panel">
+                {GraphCanvasComponent ? (
+                  viewMode === "relationship" ? (
+                    <GraphCanvasComponent
+                      ref={relationshipGraphRef}
+                      adapter={questRelationshipGraphAdapter}
+                      document={relationshipDocument}
+                      issues={selectedIssues}
+                      selection={relationshipSelection}
+                      onSelectionChange={setRelationshipSelection}
+                      onDocumentChange={updateAllFromRelationship}
+                    />
                   ) : (
-                    <GraphLoadingFallback />
-                  )}
-                </div>
-              </PanelSection>
-            </>
-          ) : (
-            <PanelSection label="Selection" title="No quest selected">
-              <div className="empty-state">
-                <Badge tone="muted">Idle</Badge>
-                <p>Select a quest from the left panel or create a new draft.</p>
+                    <GraphCanvasComponent
+                      ref={flowGraphRef}
+                      adapter={questFlowGraphAdapter}
+                      document={selectedDocument.quest}
+                      issues={selectedIssues}
+                      selection={flowSelection}
+                      onSelectionChange={setFlowSelection}
+                      onDocumentChange={(quest) => updateSelectedQuest(() => quest)}
+                    />
+                  )
+                ) : (
+                  <GraphLoadingFallback />
+                )}
               </div>
             </PanelSection>
+          ) : (
+            <div className="workspace-empty">
+              <Badge tone="muted">Quest</Badge>
+              <p>Select a quest from the left panel or create a new draft.</p>
+            </div>
           )}
         </main>
 
         <aside className="column">
-          {selectedDocument ? (
-            <PanelSection label="Quest" title="Quest properties">
-              <TextField
-                label="Quest ID"
-                value={selectedDocument.quest.quest_id}
-                onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, quest_id: value.trim() }))}
-              />
-              <TextField
-                label="Title"
-                value={selectedDocument.quest.title}
-                onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, title: value }))}
-              />
-              <TextareaField
-                label="Description"
-                value={selectedDocument.quest.description}
-                onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, description: value }))}
-              />
-              <TokenListField
-                label="Prerequisites"
-                values={selectedDocument.quest.prerequisites ?? []}
-                onChange={(values) =>
-                  updateSelectedQuest((quest) => ({ ...quest, prerequisites: values.filter(Boolean) }))
-                }
-              />
-              <NumberField
-                label="Time limit"
-                value={selectedDocument.quest.time_limit}
-                onChange={(value) => updateSelectedQuest((quest) => ({ ...quest, time_limit: value }))}
-              />
-              <div className="field-grid">
-                <NumberField
-                  label="Relationship X"
-                  value={selectedDocument.quest._editor?.relationship_position?.x ?? 0}
-                  onChange={(value) =>
-                    updateSelectedQuest((quest) => ({
-                      ...quest,
-                      _editor: {
-                        ...(quest._editor ?? {}),
-                        relationship_position: {
-                          x: value,
-                          y: quest._editor?.relationship_position?.y ?? 0,
-                        },
-                      },
-                    }))
-                  }
-                />
-                <NumberField
-                  label="Relationship Y"
-                  value={selectedDocument.quest._editor?.relationship_position?.y ?? 0}
-                  onChange={(value) =>
-                    updateSelectedQuest((quest) => ({
-                      ...quest,
-                      _editor: {
-                        ...(quest._editor ?? {}),
-                        relationship_position: {
-                          x: quest._editor?.relationship_position?.x ?? 0,
-                          y: value,
-                        },
-                      },
-                    }))
-                  }
-                />
+          <PanelSection
+            label="Inspector"
+            title={
+              inspectorMode === "quest"
+                ? "Quest"
+                : inspectorMode === "node"
+                  ? "Node"
+                  : "Validation"
+            }
+            compact
+            summary={
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`segmented-control-item ${inspectorMode === "quest" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setInspectorMode("quest")}
+                >
+                  Quest
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-control-item ${inspectorMode === "node" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setInspectorMode("node")}
+                >
+                  Node
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-control-item ${inspectorMode === "validation" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setInspectorMode("validation")}
+                >
+                  Validation
+                </button>
               </div>
-            </PanelSection>
-          ) : null}
-
-          {viewMode === "flow" && selectedDocument && selectedNode ? (
-            <PanelSection label="Node" title={`${selectedNode.type} · ${selectedNode.id}`}>
-              <TextField
-                label="Node ID"
-                value={selectedNode.id}
-                onChange={(value) =>
-                  updateSelectedQuest((quest) => {
-                    const nextId = value.trim();
-                    if (!nextId || nextId === selectedNode.id || quest.flow.nodes[nextId]) {
-                      return quest;
-                    }
-                    const next = questFlowGraphAdapter.normalizeDocument(quest);
-                    const node = { ...next.flow.nodes[selectedNode.id], id: nextId };
-                    const nextNodes = { ...next.flow.nodes };
-                    delete nextNodes[selectedNode.id];
-                    nextNodes[nextId] = node;
-                    const nextConnections = next.flow.connections.map((connection) => ({
-                      ...connection,
-                      from: connection.from === selectedNode.id ? nextId : connection.from,
-                      to: connection.to === selectedNode.id ? nextId : connection.to,
-                    }));
-                    return {
-                      ...next,
-                      flow: {
-                        ...next.flow,
-                        start_node_id:
-                          next.flow.start_node_id === selectedNode.id
-                            ? nextId
-                            : next.flow.start_node_id,
-                        nodes: nextNodes,
-                        connections: nextConnections,
-                      },
-                    };
-                  })
-                }
-              />
-              <TextField
-                label="Title"
-                value={selectedNode.title ?? ""}
-                onChange={(value) =>
-                  updateSelectedQuest((quest) =>
-                    updateQuestNode(quest, selectedNode.id, (node) => ({ ...node, title: value })),
-                  )
-                }
-              />
-              {selectedNode.type === "objective" ? (
-                <>
-                  <SelectField
-                    label="Objective type"
-                    allowBlank={false}
-                    value={selectedNode.objective_type ?? "travel"}
-                    options={workspace.catalogs.objectiveTypes}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          objective_type: value,
-                        })),
-                      )
-                    }
-                  />
-                  <TextareaField
-                    label="Description"
-                    value={selectedNode.description ?? ""}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          description: value,
-                        })),
-                      )
-                    }
-                  />
-                  <TextField
-                    label="Target"
-                    value={selectedNode.target ?? ""}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({ ...node, target: value })),
-                      )
-                    }
-                  />
-                  <NumberField
-                    label="Item ID"
-                    value={selectedNode.item_id ?? 0}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          item_id: value > 0 ? value : null,
-                        })),
-                      )
-                    }
-                  />
-                  <NumberField
-                    label="Count"
-                    value={selectedNode.count ?? 1}
-                    min={1}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          count: Math.max(1, value),
-                        })),
-                      )
-                    }
-                  />
-                </>
-              ) : null}
-              {selectedNode.type === "dialog" ? (
-                <>
-                  <TextField
-                    label="Dialog ID"
-                    value={selectedNode.dialog_id ?? ""}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({ ...node, dialog_id: value.trim() })),
-                      )
-                    }
-                  />
-                  <TokenListField
-                    label="Branch labels"
-                    values={Array.isArray(selectedNode.branch_labels) ? (selectedNode.branch_labels as string[]) : []}
-                    onChange={(values) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          branch_labels: values,
-                        })),
-                      )
-                    }
-                  />
-                </>
-              ) : null}
-              {selectedNode.type === "choice" ? (
-                <TextareaField
-                  label="Options"
-                  hint="One per line: text => nextNodeId"
-                  value={formatChoiceOptions(selectedNode.options)}
-                  onChange={(value) =>
-                    updateSelectedQuest((quest) =>
-                      updateQuestNode(quest, selectedNode.id, (node) => ({
-                        ...node,
-                        options: parseChoiceOptions(value),
-                      })),
-                    )
-                  }
-                />
-              ) : null}
-              {selectedNode.type === "reward" ? (
-                <>
-                  <TextareaField
-                    label="Reward items"
-                    hint="One per line: itemId=count"
-                    value={formatRewardItems(selectedNode)}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          rewards: {
-                            ...(node.rewards ?? defaultReward()),
-                            items: parseRewardItems(value),
-                          },
-                        })),
-                      )
-                    }
-                  />
-                  <NumberField
-                    label="Experience"
-                    value={selectedNode.rewards?.experience ?? 0}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          rewards: { ...(node.rewards ?? defaultReward()), experience: value },
-                        })),
-                      )
-                    }
-                  />
-                  <NumberField
-                    label="Skill points"
-                    value={selectedNode.rewards?.skill_points ?? 0}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          rewards: { ...(node.rewards ?? defaultReward()), skill_points: value },
-                        })),
-                      )
-                    }
-                  />
-                  <TextField
-                    label="Unlock location"
-                    value={selectedNode.rewards?.unlock_location ?? ""}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          rewards: { ...(node.rewards ?? defaultReward()), unlock_location: value.trim() },
-                        })),
-                      )
-                    }
-                  />
-                  <TokenListField
-                    label="Unlock recipes"
-                    values={selectedNode.rewards?.unlock_recipes ?? []}
-                    onChange={(values) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          rewards: { ...(node.rewards ?? defaultReward()), unlock_recipes: values },
-                        })),
-                      )
-                    }
-                  />
-                  <TextField
-                    label="Reward title"
-                    value={selectedNode.rewards?.title ?? ""}
-                    onChange={(value) =>
-                      updateSelectedQuest((quest) =>
-                        updateQuestNode(quest, selectedNode.id, (node) => ({
-                          ...node,
-                          rewards: { ...(node.rewards ?? defaultReward()), title: value },
-                        })),
-                      )
-                    }
-                  />
-                </>
-              ) : null}
-            </PanelSection>
-          ) : null}
-
-          <ValidationPanel issues={selectedIssues} />
-
-          <PanelSection label="Selection" title="Quest focus" compact>
-            <div className="toolbar-summary">
-              <Badge tone={viewMode === "flow" && flowSelection.nodeId ? "accent" : "muted"}>
-                node: {viewMode === "flow" ? flowSelection.nodeId ?? "none" : relationshipSelection.nodeId ?? "none"}
-              </Badge>
-              <Badge tone={viewMode === "flow" && flowSelection.edgeId ? "accent" : "muted"}>
-                edge: {viewMode === "flow" ? flowSelection.edgeId ?? "none" : relationshipSelection.edgeId ?? "none"}
-              </Badge>
-              <Badge tone={dirtyCount > 0 ? "warning" : "muted"}>{dirtyCount} dirty docs</Badge>
-              <Badge tone={totalIssues.errors > 0 ? "danger" : "success"}>
-                {totalIssues.errors} errors
-              </Badge>
-            </div>
+            }
+          >
+            {inspectorMode === "quest" ? renderQuestInspector() : null}
+            {inspectorMode === "node" ? renderNodeInspector() : null}
+            {inspectorMode === "validation" ? renderValidationInspector() : null}
           </PanelSection>
         </aside>
       </div>
@@ -1178,10 +1263,7 @@ export function QuestWorkspace({
               invokeCommand<AiGenerationResponse<QuestData>>("generate_quest_draft", { request })
             }
             onLoadSettings={() => invokeCommand<AiSettings>("load_ai_settings")}
-            onSaveSettings={(settings) => invokeCommand<AiSettings>("save_ai_settings", { settings })}
-            onTestSettings={(settings) =>
-              invokeCommand<AiConnectionTestResult>("test_ai_provider", { settings })
-            }
+            onOpenSettings={() => openOrFocusSettingsWindow("ai")}
             onApply={applyAiDraft}
           />
         </Suspense>

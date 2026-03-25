@@ -4,9 +4,10 @@ mod narrative;
 use bevy_app::prelude::*;
 
 pub use messages::{
-    ActorSnapshot, ClientMessage, DialogueAdvanceRequest, MapTravelRequest, ProtocolError,
-    RuntimeEventEnvelope, RuntimeSubscriptionRequest, SceneTransitionNotice, ServerMessage,
-    WorldSnapshotEnvelope,
+    ActorSnapshot, AdvanceOverworldTravelRequest, ClientMessage, DialogueAdvanceRequest,
+    EnterLocationRequest, MapTravelRequest, OverworldRouteRequest, ProtocolError,
+    ReturnToOverworldRequest, RuntimeEventEnvelope, RuntimeSubscriptionRequest,
+    SceneTransitionNotice, ServerMessage, WorldSnapshotEnvelope,
 };
 pub use narrative::{
     CloudNarrativeDocument, CloudWorkspaceMeta, NarrativeExecutorMode, NarrativeSyncPushDocument,

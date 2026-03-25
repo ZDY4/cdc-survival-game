@@ -3,6 +3,7 @@ use game_data::{
     InteractionExecutionRequest, InteractionExecutionResult, InteractionPrompt,
     InteractionTargetId, TurnState, WorldCoord,
 };
+use game_core::{LocationTransitionContext, OverworldRouteSnapshot, OverworldStateSnapshot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -45,6 +46,38 @@ pub struct MapTravelRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct OverworldRouteRequest {
+    pub actor_id: ActorId,
+    #[serde(default)]
+    pub target_location_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvanceOverworldTravelRequest {
+    pub actor_id: ActorId,
+    #[serde(default)]
+    pub minutes: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EnterLocationRequest {
+    pub actor_id: ActorId,
+    #[serde(default)]
+    pub location_id: String,
+    #[serde(default)]
+    pub entry_point_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReturnToOverworldRequest {
+    pub actor_id: ActorId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct WorldSnapshotEnvelope {
     #[serde(default)]
     pub sequence: u64,
@@ -56,6 +89,10 @@ pub struct WorldSnapshotEnvelope {
     pub interaction_context: Option<InteractionContextSnapshot>,
     #[serde(default)]
     pub active_map_id: Option<String>,
+    #[serde(default)]
+    pub active_location_id: Option<String>,
+    #[serde(default)]
+    pub overworld_state: Option<OverworldStateSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -86,6 +123,12 @@ pub struct SceneTransitionNotice {
     #[serde(default)]
     pub entry_point: Option<String>,
     #[serde(default)]
+    pub location_id: Option<String>,
+    #[serde(default)]
+    pub entry_point_id: Option<String>,
+    #[serde(default)]
+    pub return_location_id: Option<String>,
+    #[serde(default)]
     pub world_mode: Option<String>,
 }
 
@@ -109,6 +152,7 @@ pub enum ClientMessage {
     },
     SubscribeRuntime(RuntimeSubscriptionRequest),
     RequestWorldSnapshot,
+    RequestOverworldSnapshot,
     RequestAction(ActionRequest),
     QueryInteractionOptions {
         actor_id: ActorId,
@@ -121,6 +165,11 @@ pub enum ClientMessage {
         destination: WorldCoord,
     },
     TravelToMap(MapTravelRequest),
+    RequestOverworldRoute(OverworldRouteRequest),
+    StartOverworldTravel(OverworldRouteRequest),
+    AdvanceOverworldTravel(AdvanceOverworldTravelRequest),
+    EnterLocation(EnterLocationRequest),
+    ReturnToOverworld(ReturnToOverworldRequest),
     FindPath {
         actor_id: Option<ActorId>,
         start: GridCoord,
@@ -147,6 +196,9 @@ pub enum ServerMessage {
     InteractionPrompt(InteractionPrompt),
     InteractionExecution(InteractionExecutionResult),
     SceneTransitionRequested(SceneTransitionNotice),
+    OverworldRouteComputed(OverworldRouteSnapshot),
+    OverworldState(OverworldStateSnapshot),
+    LocationTransition(LocationTransitionContext),
     PathResult {
         path: Vec<GridCoord>,
     },

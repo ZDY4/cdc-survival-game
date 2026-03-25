@@ -10,15 +10,16 @@ use game_data::GameDataPlugin;
 
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::controls::{
-    handle_camera_pan, handle_keyboard_input, handle_mouse_input, handle_mouse_wheel_zoom,
-    update_view_scale,
+    handle_camera_pan, handle_interaction_menu_buttons, handle_keyboard_input, handle_mouse_input,
+    handle_mouse_wheel_zoom, update_view_scale,
 };
 use crate::render::{
-    draw_world, setup_viewer, sync_actor_labels, update_camera, update_interaction_menu,
+    draw_world, setup_viewer, sync_actor_labels, update_camera, update_dialogue_panel,
+    update_interaction_menu,
 };
 use crate::simulation::{
-    advance_runtime_progression, collect_events, prime_viewer_state, refresh_interaction_prompt,
-    tick_runtime,
+    advance_online_npc_actions, advance_runtime_progression, collect_events, prime_viewer_state,
+    refresh_interaction_prompt, sync_npc_runtime_presence, tick_runtime,
 };
 use crate::state::{ActorLabelEntities, ViewerRenderConfig, ViewerRuntimeState, ViewerState};
 
@@ -83,6 +84,8 @@ impl Plugin for ViewerAppPlugin {
             Update,
             (
                 spawn_characters_from_definition,
+                sync_npc_runtime_presence,
+                advance_online_npc_actions,
                 sync_ai_snapshot,
                 handle_keyboard_input,
                 handle_mouse_wheel_zoom,
@@ -90,6 +93,7 @@ impl Plugin for ViewerAppPlugin {
                 handle_camera_pan,
                 update_camera,
                 handle_mouse_input,
+                handle_interaction_menu_buttons,
                 tick_runtime,
                 advance_runtime_progression,
                 collect_events,
@@ -97,6 +101,7 @@ impl Plugin for ViewerAppPlugin {
                 sync_actor_labels,
                 crate::hud::update_hud,
                 update_interaction_menu,
+                update_dialogue_panel,
                 draw_world,
             )
                 .chain(),

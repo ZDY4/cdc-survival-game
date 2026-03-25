@@ -1,0 +1,50 @@
+{
+  "dialog_id": "trader_lao_wang_cold",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Cold Trader",
+      "speaker": "老王",
+      "text": "有事说事，没事别在我摊子前磨蹭。想看货就自己掏钱。",
+      "portrait": "res://assets/portraits/trader_lao_wang.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "交易",
+          "next": "trade_action"
+        },
+        {
+          "text": "离开",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

@@ -16,19 +16,6 @@ pub(crate) fn render_cell_extent(grid_size: f32, render_config: ViewerRenderConf
     grid_size * render_config.pixels_per_world_unit
 }
 
-pub(crate) fn actor_label_translation(
-    world: WorldCoord,
-    grid_size: f32,
-    render_config: ViewerRenderConfig,
-) -> Vec3 {
-    let view = world_to_view_coord(world, render_config);
-    Vec3::new(
-        view.x,
-        view.y + render_cell_extent(grid_size, render_config) * 0.32,
-        2.0,
-    )
-}
-
 pub(crate) fn actor_label(actor: &ActorDebugState) -> String {
     if actor.display_name.trim().is_empty() {
         actor.actor_id.0.to_string()
@@ -86,7 +73,7 @@ pub(crate) fn fit_pixels_per_world_unit(
         .max(160.0);
     let usable_height = (viewport_height - render_config.viewport_padding_px * 2.0).max(160.0);
     let fit_per_cell = (usable_width / grid_width_cells)
-        .min(usable_height / grid_height_cells)
+        .min(usable_height / (grid_height_cells * render_config.vertical_projection_factor()))
         .max(render_config.min_pixels_per_world_unit);
 
     (fit_per_cell * render_config.zoom_factor).clamp(
@@ -95,19 +82,126 @@ pub(crate) fn fit_pixels_per_world_unit(
     ) / grid_size.max(f32::EPSILON)
 }
 
-pub(crate) fn world_to_view_coord(world: WorldCoord, render_config: ViewerRenderConfig) -> Vec2 {
-    Vec2::new(
-        world.x * render_config.pixels_per_world_unit,
-        world.z * render_config.pixels_per_world_unit,
+pub(crate) fn level_base_height(level: i32, grid_size: f32) -> f32 {
+    level as f32 * grid_size
+}
+
+pub(crate) fn level_plane_height(level: i32, grid_size: f32) -> f32 {
+    level_base_height(level, grid_size) + grid_size * 0.5
+}
+
+pub(crate) fn actor_body_translation(
+    world: WorldCoord,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec3 {
+    let floor_y = world.y - grid_size * 0.5;
+    Vec3::new(
+        world.x,
+        floor_y
+            + (render_config.actor_radius_world + render_config.actor_body_length_world * 0.5)
+                * grid_size,
+        world.z,
     )
 }
 
-pub(crate) fn view_to_world_coord(view: Vec2, render_config: ViewerRenderConfig) -> WorldCoord {
-    WorldCoord::new(
-        view.x / render_config.pixels_per_world_unit,
-        0.0,
-        view.y / render_config.pixels_per_world_unit,
+pub(crate) fn actor_label_world_position(
+    world: WorldCoord,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec3 {
+    let floor_y = world.y - grid_size * 0.5;
+    Vec3::new(
+        world.x,
+        floor_y + render_config.actor_label_height_world * grid_size,
+        world.z,
     )
+}
+
+pub(crate) fn pick_grid_from_ray(ray: Ray3d, level: i32, grid_size: f32) -> Option<GridCoord> {
+    let plane_origin = Vec3::new(0.0, level_plane_height(level, grid_size), 0.0);
+    let point = ray.plane_intersection_point(plane_origin, InfinitePlane3d::new(Vec3::Y))?;
+    Some(GridCoord::new(
+        (point.x / grid_size).floor() as i32,
+        level,
+        (point.z / grid_size).floor() as i32,
+    ))
+}
+
+pub(crate) fn camera_focus_point(
+    bounds: GridBounds,
+    current_level: i32,
+    grid_size: f32,
+    pan_offset: Vec2,
+) -> Vec3 {
+    let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * grid_size * 0.5;
+    let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * grid_size * 0.5;
+    Vec3::new(
+        center_x + pan_offset.x,
+        level_plane_height(current_level, grid_size),
+        center_z + pan_offset.y,
+    )
+}
+
+pub(crate) fn camera_world_distance(
+    bounds: GridBounds,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+) -> f32 {
+    let world_width = (bounds.max_x - bounds.min_x + 1).max(1) as f32 * grid_size;
+    let world_depth = (bounds.max_z - bounds.min_z + 1).max(1) as f32 * grid_size;
+    (world_width.max(world_depth) * 1.35 + render_config.camera_distance_padding_world)
+        .max(10.0 * grid_size)
+}
+
+pub(crate) fn clamp_camera_pan_offset(
+    bounds: GridBounds,
+    grid_size: f32,
+    pan_offset: Vec2,
+    viewport_width: f32,
+    viewport_height: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec2 {
+    let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * grid_size * 0.5;
+    let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * grid_size * 0.5;
+    let map_width = (bounds.max_x - bounds.min_x + 1).max(1) as f32 * grid_size;
+    let map_depth = (bounds.max_z - bounds.min_z + 1).max(1) as f32 * grid_size;
+    let usable_width = (viewport_width
+        - render_config.hud_reserved_width_px
+        - render_config.viewport_padding_px * 2.0)
+        .max(160.0)
+        / render_config.pixels_per_world_unit.max(f32::EPSILON);
+    let usable_depth = (viewport_height - render_config.viewport_padding_px * 2.0).max(160.0)
+        / (render_config.pixels_per_world_unit * render_config.vertical_projection_factor())
+            .max(f32::EPSILON);
+    let half_visible_width = usable_width * 0.5;
+    let half_visible_depth = usable_depth * 0.5;
+
+    let clamped_focus_x = if map_width <= usable_width {
+        center_x
+    } else {
+        (center_x + pan_offset.x).clamp(
+            bounds.min_x as f32 * grid_size + half_visible_width,
+            (bounds.max_x + 1) as f32 * grid_size - half_visible_width,
+        )
+    };
+    let clamped_focus_z = if map_depth <= usable_depth {
+        center_z
+    } else {
+        (center_z + pan_offset.y).clamp(
+            bounds.min_z as f32 * grid_size + half_visible_depth,
+            (bounds.max_z + 1) as f32 * grid_size - half_visible_depth,
+        )
+    };
+
+    Vec2::new(clamped_focus_x - center_x, clamped_focus_z - center_z)
+}
+
+pub(crate) fn should_rebuild_static_world<Key>(current: &Option<Key>, next: &Key) -> bool
+where
+    Key: PartialEq,
+{
+    current.as_ref() != Some(next)
 }
 
 pub(crate) fn actor_at_grid(
@@ -321,33 +415,31 @@ pub(crate) fn grid_bounds(snapshot: &SimulationSnapshot, level: i32) -> GridBoun
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_label, cycle_level, fit_pixels_per_world_unit, grid_bounds, movement_block_reasons,
-        rendered_path_preview, view_to_world_coord, world_to_view_coord, GridBounds,
+        actor_label, camera_focus_point, camera_world_distance, clamp_camera_pan_offset,
+        cycle_level, fit_pixels_per_world_unit, grid_bounds, level_plane_height,
+        movement_block_reasons, pick_grid_from_ray, rendered_path_preview,
+        should_rebuild_static_world, GridBounds,
     };
     use crate::state::ViewerRenderConfig;
     use crate::test_support::actor_debug_state_fixture;
+    use bevy::prelude::*;
     use game_core::{
         create_demo_runtime, CombatDebugState, GridDebugState, MapCellDebugState,
-        MapObjectDebugState, SimulationSnapshot,
+        MapObjectDebugState, OverworldStateSnapshot, SimulationSnapshot,
     };
     use game_data::{
         ActorId, ActorKind, ActorSide, GridCoord, InteractionContextSnapshot, MapId,
-        MapObjectFootprint, MapObjectKind, MapRotation, TurnState, WorldCoord,
+        MapObjectFootprint, MapObjectKind, MapRotation, TurnState,
     };
     use std::collections::BTreeMap;
 
     #[test]
-    fn render_coordinate_conversion_round_trips() {
-        let render_config = ViewerRenderConfig {
-            pixels_per_world_unit: 96.0,
-            ..ViewerRenderConfig::default()
-        };
-        let world = WorldCoord::new(2.5, 0.0, -1.75);
+    fn level_pick_from_ray_maps_to_expected_grid() {
+        let ray = Ray3d::new(Vec3::new(2.2, 6.0, 3.8), -Dir3::Y);
 
-        let view = world_to_view_coord(world, render_config);
-        let round_trip = view_to_world_coord(view, render_config);
+        let grid = pick_grid_from_ray(ray, 1, 1.0);
 
-        assert_eq!(round_trip, world);
+        assert_eq!(grid, Some(GridCoord::new(2, 1, 3)));
     }
 
     #[test]
@@ -379,6 +471,41 @@ mod tests {
         );
 
         assert!(large < small);
+    }
+
+    #[test]
+    fn fit_scale_accounts_for_tilted_vertical_projection() {
+        let mut shallow_pitch = ViewerRenderConfig::default();
+        shallow_pitch.camera_pitch_degrees = 20.0;
+        let mut steep_pitch = ViewerRenderConfig::default();
+        steep_pitch.camera_pitch_degrees = 70.0;
+
+        let shallow = fit_pixels_per_world_unit(
+            1440.0,
+            900.0,
+            1.0,
+            GridBounds {
+                min_x: 0,
+                max_x: 5,
+                min_z: 0,
+                max_z: 11,
+            },
+            shallow_pitch,
+        );
+        let steep = fit_pixels_per_world_unit(
+            1440.0,
+            900.0,
+            1.0,
+            GridBounds {
+                min_x: 0,
+                max_x: 5,
+                min_z: 0,
+                max_z: 11,
+            },
+            steep_pitch,
+        );
+
+        assert!(steep < shallow);
     }
 
     #[test]
@@ -417,6 +544,7 @@ mod tests {
                 current_turn_index: 0,
             },
             interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
             path_preview: Vec::new(),
         };
 
@@ -454,6 +582,7 @@ mod tests {
                 current_turn_index: 0,
             },
             interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
             path_preview: Vec::new(),
         };
 
@@ -552,6 +681,7 @@ mod tests {
                 current_turn_index: 0,
             },
             interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
             path_preview: Vec::new(),
         };
 
@@ -583,5 +713,109 @@ mod tests {
 
         assert_eq!(preview.first().copied(), Some(GridCoord::new(0, 0, 1)));
         assert_eq!(preview.last().copied(), Some(GridCoord::new(0, 0, 2)));
+    }
+
+    #[test]
+    fn camera_helpers_center_map_and_expand_distance_with_bounds() {
+        let focus = camera_focus_point(
+            GridBounds {
+                min_x: 0,
+                max_x: 11,
+                min_z: 0,
+                max_z: 7,
+            },
+            1,
+            1.0,
+            Vec2::new(2.0, -1.5),
+        );
+
+        assert_eq!(focus, Vec3::new(8.0, level_plane_height(1, 1.0), 2.5));
+
+        let small = camera_world_distance(
+            GridBounds {
+                min_x: 0,
+                max_x: 3,
+                min_z: 0,
+                max_z: 3,
+            },
+            1.0,
+            ViewerRenderConfig::default(),
+        );
+        let large = camera_world_distance(
+            GridBounds {
+                min_x: 0,
+                max_x: 15,
+                min_z: 0,
+                max_z: 15,
+            },
+            1.0,
+            ViewerRenderConfig::default(),
+        );
+
+        assert!(large > small);
+    }
+
+    #[test]
+    fn static_world_rebuild_helper_only_triggers_on_key_change() {
+        let current = Some((Some("safehouse_grid"), 0, 3_u64));
+        let next_same = (Some("safehouse_grid"), 0, 3_u64);
+        let next_level = (Some("safehouse_grid"), 1, 3_u64);
+
+        assert!(!should_rebuild_static_world(&current, &next_same));
+        assert!(should_rebuild_static_world(&current, &next_level));
+    }
+
+    #[test]
+    fn clamp_camera_pan_offset_stops_at_map_edges() {
+        let render_config = ViewerRenderConfig {
+            pixels_per_world_unit: 100.0,
+            hud_reserved_width_px: 0.0,
+            viewport_padding_px: 0.0,
+            camera_pitch_degrees: 90.0,
+            ..ViewerRenderConfig::default()
+        };
+
+        let clamped = clamp_camera_pan_offset(
+            GridBounds {
+                min_x: 0,
+                max_x: 9,
+                min_z: 0,
+                max_z: 9,
+            },
+            1.0,
+            Vec2::new(99.0, -99.0),
+            400.0,
+            400.0,
+            render_config,
+        );
+
+        assert_eq!(clamped, Vec2::new(3.0, -3.0));
+    }
+
+    #[test]
+    fn clamp_camera_pan_offset_recenters_small_maps() {
+        let render_config = ViewerRenderConfig {
+            pixels_per_world_unit: 100.0,
+            hud_reserved_width_px: 0.0,
+            viewport_padding_px: 0.0,
+            camera_pitch_degrees: 90.0,
+            ..ViewerRenderConfig::default()
+        };
+
+        let clamped = clamp_camera_pan_offset(
+            GridBounds {
+                min_x: 0,
+                max_x: 1,
+                min_z: 0,
+                max_z: 1,
+            },
+            1.0,
+            Vec2::new(5.0, 5.0),
+            600.0,
+            600.0,
+            render_config,
+        );
+
+        assert_eq!(clamped, Vec2::ZERO);
     }
 }

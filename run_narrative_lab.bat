@@ -7,6 +7,11 @@ set "CARGO_DIR=%USERPROFILE%\.cargo\bin"
 set "NPM_EXE=npm.cmd"
 set "VSDEVCMD="
 set "VSWHERE="
+set "SELF_TEST_SCENARIO="
+
+if /I "%~1"=="--self-test" (
+    set "SELF_TEST_SCENARIO=narrative-menu"
+)
 
 if not exist "%EDITOR_DIR%\package.json" (
     echo [ERROR] Narrative Lab project not found: "%EDITOR_DIR%"
@@ -81,7 +86,12 @@ if not exist "node_modules" (
     )
 )
 
-echo Starting Narrative Lab...
+if defined SELF_TEST_SCENARIO (
+    echo Starting Narrative Lab in self-test mode: %SELF_TEST_SCENARIO%
+    set "CDC_EDITOR_SELF_TEST=%SELF_TEST_SCENARIO%"
+) else (
+    echo Starting Narrative Lab...
+)
 call %NPM_EXE% run tauri:narrative
 set "EXIT_CODE=%ERRORLEVEL%"
 popd

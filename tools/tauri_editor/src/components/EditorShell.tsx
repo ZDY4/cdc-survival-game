@@ -44,8 +44,8 @@ export function EditorShell({
   secondaryMetaValue,
   shellMode = "default",
   brandEyebrow = "CDC Editor",
-  topbarEyebrow = "Workspace",
-  topbarHeadline = "Shared Rust data, standalone editor UI, real project content.",
+  topbarEyebrow,
+  topbarHeadline,
   showSidebar = true,
   showStatusBar = true,
   children,
@@ -58,102 +58,84 @@ export function EditorShell({
     <div className={`shell ${showSidebar ? "" : "shell-no-sidebar"}`.trim()}>
       {showSidebar ? (
         <aside className="shell-sidebar">
-          <div className="brand-block">
-            <p className="eyebrow">{brandEyebrow}</p>
-            <h1>{title}</h1>
-            <p className="shell-copy">{subtitle}</p>
-            {narrativeMode ? (
-              <div className="row-badges">
+          <div className="shell-sidebar-top">
+            <div className="sidebar-section sidebar-section-compact">
+              <div className="section-header">
+                <span className="section-label">Modules</span>
                 <Badge tone="accent">{runtimeLabel}</Badge>
-                <Badge tone="muted">standalone writing studio</Badge>
               </div>
-            ) : null}
+              <nav className="module-nav">
+                {modules.map((module) => (
+                  <button
+                    key={module.id}
+                    className={`module-button ${module.id === activeModule ? "module-button-active" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      if (module.state === "active") {
+                        onModuleChange(module.id);
+                      }
+                    }}
+                    disabled={module.state !== "active"}
+                  >
+                    <span>{module.label}</span>
+                    <Badge tone={module.state === "active" ? "success" : "muted"}>
+                      {module.state === "active" ? "Ready" : "Planned"}
+                    </Badge>
+                  </button>
+                ))}
+              </nav>
+            </div>
           </div>
 
-          {narrativeMode ? (
-            <>
-              <div className="sidebar-section">
-                <span className="section-label">Session</span>
-                <div className="list-summary">
-                  <div className="summary-row">
-                    <div className="summary-row-main">
-                      <strong>{primaryMetaLabel}</strong>
-                      <p>{resolvedPrimaryMeta}</p>
-                    </div>
+          <div className="shell-sidebar-bottom">
+            <div className="sidebar-section sidebar-section-compact">
+              <span className="section-label">{narrativeMode ? "Session" : "Workspace"}</span>
+              <div className="list-summary">
+                <div className="summary-row summary-row-compact">
+                  <div className="summary-row-main">
+                    <strong>{primaryMetaLabel}</strong>
+                    <p>{resolvedPrimaryMeta}</p>
                   </div>
-                  <div className="summary-row">
-                    <div className="summary-row-main">
-                      <strong>{secondaryMetaLabel}</strong>
-                      <p>{resolvedSecondaryMeta}</p>
-                    </div>
+                </div>
+                <div className="summary-row summary-row-compact">
+                  <div className="summary-row-main">
+                    <strong>{secondaryMetaLabel}</strong>
+                    <p>{resolvedSecondaryMeta}</p>
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="sidebar-section">
-                <span className="section-label">Focus</span>
-                <ul className="domain-list">
-                  <li>Draft, revise, and compare markdown narrative documents.</li>
-                  <li>Arrange the workbench layout around your writing flow.</li>
-                  <li>Configure AI providers and cloud sync without leaving the lab.</li>
-                </ul>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="sidebar-section">
-                <div className="section-header">
-                  <span className="section-label">Modules</span>
-                  <Badge tone="accent">{runtimeLabel}</Badge>
+            <div className="sidebar-section sidebar-section-compact">
+              <span className="section-label">{narrativeMode ? "Context" : "Runtime"}</span>
+              <div className="shell-sidebar-notes">
+                <div className="summary-row summary-row-compact">
+                  <div className="summary-row-main">
+                    <strong>Stage</strong>
+                    <p>{bootstrap.activeStage}</p>
+                  </div>
                 </div>
-
-                <nav className="module-nav">
-                  {modules.map((module) => (
-                    <button
-                      key={module.id}
-                      className={`module-button ${
-                        module.id === activeModule ? "module-button-active" : ""
-                      }`}
-                      type="button"
-                      onClick={() => {
-                        if (module.state === "active") {
-                          onModuleChange(module.id);
-                        }
-                      }}
-                      disabled={module.state !== "active"}
-                    >
-                      <span>{module.label}</span>
-                      <Badge tone={module.state === "active" ? "success" : "muted"}>
-                        {module.state === "active" ? "Ready" : "Planned"}
-                      </Badge>
-                    </button>
-                  ))}
-                </nav>
-              </div>
-
-              <div className="sidebar-section">
-                <span className="section-label">Migration focus</span>
-                <strong className="focus-heading">{bootstrap.activeStage}</strong>
-                <div className="phase-stack">
-                  {bootstrap.stages.map((stage) => (
-                    <article className="phase-card" key={stage.id}>
-                      <h2>{stage.title}</h2>
-                      <p>{stage.description}</p>
-                    </article>
+                <div className="row-badges">
+                  {bootstrap.editorDomains.slice(0, 4).map((domain) => (
+                    <Badge key={domain} tone="muted">
+                      {domain}
+                    </Badge>
                   ))}
                 </div>
               </div>
-            </>
-          )}
+            </div>
+          </div>
         </aside>
       ) : null}
 
       <section className="shell-main">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">{topbarEyebrow}</p>
-            <h2>{topbarHeadline}</h2>
-          </div>
+          {topbarEyebrow || topbarHeadline ? (
+            <div className="topbar-copy">
+              {topbarEyebrow ? <p className="eyebrow">{topbarEyebrow}</p> : null}
+              {topbarHeadline ? <h2>{topbarHeadline}</h2> : null}
+            </div>
+          ) : null}
           <div className="workspace-meta">
             <div>
               <span className="meta-label">{primaryMetaLabel}</span>

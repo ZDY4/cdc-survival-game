@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/Badge";
-import {
-  NumberField,
-  SelectField,
-  TextareaField,
-  TextField,
-} from "../../components/fields";
+import { SelectField, TextareaField } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import type {
-  AiConnectionTestResult,
   AiDiffSummary,
   AiDraftPayload,
   AiGenerateRequest,
@@ -26,8 +20,7 @@ export type AiGeneratePanelProps<TRecord> = {
   onClose: () => void;
   onGenerate: (request: AiGenerateRequest<TRecord>) => Promise<AiGenerationResponse<TRecord>>;
   onLoadSettings: () => Promise<AiSettings>;
-  onSaveSettings: (settings: AiSettings) => Promise<AiSettings>;
-  onTestSettings: (settings: AiSettings) => Promise<AiConnectionTestResult>;
+  onOpenSettings: () => Promise<void> | void;
   onApply: (draft: AiDraftPayload<TRecord>) => void;
 };
 
@@ -58,8 +51,7 @@ export function AiGeneratePanel<TRecord>({
   onClose,
   onGenerate,
   onLoadSettings,
-  onSaveSettings,
-  onTestSettings,
+  onOpenSettings,
   onApply,
 }: AiGeneratePanelProps<TRecord>) {
   const [mode, setMode] = useState<"create" | "revise">("revise");
@@ -68,7 +60,6 @@ export function AiGeneratePanel<TRecord>({
   const [response, setResponse] = useState<AiGenerationResponse<TRecord> | null>(null);
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [busy, setBusy] = useState(false);
-  const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState("");
 
   useEffect(() => {
@@ -115,37 +106,6 @@ export function AiGeneratePanel<TRecord>({
       setResponse(next);
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function saveSettings() {
-    if (!settings) {
-      return;
-    }
-    setSettingsBusy(true);
-    try {
-      const saved = await onSaveSettings(settings);
-      setSettings(saved);
-      setSettingsStatus("AI 设置已保存");
-    } catch (error) {
-      setSettingsStatus(`保存 AI 设置失败: ${String(error)}`);
-    } finally {
-      setSettingsBusy(false);
-    }
-  }
-
-  async function testSettings() {
-    if (!settings) {
-      return;
-    }
-    setSettingsBusy(true);
-    try {
-      const result = await onTestSettings(settings);
-      setSettingsStatus(result.ok ? "连接测试成功" : result.error || "连接测试失败");
-    } catch (error) {
-      setSettingsStatus(`连接测试失败: ${String(error)}`);
-    } finally {
-      setSettingsBusy(false);
     }
   }
 
@@ -229,44 +189,31 @@ export function AiGeneratePanel<TRecord>({
             </PanelSection>
 
             <PanelSection label="Provider" title="AI settings">
-              <TextField
-                label="Base URL"
-                value={settings?.baseUrl ?? ""}
-                onChange={(value) => setSettings((current) => ({ ...(current ?? defaultSettings()), baseUrl: value }))}
-              />
-              <TextField
-                label="Model"
-                value={settings?.model ?? ""}
-                onChange={(value) => setSettings((current) => ({ ...(current ?? defaultSettings()), model: value }))}
-              />
-              <TextField
-                label="API Key"
-                value={settings?.apiKey ?? ""}
-                onChange={(value) => setSettings((current) => ({ ...(current ?? defaultSettings()), apiKey: value }))}
-              />
-              <NumberField
-                label="Timeout (sec)"
-                value={settings?.timeoutSec ?? 45}
-                min={5}
-                onChange={(value) => setSettings((current) => ({ ...(current ?? defaultSettings()), timeoutSec: Math.max(5, value) }))}
-              />
-              <NumberField
-                label="Max context records"
-                value={settings?.maxContextRecords ?? 24}
-                min={6}
-                onChange={(value) =>
-                  setSettings((current) => ({
-                    ...(current ?? defaultSettings()),
-                    maxContextRecords: Math.max(6, value),
-                  }))
-                }
-              />
+              <div className="ai-provider-summary">
+                <div className="summary-row summary-row-compact">
+                  <div className="summary-row-main">
+                    <strong>Model</strong>
+                    <p>{settings?.model || "Not configured"}</p>
+                  </div>
+                </div>
+                <div className="summary-row summary-row-compact">
+                  <div className="summary-row-main">
+                    <strong>Endpoint</strong>
+                    <p>{settings?.baseUrl || "No provider endpoint saved"}</p>
+                  </div>
+                </div>
+                <div className="summary-row summary-row-compact">
+                  <div className="summary-row-main">
+                    <strong>Request policy</strong>
+                    <p>
+                      timeout {settings?.timeoutSec ?? defaultSettings().timeoutSec}s · context {settings?.maxContextRecords ?? defaultSettings().maxContextRecords}
+                    </p>
+                  </div>
+                </div>
+              </div>
               <div className="toolbar-actions">
-                <button type="button" className="toolbar-button" onClick={() => void testSettings()} disabled={settingsBusy}>
-                  Test connection
-                </button>
-                <button type="button" className="toolbar-button toolbar-accent" onClick={() => void saveSettings()} disabled={settingsBusy}>
-                  Save settings
+                <button type="button" className="toolbar-button toolbar-accent" onClick={() => void onOpenSettings()}>
+                  Open AI settings
                 </button>
               </div>
               {settingsStatus ? <p className="field-hint">{settingsStatus}</p> : null}

@@ -6,19 +6,30 @@ use std::collections::VecDeque;
 use game_data::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide,
     CharacterId, CharacterInteractionProfile, CharacterLootEntry, CharacterResourcePool, GridCoord,
-    InteractionContextSnapshot,
-    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionDefinition,
-    InteractionOptionId, InteractionOptionKind, InteractionPrompt, InteractionTargetId,
-    ItemLibrary, MapCellDefinition, MapId, MapObjectDefinition, MapObjectFootprint,
-    MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, ResolvedInteractionOption,
-    QuestLibrary, QuestNode, RecipeLibrary, ShopLibrary, SkillLibrary, TurnState, WorldCoord,
+    InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
+    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind, InteractionPrompt,
+    InteractionTargetId, ItemLibrary, MapCellDefinition, MapEntryPointDefinition,
+    MapId, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+    MapPickupProps, MapRotation, OverworldDefinition, OverworldLibrary, QuestLibrary, QuestNode,
+    RecipeLibrary, ResolvedInteractionOption, ShopLibrary, SkillLibrary, TurnState, WorldCoord,
     WorldMode,
 };
+use tracing::{error, info, warn};
 
 use crate::actor::{ActorRecord, ActorRegistry, AiController};
 use crate::economy::HeadlessEconomyRuntime;
+use crate::goap::{
+    ActionExecutionPhase, NpcActionKey, NpcBackgroundState, NpcRuntimeActionState,
+};
 use crate::grid::{find_path_grid, find_path_world, GridPathfindingError, GridWorld};
-use crate::movement::{MovementPlan, MovementPlanError, PendingProgressionStep};
+use crate::movement::{
+    MovementCommandOutcome, MovementPlan, MovementPlanError, PendingProgressionStep,
+};
+use crate::overworld::{
+    compute_location_route, find_entry_point, location_by_id, world_mode_for_location_kind,
+    LocationTransitionContext, OverworldRouteSnapshot, OverworldStateSnapshot,
+    OverworldTravelState, UnlockedLocationSet,
+};
 use crate::turn::{ActiveActionState, ActiveActions, GroupOrderRegistry, TurnConfig, TurnRuntime};
 
 #[derive(Debug)]
@@ -87,6 +98,29 @@ pub enum SimulationCommand {
         start: GridCoord,
         goal: GridCoord,
     },
+    RequestOverworldRoute {
+        actor_id: ActorId,
+        target_location_id: String,
+    },
+    StartOverworldTravel {
+        actor_id: ActorId,
+        target_location_id: String,
+    },
+    AdvanceOverworldTravel {
+        actor_id: ActorId,
+        minutes: u32,
+    },
+    EnterLocation {
+        actor_id: ActorId,
+        location_id: String,
+        entry_point_id: Option<String>,
+    },
+    ReturnToOverworld {
+        actor_id: ActorId,
+    },
+    UnlockLocation {
+        location_id: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +130,9 @@ pub enum SimulationCommandResult {
     Path(Result<Vec<GridCoord>, GridPathfindingError>),
     InteractionPrompt(InteractionPrompt),
     InteractionExecution(InteractionExecutionResult),
+    OverworldRoute(Result<OverworldRouteSnapshot, String>),
+    OverworldState(Result<OverworldStateSnapshot, String>),
+    LocationTransition(Result<LocationTransitionContext, String>),
 }
 
 #[derive(Debug, Clone)]
@@ -136,6 +173,25 @@ pub enum SimulationEvent {
         result: ActionResult,
     },
     WorldCycleCompleted,
+    NpcActionStarted {
+        actor_id: ActorId,
+        action: NpcActionKey,
+        phase: ActionExecutionPhase,
+    },
+    NpcActionPhaseChanged {
+        actor_id: ActorId,
+        action: NpcActionKey,
+        phase: ActionExecutionPhase,
+    },
+    NpcActionCompleted {
+        actor_id: ActorId,
+        action: NpcActionKey,
+    },
+    NpcActionFailed {
+        actor_id: ActorId,
+        action: NpcActionKey,
+        reason: String,
+    },
     ActorMoved {
         actor_id: ActorId,
         from: GridCoord,
@@ -190,6 +246,44 @@ pub enum SimulationEvent {
         option_id: InteractionOptionId,
         target_id: String,
         world_mode: WorldMode,
+        location_id: Option<String>,
+        entry_point_id: Option<String>,
+        return_location_id: Option<String>,
+    },
+    OverworldRouteComputed {
+        actor_id: ActorId,
+        target_location_id: String,
+        travel_minutes: u32,
+        path_length: usize,
+    },
+    OverworldTravelStarted {
+        actor_id: ActorId,
+        target_location_id: String,
+        travel_minutes: u32,
+    },
+    OverworldTravelProgressed {
+        actor_id: ActorId,
+        target_location_id: String,
+        progressed_minutes: u32,
+        remaining_minutes: u32,
+    },
+    OverworldTravelCompleted {
+        actor_id: ActorId,
+        target_location_id: String,
+    },
+    LocationEntered {
+        actor_id: ActorId,
+        location_id: String,
+        map_id: String,
+        entry_point_id: String,
+        world_mode: WorldMode,
+    },
+    ReturnedToOverworld {
+        actor_id: ActorId,
+        active_outdoor_location_id: Option<String>,
+    },
+    LocationUnlocked {
+        location_id: String,
     },
     PickupGranted {
         actor_id: ActorId,
@@ -342,6 +436,7 @@ pub struct SimulationSnapshot {
     pub grid: GridDebugState,
     pub combat: CombatDebugState,
     pub interaction_context: InteractionContextSnapshot,
+    pub overworld: OverworldStateSnapshot,
     pub path_preview: Vec<GridCoord>,
 }
 
@@ -365,9 +460,21 @@ pub struct Simulation {
     shop_library: Option<ShopLibrary>,
     active_quests: BTreeMap<String, QuestRuntimeState>,
     completed_quests: BTreeSet<String>,
+    actor_relationships: HashMap<(ActorId, ActorId), i32>,
+    actor_autonomous_movement_goals: HashMap<ActorId, GridCoord>,
+    actor_runtime_actions: HashMap<ActorId, NpcRuntimeActionState>,
     economy: HeadlessEconomyRuntime,
     item_library: Option<ItemLibrary>,
+    map_library: Option<MapLibrary>,
+    overworld_library: Option<OverworldLibrary>,
     interaction_context: InteractionContextSnapshot,
+    active_location_id: Option<String>,
+    current_entry_point_id: Option<String>,
+    overworld_pawn_cell: Option<GridCoord>,
+    return_outdoor_location_id: Option<String>,
+    unlocked_locations: UnlockedLocationSet,
+    active_overworld_id: Option<String>,
+    overworld_travel: Option<OverworldTravelState>,
     ai_controllers: HashMap<ActorId, Box<dyn AiController>>,
     grid_world: GridWorld,
     pending_progression: VecDeque<PendingProgressionStep>,
@@ -397,9 +504,21 @@ impl Default for Simulation {
             shop_library: None,
             active_quests: BTreeMap::new(),
             completed_quests: BTreeSet::new(),
+            actor_relationships: HashMap::new(),
+            actor_autonomous_movement_goals: HashMap::new(),
+            actor_runtime_actions: HashMap::new(),
             economy: HeadlessEconomyRuntime::default(),
             item_library: None,
+            map_library: None,
+            overworld_library: None,
             interaction_context: InteractionContextSnapshot::default(),
+            active_location_id: None,
+            current_entry_point_id: None,
+            overworld_pawn_cell: None,
+            return_outdoor_location_id: None,
+            unlocked_locations: BTreeSet::new(),
+            active_overworld_id: None,
+            overworld_travel: None,
             ai_controllers: HashMap::new(),
             grid_world: GridWorld::default(),
             pending_progression: VecDeque::new(),
@@ -430,6 +549,10 @@ impl Simulation {
         std::mem::take(&mut self.events)
     }
 
+    pub fn push_event(&mut self, event: SimulationEvent) {
+        self.events.push(event);
+    }
+
     pub fn economy(&self) -> &HeadlessEconomyRuntime {
         &self.economy
     }
@@ -440,6 +563,63 @@ impl Simulation {
 
     pub fn set_item_library(&mut self, items: ItemLibrary) {
         self.item_library = Some(items);
+    }
+
+    pub fn set_map_library(&mut self, maps: MapLibrary) {
+        self.map_library = Some(maps);
+    }
+
+    pub fn set_overworld_library(&mut self, overworld: OverworldLibrary) {
+        self.active_overworld_id = overworld
+            .first()
+            .map(|definition| definition.id.as_str().to_string());
+        if let Some(definition) = overworld.first() {
+            self.unlocked_locations = definition
+                .locations
+                .iter()
+                .filter(|location| location.default_unlocked)
+                .map(|location| location.id.as_str().to_string())
+                .collect();
+        }
+        self.overworld_library = Some(overworld);
+    }
+
+    pub fn seed_overworld_state(
+        &mut self,
+        world_mode: WorldMode,
+        active_location_id: Option<String>,
+        entry_point_id: Option<String>,
+        unlocked_locations: impl IntoIterator<Item = String>,
+    ) -> Result<(), String> {
+        self.unlocked_locations.extend(unlocked_locations);
+        self.active_location_id = active_location_id;
+        self.current_entry_point_id = entry_point_id;
+
+        if let Some(location_id) = self.active_location_id.as_deref() {
+            let definition = self.current_overworld_definition()?;
+            let location = location_by_id(definition, location_id)
+                .ok_or_else(|| format!("unknown_location:{location_id}"))?;
+            let overworld_cell = location.overworld_cell;
+            let return_outdoor_location_id = match location.kind {
+                game_data::OverworldLocationKind::Outdoor => Some(location.id.as_str().to_string()),
+                game_data::OverworldLocationKind::Interior
+                | game_data::OverworldLocationKind::Dungeon => location
+                    .parent_outdoor_location_id
+                    .as_ref()
+                    .map(|location_id| location_id.as_str().to_string()),
+            };
+            self.overworld_pawn_cell = Some(overworld_cell);
+            self.return_outdoor_location_id = return_outdoor_location_id;
+        }
+
+        self.interaction_context.world_mode = world_mode;
+        if matches!(world_mode, WorldMode::Overworld | WorldMode::Traveling) {
+            self.grid_world.clear_map();
+            self.reset_runtime_actor_occupancy();
+            self.current_entry_point_id = None;
+        }
+        self.sync_interaction_context_from_runtime();
+        Ok(())
     }
 
     pub fn set_quest_library(&mut self, quests: QuestLibrary) {
@@ -471,7 +651,12 @@ impl Simulation {
             .quest_library
             .as_ref()
             .and_then(|library| library.get(quest_id))
-            .map(|quest| (quest.prerequisites.clone(), quest.flow.start_node_id.clone()))
+            .map(|quest| {
+                (
+                    quest.prerequisites.clone(),
+                    quest.flow.start_node_id.clone(),
+                )
+            })
         else {
             return false;
         };
@@ -533,6 +718,148 @@ impl Simulation {
             .unwrap_or(0)
     }
 
+    pub fn active_quest_ids_for_actor(&self, actor_id: ActorId) -> BTreeSet<String> {
+        self.active_quests
+            .values()
+            .filter(|state| state.owner_actor_id == actor_id)
+            .map(|state| state.quest_id.clone())
+            .collect()
+    }
+
+    pub fn completed_quest_ids(&self) -> BTreeSet<String> {
+        self.completed_quests.clone()
+    }
+
+    pub fn get_relationship_score(&self, actor_id: ActorId, target_actor_id: ActorId) -> i32 {
+        self.actor_relationships
+            .get(&(actor_id, target_actor_id))
+            .copied()
+            .unwrap_or_else(|| self.default_relationship_score(actor_id, target_actor_id))
+    }
+
+    pub fn set_relationship_score(
+        &mut self,
+        actor_id: ActorId,
+        target_actor_id: ActorId,
+        score: i32,
+    ) -> i32 {
+        let score = score.clamp(-100, 100);
+        self.actor_relationships
+            .insert((actor_id, target_actor_id), score);
+        score
+    }
+
+    pub fn adjust_relationship_score(
+        &mut self,
+        actor_id: ActorId,
+        target_actor_id: ActorId,
+        delta: i32,
+    ) -> i32 {
+        let next = self
+            .get_relationship_score(actor_id, target_actor_id)
+            .saturating_add(delta)
+            .clamp(-100, 100);
+        self.actor_relationships
+            .insert((actor_id, target_actor_id), next);
+        next
+    }
+
+    pub fn set_actor_autonomous_movement_goal(&mut self, actor_id: ActorId, goal: GridCoord) {
+        if self.actors.contains(actor_id) {
+            self.actor_autonomous_movement_goals.insert(actor_id, goal);
+        }
+    }
+
+    pub fn clear_actor_autonomous_movement_goal(&mut self, actor_id: ActorId) {
+        self.actor_autonomous_movement_goals.remove(&actor_id);
+    }
+
+    pub fn autonomous_movement_goal(&self, actor_id: ActorId) -> Option<GridCoord> {
+        self.actor_autonomous_movement_goals.get(&actor_id).copied()
+    }
+
+    pub fn get_actor_autonomous_movement_goal(&self, actor_id: ActorId) -> Option<GridCoord> {
+        self.autonomous_movement_goal(actor_id)
+    }
+
+    pub fn set_actor_runtime_action_state(
+        &mut self,
+        actor_id: ActorId,
+        state: NpcRuntimeActionState,
+    ) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        self.actor_runtime_actions.insert(actor_id, state);
+    }
+
+    pub fn get_actor_runtime_action_state(
+        &self,
+        actor_id: ActorId,
+    ) -> Option<&NpcRuntimeActionState> {
+        self.actor_runtime_actions.get(&actor_id)
+    }
+
+    pub fn clear_actor_runtime_action_state(&mut self, actor_id: ActorId) {
+        self.actor_runtime_actions.remove(&actor_id);
+    }
+
+    pub fn export_actor_background_state(&self, actor_id: ActorId) -> Option<NpcBackgroundState> {
+        let actor = self.actors.get(actor_id)?;
+        Some(NpcBackgroundState {
+            definition_id: actor
+                .definition_id
+                .as_ref()
+                .map(|definition_id| definition_id.as_str().to_string()),
+            display_name: actor.display_name.clone(),
+            map_id: self.grid_world.map_id().cloned(),
+            grid_position: actor.grid_position,
+            current_anchor: self
+                .actor_runtime_actions
+                .get(&actor_id)
+                .and_then(|state| state.current_anchor.clone()),
+            current_plan: self
+                .actor_runtime_actions
+                .get(&actor_id)
+                .map(|state| vec![state.step.clone()])
+                .unwrap_or_default(),
+            plan_next_index: 0,
+            current_action: self.actor_runtime_actions.get(&actor_id).cloned(),
+            held_reservations: self
+                .actor_runtime_actions
+                .get(&actor_id)
+                .map(|state| state.held_reservations.clone())
+                .unwrap_or_default(),
+            hunger: 0,
+            energy: 0,
+            morale: 0,
+            on_shift: false,
+            meal_window_open: false,
+            quiet_hours: false,
+            world_alert_active: false,
+        })
+    }
+
+    pub fn import_actor_background_state(
+        &mut self,
+        actor_id: ActorId,
+        background: &NpcBackgroundState,
+    ) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+        self.update_actor_grid_position(actor_id, background.grid_position);
+        if let Some(action) = background.current_action.clone() {
+            self.actor_runtime_actions.insert(actor_id, action.clone());
+            if let Some(goal) = action.goal_grid {
+                self.actor_autonomous_movement_goals.insert(actor_id, goal);
+            }
+        } else {
+            self.actor_runtime_actions.remove(&actor_id);
+            self.actor_autonomous_movement_goals.remove(&actor_id);
+        }
+    }
+
     pub fn is_quest_active(&self, quest_id: &str) -> bool {
         self.active_quests.contains_key(quest_id)
     }
@@ -550,7 +877,8 @@ impl Simulation {
         if !self.actors.contains(actor_id) {
             return;
         }
-        self.actor_combat_attributes.insert(actor_id, combat_attributes);
+        self.actor_combat_attributes
+            .insert(actor_id, combat_attributes);
         self.actor_resources.insert(
             actor_id,
             resources
@@ -704,6 +1032,36 @@ impl Simulation {
                 }
                 SimulationCommandResult::Path(result)
             }
+            SimulationCommand::RequestOverworldRoute {
+                actor_id,
+                target_location_id,
+            } => SimulationCommandResult::OverworldRoute(
+                self.request_overworld_route(actor_id, &target_location_id),
+            ),
+            SimulationCommand::StartOverworldTravel {
+                actor_id,
+                target_location_id,
+            } => SimulationCommandResult::OverworldState(
+                self.start_overworld_travel(actor_id, &target_location_id),
+            ),
+            SimulationCommand::AdvanceOverworldTravel { actor_id, minutes } => {
+                SimulationCommandResult::OverworldState(
+                    self.advance_overworld_travel(actor_id, minutes),
+                )
+            }
+            SimulationCommand::EnterLocation {
+                actor_id,
+                location_id,
+                entry_point_id,
+            } => SimulationCommandResult::LocationTransition(
+                self.enter_location(actor_id, &location_id, entry_point_id.as_deref()),
+            ),
+            SimulationCommand::ReturnToOverworld { actor_id } => {
+                SimulationCommandResult::OverworldState(self.return_to_overworld(actor_id))
+            }
+            SimulationCommand::UnlockLocation { location_id } => {
+                SimulationCommandResult::OverworldState(self.unlock_location(&location_id))
+            }
         }
     }
 
@@ -758,6 +1116,19 @@ impl Simulation {
             in_combat: self.turn.combat_active,
             grid_position,
         });
+        let existing_actor_ids: Vec<ActorId> = self
+            .actors
+            .ids()
+            .filter(|existing_actor_id| *existing_actor_id != actor_id)
+            .collect();
+        for existing_actor_id in existing_actor_ids {
+            let forward_score = self.default_relationship_score(actor_id, existing_actor_id);
+            self.actor_relationships
+                .insert((actor_id, existing_actor_id), forward_score);
+            let backward_score = self.default_relationship_score(existing_actor_id, actor_id);
+            self.actor_relationships
+                .insert((existing_actor_id, actor_id), backward_score);
+        }
         self.next_registration_index += 1;
         if let Some(interaction) = interaction {
             self.actor_interactions.insert(actor_id, interaction);
@@ -796,6 +1167,12 @@ impl Simulation {
         self.actor_loot_tables.remove(&actor_id);
         self.actor_progression.remove(&actor_id);
         self.actor_xp_rewards.remove(&actor_id);
+        self.actor_relationships
+            .retain(|(source_actor_id, target_actor_id), _| {
+                *source_actor_id != actor_id && *target_actor_id != actor_id
+            });
+        self.actor_autonomous_movement_goals.remove(&actor_id);
+        self.actor_runtime_actions.remove(&actor_id);
         self.economy.remove_actor(actor_id);
         self.ai_controllers.remove(&actor_id);
         self.active_actions.by_actor.remove(&actor_id);
@@ -852,6 +1229,12 @@ impl Simulation {
         self.actors
             .get(actor_id)
             .map(|actor| actor.group_id.as_str())
+    }
+
+    pub fn get_actor_definition_id(&self, actor_id: ActorId) -> Option<&CharacterId> {
+        self.actors
+            .get(actor_id)
+            .and_then(|actor| actor.definition_id.as_ref())
     }
 
     pub fn actor_grid_position(&self, actor_id: ActorId) -> Option<GridCoord> {
@@ -1071,6 +1454,7 @@ impl Simulation {
                 current_turn_index: self.turn.combat_turn_index,
             },
             interaction_context: self.current_interaction_context(),
+            overworld: self.current_overworld_snapshot(),
             path_preview,
         }
     }
@@ -1150,6 +1534,25 @@ impl Simulation {
             resolved_path,
             available_steps,
         })
+    }
+
+    pub fn move_actor_to_reachable(
+        &mut self,
+        actor_id: ActorId,
+        goal: GridCoord,
+    ) -> Result<MovementCommandOutcome, MovementPlanError> {
+        let plan = self.plan_actor_movement(actor_id, goal)?;
+        let result = if plan.requested_steps() == 0 {
+            let ap = self.get_actor_ap(actor_id);
+            ActionResult::accepted(ap, ap, 0.0, self.turn.combat_active)
+        } else if plan.resolved_steps() == 0 {
+            let ap = self.get_actor_ap(actor_id);
+            ActionResult::rejected("insufficient_ap", ap, ap, self.turn.combat_active)
+        } else {
+            self.move_actor_to(actor_id, plan.resolved_goal)
+        };
+
+        Ok(MovementCommandOutcome { plan, result })
     }
 
     pub fn request_action(&mut self, request: ActionRequest) -> ActionResult {
@@ -1338,8 +1741,20 @@ impl Simulation {
         &mut self,
         request: InteractionExecutionRequest,
     ) -> InteractionExecutionResult {
+        info!(
+            "core.interaction.execute actor={:?} target={:?} option_id={}",
+            request.actor_id,
+            request.target_id,
+            request.option_id.as_str()
+        );
         let Some(prompt) = self.query_interaction_options(request.actor_id, &request.target_id)
         else {
+            warn!(
+                "core.interaction.target_unavailable actor={:?} target={:?} option_id={}",
+                request.actor_id,
+                request.target_id,
+                request.option_id.as_str()
+            );
             return InteractionExecutionResult {
                 success: false,
                 reason: Some("interaction_target_unavailable".to_string()),
@@ -1353,6 +1768,12 @@ impl Simulation {
             .find(|option| option.id == request.option_id)
             .cloned()
         else {
+            warn!(
+                "core.interaction.option_unavailable actor={:?} target={:?} option_id={}",
+                request.actor_id,
+                request.target_id,
+                request.option_id.as_str()
+            );
             return InteractionExecutionResult {
                 success: false,
                 reason: Some("interaction_option_unavailable".to_string()),
@@ -1363,6 +1784,12 @@ impl Simulation {
         let Some(option_definition) =
             self.resolve_option_definition(&request.target_id, &option.id)
         else {
+            warn!(
+                "core.interaction.option_definition_missing actor={:?} target={:?} option_id={}",
+                request.actor_id,
+                request.target_id,
+                option.id.as_str()
+            );
             return InteractionExecutionResult {
                 success: false,
                 reason: Some("interaction_option_unavailable".to_string()),
@@ -1378,6 +1805,16 @@ impl Simulation {
                 option.interaction_distance,
             ) {
                 Ok(Some((goal, path_length))) => {
+                    info!(
+                        "core.interaction.approach_planned actor={:?} target={:?} option_id={} goal=({}, {}, {}) path_length={}",
+                        request.actor_id,
+                        request.target_id,
+                        option.id.as_str(),
+                        goal.x,
+                        goal.y,
+                        goal.z,
+                        path_length
+                    );
                     self.events
                         .push(SimulationEvent::InteractionApproachPlanned {
                             actor_id: request.actor_id,
@@ -1396,6 +1833,13 @@ impl Simulation {
                 }
                 Ok(None) => {}
                 Err(reason) => {
+                    warn!(
+                        "core.interaction.approach_unavailable actor={:?} target={:?} option_id={} reason={}",
+                        request.actor_id,
+                        request.target_id,
+                        option.id.as_str(),
+                        reason
+                    );
                     self.events.push(SimulationEvent::InteractionFailed {
                         actor_id: request.actor_id,
                         target_id: request.target_id.clone(),
@@ -1426,6 +1870,7 @@ impl Simulation {
                         prompt,
                         option.id,
                         "attack_target_invalid",
+                        false,
                     );
                 };
                 let action = self.perform_attack(request.actor_id, target_actor);
@@ -1443,6 +1888,12 @@ impl Simulation {
                     target_id: InteractionTargetId::Actor(target_actor),
                     option_id: option.id.clone(),
                 });
+                info!(
+                    "core.interaction.succeeded actor={:?} target={:?} option_id={}",
+                    request.actor_id,
+                    InteractionTargetId::Actor(target_actor),
+                    option.id.as_str()
+                );
                 InteractionExecutionResult {
                     success: true,
                     prompt: Some(prompt),
@@ -1481,6 +1932,13 @@ impl Simulation {
                     target_id: request.target_id.clone(),
                     option_id: option.id.clone(),
                 });
+                info!(
+                    "core.interaction.dialogue_started actor={:?} target={:?} option_id={} dialogue_id={}",
+                    request.actor_id,
+                    request.target_id,
+                    option.id.as_str(),
+                    dialogue_id.as_deref().unwrap_or("none")
+                );
                 InteractionExecutionResult {
                     success: true,
                     prompt: Some(prompt),
@@ -1496,6 +1954,7 @@ impl Simulation {
                         prompt,
                         option.id,
                         "pickup_target_invalid",
+                        false,
                     );
                 };
                 let action = self.perform_interact(request.actor_id);
@@ -1521,14 +1980,15 @@ impl Simulation {
                             prompt,
                             option.id,
                             "pickup_item_invalid",
+                            true,
                         );
                     }
                 };
                 self.grid_world.remove_map_object(object_id);
                 self.economy.ensure_actor(request.actor_id);
-                if let Err(error) = self
-                    .economy
-                    .add_item_unchecked(request.actor_id, pickup_item_id, count)
+                if let Err(error) =
+                    self.economy
+                        .add_item_unchecked(request.actor_id, pickup_item_id, count)
                 {
                     let error_message = error.to_string();
                     return self.failed_interaction_execution(
@@ -1536,6 +1996,7 @@ impl Simulation {
                         prompt,
                         option.id,
                         &error_message,
+                        true,
                     );
                 }
                 self.advance_collect_quest_progress(request.actor_id, pickup_item_id, count);
@@ -1550,6 +2011,14 @@ impl Simulation {
                     target_id: request.target_id.clone(),
                     option_id: option.id.clone(),
                 });
+                info!(
+                    "core.interaction.pickup_succeeded actor={:?} target={:?} option_id={} item_id={} count={}",
+                    request.actor_id,
+                    request.target_id,
+                    option.id.as_str(),
+                    option_definition.item_id,
+                    count
+                );
                 InteractionExecutionResult {
                     success: true,
                     prompt: Some(prompt),
@@ -1580,12 +2049,22 @@ impl Simulation {
                     option_id: option.id.clone(),
                     target_id,
                     world_mode: context_snapshot.world_mode,
+                    location_id: context_snapshot.active_location_id.clone(),
+                    entry_point_id: context_snapshot.entry_point_id.clone(),
+                    return_location_id: context_snapshot.return_outdoor_location_id.clone(),
                 });
                 self.events.push(SimulationEvent::InteractionSucceeded {
                     actor_id: request.actor_id,
                     target_id: request.target_id.clone(),
                     option_id: option.id.clone(),
                 });
+                info!(
+                    "core.interaction.scene_transition actor={:?} target={:?} option_id={} mode={:?}",
+                    request.actor_id,
+                    request.target_id,
+                    option.id.as_str(),
+                    context_snapshot.world_mode
+                );
                 InteractionExecutionResult {
                     success: true,
                     prompt: Some(prompt),
@@ -1764,7 +2243,9 @@ impl Simulation {
                 .consume_equipped_ammo(actor_id, "main_hand", 1, &items);
         }
         if weapon.current_durability.is_some() {
-            let _ = self.economy.consume_equipped_durability(actor_id, "main_hand", 1);
+            let _ = self
+                .economy
+                .consume_equipped_durability(actor_id, "main_hand", 1);
         }
     }
 
@@ -1791,8 +2272,10 @@ impl Simulation {
         if next_hp <= 0.0 {
             self.award_kill_experience(actor_id, target_actor);
             self.advance_kill_quest_progress(actor_id, target_actor);
-            self.events
-                .push(SimulationEvent::ActorDefeated { actor_id, target_actor });
+            self.events.push(SimulationEvent::ActorDefeated {
+                actor_id,
+                target_actor,
+            });
             if let Some(grid) = defeat_position {
                 self.spawn_loot_drops(actor_id, target_actor, grid);
             }
@@ -1804,7 +2287,11 @@ impl Simulation {
         let weapon_profile = self
             .item_library
             .as_ref()
-            .and_then(|items| self.economy.equipped_weapon(actor_id, "main_hand", items).ok())
+            .and_then(|items| {
+                self.economy
+                    .equipped_weapon(actor_id, "main_hand", items)
+                    .ok()
+            })
             .flatten();
         let attack_power = self.actor_combat_attribute_value(actor_id, "attack_power")
             + self.actor_equipment_attribute_bonus(actor_id, "attack_power")
@@ -1829,19 +2316,22 @@ impl Simulation {
         let crit_damage = weapon_profile
             .as_ref()
             .map(|weapon| weapon.crit_multiplier.max(1.0))
-            .unwrap_or_else(|| self.actor_combat_attribute_value(actor_id, "crit_damage").max(1.0));
+            .unwrap_or_else(|| {
+                self.actor_combat_attribute_value(actor_id, "crit_damage")
+                    .max(1.0)
+            });
 
         let defense = (self.actor_combat_attribute_value(target_actor, "defense")
             + self.actor_equipment_attribute_bonus(target_actor, "defense"))
         .max(0.0);
-        let damage_reduction =
-            self.actor_combat_attribute_value(target_actor, "damage_reduction").clamp(0.0, 0.95);
+        let damage_reduction = self
+            .actor_combat_attribute_value(target_actor, "damage_reduction")
+            .clamp(0.0, 0.95);
         let accuracy_multiplier = (accuracy / 100.0).clamp(0.25, 1.5);
         let crit_multiplier = 1.0 + crit_chance * (crit_damage - 1.0);
 
-        let mut damage = ((attack_power.max(1.0) * accuracy_multiplier * crit_multiplier)
-            - defense)
-            .max(1.0);
+        let mut damage =
+            ((attack_power.max(1.0) * accuracy_multiplier * crit_multiplier) - defense).max(1.0);
         damage *= 1.0 - damage_reduction;
         damage.max(1.0).round()
     }
@@ -1857,7 +2347,12 @@ impl Simulation {
                 continue;
             }
 
-            let object_id = format!("loot_{}_{}_{}", target_actor.0, entry.item_id, self.events.len());
+            let object_id = format!(
+                "loot_{}_{}_{}",
+                target_actor.0,
+                entry.item_id,
+                self.events.len()
+            );
             self.grid_world.upsert_map_object(MapObjectDefinition {
                 object_id: object_id.clone(),
                 kind: MapObjectKind::Pickup,
@@ -1907,7 +2402,12 @@ impl Simulation {
         if !self.actors.contains(actor_id) {
             return;
         }
-        let amount = self.actor_xp_rewards.get(&target_actor).copied().unwrap_or(0).max(0);
+        let amount = self
+            .actor_xp_rewards
+            .get(&target_actor)
+            .copied()
+            .unwrap_or(0)
+            .max(0);
         self.grant_experience(actor_id, amount);
     }
 
@@ -1922,7 +2422,14 @@ impl Simulation {
     }
 
     fn advance_collect_quest_progress(&mut self, actor_id: ActorId, item_id: u32, count: i32) {
-        self.advance_objective_progress(actor_id, "collect", count.max(1), Some(item_id), None, None);
+        self.advance_objective_progress(
+            actor_id,
+            "collect",
+            count.max(1),
+            Some(item_id),
+            None,
+            None,
+        );
     }
 
     fn advance_objective_progress(
@@ -1954,7 +2461,11 @@ impl Simulation {
                         continue;
                     }
                 }
-                if let Some(expected_enemy_type) = node.extra.get("enemy_type").and_then(|value| value.as_str()) {
+                if let Some(expected_enemy_type) = node
+                    .extra
+                    .get("enemy_type")
+                    .and_then(|value| value.as_str())
+                {
                     if enemy_type.as_deref() != Some(expected_enemy_type) {
                         continue;
                     }
@@ -1964,7 +2475,10 @@ impl Simulation {
                 }
 
                 let target = objective_target(&node);
-                let state = self.active_quests.get_mut(&quest_id).expect("quest should exist");
+                let state = self
+                    .active_quests
+                    .get_mut(&quest_id)
+                    .expect("quest should exist");
                 let current = state
                     .completed_objectives
                     .get(&node.id)
@@ -2040,7 +2554,12 @@ impl Simulation {
         }
     }
 
-    fn advance_quest_to_connection(&mut self, quest_id: &str, from_node_id: &str, from_port: i32) -> bool {
+    fn advance_quest_to_connection(
+        &mut self,
+        quest_id: &str,
+        from_node_id: &str,
+        from_port: i32,
+    ) -> bool {
         let Some(next_node_id) = self
             .quest_library
             .as_ref()
@@ -2087,9 +2606,9 @@ impl Simulation {
                     .economy
                     .add_item(actor_id, reward_item.id, reward_item.count, items);
             } else {
-                let _ = self
-                    .economy
-                    .add_item_unchecked(actor_id, reward_item.id, reward_item.count);
+                let _ =
+                    self.economy
+                        .add_item_unchecked(actor_id, reward_item.id, reward_item.count);
             }
         }
         if node.rewards.experience > 0 {
@@ -2106,7 +2625,9 @@ impl Simulation {
         }
         if let Some(recipes) = self.recipe_library.as_ref() {
             for recipe_id in &node.rewards.unlock_recipes {
-                let _ = self.economy.unlock_recipe(actor_id, recipe_id.clone(), recipes);
+                let _ = self
+                    .economy
+                    .unlock_recipe(actor_id, recipe_id.clone(), recipes);
             }
         }
     }
@@ -2118,7 +2639,12 @@ impl Simulation {
 
         let (total_xp_after, level_up_event) = {
             let state = self.actor_progression.entry(actor_id).or_insert_with(|| {
-                let level = self.economy.actor(actor_id).map(|actor| actor.level).unwrap_or(1).max(1);
+                let level = self
+                    .economy
+                    .actor(actor_id)
+                    .map(|actor| actor.level)
+                    .unwrap_or(1)
+                    .max(1);
                 ActorProgressionState {
                     level,
                     ..ActorProgressionState::default()
@@ -2252,13 +2778,401 @@ impl Simulation {
 
     fn current_interaction_context(&self) -> InteractionContextSnapshot {
         let mut snapshot = self.interaction_context.clone();
-        if snapshot.current_map_id.is_none() {
-            snapshot.current_map_id = self
+        let overworld = self.current_overworld_snapshot();
+        snapshot.current_map_id = overworld.current_map_id;
+        snapshot.active_outdoor_location_id = overworld.active_outdoor_location_id;
+        snapshot.active_location_id = overworld.active_location_id;
+        snapshot.current_subscene_location_id = match overworld.world_mode {
+            WorldMode::Interior | WorldMode::Dungeon => self.active_location_id.clone(),
+            _ => None,
+        };
+        snapshot.return_outdoor_location_id = self.return_outdoor_location_id.clone();
+        snapshot.return_outdoor_spawn_id = self.current_return_entry_point_id();
+        snapshot.overworld_pawn_cell = overworld.current_overworld_cell;
+        snapshot.entry_point_id = overworld.current_entry_point_id;
+        snapshot.world_mode = overworld.world_mode;
+        snapshot
+    }
+
+    fn current_overworld_definition(&self) -> Result<&OverworldDefinition, String> {
+        let Some(library) = self.overworld_library.as_ref() else {
+            return Err("overworld_library_missing".to_string());
+        };
+        if let Some(active_overworld_id) = self.active_overworld_id.as_deref() {
+            if let Some((_, definition)) = library
+                .iter()
+                .find(|(id, _)| id.as_str() == active_overworld_id)
+            {
+                return Ok(definition);
+            }
+        }
+        library
+            .first()
+            .ok_or_else(|| "overworld_definition_missing".to_string())
+    }
+
+    fn current_overworld_snapshot(&self) -> OverworldStateSnapshot {
+        let active_location_id = self
+            .active_location_id
+            .clone()
+            .or_else(|| self.interaction_context.active_location_id.clone());
+        let active_outdoor_location_id = self
+            .current_overworld_definition()
+            .ok()
+            .and_then(|definition| self.resolve_active_outdoor_location_id(definition))
+            .or_else(|| self.interaction_context.active_outdoor_location_id.clone());
+
+        OverworldStateSnapshot {
+            overworld_id: self.active_overworld_id.clone(),
+            active_location_id,
+            active_outdoor_location_id,
+            current_map_id: self
                 .grid_world
                 .map_id()
-                .map(|map_id| map_id.as_str().to_string());
+                .map(|map_id| map_id.as_str().to_string())
+                .or_else(|| self.interaction_context.current_map_id.clone()),
+            current_entry_point_id: self
+                .current_entry_point_id
+                .clone()
+                .or_else(|| self.interaction_context.entry_point_id.clone()),
+            current_overworld_cell: self
+                .overworld_pawn_cell
+                .or(self.interaction_context.overworld_pawn_cell),
+            unlocked_locations: self.unlocked_locations.iter().cloned().collect(),
+            travel: self.overworld_travel.clone(),
+            world_mode: self.interaction_context.world_mode,
         }
-        snapshot
+    }
+
+    fn resolve_active_outdoor_location_id(
+        &self,
+        definition: &OverworldDefinition,
+    ) -> Option<String> {
+        let active_location_id = self.active_location_id.as_deref()?;
+        let location = location_by_id(definition, active_location_id)?;
+        match location.kind {
+            game_data::OverworldLocationKind::Outdoor => Some(active_location_id.to_string()),
+            game_data::OverworldLocationKind::Interior
+            | game_data::OverworldLocationKind::Dungeon => location
+                .parent_outdoor_location_id
+                .as_ref()
+                .map(|location_id| location_id.as_str().to_string())
+                .or_else(|| self.return_outdoor_location_id.clone()),
+        }
+    }
+
+    fn current_return_entry_point_id(&self) -> Option<String> {
+        let definition = self.current_overworld_definition().ok()?;
+        let location_id = self.active_location_id.as_deref()?;
+        let location = location_by_id(definition, location_id)?;
+        location.return_entry_point_id.clone()
+    }
+
+    fn sync_interaction_context_from_runtime(&mut self) {
+        self.interaction_context = self.current_interaction_context();
+    }
+
+    fn reset_runtime_actor_occupancy(&mut self) {
+        let actor_ids: Vec<ActorId> = self.actors.ids().collect();
+        for actor_id in actor_ids {
+            self.grid_world.unregister_runtime_actor(actor_id);
+        }
+    }
+
+    fn load_location_map_and_place_actor(
+        &mut self,
+        actor_id: ActorId,
+        map_id: &MapId,
+        entry_point_id: &str,
+    ) -> Result<MapEntryPointDefinition, String> {
+        let map = self
+            .map_library
+            .as_ref()
+            .ok_or_else(|| "map_library_missing".to_string())?
+            .get(map_id)
+            .ok_or_else(|| format!("unknown_map:{}", map_id.as_str()))?
+            .clone();
+        let entry_point = find_entry_point(&map, entry_point_id)
+            .ok_or_else(|| format!("unknown_entry_point:{entry_point_id}"))?
+            .clone();
+
+        self.reset_runtime_actor_occupancy();
+        self.grid_world.load_map(&map);
+        self.update_actor_grid_position(actor_id, entry_point.grid);
+        self.current_entry_point_id = Some(entry_point.id.clone());
+        Ok(entry_point)
+    }
+
+    fn request_overworld_route(
+        &mut self,
+        actor_id: ActorId,
+        target_location_id: &str,
+    ) -> Result<OverworldRouteSnapshot, String> {
+        if !self.actors.contains(actor_id) {
+            return Err("unknown_actor".to_string());
+        }
+        let definition = self.current_overworld_definition()?;
+        let from_location_id = self
+            .active_location_id
+            .clone()
+            .or_else(|| self.resolve_active_outdoor_location_id(definition))
+            .ok_or_else(|| "active_overworld_location_missing".to_string())?;
+        if target_location_id != from_location_id
+            && !self.unlocked_locations.contains(target_location_id)
+        {
+            return Err(format!("location_locked:{target_location_id}"));
+        }
+
+        let route =
+            compute_location_route(definition, actor_id, &from_location_id, target_location_id)?;
+        self.events.push(SimulationEvent::OverworldRouteComputed {
+            actor_id,
+            target_location_id: target_location_id.to_string(),
+            travel_minutes: route.travel_minutes,
+            path_length: route.location_path.len(),
+        });
+        Ok(route)
+    }
+
+    fn start_overworld_travel(
+        &mut self,
+        actor_id: ActorId,
+        target_location_id: &str,
+    ) -> Result<OverworldStateSnapshot, String> {
+        if !self.actors.contains(actor_id) {
+            return Err("unknown_actor".to_string());
+        }
+        if self.overworld_travel.is_some() {
+            return Err("overworld_travel_already_active".to_string());
+        }
+
+        let route = self.request_overworld_route(actor_id, target_location_id)?;
+        let definition = self.current_overworld_definition()?.clone();
+        let food_item_id = definition.travel_rules.food_item_id.trim().parse::<u32>().ok();
+        let current_stamina = self.actor_resource_value(actor_id, "stamina");
+        if current_stamina + f32::EPSILON < route.stamina_cost.max(0) as f32 {
+            return Err("insufficient_stamina".to_string());
+        }
+        if let Some(food_item_id) = food_item_id {
+            let available_food = self.economy.inventory_count(actor_id, food_item_id).unwrap_or(0);
+            if available_food < route.food_cost.max(0) {
+                return Err("insufficient_food".to_string());
+            }
+        }
+
+        if let Some(food_item_id) = food_item_id {
+            self.economy
+                .remove_item(actor_id, food_item_id, route.food_cost.max(0))
+                .map_err(|error| error.to_string())?;
+        }
+        if route.stamina_cost > 0 {
+            self.set_actor_resource(
+                actor_id,
+                "stamina",
+                (current_stamina - route.stamina_cost as f32).max(0.0),
+            );
+        }
+
+        self.overworld_travel = Some(OverworldTravelState {
+            actor_id,
+            remaining_minutes: route.travel_minutes,
+            progressed_minutes: 0,
+            route: route.clone(),
+        });
+        self.interaction_context.world_mode = WorldMode::Traveling;
+        self.overworld_pawn_cell = route.cell_path.first().copied();
+        self.sync_interaction_context_from_runtime();
+        self.events.push(SimulationEvent::OverworldTravelStarted {
+            actor_id,
+            target_location_id: target_location_id.to_string(),
+            travel_minutes: route.travel_minutes,
+        });
+
+        if route.travel_minutes == 0 {
+            return self.advance_overworld_travel(actor_id, 0);
+        }
+
+        Ok(self.current_overworld_snapshot())
+    }
+
+    fn advance_overworld_travel(
+        &mut self,
+        actor_id: ActorId,
+        minutes: u32,
+    ) -> Result<OverworldStateSnapshot, String> {
+        let Some(travel) = self.overworld_travel.as_mut() else {
+            return Err("overworld_travel_missing".to_string());
+        };
+        if travel.actor_id != actor_id {
+            return Err("travel_actor_mismatch".to_string());
+        }
+
+        let progressed_minutes = minutes.min(travel.remaining_minutes);
+        travel.progressed_minutes = travel.progressed_minutes.saturating_add(progressed_minutes);
+        travel.remaining_minutes = travel.remaining_minutes.saturating_sub(progressed_minutes);
+
+        let total_minutes = travel.route.travel_minutes.max(1);
+        let cell_path_len = travel.route.cell_path.len().max(1);
+        let progress_ratio = travel.progressed_minutes as f32 / total_minutes as f32;
+        let cell_index = ((cell_path_len - 1) as f32 * progress_ratio)
+            .floor()
+            .clamp(0.0, (cell_path_len - 1) as f32) as usize;
+        self.overworld_pawn_cell = travel.route.cell_path.get(cell_index).copied();
+
+        self.events.push(SimulationEvent::OverworldTravelProgressed {
+            actor_id,
+            target_location_id: travel.route.to_location_id.clone(),
+            progressed_minutes,
+            remaining_minutes: travel.remaining_minutes,
+        });
+
+        if travel.remaining_minutes == 0 {
+            let completed = self
+                .overworld_travel
+                .take()
+                .ok_or_else(|| "overworld_travel_missing".to_string())?;
+            let overworld_cell = {
+                let definition = self.current_overworld_definition()?;
+                location_by_id(definition, &completed.route.to_location_id)
+                    .map(|location| location.overworld_cell)
+                    .ok_or_else(|| {
+                        format!("unknown_location:{}", completed.route.to_location_id)
+                    })?
+            };
+            self.active_location_id = Some(completed.route.to_location_id.clone());
+            self.return_outdoor_location_id = Some(completed.route.to_location_id.clone());
+            self.current_entry_point_id = None;
+            self.overworld_pawn_cell = Some(overworld_cell);
+            self.grid_world.clear_map();
+            self.reset_runtime_actor_occupancy();
+            self.interaction_context.world_mode = WorldMode::Outdoor;
+            self.sync_interaction_context_from_runtime();
+            self.events.push(SimulationEvent::OverworldTravelCompleted {
+                actor_id,
+                target_location_id: completed.route.to_location_id,
+            });
+        } else {
+            self.sync_interaction_context_from_runtime();
+        }
+
+        Ok(self.current_overworld_snapshot())
+    }
+
+    fn enter_location(
+        &mut self,
+        actor_id: ActorId,
+        location_id: &str,
+        entry_point_id: Option<&str>,
+    ) -> Result<LocationTransitionContext, String> {
+        if !self.actors.contains(actor_id) {
+            return Err("unknown_actor".to_string());
+        }
+        let definition = self.current_overworld_definition()?.clone();
+        let location = location_by_id(&definition, location_id)
+            .ok_or_else(|| format!("unknown_location:{location_id}"))?
+            .clone();
+        let resolved_entry_point_id = entry_point_id
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(location.entry_point_id.as_str())
+            .to_string();
+
+        let entry_point =
+            self.load_location_map_and_place_actor(actor_id, &location.map_id, &resolved_entry_point_id)?;
+        self.active_location_id = Some(location.id.as_str().to_string());
+        self.overworld_pawn_cell = Some(location.overworld_cell);
+        self.return_outdoor_location_id = match location.kind {
+            game_data::OverworldLocationKind::Outdoor => Some(location.id.as_str().to_string()),
+            game_data::OverworldLocationKind::Interior
+            | game_data::OverworldLocationKind::Dungeon => location
+                .parent_outdoor_location_id
+                .as_ref()
+                .map(|location_id| location_id.as_str().to_string()),
+        };
+        self.interaction_context.world_mode = world_mode_for_location_kind(location.kind);
+        self.sync_interaction_context_from_runtime();
+
+        let transition = LocationTransitionContext {
+            location_id: location.id.as_str().to_string(),
+            map_id: location.map_id.as_str().to_string(),
+            entry_point_id: entry_point.id.clone(),
+            return_outdoor_location_id: self.return_outdoor_location_id.clone(),
+            return_entry_point_id: location.return_entry_point_id.clone(),
+            world_mode: self.interaction_context.world_mode,
+        };
+
+        self.events.push(SimulationEvent::SceneTransitionRequested {
+            actor_id,
+            option_id: InteractionOptionId("enter_location".into()),
+            target_id: location.map_id.as_str().to_string(),
+            world_mode: transition.world_mode,
+            location_id: Some(location.id.as_str().to_string()),
+            entry_point_id: Some(entry_point.id.clone()),
+            return_location_id: self.return_outdoor_location_id.clone(),
+        });
+        self.events.push(SimulationEvent::LocationEntered {
+            actor_id,
+            location_id: location.id.as_str().to_string(),
+            map_id: location.map_id.as_str().to_string(),
+            entry_point_id: entry_point.id,
+            world_mode: transition.world_mode,
+        });
+
+        Ok(transition)
+    }
+
+    fn return_to_overworld(&mut self, actor_id: ActorId) -> Result<OverworldStateSnapshot, String> {
+        if !self.actors.contains(actor_id) {
+            return Err("unknown_actor".to_string());
+        }
+        let definition = self.current_overworld_definition()?.clone();
+        let outdoor_location_id = self
+            .active_location_id
+            .as_deref()
+            .and_then(|location_id| location_by_id(&definition, location_id))
+            .map(|location| match location.kind {
+                game_data::OverworldLocationKind::Outdoor => Some(location.id.as_str().to_string()),
+                game_data::OverworldLocationKind::Interior
+                | game_data::OverworldLocationKind::Dungeon => location
+                    .parent_outdoor_location_id
+                    .as_ref()
+                    .map(|location_id| location_id.as_str().to_string()),
+            })
+            .flatten()
+            .or_else(|| self.return_outdoor_location_id.clone());
+
+        if let Some(outdoor_location_id) = outdoor_location_id.as_deref() {
+            if let Some(location) = location_by_id(&definition, outdoor_location_id) {
+                self.active_location_id = Some(outdoor_location_id.to_string());
+                self.overworld_pawn_cell = Some(location.overworld_cell);
+            }
+        }
+
+        self.grid_world.clear_map();
+        self.reset_runtime_actor_occupancy();
+        self.current_entry_point_id = None;
+        self.interaction_context.world_mode = WorldMode::Overworld;
+        self.sync_interaction_context_from_runtime();
+        self.events.push(SimulationEvent::ReturnedToOverworld {
+            actor_id,
+            active_outdoor_location_id: self
+                .current_overworld_definition()
+                .ok()
+                .and_then(|definition| self.resolve_active_outdoor_location_id(definition)),
+        });
+        Ok(self.current_overworld_snapshot())
+    }
+
+    fn unlock_location(&mut self, location_id: &str) -> Result<OverworldStateSnapshot, String> {
+        let definition = self.current_overworld_definition()?;
+        if location_by_id(definition, location_id).is_none() {
+            return Err(format!("unknown_location:{location_id}"));
+        }
+        if self.unlocked_locations.insert(location_id.to_string()) {
+            self.events.push(SimulationEvent::LocationUnlocked {
+                location_id: location_id.to_string(),
+            });
+        }
+        Ok(self.current_overworld_snapshot())
     }
 
     fn resolve_target_interaction_data(
@@ -2480,24 +3394,29 @@ impl Simulation {
             .map(|map_id| map_id.as_str().to_string());
         match option.kind {
             InteractionOptionKind::EnterSubscene => {
-                self.interaction_context.current_subscene_location_id =
-                    Some(self.resolve_scene_target_id(option));
+                let target_id = self.resolve_scene_target_id(option);
+                self.active_location_id = Some(target_id.clone());
+                self.interaction_context.current_subscene_location_id = Some(target_id);
                 self.interaction_context.return_outdoor_spawn_id =
                     if option.return_spawn_id.trim().is_empty() {
                         None
                     } else {
                         Some(option.return_spawn_id.clone())
                     };
+                self.interaction_context.return_outdoor_location_id =
+                    self.active_location_id.clone();
                 self.interaction_context.world_mode = WorldMode::Interior;
             }
             InteractionOptionKind::EnterOverworld => {
+                self.active_location_id = None;
                 self.interaction_context.active_outdoor_location_id = None;
                 self.interaction_context.current_subscene_location_id = None;
                 self.interaction_context.world_mode = WorldMode::Overworld;
             }
             InteractionOptionKind::ExitToOutdoor | InteractionOptionKind::EnterOutdoorLocation => {
-                self.interaction_context.active_outdoor_location_id =
-                    Some(self.resolve_scene_target_id(option));
+                let target_id = self.resolve_scene_target_id(option);
+                self.active_location_id = Some(target_id.clone());
+                self.interaction_context.active_outdoor_location_id = Some(target_id);
                 self.interaction_context.current_subscene_location_id = None;
                 self.interaction_context.world_mode = WorldMode::Outdoor;
             }
@@ -2505,6 +3424,7 @@ impl Simulation {
             | InteractionOptionKind::Attack
             | InteractionOptionKind::Pickup => {}
         }
+        self.sync_interaction_context_from_runtime();
     }
 
     fn plan_interaction_approach(
@@ -2586,7 +3506,21 @@ impl Simulation {
         prompt: InteractionPrompt,
         option_id: InteractionOptionId,
         reason: &str,
+        log_as_error: bool,
     ) -> InteractionExecutionResult {
+        if log_as_error {
+            error!(
+                "core.interaction.execution_failed actor={actor_id:?} target={:?} option_id={} reason={reason}",
+                prompt.target_id,
+                option_id.as_str()
+            );
+        } else {
+            warn!(
+                "core.interaction.execution_failed actor={actor_id:?} target={:?} option_id={} reason={reason}",
+                prompt.target_id,
+                option_id.as_str()
+            );
+        }
         self.events.push(SimulationEvent::InteractionFailed {
             actor_id,
             target_id: prompt.target_id.clone(),
@@ -2613,6 +3547,10 @@ impl Simulation {
             .reason
             .clone()
             .unwrap_or_else(|| "interaction_failed".to_string());
+        warn!(
+            "core.interaction.action_failed actor={actor_id:?} target={target_id:?} option_id={} reason={reason}",
+            option_id.as_str()
+        );
         self.events.push(SimulationEvent::InteractionFailed {
             actor_id,
             target_id,
@@ -2881,6 +3819,14 @@ impl Simulation {
         }
     }
 
+    fn default_relationship_score(&self, actor_id: ActorId, target_actor_id: ActorId) -> i32 {
+        let actor_side = self.get_actor_side(actor_id).unwrap_or(ActorSide::Neutral);
+        let target_side = self
+            .get_actor_side(target_actor_id)
+            .unwrap_or(ActorSide::Neutral);
+        default_relationship_score_for_sides(actor_side, target_side)
+    }
+
     fn attack_interaction_distance(&self, actor_id: ActorId) -> f32 {
         let default_range = self
             .actor_attack_ranges
@@ -3089,6 +4035,15 @@ fn derive_enemy_type(definition_id: &str) -> String {
         .to_string()
 }
 
+fn default_relationship_score_for_sides(actor_side: ActorSide, target_side: ActorSide) -> i32 {
+    match (actor_side, target_side) {
+        (ActorSide::Player, ActorSide::Player) => 60,
+        (ActorSide::Hostile, _) | (_, ActorSide::Hostile) => -60,
+        (ActorSide::Neutral, _) | (_, ActorSide::Neutral) => 0,
+        (ActorSide::Friendly, _) | (_, ActorSide::Friendly) => 40,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -3097,10 +4052,11 @@ mod tests {
         ActionPhase, ActionRequest, ActionType, ActorKind, ActorSide, CharacterId,
         CharacterLootEntry, GridCoord, InteractionExecutionRequest, InteractionOptionId,
         InteractionOptionKind, InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapId, MapInteractiveProps,
-        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-        MapObjectProps, MapPickupProps, MapRotation, MapSize, QuestConnection, QuestDefinition,
-        QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeLibrary, WorldCoord, WorldMode,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
+        MapInteractiveProps, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint,
+        MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, QuestConnection,
+        QuestDefinition, QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeLibrary,
+        WorldCoord, WorldMode,
     };
 
     use crate::actor::InteractOnceAiController;
@@ -3530,11 +4486,11 @@ mod tests {
         assert_eq!(loot_object.kind, MapObjectKind::Pickup);
         assert_eq!(loot_object.anchor, GridCoord::new(1, 0, 0));
         assert_eq!(
-            loot_object
-                .props
-                .pickup
-                .as_ref()
-                .map(|pickup| (pickup.item_id.clone(), pickup.min_count, pickup.max_count)),
+            loot_object.props.pickup.as_ref().map(|pickup| (
+                pickup.item_id.clone(),
+                pickup.min_count,
+                pickup.max_count
+            )),
             Some(("1010".to_string(), 2, 2))
         );
     }
@@ -3583,7 +4539,10 @@ mod tests {
                 .map(|state| (state.available_stat_points, state.available_skill_points)),
             Some((3, 1))
         );
-        assert_eq!(simulation.economy.actor(player).map(|state| state.level), Some(2));
+        assert_eq!(
+            simulation.economy.actor(player).map(|state| state.level),
+            Some(2)
+        );
     }
 
     #[test]
@@ -3666,7 +4625,10 @@ mod tests {
         assert_eq!(simulation.inventory_count(player, "1007"), 2);
         assert_eq!(simulation.actor_current_xp(player), 50);
         assert_eq!(
-            simulation.economy.actor(player).map(|state| state.skill_points),
+            simulation
+                .economy
+                .actor(player)
+                .map(|state| state.skill_points),
             Some(2)
         );
     }
@@ -3803,6 +4765,84 @@ mod tests {
 
         assert!(result.success);
         assert_eq!(result.dialogue_id.as_deref(), Some("trader_lao_wang"));
+    }
+
+    #[test]
+    fn relationship_scores_seed_from_actor_sides() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let trader = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let zombie = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("zombie_walker".into())),
+            display_name: "Zombie".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(2, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        assert_eq!(simulation.get_relationship_score(player, trader), 40);
+        assert_eq!(simulation.get_relationship_score(trader, player), 40);
+        assert_eq!(simulation.get_relationship_score(player, zombie), -60);
+        assert_eq!(simulation.get_relationship_score(zombie, player), -60);
+    }
+
+    #[test]
+    fn relationship_score_mutation_clamps_to_range() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let trader = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        assert_eq!(simulation.set_relationship_score(player, trader, 120), 100);
+        assert_eq!(simulation.get_relationship_score(player, trader), 100);
+        assert_eq!(
+            simulation.adjust_relationship_score(player, trader, -250),
+            -100
+        );
+        assert_eq!(simulation.get_relationship_score(player, trader), -100);
     }
 
     #[test]
@@ -4022,6 +5062,12 @@ mod tests {
                     cells: Vec::new(),
                 },
             ],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
             objects: vec![
                 MapObjectDefinition {
                     object_id: "house".into(),
@@ -4068,6 +5114,12 @@ mod tests {
             levels: vec![MapLevelDefinition {
                 y: 0,
                 cells: Vec::new(),
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(4, 0, 7),
+                facing: None,
+                extra: BTreeMap::new(),
             }],
             objects: vec![
                 MapObjectDefinition {
@@ -4124,6 +5176,12 @@ mod tests {
             levels: vec![MapLevelDefinition {
                 y: 0,
                 cells: Vec::new(),
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
             }],
             objects: vec![MapObjectDefinition {
                 object_id: "food_pickup".into(),

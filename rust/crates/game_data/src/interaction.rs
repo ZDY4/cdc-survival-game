@@ -152,6 +152,7 @@ impl Default for InteractionTargetId {
 #[serde(rename_all = "snake_case")]
 pub enum WorldMode {
     Overworld,
+    Traveling,
     Outdoor,
     Interior,
     Dungeon,
@@ -166,9 +167,17 @@ pub struct InteractionContextSnapshot {
     #[serde(default)]
     pub active_outdoor_location_id: Option<String>,
     #[serde(default)]
+    pub active_location_id: Option<String>,
+    #[serde(default)]
     pub current_subscene_location_id: Option<String>,
     #[serde(default)]
     pub return_outdoor_spawn_id: Option<String>,
+    #[serde(default)]
+    pub return_outdoor_location_id: Option<String>,
+    #[serde(default)]
+    pub overworld_pawn_cell: Option<GridCoord>,
+    #[serde(default)]
+    pub entry_point_id: Option<String>,
     #[serde(default)]
     pub world_mode: WorldMode,
 }

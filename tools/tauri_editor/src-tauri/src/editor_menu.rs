@@ -1,10 +1,16 @@
+use std::{collections::HashSet, sync::Mutex};
+
 use serde::Serialize;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, SubmenuBuilder},
-    AppHandle, Emitter, Manager, Runtime,
+    AppHandle, Emitter, Manager, Runtime, WebviewWindow,
 };
 
 pub const EDITOR_MENU_COMMAND_EVENT: &str = "editor-menu:command";
+
+fn log_menu(message: impl AsRef<str>) {
+    eprintln!("[editor-menu] {}", message.as_ref());
+}
 
 pub mod ids {
     pub const FILE_NEW_CURRENT: &str = "file.new-current";
@@ -40,6 +46,12 @@ pub mod ids {
 #[serde(rename_all = "camelCase")]
 pub struct EditorMenuCommandPayload {
     pub command_id: String,
+}
+
+#[derive(Default)]
+pub struct EditorMenuState {
+    last_focused_window: Mutex<Option<String>>,
+    attached_menu_windows: Mutex<HashSet<String>>,
 }
 
 pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
@@ -404,76 +416,111 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
 
 pub fn apply_window_menu<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window(window_label) else {
+        log_menu(format!(
+            "skip applying menu because window is missing: {}",
+            window_label
+        ));
         return Ok(());
     };
 
+    if window_label == "settings" {
+        let _ = window.remove_menu()?;
+        log_menu(format!("removed native menu for window={window_label}"));
+        return Ok(());
+    }
+
     let menu = if window_label == "narrative-lab" {
+        log_menu(format!("building narrative lab menu for window={window_label}"));
         build_narrative_lab_menu(app)?
     } else {
+        log_menu(format!("building main editor menu for window={window_label}"));
         build_main_editor_menu(app)?
     };
 
     window.set_menu(menu)?;
+    log_menu(format!("applied menu to window={window_label}"));
     Ok(())
 }
 
-pub fn handle_editor_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
-    if !is_editor_menu_command(menu_id) {
+pub fn attach_window_menu_listener<R: Runtime>(window: WebviewWindow<R>) {
+    let label = window.label().to_string();
+    let app = window.app_handle().clone();
+
+    if label == "settings" {
+        log_menu(format!("skip attaching menu listener for window={label}"));
         return;
     }
 
-    let target_label = app
-        .webview_windows()
-        .into_iter()
-        .find(|(_, window)| window.is_focused().unwrap_or(false))
-        .map(|(label, _)| label)
-        .or_else(|| app.get_webview_window("main").map(|window| window.label().to_string()))
-        .or_else(|| {
-            app.get_webview_window("narrative-lab")
-                .map(|window| window.label().to_string())
-        })
-        .or_else(|| app.get_webview_window("map-editor").map(|window| window.label().to_string()));
+    let should_attach = {
+        if let Ok(mut attached_menu_windows) = app.state::<EditorMenuState>().attached_menu_windows.lock() {
+            attached_menu_windows.insert(label.clone())
+        } else {
+            log_menu(format!(
+                "failed to acquire attached window registry lock for window={label}"
+            ));
+            false
+        }
+    };
 
-    if let Some(label) = target_label {
-        let _ = app.emit_to(
-            label,
+    if !should_attach {
+        log_menu(format!(
+            "menu listener already attached or unavailable for window={label}"
+        ));
+        return;
+    }
+
+    log_menu(format!("attaching menu listener to window={label}"));
+    window.on_menu_event(move |window, event| {
+        let command_id = event.id().as_ref().to_string();
+        log_menu(format!(
+            "menu click received from window={} command_id={command_id}",
+            window.label()
+        ));
+
+        match app.emit_to(
+            window.label(),
             EDITOR_MENU_COMMAND_EVENT,
             EditorMenuCommandPayload {
-                command_id: menu_id.to_string(),
+                command_id: command_id.clone(),
             },
-        );
+        ) {
+            Ok(()) => {
+                log_menu(format!(
+                    "forwarded command to frontend window={} command_id={command_id}",
+                    window.label()
+                ));
+            }
+            Err(error) => {
+                log_menu(format!(
+                    "failed to forward command to frontend window={} command_id={} error={}",
+                    window.label(),
+                    command_id,
+                    error
+                ));
+            }
+        }
+    });
+}
+
+pub fn remember_focused_editor_window<R: Runtime>(
+    app: &AppHandle<R>,
+    window_label: &str,
+    focused: bool,
+) {
+    if !focused || !is_editor_window_label(window_label) {
+        return;
+    }
+
+    if let Ok(mut last_focused_window) = app.state::<EditorMenuState>().last_focused_window.lock() {
+        *last_focused_window = Some(window_label.to_string());
+        log_menu(format!("focused editor window changed to {window_label}"));
+    } else {
+        log_menu(format!(
+            "failed to record focused editor window={window_label}"
+        ));
     }
 }
 
-fn is_editor_menu_command(menu_id: &str) -> bool {
-    matches!(
-        menu_id,
-        ids::FILE_NEW_CURRENT
-            | ids::FILE_SAVE_ALL
-            | ids::FILE_RELOAD
-            | ids::FILE_DELETE_CURRENT
-            | ids::EDIT_VALIDATE_CURRENT
-            | ids::EDIT_AUTO_LAYOUT
-            | ids::EDIT_DELETE_SELECTION
-            | ids::VIEW_TOGGLE_SIDEBAR
-            | ids::VIEW_TOGGLE_STATUS_BAR
-            | ids::VIEW_RESET_LAYOUT
-            | ids::VIEW_RESTORE_DEFAULT_LAYOUT
-            | ids::VIEW_COLLAPSE_ADVANCED_PANELS
-            | ids::VIEW_EXPAND_ALL_PANELS
-            | ids::VIEW_TOGGLE_INSPECTOR
-            | ids::AI_GENERATE
-            | ids::AI_TEST_PROVIDER_CONNECTION
-            | ids::AI_OPEN_PROVIDER_SETTINGS
-            | ids::MODULE_ITEMS
-            | ids::MODULE_DIALOGUES
-            | ids::MODULE_QUESTS
-            | ids::MODULE_MAPS
-            | ids::MODULE_NARRATIVE
-            | ids::NARRATIVE_NEW_PROJECT_BRIEF
-            | ids::NARRATIVE_NEW_CHARACTER_CARD
-            | ids::NARRATIVE_NEW_CHAPTER_OUTLINE
-            | ids::NARRATIVE_NEW_BRANCH_SHEET
-            | ids::NARRATIVE_NEW_SCENE_DRAFT
-    )
+fn is_editor_window_label(label: &str) -> bool {
+    matches!(label, "main" | "narrative-lab" | "map-editor" | "settings")
 }

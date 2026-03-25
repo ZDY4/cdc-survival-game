@@ -1,10 +1,12 @@
-pub mod character;
 pub mod ai_content;
+pub mod character;
 pub mod content;
 pub mod content_registry;
+pub mod dialogue_rules;
 pub mod interaction;
 pub mod map;
 pub mod models;
+pub mod overworld;
 pub mod quest;
 pub mod recipe;
 pub mod settlement;
@@ -34,6 +36,15 @@ pub use content_registry::{
     load_shared_content_registry, ContentAuthorityKind, ContentDomainSummary, ContentReference,
     ContentRegistryLoadError, SharedContentRegistry,
 };
+pub use dialogue_rules::{
+    load_dialogue_library, load_dialogue_rule_library, resolve_dialogue_preview,
+    validate_dialogue_definition, validate_dialogue_rule_definition, DialogueLibrary,
+    DialogueLoadError, DialogueResolutionContext, DialogueResolutionPreview,
+    DialogueResolutionResult, DialogueResolutionSource, DialogueRuleConditions,
+    DialogueRuleDefinition, DialogueRuleLibrary, DialogueRuleLoadError,
+    DialogueRuleValidationCatalog, DialogueRuleValidationError, DialogueRuleVariant,
+    DialogueValidationError,
+};
 pub use interaction::{
     default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,
     CharacterInteractionProfile, InteractionContextSnapshot, InteractionExecutionRequest,
@@ -45,13 +56,20 @@ pub use map::{
     expand_object_footprint, load_map_library, load_map_library_with_catalog,
     object_effectively_blocks_movement, object_effectively_blocks_sight, rotated_footprint_size,
     validate_map_definition, MapAiSpawnProps, MapBuildingProps, MapCellDefinition, MapDefinition,
-    MapDefinitionValidationError, MapId, MapInteractiveProps, MapLevelDefinition, MapLibrary,
-    MapLoadError, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
-    MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
+    MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapInteractiveProps,
+    MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition, MapObjectFootprint,
+    MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
 };
 pub use models::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,
     TurnState, WorldCoord,
+};
+pub use overworld::{
+    load_overworld_library, load_overworld_library_with_catalog, validate_overworld_definition,
+    OverworldCellDefinition, OverworldDefinition, OverworldEdgeDefinition, OverworldId,
+    OverworldLibrary, OverworldLoadError, OverworldLocationDefinition, OverworldLocationId,
+    OverworldLocationKind, OverworldTravelRuleSet, OverworldValidationCatalog,
+    OverworldValidationError,
 };
 pub use quest::{
     load_quest_library, validate_quest_definition, QuestChoiceOption, QuestConnection,

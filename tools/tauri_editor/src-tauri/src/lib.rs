@@ -139,6 +139,12 @@ pub(crate) struct EditorBootstrap {
     pub(crate) editor_domains: Vec<&'static str>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorRuntimeFlags {
+    menu_self_test_scenario: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ValidationIssue {
@@ -354,6 +360,42 @@ struct DeleteMapResult {
 #[tauri::command]
 fn get_editor_bootstrap() -> Result<EditorBootstrap, String> {
     Ok(editor_bootstrap()?)
+}
+
+#[tauri::command]
+fn get_editor_runtime_flags() -> Result<EditorRuntimeFlags, String> {
+    let menu_self_test_scenario = std::env::var("CDC_EDITOR_SELF_TEST")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    if let Some(scenario) = &menu_self_test_scenario {
+        eprintln!(
+            "[editor-self-test] runtime self-test scenario requested: {}",
+            scenario
+        );
+    }
+
+    Ok(EditorRuntimeFlags {
+        menu_self_test_scenario,
+    })
+}
+
+#[tauri::command]
+fn log_editor_frontend_debug(
+    level: String,
+    message: String,
+    payload: Option<String>,
+) -> Result<(), String> {
+    match payload {
+        Some(payload) if !payload.is_empty() => {
+            eprintln!("[editor-menu][frontend][{}] {} {}", level, message, payload);
+        }
+        _ => {
+            eprintln!("[editor-menu][frontend][{}] {}", level, message);
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -2142,17 +2184,52 @@ pub(crate) fn to_forward_slashes(path: impl AsRef<Path>) -> String {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            eprintln!("[editor-menu] setup start");
+            app.manage(editor_menu::EditorMenuState::default());
             editor_menu::apply_window_menu(&app.handle(), "main")?;
+            if let Some(window) = app.get_webview_window("main") {
+                editor_menu::attach_window_menu_listener(window);
+                editor_menu::remember_focused_editor_window(&app.handle(), "main", true);
+            } else {
+                eprintln!("[editor-menu] main window not available during setup");
+            }
+            eprintln!("[editor-menu] setup complete");
             Ok(())
         })
         .on_page_load(|webview, _payload| {
+            eprintln!(
+                "[editor-menu] page load window={} url={:?}",
+                webview.label(),
+                webview.url()
+            );
             let _ = editor_menu::apply_window_menu(&webview.app_handle(), webview.label());
+            if let Some(window) = webview.app_handle().get_webview_window(webview.label()) {
+                editor_menu::attach_window_menu_listener(window);
+            } else {
+                eprintln!(
+                    "[editor-menu] page load could not resolve window handle for {}",
+                    webview.label()
+                );
+            }
         })
-        .on_menu_event(|app, event| {
-            editor_menu::handle_editor_menu_event(app, event.id().as_ref());
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(focused) = event {
+                eprintln!(
+                    "[editor-menu] window focus event window={} focused={}",
+                    window.label(),
+                    focused
+                );
+                editor_menu::remember_focused_editor_window(
+                    &window.app_handle(),
+                    window.label(),
+                    *focused,
+                );
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_editor_bootstrap,
+            get_editor_runtime_flags,
+            log_editor_frontend_debug,
             load_shared_registry,
             load_item_workspace,
             validate_item_document,

@@ -1,4 +1,3 @@
-import { Badge } from "../../components/Badge";
 import {
   CheckboxField,
   TextField,
@@ -20,6 +19,7 @@ type DialogueInspectorProps = {
   dialog: DialogueData;
   selectedNodeId: string | null;
   onDialogChange: (dialog: DialogueData) => void;
+  embedded?: boolean;
 };
 
 function CommonNodeFields({
@@ -430,22 +430,30 @@ export function DialogueInspector({
   dialog,
   selectedNodeId,
   onDialogChange,
+  embedded = false,
 }: DialogueInspectorProps) {
   const node = getDialogueNode(dialog, selectedNodeId);
 
   if (!node) {
+    const emptyContent = (
+      <div className="workspace-empty settings-empty-inline">
+        <p>Select a node in the graph to edit its structure.</p>
+      </div>
+    );
+
+    if (embedded) {
+      return emptyContent;
+    }
+
     return (
       <PanelSection label="Inspector" title="No node selected">
-        <div className="empty-state">
-          <Badge tone="muted">Idle</Badge>
-          <p>Select a node in the graph to edit its structure.</p>
-        </div>
+        {emptyContent}
       </PanelSection>
     );
   }
 
-  return (
-    <PanelSection label="Inspector" title={node.title || node.id}>
+  const content = (
+    <>
       <CommonNodeFields dialog={dialog} node={node} onDialogChange={onDialogChange} />
       {node.type === "dialog" ? (
         <DialogNodeFields dialog={dialog} node={node} onDialogChange={onDialogChange} />
@@ -462,6 +470,12 @@ export function DialogueInspector({
       {node.type === "end" ? (
         <EndNodeFields dialog={dialog} node={node} onDialogChange={onDialogChange} />
       ) : null}
-    </PanelSection>
+    </>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <PanelSection label="Inspector" title={node.title || node.id}>{content}</PanelSection>;
 }

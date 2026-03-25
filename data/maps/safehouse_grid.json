@@ -46,6 +46,17 @@
       ]
     }
   ],
+  "entry_points": [
+    {
+      "id": "default_entry",
+      "grid": {
+        "x": 1,
+        "y": 0,
+        "z": 1
+      },
+      "facing": null
+    }
+  ],
   "objects": [
     {
       "object_id": "safehouse_building_ground",
@@ -65,7 +76,10 @@
       "props": {
         "building": {
           "prefab_id": "safehouse_house"
-        }
+        },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
       }
     },
     {
@@ -84,11 +98,14 @@
       "blocks_movement": false,
       "blocks_sight": false,
       "props": {
+        "building": null,
         "pickup": {
           "item_id": "1005",
           "min_count": 1,
           "max_count": 2
-        }
+        },
+        "interactive": null,
+        "ai_spawn": null
       }
     },
     {
@@ -107,10 +124,16 @@
       "blocks_movement": false,
       "blocks_sight": false,
       "props": {
+        "building": null,
+        "pickup": null,
         "interactive": {
+          "display_name": "",
+          "interaction_distance": 1.4,
           "interaction_kind": "enter_outdoor_location",
-          "target_id": "safehouse"
-        }
+          "target_id": "safehouse",
+          "options": []
+        },
+        "ai_spawn": null
       }
     },
     {
@@ -129,6 +152,9 @@
       "blocks_movement": false,
       "blocks_sight": false,
       "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
         "ai_spawn": {
           "spawn_id": "safehouse_enemy_spawn",
           "character_id": "zombie_walker",
@@ -157,7 +183,10 @@
       "props": {
         "building": {
           "prefab_id": "safehouse_upper_room"
-        }
+        },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
       }
     }
   ]

@@ -12,7 +12,6 @@ import {
 } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
-import { ValidationPanel } from "../../components/ValidationPanel";
 import { invokeCommand } from "../../lib/tauri";
 import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
 import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
@@ -536,6 +535,8 @@ type ReferenceFocus =
       kind: "effect";
       id: string;
     };
+
+type ItemSidebarMode = "validation" | "reference" | "catalogs";
 
 function shortenLabel(label: string, maxLength = 28): string {
   return label.length <= maxLength ? label : `${label.slice(0, maxLength - 1)}…`;
@@ -1073,6 +1074,7 @@ export function ItemWorkspace({
   const [addFragmentKind, setAddFragmentKind] = useState("");
   const [collapsedFragments, setCollapsedFragments] = useState<Record<string, boolean>>({});
   const [referenceFocus, setReferenceFocus] = useState<ReferenceFocus | null>(null);
+  const [sidebarMode, setSidebarMode] = useState<ItemSidebarMode>("validation");
   const [newTemplateId, setNewTemplateId] = useState<ItemTemplateId>(ITEM_TEMPLATES[0].id);
   const [cloneSourceKey, setCloneSourceKey] = useState("");
   const deferredSearch = useDeferredValue(searchText);
@@ -1081,6 +1083,7 @@ export function ItemWorkspace({
     setDocuments(hydrateDocuments(workspace.documents));
     setSelectedKey(workspace.documents[0]?.documentKey ?? "");
     setReferenceFocus(null);
+    setSidebarMode("validation");
   }, [workspace]);
 
   useEffect(() => {
@@ -1534,6 +1537,7 @@ export function ItemWorkspace({
       return;
     }
     setReferenceFocus({ kind: "item", id });
+    setSidebarMode("reference");
   }
 
   function focusEffectReference(value: string | null | undefined) {
@@ -1542,6 +1546,7 @@ export function ItemWorkspace({
       return;
     }
     setReferenceFocus({ kind: "effect", id });
+    setSidebarMode("reference");
   }
 
   const focusedItemPreview =
@@ -2068,6 +2073,172 @@ export function ItemWorkspace({
     onStatusChange(`Opened source item ${entry.sourceItemId} from Used By.`);
   }
 
+  function renderValidationInspector() {
+    if (!selectedDocument) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <p>Select an item to inspect its validation state.</p>
+        </div>
+      );
+    }
+
+    if (selectedIssues.length === 0) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <Badge tone="success">Clean</Badge>
+          <p>No validation issues for the current item.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="issue-list">
+        {selectedIssues.map((issue, index) => (
+          <article className={`issue issue-${issue.severity}`} key={`${issue.field}-${index}`}>
+            <div className="issue-head">
+              <Badge tone={issue.severity === "error" ? "danger" : "warning"}>
+                {issue.severity}
+              </Badge>
+              <strong>{issue.field}</strong>
+              {issue.scope ? <Badge tone="muted">{issue.scope}</Badge> : null}
+              {issue.nodeId ? <Badge tone="accent">{issue.nodeId}</Badge> : null}
+              {issue.edgeKey ? <Badge tone="muted">{issue.edgeKey}</Badge> : null}
+            </div>
+            <p>{issue.message}</p>
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  function renderReferenceInspector() {
+    return (
+      <>
+        {focusedItemPreview ? (
+          <div className="issue-list">
+            <article className="issue">
+              <div className="issue-head">
+                <Badge tone="accent">item</Badge>
+                <strong>
+                  {focusedItemPreview.id} · {focusedItemPreview.name || "Unnamed item"}
+                </strong>
+              </div>
+              <p>
+                value {focusedItemPreview.value} · weight {focusedItemPreview.weight}
+              </p>
+              <div className="row-badges">
+                {focusedItemPreview.derivedTags.map((tag) => (
+                  <Badge key={`focus-item-tag-${tag}`} tone="muted">
+                    {tag}
+                  </Badge>
+                ))}
+                {focusedItemPreview.keyFragments.slice(0, 4).map((summary) => (
+                  <Badge key={`focus-item-frag-${summary}`} tone="accent">
+                    {summary}
+                  </Badge>
+                ))}
+              </div>
+            </article>
+          </div>
+        ) : null}
+
+        {focusedEffectPreview ? (
+          <div className="issue-list">
+            <article className="issue">
+              <div className="issue-head">
+                <Badge tone="success">effect</Badge>
+                <strong>
+                  {focusedEffectPreview.id} · {focusedEffectPreview.name || "Unnamed effect"}
+                </strong>
+              </div>
+              <p>
+                {focusedEffectPreview.category} · duration {focusedEffectPreview.duration} · stack{" "}
+                {focusedEffectPreview.stackMode}
+              </p>
+              {focusedEffectPreview.description ? <p>{focusedEffectPreview.description}</p> : null}
+              {Object.keys(focusedEffectPreview.resourceDeltas).length > 0 ? (
+                <div className="row-badges">
+                  {Object.entries(focusedEffectPreview.resourceDeltas).map(([key, amount]) => (
+                    <Badge key={`focus-effect-delta-${key}`} tone="accent">
+                      {key} {amount >= 0 ? "+" : ""}
+                      {amount}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+          </div>
+        ) : null}
+
+        {referenceFocus == null ? (
+          <div className="workspace-empty settings-empty-inline">
+            <p>Click Inspect in any reference field to view details and reverse usage.</p>
+          </div>
+        ) : focusedUsageEntries.length > 0 ? (
+          <div className="issue-list">
+            {focusedUsageEntries.map((entry, index) => (
+              <article
+                className="issue"
+                key={`${entry.sourceItemId}-${entry.fragmentKind}-${entry.path}-${index}`}
+              >
+                <div className="issue-head">
+                  <Badge tone="warning">{entry.fragmentKind}</Badge>
+                  <strong>
+                    #{entry.sourceItemId} · {entry.sourceItemName || "Unnamed item"}
+                  </strong>
+                </div>
+                <p>
+                  {entry.note} · {entry.path}
+                </p>
+                <button
+                  type="button"
+                  className="toolbar-button"
+                  onClick={() => openUsageSource(entry)}
+                >
+                  Open source item
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="workspace-empty settings-empty-inline">
+            <Badge tone="success">No usage</Badge>
+            <p>No reverse references found for this entry in the current workspace.</p>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  function renderCatalogInspector() {
+    return (
+      <div className="settings-body">
+        <div className="row-badges">
+          <Badge tone="accent">{workspace.catalogs.fragmentKinds.length} fragment kinds</Badge>
+          <Badge tone="muted">{workspace.catalogs.effectIds.length} effects</Badge>
+          <Badge tone="muted">{workspace.catalogs.itemIds.length} item ids</Badge>
+        </div>
+        <div className="row-badges">
+          {workspace.catalogs.fragmentKinds.slice(0, 8).map((kind) => (
+            <Badge key={kind} tone="muted">
+              {kind}
+            </Badge>
+          ))}
+          {workspace.catalogs.fragmentKinds.length > 8 ? (
+            <Badge tone="muted">+{workspace.catalogs.fragmentKinds.length - 8} more</Badge>
+          ) : null}
+        </div>
+        <div className="row-badges">
+          {workspace.bootstrap.editorDomains.map((domain) => (
+            <Badge key={domain} tone="accent">
+              {domain}
+            </Badge>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="workspace">
       <Toolbar actions={actions}>
@@ -2379,8 +2550,7 @@ export function ItemWorkspace({
             </>
           ) : (
             <PanelSection label="Selection" title="No item selected">
-              <div className="empty-state">
-                <Badge tone="muted">Idle</Badge>
+              <div className="workspace-empty">
                 <p>Select an item from the left panel or create a new draft.</p>
               </div>
             </PanelSection>
@@ -2388,125 +2558,47 @@ export function ItemWorkspace({
         </main>
 
         <aside className="column">
-          <ValidationPanel issues={selectedIssues} />
-
-          <PanelSection label="Reference" title="Inspector and Used By" compact>
-            {focusedItemPreview ? (
-              <div className="issue-list">
-                <article className="issue">
-                  <div className="issue-head">
-                    <Badge tone="accent">item</Badge>
-                    <strong>
-                      {focusedItemPreview.id} · {focusedItemPreview.name || "Unnamed item"}
-                    </strong>
-                  </div>
-                  <p>
-                    value {focusedItemPreview.value} · weight {focusedItemPreview.weight}
-                  </p>
-                  <div className="row-badges">
-                    {focusedItemPreview.derivedTags.map((tag) => (
-                      <Badge key={`focus-item-tag-${tag}`} tone="muted">
-                        {tag}
-                      </Badge>
-                    ))}
-                    {focusedItemPreview.keyFragments.slice(0, 4).map((summary) => (
-                      <Badge key={`focus-item-frag-${summary}`} tone="accent">
-                        {summary}
-                      </Badge>
-                    ))}
-                  </div>
-                </article>
+          <PanelSection
+            label="Inspector"
+            title={
+              sidebarMode === "validation"
+                ? "Validation"
+                : sidebarMode === "reference"
+                  ? "Reference"
+                  : "Catalogs"
+            }
+            compact
+            summary={
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`segmented-control-item ${sidebarMode === "validation" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setSidebarMode("validation")}
+                >
+                  Validation
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-control-item ${sidebarMode === "reference" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setSidebarMode("reference")}
+                >
+                  Reference
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-control-item ${sidebarMode === "catalogs" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setSidebarMode("catalogs")}
+                >
+                  Catalogs
+                </button>
               </div>
-            ) : null}
-
-            {focusedEffectPreview ? (
-              <div className="issue-list">
-                <article className="issue">
-                  <div className="issue-head">
-                    <Badge tone="success">effect</Badge>
-                    <strong>
-                      {focusedEffectPreview.id} · {focusedEffectPreview.name || "Unnamed effect"}
-                    </strong>
-                  </div>
-                  <p>
-                    {focusedEffectPreview.category} · duration {focusedEffectPreview.duration} ·
-                    stack {focusedEffectPreview.stackMode}
-                  </p>
-                  {focusedEffectPreview.description ? <p>{focusedEffectPreview.description}</p> : null}
-                  {Object.keys(focusedEffectPreview.resourceDeltas).length > 0 ? (
-                    <div className="row-badges">
-                      {Object.entries(focusedEffectPreview.resourceDeltas).map(([key, amount]) => (
-                        <Badge key={`focus-effect-delta-${key}`} tone="accent">
-                          {key} {amount >= 0 ? "+" : ""}
-                          {amount}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
-              </div>
-            ) : null}
-
-            {referenceFocus == null ? (
-              <div className="empty-state">
-                <Badge tone="muted">Idle</Badge>
-                <p>Click Inspect in any reference field to view details and Used By info.</p>
-              </div>
-            ) : (
-              <div className="issue-list">
-                {focusedUsageEntries.length > 0 ? (
-                  focusedUsageEntries.map((entry, index) => (
-                    <article
-                      className="issue"
-                      key={`${entry.sourceItemId}-${entry.fragmentKind}-${entry.path}-${index}`}
-                    >
-                      <div className="issue-head">
-                        <Badge tone="warning">{entry.fragmentKind}</Badge>
-                        <strong>
-                          #{entry.sourceItemId} · {entry.sourceItemName || "Unnamed item"}
-                        </strong>
-                      </div>
-                      <p>
-                        {entry.note} · {entry.path}
-                      </p>
-                      <button
-                        type="button"
-                        className="toolbar-button"
-                        onClick={() => openUsageSource(entry)}
-                      >
-                        Open source item
-                      </button>
-                    </article>
-                  ))
-                ) : (
-                  <div className="empty-state">
-                    <Badge tone="success">No usage</Badge>
-                    <p>No reverse references found for this entry in current item workspace.</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </PanelSection>
-
-          <PanelSection label="Catalogs" title="Fragment authoring context" compact>
-            <div className="row-badges">
-              <Badge tone="accent">{workspace.catalogs.fragmentKinds.length} fragment kinds</Badge>
-              <Badge tone="muted">{workspace.catalogs.effectIds.length} effects</Badge>
-              <Badge tone="muted">{workspace.catalogs.itemIds.length} item ids</Badge>
-            </div>
-            <ul className="domain-list">
-              {workspace.catalogs.fragmentKinds.map((kind) => (
-                <li key={kind}>{kind}</li>
-              ))}
-            </ul>
-          </PanelSection>
-
-          <PanelSection label="Domains" title="Why this shell exists" compact>
-            <ul className="domain-list">
-              {workspace.bootstrap.editorDomains.map((domain) => (
-                <li key={domain}>{domain}</li>
-              ))}
-            </ul>
+            }
+          >
+            {sidebarMode === "validation"
+              ? renderValidationInspector()
+              : sidebarMode === "reference"
+                ? renderReferenceInspector()
+                : renderCatalogInspector()}
           </PanelSection>
         </aside>
       </div>

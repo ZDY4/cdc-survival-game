@@ -6,15 +6,19 @@ pub mod offline_sim;
 pub mod plan_runtime;
 pub mod planner;
 
-use game_data::NpcRole;
+use std::collections::BTreeSet;
 
-pub use facts::rebuild_facts;
+use game_data::{GridCoord, MapId, NpcRole};
+
 pub use context::NpcPlanningContext;
+pub use facts::rebuild_facts;
 pub use offline_sim::{advance_offline_sim, NpcOfflineSimState, OfflineSimAdvanceResult};
 pub use plan_runtime::{
     tick_offline_action, ActionExecutionPhase, ActionTickResult, OfflineActionState,
 };
-pub use planner::{build_plan, build_plan_for_context, build_plan_for_goal, build_plan_for_goal_with_context};
+pub use planner::{
+    build_plan, build_plan_for_context, build_plan_for_goal, build_plan_for_goal_with_context,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NpcFact {
@@ -160,15 +164,88 @@ pub struct NpcPlanResult {
     pub planned: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NpcExecutionMode {
+    Online,
+    #[default]
+    Background,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NpcRuntimeActionState {
+    pub step: NpcPlanStep,
+    pub phase: ActionExecutionPhase,
+    pub current_anchor: Option<String>,
+    pub held_reservations: BTreeSet<String>,
+    pub last_failure_reason: Option<String>,
+    pub goal_grid: Option<GridCoord>,
+}
+
+impl NpcRuntimeActionState {
+    pub fn from_offline_action(
+        action: &OfflineActionState,
+        held_reservations: BTreeSet<String>,
+        last_failure_reason: Option<String>,
+        goal_grid: Option<GridCoord>,
+    ) -> Self {
+        Self {
+            step: action.step.clone(),
+            phase: action.phase,
+            current_anchor: action.current_anchor.clone(),
+            held_reservations,
+            last_failure_reason,
+            goal_grid,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NpcBackgroundState {
+    pub definition_id: Option<String>,
+    pub display_name: String,
+    pub map_id: Option<MapId>,
+    pub grid_position: GridCoord,
+    pub current_anchor: Option<String>,
+    pub current_plan: Vec<NpcPlanStep>,
+    pub plan_next_index: usize,
+    pub current_action: Option<NpcRuntimeActionState>,
+    pub held_reservations: BTreeSet<String>,
+    pub hunger: u8,
+    pub energy: u8,
+    pub morale: u8,
+    pub on_shift: bool,
+    pub meal_window_open: bool,
+    pub quiet_hours: bool,
+    pub world_alert_active: bool,
+}
+
+pub fn apply_npc_action_effects(action: NpcActionKey, hunger: &mut f32, energy: &mut f32, morale: &mut f32) {
+    match action {
+        NpcActionKey::EatMeal => {
+            *hunger = (*hunger + 55.0).clamp(0.0, 100.0);
+        }
+        NpcActionKey::Sleep => {
+            *energy = (*energy + 75.0).clamp(0.0, 100.0);
+            *morale = (*morale + 10.0).clamp(0.0, 100.0);
+        }
+        NpcActionKey::Relax => {
+            *morale = (*morale + 35.0).clamp(0.0, 100.0);
+        }
+        NpcActionKey::TreatPatients => {
+            *morale = (*morale + 18.0).clamp(0.0, 100.0);
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use game_data::NpcRole;
 
     use super::{
         advance_offline_sim, build_plan, build_plan_for_goal_with_context, rebuild_facts,
-        tick_offline_action, ActionExecutionPhase, NpcActionKey, NpcFact, NpcFactInput,
-        NpcGoalKey, NpcOfflineSimState, NpcPlanRequest, NpcPlanStep, NpcPlanningContext,
-        OfflineActionState,
+        tick_offline_action, ActionExecutionPhase, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey,
+        NpcOfflineSimState, NpcPlanRequest, NpcPlanStep, NpcPlanningContext, OfflineActionState,
     };
 
     #[test]
@@ -403,8 +480,8 @@ mod tests {
             medical_station_id: Some("clinic_station".into()),
             patrol_route_id: None,
         };
-        let mut context =
-            NpcPlanningContext::from_plan_request(&request).with_current_anchor(Some("doctor_home".into()));
+        let mut context = NpcPlanningContext::from_plan_request(&request)
+            .with_current_anchor(Some("doctor_home".into()));
         context.register_reachable_anchor("clinic".into(), 35);
 
         let result = build_plan_for_goal_with_context(&context, NpcGoalKey::SatisfyShift);

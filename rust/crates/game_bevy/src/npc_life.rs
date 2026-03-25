@@ -3,16 +3,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use game_core::{
-    build_plan_for_goal_with_context, rebuild_facts, score_goals, select_goal, tick_offline_action,
-    ActionExecutionPhase, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey, NpcGoalScore,
-    NpcPlanRequest, NpcPlanStep, NpcPlanningContext, OfflineActionState,
+    apply_npc_action_effects, build_plan_for_goal_with_context, rebuild_facts, score_goals,
+    select_goal, tick_offline_action, ActionExecutionPhase, NpcActionKey, NpcBackgroundState,
+    NpcExecutionMode, NpcFact, NpcFactInput, NpcGoalKey, NpcGoalScore, NpcPlanRequest,
+    NpcPlanStep, NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
 };
 use game_data::{
-    CharacterLifeProfile, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay, SettlementDefinition,
-    SettlementId, SmartObjectDefinition, SmartObjectKind,
+    ActorId, CharacterLifeProfile, GridCoord, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay,
+    SettlementDefinition, SettlementId, SmartObjectDefinition, SmartObjectKind,
 };
 
-use crate::{reservations::ReservationConflict, SettlementDefinitions, SmartObjectReservations};
+use crate::{
+    reservations::ReservationConflict, CharacterDefinitionId, SettlementDefinitions,
+    SmartObjectReservations,
+};
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct LifeProfileComponent(pub CharacterLifeProfile);
@@ -89,6 +93,31 @@ pub struct ReservationState {
     pub active: BTreeSet<String>,
 }
 
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeActorLink {
+    pub actor_id: ActorId,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeExecutionState {
+    pub mode: NpcExecutionMode,
+    pub runtime_goal_grid: Option<GridCoord>,
+    pub last_failure_reason: Option<String>,
+}
+
+impl Default for RuntimeExecutionState {
+    fn default() -> Self {
+        Self {
+            mode: NpcExecutionMode::Background,
+            runtime_goal_grid: None,
+            last_failure_reason: None,
+        }
+    }
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
+pub struct BackgroundLifeState(pub Option<NpcBackgroundState>);
+
 #[derive(Resource, Debug, Clone, PartialEq, Eq)]
 pub struct SimClock {
     pub day: ScheduleDay,
@@ -136,6 +165,9 @@ pub struct DecisionTrace {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettlementDebugEntry {
     pub entity: Entity,
+    pub definition_id: String,
+    pub runtime_actor_id: Option<ActorId>,
+    pub execution_mode: NpcExecutionMode,
     pub settlement_id: String,
     pub role: NpcRole,
     pub goal: Option<NpcGoalKey>,
@@ -162,7 +194,9 @@ pub struct SettlementDebugEntry {
     pub plan_total_cost: usize,
     pub pending_plan: Vec<PlannedActionDebug>,
     pub current_anchor: Option<String>,
+    pub runtime_goal_grid: Option<GridCoord>,
     pub reservations: Vec<String>,
+    pub last_failure_reason: Option<String>,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq, Eq, Default)]
@@ -221,8 +255,9 @@ fn initialize_npc_life_entities(
             Some(settlement) => settlement,
             None => continue,
         };
-        let duty_anchor = route_duty_anchor(settlement, &profile.home_anchor, &profile.duty_route_id)
-            .or_else(|| default_duty_anchor_for_role(settlement, profile.role));
+        let duty_anchor =
+            route_duty_anchor(settlement, &profile.home_anchor, &profile.duty_route_id)
+                .or_else(|| default_duty_anchor_for_role(settlement, profile.role));
         let canteen_anchor = first_anchor_for_kind(settlement, SmartObjectKind::CanteenSeat);
         let leisure_anchor = first_anchor_for_kind(settlement, SmartObjectKind::RecreationSpot);
         let alarm_anchor = first_anchor_for_kind(settlement, SmartObjectKind::AlarmPoint);
@@ -268,6 +303,8 @@ fn initialize_npc_life_entities(
             CurrentPlan::default(),
             CurrentAction::default(),
             ReservationState::default(),
+            RuntimeExecutionState::default(),
+            BackgroundLifeState::default(),
             DecisionTrace::default(),
         ));
     }
@@ -541,11 +578,24 @@ fn execute_offline_actions_system(
         &mut CurrentPlan,
         &mut CurrentAction,
         &mut ReservationState,
+        &mut BackgroundLifeState,
     )>,
 ) {
-    for (entity, mut life, mut need, mut current_plan, mut current_action, mut reservations) in
-        &mut query
+    for (
+        entity,
+        mut life,
+        mut need,
+        mut current_plan,
+        mut current_action,
+        mut reservations,
+        mut background_state,
+    ) in &mut query
     {
+        if life.online {
+            background_state.0 = None;
+            continue;
+        }
+
         if current_action.0.is_none() && current_plan.next_index < current_plan.steps.len() {
             current_action.0 = Some(OfflineActionState::new(
                 current_plan.steps[current_plan.next_index].clone(),
@@ -592,7 +642,18 @@ fn execute_offline_actions_system(
         }
         if tick.finished {
             if let Some(action) = tick.completed_action {
-                apply_action_effects(action, &mut need);
+                let mut hunger = need.hunger;
+                let mut energy = need.energy;
+                let mut morale = need.morale;
+                apply_npc_action_effects(
+                    action,
+                    &mut hunger,
+                    &mut energy,
+                    &mut morale,
+                );
+                need.hunger = hunger;
+                need.energy = energy;
+                need.morale = morale;
             }
             for released in tick.released_reservations {
                 registry.release(&released, entity);
@@ -604,14 +665,42 @@ fn execute_offline_actions_system(
                 life.replan_required = true;
             }
         }
+
+        background_state.0 = Some(NpcBackgroundState {
+            definition_id: None,
+            display_name: String::new(),
+            map_id: None,
+            grid_position: GridCoord::default(),
+            current_anchor: life.current_anchor.clone(),
+            current_plan: current_plan.steps.clone(),
+            plan_next_index: current_plan.next_index,
+            current_action: current_action.0.as_ref().map(|action| {
+                NpcRuntimeActionState::from_offline_action(
+                    action,
+                    reservations.active.clone(),
+                    None,
+                    None,
+                )
+            }),
+            held_reservations: reservations.active.clone(),
+            hunger: quantize_need(need.hunger),
+            energy: quantize_need(need.energy),
+            morale: quantize_need(need.morale),
+            on_shift: false,
+            meal_window_open: false,
+            quiet_hours: false,
+            world_alert_active: false,
+        });
     }
 }
 
 fn refresh_debug_snapshot_system(
     world_alert: Res<WorldAlertState>,
+    settlements: Option<Res<SettlementDefinitions>>,
     mut snapshot: ResMut<SettlementDebugSnapshot>,
     query: Query<(
         Entity,
+        &CharacterDefinitionId,
         &NpcLifeState,
         &NeedState,
         &CurrentGoal,
@@ -619,11 +708,29 @@ fn refresh_debug_snapshot_system(
         &CurrentAction,
         &ScheduleState,
         &ReservationState,
+        &RuntimeExecutionState,
+        Option<&RuntimeActorLink>,
         &DecisionTrace,
     )>,
 ) {
+    let settlements = settlements.as_deref();
     let mut entries = Vec::new();
-    for (entity, life, need, goal, plan, action, schedule, reservations, trace) in &query {
+    for (
+        entity,
+        definition_id,
+        life,
+        need,
+        goal,
+        plan,
+        action,
+        schedule,
+        reservations,
+        runtime_execution,
+        runtime_link,
+        trace,
+    ) in
+        &query
+    {
         let (
             action_key,
             action_phase,
@@ -650,8 +757,31 @@ fn refresh_debug_snapshot_system(
                 reservation_target: step.reservation_target.clone(),
             })
             .collect();
+        let runtime_goal_grid = runtime_execution.runtime_goal_grid.or_else(|| {
+            action
+                .0
+                .as_ref()
+                .and_then(|current_action| current_action.step.target_anchor.as_deref())
+                .and_then(|anchor_id| {
+                    settlements.and_then(|settlements| {
+                        settlements
+                            .0
+                            .get(&SettlementId(life.settlement_id.clone()))
+                            .and_then(|settlement| {
+                                settlement
+                                    .anchors
+                                    .iter()
+                                    .find(|anchor| anchor.id == anchor_id)
+                                    .map(|anchor| anchor.grid)
+                            })
+                    })
+                })
+        });
         entries.push(SettlementDebugEntry {
             entity,
+            definition_id: definition_id.0.as_str().to_string(),
+            runtime_actor_id: runtime_link.map(|link| link.actor_id),
+            execution_mode: runtime_execution.mode,
             settlement_id: life.settlement_id.clone(),
             role: life.role,
             goal: goal.0,
@@ -678,7 +808,9 @@ fn refresh_debug_snapshot_system(
             plan_total_cost: plan.total_cost,
             pending_plan,
             current_anchor: life.current_anchor.clone(),
+            runtime_goal_grid,
             reservations: reservations.active.iter().cloned().collect(),
+            last_failure_reason: runtime_execution.last_failure_reason.clone(),
         });
     }
     snapshot.entries = entries;
@@ -703,7 +835,8 @@ fn route_duty_anchor(
         .iter()
         .find(|route| route.id == route_id)
         .and_then(|route| {
-            route.anchors
+            route
+                .anchors
                 .iter()
                 .find(|anchor| anchor.as_str() != home_anchor)
                 .cloned()
@@ -762,10 +895,9 @@ fn select_object_for_kind_for_role<'a>(
 ) -> Option<&'a SmartObjectDefinition> {
     let role_tag = role_tag(role);
     select_available_object(
-        settlement
-            .smart_objects
-            .iter()
-            .filter(move |object| object.kind == kind && object.tags.iter().any(|tag| tag == role_tag)),
+        settlement.smart_objects.iter().filter(move |object| {
+            object.kind == kind && object.tags.iter().any(|tag| tag == role_tag)
+        }),
         reservations,
         owner,
     )
@@ -837,25 +969,6 @@ fn non_empty(value: String) -> Option<String> {
     }
 }
 
-fn apply_action_effects(action: NpcActionKey, need: &mut NeedState) {
-    match action {
-        NpcActionKey::EatMeal => {
-            need.hunger = (need.hunger + 55.0).clamp(0.0, 100.0);
-        }
-        NpcActionKey::Sleep => {
-            need.energy = (need.energy + 75.0).clamp(0.0, 100.0);
-            need.morale = (need.morale + 10.0).clamp(0.0, 100.0);
-        }
-        NpcActionKey::Relax => {
-            need.morale = (need.morale + 35.0).clamp(0.0, 100.0);
-        }
-        NpcActionKey::TreatPatients => {
-            need.morale = (need.morale + 18.0).clamp(0.0, 100.0);
-        }
-        _ => {}
-    }
-}
-
 fn quantize_need(value: f32) -> u8 {
     value.round().clamp(0.0, 100.0) as u8
 }
@@ -921,7 +1034,9 @@ fn build_planning_context(
     .into_iter()
     .flatten()
     {
-        if let Some(minutes) = travel_minutes_between_anchors(&anchor_lookup, &current_anchor, anchor) {
+        if let Some(minutes) =
+            travel_minutes_between_anchors(&anchor_lookup, &current_anchor, anchor)
+        {
             context.register_reachable_anchor(anchor.to_string(), minutes);
         }
     }
@@ -945,8 +1060,8 @@ fn travel_minutes_between_anchors(
 mod tests {
     use std::collections::BTreeMap;
 
-    use bevy_app::App;
     use super::SimClock;
+    use bevy_app::App;
     use game_data::{
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
@@ -1140,6 +1255,7 @@ mod tests {
         assert!(!entry.goal_scores.is_empty());
         assert!(!entry.decision_summary.is_empty());
         assert_eq!(entry.role, NpcRole::Cook);
+        assert_eq!(entry.definition_id, "safehouse_cook_test");
     }
 
     #[test]
@@ -1191,6 +1307,7 @@ mod tests {
             .find(|entry| entry.entity == doctor)
             .expect("doctor entry in debug snapshot");
         assert_eq!(entry.role, NpcRole::Doctor);
+        assert_eq!(entry.definition_id, "safehouse_doctor_test");
         assert!(!entry.goal_scores.is_empty());
     }
 
@@ -1441,7 +1558,11 @@ mod tests {
                 },
                 SettlementRouteDefinition {
                     id: "doctor_clinic_rounds".into(),
-                    anchors: vec!["doctor_home_01".into(), "clinic_room".into(), "canteen_main".into()],
+                    anchors: vec![
+                        "doctor_home_01".into(),
+                        "clinic_room".into(),
+                        "canteen_main".into(),
+                    ],
                 },
             ],
             smart_objects: vec![

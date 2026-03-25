@@ -4,8 +4,9 @@ use crate::config::{EconomySmokeReport, ServerConfig, ServerSimulationRuntime};
 use game_bevy::bootstrap::build_default_startup_seed;
 use game_bevy::{
     build_runtime_from_seed, CharacterDefinitions, EffectDefinitions, ItemDefinitions,
-    MapDefinitions, QuestDefinitions, RecipeDefinitions, RuntimeStartupConfig, ShopDefinitions,
-    SkillDefinitions, SkillTreeDefinitions, SpawnCharacterRequest,
+    MapDefinitions, OverworldDefinitions, QuestDefinitions, RecipeDefinitions,
+    RuntimeStartupConfig, ShopDefinitions, SkillDefinitions, SkillTreeDefinitions,
+    SpawnCharacterRequest,
 };
 use game_core::SimulationRuntime;
 use game_data::{CharacterId, GridCoord};
@@ -17,6 +18,7 @@ pub fn startup_demo(
     effects: Res<EffectDefinitions>,
     items: Res<ItemDefinitions>,
     maps: Res<MapDefinitions>,
+    overworld: Res<OverworldDefinitions>,
     skills: Res<SkillDefinitions>,
     skill_trees: Res<SkillTreeDefinitions>,
     recipes: Res<RecipeDefinitions>,
@@ -46,6 +48,10 @@ pub fn startup_demo(
     println!(
         "loaded {} map definitions from Rust game_data authority",
         maps.0.len()
+    );
+    println!(
+        "loaded {} overworld definitions from Rust game_data authority",
+        overworld.0.len()
     );
     println!(
         "loaded {} skill definitions from Rust game_data authority",
@@ -85,10 +91,12 @@ pub fn startup_demo(
         }
     }
 
-    let mut runtime = build_runtime_from_seed(&definitions.0, &maps.0, &seed)
+    let mut runtime = build_runtime_from_seed(&definitions.0, &maps.0, &overworld.0, &seed)
         .unwrap_or_else(|error| {
             panic!("failed to build bevy_server runtime from startup seed: {error}")
         });
+    runtime.set_map_library(maps.0.clone());
+    runtime.set_overworld_library(overworld.0.clone());
     runtime.set_item_library(items.0.clone());
     runtime.set_skill_library(skills.0.clone());
     runtime.set_recipe_library(recipes.0.clone());
@@ -107,8 +115,14 @@ pub fn startup_demo(
         snapshot.grid.map_height.unwrap_or(0),
         snapshot.grid.levels,
     );
-    let smoke_report =
-        run_economy_smoke_demo(&mut runtime, &snapshot, &items.0, &skills.0, &recipes.0, &shops.0);
+    let smoke_report = run_economy_smoke_demo(
+        &mut runtime,
+        &snapshot,
+        &items.0,
+        &skills.0,
+        &recipes.0,
+        &shops.0,
+    );
     println!(
         "initialized headless economy actors={} shops={} default_recipe_domains_ready=true",
         runtime.economy().actor_count(),
@@ -188,15 +202,19 @@ pub fn run_economy_smoke_demo(
         .find(|(_, definition)| definition.prerequisites.is_empty())
     {
         for (attribute, required) in &definition.attribute_requirements {
-            runtime
-                .economy_mut()
-                .set_actor_attribute(player_actor_id, attribute.clone(), *required);
+            runtime.economy_mut().set_actor_attribute(
+                player_actor_id,
+                attribute.clone(),
+                *required,
+            );
         }
         if runtime
             .economy_mut()
             .add_skill_points(player_actor_id, 1)
             .is_ok()
-            && runtime.learn_skill(player_actor_id, skill_id, skills).is_ok()
+            && runtime
+                .learn_skill(player_actor_id, skill_id, skills)
+                .is_ok()
         {
             report.learned_skill_id = Some(skill_id.clone());
         }
@@ -223,9 +241,12 @@ pub fn run_economy_smoke_demo(
         }
 
         for material in &definition.materials {
-            let _ = runtime
-                .economy_mut()
-                .add_item(player_actor_id, material.item_id, material.count, items);
+            let _ = runtime.economy_mut().add_item(
+                player_actor_id,
+                material.item_id,
+                material.count,
+                items,
+            );
         }
         for tool_id in &definition.required_tools {
             if let Ok(tool_item_id) = tool_id.parse::<u32>() {
@@ -288,8 +309,9 @@ mod tests {
     use bevy_ecs::prelude::*;
     use game_bevy::{
         default_debug_seed, CharacterDefinitions, EffectDefinitions, ItemDefinitions,
-        MapDefinitions, QuestDefinitions, RecipeDefinitions, RuntimeStartupConfig,
-        ShopDefinitions, SkillDefinitions, SkillTreeDefinitions, SpawnCharacterRequest,
+        MapDefinitions, OverworldDefinitions, QuestDefinitions, RecipeDefinitions,
+        RuntimeStartupConfig, ShopDefinitions, SkillDefinitions, SkillTreeDefinitions,
+        SpawnCharacterRequest,
     };
     use game_data::{
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
@@ -297,10 +319,12 @@ mod tests {
         CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterLootEntry,
         CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
         CharacterResourcePool, EffectLibrary, GridCoord, ItemLibrary, MapBuildingProps,
-        MapCellDefinition, MapDefinition, MapId, MapLevelDefinition, MapLibrary,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
-        MapSize, NeedProfile, NpcRole, QuestLibrary, RecipeLibrary, ScheduleBlock, ScheduleDay,
-        ShopLibrary, SkillLibrary, SkillTreeLibrary,
+        MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
+        MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+        MapRotation, MapSize, NeedProfile, NpcRole, OverworldCellDefinition,
+        OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
+        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet, QuestLibrary,
+        RecipeLibrary, ScheduleBlock, ScheduleDay, ShopLibrary, SkillLibrary, SkillTreeLibrary,
     };
     use std::collections::BTreeMap;
 
@@ -315,6 +339,7 @@ mod tests {
         app.insert_resource(EffectDefinitions(EffectLibrary::default()));
         app.insert_resource(ItemDefinitions(ItemLibrary::default()));
         app.insert_resource(MapDefinitions(sample_map_library()));
+        app.insert_resource(OverworldDefinitions(sample_overworld_library()));
         app.insert_resource(SkillDefinitions(SkillLibrary::default()));
         app.insert_resource(SkillTreeDefinitions(SkillTreeLibrary::default()));
         app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
@@ -351,6 +376,7 @@ mod tests {
         app.insert_resource(EffectDefinitions(EffectLibrary::default()));
         app.insert_resource(ItemDefinitions(ItemLibrary::default()));
         app.insert_resource(MapDefinitions(sample_map_library()));
+        app.insert_resource(OverworldDefinitions(sample_overworld_library()));
         app.insert_resource(SkillDefinitions(SkillLibrary::default()));
         app.insert_resource(SkillTreeDefinitions(SkillTreeLibrary::default()));
         app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
@@ -383,6 +409,7 @@ mod tests {
         app.insert_resource(EffectDefinitions(EffectLibrary::default()));
         app.insert_resource(ItemDefinitions(ItemLibrary::default()));
         app.insert_resource(MapDefinitions(sample_map_library()));
+        app.insert_resource(OverworldDefinitions(sample_overworld_library()));
         app.insert_resource(SkillDefinitions(SkillLibrary::default()));
         app.insert_resource(SkillTreeDefinitions(SkillTreeLibrary::default()));
         app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
@@ -414,6 +441,7 @@ mod tests {
         app.insert_resource(EffectDefinitions(EffectLibrary::default()));
         app.insert_resource(ItemDefinitions(ItemLibrary::default()));
         app.insert_resource(MapDefinitions(sample_map_library()));
+        app.insert_resource(OverworldDefinitions(sample_overworld_library()));
         app.insert_resource(SkillDefinitions(SkillLibrary::default()));
         app.insert_resource(SkillTreeDefinitions(SkillTreeLibrary::default()));
         app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
@@ -531,6 +559,12 @@ mod tests {
                     cells: Vec::new(),
                 },
             ],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
             objects: vec![MapObjectDefinition {
                 object_id: "house".into(),
                 kind: MapObjectKind::Building,
@@ -555,6 +589,97 @@ mod tests {
         let mut maps = BTreeMap::new();
         maps.insert(definition.id.clone(), definition);
         MapLibrary::from(maps)
+    }
+
+    fn sample_overworld_library() -> OverworldLibrary {
+        let definition = OverworldDefinition {
+            id: OverworldId("main_overworld".into()),
+            locations: vec![
+                sample_overworld_location("safehouse", "safehouse_grid", 0, 0),
+                sample_overworld_location("street_a", "safehouse_grid", -1, 0),
+                sample_overworld_location("street_b", "safehouse_grid", 1, 0),
+                OverworldLocationDefinition {
+                    id: OverworldLocationId("safehouse_interior".into()),
+                    name: "Safehouse Interior".into(),
+                    description: String::new(),
+                    kind: OverworldLocationKind::Interior,
+                    map_id: MapId("safehouse_grid".into()),
+                    entry_point_id: "default_entry".into(),
+                    parent_outdoor_location_id: Some(OverworldLocationId("safehouse".into())),
+                    return_entry_point_id: Some("default_entry".into()),
+                    default_unlocked: true,
+                    visible: false,
+                    overworld_cell: GridCoord::new(0, 0, 0),
+                    danger_level: 0,
+                    icon: String::new(),
+                    extra: BTreeMap::new(),
+                },
+            ],
+            edges: vec![
+                sample_overworld_edge("safehouse", "street_a"),
+                sample_overworld_edge("safehouse", "street_b"),
+            ],
+            walkable_cells: vec![
+                OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                },
+                OverworldCellDefinition {
+                    grid: GridCoord::new(-1, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                },
+                OverworldCellDefinition {
+                    grid: GridCoord::new(1, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                },
+            ],
+            travel_rules: OverworldTravelRuleSet::default(),
+        };
+
+        let mut definitions = BTreeMap::new();
+        definitions.insert(definition.id.clone(), definition);
+        OverworldLibrary::from(definitions)
+    }
+
+    fn sample_overworld_location(
+        id: &str,
+        map_id: &str,
+        x: i32,
+        z: i32,
+    ) -> OverworldLocationDefinition {
+        OverworldLocationDefinition {
+            id: OverworldLocationId(id.into()),
+            name: id.into(),
+            description: String::new(),
+            kind: OverworldLocationKind::Outdoor,
+            map_id: MapId(map_id.into()),
+            entry_point_id: "default_entry".into(),
+            parent_outdoor_location_id: None,
+            return_entry_point_id: None,
+            default_unlocked: true,
+            visible: true,
+            overworld_cell: GridCoord::new(x, 0, z),
+            danger_level: 0,
+            icon: String::new(),
+            extra: BTreeMap::new(),
+        }
+    }
+
+    fn sample_overworld_edge(from: &str, to: &str) -> game_data::OverworldEdgeDefinition {
+        game_data::OverworldEdgeDefinition {
+            from: OverworldLocationId(from.into()),
+            to: OverworldLocationId(to.into()),
+            bidirectional: true,
+            travel_minutes: 30,
+            food_cost: 1,
+            stamina_cost: 1,
+            risk_level: 0.0,
+            route_cells: Vec::new(),
+            extra: BTreeMap::new(),
+        }
     }
 
     fn sample_definition(

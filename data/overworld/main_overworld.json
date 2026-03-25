@@ -1,0 +1,505 @@
+{
+  "id": "main_overworld",
+  "locations": [
+    {
+      "id": "factory",
+      "name": "废弃工厂",
+      "description": "可以找到制作材料，适合搜刮零件",
+      "kind": "outdoor",
+      "map_id": "factory_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": true,
+      "visible": true,
+      "overworld_cell": {
+        "x": -1,
+        "y": 0,
+        "z": 3
+      },
+      "danger_level": 4,
+      "icon": "res://assets/icons/location_factory.png"
+    },
+    {
+      "id": "forest",
+      "name": "城市森林",
+      "description": "相对安全的野外区域，可以找到食物和材料",
+      "kind": "outdoor",
+      "map_id": "forest_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": false,
+      "visible": true,
+      "overworld_cell": {
+        "x": 0,
+        "y": 0,
+        "z": 5
+      },
+      "danger_level": 2,
+      "icon": "res://assets/icons/location_forest.png"
+    },
+    {
+      "id": "hospital",
+      "name": "废弃医院",
+      "description": "有医疗物资，但感染者众多，非常危险",
+      "kind": "outdoor",
+      "map_id": "hospital_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": false,
+      "visible": true,
+      "overworld_cell": {
+        "x": -3,
+        "y": 0,
+        "z": 2
+      },
+      "danger_level": 4,
+      "icon": "res://assets/icons/location_hospital.png"
+    },
+    {
+      "id": "ruins",
+      "name": "废墟",
+      "description": "危险的废墟区域，据说隐藏着秘密",
+      "kind": "outdoor",
+      "map_id": "ruins_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": false,
+      "visible": true,
+      "overworld_cell": {
+        "x": 7,
+        "y": 0,
+        "z": 2
+      },
+      "danger_level": 5,
+      "icon": "res://assets/icons/location_ruins.png"
+    },
+    {
+      "id": "safehouse",
+      "name": "安全屋",
+      "description": "一个相对安全的避难所，可以休息恢复状态",
+      "kind": "outdoor",
+      "map_id": "safehouse_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": true,
+      "visible": true,
+      "overworld_cell": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "danger_level": 0,
+      "icon": "res://assets/icons/location_safehouse.png"
+    },
+    {
+      "id": "safehouse_interior",
+      "name": "安全屋室内",
+      "description": "安全屋内部，可以在这里短暂整顿。",
+      "kind": "interior",
+      "map_id": "safehouse_interior_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": "safehouse",
+      "return_entry_point_id": "outdoor_return",
+      "default_unlocked": true,
+      "visible": false,
+      "overworld_cell": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "danger_level": 0,
+      "icon": "res://assets/icons/location_safehouse.png"
+    },
+    {
+      "id": "school",
+      "name": "废弃学校",
+      "description": "曾经的教育场所，现在荒废，偶尔有拾荒者",
+      "kind": "outdoor",
+      "map_id": "school_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": false,
+      "visible": true,
+      "overworld_cell": {
+        "x": 4,
+        "y": 0,
+        "z": -1
+      },
+      "danger_level": 3,
+      "icon": "res://assets/icons/location_school.png"
+    },
+    {
+      "id": "street_a",
+      "name": "废弃街道A",
+      "description": "到处都是废弃的车辆，偶尔有游荡的感染者",
+      "kind": "outdoor",
+      "map_id": "street_a_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": true,
+      "visible": true,
+      "overworld_cell": {
+        "x": -2,
+        "y": 0,
+        "z": 0
+      },
+      "danger_level": 2,
+      "icon": "res://assets/icons/location_street.png"
+    },
+    {
+      "id": "street_b",
+      "name": "废弃街道B",
+      "description": "这里看起来更加荒凉，危险程度较高",
+      "kind": "outdoor",
+      "map_id": "street_b_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": true,
+      "visible": true,
+      "overworld_cell": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "danger_level": 3,
+      "icon": "res://assets/icons/location_street.png"
+    },
+    {
+      "id": "subway",
+      "name": "地铁站",
+      "description": "黑暗的地下，充满未知危险，但可能有宝贵物资",
+      "kind": "outdoor",
+      "map_id": "subway_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": false,
+      "visible": true,
+      "overworld_cell": {
+        "x": 5,
+        "y": 0,
+        "z": 1
+      },
+      "danger_level": 5,
+      "icon": "res://assets/icons/location_subway.png"
+    },
+    {
+      "id": "supermarket",
+      "name": "废弃超市",
+      "description": "可能有食物和日用品，但也有掠夺者出没",
+      "kind": "outdoor",
+      "map_id": "supermarket_grid",
+      "entry_point_id": "default_entry",
+      "parent_outdoor_location_id": null,
+      "return_entry_point_id": null,
+      "default_unlocked": true,
+      "visible": true,
+      "overworld_cell": {
+        "x": -4,
+        "y": 0,
+        "z": 0
+      },
+      "danger_level": 2,
+      "icon": "res://assets/icons/location_supermarket.png"
+    }
+  ],
+  "edges": [
+    {
+      "from": "factory",
+      "to": "forest",
+      "bidirectional": true,
+      "travel_minutes": 120,
+      "food_cost": 1,
+      "stamina_cost": 16,
+      "risk_level": 3.0,
+      "route_cells": []
+    },
+    {
+      "from": "factory",
+      "to": "street_a",
+      "bidirectional": true,
+      "travel_minutes": 90,
+      "food_cost": 1,
+      "stamina_cost": 12,
+      "risk_level": 3.0,
+      "route_cells": []
+    },
+    {
+      "from": "hospital",
+      "to": "street_a",
+      "bidirectional": true,
+      "travel_minutes": 60,
+      "food_cost": 1,
+      "stamina_cost": 8,
+      "risk_level": 3.0,
+      "route_cells": []
+    },
+    {
+      "from": "ruins",
+      "to": "subway",
+      "bidirectional": true,
+      "travel_minutes": 60,
+      "food_cost": 1,
+      "stamina_cost": 8,
+      "risk_level": 5.0,
+      "route_cells": []
+    },
+    {
+      "from": "safehouse",
+      "to": "street_a",
+      "bidirectional": true,
+      "travel_minutes": 30,
+      "food_cost": 1,
+      "stamina_cost": 4,
+      "risk_level": 1.0,
+      "route_cells": []
+    },
+    {
+      "from": "safehouse",
+      "to": "street_b",
+      "bidirectional": true,
+      "travel_minutes": 30,
+      "food_cost": 1,
+      "stamina_cost": 4,
+      "risk_level": 1.5,
+      "route_cells": []
+    },
+    {
+      "from": "school",
+      "to": "street_b",
+      "bidirectional": true,
+      "travel_minutes": 30,
+      "food_cost": 1,
+      "stamina_cost": 4,
+      "risk_level": 3.0,
+      "route_cells": []
+    },
+    {
+      "from": "street_a",
+      "to": "supermarket",
+      "bidirectional": true,
+      "travel_minutes": 30,
+      "food_cost": 1,
+      "stamina_cost": 4,
+      "risk_level": 2.0,
+      "route_cells": []
+    },
+    {
+      "from": "street_b",
+      "to": "subway",
+      "bidirectional": true,
+      "travel_minutes": 60,
+      "food_cost": 1,
+      "stamina_cost": 8,
+      "risk_level": 4.0,
+      "route_cells": []
+    }
+  ],
+  "walkable_cells": [
+    {
+      "grid": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -2,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -3,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -4,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -2,
+        "y": 0,
+        "z": 1
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -3,
+        "y": 0,
+        "z": 1
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -3,
+        "y": 0,
+        "z": 2
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -1,
+        "y": 0,
+        "z": 1
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -1,
+        "y": 0,
+        "z": 2
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": -1,
+        "y": 0,
+        "z": 3
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 0,
+        "y": 0,
+        "z": 3
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 0,
+        "y": 0,
+        "z": 4
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 0,
+        "y": 0,
+        "z": 5
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 3,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 4,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 4,
+        "y": 0,
+        "z": -1
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 5,
+        "y": 0,
+        "z": 0
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 5,
+        "y": 0,
+        "z": 1
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 6,
+        "y": 0,
+        "z": 1
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 7,
+        "y": 0,
+        "z": 1
+      },
+      "terrain": "road"
+    },
+    {
+      "grid": {
+        "x": 7,
+        "y": 0,
+        "z": 2
+      },
+      "terrain": "road"
+    }
+  ],
+  "travel_rules": {
+    "food_item_id": "1007",
+    "night_minutes_multiplier": 1.2,
+    "risk_multiplier": 1.0
+  }
+}

@@ -13,6 +13,14 @@ export type EditorBootstrap = {
   editorDomains: string[];
 };
 
+export type EditorMenuSelfTestScenario = "narrative-menu";
+
+export type EditorRuntimeFlags = {
+  menuSelfTestScenario?: EditorMenuSelfTestScenario | null;
+};
+
+export type EditorSettingsSection = "ai" | "narrative-sync" | "workspace";
+
 export type ValidationIssue = {
   severity: "error" | "warning";
   field: string;

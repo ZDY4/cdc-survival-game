@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use game_bevy::{
     build_runtime_from_default_startup_seed, load_runtime_bootstrap, CharacterDefinitionPath,
-    MapDefinitionPath, RuntimeBootstrapError, RuntimeStartupConfigPath,
+    MapDefinitionPath, OverworldDefinitionPath, RuntimeBootstrapError, RuntimeStartupConfigPath,
 };
 use game_core::SimulationRuntime;
 
@@ -15,6 +15,7 @@ pub(crate) fn load_viewer_bootstrap() -> Result<ViewerBootstrap, RuntimeBootstra
     let bootstrap = load_runtime_bootstrap(
         &CharacterDefinitionPath::default().0,
         &MapDefinitionPath::default().0,
+        &OverworldDefinitionPath::default().0,
         &RuntimeStartupConfigPath::default().0,
     )?;
     let runtime = build_runtime_from_default_startup_seed(&bootstrap)?;

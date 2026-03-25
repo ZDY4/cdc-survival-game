@@ -1,16 +1,17 @@
 use bevy::input::mouse::MouseWheel;
+use bevy::log::info;
 use bevy::prelude::*;
-use game_data::{ActorId, ActorSide, InteractionPrompt, InteractionTargetId};
+use game_data::{ActorId, ActorSide, InteractionOptionId, InteractionPrompt, InteractionTargetId};
 
-use crate::dialogue::{advance_dialogue, apply_interaction_result};
+use crate::dialogue::{advance_dialogue, apply_interaction_result, current_dialogue_node};
 use crate::geometry::{
-    actor_at_grid, cycle_level, just_pressed_hud_page, map_object_at_grid, view_to_world_coord,
+    actor_at_grid, cycle_level, just_pressed_hud_page, map_object_at_grid, pick_grid_from_ray,
 };
-use crate::render::{interaction_menu_layout, interaction_menu_option_at_cursor};
+use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
-    InteractionMenuState, ViewerCamera, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState,
-    ViewerState,
+    InteractionMenuButton, InteractionMenuState, ViewerCamera, ViewerHudPage, ViewerRenderConfig,
+    ViewerRuntimeState, ViewerState,
 };
 
 pub(crate) fn handle_keyboard_input(
@@ -20,6 +21,8 @@ pub(crate) fn handle_keyboard_input(
     mut viewer_state: ResMut<ViewerState>,
     mut render_config: ResMut<ViewerRenderConfig>,
 ) {
+    let digit_input = just_pressed_digit(&keys);
+
     if let Some(page) = just_pressed_hud_page(&keys) {
         viewer_state.hud_page = page;
         viewer_state.status_line = format!("hud page: {}", page.title());
@@ -68,15 +71,27 @@ pub(crate) fn handle_keyboard_input(
     }
 
     if viewer_state.active_dialogue.is_some() {
-        if keys.just_pressed(KeyCode::Enter) {
+        if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
+            log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_key", None);
             advance_dialogue(&mut viewer_state, None);
         }
 
-        if let Some(index) = just_pressed_digit(&keys) {
+        if let Some(index) = digit_input {
+            log_dialogue_input(
+                &viewer_state,
+                "dialogue_choice_selected",
+                "dialogue_digit",
+                Some(index),
+            );
             advance_dialogue(&mut viewer_state, Some(index));
         }
         return;
     }
+
+    let selected_actor_locked = viewer_state
+        .selected_actor
+        .map(|actor_id| viewer_state.is_actor_interaction_locked(&runtime_state, actor_id))
+        .unwrap_or(false);
 
     if keys.just_pressed(KeyCode::KeyA) {
         viewer_state.auto_tick = !viewer_state.auto_tick;
@@ -123,6 +138,17 @@ pub(crate) fn handle_keyboard_input(
         }
     }
 
+    if selected_actor_locked
+        && (keys.just_pressed(KeyCode::Tab)
+            || keys.just_pressed(KeyCode::Space)
+            || keys.pressed(KeyCode::Space))
+    {
+        viewer_state.end_turn_hold_sec = 0.0;
+        viewer_state.end_turn_repeat_elapsed_sec = 0.0;
+        viewer_state.status_line = "interaction: actor is busy".to_string();
+        return;
+    }
+
     if keys.just_pressed(KeyCode::Tab) {
         let actor_ids: Vec<ActorId> = snapshot
             .actors
@@ -165,41 +191,6 @@ pub(crate) fn handle_keyboard_input(
                 viewer_state.end_turn_repeat_elapsed_sec -=
                     viewer_state.end_turn_repeat_interval_sec;
                 submit_end_turn(&mut runtime_state, &mut viewer_state);
-            }
-        }
-    }
-
-    if keys.just_pressed(KeyCode::KeyE) {
-        if let (Some(actor_id), Some(target_id), Some(prompt)) = (
-            viewer_state.selected_actor,
-            viewer_state.focused_target.clone(),
-            viewer_state.current_prompt.clone(),
-        ) {
-            if let Some(option_id) = prompt.primary_option_id.clone() {
-                viewer_state.progression_elapsed_sec = 0.0;
-                viewer_state.interaction_menu = None;
-                let result = runtime_state
-                    .runtime
-                    .issue_interaction(actor_id, target_id, option_id);
-                apply_interaction_result(&mut viewer_state, result);
-            }
-        }
-    }
-
-    if let Some(index) = just_pressed_digit(&keys) {
-        if let (Some(actor_id), Some(target_id), Some(prompt)) = (
-            viewer_state.selected_actor,
-            viewer_state.focused_target.clone(),
-            viewer_state.current_prompt.clone(),
-        ) {
-            if let Some(option) = prompt.options.get(index) {
-                viewer_state.progression_elapsed_sec = 0.0;
-                viewer_state.interaction_menu = None;
-                let result =
-                    runtime_state
-                        .runtime
-                        .issue_interaction(actor_id, target_id, option.id.clone());
-                apply_interaction_result(&mut viewer_state, result);
             }
         }
     }
@@ -248,6 +239,7 @@ pub(crate) fn handle_mouse_wheel_zoom(
 pub(crate) fn handle_camera_pan(
     window: Single<&Window>,
     buttons: Res<ButtonInput<MouseButton>>,
+    render_config: Res<ViewerRenderConfig>,
     mut viewer_state: ResMut<ViewerState>,
 ) {
     if !buttons.pressed(MouseButton::Middle) {
@@ -261,10 +253,11 @@ pub(crate) fn handle_camera_pan(
     };
 
     if let Some(previous_cursor) = viewer_state.camera_drag_cursor.replace(cursor_position) {
-        viewer_state.camera_pan_offset += Vec2::new(
-            previous_cursor.x - cursor_position.x,
-            cursor_position.y - previous_cursor.y,
-        );
+        viewer_state.camera_pan_offset.x += (previous_cursor.x - cursor_position.x)
+            / render_config.pixels_per_world_unit.max(f32::EPSILON);
+        viewer_state.camera_pan_offset.y += (cursor_position.y - previous_cursor.y)
+            / (render_config.pixels_per_world_unit * render_config.vertical_projection_factor())
+                .max(f32::EPSILON);
     }
 }
 
@@ -274,7 +267,6 @@ pub(crate) fn handle_mouse_input(
     buttons: Res<ButtonInput<MouseButton>>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
-    render_config: Res<ViewerRenderConfig>,
 ) {
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
@@ -282,43 +274,44 @@ pub(crate) fn handle_mouse_input(
         viewer_state.hovered_grid = None;
         return;
     };
-    let Ok(world_pos) = camera.viewport_to_world_2d(&camera_transform, cursor_position) else {
+    let Ok(ray) = camera.viewport_to_world(&camera_transform, cursor_position) else {
         viewer_state.hovered_grid = None;
         return;
     };
+    let snapshot = runtime_state.runtime.snapshot();
 
-    let mut grid = runtime_state
-        .runtime
-        .world_to_grid(view_to_world_coord(world_pos, *render_config));
-    grid.y = viewer_state.current_level;
+    let Some(grid) = pick_grid_from_ray(ray, viewer_state.current_level, snapshot.grid.grid_size)
+    else {
+        viewer_state.hovered_grid = None;
+        return;
+    };
     viewer_state.hovered_grid = Some(grid);
 
-    let snapshot = runtime_state.runtime.snapshot();
     let actor_at_cursor = actor_at_grid(&snapshot, grid);
     let map_object_at_cursor = map_object_at_grid(&snapshot, grid);
     let cursor_target =
         cursor_interaction_target(actor_at_cursor.as_ref(), map_object_at_cursor.as_ref());
 
     if viewer_state.active_dialogue.is_some() {
+        if buttons.just_pressed(MouseButton::Left) {
+            log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_click", None);
+            advance_dialogue(&mut viewer_state, None);
+        }
+        return;
+    }
+
+    let selected_actor_locked = viewer_state
+        .selected_actor
+        .map(|actor_id| viewer_state.is_actor_interaction_locked(&runtime_state, actor_id))
+        .unwrap_or(false);
+    if selected_actor_locked
+        && (buttons.just_pressed(MouseButton::Left) || buttons.just_pressed(MouseButton::Right))
+    {
+        viewer_state.status_line = "interaction: actor is busy".to_string();
         return;
     }
 
     if buttons.just_pressed(MouseButton::Left) {
-        if let Some(option_index) =
-            clicked_interaction_menu_option(&window, &viewer_state, cursor_position)
-        {
-            if let Some(prompt) = viewer_state.current_prompt.clone() {
-                if let Some(option) = prompt.options.get(option_index) {
-                    execute_target_interaction_option(
-                        &mut runtime_state,
-                        &mut viewer_state,
-                        prompt.target_id.clone(),
-                        option.id.clone(),
-                    );
-                }
-            }
-            return;
-        }
         if interaction_menu_contains_cursor(&window, &viewer_state, cursor_position) {
             return;
         }
@@ -347,6 +340,7 @@ pub(crate) fn handle_mouse_input(
                     &mut viewer_state,
                     target_id,
                     format!("actor {:?} ({:?})", actor.actor_id, actor.side),
+                    "mouse_primary",
                 );
             }
         } else if let Some(object) = map_object_at_cursor.as_ref() {
@@ -356,6 +350,7 @@ pub(crate) fn handle_mouse_input(
                 &mut viewer_state,
                 target_id,
                 format!("object {}", object.object_id),
+                "mouse_primary",
             );
         } else if let Some(actor_id) = viewer_state.selected_actor {
             if !runtime_state.runtime.is_grid_in_bounds(grid) {
@@ -414,6 +409,14 @@ pub(crate) fn handle_mouse_input(
                 target_id.clone(),
             );
             if let Some(prompt) = prompt {
+                log_viewer_interaction(
+                    "menu_open",
+                    viewer_state.selected_actor,
+                    &target_id,
+                    &prompt.target_name,
+                    None,
+                    "mouse_menu",
+                );
                 viewer_state.interaction_menu = Some(InteractionMenuState {
                     target_id,
                     cursor_position,
@@ -434,6 +437,7 @@ fn execute_primary_target_interaction(
     viewer_state: &mut ViewerState,
     target_id: InteractionTargetId,
     target_summary: String,
+    input_source: &'static str,
 ) {
     let prompt = focus_target_and_query_prompt(runtime_state, viewer_state, target_id.clone());
     let Some(prompt) = prompt else {
@@ -458,6 +462,14 @@ fn execute_primary_target_interaction(
         return;
     };
 
+    log_viewer_interaction(
+        "primary",
+        viewer_state.selected_actor,
+        &target_id,
+        &prompt.target_name,
+        Some(&option_id),
+        input_source,
+    );
     execute_target_interaction_option(runtime_state, viewer_state, target_id, option_id);
 }
 
@@ -506,22 +518,7 @@ fn execute_target_interaction_option(
     let result = runtime_state
         .runtime
         .issue_interaction(actor_id, target_id, option_id);
-    apply_interaction_result(viewer_state, result);
-}
-
-fn clicked_interaction_menu_option(
-    window: &Window,
-    viewer_state: &ViewerState,
-    cursor_position: Vec2,
-) -> Option<usize> {
-    let menu_state = viewer_state.interaction_menu.as_ref()?;
-    let prompt = viewer_state.current_prompt.as_ref()?;
-    if prompt.target_id != menu_state.target_id || prompt.options.is_empty() {
-        return None;
-    }
-
-    let layout = interaction_menu_layout(window, menu_state, prompt);
-    interaction_menu_option_at_cursor(layout, cursor_position, prompt.options.len())
+    apply_interaction_result(runtime_state, viewer_state, result);
 }
 
 fn interaction_menu_contains_cursor(
@@ -542,6 +539,41 @@ fn interaction_menu_contains_cursor(
     interaction_menu_layout(window, menu_state, prompt).contains(cursor_position)
 }
 
+pub(crate) fn handle_interaction_menu_buttons(
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor, &InteractionMenuButton),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut runtime_state: ResMut<ViewerRuntimeState>,
+    mut viewer_state: ResMut<ViewerState>,
+) {
+    for (interaction, mut background, menu_button) in &mut buttons {
+        *background = BackgroundColor(interaction_menu_button_color(
+            menu_button.is_primary,
+            *interaction,
+        ));
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        let target_name = interaction_target_name(&viewer_state, &menu_button.target_id);
+        log_viewer_interaction(
+            "option_selected",
+            viewer_state.selected_actor,
+            &menu_button.target_id,
+            &target_name,
+            Some(&menu_button.option_id),
+            "mouse_menu",
+        );
+        execute_target_interaction_option(
+            &mut runtime_state,
+            &mut viewer_state,
+            menu_button.target_id.clone(),
+            menu_button.option_id.clone(),
+        );
+    }
+}
+
 fn just_pressed_digit(keys: &ButtonInput<KeyCode>) -> Option<usize> {
     let bindings = [
         KeyCode::Digit1,
@@ -555,4 +587,57 @@ fn just_pressed_digit(keys: &ButtonInput<KeyCode>) -> Option<usize> {
         KeyCode::Digit9,
     ];
     bindings.iter().position(|key| keys.just_pressed(*key))
+}
+
+fn log_viewer_interaction(
+    action: &str,
+    actor_id: Option<ActorId>,
+    target_id: &InteractionTargetId,
+    target_name: &str,
+    option_id: Option<&InteractionOptionId>,
+    input_source: &str,
+) {
+    info!(
+        "viewer.interaction.{action} actor={actor_id:?} target={target_id:?} target_name={target_name} option_id={} input_source={input_source}",
+        option_id.map(|id| id.as_str()).unwrap_or("none")
+    );
+}
+
+fn log_dialogue_input(
+    viewer_state: &ViewerState,
+    action: &str,
+    input_source: &str,
+    choice_index: Option<usize>,
+) {
+    let Some(dialogue) = viewer_state.active_dialogue.as_ref() else {
+        return;
+    };
+    let node_id = current_dialogue_node(dialogue)
+        .map(|node| node.id.as_str())
+        .unwrap_or("unknown");
+    let target_id = viewer_state
+        .focused_target
+        .as_ref()
+        .map(|target| format!("{target:?}"))
+        .unwrap_or_else(|| "None".to_string());
+    info!(
+        "viewer.interaction.{action} actor={:?} target={} target_name={} dialog_id={} node_id={} option_id={} input_source={input_source}",
+        dialogue.actor_id,
+        target_id,
+        dialogue.target_name,
+        dialogue.dialog_id,
+        node_id,
+        choice_index
+            .map(|index| format!("choice_{}", index + 1))
+            .unwrap_or_else(|| "next".to_string())
+    );
+}
+
+fn interaction_target_name(viewer_state: &ViewerState, target_id: &InteractionTargetId) -> String {
+    viewer_state
+        .current_prompt
+        .as_ref()
+        .filter(|prompt| &prompt.target_id == target_id)
+        .map(|prompt| prompt.target_name.clone())
+        .unwrap_or_else(|| format!("{target_id:?}"))
 }

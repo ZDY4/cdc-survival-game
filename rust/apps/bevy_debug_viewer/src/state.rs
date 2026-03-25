@@ -116,6 +116,13 @@ pub(crate) struct ViewerRenderConfig {
     pub max_pixels_per_world_unit: f32,
     pub viewport_padding_px: f32,
     pub hud_reserved_width_px: f32,
+    pub camera_pitch_degrees: f32,
+    pub camera_distance_padding_world: f32,
+    pub floor_thickness_world: f32,
+    pub actor_radius_world: f32,
+    pub actor_body_length_world: f32,
+    pub actor_label_height_world: f32,
+    pub label_screen_offset_px: Vec2,
 }
 
 impl Default for ViewerRenderConfig {
@@ -127,7 +134,24 @@ impl Default for ViewerRenderConfig {
             max_pixels_per_world_unit: 160.0,
             viewport_padding_px: 72.0,
             hud_reserved_width_px: 460.0,
+            camera_pitch_degrees: 35.0,
+            camera_distance_padding_world: 8.0,
+            floor_thickness_world: 0.08,
+            actor_radius_world: 0.22,
+            actor_body_length_world: 0.52,
+            actor_label_height_world: 1.3,
+            label_screen_offset_px: Vec2::new(-26.0, -14.0),
         }
+    }
+}
+
+impl ViewerRenderConfig {
+    pub(crate) fn camera_pitch_radians(self) -> f32 {
+        self.camera_pitch_degrees.to_radians()
+    }
+
+    pub(crate) fn vertical_projection_factor(self) -> f32 {
+        self.camera_pitch_radians().sin().max(0.1)
     }
 }
 
@@ -184,6 +208,31 @@ impl Default for ViewerState {
     }
 }
 
+impl ViewerState {
+    pub(crate) fn interaction_locked_actor_id(
+        &self,
+        runtime_state: &ViewerRuntimeState,
+    ) -> Option<ActorId> {
+        self.active_dialogue
+            .as_ref()
+            .map(|dialogue| dialogue.actor_id)
+            .or_else(|| {
+                runtime_state
+                    .runtime
+                    .pending_interaction()
+                    .map(|intent| intent.actor_id)
+            })
+    }
+
+    pub(crate) fn is_actor_interaction_locked(
+        &self,
+        runtime_state: &ViewerRuntimeState,
+        actor_id: ActorId,
+    ) -> bool {
+        self.interaction_locked_actor_id(runtime_state) == Some(actor_id)
+    }
+}
+
 #[derive(Component)]
 pub(crate) struct HudText;
 
@@ -194,7 +243,20 @@ pub(crate) struct HudFooterText;
 pub(crate) struct ViewerCamera;
 
 #[derive(Component)]
-pub(crate) struct InteractionMenuText;
+pub(crate) struct InteractionMenuRoot;
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelRoot;
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct InteractionMenuButton {
+    pub target_id: InteractionTargetId,
+    pub option_id: game_data::InteractionOptionId,
+    pub is_primary: bool,
+}
+
+#[derive(Component)]
+pub(crate) struct InteractionLockedActorTag;
 
 #[derive(Component)]
 pub(crate) struct ActorLabel {
@@ -209,6 +271,8 @@ pub(crate) struct InteractionMenuState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ActiveDialogueState {
+    pub actor_id: ActorId,
+    pub dialogue_key: String,
     pub dialog_id: String,
     pub data: DialogueData,
     pub current_node_id: String,

@@ -13,13 +13,12 @@ import { Badge } from "../../components/Badge";
 import { TextField } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
-import { ValidationPanel } from "../../components/ValidationPanel";
 import type { GraphSelection } from "../../graph-kit/types";
+import { openOrFocusSettingsWindow } from "../../lib/editorWindows";
 import { invokeCommand } from "../../lib/tauri";
 import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
 import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
-  AiConnectionTestResult,
   AiDraftPayload,
   AiGenerationResponse,
   AiSettings,
@@ -54,6 +53,8 @@ type DialogueWorkspaceProps = {
   onStatusChange: (status: string) => void;
   onReload: () => Promise<void>;
 };
+
+type DialogueInspectorMode = "node" | "validation";
 
 function createDraftDialogue(nextId: string): DialogueData {
   return dialogueGraphAdapter.normalizeDocument({
@@ -148,6 +149,7 @@ export function DialogueWorkspace({
     nodeId: null,
     edgeId: null,
   });
+  const [inspectorMode, setInspectorMode] = useState<DialogueInspectorMode>("node");
   const graphRef = useRef<GraphCanvasHandle | null>(null);
   const deferredSearch = useDeferredValue(searchText);
   const emptyDialogueRecord = useMemo(() => createDraftDialogue("dialog_draft"), []);
@@ -156,7 +158,14 @@ export function DialogueWorkspace({
     setDocuments(hydrateDocuments(workspace.documents));
     setSelectedKey(workspace.documents[0]?.documentKey ?? "");
     setSelection({ nodeId: null, edgeId: null });
+    setInspectorMode("node");
   }, [workspace]);
+
+  useEffect(() => {
+    if (selection.nodeId) {
+      setInspectorMode("node");
+    }
+  }, [selection.nodeId]);
 
   useEffect(() => {
     if (!selectedKey || (GraphCanvasComponent && GraphToolbarActionsComponent)) {
@@ -557,9 +566,46 @@ export function DialogueWorkspace({
 
   function GraphLoadingFallback() {
     return (
-      <div className="empty-state">
-        <Badge tone="muted">Graph</Badge>
+      <div className="workspace-empty settings-empty-inline">
         <p>Loading graph editor...</p>
+      </div>
+    );
+  }
+
+  function renderValidationInspector() {
+    if (!selectedDocument) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <p>Select a dialogue to inspect validation.</p>
+        </div>
+      );
+    }
+
+    if (selectedIssues.length === 0) {
+      return (
+        <div className="workspace-empty settings-empty-inline">
+          <Badge tone="success">Clean</Badge>
+          <p>No validation issues for the current dialogue.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="issue-list">
+        {selectedIssues.map((issue, index) => (
+          <article className={`issue issue-${issue.severity}`} key={`${issue.field}-${index}`}>
+            <div className="issue-head">
+              <Badge tone={issue.severity === "error" ? "danger" : "warning"}>
+                {issue.severity}
+              </Badge>
+              <strong>{issue.field}</strong>
+              {issue.scope ? <Badge tone="muted">{issue.scope}</Badge> : null}
+              {issue.nodeId ? <Badge tone="accent">{issue.nodeId}</Badge> : null}
+              {issue.edgeKey ? <Badge tone="muted">{issue.edgeKey}</Badge> : null}
+            </div>
+            <p>{issue.message}</p>
+          </article>
+        ))}
       </div>
     );
   }
@@ -626,96 +672,90 @@ export function DialogueWorkspace({
 
         <main className="column column-main">
           {selectedDocument ? (
-            <>
-              <PanelSection
-                label="Document"
-                title={selectedDocument.dialog.dialog_id || "Unnamed dialogue"}
-              >
-                <div className="stats-grid">
-                  <article className="stat-card">
-                    <span>Dialog ID</span>
-                    <strong>{selectedDocument.dialog.dialog_id}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Nodes</span>
-                    <strong>{selectedDocument.dialog.nodes.length}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Connections</span>
-                    <strong>{selectedDocument.dialog.connections.length}</strong>
-                  </article>
-                  <article className="stat-card">
-                    <span>Validation</span>
-                    <strong>
-                      {selectedCounts.errorCount}E / {selectedCounts.warningCount}W
-                    </strong>
-                  </article>
+            <PanelSection
+              label="Graph"
+              title={selectedDocument.dialog.dialog_id || "Unnamed dialogue"}
+              summary={
+                <div className="toolbar-summary">
+                  <Badge tone="muted">{selectedDocument.dialog.nodes.length} nodes</Badge>
+                  <Badge tone="muted">{selectedDocument.dialog.connections.length} edges</Badge>
+                  <Badge tone={selectedCounts.errorCount > 0 ? "danger" : "muted"}>
+                    {selectedCounts.errorCount} errors
+                  </Badge>
                 </div>
-                <TextField
-                  label="Dialog ID"
-                  value={selectedDocument.dialog.dialog_id}
-                  onChange={(value) =>
-                    updateSelectedDialog((dialog) =>
-                      dialogueGraphAdapter.setDocumentId(dialog, value.trim()),
-                    )
-                  }
-                />
-              </PanelSection>
-
-              <PanelSection label="Graph" title="Flow editor">
-                <div className="graph-panel">
-                  {GraphCanvasComponent ? (
-                    <GraphCanvasComponent
-                      ref={graphRef}
-                      adapter={dialogueGraphAdapter}
-                      document={selectedDocument.dialog}
-                      issues={selectedIssues}
-                      selection={selection}
-                      onSelectionChange={setSelection}
-                      onDocumentChange={(dialog) => updateSelectedDialog(() => dialog)}
-                    />
-                  ) : (
-                    <GraphLoadingFallback />
-                  )}
-                </div>
-              </PanelSection>
-            </>
-          ) : (
-            <PanelSection label="Selection" title="No dialogue selected">
-              <div className="empty-state">
-                <Badge tone="muted">Idle</Badge>
-                <p>Select a dialogue from the left panel or create a new draft.</p>
+              }
+            >
+              <TextField
+                label="Dialog ID"
+                value={selectedDocument.dialog.dialog_id}
+                onChange={(value) =>
+                  updateSelectedDialog((dialog) =>
+                    dialogueGraphAdapter.setDocumentId(dialog, value.trim()),
+                  )
+                }
+              />
+              <div className="graph-panel">
+                {GraphCanvasComponent ? (
+                  <GraphCanvasComponent
+                    ref={graphRef}
+                    adapter={dialogueGraphAdapter}
+                    document={selectedDocument.dialog}
+                    issues={selectedIssues}
+                    selection={selection}
+                    onSelectionChange={setSelection}
+                    onDocumentChange={(dialog) => updateSelectedDialog(() => dialog)}
+                  />
+                ) : (
+                  <GraphLoadingFallback />
+                )}
               </div>
             </PanelSection>
+          ) : (
+            <div className="workspace-empty">
+              <Badge tone="muted">Dialogue</Badge>
+              <p>Select a dialogue from the left panel or create a new draft.</p>
+            </div>
           )}
         </main>
 
         <aside className="column">
-          {selectedDocument ? (
-            <DialogueInspector
-              dialog={selectedDocument.dialog}
-              selectedNodeId={selection.nodeId}
-              onDialogChange={(dialog) => updateSelectedDialog(() => dialog)}
-            />
-          ) : null}
-
-          <ValidationPanel issues={selectedIssues} />
-
-          <PanelSection label="Selection" title="Graph focus" compact>
-            <div className="toolbar-summary">
-              <Badge tone={selection.nodeId ? "accent" : "muted"}>
-                node: {selection.nodeId ?? "none"}
-              </Badge>
-              <Badge tone={selection.edgeId ? "accent" : "muted"}>
-                edge: {selection.edgeId ?? "none"}
-              </Badge>
-              <Badge tone={dirtyCount > 0 ? "warning" : "muted"}>
-                {dirtyCount} dirty docs
-              </Badge>
-              <Badge tone={totalIssues.errors > 0 ? "danger" : "success"}>
-                {totalIssues.errors} errors
-              </Badge>
-            </div>
+          <PanelSection
+            label="Inspector"
+            title={inspectorMode === "node" ? "Node" : "Validation"}
+            compact
+            summary={
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`segmented-control-item ${inspectorMode === "node" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setInspectorMode("node")}
+                >
+                  Node
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-control-item ${inspectorMode === "validation" ? "segmented-control-item-active" : ""}`}
+                  onClick={() => setInspectorMode("validation")}
+                >
+                  Validation
+                </button>
+              </div>
+            }
+          >
+            {selectedDocument && inspectorMode === "node" ? (
+              <DialogueInspector
+                dialog={selectedDocument.dialog}
+                selectedNodeId={selection.nodeId}
+                onDialogChange={(dialog) => updateSelectedDialog(() => dialog)}
+                embedded
+              />
+            ) : null}
+            {inspectorMode === "validation" ? renderValidationInspector() : null}
+            {!selectedDocument && inspectorMode === "node" ? (
+              <div className="workspace-empty settings-empty-inline">
+                <p>Select a dialogue to inspect graph details.</p>
+              </div>
+            ) : null}
           </PanelSection>
         </aside>
       </div>
@@ -736,12 +776,7 @@ export function DialogueWorkspace({
               })
             }
             onLoadSettings={() => invokeCommand<AiSettings>("load_ai_settings")}
-            onSaveSettings={(settings) =>
-              invokeCommand<AiSettings>("save_ai_settings", { settings })
-            }
-            onTestSettings={(settings) =>
-              invokeCommand<AiConnectionTestResult>("test_ai_provider", { settings })
-            }
+            onOpenSettings={() => openOrFocusSettingsWindow("ai")}
             onApply={applyAiDraft}
           />
         </Suspense>

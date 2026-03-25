@@ -1,55 +1,34 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { EditorShell } from "./components/EditorShell";
 import { detectCurrentSurface } from "./lib/editorSurface";
-import { openOrFocusMainEditor, openOrFocusNarrativeLab } from "./lib/editorWindows";
+import { openOrFocusMainEditor, openOrFocusNarrativeLab, openOrFocusSettingsWindow } from "./lib/editorWindows";
 import { invokeCommand, isTauriRuntime } from "./lib/tauri";
 import { useRegisterEditorMenuCommands } from "./menu/editorCommandRegistry";
 import { useEditorMenuBridge } from "./menu/menuBridge";
 import { EDITOR_MENU_COMMANDS } from "./menu/menuCommands";
+import { DialogueWorkspace } from "./modules/dialogues/DialogueWorkspace";
 import { fallbackDialogueWorkspace } from "./modules/dialogues/fallback";
 import { fallbackWorkspace } from "./modules/items/fallback";
+import { ItemWorkspace } from "./modules/items/ItemWorkspace";
+import { MapEditorWindow } from "./modules/maps/MapEditorWindow";
+import { MapLibraryWorkspace } from "./modules/maps/MapLibraryWorkspace";
 import { fallbackMapWorkspace } from "./modules/maps/fallback";
 import { fallbackNarrativeWorkspace } from "./modules/narrative/fallback";
+import { NarrativeWorkspace } from "./modules/narrative/NarrativeWorkspace";
 import { fallbackQuestWorkspace } from "./modules/quests/fallback";
+import { QuestWorkspace } from "./modules/quests/QuestWorkspace";
+import { SETTINGS_CHANGED_EVENT } from "./modules/settings/settingsWindowing";
+import { SettingsWindow } from "./modules/settings/SettingsWindow";
 import type {
   DialogueWorkspacePayload,
+  EditorRuntimeFlags,
   ItemWorkspacePayload,
   MapWorkspacePayload,
   NarrativeAppSettings,
   NarrativeWorkspacePayload,
   QuestWorkspacePayload,
 } from "./types";
-
-const ItemWorkspace = lazy(() =>
-  import("./modules/items/ItemWorkspace").then((module) => ({ default: module.ItemWorkspace })),
-);
-
-const DialogueWorkspace = lazy(() =>
-  import("./modules/dialogues/DialogueWorkspace").then((module) => ({
-    default: module.DialogueWorkspace,
-  })),
-);
-
-const QuestWorkspace = lazy(() =>
-  import("./modules/quests/QuestWorkspace").then((module) => ({ default: module.QuestWorkspace })),
-);
-
-const MapLibraryWorkspace = lazy(() =>
-  import("./modules/maps/MapLibraryWorkspace").then((module) => ({
-    default: module.MapLibraryWorkspace,
-  })),
-);
-
-const MapEditorWindow = lazy(() =>
-  import("./modules/maps/MapEditorWindow").then((module) => ({ default: module.MapEditorWindow })),
-);
-
-const NarrativeWorkspace = lazy(() =>
-  import("./modules/narrative/NarrativeWorkspace").then((module) => ({
-    default: module.NarrativeWorkspace,
-  })),
-);
-
 const defaultNarrativeAppSettings: NarrativeAppSettings = {
   recentWorkspaces: [],
   lastWorkspace: null,
@@ -58,13 +37,9 @@ const defaultNarrativeAppSettings: NarrativeAppSettings = {
   workspaceLayouts: {},
 };
 
-function WorkspaceLoadingFallback() {
-  return (
-    <div className="empty-state">
-      <p>Loading editor module...</p>
-    </div>
-  );
-}
+const defaultEditorRuntimeFlags: EditorRuntimeFlags = {
+  menuSelfTestScenario: null,
+};
 
 function App() {
   const surface = detectCurrentSurface();
@@ -78,6 +53,8 @@ function App() {
   const [narrativeAppSettings, setNarrativeAppSettings] = useState<NarrativeAppSettings>(
     defaultNarrativeAppSettings,
   );
+  const [editorRuntimeFlags, setEditorRuntimeFlags] =
+    useState<EditorRuntimeFlags>(defaultEditorRuntimeFlags);
   const [questWorkspace, setQuestWorkspace] = useState<QuestWorkspacePayload>(fallbackQuestWorkspace);
   const [mapWorkspace, setMapWorkspace] = useState<MapWorkspacePayload>(fallbackMapWorkspace);
   const [status, setStatus] = useState("Loading editor workspaces...");
@@ -87,6 +64,7 @@ function App() {
   const [canPersist, setCanPersist] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
+  const [narrativeStartupReady, setNarrativeStartupReady] = useState(surface !== "narrative-lab");
 
   async function loadMainWorkspaces() {
     try {
@@ -150,6 +128,30 @@ function App() {
     }
   }
 
+  async function refreshNarrativeSessionFromSettings() {
+    const settings = await invokeCommand<NarrativeAppSettings>("load_narrative_app_settings");
+    setNarrativeAppSettings(settings);
+    setCanPersist(true);
+
+    const workspaceRoot = settings.lastWorkspace?.trim();
+    if (!workspaceRoot) {
+      setNarrativeWorkspace({
+        ...fallbackNarrativeWorkspace,
+        connectedProjectRoot: settings.connectedProjectRoot ?? null,
+        projectContextStatus: "选择或创建一个工作区后即可开始使用 Narrative Lab。",
+      });
+      setStatus("Choose or create a narrative workspace to get started.");
+      return;
+    }
+
+    const payload = await invokeCommand<NarrativeWorkspacePayload>("load_narrative_workspace", {
+      workspaceRoot,
+      projectRoot: settings.connectedProjectRoot ?? null,
+    });
+    setNarrativeWorkspace(payload);
+    setStatus(`Loaded ${payload.documentCount} narrative docs from ${payload.workspaceRoot}.`);
+  }
+
   async function saveNarrativeSettings(nextSettings: NarrativeAppSettings) {
     const saved = await invokeCommand<NarrativeAppSettings>("save_narrative_app_settings", {
       settings: nextSettings,
@@ -210,11 +212,30 @@ function App() {
   }
 
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    void invokeCommand<EditorRuntimeFlags>("get_editor_runtime_flags")
+      .then(setEditorRuntimeFlags)
+      .catch(() => {
+        setEditorRuntimeFlags(defaultEditorRuntimeFlags);
+      });
+  }, []);
+
+  useEffect(() => {
     if (surface === "map-editor") {
+      return;
+    }
+    if (surface === "settings") {
+      setActiveModule("items");
+      setStatus("Settings ready.");
+      setNarrativeStartupReady(true);
       return;
     }
     setActiveModule(surface === "narrative-lab" ? "narrative" : "items");
     if (surface === "narrative-lab") {
+      setNarrativeStartupReady(false);
       void invokeCommand<NarrativeAppSettings>("load_narrative_app_settings")
         .then((settings) => {
           setNarrativeAppSettings(settings);
@@ -226,6 +247,7 @@ function App() {
               projectContextStatus: "选择或创建一个工作区后即可开始使用 Narrative Lab。",
             });
             setStatus("Choose or create a narrative workspace to get started.");
+            setNarrativeStartupReady(true);
             return;
           }
 
@@ -235,6 +257,7 @@ function App() {
           }).then((payload) => {
             setNarrativeWorkspace(payload);
             setStatus(`Loaded ${payload.documentCount} narrative docs from ${payload.workspaceRoot}.`);
+            setNarrativeStartupReady(true);
           });
         })
         .catch((error) => {
@@ -244,10 +267,36 @@ function App() {
           setStatus(
             `Running Narrative Lab in fallback mode. ${String(error)}. Start the Tauri host to read project files.`,
           );
+          setNarrativeStartupReady(true);
         });
       return;
     }
+    setNarrativeStartupReady(true);
     void loadMainWorkspaces();
+  }, [surface]);
+
+  useEffect(() => {
+    if (!isTauriRuntime() || surface !== "narrative-lab") {
+      return;
+    }
+
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .listen<{ section?: string }>(SETTINGS_CHANGED_EVENT, (event) => {
+        if (event.payload.section !== "workspace") {
+          return;
+        }
+        void refreshNarrativeSessionFromSettings().catch((error) => {
+          setStatus(`Failed to refresh Narrative Lab settings: ${String(error)}`);
+        });
+      })
+      .then((dispose) => {
+        unlisten = dispose;
+      });
+
+    return () => {
+      unlisten?.();
+    };
   }, [surface]);
 
   useEditorMenuBridge(setStatus, surface !== "map-editor");
@@ -318,17 +367,29 @@ function App() {
           setStatus("Opened Narrative Lab.");
         },
       },
+      [EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS]: {
+        execute: async () => {
+          await openOrFocusSettingsWindow("ai");
+          setStatus("Opened AI provider settings.");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.AI_TEST_PROVIDER_CONNECTION]: {
+        execute: async () => {
+          await openOrFocusSettingsWindow("ai");
+          setStatus("Opened AI settings to test provider connection.");
+        },
+      },
     };
   }, [surface]);
 
   useRegisterEditorMenuCommands(shellMenuCommands);
 
   if (surface === "map-editor") {
-    return (
-      <Suspense fallback={<WorkspaceLoadingFallback />}>
-        <MapEditorWindow />
-      </Suspense>
-    );
+    return <MapEditorWindow />;
+  }
+
+  if (surface === "settings") {
+    return <SettingsWindow status={status} onStatusChange={setStatus} />;
   }
 
   if (surface === "narrative-lab") {
@@ -350,23 +411,21 @@ function App() {
         runtimeLabel={isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode"}
         shellMode="narrative"
         brandEyebrow="Narrative Studio"
-        topbarEyebrow="Workbench"
-        topbarHeadline="Write, review, and iterate on narrative documents in a dedicated standalone workspace."
         showSidebar={sidebarVisible}
         showStatusBar={statusBarVisible}
       >
-        <Suspense fallback={<WorkspaceLoadingFallback />}>
-          <NarrativeWorkspace
-            workspace={narrativeWorkspace}
-            appSettings={narrativeAppSettings}
-            canPersist={canPersist}
-            onStatusChange={setStatus}
-            onReload={loadNarrativeWorkspaceOnly}
-            onOpenWorkspace={openNarrativeWorkspace}
-            onConnectProject={connectNarrativeProject}
-            onSaveAppSettings={saveNarrativeSettings}
-          />
-        </Suspense>
+        <NarrativeWorkspace
+          workspace={narrativeWorkspace}
+          appSettings={narrativeAppSettings}
+          canPersist={canPersist}
+          startupReady={narrativeStartupReady}
+          selfTestScenario={editorRuntimeFlags.menuSelfTestScenario ?? null}
+          onStatusChange={setStatus}
+          onReload={loadNarrativeWorkspaceOnly}
+          onOpenWorkspace={openNarrativeWorkspace}
+          onConnectProject={connectNarrativeProject}
+          onSaveAppSettings={saveNarrativeSettings}
+        />
       </EditorShell>
     );
   }
@@ -391,40 +450,38 @@ function App() {
       showSidebar={sidebarVisible}
       showStatusBar={statusBarVisible}
     >
-      <Suspense fallback={<WorkspaceLoadingFallback />}>
-        {activeModule === "items" ? (
-          <ItemWorkspace
-            workspace={itemWorkspace}
-            canPersist={canPersist}
-            onStatusChange={setStatus}
-            onReload={loadMainWorkspaces}
-          />
-        ) : null}
-        {activeModule === "dialogues" ? (
-          <DialogueWorkspace
-            workspace={dialogueWorkspace}
-            canPersist={canPersist}
-            onStatusChange={setStatus}
-            onReload={loadMainWorkspaces}
-          />
-        ) : null}
-        {activeModule === "quests" ? (
-          <QuestWorkspace
-            workspace={questWorkspace}
-            canPersist={canPersist}
-            onStatusChange={setStatus}
-            onReload={loadMainWorkspaces}
-          />
-        ) : null}
-        {activeModule === "maps" ? (
-          <MapLibraryWorkspace
-            workspace={mapWorkspace}
-            canPersist={canPersist}
-            onStatusChange={setStatus}
-            onReload={loadMainWorkspaces}
-          />
-        ) : null}
-      </Suspense>
+      {activeModule === "items" ? (
+        <ItemWorkspace
+          workspace={itemWorkspace}
+          canPersist={canPersist}
+          onStatusChange={setStatus}
+          onReload={loadMainWorkspaces}
+        />
+      ) : null}
+      {activeModule === "dialogues" ? (
+        <DialogueWorkspace
+          workspace={dialogueWorkspace}
+          canPersist={canPersist}
+          onStatusChange={setStatus}
+          onReload={loadMainWorkspaces}
+        />
+      ) : null}
+      {activeModule === "quests" ? (
+        <QuestWorkspace
+          workspace={questWorkspace}
+          canPersist={canPersist}
+          onStatusChange={setStatus}
+          onReload={loadMainWorkspaces}
+        />
+      ) : null}
+      {activeModule === "maps" ? (
+        <MapLibraryWorkspace
+          workspace={mapWorkspace}
+          canPersist={canPersist}
+          onStatusChange={setStatus}
+          onReload={loadMainWorkspaces}
+        />
+      ) : null}
     </EditorShell>
   );
 }
