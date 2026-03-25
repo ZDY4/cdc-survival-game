@@ -16,7 +16,7 @@ import type {
   AiSettings,
 } from "../../types";
 
-type AiGeneratePanelProps<TRecord> = {
+export type AiGeneratePanelProps<TRecord> = {
   open: boolean;
   title: string;
   targetType: string;

@@ -1,4 +1,14 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  type ComponentType,
+  type LazyExoticComponent,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Badge } from "../../components/Badge";
 import {
   NumberField,
@@ -10,8 +20,6 @@ import {
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
 import { ValidationPanel } from "../../components/ValidationPanel";
-import { GraphCanvas, type GraphCanvasHandle } from "../../graph-kit/GraphCanvas";
-import { GraphToolbarActions } from "../../graph-kit/GraphToolbarActions";
 import type { GraphSelection } from "../../graph-kit/types";
 import { invokeCommand } from "../../lib/tauri";
 import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
@@ -29,12 +37,21 @@ import type {
   SaveQuestsResult,
   ValidationIssue,
 } from "../../types";
-import { AiGeneratePanel } from "../ai/AiGeneratePanel";
+import type { AiGeneratePanelProps } from "../ai/AiGeneratePanel";
 import {
   questFlowGraphAdapter,
   questRelationshipGraphAdapter,
   type QuestRelationshipDocument,
 } from "./questGraphAdapters";
+
+type GraphCanvasComponent = typeof import("../../graph-kit/GraphCanvas").GraphCanvas;
+type GraphCanvasHandle = import("../../graph-kit/GraphCanvas").GraphCanvasHandle;
+type GraphToolbarActionsComponent =
+  typeof import("../../graph-kit/GraphToolbarActions").GraphToolbarActions;
+
+const AiGeneratePanel = lazy(() =>
+  import("../ai/AiGeneratePanel").then((module) => ({ default: module.AiGeneratePanel })),
+) as LazyExoticComponent<ComponentType<AiGeneratePanelProps<QuestData>>>;
 
 type EditableQuestDocument = QuestDocumentPayload & {
   savedSnapshot: string;
@@ -214,6 +231,10 @@ export function QuestWorkspace({
     edgeId: null,
   });
   const [aiOpen, setAiOpen] = useState(false);
+  const [GraphCanvasComponent, setGraphCanvasComponent] =
+    useState<GraphCanvasComponent | null>(null);
+  const [GraphToolbarActionsComponent, setGraphToolbarActionsComponent] =
+    useState<GraphToolbarActionsComponent | null>(null);
   const flowGraphRef = useRef<GraphCanvasHandle | null>(null);
   const relationshipGraphRef = useRef<GraphCanvasHandle | null>(null);
   const deferredSearch = useDeferredValue(searchText);
@@ -225,6 +246,28 @@ export function QuestWorkspace({
     setFlowSelection({ nodeId: null, edgeId: null });
     setRelationshipSelection({ nodeId: null, edgeId: null });
   }, [workspace]);
+
+  useEffect(() => {
+    if (!selectedKey || (GraphCanvasComponent && GraphToolbarActionsComponent)) {
+      return;
+    }
+
+    let disposed = false;
+    void Promise.all([
+      import("../../graph-kit/GraphCanvas"),
+      import("../../graph-kit/GraphToolbarActions"),
+    ]).then(([graphCanvasModule, graphToolbarModule]) => {
+      if (disposed) {
+        return;
+      }
+      setGraphCanvasComponent(() => graphCanvasModule.GraphCanvas);
+      setGraphToolbarActionsComponent(() => graphToolbarModule.GraphToolbarActions);
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [GraphCanvasComponent, GraphToolbarActionsComponent, selectedKey]);
 
   useEffect(() => {
     if (viewMode === "relationship" && relationshipSelection.nodeId) {
@@ -614,6 +657,28 @@ export function QuestWorkspace({
     },
   });
 
+  function AiPanelLoadingFallback() {
+    return (
+      <div className="ai-modal-backdrop" role="presentation">
+        <div className="ai-modal" role="dialog" aria-modal="true">
+          <div className="empty-state">
+            <Badge tone="muted">AI</Badge>
+            <p>Loading AI generator...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function GraphLoadingFallback() {
+    return (
+      <div className="empty-state">
+        <Badge tone="muted">Graph</Badge>
+        <p>Loading graph editor...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="workspace">
       <Toolbar actions={actions}>
@@ -634,8 +699,8 @@ export function QuestWorkspace({
             Flow
           </button>
         </div>
-        {viewMode === "flow" && selectedDocument ? (
-          <GraphToolbarActions
+        {viewMode === "flow" && selectedDocument && GraphToolbarActionsComponent ? (
+          <GraphToolbarActionsComponent
             adapter={questFlowGraphAdapter}
             onAddNode={(type) => flowGraphRef.current?.createNodeAtViewportCenter(type)}
             onAutoLayout={applyAutoLayout}
@@ -643,6 +708,8 @@ export function QuestWorkspace({
             onDeleteSelection={deleteGraphSelection}
             disabled={busy}
           />
+        ) : viewMode === "flow" && selectedDocument ? (
+          <GraphLoadingFallback />
         ) : null}
         {viewMode === "relationship" ? (
           <div className="toolbar-actions">
@@ -741,26 +808,30 @@ export function QuestWorkspace({
                 title={viewMode === "relationship" ? "Quest prerequisite map" : "Quest flow editor"}
               >
                 <div className="graph-panel">
-                  {viewMode === "relationship" ? (
-                    <GraphCanvas
-                      ref={relationshipGraphRef}
-                      adapter={questRelationshipGraphAdapter}
-                      document={relationshipDocument}
-                      issues={selectedIssues}
-                      selection={relationshipSelection}
-                      onSelectionChange={setRelationshipSelection}
-                      onDocumentChange={updateAllFromRelationship}
-                    />
+                  {GraphCanvasComponent ? (
+                    viewMode === "relationship" ? (
+                      <GraphCanvasComponent
+                        ref={relationshipGraphRef}
+                        adapter={questRelationshipGraphAdapter}
+                        document={relationshipDocument}
+                        issues={selectedIssues}
+                        selection={relationshipSelection}
+                        onSelectionChange={setRelationshipSelection}
+                        onDocumentChange={updateAllFromRelationship}
+                      />
+                    ) : (
+                      <GraphCanvasComponent
+                        ref={flowGraphRef}
+                        adapter={questFlowGraphAdapter}
+                        document={selectedDocument.quest}
+                        issues={selectedIssues}
+                        selection={flowSelection}
+                        onSelectionChange={setFlowSelection}
+                        onDocumentChange={(quest) => updateSelectedQuest(() => quest)}
+                      />
+                    )
                   ) : (
-                    <GraphCanvas
-                      ref={flowGraphRef}
-                      adapter={questFlowGraphAdapter}
-                      document={selectedDocument.quest}
-                      issues={selectedIssues}
-                      selection={flowSelection}
-                      onSelectionChange={setFlowSelection}
-                      onDocumentChange={(quest) => updateSelectedQuest(() => quest)}
-                    />
+                    <GraphLoadingFallback />
                   )}
                 </div>
               </PanelSection>
@@ -1094,24 +1165,26 @@ export function QuestWorkspace({
       </div>
 
       {aiOpen ? (
-        <AiGeneratePanel<QuestData>
-          open={aiOpen}
-          title="Quest AI Generate"
-          targetType="quest"
-          targetId={selectedDocument?.quest.quest_id ?? ""}
-          currentRecord={selectedDocument?.quest ?? emptyQuestRecord}
-          emptyRecord={emptyQuestRecord}
-          onClose={() => setAiOpen(false)}
-          onGenerate={(request) =>
-            invokeCommand<AiGenerationResponse<QuestData>>("generate_quest_draft", { request })
-          }
-          onLoadSettings={() => invokeCommand<AiSettings>("load_ai_settings")}
-          onSaveSettings={(settings) => invokeCommand<AiSettings>("save_ai_settings", { settings })}
-          onTestSettings={(settings) =>
-            invokeCommand<AiConnectionTestResult>("test_ai_provider", { settings })
-          }
-          onApply={applyAiDraft}
-        />
+        <Suspense fallback={<AiPanelLoadingFallback />}>
+          <AiGeneratePanel
+            open={aiOpen}
+            title="Quest AI Generate"
+            targetType="quest"
+            targetId={selectedDocument?.quest.quest_id ?? ""}
+            currentRecord={selectedDocument?.quest ?? emptyQuestRecord}
+            emptyRecord={emptyQuestRecord}
+            onClose={() => setAiOpen(false)}
+            onGenerate={(request) =>
+              invokeCommand<AiGenerationResponse<QuestData>>("generate_quest_draft", { request })
+            }
+            onLoadSettings={() => invokeCommand<AiSettings>("load_ai_settings")}
+            onSaveSettings={(settings) => invokeCommand<AiSettings>("save_ai_settings", { settings })}
+            onTestSettings={(settings) =>
+              invokeCommand<AiConnectionTestResult>("test_ai_provider", { settings })
+            }
+            onApply={applyAiDraft}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

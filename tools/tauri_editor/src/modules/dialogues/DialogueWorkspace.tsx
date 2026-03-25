@@ -1,11 +1,19 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  type ComponentType,
+  type LazyExoticComponent,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Badge } from "../../components/Badge";
 import { TextField } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { Toolbar } from "../../components/Toolbar";
 import { ValidationPanel } from "../../components/ValidationPanel";
-import { GraphCanvas, type GraphCanvasHandle } from "../../graph-kit/GraphCanvas";
-import { GraphToolbarActions } from "../../graph-kit/GraphToolbarActions";
 import type { GraphSelection } from "../../graph-kit/types";
 import { invokeCommand } from "../../lib/tauri";
 import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
@@ -21,9 +29,18 @@ import type {
   SaveDialoguesResult,
   ValidationIssue,
 } from "../../types";
-import { AiGeneratePanel } from "../ai/AiGeneratePanel";
+import type { AiGeneratePanelProps } from "../ai/AiGeneratePanel";
 import { DialogueInspector } from "./DialogueInspector";
 import { dialogueGraphAdapter } from "./dialogueGraphAdapter";
+
+type GraphCanvasComponent = typeof import("../../graph-kit/GraphCanvas").GraphCanvas;
+type GraphCanvasHandle = import("../../graph-kit/GraphCanvas").GraphCanvasHandle;
+type GraphToolbarActionsComponent =
+  typeof import("../../graph-kit/GraphToolbarActions").GraphToolbarActions;
+
+const AiGeneratePanel = lazy(() =>
+  import("../ai/AiGeneratePanel").then((module) => ({ default: module.AiGeneratePanel })),
+) as LazyExoticComponent<ComponentType<AiGeneratePanelProps<DialogueData>>>;
 
 type EditableDialogueDocument = DialogueDocumentPayload & {
   savedSnapshot: string;
@@ -123,6 +140,10 @@ export function DialogueWorkspace({
   const [searchText, setSearchText] = useState("");
   const [busy, setBusy] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [GraphCanvasComponent, setGraphCanvasComponent] =
+    useState<GraphCanvasComponent | null>(null);
+  const [GraphToolbarActionsComponent, setGraphToolbarActionsComponent] =
+    useState<GraphToolbarActionsComponent | null>(null);
   const [selection, setSelection] = useState<GraphSelection>({
     nodeId: null,
     edgeId: null,
@@ -136,6 +157,28 @@ export function DialogueWorkspace({
     setSelectedKey(workspace.documents[0]?.documentKey ?? "");
     setSelection({ nodeId: null, edgeId: null });
   }, [workspace]);
+
+  useEffect(() => {
+    if (!selectedKey || (GraphCanvasComponent && GraphToolbarActionsComponent)) {
+      return;
+    }
+
+    let disposed = false;
+    void Promise.all([
+      import("../../graph-kit/GraphCanvas"),
+      import("../../graph-kit/GraphToolbarActions"),
+    ]).then(([graphCanvasModule, graphToolbarModule]) => {
+      if (disposed) {
+        return;
+      }
+      setGraphCanvasComponent(() => graphCanvasModule.GraphCanvas);
+      setGraphToolbarActionsComponent(() => graphToolbarModule.GraphToolbarActions);
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [GraphCanvasComponent, GraphToolbarActionsComponent, selectedKey]);
 
   const filteredDocuments = useMemo(
     () =>
@@ -499,11 +542,33 @@ export function DialogueWorkspace({
 
   useRegisterEditorMenuCommands(menuCommands);
 
+  function AiPanelLoadingFallback() {
+    return (
+      <div className="ai-modal-backdrop" role="presentation">
+        <div className="ai-modal" role="dialog" aria-modal="true">
+          <div className="empty-state">
+            <Badge tone="muted">AI</Badge>
+            <p>Loading AI generator...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function GraphLoadingFallback() {
+    return (
+      <div className="empty-state">
+        <Badge tone="muted">Graph</Badge>
+        <p>Loading graph editor...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="workspace">
       <Toolbar actions={actions}>
-        {selectedDocument ? (
-          <GraphToolbarActions
+        {selectedDocument && GraphToolbarActionsComponent ? (
+          <GraphToolbarActionsComponent
             adapter={dialogueGraphAdapter}
             onAddNode={(type) => graphRef.current?.createNodeAtViewportCenter(type)}
             onAutoLayout={applyAutoLayout}
@@ -511,6 +576,8 @@ export function DialogueWorkspace({
             onDeleteSelection={deleteGraphSelection}
             disabled={busy}
           />
+        ) : selectedDocument ? (
+          <GraphLoadingFallback />
         ) : null}
       </Toolbar>
 
@@ -597,15 +664,19 @@ export function DialogueWorkspace({
 
               <PanelSection label="Graph" title="Flow editor">
                 <div className="graph-panel">
-                  <GraphCanvas
-                    ref={graphRef}
-                    adapter={dialogueGraphAdapter}
-                    document={selectedDocument.dialog}
-                    issues={selectedIssues}
-                    selection={selection}
-                    onSelectionChange={setSelection}
-                    onDocumentChange={(dialog) => updateSelectedDialog(() => dialog)}
-                  />
+                  {GraphCanvasComponent ? (
+                    <GraphCanvasComponent
+                      ref={graphRef}
+                      adapter={dialogueGraphAdapter}
+                      document={selectedDocument.dialog}
+                      issues={selectedIssues}
+                      selection={selection}
+                      onSelectionChange={setSelection}
+                      onDocumentChange={(dialog) => updateSelectedDialog(() => dialog)}
+                    />
+                  ) : (
+                    <GraphLoadingFallback />
+                  )}
                 </div>
               </PanelSection>
             </>
@@ -650,28 +721,30 @@ export function DialogueWorkspace({
       </div>
 
       {aiOpen ? (
-        <AiGeneratePanel<DialogueData>
-          open={aiOpen}
-          title="Dialogue AI Generate"
-          targetType="dialog"
-          targetId={selectedDocument?.dialog.dialog_id ?? ""}
-          currentRecord={selectedDocument?.dialog ?? emptyDialogueRecord}
-          emptyRecord={emptyDialogueRecord}
-          onClose={() => setAiOpen(false)}
-          onGenerate={(request) =>
-            invokeCommand<AiGenerationResponse<DialogueData>>("generate_dialogue_draft", {
-              request,
-            })
-          }
-          onLoadSettings={() => invokeCommand<AiSettings>("load_ai_settings")}
-          onSaveSettings={(settings) =>
-            invokeCommand<AiSettings>("save_ai_settings", { settings })
-          }
-          onTestSettings={(settings) =>
-            invokeCommand<AiConnectionTestResult>("test_ai_provider", { settings })
-          }
-          onApply={applyAiDraft}
-        />
+        <Suspense fallback={<AiPanelLoadingFallback />}>
+          <AiGeneratePanel
+            open={aiOpen}
+            title="Dialogue AI Generate"
+            targetType="dialog"
+            targetId={selectedDocument?.dialog.dialog_id ?? ""}
+            currentRecord={selectedDocument?.dialog ?? emptyDialogueRecord}
+            emptyRecord={emptyDialogueRecord}
+            onClose={() => setAiOpen(false)}
+            onGenerate={(request) =>
+              invokeCommand<AiGenerationResponse<DialogueData>>("generate_dialogue_draft", {
+                request,
+              })
+            }
+            onLoadSettings={() => invokeCommand<AiSettings>("load_ai_settings")}
+            onSaveSettings={(settings) =>
+              invokeCommand<AiSettings>("save_ai_settings", { settings })
+            }
+            onTestSettings={(settings) =>
+              invokeCommand<AiConnectionTestResult>("test_ai_provider", { settings })
+            }
+            onApply={applyAiDraft}
+          />
+        </Suspense>
       ) : null}
     </div>
   );
