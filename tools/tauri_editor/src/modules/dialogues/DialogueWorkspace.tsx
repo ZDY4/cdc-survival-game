@@ -215,20 +215,21 @@ export function DialogueWorkspace({
     { errors: 0, warnings: 0 },
   );
 
+  const validationTarget = selectedDocument;
+
   useEffect(() => {
-    const selected = documents.find((document) => document.documentKey === selectedKey);
-    if (!selected || !canPersist) {
+    if (!validationTarget || !canPersist) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       void invokeCommand<ValidationIssue[]>("validate_dialogue_document", {
-        dialog: selected.dialog,
+        dialog: validationTarget.dialog,
       })
         .then((issues) => {
           setDocuments((current) =>
             current.map((document) =>
-              document.documentKey === selected.documentKey
+              document.documentKey === validationTarget.documentKey
                 ? { ...document, validation: issues }
                 : document,
             ),
@@ -238,7 +239,7 @@ export function DialogueWorkspace({
     }, 220);
 
     return () => window.clearTimeout(timeoutId);
-  }, [canPersist, documents, selectedKey]);
+  }, [canPersist, validationTarget?.documentKey, validationTarget?.dialog]);
 
   function updateSelectedDialog(transform: (dialog: DialogueData) => DialogueData) {
     setDocuments((current) =>

@@ -3,6 +3,7 @@ import { invokeCommand } from "../../lib/tauri";
 import type {
   MapDefinition,
   MapDocumentPayload,
+  MapEntryPointDefinition,
   MapObjectDefinition,
   MapObjectKind,
   MapRotation,
@@ -33,7 +34,20 @@ export type EditableMapDocument = MapDocumentPayload & {
   isDraft: boolean;
 };
 
-export type MapTool = "select" | "erase" | MapObjectKind;
+export type MapLayer = "cells" | "objects" | "entryPoints";
+
+export type CellDraft = {
+  terrain: string;
+  blocksMovement: boolean;
+  blocksSight: boolean;
+};
+
+export type EntryPointDraft = {
+  id: string;
+  facing: string;
+};
+
+export type MapTool = "select" | "erase" | "paint-cell" | "entry-point" | MapObjectKind;
 
 type UseMapEditorStateOptions = {
   workspace: MapWorkspacePayload;
@@ -68,6 +82,34 @@ function lastObject(objects: MapObjectDefinition[]) {
   return objects.length > 0 ? objects[objects.length - 1] : undefined;
 }
 
+function cellAtGrid(map: MapDefinition, grid: GridPoint) {
+  const level = map.levels.find((entry) => entry.y === grid.y);
+  return level?.cells.find((cell) => cell.x === grid.x && cell.z === grid.z) ?? null;
+}
+
+function entryPointAtGrid(map: MapDefinition, grid: GridPoint) {
+  return (
+    map.entry_points.find(
+      (entryPoint) =>
+        entryPoint.grid.x === grid.x &&
+        entryPoint.grid.y === grid.y &&
+        entryPoint.grid.z === grid.z,
+    ) ?? null
+  );
+}
+
+function initialToolForLayer(layer: MapLayer): MapTool {
+  switch (layer) {
+    case "cells":
+      return "paint-cell";
+    case "entryPoints":
+      return "entry-point";
+    case "objects":
+    default:
+      return "select";
+  }
+}
+
 export function gridKey(grid: GridPoint) {
   return `${grid.x}:${grid.y}:${grid.z}`;
 }
@@ -85,6 +127,15 @@ export function objectGlyph(kind: MapObjectKind) {
     default:
       return "?";
   }
+}
+
+function isObjectPlacementTool(tool: MapTool): tool is MapObjectKind {
+  return (
+    tool === "building" ||
+    tool === "pickup" ||
+    tool === "interactive" ||
+    tool === "ai_spawn"
+  );
 }
 
 export function hydrateDocuments(documents: MapDocumentPayload[]): EditableMapDocument[] {
@@ -128,9 +179,21 @@ export function useMapEditorState({
   );
   const [busy, setBusy] = useState(false);
   const [currentLevel, setCurrentLevel] = useState(workspace.documents[0]?.map.default_level ?? 0);
+  const [layer, setLayer] = useState<MapLayer>("objects");
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedEntryPointId, setSelectedEntryPointId] = useState<string | null>(null);
+  const [selectedCellKey, setSelectedCellKey] = useState<string | null>(null);
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
   const [tool, setTool] = useState<MapTool>("select");
+  const [cellDraft, setCellDraft] = useState<CellDraft>({
+    terrain: "floor",
+    blocksMovement: false,
+    blocksSight: false,
+  });
+  const [entryPointDraft, setEntryPointDraft] = useState<EntryPointDraft>({
+    id: "default_entry",
+    facing: "",
+  });
   const [placementDraft, setPlacementDraft] = useState<PlacementDraft>(
     createPlacementDraft("building", currentLevel, 1),
   );
@@ -152,6 +215,8 @@ export function useMapEditorState({
       return next;
     });
     setSelectedObjectId(null);
+    setSelectedEntryPointId(null);
+    setSelectedCellKey(null);
     setHoveredCell(null);
     setPendingIntent(null);
   }, [initialDocumentKey, workspace]);
@@ -160,6 +225,20 @@ export function useMapEditorState({
     documents.find((document) => document.documentKey === selectedKey) ?? null;
   const selectedObject =
     selectedDocument?.map.objects.find((object) => object.object_id === selectedObjectId) ?? null;
+  const selectedEntryPoint =
+    selectedDocument?.map.entry_points.find((entryPoint) => entryPoint.id === selectedEntryPointId) ??
+    null;
+  const selectedCell =
+    selectedDocument && selectedCellKey
+      ? selectedDocument.map.levels
+          .flatMap((level) =>
+            level.cells.map((cell) => ({
+              ...cell,
+              y: level.y,
+            })),
+          )
+          .find((cell) => gridKey({ x: cell.x, y: cell.y, z: cell.z }) === selectedCellKey) ?? null
+      : null;
   const dirtyCount = documents.filter((document) => document.dirty).length;
   const totalIssues = documents.reduce(
     (totals, document) => {
@@ -210,13 +289,23 @@ export function useMapEditorState({
     }, 220);
 
     return () => window.clearTimeout(timeoutId);
-  }, [canPersist, selectedDocument]);
+  }, [canPersist, selectedDocument?.documentKey, selectedDocument?.map]);
 
   const selectedIssues = selectedDocument?.validation ?? [];
   const selectedCounts = getIssueCounts(selectedIssues);
-  const toolOptions: MapTool[] = ["select", "erase", "building", "pickup", "interactive", "ai_spawn"];
+  const toolOptions: MapTool[] = useMemo(() => {
+    switch (layer) {
+      case "cells":
+        return ["select", "paint-cell", "erase"];
+      case "entryPoints":
+        return ["select", "entry-point", "erase"];
+      case "objects":
+      default:
+        return ["select", "erase", "building", "pickup", "interactive", "ai_spawn"];
+    }
+  }, [layer]);
   const hoveredPreview =
-    hoveredCell && tool !== "select" && tool !== "erase"
+    layer === "objects" && hoveredCell && isObjectPlacementTool(tool)
       ? getOccupiedCells({
           object_id: "preview",
           kind: tool,
@@ -228,7 +317,19 @@ export function useMapEditorState({
           props: {},
         })
       : [];
-  const selectedCoverage = selectedObject ? getOccupiedCells(selectedObject) : [];
+  const selectedCoverage = selectedObject
+    ? getOccupiedCells(selectedObject)
+    : selectedEntryPoint
+      ? [
+          {
+            x: selectedEntryPoint.grid.x,
+            y: selectedEntryPoint.grid.y,
+            z: selectedEntryPoint.grid.z,
+          },
+        ]
+      : selectedCell
+        ? [{ x: selectedCell.x, y: selectedCell.y, z: selectedCell.z }]
+        : [];
 
   function commitSelection(documentKey: string) {
     if (documentKey === NEW_MAP_DOCUMENT_KEY) {
@@ -249,6 +350,8 @@ export function useMapEditorState({
       setSelectedKey(draft.documentKey);
       setCurrentLevel(draftMap.default_level);
       setSelectedObjectId(null);
+      setSelectedEntryPointId(null);
+      setSelectedCellKey(null);
       setHoveredCell(null);
       onStatusChange(`Created draft map ${nextId}.`);
       return;
@@ -261,6 +364,8 @@ export function useMapEditorState({
     setSelectedKey(nextDocument.documentKey);
     setCurrentLevel(nextDocument.map.default_level);
     setSelectedObjectId(null);
+    setSelectedEntryPointId(null);
+    setSelectedCellKey(null);
     setHoveredCell(null);
     onStatusChange(`Opened map ${nextDocument.map.id}.`);
   }
@@ -300,14 +405,22 @@ export function useMapEditorState({
 
   function clearSelection() {
     setSelectedObjectId(null);
+    setSelectedEntryPointId(null);
+    setSelectedCellKey(null);
     setHoveredCell(null);
   }
 
   function setToolMode(nextTool: MapTool) {
     setTool(nextTool);
-    if (nextTool !== "select" && nextTool !== "erase") {
+    if (layer === "objects" && nextTool !== "select" && nextTool !== "erase" && nextTool !== "paint-cell" && nextTool !== "entry-point") {
       setPlacementDraft(createPlacementDraft(nextTool, currentLevel, objectSequence));
     }
+  }
+
+  function setLayerMode(nextLayer: MapLayer) {
+    setLayer(nextLayer);
+    setTool(initialToolForLayer(nextLayer));
+    clearSelection();
   }
 
   function updateSelectedObject(transform: (object: MapObjectDefinition) => MapObjectDefinition) {
@@ -317,6 +430,20 @@ export function useMapEditorState({
     updateSelectedMap((map) => updateObject(map, selectedObjectId, transform));
   }
 
+  function updateSelectedEntryPoint(
+    transform: (entryPoint: MapEntryPointDefinition) => MapEntryPointDefinition,
+  ) {
+    if (!selectedEntryPointId) {
+      return;
+    }
+    updateSelectedMap((map) => ({
+      ...map,
+      entry_points: map.entry_points.map((entryPoint) =>
+        entryPoint.id === selectedEntryPointId ? transform(entryPoint) : entryPoint,
+      ),
+    }));
+  }
+
   function deleteSelectedObject() {
     if (!selectedObject) {
       return;
@@ -324,6 +451,18 @@ export function useMapEditorState({
     updateSelectedMap((map) => removeObject(map, selectedObject.object_id));
     setSelectedObjectId(null);
     onStatusChange(`Deleted object ${selectedObject.object_id}.`);
+  }
+
+  function deleteSelectedEntryPoint() {
+    if (!selectedEntryPoint) {
+      return;
+    }
+    updateSelectedMap((map) => ({
+      ...map,
+      entry_points: map.entry_points.filter((entryPoint) => entryPoint.id !== selectedEntryPoint.id),
+    }));
+    setSelectedEntryPointId(null);
+    onStatusChange(`Deleted entry point ${selectedEntryPoint.id}.`);
   }
 
   function addLevel() {
@@ -368,10 +507,13 @@ export function useMapEditorState({
       default_level:
         map.default_level === currentLevel ? nextLevels[0]?.y ?? 0 : map.default_level,
       levels: nextLevels,
+      entry_points: map.entry_points.filter((entryPoint) => entryPoint.grid.y !== currentLevel),
       objects: map.objects.filter((object) => object.anchor.y !== currentLevel),
     }));
     setCurrentLevel(nextLevels[0]?.y ?? 0);
     setSelectedObjectId(null);
+    setSelectedEntryPointId(null);
+    setSelectedCellKey(null);
     onStatusChange(`Removed level ${currentLevel} and its placed objects.`);
   }
 
@@ -381,9 +523,125 @@ export function useMapEditorState({
       return;
     }
 
+    if (layer === "cells") {
+      if (tool === "select") {
+        setSelectedCellKey(gridKey(grid));
+        setSelectedObjectId(null);
+        setSelectedEntryPointId(null);
+        const existingCell = cellAtGrid(selectedDocument.map, grid);
+        if (existingCell) {
+          setCellDraft({
+            terrain: existingCell.terrain,
+            blocksMovement: existingCell.blocks_movement,
+            blocksSight: existingCell.blocks_sight,
+          });
+        }
+        return;
+      }
+
+      if (tool === "erase") {
+        updateSelectedMap((map) => ({
+          ...map,
+          levels: map.levels.map((level) =>
+            level.y === grid.y
+              ? {
+                  ...level,
+                  cells: level.cells.filter((cell) => !(cell.x === grid.x && cell.z === grid.z)),
+                }
+              : level,
+          ),
+        }));
+        if (selectedCellKey === gridKey(grid)) {
+          setSelectedCellKey(null);
+        }
+        onStatusChange(`Cleared cell ${grid.x}, ${grid.z} on level ${grid.y}.`);
+        return;
+      }
+
+      updateSelectedMap((map) => ({
+        ...map,
+        levels: map.levels.map((level) =>
+          level.y === grid.y
+            ? {
+                ...level,
+                cells: [
+                  ...level.cells.filter((cell) => !(cell.x === grid.x && cell.z === grid.z)),
+                  {
+                    x: grid.x,
+                    z: grid.z,
+                    blocks_movement: cellDraft.blocksMovement,
+                    blocks_sight: cellDraft.blocksSight,
+                    terrain: cellDraft.terrain,
+                  },
+                ],
+              }
+            : level,
+        ),
+      }));
+      setSelectedCellKey(gridKey(grid));
+      setSelectedObjectId(null);
+      setSelectedEntryPointId(null);
+      onStatusChange(`Painted cell ${grid.x}, ${grid.z} on level ${grid.y}.`);
+      return;
+    }
+
+    if (layer === "entryPoints") {
+      const entryPoint = entryPointAtGrid(selectedDocument.map, grid);
+      if (tool === "select") {
+        setSelectedEntryPointId(entryPoint?.id ?? null);
+        setSelectedObjectId(null);
+        setSelectedCellKey(null);
+        if (entryPoint) {
+          setEntryPointDraft({
+            id: entryPoint.id,
+            facing: entryPoint.facing ? String(entryPoint.facing) : "",
+          });
+        }
+        return;
+      }
+
+      if (tool === "erase") {
+        if (!entryPoint) {
+          return;
+        }
+        updateSelectedMap((map) => ({
+          ...map,
+          entry_points: map.entry_points.filter((candidate) => candidate.id !== entryPoint.id),
+        }));
+        if (selectedEntryPointId === entryPoint.id) {
+          setSelectedEntryPointId(null);
+        }
+        onStatusChange(`Deleted entry point ${entryPoint.id}.`);
+        return;
+      }
+
+      const nextEntryPointId =
+        entryPointDraft.id.trim() || `entry_${selectedDocument.map.entry_points.length + 1}`;
+      updateSelectedMap((map) => ({
+        ...map,
+        entry_points: [
+          ...map.entry_points.filter((candidate) => candidate.id !== nextEntryPointId),
+          {
+            id: nextEntryPointId,
+            grid: { x: grid.x, y: grid.y, z: grid.z },
+            facing: entryPointDraft.facing.trim() ? entryPointDraft.facing.trim() : null,
+          },
+        ],
+        default_level:
+          nextEntryPointId === "default_entry" ? grid.y : map.default_level,
+      }));
+      setSelectedEntryPointId(nextEntryPointId);
+      setSelectedObjectId(null);
+      setSelectedCellKey(null);
+      onStatusChange(`Placed entry point ${nextEntryPointId}.`);
+      return;
+    }
+
     const objectsAtCell = getObjectsAtCell(selectedDocument.map, grid);
     if (tool === "select") {
       setSelectedObjectId(lastObject(objectsAtCell)?.object_id ?? null);
+      setSelectedEntryPointId(null);
+      setSelectedCellKey(null);
       return;
     }
     if (tool === "erase") {
@@ -399,9 +657,15 @@ export function useMapEditorState({
       return;
     }
 
+    if (!isObjectPlacementTool(tool)) {
+      return;
+    }
+
     const nextObjectId = `${tool}_${objectSequence}`;
     setObjectSequence((current) => current + 1);
     setSelectedObjectId(nextObjectId);
+    setSelectedEntryPointId(null);
+    setSelectedCellKey(null);
     updateSelectedMap((map) =>
       applyPlacement(
         map,
@@ -508,6 +772,8 @@ export function useMapEditorState({
       setDocuments(remaining);
       setSelectedKey(remaining[0]?.documentKey ?? "");
       setSelectedObjectId(null);
+      setSelectedEntryPointId(null);
+      setSelectedCellKey(null);
       setHoveredCell(null);
       onStatusChange("Removed unsaved map draft.");
       return [];
@@ -526,6 +792,8 @@ export function useMapEditorState({
       preferredSelectionAfterReloadRef.current = null;
       await onReload();
       setSelectedObjectId(null);
+      setSelectedEntryPointId(null);
+      setSelectedCellKey(null);
       setHoveredCell(null);
       onStatusChange(`Deleted map ${selectedDocument.originalId}.`);
       return [selectedDocument.originalId];
@@ -552,6 +820,8 @@ export function useMapEditorState({
       const nextDocument = remaining.find((document) => document.documentKey === nextSelection);
       setCurrentLevel(nextDocument?.map.default_level ?? 0);
       setSelectedObjectId(null);
+      setSelectedEntryPointId(null);
+      setSelectedCellKey(null);
       setHoveredCell(null);
       onStatusChange("Discarded unsaved draft.");
       return;
@@ -572,6 +842,8 @@ export function useMapEditorState({
     );
     setCurrentLevel(restored.map.default_level);
     setSelectedObjectId(null);
+    setSelectedEntryPointId(null);
+    setSelectedCellKey(null);
     setHoveredCell(null);
     onStatusChange(`Discarded unsaved changes for ${restored.map.id}.`);
   }
@@ -632,9 +904,14 @@ export function useMapEditorState({
     selectedKey,
     selectedDocument,
     selectedObject,
+    selectedEntryPoint,
+    selectedCell,
     selectedObjectId,
     hoveredCell,
     currentLevel,
+    layer,
+    cellDraft,
+    entryPointDraft,
     placementDraft,
     tool,
     busy,
@@ -649,6 +926,9 @@ export function useMapEditorState({
     canCloseWithoutPrompt: !selectedDocument?.dirty,
     setCurrentLevel,
     setHoveredCell,
+    setLayerMode,
+    setCellDraft,
+    setEntryPointDraft,
     setPlacementDraft,
     setSelectedObjectId,
     setToolMode,
@@ -657,6 +937,7 @@ export function useMapEditorState({
       updateSelectedObject((object) => changeObjectKind(object, nextKind)),
     updateSelectedMap,
     updateSelectedObject,
+    updateSelectedEntryPoint,
     handleGridCellClick,
     requestOpenDocument,
     requestNewDraft: () => requestOpenDocument(NEW_MAP_DOCUMENT_KEY),
@@ -670,5 +951,6 @@ export function useMapEditorState({
     stepLevel,
     rotatePlacement,
     deleteSelectedObject,
+    deleteSelectedEntryPoint,
   };
 }

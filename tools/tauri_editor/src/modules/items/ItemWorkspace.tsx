@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/Badge";
 import {
   CheckboxField,
@@ -1109,20 +1109,22 @@ export function ItemWorkspace({
     }
   }, [cloneSourceKey, documents, selectedKey]);
 
+  const validationTarget =
+    documents.find((document) => document.documentKey === selectedKey) ?? null;
+
   useEffect(() => {
-    const selected = documents.find((document) => document.documentKey === selectedKey);
-    if (!selected || !canPersist) {
+    if (!validationTarget || !canPersist) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       void invokeCommand<ValidationIssue[]>("validate_item_document", {
-        item: selected.item,
+        item: validationTarget.item,
       })
         .then((issues) => {
           setDocuments((current) =>
             current.map((document) =>
-              document.documentKey === selectedKey
+              document.documentKey === validationTarget.documentKey
                 ? { ...document, validation: issues }
                 : document,
             ),
@@ -1132,7 +1134,7 @@ export function ItemWorkspace({
     }, 180);
 
     return () => window.clearTimeout(timeoutId);
-  }, [canPersist, documents, selectedKey]);
+  }, [canPersist, validationTarget?.documentKey, validationTarget?.item]);
 
   const filteredDocuments = documents.filter((document) => {
     const tags = inferItemTags(document.item);
@@ -1163,8 +1165,7 @@ export function ItemWorkspace({
     return haystack.includes(deferredSearch.trim().toLowerCase());
   });
 
-  const selectedDocument =
-    documents.find((document) => document.documentKey === selectedKey) ?? null;
+  const selectedDocument = validationTarget;
   const dirtyCount = documents.filter((document) => document.dirty).length;
   const totalIssues = documents.reduce(
     (totals, document) => {
@@ -1486,41 +1487,58 @@ export function ItemWorkspace({
   const effectPreviewLookup: Record<string, EffectReferencePreview> = Object.fromEntries(
     effectPreviews.map((preview) => [preview.id, preview]),
   );
+  const menuActionRef = useRef({
+    createDraft,
+    saveAll,
+    deleteCurrent,
+    validateCurrent,
+    onReload,
+  });
+
+  useEffect(() => {
+    menuActionRef.current = {
+      createDraft,
+      saveAll,
+      deleteCurrent,
+      validateCurrent,
+      onReload,
+    };
+  }, [createDraft, deleteCurrent, onReload, saveAll, validateCurrent]);
 
   const menuCommands = useMemo(
     () => ({
       [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: {
         execute: () => {
-          createDraft();
+          menuActionRef.current.createDraft();
         },
         isEnabled: () => !busy,
       },
       [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: {
         execute: async () => {
-          await saveAll();
+          await menuActionRef.current.saveAll();
         },
         isEnabled: () => !busy && dirtyCount > 0,
       },
       [EDITOR_MENU_COMMANDS.FILE_RELOAD]: {
         execute: async () => {
-          await onReload();
+          await menuActionRef.current.onReload();
         },
         isEnabled: () => !busy,
       },
       [EDITOR_MENU_COMMANDS.FILE_DELETE_CURRENT]: {
         execute: async () => {
-          await deleteCurrent();
+          await menuActionRef.current.deleteCurrent();
         },
         isEnabled: () => !busy && Boolean(selectedDocument),
       },
       [EDITOR_MENU_COMMANDS.EDIT_VALIDATE_CURRENT]: {
         execute: async () => {
-          await validateCurrent();
+          await menuActionRef.current.validateCurrent();
         },
         isEnabled: () => !busy && Boolean(selectedDocument),
       },
     }),
-    [busy, deleteCurrent, dirtyCount, onReload, saveAll, selectedDocument, validateCurrent],
+    [busy, dirtyCount, selectedDocument],
   );
 
   useRegisterEditorMenuCommands(menuCommands);

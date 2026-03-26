@@ -4,6 +4,7 @@ import type {
   MapEditorSaveCompletePayload,
   MapEditorSessionEndedPayload,
   MapEditorStateChangedPayload,
+  SpatialDocumentType,
 } from "../../types";
 import { formatError, isTauriRuntime } from "../../lib/tauri";
 
@@ -15,9 +16,13 @@ export const MAP_EDITOR_STATE_CHANGED_EVENT = "map-editor:state-changed";
 export const MAP_EDITOR_SAVE_COMPLETE_EVENT = "map-editor:save-complete";
 export const MAP_EDITOR_SESSION_ENDED_EVENT = "map-editor:session-ended";
 
-export function buildMapEditorWindowUrl(documentKey?: string | null): string {
+export function buildMapEditorWindowUrl(
+  documentType: SpatialDocumentType,
+  documentKey?: string | null,
+): string {
   const params = new URLSearchParams({
     surface: "map-editor",
+    documentType,
   });
   if (documentKey?.trim()) {
     params.set("documentKey", documentKey.trim());
@@ -30,7 +35,10 @@ async function emitToWindow<T>(label: string, event: string, payload: T) {
   await current.emitTo(label, event, payload);
 }
 
-export async function openOrFocusMapEditor(documentKey: string) {
+export async function openOrFocusMapEditor(
+  documentType: SpatialDocumentType,
+  documentKey: string,
+) {
   if (!isTauriRuntime()) {
     return;
   }
@@ -39,6 +47,7 @@ export async function openOrFocusMapEditor(documentKey: string) {
   if (existing) {
     await existing.setFocus();
     await emitToWindow<MapEditorOpenDocumentPayload>(MAP_EDITOR_WINDOW_LABEL, MAP_EDITOR_OPEN_DOCUMENT_EVENT, {
+      documentType,
       documentKey,
     });
     return;
@@ -52,7 +61,7 @@ export async function openOrFocusMapEditor(documentKey: string) {
       minWidth: 1320,
       minHeight: 760,
       resizable: true,
-      url: buildMapEditorWindowUrl(documentKey),
+      url: buildMapEditorWindowUrl(documentType, documentKey),
     });
 
     void next.once("tauri://created", async () => {

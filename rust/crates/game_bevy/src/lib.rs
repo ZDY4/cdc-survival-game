@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use bevy_ecs::prelude::*;
@@ -15,8 +16,8 @@ use game_data::{
     ActorSide, CharacterAiProfile, CharacterArchetype, CharacterDefinition,
     CharacterDisposition, CharacterId, CharacterLibrary, CharacterLoadError,
     CharacterLootEntry, CharacterPlaceholderColors, CharacterResourcePool, EffectLibrary,
-    EffectLoadError, GridCoord, ItemLibrary, ItemLoadError, MapId,
-    MapLibrary, MapLoadError, OverworldLibrary, OverworldLoadError, QuestLibrary,
+    EffectLoadError, GridCoord, ItemLibrary, ItemLoadError, MapId, MapLibrary,
+    MapLoadError, MapObjectKind, OverworldLibrary, OverworldLoadError, QuestLibrary,
     QuestLoadError, RecipeLibrary, RecipeLoadError, SettlementLibrary, SettlementLoadError,
     ShopLibrary, ShopLoadError, SkillLibrary, SkillLoadError, SkillTreeLibrary,
     SkillTreeLoadError, WorldMode,
@@ -218,6 +219,26 @@ pub struct RuntimeScenarioSeed {
     pub unlocked_locations: Vec<String>,
     pub static_obstacles: Vec<GridCoord>,
     pub characters: Vec<RuntimeSpawnEntry>,
+}
+
+#[derive(Resource, Debug, Clone, Default)]
+pub struct MapAiSpawnRuntimeState {
+    pub current_map_id: Option<MapId>,
+    pub elapsed_seconds: f32,
+    pub spawn_points: BTreeMap<String, RuntimeAiSpawnPoint>,
+    pub active_spawn_actors: BTreeMap<String, ActorId>,
+    pub respawn_deadlines: BTreeMap<String, f32>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeAiSpawnPoint {
+    pub spawn_id: String,
+    pub character_id: CharacterId,
+    pub anchor: GridCoord,
+    pub auto_spawn: bool,
+    pub respawn_enabled: bool,
+    pub respawn_delay_seconds: f32,
+    pub spawn_radius: f32,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -769,11 +790,13 @@ pub fn register_runtime_actor_from_definition(
 }
 
 pub fn default_debug_seed() -> RuntimeScenarioSeed {
+    let map_id = MapId("survivor_outpost_01_grid".to_string());
+
     RuntimeScenarioSeed {
-        map_id: Some(MapId("survivor_outpost_01_grid".to_string())),
+        map_id: Some(map_id.clone()),
         start_world_mode: Some(WorldMode::Outdoor),
         start_location_id: Some("survivor_outpost_01".to_string()),
-        start_map_id: Some(MapId("survivor_outpost_01_grid".to_string())),
+        start_map_id: Some(map_id.clone()),
         start_entry_point_id: Some("default_entry".to_string()),
         unlocked_locations: vec![
             "survivor_outpost_01".to_string(),
@@ -783,7 +806,27 @@ pub fn default_debug_seed() -> RuntimeScenarioSeed {
             "survivor_outpost_01_interior".to_string(),
         ],
         static_obstacles: Vec::new(),
-        characters: vec![
+        characters: debug_seed_characters_for_map(Some(&map_id)),
+    }
+}
+
+pub(crate) fn debug_seed_characters_for_map(map_id: Option<&MapId>) -> Vec<RuntimeSpawnEntry> {
+    match map_id.map(MapId::as_str) {
+        Some("survivor_outpost_01_perimeter_grid") => vec![RuntimeSpawnEntry {
+            definition_id: CharacterId("player".to_string()),
+            grid_position: GridCoord::new(2, 0, 10),
+        }],
+        Some("survivor_outpost_01_interior_grid") => vec![
+            RuntimeSpawnEntry {
+                definition_id: CharacterId("player".to_string()),
+                grid_position: GridCoord::new(2, 0, 2),
+            },
+            RuntimeSpawnEntry {
+                definition_id: CharacterId("trader_lao_wang".to_string()),
+                grid_position: GridCoord::new(3, 0, 2),
+            },
+        ],
+        _ => vec![
             RuntimeSpawnEntry {
                 definition_id: CharacterId("player".to_string()),
                 grid_position: GridCoord::new(0, 0, 0),
@@ -792,12 +835,224 @@ pub fn default_debug_seed() -> RuntimeScenarioSeed {
                 definition_id: CharacterId("trader_lao_wang".to_string()),
                 grid_position: GridCoord::new(1, 0, 0),
             },
-            RuntimeSpawnEntry {
-                definition_id: CharacterId("zombie_walker".to_string()),
-                grid_position: GridCoord::new(4, 0, 0),
-            },
         ],
     }
+}
+
+#[cfg(test)]
+pub(crate) fn auto_spawn_characters_for_map(
+    maps: &MapLibrary,
+    map_id: Option<&MapId>,
+) -> Vec<RuntimeSpawnEntry> {
+    let Some(map_id) = map_id else {
+        return Vec::new();
+    };
+    let Some(map) = maps.get(map_id) else {
+        return Vec::new();
+    };
+
+    map.objects
+        .iter()
+        .filter(|object| object.kind == MapObjectKind::AiSpawn)
+        .filter_map(|object| {
+            let ai_spawn = object.props.ai_spawn.as_ref()?;
+            if !ai_spawn.auto_spawn || ai_spawn.character_id.trim().is_empty() {
+                return None;
+            }
+            Some(RuntimeSpawnEntry {
+                definition_id: CharacterId(ai_spawn.character_id.clone()),
+                grid_position: object.anchor,
+            })
+        })
+        .collect()
+}
+
+pub fn advance_map_ai_spawn_runtime(
+    state: &mut MapAiSpawnRuntimeState,
+    runtime: &mut SimulationRuntime,
+    definitions: &CharacterLibrary,
+    maps: &MapLibrary,
+    delta_seconds: f32,
+) {
+    state.elapsed_seconds = (state.elapsed_seconds + delta_seconds.max(0.0)).max(0.0);
+
+    let current_map_id = runtime.snapshot().grid.map_id.clone();
+    if current_map_id != state.current_map_id {
+        clear_active_map_ai_spawns(state, runtime);
+        state.current_map_id = current_map_id.clone();
+        state.spawn_points = load_runtime_ai_spawn_points(maps, current_map_id.as_ref());
+    }
+
+    if state.spawn_points.is_empty() {
+        return;
+    }
+
+    reconcile_missing_spawned_actors(state, runtime);
+
+    let spawn_ids: Vec<String> = state.spawn_points.keys().cloned().collect();
+    for spawn_id in spawn_ids {
+        if state.active_spawn_actors.contains_key(&spawn_id) {
+            continue;
+        }
+
+        let Some(spawn_point) = state.spawn_points.get(&spawn_id).cloned() else {
+            continue;
+        };
+
+        if let Some(deadline) = state.respawn_deadlines.get(&spawn_id).copied() {
+            if state.elapsed_seconds < deadline {
+                continue;
+            }
+            state.respawn_deadlines.remove(&spawn_id);
+        } else if !spawn_point.auto_spawn {
+            continue;
+        }
+
+        let Some(definition) = definitions.get(&spawn_point.character_id) else {
+            continue;
+        };
+
+        let spawn_grid = resolve_runtime_ai_spawn_grid(runtime, &spawn_point);
+        let actor_id = register_runtime_actor_from_definition(runtime, definition, spawn_grid);
+        state.active_spawn_actors.insert(spawn_id, actor_id);
+    }
+}
+
+fn clear_active_map_ai_spawns(
+    state: &mut MapAiSpawnRuntimeState,
+    runtime: &mut SimulationRuntime,
+) {
+    let actor_ids: Vec<ActorId> = state.active_spawn_actors.values().copied().collect();
+    for actor_id in actor_ids {
+        runtime.unregister_actor(actor_id);
+    }
+    state.spawn_points.clear();
+    state.active_spawn_actors.clear();
+    state.respawn_deadlines.clear();
+}
+
+fn reconcile_missing_spawned_actors(
+    state: &mut MapAiSpawnRuntimeState,
+    runtime: &SimulationRuntime,
+) {
+    let snapshot = runtime.snapshot();
+    let existing_actor_ids: Vec<ActorId> = snapshot.actors.iter().map(|actor| actor.actor_id).collect();
+
+    let active_pairs: Vec<(String, ActorId)> = state
+        .active_spawn_actors
+        .iter()
+        .map(|(spawn_id, actor_id)| (spawn_id.clone(), *actor_id))
+        .collect();
+    for (spawn_id, actor_id) in active_pairs {
+        if existing_actor_ids.contains(&actor_id) {
+            continue;
+        }
+
+        state.active_spawn_actors.remove(&spawn_id);
+        let Some(spawn_point) = state.spawn_points.get(&spawn_id) else {
+            continue;
+        };
+        if !spawn_point.respawn_enabled {
+            continue;
+        }
+        state.respawn_deadlines.insert(
+            spawn_id,
+            state.elapsed_seconds + spawn_point.respawn_delay_seconds.max(0.0),
+        );
+    }
+}
+
+fn load_runtime_ai_spawn_points(
+    maps: &MapLibrary,
+    map_id: Option<&MapId>,
+) -> BTreeMap<String, RuntimeAiSpawnPoint> {
+    let Some(map_id) = map_id else {
+        return BTreeMap::new();
+    };
+    let Some(map) = maps.get(map_id) else {
+        return BTreeMap::new();
+    };
+
+    map.objects
+        .iter()
+        .filter(|object| object.kind == MapObjectKind::AiSpawn)
+        .filter_map(|object| {
+            let ai_spawn = object.props.ai_spawn.as_ref()?;
+            if ai_spawn.spawn_id.trim().is_empty() || ai_spawn.character_id.trim().is_empty() {
+                return None;
+            }
+            Some((
+                ai_spawn.spawn_id.clone(),
+                RuntimeAiSpawnPoint {
+                    spawn_id: ai_spawn.spawn_id.clone(),
+                    character_id: CharacterId(ai_spawn.character_id.clone()),
+                    anchor: object.anchor,
+                    auto_spawn: ai_spawn.auto_spawn,
+                    respawn_enabled: ai_spawn.respawn_enabled,
+                    respawn_delay_seconds: ai_spawn.respawn_delay,
+                    spawn_radius: ai_spawn.spawn_radius,
+                },
+            ))
+        })
+        .collect()
+}
+
+fn resolve_runtime_ai_spawn_grid(
+    runtime: &SimulationRuntime,
+    spawn_point: &RuntimeAiSpawnPoint,
+) -> GridCoord {
+    let snapshot = runtime.snapshot();
+    let radius_cells = spawn_point.spawn_radius.max(0.0).ceil() as i32;
+    let mut candidates = vec![spawn_point.anchor];
+    if radius_cells > 0 {
+        for dz in -radius_cells..=radius_cells {
+            for dx in -radius_cells..=radius_cells {
+                if dx == 0 && dz == 0 {
+                    continue;
+                }
+                let distance_sq = (dx * dx + dz * dz) as f32;
+                if distance_sq > spawn_point.spawn_radius.max(0.0).powi(2) {
+                    continue;
+                }
+                let candidate = GridCoord::new(
+                    spawn_point.anchor.x + dx,
+                    spawn_point.anchor.y,
+                    spawn_point.anchor.z + dz,
+                );
+                if !grid_is_in_snapshot_bounds(&snapshot, candidate) {
+                    continue;
+                }
+                candidates.push(candidate);
+            }
+        }
+    }
+
+    let rotation = runtime_ai_spawn_rotation(&spawn_point.spawn_id, runtime.tick_count());
+    if !candidates.is_empty() {
+        let candidate_count = candidates.len();
+        candidates.rotate_left(rotation % candidate_count);
+    }
+
+    candidates
+        .into_iter()
+        .find(|candidate| runtime.grid_walkable(*candidate))
+        .unwrap_or(spawn_point.anchor)
+}
+
+fn grid_is_in_snapshot_bounds(snapshot: &game_core::SimulationSnapshot, grid: GridCoord) -> bool {
+    let width = snapshot.grid.map_width.unwrap_or_default() as i32;
+    let height = snapshot.grid.map_height.unwrap_or_default() as i32;
+    if width <= 0 || height <= 0 {
+        return true;
+    }
+    grid.x >= 0 && grid.z >= 0 && grid.x < width && grid.z < height
+}
+
+fn runtime_ai_spawn_rotation(spawn_id: &str, tick_count: u64) -> usize {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    spawn_id.hash(&mut hasher);
+    tick_count.hash(&mut hasher);
+    hasher.finish() as usize
 }
 
 fn spawn_character_entity(
@@ -902,14 +1157,16 @@ fn actor_group_id(definition: &CharacterDefinition) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_runtime_from_seed, default_debug_seed, load_runtime_startup_config,
+        advance_map_ai_spawn_runtime, auto_spawn_characters_for_map, build_runtime_from_seed,
+        debug_seed_characters_for_map, default_debug_seed, load_runtime_startup_config,
         parse_runtime_startup_config, resolve_startup_map_id, spawn_characters_from_definition,
         AiCombatProfile, AvatarPath, BaseAttributeSet, BehaviorProfile, CampId,
         CharacterArchetypeComponent, CharacterDefinitionId, CharacterDefinitionPath,
         CharacterDefinitions, CharacterSpawnRejected, CombatAttributeSet, Description, DisplayName,
-        Disposition, GridPosition, Level, LootTable, MapDefinitionPath, ModelPath,
-        PlaceholderColors, PortraitPath, ResourcePools, RuntimeBuildError, RuntimeScenarioSeed,
-        RuntimeSpawnEntry, RuntimeStartupConfig, SpawnCharacterRequest, XpReward,
+        Disposition, GridPosition, Level, LootTable, MapAiSpawnRuntimeState, MapDefinitionPath,
+        ModelPath, PlaceholderColors, PortraitPath, ResourcePools, RuntimeBuildError,
+        RuntimeScenarioSeed, RuntimeSpawnEntry, RuntimeStartupConfig, SpawnCharacterRequest,
+        XpReward,
     };
     use bevy_app::{App, Update};
     use bevy_ecs::message::{MessageReader, Messages};
@@ -1136,7 +1393,6 @@ mod tests {
             vec![
                 "player".to_string(),
                 "trader_lao_wang".to_string(),
-                "zombie_walker".to_string(),
             ]
         );
         assert_eq!(
@@ -1147,6 +1403,199 @@ mod tests {
             default_debug_seed().start_location_id.as_deref(),
             Some("survivor_outpost_01")
         );
+    }
+
+    #[test]
+    fn perimeter_debug_seed_adds_hostile_actor_only_for_perimeter_map() {
+        let characters = debug_seed_characters_for_map(Some(&MapId(
+            "survivor_outpost_01_perimeter_grid".into(),
+        )));
+        let ids: Vec<&str> = characters
+            .iter()
+            .map(|entry| entry.definition_id.as_str())
+            .collect();
+
+        assert_eq!(ids, vec!["player"]);
+    }
+
+    #[test]
+    fn auto_spawn_characters_for_map_reads_auto_spawn_ai_points() {
+        let maps = MapLibrary::from(BTreeMap::from([(
+            MapId("survivor_outpost_01_perimeter_grid".into()),
+            MapDefinition {
+                id: MapId("survivor_outpost_01_perimeter_grid".into()),
+                name: "Perimeter".into(),
+                size: MapSize {
+                    width: 20,
+                    height: 20,
+                },
+                default_level: 0,
+                levels: vec![MapLevelDefinition {
+                    y: 0,
+                    cells: Vec::new(),
+                }],
+                entry_points: vec![MapEntryPointDefinition {
+                    id: "default_entry".into(),
+                    grid: GridCoord::new(0, 0, 0),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                }],
+                objects: vec![
+                    MapObjectDefinition {
+                        object_id: "spawn_walker".into(),
+                        kind: MapObjectKind::AiSpawn,
+                        anchor: GridCoord::new(15, 0, 4),
+                        footprint: MapObjectFootprint::default(),
+                        rotation: MapRotation::North,
+                        blocks_movement: false,
+                        blocks_sight: false,
+                        props: MapObjectProps {
+                            ai_spawn: Some(game_data::MapAiSpawnProps {
+                                spawn_id: "spawn_walker".into(),
+                                character_id: "zombie_walker".into(),
+                                auto_spawn: true,
+                                respawn_enabled: true,
+                                respawn_delay: 24.0,
+                                spawn_radius: 2.5,
+                                extra: BTreeMap::new(),
+                            }),
+                            ..MapObjectProps::default()
+                        },
+                    },
+                    MapObjectDefinition {
+                        object_id: "spawn_brute".into(),
+                        kind: MapObjectKind::AiSpawn,
+                        anchor: GridCoord::new(12, 0, 3),
+                        footprint: MapObjectFootprint::default(),
+                        rotation: MapRotation::North,
+                        blocks_movement: false,
+                        blocks_sight: false,
+                        props: MapObjectProps {
+                            ai_spawn: Some(game_data::MapAiSpawnProps {
+                                spawn_id: "spawn_brute".into(),
+                                character_id: "zombie_brute".into(),
+                                auto_spawn: false,
+                                respawn_enabled: true,
+                                respawn_delay: 40.0,
+                                spawn_radius: 1.5,
+                                extra: BTreeMap::new(),
+                            }),
+                            ..MapObjectProps::default()
+                        },
+                    },
+                ],
+            },
+        )]));
+
+        let characters = auto_spawn_characters_for_map(
+            &maps,
+            Some(&MapId("survivor_outpost_01_perimeter_grid".into())),
+        );
+
+        assert_eq!(
+            characters,
+            vec![RuntimeSpawnEntry {
+                definition_id: CharacterId("zombie_walker".into()),
+                grid_position: GridCoord::new(15, 0, 4),
+            }]
+        );
+    }
+
+    #[test]
+    fn map_ai_spawn_runtime_spawns_and_respawns_auto_spawn_entries() {
+        let library = sample_library();
+        let maps = MapLibrary::from(BTreeMap::from([(
+            MapId("survivor_outpost_01_perimeter_grid".into()),
+            MapDefinition {
+                id: MapId("survivor_outpost_01_perimeter_grid".into()),
+                name: "Perimeter".into(),
+                size: MapSize {
+                    width: 20,
+                    height: 20,
+                },
+                default_level: 0,
+                levels: vec![MapLevelDefinition {
+                    y: 0,
+                    cells: Vec::new(),
+                }],
+                entry_points: vec![MapEntryPointDefinition {
+                    id: "default_entry".into(),
+                    grid: GridCoord::new(2, 0, 10),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                }],
+                objects: vec![MapObjectDefinition {
+                    object_id: "spawn_walker".into(),
+                    kind: MapObjectKind::AiSpawn,
+                    anchor: GridCoord::new(15, 0, 4),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    props: MapObjectProps {
+                        ai_spawn: Some(game_data::MapAiSpawnProps {
+                            spawn_id: "spawn_walker".into(),
+                            character_id: "zombie_walker".into(),
+                            auto_spawn: true,
+                            respawn_enabled: true,
+                            respawn_delay: 24.0,
+                            spawn_radius: 0.0,
+                            extra: BTreeMap::new(),
+                        }),
+                        ..MapObjectProps::default()
+                    },
+                }],
+            },
+        )]));
+        let seed = RuntimeScenarioSeed {
+            map_id: Some(MapId("survivor_outpost_01_perimeter_grid".into())),
+            characters: vec![RuntimeSpawnEntry {
+                definition_id: CharacterId("player".into()),
+                grid_position: GridCoord::new(2, 0, 10),
+            }],
+            ..RuntimeScenarioSeed::default()
+        };
+        let mut runtime = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+            .expect("runtime should build");
+        let mut state = MapAiSpawnRuntimeState::default();
+
+        advance_map_ai_spawn_runtime(&mut state, &mut runtime, &library, &maps, 0.0);
+        let walker_actor_id = runtime
+            .snapshot()
+            .actors
+            .iter()
+            .find(|actor| {
+                actor.definition_id.as_ref().map(CharacterId::as_str) == Some("zombie_walker")
+            })
+            .map(|actor| actor.actor_id)
+            .expect("walker should spawn from ai_spawn");
+        assert_eq!(
+            runtime.get_actor_grid_position(walker_actor_id),
+            Some(GridCoord::new(15, 0, 4))
+        );
+        assert_eq!(
+            state.active_spawn_actors.get("spawn_walker").copied(),
+            Some(walker_actor_id)
+        );
+
+        runtime.unregister_actor(walker_actor_id);
+        advance_map_ai_spawn_runtime(&mut state, &mut runtime, &library, &maps, 0.0);
+        assert!(!state.active_spawn_actors.contains_key("spawn_walker"));
+        assert!(state.respawn_deadlines.contains_key("spawn_walker"));
+
+        advance_map_ai_spawn_runtime(&mut state, &mut runtime, &library, &maps, 23.0);
+        assert!(runtime
+            .snapshot()
+            .actors
+            .iter()
+            .all(|actor| actor.definition_id.as_ref().map(CharacterId::as_str) != Some("zombie_walker")));
+
+        advance_map_ai_spawn_runtime(&mut state, &mut runtime, &library, &maps, 1.1);
+        assert!(runtime
+            .snapshot()
+            .actors
+            .iter()
+            .any(|actor| actor.definition_id.as_ref().map(CharacterId::as_str) == Some("zombie_walker")));
     }
 
     #[test]

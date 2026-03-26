@@ -463,6 +463,10 @@ impl SimulationRuntime {
         self.simulation.actor_grid_position(actor_id)
     }
 
+    pub fn grid_walkable(&self, grid: GridCoord) -> bool {
+        self.simulation.grid_walkable(grid)
+    }
+
     pub fn is_grid_in_bounds(&self, grid: GridCoord) -> bool {
         self.simulation.grid_world().is_in_bounds(grid)
     }

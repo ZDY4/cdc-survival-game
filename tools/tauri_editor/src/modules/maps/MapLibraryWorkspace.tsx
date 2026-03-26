@@ -163,7 +163,7 @@ export function MapLibraryWorkspace({
       onStatusChange("Map editor windowing is only available inside the Tauri host.");
       return;
     }
-    await openOrFocusMapEditor(documentKey);
+    await openOrFocusMapEditor("map", documentKey);
     if (documentKey === NEW_MAP_DOCUMENT_KEY) {
       onStatusChange("Opened map editor for a new draft.");
       return;

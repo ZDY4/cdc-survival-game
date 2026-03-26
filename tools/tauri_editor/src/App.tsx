@@ -11,8 +11,9 @@ import { fallbackDialogueWorkspace } from "./modules/dialogues/fallback";
 import { fallbackWorkspace } from "./modules/items/fallback";
 import { ItemWorkspace } from "./modules/items/ItemWorkspace";
 import { MapEditorWindow } from "./modules/maps/MapEditorWindow";
-import { MapLibraryWorkspace } from "./modules/maps/MapLibraryWorkspace";
 import { fallbackMapWorkspace } from "./modules/maps/fallback";
+import { fallbackOverworldWorkspace } from "./modules/maps/overworldFallback";
+import { SpatialLibraryWorkspace } from "./modules/maps/SpatialLibraryWorkspace";
 import { fallbackQuestWorkspace } from "./modules/quests/fallback";
 import { QuestWorkspace } from "./modules/quests/QuestWorkspace";
 import { SettingsWindow } from "./modules/settings/SettingsWindow";
@@ -20,6 +21,7 @@ import type {
   DialogueWorkspacePayload,
   ItemWorkspacePayload,
   MapWorkspacePayload,
+  OverworldWorkspacePayload,
   QuestWorkspacePayload,
 } from "./types";
 
@@ -31,6 +33,8 @@ function App() {
   );
   const [questWorkspace, setQuestWorkspace] = useState<QuestWorkspacePayload>(fallbackQuestWorkspace);
   const [mapWorkspace, setMapWorkspace] = useState<MapWorkspacePayload>(fallbackMapWorkspace);
+  const [overworldWorkspace, setOverworldWorkspace] =
+    useState<OverworldWorkspacePayload>(fallbackOverworldWorkspace);
   const [status, setStatus] = useState("Loading editor workspaces...");
   const [activeModule, setActiveModule] = useState("items");
   const [canPersist, setCanPersist] = useState(false);
@@ -39,25 +43,29 @@ function App() {
 
   async function loadMainWorkspaces() {
     try {
-      const [itemPayload, dialoguePayload, questPayload, mapPayload] = await Promise.all([
+      const [itemPayload, dialoguePayload, questPayload, mapPayload, overworldPayload] =
+        await Promise.all([
         invokeCommand<ItemWorkspacePayload>("load_item_workspace"),
         invokeCommand<DialogueWorkspacePayload>("load_dialogue_workspace"),
         invokeCommand<QuestWorkspacePayload>("load_quest_workspace"),
         invokeCommand<MapWorkspacePayload>("load_map_workspace"),
+        invokeCommand<OverworldWorkspacePayload>("load_overworld_workspace"),
       ]);
       setItemWorkspace(itemPayload);
       setDialogueWorkspace(dialoguePayload);
       setQuestWorkspace(questPayload);
       setMapWorkspace(mapPayload);
+      setOverworldWorkspace(overworldPayload);
       setCanPersist(true);
       setStatus(
-        `Loaded ${itemPayload.itemCount} items, ${dialoguePayload.dialogCount} dialogues, ${questPayload.questCount} quests, and ${mapPayload.mapCount} maps from project data.`,
+        `Loaded ${itemPayload.itemCount} items, ${dialoguePayload.dialogCount} dialogues, ${questPayload.questCount} quests, ${mapPayload.mapCount} maps, and ${overworldPayload.overworldCount} overworld files from project data.`,
       );
     } catch (error) {
       setItemWorkspace(fallbackWorkspace);
       setDialogueWorkspace(fallbackDialogueWorkspace);
       setQuestWorkspace(fallbackQuestWorkspace);
       setMapWorkspace(fallbackMapWorkspace);
+      setOverworldWorkspace(fallbackOverworldWorkspace);
       setCanPersist(false);
       setStatus(
         `Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`,
@@ -188,8 +196,9 @@ function App() {
         />
       ) : null}
       {activeModule === "maps" ? (
-        <MapLibraryWorkspace
-          workspace={mapWorkspace}
+        <SpatialLibraryWorkspace
+          mapWorkspace={mapWorkspace}
+          overworldWorkspace={overworldWorkspace}
           canPersist={canPersist}
           onStatusChange={setStatus}
           onReload={loadMainWorkspaces}

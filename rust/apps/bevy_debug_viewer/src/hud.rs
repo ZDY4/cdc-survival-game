@@ -10,13 +10,14 @@ use crate::geometry::{
 };
 use crate::state::{
     HudEventCategory, HudEventFilter, HudFooterText, HudText, ViewerEventEntry, ViewerHudPage,
-    ViewerRuntimeState, ViewerState,
+    ViewerRenderConfig, ViewerRuntimeState, ViewerState,
 };
 
 pub(crate) fn update_hud(
     hud_text: Single<(&mut Text, &mut Visibility), With<HudText>>,
     mut hud_footer: Single<&mut TextSpan, With<HudFooterText>>,
     runtime_state: Res<ViewerRuntimeState>,
+    render_config: Res<ViewerRenderConfig>,
     viewer_state: Res<ViewerState>,
 ) {
     let (mut hud_text, mut visibility) = hud_text.into_inner();
@@ -30,7 +31,7 @@ pub(crate) fn update_hud(
     *visibility = Visibility::Visible;
     let snapshot = runtime_state.runtime.snapshot();
     let header = format!("Bevy Debug Viewer · {}", viewer_state.hud_page.title());
-    let summary = format_status_summary(&snapshot, &runtime_state, &viewer_state);
+    let summary = format_status_summary(&snapshot, &runtime_state, &viewer_state, *render_config);
     let page_body = match viewer_state.hud_page {
         ViewerHudPage::Overview => format_overview_panel(&snapshot, &runtime_state, &viewer_state),
         ViewerHudPage::SelectedActor => {
@@ -64,6 +65,7 @@ fn format_status_summary(
     snapshot: &SimulationSnapshot,
     runtime_state: &ViewerRuntimeState,
     viewer_state: &ViewerState,
+    render_config: ViewerRenderConfig,
 ) -> String {
     section(
         "Status",
@@ -87,6 +89,8 @@ fn format_status_summary(
                 "Pending Movement",
                 runtime_state.runtime.pending_movement().is_some(),
             ),
+            kv("Overlay", render_config.overlay_mode.label()),
+            kv("Zoom", format!("{:.0}%", render_config.zoom_factor * 100.0)),
         ],
     )
 }
@@ -610,6 +614,7 @@ fn format_controls_help() -> String {
             "Ctrl+P toggle player control / free observe".to_string(),
             "H toggle HUD".to_string(),
             "/ toggle detailed help".to_string(),
+            "V cycles overlay density (minimal / gameplay / AI debug)".to_string(),
             "[ / ] switch event filter on Events page".to_string(),
             "Left click cancels auto-move, selects actor, advances dialogue, or moves".to_string(),
             "Right click target opens the interaction button menu".to_string(),
@@ -632,19 +637,19 @@ fn format_controls_help() -> String {
 pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
     match page {
         ViewerHudPage::Overview => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
         }
         ViewerHudPage::SelectedActor => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · Tab切换角色 · 自由观察下左键选AI"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · Tab切换角色 · 自由观察下左键选AI"
         }
         ViewerHudPage::World => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · 悬停看格子 · 中键拖拽 · 滚轮缩放 · F回中"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 悬停看格子 · 中键拖拽 · 滚轮缩放 · F回中"
         }
         ViewerHudPage::Interaction => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
         }
-        ViewerHudPage::Events => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · [ / ]切过滤器",
-        ViewerHudPage::Ai => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · 查看 AI 目标 / 动作 / 预订 / 班次",
+        ViewerHudPage::Events => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · [ / ]切过滤器",
+        ViewerHudPage::Ai => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 查看 AI 目标 / 动作 / 预订 / 班次",
     }
 }
 

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -276,8 +276,6 @@ pub enum OverworldValidationError {
         y: i32,
         z: i32,
     },
-    #[error("visible outdoor location {location_id} is not connected in overworld topology")]
-    UnreachableVisibleOutdoorLocation { location_id: String },
 }
 
 pub fn load_overworld_library(
@@ -455,7 +453,6 @@ pub fn validate_overworld_definition(
         }
     }
 
-    let mut graph = HashMap::<String, BTreeSet<String>>::new();
     for edge in &definition.edges {
         if edge.from.as_str().trim().is_empty() || edge.to.as_str().trim().is_empty() {
             return Err(OverworldValidationError::MissingEdgeEndpoint);
@@ -485,46 +482,6 @@ pub fn validate_overworld_definition(
                 to: edge.to.as_str().to_string(),
                 location_id: edge.to.as_str().to_string(),
             });
-        }
-        graph
-            .entry(edge.from.as_str().to_string())
-            .or_default()
-            .insert(edge.to.as_str().to_string());
-        if edge.bidirectional {
-            graph
-                .entry(edge.to.as_str().to_string())
-                .or_default()
-                .insert(edge.from.as_str().to_string());
-        }
-    }
-
-    let visible_outdoor_ids: Vec<String> = definition
-        .locations
-        .iter()
-        .filter(|location| location.kind == OverworldLocationKind::Outdoor && location.visible)
-        .map(|location| location.id.as_str().to_string())
-        .collect();
-    if let Some(start) = visible_outdoor_ids.first() {
-        let mut visited = HashSet::from([start.clone()]);
-        let mut queue = VecDeque::from([start.clone()]);
-        while let Some(current) = queue.pop_front() {
-            for next in graph
-                .get(&current)
-                .into_iter()
-                .flat_map(|neighbors| neighbors.iter())
-            {
-                if visited.insert(next.clone()) {
-                    queue.push_back(next.clone());
-                }
-            }
-        }
-
-        for location_id in visible_outdoor_ids {
-            if !visited.contains(&location_id) {
-                return Err(
-                    OverworldValidationError::UnreachableVisibleOutdoorLocation { location_id },
-                );
-            }
         }
     }
 
@@ -599,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn disconnected_visible_outdoor_location_is_rejected() {
+    fn disconnected_visible_outdoor_location_is_allowed_for_grid_navigation() {
         let mut definition = sample_overworld();
         definition.locations.push(OverworldLocationDefinition {
             id: OverworldLocationId("forest".into()),
@@ -628,13 +585,8 @@ mod tests {
             "forest_grid".into(),
             BTreeSet::from(["default_entry".into()]),
         );
-
-        let error = validate_overworld_definition(&definition, Some(&catalog))
-            .expect_err("disconnected visible location should fail");
-        assert!(matches!(
-            error,
-            OverworldValidationError::UnreachableVisibleOutdoorLocation { .. }
-        ));
+        validate_overworld_definition(&definition, Some(&catalog))
+            .expect("grid-based overworld should not require edge connectivity");
     }
 
     #[test]

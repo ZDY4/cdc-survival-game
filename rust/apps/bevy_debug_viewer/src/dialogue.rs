@@ -5,10 +5,12 @@ use bevy::log::warn;
 use game_core::runtime::action_result_status;
 use game_core::{NpcActionKey, SimulationEvent};
 use game_data::{
+    advance_dialogue as advance_dialogue_local_runtime,
     current_dialogue_node as current_dialogue_node_runtime, resolve_dialogue_start_node_id,
-    ActorId, CharacterId, DialogueData, DialogueNode, DialogueResolutionContext,
-    DialogueResolutionResult, DialogueResolutionSource, DialogueRuleDefinition,
-    DialogueRuntimeState, InteractionExecutionResult, InteractionTargetId,
+    ActorId, CharacterId, DialogueAdvanceError, DialogueData, DialogueNode,
+    DialogueResolutionContext, DialogueResolutionResult, DialogueResolutionSource,
+    DialogueRuleDefinition, DialogueRuntimeState, InteractionExecutionResult,
+    InteractionTargetId,
 };
 
 use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
@@ -123,6 +125,15 @@ pub(crate) fn advance_dialogue(
         return;
     };
 
+    if runtime_state
+        .runtime
+        .active_dialogue_state(dialogue.actor_id)
+        .is_none()
+    {
+        advance_dialogue_with_local_state(viewer_state, dialogue, choice_index);
+        return;
+    }
+
     match runtime_state.runtime.advance_dialogue(
         dialogue.actor_id,
         dialogue.target_id.clone(),
@@ -150,8 +161,48 @@ pub(crate) fn advance_dialogue(
             viewer_state.active_dialogue = None;
             viewer_state.status_line = "dialogue: current node missing".to_string();
         }
+        Err(reason)
+            if reason.starts_with("dialogue_session_missing")
+                || reason.starts_with("dialogue_definition_missing:") =>
+        {
+            advance_dialogue_with_local_state(viewer_state, dialogue, choice_index);
+        }
         Err(reason) => {
             viewer_state.status_line = format!("dialogue: {reason}");
+        }
+    }
+}
+
+fn advance_dialogue_with_local_state(
+    viewer_state: &mut ViewerState,
+    dialogue: ActiveDialogueState,
+    choice_index: Option<usize>,
+) {
+    match advance_dialogue_local_runtime(&dialogue.data, &dialogue.current_node_id, choice_index) {
+        Ok(outcome) => {
+            if let Some(next_node_id) = outcome.next_node_id {
+                if let Some(active_dialogue) = viewer_state.active_dialogue.as_mut() {
+                    active_dialogue.current_node_id = next_node_id.clone();
+                }
+                viewer_state.status_line = format!("dialogue node: {next_node_id}");
+                return;
+            }
+
+            viewer_state.active_dialogue = None;
+            viewer_state.status_line = match outcome.end_type {
+                Some(end_type) => format!("dialogue finished: {end_type}"),
+                None => "dialogue finished".to_string(),
+            };
+        }
+        Err(DialogueAdvanceError::ChoiceRequired { .. }) => {
+            viewer_state.status_line = "dialogue: choose an option with 1-9".to_string();
+        }
+        Err(DialogueAdvanceError::InvalidChoice { .. }) => {
+            viewer_state.status_line = "dialogue: invalid choice".to_string();
+        }
+        Err(DialogueAdvanceError::MissingNode { .. }) => {
+            viewer_state.active_dialogue = None;
+            viewer_state.status_line = "dialogue: current node missing".to_string();
         }
     }
 }
@@ -707,8 +758,7 @@ mod tests {
         advance_dialogue, apply_interaction_result, resolve_dialogue_content_from_context,
         DialogueAssetDirs,
     };
-    use crate::state::ViewerRuntimeState;
-    use crate::state::ViewerState;
+    use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
     use game_data::{
         ActorKind, ActorSide, CharacterId, DialogueData, DialogueLibrary, DialogueNode,
         DialogueOption, DialogueResolutionContext, DialogueResolutionSource, InteractionOptionId,
@@ -783,6 +833,41 @@ mod tests {
             viewer_state.status_line,
             "dialogue: choose an option with 1-9"
         );
+    }
+
+    #[test]
+    fn local_viewer_dialogue_can_finish_without_runtime_session() {
+        let (runtime, _) = game_core::create_demo_runtime();
+        let mut runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.active_dialogue = Some(ActiveDialogueState {
+            actor_id: game_data::ActorId(99),
+            target_id: Some(InteractionTargetId::MapObject("npc".into())),
+            dialogue_key: "viewer_only".into(),
+            dialog_id: "viewer_only".into(),
+            data: DialogueData {
+                dialog_id: "viewer_only".into(),
+                nodes: vec![DialogueNode {
+                    id: "start".into(),
+                    node_type: "dialog".into(),
+                    text: "临时对话".into(),
+                    is_start: true,
+                    ..DialogueNode::default()
+                }],
+                ..DialogueData::default()
+            },
+            current_node_id: "start".into(),
+            target_name: "NPC".into(),
+        });
+
+        advance_dialogue(&mut runtime_state, &mut viewer_state, None);
+
+        assert!(viewer_state.active_dialogue.is_none());
+        assert_eq!(viewer_state.status_line, "dialogue finished");
     }
 
     #[test]

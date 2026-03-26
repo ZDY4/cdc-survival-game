@@ -24,6 +24,22 @@ export function defaultNarrativeTitle(docType: NarrativeDocType): string {
   return `${docTypeLabel(docType)}草稿`;
 }
 
+export function docTypeSummary(docType: NarrativeDocType): string {
+  const summaries: Record<NarrativeDocType, string> = {
+    project_brief: "定义项目定位、主题、整体走向与核心人物关系。",
+    world_bible: "整理世界规则、地点氛围与长期可复用背景资料。",
+    faction_note: "记录阵营目标、外部形象与和主角的动态关系。",
+    character_card: "沉淀角色动机、秘密、口吻与任务挂钩。",
+    arc_outline: "梳理一条剧情弧线的起点、转折和收束。",
+    chapter_outline: "把单章目标、事件推进和分支节点写清楚。",
+    branch_sheet: "集中设计关键选择、即时反馈和长期回收。",
+    scene_draft: "直接起草场景推进、对白重点和后续钩子。",
+    dialogue_tone_sheet: "规范角色语气、情绪切换与对白风格样例。",
+  };
+
+  return summaries[docType];
+}
+
 export function defaultNarrativeMarkdown(docType: NarrativeDocType, title = defaultNarrativeTitle(docType)): string {
   const heading = `# ${title}`;
   const sections: Record<NarrativeDocType, string[]> = {

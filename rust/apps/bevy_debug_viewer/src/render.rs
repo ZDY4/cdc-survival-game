@@ -1,7 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
+use bevy::asset::Asset;
 use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight};
+use bevy::pbr::{
+    ExtendedMaterial, MaterialExtension, OpaqueRendererMethod, StandardMaterial,
+};
 use bevy::prelude::*;
+use bevy::reflect::TypePath;
+use bevy::render::render_resource::{AsBindGroup, AsBindGroupShaderType, ShaderType};
+use bevy::shader::ShaderRef;
 use game_bevy::{SettlementDebugEntry, SettlementDefinitions};
 use game_data::{ActorId, ActorSide, GridCoord};
 
@@ -15,8 +22,9 @@ use crate::geometry::{
 use crate::state::{
     ActorLabel, ActorLabelEntities, DialoguePanelRoot, HudFooterText, HudText,
     InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot, InteractionMenuState,
-    ViewerActorMotionState, ViewerCamera, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
-    ViewerUiFont, VIEWER_FONT_PATH,
+    ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera, ViewerCameraShakeState,
+    ViewerDamageNumberState, ViewerOverlayMode, ViewerPalette, ViewerRenderConfig,
+    ViewerRuntimeState, ViewerState, ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
 };
 
 const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
@@ -28,6 +36,7 @@ const DIALOGUE_PANEL_MIN_WIDTH_PX: f32 = 360.0;
 const DIALOGUE_PANEL_MAX_WIDTH_PX: f32 = 920.0;
 const GRID_LINE_ELEVATION: f32 = 0.002;
 const OVERLAY_ELEVATION: f32 = 0.03;
+const GRID_GROUND_SHADER_PATH: &str = "shaders/grid_ground.wgsl";
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InteractionMenuLayout {
@@ -94,6 +103,7 @@ struct StaticWorldBoxSpec {
     size: Vec3,
     translation: Vec3,
     color: Color,
+    material_style: MaterialStyle,
     occluder_kind: Option<StaticWorldOccluderKind>,
 }
 
@@ -117,21 +127,109 @@ pub(crate) struct ActorVisualState {
     by_actor: HashMap<ActorId, Entity>,
 }
 
+#[derive(Resource, Default)]
+pub(crate) struct DamageNumberVisualState {
+    by_id: HashMap<u64, Entity>,
+}
+
 #[derive(Component)]
 pub(crate) struct ActorBodyVisual {
     actor_id: ActorId,
     body_material: Handle<StandardMaterial>,
     head_material: Handle<StandardMaterial>,
+    accent_material: Handle<StandardMaterial>,
 }
 
-pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer>) {
+#[derive(Component)]
+struct KeyLight;
+
+#[derive(Component)]
+struct FillLight;
+
+#[derive(Component)]
+pub(crate) struct DamageNumberLabel {
+    id: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum MaterialStyle {
+    Structure,
+    StructureAccent,
+    Utility,
+    UtilityAccent,
+    CharacterBody,
+    CharacterHead,
+    CharacterAccent,
+    Shadow,
+}
+
+pub(crate) type GridGroundMaterial = ExtendedMaterial<StandardMaterial, GridGroundMaterialExt>;
+
+#[derive(Asset, AsBindGroup, TypePath, Clone, Debug)]
+#[uniform(100, GridGroundMaterialUniform)]
+pub(crate) struct GridGroundMaterialExt {
+    world_origin: Vec2,
+    grid_size: f32,
+    line_width: f32,
+    variation_strength: f32,
+    seed: u32,
+    dark_color: Color,
+    light_color: Color,
+    edge_color: Color,
+}
+
+#[derive(Clone, Copy, Debug, ShaderType)]
+struct GridGroundMaterialUniform {
+    world_origin: Vec2,
+    grid_size: f32,
+    line_width: f32,
+    variation_strength: f32,
+    seed: f32,
+    _padding: Vec2,
+    dark_color: Vec4,
+    light_color: Vec4,
+    edge_color: Vec4,
+}
+
+impl AsBindGroupShaderType<GridGroundMaterialUniform> for GridGroundMaterialExt {
+    fn as_bind_group_shader_type(
+        &self,
+        _images: &bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>,
+    ) -> GridGroundMaterialUniform {
+        GridGroundMaterialUniform {
+            world_origin: self.world_origin,
+            grid_size: self.grid_size.max(0.001),
+            line_width: self.line_width,
+            variation_strength: self.variation_strength,
+            seed: self.seed as f32,
+            _padding: Vec2::ZERO,
+            dark_color: self.dark_color.to_linear().to_vec4(),
+            light_color: self.light_color.to_linear().to_vec4(),
+            edge_color: self.edge_color.to_linear().to_vec4(),
+        }
+    }
+}
+
+impl MaterialExtension for GridGroundMaterialExt {
+    fn fragment_shader() -> ShaderRef {
+        GRID_GROUND_SHADER_PATH.into()
+    }
+}
+
+pub(crate) fn setup_viewer(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    palette: Res<ViewerPalette>,
+    style: Res<ViewerStyleProfile>,
+) {
     let ui_font = asset_server.load(VIEWER_FONT_PATH);
     commands.insert_resource(ViewerUiFont(ui_font.clone()));
     commands.insert_resource(StaticWorldVisualState::default());
     commands.insert_resource(ActorVisualState::default());
+    commands.insert_resource(DamageNumberVisualState::default());
     commands.insert_resource(GlobalAmbientLight {
-        color: Color::srgb(0.92, 0.95, 1.0),
-        brightness: 180.0,
+        color: palette.ambient_color,
+        brightness: style.ambient_brightness,
         affects_lightmapped_meshes: true,
     });
     commands.insert_resource(DirectionalLightShadowMap { size: 2048 });
@@ -148,8 +246,8 @@ pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer
     ));
     commands.spawn((
         DirectionalLight {
-            color: Color::srgb(1.0, 0.98, 0.95),
-            illuminance: 16_000.0,
+            color: palette.key_light_color,
+            illuminance: style.key_light_illuminance,
             shadows_enabled: true,
             shadow_depth_bias: 0.04,
             shadow_normal_bias: 1.6,
@@ -164,6 +262,17 @@ pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer
         }
         .build(),
         Transform::from_xyz(-12.0, 18.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        KeyLight,
+    ));
+    commands.spawn((
+        DirectionalLight {
+            color: palette.fill_light_color,
+            illuminance: style.fill_light_illuminance,
+            shadows_enabled: false,
+            ..default()
+        },
+        Transform::from_xyz(15.0, 10.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
+        FillLight,
     ));
     commands
         .spawn((
@@ -179,13 +288,13 @@ pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer
                 padding: UiRect::all(px(12)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.07, 0.09, 0.12, 0.92)),
+            BackgroundColor(palette.hud_panel_background),
             HudText,
         ))
         .with_child((
             TextSpan::new(""),
             TextFont::from_font_size(9.0).with_font(ui_font.clone()),
-            TextColor(Color::srgba(0.79, 0.83, 0.88, 0.94)),
+            TextColor(palette.hud_text_secondary),
             HudFooterText,
         ));
     commands.spawn((
@@ -198,7 +307,7 @@ pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer
             flex_direction: FlexDirection::Column,
             ..default()
         },
-        BackgroundColor(Color::srgba(0.06, 0.07, 0.1, 0.96)),
+        BackgroundColor(palette.menu_background),
         Visibility::Hidden,
         InteractionMenuRoot,
     ));
@@ -212,16 +321,18 @@ pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer
             flex_direction: FlexDirection::Column,
             ..default()
         },
-        BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.95)),
+        BackgroundColor(palette.dialogue_background),
         Visibility::Hidden,
         DialoguePanelRoot,
     ));
 }
 
 pub(crate) fn update_camera(
+    time: Res<Time>,
     window: Single<&Window>,
     camera_query: Single<(&mut Projection, &mut Transform), With<ViewerCamera>>,
     runtime_state: Res<ViewerRuntimeState>,
+    mut camera_shake_state: ResMut<ViewerCameraShakeState>,
     mut viewer_state: ResMut<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
 ) {
@@ -250,7 +361,13 @@ pub(crate) fn update_camera(
         *render_config,
     );
     let pitch = render_config.camera_pitch_radians();
-    let offset = Vec3::new(0.0, distance * pitch.sin(), -distance * pitch.cos());
+    let yaw = render_config.camera_yaw_radians();
+    let horizontal = distance * pitch.cos();
+    let offset = Vec3::new(
+        horizontal * yaw.sin(),
+        distance * pitch.sin(),
+        -horizontal * yaw.cos(),
+    );
     let (mut projection, mut transform) = camera_query.into_inner();
 
     if let Projection::Perspective(perspective) = &mut *projection {
@@ -259,7 +376,8 @@ pub(crate) fn update_camera(
         perspective.far = (distance * 8.0).max(1000.0);
     }
 
-    transform.translation = focus + offset;
+    camera_shake_state.advance(time.delta_secs());
+    transform.translation = focus + offset + camera_shake_state.current_offset();
     transform.look_at(focus, Vec3::Z);
 }
 
@@ -268,6 +386,7 @@ pub(crate) fn sync_actor_labels(
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    palette: Res<ViewerPalette>,
     render_config: Res<ViewerRenderConfig>,
     viewer_font: Res<ViewerUiFont>,
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
@@ -286,6 +405,10 @@ pub(crate) fn sync_actor_labels(
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
     let mut seen_actor_ids = HashSet::new();
+    let hovered_actor_id = viewer_state
+        .hovered_grid
+        .and_then(|grid| snapshot.actors.iter().find(|actor| actor.grid_position == grid))
+        .map(|actor| actor.actor_id);
 
     for actor in snapshot
         .actors
@@ -295,12 +418,19 @@ pub(crate) fn sync_actor_labels(
         seen_actor_ids.insert(actor.actor_id);
         let interaction_locked =
             viewer_state.is_actor_interaction_locked(&runtime_state, actor.actor_id);
+        let should_show_label = should_show_actor_label(
+            *render_config,
+            &viewer_state,
+            actor,
+            interaction_locked,
+            hovered_actor_id,
+        );
         let label = if interaction_locked {
             format!("{} [交互中]", actor_label(actor))
         } else {
             actor_label(actor)
         };
-        let color = actor_color(actor.side);
+        let color = actor_color(actor.side, &palette);
         let world_position = actor_label_world_position(
             actor_visual_world_position(&runtime_state, &motion_state, actor),
             snapshot.grid.grid_size,
@@ -326,7 +456,11 @@ pub(crate) fn sync_actor_labels(
                         node.left =
                             px(viewport_position.x + render_config.label_screen_offset_px.x);
                         node.top = px(viewport_position.y + render_config.label_screen_offset_px.y);
-                        *visibility = Visibility::Visible;
+                        *visibility = if should_show_label {
+                            Visibility::Visible
+                        } else {
+                            Visibility::Hidden
+                        };
                     } else {
                         *visibility = Visibility::Hidden;
                     }
@@ -343,19 +477,23 @@ pub(crate) fn sync_actor_labels(
 
         let mut node = Node {
             position_type: PositionType::Absolute,
+            padding: UiRect::axes(px(8), px(3)),
             ..default()
         };
         let mut visibility = Visibility::Hidden;
-        if let Ok(viewport_position) = viewport {
-            node.left = px(viewport_position.x + render_config.label_screen_offset_px.x);
-            node.top = px(viewport_position.y + render_config.label_screen_offset_px.y);
-            visibility = Visibility::Visible;
+        if should_show_label {
+            if let Ok(viewport_position) = viewport {
+                node.left = px(viewport_position.x + render_config.label_screen_offset_px.x);
+                node.top = px(viewport_position.y + render_config.label_screen_offset_px.y);
+                visibility = Visibility::Visible;
+            }
         }
         let mut entity = commands.spawn((
             Text::new(label),
             TextFont::from_font_size(13.5).with_font(viewer_font.0.clone()),
             TextColor(color),
             node,
+            BackgroundColor(palette.label_background),
             visibility,
             ActorLabel {
                 actor_id: actor.actor_id,
@@ -376,6 +514,98 @@ pub(crate) fn sync_actor_labels(
         .collect();
     for actor_id in stale_actor_ids {
         if let Some(entity) = label_entities.by_actor.remove(&actor_id) {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+pub(crate) fn sync_damage_numbers(
+    mut commands: Commands,
+    time: Res<Time>,
+    viewer_font: Res<ViewerUiFont>,
+    camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
+    mut damage_numbers: ResMut<ViewerDamageNumberState>,
+    mut visual_state: ResMut<DamageNumberVisualState>,
+    mut labels: Query<
+        (
+            Entity,
+            &mut Text,
+            &mut TextFont,
+            &mut TextColor,
+            &mut Node,
+            &mut Visibility,
+            &DamageNumberLabel,
+        ),
+    >,
+) {
+    damage_numbers.advance(time.delta_secs());
+
+    let (camera, camera_transform) = *camera_query;
+    let camera_transform = GlobalTransform::from(*camera_transform);
+    let mut seen_ids = HashSet::new();
+
+    for (id, entry) in &damage_numbers.entries {
+        seen_ids.insert(*id);
+        let viewport = camera.world_to_viewport(&camera_transform, entry.current_world_position());
+
+        if let Some(entity) = visual_state.by_id.get(id).copied() {
+            if let Ok((
+                _,
+                mut text,
+                mut text_font,
+                mut text_color,
+                mut node,
+                mut visibility,
+                damage_label,
+            )) = labels.get_mut(entity)
+            {
+                if damage_label.id == *id {
+                    *text = Text::new(entry.text());
+                    text_font.font_size = entry.current_font_size();
+                    *text_color = TextColor(entry.color());
+                    if let Ok(viewport_position) = viewport {
+                        node.left = px(viewport_position.x);
+                        node.top = px(viewport_position.y);
+                        *visibility = Visibility::Visible;
+                    } else {
+                        *visibility = Visibility::Hidden;
+                    }
+                    continue;
+                }
+            }
+        }
+
+        let mut node = Node {
+            position_type: PositionType::Absolute,
+            ..default()
+        };
+        let mut visibility = Visibility::Hidden;
+        if let Ok(viewport_position) = viewport {
+            node.left = px(viewport_position.x);
+            node.top = px(viewport_position.y);
+            visibility = Visibility::Visible;
+        }
+        let entity = commands
+            .spawn((
+                Text::new(entry.text()),
+                TextFont::from_font_size(entry.current_font_size()).with_font(viewer_font.0.clone()),
+                TextColor(entry.color()),
+                node,
+                visibility,
+                DamageNumberLabel { id: *id },
+            ))
+            .id();
+        visual_state.by_id.insert(*id, entity);
+    }
+
+    let stale_ids: Vec<_> = visual_state
+        .by_id
+        .keys()
+        .copied()
+        .filter(|id| !seen_ids.contains(id))
+        .collect();
+    for id in stale_ids {
+        if let Some(entity) = visual_state.by_id.remove(&id) {
             commands.entity(entity).despawn();
         }
     }
@@ -525,8 +755,11 @@ pub(crate) fn sync_world_visuals(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
+    palette: Res<ViewerPalette>,
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
+    feedback_state: Res<ViewerActorFeedbackState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     mut static_world_state: ResMut<StaticWorldVisualState>,
@@ -549,6 +782,8 @@ pub(crate) fn sync_world_visuals(
             &mut commands,
             &mut meshes,
             &mut materials,
+            &mut ground_materials,
+            &palette,
             &runtime_state,
             &snapshot,
             viewer_state.current_level,
@@ -563,8 +798,10 @@ pub(crate) fn sync_world_visuals(
         &mut commands,
         &mut meshes,
         &mut materials,
+        &palette,
         &runtime_state,
         &motion_state,
+        &feedback_state,
         &snapshot,
         &viewer_state,
         *render_config,
@@ -611,7 +848,10 @@ pub(crate) fn update_occluding_world_visuals(
 }
 
 pub(crate) fn draw_world(
+    time: Res<Time>,
     mut gizmos: Gizmos,
+    palette: Res<ViewerPalette>,
+    style: Res<ViewerStyleProfile>,
     runtime_state: Res<ViewerRuntimeState>,
     settlements: Option<Res<SettlementDefinitions>>,
     motion_state: Res<ViewerActorMotionState>,
@@ -621,14 +861,21 @@ pub(crate) fn draw_world(
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
     let grid_size = snapshot.grid.grid_size;
+    let overlay_mode = render_config.overlay_mode;
+    let pulse = 1.0
+        + (time.elapsed_secs() * style.selection_pulse_speed).sin()
+            * style.selection_pulse_amount;
 
-    draw_grid_lines(
-        &mut gizmos,
-        bounds,
-        viewer_state.current_level,
-        grid_size,
-        render_config.floor_thickness_world,
-    );
+    if overlay_mode != ViewerOverlayMode::Minimal {
+        draw_grid_lines(
+            &mut gizmos,
+            bounds,
+            viewer_state.current_level,
+            grid_size,
+            render_config.floor_thickness_world,
+            effective_grid_line_opacity(*render_config),
+        );
+    }
 
     for actor in snapshot
         .actors
@@ -642,7 +889,7 @@ pub(crate) fn draw_world(
                 grid_size,
                 render_config.floor_thickness_world + OVERLAY_ELEVATION,
                 0.82,
-                Color::srgb(0.36, 0.86, 0.97),
+                palette.current_turn,
             );
         }
 
@@ -653,7 +900,7 @@ pub(crate) fn draw_world(
                 grid_size,
                 render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.0,
                 0.68,
-                Color::srgb(0.98, 0.84, 0.28),
+                palette.interaction_locked,
             );
         }
     }
@@ -675,7 +922,7 @@ pub(crate) fn draw_world(
         gizmos.line(
             Vec3::new(start.x, y, start.z),
             Vec3::new(end.x, y, end.z),
-            Color::srgba(0.96, 0.79, 0.24, 0.75),
+            with_alpha(palette.path, 0.82),
         );
     }
 
@@ -685,39 +932,43 @@ pub(crate) fn draw_world(
     }) {
         let (grid, kind) = grid;
         let color = match kind {
-            HoveredGridOutlineKind::Reachable => Color::srgb(0.96, 0.97, 0.99),
-            HoveredGridOutlineKind::Hostile => Color::srgb(0.94, 0.36, 0.33),
+            HoveredGridOutlineKind::Reachable => palette.hover_walkable,
+            HoveredGridOutlineKind::Hostile => palette.hover_hostile,
         };
         draw_grid_outline(
             &mut gizmos,
             grid,
             grid_size,
             render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.5,
-            0.94,
+            if overlay_mode == ViewerOverlayMode::Minimal {
+                0.88
+            } else {
+                0.94
+            },
             color,
         );
     }
 
-    if viewer_state.is_free_observe() {
-        if let Some(actor) = snapshot
-            .actors
-            .iter()
-            .find(|actor| Some(actor.actor_id) == viewer_state.selected_actor)
-        {
-            let actor_world = actor_visual_world_position(&runtime_state, &motion_state, actor);
-            if actor.side != ActorSide::Player {
-                draw_actor_selection_ring(
-                    &mut gizmos,
-                    actor_world,
-                    actor.grid_position.y,
-                    snapshot.grid.grid_size,
-                    *render_config,
-                    actor_selection_ring_color(actor.side),
-                );
-            }
+    if let Some(actor) = snapshot
+        .actors
+        .iter()
+        .find(|actor| Some(actor.actor_id) == viewer_state.selected_actor)
+    {
+        let actor_world = actor_visual_world_position(&runtime_state, &motion_state, actor);
+        draw_actor_selection_ring(
+            &mut gizmos,
+            actor_world,
+            actor.grid_position.y,
+            snapshot.grid.grid_size,
+            *render_config,
+            actor_selection_ring_color(actor.side, &palette),
+            1.0 + pulse * 0.08,
+        );
+        if overlay_mode == ViewerOverlayMode::AiDebug {
             if let Some(entry) = selected_ai_debug_entry(actor, &runtime_state) {
                 draw_selected_ai_overlay(
                     &mut gizmos,
+                    &palette,
                     &runtime_state,
                     &snapshot,
                     settlements.as_deref(),
@@ -765,6 +1016,8 @@ fn rebuild_static_world(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    ground_materials: &mut Assets<GridGroundMaterial>,
+    palette: &ViewerPalette,
     runtime_state: &ViewerRuntimeState,
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
@@ -775,8 +1028,20 @@ fn rebuild_static_world(
     static_world_state.entities.clear();
     static_world_state.occluders.clear();
 
+    let ground_entity = spawn_ground_plane(
+        commands,
+        meshes,
+        ground_materials,
+        snapshot,
+        current_level,
+        render_config,
+        palette,
+        bounds,
+    );
+    static_world_state.entities.push(ground_entity);
+
     for spec in
-        collect_static_world_box_specs(snapshot, current_level, render_config, bounds, |grid| {
+        collect_static_world_box_specs(snapshot, current_level, render_config, palette, bounds, |grid| {
             runtime_state.runtime.grid_to_world(grid)
         })
     {
@@ -787,6 +1052,7 @@ fn rebuild_static_world(
             spec.size,
             spec.translation,
             spec.color,
+            spec.material_style,
         );
         static_world_state.entities.push(spawned.entity);
         if let Some(kind) = spec.occluder_kind {
@@ -801,40 +1067,13 @@ fn collect_static_world_box_specs(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
     render_config: ViewerRenderConfig,
-    bounds: GridBounds,
+    palette: &ViewerPalette,
+    _bounds: GridBounds,
     mut grid_to_world: impl FnMut(GridCoord) -> game_data::WorldCoord,
 ) -> Vec<StaticWorldBoxSpec> {
     let mut specs = Vec::new();
     let grid_size = snapshot.grid.grid_size;
-    let floor_top =
-        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
-
-    for z in bounds.min_z..=bounds.max_z {
-        for x in bounds.min_x..=bounds.max_x {
-            let grid = GridCoord::new(x, current_level, z);
-            let world = grid_to_world(grid);
-            let tint = if (x + z).rem_euclid(2) == 0 {
-                Color::srgb(0.12, 0.14, 0.17)
-            } else {
-                Color::srgb(0.15, 0.18, 0.22)
-            };
-            specs.push(StaticWorldBoxSpec {
-                size: Vec3::new(
-                    grid_size * 0.96,
-                    render_config.floor_thickness_world,
-                    grid_size * 0.96,
-                ),
-                translation: Vec3::new(
-                    world.x,
-                    level_base_height(current_level, grid_size)
-                        + render_config.floor_thickness_world * 0.5,
-                    world.z,
-                ),
-                color: tint,
-                occluder_kind: None,
-            });
-        }
-    }
+    let floor_top = level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
 
     for cell in snapshot
         .grid
@@ -847,22 +1086,47 @@ fn collect_static_world_box_specs(
         }
 
         let world = grid_to_world(cell.grid);
-        let height = if cell.blocks_movement { 1.0 } else { 0.56 } * grid_size;
+        let noise = cell_style_noise(
+            render_config.object_style_seed.wrapping_add(101),
+            cell.grid.x,
+            cell.grid.z,
+        );
+        let height = if cell.blocks_movement { 0.92 } else { 0.54 } * grid_size;
         let color = if cell.blocks_movement {
-            Color::srgb(0.52, 0.25, 0.22)
+            palette.blocking_cell
         } else {
-            Color::srgb(0.38, 0.42, 0.48)
+            palette.sight_blocker
         };
-        specs.push(StaticWorldBoxSpec {
-            size: Vec3::new(grid_size * 0.78, height, grid_size * 0.78),
-            translation: Vec3::new(world.x, floor_top + height * 0.5, world.z),
-            color,
-            occluder_kind: Some(if cell.blocks_movement {
-                StaticWorldOccluderKind::BlockingCell
-            } else {
-                StaticWorldOccluderKind::SightCell
-            }),
+        let occluder_kind = Some(if cell.blocks_movement {
+            StaticWorldOccluderKind::BlockingCell
+        } else {
+            StaticWorldOccluderKind::SightCell
         });
+        let base_size = grid_size * (0.78 + noise * 0.06);
+        push_box_spec(
+            &mut specs,
+            Vec3::new(grid_size * 0.92, grid_size * 0.09, grid_size * 0.92),
+            Vec3::new(world.x, floor_top + grid_size * 0.045, world.z),
+            lerp_color(color, palette.ground_edge, 0.18),
+            MaterialStyle::StructureAccent,
+            None,
+        );
+        push_box_spec(
+            &mut specs,
+            Vec3::new(base_size, height, grid_size * (0.72 + noise * 0.08)),
+            Vec3::new(world.x, floor_top + height * 0.5, world.z),
+            color,
+            MaterialStyle::Structure,
+            occluder_kind,
+        );
+        push_box_spec(
+            &mut specs,
+            Vec3::new(base_size * 0.62, height * 0.18, base_size * 0.58),
+            Vec3::new(world.x, floor_top + height + height * 0.09, world.z),
+            lighten_color(color, 0.12),
+            MaterialStyle::StructureAccent,
+            None,
+        );
     }
 
     for grid in snapshot
@@ -873,13 +1137,36 @@ fn collect_static_world_box_specs(
         .filter(|grid| grid.y == current_level)
     {
         let world = grid_to_world(grid);
-        let height = grid_size * 1.18;
-        specs.push(StaticWorldBoxSpec {
-            size: Vec3::new(grid_size * 0.7, height, grid_size * 0.7),
-            translation: Vec3::new(world.x, floor_top + height * 0.5, world.z),
-            color: Color::srgb(0.67, 0.21, 0.21),
-            occluder_kind: Some(StaticWorldOccluderKind::StaticObstacle),
-        });
+        let noise =
+            cell_style_noise(render_config.object_style_seed.wrapping_add(211), grid.x, grid.z);
+        let height = grid_size * (1.02 + noise * 0.34);
+        let width = grid_size * (0.62 + noise * 0.12);
+        let depth = grid_size * (0.56 + (1.0 - noise) * 0.14);
+        let color = lerp_color(palette.obstacle, palette.blocking_cell, 0.24);
+        push_box_spec(
+            &mut specs,
+            Vec3::new(grid_size * 0.9, grid_size * 0.1, grid_size * 0.82),
+            Vec3::new(world.x, floor_top + grid_size * 0.05, world.z),
+            lerp_color(color, palette.ground_edge, 0.22),
+            MaterialStyle::StructureAccent,
+            None,
+        );
+        push_box_spec(
+            &mut specs,
+            Vec3::new(width, height, depth),
+            Vec3::new(world.x, floor_top + height * 0.5, world.z),
+            color,
+            MaterialStyle::Structure,
+            Some(StaticWorldOccluderKind::StaticObstacle),
+        );
+        push_box_spec(
+            &mut specs,
+            Vec3::new(width * 0.56, height * 0.18, depth * 0.62),
+            Vec3::new(world.x, floor_top + height + height * 0.09, world.z),
+            lighten_color(color, 0.1),
+            MaterialStyle::StructureAccent,
+            None,
+        );
     }
 
     for object in snapshot
@@ -890,33 +1177,120 @@ fn collect_static_world_box_specs(
     {
         let (center_x, center_z, footprint_width, footprint_depth) =
             occupied_cells_box(&object.occupied_cells, grid_size);
-        let color = map_object_color(object.kind);
-        let (size_x, size_y, size_z) = match object.kind {
-            game_data::MapObjectKind::Building => (
-                footprint_width * 0.94,
-                grid_size * 1.45,
-                footprint_depth * 0.94,
-            ),
+        let anchor_noise = cell_style_noise(
+            render_config.object_style_seed.wrapping_add(409),
+            object.anchor.x,
+            object.anchor.z,
+        );
+        let base_color = map_object_color(object.kind, palette);
+
+        match object.kind {
+            game_data::MapObjectKind::Building => {
+                let body_height = grid_size * (1.08 + anchor_noise * 0.34);
+                let roof_height = grid_size * 0.2;
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(footprint_width * 0.98, grid_size * 0.12, footprint_depth * 0.98),
+                    Vec3::new(center_x, floor_top + grid_size * 0.06, center_z),
+                    darken_color(base_color, 0.12),
+                    MaterialStyle::StructureAccent,
+                    None,
+                );
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(footprint_width * 0.9, body_height, footprint_depth * 0.88),
+                    Vec3::new(center_x, floor_top + body_height * 0.5, center_z),
+                    base_color,
+                    MaterialStyle::Structure,
+                    Some(StaticWorldOccluderKind::MapObject(object.kind)),
+                );
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(footprint_width * 0.78, roof_height, footprint_depth * 0.76),
+                    Vec3::new(center_x, floor_top + body_height + roof_height * 0.5, center_z),
+                    palette.building_top,
+                    MaterialStyle::StructureAccent,
+                    None,
+                );
+            }
             game_data::MapObjectKind::Pickup => {
-                let side = grid_size * 0.3;
-                (side, grid_size * 0.18, side)
+                let plinth_height = grid_size * 0.08;
+                let core_height = grid_size * 0.22;
+                let side = grid_size * 0.28;
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(grid_size * 0.42, plinth_height, grid_size * 0.42),
+                    Vec3::new(center_x, floor_top + plinth_height * 0.5, center_z),
+                    darken_color(base_color, 0.18),
+                    MaterialStyle::UtilityAccent,
+                    None,
+                );
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(side, core_height, side),
+                    Vec3::new(center_x, floor_top + plinth_height + core_height * 0.5, center_z),
+                    base_color,
+                    MaterialStyle::Utility,
+                    Some(StaticWorldOccluderKind::MapObject(object.kind)),
+                );
             }
-            game_data::MapObjectKind::Interactive => (
-                footprint_width.min(grid_size * 0.42),
-                grid_size * 0.86,
-                footprint_depth * 0.82,
-            ),
+            game_data::MapObjectKind::Interactive => {
+                let pillar_height = grid_size * (0.72 + anchor_noise * 0.16);
+                let width = footprint_width.min(grid_size * 0.46);
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(grid_size * 0.52, grid_size * 0.08, grid_size * 0.52),
+                    Vec3::new(center_x, floor_top + grid_size * 0.04, center_z),
+                    darken_color(base_color, 0.16),
+                    MaterialStyle::UtilityAccent,
+                    None,
+                );
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(width.max(0.16), pillar_height, footprint_depth.min(grid_size * 0.42)),
+                    Vec3::new(center_x, floor_top + pillar_height * 0.5, center_z),
+                    base_color,
+                    MaterialStyle::Utility,
+                    Some(StaticWorldOccluderKind::MapObject(object.kind)),
+                );
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(width.max(0.16) * 0.58, grid_size * 0.16, grid_size * 0.22),
+                    Vec3::new(center_x, floor_top + pillar_height + grid_size * 0.08, center_z),
+                    lighten_color(base_color, 0.12),
+                    MaterialStyle::UtilityAccent,
+                    None,
+                );
+            }
             game_data::MapObjectKind::AiSpawn => {
-                let side = grid_size * 0.34;
-                (side, grid_size * 0.42, side)
+                let beacon_height = grid_size * (0.34 + anchor_noise * 0.16);
+                let side = grid_size * 0.28;
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(grid_size * 0.52, grid_size * 0.06, grid_size * 0.52),
+                    Vec3::new(center_x, floor_top + grid_size * 0.03, center_z),
+                    darken_color(base_color, 0.2),
+                    MaterialStyle::UtilityAccent,
+                    None,
+                );
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(side, beacon_height, side),
+                    Vec3::new(center_x, floor_top + beacon_height * 0.5, center_z),
+                    base_color,
+                    MaterialStyle::Utility,
+                    Some(StaticWorldOccluderKind::MapObject(object.kind)),
+                );
+                push_box_spec(
+                    &mut specs,
+                    Vec3::new(side * 0.55, grid_size * 0.16, side * 0.55),
+                    Vec3::new(center_x, floor_top + beacon_height + grid_size * 0.08, center_z),
+                    lighten_color(base_color, 0.18),
+                    MaterialStyle::UtilityAccent,
+                    None,
+                );
             }
-        };
-        specs.push(StaticWorldBoxSpec {
-            size: Vec3::new(size_x.max(0.14), size_y, size_z.max(0.14)),
-            translation: Vec3::new(center_x, floor_top + size_y * 0.5, center_z),
-            color,
-            occluder_kind: Some(StaticWorldOccluderKind::MapObject(object.kind)),
-        });
+        }
     }
 
     specs
@@ -927,8 +1301,10 @@ fn sync_actor_visuals(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    palette: &ViewerPalette,
     runtime_state: &ViewerRuntimeState,
     motion_state: &ViewerActorMotionState,
+    feedback_state: &ViewerActorFeedbackState,
     snapshot: &game_core::SimulationSnapshot,
     viewer_state: &ViewerState,
     render_config: ViewerRenderConfig,
@@ -944,9 +1320,16 @@ fn sync_actor_visuals(
         .filter(|actor| actor.grid_position.y == viewer_state.current_level)
     {
         seen_actor_ids.insert(actor.actor_id);
-        let translation =
-            actor_visual_translation(runtime_state, motion_state, actor, grid_size, render_config);
-        let color = actor_color(actor.side);
+        let translation = actor_visual_translation(
+            runtime_state,
+            motion_state,
+            feedback_state,
+            actor,
+            grid_size,
+            render_config,
+        );
+        let color = actor_color(actor.side, palette);
+        let accent_color = actor_accent_color(actor.side, palette);
 
         if let Some(entity) = actor_visual_state.by_actor.get(&actor.actor_id).copied() {
             if let Ok((_, mut transform, body)) = actor_visuals.get_mut(entity) {
@@ -958,25 +1341,30 @@ fn sync_actor_visuals(
                     if let Some(material) = materials.get_mut(&body.head_material) {
                         material.base_color = actor_head_color(color);
                     }
+                    if let Some(material) = materials.get_mut(&body.accent_material) {
+                        material.base_color = accent_color;
+                    }
                     continue;
                 }
             }
         }
 
-        let body_material = materials.add(StandardMaterial {
-            base_color: color,
-            perceptual_roughness: 0.92,
-            ..default()
-        });
-        let head_material = materials.add(StandardMaterial {
-            base_color: actor_head_color(color),
-            perceptual_roughness: 0.88,
-            ..default()
-        });
+        let body_material = make_material(materials, color, MaterialStyle::CharacterBody);
+        let head_material =
+            make_material(materials, actor_head_color(color), MaterialStyle::CharacterHead);
+        let accent_material =
+            make_material(materials, accent_color, MaterialStyle::CharacterAccent);
+        let shadow_material = make_material(
+            materials,
+            Color::srgba(0.02, 0.025, 0.032, render_config.shadow_opacity_scale * 0.62),
+            MaterialStyle::Shadow,
+        );
         let body_height = render_config.actor_body_length_world;
         let body_width = (render_config.actor_radius_world * 1.65).max(0.18);
         let body_depth = (render_config.actor_radius_world * 1.2).max(0.16);
         let head_radius = (render_config.actor_radius_world * 0.92).max(0.12);
+        let shadow_width = body_width * 1.55;
+        let shadow_depth = body_depth * 1.7;
 
         let entity = commands
             .spawn((
@@ -985,12 +1373,22 @@ fn sync_actor_visuals(
                     actor_id: actor.actor_id,
                     body_material: body_material.clone(),
                     head_material: head_material.clone(),
+                    accent_material: accent_material.clone(),
                 },
             ))
             .with_children(|parent| {
                 parent.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(shadow_width, 0.018, shadow_depth))),
+                    MeshMaterial3d(shadow_material),
+                    Transform::from_xyz(
+                        0.0,
+                        -(render_config.actor_radius_world + body_height * 0.5) + 0.01,
+                        0.0,
+                    ),
+                ));
+                parent.spawn((
                     Mesh3d(meshes.add(Cuboid::new(body_width, body_height, body_depth))),
-                    MeshMaterial3d(body_material),
+                    MeshMaterial3d(body_material.clone()),
                     Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
                 ));
                 parent.spawn((
@@ -1016,22 +1414,166 @@ fn sync_actor_visuals(
     }
 }
 
+fn spawn_ground_plane(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    ground_materials: &mut Assets<GridGroundMaterial>,
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+    palette: &ViewerPalette,
+    bounds: GridBounds,
+) -> Entity {
+    let grid_size = snapshot.grid.grid_size;
+    let width = (bounds.max_x - bounds.min_x + 1).max(1) as f32 * grid_size;
+    let depth = (bounds.max_z - bounds.min_z + 1).max(1) as f32 * grid_size;
+    let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * grid_size * 0.5;
+    let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * grid_size * 0.5;
+    let floor_y =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world * 0.5;
+    let material = ground_materials.add(GridGroundMaterial {
+        base: StandardMaterial {
+            base_color: Color::WHITE,
+            perceptual_roughness: 0.97,
+            reflectance: 0.03,
+            metallic: 0.0,
+            opaque_render_method: OpaqueRendererMethod::Forward,
+            ..default()
+        },
+        extension: GridGroundMaterialExt {
+            world_origin: Vec2::new(bounds.min_x as f32 * grid_size, bounds.min_z as f32 * grid_size),
+            grid_size,
+            line_width: 0.06,
+            variation_strength: render_config.ground_variation_strength,
+            seed: render_config.object_style_seed,
+            dark_color: palette.ground_dark,
+            light_color: palette.ground_light,
+            edge_color: palette.ground_edge,
+        },
+    });
+
+    commands
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::new(
+                width.max(grid_size),
+                render_config.floor_thickness_world.max(0.02),
+                depth.max(grid_size),
+            ))),
+            MeshMaterial3d(material),
+            Transform::from_xyz(center_x, floor_y, center_z),
+        ))
+        .id()
+}
+
+fn push_box_spec(
+    specs: &mut Vec<StaticWorldBoxSpec>,
+    size: Vec3,
+    translation: Vec3,
+    color: Color,
+    material_style: MaterialStyle,
+    occluder_kind: Option<StaticWorldOccluderKind>,
+) {
+    specs.push(StaticWorldBoxSpec {
+        size,
+        translation,
+        color,
+        material_style,
+        occluder_kind,
+    });
+}
+
+fn cell_style_noise(seed: u32, x: i32, z: i32) -> f32 {
+    let mut hash = seed
+        .wrapping_mul(0x9E37_79B9)
+        .wrapping_add((x as u32).wrapping_mul(0x85EB_CA6B))
+        .wrapping_add((z as u32).wrapping_mul(0xC2B2_AE35));
+    hash ^= hash >> 15;
+    hash = hash.wrapping_mul(0x27D4_EB2D);
+    hash ^= hash >> 13;
+    (hash & 0xFFFF) as f32 / 65_535.0
+}
+
+fn lerp_color(a: Color, b: Color, t: f32) -> Color {
+    let a = a.to_srgba();
+    let b = b.to_srgba();
+    let t = t.clamp(0.0, 1.0);
+    Color::srgba(
+        a.red + (b.red - a.red) * t,
+        a.green + (b.green - a.green) * t,
+        a.blue + (b.blue - a.blue) * t,
+        a.alpha + (b.alpha - a.alpha) * t,
+    )
+}
+
+fn lighten_color(color: Color, amount: f32) -> Color {
+    lerp_color(color, Color::srgb(1.0, 1.0, 1.0), amount)
+}
+
+fn darken_color(color: Color, amount: f32) -> Color {
+    lerp_color(color, Color::srgb(0.0, 0.0, 0.0), amount)
+}
+
+fn with_alpha(color: Color, alpha: f32) -> Color {
+    let mut color = color.to_srgba();
+    color.alpha = alpha.clamp(0.0, 1.0);
+    color.into()
+}
+
+fn make_material(
+    materials: &mut Assets<StandardMaterial>,
+    color: Color,
+    style: MaterialStyle,
+) -> Handle<StandardMaterial> {
+    let (perceptual_roughness, reflectance, metallic, alpha_mode, emissive_strength) = match style
+    {
+        MaterialStyle::Structure => (0.88, 0.04, 0.0, AlphaMode::Opaque, 0.0),
+        MaterialStyle::StructureAccent => (0.8, 0.05, 0.0, AlphaMode::Opaque, 0.0),
+        MaterialStyle::Utility => (0.66, 0.16, 0.0, AlphaMode::Opaque, 0.04),
+        MaterialStyle::UtilityAccent => (0.58, 0.2, 0.0, AlphaMode::Opaque, 0.09),
+        MaterialStyle::CharacterBody => (0.84, 0.05, 0.0, AlphaMode::Opaque, 0.0),
+        MaterialStyle::CharacterHead => (0.76, 0.06, 0.0, AlphaMode::Opaque, 0.0),
+        MaterialStyle::CharacterAccent => (0.7, 0.12, 0.0, AlphaMode::Opaque, 0.05),
+        MaterialStyle::Shadow => (1.0, 0.0, 0.0, AlphaMode::Blend, 0.0),
+    };
+    let emissive = color.with_alpha(1.0).to_linear() * emissive_strength;
+
+    materials.add(StandardMaterial {
+        base_color: color,
+        perceptual_roughness,
+        reflectance,
+        metallic,
+        alpha_mode,
+        emissive: emissive.into(),
+        ..default()
+    })
+}
+
+fn effective_grid_line_opacity(render_config: ViewerRenderConfig) -> f32 {
+    match render_config.overlay_mode {
+        ViewerOverlayMode::Minimal => 0.0,
+        ViewerOverlayMode::Gameplay => render_config.grid_line_opacity,
+        ViewerOverlayMode::AiDebug => (render_config.grid_line_opacity * 1.55).clamp(0.0, 0.5),
+    }
+}
+
 fn draw_grid_lines(
     gizmos: &mut Gizmos,
     bounds: crate::geometry::GridBounds,
     current_level: i32,
     grid_size: f32,
     floor_thickness_world: f32,
+    opacity: f32,
 ) {
     let y =
         level_base_height(current_level, grid_size) + floor_thickness_world + GRID_LINE_ELEVATION;
+    let line_color = Color::srgba(0.24, 0.25, 0.23, opacity.clamp(0.0, 1.0));
 
     for x in bounds.min_x..=bounds.max_x + 1 {
         let x_world = x as f32 * grid_size;
         gizmos.line(
             Vec3::new(x_world, y, bounds.min_z as f32 * grid_size),
             Vec3::new(x_world, y, (bounds.max_z + 1) as f32 * grid_size),
-            Color::srgba(0.18, 0.22, 0.28, 0.72),
+            line_color,
         );
     }
 
@@ -1040,7 +1582,7 @@ fn draw_grid_lines(
         gizmos.line(
             Vec3::new(bounds.min_x as f32 * grid_size, y, z_world),
             Vec3::new((bounds.max_x + 1) as f32 * grid_size, y, z_world),
-            Color::srgba(0.18, 0.22, 0.28, 0.72),
+            line_color,
         );
     }
 }
@@ -1078,6 +1620,7 @@ fn draw_actor_selection_ring(
     grid_size: f32,
     render_config: ViewerRenderConfig,
     color: Color,
+    radius_scale: f32,
 ) {
     let y = level_base_height(level, grid_size)
         + render_config.floor_thickness_world
@@ -1087,13 +1630,14 @@ fn draw_actor_selection_ring(
             Vec3::new(world.x, y, world.z),
             Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
         ),
-        grid_size * 0.34,
+        grid_size * 0.34 * radius_scale,
         color,
     );
 }
 
 fn draw_selected_ai_overlay(
     gizmos: &mut Gizmos,
+    palette: &ViewerPalette,
     runtime_state: &ViewerRuntimeState,
     snapshot: &game_core::SimulationSnapshot,
     settlements: Option<&SettlementDefinitions>,
@@ -1114,14 +1658,14 @@ fn draw_selected_ai_overlay(
     {
         let goal_world = runtime_state.runtime.grid_to_world(goal_grid);
         let goal_pos = Vec3::new(goal_world.x, actor_y, goal_world.z);
-        gizmos.line(actor_pos, goal_pos, Color::srgb(0.98, 0.72, 0.26));
+        gizmos.line(actor_pos, goal_pos, palette.ai_goal);
         draw_grid_outline(
             gizmos,
             goal_grid,
             grid_size,
             render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.4,
             0.86,
-            Color::srgb(0.98, 0.72, 0.26),
+            palette.ai_goal,
         );
     }
 
@@ -1137,7 +1681,7 @@ fn draw_selected_ai_overlay(
             grid_size,
             render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.6,
             0.9,
-            Color::srgb(0.2, 0.86, 0.84),
+            palette.ai_anchor,
         );
     }
 
@@ -1154,7 +1698,7 @@ fn draw_selected_ai_overlay(
         gizmos.line(
             actor_pos,
             Vec3::new(reservation_world.x, actor_y, reservation_world.z),
-            Color::srgb(0.6, 0.46, 0.96),
+            palette.ai_reservation,
         );
         draw_grid_outline(
             gizmos,
@@ -1162,7 +1706,7 @@ fn draw_selected_ai_overlay(
             grid_size,
             render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.0,
             0.8,
-            Color::srgb(0.6, 0.46, 0.96),
+            palette.ai_reservation,
         );
     }
 }
@@ -1180,6 +1724,7 @@ fn actor_visual_world_position(
 fn actor_visual_translation(
     runtime_state: &ViewerRuntimeState,
     motion_state: &ViewerActorMotionState,
+    feedback_state: &ViewerActorFeedbackState,
     actor: &game_core::ActorDebugState,
     grid_size: f32,
     render_config: ViewerRenderConfig,
@@ -1188,7 +1733,7 @@ fn actor_visual_translation(
         actor_visual_world_position(runtime_state, motion_state, actor),
         grid_size,
         render_config,
-    )
+    ) + feedback_state.visual_offset(actor.actor_id)
 }
 
 fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
@@ -1281,12 +1826,9 @@ fn spawn_box(
     size: Vec3,
     translation: Vec3,
     color: Color,
+    material_style: MaterialStyle,
 ) -> SpawnedBoxVisual {
-    let material = materials.add(StandardMaterial {
-        base_color: color,
-        perceptual_roughness: 0.94,
-        ..default()
-    });
+    let material = make_material(materials, color, material_style);
     let entity = commands
         .spawn((
             Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
@@ -1363,13 +1905,14 @@ fn restore_all_occluders(
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_visual_world_position, collect_static_world_box_specs, interaction_menu_button_color,
-        interaction_menu_layout, occupied_cells_box, GridBounds, StaticWorldOccluderKind,
-        INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX,
+        actor_visual_translation, actor_visual_world_position, collect_static_world_box_specs,
+        interaction_menu_button_color, interaction_menu_layout, occupied_cells_box, GridBounds,
+        StaticWorldOccluderKind, INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX,
         INTERACTION_MENU_PADDING_PX,
     };
     use crate::state::{
-        InteractionMenuState, ViewerActorMotionState, ViewerRenderConfig, ViewerRuntimeState,
+        InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState, ViewerRenderConfig,
+        ViewerPalette, ViewerRuntimeState,
     };
     use bevy::prelude::*;
     use game_bevy::SettlementDebugSnapshot;
@@ -1414,6 +1957,45 @@ mod tests {
         let world = actor_visual_world_position(&runtime_state, &motion_state, actor);
 
         assert_eq!(world, WorldCoord::new(1.0, 0.5, 0.5));
+    }
+
+    #[test]
+    fn actor_visual_translation_applies_feedback_offset_without_moving_authority() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let actor = snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == handles.player)
+            .expect("player actor should exist");
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let motion_state = ViewerActorMotionState::default();
+        let mut feedback_state = ViewerActorFeedbackState::default();
+        feedback_state.queue_hit_reaction(handles.player);
+        feedback_state.advance(0.03);
+
+        let translated = actor_visual_translation(
+            &runtime_state,
+            &motion_state,
+            &feedback_state,
+            actor,
+            snapshot.grid.grid_size,
+            ViewerRenderConfig::default(),
+        );
+        let baseline = actor_visual_translation(
+            &runtime_state,
+            &motion_state,
+            &ViewerActorFeedbackState::default(),
+            actor,
+            snapshot.grid.grid_size,
+            ViewerRenderConfig::default(),
+        );
+
+        assert_ne!(translated, baseline);
     }
 
     #[test]
@@ -1489,11 +2071,12 @@ mod tests {
     }
 
     #[test]
-    fn static_world_specs_exclude_floor_tiles_from_occluders() {
+    fn static_world_specs_only_register_occluder_geometry_when_ground_is_shader_driven() {
         let specs = collect_static_world_box_specs(
             &snapshot_with_occluders(),
             0,
             ViewerRenderConfig::default(),
+            &ViewerPalette::default(),
             GridBounds {
                 min_x: 0,
                 max_x: 1,
@@ -1503,7 +2086,7 @@ mod tests {
             world_from_grid,
         );
 
-        let floor_count = specs
+        let non_occluder_count = specs
             .iter()
             .filter(|spec| spec.occluder_kind.is_none())
             .count();
@@ -1512,7 +2095,7 @@ mod tests {
             .filter(|spec| spec.occluder_kind.is_some())
             .count();
 
-        assert_eq!(floor_count, 4);
+        assert!(non_occluder_count > 0);
         assert_eq!(occluder_count, 4);
     }
 
@@ -1522,6 +2105,7 @@ mod tests {
             &snapshot_with_occluders(),
             0,
             ViewerRenderConfig::default(),
+            &ViewerPalette::default(),
             GridBounds {
                 min_x: 0,
                 max_x: 1,
@@ -1721,12 +2305,35 @@ pub(crate) fn interaction_menu_button_color(_is_primary: bool, interaction: Inte
     }
 }
 
-fn actor_color(side: ActorSide) -> Color {
+fn should_show_actor_label(
+    render_config: ViewerRenderConfig,
+    viewer_state: &ViewerState,
+    actor: &game_core::ActorDebugState,
+    interaction_locked: bool,
+    hovered_actor_id: Option<ActorId>,
+) -> bool {
+    match render_config.overlay_mode {
+        ViewerOverlayMode::Minimal => {
+            Some(actor.actor_id) == viewer_state.selected_actor
+                || Some(actor.actor_id) == hovered_actor_id
+                || interaction_locked
+        }
+        ViewerOverlayMode::Gameplay => {
+            Some(actor.actor_id) == viewer_state.selected_actor
+                || Some(actor.actor_id) == hovered_actor_id
+                || actor.side == ActorSide::Player
+                || interaction_locked
+        }
+        ViewerOverlayMode::AiDebug => true,
+    }
+}
+
+fn actor_color(side: ActorSide, palette: &ViewerPalette) -> Color {
     match side {
-        ActorSide::Player => Color::srgb(0.28, 0.72, 0.98),
-        ActorSide::Friendly => Color::srgb(0.34, 0.88, 0.47),
-        ActorSide::Hostile => Color::srgb(0.94, 0.36, 0.33),
-        ActorSide::Neutral => Color::srgb(0.78, 0.78, 0.82),
+        ActorSide::Player => palette.player,
+        ActorSide::Friendly => palette.friendly,
+        ActorSide::Hostile => palette.hostile,
+        ActorSide::Neutral => palette.neutral,
     }
 }
 
@@ -1738,19 +2345,28 @@ fn actor_head_color(body_color: Color) -> Color {
     color.into()
 }
 
-fn actor_selection_ring_color(side: ActorSide) -> Color {
-    let mut color = actor_color(side).to_srgba();
+fn actor_accent_color(side: ActorSide, palette: &ViewerPalette) -> Color {
+    match side {
+        ActorSide::Player => lighten_color(palette.player, 0.2),
+        ActorSide::Friendly => lighten_color(palette.friendly, 0.16),
+        ActorSide::Hostile => lighten_color(palette.hostile, 0.12),
+        ActorSide::Neutral => lighten_color(palette.neutral, 0.12),
+    }
+}
+
+fn actor_selection_ring_color(side: ActorSide, palette: &ViewerPalette) -> Color {
+    let mut color = lerp_color(actor_color(side, palette), palette.selection, 0.35).to_srgba();
     color.red = (color.red * 1.15).min(1.0);
     color.green = (color.green * 1.15).min(1.0);
     color.blue = (color.blue * 1.15).min(1.0);
     color.into()
 }
 
-fn map_object_color(kind: game_data::MapObjectKind) -> Color {
+fn map_object_color(kind: game_data::MapObjectKind, palette: &ViewerPalette) -> Color {
     match kind {
-        game_data::MapObjectKind::Building => Color::srgb(0.84, 0.58, 0.28),
-        game_data::MapObjectKind::Pickup => Color::srgb(0.38, 0.85, 0.64),
-        game_data::MapObjectKind::Interactive => Color::srgb(0.35, 0.66, 0.98),
-        game_data::MapObjectKind::AiSpawn => Color::srgb(0.92, 0.38, 0.45),
+        game_data::MapObjectKind::Building => palette.building_base,
+        game_data::MapObjectKind::Pickup => palette.pickup,
+        game_data::MapObjectKind::Interactive => palette.interactive,
+        game_data::MapObjectKind::AiSpawn => palette.ai_spawn,
     }
 }

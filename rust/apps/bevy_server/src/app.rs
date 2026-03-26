@@ -11,7 +11,7 @@ use crate::protocol::{
     ServerProtocolRequest, ServerProtocolResponse,
 };
 use crate::reporting::{report_npc_life_debug_snapshot, report_spawned_characters_and_exit};
-use crate::startup::startup_demo;
+use crate::startup::{advance_map_ai_spawns, startup_demo};
 use game_bevy::{
     load_character_definitions_on_startup, load_effect_definitions_on_startup,
     load_item_definitions_on_startup, load_map_definitions_on_startup,
@@ -20,10 +20,10 @@ use game_bevy::{
     load_settlement_definitions_on_startup, load_shop_definitions_on_startup,
     load_skill_definitions_on_startup, load_skill_tree_definitions_on_startup,
     spawn_characters_from_definition, CharacterDefinitionPath, CharacterSpawnRejected,
-    EffectDefinitionPath, ItemDefinitionPath, MapDefinitionPath, NpcLifePlugin,
-    OverworldDefinitionPath, QuestDefinitionPath, RecipeDefinitionPath, RuntimeStartupConfigPath,
-    SettlementDefinitionPath, SettlementSimulationPlugin, ShopDefinitionPath, SkillDefinitionPath,
-    SkillTreeDefinitionPath, SpawnCharacterRequest,
+    EffectDefinitionPath, ItemDefinitionPath, MapAiSpawnRuntimeState, MapDefinitionPath,
+    NpcLifePlugin, OverworldDefinitionPath, QuestDefinitionPath, RecipeDefinitionPath,
+    RuntimeStartupConfigPath, SettlementDefinitionPath, SettlementSimulationPlugin,
+    ShopDefinitionPath, SkillDefinitionPath, SkillTreeDefinitionPath, SpawnCharacterRequest,
 };
 use game_core::GameCorePlugin;
 use game_data::GameDataPlugin;
@@ -51,6 +51,7 @@ impl Plugin for ServerAppPlugin {
             .insert_resource(ShopDefinitionPath::default())
             .insert_resource(RuntimeStartupConfigPath::default())
             .insert_resource(NpcDebugReportState::default())
+            .insert_resource(MapAiSpawnRuntimeState::default())
             .insert_resource(RuntimeSnapshotStore::default())
             .insert_resource(RuntimeProtocolPushState::default())
             .insert_resource(RuntimeProtocolSequence::default())
@@ -93,6 +94,7 @@ impl Plugin for ServerAppPlugin {
                     emit_runtime_protocol_events,
                     drain_protocol_responses,
                     spawn_characters_from_definition,
+                    advance_map_ai_spawns,
                     report_npc_life_debug_snapshot,
                     report_spawned_characters_and_exit,
                 )

@@ -1,7 +1,7 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { MAP_EDITOR_WINDOW_LABEL } from "../modules/maps/mapWindowing";
 import { SETTINGS_WINDOW_LABEL, isEditorSettingsSection } from "../modules/settings/settingsWindowing";
-import type { EditorSettingsSection } from "../types";
+import type { EditorSettingsSection, SpatialDocumentType } from "../types";
 import { isTauriRuntime } from "./tauri";
 
 export type EditorSurface = "main" | "map-editor" | "settings";
@@ -30,6 +30,11 @@ export function getRequestedDocumentKey(search = ""): string | null {
   const params = new URLSearchParams(search);
   const documentKey = params.get("documentKey")?.trim();
   return documentKey ? documentKey : null;
+}
+
+export function getRequestedDocumentType(search = ""): SpatialDocumentType {
+  const params = new URLSearchParams(search);
+  return params.get("documentType") === "overworld" ? "overworld" : "map";
 }
 
 export function getRequestedSettingsSection(search = ""): EditorSettingsSection {

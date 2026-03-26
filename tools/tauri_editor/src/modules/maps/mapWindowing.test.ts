@@ -59,8 +59,8 @@ describe("mapWindowing", () => {
 
   it("builds a map-editor URL with a document key", async () => {
     const { buildMapEditorWindowUrl } = await import("./mapWindowing");
-    expect(buildMapEditorWindowUrl("survivor_outpost_01_grid")).toBe(
-      "/?surface=map-editor&documentKey=survivor_outpost_01_grid",
+    expect(buildMapEditorWindowUrl("map", "survivor_outpost_01_grid")).toBe(
+      "/?surface=map-editor&documentType=map&documentKey=survivor_outpost_01_grid",
     );
   });
 
@@ -71,7 +71,7 @@ describe("mapWindowing", () => {
     });
 
     const { MAP_EDITOR_OPEN_DOCUMENT_EVENT, openOrFocusMapEditor } = await import("./mapWindowing");
-    await openOrFocusMapEditor("survivor_outpost_01_grid");
+    await openOrFocusMapEditor("map", "survivor_outpost_01_grid");
 
     expect(createdWindows).toHaveLength(0);
     expect(setFocusMock).toHaveBeenCalledTimes(1);
@@ -79,6 +79,7 @@ describe("mapWindowing", () => {
       "map-editor",
       MAP_EDITOR_OPEN_DOCUMENT_EVENT,
       {
+        documentType: "map",
         documentKey: "survivor_outpost_01_grid",
       },
     );
@@ -88,7 +89,7 @@ describe("mapWindowing", () => {
     getByLabelMock.mockResolvedValue(null);
 
     const { openOrFocusMapEditor } = await import("./mapWindowing");
-    await openOrFocusMapEditor("survivor_outpost_01_grid");
+    await openOrFocusMapEditor("map", "survivor_outpost_01_grid");
 
     expect(createdWindows).toHaveLength(1);
     expect(createdWindows[0]).toMatchObject({

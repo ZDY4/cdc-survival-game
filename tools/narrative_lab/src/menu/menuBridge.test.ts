@@ -63,7 +63,7 @@ describe("menuBridge", () => {
     );
 
     expect(onStatusChange).toHaveBeenCalledWith(
-      "New Project Brief is unavailable in the current context.",
+      "新建项目简介 在当前上下文中不可用。",
     );
   });
 
@@ -77,7 +77,7 @@ describe("menuBridge", () => {
       "main",
     );
 
-    expect(onStatusChange).toHaveBeenCalledWith("New is not supported in this window.");
+    expect(onStatusChange).toHaveBeenCalledWith("新建 在此窗口中不受支持。");
   });
 
   it("reports execution errors to the status bar", async () => {
@@ -90,6 +90,6 @@ describe("menuBridge", () => {
       "main",
     );
 
-    expect(onStatusChange).toHaveBeenCalledWith("AI Generate failed: boom");
+    expect(onStatusChange).toHaveBeenCalledWith("AI 生成 执行失败：boom");
   });
 });

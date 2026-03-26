@@ -315,20 +315,21 @@ export function QuestWorkspace({
     [documents],
   );
 
+  const validationTarget = selectedDocument;
+
   useEffect(() => {
-    const selected = documents.find((document) => document.documentKey === selectedKey);
-    if (!selected || !canPersist) {
+    if (!validationTarget || !canPersist) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       void invokeCommand<ValidationIssue[]>("validate_quest_document", {
-        quest: selected.quest,
+        quest: validationTarget.quest,
       })
         .then((issues) => {
           setDocuments((current) =>
             current.map((document) =>
-              document.documentKey === selected.documentKey
+              document.documentKey === validationTarget.documentKey
                 ? { ...document, validation: issues }
                 : document,
             ),
@@ -338,7 +339,7 @@ export function QuestWorkspace({
     }, 220);
 
     return () => window.clearTimeout(timeoutId);
-  }, [canPersist, documents, selectedKey]);
+  }, [canPersist, validationTarget?.documentKey, validationTarget?.quest]);
 
   function updateSelectedQuest(transform: (quest: QuestData) => QuestData) {
     setDocuments((current) =>

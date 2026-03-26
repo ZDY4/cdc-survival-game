@@ -2,6 +2,7 @@ import type {
   MapAiSpawnProps,
   MapBuildingProps,
   MapDefinition,
+  MapEntryPointDefinition,
   MapInteractiveProps,
   MapObjectDefinition,
   MapObjectFootprint,
@@ -52,6 +53,13 @@ export function createDraftMap(nextId: string): MapDefinition {
       {
         y: 0,
         cells: [],
+      },
+    ],
+    entry_points: [
+      {
+        id: "default_entry",
+        grid: { x: 0, y: 0, z: 0 },
+        facing: null,
       },
     ],
     objects: [],
@@ -121,6 +129,12 @@ export function normalizeMapDocument(map: MapDefinition): MapDefinition {
   const objects = [...(map.objects ?? [])]
     .map((object) => normalizeObject(object))
     .sort((left, right) => left.object_id.localeCompare(right.object_id));
+  const entryPoints = [...(map.entry_points ?? [])]
+    .map((entryPoint) => normalizeEntryPoint(entryPoint))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const uniqueEntryPoints = entryPoints.filter((entryPoint, index, collection) => {
+    return collection.findIndex((candidate) => candidate.id === entryPoint.id) === index;
+  });
 
   return {
     id: String(map.id ?? "").trim(),
@@ -134,6 +148,7 @@ export function normalizeMapDocument(map: MapDefinition): MapDefinition {
         ? Math.floor(map.default_level)
         : 0,
     levels,
+    entry_points: uniqueEntryPoints,
     objects,
   };
 }
@@ -143,7 +158,7 @@ export function getMapDirtyState(map: MapDefinition, savedSnapshot: string): boo
 }
 
 export function summarizeMap(map: MapDefinition): string {
-  return `${map.size.width}x${map.size.height} · ${map.levels.length} levels · ${map.objects.length} objects`;
+  return `${map.size.width}x${map.size.height} · ${map.levels.length} levels · ${map.entry_points.length} entry points · ${map.objects.length} objects`;
 }
 
 export function getObjectsAtCell(map: MapDefinition, grid: GridPoint): MapObjectDefinition[] {
@@ -351,6 +366,22 @@ function normalizeObject(object: MapObjectDefinition): MapObjectDefinition {
         : undefined,
       ai_spawn: object.props?.ai_spawn ? normalizeAiSpawnProps(object.props.ai_spawn) : undefined,
     },
+  };
+}
+
+function normalizeEntryPoint(entryPoint: MapEntryPointDefinition): MapEntryPointDefinition {
+  return {
+    ...entryPoint,
+    id: String(entryPoint.id ?? "").trim(),
+    grid: {
+      x: Math.floor(entryPoint.grid?.x ?? 0),
+      y: Math.floor(entryPoint.grid?.y ?? 0),
+      z: Math.floor(entryPoint.grid?.z ?? 0),
+    },
+    facing:
+      entryPoint.facing === null || entryPoint.facing === undefined
+        ? null
+        : String(entryPoint.facing),
   };
 }
 

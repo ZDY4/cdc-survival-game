@@ -106,8 +106,34 @@ export function registerEditorMenuCommands(
 
 export function useRegisterEditorMenuCommands(commands: EditorMenuCommandMap) {
   const sourceIdRef = useRef(`editor-menu-source-${nextSourceId++}`);
+  const registeredRef = useRef(false);
 
-  useEffect(() => registerEditorMenuCommands(sourceIdRef.current, commands), [commands]);
+  useEffect(() => {
+    const sourceId = sourceIdRef.current;
+    if (!registeredRef.current) {
+      logEditorMenuDebug("info", "[editor-menu] register command source", {
+        sourceId,
+        commandIds: getRegisteredCommandIds(commands),
+        totalBefore: commandRegistry.size,
+      });
+      registeredRef.current = true;
+    }
+    commandRegistry.set(sourceId, commands);
+  }, [commands]);
+
+  useEffect(
+    () => () => {
+      const sourceId = sourceIdRef.current;
+      if (registeredRef.current) {
+        logEditorMenuDebug("info", "[editor-menu] unregister command source", {
+          sourceId,
+          totalBefore: commandRegistry.size,
+        });
+      }
+      commandRegistry.delete(sourceId);
+    },
+    [],
+  );
 }
 
 export function clearEditorMenuCommandRegistryForTests() {

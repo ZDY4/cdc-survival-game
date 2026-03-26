@@ -5,9 +5,8 @@ use game_data::{ActorId, ActorSide, InteractionOptionId, InteractionPrompt, Inte
 
 use crate::dialogue::{advance_dialogue, apply_interaction_result, current_dialogue_node};
 use crate::geometry::{
-    actor_at_grid, camera_world_distance, clamp_camera_pan_offset, cycle_level, grid_bounds,
-    just_pressed_hud_page, level_base_height, map_object_at_grid, pick_grid_from_ray,
-    visible_world_footprint,
+    actor_at_grid, camera_pan_delta_from_ground_drag, clamp_camera_pan_offset, cycle_level,
+    grid_bounds, just_pressed_hud_page, level_base_height, map_object_at_grid, pick_grid_from_ray,
 };
 use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
@@ -15,6 +14,85 @@ use crate::state::{
     InteractionMenuButton, InteractionMenuState, ViewerCamera, ViewerControlMode, ViewerHudPage,
     ViewerRenderConfig, ViewerRuntimeState, ViewerState,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PostCancelTurnPolicy {
+    KeepCurrentTurn,
+    EndTurnAfterStop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CancelMovementContext {
+    KeyboardShortcut,
+    EmptyGroundClick,
+    TargetClick,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CancelMovementOutcome {
+    cancelled: bool,
+    post_cancel_turn_policy: PostCancelTurnPolicy,
+}
+
+impl CancelMovementOutcome {
+    fn not_cancelled() -> Self {
+        Self {
+            cancelled: false,
+            post_cancel_turn_policy: PostCancelTurnPolicy::KeepCurrentTurn,
+        }
+    }
+
+    fn cancelled(post_cancel_turn_policy: PostCancelTurnPolicy) -> Self {
+        Self {
+            cancelled: true,
+            post_cancel_turn_policy,
+        }
+    }
+
+    fn should_auto_end_turn_after_stop(self) -> bool {
+        self.cancelled
+            && matches!(
+                self.post_cancel_turn_policy,
+                PostCancelTurnPolicy::EndTurnAfterStop
+            )
+    }
+}
+
+fn post_cancel_turn_policy_for_context(
+    context: CancelMovementContext,
+    in_combat: bool,
+) -> PostCancelTurnPolicy {
+    if in_combat {
+        return PostCancelTurnPolicy::KeepCurrentTurn;
+    }
+
+    match context {
+        CancelMovementContext::KeyboardShortcut | CancelMovementContext::EmptyGroundClick => {
+            PostCancelTurnPolicy::EndTurnAfterStop
+        }
+        CancelMovementContext::TargetClick => PostCancelTurnPolicy::KeepCurrentTurn,
+    }
+}
+
+fn request_cancel_pending_movement(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    context: CancelMovementContext,
+    in_combat: bool,
+) -> CancelMovementOutcome {
+    let cancelled = cancel_pending_movement(runtime_state, viewer_state);
+    let outcome = if cancelled {
+        CancelMovementOutcome::cancelled(post_cancel_turn_policy_for_context(context, in_combat))
+    } else {
+        CancelMovementOutcome::not_cancelled()
+    };
+    viewer_state.auto_end_turn_after_stop = outcome.should_auto_end_turn_after_stop();
+    outcome
+}
+
+fn clear_pending_post_cancel_turn_policy(viewer_state: &mut ViewerState) {
+    viewer_state.auto_end_turn_after_stop = false;
+}
 
 pub(crate) fn handle_keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
@@ -85,6 +163,11 @@ pub(crate) fn handle_keyboard_input(
         } else {
             "hud: hidden".to_string()
         };
+    }
+
+    if keys.just_pressed(KeyCode::KeyV) {
+        render_config.overlay_mode = render_config.overlay_mode.next();
+        viewer_state.status_line = format!("overlay: {}", render_config.overlay_mode.label());
     }
 
     if keys.just_pressed(KeyCode::Slash) {
@@ -215,7 +298,14 @@ pub(crate) fn handle_keyboard_input(
             viewer_state.status_line = "free observe: player commands disabled".to_string();
             return;
         }
-        if !cancel_pending_movement(&mut runtime_state, &mut viewer_state) {
+        let in_combat = runtime_state.runtime.snapshot().combat.in_combat;
+        let cancel_outcome = request_cancel_pending_movement(
+            &mut runtime_state,
+            &mut viewer_state,
+            CancelMovementContext::KeyboardShortcut,
+            in_combat,
+        );
+        if !cancel_outcome.cancelled {
             submit_end_turn(&mut runtime_state, &mut viewer_state);
         }
     } else if keys.pressed(KeyCode::Space) {
@@ -269,6 +359,7 @@ pub(crate) fn handle_mouse_wheel_zoom(
 
 pub(crate) fn handle_camera_pan(
     window: Single<&Window>,
+    camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
     runtime_state: Res<ViewerRuntimeState>,
     render_config: Res<ViewerRenderConfig>,
@@ -290,28 +381,25 @@ pub(crate) fn handle_camera_pan(
     };
 
     if let Some(previous_cursor) = viewer_state.camera_drag_cursor.replace(cursor_position) {
+        let (camera, camera_transform) = *camera_query;
+        let camera_transform = GlobalTransform::from(*camera_transform);
         let snapshot = runtime_state.runtime.snapshot();
         let bounds = grid_bounds(&snapshot, viewer_state.current_level);
-        let camera_distance = camera_world_distance(
-            bounds,
-            window.width(),
-            window.height(),
-            snapshot.grid.grid_size,
-            *render_config,
-        );
-        let visible_world = visible_world_footprint(
-            window.width(),
-            window.height(),
-            camera_distance,
-            *render_config,
-        );
-        let world_per_pixel_x = visible_world.x / window.width().max(1.0);
-        let world_per_pixel_z = visible_world.y / window.height().max(1.0);
+        let plane_height = level_base_height(viewer_state.current_level, snapshot.grid.grid_size)
+            + render_config.floor_thickness_world;
+        let Ok(previous_ray) = camera.viewport_to_world(&camera_transform, previous_cursor) else {
+            return;
+        };
+        let Ok(current_ray) = camera.viewport_to_world(&camera_transform, cursor_position) else {
+            return;
+        };
+        let Some(pan_delta) =
+            camera_pan_delta_from_ground_drag(previous_ray, current_ray, plane_height)
+        else {
+            return;
+        };
 
-        viewer_state.camera_pan_offset.x +=
-            (previous_cursor.x - cursor_position.x) * world_per_pixel_x;
-        viewer_state.camera_pan_offset.y +=
-            (cursor_position.y - previous_cursor.y) * world_per_pixel_z;
+        viewer_state.camera_pan_offset += pan_delta;
         viewer_state.camera_pan_offset = clamp_camera_pan_offset(
             bounds,
             snapshot.grid.grid_size,
@@ -419,8 +507,20 @@ pub(crate) fn handle_mouse_input(
             return;
         }
 
-        let cancelled_movement = cancel_pending_movement(&mut runtime_state, &mut viewer_state);
-        if cancelled_movement && actor_at_cursor.is_none() && map_object_at_cursor.is_none() {
+        let cancel_context = if actor_at_cursor.is_none() && map_object_at_cursor.is_none() {
+            CancelMovementContext::EmptyGroundClick
+        } else {
+            CancelMovementContext::TargetClick
+        };
+        let cancel_outcome = request_cancel_pending_movement(
+            &mut runtime_state,
+            &mut viewer_state,
+            cancel_context,
+            snapshot.combat.in_combat,
+        );
+        if cancel_outcome.cancelled
+            && matches!(cancel_context, CancelMovementContext::EmptyGroundClick)
+        {
             viewer_state.interaction_menu = None;
             return;
         }
@@ -453,6 +553,7 @@ pub(crate) fn handle_mouse_input(
                 "mouse_primary",
             );
         } else if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
+            clear_pending_post_cancel_turn_policy(&mut viewer_state);
             if !runtime_state.runtime.is_grid_in_bounds(grid) {
                 viewer_state.status_line = format!(
                     "move: target out of bounds ({}, {}, {})",
@@ -748,4 +849,120 @@ fn interaction_target_name(viewer_state: &ViewerState, target_id: &InteractionTa
         .filter(|prompt| &prompt.target_id == target_id)
         .map(|prompt| prompt.target_name.clone())
         .unwrap_or_else(|| format!("{target_id:?}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        clear_pending_post_cancel_turn_policy, post_cancel_turn_policy_for_context,
+        request_cancel_pending_movement, CancelMovementContext, PostCancelTurnPolicy,
+    };
+    use crate::state::{ViewerRuntimeState, ViewerState};
+    use game_bevy::SettlementDebugSnapshot;
+    use game_core::create_demo_runtime;
+    use game_data::{ActorSide, GridCoord};
+
+    #[test]
+    fn keyboard_cancel_requests_auto_end_turn_out_of_combat() {
+        assert_eq!(
+            post_cancel_turn_policy_for_context(CancelMovementContext::KeyboardShortcut, false),
+            PostCancelTurnPolicy::EndTurnAfterStop
+        );
+    }
+
+    #[test]
+    fn empty_ground_cancel_requests_auto_end_turn_out_of_combat() {
+        assert_eq!(
+            post_cancel_turn_policy_for_context(CancelMovementContext::EmptyGroundClick, false),
+            PostCancelTurnPolicy::EndTurnAfterStop
+        );
+    }
+
+    #[test]
+    fn target_click_cancel_keeps_turn_out_of_combat() {
+        assert_eq!(
+            post_cancel_turn_policy_for_context(CancelMovementContext::TargetClick, false),
+            PostCancelTurnPolicy::KeepCurrentTurn
+        );
+    }
+
+    #[test]
+    fn combat_cancel_never_requests_auto_end_turn() {
+        assert_eq!(
+            post_cancel_turn_policy_for_context(CancelMovementContext::KeyboardShortcut, true),
+            PostCancelTurnPolicy::KeepCurrentTurn
+        );
+        assert_eq!(
+            post_cancel_turn_policy_for_context(CancelMovementContext::EmptyGroundClick, true),
+            PostCancelTurnPolicy::KeepCurrentTurn
+        );
+    }
+
+    #[test]
+    fn request_cancel_pending_movement_sets_auto_end_turn_for_keyboard_cancel() {
+        let (mut runtime, handles) = create_demo_runtime();
+        runtime
+            .issue_actor_move(handles.player, GridCoord::new(0, 0, 2))
+            .expect("path should be planned");
+        let mut runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(handles.player, ActorSide::Player);
+
+        let outcome = request_cancel_pending_movement(
+            &mut runtime_state,
+            &mut viewer_state,
+            CancelMovementContext::KeyboardShortcut,
+            false,
+        );
+
+        assert!(outcome.cancelled);
+        assert_eq!(
+            outcome.post_cancel_turn_policy,
+            PostCancelTurnPolicy::EndTurnAfterStop
+        );
+        assert!(viewer_state.auto_end_turn_after_stop);
+    }
+
+    #[test]
+    fn request_cancel_pending_movement_keeps_turn_for_target_click() {
+        let (mut runtime, handles) = create_demo_runtime();
+        runtime
+            .issue_actor_move(handles.player, GridCoord::new(0, 0, 2))
+            .expect("path should be planned");
+        let mut runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(handles.player, ActorSide::Player);
+
+        let outcome = request_cancel_pending_movement(
+            &mut runtime_state,
+            &mut viewer_state,
+            CancelMovementContext::TargetClick,
+            false,
+        );
+
+        assert!(outcome.cancelled);
+        assert_eq!(
+            outcome.post_cancel_turn_policy,
+            PostCancelTurnPolicy::KeepCurrentTurn
+        );
+        assert!(!viewer_state.auto_end_turn_after_stop);
+    }
+
+    #[test]
+    fn clear_pending_post_cancel_turn_policy_resets_state_for_new_move() {
+        let mut viewer_state = ViewerState::default();
+        viewer_state.auto_end_turn_after_stop = true;
+
+        clear_pending_post_cancel_turn_policy(&mut viewer_state);
+
+        assert!(!viewer_state.auto_end_turn_after_stop);
+    }
 }

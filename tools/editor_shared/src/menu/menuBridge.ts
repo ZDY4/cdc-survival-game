@@ -46,15 +46,15 @@ export async function handleEditorMenuCommand(
       const label = formatEditorMenuCommandLabel(commandId);
       onStatusChange(
         result.reason === "disabled"
-          ? `${label} is unavailable in the current context.`
-          : `${label} is not supported in this window.`,
+          ? `${label} 在当前上下文中不可用。`
+          : `${label} 在此窗口中不受支持。`,
       );
     }
 
     return result;
   } catch (error) {
     const formattedError = formatError(error);
-    onStatusChange(`${formatEditorMenuCommandLabel(commandId)} failed: ${formattedError}`);
+    onStatusChange(`${formatEditorMenuCommandLabel(commandId)} 执行失败：${formattedError}`);
     logEditorMenuDebug("error", "[editor-menu] command execution failed", {
       windowLabel,
       commandId,

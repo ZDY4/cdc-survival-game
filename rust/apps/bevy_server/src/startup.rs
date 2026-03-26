@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use crate::config::{EconomySmokeReport, ServerConfig, ServerSimulationRuntime};
 use game_bevy::bootstrap::build_default_startup_seed;
 use game_bevy::{
-    build_runtime_from_seed, CharacterDefinitions, EffectDefinitions, ItemDefinitions,
-    MapDefinitions, OverworldDefinitions, QuestDefinitions, RecipeDefinitions,
-    RuntimeStartupConfig, ShopDefinitions, SkillDefinitions, SkillTreeDefinitions,
-    SpawnCharacterRequest,
+    advance_map_ai_spawn_runtime, build_runtime_from_seed, CharacterDefinitions,
+    EffectDefinitions, ItemDefinitions, MapAiSpawnRuntimeState, MapDefinitions,
+    OverworldDefinitions, QuestDefinitions, RecipeDefinitions, RuntimeStartupConfig,
+    ShopDefinitions, SkillDefinitions, SkillTreeDefinitions, SpawnCharacterRequest,
 };
 use game_core::SimulationRuntime;
 use game_data::{load_dialogue_library, load_dialogue_rule_library, CharacterId, GridCoord};
@@ -28,7 +28,7 @@ pub fn startup_demo(
     startup_config: Res<RuntimeStartupConfig>,
     mut requests: MessageWriter<SpawnCharacterRequest>,
 ) {
-    let seed = build_default_startup_seed(&maps.0, startup_config.startup_map.clone());
+    let seed = build_default_startup_seed(&maps.0, &overworld.0, startup_config.startup_map.clone());
 
     println!(
         "bevy_server booted with headless loop at {} Hz",
@@ -183,6 +183,23 @@ pub fn startup_demo(
         println!("queued {next_spawn_index} life-enabled npc spawns for AI debug visibility");
     }
     println!("startup queued total spawn requests={total_requests}");
+}
+
+pub fn advance_map_ai_spawns(
+    config: Res<ServerConfig>,
+    definitions: Res<CharacterDefinitions>,
+    maps: Res<MapDefinitions>,
+    mut spawn_state: ResMut<MapAiSpawnRuntimeState>,
+    mut runtime: ResMut<ServerSimulationRuntime>,
+) {
+    let delta_seconds = 1.0 / f32::from(config.tick_rate_hz.max(1));
+    advance_map_ai_spawn_runtime(
+        &mut spawn_state,
+        &mut runtime.0,
+        &definitions.0,
+        &maps.0,
+        delta_seconds,
+    );
 }
 
 pub fn run_economy_smoke_demo(

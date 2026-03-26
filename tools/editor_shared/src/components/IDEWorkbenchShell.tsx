@@ -3,7 +3,7 @@ import {
   useMemo,
   useRef,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { Badge } from "./Badge";
@@ -74,7 +74,7 @@ export function IDEWorkbenchShell({
   workspaceLabel,
   runtimeLabel,
   topbarSearchValue = "",
-  topbarSearchPlaceholder = "Search workspace",
+  topbarSearchPlaceholder = "搜索工作区",
   onTopbarSearchChange,
   onOpenQuickOpen,
   onOpenCommandPalette,
@@ -116,7 +116,7 @@ export function IDEWorkbenchShell({
       document.body.style.userSelect = "";
     }
 
-    function handleResize(event: MouseEvent) {
+    function handleResize(event: PointerEvent) {
       const resizeState = resizeStateRef.current;
       if (!resizeState) {
         return;
@@ -138,12 +138,14 @@ export function IDEWorkbenchShell({
       onBottomPanelHeightChange(Math.max(180, Math.min(440, nextHeight)));
     }
 
-    window.addEventListener("mousemove", handleResize);
-    window.addEventListener("mouseup", stopResize);
+    window.addEventListener("pointermove", handleResize);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
 
     return () => {
-      window.removeEventListener("mousemove", handleResize);
-      window.removeEventListener("mouseup", stopResize);
+      window.removeEventListener("pointermove", handleResize);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
       stopResize();
     };
   }, [onBottomPanelHeightChange, onLeftSidebarWidthChange, onRightSidebarWidthChange]);
@@ -158,8 +160,12 @@ export function IDEWorkbenchShell({
     [bottomPanelHeight, leftSidebarWidth, rightSidebarWidth],
   );
 
-  function startResize(axis: ResizeAxis, event: ReactMouseEvent<HTMLButtonElement>) {
+  function startResize(axis: ResizeAxis, event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) {
+      return;
+    }
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     resizeStateRef.current = {
       axis,
       startX: event.clientX,
@@ -206,13 +212,15 @@ export function IDEWorkbenchShell({
 
         <div className="ide-topbar-actions">
           <button type="button" className="toolbar-button" onClick={onToggleLeftSidebar}>
-            Explorer
+            <span className="toolbar-button-main">资源</span>
           </button>
           <button type="button" className="toolbar-button" onClick={onOpenQuickOpen}>
-            Quick Open
+            <span className="toolbar-button-main">快速打开</span>
+            <span className="toolbar-button-hint">Ctrl+P</span>
           </button>
           <button type="button" className="toolbar-button" onClick={onOpenCommandPalette}>
-            Commands
+            <span className="toolbar-button-main">命令</span>
+            <span className="toolbar-button-hint">Ctrl+Shift+P</span>
           </button>
           {topbarActions}
           <Badge tone="accent">{runtimeLabel}</Badge>
@@ -243,9 +251,9 @@ export function IDEWorkbenchShell({
         <button
           type="button"
           className="ide-divider ide-divider-vertical"
-          onMouseDown={(event) => startResize("left", event)}
-          aria-label="Resize left sidebar"
-          title="Drag to resize explorer"
+          onPointerDown={(event) => startResize("left", event)}
+          aria-label="调整左侧边栏大小"
+          title="拖动以调整资源栏宽度"
         />
 
         <main className="ide-main-column">
@@ -254,9 +262,9 @@ export function IDEWorkbenchShell({
           <button
             type="button"
             className="ide-divider ide-divider-horizontal"
-            onMouseDown={(event) => startResize("bottom", event)}
-            aria-label="Resize bottom panel"
-            title="Drag to resize bottom panel"
+            onPointerDown={(event) => startResize("bottom", event)}
+            aria-label="调整底部面板大小"
+            title="拖动以调整底部面板高度"
           />
 
           <section className="ide-bottom-panel">{bottomPanel}</section>
@@ -265,9 +273,9 @@ export function IDEWorkbenchShell({
         <button
           type="button"
           className="ide-divider ide-divider-vertical"
-          onMouseDown={(event) => startResize("right", event)}
-          aria-label="Resize right sidebar"
-          title="Drag to resize inspector"
+          onPointerDown={(event) => startResize("right", event)}
+          aria-label="调整右侧边栏大小"
+          title="拖动以调整检查器宽度"
         />
 
         <aside className="ide-right-sidebar">{rightSidebar}</aside>
@@ -277,8 +285,8 @@ export function IDEWorkbenchShell({
             type="button"
             className="ide-right-rail-toggle"
             onClick={onToggleRightSidebar}
-            aria-label={rightSidebarVisible ? "Collapse right sidebar" : "Expand right sidebar"}
-            title={rightSidebarVisible ? "Collapse right sidebar" : "Expand right sidebar"}
+            aria-label={rightSidebarVisible ? "收起右侧边栏" : "展开右侧边栏"}
+            title={rightSidebarVisible ? "收起右侧边栏" : "展开右侧边栏"}
           >
             {rightSidebarVisible ? "<" : ">"}
           </button>
@@ -298,7 +306,7 @@ export function IDEWorkbenchShell({
               </Badge>
             ))}
             <button type="button" className="toolbar-button ide-statusbar-toggle" onClick={onToggleBottomPanel}>
-              {bottomPanelVisible ? "Hide Panel" : "Show Panel"}
+              {bottomPanelVisible ? "隐藏面板" : "显示面板"}
             </button>
           </div>
         </footer>

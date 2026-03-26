@@ -1,9 +1,8 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use game_data::{
-    ActorId, GridCoord, MapDefinition, OverworldDefinition, OverworldEdgeDefinition,
-    OverworldLocationDefinition, OverworldLocationKind, WorldMode,
+    ActorId, GridCoord, MapDefinition, OverworldDefinition, OverworldLocationDefinition,
+    OverworldLocationKind, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -84,23 +83,22 @@ pub fn compute_location_route(
     definition: &OverworldDefinition,
     actor_id: ActorId,
     from_location_id: &str,
+    from_cell: GridCoord,
     to_location_id: &str,
 ) -> Result<OverworldRouteSnapshot, String> {
-    if from_location_id.trim().is_empty() || to_location_id.trim().is_empty() {
+    if to_location_id.trim().is_empty() {
         return Err("missing_overworld_location".to_string());
     }
-    let from_location = location_by_id(definition, from_location_id)
-        .ok_or_else(|| format!("unknown_location:{from_location_id}"))?;
     let to_location = location_by_id(definition, to_location_id)
         .ok_or_else(|| format!("unknown_location:{to_location_id}"))?;
 
-    if from_location_id == to_location_id {
+    if from_cell == to_location.overworld_cell {
         return Ok(OverworldRouteSnapshot {
             actor_id,
             from_location_id: from_location_id.to_string(),
             to_location_id: to_location_id.to_string(),
-            location_path: vec![from_location_id.to_string()],
-            cell_path: vec![from_location.overworld_cell],
+            location_path: vec![from_location_id.to_string(), to_location_id.to_string()],
+            cell_path: vec![from_cell],
             travel_minutes: 0,
             food_cost: 0,
             stamina_cost: 0,
@@ -108,34 +106,26 @@ pub fn compute_location_route(
         });
     }
 
-    let location_path = dijkstra_location_path(definition, from_location_id, to_location_id)
-        .ok_or_else(|| "overworld_route_unavailable".to_string())?;
-    let cell_path = compute_cell_path(
-        definition,
-        from_location.overworld_cell,
-        to_location.overworld_cell,
-    )
-    .ok_or_else(|| "overworld_cell_route_unavailable".to_string())?;
-
-    let mut total_minutes = 0u32;
-    let mut total_food = 0i32;
-    let mut total_stamina = 0i32;
-    let mut total_risk = 0.0f32;
-
-    for pair in location_path.windows(2) {
-        let edge = resolve_edge(definition, &pair[0], &pair[1])
-            .ok_or_else(|| format!("missing_edge:{}->{}", pair[0], pair[1]))?;
-        total_minutes = total_minutes.saturating_add(edge.travel_minutes);
-        total_food += edge.food_cost.max(0);
-        total_stamina += edge.stamina_cost.max(0);
-        total_risk += edge.risk_level.max(0.0);
-    }
+    let cell_path = compute_cell_path(definition, from_cell, to_location.overworld_cell)
+        .ok_or_else(|| "overworld_cell_route_unavailable".to_string())?;
+    let steps = cell_path.len().saturating_sub(1) as u32;
+    let total_minutes = steps.saturating_mul(5);
+    let total_food = if total_minutes == 0 {
+        0
+    } else {
+        ((total_minutes as f32) / 60.0).ceil() as i32
+    };
+    let total_stamina = steps as i32 * 2;
+    let source_danger = location_by_id(definition, from_location_id)
+        .map(|location| location.danger_level.max(0) as f32)
+        .unwrap_or(0.0);
+    let total_risk = (source_danger + to_location.danger_level.max(0) as f32) / 2.0;
 
     Ok(OverworldRouteSnapshot {
         actor_id,
         from_location_id: from_location_id.to_string(),
         to_location_id: to_location_id.to_string(),
-        location_path,
+        location_path: vec![from_location_id.to_string(), to_location_id.to_string()],
         cell_path,
         travel_minutes: total_minutes,
         food_cost: total_food,
@@ -181,100 +171,6 @@ pub fn compute_cell_path(
     None
 }
 
-fn resolve_edge<'a>(
-    definition: &'a OverworldDefinition,
-    from: &str,
-    to: &str,
-) -> Option<&'a OverworldEdgeDefinition> {
-    definition.edges.iter().find(|edge| {
-        (edge.from.as_str() == from && edge.to.as_str() == to)
-            || (edge.bidirectional && edge.from.as_str() == to && edge.to.as_str() == from)
-    })
-}
-
-fn dijkstra_location_path(
-    definition: &OverworldDefinition,
-    start: &str,
-    goal: &str,
-) -> Option<Vec<String>> {
-    #[derive(Debug, Clone, Eq, PartialEq)]
-    struct Visit {
-        location_id: String,
-        travel_minutes: u32,
-    }
-
-    impl Ord for Visit {
-        fn cmp(&self, other: &Self) -> Ordering {
-            other
-                .travel_minutes
-                .cmp(&self.travel_minutes)
-                .then_with(|| self.location_id.cmp(&other.location_id))
-        }
-    }
-
-    impl PartialOrd for Visit {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-
-    let mut costs = HashMap::<String, u32>::from([(start.to_string(), 0)]);
-    let mut previous = HashMap::<String, String>::new();
-    let mut queue = BinaryHeap::from([Visit {
-        location_id: start.to_string(),
-        travel_minutes: 0,
-    }]);
-
-    while let Some(visit) = queue.pop() {
-        if visit.location_id == goal {
-            return Some(reconstruct_location_path(previous, start, goal));
-        }
-        if visit.travel_minutes > *costs.get(&visit.location_id).unwrap_or(&u32::MAX) {
-            continue;
-        }
-        for edge in definition.edges.iter().filter(|edge| {
-            edge.from.as_str() == visit.location_id
-                || (edge.bidirectional && edge.to.as_str() == visit.location_id)
-        }) {
-            let next = if edge.from.as_str() == visit.location_id {
-                edge.to.as_str().to_string()
-            } else {
-                edge.from.as_str().to_string()
-            };
-            let next_cost = visit.travel_minutes.saturating_add(edge.travel_minutes);
-            if next_cost >= *costs.get(&next).unwrap_or(&u32::MAX) {
-                continue;
-            }
-            costs.insert(next.clone(), next_cost);
-            previous.insert(next.clone(), visit.location_id.clone());
-            queue.push(Visit {
-                location_id: next,
-                travel_minutes: next_cost,
-            });
-        }
-    }
-
-    None
-}
-
-fn reconstruct_location_path(
-    previous: HashMap<String, String>,
-    start: &str,
-    goal: &str,
-) -> Vec<String> {
-    let mut path = vec![goal.to_string()];
-    let mut current = goal.to_string();
-    while current != start {
-        let Some(next) = previous.get(&current) else {
-            break;
-        };
-        current = next.clone();
-        path.push(current.clone());
-    }
-    path.reverse();
-    path
-}
-
 fn reconstruct_cell_path(
     previous: HashMap<GridCoord, GridCoord>,
     start: GridCoord,
@@ -315,10 +211,16 @@ mod tests {
 
     #[test]
     fn location_route_prefers_explicit_edge_weights() {
-        let route = compute_location_route(&sample_overworld(), game_data::ActorId(1), "a", "c")
-            .expect("route should resolve");
-        assert_eq!(route.location_path, vec!["a", "b", "c"]);
-        assert_eq!(route.travel_minutes, 15);
+        let route = compute_location_route(
+            &sample_overworld(),
+            game_data::ActorId(1),
+            "a",
+            GridCoord::new(0, 0, 0),
+            "c",
+        )
+        .expect("route should resolve");
+        assert_eq!(route.location_path, vec!["a", "c"]);
+        assert_eq!(route.travel_minutes, 10);
     }
 
     #[test]

@@ -19,12 +19,39 @@ describe("mapEditorUtils", () => {
       size: { width: 0, height: 0 },
       default_level: 2,
       levels: [{ y: 0, cells: [] }],
+      entry_points: [],
       objects: [],
     } as MapDefinition);
 
     expect(map.size.width).toBe(1);
     expect(map.size.height).toBe(1);
     expect(map.levels.some((level) => level.y === 2)).toBe(true);
+  });
+
+  it("preserves and normalizes entry points", () => {
+    const map = normalizeMapDocument({
+      id: "demo",
+      name: "Demo",
+      size: { width: 4, height: 4 },
+      default_level: 0,
+      levels: [{ y: 0, cells: [] }],
+      entry_points: [
+        {
+          id: " gate_north ",
+          grid: { x: 2.9, y: 0.1, z: 1.6 },
+          facing: "south",
+        },
+      ],
+      objects: [],
+    } as MapDefinition);
+
+    expect(map.entry_points).toEqual([
+      {
+        id: "gate_north",
+        grid: { x: 2, y: 0, z: 1 },
+        facing: "south",
+      },
+    ]);
   });
 
   it("places rectangular buildings using footprint", () => {

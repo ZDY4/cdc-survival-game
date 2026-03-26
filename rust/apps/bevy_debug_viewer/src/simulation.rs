@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use game_bevy::{
-    register_runtime_actor_from_definition, BackgroundLifeState, CharacterDefinitionId,
-    CharacterDefinitions, CurrentAction, CurrentPlan, DisplayName, GridPosition, NeedState,
-    NpcLifeState, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
+    advance_map_ai_spawn_runtime, register_runtime_actor_from_definition, BackgroundLifeState,
+    CharacterDefinitionId, CharacterDefinitions, CurrentAction, CurrentPlan, DisplayName,
+    GridPosition, MapAiSpawnRuntimeState, MapDefinitions, NeedState, NpcLifeState,
+    ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
     SettlementDefinitions, SmartObjectReservations, WorldAlertState,
 };
 use game_core::runtime::action_result_status;
@@ -15,7 +16,8 @@ use game_data::{ActorSide, GridCoord, SettlementId};
 
 use crate::dialogue::sync_dialogue_from_event;
 use crate::state::{
-    HudEventCategory, ViewerActorMotionState, ViewerEventEntry, ViewerRuntimeState, ViewerState,
+    HudEventCategory, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
+    ViewerDamageNumberState, ViewerEventEntry, ViewerRuntimeState, ViewerState,
 };
 
 const ACTOR_MOTION_MIN_DURATION_SEC: f32 = 0.04;
@@ -67,6 +69,22 @@ pub(crate) fn tick_runtime(
             }
         }
     }
+}
+
+pub(crate) fn advance_map_ai_spawns(
+    time: Res<Time>,
+    definitions: Res<CharacterDefinitions>,
+    maps: Res<MapDefinitions>,
+    mut spawn_state: ResMut<MapAiSpawnRuntimeState>,
+    mut runtime_state: ResMut<ViewerRuntimeState>,
+) {
+    advance_map_ai_spawn_runtime(
+        &mut spawn_state,
+        &mut runtime_state.runtime,
+        &definitions.0,
+        &maps.0,
+        time.delta_secs(),
+    );
 }
 
 pub(crate) fn sync_npc_runtime_presence(
@@ -601,6 +619,7 @@ pub(crate) fn submit_end_turn(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
 ) {
+    viewer_state.auto_end_turn_after_stop = false;
     let snapshot = runtime_state.runtime.snapshot();
     if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
         viewer_state.progression_elapsed_sec = 0.0;
@@ -611,6 +630,33 @@ pub(crate) fn submit_end_turn(
     }
 }
 
+fn maybe_auto_end_turn_after_stop(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+) {
+    if !viewer_state.auto_end_turn_after_stop {
+        return;
+    }
+    if runtime_state.runtime.has_pending_progression()
+        || runtime_state.runtime.pending_movement().is_some()
+    {
+        return;
+    }
+    if viewer_state.active_dialogue.is_some()
+        || runtime_state.runtime.pending_interaction().is_some()
+    {
+        return;
+    }
+
+    let snapshot = runtime_state.runtime.snapshot();
+    if snapshot.combat.in_combat || viewer_state.command_actor_id(&snapshot).is_none() {
+        viewer_state.auto_end_turn_after_stop = false;
+        return;
+    }
+
+    submit_end_turn(runtime_state, viewer_state);
+}
+
 pub(crate) fn advance_runtime_progression(
     time: Res<Time>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
@@ -618,6 +664,7 @@ pub(crate) fn advance_runtime_progression(
 ) {
     if !runtime_state.runtime.has_pending_progression() {
         viewer_state.progression_elapsed_sec = 0.0;
+        maybe_auto_end_turn_after_stop(&mut runtime_state, &mut viewer_state);
         return;
     }
 
@@ -631,14 +678,19 @@ pub(crate) fn advance_runtime_progression(
     if result.applied_step.is_some() {
         viewer_state.status_line = progression_result_status(&result);
     }
+    maybe_auto_end_turn_after_stop(&mut runtime_state, &mut viewer_state);
 }
 
 pub(crate) fn collect_events(
     mut runtime_state: ResMut<ViewerRuntimeState>,
+    mut feedback_state: ResMut<ViewerActorFeedbackState>,
+    mut camera_shake_state: ResMut<ViewerCameraShakeState>,
+    mut damage_number_state: ResMut<ViewerDamageNumberState>,
     mut motion_state: ResMut<ViewerActorMotionState>,
     mut viewer_state: ResMut<ViewerState>,
 ) {
-    let turn_index = runtime_state.runtime.snapshot().combat.current_turn_index;
+    let snapshot = runtime_state.runtime.snapshot();
+    let turn_index = snapshot.combat.current_turn_index;
     for event in runtime_state.runtime.drain_events() {
         if let SimulationEvent::ActorMoved {
             actor_id, from, to, ..
@@ -651,6 +703,24 @@ pub(crate) fn collect_events(
                 *from,
                 *to,
                 viewer_state.min_progression_interval_sec,
+            );
+        }
+        if let SimulationEvent::ActorDamaged {
+            actor_id,
+            target_actor,
+            damage,
+            ..
+        } = &event
+        {
+            queue_attack_and_hit_feedback(
+                &mut feedback_state,
+                &mut camera_shake_state,
+                &mut damage_number_state,
+                &runtime_state,
+                &snapshot,
+                *actor_id,
+                *target_actor,
+                *damage,
             );
         }
         sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
@@ -712,6 +782,17 @@ pub(crate) fn advance_actor_motion(
             motion_state.tracks.remove(&actor_id);
         }
     }
+}
+
+pub(crate) fn advance_actor_feedback(
+    time: Res<Time>,
+    mut feedback_state: ResMut<ViewerActorFeedbackState>,
+) {
+    if feedback_state.tracks.is_empty() {
+        return;
+    }
+
+    feedback_state.advance(time.delta_secs());
 }
 
 pub(crate) fn refresh_interaction_prompt(
@@ -832,6 +913,39 @@ fn queue_actor_motion(
 fn actor_motion_duration_sec(min_progression_interval_sec: f32) -> f32 {
     (min_progression_interval_sec * 0.9)
         .clamp(ACTOR_MOTION_MIN_DURATION_SEC, ACTOR_MOTION_MAX_DURATION_SEC)
+}
+
+fn queue_attack_and_hit_feedback(
+    feedback_state: &mut ViewerActorFeedbackState,
+    camera_shake_state: &mut ViewerCameraShakeState,
+    damage_number_state: &mut ViewerDamageNumberState,
+    runtime_state: &ViewerRuntimeState,
+    snapshot: &game_core::SimulationSnapshot,
+    attacker_id: game_data::ActorId,
+    target_actor_id: game_data::ActorId,
+    damage: f32,
+) {
+    let attacker_world = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == attacker_id)
+        .map(|actor| runtime_state.runtime.grid_to_world(actor.grid_position));
+    let target_world = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == target_actor_id)
+        .map(|actor| runtime_state.runtime.grid_to_world(actor.grid_position));
+
+    if let (Some(attacker_world), Some(target_world)) = (attacker_world, target_world) {
+        feedback_state.queue_attack_lunge(attacker_id, attacker_world, target_world);
+    }
+    if let Some(target_world) = target_world {
+        damage_number_state.queue_damage_number(target_world, damage.round() as i32, false);
+    }
+    if target_world.is_some() {
+        feedback_state.queue_hit_reaction(target_actor_id);
+        camera_shake_state.trigger_default_damage_shake();
+    }
 }
 
 fn horizontal_world_distance(a: game_data::WorldCoord, b: game_data::WorldCoord) -> f32 {
@@ -1082,10 +1196,14 @@ fn mark_online_replan_failure(
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_motion_duration_sec, advance_online_npc_actions, queue_actor_motion,
-        sync_npc_runtime_presence, ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
+        actor_motion_duration_sec, advance_online_npc_actions, maybe_auto_end_turn_after_stop,
+        queue_actor_motion, queue_attack_and_hit_feedback, sync_npc_runtime_presence,
+        ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
     };
-    use crate::state::{ViewerActorMotionState, ViewerRuntimeState, ViewerState};
+    use crate::state::{
+        ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
+        ViewerDamageNumberState, ViewerRuntimeState, ViewerState,
+    };
     use bevy::ecs::message::Messages;
     use bevy::prelude::*;
     use game_bevy::{
@@ -1310,6 +1428,101 @@ mod tests {
             .expect("next track should exist");
         assert_eq!(next_track.from_world, current_world);
         assert_eq!(next_track.to_world, WorldCoord::new(2.5, 0.5, 0.5));
+    }
+
+    #[test]
+    fn queue_attack_and_hit_feedback_tracks_attacker_and_target() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let target_actor = snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id != handles.player)
+            .expect("fixture should include a non-player target");
+        let mut feedback_state = ViewerActorFeedbackState::default();
+        let mut camera_shake_state = ViewerCameraShakeState::default();
+        let mut damage_number_state = ViewerDamageNumberState::default();
+
+        queue_attack_and_hit_feedback(
+            &mut feedback_state,
+            &mut camera_shake_state,
+            &mut damage_number_state,
+            &runtime_state,
+            &snapshot,
+            handles.player,
+            target_actor.actor_id,
+            11.0,
+        );
+
+        assert!(feedback_state
+            .tracks
+            .get(&handles.player)
+            .and_then(|tracks| tracks.attack_lunge)
+            .is_some());
+        assert!(feedback_state
+            .tracks
+            .get(&target_actor.actor_id)
+            .and_then(|tracks| tracks.hit_reaction)
+            .is_some());
+        assert!(!damage_number_state.entries.is_empty());
+        camera_shake_state.advance(0.05);
+        assert!(camera_shake_state.current_offset().length() > 0.0);
+    }
+
+    #[test]
+    fn auto_end_turn_after_stop_submits_once_movement_fully_stops() {
+        let (mut runtime, handles) = create_demo_runtime();
+        runtime
+            .issue_actor_move(handles.player, GridCoord::new(0, 0, 3))
+            .expect("path should be planned");
+
+        assert_eq!(
+            runtime.advance_pending_progression().applied_step,
+            Some(game_core::PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert_eq!(
+            runtime.advance_pending_progression().applied_step,
+            Some(game_core::PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+        assert!(runtime.request_pending_movement_stop(handles.player));
+        let stop_result = runtime.advance_pending_progression();
+        assert_eq!(
+            stop_result.interrupt_reason,
+            Some(game_core::AutoMoveInterruptReason::CancelledByNewCommand)
+        );
+        assert_eq!(
+            runtime.advance_pending_progression().applied_step,
+            Some(game_core::PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert_eq!(
+            runtime.advance_pending_progression().applied_step,
+            Some(game_core::PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+        assert!(!runtime.has_pending_progression());
+        assert!(runtime.actor_turn_open(handles.player));
+
+        let mut runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(handles.player, ActorSide::Player);
+        viewer_state.auto_end_turn_after_stop = true;
+
+        maybe_auto_end_turn_after_stop(&mut runtime_state, &mut viewer_state);
+
+        assert!(!viewer_state.auto_end_turn_after_stop);
+        assert_eq!(
+            runtime_state.runtime.peek_pending_progression(),
+            Some(&game_core::PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert!(!runtime_state.runtime.actor_turn_open(handles.player));
     }
 }
 

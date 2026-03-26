@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getRequestedDocumentKey, getRequestedSettingsSection, resolveEditorSurface } from "./editorSurface";
+import {
+  getRequestedDocumentKey,
+  getRequestedDocumentType,
+  getRequestedSettingsSection,
+  resolveEditorSurface,
+} from "./editorSurface";
 
 describe("editorSurface", () => {
   it("prefers the dedicated map-editor surface from query string", () => {
@@ -26,6 +31,13 @@ describe("editorSurface", () => {
     expect(getRequestedDocumentKey("?surface=map-editor&documentKey=survivor_outpost_01_grid")).toBe(
       "survivor_outpost_01_grid",
     );
+  });
+
+  it("reads the requested document type from the query string", () => {
+    expect(getRequestedDocumentType("?surface=map-editor&documentType=overworld")).toBe(
+      "overworld",
+    );
+    expect(getRequestedDocumentType("?surface=map-editor&documentType=map")).toBe("map");
   });
 
   it("reads the requested settings section from the query string", () => {

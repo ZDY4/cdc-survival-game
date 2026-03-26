@@ -35,7 +35,7 @@ function App() {
   );
   const [editorRuntimeFlags, setEditorRuntimeFlags] =
     useState<EditorRuntimeFlags>(defaultEditorRuntimeFlags);
-  const [status, setStatus] = useState("Loading Narrative Lab...");
+  const [status, setStatus] = useState("正在加载叙事实验室...");
   const [canPersist, setCanPersist] = useState(false);
   const [narrativeStartupReady, setNarrativeStartupReady] = useState(surface === "settings");
 
@@ -45,9 +45,9 @@ function App() {
       setNarrativeWorkspace({
         ...fallbackNarrativeWorkspace,
         connectedProjectRoot: narrativeAppSettings.connectedProjectRoot ?? null,
-        projectContextStatus: "选择或创建一个工作区后即可开始使用 Narrative Lab。",
+        projectContextStatus: "选择或创建一个工作区后即可开始使用叙事实验室。",
       });
-      setStatus("Choose or create a narrative workspace to get started.");
+      setStatus("请选择或创建一个叙事工作区后开始使用。");
       return;
     }
 
@@ -61,15 +61,11 @@ function App() {
       );
       setNarrativeWorkspace(narrativePayload);
       setCanPersist(true);
-      setStatus(
-        `Loaded ${narrativePayload.documentCount} narrative docs from ${narrativePayload.workspaceRoot}.`,
-      );
+      setStatus(`已从 ${narrativePayload.workspaceRoot} 加载 ${narrativePayload.documentCount} 份叙事文档。`);
     } catch (error) {
       setNarrativeWorkspace(fallbackNarrativeWorkspace);
       setCanPersist(false);
-      setStatus(
-        `Running Narrative Lab in fallback mode. ${String(error)}. Start the Tauri host to read project files.`,
-      );
+      setStatus(`叙事实验室正在以回退模式运行。${String(error)}。请启动 Tauri 宿主以读取项目文件。`);
     }
   }
 
@@ -83,9 +79,9 @@ function App() {
       setNarrativeWorkspace({
         ...fallbackNarrativeWorkspace,
         connectedProjectRoot: settings.connectedProjectRoot ?? null,
-        projectContextStatus: "选择或创建一个工作区后即可开始使用 Narrative Lab。",
+        projectContextStatus: "选择或创建一个工作区后即可开始使用叙事实验室。",
       });
-      setStatus("Choose or create a narrative workspace to get started.");
+      setStatus("请选择或创建一个叙事工作区后开始使用。");
       return;
     }
 
@@ -94,7 +90,7 @@ function App() {
       projectRoot: settings.connectedProjectRoot ?? null,
     });
     setNarrativeWorkspace(payload);
-    setStatus(`Loaded ${payload.documentCount} narrative docs from ${payload.workspaceRoot}.`);
+    setStatus(`已从 ${payload.workspaceRoot} 加载 ${payload.documentCount} 份叙事文档。`);
   }
 
   async function saveNarrativeSettings(nextSettings: NarrativeAppSettings) {
@@ -117,9 +113,9 @@ function App() {
       });
       setNarrativeWorkspace(payload);
       setCanPersist(true);
-      setStatus(`Loaded ${payload.documentCount} narrative docs from ${payload.workspaceRoot}.`);
+      setStatus(`已从 ${payload.workspaceRoot} 加载 ${payload.documentCount} 份叙事文档。`);
     } catch (error) {
-      setStatus(`Failed to open narrative workspace: ${String(error)}`);
+      setStatus(`打开叙事工作区失败：${String(error)}`);
     }
   }
 
@@ -138,8 +134,8 @@ function App() {
       }));
       setStatus(
         saved.connectedProjectRoot
-          ? "Saved project context path. Open a workspace to activate it."
-          : "Disconnected project context.",
+          ? "已保存项目上下文路径。打开工作区后即可激活。"
+          : "已断开项目上下文连接。",
       );
       return;
     }
@@ -152,7 +148,7 @@ function App() {
       setNarrativeWorkspace(payload);
       setStatus(payload.projectContextStatus);
     } catch (error) {
-      setStatus(`Failed to refresh project context: ${String(error)}`);
+      setStatus(`刷新项目上下文失败：${String(error)}`);
     }
   }
 
@@ -170,7 +166,7 @@ function App() {
 
   useEffect(() => {
     if (surface === "settings") {
-      setStatus("Settings ready.");
+      setStatus("设置已就绪。");
       setNarrativeStartupReady(true);
       return;
     }
@@ -184,9 +180,9 @@ function App() {
           setNarrativeWorkspace({
             ...fallbackNarrativeWorkspace,
             connectedProjectRoot: settings.connectedProjectRoot ?? null,
-            projectContextStatus: "选择或创建一个工作区后即可开始使用 Narrative Lab。",
+            projectContextStatus: "选择或创建一个工作区后即可开始使用叙事实验室。",
           });
-          setStatus("Choose or create a narrative workspace to get started.");
+          setStatus("请选择或创建一个叙事工作区后开始使用。");
           setNarrativeStartupReady(true);
           return;
         }
@@ -196,7 +192,7 @@ function App() {
           projectRoot: settings.connectedProjectRoot ?? null,
         }).then((payload) => {
           setNarrativeWorkspace(payload);
-          setStatus(`Loaded ${payload.documentCount} narrative docs from ${payload.workspaceRoot}.`);
+          setStatus(`已从 ${payload.workspaceRoot} 加载 ${payload.documentCount} 份叙事文档。`);
           setNarrativeStartupReady(true);
         });
       })
@@ -204,9 +200,7 @@ function App() {
         setCanPersist(false);
         setNarrativeAppSettings(defaultNarrativeAppSettings);
         setNarrativeWorkspace(fallbackNarrativeWorkspace);
-        setStatus(
-          `Running Narrative Lab in fallback mode. ${String(error)}. Start the Tauri host to read project files.`,
-        );
+        setStatus(`叙事实验室正在以回退模式运行。${String(error)}。请启动 Tauri 宿主以读取项目文件。`);
         setNarrativeStartupReady(true);
       });
   }, [surface]);
@@ -223,7 +217,7 @@ function App() {
           return;
         }
         void refreshNarrativeSessionFromSettings().catch((error) => {
-          setStatus(`Failed to refresh Narrative Lab settings: ${String(error)}`);
+          setStatus(`刷新叙事实验室设置失败：${String(error)}`);
         });
       })
       .then((dispose) => {
@@ -249,7 +243,7 @@ function App() {
       startupReady={narrativeStartupReady}
       selfTestScenario={editorRuntimeFlags.menuSelfTestScenario ?? null}
       status={status}
-      runtimeLabel={isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode"}
+      runtimeLabel={isTauriRuntime() && canPersist ? "Tauri 宿主已连接" : "界面回退模式"}
       onStatusChange={setStatus}
       onReload={loadNarrativeWorkspaceOnly}
       onOpenWorkspace={openNarrativeWorkspace}

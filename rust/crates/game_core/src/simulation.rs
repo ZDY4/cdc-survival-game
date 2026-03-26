@@ -3757,19 +3757,30 @@ impl Simulation {
             .clone()
             .or_else(|| self.resolve_active_outdoor_location_id(definition))
             .ok_or_else(|| "active_overworld_location_missing".to_string())?;
+        let from_cell = self
+            .overworld_pawn_cell
+            .or_else(|| {
+                location_by_id(definition, &from_location_id).map(|location| location.overworld_cell)
+            })
+            .ok_or_else(|| "active_overworld_cell_missing".to_string())?;
         if target_location_id != from_location_id
             && !self.unlocked_locations.contains(target_location_id)
         {
             return Err(format!("location_locked:{target_location_id}"));
         }
 
-        let route =
-            compute_location_route(definition, actor_id, &from_location_id, target_location_id)?;
+        let route = compute_location_route(
+            definition,
+            actor_id,
+            &from_location_id,
+            from_cell,
+            target_location_id,
+        )?;
         self.events.push(SimulationEvent::OverworldRouteComputed {
             actor_id,
             target_location_id: target_location_id.to_string(),
             travel_minutes: route.travel_minutes,
-            path_length: route.location_path.len(),
+            path_length: route.cell_path.len(),
         });
         Ok(route)
     }

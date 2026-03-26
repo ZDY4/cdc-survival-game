@@ -61,6 +61,18 @@ export const fallbackMapWorkspace: MapWorkspacePayload = {
             cells: [],
           },
         ],
+        entry_points: [
+          {
+            id: "default_entry",
+            grid: { x: 15, y: 0, z: 29 },
+            facing: null,
+          },
+          {
+            id: "perimeter_return",
+            grid: { x: 15, y: 0, z: 27 },
+            facing: null,
+          },
+        ],
         objects: [
           {
             object_id: "survivor_outpost_01_dormitory",

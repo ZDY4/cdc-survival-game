@@ -683,6 +683,17 @@ export type MapLevelDefinition = {
   cells: MapCellDefinition[];
 };
 
+export type MapEntryPointDefinition = {
+  id: string;
+  grid: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  facing?: string | null;
+  [key: string]: unknown;
+};
+
 export type MapObjectKind = "building" | "pickup" | "interactive" | "ai_spawn";
 
 export type MapRotation = "north" | "east" | "south" | "west";
@@ -749,6 +760,7 @@ export type MapDefinition = {
   size: MapSize;
   default_level: number;
   levels: MapLevelDefinition[];
+  entry_points: MapEntryPointDefinition[];
   objects: MapObjectDefinition[];
 };
 
@@ -781,7 +793,88 @@ export type SaveMapsResult = {
   deletedIds: string[];
 };
 
+export type OverworldId = string;
+
+export type OverworldLocationKind = "outdoor" | "interior" | "dungeon";
+
+export type OverworldLocationDefinition = {
+  id: string;
+  name: string;
+  description: string;
+  kind: OverworldLocationKind;
+  map_id: string;
+  entry_point_id: string;
+  parent_outdoor_location_id?: string | null;
+  return_entry_point_id?: string | null;
+  default_unlocked: boolean;
+  visible: boolean;
+  overworld_cell: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  danger_level: number;
+  icon: string;
+  [key: string]: unknown;
+};
+
+export type OverworldCellDefinition = {
+  grid: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  terrain: string;
+  [key: string]: unknown;
+};
+
+export type OverworldTravelRuleSet = {
+  food_item_id: string;
+  night_minutes_multiplier: number;
+  risk_multiplier: number;
+  [key: string]: unknown;
+};
+
+export type OverworldDefinition = {
+  id: OverworldId;
+  locations: OverworldLocationDefinition[];
+  walkable_cells: OverworldCellDefinition[];
+  travel_rules: OverworldTravelRuleSet;
+};
+
+export type OverworldCatalogs = {
+  mapIds: string[];
+  locationKinds: string[];
+  terrainKinds: string[];
+  mapEntryPointsByMap: Record<string, string[]>;
+};
+
+export type OverworldDocumentPayload = {
+  documentKey: string;
+  originalId: string;
+  fileName: string;
+  relativePath: string;
+  overworld: OverworldDefinition;
+  validation: ValidationIssue[];
+};
+
+export type OverworldWorkspacePayload = {
+  bootstrap: EditorBootstrap;
+  dataDirectory: string;
+  overworldCount: number;
+  catalogs: OverworldCatalogs;
+  documents: OverworldDocumentPayload[];
+};
+
+export type SaveOverworldsResult = {
+  savedIds: string[];
+  deletedIds: string[];
+};
+
+export type SpatialDocumentType = "map" | "overworld";
+
 export type MapEditorOpenDocumentPayload = {
+  documentType: SpatialDocumentType;
   documentKey: string;
 };
 

@@ -102,12 +102,29 @@ pub(crate) fn pick_grid_from_ray(
     grid_size: f32,
     plane_height: f32,
 ) -> Option<GridCoord> {
-    let plane_origin = Vec3::new(0.0, plane_height, 0.0);
-    let point = ray.plane_intersection_point(plane_origin, InfinitePlane3d::new(Vec3::Y))?;
+    let point = ray_point_on_horizontal_plane(ray, plane_height)?;
     Some(GridCoord::new(
         (point.x / grid_size).floor() as i32,
         level,
         (point.z / grid_size).floor() as i32,
+    ))
+}
+
+pub(crate) fn ray_point_on_horizontal_plane(ray: Ray3d, plane_height: f32) -> Option<Vec3> {
+    let plane_origin = Vec3::new(0.0, plane_height, 0.0);
+    ray.plane_intersection_point(plane_origin, InfinitePlane3d::new(Vec3::Y))
+}
+
+pub(crate) fn camera_pan_delta_from_ground_drag(
+    previous_ray: Ray3d,
+    current_ray: Ray3d,
+    plane_height: f32,
+) -> Option<Vec2> {
+    let previous_point = ray_point_on_horizontal_plane(previous_ray, plane_height)?;
+    let current_point = ray_point_on_horizontal_plane(current_ray, plane_height)?;
+    Some(Vec2::new(
+        previous_point.x - current_point.x,
+        previous_point.z - current_point.z,
     ))
 }
 
@@ -173,8 +190,7 @@ pub(crate) fn clamp_camera_pan_offset(
 ) -> Vec2 {
     let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * grid_size * 0.5;
     let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * grid_size * 0.5;
-    let map_width = (bounds.max_x - bounds.min_x + 1).max(1) as f32 * grid_size;
-    let map_depth = (bounds.max_z - bounds.min_z + 1).max(1) as f32 * grid_size;
+    let half_cell = grid_size * 0.5;
     let camera_distance = camera_world_distance(
         bounds,
         viewport_width,
@@ -188,27 +204,19 @@ pub(crate) fn clamp_camera_pan_offset(
         camera_distance,
         render_config,
     );
-    let visible_width = visible_world.x;
-    let visible_depth = visible_world.y;
     let half_visible_width = visible_world.x * 0.5;
     let half_visible_depth = visible_world.y * 0.5;
+    let focus_min_x = (bounds.min_x as f32 * grid_size + half_visible_width)
+        .min(bounds.min_x as f32 * grid_size + half_cell);
+    let focus_max_x = ((bounds.max_x + 1) as f32 * grid_size - half_visible_width)
+        .max((bounds.max_x + 1) as f32 * grid_size - half_cell);
+    let focus_min_z = (bounds.min_z as f32 * grid_size + half_visible_depth)
+        .min(bounds.min_z as f32 * grid_size + half_cell);
+    let focus_max_z = ((bounds.max_z + 1) as f32 * grid_size - half_visible_depth)
+        .max((bounds.max_z + 1) as f32 * grid_size - half_cell);
 
-    let clamped_focus_x = if map_width <= visible_width {
-        center_x
-    } else {
-        (center_x + pan_offset.x).clamp(
-            bounds.min_x as f32 * grid_size + half_visible_width,
-            (bounds.max_x + 1) as f32 * grid_size - half_visible_width,
-        )
-    };
-    let clamped_focus_z = if map_depth <= visible_depth {
-        center_z
-    } else {
-        (center_z + pan_offset.y).clamp(
-            bounds.min_z as f32 * grid_size + half_visible_depth,
-            (bounds.max_z + 1) as f32 * grid_size - half_visible_depth,
-        )
-    };
+    let clamped_focus_x = (center_x + pan_offset.x).clamp(focus_min_x, focus_max_x);
+    let clamped_focus_z = (center_z + pan_offset.y).clamp(focus_min_z, focus_max_z);
 
     Vec2::new(clamped_focus_x - center_x, clamped_focus_z - center_z)
 }
@@ -550,11 +558,12 @@ pub(crate) fn grid_bounds(snapshot: &SimulationSnapshot, level: i32) -> GridBoun
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_label, camera_focus_point, camera_world_distance, clamp_camera_pan_offset,
-        cycle_level, grid_bounds, hovered_grid_outline_kind, level_plane_height,
-        movement_block_reasons, occluder_blocks_target, pick_grid_from_ray, rendered_path_preview,
-        resolve_occlusion_target, segment_aabb_intersection_fraction, should_rebuild_static_world,
-        visible_world_footprint, GridBounds, HoveredGridOutlineKind,
+        actor_label, camera_focus_point, camera_pan_delta_from_ground_drag, camera_world_distance,
+        clamp_camera_pan_offset, cycle_level, grid_bounds, hovered_grid_outline_kind,
+        level_plane_height, movement_block_reasons, occluder_blocks_target, pick_grid_from_ray,
+        rendered_path_preview, resolve_occlusion_target, segment_aabb_intersection_fraction,
+        should_rebuild_static_world, visible_world_footprint, GridBounds,
+        HoveredGridOutlineKind,
     };
     use crate::state::{ViewerRenderConfig, ViewerState};
     use crate::test_support::actor_debug_state_fixture;
@@ -591,6 +600,25 @@ mod tests {
 
         assert_eq!(center_pick, GridCoord::new(3, 0, 5));
         assert_eq!(floor_pick, GridCoord::new(3, 0, 6));
+    }
+
+    #[test]
+    fn camera_pan_delta_from_ground_drag_tracks_ground_points_instead_of_world_axes() {
+        let plane_height = 0.08;
+        let previous_ray = Ray3d::new(
+            Vec3::new(0.0, 10.0, 8.0),
+            Dir3::new(Vec3::new(0.15, -1.0, -0.7)).expect("valid ray direction"),
+        );
+        let current_ray = Ray3d::new(
+            Vec3::new(0.0, 10.0, 8.0),
+            Dir3::new(Vec3::new(0.45, -1.0, -0.4)).expect("valid ray direction"),
+        );
+
+        let delta = camera_pan_delta_from_ground_drag(previous_ray, current_ray, plane_height)
+            .expect("drag rays should hit the ground plane");
+
+        assert!(delta.x < 0.0);
+        assert!(delta.y < 0.0);
     }
 
     #[test]
@@ -967,12 +995,12 @@ mod tests {
             render_config,
         );
 
-        assert!((clamped.x - 0.5).abs() < 0.001);
-        assert!((clamped.y + 0.5).abs() < 0.001);
+        assert!((clamped.x - 4.5).abs() < 0.001);
+        assert!((clamped.y + 4.5).abs() < 0.001);
     }
 
     #[test]
-    fn clamp_camera_pan_offset_recenters_small_maps() {
+    fn clamp_camera_pan_offset_allows_small_maps_to_pan_to_edge_cells() {
         let render_config = ViewerRenderConfig {
             hud_reserved_width_px: 0.0,
             viewport_padding_px: 0.0,
@@ -994,7 +1022,7 @@ mod tests {
             render_config,
         );
 
-        assert_eq!(clamped, Vec2::ZERO);
+        assert_eq!(clamped, Vec2::splat(0.5));
     }
 
     #[test]
