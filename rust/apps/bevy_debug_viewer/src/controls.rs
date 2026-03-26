@@ -12,8 +12,8 @@ use crate::geometry::{
 use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
-    InteractionMenuButton, InteractionMenuState, ViewerCamera, ViewerHudPage, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerState,
+    InteractionMenuButton, InteractionMenuState, ViewerCamera, ViewerControlMode, ViewerHudPage,
+    ViewerRenderConfig, ViewerRuntimeState, ViewerState,
 };
 
 pub(crate) fn handle_keyboard_input(
@@ -24,6 +24,20 @@ pub(crate) fn handle_keyboard_input(
     mut render_config: ResMut<ViewerRenderConfig>,
 ) {
     let digit_input = just_pressed_digit(&keys);
+
+    if (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight))
+        && keys.just_pressed(KeyCode::KeyP)
+    {
+        viewer_state.control_mode = viewer_state.control_mode.toggle();
+        viewer_state.focused_target = None;
+        viewer_state.current_prompt = None;
+        viewer_state.interaction_menu = None;
+        if viewer_state.control_mode == ViewerControlMode::PlayerControl {
+            viewer_state.selected_actor =
+                viewer_state.command_actor_id(&runtime_state.runtime.snapshot());
+        }
+        viewer_state.status_line = format!("control mode: {}", viewer_state.control_mode.label());
+    }
 
     if keys.just_pressed(KeyCode::Escape) {
         if viewer_state.active_dialogue.is_some() {
@@ -98,6 +112,7 @@ pub(crate) fn handle_keyboard_input(
 
     let selected_actor_locked = viewer_state
         .selected_actor
+        .filter(|_| viewer_state.can_issue_player_commands())
         .map(|actor_id| viewer_state.is_actor_interaction_locked(&runtime_state, actor_id))
         .unwrap_or(false);
 
@@ -161,7 +176,10 @@ pub(crate) fn handle_keyboard_input(
         let actor_ids: Vec<ActorId> = snapshot
             .actors
             .iter()
-            .filter(|actor| actor.grid_position.y == viewer_state.current_level)
+            .filter(|actor| {
+                actor.grid_position.y == viewer_state.current_level
+                    && (viewer_state.is_free_observe() || actor.side == ActorSide::Player)
+            })
             .map(|actor| actor.actor_id)
             .collect();
         if !actor_ids.is_empty() {
@@ -170,8 +188,18 @@ pub(crate) fn handle_keyboard_input(
                 .and_then(|selected| actor_ids.iter().position(|actor_id| *actor_id == selected))
                 .map(|index| (index + 1) % actor_ids.len())
                 .unwrap_or(0);
-            viewer_state.selected_actor = actor_ids.get(next_index).copied();
+            if let Some(next_actor_id) = actor_ids.get(next_index).copied() {
+                let next_side = snapshot
+                    .actors
+                    .iter()
+                    .find(|actor| actor.actor_id == next_actor_id)
+                    .map(|actor| actor.side)
+                    .unwrap_or(ActorSide::Neutral);
+                viewer_state.select_actor(next_actor_id, next_side);
+            }
             viewer_state.interaction_menu = None;
+            viewer_state.focused_target = None;
+            viewer_state.current_prompt = None;
         }
     }
 
@@ -183,10 +211,17 @@ pub(crate) fn handle_keyboard_input(
     if keys.just_pressed(KeyCode::Space) {
         viewer_state.end_turn_hold_sec = 0.0;
         viewer_state.end_turn_repeat_elapsed_sec = 0.0;
+        if viewer_state.is_free_observe() {
+            viewer_state.status_line = "free observe: player commands disabled".to_string();
+            return;
+        }
         if !cancel_pending_movement(&mut runtime_state, &mut viewer_state) {
             submit_end_turn(&mut runtime_state, &mut viewer_state);
         }
     } else if keys.pressed(KeyCode::Space) {
+        if viewer_state.is_free_observe() {
+            return;
+        }
         if runtime_state.runtime.pending_movement().is_some() {
             return;
         }
@@ -355,6 +390,7 @@ pub(crate) fn handle_mouse_input(
 
     let selected_actor_locked = viewer_state
         .selected_actor
+        .filter(|_| viewer_state.can_issue_player_commands())
         .map(|actor_id| viewer_state.is_actor_interaction_locked(&runtime_state, actor_id))
         .unwrap_or(false);
     if selected_actor_locked
@@ -372,6 +408,17 @@ pub(crate) fn handle_mouse_input(
             viewer_state.interaction_menu = None;
         }
 
+        if viewer_state.is_free_observe() {
+            if let Some(actor) = actor_at_cursor.as_ref() {
+                viewer_state.select_actor(actor.actor_id, actor.side);
+                viewer_state.focused_target = None;
+                viewer_state.current_prompt = None;
+                viewer_state.status_line =
+                    format!("observing actor {:?} ({:?})", actor.actor_id, actor.side);
+            }
+            return;
+        }
+
         let cancelled_movement = cancel_pending_movement(&mut runtime_state, &mut viewer_state);
         if cancelled_movement && actor_at_cursor.is_none() && map_object_at_cursor.is_none() {
             viewer_state.interaction_menu = None;
@@ -380,7 +427,7 @@ pub(crate) fn handle_mouse_input(
 
         if let Some(ref actor) = actor_at_cursor {
             if actor.side == ActorSide::Player {
-                viewer_state.selected_actor = Some(actor.actor_id);
+                viewer_state.select_actor(actor.actor_id, actor.side);
                 viewer_state.focused_target = None;
                 viewer_state.current_prompt = None;
                 viewer_state.interaction_menu = None;
@@ -405,7 +452,7 @@ pub(crate) fn handle_mouse_input(
                 format!("object {}", object.object_id),
                 "mouse_primary",
             );
-        } else if let Some(actor_id) = viewer_state.selected_actor {
+        } else if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
             if !runtime_state.runtime.is_grid_in_bounds(grid) {
                 viewer_state.status_line = format!(
                     "move: target out of bounds ({}, {}, {})",
@@ -454,6 +501,10 @@ pub(crate) fn handle_mouse_input(
     }
 
     if buttons.just_pressed(MouseButton::Right) {
+        if viewer_state.is_free_observe() {
+            viewer_state.status_line = "free observe: interactions disabled".to_string();
+            return;
+        }
         if let Some(target_id) = cursor_target {
             let prompt = focus_target_and_query_prompt(
                 &mut runtime_state,
@@ -491,6 +542,7 @@ fn execute_primary_target_interaction(
     target_summary: String,
     input_source: &'static str,
 ) {
+    let snapshot = runtime_state.runtime.snapshot();
     let prompt = focus_target_and_query_prompt(runtime_state, viewer_state, target_id.clone());
     let Some(prompt) = prompt else {
         viewer_state.interaction_menu = None;
@@ -508,7 +560,7 @@ fn execute_primary_target_interaction(
         viewer_state.status_line = format!("focused {target_summary} with no executable options");
         return;
     };
-    let Some(_) = viewer_state.selected_actor else {
+    let Some(actor_id) = viewer_state.command_actor_id(&snapshot) else {
         viewer_state.interaction_menu = None;
         viewer_state.status_line = format!("focused {target_summary}; select an actor first");
         return;
@@ -516,7 +568,7 @@ fn execute_primary_target_interaction(
 
     log_viewer_interaction(
         "primary",
-        viewer_state.selected_actor,
+        Some(actor_id),
         &target_id,
         &prompt.target_name,
         Some(&option_id),
@@ -531,11 +583,14 @@ fn focus_target_and_query_prompt(
     target_id: InteractionTargetId,
 ) -> Option<InteractionPrompt> {
     viewer_state.focused_target = Some(target_id.clone());
-    let prompt = viewer_state.selected_actor.and_then(|actor_id| {
-        runtime_state
-            .runtime
-            .query_interaction_prompt(actor_id, target_id)
-    });
+    let snapshot = runtime_state.runtime.snapshot();
+    let prompt = viewer_state
+        .command_actor_id(&snapshot)
+        .and_then(|actor_id| {
+            runtime_state
+                .runtime
+                .query_interaction_prompt(actor_id, target_id)
+        });
     viewer_state.current_prompt = prompt.clone();
     prompt
 }
@@ -559,7 +614,8 @@ fn execute_target_interaction_option(
     target_id: InteractionTargetId,
     option_id: game_data::InteractionOptionId,
 ) {
-    let Some(actor_id) = viewer_state.selected_actor else {
+    let snapshot = runtime_state.runtime.snapshot();
+    let Some(actor_id) = viewer_state.command_actor_id(&snapshot) else {
         viewer_state.interaction_menu = None;
         viewer_state.status_line = "interaction: select an actor first".to_string();
         return;

@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { EditorShell } from "./components/EditorShell";
 import { detectCurrentSurface } from "./lib/editorSurface";
-import { openOrFocusSettingsWindow } from "./lib/editorWindows";
 import { invokeCommand, isTauriRuntime } from "./lib/tauri";
-import { useRegisterEditorMenuCommands } from "./menu/editorCommandRegistry";
 import { useEditorMenuBridge } from "./menu/menuBridge";
-import { EDITOR_MENU_COMMANDS } from "./menu/menuCommands";
 import { fallbackNarrativeWorkspace } from "./modules/narrative/fallback";
 import { NarrativeWorkspace } from "./modules/narrative/NarrativeWorkspace";
 import { SETTINGS_CHANGED_EVENT } from "./modules/settings/settingsWindowing";
@@ -41,8 +37,6 @@ function App() {
     useState<EditorRuntimeFlags>(defaultEditorRuntimeFlags);
   const [status, setStatus] = useState("Loading Narrative Lab...");
   const [canPersist, setCanPersist] = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [statusBarVisible, setStatusBarVisible] = useState(true);
   const [narrativeStartupReady, setNarrativeStartupReady] = useState(surface === "settings");
 
   async function loadNarrativeWorkspaceOnly() {
@@ -243,74 +237,25 @@ function App() {
 
   useEditorMenuBridge(setStatus, true);
 
-  const shellMenuCommands = useMemo(
-    () => ({
-      [EDITOR_MENU_COMMANDS.VIEW_TOGGLE_SIDEBAR]: {
-        execute: () => {
-          setSidebarVisible((current) => !current);
-        },
-      },
-      [EDITOR_MENU_COMMANDS.VIEW_TOGGLE_STATUS_BAR]: {
-        execute: () => {
-          setStatusBarVisible((current) => !current);
-        },
-      },
-      [EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS]: {
-        execute: async () => {
-          await openOrFocusSettingsWindow("ai");
-          setStatus("Opened AI provider settings.");
-        },
-      },
-      [EDITOR_MENU_COMMANDS.AI_TEST_PROVIDER_CONNECTION]: {
-        execute: async () => {
-          await openOrFocusSettingsWindow("ai");
-          setStatus("Opened AI settings to test provider connection.");
-        },
-      },
-    }),
-    [],
-  );
-
-  useRegisterEditorMenuCommands(shellMenuCommands);
-
   if (surface === "settings") {
     return <SettingsWindow status={status} onStatusChange={setStatus} />;
   }
 
   return (
-    <EditorShell
-      title="Narrative Lab"
-      subtitle="Markdown-first writing studio for outlines, scenes, branches, reviews, and AI-assisted revision."
-      bootstrap={narrativeWorkspace.bootstrap}
-      modules={[{ id: "narrative", label: "Narrative Lab", state: "active" as const }]}
-      activeModule="narrative"
-      onModuleChange={() => {}}
+    <NarrativeWorkspace
+      workspace={narrativeWorkspace}
+      appSettings={narrativeAppSettings}
+      canPersist={canPersist}
+      startupReady={narrativeStartupReady}
+      selfTestScenario={editorRuntimeFlags.menuSelfTestScenario ?? null}
       status={status}
-      primaryMetaLabel="Workspace"
-      secondaryMetaLabel="Project"
-      primaryMetaValue={narrativeWorkspace.workspaceRoot || "No workspace selected"}
-      secondaryMetaValue={
-        narrativeWorkspace.connectedProjectRoot || narrativeAppSettings.connectedProjectRoot || "Not connected"
-      }
       runtimeLabel={isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode"}
-      shellMode="narrative"
-      brandEyebrow="Narrative Studio"
-      showSidebar={sidebarVisible}
-      showStatusBar={statusBarVisible}
-    >
-      <NarrativeWorkspace
-        workspace={narrativeWorkspace}
-        appSettings={narrativeAppSettings}
-        canPersist={canPersist}
-        startupReady={narrativeStartupReady}
-        selfTestScenario={editorRuntimeFlags.menuSelfTestScenario ?? null}
-        onStatusChange={setStatus}
-        onReload={loadNarrativeWorkspaceOnly}
-        onOpenWorkspace={openNarrativeWorkspace}
-        onConnectProject={connectNarrativeProject}
-        onSaveAppSettings={saveNarrativeSettings}
-      />
-    </EditorShell>
+      onStatusChange={setStatus}
+      onReload={loadNarrativeWorkspaceOnly}
+      onOpenWorkspace={openNarrativeWorkspace}
+      onConnectProject={connectNarrativeProject}
+      onSaveAppSettings={saveNarrativeSettings}
+    />
   );
 }
 

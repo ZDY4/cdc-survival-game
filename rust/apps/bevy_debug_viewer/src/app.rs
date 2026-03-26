@@ -18,10 +18,12 @@ use crate::render::{
     update_dialogue_panel, update_interaction_menu, update_occluding_world_visuals,
 };
 use crate::simulation::{
-    advance_online_npc_actions, advance_runtime_progression, collect_events, prime_viewer_state,
-    refresh_interaction_prompt, sync_npc_runtime_presence, tick_runtime,
+    advance_actor_motion, advance_online_npc_actions, advance_runtime_progression, collect_events,
+    prime_viewer_state, refresh_interaction_prompt, sync_npc_runtime_presence, tick_runtime,
 };
-use crate::state::{ActorLabelEntities, ViewerRenderConfig, ViewerRuntimeState, ViewerState};
+use crate::state::{
+    ActorLabelEntities, ViewerActorMotionState, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+};
 
 pub(crate) fn run() {
     let bootstrap = load_viewer_bootstrap()
@@ -38,6 +40,7 @@ pub(crate) fn run() {
             ai_snapshot: Default::default(),
         })
         .insert_resource(ActorLabelEntities::default())
+        .insert_resource(ViewerActorMotionState::default())
         .insert_resource(ViewerRenderConfig::default())
         .insert_resource(ViewerState::default())
         .run();
@@ -91,13 +94,12 @@ impl Plugin for ViewerAppPlugin {
                 handle_mouse_wheel_zoom,
                 handle_camera_pan,
                 update_camera,
-                sync_world_visuals,
-                update_occluding_world_visuals,
                 handle_mouse_input,
                 handle_interaction_menu_buttons,
                 tick_runtime,
                 advance_runtime_progression,
                 collect_events,
+                advance_actor_motion,
                 refresh_interaction_prompt,
             )
                 .chain(),
@@ -105,6 +107,8 @@ impl Plugin for ViewerAppPlugin {
         .add_systems(
             Update,
             (
+                sync_world_visuals,
+                update_occluding_world_visuals,
                 sync_actor_labels,
                 crate::hud::update_hud,
                 update_interaction_menu,
@@ -112,7 +116,7 @@ impl Plugin for ViewerAppPlugin {
                 draw_world,
             )
                 .chain()
-                .after(update_occluding_world_visuals),
+                .after(advance_actor_motion),
         );
     }
 }

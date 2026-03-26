@@ -24,20 +24,96 @@ pub struct NarrativePanelLayoutItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NarrativeWorkspaceLayout {
-    #[serde(default = "default_layout_version")]
+    #[serde(default = "current_layout_version")]
     pub version: u32,
+    #[serde(default = "default_left_sidebar_visible")]
+    pub left_sidebar_visible: bool,
+    #[serde(default = "default_left_sidebar_width")]
+    pub left_sidebar_width: i32,
+    #[serde(default = "default_left_sidebar_view")]
+    pub left_sidebar_view: String,
+    #[serde(default = "default_right_sidebar_visible")]
+    pub right_sidebar_visible: bool,
+    #[serde(default = "default_right_sidebar_width")]
+    pub right_sidebar_width: i32,
+    #[serde(default = "default_right_sidebar_view")]
+    pub right_sidebar_view: String,
+    #[serde(default = "default_bottom_panel_visible")]
+    pub bottom_panel_visible: bool,
+    #[serde(default = "default_bottom_panel_height")]
+    pub bottom_panel_height: i32,
+    #[serde(default = "default_bottom_panel_view")]
+    pub bottom_panel_view: String,
     #[serde(default)]
+    pub open_document_keys: Vec<String>,
+    #[serde(default)]
+    pub active_document_key: Option<String>,
+    #[serde(default)]
+    pub zen_mode: bool,
+    #[serde(default, skip_serializing)]
     pub items: Vec<NarrativePanelLayoutItem>,
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub collapsed_panels: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub hidden_panels: Vec<String>,
 }
 
 impl Default for NarrativeWorkspaceLayout {
     fn default() -> Self {
         Self {
-            version: default_layout_version(),
+            version: current_layout_version(),
+            left_sidebar_visible: default_left_sidebar_visible(),
+            left_sidebar_width: default_left_sidebar_width(),
+            left_sidebar_view: default_left_sidebar_view(),
+            right_sidebar_visible: default_right_sidebar_visible(),
+            right_sidebar_width: default_right_sidebar_width(),
+            right_sidebar_view: default_right_sidebar_view(),
+            bottom_panel_visible: default_bottom_panel_visible(),
+            bottom_panel_height: default_bottom_panel_height(),
+            bottom_panel_view: default_bottom_panel_view(),
+            open_document_keys: Vec::new(),
+            active_document_key: None,
+            zen_mode: false,
+            items: Vec::new(),
+            collapsed_panels: Vec::new(),
+            hidden_panels: Vec::new(),
+        }
+    }
+}
+
+impl NarrativeWorkspaceLayout {
+    fn normalized(self) -> Self {
+        let migrated_from_v1 = self.version < current_layout_version()
+            || !self.items.is_empty()
+            || !self.collapsed_panels.is_empty()
+            || !self.hidden_panels.is_empty();
+
+        if migrated_from_v1 {
+            return Self::default();
+        }
+
+        let mut open_document_keys = dedupe_strings(self.open_document_keys);
+        let active_document_key = normalize_optional_value(self.active_document_key.as_deref());
+        if let Some(active_document_key) = active_document_key.as_ref() {
+            if !open_document_keys.contains(active_document_key) {
+                open_document_keys.insert(0, active_document_key.clone());
+            }
+        }
+
+        Self {
+            version: current_layout_version(),
+            left_sidebar_visible: self.left_sidebar_visible,
+            left_sidebar_width: clamp_i32(self.left_sidebar_width, 220, 460),
+            left_sidebar_view: normalize_left_sidebar_view(self.left_sidebar_view),
+            right_sidebar_visible: self.right_sidebar_visible,
+            right_sidebar_width: clamp_i32(self.right_sidebar_width, 260, 520),
+            right_sidebar_view: normalize_right_sidebar_view(self.right_sidebar_view),
+            bottom_panel_visible: self.bottom_panel_visible,
+            bottom_panel_height: clamp_i32(self.bottom_panel_height, 180, 440),
+            bottom_panel_view: normalize_bottom_panel_view(self.bottom_panel_view),
+            open_document_keys,
+            active_document_key,
+            zen_mode: self.zen_mode,
             items: Vec::new(),
             collapsed_panels: Vec::new(),
             hidden_panels: Vec::new(),
@@ -224,8 +300,8 @@ fn to_forward_slashes(path: PathBuf) -> String {
     raw
 }
 
-fn default_layout_version() -> u32 {
-    1
+fn current_layout_version() -> u32 {
+    2
 }
 
 fn normalize_workspace_layouts(
@@ -238,22 +314,79 @@ fn normalize_workspace_layouts(
             continue;
         };
 
-        normalized.insert(
-            key,
-            NarrativeWorkspaceLayout {
-                version: if layout.version == 0 {
-                    default_layout_version()
-                } else {
-                    layout.version
-                },
-                items: layout.items,
-                collapsed_panels: dedupe_strings(layout.collapsed_panels),
-                hidden_panels: dedupe_strings(layout.hidden_panels),
-            },
-        );
+        normalized.insert(key, layout.normalized());
     }
 
     normalized
+}
+
+fn default_left_sidebar_visible() -> bool {
+    true
+}
+
+fn default_left_sidebar_width() -> i32 {
+    300
+}
+
+fn default_left_sidebar_view() -> String {
+    "explorer".to_string()
+}
+
+fn default_right_sidebar_visible() -> bool {
+    true
+}
+
+fn default_right_sidebar_width() -> i32 {
+    320
+}
+
+fn default_right_sidebar_view() -> String {
+    "inspector".to_string()
+}
+
+fn default_bottom_panel_visible() -> bool {
+    true
+}
+
+fn default_bottom_panel_height() -> i32 {
+    220
+}
+
+fn default_bottom_panel_view() -> String {
+    "problems".to_string()
+}
+
+fn clamp_i32(value: i32, min: i32, max: i32) -> i32 {
+    value.clamp(min, max)
+}
+
+fn normalize_optional_value(raw: Option<&str>) -> Option<String> {
+    let trimmed = raw.unwrap_or_default().trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn normalize_left_sidebar_view(value: String) -> String {
+    match value.trim() {
+        "explorer" | "search" | "outline" | "ai" | "session" => value.trim().to_string(),
+        _ => default_left_sidebar_view(),
+    }
+}
+
+fn normalize_right_sidebar_view(value: String) -> String {
+    match value.trim() {
+        "inspector" | "review" | "bundle" | "session" => value.trim().to_string(),
+        _ => default_right_sidebar_view(),
+    }
+}
+
+fn normalize_bottom_panel_view(value: String) -> String {
+    match value.trim() {
+        "problems" | "ai_runs" | "prompt_debug" | "bundle_preview" => value.trim().to_string(),
+        _ => default_bottom_panel_view(),
+    }
 }
 
 fn dedupe_strings(values: Vec<String>) -> Vec<String> {
@@ -274,8 +407,10 @@ fn dedupe_strings(values: Vec<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        infer_default_narrative_app_settings_from_base, NarrativeAppSettings,
+        infer_default_narrative_app_settings_from_base, normalize_workspace_layouts, NarrativeAppSettings,
+        NarrativePanelLayoutItem, NarrativeWorkspaceLayout,
     };
+    use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -320,6 +455,84 @@ mod tests {
             merged.connected_project_root.as_deref(),
             Some("G:/custom/project")
         );
+    }
+
+    #[test]
+    fn migrates_v1_workspace_layouts_to_v2_defaults() {
+        let layouts = HashMap::from([(
+            "D:/repo/docs/narrative".to_string(),
+            NarrativeWorkspaceLayout {
+                version: 1,
+                items: vec![NarrativePanelLayoutItem {
+                    panel_id: "library".to_string(),
+                    x: 0,
+                    y: 0,
+                    w: 4,
+                    h: 8,
+                    min_w: None,
+                    min_h: None,
+                }],
+                collapsed_panels: vec!["review".to_string()],
+                hidden_panels: vec!["dock".to_string()],
+                ..NarrativeWorkspaceLayout::default()
+            },
+        )]);
+
+        let normalized = normalize_workspace_layouts(layouts);
+        let layout = normalized.get("D:/repo/docs/narrative").unwrap();
+
+        assert_eq!(layout.version, 2);
+        assert!(layout.left_sidebar_visible);
+        assert!(layout.right_sidebar_visible);
+        assert!(layout.bottom_panel_visible);
+        assert_eq!(layout.left_sidebar_view, "explorer");
+        assert_eq!(layout.right_sidebar_view, "inspector");
+        assert_eq!(layout.bottom_panel_view, "problems");
+        assert!(layout.open_document_keys.is_empty());
+        assert!(layout.items.is_empty());
+    }
+
+    #[test]
+    fn normalizes_v2_workspace_layout_values() {
+        let layouts = HashMap::from([(
+            "D:/repo/docs/narrative".to_string(),
+            NarrativeWorkspaceLayout {
+                version: 2,
+                left_sidebar_width: 999,
+                left_sidebar_view: "unknown".to_string(),
+                right_sidebar_width: 80,
+                right_sidebar_view: "review".to_string(),
+                bottom_panel_height: 1000,
+                bottom_panel_view: "mystery".to_string(),
+                open_document_keys: vec![
+                    "scene/intro".to_string(),
+                    "scene/intro".to_string(),
+                    "scene/outro".to_string(),
+                ],
+                active_document_key: Some("scene/finale".to_string()),
+                ..NarrativeWorkspaceLayout::default()
+            },
+        )]);
+
+        let normalized = normalize_workspace_layouts(layouts);
+        let layout = normalized.get("D:/repo/docs/narrative").unwrap();
+
+        assert_eq!(layout.version, 2);
+        assert_eq!(layout.left_sidebar_width, 460);
+        assert_eq!(layout.left_sidebar_view, "explorer");
+        assert_eq!(layout.right_sidebar_width, 260);
+        assert_eq!(layout.right_sidebar_view, "review");
+        assert_eq!(layout.bottom_panel_height, 440);
+        assert_eq!(layout.bottom_panel_view, "problems");
+        assert_eq!(
+            layout.open_document_keys,
+            vec![
+                "scene/finale".to_string(),
+                "scene/intro".to_string(),
+                "scene/outro".to_string()
+            ]
+        );
+        assert_eq!(layout.active_document_key.as_deref(), Some("scene/finale"));
     }
 
     fn unique_temp_dir(prefix: &str) -> PathBuf {

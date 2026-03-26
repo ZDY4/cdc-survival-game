@@ -39,6 +39,8 @@ pub struct RuntimeSnapshot {
     #[serde(default)]
     pub pending_interaction: Option<PendingInteractionIntent>,
     #[serde(default)]
+    pub pending_movement_stop_requested: bool,
+    #[serde(default)]
     pub path_preview: Vec<GridCoord>,
     #[serde(default)]
     pub tick_count: u64,
@@ -49,6 +51,7 @@ pub struct SimulationRuntime {
     simulation: Simulation,
     pending_movement: Option<PendingMovementIntent>,
     pending_interaction: Option<PendingInteractionIntent>,
+    pending_movement_stop_requested: bool,
     path_preview: Vec<GridCoord>,
     tick_count: u64,
 }
@@ -65,6 +68,7 @@ impl SimulationRuntime {
             simulation: Simulation::new(),
             pending_movement: None,
             pending_interaction: None,
+            pending_movement_stop_requested: false,
             path_preview: Vec::new(),
             tick_count: 0,
         }
@@ -75,6 +79,7 @@ impl SimulationRuntime {
             simulation,
             pending_movement: None,
             pending_interaction: None,
+            pending_movement_stop_requested: false,
             path_preview: Vec::new(),
             tick_count: 0,
         }
@@ -336,6 +341,7 @@ impl SimulationRuntime {
             simulation: self.simulation.save_snapshot(),
             pending_movement: self.pending_movement,
             pending_interaction: self.pending_interaction.clone(),
+            pending_movement_stop_requested: self.pending_movement_stop_requested,
             path_preview: self.path_preview.clone(),
             tick_count: self.tick_count,
         }
@@ -351,6 +357,7 @@ impl SimulationRuntime {
         self.simulation.load_snapshot(snapshot.simulation);
         self.pending_movement = snapshot.pending_movement;
         self.pending_interaction = snapshot.pending_interaction;
+        self.pending_movement_stop_requested = snapshot.pending_movement_stop_requested;
         self.path_preview = snapshot.path_preview;
         self.tick_count = snapshot.tick_count;
         Ok(())
@@ -844,6 +851,27 @@ impl SimulationRuntime {
         }
     }
 
+    pub fn request_pending_movement_stop(&mut self, actor_id: ActorId) -> bool {
+        if !self
+            .pending_movement
+            .map(|intent| intent.actor_id == actor_id)
+            .unwrap_or(false)
+        {
+            return false;
+        }
+
+        if self.peek_pending_progression() == Some(&PendingProgressionStep::ContinuePendingMovement)
+        {
+            self.pending_movement_stop_requested = true;
+        } else {
+            self.clear_pending_movement_internal(Some(
+                AutoMoveInterruptReason::CancelledByNewCommand,
+            ));
+        }
+
+        true
+    }
+
     pub fn advance_pending_progression(&mut self) -> ProgressionAdvanceResult {
         let Some(step) = self.simulation.pop_pending_progression() else {
             return ProgressionAdvanceResult::idle(self.pending_movement_position());
@@ -899,7 +927,20 @@ impl SimulationRuntime {
     ) {
         self.pending_movement = None;
         self.pending_interaction = None;
+        self.pending_movement_stop_requested = false;
         self.simulation.clear_pending_progression();
+        if interrupt_reason.is_some() {
+            self.path_preview.clear();
+        }
+    }
+
+    fn clear_pending_movement_state_preserving_progression(
+        &mut self,
+        interrupt_reason: Option<AutoMoveInterruptReason>,
+    ) {
+        self.pending_movement = None;
+        self.pending_interaction = None;
+        self.pending_movement_stop_requested = false;
         if interrupt_reason.is_some() {
             self.path_preview.clear();
         }
@@ -1024,6 +1065,7 @@ impl SimulationRuntime {
         if plan.requested_steps() == 0 {
             let final_position = Some(plan.start);
             self.pending_movement = None;
+            self.pending_movement_stop_requested = false;
             return ProgressionAdvanceResult {
                 applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
                 final_position,
@@ -1093,11 +1135,26 @@ impl SimulationRuntime {
             };
         }
 
+        if self.pending_movement_stop_requested && outcome.plan.is_truncated() {
+            self.clear_pending_movement_state_preserving_progression(Some(
+                AutoMoveInterruptReason::CancelledByNewCommand,
+            ));
+            return ProgressionAdvanceResult {
+                applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
+                final_position,
+                reached_goal: false,
+                interrupted: true,
+                interrupt_reason: Some(AutoMoveInterruptReason::CancelledByNewCommand),
+                movement_outcome: Some(outcome),
+            };
+        }
+
         if outcome.plan.is_truncated() && !self.simulation.is_in_combat() {
             self.simulation
                 .queue_pending_progression(PendingProgressionStep::ContinuePendingMovement);
         } else {
             self.pending_movement = None;
+            self.pending_movement_stop_requested = false;
         }
 
         let reached_goal = !outcome.plan.is_truncated();
@@ -1509,6 +1566,65 @@ mod tests {
         assert_eq!(
             runtime.peek_pending_progression(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+    }
+
+    #[test]
+    fn deferred_stop_finishes_current_pending_step_then_clears_remaining_path() {
+        let (mut runtime, handles) = create_demo_runtime();
+
+        runtime
+            .issue_actor_move(handles.player, GridCoord::new(0, 0, 3))
+            .expect("path should be planned");
+
+        let world_cycle = runtime.advance_pending_progression();
+        assert_eq!(
+            world_cycle.applied_step,
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        let next_turn = runtime.advance_pending_progression();
+        assert_eq!(
+            next_turn.applied_step,
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+        assert_eq!(
+            runtime.peek_pending_progression(),
+            Some(&PendingProgressionStep::ContinuePendingMovement)
+        );
+
+        assert!(runtime.request_pending_movement_stop(handles.player));
+        assert!(runtime.pending_movement().is_some());
+
+        let continue_move = runtime.advance_pending_progression();
+        assert_eq!(
+            continue_move.applied_step,
+            Some(PendingProgressionStep::ContinuePendingMovement)
+        );
+        assert!(continue_move.interrupted);
+        assert_eq!(
+            continue_move.interrupt_reason,
+            Some(AutoMoveInterruptReason::CancelledByNewCommand)
+        );
+        assert_eq!(
+            runtime.get_actor_grid_position(handles.player),
+            Some(GridCoord::new(0, 0, 2))
+        );
+        assert!(runtime.pending_movement().is_none());
+        assert_eq!(
+            runtime.peek_pending_progression(),
+            Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert!(runtime.actor_turn_open(handles.player));
+
+        let world_cycle = runtime.advance_pending_progression();
+        assert_eq!(
+            world_cycle.applied_step,
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert!(!runtime.actor_turn_open(handles.player));
+        assert_eq!(
+            runtime.peek_pending_progression(),
+            Some(&PendingProgressionStep::StartNextNonCombatPlayerTurn)
         );
     }
 

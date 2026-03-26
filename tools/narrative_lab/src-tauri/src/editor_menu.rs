@@ -17,15 +17,28 @@ pub mod ids {
     pub const FILE_SAVE_ALL: &str = "file.save-all";
     pub const FILE_RELOAD: &str = "file.reload";
     pub const FILE_DELETE_CURRENT: &str = "file.delete-current";
+    pub const WORKBENCH_COMMAND_PALETTE: &str = "workbench.command-palette";
+    pub const WORKBENCH_QUICK_OPEN: &str = "workbench.quick-open";
     pub const VIEW_TOGGLE_SIDEBAR: &str = "view.toggle-sidebar";
+    pub const VIEW_TOGGLE_LEFT_SIDEBAR: &str = "view.toggle-left-sidebar";
+    pub const VIEW_TOGGLE_RIGHT_SIDEBAR: &str = "view.toggle-right-sidebar";
+    pub const VIEW_TOGGLE_BOTTOM_PANEL: &str = "view.toggle-bottom-panel";
     pub const VIEW_TOGGLE_STATUS_BAR: &str = "view.toggle-status-bar";
     pub const VIEW_RESET_LAYOUT: &str = "view.reset-layout";
     pub const VIEW_RESTORE_DEFAULT_LAYOUT: &str = "view.restore-default-layout";
     pub const VIEW_COLLAPSE_ADVANCED_PANELS: &str = "view.collapse-advanced-panels";
     pub const VIEW_EXPAND_ALL_PANELS: &str = "view.expand-all-panels";
+    pub const VIEW_TOGGLE_INSPECTOR: &str = "view.toggle-inspector";
+    pub const VIEW_FOCUS_EXPLORER: &str = "view.focus-explorer";
+    pub const VIEW_FOCUS_EDITOR: &str = "view.focus-editor";
+    pub const VIEW_FOCUS_PROBLEMS: &str = "view.focus-problems";
+    pub const VIEW_ZEN_MODE: &str = "view.zen-mode";
     pub const AI_GENERATE: &str = "ai.generate";
     pub const AI_TEST_PROVIDER_CONNECTION: &str = "ai.test-provider-connection";
     pub const AI_OPEN_PROVIDER_SETTINGS: &str = "ai.open-provider-settings";
+    pub const NAVIGATION_NEXT_TAB: &str = "navigation.next-tab";
+    pub const NAVIGATION_PREV_TAB: &str = "navigation.prev-tab";
+    pub const NAVIGATION_CLOSE_ACTIVE_TAB: &str = "navigation.close-active-tab";
     pub const NARRATIVE_NEW_PROJECT_BRIEF: &str = "narrative.new.project-brief";
     pub const NARRATIVE_NEW_CHARACTER_CARD: &str = "narrative.new.character-card";
     pub const NARRATIVE_NEW_CHAPTER_OUTLINE: &str = "narrative.new.chapter-outline";
@@ -53,6 +66,20 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     let file_reload = MenuItem::with_id(app, ids::FILE_RELOAD, "Reload", true, Some("F5"))?;
     let file_delete_current =
         MenuItem::with_id(app, ids::FILE_DELETE_CURRENT, "Delete Current", true, Some("Delete"))?;
+    let workbench_command_palette = MenuItem::with_id(
+        app,
+        ids::WORKBENCH_COMMAND_PALETTE,
+        "Command Palette",
+        true,
+        Some("CmdOrCtrl+Shift+P"),
+    )?;
+    let workbench_quick_open = MenuItem::with_id(
+        app,
+        ids::WORKBENCH_QUICK_OPEN,
+        "Quick Open",
+        true,
+        Some("CmdOrCtrl+P"),
+    )?;
 
     let narrative_new_project_brief = MenuItem::with_id(
         app,
@@ -92,6 +119,27 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
 
     let toggle_sidebar =
         MenuItem::with_id(app, ids::VIEW_TOGGLE_SIDEBAR, "Toggle Sidebar", true, None::<&str>)?;
+    let toggle_left_sidebar = MenuItem::with_id(
+        app,
+        ids::VIEW_TOGGLE_LEFT_SIDEBAR,
+        "Toggle Left Sidebar",
+        true,
+        Some("CmdOrCtrl+B"),
+    )?;
+    let toggle_right_sidebar = MenuItem::with_id(
+        app,
+        ids::VIEW_TOGGLE_RIGHT_SIDEBAR,
+        "Toggle Right Sidebar",
+        true,
+        None::<&str>,
+    )?;
+    let toggle_bottom_panel = MenuItem::with_id(
+        app,
+        ids::VIEW_TOGGLE_BOTTOM_PANEL,
+        "Toggle Bottom Panel",
+        true,
+        Some("CmdOrCtrl+J"),
+    )?;
     let toggle_status_bar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_STATUS_BAR,
@@ -117,6 +165,57 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     )?;
     let expand_all_panels =
         MenuItem::with_id(app, ids::VIEW_EXPAND_ALL_PANELS, "Expand All Panels", true, None::<&str>)?;
+    let toggle_inspector = MenuItem::with_id(
+        app,
+        ids::VIEW_TOGGLE_INSPECTOR,
+        "Toggle Inspector",
+        true,
+        None::<&str>,
+    )?;
+    let focus_explorer = MenuItem::with_id(
+        app,
+        ids::VIEW_FOCUS_EXPLORER,
+        "Focus Explorer",
+        true,
+        None::<&str>,
+    )?;
+    let focus_editor = MenuItem::with_id(
+        app,
+        ids::VIEW_FOCUS_EDITOR,
+        "Focus Editor",
+        true,
+        None::<&str>,
+    )?;
+    let focus_problems = MenuItem::with_id(
+        app,
+        ids::VIEW_FOCUS_PROBLEMS,
+        "Focus Problems",
+        true,
+        None::<&str>,
+    )?;
+    let zen_mode =
+        MenuItem::with_id(app, ids::VIEW_ZEN_MODE, "Zen Mode", true, None::<&str>)?;
+    let next_tab = MenuItem::with_id(
+        app,
+        ids::NAVIGATION_NEXT_TAB,
+        "Next Tab",
+        true,
+        Some("CmdOrCtrl+Tab"),
+    )?;
+    let prev_tab = MenuItem::with_id(
+        app,
+        ids::NAVIGATION_PREV_TAB,
+        "Previous Tab",
+        true,
+        Some("CmdOrCtrl+Shift+Tab"),
+    )?;
+    let close_active_tab = MenuItem::with_id(
+        app,
+        ids::NAVIGATION_CLOSE_ACTIVE_TAB,
+        "Close Active Tab",
+        true,
+        Some("CmdOrCtrl+W"),
+    )?;
 
     let ai_generate = MenuItem::with_id(
         app,
@@ -176,13 +275,32 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         .build()?;
 
     let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&workbench_command_palette)
+        .separator()
         .item(&toggle_sidebar)
+        .item(&toggle_left_sidebar)
+        .item(&toggle_right_sidebar)
+        .item(&toggle_bottom_panel)
+        .item(&toggle_inspector)
         .item(&toggle_status_bar)
+        .separator()
+        .item(&focus_explorer)
+        .item(&focus_editor)
+        .item(&focus_problems)
+        .item(&zen_mode)
         .separator()
         .item(&reset_layout)
         .item(&restore_default_layout)
         .item(&collapse_advanced_panels)
         .item(&expand_all_panels)
+        .build()?;
+
+    let go_menu = SubmenuBuilder::new(app, "Go")
+        .item(&workbench_quick_open)
+        .separator()
+        .item(&next_tab)
+        .item(&prev_tab)
+        .item(&close_active_tab)
         .build()?;
 
     let ai_menu = SubmenuBuilder::new(app, "AI")
@@ -193,7 +311,7 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
 
     let help_menu = SubmenuBuilder::new(app, "Help").about(None).build()?;
 
-    Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &ai_menu, &help_menu])
+    Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &go_menu, &ai_menu, &help_menu])
 }
 
 pub fn apply_window_menu<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> tauri::Result<()> {

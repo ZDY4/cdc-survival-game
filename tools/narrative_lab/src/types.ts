@@ -484,11 +484,39 @@ export type NarrativePanelLayoutItem = {
   minH?: number;
 };
 
+export type NarrativeActivityView =
+  | "explorer"
+  | "search"
+  | "outline"
+  | "ai"
+  | "session";
+
+export type NarrativeSidePanelView =
+  | "inspector"
+  | "review"
+  | "bundle"
+  | "session";
+
+export type NarrativeBottomPanelView =
+  | "problems"
+  | "ai_runs"
+  | "prompt_debug"
+  | "bundle_preview";
+
 export type NarrativeWorkspaceLayout = {
-  version: number;
-  items: NarrativePanelLayoutItem[];
-  collapsedPanels: NarrativePanelId[];
-  hiddenPanels: NarrativePanelId[];
+  version: 2;
+  leftSidebarVisible: boolean;
+  leftSidebarWidth: number;
+  leftSidebarView: NarrativeActivityView;
+  rightSidebarVisible: boolean;
+  rightSidebarWidth: number;
+  rightSidebarView: NarrativeSidePanelView;
+  bottomPanelVisible: boolean;
+  bottomPanelHeight: number;
+  bottomPanelView: NarrativeBottomPanelView;
+  openDocumentKeys: string[];
+  activeDocumentKey?: string | null;
+  zenMode: boolean;
 };
 
 export type NarrativeAppSettings = {

@@ -570,6 +570,7 @@ fn plan_npc_life_system(
 
 fn execute_offline_actions_system(
     clock: Res<SimClock>,
+    settlements: Option<Res<SettlementDefinitions>>,
     mut registry: ResMut<SmartObjectReservations>,
     mut query: Query<(
         Entity,
@@ -579,6 +580,7 @@ fn execute_offline_actions_system(
         &mut CurrentAction,
         &mut ReservationState,
         &mut BackgroundLifeState,
+        Option<&mut crate::GridPosition>,
     )>,
 ) {
     for (
@@ -589,6 +591,7 @@ fn execute_offline_actions_system(
         mut current_action,
         mut reservations,
         mut background_state,
+        grid_position,
     ) in &mut query
     {
         if life.online {
@@ -666,11 +669,25 @@ fn execute_offline_actions_system(
             }
         }
 
+        let resolved_grid = settlements
+            .as_ref()
+            .and_then(|settlements| settlements.0.get(&SettlementId(life.settlement_id.clone())))
+            .and_then(|settlement| {
+                life.current_anchor
+                    .as_deref()
+                    .and_then(|anchor_id| resolve_anchor_grid(settlement, anchor_id))
+            })
+            .or_else(|| grid_position.as_ref().map(|grid_position| grid_position.0))
+            .unwrap_or_default();
+        if let Some(mut grid_position) = grid_position {
+            grid_position.0 = resolved_grid;
+        }
+
         background_state.0 = Some(NpcBackgroundState {
             definition_id: None,
             display_name: String::new(),
             map_id: None,
-            grid_position: GridCoord::default(),
+            grid_position: resolved_grid,
             current_anchor: life.current_anchor.clone(),
             current_plan: current_plan.steps.clone(),
             plan_next_index: current_plan.next_index,
@@ -854,6 +871,17 @@ fn default_duty_anchor_for_role(
         NpcRole::Doctor => first_anchor_for_kind(settlement, SmartObjectKind::MedicalStation),
         NpcRole::Resident => None,
     }
+}
+
+fn resolve_anchor_grid(
+    settlement: &SettlementDefinition,
+    anchor_id: &str,
+) -> Option<GridCoord> {
+    settlement
+        .anchors
+        .iter()
+        .find(|anchor| anchor.id == anchor_id)
+        .map(|anchor| anchor.grid)
 }
 
 fn first_anchor_for_kind(

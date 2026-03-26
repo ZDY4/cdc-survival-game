@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::prelude::*;
+use game_bevy::{SettlementDebugEntry, SettlementDefinitions};
 use game_data::{ActorId, ActorSide, GridCoord};
 
 use crate::dialogue::current_dialogue_node;
@@ -13,8 +15,8 @@ use crate::geometry::{
 use crate::state::{
     ActorLabel, ActorLabelEntities, DialoguePanelRoot, HudFooterText, HudText,
     InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot, InteractionMenuState,
-    ViewerCamera, ViewerRenderConfig, ViewerRuntimeState, ViewerState, ViewerUiFont,
-    VIEWER_FONT_PATH,
+    ViewerActorMotionState, ViewerCamera, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+    ViewerUiFont, VIEWER_FONT_PATH,
 };
 
 const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
@@ -118,6 +120,8 @@ pub(crate) struct ActorVisualState {
 #[derive(Component)]
 pub(crate) struct ActorBodyVisual {
     actor_id: ActorId,
+    body_material: Handle<StandardMaterial>,
+    head_material: Handle<StandardMaterial>,
 }
 
 pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -125,6 +129,12 @@ pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer
     commands.insert_resource(ViewerUiFont(ui_font.clone()));
     commands.insert_resource(StaticWorldVisualState::default());
     commands.insert_resource(ActorVisualState::default());
+    commands.insert_resource(GlobalAmbientLight {
+        color: Color::srgb(0.92, 0.95, 1.0),
+        brightness: 180.0,
+        affects_lightmapped_meshes: true,
+    });
+    commands.insert_resource(DirectionalLightShadowMap { size: 2048 });
     commands.spawn((
         Camera3d::default(),
         Projection::from(PerspectiveProjection {
@@ -138,21 +148,34 @@ pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer
     ));
     commands.spawn((
         DirectionalLight {
-            illuminance: 12_500.0,
-            shadows_enabled: false,
+            color: Color::srgb(1.0, 0.98, 0.95),
+            illuminance: 16_000.0,
+            shadows_enabled: true,
+            shadow_depth_bias: 0.04,
+            shadow_normal_bias: 1.6,
             ..default()
         },
+        CascadeShadowConfigBuilder {
+            num_cascades: 3,
+            minimum_distance: 0.1,
+            first_cascade_far_bound: 10.0,
+            maximum_distance: 48.0,
+            overlap_proportion: 0.25,
+        }
+        .build(),
         Transform::from_xyz(-12.0, 18.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     commands
         .spawn((
             Text::new(""),
             TextFont::from_font_size(11.2).with_font(ui_font.clone()),
+            TextLayout::new(Justify::Left, LineBreak::NoWrap),
             Node {
                 position_type: PositionType::Absolute,
                 top: px(12),
-                right: px(12),
-                width: px(420),
+                left: px(12),
+                width: Val::Auto,
+                min_width: px(560),
                 padding: UiRect::all(px(12)),
                 ..default()
             },
@@ -243,6 +266,7 @@ pub(crate) fn update_camera(
 pub(crate) fn sync_actor_labels(
     mut commands: Commands,
     runtime_state: Res<ViewerRuntimeState>,
+    motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     viewer_font: Res<ViewerUiFont>,
@@ -278,7 +302,7 @@ pub(crate) fn sync_actor_labels(
         };
         let color = actor_color(actor.side);
         let world_position = actor_label_world_position(
-            runtime_state.runtime.grid_to_world(actor.grid_position),
+            actor_visual_world_position(&runtime_state, &motion_state, actor),
             snapshot.grid.grid_size,
             *render_config,
         );
@@ -502,16 +526,12 @@ pub(crate) fn sync_world_visuals(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     runtime_state: Res<ViewerRuntimeState>,
+    motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     mut static_world_state: ResMut<StaticWorldVisualState>,
     mut actor_visual_state: ResMut<ActorVisualState>,
-    mut actor_visuals: Query<(
-        Entity,
-        &mut Transform,
-        &MeshMaterial3d<StandardMaterial>,
-        &ActorBodyVisual,
-    )>,
+    mut actor_visuals: Query<(Entity, &mut Transform, &ActorBodyVisual)>,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
@@ -544,6 +564,7 @@ pub(crate) fn sync_world_visuals(
         &mut meshes,
         &mut materials,
         &runtime_state,
+        &motion_state,
         &snapshot,
         &viewer_state,
         *render_config,
@@ -554,6 +575,7 @@ pub(crate) fn sync_world_visuals(
 
 pub(crate) fn update_occluding_world_visuals(
     runtime_state: Res<ViewerRuntimeState>,
+    motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     camera_query: Single<&Transform, With<ViewerCamera>>,
@@ -572,9 +594,7 @@ pub(crate) fn update_occluding_world_visuals(
 
     let camera_position = camera_query.translation;
     let target_position = actor_label_world_position(
-        runtime_state
-            .runtime
-            .grid_to_world(target_actor.grid_position),
+        actor_visual_world_position(&runtime_state, &motion_state, target_actor),
         snapshot.grid.grid_size,
         *render_config,
     );
@@ -593,6 +613,8 @@ pub(crate) fn update_occluding_world_visuals(
 pub(crate) fn draw_world(
     mut gizmos: Gizmos,
     runtime_state: Res<ViewerRuntimeState>,
+    settlements: Option<Res<SettlementDefinitions>>,
+    motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
 ) {
@@ -674,6 +696,38 @@ pub(crate) fn draw_world(
             0.94,
             color,
         );
+    }
+
+    if viewer_state.is_free_observe() {
+        if let Some(actor) = snapshot
+            .actors
+            .iter()
+            .find(|actor| Some(actor.actor_id) == viewer_state.selected_actor)
+        {
+            let actor_world = actor_visual_world_position(&runtime_state, &motion_state, actor);
+            if actor.side != ActorSide::Player {
+                draw_actor_selection_ring(
+                    &mut gizmos,
+                    actor_world,
+                    actor.grid_position.y,
+                    snapshot.grid.grid_size,
+                    *render_config,
+                    actor_selection_ring_color(actor.side),
+                );
+            }
+            if let Some(entry) = selected_ai_debug_entry(actor, &runtime_state) {
+                draw_selected_ai_overlay(
+                    &mut gizmos,
+                    &runtime_state,
+                    &snapshot,
+                    settlements.as_deref(),
+                    actor,
+                    actor_world,
+                    entry,
+                    *render_config,
+                );
+            }
+        }
     }
 }
 
@@ -874,16 +928,12 @@ fn sync_actor_visuals(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     runtime_state: &ViewerRuntimeState,
+    motion_state: &ViewerActorMotionState,
     snapshot: &game_core::SimulationSnapshot,
     viewer_state: &ViewerState,
     render_config: ViewerRenderConfig,
     actor_visual_state: &mut ActorVisualState,
-    actor_visuals: &mut Query<(
-        Entity,
-        &mut Transform,
-        &MeshMaterial3d<StandardMaterial>,
-        &ActorBodyVisual,
-    )>,
+    actor_visuals: &mut Query<(Entity, &mut Transform, &ActorBodyVisual)>,
 ) {
     let mut seen_actor_ids = HashSet::new();
     let grid_size = snapshot.grid.grid_size;
@@ -894,41 +944,61 @@ fn sync_actor_visuals(
         .filter(|actor| actor.grid_position.y == viewer_state.current_level)
     {
         seen_actor_ids.insert(actor.actor_id);
-        let translation = actor_body_translation(
-            runtime_state.runtime.grid_to_world(actor.grid_position),
-            grid_size,
-            render_config,
-        );
+        let translation =
+            actor_visual_translation(runtime_state, motion_state, actor, grid_size, render_config);
         let color = actor_color(actor.side);
 
         if let Some(entity) = actor_visual_state.by_actor.get(&actor.actor_id).copied() {
-            if let Ok((_, mut transform, material_handle, body)) = actor_visuals.get_mut(entity) {
+            if let Ok((_, mut transform, body)) = actor_visuals.get_mut(entity) {
                 if body.actor_id == actor.actor_id {
                     transform.translation = translation;
-                    if let Some(material) = materials.get_mut(&material_handle.0) {
+                    if let Some(material) = materials.get_mut(&body.body_material) {
                         material.base_color = color;
+                    }
+                    if let Some(material) = materials.get_mut(&body.head_material) {
+                        material.base_color = actor_head_color(color);
                     }
                     continue;
                 }
             }
         }
 
+        let body_material = materials.add(StandardMaterial {
+            base_color: color,
+            perceptual_roughness: 0.92,
+            ..default()
+        });
+        let head_material = materials.add(StandardMaterial {
+            base_color: actor_head_color(color),
+            perceptual_roughness: 0.88,
+            ..default()
+        });
+        let body_height = render_config.actor_body_length_world;
+        let body_width = (render_config.actor_radius_world * 1.65).max(0.18);
+        let body_depth = (render_config.actor_radius_world * 1.2).max(0.16);
+        let head_radius = (render_config.actor_radius_world * 0.92).max(0.12);
+
         let entity = commands
             .spawn((
-                Mesh3d(meshes.add(Capsule3d::new(
-                    render_config.actor_radius_world,
-                    render_config.actor_body_length_world,
-                ))),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: color,
-                    perceptual_roughness: 0.92,
-                    ..default()
-                })),
                 Transform::from_translation(translation).with_scale(Vec3::splat(grid_size)),
                 ActorBodyVisual {
                     actor_id: actor.actor_id,
+                    body_material: body_material.clone(),
+                    head_material: head_material.clone(),
                 },
             ))
+            .with_children(|parent| {
+                parent.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(body_width, body_height, body_depth))),
+                    MeshMaterial3d(body_material),
+                    Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
+                ));
+                parent.spawn((
+                    Mesh3d(meshes.add(Sphere::new(head_radius))),
+                    MeshMaterial3d(head_material),
+                    Transform::from_xyz(0.0, body_height * 0.5, 0.0),
+                ));
+            })
             .id();
         actor_visual_state.by_actor.insert(actor.actor_id, entity);
     }
@@ -1001,6 +1071,126 @@ fn draw_grid_outline(
     gizmos.line(d, a, color);
 }
 
+fn draw_actor_selection_ring(
+    gizmos: &mut Gizmos,
+    world: game_data::WorldCoord,
+    level: i32,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+    color: Color,
+) {
+    let y = level_base_height(level, grid_size)
+        + render_config.floor_thickness_world
+        + OVERLAY_ELEVATION * 1.2;
+    gizmos.circle(
+        Isometry3d::new(
+            Vec3::new(world.x, y, world.z),
+            Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
+        ),
+        grid_size * 0.34,
+        color,
+    );
+}
+
+fn draw_selected_ai_overlay(
+    gizmos: &mut Gizmos,
+    runtime_state: &ViewerRuntimeState,
+    snapshot: &game_core::SimulationSnapshot,
+    settlements: Option<&SettlementDefinitions>,
+    actor: &game_core::ActorDebugState,
+    actor_world: game_data::WorldCoord,
+    entry: &SettlementDebugEntry,
+    render_config: ViewerRenderConfig,
+) {
+    let grid_size = snapshot.grid.grid_size;
+    let actor_y = level_base_height(actor.grid_position.y, grid_size)
+        + render_config.floor_thickness_world
+        + OVERLAY_ELEVATION * 2.2;
+    let actor_pos = Vec3::new(actor_world.x, actor_y, actor_world.z);
+
+    if let Some(goal_grid) = entry
+        .runtime_goal_grid
+        .filter(|grid| grid.y == actor.grid_position.y)
+    {
+        let goal_world = runtime_state.runtime.grid_to_world(goal_grid);
+        let goal_pos = Vec3::new(goal_world.x, actor_y, goal_world.z);
+        gizmos.line(actor_pos, goal_pos, Color::srgb(0.98, 0.72, 0.26));
+        draw_grid_outline(
+            gizmos,
+            goal_grid,
+            grid_size,
+            render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.4,
+            0.86,
+            Color::srgb(0.98, 0.72, 0.26),
+        );
+    }
+
+    if let Some(anchor_grid) = entry
+        .current_anchor
+        .as_deref()
+        .and_then(|anchor_id| resolve_settlement_anchor_grid(settlements, entry, anchor_id))
+        .filter(|grid| grid.y == actor.grid_position.y)
+    {
+        draw_grid_outline(
+            gizmos,
+            anchor_grid,
+            grid_size,
+            render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.6,
+            0.9,
+            Color::srgb(0.2, 0.86, 0.84),
+        );
+    }
+
+    for reservation_grid in entry
+        .reservations
+        .iter()
+        .filter_map(|reservation_id| {
+            resolve_reservation_grid(settlements, snapshot, entry, reservation_id)
+        })
+        .filter(|grid| grid.y == actor.grid_position.y)
+        .take(3)
+    {
+        let reservation_world = runtime_state.runtime.grid_to_world(reservation_grid);
+        gizmos.line(
+            actor_pos,
+            Vec3::new(reservation_world.x, actor_y, reservation_world.z),
+            Color::srgb(0.6, 0.46, 0.96),
+        );
+        draw_grid_outline(
+            gizmos,
+            reservation_grid,
+            grid_size,
+            render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.0,
+            0.8,
+            Color::srgb(0.6, 0.46, 0.96),
+        );
+    }
+}
+
+fn actor_visual_world_position(
+    runtime_state: &ViewerRuntimeState,
+    motion_state: &ViewerActorMotionState,
+    actor: &game_core::ActorDebugState,
+) -> game_data::WorldCoord {
+    motion_state
+        .current_world(actor.actor_id)
+        .unwrap_or_else(|| runtime_state.runtime.grid_to_world(actor.grid_position))
+}
+
+fn actor_visual_translation(
+    runtime_state: &ViewerRuntimeState,
+    motion_state: &ViewerActorMotionState,
+    actor: &game_core::ActorDebugState,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec3 {
+    actor_body_translation(
+        actor_visual_world_position(runtime_state, motion_state, actor),
+        grid_size,
+        render_config,
+    )
+}
+
 fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
     let mut min_x = i32::MAX;
     let mut max_x = i32::MIN;
@@ -1019,6 +1209,69 @@ fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f3
     let width = (max_x - min_x + 1) as f32 * grid_size;
     let depth = (max_z - min_z + 1) as f32 * grid_size;
     (center_x, center_z, width, depth)
+}
+
+fn selected_ai_debug_entry<'a>(
+    actor: &game_core::ActorDebugState,
+    runtime_state: &'a ViewerRuntimeState,
+) -> Option<&'a SettlementDebugEntry> {
+    runtime_state
+        .ai_snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.runtime_actor_id == Some(actor.actor_id))
+        .or_else(|| {
+            actor.definition_id.as_ref().and_then(|definition_id| {
+                runtime_state
+                    .ai_snapshot
+                    .entries
+                    .iter()
+                    .find(|entry| entry.definition_id == definition_id.as_str())
+            })
+        })
+}
+
+fn resolve_settlement_anchor_grid(
+    settlements: Option<&SettlementDefinitions>,
+    entry: &SettlementDebugEntry,
+    anchor_id: &str,
+) -> Option<GridCoord> {
+    settlements?
+        .0
+        .get(&game_data::SettlementId(entry.settlement_id.clone()))?
+        .anchors
+        .iter()
+        .find(|anchor| anchor.id == anchor_id)
+        .map(|anchor| anchor.grid)
+}
+
+fn resolve_reservation_grid(
+    settlements: Option<&SettlementDefinitions>,
+    snapshot: &game_core::SimulationSnapshot,
+    entry: &SettlementDebugEntry,
+    reservation_id: &str,
+) -> Option<GridCoord> {
+    if let Some(object) = snapshot
+        .grid
+        .map_objects
+        .iter()
+        .find(|object| object.object_id == reservation_id)
+    {
+        return Some(object.anchor);
+    }
+
+    let settlement = settlements?
+        .0
+        .get(&game_data::SettlementId(entry.settlement_id.clone()))?;
+    let smart_object = settlement
+        .smart_objects
+        .iter()
+        .find(|object| object.id == reservation_id)?;
+    settlement
+        .anchors
+        .iter()
+        .find(|anchor| anchor.id == smart_object.anchor_id)
+        .map(|anchor| anchor.grid)
 }
 
 fn spawn_box(
@@ -1110,21 +1363,58 @@ fn restore_all_occluders(
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_static_world_box_specs, interaction_menu_button_color, interaction_menu_layout,
-        occupied_cells_box, GridBounds, StaticWorldOccluderKind, INTERACTION_MENU_BUTTON_GAP_PX,
-        INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX,
+        actor_visual_world_position, collect_static_world_box_specs, interaction_menu_button_color,
+        interaction_menu_layout, occupied_cells_box, GridBounds, StaticWorldOccluderKind,
+        INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX,
+        INTERACTION_MENU_PADDING_PX,
     };
-    use crate::state::{InteractionMenuState, ViewerRenderConfig};
+    use crate::state::{
+        InteractionMenuState, ViewerActorMotionState, ViewerRenderConfig, ViewerRuntimeState,
+    };
     use bevy::prelude::*;
+    use game_bevy::SettlementDebugSnapshot;
     use game_core::{
-        CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
-        OverworldStateSnapshot, SimulationSnapshot,
+        create_demo_runtime, CombatDebugState, GridDebugState, MapCellDebugState,
+        MapObjectDebugState, OverworldStateSnapshot, SimulationSnapshot,
     };
     use game_data::{
         ActorId, GridCoord, InteractionContextSnapshot, InteractionOptionId, InteractionPrompt,
         InteractionTargetId, MapObjectFootprint, MapObjectKind, MapRotation,
         ResolvedInteractionOption, TurnState, WorldCoord,
     };
+
+    #[test]
+    fn actor_visual_world_position_prefers_motion_track() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let actor = snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == handles.player)
+            .expect("player actor should exist");
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut motion_state = ViewerActorMotionState::default();
+        motion_state.track_movement(
+            handles.player,
+            WorldCoord::new(0.5, 0.5, 0.5),
+            WorldCoord::new(1.5, 0.5, 0.5),
+            0,
+            0.1,
+        );
+        motion_state
+            .tracks
+            .get_mut(&handles.player)
+            .expect("track should exist")
+            .advance(0.05);
+
+        let world = actor_visual_world_position(&runtime_state, &motion_state, actor);
+
+        assert_eq!(world, WorldCoord::new(1.0, 0.5, 0.5));
+    }
 
     #[test]
     fn interaction_menu_layout_clamps_to_window_bounds() {
@@ -1438,6 +1728,22 @@ fn actor_color(side: ActorSide) -> Color {
         ActorSide::Hostile => Color::srgb(0.94, 0.36, 0.33),
         ActorSide::Neutral => Color::srgb(0.78, 0.78, 0.82),
     }
+}
+
+fn actor_head_color(body_color: Color) -> Color {
+    let mut color = body_color.to_srgba();
+    color.red = (color.red * 1.08).min(1.0);
+    color.green = (color.green * 1.08).min(1.0);
+    color.blue = (color.blue * 1.08).min(1.0);
+    color.into()
+}
+
+fn actor_selection_ring_color(side: ActorSide) -> Color {
+    let mut color = actor_color(side).to_srgba();
+    color.red = (color.red * 1.15).min(1.0);
+    color.green = (color.green * 1.15).min(1.0);
+    color.blue = (color.blue * 1.15).min(1.0);
+    color.into()
 }
 
 fn map_object_color(kind: game_data::MapObjectKind) -> Color {

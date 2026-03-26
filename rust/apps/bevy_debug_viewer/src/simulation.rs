@@ -14,19 +14,26 @@ use game_core::{
 use game_data::{ActorSide, GridCoord, SettlementId};
 
 use crate::dialogue::sync_dialogue_from_event;
-use crate::state::{HudEventCategory, ViewerEventEntry, ViewerRuntimeState, ViewerState};
+use crate::state::{
+    HudEventCategory, ViewerActorMotionState, ViewerEventEntry, ViewerRuntimeState, ViewerState,
+};
+
+const ACTOR_MOTION_MIN_DURATION_SEC: f32 = 0.04;
+const ACTOR_MOTION_MAX_DURATION_SEC: f32 = 0.16;
 
 pub(crate) fn prime_viewer_state(
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
-    viewer_state.selected_actor = snapshot
+    if let Some(actor) = snapshot
         .actors
         .iter()
         .find(|actor| actor.side == ActorSide::Player)
         .or_else(|| snapshot.actors.first())
-        .map(|actor| actor.actor_id);
+    {
+        viewer_state.select_actor(actor.actor_id, actor.side);
+    }
     viewer_state.current_level = snapshot.grid.default_level.unwrap_or(0);
     let initial_events = runtime_state.runtime.drain_events();
     runtime_state.recent_events.extend(
@@ -150,11 +157,20 @@ pub(crate) fn sync_npc_runtime_presence(
                 let Some(definition) = definitions.0.get(&definition_id.0) else {
                     continue;
                 };
-                let spawn_grid = background_state
+                let desired_spawn_grid = background_state
                     .0
                     .as_ref()
-                    .map(|background| background.grid_position)
+                    .and_then(|background| {
+                        background
+                            .current_anchor
+                            .as_deref()
+                            .and_then(|anchor| resolve_anchor_grid(settlement, anchor))
+                            .or(Some(background.grid_position))
+                    })
                     .unwrap_or(grid_position.0);
+                let spawn_grid =
+                    resolve_reachable_runtime_grid(&snapshot, desired_spawn_grid, None)
+                        .unwrap_or(desired_spawn_grid);
                 let actor_id = register_runtime_actor_from_definition(
                     &mut runtime_state.runtime,
                     definition,
@@ -278,6 +294,7 @@ pub(crate) fn advance_online_npc_actions(
         return;
     };
     let step_minutes = u32::from(clock.offline_step_minutes);
+    let snapshot = runtime_state.runtime.snapshot();
 
     for (
         entity,
@@ -393,7 +410,14 @@ pub(crate) fn advance_online_npc_actions(
             ActionExecutionPhase::Travel => {
                 let target_grid = target_anchor
                     .as_deref()
-                    .and_then(|anchor| resolve_anchor_grid(settlement, anchor));
+                    .and_then(|anchor| resolve_anchor_grid(settlement, anchor))
+                    .and_then(|anchor_grid| {
+                        resolve_reachable_runtime_grid(
+                            &snapshot,
+                            anchor_grid,
+                            Some(runtime_link.actor_id),
+                        )
+                    });
                 runtime_execution.runtime_goal_grid = target_grid;
                 if let Some(target_grid) = target_grid {
                     runtime_state
@@ -554,13 +578,22 @@ pub(crate) fn cancel_pending_movement(
         return false;
     }
 
+    let stop_after_current_step = runtime_state.runtime.peek_pending_progression()
+        == Some(&PendingProgressionStep::ContinuePendingMovement);
     runtime_state
         .runtime
-        .clear_pending_movement(intent.actor_id);
+        .request_pending_movement_stop(intent.actor_id);
     viewer_state.progression_elapsed_sec = 0.0;
     viewer_state.end_turn_hold_sec = 0.0;
     viewer_state.end_turn_repeat_elapsed_sec = 0.0;
-    viewer_state.status_line = format!("move: cancelled actor {:?}", intent.actor_id);
+    viewer_state.status_line = if stop_after_current_step {
+        format!(
+            "move: stopping after current step for actor {:?}",
+            intent.actor_id
+        )
+    } else {
+        format!("move: cancelled actor {:?}", intent.actor_id)
+    };
     true
 }
 
@@ -568,7 +601,8 @@ pub(crate) fn submit_end_turn(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
 ) {
-    if let Some(actor_id) = viewer_state.selected_actor {
+    let snapshot = runtime_state.runtime.snapshot();
+    if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
         viewer_state.progression_elapsed_sec = 0.0;
         let result = runtime_state
             .runtime
@@ -601,10 +635,24 @@ pub(crate) fn advance_runtime_progression(
 
 pub(crate) fn collect_events(
     mut runtime_state: ResMut<ViewerRuntimeState>,
+    mut motion_state: ResMut<ViewerActorMotionState>,
     mut viewer_state: ResMut<ViewerState>,
 ) {
     let turn_index = runtime_state.runtime.snapshot().combat.current_turn_index;
     for event in runtime_state.runtime.drain_events() {
+        if let SimulationEvent::ActorMoved {
+            actor_id, from, to, ..
+        } = &event
+        {
+            queue_actor_motion(
+                &mut motion_state,
+                &runtime_state,
+                *actor_id,
+                *from,
+                *to,
+                viewer_state.min_progression_interval_sec,
+            );
+        }
         sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
         runtime_state
             .recent_events
@@ -617,11 +665,66 @@ pub(crate) fn collect_events(
     }
 }
 
+pub(crate) fn advance_actor_motion(
+    time: Res<Time>,
+    runtime_state: Res<ViewerRuntimeState>,
+    viewer_state: Res<ViewerState>,
+    mut motion_state: ResMut<ViewerActorMotionState>,
+) {
+    if motion_state.tracks.is_empty() {
+        return;
+    }
+
+    let snapshot = runtime_state.runtime.snapshot();
+    let grid_size = snapshot.grid.grid_size;
+    let tracked_actor_ids: Vec<_> = motion_state.tracks.keys().copied().collect();
+
+    for actor_id in tracked_actor_ids {
+        let Some(actor) = snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == actor_id)
+        else {
+            motion_state.tracks.remove(&actor_id);
+            continue;
+        };
+
+        let authority_world = runtime_state.runtime.grid_to_world(actor.grid_position);
+        let authority_level = actor.grid_position.y;
+        let Some(track) = motion_state.tracks.get_mut(&actor_id) else {
+            continue;
+        };
+
+        let should_snap = authority_level != track.level
+            || authority_level != viewer_state.current_level
+            || horizontal_world_distance(track.to_world, authority_world) > grid_size + 0.001;
+        if should_snap {
+            track.snap_to(authority_world, authority_level);
+            motion_state.tracks.remove(&actor_id);
+            continue;
+        }
+
+        track.advance(time.delta_secs());
+        if !track.active {
+            if !approx_world_coord(track.current_world, authority_world) {
+                track.snap_to(authority_world, authority_level);
+            }
+            motion_state.tracks.remove(&actor_id);
+        }
+    }
+}
+
 pub(crate) fn refresh_interaction_prompt(
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
 ) {
-    let Some(actor_id) = viewer_state.selected_actor else {
+    if viewer_state.is_free_observe() {
+        viewer_state.current_prompt = None;
+        return;
+    }
+
+    let snapshot = runtime_state.runtime.snapshot();
+    let Some(actor_id) = viewer_state.command_actor_id(&snapshot) else {
         viewer_state.current_prompt = None;
         return;
     };
@@ -702,6 +805,43 @@ pub(crate) fn command_result_status(label: &str, result: SimulationCommandResult
     }
 }
 
+fn queue_actor_motion(
+    motion_state: &mut ViewerActorMotionState,
+    runtime_state: &ViewerRuntimeState,
+    actor_id: game_data::ActorId,
+    from: GridCoord,
+    to: GridCoord,
+    min_progression_interval_sec: f32,
+) {
+    let from_world = motion_state
+        .tracks
+        .get(&actor_id)
+        .filter(|track| track.active)
+        .map(|track| track.current_world)
+        .unwrap_or_else(|| runtime_state.runtime.grid_to_world(from));
+    let to_world = runtime_state.runtime.grid_to_world(to);
+    motion_state.track_movement(
+        actor_id,
+        from_world,
+        to_world,
+        to.y,
+        actor_motion_duration_sec(min_progression_interval_sec),
+    );
+}
+
+fn actor_motion_duration_sec(min_progression_interval_sec: f32) -> f32 {
+    (min_progression_interval_sec * 0.9)
+        .clamp(ACTOR_MOTION_MIN_DURATION_SEC, ACTOR_MOTION_MAX_DURATION_SEC)
+}
+
+fn horizontal_world_distance(a: game_data::WorldCoord, b: game_data::WorldCoord) -> f32 {
+    ((a.x - b.x).powi(2) + (a.z - b.z).powi(2)).sqrt()
+}
+
+fn approx_world_coord(a: game_data::WorldCoord, b: game_data::WorldCoord) -> bool {
+    (a.x - b.x).abs() <= 0.001 && (a.y - b.y).abs() <= 0.001 && (a.z - b.z).abs() <= 0.001
+}
+
 fn progression_result_status(result: &ProgressionAdvanceResult) -> String {
     let step = result
         .applied_step
@@ -774,6 +914,87 @@ fn resolve_anchor_grid(
         .iter()
         .find(|anchor| anchor.id == anchor_id)
         .map(|anchor| anchor.grid)
+}
+
+fn resolve_reachable_runtime_grid(
+    snapshot: &game_core::SimulationSnapshot,
+    desired_grid: GridCoord,
+    actor_id: Option<game_data::ActorId>,
+) -> Option<GridCoord> {
+    if is_runtime_grid_walkable(snapshot, desired_grid, actor_id) {
+        return Some(desired_grid);
+    }
+
+    let max_radius = snapshot
+        .grid
+        .map_width
+        .zip(snapshot.grid.map_height)
+        .map(|(width, height)| width.max(height) as i32)
+        .unwrap_or(8)
+        .max(1);
+
+    for radius in 1..=max_radius {
+        for candidate in collect_ring_cells(desired_grid, radius) {
+            if is_runtime_grid_walkable(snapshot, candidate, actor_id) {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+fn is_runtime_grid_walkable(
+    snapshot: &game_core::SimulationSnapshot,
+    grid: GridCoord,
+    actor_id: Option<game_data::ActorId>,
+) -> bool {
+    if grid.x < 0 || grid.z < 0 {
+        return false;
+    }
+
+    if let Some(width) = snapshot.grid.map_width {
+        if grid.x as u32 >= width {
+            return false;
+        }
+    }
+    if let Some(height) = snapshot.grid.map_height {
+        if grid.z as u32 >= height {
+            return false;
+        }
+    }
+    if !snapshot.grid.levels.is_empty() && !snapshot.grid.levels.contains(&grid.y) {
+        return false;
+    }
+    if snapshot.grid.map_blocked_cells.contains(&grid) {
+        return false;
+    }
+    if snapshot.grid.runtime_blocked_cells.contains(&grid) {
+        return actor_id
+            .and_then(|actor_id| {
+                snapshot
+                    .actors
+                    .iter()
+                    .find(|actor| actor.actor_id == actor_id)
+                    .map(|actor| actor.grid_position == grid)
+            })
+            .unwrap_or(false);
+    }
+
+    true
+}
+
+fn collect_ring_cells(center: GridCoord, radius: i32) -> Vec<GridCoord> {
+    let mut cells = Vec::new();
+    for dx in -radius..=radius {
+        for dz in -radius..=radius {
+            if dx.abs().max(dz.abs()) != radius {
+                continue;
+            }
+            cells.push(GridCoord::new(center.x + dx, center.y, center.z + dz));
+        }
+    }
+    cells
 }
 
 fn quantize_need(value: f32) -> u8 {
@@ -856,6 +1077,240 @@ fn mark_online_replan_failure(
             action,
             reason: reason.to_string(),
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        actor_motion_duration_sec, advance_online_npc_actions, queue_actor_motion,
+        sync_npc_runtime_presence, ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
+    };
+    use crate::state::{ViewerActorMotionState, ViewerRuntimeState, ViewerState};
+    use bevy::ecs::message::Messages;
+    use bevy::prelude::*;
+    use game_bevy::{
+        build_runtime_from_default_startup_seed, load_runtime_bootstrap,
+        load_settlement_definitions, spawn_characters_from_definition, CharacterDefinitionPath,
+        CharacterDefinitions, CharacterSpawnRejected, CurrentAction, CurrentPlan, NpcLifePlugin,
+        NpcLifeState, RuntimeActorLink, RuntimeExecutionState, SettlementDebugSnapshot,
+        SettlementDefinitionPath, SettlementSimulationPlugin, SpawnCharacterRequest,
+    };
+    use game_core::create_demo_runtime;
+    use game_core::SimulationCommand;
+    use game_data::{ActorSide, GridCoord, WorldCoord};
+
+    fn seed_life_debug_spawns(app: &mut App) {
+        let definition_ids = app
+            .world()
+            .resource::<CharacterDefinitions>()
+            .0
+            .iter()
+            .filter_map(|(definition_id, definition)| {
+                definition.life.as_ref().map(|_| definition_id.clone())
+            })
+            .collect::<Vec<_>>();
+        let mut next_spawn_x = 8;
+        let mut requests = app
+            .world_mut()
+            .resource_mut::<Messages<SpawnCharacterRequest>>();
+        for definition_id in definition_ids {
+            requests.write(SpawnCharacterRequest {
+                definition_id,
+                grid_position: GridCoord::new(next_spawn_x, 0, 8),
+            });
+            next_spawn_x += 1;
+        }
+    }
+
+    #[test]
+    fn online_life_npcs_receive_runtime_goals_and_move_after_end_turn() {
+        let bootstrap = load_runtime_bootstrap(
+            &CharacterDefinitionPath::default().0,
+            &game_bevy::MapDefinitionPath::default().0,
+            &game_bevy::OverworldDefinitionPath::default().0,
+            &game_bevy::RuntimeStartupConfigPath::default().0,
+        )
+        .expect("viewer bootstrap should load");
+        let settlements = load_settlement_definitions(&SettlementDefinitionPath::default().0)
+            .expect("settlement definitions should load");
+        let runtime =
+            build_runtime_from_default_startup_seed(&bootstrap).expect("runtime should build");
+
+        let mut app = App::new();
+        app.add_plugins((SettlementSimulationPlugin, NpcLifePlugin));
+        app.add_message::<SpawnCharacterRequest>();
+        app.add_message::<CharacterSpawnRejected>();
+        app.insert_resource(bootstrap.character_definitions);
+        app.insert_resource(settlements);
+        app.insert_resource(ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        });
+        app.insert_resource(ViewerState::default());
+        app.add_systems(
+            Update,
+            (
+                spawn_characters_from_definition,
+                sync_npc_runtime_presence,
+                advance_online_npc_actions,
+            )
+                .chain(),
+        );
+
+        seed_life_debug_spawns(&mut app);
+        for _ in 0..6 {
+            app.update();
+        }
+        let world = app.world_mut();
+        let mut query = world.query::<(
+            &NpcLifeState,
+            &CurrentPlan,
+            &CurrentAction,
+            &RuntimeExecutionState,
+            &RuntimeActorLink,
+        )>();
+
+        let mut online_count = 0usize;
+        let mut goal_count = 0usize;
+        let mut moving_actor = None;
+        for (life, plan, action, runtime_execution, runtime_link) in query.iter(world) {
+            if !life.online {
+                continue;
+            }
+            online_count += 1;
+            if runtime_execution.runtime_goal_grid.is_some() {
+                goal_count += 1;
+                moving_actor = Some((
+                    runtime_link.actor_id,
+                    runtime_execution
+                        .runtime_goal_grid
+                        .expect("checked is_some"),
+                ));
+            }
+            assert!(
+                !plan.steps.is_empty() || action.0.is_some(),
+                "online NPC should have a plan or current action"
+            );
+        }
+
+        assert!(online_count > 0, "expected at least one online life NPC");
+        assert!(
+            goal_count > 0,
+            "expected at least one online life NPC to receive a runtime movement goal"
+        );
+
+        let player_actor_id = app
+            .world()
+            .resource::<ViewerRuntimeState>()
+            .runtime
+            .snapshot()
+            .actors
+            .iter()
+            .find(|actor| actor.side == ActorSide::Player)
+            .map(|actor| actor.actor_id)
+            .expect("player actor should exist");
+
+        let (moving_actor_id, expected_goal) = moving_actor.expect("moving actor should exist");
+        let start_position = app
+            .world()
+            .resource::<ViewerRuntimeState>()
+            .runtime
+            .get_actor_grid_position(moving_actor_id)
+            .expect("moving actor grid should exist");
+
+        {
+            let mut runtime_state = app.world_mut().resource_mut::<ViewerRuntimeState>();
+            let result = runtime_state
+                .runtime
+                .submit_command(SimulationCommand::EndTurn {
+                    actor_id: player_actor_id,
+                });
+            match result {
+                game_core::SimulationCommandResult::Action(action) => {
+                    assert!(action.success, "end turn should succeed");
+                }
+                other => panic!("unexpected end turn result: {other:?}"),
+            }
+
+            while runtime_state.runtime.has_pending_progression() {
+                runtime_state.runtime.advance_pending_progression();
+            }
+        }
+
+        let end_position = app
+            .world()
+            .resource::<ViewerRuntimeState>()
+            .runtime
+            .get_actor_grid_position(moving_actor_id)
+            .expect("moving actor grid should still exist");
+
+        assert_ne!(
+            start_position, end_position,
+            "online NPC should move after player turn advances"
+        );
+        assert_ne!(
+            start_position, expected_goal,
+            "test actor should have needed movement rather than already being at the goal"
+        );
+    }
+
+    #[test]
+    fn actor_motion_duration_is_clamped() {
+        assert_eq!(
+            actor_motion_duration_sec(0.0),
+            ACTOR_MOTION_MIN_DURATION_SEC
+        );
+        assert_eq!(
+            actor_motion_duration_sec(1.0),
+            ACTOR_MOTION_MAX_DURATION_SEC
+        );
+        assert!((actor_motion_duration_sec(0.1) - 0.09).abs() <= 0.0001);
+    }
+
+    #[test]
+    fn queue_actor_motion_uses_active_interpolated_position_as_next_start() {
+        let (runtime, handles) = create_demo_runtime();
+        let mut motion_state = ViewerActorMotionState::default();
+        motion_state.track_movement(
+            handles.player,
+            WorldCoord::new(0.5, 0.5, 0.5),
+            WorldCoord::new(1.5, 0.5, 0.5),
+            0,
+            0.1,
+        );
+        motion_state
+            .tracks
+            .get_mut(&handles.player)
+            .expect("track should exist")
+            .advance(0.05);
+        let current_world = motion_state
+            .tracks
+            .get(&handles.player)
+            .expect("track should still exist")
+            .current_world;
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+
+        queue_actor_motion(
+            &mut motion_state,
+            &runtime_state,
+            handles.player,
+            GridCoord::new(1, 0, 0),
+            GridCoord::new(2, 0, 0),
+            0.1,
+        );
+
+        let next_track = motion_state
+            .tracks
+            .get(&handles.player)
+            .expect("next track should exist");
+        assert_eq!(next_track.from_world, current_world);
+        assert_eq!(next_track.to_world, WorldCoord::new(2.5, 0.5, 0.5));
+    }
 }
 
 pub(crate) fn viewer_event_entry(event: SimulationEvent, turn_index: u64) -> ViewerEventEntry {

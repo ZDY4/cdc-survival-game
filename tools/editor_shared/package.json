@@ -6,6 +6,7 @@
   "exports": {
     "./components/Badge": "./src/components/Badge.tsx",
     "./components/EditorShell": "./src/components/EditorShell.tsx",
+    "./components/IDEWorkbenchShell": "./src/components/IDEWorkbenchShell.tsx",
     "./components/fields": "./src/components/fields.tsx",
     "./components/PanelSection": "./src/components/PanelSection.tsx",
     "./components/Toolbar": "./src/components/Toolbar.tsx",

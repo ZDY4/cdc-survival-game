@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use game_bevy::SettlementDebugSnapshot;
 use game_core::SimulationRuntime;
-use game_data::{ActorId, DialogueData, GridCoord, InteractionPrompt, InteractionTargetId};
+use game_core::SimulationSnapshot;
+use game_data::{
+    ActorId, ActorSide, DialogueData, GridCoord, InteractionPrompt, InteractionTargetId, WorldCoord,
+};
 
 pub(crate) const VIEWER_FONT_PATH: &str = "fonts/NotoSansCJKsc-Regular.otf";
 
@@ -37,6 +40,29 @@ impl ViewerHudPage {
             Self::Interaction => "Interaction",
             Self::Events => "Events",
             Self::Ai => "AI",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ViewerControlMode {
+    #[default]
+    PlayerControl,
+    FreeObserve,
+}
+
+impl ViewerControlMode {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::PlayerControl => "Player Control",
+            Self::FreeObserve => "Free Observe",
+        }
+    }
+
+    pub(crate) fn toggle(self) -> Self {
+        match self {
+            Self::PlayerControl => Self::FreeObserve,
+            Self::FreeObserve => Self::PlayerControl,
         }
     }
 }
@@ -108,6 +134,96 @@ pub(crate) struct ActorLabelEntities {
     pub by_actor: HashMap<ActorId, Entity>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ActorMotionTrack {
+    pub from_world: WorldCoord,
+    pub to_world: WorldCoord,
+    pub current_world: WorldCoord,
+    pub elapsed_sec: f32,
+    pub duration_sec: f32,
+    pub level: i32,
+    pub active: bool,
+}
+
+impl ActorMotionTrack {
+    pub(crate) fn new(
+        from_world: WorldCoord,
+        to_world: WorldCoord,
+        level: i32,
+        duration_sec: f32,
+    ) -> Self {
+        Self {
+            from_world,
+            to_world,
+            current_world: from_world,
+            elapsed_sec: 0.0,
+            duration_sec,
+            level,
+            active: true,
+        }
+    }
+
+    pub(crate) fn advance(&mut self, delta_sec: f32) {
+        if !self.active {
+            return;
+        }
+
+        self.elapsed_sec = (self.elapsed_sec + delta_sec).min(self.duration_sec.max(0.0));
+        let progress = if self.duration_sec <= f32::EPSILON {
+            1.0
+        } else {
+            (self.elapsed_sec / self.duration_sec).clamp(0.0, 1.0)
+        };
+        self.current_world = lerp_world_coord(self.from_world, self.to_world, progress);
+        if progress >= 1.0 {
+            self.current_world = self.to_world;
+            self.active = false;
+        }
+    }
+
+    pub(crate) fn snap_to(&mut self, world: WorldCoord, level: i32) {
+        self.from_world = world;
+        self.to_world = world;
+        self.current_world = world;
+        self.elapsed_sec = 0.0;
+        self.level = level;
+        self.active = false;
+    }
+}
+
+#[derive(Resource, Debug, Default)]
+pub(crate) struct ViewerActorMotionState {
+    pub tracks: HashMap<ActorId, ActorMotionTrack>,
+}
+
+impl ViewerActorMotionState {
+    pub(crate) fn current_world(&self, actor_id: ActorId) -> Option<WorldCoord> {
+        self.tracks.get(&actor_id).map(|track| track.current_world)
+    }
+
+    pub(crate) fn track_movement(
+        &mut self,
+        actor_id: ActorId,
+        from_world: WorldCoord,
+        to_world: WorldCoord,
+        level: i32,
+        duration_sec: f32,
+    ) {
+        self.tracks.insert(
+            actor_id,
+            ActorMotionTrack::new(from_world, to_world, level, duration_sec),
+        );
+    }
+}
+
+fn lerp_world_coord(start: WorldCoord, end: WorldCoord, t: f32) -> WorldCoord {
+    WorldCoord::new(
+        start.x + (end.x - start.x) * t,
+        start.y + (end.y - start.y) * t,
+        start.z + (end.z - start.z) * t,
+    )
+}
+
 #[derive(Resource, Debug, Clone, Copy)]
 pub(crate) struct ViewerRenderConfig {
     pub zoom_factor: f32,
@@ -128,7 +244,7 @@ impl Default for ViewerRenderConfig {
         Self {
             zoom_factor: 1.0,
             viewport_padding_px: 72.0,
-            hud_reserved_width_px: 460.0,
+            hud_reserved_width_px: 620.0,
             camera_pitch_degrees: 35.0,
             camera_fov_degrees: 30.0,
             camera_distance_padding_world: 8.0,
@@ -158,11 +274,13 @@ impl ViewerRenderConfig {
 #[derive(Resource, Debug)]
 pub(crate) struct ViewerState {
     pub selected_actor: Option<ActorId>,
+    pub controlled_player_actor: Option<ActorId>,
     pub focused_target: Option<InteractionTargetId>,
     pub current_prompt: Option<InteractionPrompt>,
     pub interaction_menu: Option<InteractionMenuState>,
     pub active_dialogue: Option<ActiveDialogueState>,
     pub hud_page: ViewerHudPage,
+    pub control_mode: ViewerControlMode,
     pub event_filter: HudEventFilter,
     pub show_hud: bool,
     pub show_controls: bool,
@@ -184,11 +302,13 @@ impl Default for ViewerState {
     fn default() -> Self {
         Self {
             selected_actor: None,
+            controlled_player_actor: None,
             focused_target: None,
             current_prompt: None,
             interaction_menu: None,
             active_dialogue: None,
             hud_page: ViewerHudPage::Overview,
+            control_mode: ViewerControlMode::PlayerControl,
             event_filter: HudEventFilter::All,
             show_hud: true,
             show_controls: false,
@@ -209,6 +329,48 @@ impl Default for ViewerState {
 }
 
 impl ViewerState {
+    pub(crate) fn select_actor(&mut self, actor_id: ActorId, side: ActorSide) {
+        self.selected_actor = Some(actor_id);
+        if side == ActorSide::Player {
+            self.controlled_player_actor = Some(actor_id);
+        }
+    }
+
+    pub(crate) fn is_free_observe(self: &Self) -> bool {
+        self.control_mode == ViewerControlMode::FreeObserve
+    }
+
+    pub(crate) fn can_issue_player_commands(self: &Self) -> bool {
+        self.control_mode == ViewerControlMode::PlayerControl
+    }
+
+    pub(crate) fn command_actor_id(&self, snapshot: &SimulationSnapshot) -> Option<ActorId> {
+        if !self.can_issue_player_commands() {
+            return None;
+        }
+
+        self.selected_actor
+            .filter(|actor_id| {
+                snapshot
+                    .actors
+                    .iter()
+                    .any(|actor| actor.actor_id == *actor_id && actor.side == ActorSide::Player)
+            })
+            .or(self.controlled_player_actor.filter(|actor_id| {
+                snapshot
+                    .actors
+                    .iter()
+                    .any(|actor| actor.actor_id == *actor_id && actor.side == ActorSide::Player)
+            }))
+            .or_else(|| {
+                snapshot
+                    .actors
+                    .iter()
+                    .find(|actor| actor.side == ActorSide::Player)
+                    .map(|actor| actor.actor_id)
+            })
+    }
+
     pub(crate) fn is_interaction_menu_open(&self) -> bool {
         self.interaction_menu.is_some()
     }
@@ -282,4 +444,130 @@ pub(crate) struct ActiveDialogueState {
     pub data: DialogueData,
     pub current_node_id: String,
     pub target_name: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ActorMotionTrack, ViewerControlMode, ViewerState};
+    use game_core::{
+        ActorDebugState, CombatDebugState, GridDebugState, OverworldStateSnapshot,
+        SimulationSnapshot,
+    };
+    use game_data::{
+        ActorId, ActorKind, ActorSide, CharacterId, GridCoord, InteractionContextSnapshot,
+        TurnState, WorldCoord,
+    };
+
+    #[test]
+    fn command_actor_uses_selected_player_in_player_control_mode() {
+        let snapshot = snapshot_with_actors(vec![
+            actor(ActorId(1), ActorSide::Player, "player"),
+            actor(ActorId(2), ActorSide::Friendly, "guard"),
+        ]);
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(ActorId(1), ActorSide::Player);
+
+        assert_eq!(viewer_state.command_actor_id(&snapshot), Some(ActorId(1)));
+    }
+
+    #[test]
+    fn command_actor_is_disabled_in_free_observe_mode() {
+        let snapshot = snapshot_with_actors(vec![actor(ActorId(1), ActorSide::Player, "player")]);
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(ActorId(1), ActorSide::Player);
+        viewer_state.control_mode = ViewerControlMode::FreeObserve;
+
+        assert_eq!(viewer_state.command_actor_id(&snapshot), None);
+    }
+
+    #[test]
+    fn actor_motion_track_interpolates_linearly() {
+        let mut track = ActorMotionTrack::new(
+            WorldCoord::new(0.5, 0.5, 0.5),
+            WorldCoord::new(1.5, 0.5, 0.5),
+            0,
+            0.1,
+        );
+
+        track.advance(0.05);
+
+        assert_eq!(track.current_world, WorldCoord::new(1.0, 0.5, 0.5));
+        assert!(track.active);
+
+        track.advance(0.05);
+
+        assert_eq!(track.current_world, WorldCoord::new(1.5, 0.5, 0.5));
+        assert!(!track.active);
+    }
+
+    #[test]
+    fn actor_motion_track_snaps_to_authoritative_world() {
+        let mut track = ActorMotionTrack::new(
+            WorldCoord::new(0.5, 0.5, 0.5),
+            WorldCoord::new(1.5, 0.5, 0.5),
+            0,
+            0.1,
+        );
+
+        track.advance(0.03);
+        track.snap_to(WorldCoord::new(4.5, 1.5, 2.5), 1);
+
+        assert_eq!(track.current_world, WorldCoord::new(4.5, 1.5, 2.5));
+        assert_eq!(track.level, 1);
+        assert_eq!(track.elapsed_sec, 0.0);
+        assert!(!track.active);
+    }
+
+    fn actor(actor_id: ActorId, side: ActorSide, definition_id: &str) -> ActorDebugState {
+        ActorDebugState {
+            actor_id,
+            definition_id: Some(CharacterId(definition_id.into())),
+            display_name: definition_id.into(),
+            kind: ActorKind::Npc,
+            side,
+            group_id: "group".into(),
+            ap: 6.0,
+            available_steps: 3,
+            turn_open: false,
+            in_combat: false,
+            grid_position: GridCoord::new(0, 0, 0),
+            level: 1,
+            current_xp: 0,
+            available_stat_points: 0,
+            available_skill_points: 0,
+            hp: 10.0,
+            max_hp: 10.0,
+        }
+    }
+
+    fn snapshot_with_actors(actors: Vec<ActorDebugState>) -> SimulationSnapshot {
+        SimulationSnapshot {
+            turn: TurnState::default(),
+            actors,
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(8),
+                map_height: Some(8),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: Vec::new(),
+                map_cells: Vec::new(),
+                map_objects: Vec::new(),
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        }
+    }
 }

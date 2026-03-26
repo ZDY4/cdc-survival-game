@@ -64,6 +64,24 @@ function buildNarrativeMenuSelfTestChecks(): SelfTestCheck[] {
       execute: true,
     },
     {
+      commandId: EDITOR_MENU_COMMANDS.WORKBENCH_COMMAND_PALETTE,
+      expected: "enabled",
+    },
+    {
+      commandId: EDITOR_MENU_COMMANDS.WORKBENCH_QUICK_OPEN,
+      expected: "enabled",
+    },
+    {
+      commandId: EDITOR_MENU_COMMANDS.VIEW_TOGGLE_INSPECTOR,
+      expected: "enabled",
+      execute: true,
+    },
+    {
+      commandId: EDITOR_MENU_COMMANDS.VIEW_ZEN_MODE,
+      expected: "enabled",
+      execute: true,
+    },
+    {
       commandId: EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS,
       expected: "enabled",
       execute: true,
