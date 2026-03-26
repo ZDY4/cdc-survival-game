@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use game_data::{ActionType, ActorId};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TurnConfig {
     pub turn_ap_gain: f32,
     pub turn_ap_max: f32,
@@ -23,7 +24,7 @@ impl Default for TurnConfig {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TurnRuntime {
     pub combat_active: bool,
     pub combat_turn_index: u64,
@@ -31,7 +32,7 @@ pub struct TurnRuntime {
     pub current_actor_id: Option<ActorId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActiveActionState {
     pub action_type: ActionType,
     pub consumed: f32,
@@ -47,4 +48,63 @@ pub struct ActiveActions {
 #[derive(Debug, Default)]
 pub struct GroupOrderRegistry {
     pub orders: HashMap<String, i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ActiveActionEntrySnapshot {
+    pub actor_id: ActorId,
+    pub state: ActiveActionState,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ActiveActionsSnapshot {
+    pub by_actor: Vec<ActiveActionEntrySnapshot>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GroupOrderRegistrySnapshot {
+    pub orders: BTreeMap<String, i32>,
+}
+
+impl ActiveActions {
+    pub(crate) fn save_snapshot(&self) -> ActiveActionsSnapshot {
+        let mut by_actor = self
+            .by_actor
+            .iter()
+            .map(|(actor_id, state)| ActiveActionEntrySnapshot {
+                actor_id: *actor_id,
+                state: state.clone(),
+            })
+            .collect::<Vec<_>>();
+        by_actor.sort_by_key(|entry| entry.actor_id);
+        ActiveActionsSnapshot { by_actor }
+    }
+
+    pub(crate) fn load_snapshot(&mut self, snapshot: ActiveActionsSnapshot) {
+        self.by_actor = snapshot
+            .by_actor
+            .into_iter()
+            .map(|entry| (entry.actor_id, entry.state))
+            .collect();
+        self.counts_by_type.clear();
+        for state in self.by_actor.values() {
+            *self.counts_by_type.entry(state.action_type).or_insert(0) += 1;
+        }
+    }
+}
+
+impl GroupOrderRegistry {
+    pub(crate) fn save_snapshot(&self) -> GroupOrderRegistrySnapshot {
+        GroupOrderRegistrySnapshot {
+            orders: self
+                .orders
+                .iter()
+                .map(|(group_id, order)| (group_id.clone(), *order))
+                .collect(),
+        }
+    }
+
+    pub(crate) fn load_snapshot(&mut self, snapshot: GroupOrderRegistrySnapshot) {
+        self.orders = snapshot.orders.into_iter().collect();
+    }
 }

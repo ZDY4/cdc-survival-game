@@ -153,7 +153,11 @@ pub fn compute_cell_path(
         return Some(vec![start]);
     }
 
-    let walkable: HashSet<GridCoord> = definition.walkable_cells.iter().map(|cell| cell.grid).collect();
+    let walkable: HashSet<GridCoord> = definition
+        .walkable_cells
+        .iter()
+        .map(|cell| cell.grid)
+        .collect();
     if !walkable.contains(&start) || !walkable.contains(&goal) {
         return None;
     }

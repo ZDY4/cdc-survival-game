@@ -219,7 +219,12 @@ pub struct NpcBackgroundState {
     pub world_alert_active: bool,
 }
 
-pub fn apply_npc_action_effects(action: NpcActionKey, hunger: &mut f32, energy: &mut f32, morale: &mut f32) {
+pub fn apply_npc_action_effects(
+    action: NpcActionKey,
+    hunger: &mut f32,
+    energy: &mut f32,
+    morale: &mut f32,
+) {
     match action {
         NpcActionKey::EatMeal => {
             *hunger = (*hunger + 55.0).clamp(0.0, 100.0);

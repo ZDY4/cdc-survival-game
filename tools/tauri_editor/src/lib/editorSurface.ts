@@ -1,11 +1,10 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { MAP_EDITOR_WINDOW_LABEL } from "../modules/maps/mapWindowing";
-import { NARRATIVE_LAB_WINDOW_LABEL } from "../modules/narrative/narrativeWindowing";
 import { SETTINGS_WINDOW_LABEL, isEditorSettingsSection } from "../modules/settings/settingsWindowing";
 import type { EditorSettingsSection } from "../types";
 import { isTauriRuntime } from "./tauri";
 
-export type EditorSurface = "main" | "map-editor" | "narrative-lab" | "settings";
+export type EditorSurface = "main" | "map-editor" | "settings";
 
 type ResolveEditorSurfaceOptions = {
   search?: string;
@@ -20,9 +19,6 @@ export function resolveEditorSurface({
   const surface = params.get("surface");
   if (surface === "map-editor" || label === MAP_EDITOR_WINDOW_LABEL) {
     return "map-editor";
-  }
-  if (surface === "narrative-lab" || label === NARRATIVE_LAB_WINDOW_LABEL) {
-    return "narrative-lab";
   }
   if (surface === "settings" || label === SETTINGS_WINDOW_LABEL) {
     return "settings";

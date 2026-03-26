@@ -268,7 +268,7 @@ func get_save_info() -> Dictionary:
 		var player_attributes: Dictionary = state.get("player_attributes", {})
 		var snapshot: Dictionary = AttributeSystemScript.resolve_attribute_snapshot(player_attributes)
 		info["hp"] = int(snapshot.get("hp", 100))
-		info["location"] = state.get("player_position", "safehouse")
+		info["location"] = state.get("player_position", "survivor_outpost_01")
 
 	if data.has("game_state"):
 		var full_state: Dictionary = data.get("game_state", {})

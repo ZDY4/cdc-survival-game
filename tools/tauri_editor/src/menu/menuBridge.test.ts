@@ -6,21 +6,23 @@ const { dispatchEditorMenuCommandMock } = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
-    label: "narrative-lab",
+    label: "main",
     listen: vi.fn(),
   }),
 }));
 
-vi.mock("./menuDebug", () => ({
+vi.mock("@cdc/editor-shared/menu/menuDebug", () => ({
   logEditorMenuDebug: vi.fn(),
 }));
 
 import { handleEditorMenuCommand } from "./menuBridge";
 import { EDITOR_MENU_COMMANDS } from "./menuCommands";
 
-vi.mock("./editorCommandRegistry", async () => {
-  const actual = await vi.importActual<typeof import("./editorCommandRegistry")>(
-    "./editorCommandRegistry",
+vi.mock("@cdc/editor-shared/menu/editorCommandRegistry", async () => {
+  const actual = await vi.importActual<
+    typeof import("@cdc/editor-shared/menu/editorCommandRegistry")
+  >(
+    "@cdc/editor-shared/menu/editorCommandRegistry",
   );
 
   return {
@@ -41,7 +43,7 @@ describe("menuBridge", () => {
     await handleEditorMenuCommand(
       EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT,
       onStatusChange,
-      "narrative-lab",
+      "main",
     );
 
     expect(dispatchEditorMenuCommandMock).toHaveBeenCalledWith(
@@ -55,13 +57,13 @@ describe("menuBridge", () => {
     dispatchEditorMenuCommandMock.mockResolvedValue({ ok: false, reason: "disabled" });
 
     await handleEditorMenuCommand(
-      EDITOR_MENU_COMMANDS.NARRATIVE_NEW_PROJECT_BRIEF,
+      EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT,
       onStatusChange,
-      "narrative-lab",
+      "main",
     );
 
     expect(onStatusChange).toHaveBeenCalledWith(
-      "New Project Brief is unavailable in the current context.",
+      "New is unavailable in the current context.",
     );
   });
 
@@ -72,7 +74,7 @@ describe("menuBridge", () => {
     await handleEditorMenuCommand(
       EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT,
       onStatusChange,
-      "narrative-lab",
+      "main",
     );
 
     expect(onStatusChange).toHaveBeenCalledWith("New is not supported in this window.");
@@ -85,7 +87,7 @@ describe("menuBridge", () => {
     await handleEditorMenuCommand(
       EDITOR_MENU_COMMANDS.AI_GENERATE,
       onStatusChange,
-      "narrative-lab",
+      "main",
     );
 
     expect(onStatusChange).toHaveBeenCalledWith("AI Generate failed: boom");

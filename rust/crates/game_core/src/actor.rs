@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use game_data::{
     ActionPhase, ActionRequest, ActionType, ActorId, ActorKind, ActorSide, CharacterId, GridCoord,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::simulation::Simulation;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActorRecord {
     pub actor_id: ActorId,
     pub definition_id: Option<CharacterId>,
@@ -19,6 +20,11 @@ pub struct ActorRecord {
     pub turn_open: bool,
     pub in_combat: bool,
     pub grid_position: GridCoord,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ActorRegistrySnapshot {
+    pub actors: Vec<ActorRecord>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,6 +156,20 @@ impl ActorRegistry {
 
     pub fn contains(&self, actor_id: ActorId) -> bool {
         self.actors.contains_key(&actor_id)
+    }
+
+    pub(crate) fn save_snapshot(&self) -> ActorRegistrySnapshot {
+        let mut actors = self.values().cloned().collect::<Vec<_>>();
+        actors.sort_by_key(|actor| actor.actor_id);
+        ActorRegistrySnapshot { actors }
+    }
+
+    pub(crate) fn load_snapshot(&mut self, snapshot: ActorRegistrySnapshot) {
+        self.actors = snapshot
+            .actors
+            .into_iter()
+            .map(|actor| (actor.actor_id, actor))
+            .collect();
     }
 }
 

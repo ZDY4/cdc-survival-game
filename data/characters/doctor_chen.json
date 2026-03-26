@@ -3,7 +3,7 @@
   "archetype": "npc",
   "identity": {
     "display_name": "战地医生·陈医生",
-    "description": "曾是市中心医院的主任医师，末日后在安全屋建立了临时诊所。心地善良，尽力帮助每一个伤者。"
+    "description": "曾是市中心医院的主任医师，末日后在幸存者据点01建立了临时诊疗站。心地善良，尽力帮助每一个伤者。"
   },
   "faction": {
     "camp_id": "survivor",
@@ -60,7 +60,7 @@
     }
   },
   "life": {
-    "settlement_id": "safehouse_survivor_outpost",
+    "settlement_id": "survivor_outpost_01_settlement",
     "role": "doctor",
     "home_anchor": "doctor_home_01",
     "duty_route_id": "doctor_clinic_rounds",

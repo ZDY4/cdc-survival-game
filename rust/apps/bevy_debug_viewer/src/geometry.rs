@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use game_core::{ActorDebugState, SimulationRuntime, SimulationSnapshot};
-use game_data::{GridCoord, InteractionTargetId, WorldCoord};
+use game_data::{ActorSide, GridCoord, InteractionTargetId, WorldCoord};
 
 use crate::state::{ViewerHudPage, ViewerRenderConfig, ViewerState};
 
@@ -12,8 +12,10 @@ pub(crate) struct GridBounds {
     pub max_z: i32,
 }
 
-pub(crate) fn render_cell_extent(grid_size: f32, render_config: ViewerRenderConfig) -> f32 {
-    grid_size * render_config.pixels_per_world_unit
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HoveredGridOutlineKind {
+    Reachable,
+    Hostile,
 }
 
 pub(crate) fn actor_label(actor: &ActorDebugState) -> String {
@@ -58,30 +60,6 @@ pub(crate) fn rendered_path_preview(
         .collect()
 }
 
-pub(crate) fn fit_pixels_per_world_unit(
-    viewport_width: f32,
-    viewport_height: f32,
-    grid_size: f32,
-    bounds: GridBounds,
-    render_config: ViewerRenderConfig,
-) -> f32 {
-    let grid_width_cells = (bounds.max_x - bounds.min_x + 1).max(1) as f32;
-    let grid_height_cells = (bounds.max_z - bounds.min_z + 1).max(1) as f32;
-    let usable_width = (viewport_width
-        - render_config.hud_reserved_width_px
-        - render_config.viewport_padding_px * 2.0)
-        .max(160.0);
-    let usable_height = (viewport_height - render_config.viewport_padding_px * 2.0).max(160.0);
-    let fit_per_cell = (usable_width / grid_width_cells)
-        .min(usable_height / (grid_height_cells * render_config.vertical_projection_factor()))
-        .max(render_config.min_pixels_per_world_unit);
-
-    (fit_per_cell * render_config.zoom_factor).clamp(
-        render_config.min_pixels_per_world_unit,
-        render_config.max_pixels_per_world_unit,
-    ) / grid_size.max(f32::EPSILON)
-}
-
 pub(crate) fn level_base_height(level: i32, grid_size: f32) -> f32 {
     level as f32 * grid_size
 }
@@ -118,8 +96,13 @@ pub(crate) fn actor_label_world_position(
     )
 }
 
-pub(crate) fn pick_grid_from_ray(ray: Ray3d, level: i32, grid_size: f32) -> Option<GridCoord> {
-    let plane_origin = Vec3::new(0.0, level_plane_height(level, grid_size), 0.0);
+pub(crate) fn pick_grid_from_ray(
+    ray: Ray3d,
+    level: i32,
+    grid_size: f32,
+    plane_height: f32,
+) -> Option<GridCoord> {
+    let plane_origin = Vec3::new(0.0, plane_height, 0.0);
     let point = ray.plane_intersection_point(plane_origin, InfinitePlane3d::new(Vec3::Y))?;
     Some(GridCoord::new(
         (point.x / grid_size).floor() as i32,
@@ -145,13 +128,39 @@ pub(crate) fn camera_focus_point(
 
 pub(crate) fn camera_world_distance(
     bounds: GridBounds,
+    viewport_width: f32,
+    viewport_height: f32,
     grid_size: f32,
     render_config: ViewerRenderConfig,
 ) -> f32 {
-    let world_width = (bounds.max_x - bounds.min_x + 1).max(1) as f32 * grid_size;
-    let world_depth = (bounds.max_z - bounds.min_z + 1).max(1) as f32 * grid_size;
-    (world_width.max(world_depth) * 1.35 + render_config.camera_distance_padding_world)
-        .max(10.0 * grid_size)
+    let world_width = (bounds.max_x - bounds.min_x + 1).max(1) as f32 * grid_size
+        + render_config.camera_distance_padding_world;
+    let world_depth = (bounds.max_z - bounds.min_z + 1).max(1) as f32 * grid_size
+        + render_config.camera_distance_padding_world;
+    let (horizontal_fov, vertical_fov) =
+        perspective_camera_fovs(viewport_width, viewport_height, render_config);
+    let zoom = render_config.zoom_factor.max(0.1);
+    let half_visible_width = (world_width / zoom) * 0.5;
+    let half_visible_depth = (world_depth / zoom) * 0.5;
+    let width_distance = half_visible_width / (horizontal_fov * 0.5).tan().max(0.01);
+    let depth_distance = half_visible_depth * render_config.vertical_projection_factor()
+        / (vertical_fov * 0.5).tan().max(0.01);
+
+    width_distance.max(depth_distance).max(10.0 * grid_size)
+}
+
+pub(crate) fn visible_world_footprint(
+    viewport_width: f32,
+    viewport_height: f32,
+    camera_distance: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec2 {
+    let (horizontal_fov, vertical_fov) =
+        perspective_camera_fovs(viewport_width, viewport_height, render_config);
+    let width = 2.0 * camera_distance * (horizontal_fov * 0.5).tan();
+    let depth = 2.0 * camera_distance * (vertical_fov * 0.5).tan()
+        / render_config.vertical_projection_factor().max(0.1);
+    Vec2::new(width, depth)
 }
 
 pub(crate) fn clamp_camera_pan_offset(
@@ -166,18 +175,25 @@ pub(crate) fn clamp_camera_pan_offset(
     let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * grid_size * 0.5;
     let map_width = (bounds.max_x - bounds.min_x + 1).max(1) as f32 * grid_size;
     let map_depth = (bounds.max_z - bounds.min_z + 1).max(1) as f32 * grid_size;
-    let usable_width = (viewport_width
-        - render_config.hud_reserved_width_px
-        - render_config.viewport_padding_px * 2.0)
-        .max(160.0)
-        / render_config.pixels_per_world_unit.max(f32::EPSILON);
-    let usable_depth = (viewport_height - render_config.viewport_padding_px * 2.0).max(160.0)
-        / (render_config.pixels_per_world_unit * render_config.vertical_projection_factor())
-            .max(f32::EPSILON);
-    let half_visible_width = usable_width * 0.5;
-    let half_visible_depth = usable_depth * 0.5;
+    let camera_distance = camera_world_distance(
+        bounds,
+        viewport_width,
+        viewport_height,
+        grid_size,
+        render_config,
+    );
+    let visible_world = visible_world_footprint(
+        viewport_width,
+        viewport_height,
+        camera_distance,
+        render_config,
+    );
+    let visible_width = visible_world.x;
+    let visible_depth = visible_world.y;
+    let half_visible_width = visible_world.x * 0.5;
+    let half_visible_depth = visible_world.y * 0.5;
 
-    let clamped_focus_x = if map_width <= usable_width {
+    let clamped_focus_x = if map_width <= visible_width {
         center_x
     } else {
         (center_x + pan_offset.x).clamp(
@@ -185,7 +201,7 @@ pub(crate) fn clamp_camera_pan_offset(
             (bounds.max_x + 1) as f32 * grid_size - half_visible_width,
         )
     };
-    let clamped_focus_z = if map_depth <= usable_depth {
+    let clamped_focus_z = if map_depth <= visible_depth {
         center_z
     } else {
         (center_z + pan_offset.y).clamp(
@@ -195,6 +211,32 @@ pub(crate) fn clamp_camera_pan_offset(
     };
 
     Vec2::new(clamped_focus_x - center_x, clamped_focus_z - center_z)
+}
+
+fn perspective_camera_fovs(
+    viewport_width: f32,
+    viewport_height: f32,
+    render_config: ViewerRenderConfig,
+) -> (f32, f32) {
+    let usable_viewport = usable_viewport_size(viewport_width, viewport_height, render_config);
+    let aspect = (usable_viewport.x / usable_viewport.y.max(1.0)).max(0.1);
+    let vertical_fov = render_config.camera_fov_radians();
+    let horizontal_fov = 2.0 * ((vertical_fov * 0.5).tan() * aspect).atan();
+    (horizontal_fov, vertical_fov)
+}
+
+fn usable_viewport_size(
+    viewport_width: f32,
+    viewport_height: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec2 {
+    Vec2::new(
+        (viewport_width
+            - render_config.hud_reserved_width_px
+            - render_config.viewport_padding_px * 2.0)
+            .max(160.0),
+        (viewport_height - render_config.viewport_padding_px * 2.0).max(160.0),
+    )
 }
 
 pub(crate) fn should_rebuild_static_world<Key>(current: &Option<Key>, next: &Key) -> bool
@@ -255,6 +297,99 @@ pub(crate) fn selected_actor<'a>(
             .iter()
             .find(|actor| actor.actor_id == actor_id)
     })
+}
+
+pub(crate) fn hovered_grid_outline_kind(
+    runtime: &SimulationRuntime,
+    snapshot: &SimulationSnapshot,
+    viewer_state: &ViewerState,
+    grid: GridCoord,
+) -> Option<HoveredGridOutlineKind> {
+    if actor_at_grid(snapshot, grid).is_some_and(|actor| actor.side == ActorSide::Hostile) {
+        return Some(HoveredGridOutlineKind::Hostile);
+    }
+
+    let actor_id = viewer_state.selected_actor?;
+    if !runtime.is_grid_in_bounds(grid) {
+        return None;
+    }
+
+    let plan = runtime.plan_actor_movement(actor_id, grid).ok()?;
+    (plan.requested_steps() > 0).then_some(HoveredGridOutlineKind::Reachable)
+}
+
+pub(crate) fn resolve_occlusion_target<'a>(
+    snapshot: &'a SimulationSnapshot,
+    viewer_state: &ViewerState,
+) -> Option<&'a ActorDebugState> {
+    if let Some(actor) = selected_actor(snapshot, viewer_state) {
+        if actor.side == ActorSide::Player {
+            return (actor.grid_position.y == viewer_state.current_level).then_some(actor);
+        }
+        return snapshot.actors.iter().find(|candidate| {
+            candidate.side == ActorSide::Player
+                && candidate.grid_position.y == viewer_state.current_level
+        });
+    }
+
+    snapshot.actors.iter().find(|actor| {
+        actor.side == ActorSide::Player && actor.grid_position.y == viewer_state.current_level
+    })
+}
+
+pub(crate) fn segment_aabb_intersection_fraction(
+    start: Vec3,
+    end: Vec3,
+    aabb_center: Vec3,
+    aabb_half_extents: Vec3,
+) -> Option<f32> {
+    let direction = end - start;
+    let min = aabb_center - aabb_half_extents;
+    let max = aabb_center + aabb_half_extents;
+    let mut t_min = 0.0_f32;
+    let mut t_max = 1.0_f32;
+
+    for axis in 0..3 {
+        let start_axis = start[axis];
+        let direction_axis = direction[axis];
+        let min_axis = min[axis];
+        let max_axis = max[axis];
+
+        if direction_axis.abs() <= f32::EPSILON {
+            if start_axis < min_axis || start_axis > max_axis {
+                return None;
+            }
+            continue;
+        }
+
+        let inv_direction = 1.0 / direction_axis;
+        let t1 = (min_axis - start_axis) * inv_direction;
+        let t2 = (max_axis - start_axis) * inv_direction;
+        let (enter, exit) = if t1 <= t2 { (t1, t2) } else { (t2, t1) };
+        t_min = t_min.max(enter);
+        t_max = t_max.min(exit);
+
+        if t_min > t_max {
+            return None;
+        }
+    }
+
+    Some(t_min.clamp(0.0, 1.0))
+}
+
+pub(crate) fn occluder_blocks_target(
+    camera_position: Vec3,
+    target_position: Vec3,
+    aabb_center: Vec3,
+    aabb_half_extents: Vec3,
+) -> bool {
+    segment_aabb_intersection_fraction(
+        camera_position,
+        target_position,
+        aabb_center,
+        aabb_half_extents,
+    )
+    .is_some_and(|t| t <= 1.0)
 }
 
 pub(crate) fn focused_target_summary(
@@ -416,15 +551,16 @@ pub(crate) fn grid_bounds(snapshot: &SimulationSnapshot, level: i32) -> GridBoun
 mod tests {
     use super::{
         actor_label, camera_focus_point, camera_world_distance, clamp_camera_pan_offset,
-        cycle_level, fit_pixels_per_world_unit, grid_bounds, level_plane_height,
-        movement_block_reasons, pick_grid_from_ray, rendered_path_preview,
-        should_rebuild_static_world, GridBounds,
+        cycle_level, grid_bounds, hovered_grid_outline_kind, level_plane_height,
+        movement_block_reasons, occluder_blocks_target, pick_grid_from_ray, rendered_path_preview,
+        resolve_occlusion_target, segment_aabb_intersection_fraction, should_rebuild_static_world,
+        visible_world_footprint, GridBounds, HoveredGridOutlineKind,
     };
-    use crate::state::ViewerRenderConfig;
+    use crate::state::{ViewerRenderConfig, ViewerState};
     use crate::test_support::actor_debug_state_fixture;
     use bevy::prelude::*;
     use game_core::{
-        create_demo_runtime, CombatDebugState, GridDebugState, MapCellDebugState,
+        create_demo_runtime, ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState,
         MapObjectDebugState, OverworldStateSnapshot, SimulationSnapshot,
     };
     use game_data::{
@@ -437,75 +573,24 @@ mod tests {
     fn level_pick_from_ray_maps_to_expected_grid() {
         let ray = Ray3d::new(Vec3::new(2.2, 6.0, 3.8), -Dir3::Y);
 
-        let grid = pick_grid_from_ray(ray, 1, 1.0);
+        let grid = pick_grid_from_ray(ray, 1, 1.0, level_plane_height(1, 1.0));
 
         assert_eq!(grid, Some(GridCoord::new(2, 1, 3)));
     }
 
     #[test]
-    fn fit_scale_shrinks_when_bounds_grow() {
-        let render_config = ViewerRenderConfig::default();
-        let small = fit_pixels_per_world_unit(
-            1440.0,
-            900.0,
-            1.0,
-            GridBounds {
-                min_x: 0,
-                max_x: 5,
-                min_z: 0,
-                max_z: 5,
-            },
-            render_config,
-        );
-        let large = fit_pixels_per_world_unit(
-            1440.0,
-            900.0,
-            1.0,
-            GridBounds {
-                min_x: 0,
-                max_x: 19,
-                min_z: 0,
-                max_z: 19,
-            },
-            render_config,
+    fn level_pick_uses_requested_plane_height() {
+        let ray = Ray3d::new(
+            Vec3::new(2.2, 6.0, 3.48),
+            Dir3::new(Vec3::new(0.3, -1.0, 0.45)).expect("valid ray direction"),
         );
 
-        assert!(large < small);
-    }
+        let center_pick =
+            pick_grid_from_ray(ray, 0, 1.0, level_plane_height(0, 1.0)).expect("center pick");
+        let floor_pick = pick_grid_from_ray(ray, 0, 1.0, 0.08).expect("floor pick");
 
-    #[test]
-    fn fit_scale_accounts_for_tilted_vertical_projection() {
-        let mut shallow_pitch = ViewerRenderConfig::default();
-        shallow_pitch.camera_pitch_degrees = 20.0;
-        let mut steep_pitch = ViewerRenderConfig::default();
-        steep_pitch.camera_pitch_degrees = 70.0;
-
-        let shallow = fit_pixels_per_world_unit(
-            1440.0,
-            900.0,
-            1.0,
-            GridBounds {
-                min_x: 0,
-                max_x: 5,
-                min_z: 0,
-                max_z: 11,
-            },
-            shallow_pitch,
-        );
-        let steep = fit_pixels_per_world_unit(
-            1440.0,
-            900.0,
-            1.0,
-            GridBounds {
-                min_x: 0,
-                max_x: 5,
-                min_z: 0,
-                max_z: 11,
-            },
-            steep_pitch,
-        );
-
-        assert!(steep < shallow);
+        assert_eq!(center_pick, GridCoord::new(3, 0, 5));
+        assert_eq!(floor_pick, GridCoord::new(3, 0, 6));
     }
 
     #[test]
@@ -562,7 +647,7 @@ mod tests {
             actors: Vec::new(),
             grid: GridDebugState {
                 grid_size: 1.0,
-                map_id: Some(MapId("safehouse_grid".into())),
+                map_id: Some(MapId("survivor_outpost_01_grid".into())),
                 map_width: Some(12),
                 map_height: Some(8),
                 default_level: Some(0),
@@ -716,6 +801,54 @@ mod tests {
     }
 
     #[test]
+    fn hovered_grid_outline_marks_reachable_empty_cell() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let viewer_state = ViewerState {
+            selected_actor: Some(handles.player),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let outline =
+            hovered_grid_outline_kind(&runtime, &snapshot, &viewer_state, GridCoord::new(0, 0, 1));
+
+        assert_eq!(outline, Some(HoveredGridOutlineKind::Reachable));
+    }
+
+    #[test]
+    fn hovered_grid_outline_marks_hostile_cell_red() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let viewer_state = ViewerState {
+            selected_actor: Some(handles.player),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let outline =
+            hovered_grid_outline_kind(&runtime, &snapshot, &viewer_state, GridCoord::new(4, 0, 0));
+
+        assert_eq!(outline, Some(HoveredGridOutlineKind::Hostile));
+    }
+
+    #[test]
+    fn hovered_grid_outline_hides_unreachable_cell() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let viewer_state = ViewerState {
+            selected_actor: Some(handles.player),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let outline =
+            hovered_grid_outline_kind(&runtime, &snapshot, &viewer_state, GridCoord::new(2, 0, 1));
+
+        assert_eq!(outline, None);
+    }
+
+    #[test]
     fn camera_helpers_center_map_and_expand_distance_with_bounds() {
         let focus = camera_focus_point(
             GridBounds {
@@ -738,6 +871,8 @@ mod tests {
                 min_z: 0,
                 max_z: 3,
             },
+            1440.0,
+            900.0,
             1.0,
             ViewerRenderConfig::default(),
         );
@@ -748,6 +883,8 @@ mod tests {
                 min_z: 0,
                 max_z: 15,
             },
+            1440.0,
+            900.0,
             1.0,
             ViewerRenderConfig::default(),
         );
@@ -756,10 +893,51 @@ mod tests {
     }
 
     #[test]
+    fn camera_distance_shrinks_when_zoom_factor_increases() {
+        let mut zoomed_in = ViewerRenderConfig::default();
+        zoomed_in.zoom_factor = 2.0;
+        let base = camera_world_distance(
+            GridBounds {
+                min_x: 0,
+                max_x: 11,
+                min_z: 0,
+                max_z: 11,
+            },
+            1440.0,
+            900.0,
+            1.0,
+            ViewerRenderConfig::default(),
+        );
+        let zoomed = camera_world_distance(
+            GridBounds {
+                min_x: 0,
+                max_x: 11,
+                min_z: 0,
+                max_z: 11,
+            },
+            1440.0,
+            900.0,
+            1.0,
+            zoomed_in,
+        );
+
+        assert!(zoomed < base);
+    }
+
+    #[test]
+    fn visible_world_footprint_expands_with_camera_distance() {
+        let near = visible_world_footprint(1440.0, 900.0, 20.0, ViewerRenderConfig::default());
+        let far = visible_world_footprint(1440.0, 900.0, 40.0, ViewerRenderConfig::default());
+
+        assert!(far.x > near.x);
+        assert!(far.y > near.y);
+    }
+
+    #[test]
     fn static_world_rebuild_helper_only_triggers_on_key_change() {
-        let current = Some((Some("safehouse_grid"), 0, 3_u64));
-        let next_same = (Some("safehouse_grid"), 0, 3_u64);
-        let next_level = (Some("safehouse_grid"), 1, 3_u64);
+        let current = Some((Some("survivor_outpost_01_grid"), 0, 3_u64));
+        let next_same = (Some("survivor_outpost_01_grid"), 0, 3_u64);
+        let next_level = (Some("survivor_outpost_01_grid"), 1, 3_u64);
 
         assert!(!should_rebuild_static_world(&current, &next_same));
         assert!(should_rebuild_static_world(&current, &next_level));
@@ -768,10 +946,10 @@ mod tests {
     #[test]
     fn clamp_camera_pan_offset_stops_at_map_edges() {
         let render_config = ViewerRenderConfig {
-            pixels_per_world_unit: 100.0,
             hud_reserved_width_px: 0.0,
             viewport_padding_px: 0.0,
             camera_pitch_degrees: 90.0,
+            zoom_factor: 2.0,
             ..ViewerRenderConfig::default()
         };
 
@@ -789,13 +967,13 @@ mod tests {
             render_config,
         );
 
-        assert_eq!(clamped, Vec2::new(3.0, -3.0));
+        assert!((clamped.x - 0.5).abs() < 0.001);
+        assert!((clamped.y + 0.5).abs() < 0.001);
     }
 
     #[test]
     fn clamp_camera_pan_offset_recenters_small_maps() {
         let render_config = ViewerRenderConfig {
-            pixels_per_world_unit: 100.0,
             hud_reserved_width_px: 0.0,
             viewport_padding_px: 0.0,
             camera_pitch_degrees: 90.0,
@@ -817,5 +995,141 @@ mod tests {
         );
 
         assert_eq!(clamped, Vec2::ZERO);
+    }
+
+    #[test]
+    fn occlusion_target_prefers_selected_player_on_current_level() {
+        let mut selected_player = actor_debug_state_fixture();
+        selected_player.actor_id = ActorId(3);
+        selected_player.side = ActorSide::Player;
+        selected_player.grid_position = GridCoord::new(2, 1, 4);
+        selected_player.display_name = "selected".into();
+
+        let mut fallback_player = actor_debug_state_fixture();
+        fallback_player.actor_id = ActorId(4);
+        fallback_player.side = ActorSide::Player;
+        fallback_player.grid_position = GridCoord::new(0, 1, 0);
+        fallback_player.display_name = "fallback".into();
+
+        let snapshot = demo_snapshot_with_actors(vec![selected_player.clone(), fallback_player]);
+        let viewer_state = ViewerState {
+            selected_actor: Some(selected_player.actor_id),
+            current_level: 1,
+            ..ViewerState::default()
+        };
+
+        let target = resolve_occlusion_target(&snapshot, &viewer_state)
+            .expect("selected player should be used");
+
+        assert_eq!(target.actor_id, selected_player.actor_id);
+    }
+
+    #[test]
+    fn occlusion_target_falls_back_when_selected_actor_is_not_player() {
+        let mut hostile = actor_debug_state_fixture();
+        hostile.actor_id = ActorId(7);
+        hostile.side = ActorSide::Hostile;
+        hostile.grid_position = GridCoord::new(1, 0, 1);
+
+        let mut player = actor_debug_state_fixture();
+        player.actor_id = ActorId(8);
+        player.side = ActorSide::Player;
+        player.grid_position = GridCoord::new(2, 0, 1);
+
+        let snapshot = demo_snapshot_with_actors(vec![hostile.clone(), player.clone()]);
+        let viewer_state = ViewerState {
+            selected_actor: Some(hostile.actor_id),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let target =
+            resolve_occlusion_target(&snapshot, &viewer_state).expect("should fall back to player");
+
+        assert_eq!(target.actor_id, player.actor_id);
+    }
+
+    #[test]
+    fn occlusion_target_is_none_when_selected_player_is_on_another_level() {
+        let mut player = actor_debug_state_fixture();
+        player.actor_id = ActorId(12);
+        player.side = ActorSide::Player;
+        player.grid_position = GridCoord::new(0, 2, 0);
+
+        let snapshot = demo_snapshot_with_actors(vec![player.clone()]);
+        let viewer_state = ViewerState {
+            selected_actor: Some(player.actor_id),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        assert!(resolve_occlusion_target(&snapshot, &viewer_state).is_none());
+    }
+
+    #[test]
+    fn segment_intersection_reports_hit_for_box_on_segment() {
+        let hit = segment_aabb_intersection_fraction(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(10.0, 0.0, 0.0),
+            Vec3::new(4.0, 0.0, 0.0),
+            Vec3::splat(0.5),
+        );
+
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn occluder_blocking_rejects_box_behind_target() {
+        let blocks = occluder_blocks_target(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(4.0, 0.0, 0.0),
+            Vec3::new(6.0, 0.0, 0.0),
+            Vec3::splat(0.5),
+        );
+
+        assert!(!blocks);
+    }
+
+    #[test]
+    fn occluder_blocking_accepts_box_between_camera_and_target() {
+        let blocks = occluder_blocks_target(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(6.0, 0.0, 0.0),
+            Vec3::new(3.0, 0.0, 0.0),
+            Vec3::splat(0.5),
+        );
+
+        assert!(blocks);
+    }
+
+    fn demo_snapshot_with_actors(actors: Vec<ActorDebugState>) -> SimulationSnapshot {
+        SimulationSnapshot {
+            turn: TurnState::default(),
+            actors,
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(8),
+                map_height: Some(8),
+                default_level: Some(0),
+                levels: vec![0, 1, 2],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: Vec::new(),
+                map_cells: Vec::new(),
+                map_objects: Vec::new(),
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        }
     }
 }

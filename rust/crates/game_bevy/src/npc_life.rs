@@ -1090,7 +1090,7 @@ mod tests {
         let entity = app
             .world_mut()
             .spawn((
-                CharacterDefinitionId(CharacterId("safehouse_guard_test".into())),
+                CharacterDefinitionId(CharacterId("survivor_outpost_01_guard_test".into())),
                 LifeProfileComponent(sample_guard_life()),
             ))
             .id();
@@ -1197,7 +1197,7 @@ mod tests {
         let entity = app
             .world_mut()
             .spawn((
-                CharacterDefinitionId(CharacterId("safehouse_guard_test".into())),
+                CharacterDefinitionId(CharacterId("survivor_outpost_01_guard_test".into())),
                 LifeProfileComponent(sample_guard_life()),
             ))
             .id();
@@ -1227,7 +1227,7 @@ mod tests {
         let cook = app
             .world_mut()
             .spawn((
-                CharacterDefinitionId(CharacterId("safehouse_cook_test".into())),
+                CharacterDefinitionId(CharacterId("survivor_outpost_01_cook_test".into())),
                 LifeProfileComponent(sample_cook_life()),
             ))
             .id();
@@ -1255,7 +1255,7 @@ mod tests {
         assert!(!entry.goal_scores.is_empty());
         assert!(!entry.decision_summary.is_empty());
         assert_eq!(entry.role, NpcRole::Cook);
-        assert_eq!(entry.definition_id, "safehouse_cook_test");
+        assert_eq!(entry.definition_id, "survivor_outpost_01_cook_test");
     }
 
     #[test]
@@ -1268,7 +1268,7 @@ mod tests {
         let doctor = app
             .world_mut()
             .spawn((
-                CharacterDefinitionId(CharacterId("safehouse_doctor_test".into())),
+                CharacterDefinitionId(CharacterId("survivor_outpost_01_doctor_test".into())),
                 LifeProfileComponent(sample_doctor_life()),
             ))
             .id();
@@ -1307,7 +1307,7 @@ mod tests {
             .find(|entry| entry.entity == doctor)
             .expect("doctor entry in debug snapshot");
         assert_eq!(entry.role, NpcRole::Doctor);
-        assert_eq!(entry.definition_id, "safehouse_doctor_test");
+        assert_eq!(entry.definition_id, "survivor_outpost_01_doctor_test");
         assert!(!entry.goal_scores.is_empty());
     }
 
@@ -1322,7 +1322,7 @@ mod tests {
         let doctor = app
             .world_mut()
             .spawn((
-                CharacterDefinitionId(CharacterId("safehouse_doctor_test".into())),
+                CharacterDefinitionId(CharacterId("survivor_outpost_01_doctor_test".into())),
                 LifeProfileComponent(sample_doctor_life()),
             ))
             .id();
@@ -1344,7 +1344,7 @@ mod tests {
 
     fn sample_guard_life() -> CharacterLifeProfile {
         CharacterLifeProfile {
-            settlement_id: "safehouse_survivor_outpost".into(),
+            settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Guard,
             home_anchor: "guard_home_01".into(),
             duty_route_id: "guard_patrol_north".into(),
@@ -1373,7 +1373,7 @@ mod tests {
 
     fn sample_cook_life() -> CharacterLifeProfile {
         CharacterLifeProfile {
-            settlement_id: "safehouse_survivor_outpost".into(),
+            settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Cook,
             home_anchor: "cook_home_01".into(),
             duty_route_id: "cook_service_loop".into(),
@@ -1400,7 +1400,7 @@ mod tests {
 
     fn sample_doctor_life() -> CharacterLifeProfile {
         CharacterLifeProfile {
-            settlement_id: "safehouse_survivor_outpost".into(),
+            settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Doctor,
             home_anchor: "doctor_home_01".into(),
             duty_route_id: "doctor_clinic_rounds".into(),
@@ -1428,8 +1428,8 @@ mod tests {
     fn sample_characters() -> CharacterLibrary {
         let mut definitions = BTreeMap::new();
         definitions.insert(
-            CharacterId("safehouse_guard_test".into()),
-            sample_character("safehouse_guard_test", sample_guard_life()),
+            CharacterId("survivor_outpost_01_guard_test".into()),
+            sample_character("survivor_outpost_01_guard_test", sample_guard_life()),
         );
         definitions.insert(
             CharacterId("guard_one".into()),
@@ -1446,12 +1446,12 @@ mod tests {
             ),
         );
         definitions.insert(
-            CharacterId("safehouse_cook_test".into()),
-            sample_character("safehouse_cook_test", sample_cook_life()),
+            CharacterId("survivor_outpost_01_cook_test".into()),
+            sample_character("survivor_outpost_01_cook_test", sample_cook_life()),
         );
         definitions.insert(
-            CharacterId("safehouse_doctor_test".into()),
-            sample_character("safehouse_doctor_test", sample_doctor_life()),
+            CharacterId("survivor_outpost_01_doctor_test".into()),
+            sample_character("survivor_outpost_01_doctor_test", sample_doctor_life()),
         );
         CharacterLibrary::from(definitions)
     }
@@ -1503,8 +1503,8 @@ mod tests {
 
     fn sample_settlements() -> SettlementLibrary {
         let settlement = SettlementDefinition {
-            id: SettlementId("safehouse_survivor_outpost".into()),
-            map_id: MapId("safehouse_grid".into()),
+            id: SettlementId("survivor_outpost_01_settlement".into()),
+            map_id: MapId("survivor_outpost_01_grid".into()),
             anchors: vec![
                 SettlementAnchorDefinition {
                     id: "guard_home_01".into(),

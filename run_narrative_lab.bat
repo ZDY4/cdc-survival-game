@@ -2,7 +2,7 @@
 setlocal
 
 set "ROOT_DIR=%~dp0"
-set "EDITOR_DIR=%ROOT_DIR%tools\tauri_editor"
+set "EDITOR_DIR=%ROOT_DIR%tools\narrative_lab"
 set "CARGO_DIR=%USERPROFILE%\.cargo\bin"
 set "NPM_EXE=npm.cmd"
 set "VSDEVCMD="
@@ -92,7 +92,7 @@ if defined SELF_TEST_SCENARIO (
 ) else (
     echo Starting Narrative Lab...
 )
-call %NPM_EXE% run tauri:narrative
+call %NPM_EXE% run tauri:dev
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 

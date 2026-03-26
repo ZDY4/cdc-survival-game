@@ -5,7 +5,7 @@ import { NumberField, SelectField, TextField } from "../../components/fields";
 import { PanelSection } from "../../components/PanelSection";
 import { ValidationPanel } from "../../components/ValidationPanel";
 import { getRequestedDocumentKey } from "../../lib/editorSurface";
-import { openOrFocusMainEditor, openOrFocusNarrativeLab } from "../../lib/editorWindows";
+import { openOrFocusMainEditor } from "../../lib/editorWindows";
 import { invokeCommand, isTauriRuntime } from "../../lib/tauri";
 import { useRegisterEditorMenuCommands } from "../../menu/editorCommandRegistry";
 import { useEditorMenuBridge } from "../../menu/menuBridge";
@@ -288,11 +288,6 @@ export function MapEditorWindow() {
     [EDITOR_MENU_COMMANDS.MODULE_MAPS]: {
       execute: async () => {
         await openOrFocusMainEditor(EDITOR_MENU_COMMANDS.MODULE_MAPS);
-      },
-    },
-    [EDITOR_MENU_COMMANDS.MODULE_NARRATIVE]: {
-      execute: async () => {
-        await openOrFocusNarrativeLab();
       },
     },
   });

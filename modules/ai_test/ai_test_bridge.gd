@@ -920,7 +920,7 @@ func _send_json_response(client: StreamPeerTCP, status_code: int, body: String):
 ## Main flow test
 func run_main_flow_test():
 	var sequence = [
-		{"action": "set_state", "position": "safehouse", "hp": 100, "hunger": 100, "thirst": 100},
+		{"action": "set_state", "position": "survivor_outpost_01", "hp": 100, "hunger": 100, "thirst": 100},
 		{"action": "wait", "seconds": 1},
 		{"action": "verify", "check": "scene", "expected": "Safehouse", "critical": true},
 		{"action": "click", "target": "Door", "critical": true},

@@ -96,13 +96,13 @@ var player_hunger: int = 100
 var player_thirst: int = 100
 var player_stamina: int = 100
 var player_mental: int = 100
-var player_position: String = "safehouse"
+var player_position: String = "survivor_outpost_01"
 var player_position_3d: Vector3 = Vector3.ZERO
 var player_grid_position: Vector3i = Vector3i.ZERO
 var player_local_position: Vector3 = Vector3(0.5, 0.0, 0.5)
 var world_mode: String = WORLD_MODE_OVERWORLD
 var active_scene_kind: String = SCENE_KIND_OUTDOOR_ROOT
-var active_outdoor_location_id: String = "safehouse"
+var active_outdoor_location_id: String = "survivor_outpost_01"
 var active_outdoor_spawn_id: String = "default_spawn"
 var overworld_pawn_cell: Vector2i = Vector2i.ZERO
 var camera_zoom_level: float = 11.0
@@ -174,7 +174,7 @@ func restore_outdoor_from_subscene() -> void:
 	player_position = active_outdoor_location_id
 	world_mode = outdoor_resume_mode
 
-func reset_world_runtime(start_location_id: String = "safehouse", start_spawn_id: String = "default_spawn") -> void:
+func reset_world_runtime(start_location_id: String = "survivor_outpost_01", start_spawn_id: String = "default_spawn") -> void:
 	active_scene_kind = SCENE_KIND_OUTDOOR_ROOT
 	world_mode = WORLD_MODE_OVERWORLD
 	active_outdoor_location_id = start_location_id
@@ -256,7 +256,7 @@ var world_day: int = 1:
 		game_day = value
 
 var world_weather: String = "clear"
-var world_unlocked_locations: Array[String] = ["safehouse", "street_a", "street_b"]
+var world_unlocked_locations: Array[String] = ["survivor_outpost_01", "survivor_outpost_01_perimeter", "street_a", "street_b"]
 var fog_of_war_by_map: Dictionary = {}
 
 # ===== 任务状态 =====
@@ -1298,7 +1298,7 @@ func load_save_data(data: Dictionary):
 	player_thirst = data.get("player_thirst", 100)
 	player_stamina = data.get("player_stamina", 100)
 	player_mental = data.get("player_mental", 100)
-	player_position = data.get("player_position", "safehouse")
+	player_position = data.get("player_position", "survivor_outpost_01")
 	player_position_3d = _deserialize_vector3(
 		data.get("player_position_3d", var_to_str(Vector3.ZERO)),
 		Vector3.ZERO
@@ -1376,7 +1376,7 @@ func load_save_data(data: Dictionary):
 	
 	# 世界状态
 	world_weather = data.get("world_weather", "clear")
-	world_unlocked_locations = data.get("world_unlocked_locations", ["safehouse"])
+	world_unlocked_locations = data.get("world_unlocked_locations", ["survivor_outpost_01", "survivor_outpost_01_perimeter"])
 	fog_of_war_by_map = data.get("fog_of_war_by_map", {})
 	
 	# 任务

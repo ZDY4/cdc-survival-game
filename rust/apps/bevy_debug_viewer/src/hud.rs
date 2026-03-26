@@ -4,8 +4,9 @@ use game_data::{GridCoord, InteractionPrompt};
 
 use crate::dialogue::current_dialogue_node;
 use crate::geometry::{
-    actor_label, focused_target_summary, format_optional_grid, map_object_at_grid,
-    movement_block_reasons, rendered_path_preview, selected_actor, sight_block_reasons,
+    actor_label, camera_world_distance, focused_target_summary, format_optional_grid, grid_bounds,
+    map_object_at_grid, movement_block_reasons, rendered_path_preview, selected_actor,
+    sight_block_reasons, visible_world_footprint,
 };
 use crate::state::{
     HudEventCategory, HudEventFilter, HudFooterText, HudText, ViewerEventEntry, ViewerHudPage,
@@ -13,6 +14,7 @@ use crate::state::{
 };
 
 pub(crate) fn update_hud(
+    window: Single<&Window>,
     hud_text: Single<(&mut Text, &mut Visibility), With<HudText>>,
     mut hud_footer: Single<&mut TextSpan, With<HudFooterText>>,
     runtime_state: Res<ViewerRuntimeState>,
@@ -30,11 +32,21 @@ pub(crate) fn update_hud(
     *visibility = Visibility::Visible;
     let snapshot = runtime_state.runtime.snapshot();
     let header = format!("Bevy Debug Viewer · {}", viewer_state.hud_page.title());
-    let summary = format_status_summary(&snapshot, &runtime_state, &viewer_state, *render_config);
+    let summary = format_status_summary(
+        &window,
+        &snapshot,
+        &runtime_state,
+        &viewer_state,
+        *render_config,
+    );
     let page_body = match viewer_state.hud_page {
-        ViewerHudPage::Overview => {
-            format_overview_panel(&snapshot, &runtime_state, &viewer_state, *render_config)
-        }
+        ViewerHudPage::Overview => format_overview_panel(
+            &window,
+            &snapshot,
+            &runtime_state,
+            &viewer_state,
+            *render_config,
+        ),
         ViewerHudPage::SelectedActor => {
             format_selected_actor_panel(&snapshot, &runtime_state, &viewer_state)
         }
@@ -69,6 +81,7 @@ fn actor_overview_summary(actor: &ActorDebugState) -> String {
 }
 
 fn format_status_summary(
+    window: &Window,
     snapshot: &SimulationSnapshot,
     runtime_state: &ViewerRuntimeState,
     viewer_state: &ViewerState,
@@ -82,11 +95,7 @@ fn format_status_summary(
         snapshot,
         runtime_state.runtime.pending_movement(),
     );
-    let zoom = format!(
-        "{:.0}% ({:.1}px/cell)",
-        render_config.zoom_factor * 100.0,
-        crate::geometry::render_cell_extent(snapshot.grid.grid_size, render_config)
-    );
+    let view = camera_view_summary(window, snapshot, viewer_state, render_config);
 
     [
         format!(
@@ -97,7 +106,7 @@ fn format_status_summary(
                 viewer_state.status_line.as_str()
             },
             viewer_state.auto_tick,
-            zoom
+            view
         ),
         format!(
             "combat={} actor={:?} group={:?} turn={} | pending={:?} move={} path={}",
@@ -127,6 +136,7 @@ fn format_status_summary(
 }
 
 fn format_overview_panel(
+    window: &Window,
     snapshot: &SimulationSnapshot,
     runtime_state: &ViewerRuntimeState,
     viewer_state: &ViewerState,
@@ -213,9 +223,8 @@ fn format_overview_panel(
                     format_optional_grid(viewer_state.hovered_grid)
                 ),
                 format!(
-                    "zoom={:.0}% ({:.1}px/cell) auto_tick={}",
-                    render_config.zoom_factor * 100.0,
-                    crate::geometry::render_cell_extent(snapshot.grid.grid_size, render_config),
+                    "zoom={} auto_tick={}",
+                    camera_view_summary(window, snapshot, viewer_state, render_config),
                     viewer_state.auto_tick
                 ),
             ],
@@ -744,6 +753,35 @@ fn format_controls_help() -> String {
             "A toggle auto tick".to_string(),
             "= zoom in, - zoom out, 0 reset zoom".to_string(),
         ],
+    )
+}
+
+fn camera_view_summary(
+    window: &Window,
+    snapshot: &SimulationSnapshot,
+    viewer_state: &ViewerState,
+    render_config: ViewerRenderConfig,
+) -> String {
+    let bounds = grid_bounds(snapshot, viewer_state.current_level);
+    let camera_distance = camera_world_distance(
+        bounds,
+        window.width(),
+        window.height(),
+        snapshot.grid.grid_size,
+        render_config,
+    );
+    let footprint = visible_world_footprint(
+        window.width(),
+        window.height(),
+        camera_distance,
+        render_config,
+    );
+    format!(
+        "{:.0}% | fov={:.0}deg | view={:.1}x{:.1}wu",
+        render_config.zoom_factor * 100.0,
+        render_config.camera_fov_degrees,
+        footprint.x,
+        footprint.y
     )
 }
 

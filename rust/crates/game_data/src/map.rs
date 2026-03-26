@@ -908,7 +908,7 @@ mod tests {
             blocks_sight: true,
             props: MapObjectProps {
                 building: Some(MapBuildingProps {
-                    prefab_id: "safehouse_house".into(),
+                    prefab_id: "survivor_outpost_01_dormitory".into(),
                     extra: BTreeMap::new(),
                 }),
                 ..MapObjectProps::default()
@@ -965,7 +965,9 @@ mod tests {
         let library = load_map_library(&data_dir).expect("sample maps should load");
 
         assert!(!library.is_empty());
-        assert!(library.get(&MapId("safehouse_grid".into())).is_some());
+        assert!(library
+            .get(&MapId("survivor_outpost_01_grid".into()))
+            .is_some());
     }
 
     #[test]
@@ -1041,7 +1043,7 @@ mod tests {
             blocks_sight: true,
             props: MapObjectProps {
                 building: Some(MapBuildingProps {
-                    prefab_id: "safehouse_house".into(),
+                    prefab_id: "survivor_outpost_01_dormitory".into(),
                     extra: BTreeMap::new(),
                 }),
                 ..MapObjectProps::default()

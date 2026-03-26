@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 use game_data::{ActionResult, ActorId, GridCoord, InteractionTargetId, WorldCoord};
+use serde::{Deserialize, Serialize};
 
 use crate::grid::{GridPathfindingError, GridWorld};
 
@@ -95,13 +96,13 @@ pub struct MovementCommandOutcome {
     pub result: ActionResult,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingMovementIntent {
     pub actor_id: ActorId,
     pub requested_goal: GridCoord,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingInteractionIntent {
     pub actor_id: ActorId,
     pub target_id: InteractionTargetId,
@@ -109,7 +110,7 @@ pub struct PendingInteractionIntent {
     pub approach_goal: GridCoord,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PendingProgressionStep {
     EndCurrentCombatTurn,
     RunNonCombatWorldCycle,
@@ -121,6 +122,7 @@ pub enum PendingProgressionStep {
 pub enum AutoMoveInterruptReason {
     ReachedGoal,
     EnteredCombat,
+    InteractionTargetUnavailable,
     ActorNotPlayerControlled,
     InputNotAllowed,
     TargetOutOfBounds,

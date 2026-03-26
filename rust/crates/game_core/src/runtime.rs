@@ -1,11 +1,13 @@
 use std::collections::BTreeSet;
 
 use game_data::{
-    ActionResult, ActionType, ActorId, ActorSide, CharacterId, GridCoord,
+    ActionResult, ActionType, ActorId, ActorSide, CharacterId, DialogueLibrary,
+    DialogueRuleLibrary, DialogueRuntimeState, GridCoord, InteractionContextSnapshot,
     InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionId,
     InteractionPrompt, InteractionTargetId, ItemLibrary, MapLibrary, OverworldLibrary,
     QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldCoord, WorldMode,
 };
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::economy::{CraftOutcome, EconomyRuntimeError, HeadlessEconomyRuntime, TradeOutcome};
@@ -17,9 +19,30 @@ use crate::movement::{
 };
 use crate::simulation::{
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
-    SimulationSnapshot,
+    SimulationSnapshot, SimulationStateSnapshot,
 };
 use crate::{NpcBackgroundState, NpcRuntimeActionState};
+
+pub const RUNTIME_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
+
+const fn default_runtime_snapshot_schema_version() -> u32 {
+    RUNTIME_SNAPSHOT_SCHEMA_VERSION
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuntimeSnapshot {
+    #[serde(default = "default_runtime_snapshot_schema_version")]
+    pub schema_version: u32,
+    pub(crate) simulation: SimulationStateSnapshot,
+    #[serde(default)]
+    pub pending_movement: Option<PendingMovementIntent>,
+    #[serde(default)]
+    pub pending_interaction: Option<PendingInteractionIntent>,
+    #[serde(default)]
+    pub path_preview: Vec<GridCoord>,
+    #[serde(default)]
+    pub tick_count: u64,
+}
 
 #[derive(Debug)]
 pub struct SimulationRuntime {
@@ -132,8 +155,145 @@ impl SimulationRuntime {
         self.simulation.set_shop_library(shops);
     }
 
+    pub fn set_dialogue_library(&mut self, dialogues: DialogueLibrary) {
+        self.simulation.set_dialogue_library(dialogues);
+    }
+
+    pub fn set_dialogue_rule_library(&mut self, rules: DialogueRuleLibrary) {
+        self.simulation.set_dialogue_rule_library(rules);
+    }
+
     pub fn start_quest(&mut self, actor_id: ActorId, quest_id: &str) -> bool {
         self.simulation.start_quest(actor_id, quest_id)
+    }
+
+    pub fn active_dialogue_state(&self, actor_id: ActorId) -> Option<DialogueRuntimeState> {
+        self.simulation.active_dialogue_state(actor_id)
+    }
+
+    pub fn advance_dialogue(
+        &mut self,
+        actor_id: ActorId,
+        target_id: Option<InteractionTargetId>,
+        dialogue_id: &str,
+        option_id: Option<&str>,
+        option_index: Option<usize>,
+    ) -> Result<DialogueRuntimeState, String> {
+        match self.submit_command(SimulationCommand::AdvanceDialogue {
+            actor_id,
+            target_id,
+            dialogue_id: dialogue_id.to_string(),
+            option_id: option_id.map(str::to_string),
+            option_index,
+        }) {
+            SimulationCommandResult::DialogueState(result) => result,
+            other => Err(format!(
+                "dialogue_command_unavailable:unexpected_result:{other:?}"
+            )),
+        }
+    }
+
+    pub fn request_overworld_route(
+        &mut self,
+        actor_id: ActorId,
+        target_location_id: &str,
+    ) -> Result<crate::OverworldRouteSnapshot, String> {
+        match self.submit_command(SimulationCommand::RequestOverworldRoute {
+            actor_id,
+            target_location_id: target_location_id.to_string(),
+        }) {
+            SimulationCommandResult::OverworldRoute(result) => result,
+            other => Err(format!(
+                "overworld_route_unavailable:unexpected_result:{other:?}"
+            )),
+        }
+    }
+
+    pub fn start_overworld_travel(
+        &mut self,
+        actor_id: ActorId,
+        target_location_id: &str,
+    ) -> Result<crate::OverworldStateSnapshot, String> {
+        match self.submit_command(SimulationCommand::StartOverworldTravel {
+            actor_id,
+            target_location_id: target_location_id.to_string(),
+        }) {
+            SimulationCommandResult::OverworldState(result) => result,
+            other => Err(format!(
+                "overworld_travel_unavailable:unexpected_result:{other:?}"
+            )),
+        }
+    }
+
+    pub fn advance_overworld_travel(
+        &mut self,
+        actor_id: ActorId,
+        minutes: u32,
+    ) -> Result<crate::OverworldStateSnapshot, String> {
+        match self.submit_command(SimulationCommand::AdvanceOverworldTravel { actor_id, minutes }) {
+            SimulationCommandResult::OverworldState(result) => result,
+            other => Err(format!(
+                "overworld_travel_advance_unavailable:unexpected_result:{other:?}"
+            )),
+        }
+    }
+
+    pub fn travel_to_map(
+        &mut self,
+        actor_id: ActorId,
+        target_map_id: &str,
+        entry_point_id: Option<&str>,
+        world_mode: WorldMode,
+    ) -> Result<InteractionContextSnapshot, String> {
+        match self.submit_command(SimulationCommand::TravelToMap {
+            actor_id,
+            target_map_id: target_map_id.to_string(),
+            entry_point_id: entry_point_id.map(str::to_string),
+            world_mode,
+        }) {
+            SimulationCommandResult::InteractionContext(result) => result,
+            other => Err(format!(
+                "travel_to_map_unavailable:unexpected_result:{other:?}"
+            )),
+        }
+    }
+
+    pub fn enter_location(
+        &mut self,
+        actor_id: ActorId,
+        location_id: &str,
+        entry_point_id: Option<&str>,
+    ) -> Result<crate::LocationTransitionContext, String> {
+        match self.submit_command(SimulationCommand::EnterLocation {
+            actor_id,
+            location_id: location_id.to_string(),
+            entry_point_id: entry_point_id.map(str::to_string),
+        }) {
+            SimulationCommandResult::LocationTransition(result) => result,
+            other => Err(format!(
+                "location_enter_unavailable:unexpected_result:{other:?}"
+            )),
+        }
+    }
+
+    pub fn return_to_overworld(
+        &mut self,
+        actor_id: ActorId,
+    ) -> Result<crate::OverworldStateSnapshot, String> {
+        match self.submit_command(SimulationCommand::ReturnToOverworld { actor_id }) {
+            SimulationCommandResult::OverworldState(result) => result,
+            other => Err(format!(
+                "return_to_overworld_unavailable:unexpected_result:{other:?}"
+            )),
+        }
+    }
+
+    pub fn current_overworld_state(&self) -> crate::OverworldStateSnapshot {
+        self.snapshot().overworld
+    }
+
+    pub fn current_interaction_context(&self) -> InteractionContextSnapshot {
+        self.snapshot().interaction_context
     }
 
     pub fn is_quest_active(&self, quest_id: &str) -> bool {
@@ -168,6 +328,32 @@ impl SimulationRuntime {
 
     pub fn snapshot(&self) -> SimulationSnapshot {
         self.simulation.snapshot(self.path_preview.clone())
+    }
+
+    pub fn save_snapshot(&self) -> RuntimeSnapshot {
+        RuntimeSnapshot {
+            schema_version: RUNTIME_SNAPSHOT_SCHEMA_VERSION,
+            simulation: self.simulation.save_snapshot(),
+            pending_movement: self.pending_movement,
+            pending_interaction: self.pending_interaction.clone(),
+            path_preview: self.path_preview.clone(),
+            tick_count: self.tick_count,
+        }
+    }
+
+    pub fn load_snapshot(&mut self, snapshot: RuntimeSnapshot) -> Result<(), String> {
+        if snapshot.schema_version != RUNTIME_SNAPSHOT_SCHEMA_VERSION {
+            return Err(format!(
+                "unsupported_runtime_snapshot_schema_version:{}",
+                snapshot.schema_version
+            ));
+        }
+        self.simulation.load_snapshot(snapshot.simulation);
+        self.pending_movement = snapshot.pending_movement;
+        self.pending_interaction = snapshot.pending_interaction;
+        self.path_preview = snapshot.path_preview;
+        self.tick_count = snapshot.tick_count;
+        Ok(())
     }
 
     pub fn economy(&self) -> &HeadlessEconomyRuntime {
@@ -339,7 +525,8 @@ impl SimulationRuntime {
         actor_id: ActorId,
         state: NpcRuntimeActionState,
     ) {
-        self.simulation.set_actor_runtime_action_state(actor_id, state);
+        self.simulation
+            .set_actor_runtime_action_state(actor_id, state);
     }
 
     pub fn get_actor_runtime_action_state(
@@ -362,7 +549,8 @@ impl SimulationRuntime {
         actor_id: ActorId,
         background: &NpcBackgroundState,
     ) {
-        self.simulation.import_actor_background_state(actor_id, background);
+        self.simulation
+            .import_actor_background_state(actor_id, background);
     }
 
     pub fn active_quest_ids_for_actor(&self, actor_id: ActorId) -> BTreeSet<String> {
@@ -743,6 +931,61 @@ impl SimulationRuntime {
                 None,
             );
         };
+        let mut requested_goal = intent.requested_goal;
+
+        if let Some(pending_interaction) = self
+            .pending_interaction
+            .clone()
+            .filter(|pending| pending.actor_id == intent.actor_id)
+        {
+            match self.resolve_pending_interaction_approach_goal(&pending_interaction) {
+                Ok(Some(goal)) => {
+                    requested_goal = goal;
+                    if goal != intent.requested_goal {
+                        if let Some(pending_movement) = self.pending_movement.as_mut() {
+                            pending_movement.requested_goal = goal;
+                        }
+                        if let Some(intent) = self.pending_interaction.as_mut() {
+                            intent.approach_goal = goal;
+                        }
+                        info!(
+                            "core.interaction.approach_retargeted actor={:?} target={:?} option_id={} goal=({}, {}, {})",
+                            pending_interaction.actor_id,
+                            pending_interaction.target_id,
+                            pending_interaction.option_id,
+                            goal.x,
+                            goal.y,
+                            goal.z
+                        );
+                    }
+                }
+                Ok(None) => {
+                    let final_position = self.simulation.actor_grid_position(intent.actor_id);
+                    self.pending_movement = None;
+                    self.path_preview.clear();
+                    return ProgressionAdvanceResult {
+                        applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
+                        final_position,
+                        reached_goal: true,
+                        interrupted: false,
+                        interrupt_reason: Some(AutoMoveInterruptReason::ReachedGoal),
+                        movement_outcome: None,
+                    };
+                }
+                Err(interrupt_reason) => {
+                    let final_position = self.simulation.actor_grid_position(intent.actor_id);
+                    self.clear_pending_movement_internal(Some(interrupt_reason));
+                    return ProgressionAdvanceResult {
+                        applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
+                        final_position,
+                        reached_goal: false,
+                        interrupted: true,
+                        interrupt_reason: Some(interrupt_reason),
+                        movement_outcome: None,
+                    };
+                }
+            }
+        }
 
         if self.simulation.is_in_combat() {
             let final_position = self.simulation.actor_grid_position(intent.actor_id);
@@ -759,7 +1002,7 @@ impl SimulationRuntime {
 
         let plan = match self
             .simulation
-            .plan_actor_movement(intent.actor_id, intent.requested_goal)
+            .plan_actor_movement(intent.actor_id, requested_goal)
         {
             Ok(plan) => plan,
             Err(error) => {
@@ -820,7 +1063,7 @@ impl SimulationRuntime {
             };
         }
 
-        let outcome = match self.move_actor_to_reachable(intent.actor_id, intent.requested_goal) {
+        let outcome = match self.move_actor_to_reachable(intent.actor_id, requested_goal) {
             Ok(outcome) => outcome,
             Err(error) => {
                 let final_position = self.simulation.actor_grid_position(intent.actor_id);
@@ -918,6 +1161,35 @@ impl SimulationRuntime {
         }
         Ok(())
     }
+
+    fn resolve_pending_interaction_approach_goal(
+        &self,
+        intent: &PendingInteractionIntent,
+    ) -> Result<Option<GridCoord>, AutoMoveInterruptReason> {
+        let prompt = self
+            .simulation
+            .query_interaction_options(intent.actor_id, &intent.target_id)
+            .ok_or(AutoMoveInterruptReason::InteractionTargetUnavailable)?;
+        let option_id = InteractionOptionId(intent.option_id.clone());
+        let option = prompt
+            .options
+            .into_iter()
+            .find(|option| option.id == option_id)
+            .ok_or(AutoMoveInterruptReason::InteractionTargetUnavailable)?;
+
+        if !option.requires_proximity {
+            return Ok(None);
+        }
+
+        self.simulation
+            .plan_interaction_approach(
+                intent.actor_id,
+                &intent.target_id,
+                option.interaction_distance,
+            )
+            .map(|goal| goal.map(|(goal, _)| goal))
+            .map_err(|reason| interaction_approach_error_to_interrupt_reason(&reason))
+    }
 }
 
 pub fn pathfinding_error_reason(error: &GridPathfindingError) -> &'static str {
@@ -972,18 +1244,34 @@ fn movement_plan_error_to_interrupt_reason(error: &MovementPlanError) -> AutoMov
     }
 }
 
+fn interaction_approach_error_to_interrupt_reason(reason: &str) -> AutoMoveInterruptReason {
+    match reason {
+        "unknown_actor" => AutoMoveInterruptReason::UnknownActor,
+        "interaction_target_unavailable" | "interaction_option_unavailable" => {
+            AutoMoveInterruptReason::InteractionTargetUnavailable
+        }
+        "no_interaction_path" => AutoMoveInterruptReason::NoPath,
+        _ => AutoMoveInterruptReason::NoPath,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
     use game_data::{
-        ActionType, ActorKind, ActorSide, CharacterId, GridCoord, InteractionOptionId,
-        InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary, MapDefinition,
-        MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition,
+        ActionType, ActorKind, ActorSide, CharacterId, DialogueAction, DialogueData,
+        DialogueLibrary, DialogueNode, DialogueOption, GridCoord, InteractionExecutionRequest,
+        InteractionOptionId, InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary,
+        MapDefinition,
+        MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition, MapLibrary,
         MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
-        MapRotation, MapSize, QuestConnection, QuestDefinition, QuestFlow, QuestLibrary,
-        QuestNode, QuestRewards, RecipeDefinition, RecipeLibrary, RecipeMaterial, RecipeOutput,
-        ShopDefinition, ShopInventoryEntry, ShopLibrary, SkillDefinition, SkillLibrary,
+        MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldEdgeDefinition,
+        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
+        OverworldLocationKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition,
+        QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeDefinition, RecipeLibrary,
+        RecipeMaterial, RecipeOutput, ShopDefinition, ShopInventoryEntry, ShopLibrary,
+        SkillDefinition, SkillLibrary, WorldMode,
     };
 
     use super::SimulationRuntime;
@@ -1261,6 +1549,7 @@ mod tests {
     #[test]
     fn issue_interaction_executes_immediately_after_synchronous_approach() {
         let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(sample_runtime_dialogue_library());
         let player = simulation.register_actor(RegisterActor {
             definition_id: Some(CharacterId("player".into())),
             display_name: "Player".into(),
@@ -1298,6 +1587,158 @@ mod tests {
             Some(GridCoord::new(1, 0, 1))
         );
         assert!(runtime.pending_interaction().is_none());
+    }
+
+    #[test]
+    fn pending_interaction_retargets_when_target_actor_moves() {
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(sample_runtime_dialogue_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(4, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        let result = runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+
+        assert!(result.success);
+        assert!(result.approach_required);
+        assert_eq!(
+            runtime
+                .pending_movement()
+                .map(|intent| intent.requested_goal),
+            Some(GridCoord::new(3, 0, 1))
+        );
+        assert_eq!(
+            runtime
+                .pending_interaction()
+                .map(|intent| intent.approach_goal),
+            Some(GridCoord::new(3, 0, 1))
+        );
+
+        let move_target = runtime.submit_command(SimulationCommand::UpdateActorGridPosition {
+            actor_id: npc,
+            grid: GridCoord::new(6, 0, 1),
+        });
+        assert!(matches!(move_target, SimulationCommandResult::None));
+
+        let world_cycle = runtime.advance_pending_progression();
+        assert_eq!(
+            world_cycle.applied_step,
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        let next_turn = runtime.advance_pending_progression();
+        assert_eq!(
+            next_turn.applied_step,
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+
+        let progression = runtime.advance_pending_progression();
+
+        assert_eq!(progression.final_position, Some(GridCoord::new(2, 0, 1)));
+        assert_eq!(
+            runtime
+                .pending_movement()
+                .map(|intent| intent.requested_goal),
+            Some(GridCoord::new(5, 0, 1))
+        );
+        assert_eq!(
+            runtime
+                .pending_interaction()
+                .map(|intent| intent.approach_goal),
+            Some(GridCoord::new(5, 0, 1))
+        );
+        assert_eq!(
+            runtime.snapshot().path_preview.last().copied(),
+            Some(GridCoord::new(5, 0, 1))
+        );
+    }
+
+    #[test]
+    fn pending_interaction_executes_when_target_moves_into_range() {
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(sample_runtime_dialogue_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(4, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        let result = runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+
+        assert!(result.success);
+        assert!(result.approach_required);
+
+        let move_target = runtime.submit_command(SimulationCommand::UpdateActorGridPosition {
+            actor_id: npc,
+            grid: GridCoord::new(1, 0, 1),
+        });
+        assert!(matches!(move_target, SimulationCommandResult::None));
+
+        let world_cycle = runtime.advance_pending_progression();
+        assert_eq!(
+            world_cycle.applied_step,
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        let next_turn = runtime.advance_pending_progression();
+        assert_eq!(
+            next_turn.applied_step,
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+
+        let progression = runtime.advance_pending_progression();
+
+        assert!(progression.reached_goal);
+        assert_eq!(progression.final_position, Some(GridCoord::new(1, 0, 1)));
+        assert!(runtime.pending_movement().is_none());
+        assert!(runtime.pending_interaction().is_none());
+        assert!(runtime.snapshot().path_preview.is_empty());
     }
 
     #[test]
@@ -1448,17 +1889,428 @@ mod tests {
             .expect("money should be granted");
 
         let buy = runtime
-            .buy_item_from_shop(handles.player, "safehouse_shop", 1031, 2, &items)
+            .buy_item_from_shop(handles.player, "survivor_outpost_01_shop", 1031, 2, &items)
             .expect("buy should succeed");
         assert_eq!(buy.total_price, 30);
         assert_eq!(runtime.get_actor_inventory_count(handles.player, "1031"), 2);
 
         let sell = runtime
-            .sell_item_to_shop(handles.player, "safehouse_shop", 1031, 1, &items)
+            .sell_item_to_shop(handles.player, "survivor_outpost_01_shop", 1031, 1, &items)
             .expect("sell should succeed");
         assert_eq!(sell.total_price, 5);
         assert_eq!(runtime.get_actor_inventory_count(handles.player, "1031"), 1);
         assert_eq!(runtime.economy().actor_money(handles.player), Some(75));
+    }
+
+    #[test]
+    fn runtime_travel_to_map_and_return_to_overworld_preserve_scene_context() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_runtime_map_library());
+        simulation.set_overworld_library(sample_runtime_overworld_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation
+            .seed_overworld_state(
+                WorldMode::Outdoor,
+                Some("survivor_outpost_01".into()),
+                Some("default_entry".into()),
+                [
+                    "survivor_outpost_01".to_string(),
+                    "survivor_outpost_01_interior".to_string(),
+                ],
+            )
+            .expect("overworld state should seed");
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        let context = runtime
+            .travel_to_map(
+                player,
+                "survivor_outpost_01_interior_grid",
+                Some("clinic_entry"),
+                WorldMode::Interior,
+            )
+            .expect("travel to map should succeed");
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_interior_grid")
+        );
+        assert_eq!(context.entry_point_id.as_deref(), Some("clinic_entry"));
+        assert_eq!(context.return_outdoor_location_id.as_deref(), Some("survivor_outpost_01"));
+        assert_eq!(context.world_mode, WorldMode::Interior);
+
+        let overworld = runtime
+            .return_to_overworld(player)
+            .expect("return to overworld should succeed");
+        assert_eq!(overworld.world_mode, WorldMode::Overworld);
+        assert_eq!(
+            overworld.active_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(
+            overworld.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(overworld.current_map_id, None);
+        assert_eq!(
+            runtime.current_interaction_context().return_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+    }
+
+    #[test]
+    fn runtime_headless_smoke_covers_core_progression_loop() {
+        let items = sample_runtime_smoke_item_library();
+        let skills = sample_runtime_skill_library();
+        let recipes = sample_runtime_recipe_library();
+        let shops = sample_runtime_shop_library();
+        let quests = sample_runtime_quest_library();
+        let maps = sample_runtime_smoke_map_library();
+        let interaction_map = sample_interaction_map_definition();
+
+        let mut simulation = Simulation::new();
+        simulation.set_item_library(items.clone());
+        simulation.set_skill_library(skills.clone());
+        simulation.set_recipe_library(recipes.clone());
+        simulation.set_shop_library(shops.clone());
+        simulation.set_quest_library(quests.clone());
+        simulation.set_dialogue_library(sample_runtime_dialogue_library());
+        simulation.set_map_library(maps.clone());
+        simulation.set_overworld_library(sample_runtime_overworld_library());
+        simulation.grid_world_mut().load_map(&interaction_map);
+        simulation
+            .seed_overworld_state(
+                WorldMode::Outdoor,
+                Some("survivor_outpost_01".into()),
+                Some("default_entry".into()),
+                [
+                    "survivor_outpost_01".to_string(),
+                    "survivor_outpost_01_interior".to_string(),
+                ],
+            )
+            .expect("overworld state should seed");
+
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.5,
+            ai_controller: None,
+        });
+        let trader = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(1, 0, 2),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("zombie_walker".into())),
+            display_name: "Zombie".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.0,
+            ai_controller: None,
+        });
+        simulation.seed_actor_progression(player, 1, 0);
+        simulation.seed_actor_progression(hostile, 1, 25);
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+        simulation.set_actor_resource(hostile, "hp", 5.0);
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+        assert!(matches!(
+            runtime.submit_command(SimulationCommand::SetActorAp {
+                actor_id: player,
+                ap: 10.0,
+            }),
+            SimulationCommandResult::None
+        ));
+
+        let move_result = runtime.submit_command(SimulationCommand::MoveActorTo {
+            actor_id: player,
+            goal: GridCoord::new(1, 0, 1),
+        });
+        match move_result {
+            SimulationCommandResult::Action(action) => assert!(action.success),
+            other => panic!("unexpected move result: {other:?}"),
+        }
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(1, 0, 1))
+        );
+        assert!(matches!(
+            runtime.submit_command(SimulationCommand::SetActorAp {
+                actor_id: player,
+                ap: 10.0,
+            }),
+            SimulationCommandResult::None
+        ));
+
+        let pickup = runtime.submit_command(SimulationCommand::ExecuteInteraction(
+            InteractionExecutionRequest {
+                actor_id: player,
+                target_id: InteractionTargetId::MapObject("pickup".into()),
+                option_id: InteractionOptionId("pickup".into()),
+            },
+        ));
+        match pickup {
+            SimulationCommandResult::InteractionExecution(result) => assert!(result.success),
+            other => panic!("unexpected pickup result: {other:?}"),
+        }
+        assert!(runtime.get_actor_inventory_count(player, "1005") >= 1);
+
+        assert!(runtime.start_quest(player, "zombie_hunter"));
+        assert!(matches!(
+            runtime.submit_command(SimulationCommand::SetActorAp {
+                actor_id: player,
+                ap: 10.0,
+            }),
+            SimulationCommandResult::None
+        ));
+        let attack = runtime.submit_command(SimulationCommand::PerformAttack {
+            actor_id: player,
+            target_actor: hostile,
+        });
+        match attack {
+            SimulationCommandResult::Action(action) => assert!(action.success),
+            other => panic!("unexpected attack result: {other:?}"),
+        }
+        assert!(runtime.is_quest_completed("zombie_hunter"));
+        assert_eq!(runtime.get_actor_inventory_count(player, "1006"), 3);
+
+        assert!(matches!(
+            runtime.submit_command(SimulationCommand::SetActorAp {
+                actor_id: player,
+                ap: 10.0,
+            }),
+            SimulationCommandResult::None
+        ));
+        let talk = runtime.submit_command(SimulationCommand::ExecuteInteraction(
+            InteractionExecutionRequest {
+                actor_id: player,
+                target_id: InteractionTargetId::Actor(trader),
+                option_id: InteractionOptionId("talk".into()),
+            },
+        ));
+        match talk {
+            SimulationCommandResult::InteractionExecution(result) => {
+                assert_eq!(result.dialogue_id.as_deref(), Some("trader_lao_wang"));
+            }
+            other => panic!("unexpected talk result: {other:?}"),
+        }
+        let dialogue = runtime
+            .advance_dialogue(
+                player,
+                Some(InteractionTargetId::Actor(trader)),
+                "trader_lao_wang",
+                None,
+                None,
+            )
+            .expect("dialogue should advance");
+        assert_eq!(
+            dialogue.current_node.as_ref().map(|node| node.id.as_str()),
+            Some("choice_1")
+        );
+
+        runtime.economy_mut().set_actor_level(player, 8);
+        runtime
+            .economy_mut()
+            .set_actor_attribute(player, "intelligence", 3);
+        runtime
+            .economy_mut()
+            .add_skill_points(player, 1)
+            .expect("skill points should be granted");
+        runtime
+            .economy_mut()
+            .add_item(player, 1001, 2, &items)
+            .expect("materials should be granted");
+        runtime
+            .economy_mut()
+            .add_item(player, 1002, 1, &items)
+            .expect("tool should be granted");
+        runtime
+            .economy_mut()
+            .grant_station_tag(player, "workbench")
+            .expect("station tag should be granted");
+        runtime
+            .economy_mut()
+            .grant_money(player, 100)
+            .expect("money should be granted");
+
+        assert_eq!(
+            runtime
+                .learn_skill(player, "crafting_basics", &skills)
+                .expect("skill should learn"),
+            1
+        );
+        let craft = runtime
+            .craft_recipe(player, "bandage_recipe", &recipes, &items)
+            .expect("recipe should craft");
+        assert_eq!(craft.output_item_id, 1003);
+        let buy = runtime
+            .buy_item_from_shop(player, "survivor_outpost_01_shop", 1031, 2, &items)
+            .expect("buy should succeed");
+        assert_eq!(buy.total_price, 30);
+        let sell = runtime
+            .sell_item_to_shop(player, "survivor_outpost_01_shop", 1031, 1, &items)
+            .expect("sell should succeed");
+        assert_eq!(sell.total_price, 5);
+
+        let map_context = runtime
+            .travel_to_map(
+                player,
+                "survivor_outpost_01_interior_grid",
+                Some("clinic_entry"),
+                WorldMode::Interior,
+            )
+            .expect("travel to map should succeed");
+        assert_eq!(
+            map_context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_interior_grid")
+        );
+        assert_eq!(map_context.world_mode, WorldMode::Interior);
+
+        let overworld = runtime
+            .return_to_overworld(player)
+            .expect("return to overworld should succeed");
+        assert_eq!(overworld.world_mode, WorldMode::Overworld);
+        assert_eq!(overworld.current_map_id, None);
+
+        let saved = runtime.save_snapshot();
+        let mut restored = SimulationRuntime::new();
+        restored.set_item_library(items);
+        restored.set_skill_library(skills);
+        restored.set_recipe_library(recipes);
+        restored.set_shop_library(shops);
+        restored.set_quest_library(quests);
+        restored.set_dialogue_library(sample_runtime_dialogue_library());
+        restored.set_map_library(maps);
+        restored.set_overworld_library(sample_runtime_overworld_library());
+        restored
+            .load_snapshot(saved.clone())
+            .expect("snapshot should restore");
+        assert_eq!(restored.save_snapshot(), saved);
+        assert!(restored.is_quest_completed("zombie_hunter"));
+        assert_eq!(
+            restored.current_interaction_context().world_mode,
+            WorldMode::Overworld
+        );
+    }
+
+    #[test]
+    fn runtime_snapshot_round_trip_restores_runtime_state() {
+        let items = sample_runtime_economy_item_library();
+        let quests = sample_runtime_quest_library();
+        let map = sample_interaction_map_definition();
+        let map_library = MapLibrary::from(BTreeMap::from([(map.id.clone(), map.clone())]));
+
+        let mut simulation = Simulation::new();
+        simulation.set_item_library(items.clone());
+        simulation.set_quest_library(quests.clone());
+        simulation.set_map_library(map_library.clone());
+        simulation.grid_world_mut().load_map(&map);
+
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(1, 0, 1),
+            interaction: None,
+            attack_range: 1.5,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("zombie_walker".into())),
+            display_name: "Zombie".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.0,
+            ai_controller: None,
+        });
+        simulation.seed_actor_progression(player, 1, 0);
+        simulation.seed_actor_progression(hostile, 1, 25);
+        simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+        simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+        simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+        simulation.set_actor_resource(hostile, "hp", 5.0);
+        assert!(simulation.start_quest(player, "zombie_hunter"));
+        assert!(simulation
+            .grid_world_mut()
+            .remove_map_object("pickup")
+            .is_some());
+        simulation
+            .economy_mut()
+            .add_item_unchecked(player, 1005, 2)
+            .expect("pickup item should be granted");
+        let attack = simulation.perform_attack(player, hostile);
+        assert!(attack.success);
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+        runtime.tick();
+        runtime.tick();
+        assert_eq!(runtime.get_actor_inventory_count(player, "1005"), 2);
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(1, 0, 1))
+        );
+        assert!(runtime.is_quest_completed("zombie_hunter"));
+
+        let saved = runtime.save_snapshot();
+
+        let mut restored = SimulationRuntime::new();
+        restored.set_item_library(items);
+        restored.set_quest_library(quests);
+        restored.set_map_library(map_library);
+        restored
+            .load_snapshot(saved.clone())
+            .expect("snapshot should load");
+
+        assert_eq!(restored.save_snapshot(), saved);
+        assert_eq!(restored.tick_count(), 2);
+        assert_eq!(restored.get_actor_inventory_count(player, "1005"), 2);
+        assert!(restored.is_quest_completed("zombie_hunter"));
+        assert_eq!(
+            restored.get_actor_grid_position(player),
+            Some(GridCoord::new(1, 0, 1))
+        );
+
+        let restored_debug = restored.snapshot();
+        assert_eq!(
+            restored_debug.grid.map_id,
+            Some(MapId("interaction_map".into()))
+        );
+        assert!(restored_debug
+            .grid
+            .map_objects
+            .iter()
+            .all(|object| object.object_id != "pickup"));
     }
 
     fn sample_reward_item_library() -> ItemLibrary {
@@ -1630,9 +2482,9 @@ mod tests {
 
     fn sample_runtime_shop_library() -> ShopLibrary {
         ShopLibrary::from(BTreeMap::from([(
-            "safehouse_shop".to_string(),
+            "survivor_outpost_01_shop".to_string(),
             ShopDefinition {
-                id: "safehouse_shop".to_string(),
+                id: "survivor_outpost_01_shop".to_string(),
                 buy_price_modifier: 1.5,
                 sell_price_modifier: 0.5,
                 money: 100,
@@ -1641,6 +2493,218 @@ mod tests {
                     count: 3,
                     price: 15,
                 }],
+            },
+        )]))
+    }
+
+    fn sample_runtime_map_library() -> MapLibrary {
+        MapLibrary::from(BTreeMap::from([
+            (
+                MapId("survivor_outpost_01_grid".into()),
+                MapDefinition {
+                    id: MapId("survivor_outpost_01_grid".into()),
+                    name: "Survivor Outpost".into(),
+                    size: MapSize {
+                        width: 12,
+                        height: 12,
+                    },
+                    default_level: 0,
+                    levels: vec![MapLevelDefinition {
+                        y: 0,
+                        cells: Vec::new(),
+                    }],
+                    entry_points: vec![MapEntryPointDefinition {
+                        id: "default_entry".into(),
+                        grid: GridCoord::new(1, 0, 1),
+                        facing: None,
+                        extra: BTreeMap::new(),
+                    }],
+                    objects: Vec::new(),
+                },
+            ),
+            (
+                MapId("survivor_outpost_01_interior_grid".into()),
+                MapDefinition {
+                    id: MapId("survivor_outpost_01_interior_grid".into()),
+                    name: "Outpost Interior".into(),
+                    size: MapSize {
+                        width: 8,
+                        height: 8,
+                    },
+                    default_level: 0,
+                    levels: vec![MapLevelDefinition {
+                        y: 0,
+                        cells: Vec::new(),
+                    }],
+                    entry_points: vec![
+                        MapEntryPointDefinition {
+                            id: "default_entry".into(),
+                            grid: GridCoord::new(0, 0, 0),
+                            facing: None,
+                            extra: BTreeMap::new(),
+                        },
+                        MapEntryPointDefinition {
+                            id: "clinic_entry".into(),
+                            grid: GridCoord::new(2, 0, 2),
+                            facing: None,
+                            extra: BTreeMap::new(),
+                        },
+                    ],
+                    objects: Vec::new(),
+                },
+            ),
+        ]))
+    }
+
+    fn sample_runtime_overworld_library() -> OverworldLibrary {
+        OverworldLibrary::from(BTreeMap::from([(
+            OverworldId("main_overworld".into()),
+            OverworldDefinition {
+                id: OverworldId("main_overworld".into()),
+                locations: vec![
+                    OverworldLocationDefinition {
+                        id: OverworldLocationId("survivor_outpost_01".into()),
+                        name: "Survivor Outpost".into(),
+                        description: String::new(),
+                        kind: OverworldLocationKind::Outdoor,
+                        map_id: MapId("survivor_outpost_01_grid".into()),
+                        entry_point_id: "default_entry".into(),
+                        parent_outdoor_location_id: None,
+                        return_entry_point_id: None,
+                        default_unlocked: true,
+                        visible: true,
+                        overworld_cell: GridCoord::new(0, 0, 0),
+                        danger_level: 0,
+                        icon: String::new(),
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldLocationDefinition {
+                        id: OverworldLocationId("survivor_outpost_01_interior".into()),
+                        name: "Outpost Interior".into(),
+                        description: String::new(),
+                        kind: OverworldLocationKind::Interior,
+                        map_id: MapId("survivor_outpost_01_interior_grid".into()),
+                        entry_point_id: "default_entry".into(),
+                        parent_outdoor_location_id: Some(OverworldLocationId(
+                            "survivor_outpost_01".into(),
+                        )),
+                        return_entry_point_id: Some("default_entry".into()),
+                        default_unlocked: true,
+                        visible: false,
+                        overworld_cell: GridCoord::new(0, 0, 0),
+                        danger_level: 0,
+                        icon: String::new(),
+                        extra: BTreeMap::new(),
+                    },
+                ],
+                edges: vec![OverworldEdgeDefinition {
+                    from: OverworldLocationId("survivor_outpost_01".into()),
+                    to: OverworldLocationId("survivor_outpost_01_interior".into()),
+                    bidirectional: true,
+                    travel_minutes: 0,
+                    food_cost: 0,
+                    stamina_cost: 0,
+                    risk_level: 0.0,
+                    route_cells: Vec::new(),
+                    extra: BTreeMap::new(),
+                }],
+                walkable_cells: vec![OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                }],
+                travel_rules: OverworldTravelRuleSet::default(),
+            },
+        )]))
+    }
+
+    fn sample_runtime_smoke_item_library() -> ItemLibrary {
+        let mut definitions = BTreeMap::new();
+        for (item_id, definition) in sample_runtime_economy_item_library().iter() {
+            definitions.insert(*item_id, definition.clone());
+        }
+        for (item_id, definition) in sample_reward_item_library().iter() {
+            definitions.insert(*item_id, definition.clone());
+        }
+        definitions.insert(
+            1005,
+            ItemDefinition {
+                id: 1005,
+                name: "Scrap".to_string(),
+                fragments: vec![ItemFragment::Stacking {
+                    stackable: true,
+                    max_stack: 20,
+                }],
+                ..ItemDefinition::default()
+            },
+        );
+        ItemLibrary::from(definitions)
+    }
+
+    fn sample_runtime_smoke_map_library() -> MapLibrary {
+        let mut definitions = BTreeMap::new();
+        for (map_id, definition) in sample_runtime_map_library().iter() {
+            definitions.insert(map_id.clone(), definition.clone());
+        }
+        let interaction_map = sample_interaction_map_definition();
+        definitions.insert(interaction_map.id.clone(), interaction_map);
+        MapLibrary::from(definitions)
+    }
+
+    fn sample_runtime_dialogue_library() -> DialogueLibrary {
+        DialogueLibrary::from(BTreeMap::from([(
+            "trader_lao_wang".to_string(),
+            DialogueData {
+                dialog_id: "trader_lao_wang".to_string(),
+                nodes: vec![
+                    DialogueNode {
+                        id: "start".to_string(),
+                        node_type: "dialog".to_string(),
+                        is_start: true,
+                        next: "choice_1".to_string(),
+                        ..DialogueNode::default()
+                    },
+                    DialogueNode {
+                        id: "choice_1".to_string(),
+                        node_type: "choice".to_string(),
+                        options: vec![
+                            DialogueOption {
+                                text: "Trade".to_string(),
+                                next: "trade_action".to_string(),
+                                ..DialogueOption::default()
+                            },
+                            DialogueOption {
+                                text: "Leave".to_string(),
+                                next: "leave_end".to_string(),
+                                ..DialogueOption::default()
+                            },
+                        ],
+                        ..DialogueNode::default()
+                    },
+                    DialogueNode {
+                        id: "trade_action".to_string(),
+                        node_type: "action".to_string(),
+                        actions: vec![DialogueAction {
+                            action_type: "open_trade".to_string(),
+                            extra: BTreeMap::new(),
+                        }],
+                        next: "trade_end".to_string(),
+                        ..DialogueNode::default()
+                    },
+                    DialogueNode {
+                        id: "trade_end".to_string(),
+                        node_type: "end".to_string(),
+                        end_type: "trade".to_string(),
+                        ..DialogueNode::default()
+                    },
+                    DialogueNode {
+                        id: "leave_end".to_string(),
+                        node_type: "end".to_string(),
+                        end_type: "leave".to_string(),
+                        ..DialogueNode::default()
+                    },
+                ],
+                ..DialogueData::default()
             },
         )]))
     }
@@ -1733,6 +2797,214 @@ mod tests {
         )]))
     }
 
+    #[test]
+    fn runtime_travel_to_map_updates_scene_context_and_return_anchor() {
+        let (mut runtime, player) = sample_runtime_with_overworld();
+
+        let context = runtime
+            .travel_to_map(
+                player,
+                "clinic_interior_map",
+                Some("clinic_entry"),
+                WorldMode::Interior,
+            )
+            .expect("travel_to_map should succeed");
+
+        assert_eq!(context.current_map_id.as_deref(), Some("clinic_interior_map"));
+        assert_eq!(context.entry_point_id.as_deref(), Some("clinic_entry"));
+        assert_eq!(context.world_mode, WorldMode::Interior);
+        assert_eq!(
+            context.return_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+
+        let snapshot = runtime.current_interaction_context();
+        assert_eq!(snapshot.current_map_id.as_deref(), Some("clinic_interior_map"));
+        assert_eq!(snapshot.world_mode, WorldMode::Interior);
+    }
+
+    #[test]
+    fn runtime_enter_location_and_return_to_overworld_restore_context() {
+        let (mut runtime, player) = sample_runtime_with_overworld();
+
+        let entered = runtime
+            .enter_location(player, "clinic_interior", None)
+            .expect("enter_location should succeed");
+        assert_eq!(entered.location_id, "clinic_interior");
+        assert_eq!(entered.map_id, "clinic_interior_map");
+        assert_eq!(entered.entry_point_id, "clinic_entry");
+        assert_eq!(
+            entered.return_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(entered.world_mode, WorldMode::Interior);
+
+        let returned = runtime
+            .return_to_overworld(player)
+            .expect("return_to_overworld should succeed");
+        assert_eq!(
+            returned.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(returned.current_map_id, None);
+        assert_eq!(returned.world_mode, WorldMode::Overworld);
+
+        let context = runtime.current_interaction_context();
+        assert_eq!(
+            context.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.current_map_id, None);
+        assert_eq!(context.world_mode, WorldMode::Overworld);
+    }
+
+    fn sample_runtime_with_overworld() -> (SimulationRuntime, game_data::ActorId) {
+        let mut runtime = SimulationRuntime::new();
+        runtime.set_map_library(sample_scene_context_map_library());
+        runtime.set_overworld_library(sample_scene_context_overworld_library());
+        let actor_id = runtime.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        runtime
+            .seed_overworld_state(
+                WorldMode::Outdoor,
+                Some("survivor_outpost_01".into()),
+                Some("default_entry".into()),
+                ["survivor_outpost_01".into(), "clinic_interior".into()],
+            )
+            .expect("overworld state should seed");
+        (runtime, actor_id)
+    }
+
+    fn sample_scene_context_map_library() -> MapLibrary {
+        MapLibrary::from(BTreeMap::from([
+            (
+                MapId("survivor_outpost_01_map".into()),
+                MapDefinition {
+                    id: MapId("survivor_outpost_01_map".into()),
+                    name: "Survivor Outpost".into(),
+                    size: MapSize {
+                        width: 12,
+                        height: 12,
+                    },
+                    default_level: 0,
+                    levels: vec![MapLevelDefinition {
+                        y: 0,
+                        cells: Vec::new(),
+                    }],
+                    entry_points: vec![
+                        MapEntryPointDefinition {
+                            id: "default_entry".into(),
+                            grid: GridCoord::new(1, 0, 1),
+                            facing: None,
+                            extra: BTreeMap::new(),
+                        },
+                        MapEntryPointDefinition {
+                            id: "outdoor_return".into(),
+                            grid: GridCoord::new(2, 0, 2),
+                            facing: None,
+                            extra: BTreeMap::new(),
+                        },
+                    ],
+                    objects: Vec::new(),
+                },
+            ),
+            (
+                MapId("clinic_interior_map".into()),
+                MapDefinition {
+                    id: MapId("clinic_interior_map".into()),
+                    name: "Clinic Interior".into(),
+                    size: MapSize {
+                        width: 8,
+                        height: 8,
+                    },
+                    default_level: 0,
+                    levels: vec![MapLevelDefinition {
+                        y: 0,
+                        cells: Vec::new(),
+                    }],
+                    entry_points: vec![MapEntryPointDefinition {
+                        id: "clinic_entry".into(),
+                        grid: GridCoord::new(3, 0, 3),
+                        facing: None,
+                        extra: BTreeMap::new(),
+                    }],
+                    objects: Vec::new(),
+                },
+            ),
+        ]))
+    }
+
+    fn sample_scene_context_overworld_library() -> OverworldLibrary {
+        OverworldLibrary::from(BTreeMap::from([(
+            OverworldId("scene_context_world".into()),
+            OverworldDefinition {
+                id: OverworldId("scene_context_world".into()),
+                locations: vec![
+                    OverworldLocationDefinition {
+                        id: OverworldLocationId("survivor_outpost_01".into()),
+                        name: "Survivor Outpost".into(),
+                        description: String::new(),
+                        kind: OverworldLocationKind::Outdoor,
+                        map_id: MapId("survivor_outpost_01_map".into()),
+                        entry_point_id: "default_entry".into(),
+                        parent_outdoor_location_id: None,
+                        return_entry_point_id: Some("outdoor_return".into()),
+                        default_unlocked: true,
+                        visible: true,
+                        overworld_cell: GridCoord::new(0, 0, 0),
+                        danger_level: 0,
+                        icon: String::new(),
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldLocationDefinition {
+                        id: OverworldLocationId("clinic_interior".into()),
+                        name: "Clinic Interior".into(),
+                        description: String::new(),
+                        kind: OverworldLocationKind::Interior,
+                        map_id: MapId("clinic_interior_map".into()),
+                        entry_point_id: "clinic_entry".into(),
+                        parent_outdoor_location_id: Some(OverworldLocationId(
+                            "survivor_outpost_01".into(),
+                        )),
+                        return_entry_point_id: Some("outdoor_return".into()),
+                        default_unlocked: true,
+                        visible: false,
+                        overworld_cell: GridCoord::new(0, 0, 0),
+                        danger_level: 0,
+                        icon: String::new(),
+                        extra: BTreeMap::new(),
+                    },
+                ],
+                edges: vec![OverworldEdgeDefinition {
+                    from: OverworldLocationId("survivor_outpost_01".into()),
+                    to: OverworldLocationId("clinic_interior".into()),
+                    bidirectional: true,
+                    travel_minutes: 5,
+                    food_cost: 0,
+                    stamina_cost: 0,
+                    risk_level: 0.0,
+                    route_cells: Vec::new(),
+                    extra: BTreeMap::new(),
+                }],
+                walkable_cells: vec![OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                }],
+                travel_rules: OverworldTravelRuleSet::default(),
+            },
+        )]))
+    }
+
     fn sample_interaction_map_definition() -> MapDefinition {
         MapDefinition {
             id: MapId("interaction_map".into()),
@@ -1784,7 +3056,7 @@ mod tests {
                             display_name: "Exit".into(),
                             interaction_distance: 1.4,
                             interaction_kind: "enter_outdoor_location".into(),
-                            target_id: Some("safehouse".into()),
+                            target_id: Some("survivor_outpost_01".into()),
                             options: Vec::new(),
                             extra: BTreeMap::new(),
                         }),

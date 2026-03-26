@@ -5,7 +5,9 @@ use game_data::{ActorId, ActorSide, InteractionOptionId, InteractionPrompt, Inte
 
 use crate::dialogue::{advance_dialogue, apply_interaction_result, current_dialogue_node};
 use crate::geometry::{
-    actor_at_grid, cycle_level, just_pressed_hud_page, map_object_at_grid, pick_grid_from_ray,
+    actor_at_grid, camera_world_distance, clamp_camera_pan_offset, cycle_level, grid_bounds,
+    just_pressed_hud_page, level_base_height, map_object_at_grid, pick_grid_from_ray,
+    visible_world_footprint,
 };
 use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
@@ -22,6 +24,40 @@ pub(crate) fn handle_keyboard_input(
     mut render_config: ResMut<ViewerRenderConfig>,
 ) {
     let digit_input = just_pressed_digit(&keys);
+
+    if keys.just_pressed(KeyCode::Escape) {
+        if viewer_state.active_dialogue.is_some() {
+            viewer_state.active_dialogue = None;
+            viewer_state.status_line = "dialogue closed".to_string();
+            return;
+        } else if viewer_state.is_interaction_menu_open() {
+            viewer_state.interaction_menu = None;
+            viewer_state.status_line = "interaction menu: closed".to_string();
+            return;
+        }
+    }
+
+    if viewer_state.active_dialogue.is_some() {
+        if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
+            log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_key", None);
+            advance_dialogue(&mut runtime_state, &mut viewer_state, None);
+        }
+
+        if let Some(index) = digit_input {
+            log_dialogue_input(
+                &viewer_state,
+                "dialogue_choice_selected",
+                "dialogue_digit",
+                Some(index),
+            );
+            advance_dialogue(&mut runtime_state, &mut viewer_state, Some(index));
+        }
+        return;
+    }
+
+    if viewer_state.is_interaction_menu_open() {
+        return;
+    }
 
     if let Some(page) = just_pressed_hud_page(&keys) {
         viewer_state.hud_page = page;
@@ -58,34 +94,6 @@ pub(crate) fn handle_keyboard_input(
             viewer_state.status_line =
                 format!("events filter: {}", viewer_state.event_filter.label());
         }
-    }
-
-    if keys.just_pressed(KeyCode::Escape) {
-        if viewer_state.active_dialogue.is_some() {
-            viewer_state.active_dialogue = None;
-            viewer_state.status_line = "dialogue closed".to_string();
-        } else if viewer_state.interaction_menu.is_some() {
-            viewer_state.interaction_menu = None;
-            viewer_state.status_line = "interaction menu: closed".to_string();
-        }
-    }
-
-    if viewer_state.active_dialogue.is_some() {
-        if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
-            log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_key", None);
-            advance_dialogue(&mut viewer_state, None);
-        }
-
-        if let Some(index) = digit_input {
-            log_dialogue_input(
-                &viewer_state,
-                "dialogue_choice_selected",
-                "dialogue_digit",
-                Some(index),
-            );
-            advance_dialogue(&mut viewer_state, Some(index));
-        }
-        return;
     }
 
     let selected_actor_locked = viewer_state
@@ -196,28 +204,16 @@ pub(crate) fn handle_keyboard_input(
     }
 }
 
-pub(crate) fn update_view_scale(
-    window: Single<&Window>,
-    runtime_state: Res<ViewerRuntimeState>,
-    viewer_state: Res<ViewerState>,
-    mut render_config: ResMut<ViewerRenderConfig>,
-) {
-    let snapshot = runtime_state.runtime.snapshot();
-    let bounds = crate::geometry::grid_bounds(&snapshot, viewer_state.current_level);
-    render_config.pixels_per_world_unit = crate::geometry::fit_pixels_per_world_unit(
-        window.width(),
-        window.height(),
-        snapshot.grid.grid_size,
-        bounds,
-        *render_config,
-    );
-}
-
 pub(crate) fn handle_mouse_wheel_zoom(
     mut mouse_wheel_events: MessageReader<MouseWheel>,
     mut viewer_state: ResMut<ViewerState>,
     mut render_config: ResMut<ViewerRenderConfig>,
 ) {
+    if viewer_state.is_interaction_menu_open() {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    }
+
     let mut scroll_delta = 0.0f32;
     for event in mouse_wheel_events.read() {
         let unit_scale = match event.unit {
@@ -239,9 +235,15 @@ pub(crate) fn handle_mouse_wheel_zoom(
 pub(crate) fn handle_camera_pan(
     window: Single<&Window>,
     buttons: Res<ButtonInput<MouseButton>>,
+    runtime_state: Res<ViewerRuntimeState>,
     render_config: Res<ViewerRenderConfig>,
     mut viewer_state: ResMut<ViewerState>,
 ) {
+    if viewer_state.is_interaction_menu_open() {
+        viewer_state.camera_drag_cursor = None;
+        return;
+    }
+
     if !buttons.pressed(MouseButton::Middle) {
         viewer_state.camera_drag_cursor = None;
         return;
@@ -253,11 +255,36 @@ pub(crate) fn handle_camera_pan(
     };
 
     if let Some(previous_cursor) = viewer_state.camera_drag_cursor.replace(cursor_position) {
-        viewer_state.camera_pan_offset.x += (previous_cursor.x - cursor_position.x)
-            / render_config.pixels_per_world_unit.max(f32::EPSILON);
-        viewer_state.camera_pan_offset.y += (cursor_position.y - previous_cursor.y)
-            / (render_config.pixels_per_world_unit * render_config.vertical_projection_factor())
-                .max(f32::EPSILON);
+        let snapshot = runtime_state.runtime.snapshot();
+        let bounds = grid_bounds(&snapshot, viewer_state.current_level);
+        let camera_distance = camera_world_distance(
+            bounds,
+            window.width(),
+            window.height(),
+            snapshot.grid.grid_size,
+            *render_config,
+        );
+        let visible_world = visible_world_footprint(
+            window.width(),
+            window.height(),
+            camera_distance,
+            *render_config,
+        );
+        let world_per_pixel_x = visible_world.x / window.width().max(1.0);
+        let world_per_pixel_z = visible_world.y / window.height().max(1.0);
+
+        viewer_state.camera_pan_offset.x +=
+            (previous_cursor.x - cursor_position.x) * world_per_pixel_x;
+        viewer_state.camera_pan_offset.y +=
+            (cursor_position.y - previous_cursor.y) * world_per_pixel_z;
+        viewer_state.camera_pan_offset = clamp_camera_pan_offset(
+            bounds,
+            snapshot.grid.grid_size,
+            viewer_state.camera_pan_offset,
+            window.width(),
+            window.height(),
+            *render_config,
+        );
     }
 }
 
@@ -267,6 +294,7 @@ pub(crate) fn handle_mouse_input(
     buttons: Res<ButtonInput<MouseButton>>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
+    render_config: Res<ViewerRenderConfig>,
 ) {
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
@@ -280,8 +308,14 @@ pub(crate) fn handle_mouse_input(
     };
     let snapshot = runtime_state.runtime.snapshot();
 
-    let Some(grid) = pick_grid_from_ray(ray, viewer_state.current_level, snapshot.grid.grid_size)
-    else {
+    let pick_plane_height = level_base_height(viewer_state.current_level, snapshot.grid.grid_size)
+        + render_config.floor_thickness_world;
+    let Some(grid) = pick_grid_from_ray(
+        ray,
+        viewer_state.current_level,
+        snapshot.grid.grid_size,
+        pick_plane_height,
+    ) else {
         viewer_state.hovered_grid = None;
         return;
     };
@@ -295,8 +329,27 @@ pub(crate) fn handle_mouse_input(
     if viewer_state.active_dialogue.is_some() {
         if buttons.just_pressed(MouseButton::Left) {
             log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_click", None);
-            advance_dialogue(&mut viewer_state, None);
+            advance_dialogue(&mut runtime_state, &mut viewer_state, None);
         }
+        return;
+    }
+
+    if viewer_state.is_interaction_menu_open() {
+        if buttons.just_pressed(MouseButton::Left) {
+            if interaction_menu_contains_cursor(&window, &viewer_state, cursor_position) {
+                return;
+            }
+            viewer_state.interaction_menu = None;
+            viewer_state.status_line = "interaction menu: closed".to_string();
+            return;
+        }
+
+        if buttons.just_pressed(MouseButton::Right) {
+            viewer_state.interaction_menu = None;
+            viewer_state.status_line = "interaction menu: closed".to_string();
+            return;
+        }
+
         return;
     }
 
@@ -401,7 +454,6 @@ pub(crate) fn handle_mouse_input(
     }
 
     if buttons.just_pressed(MouseButton::Right) {
-        viewer_state.interaction_menu = None;
         if let Some(target_id) = cursor_target {
             let prompt = focus_target_and_query_prompt(
                 &mut runtime_state,

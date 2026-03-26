@@ -110,7 +110,7 @@
     "title": "希望",
     "chapter": "hope",
     "name": "幸存者合影",
-    "location": "safehouse",
+    "location": "survivor_outpost_01",
     "hint": "安全屋的墙上",
     "type": "photo"
   },

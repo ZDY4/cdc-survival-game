@@ -6,8 +6,9 @@ use game_data::{ActorId, ActorSide, GridCoord};
 use crate::dialogue::current_dialogue_node;
 use crate::geometry::{
     actor_body_translation, actor_label, actor_label_world_position, camera_focus_point,
-    camera_world_distance, clamp_camera_pan_offset, grid_bounds, level_base_height,
-    rendered_path_preview, should_rebuild_static_world,
+    camera_world_distance, clamp_camera_pan_offset, grid_bounds, hovered_grid_outline_kind,
+    level_base_height, occluder_blocks_target, rendered_path_preview, resolve_occlusion_target,
+    should_rebuild_static_world, GridBounds, HoveredGridOutlineKind,
 };
 use crate::state::{
     ActorLabel, ActorLabelEntities, DialoguePanelRoot, HudFooterText, HudText,
@@ -18,8 +19,6 @@ use crate::state::{
 
 const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
 const INTERACTION_MENU_PADDING_PX: f32 = 12.0;
-const INTERACTION_MENU_HEADER_HEIGHT_PX: f32 = 24.0;
-const INTERACTION_MENU_HINT_HEIGHT_PX: f32 = 36.0;
 const INTERACTION_MENU_BUTTON_HEIGHT_PX: f32 = 34.0;
 const INTERACTION_MENU_BUTTON_GAP_PX: f32 = 8.0;
 const DIALOGUE_PANEL_BOTTOM_PX: f32 = 24.0;
@@ -66,13 +65,52 @@ struct StaticWorldVisualKey {
     topology_version: u64,
 }
 
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StaticWorldOccluderKind {
+    BlockingCell,
+    SightCell,
+    StaticObstacle,
+    MapObject(game_data::MapObjectKind),
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct StaticWorldOccluderVisual {
+    entity: Entity,
+    material: Handle<StandardMaterial>,
+    base_color: Color,
+    base_alpha: f32,
+    base_alpha_mode: AlphaMode,
+    aabb_center: Vec3,
+    aabb_half_extents: Vec3,
+    kind: StaticWorldOccluderKind,
+    currently_faded: bool,
+}
+
+#[derive(Debug, Clone)]
+struct StaticWorldBoxSpec {
+    size: Vec3,
+    translation: Vec3,
+    color: Color,
+    occluder_kind: Option<StaticWorldOccluderKind>,
+}
+
+struct SpawnedBoxVisual {
+    entity: Entity,
+    material: Handle<StandardMaterial>,
+    size: Vec3,
+    translation: Vec3,
+    color: Color,
+}
+
+#[derive(Resource, Default)]
 pub(crate) struct StaticWorldVisualState {
     key: Option<StaticWorldVisualKey>,
     entities: Vec<Entity>,
+    occluders: Vec<StaticWorldOccluderVisual>,
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub(crate) struct ActorVisualState {
     by_actor: HashMap<ActorId, Entity>,
 }
@@ -85,13 +123,15 @@ pub(crate) struct ActorBodyVisual {
 pub(crate) fn setup_viewer(mut commands: Commands, asset_server: Res<AssetServer>) {
     let ui_font = asset_server.load(VIEWER_FONT_PATH);
     commands.insert_resource(ViewerUiFont(ui_font.clone()));
+    commands.insert_resource(StaticWorldVisualState::default());
+    commands.insert_resource(ActorVisualState::default());
     commands.spawn((
         Camera3d::default(),
-        Projection::from(OrthographicProjection {
-            scale: 1.0 / 96.0,
+        Projection::from(PerspectiveProjection {
+            fov: 30.0_f32.to_radians(),
             near: 0.1,
             far: 2000.0,
-            ..OrthographicProjection::default_3d()
+            ..PerspectiveProjection::default()
         }),
         Transform::from_xyz(0.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Z),
         ViewerCamera,
@@ -179,15 +219,21 @@ pub(crate) fn update_camera(
         grid_size,
         viewer_state.camera_pan_offset,
     );
-    let distance = camera_world_distance(bounds, grid_size, *render_config);
+    let distance = camera_world_distance(
+        bounds,
+        window.width(),
+        window.height(),
+        grid_size,
+        *render_config,
+    );
     let pitch = render_config.camera_pitch_radians();
     let offset = Vec3::new(0.0, distance * pitch.sin(), -distance * pitch.cos());
     let (mut projection, mut transform) = camera_query.into_inner();
 
-    if let Projection::Orthographic(orthographic) = &mut *projection {
-        orthographic.scale = 1.0 / render_config.pixels_per_world_unit.max(0.0001);
-        orthographic.near = 0.1;
-        orthographic.far = (distance * 8.0).max(1000.0);
+    if let Projection::Perspective(perspective) = &mut *projection {
+        perspective.fov = render_config.camera_fov_radians();
+        perspective.near = 0.1;
+        perspective.far = (distance * 8.0).max(1000.0);
     }
 
     transform.translation = focus + offset;
@@ -359,27 +405,6 @@ pub(crate) fn update_interaction_menu(
     if visual_cache.key.as_ref() != Some(&visual_key) {
         clear_ui_children(&mut commands, children);
         commands.entity(entity).with_children(|parent| {
-            parent.spawn((
-                Text::new(format!("交互目标 · {}", prompt.target_name)),
-                TextFont::from_font_size(16.0).with_font(viewer_font.0.clone()),
-                TextColor(Color::srgba(0.96, 0.97, 0.99, 0.98)),
-                Node {
-                    margin: UiRect::bottom(px(4)),
-                    min_height: px(INTERACTION_MENU_HEADER_HEIGHT_PX),
-                    ..default()
-                },
-            ));
-            parent.spawn((
-                Text::new("左键点击按钮执行交互"),
-                TextFont::from_font_size(11.0).with_font(viewer_font.0.clone()),
-                TextColor(Color::srgba(0.77, 0.81, 0.87, 0.92)),
-                Node {
-                    margin: UiRect::bottom(px(10)),
-                    min_height: px(INTERACTION_MENU_HINT_HEIGHT_PX),
-                    ..default()
-                },
-            ));
-
             for (index, option) in prompt.options.iter().enumerate() {
                 let is_primary = prompt.primary_option_id.as_ref() == Some(&option.id);
                 parent.spawn((
@@ -472,16 +497,15 @@ pub(crate) fn update_dialogue_panel(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_world(
+pub(crate) fn sync_world_visuals(
     mut commands: Commands,
-    mut gizmos: Gizmos,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     runtime_state: Res<ViewerRuntimeState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
-    mut static_world_state: Local<StaticWorldVisualState>,
-    mut actor_visual_state: Local<ActorVisualState>,
+    mut static_world_state: ResMut<StaticWorldVisualState>,
+    mut actor_visual_state: ResMut<ActorVisualState>,
     mut actor_visuals: Query<(
         Entity,
         &mut Transform,
@@ -491,7 +515,6 @@ pub(crate) fn draw_world(
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
-    let grid_size = snapshot.grid.grid_size;
     let next_key = StaticWorldVisualKey {
         map_id: snapshot.grid.map_id.clone(),
         current_level: viewer_state.current_level,
@@ -511,7 +534,7 @@ pub(crate) fn draw_world(
             viewer_state.current_level,
             *render_config,
             bounds,
-            &mut static_world_state.entities,
+            &mut static_world_state,
         );
         static_world_state.key = Some(next_key);
     }
@@ -527,6 +550,55 @@ pub(crate) fn draw_world(
         &mut actor_visual_state,
         &mut actor_visuals,
     );
+}
+
+pub(crate) fn update_occluding_world_visuals(
+    runtime_state: Res<ViewerRuntimeState>,
+    viewer_state: Res<ViewerState>,
+    render_config: Res<ViewerRenderConfig>,
+    camera_query: Single<&Transform, With<ViewerCamera>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut static_world_state: ResMut<StaticWorldVisualState>,
+) {
+    if static_world_state.occluders.is_empty() {
+        return;
+    }
+
+    let snapshot = runtime_state.runtime.snapshot();
+    let Some(target_actor) = resolve_occlusion_target(&snapshot, &viewer_state) else {
+        restore_all_occluders(&mut static_world_state, &mut materials);
+        return;
+    };
+
+    let camera_position = camera_query.translation;
+    let target_position = actor_label_world_position(
+        runtime_state
+            .runtime
+            .grid_to_world(target_actor.grid_position),
+        snapshot.grid.grid_size,
+        *render_config,
+    );
+
+    for occluder in &mut static_world_state.occluders {
+        let should_fade = occluder_blocks_target(
+            camera_position,
+            target_position,
+            occluder.aabb_center,
+            occluder.aabb_half_extents,
+        );
+        set_occluder_faded(occluder, should_fade, &mut materials);
+    }
+}
+
+pub(crate) fn draw_world(
+    mut gizmos: Gizmos,
+    runtime_state: Res<ViewerRuntimeState>,
+    viewer_state: Res<ViewerState>,
+    render_config: Res<ViewerRenderConfig>,
+) {
+    let snapshot = runtime_state.runtime.snapshot();
+    let bounds = grid_bounds(&snapshot, viewer_state.current_level);
+    let grid_size = snapshot.grid.grid_size;
 
     draw_grid_lines(
         &mut gizmos,
@@ -585,14 +657,22 @@ pub(crate) fn draw_world(
         );
     }
 
-    if let Some(grid) = viewer_state.hovered_grid {
+    if let Some(grid) = viewer_state.hovered_grid.and_then(|grid| {
+        hovered_grid_outline_kind(&runtime_state.runtime, &snapshot, &viewer_state, grid)
+            .map(|kind| (grid, kind))
+    }) {
+        let (grid, kind) = grid;
+        let color = match kind {
+            HoveredGridOutlineKind::Reachable => Color::srgb(0.96, 0.97, 0.99),
+            HoveredGridOutlineKind::Hostile => Color::srgb(0.94, 0.36, 0.33),
+        };
         draw_grid_outline(
             &mut gizmos,
             grid,
             grid_size,
             render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.5,
             0.94,
-            Color::srgb(0.35, 0.95, 0.64),
+            color,
         );
     }
 }
@@ -623,8 +703,6 @@ pub(crate) fn interaction_menu_layout(
 
 fn interaction_menu_height(option_count: usize) -> f32 {
     INTERACTION_MENU_PADDING_PX * 2.0
-        + INTERACTION_MENU_HEADER_HEIGHT_PX
-        + INTERACTION_MENU_HINT_HEIGHT_PX
         + option_count as f32 * INTERACTION_MENU_BUTTON_HEIGHT_PX
         + option_count.saturating_sub(1) as f32 * INTERACTION_MENU_BUTTON_GAP_PX
 }
@@ -637,9 +715,42 @@ fn rebuild_static_world(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
     render_config: ViewerRenderConfig,
-    bounds: crate::geometry::GridBounds,
-    entities: &mut Vec<Entity>,
+    bounds: GridBounds,
+    static_world_state: &mut StaticWorldVisualState,
 ) {
+    static_world_state.entities.clear();
+    static_world_state.occluders.clear();
+
+    for spec in
+        collect_static_world_box_specs(snapshot, current_level, render_config, bounds, |grid| {
+            runtime_state.runtime.grid_to_world(grid)
+        })
+    {
+        let spawned = spawn_box(
+            commands,
+            meshes,
+            materials,
+            spec.size,
+            spec.translation,
+            spec.color,
+        );
+        static_world_state.entities.push(spawned.entity);
+        if let Some(kind) = spec.occluder_kind {
+            static_world_state
+                .occluders
+                .push(occluder_visual_from_spawned_box(spawned, kind));
+        }
+    }
+}
+
+fn collect_static_world_box_specs(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+    bounds: GridBounds,
+    mut grid_to_world: impl FnMut(GridCoord) -> game_data::WorldCoord,
+) -> Vec<StaticWorldBoxSpec> {
+    let mut specs = Vec::new();
     let grid_size = snapshot.grid.grid_size;
     let floor_top =
         level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
@@ -647,29 +758,27 @@ fn rebuild_static_world(
     for z in bounds.min_z..=bounds.max_z {
         for x in bounds.min_x..=bounds.max_x {
             let grid = GridCoord::new(x, current_level, z);
-            let world = runtime_state.runtime.grid_to_world(grid);
+            let world = grid_to_world(grid);
             let tint = if (x + z).rem_euclid(2) == 0 {
                 Color::srgb(0.12, 0.14, 0.17)
             } else {
                 Color::srgb(0.15, 0.18, 0.22)
             };
-            entities.push(spawn_box(
-                commands,
-                meshes,
-                materials,
-                Vec3::new(
+            specs.push(StaticWorldBoxSpec {
+                size: Vec3::new(
                     grid_size * 0.96,
                     render_config.floor_thickness_world,
                     grid_size * 0.96,
                 ),
-                Vec3::new(
+                translation: Vec3::new(
                     world.x,
                     level_base_height(current_level, grid_size)
                         + render_config.floor_thickness_world * 0.5,
                     world.z,
                 ),
-                tint,
-            ));
+                color: tint,
+                occluder_kind: None,
+            });
         }
     }
 
@@ -683,21 +792,23 @@ fn rebuild_static_world(
             continue;
         }
 
-        let world = runtime_state.runtime.grid_to_world(cell.grid);
+        let world = grid_to_world(cell.grid);
         let height = if cell.blocks_movement { 1.0 } else { 0.56 } * grid_size;
         let color = if cell.blocks_movement {
             Color::srgb(0.52, 0.25, 0.22)
         } else {
             Color::srgb(0.38, 0.42, 0.48)
         };
-        entities.push(spawn_box(
-            commands,
-            meshes,
-            materials,
-            Vec3::new(grid_size * 0.78, height, grid_size * 0.78),
-            Vec3::new(world.x, floor_top + height * 0.5, world.z),
+        specs.push(StaticWorldBoxSpec {
+            size: Vec3::new(grid_size * 0.78, height, grid_size * 0.78),
+            translation: Vec3::new(world.x, floor_top + height * 0.5, world.z),
             color,
-        ));
+            occluder_kind: Some(if cell.blocks_movement {
+                StaticWorldOccluderKind::BlockingCell
+            } else {
+                StaticWorldOccluderKind::SightCell
+            }),
+        });
     }
 
     for grid in snapshot
@@ -707,16 +818,14 @@ fn rebuild_static_world(
         .copied()
         .filter(|grid| grid.y == current_level)
     {
-        let world = runtime_state.runtime.grid_to_world(grid);
+        let world = grid_to_world(grid);
         let height = grid_size * 1.18;
-        entities.push(spawn_box(
-            commands,
-            meshes,
-            materials,
-            Vec3::new(grid_size * 0.7, height, grid_size * 0.7),
-            Vec3::new(world.x, floor_top + height * 0.5, world.z),
-            Color::srgb(0.67, 0.21, 0.21),
-        ));
+        specs.push(StaticWorldBoxSpec {
+            size: Vec3::new(grid_size * 0.7, height, grid_size * 0.7),
+            translation: Vec3::new(world.x, floor_top + height * 0.5, world.z),
+            color: Color::srgb(0.67, 0.21, 0.21),
+            occluder_kind: Some(StaticWorldOccluderKind::StaticObstacle),
+        });
     }
 
     for object in snapshot
@@ -748,16 +857,15 @@ fn rebuild_static_world(
                 (side, grid_size * 0.42, side)
             }
         };
-
-        entities.push(spawn_box(
-            commands,
-            meshes,
-            materials,
-            Vec3::new(size_x.max(0.14), size_y, size_z.max(0.14)),
-            Vec3::new(center_x, floor_top + size_y * 0.5, center_z),
+        specs.push(StaticWorldBoxSpec {
+            size: Vec3::new(size_x.max(0.14), size_y, size_z.max(0.14)),
+            translation: Vec3::new(center_x, floor_top + size_y * 0.5, center_z),
             color,
-        ));
+            occluder_kind: Some(StaticWorldOccluderKind::MapObject(object.kind)),
+        });
     }
+
+    specs
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -920,28 +1028,102 @@ fn spawn_box(
     size: Vec3,
     translation: Vec3,
     color: Color,
-) -> Entity {
-    commands
+) -> SpawnedBoxVisual {
+    let material = materials.add(StandardMaterial {
+        base_color: color,
+        perceptual_roughness: 0.94,
+        ..default()
+    });
+    let entity = commands
         .spawn((
             Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: color,
-                perceptual_roughness: 0.94,
-                ..default()
-            })),
+            MeshMaterial3d(material.clone()),
             Transform::from_translation(translation),
         ))
-        .id()
+        .id();
+
+    SpawnedBoxVisual {
+        entity,
+        material,
+        size,
+        translation,
+        color,
+    }
+}
+
+fn occluder_visual_from_spawned_box(
+    spawned: SpawnedBoxVisual,
+    kind: StaticWorldOccluderKind,
+) -> StaticWorldOccluderVisual {
+    let base_alpha = spawned.color.to_srgba().alpha;
+    StaticWorldOccluderVisual {
+        entity: spawned.entity,
+        material: spawned.material,
+        base_color: spawned.color,
+        base_alpha,
+        base_alpha_mode: AlphaMode::Opaque,
+        aabb_center: spawned.translation,
+        aabb_half_extents: spawned.size * 0.5,
+        kind,
+        currently_faded: false,
+    }
+}
+
+fn set_occluder_faded(
+    occluder: &mut StaticWorldOccluderVisual,
+    faded: bool,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    if occluder.currently_faded == faded {
+        return;
+    }
+
+    let Some(material) = materials.get_mut(&occluder.material) else {
+        occluder.currently_faded = faded;
+        return;
+    };
+
+    if faded {
+        let mut tinted = occluder.base_color.to_srgba();
+        tinted.alpha = 0.28;
+        material.base_color = tinted.into();
+        material.alpha_mode = AlphaMode::Blend;
+    } else {
+        let mut restored = occluder.base_color.to_srgba();
+        restored.alpha = occluder.base_alpha;
+        material.base_color = restored.into();
+        material.alpha_mode = occluder.base_alpha_mode.clone();
+    }
+
+    occluder.currently_faded = faded;
+}
+
+fn restore_all_occluders(
+    static_world_state: &mut StaticWorldVisualState,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    for occluder in &mut static_world_state.occluders {
+        set_occluder_faded(occluder, false, materials);
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{interaction_menu_button_color, interaction_menu_layout, occupied_cells_box};
-    use crate::state::InteractionMenuState;
+    use super::{
+        collect_static_world_box_specs, interaction_menu_button_color, interaction_menu_layout,
+        occupied_cells_box, GridBounds, StaticWorldOccluderKind, INTERACTION_MENU_BUTTON_GAP_PX,
+        INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX,
+    };
+    use crate::state::{InteractionMenuState, ViewerRenderConfig};
     use bevy::prelude::*;
+    use game_core::{
+        CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
+        OverworldStateSnapshot, SimulationSnapshot,
+    };
     use game_data::{
-        ActorId, GridCoord, InteractionOptionId, InteractionPrompt, InteractionTargetId,
-        ResolvedInteractionOption,
+        ActorId, GridCoord, InteractionContextSnapshot, InteractionOptionId, InteractionPrompt,
+        InteractionTargetId, MapObjectFootprint, MapObjectKind, MapRotation,
+        ResolvedInteractionOption, TurnState, WorldCoord,
     };
 
     #[test]
@@ -962,6 +1144,28 @@ mod tests {
         assert!(layout.top >= 0.0);
         assert!(layout.left + layout.width <= window.width() - 11.0);
         assert!(layout.top + layout.height <= window.height() - 11.0);
+    }
+
+    #[test]
+    fn interaction_menu_layout_height_only_accounts_for_option_list() {
+        let window = Window {
+            resolution: (640, 360).into(),
+            ..default()
+        };
+        let menu_state = InteractionMenuState {
+            target_id: InteractionTargetId::MapObject("crate".into()),
+            cursor_position: Vec2::new(120.0, 90.0),
+        };
+        let prompt = sample_prompt(3);
+
+        let layout = interaction_menu_layout(&window, &menu_state, &prompt);
+
+        assert_eq!(
+            layout.height,
+            INTERACTION_MENU_PADDING_PX * 2.0
+                + 3.0 * INTERACTION_MENU_BUTTON_HEIGHT_PX
+                + 2.0 * INTERACTION_MENU_BUTTON_GAP_PX
+        );
     }
 
     #[test]
@@ -994,6 +1198,63 @@ mod tests {
         assert_eq!(depth, 2.0);
     }
 
+    #[test]
+    fn static_world_specs_exclude_floor_tiles_from_occluders() {
+        let specs = collect_static_world_box_specs(
+            &snapshot_with_occluders(),
+            0,
+            ViewerRenderConfig::default(),
+            GridBounds {
+                min_x: 0,
+                max_x: 1,
+                min_z: 0,
+                max_z: 1,
+            },
+            world_from_grid,
+        );
+
+        let floor_count = specs
+            .iter()
+            .filter(|spec| spec.occluder_kind.is_none())
+            .count();
+        let occluder_count = specs
+            .iter()
+            .filter(|spec| spec.occluder_kind.is_some())
+            .count();
+
+        assert_eq!(floor_count, 4);
+        assert_eq!(occluder_count, 4);
+    }
+
+    #[test]
+    fn static_world_specs_register_all_occluder_categories() {
+        let specs = collect_static_world_box_specs(
+            &snapshot_with_occluders(),
+            0,
+            ViewerRenderConfig::default(),
+            GridBounds {
+                min_x: 0,
+                max_x: 1,
+                min_z: 0,
+                max_z: 1,
+            },
+            world_from_grid,
+        );
+
+        assert!(specs
+            .iter()
+            .any(|spec| spec.occluder_kind == Some(StaticWorldOccluderKind::BlockingCell)));
+        assert!(specs
+            .iter()
+            .any(|spec| spec.occluder_kind == Some(StaticWorldOccluderKind::SightCell)));
+        assert!(specs
+            .iter()
+            .any(|spec| spec.occluder_kind == Some(StaticWorldOccluderKind::StaticObstacle)));
+        assert!(specs.iter().any(|spec| {
+            spec.occluder_kind == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
+        }));
+    }
+
     fn sample_prompt(option_count: usize) -> InteractionPrompt {
         InteractionPrompt {
             actor_id: ActorId(1),
@@ -1009,6 +1270,71 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    fn snapshot_with_occluders() -> SimulationSnapshot {
+        SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: Vec::new(),
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(2),
+                map_height: Some(2),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: vec![GridCoord::new(1, 0, 0)],
+                map_blocked_cells: vec![GridCoord::new(0, 0, 0)],
+                map_cells: vec![
+                    MapCellDebugState {
+                        grid: GridCoord::new(0, 0, 0),
+                        blocks_movement: true,
+                        blocks_sight: true,
+                        terrain: "wall".into(),
+                    },
+                    MapCellDebugState {
+                        grid: GridCoord::new(1, 0, 1),
+                        blocks_movement: false,
+                        blocks_sight: true,
+                        terrain: "curtain".into(),
+                    },
+                ],
+                map_objects: vec![MapObjectDebugState {
+                    object_id: "house".into(),
+                    kind: MapObjectKind::Building,
+                    anchor: GridCoord::new(0, 0, 1),
+                    footprint: MapObjectFootprint {
+                        width: 1,
+                        height: 1,
+                    },
+                    rotation: MapRotation::North,
+                    blocks_movement: true,
+                    blocks_sight: true,
+                    occupied_cells: vec![GridCoord::new(0, 0, 1)],
+                    payload_summary: Default::default(),
+                }],
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        }
+    }
+
+    fn world_from_grid(grid: GridCoord) -> WorldCoord {
+        WorldCoord::new(
+            grid.x as f32 + 0.5,
+            grid.y as f32 + 0.5,
+            grid.z as f32 + 0.5,
+        )
     }
 }
 

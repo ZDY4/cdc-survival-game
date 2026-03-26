@@ -52,7 +52,7 @@ func _on_location_selected(location_id: String, button: Node):
 		return
 	
 	# 计算移动消耗
-	var current = GameState.player_position if GameState else "safehouse"
+	var current = GameState.player_position if GameState else "survivor_outpost_01"
 	var cost = MapModule._calculate_travel_cost(current, location_id)
 	
 	_update_info_panel(button.get_location_name(), cost)
@@ -132,7 +132,7 @@ func hide_map():
 	hide()
 
 func _highlight_current_location():
-	var current = GameState.player_position if GameState else "safehouse"
+	var current = GameState.player_position if GameState else "survivor_outpost_01"
 	
 	for child in locations_container.get_children():
 		if child is MapLocationScript:

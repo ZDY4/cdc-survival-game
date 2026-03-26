@@ -4,6 +4,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::dialogue_runtime::DialogueRuntimeState;
 use crate::models::{ActionResult, ActorId, GridCoord};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
@@ -242,6 +243,8 @@ pub struct InteractionExecutionResult {
     pub consumed_target: bool,
     #[serde(default)]
     pub dialogue_id: Option<String>,
+    #[serde(default)]
+    pub dialogue_state: Option<DialogueRuntimeState>,
     #[serde(default)]
     pub context_snapshot: Option<InteractionContextSnapshot>,
 }

@@ -1,0 +1,135 @@
+{
+  "id": "survivor_outpost_01_settlement",
+  "map_id": "survivor_outpost_01_grid",
+  "anchors": [
+    { "id": "guard_bed_01", "grid": { "x": 8, "y": 0, "z": 8 } },
+    { "id": "guard_bed_02", "grid": { "x": 9, "y": 0, "z": 8 } },
+    { "id": "main_gate_inner", "grid": { "x": 15, "y": 0, "z": 26 } },
+    { "id": "east_watch_post", "grid": { "x": 25, "y": 0, "z": 24 } },
+    { "id": "canteen_main", "grid": { "x": 9, "y": 0, "z": 16 } },
+    { "id": "recreation_yard", "grid": { "x": 15, "y": 0, "z": 15 } },
+    { "id": "alarm_bell", "grid": { "x": 16, "y": 0, "z": 24 } },
+    { "id": "cook_home_01", "grid": { "x": 6, "y": 0, "z": 10 } },
+    { "id": "kitchen_station", "grid": { "x": 7, "y": 0, "z": 15 } },
+    { "id": "doctor_home_01", "grid": { "x": 21, "y": 0, "z": 9 } },
+    { "id": "clinic_room", "grid": { "x": 23, "y": 0, "z": 10 } },
+    { "id": "storage_main", "grid": { "x": 24, "y": 0, "z": 18 } },
+    { "id": "workshop_bench", "grid": { "x": 21, "y": 0, "z": 24 } }
+  ],
+  "routes": [
+    {
+      "id": "guard_patrol_main",
+      "anchors": ["main_gate_inner", "recreation_yard", "east_watch_post", "main_gate_inner"]
+    },
+    {
+      "id": "cook_service_loop",
+      "anchors": ["kitchen_station", "canteen_main", "storage_main", "kitchen_station"]
+    },
+    {
+      "id": "doctor_clinic_rounds",
+      "anchors": ["doctor_home_01", "clinic_room", "canteen_main", "clinic_room"]
+    }
+  ],
+  "smart_objects": [
+    {
+      "id": "guard_post_main_gate",
+      "kind": "guard_post",
+      "anchor_id": "main_gate_inner",
+      "capacity": 2,
+      "tags": ["main_gate", "guard"]
+    },
+    {
+      "id": "guard_post_east",
+      "kind": "guard_post",
+      "anchor_id": "east_watch_post",
+      "capacity": 1,
+      "tags": ["watchtower", "guard"]
+    },
+    {
+      "id": "guard_bed_01",
+      "kind": "bed",
+      "anchor_id": "guard_bed_01",
+      "capacity": 1,
+      "tags": ["guard"]
+    },
+    {
+      "id": "guard_bed_02",
+      "kind": "bed",
+      "anchor_id": "guard_bed_02",
+      "capacity": 1,
+      "tags": ["guard"]
+    },
+    {
+      "id": "canteen_seat_01",
+      "kind": "canteen_seat",
+      "anchor_id": "canteen_main",
+      "capacity": 1,
+      "tags": ["meal"]
+    },
+    {
+      "id": "canteen_seat_cook_01",
+      "kind": "canteen_seat",
+      "anchor_id": "kitchen_station",
+      "capacity": 1,
+      "tags": ["meal", "cook"]
+    },
+    {
+      "id": "recreation_bench_01",
+      "kind": "recreation_spot",
+      "anchor_id": "recreation_yard",
+      "capacity": 1,
+      "tags": ["morale"]
+    },
+    {
+      "id": "cook_bed_01",
+      "kind": "bed",
+      "anchor_id": "cook_home_01",
+      "capacity": 1,
+      "tags": ["cook"]
+    },
+    {
+      "id": "doctor_bed_01",
+      "kind": "bed",
+      "anchor_id": "doctor_home_01",
+      "capacity": 1,
+      "tags": ["doctor"]
+    },
+    {
+      "id": "clinic_station_01",
+      "kind": "medical_station",
+      "anchor_id": "clinic_room",
+      "capacity": 1,
+      "tags": ["doctor", "clinic"]
+    },
+    {
+      "id": "storage_cache_01",
+      "kind": "recreation_spot",
+      "anchor_id": "storage_main",
+      "capacity": 1,
+      "tags": ["storage"]
+    },
+    {
+      "id": "workshop_station_01",
+      "kind": "recreation_spot",
+      "anchor_id": "workshop_bench",
+      "capacity": 1,
+      "tags": ["workshop"]
+    },
+    {
+      "id": "alarm_bell_01",
+      "kind": "alarm_point",
+      "anchor_id": "alarm_bell",
+      "capacity": 1,
+      "tags": ["alert"]
+    }
+  ],
+  "service_rules": {
+    "min_guard_on_duty": 2,
+    "meal_windows": [
+      { "start_minute": 420, "end_minute": 480 },
+      { "start_minute": 720, "end_minute": 780 },
+      { "start_minute": 1080, "end_minute": 1140 }
+    ],
+    "quiet_hours": { "start_minute": 1320, "end_minute": 1440 }
+  }
+}

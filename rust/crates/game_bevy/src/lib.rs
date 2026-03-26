@@ -770,16 +770,17 @@ pub fn register_runtime_actor_from_definition(
 
 pub fn default_debug_seed() -> RuntimeScenarioSeed {
     RuntimeScenarioSeed {
-        map_id: Some(MapId("safehouse_grid".to_string())),
+        map_id: Some(MapId("survivor_outpost_01_grid".to_string())),
         start_world_mode: Some(WorldMode::Outdoor),
-        start_location_id: Some("safehouse".to_string()),
-        start_map_id: Some(MapId("safehouse_grid".to_string())),
+        start_location_id: Some("survivor_outpost_01".to_string()),
+        start_map_id: Some(MapId("survivor_outpost_01_grid".to_string())),
         start_entry_point_id: Some("default_entry".to_string()),
         unlocked_locations: vec![
-            "safehouse".to_string(),
+            "survivor_outpost_01".to_string(),
             "street_a".to_string(),
             "street_b".to_string(),
-            "safehouse_interior".to_string(),
+            "survivor_outpost_01_perimeter".to_string(),
+            "survivor_outpost_01_interior".to_string(),
         ],
         static_obstacles: Vec::new(),
         characters: vec![
@@ -935,7 +936,7 @@ mod tests {
         let library = sample_library();
         let maps = sample_map_library();
         let seed = RuntimeScenarioSeed {
-            map_id: Some(MapId("safehouse_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01_grid".into())),
             static_obstacles: vec![GridCoord::new(2, 0, 1)],
             characters: vec![
                 RuntimeSpawnEntry {
@@ -991,7 +992,7 @@ mod tests {
         assert_eq!(enemy.group_id, "infected");
         assert_eq!(
             snapshot.grid.map_id.as_ref().map(MapId::as_str),
-            Some("safehouse_grid")
+            Some("survivor_outpost_01_grid")
         );
         assert_eq!(snapshot.grid.map_width, Some(12));
         assert_eq!(snapshot.grid.levels, vec![0, 1]);
@@ -1140,11 +1141,11 @@ mod tests {
         );
         assert_eq!(
             default_debug_seed().map_id.as_ref().map(MapId::as_str),
-            Some("safehouse_grid")
+            Some("survivor_outpost_01_grid")
         );
         assert_eq!(
             default_debug_seed().start_location_id.as_deref(),
-            Some("safehouse")
+            Some("survivor_outpost_01")
         );
     }
 
@@ -1165,7 +1166,7 @@ mod tests {
         let config = parse_runtime_startup_config(
             r#"
 [Startup]
-startup_map = "safehouse_grid"
+startup_map = "survivor_outpost_01_grid"
 "#,
         )
         .expect("runtime startup config should parse");
@@ -1173,7 +1174,7 @@ startup_map = "safehouse_grid"
         assert_eq!(
             config,
             RuntimeStartupConfig {
-                startup_map: Some(MapId("safehouse_grid".into())),
+                startup_map: Some(MapId("survivor_outpost_01_grid".into())),
             }
         );
     }
@@ -1195,9 +1196,10 @@ startup_map =
     fn startup_map_resolution_prefers_configured_map() {
         let maps = sample_map_library();
 
-        let resolved = resolve_startup_map_id(&maps, Some(MapId("safehouse_grid".into())));
+        let resolved =
+            resolve_startup_map_id(&maps, Some(MapId("survivor_outpost_01_grid".into())));
 
-        assert_eq!(resolved, Some(MapId("safehouse_grid".into())));
+        assert_eq!(resolved, Some(MapId("survivor_outpost_01_grid".into())));
     }
 
     #[test]
@@ -1206,7 +1208,7 @@ startup_map =
 
         let resolved = resolve_startup_map_id(&maps, None);
 
-        assert_eq!(resolved, Some(MapId("safehouse_grid".into())));
+        assert_eq!(resolved, Some(MapId("survivor_outpost_01_grid".into())));
     }
 
     #[test]
@@ -1263,8 +1265,8 @@ startup_map =
 
     fn sample_map_library() -> MapLibrary {
         let definition = MapDefinition {
-            id: MapId("safehouse_grid".into()),
-            name: "Safehouse".into(),
+            id: MapId("survivor_outpost_01_grid".into()),
+            name: "Survivor Outpost 01".into(),
             size: MapSize {
                 width: 12,
                 height: 12,
@@ -1306,7 +1308,7 @@ startup_map =
                 blocks_sight: true,
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
-                        prefab_id: "safehouse_house".into(),
+                        prefab_id: "survivor_outpost_01_dormitory".into(),
                         extra: BTreeMap::new(),
                     }),
                     ..MapObjectProps::default()
@@ -1324,11 +1326,11 @@ startup_map =
             id: OverworldId("main_overworld".into()),
             locations: vec![
                 OverworldLocationDefinition {
-                    id: OverworldLocationId("safehouse".into()),
-                    name: "Safehouse".into(),
+                    id: OverworldLocationId("survivor_outpost_01".into()),
+                    name: "Survivor Outpost 01".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("safehouse_grid".into()),
+                    map_id: MapId("survivor_outpost_01_grid".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,
@@ -1344,7 +1346,7 @@ startup_map =
                     name: "Street A".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("safehouse_grid".into()),
+                    map_id: MapId("survivor_outpost_01_grid".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,
@@ -1357,7 +1359,7 @@ startup_map =
                 },
             ],
             edges: vec![OverworldEdgeDefinition {
-                from: OverworldLocationId("safehouse".into()),
+                from: OverworldLocationId("survivor_outpost_01".into()),
                 to: OverworldLocationId("street_a".into()),
                 bidirectional: true,
                 travel_minutes: 30,

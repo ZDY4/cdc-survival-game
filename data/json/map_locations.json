@@ -1,17 +1,34 @@
 {
-  "safehouse": {
-    "id": "safehouse",
+  "survivor_outpost_01": {
+    "id": "survivor_outpost_01",
     "default_unlocked": true,
     "icon": "res://assets/icons/location_safehouse.png",
-    "description": "一个相对安全的避难所，可以休息恢复状态",
-    "name": "安全屋",
+    "description": "一处已经稳定运转的幸存者据点，拥有宿舍、食堂、诊疗和仓储等长期驻留设施。",
+    "name": "幸存者据点01",
     "scene_path": "res://scenes/locations/game_world_3d.tscn",
     "danger_level": 0,
     "entry_spawn_id": "default_spawn",
     "return_spawn_id": "default_spawn",
     "overworld_cell": [0, 0],
     "world_origin_cell": [0, 0],
-    "world_size_cells": [12, 12],
+    "world_size_cells": [32, 32],
+    "proxy_scene_path": "",
+    "overworld_visible": true,
+    "location_kind": "outdoor"
+  },
+  "survivor_outpost_01_perimeter": {
+    "id": "survivor_outpost_01_perimeter",
+    "default_unlocked": true,
+    "icon": "res://assets/icons/location_street.png",
+    "description": "位于幸存者据点01外缘的警戒缓冲区，承担据点与废弃街区之间的防线职责。",
+    "name": "据点外警戒区",
+    "scene_path": "res://scenes/locations/game_street_b.tscn",
+    "danger_level": 2,
+    "entry_spawn_id": "default_spawn",
+    "return_spawn_id": "default_spawn",
+    "overworld_cell": [1, 0],
+    "world_origin_cell": [1, 0],
+    "world_size_cells": [20, 20],
     "proxy_scene_path": "",
     "overworld_visible": true,
     "location_kind": "outdoor"
@@ -169,17 +186,17 @@
     "overworld_visible": true,
     "location_kind": "outdoor"
   },
-  "safehouse_interior": {
-    "id": "safehouse_interior",
+  "survivor_outpost_01_interior": {
+    "id": "survivor_outpost_01_interior",
     "default_unlocked": true,
     "icon": "res://assets/icons/location_safehouse.png",
-    "description": "安全屋内部，可以在这里短暂整顿。",
-    "name": "安全屋室内",
-    "scene_path": "res://scenes/interiors/safehouse_interior.tscn",
+    "description": "据点主建筑内部，可以在这里短暂整顿。",
+    "name": "幸存者据点01室内",
+    "scene_path": "res://scenes/interiors/survivor_outpost_01_interior.tscn",
     "danger_level": 0,
     "entry_spawn_id": "default_spawn",
-    "return_spawn_id": "safehouse_house_exit",
-    "parent_outdoor_location_id": "safehouse",
+    "return_spawn_id": "survivor_outpost_01_house_exit",
+    "parent_outdoor_location_id": "survivor_outpost_01",
     "overworld_visible": false,
     "location_kind": "interior"
   }

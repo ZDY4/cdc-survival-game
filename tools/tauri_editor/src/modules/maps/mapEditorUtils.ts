@@ -70,7 +70,7 @@ export function createPlacementDraft(
     rotation: "north",
     blocksMovement: kind === "building",
     blocksSight: kind === "building",
-    buildingPrefabId: "safehouse_house",
+    buildingPrefabId: "survivor_outpost_01_dormitory",
     pickupItemId: "1005",
     pickupMinCount: 1,
     pickupMaxCount: 1,

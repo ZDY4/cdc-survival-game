@@ -5,9 +5,10 @@ use bevy::log::warn;
 use game_core::runtime::action_result_status;
 use game_core::{NpcActionKey, SimulationEvent};
 use game_data::{
+    current_dialogue_node as current_dialogue_node_runtime, resolve_dialogue_start_node_id,
     ActorId, CharacterId, DialogueData, DialogueNode, DialogueResolutionContext,
     DialogueResolutionResult, DialogueResolutionSource, DialogueRuleDefinition,
-    InteractionExecutionResult, InteractionTargetId,
+    DialogueRuntimeState, InteractionExecutionResult, InteractionTargetId,
 };
 
 use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
@@ -33,6 +34,21 @@ pub(crate) fn apply_interaction_result(
 ) {
     if let Some(prompt) = result.prompt.clone() {
         viewer_state.current_prompt = Some(prompt);
+    }
+
+    if let Some(dialogue_state) = result.dialogue_state.clone() {
+        let dialogue_key = if dialogue_state.session.dialogue_key.trim().is_empty() {
+            dialogue_state.session.dialogue_id.clone()
+        } else {
+            dialogue_state.session.dialogue_key.clone()
+        };
+        let target_name = viewer_state
+            .current_prompt
+            .as_ref()
+            .map(|prompt| prompt.target_name.clone())
+            .unwrap_or_else(|| dialogue_key.clone());
+        apply_dialogue_runtime_state(viewer_state, dialogue_state, target_name);
+        return;
     }
 
     let dialogue_key = result.dialogue_id.clone();
@@ -95,66 +111,47 @@ pub(crate) fn apply_interaction_result(
 }
 
 pub(crate) fn current_dialogue_node(dialogue: &ActiveDialogueState) -> Option<&DialogueNode> {
-    dialogue
-        .data
-        .nodes
-        .iter()
-        .find(|node| node.id == dialogue.current_node_id)
+    current_dialogue_node_runtime(&dialogue.data, &dialogue.current_node_id)
 }
 
-pub(crate) fn find_dialogue_start_node(dialogue: &DialogueData) -> Option<&DialogueNode> {
-    dialogue
-        .nodes
-        .iter()
-        .find(|node| node.is_start)
-        .or_else(|| dialogue.nodes.first())
-}
-
-pub(crate) fn advance_dialogue(viewer_state: &mut ViewerState, choice_index: Option<usize>) {
-    let Some(dialogue) = viewer_state.active_dialogue.as_mut() else {
-        return;
-    };
-    let Some(node) = current_dialogue_node(dialogue).cloned() else {
-        viewer_state.active_dialogue = None;
+pub(crate) fn advance_dialogue(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    choice_index: Option<usize>,
+) {
+    let Some(dialogue) = viewer_state.active_dialogue.clone() else {
         return;
     };
 
-    let next = match node.node_type.as_str() {
-        "choice" => {
-            let Some(choice_index) = choice_index else {
-                viewer_state.status_line = "dialogue: choose an option with 1-9".to_string();
-                return;
-            };
-            let Some(option) = node.options.get(choice_index) else {
-                viewer_state.status_line = "dialogue: invalid choice".to_string();
-                return;
-            };
-            Some(option.next.clone())
+    match runtime_state.runtime.advance_dialogue(
+        dialogue.actor_id,
+        dialogue.target_id.clone(),
+        &dialogue.dialogue_key,
+        None,
+        choice_index,
+    ) {
+        Ok(dialogue_state) => {
+            apply_dialogue_runtime_state(viewer_state, dialogue_state, dialogue.target_name);
         }
-        "dialog" | "action" => {
-            if node.next.trim().is_empty() {
-                None
-            } else {
-                Some(node.next.clone())
-            }
+        Err(reason) if reason.starts_with("dialogue_choice_required:") => {
+            viewer_state.status_line = "dialogue: choose an option with 1-9".to_string();
         }
-        "end" => None,
-        _ => {
-            if node.next.trim().is_empty() {
-                None
-            } else {
-                Some(node.next.clone())
-            }
+        Err(reason)
+            if reason.starts_with("dialogue_invalid_choice:")
+                || reason.starts_with("dialogue_choice_invalid:")
+                || reason.starts_with("dialogue_option_unresolved:") =>
+        {
+            viewer_state.status_line = "dialogue: invalid choice".to_string();
         }
-    };
-
-    match next {
-        Some(next_id) if !next_id.trim().is_empty() => {
-            dialogue.current_node_id = next_id;
-        }
-        _ => {
+        Err(reason)
+            if reason.starts_with("dialogue_missing_node:")
+                || reason.starts_with("dialogue_node_missing:") =>
+        {
             viewer_state.active_dialogue = None;
-            viewer_state.status_line = "dialogue finished".to_string();
+            viewer_state.status_line = "dialogue: current node missing".to_string();
+        }
+        Err(reason) => {
+            viewer_state.status_line = format!("dialogue: {reason}");
         }
     }
 }
@@ -174,6 +171,15 @@ pub(crate) fn sync_dialogue_from_event(
                 return;
             }
 
+            if let Some(dialogue_state) = runtime_state.runtime.active_dialogue_state(*actor_id) {
+                apply_dialogue_runtime_state(
+                    viewer_state,
+                    dialogue_state,
+                    resolve_target_name(viewer_state, target_id, dialogue_id),
+                );
+                return;
+            }
+
             open_dialogue(
                 runtime_state,
                 viewer_state,
@@ -190,6 +196,16 @@ pub(crate) fn sync_dialogue_from_event(
             node_id,
         } => {
             if !should_follow_dialogue_event(viewer_state, *actor_id) {
+                return;
+            }
+
+            if let Some(dialogue_state) = runtime_state.runtime.active_dialogue_state(*actor_id) {
+                let target_name = viewer_state
+                    .active_dialogue
+                    .as_ref()
+                    .map(|dialogue| dialogue.target_name.clone())
+                    .unwrap_or_else(|| resolve_focused_target_name(viewer_state, dialogue_id));
+                apply_dialogue_runtime_state(viewer_state, dialogue_state, target_name);
                 return;
             }
 
@@ -244,12 +260,11 @@ fn open_dialogue(
         target_name.as_str(),
     );
     let current_node_id = current_node_id.unwrap_or_else(|| {
-        find_dialogue_start_node(&resolved.data)
-            .map(|node| node.id.clone())
-            .unwrap_or_else(|| "start".to_string())
+        resolve_dialogue_start_node_id(&resolved.data).unwrap_or_else(|| "start".to_string())
     });
     viewer_state.active_dialogue = Some(ActiveDialogueState {
         actor_id,
+        target_id: target_id.cloned(),
         dialogue_key: dialogue_key.to_string(),
         dialog_id: resolved
             .result
@@ -302,6 +317,88 @@ fn interaction_dialogue_status(result: &DialogueResolutionResult) -> String {
         return format!("interaction: opened dialogue {}", dialogue_id);
     }
     "interaction: opened dialogue".to_string()
+}
+
+fn apply_dialogue_runtime_state(
+    viewer_state: &mut ViewerState,
+    dialogue_state: DialogueRuntimeState,
+    target_name: String,
+) {
+    if dialogue_state.finished {
+        viewer_state.active_dialogue = None;
+        viewer_state.status_line = dialogue_runtime_status(&dialogue_state);
+        return;
+    }
+
+    let dialogue_key = if dialogue_state.session.dialogue_key.trim().is_empty() {
+        dialogue_state.session.dialogue_id.clone()
+    } else {
+        dialogue_state.session.dialogue_key.clone()
+    };
+    let dialog_id = if dialogue_state.session.dialogue_id.trim().is_empty() {
+        dialogue_key.clone()
+    } else {
+        dialogue_state.session.dialogue_id.clone()
+    };
+
+    viewer_state.active_dialogue = Some(ActiveDialogueState {
+        actor_id: dialogue_state.session.actor_id,
+        target_id: dialogue_state.session.target_id.clone(),
+        dialogue_key,
+        dialog_id: dialog_id.clone(),
+        data: dialogue_data_from_runtime_state(&dialogue_state, &dialog_id),
+        current_node_id: dialogue_state.session.current_node_id.clone(),
+        target_name,
+    });
+    viewer_state.status_line = dialogue_runtime_status(&dialogue_state);
+}
+
+fn dialogue_data_from_runtime_state(
+    dialogue_state: &DialogueRuntimeState,
+    dialog_id: &str,
+) -> DialogueData {
+    let current_node = dialogue_state
+        .current_node
+        .clone()
+        .unwrap_or_else(|| DialogueNode {
+            id: dialogue_state.session.current_node_id.clone(),
+            node_type: "dialog".to_string(),
+            ..DialogueNode::default()
+        });
+
+    DialogueData {
+        dialog_id: dialog_id.to_string(),
+        nodes: vec![DialogueNode {
+            options: if dialogue_state.available_options.is_empty() {
+                current_node.options.clone()
+            } else {
+                dialogue_state.available_options.clone()
+            },
+            ..current_node
+        }],
+        ..DialogueData::default()
+    }
+}
+
+fn dialogue_runtime_status(dialogue_state: &DialogueRuntimeState) -> String {
+    if dialogue_state.finished {
+        if let Some(end_type) = dialogue_state.end_type.as_deref() {
+            return format!("dialogue finished: {}", end_type);
+        }
+        return "dialogue finished".to_string();
+    }
+
+    if !dialogue_state.emitted_actions.is_empty() {
+        let actions = dialogue_state
+            .emitted_actions
+            .iter()
+            .map(|action| action.action_type.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        return format!("dialogue actions: {}", actions);
+    }
+
+    format!("dialogue node: {}", dialogue_state.session.current_node_id)
 }
 
 fn resolve_dialogue_content(
@@ -602,43 +699,84 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use game_bevy::SettlementDebugSnapshot;
+    use game_core::{RegisterActor, Simulation, SimulationRuntime};
     use serde_json::json;
 
-    use super::{advance_dialogue, resolve_dialogue_content_from_context, DialogueAssetDirs};
-    use crate::state::{ActiveDialogueState, ViewerState};
+    use super::{
+        advance_dialogue, apply_interaction_result, resolve_dialogue_content_from_context,
+        DialogueAssetDirs,
+    };
+    use crate::state::ViewerRuntimeState;
+    use crate::state::ViewerState;
     use game_data::{
-        ActorId, DialogueData, DialogueNode, DialogueOption, DialogueResolutionContext,
-        DialogueResolutionSource, NpcRole, WorldMode,
+        ActorKind, ActorSide, CharacterId, DialogueData, DialogueLibrary, DialogueNode,
+        DialogueOption, DialogueResolutionContext, DialogueResolutionSource, InteractionOptionId,
+        InteractionTargetId, NpcRole, WorldMode,
     };
 
     #[test]
     fn choice_dialogue_requires_explicit_selection() {
-        let mut viewer_state = ViewerState::default();
-        viewer_state.active_dialogue = Some(ActiveDialogueState {
-            actor_id: ActorId(1),
-            dialogue_key: "test".to_string(),
-            dialog_id: "test".to_string(),
-            data: DialogueData {
-                dialog_id: "test".to_string(),
-                nodes: vec![DialogueNode {
-                    id: "start".to_string(),
-                    node_type: "choice".to_string(),
-                    text: "Choose".to_string(),
-                    options: vec![DialogueOption {
-                        text: "Option".to_string(),
-                        next: "end".to_string(),
-                        ..DialogueOption::default()
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(DialogueLibrary::from(std::collections::BTreeMap::from([
+            (
+                "test".to_string(),
+                DialogueData {
+                    dialog_id: "test".to_string(),
+                    nodes: vec![DialogueNode {
+                        id: "start".to_string(),
+                        node_type: "choice".to_string(),
+                        text: "Choose".to_string(),
+                        options: vec![DialogueOption {
+                            text: "Option".to_string(),
+                            next: "end".to_string(),
+                            ..DialogueOption::default()
+                        }],
+                        is_start: true,
+                        ..DialogueNode::default()
                     }],
-                    is_start: true,
-                    ..DialogueNode::default()
-                }],
-                ..DialogueData::default()
-            },
-            current_node_id: "start".to_string(),
-            target_name: "NPC".to_string(),
+                    ..DialogueData::default()
+                },
+            ),
+        ])));
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: game_data::GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
         });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("test".into())),
+            display_name: "NPC".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: game_data::GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let mut runtime_state = ViewerRuntimeState {
+            runtime: SimulationRuntime::from_simulation(simulation),
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.selected_actor = Some(player);
+        viewer_state.focused_target = Some(InteractionTargetId::Actor(npc));
 
-        advance_dialogue(&mut viewer_state, None);
+        let result = runtime_state.runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+        apply_interaction_result(&runtime_state, &mut viewer_state, result);
+        advance_dialogue(&mut runtime_state, &mut viewer_state, None);
 
         assert!(viewer_state.active_dialogue.is_some());
         assert_eq!(

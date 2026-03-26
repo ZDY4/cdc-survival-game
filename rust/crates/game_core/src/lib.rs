@@ -31,9 +31,9 @@ pub use game_data::{
 pub use goap::{
     advance_offline_sim, apply_npc_action_effects, build_plan, build_plan_for_context,
     build_plan_for_goal, build_plan_for_goal_with_context, rebuild_facts, tick_offline_action,
-    ActionExecutionPhase, ActionTickResult, NpcActionKey, NpcBackgroundState,
-    NpcExecutionMode, NpcFact, NpcFactInput, NpcGoalKey, NpcOfflineSimState, NpcPlanRequest,
-    NpcPlanResult, NpcPlanStep, NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
+    ActionExecutionPhase, ActionTickResult, NpcActionKey, NpcBackgroundState, NpcExecutionMode,
+    NpcFact, NpcFactInput, NpcGoalKey, NpcOfflineSimState, NpcPlanRequest, NpcPlanResult,
+    NpcPlanStep, NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
     OfflineSimAdvanceResult,
 };
 pub use movement::{
@@ -46,7 +46,9 @@ pub use overworld::{
     world_mode_for_location_kind, LocationTransitionContext, OverworldRouteSnapshot,
     OverworldStateSnapshot, OverworldTravelState, UnlockedLocationSet,
 };
-pub use runtime::{action_result_status, SimulationRuntime};
+pub use runtime::{
+    action_result_status, RuntimeSnapshot, SimulationRuntime, RUNTIME_SNAPSHOT_SCHEMA_VERSION,
+};
 pub use simulation::{
     ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,

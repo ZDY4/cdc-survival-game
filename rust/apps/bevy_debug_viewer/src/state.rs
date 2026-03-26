@@ -110,13 +110,11 @@ pub(crate) struct ActorLabelEntities {
 
 #[derive(Resource, Debug, Clone, Copy)]
 pub(crate) struct ViewerRenderConfig {
-    pub pixels_per_world_unit: f32,
     pub zoom_factor: f32,
-    pub min_pixels_per_world_unit: f32,
-    pub max_pixels_per_world_unit: f32,
     pub viewport_padding_px: f32,
     pub hud_reserved_width_px: f32,
     pub camera_pitch_degrees: f32,
+    pub camera_fov_degrees: f32,
     pub camera_distance_padding_world: f32,
     pub floor_thickness_world: f32,
     pub actor_radius_world: f32,
@@ -128,13 +126,11 @@ pub(crate) struct ViewerRenderConfig {
 impl Default for ViewerRenderConfig {
     fn default() -> Self {
         Self {
-            pixels_per_world_unit: 96.0,
             zoom_factor: 1.0,
-            min_pixels_per_world_unit: 24.0,
-            max_pixels_per_world_unit: 160.0,
             viewport_padding_px: 72.0,
             hud_reserved_width_px: 460.0,
             camera_pitch_degrees: 35.0,
+            camera_fov_degrees: 30.0,
             camera_distance_padding_world: 8.0,
             floor_thickness_world: 0.08,
             actor_radius_world: 0.22,
@@ -148,6 +144,10 @@ impl Default for ViewerRenderConfig {
 impl ViewerRenderConfig {
     pub(crate) fn camera_pitch_radians(self) -> f32 {
         self.camera_pitch_degrees.to_radians()
+    }
+
+    pub(crate) fn camera_fov_radians(self) -> f32 {
+        self.camera_fov_degrees.to_radians()
     }
 
     pub(crate) fn vertical_projection_factor(self) -> f32 {
@@ -209,6 +209,10 @@ impl Default for ViewerState {
 }
 
 impl ViewerState {
+    pub(crate) fn is_interaction_menu_open(&self) -> bool {
+        self.interaction_menu.is_some()
+    }
+
     pub(crate) fn interaction_locked_actor_id(
         &self,
         runtime_state: &ViewerRuntimeState,
@@ -272,6 +276,7 @@ pub(crate) struct InteractionMenuState {
 #[derive(Debug, Clone)]
 pub(crate) struct ActiveDialogueState {
     pub actor_id: ActorId,
+    pub target_id: Option<InteractionTargetId>,
     pub dialogue_key: String,
     pub dialog_id: String,
     pub data: DialogueData,

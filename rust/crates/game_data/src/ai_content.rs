@@ -299,7 +299,7 @@ mod tests {
             sample_character(
                 "doctor",
                 Some(CharacterLifeProfile {
-                    settlement_id: "safehouse".into(),
+                    settlement_id: "survivor_outpost_01_settlement".into(),
                     role: NpcRole::Doctor,
                     home_anchor: "home".into(),
                     duty_route_id: "missing_route".into(),
@@ -316,10 +316,10 @@ mod tests {
             ),
         )]));
         let settlements = SettlementLibrary::from(BTreeMap::from([(
-            SettlementId("safehouse".into()),
+            SettlementId("survivor_outpost_01_settlement".into()),
             SettlementDefinition {
-                id: SettlementId("safehouse".into()),
-                map_id: crate::MapId("safehouse_grid".into()),
+                id: SettlementId("survivor_outpost_01_settlement".into()),
+                map_id: crate::MapId("survivor_outpost_01_grid".into()),
                 anchors: vec![SettlementAnchorDefinition {
                     id: "home".into(),
                     grid: crate::GridCoord::new(1, 0, 1),
@@ -359,7 +359,7 @@ mod tests {
             sample_character(
                 "guard",
                 Some(CharacterLifeProfile {
-                    settlement_id: "safehouse".into(),
+                    settlement_id: "survivor_outpost_01_settlement".into(),
                     role: NpcRole::Guard,
                     home_anchor: "guard_home".into(),
                     duty_route_id: "guard_patrol".into(),
@@ -376,10 +376,10 @@ mod tests {
             ),
         )]));
         let settlements = SettlementLibrary::from(BTreeMap::from([(
-            SettlementId("safehouse".into()),
+            SettlementId("survivor_outpost_01_settlement".into()),
             SettlementDefinition {
-                id: SettlementId("safehouse".into()),
-                map_id: crate::MapId("safehouse_grid".into()),
+                id: SettlementId("survivor_outpost_01_settlement".into()),
+                map_id: crate::MapId("survivor_outpost_01_grid".into()),
                 anchors: vec![
                     SettlementAnchorDefinition {
                         id: "guard_home".into(),

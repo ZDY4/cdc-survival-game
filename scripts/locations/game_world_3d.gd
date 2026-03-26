@@ -14,7 +14,7 @@ const DETAIL_FULL: int = 0
 const DETAIL_REDUCED: int = 1
 const DETAIL_PROXY_ONLY: int = 2
 
-@export var location_id: String = "safehouse"
+@export var location_id: String = "survivor_outpost_01"
 @export var player_scene: PackedScene = null
 @export var grid_debug_default_visible: bool = false
 @export var max_preview_path_points: int = 200
@@ -109,7 +109,7 @@ func resolve_spawn_point(spawn_id: String) -> Node3D:
 		var matching_spawn := _find_spawn_point_by_id(normalized_spawn_id)
 		if matching_spawn != null:
 			return matching_spawn
-	if not hosted_mode and location_id == "safehouse" and not GameState.player_local_position.is_zero_approx():
+	if not hosted_mode and location_id == "survivor_outpost_01" and not GameState.player_local_position.is_zero_approx():
 		return null
 	var default_spawn := _find_spawn_point_by_id("default_spawn")
 	if default_spawn != null:
@@ -223,7 +223,7 @@ func _sync_location_state() -> void:
 	if GameState == null:
 		return
 	if location_id.is_empty():
-		location_id = "safehouse"
+		location_id = "survivor_outpost_01"
 	GameState.player_position = location_id
 	if hosted_mode:
 		GameState.active_outdoor_location_id = location_id

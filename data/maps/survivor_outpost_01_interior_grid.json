@@ -1,0 +1,36 @@
+{
+  "id": "survivor_outpost_01_interior_grid",
+  "name": "survivor outpost 01 interior grid",
+  "size": {
+    "width": 16,
+    "height": 16
+  },
+  "default_level": 0,
+  "levels": [
+    {
+      "y": 0,
+      "cells": []
+    }
+  ],
+  "entry_points": [
+    {
+      "id": "default_entry",
+      "grid": {
+        "x": 2,
+        "y": 0,
+        "z": 2
+      },
+      "facing": null
+    },
+    {
+      "id": "outdoor_return",
+      "grid": {
+        "x": 2,
+        "y": 0,
+        "z": 2
+      },
+      "facing": null
+    }
+  ],
+  "objects": []
+}

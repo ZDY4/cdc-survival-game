@@ -18,7 +18,10 @@ fn main() -> Result<(), String> {
         .canonicalize()
         .map_err(|error| format!("failed to resolve repo root: {error}"))?;
 
-    let locations_path = repo_root.join("data").join("json").join("map_locations.json");
+    let locations_path = repo_root
+        .join("data")
+        .join("json")
+        .join("map_locations.json");
     let map_data_path = repo_root.join("data").join("json").join("map_data.json");
     let overworld_dir = repo_root.join("data").join("overworld");
     let maps_dir = repo_root.join("data").join("maps");
@@ -136,7 +139,9 @@ fn main() -> Result<(), String> {
         for neighbor in neighbors {
             let to = neighbor
                 .as_str()
-                .ok_or_else(|| format!("map_data.json connections[{from}] entries must be strings"))?
+                .ok_or_else(|| {
+                    format!("map_data.json connections[{from}] entries must be strings")
+                })?
                 .to_string();
             let pair = canonical_pair(from, &to);
             if !seen_pairs.insert(pair.clone()) {
@@ -203,11 +208,12 @@ fn ensure_maps(maps_dir: &Path, required_maps: &BTreeSet<MapId>) -> Result<(), S
             placeholder_map_definition(map_id.as_str())
         };
 
-        let required_entries = if map_id.as_str().contains("interior") || map_id.as_str().contains("dungeon") {
-            vec!["default_entry".to_string(), "outdoor_return".to_string()]
-        } else {
-            vec!["default_entry".to_string()]
-        };
+        let required_entries =
+            if map_id.as_str().contains("interior") || map_id.as_str().contains("dungeon") {
+                vec!["default_entry".to_string(), "outdoor_return".to_string()]
+            } else {
+                vec!["default_entry".to_string()]
+            };
         for entry_id in required_entries {
             if definition
                 .entry_points
@@ -262,7 +268,11 @@ fn canonical_pair(left: &str, right: &str) -> (String, String) {
     }
 }
 
-fn lookup_distance(distances: &serde_json::Map<String, Value>, from: &str, to: &str) -> Option<f64> {
+fn lookup_distance(
+    distances: &serde_json::Map<String, Value>,
+    from: &str,
+    to: &str,
+) -> Option<f64> {
     let forward = format!("{from}_{to}");
     let backward = format!("{to}_{from}");
     distances
@@ -289,7 +299,8 @@ fn parse_cell(value: &Value) -> GridCoord {
 fn read_json(path: &Path) -> Result<Value, String> {
     let raw = fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-    serde_json::from_str(&raw).map_err(|error| format!("failed to parse {}: {error}", path.display()))
+    serde_json::from_str(&raw)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))
 }
 
 fn write_json(path: &Path, value: &impl serde::Serialize) -> Result<(), String> {

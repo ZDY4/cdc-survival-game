@@ -41,7 +41,7 @@ var _overworld_grid_world: OverworldGridWorld = null
 var _overworld_player: PlayerController = null
 var _location_nodes: Dictionary = {}
 var _active_outdoor_scene: GameWorld3D = null
-var _active_outdoor_location_id: String = "safehouse"
+var _active_outdoor_location_id: String = "survivor_outpost_01"
 var _transition_locked: bool = false
 
 func _ready() -> void:
@@ -96,13 +96,13 @@ func get_current_overworld_cell() -> Vector2i:
 	return MapModule.get_location_overworld_cell(_active_outdoor_location_id)
 
 func _restore_from_game_state() -> void:
-	var location_id := "safehouse"
+	var location_id := "survivor_outpost_01"
 	var spawn_id := "default_spawn"
 	if GameState != null:
 		location_id = str(GameState.active_outdoor_location_id).strip_edges()
 		spawn_id = str(GameState.active_outdoor_spawn_id).strip_edges()
 	if location_id.is_empty():
-		location_id = "safehouse"
+		location_id = "survivor_outpost_01"
 	if spawn_id.is_empty():
 		spawn_id = "default_spawn"
 

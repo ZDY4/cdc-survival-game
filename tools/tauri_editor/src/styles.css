@@ -1341,11 +1341,16 @@ button {
 }
 
 .settings-window-drag {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  min-height: 40px;
+  padding: 0 8px;
   color: var(--text-muted);
+  cursor: grab;
+  user-select: none;
 }
 
 .settings-window-drag strong {
@@ -1365,7 +1370,10 @@ button {
 }
 
 .settings-window-control {
-  min-width: 72px;
+  min-width: 40px;
+  padding: 8px 0;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .settings-sidebar,

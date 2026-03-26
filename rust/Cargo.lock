@@ -1401,6 +1401,7 @@ dependencies = [
  "game_data",
  "game_protocol",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

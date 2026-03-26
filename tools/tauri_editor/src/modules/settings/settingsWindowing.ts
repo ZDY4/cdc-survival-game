@@ -6,10 +6,10 @@ export const SETTINGS_WINDOW_LABEL = "settings";
 export const SETTINGS_OPEN_SECTION_EVENT = "settings:open-section";
 export const SETTINGS_CHANGED_EVENT = "settings:changed";
 
-const EDITOR_WINDOW_LABELS = ["main", "narrative-lab", "settings"] as const;
+const EDITOR_WINDOW_LABELS = ["main", "settings"] as const;
 
 export function isEditorSettingsSection(value: string | null | undefined): value is EditorSettingsSection {
-  return value === "ai" || value === "narrative-sync" || value === "workspace";
+  return value === "ai";
 }
 
 export function buildSettingsWindowUrl(section: EditorSettingsSection = "ai"): string {

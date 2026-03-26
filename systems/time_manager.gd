@@ -143,7 +143,7 @@ func _apply_status_decay(hours: int):
 		
 		# 精神衰减
 		var mental_decay = MENTAL_DECAY_PER_HOUR
-		if is_night() and not GameState.player_position == "safehouse":
+		if is_night() and not GameState.player_position == "survivor_outpost_01":
 			mental_decay += 2  # 夜间在室外精神下降更快
 			GameState.player_mental = maxi(0, GameState.player_mental - mental_decay)
 	

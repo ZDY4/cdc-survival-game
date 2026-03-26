@@ -6,7 +6,7 @@ signal night_danger_increased(level: int)
 signal fatigue_warning(level: String)
 signal fatigue_damage_taken(amount: int)
 signal night_event_triggered(event_type: String, event_data: Dictionary)
-signal safehouse_warning(distance: int)
+signal outpost_warning(distance: int)
 
 # ===== 风险等级 =====
 enum DangerLevel { LOW = 0, MEDIUM = 1, HIGH = 2, EXTREME = 3 }
@@ -18,7 +18,7 @@ enum FatigueLevel { FRESH = 0, TIRED = 1, EXHAUSTED = 2, COLLAPSING = 3 }
 var current_danger_level: int = DangerLevel.LOW
 var current_fatigue_level: int = FatigueLevel.FRESH
 var fatigue_value: float = 0.0  # 0-100
-var is_in_safehouse: bool = true
+var is_in_outpost: bool = true
 var hours_outside: float = 0.0
 var last_sleep_day: int = 1
 
@@ -112,7 +112,7 @@ func _ready():
 	EventBus.subscribe(EventBus.EventType.LOCATION_CHANGED, _on_location_changed)
 
 func _process(delta: float):
-	if not is_in_safehouse and TimeManager.is_night():
+	if not is_in_outpost and TimeManager.is_night():
 		_danger_accumulator += delta
 		if _danger_accumulator >= danger_check_interval:
 			_danger_accumulator = 0.0
@@ -121,11 +121,11 @@ func _process(delta: float):
 # ===== 事件回调 =====
 
 func _on_night_fallen(current_time: Dictionary):
-	if not is_in_safehouse:
+	if not is_in_outpost:
 		print("[DayNightRiskSystem] 夜幕降临！危险度上升")
 		_increase_danger_level()
 		DialogModule.show_dialog(
-			"夜幕已经降临！外面变得更加危险，建议你尽快返回安全屋",
+			"夜幕已经降临！外面变得更加危险，建议你尽快返回幸存者据点01。",
 			"警告",
 			""
 		)
@@ -143,7 +143,7 @@ func _on_time_advanced(old_time: Dictionary, new_time: Dictionary):
 		hours_passed += new_time.hour - old_time.hour
 	
 	# 增加疲劳
-	if not is_in_safehouse:
+	if not is_in_outpost:
 		var fatigue_rate = FATIGUE_PER_HOUR
 		if TimeManager.is_night():
 			fatigue_rate = FATIGUE_PER_HOUR_NIGHT
@@ -152,15 +152,15 @@ func _on_time_advanced(old_time: Dictionary, new_time: Dictionary):
 
 func _on_location_changed(data: Dictionary):
 	var location = data.get("location", "")
-	is_in_safehouse = (location == "safehouse")
+	is_in_outpost = (location == "survivor_outpost_01")
 	
-	if is_in_safehouse:
+	if is_in_outpost:
 		# 进入安全屋，逐渐恢复
 		_reset_danger()
 	else:
 		# 离开安全"		if TimeManager.is_night():
 			DialogModule.show_dialog(
-				"夜晚在外面非常危险！建议你留在安全屋内",
+				"夜晚在外面非常危险！建议你留在幸存者据点01内。",
 				"警告",
 				""
 			)
@@ -279,7 +279,7 @@ func reduce_fatigue(amount: float):
 	fatigue_value = maxf(0.0, fatigue_value - amount)
 	_update_fatigue_level()
 
-func rest_in_safehouse():
+func rest_in_outpost():
 	fatigue_value = 0.0
 	hours_outside = 0.0
 	last_sleep_day = TimeManager.current_day
@@ -370,7 +370,7 @@ func get_fatigue_effects() -> Dictionary:
 # ===== 查询方法 =====
 
 func is_safe() -> bool:
-	return is_in_safehouse or TimeManager.is_day()
+	return is_in_outpost or TimeManager.is_day()
 
 func get_current_danger_level() -> int:
 	return current_danger_level
@@ -407,7 +407,7 @@ func serialize() -> Dictionary:
 		"danger_level": current_danger_level,
 		"fatigue_level": current_fatigue_level,
 		"fatigue_value": fatigue_value,
-		"is_in_safehouse": is_in_safehouse,
+		"is_in_outpost": is_in_outpost,
 		"hours_outside": hours_outside,
 		"last_sleep_day": last_sleep_day
 	}
@@ -416,7 +416,7 @@ func deserialize(data: Dictionary):
 	current_danger_level = data.get("danger_level", DangerLevel.LOW)
 	current_fatigue_level = data.get("fatigue_level", FatigueLevel.FRESH)
 	fatigue_value = data.get("fatigue_value", 0.0)
-	is_in_safehouse = data.get("is_in_safehouse", true)
+	is_in_outpost = data.get("is_in_outpost", true)
 	hours_outside = data.get("hours_outside", 0.0)
 	last_sleep_day = data.get("last_sleep_day", 1)
 	print("[DayNightRiskSystem] 风险系统数据已加")

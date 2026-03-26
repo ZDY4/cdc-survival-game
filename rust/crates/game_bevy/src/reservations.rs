@@ -119,10 +119,10 @@ mod tests {
 
         let mut service = SmartObjectReservations::default();
         service.sync_settlement_catalog(&SettlementLibrary::from(BTreeMap::from([(
-            SettlementId("safehouse".into()),
+            SettlementId("survivor_outpost_01_settlement".into()),
             SettlementDefinition {
-                id: SettlementId("safehouse".into()),
-                map_id: MapId("safehouse_grid".into()),
+                id: SettlementId("survivor_outpost_01_settlement".into()),
+                map_id: MapId("survivor_outpost_01_grid".into()),
                 anchors: vec![SettlementAnchorDefinition {
                     id: "north_gate".into(),
                     grid: GridCoord::new(1, 0, 1),

@@ -280,7 +280,9 @@ pub enum OverworldValidationError {
     UnreachableVisibleOutdoorLocation { location_id: String },
 }
 
-pub fn load_overworld_library(dir: impl AsRef<Path>) -> Result<OverworldLibrary, OverworldLoadError> {
+pub fn load_overworld_library(
+    dir: impl AsRef<Path>,
+) -> Result<OverworldLibrary, OverworldLoadError> {
     load_overworld_library_with_catalog(dir, None)
 }
 
@@ -385,7 +387,9 @@ pub fn validate_overworld_definition(
                     map_id: location.map_id.as_str().to_string(),
                 });
             }
-            let Some(entry_points) = catalog.map_entry_points_by_map.get(location.map_id.as_str())
+            let Some(entry_points) = catalog
+                .map_entry_points_by_map
+                .get(location.map_id.as_str())
             else {
                 return Err(OverworldValidationError::UnknownEntryPointId {
                     location_id: location.id.as_str().to_string(),
@@ -504,7 +508,11 @@ pub fn validate_overworld_definition(
         let mut visited = HashSet::from([start.clone()]);
         let mut queue = VecDeque::from([start.clone()]);
         while let Some(current) = queue.pop_front() {
-            for next in graph.get(&current).into_iter().flat_map(|neighbors| neighbors.iter()) {
+            for next in graph
+                .get(&current)
+                .into_iter()
+                .flat_map(|neighbors| neighbors.iter())
+            {
                 if visited.insert(next.clone()) {
                     queue.push_back(next.clone());
                 }
@@ -513,9 +521,9 @@ pub fn validate_overworld_definition(
 
         for location_id in visible_outdoor_ids {
             if !visited.contains(&location_id) {
-                return Err(OverworldValidationError::UnreachableVisibleOutdoorLocation {
-                    location_id,
-                });
+                return Err(
+                    OverworldValidationError::UnreachableVisibleOutdoorLocation { location_id },
+                );
             }
         }
     }
@@ -616,9 +624,10 @@ mod tests {
         });
         let mut catalog = sample_catalog();
         catalog.map_ids.insert("forest_grid".into());
-        catalog
-            .map_entry_points_by_map
-            .insert("forest_grid".into(), BTreeSet::from(["default_entry".into()]));
+        catalog.map_entry_points_by_map.insert(
+            "forest_grid".into(),
+            BTreeSet::from(["default_entry".into()]),
+        );
 
         let error = validate_overworld_definition(&definition, Some(&catalog))
             .expect_err("disconnected visible location should fail");
@@ -652,25 +661,22 @@ mod tests {
     fn sample_catalog() -> OverworldValidationCatalog {
         OverworldValidationCatalog {
             map_ids: BTreeSet::from([
-                "safehouse_grid".into(),
+                "survivor_outpost_01_grid".into(),
                 "street_a_grid".into(),
-                "safehouse_interior_grid".into(),
+                "survivor_outpost_01_interior_grid".into(),
             ]),
             map_entry_points_by_map: BTreeMap::from([
                 (
-                    "safehouse_grid".into(),
-                    BTreeSet::from([
-                        "default_entry".into(),
-                        "outdoor_return".into(),
-                    ]),
+                    "survivor_outpost_01_grid".into(),
+                    BTreeSet::from(["default_entry".into(), "outdoor_return".into()]),
                 ),
-                ("street_a_grid".into(), BTreeSet::from(["default_entry".into()])),
                 (
-                    "safehouse_interior_grid".into(),
-                    BTreeSet::from([
-                        "default_entry".into(),
-                        "outdoor_return".into(),
-                    ]),
+                    "street_a_grid".into(),
+                    BTreeSet::from(["default_entry".into()]),
+                ),
+                (
+                    "survivor_outpost_01_interior_grid".into(),
+                    BTreeSet::from(["default_entry".into(), "outdoor_return".into()]),
                 ),
             ]),
         }
@@ -681,11 +687,11 @@ mod tests {
             id: OverworldId("main_overworld".into()),
             locations: vec![
                 OverworldLocationDefinition {
-                    id: OverworldLocationId("safehouse".into()),
-                    name: "Safehouse".into(),
+                    id: OverworldLocationId("survivor_outpost_01".into()),
+                    name: "Survivor Outpost 01".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("safehouse_grid".into()),
+                    map_id: MapId("survivor_outpost_01_grid".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,
@@ -713,13 +719,15 @@ mod tests {
                     extra: BTreeMap::new(),
                 },
                 OverworldLocationDefinition {
-                    id: OverworldLocationId("safehouse_interior".into()),
-                    name: "Safehouse Interior".into(),
+                    id: OverworldLocationId("survivor_outpost_01_interior".into()),
+                    name: "Survivor Outpost 01 Interior".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Interior,
-                    map_id: MapId("safehouse_interior_grid".into()),
+                    map_id: MapId("survivor_outpost_01_interior_grid".into()),
                     entry_point_id: "default_entry".into(),
-                    parent_outdoor_location_id: Some(OverworldLocationId("safehouse".into())),
+                    parent_outdoor_location_id: Some(OverworldLocationId(
+                        "survivor_outpost_01".into(),
+                    )),
                     return_entry_point_id: Some("outdoor_return".into()),
                     default_unlocked: true,
                     visible: false,
@@ -730,7 +738,7 @@ mod tests {
                 },
             ],
             edges: vec![OverworldEdgeDefinition {
-                from: OverworldLocationId("safehouse".into()),
+                from: OverworldLocationId("survivor_outpost_01".into()),
                 to: OverworldLocationId("street_a".into()),
                 bidirectional: true,
                 travel_minutes: 30,

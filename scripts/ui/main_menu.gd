@@ -85,8 +85,8 @@ func _reset_game_state(item: Dictionary = {}):
 	GameState.player_thirst = 100
 	GameState.player_stamina = 100
 	GameState.player_mental = 100
-	GameState.player_position = "safehouse"
-	GameState.reset_world_runtime("safehouse", "default_spawn")
+	GameState.player_position = "survivor_outpost_01"
+	GameState.reset_world_runtime("survivor_outpost_01", "default_spawn")
 	GameState.set_overworld_cell(Vector2i.ZERO)
 	
 	if GameState.has_method("set_inventory_from_save"):
@@ -114,7 +114,14 @@ func _reset_game_state(item: Dictionary = {}):
 	GameState.world_time = 8
 	GameState.world_day = 1
 	GameState.world_weather = "clear"
-	GameState.world_unlocked_locations = ["safehouse", "street_a", "street_b", "factory", "supermarket"]
+	GameState.world_unlocked_locations = [
+		"survivor_outpost_01",
+		"survivor_outpost_01_perimeter",
+		"street_a",
+		"street_b",
+		"factory",
+		"supermarket"
+	]
 
 func _apply_safe_area():
 	# 移动端安全区域适配（刘海屏、圆角屏等）

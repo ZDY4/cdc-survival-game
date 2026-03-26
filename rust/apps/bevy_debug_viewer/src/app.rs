@@ -11,11 +11,11 @@ use game_data::GameDataPlugin;
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::controls::{
     handle_camera_pan, handle_interaction_menu_buttons, handle_keyboard_input, handle_mouse_input,
-    handle_mouse_wheel_zoom, update_view_scale,
+    handle_mouse_wheel_zoom,
 };
 use crate::render::{
-    draw_world, setup_viewer, sync_actor_labels, update_camera, update_dialogue_panel,
-    update_interaction_menu,
+    draw_world, setup_viewer, sync_actor_labels, sync_world_visuals, update_camera,
+    update_dialogue_panel, update_interaction_menu, update_occluding_world_visuals,
 };
 use crate::simulation::{
     advance_online_npc_actions, advance_runtime_progression, collect_events, prime_viewer_state,
@@ -89,22 +89,30 @@ impl Plugin for ViewerAppPlugin {
                 sync_ai_snapshot,
                 handle_keyboard_input,
                 handle_mouse_wheel_zoom,
-                update_view_scale,
                 handle_camera_pan,
                 update_camera,
+                sync_world_visuals,
+                update_occluding_world_visuals,
                 handle_mouse_input,
                 handle_interaction_menu_buttons,
                 tick_runtime,
                 advance_runtime_progression,
                 collect_events,
                 refresh_interaction_prompt,
+            )
+                .chain(),
+        )
+        .add_systems(
+            Update,
+            (
                 sync_actor_labels,
                 crate::hud::update_hud,
                 update_interaction_menu,
                 update_dialogue_panel,
                 draw_world,
             )
-                .chain(),
+                .chain()
+                .after(update_occluding_world_visuals),
         );
     }
 }

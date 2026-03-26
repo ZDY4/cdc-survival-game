@@ -86,17 +86,11 @@ describe("narrativeMenuSelfTest", () => {
     expect(result.summary).toContain(EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT);
   });
 
-  it("accepts disabled draft creation when no workspace is active", async () => {
-    inspectEditorMenuCommandMock.mockImplementation((commandId: string) => {
-      if (
-        commandId === EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT ||
-        commandId === EDITOR_MENU_COMMANDS.NARRATIVE_NEW_PROJECT_BRIEF
-      ) {
-        return { reason: "disabled", sourceId: "narrative-source" };
-      }
-
-      return { reason: "enabled", sourceId: `source-${commandId}` };
-    });
+  it("expects draft creation commands to stay enabled when no workspace is active", async () => {
+    inspectEditorMenuCommandMock.mockImplementation((commandId: string) => ({
+      reason: "enabled",
+      sourceId: `source-${commandId}`,
+    }));
     handleEditorMenuCommandMock.mockResolvedValue({ ok: true });
 
     const result = await runNarrativeMenuSelfTest({

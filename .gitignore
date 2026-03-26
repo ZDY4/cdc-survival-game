@@ -55,6 +55,17 @@ tools/tauri_editor/coverage/
 tools/tauri_editor/playwright-report/
 tools/tauri_editor/src-tauri/target/
 tools/tauri_editor/test-results/
+tools/narrative_lab/node_modules/
+tools/narrative_lab/dist/
+tools/narrative_lab/.vite/
+tools/narrative_lab/coverage/
+tools/narrative_lab/playwright-report/
+tools/narrative_lab/src-tauri/target/
+tools/narrative_lab/test-results/
+tools/editor_shared/node_modules/
+tools/editor_shared/dist/
+tools/editor_shared/.vite/
+tools/editor_shared/coverage/
 tools/npm-cache/
 native/jps_extension/.vs/
 native/jps_extension/build/
@@ -69,6 +80,10 @@ native/jps_extension/build_nmake/
 # Local environment files
 tools/tauri_editor/.env
 tools/tauri_editor/.env.*
+tools/narrative_lab/.env
+tools/narrative_lab/.env.*
+tools/editor_shared/.env
+tools/editor_shared/.env.*
 
 # Rust lockfiles should be versioned for app crates
 !rust/Cargo.lock

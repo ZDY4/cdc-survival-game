@@ -2,13 +2,14 @@
   "distances": {
     "factory_forest": 2.0,
     "street_a_supermarket": 0.5,
-    "safehouse_street_b": 0.5,
     "street_a_hospital": 1.0,
     "street_a_factory": 1.5,
     "subway_ruins": 1.0,
     "street_b_subway": 1.0,
-    "safehouse_street_a": 0.5,
-    "street_b_school": 0.5
+    "street_b_school": 0.5,
+    "survivor_outpost_01_street_a": 0.5,
+    "survivor_outpost_01_survivor_outpost_01_perimeter": 0.2,
+    "survivor_outpost_01_perimeter_street_b": 0.3
   },
   "connections": {
     "subway": [
@@ -22,7 +23,7 @@
       "street_a"
     ],
     "street_b": [
-      "safehouse",
+      "survivor_outpost_01_perimeter",
       "subway",
       "school"
     ],
@@ -33,12 +34,16 @@
       "street_a",
       "forest"
     ],
-    "safehouse": [
+    "survivor_outpost_01": [
       "street_a",
+      "survivor_outpost_01_perimeter"
+    ],
+    "survivor_outpost_01_perimeter": [
+      "survivor_outpost_01",
       "street_b"
     ],
     "street_a": [
-      "safehouse",
+      "survivor_outpost_01",
       "supermarket",
       "hospital",
       "factory"
@@ -57,17 +62,18 @@
     "street_b": 3,
     "forest": 2,
     "factory": 4,
-    "safehouse": 0,
+    "survivor_outpost_01": 0,
+    "survivor_outpost_01_perimeter": 2,
     "street_a": 2,
     "hospital": 4,
     "ruins": 5
   },
   "overworld_walkable_cells": [
     [0, 0],
-    [-1, 0],
-    [-2, 0],
     [1, 0],
     [2, 0],
+    [-1, 0],
+    [-2, 0],
     [-3, 0],
     [-4, 0],
     [-2, 1],

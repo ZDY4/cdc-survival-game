@@ -3,13 +3,6 @@ mod ai_provider;
 mod ai_review;
 mod ai_settings;
 mod editor_menu;
-mod narrative_app_settings;
-mod narrative_context;
-mod narrative_provider;
-mod narrative_review;
-mod narrative_sync;
-mod narrative_templates;
-mod narrative_workspace;
 mod quest_workspace;
 
 use std::{
@@ -31,22 +24,6 @@ use crate::ai_provider::{
     generate_dialogue_draft, generate_quest_draft, test_ai_provider,
 };
 use crate::ai_settings::{load_ai_settings, save_ai_settings};
-use crate::narrative_app_settings::{
-    load_narrative_app_settings, save_narrative_app_settings,
-};
-use crate::narrative_provider::{
-    generate_narrative_draft, revise_narrative_draft,
-};
-use crate::narrative_sync::{
-    create_cloud_workspace, export_project_context_snapshot, list_cloud_workspaces,
-    load_narrative_sync_settings, save_narrative_sync_settings, sync_narrative_workspace,
-    upload_project_context_snapshot,
-};
-use crate::narrative_workspace::{
-    create_narrative_document, delete_narrative_document, load_narrative_document,
-    load_narrative_workspace, prepare_structuring_bundle, save_narrative_document,
-    summarize_narrative_document,
-};
 use crate::quest_workspace::{
     delete_quest_document, load_quest_workspace, save_quest_documents, validate_quest_document,
 };
@@ -107,8 +84,8 @@ const DEFAULT_KNOWN_SUBTYPES: &[&str] = &[
 ];
 const DEFAULT_DIALOG_NODE_TYPES: &[&str] = &["dialog", "choice", "condition", "action", "end"];
 const DEFAULT_BUILDING_PREFABS: &[&str] = &[
-    "safehouse_house",
-    "safehouse_upper_room",
+    "survivor_outpost_01_dormitory",
+    "survivor_outpost_01_gatehouse",
     "street_block",
     "warehouse_shell",
 ];
@@ -2243,33 +2220,15 @@ pub fn run() {
             validate_quest_document,
             save_quest_documents,
             delete_quest_document,
-            load_narrative_workspace,
-            load_narrative_document,
-            save_narrative_document,
-            create_narrative_document,
-            delete_narrative_document,
-            summarize_narrative_document,
-            prepare_structuring_bundle,
-            load_narrative_sync_settings,
-            save_narrative_sync_settings,
-            list_cloud_workspaces,
-            create_cloud_workspace,
-            sync_narrative_workspace,
-            export_project_context_snapshot,
-            upload_project_context_snapshot,
             load_map_workspace,
             validate_map_document,
             save_map_documents,
             delete_map_document,
             load_ai_settings,
             save_ai_settings,
-            load_narrative_app_settings,
-            save_narrative_app_settings,
             test_ai_provider,
             generate_dialogue_draft,
-            generate_quest_draft,
-            generate_narrative_draft,
-            revise_narrative_draft
+            generate_quest_draft
         ])
         .run(tauri::generate_context!())
         .expect("error while running CDC content editor");

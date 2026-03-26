@@ -125,7 +125,7 @@ func can_travel_to_outdoor(location_id: String, apply_travel_costs: bool = true)
 	if current.is_empty():
 		current = str(gs.player_position).strip_edges()
 	if current.is_empty():
-		current = "safehouse"
+		current = "survivor_outpost_01"
 
 	if apply_travel_costs and location_id == current:
 		return {"success": false, "message": "你已经在这里了。"}
@@ -157,7 +157,7 @@ func travel_to(location_id: String, apply_travel_costs: bool = true) -> bool:
 	if current.is_empty():
 		current = str(gs.player_position).strip_edges()
 	if current.is_empty():
-		current = "safehouse"
+		current = "survivor_outpost_01"
 
 	if apply_travel_costs:
 		var travel_cost := _calculate_travel_cost(current, location_id)
@@ -222,7 +222,7 @@ func exit_current_subscene_to_outdoor() -> bool:
 	if target_outdoor.is_empty():
 		target_outdoor = get_parent_outdoor_location_id(gs.current_subscene_location_id)
 	if target_outdoor.is_empty():
-		target_outdoor = "safehouse"
+		target_outdoor = "survivor_outpost_01"
 
 	var target_spawn := str(gs.return_outdoor_spawn_id).strip_edges()
 	if target_spawn.is_empty():
@@ -487,7 +487,8 @@ func _get_travel_distance(from: String, to: String) -> float:
 
 func _get_direct_distance(from: String, to: String) -> float:
 	var location_coords = {
-		"safehouse": Vector2(400, 300),
+		"survivor_outpost_01": Vector2(400, 300),
+		"survivor_outpost_01_perimeter": Vector2(470, 300),
 		"street_a": Vector2(300, 250),
 		"street_b": Vector2(500, 250),
 		"supermarket": Vector2(200, 200),

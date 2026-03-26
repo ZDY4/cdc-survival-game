@@ -68,23 +68,21 @@ pub(crate) fn sync_npc_runtime_presence(
     settlements: Option<Res<SettlementDefinitions>>,
     mut reservations: ResMut<SmartObjectReservations>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
-    mut query: Query<
-        (
-            Entity,
-            &CharacterDefinitionId,
-            &DisplayName,
-            &mut GridPosition,
-            &mut NpcLifeState,
-            &NeedState,
-            &ScheduleState,
-            &CurrentPlan,
-            &CurrentAction,
-            &ReservationState,
-            &mut RuntimeExecutionState,
-            &mut BackgroundLifeState,
-            Option<&RuntimeActorLink>,
-        ),
-    >,
+    mut query: Query<(
+        Entity,
+        &CharacterDefinitionId,
+        &DisplayName,
+        &mut GridPosition,
+        &mut NpcLifeState,
+        &NeedState,
+        &ScheduleState,
+        &CurrentPlan,
+        &CurrentAction,
+        &ReservationState,
+        &mut RuntimeExecutionState,
+        &mut BackgroundLifeState,
+        Option<&RuntimeActorLink>,
+    )>,
 ) {
     let (Some(definitions), Some(settlements)) = (definitions, settlements) else {
         return;
@@ -96,7 +94,8 @@ pub(crate) fn sync_npc_runtime_presence(
         .actors
         .iter()
         .filter_map(|actor| {
-            actor.definition_id
+            actor
+                .definition_id
                 .as_ref()
                 .map(|definition_id| (definition_id.as_str().to_string(), actor.actor_id))
         })
@@ -118,10 +117,7 @@ pub(crate) fn sync_npc_runtime_presence(
         runtime_link,
     ) in &mut query
     {
-        let Some(settlement) = settlements
-            .0
-            .get(&SettlementId(life.settlement_id.clone()))
-        else {
+        let Some(settlement) = settlements.0.get(&SettlementId(life.settlement_id.clone())) else {
             continue;
         };
         let should_be_online = active_map_id
@@ -146,7 +142,9 @@ pub(crate) fn sync_npc_runtime_presence(
                 .get(definition_id.0.as_str())
                 .copied()
             {
-                commands.entity(entity).insert(RuntimeActorLink { actor_id });
+                commands
+                    .entity(entity)
+                    .insert(RuntimeActorLink { actor_id });
                 actor_id
             } else {
                 let Some(definition) = definitions.0.get(&definition_id.0) else {
@@ -162,9 +160,10 @@ pub(crate) fn sync_npc_runtime_presence(
                     definition,
                     spawn_grid,
                 );
-                runtime_actors_by_definition
-                    .insert(definition_id.0.as_str().to_string(), actor_id);
-                commands.entity(entity).insert(RuntimeActorLink { actor_id });
+                runtime_actors_by_definition.insert(definition_id.0.as_str().to_string(), actor_id);
+                commands
+                    .entity(entity)
+                    .insert(RuntimeActorLink { actor_id });
                 if let Some(background) = background_state.0.as_ref() {
                     runtime_state
                         .runtime
@@ -187,19 +186,21 @@ pub(crate) fn sync_npc_runtime_presence(
                 let mut exported = runtime_state
                     .runtime
                     .export_actor_background_state(link.actor_id)
-                    .unwrap_or_else(|| build_background_state(
-                        definition_id.0.as_str(),
-                        display_name.0.as_str(),
-                        settlement.map_id.clone(),
-                        grid_position.0,
-                        &life,
-                        &need,
-                        &schedule,
-                        &current_plan,
-                        &current_action,
-                        &reservation_state,
-                        &runtime_execution,
-                    ));
+                    .unwrap_or_else(|| {
+                        build_background_state(
+                            definition_id.0.as_str(),
+                            display_name.0.as_str(),
+                            settlement.map_id.clone(),
+                            grid_position.0,
+                            &life,
+                            &need,
+                            &schedule,
+                            &current_plan,
+                            &current_action,
+                            &reservation_state,
+                            &runtime_execution,
+                        )
+                    });
                 exported.definition_id = Some(definition_id.0.as_str().to_string());
                 exported.display_name = display_name.0.clone();
                 exported.map_id = Some(settlement.map_id.clone());
@@ -260,20 +261,18 @@ pub(crate) fn advance_online_npc_actions(
     mut world_alert: ResMut<WorldAlertState>,
     mut reservations: ResMut<SmartObjectReservations>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
-    mut query: Query<
-        (
-            Entity,
-            &CharacterDefinitionId,
-            &mut GridPosition,
-            &mut NpcLifeState,
-            &mut NeedState,
-            &mut CurrentPlan,
-            &mut CurrentAction,
-            &mut ReservationState,
-            &mut RuntimeExecutionState,
-            &RuntimeActorLink,
-        ),
-    >,
+    mut query: Query<(
+        Entity,
+        &CharacterDefinitionId,
+        &mut GridPosition,
+        &mut NpcLifeState,
+        &mut NeedState,
+        &mut CurrentPlan,
+        &mut CurrentAction,
+        &mut ReservationState,
+        &mut RuntimeExecutionState,
+        &RuntimeActorLink,
+    )>,
 ) {
     let Some(settlements) = settlements else {
         return;
@@ -303,11 +302,13 @@ pub(crate) fn advance_online_npc_actions(
                 life.current_anchor.clone(),
             ));
             if let Some(action) = current_action.0.as_ref() {
-                runtime_state.runtime.push_event(SimulationEvent::NpcActionStarted {
-                    actor_id: runtime_link.actor_id,
-                    action: action.step.action,
-                    phase: action.phase,
-                });
+                runtime_state
+                    .runtime
+                    .push_event(SimulationEvent::NpcActionStarted {
+                        actor_id: runtime_link.actor_id,
+                        action: action.step.action,
+                        phase: action.phase,
+                    });
             }
         }
 
@@ -332,10 +333,7 @@ pub(crate) fn advance_online_npc_actions(
             continue;
         };
 
-        let Some(settlement) = settlements
-            .0
-            .get(&SettlementId(life.settlement_id.clone()))
-        else {
+        let Some(settlement) = settlements.0.get(&SettlementId(life.settlement_id.clone())) else {
             mark_online_replan_failure(
                 &mut reservations,
                 entity,
@@ -384,11 +382,13 @@ pub(crate) fn advance_online_npc_actions(
                     action_state.advance_after_acquire();
                     action_state.phase
                 };
-                runtime_state.runtime.push_event(SimulationEvent::NpcActionPhaseChanged {
-                    actor_id: runtime_link.actor_id,
-                    action: action_key,
-                    phase: next_phase,
-                });
+                runtime_state
+                    .runtime
+                    .push_event(SimulationEvent::NpcActionPhaseChanged {
+                        actor_id: runtime_link.actor_id,
+                        action: action_key,
+                        phase: next_phase,
+                    });
             }
             ActionExecutionPhase::Travel => {
                 let target_grid = target_anchor
@@ -418,13 +418,13 @@ pub(crate) fn advance_online_npc_actions(
                             };
                             action_state.phase
                         };
-                        runtime_state.runtime.push_event(
-                            SimulationEvent::NpcActionPhaseChanged {
+                        runtime_state
+                            .runtime
+                            .push_event(SimulationEvent::NpcActionPhaseChanged {
                                 actor_id: runtime_link.actor_id,
                                 action: action_key,
                                 phase: next_phase,
-                            },
-                        );
+                            });
                     }
                 } else {
                     mark_online_replan_failure(
@@ -450,19 +450,18 @@ pub(crate) fn advance_online_npc_actions(
                         world_alert.active = true;
                     }
                     let next_phase = {
-                        let action_state =
-                            current_action.0.as_mut().expect("online action exists");
+                        let action_state = current_action.0.as_mut().expect("online action exists");
                         action_state.perform_remaining_minutes = 0;
                         action_state.phase = ActionExecutionPhase::ReleaseReservation;
                         action_state.phase
                     };
-                    runtime_state.runtime.push_event(
-                        SimulationEvent::NpcActionPhaseChanged {
+                    runtime_state
+                        .runtime
+                        .push_event(SimulationEvent::NpcActionPhaseChanged {
                             actor_id: runtime_link.actor_id,
                             action: action_key,
                             phase: next_phase,
-                        },
-                    );
+                        });
                 } else {
                     let action_state = current_action.0.as_mut().expect("online action exists");
                     action_state.perform_remaining_minutes -= step_minutes;
@@ -478,33 +477,32 @@ pub(crate) fn advance_online_npc_actions(
                     action_state.phase = ActionExecutionPhase::Complete;
                     action_state.phase
                 };
-                runtime_state.runtime.push_event(SimulationEvent::NpcActionPhaseChanged {
-                    actor_id: runtime_link.actor_id,
-                    action: action_key,
-                    phase: next_phase,
-                });
+                runtime_state
+                    .runtime
+                    .push_event(SimulationEvent::NpcActionPhaseChanged {
+                        actor_id: runtime_link.actor_id,
+                        action: action_key,
+                        phase: next_phase,
+                    });
             }
             ActionExecutionPhase::Complete => {
                 let action = action_key;
                 let mut hunger = need.hunger;
                 let mut energy = need.energy;
                 let mut morale = need.morale;
-                game_core::apply_npc_action_effects(
-                    action,
-                    &mut hunger,
-                    &mut energy,
-                    &mut morale,
-                );
+                game_core::apply_npc_action_effects(action, &mut hunger, &mut energy, &mut morale);
                 need.hunger = hunger;
                 need.energy = energy;
                 need.morale = morale;
                 current_plan.next_index += 1;
                 current_action.0 = None;
                 runtime_execution.last_failure_reason = None;
-                runtime_state.runtime.push_event(SimulationEvent::NpcActionCompleted {
-                    actor_id: runtime_link.actor_id,
-                    action,
-                });
+                runtime_state
+                    .runtime
+                    .push_event(SimulationEvent::NpcActionCompleted {
+                        actor_id: runtime_link.actor_id,
+                        action,
+                    });
                 if current_plan.next_index >= current_plan.steps.len() {
                     life.replan_required = true;
                 }
@@ -661,6 +659,13 @@ pub(crate) fn command_result_status(label: &str, result: SimulationCommandResult
                 }
             )
         }
+        SimulationCommandResult::DialogueState(result) => match result {
+            Ok(state) => format!(
+                "{label}: dialogue node={} finished={}",
+                state.session.current_node_id, state.finished
+            ),
+            Err(error) => format!("{label}: dialogue error={error}"),
+        },
         SimulationCommandResult::OverworldRoute(result) => match result {
             Ok(route) => format!(
                 "{label}: route {} -> {} mins={}",
@@ -672,10 +677,7 @@ pub(crate) fn command_result_status(label: &str, result: SimulationCommandResult
             Ok(state) => format!(
                 "{label}: mode={:?} location={}",
                 state.world_mode,
-                state
-                    .active_location_id
-                    .as_deref()
-                    .unwrap_or("unknown")
+                state.active_location_id.as_deref().unwrap_or("unknown")
             ),
             Err(error) => format!("{label}: world error={error}"),
         },
@@ -685,6 +687,16 @@ pub(crate) fn command_result_status(label: &str, result: SimulationCommandResult
                 context.location_id, context.map_id, context.entry_point_id
             ),
             Err(error) => format!("{label}: transition error={error}"),
+        },
+        SimulationCommandResult::InteractionContext(result) => match result {
+            Ok(context) => format!(
+                "{label}: mode={:?} map={:?} outdoor={:?} subscene={:?}",
+                context.world_mode,
+                context.current_map_id,
+                context.active_outdoor_location_id,
+                context.current_subscene_location_id
+            ),
+            Err(error) => format!("{label}: interaction context error={error}"),
         },
         SimulationCommandResult::None => format!("{label}: ok"),
     }
@@ -736,6 +748,9 @@ fn format_interrupt_reason(reason: Option<AutoMoveInterruptReason>) -> &'static 
     match reason {
         Some(AutoMoveInterruptReason::ReachedGoal) => "reached_goal",
         Some(AutoMoveInterruptReason::EnteredCombat) => "entered_combat",
+        Some(AutoMoveInterruptReason::InteractionTargetUnavailable) => {
+            "interaction_target_unavailable"
+        }
         Some(AutoMoveInterruptReason::ActorNotPlayerControlled) => "actor_not_player_controlled",
         Some(AutoMoveInterruptReason::InputNotAllowed) => "input_not_allowed",
         Some(AutoMoveInterruptReason::TargetOutOfBounds) => "target_out_of_bounds",
@@ -831,12 +846,16 @@ fn mark_online_replan_failure(
     runtime_state
         .runtime
         .clear_actor_autonomous_movement_goal(actor_id);
-    runtime_state.runtime.clear_actor_runtime_action_state(actor_id);
-    runtime_state.runtime.push_event(SimulationEvent::NpcActionFailed {
-        actor_id,
-        action,
-        reason: reason.to_string(),
-    });
+    runtime_state
+        .runtime
+        .clear_actor_runtime_action_state(actor_id);
+    runtime_state
+        .runtime
+        .push_event(SimulationEvent::NpcActionFailed {
+            actor_id,
+            action,
+            reason: reason.to_string(),
+        });
 }
 
 pub(crate) fn viewer_event_entry(event: SimulationEvent, turn_index: u64) -> ViewerEventEntry {
@@ -1106,9 +1125,7 @@ fn format_event_text(event: SimulationEvent) -> String {
         } => format!(
             "returned to overworld actor={:?} location={}",
             actor_id,
-            active_outdoor_location_id
-                .as_deref()
-                .unwrap_or("unknown")
+            active_outdoor_location_id.as_deref().unwrap_or("unknown")
         ),
         SimulationEvent::LocationUnlocked { location_id } => {
             format!("location unlocked {}", location_id)

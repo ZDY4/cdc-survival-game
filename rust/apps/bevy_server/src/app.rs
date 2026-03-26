@@ -5,6 +5,11 @@ use bevy_app::{ScheduleRunnerPlugin, TaskPoolPlugin};
 use bevy_ecs::schedule::IntoScheduleConfigs;
 
 use crate::config::NpcDebugReportState;
+use crate::protocol::{
+    dispatch_protocol_requests, drain_protocol_responses, emit_runtime_protocol_events,
+    RuntimeProtocolPushState, RuntimeProtocolSequence, RuntimeSnapshotStore,
+    ServerProtocolRequest, ServerProtocolResponse,
+};
 use crate::reporting::{report_npc_life_debug_snapshot, report_spawned_characters_and_exit};
 use crate::startup::startup_demo;
 use game_bevy::{
@@ -17,8 +22,8 @@ use game_bevy::{
     spawn_characters_from_definition, CharacterDefinitionPath, CharacterSpawnRejected,
     EffectDefinitionPath, ItemDefinitionPath, MapDefinitionPath, NpcLifePlugin,
     OverworldDefinitionPath, QuestDefinitionPath, RecipeDefinitionPath, RuntimeStartupConfigPath,
-    SettlementDefinitionPath, SettlementSimulationPlugin, ShopDefinitionPath,
-    SkillDefinitionPath, SkillTreeDefinitionPath, SpawnCharacterRequest,
+    SettlementDefinitionPath, SettlementSimulationPlugin, ShopDefinitionPath, SkillDefinitionPath,
+    SkillTreeDefinitionPath, SpawnCharacterRequest,
 };
 use game_core::GameCorePlugin;
 use game_data::GameDataPlugin;
@@ -46,6 +51,9 @@ impl Plugin for ServerAppPlugin {
             .insert_resource(ShopDefinitionPath::default())
             .insert_resource(RuntimeStartupConfigPath::default())
             .insert_resource(NpcDebugReportState::default())
+            .insert_resource(RuntimeSnapshotStore::default())
+            .insert_resource(RuntimeProtocolPushState::default())
+            .insert_resource(RuntimeProtocolSequence::default())
             .add_plugins(TaskPoolPlugin::default())
             .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_millis(16)))
             .add_plugins((
@@ -57,6 +65,8 @@ impl Plugin for ServerAppPlugin {
             ))
             .add_message::<SpawnCharacterRequest>()
             .add_message::<CharacterSpawnRejected>()
+            .add_message::<ServerProtocolRequest>()
+            .add_message::<ServerProtocolResponse>()
             .add_systems(
                 Startup,
                 (
@@ -79,6 +89,9 @@ impl Plugin for ServerAppPlugin {
             .add_systems(
                 Update,
                 (
+                    dispatch_protocol_requests,
+                    emit_runtime_protocol_events,
+                    drain_protocol_responses,
                     spawn_characters_from_definition,
                     report_npc_life_debug_snapshot,
                     report_spawned_characters_and_exit,

@@ -17,7 +17,7 @@ pub struct DialogueOption {
     pub extra: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DialogueAction {
     #[serde(default, rename = "type")]
     pub action_type: String,

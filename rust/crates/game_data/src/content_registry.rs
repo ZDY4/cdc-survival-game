@@ -11,11 +11,10 @@ use crate::{
     load_item_library, load_map_library, load_overworld_library_with_catalog, load_quest_library,
     load_recipe_library, load_settlement_library, load_shop_library, load_skill_library,
     load_skill_tree_library, CharacterDefinition, DialogueRuleDefinition,
-    DialogueRuleValidationCatalog, ItemDefinition, ItemFragment, MapDefinition,
-    MapObjectKind, OverworldDefinition, OverworldValidationCatalog, QuestDefinition,
-    RecipeDefinition, RecipeValidationCatalog, SettlementDefinition, ShopDefinition,
-    ShopValidationCatalog, SkillDefinition, SkillTreeDefinition, SkillTreeValidationCatalog,
-    SkillValidationCatalog,
+    DialogueRuleValidationCatalog, ItemDefinition, ItemFragment, MapDefinition, MapObjectKind,
+    OverworldDefinition, OverworldValidationCatalog, QuestDefinition, RecipeDefinition,
+    RecipeValidationCatalog, SettlementDefinition, ShopDefinition, ShopValidationCatalog,
+    SkillDefinition, SkillTreeDefinition, SkillTreeValidationCatalog, SkillValidationCatalog,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

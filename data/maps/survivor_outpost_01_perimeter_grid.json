@@ -1,0 +1,206 @@
+{
+  "id": "survivor_outpost_01_perimeter_grid",
+  "name": "survivor outpost 01 perimeter grid",
+  "size": {
+    "width": 20,
+    "height": 20
+  },
+  "default_level": 0,
+  "levels": [
+    {
+      "y": 0,
+      "cells": [
+        { "x": 4, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
+        { "x": 5, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
+        { "x": 6, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
+        { "x": 10, "z": 5, "blocks_movement": true, "blocks_sight": true, "terrain": "wreckage" },
+        { "x": 11, "z": 5, "blocks_movement": true, "blocks_sight": true, "terrain": "wreckage" },
+        { "x": 12, "z": 5, "blocks_movement": true, "blocks_sight": true, "terrain": "wreckage" },
+        { "x": 13, "z": 14, "blocks_movement": true, "blocks_sight": false, "terrain": "sandbag" },
+        { "x": 14, "z": 14, "blocks_movement": true, "blocks_sight": false, "terrain": "sandbag" },
+        { "x": 15, "z": 14, "blocks_movement": true, "blocks_sight": false, "terrain": "sandbag" }
+      ]
+    }
+  ],
+  "entry_points": [
+    {
+      "id": "default_entry",
+      "grid": {
+        "x": 2,
+        "y": 0,
+        "z": 10
+      },
+      "facing": null
+    }
+  ],
+  "objects": [
+    {
+      "object_id": "survivor_outpost_01_perimeter_barricade",
+      "kind": "building",
+      "anchor": { "x": 4, "y": 0, "z": 7 },
+      "footprint": { "width": 4, "height": 2 },
+      "rotation": "east",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "building": { "prefab_id": "survivor_outpost_01_perimeter_barricade" },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_bus_wreck",
+      "kind": "building",
+      "anchor": { "x": 10, "y": 0, "z": 4 },
+      "footprint": { "width": 3, "height": 2 },
+      "rotation": "north",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "building": { "prefab_id": "survivor_outpost_01_bus_wreck" },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_return_gate",
+      "kind": "interactive",
+      "anchor": { "x": 2, "y": 0, "z": 10 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "west",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": {
+          "display_name": "返回幸存者据点01",
+          "interaction_distance": 1.4,
+          "interaction_kind": "enter_outdoor_location",
+          "target_id": "survivor_outpost_01",
+          "options": []
+        },
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_to_street_b",
+      "kind": "interactive",
+      "anchor": { "x": 18, "y": 0, "z": 10 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "east",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": {
+          "display_name": "前往废弃街道B",
+          "interaction_distance": 1.4,
+          "interaction_kind": "enter_outdoor_location",
+          "target_id": "street_b",
+          "options": []
+        },
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_supply_box",
+      "kind": "pickup",
+      "anchor": { "x": 6, "y": 0, "z": 12 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1007", "min_count": 1, "max_count": 3 },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_scrap_cache",
+      "kind": "pickup",
+      "anchor": { "x": 11, "y": 0, "z": 15 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1010", "min_count": 2, "max_count": 5 },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_spawn_walker",
+      "kind": "ai_spawn",
+      "anchor": { "x": 15, "y": 0, "z": 4 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "survivor_outpost_01_perimeter_spawn_walker",
+          "character_id": "zombie_walker",
+          "auto_spawn": true,
+          "respawn_enabled": true,
+          "respawn_delay": 24.0,
+          "spawn_radius": 2.5
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_spawn_runner",
+      "kind": "ai_spawn",
+      "anchor": { "x": 16, "y": 0, "z": 15 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "survivor_outpost_01_perimeter_spawn_runner",
+          "character_id": "zombie_runner",
+          "auto_spawn": true,
+          "respawn_enabled": true,
+          "respawn_delay": 28.0,
+          "spawn_radius": 2.5
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_spawn_brute",
+      "kind": "ai_spawn",
+      "anchor": { "x": 12, "y": 0, "z": 3 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "survivor_outpost_01_perimeter_spawn_brute",
+          "character_id": "zombie_brute",
+          "auto_spawn": false,
+          "respawn_enabled": true,
+          "respawn_delay": 40.0,
+          "spawn_radius": 1.5
+        }
+      }
+    }
+  ]
+}

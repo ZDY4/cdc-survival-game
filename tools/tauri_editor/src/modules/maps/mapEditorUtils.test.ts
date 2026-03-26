@@ -75,7 +75,7 @@ describe("mapEditorUtils", () => {
       blocks_sight: true,
       props: {
         building: {
-          prefab_id: "safehouse_house",
+          prefab_id: "survivor_outpost_01_dormitory",
         },
       },
     } as const;

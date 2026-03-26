@@ -1,0 +1,63 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/locations/game_subscene_base.gd" id="1_script"]
+[ext_resource type="Script" path="res://systems/camera_controller_3d.gd" id="2_camera"]
+[ext_resource type="Script" path="res://systems/spawn/player_spawn_point.gd" id="3_player_spawn"]
+[ext_resource type="PackedScene" path="res://modules/interaction/outdoor_return_exit.tscn" id="4_return_exit"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(14, 0.2, 14)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.301961, 0.282353, 0.266667, 1)
+roughness = 0.85
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(14, 0.2, 14)
+
+[sub_resource type="Environment" id="Environment_subscene"]
+background_mode = 1
+background_color = Color(0.101961, 0.101961, 0.117647, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.54902, 0.54902, 0.6, 1)
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_subscene"]
+
+[node name="SafehouseInterior" type="Node3D"]
+script = ExtResource("1_script")
+location_id = "survivor_outpost_01_interior"
+scene_kind = "interior"
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 10, 0)
+shadow_enabled = true
+
+[node name="CameraController3D" type="Node3D" parent="."]
+script = ExtResource("2_camera")
+
+[node name="GridFloor" type="StaticBody3D" parent="."]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="GridFloor"]
+mesh = SubResource("BoxMesh_floor")
+material_override = SubResource("StandardMaterial3D_floor")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GridFloor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_subscene")
+camera_attributes = SubResource("CameraAttributesPractical_subscene")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0, 0.5)
+script = ExtResource("3_player_spawn")
+spawn_id = "default_spawn"
+
+[node name="OutdoorReturnExit" parent="." instance=ExtResource("4_return_exit")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0, 4.5)
+prompt_text = "离开房间"
+
+[node name="Label3D" type="Label3D" parent="."]
+position = Vector3(0, 1.8, -2)
+billboard = 1
+text = "幸存者据点01室内"

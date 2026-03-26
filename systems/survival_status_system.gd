@@ -187,7 +187,7 @@ func _get_location_infection_risk() -> float:
 		"subway": return 0.3
 		"factory": return 0.25
 		"forest": return 0.1
-		"safehouse": return 0.05
+		"survivor_outpost_01": return 0.05
 		_: return 0.1
 
 func _apply_infection_effects():

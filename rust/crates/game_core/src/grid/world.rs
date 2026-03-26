@@ -4,6 +4,7 @@ use game_data::{
     expand_object_footprint, object_effectively_blocks_movement, ActorId, GridCoord,
     MapCellDefinition, MapDefinition, MapId, MapObjectDefinition, MapSize, WorldCoord,
 };
+use serde::{Deserialize, Serialize};
 
 use super::math::{grid_to_world, world_to_grid, DEFAULT_GRID_SIZE};
 
@@ -32,6 +33,39 @@ pub struct GridWorld {
     map_blocked_cells: HashSet<GridCoord>,
     topology_version: u64,
     runtime_obstacle_version: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GridStaticObstacleSnapshot {
+    pub grid: GridCoord,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GridRuntimeActorCellSnapshot {
+    pub actor_id: ActorId,
+    pub grid: GridCoord,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct GridCellSnapshotEntry {
+    pub grid: GridCoord,
+    pub cell: MapCellDefinition,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct GridWorldSnapshot {
+    pub grid_size: f32,
+    pub manual_static_obstacles: Vec<GridStaticObstacleSnapshot>,
+    pub runtime_actor_cells: Vec<GridRuntimeActorCellSnapshot>,
+    pub map_id: Option<MapId>,
+    pub map_size: Option<MapSize>,
+    pub default_level: Option<i32>,
+    pub levels: Vec<i32>,
+    pub map_cells: Vec<GridCellSnapshotEntry>,
+    pub map_objects: Vec<MapObjectDefinition>,
+    pub topology_version: u64,
+    pub runtime_obstacle_version: u64,
 }
 
 impl Default for GridWorld {
@@ -417,5 +451,108 @@ impl GridWorld {
 
     pub fn runtime_obstacle_version(&self) -> u64 {
         self.runtime_obstacle_version
+    }
+
+    pub(crate) fn save_snapshot(&self) -> GridWorldSnapshot {
+        let mut manual_static_obstacles = self
+            .manual_static_obstacle_ref_counts
+            .iter()
+            .map(|(grid, count)| GridStaticObstacleSnapshot {
+                grid: *grid,
+                count: *count,
+            })
+            .collect::<Vec<_>>();
+        manual_static_obstacles.sort_by_key(|entry| (entry.grid.y, entry.grid.z, entry.grid.x));
+
+        let mut runtime_actor_cells = self
+            .runtime_actor_cells
+            .iter()
+            .map(|(actor_id, grid)| GridRuntimeActorCellSnapshot {
+                actor_id: *actor_id,
+                grid: *grid,
+            })
+            .collect::<Vec<_>>();
+        runtime_actor_cells.sort_by_key(|entry| entry.actor_id);
+
+        GridWorldSnapshot {
+            grid_size: self.grid_size,
+            manual_static_obstacles,
+            runtime_actor_cells,
+            map_id: self.map_id.clone(),
+            map_size: self.map_size,
+            default_level: self.default_level,
+            levels: self.levels(),
+            map_cells: self
+                .map_cell_entries()
+                .into_iter()
+                .map(|(grid, cell)| GridCellSnapshotEntry { grid, cell })
+                .collect(),
+            map_objects: self.map_object_entries(),
+            topology_version: self.topology_version,
+            runtime_obstacle_version: self.runtime_obstacle_version,
+        }
+    }
+
+    pub(crate) fn load_snapshot(&mut self, snapshot: GridWorldSnapshot) {
+        self.grid_size = snapshot.grid_size;
+        self.manual_static_obstacle_ref_counts = snapshot
+            .manual_static_obstacles
+            .into_iter()
+            .map(|entry| (entry.grid, entry.count))
+            .collect();
+        self.runtime_occupants_by_cell.clear();
+        self.runtime_actor_cells = snapshot
+            .runtime_actor_cells
+            .into_iter()
+            .map(|entry| {
+                self.runtime_occupants_by_cell
+                    .entry(entry.grid)
+                    .or_default()
+                    .insert(entry.actor_id);
+                (entry.actor_id, entry.grid)
+            })
+            .collect();
+        self.map_id = snapshot.map_id;
+        self.map_size = snapshot.map_size;
+        self.default_level = snapshot.default_level;
+        self.levels = snapshot.levels.into_iter().collect();
+        self.map_cells = snapshot
+            .map_cells
+            .into_iter()
+            .map(|entry| (entry.grid, entry.cell))
+            .collect();
+        self.map_objects = snapshot
+            .map_objects
+            .into_iter()
+            .map(|object| (object.object_id.clone(), object))
+            .collect();
+        self.map_object_cells.clear();
+        self.map_blocked_cells.clear();
+
+        for (grid, cell) in &self.map_cells {
+            if cell.blocks_movement {
+                self.map_blocked_cells.insert(*grid);
+            }
+        }
+
+        for object in self.map_objects.values() {
+            for cell in expand_object_footprint(object) {
+                self.map_object_cells
+                    .entry(cell)
+                    .or_default()
+                    .push(object.object_id.clone());
+                if object_effectively_blocks_movement(object) {
+                    self.map_blocked_cells.insert(cell);
+                }
+            }
+        }
+
+        for object_ids in self.map_object_cells.values_mut() {
+            object_ids.sort();
+            object_ids.dedup();
+        }
+
+        self.topology_version = snapshot.topology_version;
+        self.runtime_obstacle_version = snapshot.runtime_obstacle_version;
     }
 }

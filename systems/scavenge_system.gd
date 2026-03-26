@@ -113,7 +113,7 @@ const LOCATION_LOOT_TABLES: Dictionary = {
 		"base_quality": 0.9,
 		"search_difficulty": 0.7
 	},
-	"safehouse": {
+	"survivor_outpost_01": {
 		"common": ["wood", "cloth", "nails"],
 		"uncommon": ["food", "water", "basic_tools"],
 		"rare": ["personal_cache"],
@@ -355,7 +355,7 @@ func _calculate_noise_risk(config: Dictionary) -> Dictionary:
 		"hospital": 1.0,
 		"factory": 1.2,
 		"subway": 1.5,  # 封闭空间噪音更大
-		"safehouse": 0.3
+		"survivor_outpost_01": 0.3
 	}
 	
 	var location_modifier = location_modifiers.get(config.location, 1.0)

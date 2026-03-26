@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::*;
+use std::path::PathBuf;
 
 use crate::config::{EconomySmokeReport, ServerConfig, ServerSimulationRuntime};
 use game_bevy::bootstrap::build_default_startup_seed;
@@ -9,7 +10,7 @@ use game_bevy::{
     SpawnCharacterRequest,
 };
 use game_core::SimulationRuntime;
-use game_data::{CharacterId, GridCoord};
+use game_data::{load_dialogue_library, load_dialogue_rule_library, CharacterId, GridCoord};
 
 pub fn startup_demo(
     mut commands: Commands,
@@ -102,6 +103,15 @@ pub fn startup_demo(
     runtime.set_recipe_library(recipes.0.clone());
     runtime.set_quest_library(quests.0.clone());
     runtime.set_shop_library(shops.0.clone());
+    let dialogue_data_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data");
+    let dialogue_library = load_dialogue_library(dialogue_data_root.join("dialogues"))
+        .unwrap_or_else(|error| panic!("failed to load dialogue library for bevy_server: {error}"));
+    let dialogue_rule_library =
+        load_dialogue_rule_library(dialogue_data_root.join("dialogue_rules"), None).unwrap_or_else(
+            |error| panic!("failed to load dialogue rule library for bevy_server: {error}"),
+        );
+    runtime.set_dialogue_library(dialogue_library);
+    runtime.set_dialogue_rule_library(dialogue_rule_library);
     let snapshot = runtime.snapshot();
     println!(
         "initialized simulation runtime map_id={} size={}x{} levels={:?}",
@@ -321,10 +331,10 @@ mod tests {
         CharacterResourcePool, EffectLibrary, GridCoord, ItemLibrary, MapBuildingProps,
         MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
         MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
-        MapRotation, MapSize, NeedProfile, NpcRole, OverworldCellDefinition,
-        OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet, QuestLibrary,
-        RecipeLibrary, ScheduleBlock, ScheduleDay, ShopLibrary, SkillLibrary, SkillTreeLibrary,
+        MapRotation, MapSize, NeedProfile, NpcRole, OverworldCellDefinition, OverworldDefinition,
+        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
+        OverworldLocationKind, OverworldTravelRuleSet, QuestLibrary, RecipeLibrary, ScheduleBlock,
+        ScheduleDay, ShopLibrary, SkillLibrary, SkillTreeLibrary,
     };
     use std::collections::BTreeMap;
 
@@ -383,7 +393,7 @@ mod tests {
         app.insert_resource(QuestDefinitions(QuestLibrary::default()));
         app.insert_resource(ShopDefinitions(ShopLibrary::default()));
         app.insert_resource(RuntimeStartupConfig {
-            startup_map: Some(MapId("safehouse_grid".into())),
+            startup_map: Some(MapId("survivor_outpost_01_grid".into())),
         });
         app.add_message::<SpawnCharacterRequest>();
         app.add_systems(Startup, startup_demo);
@@ -395,7 +405,7 @@ mod tests {
 
         assert_eq!(
             snapshot.grid.map_id.as_ref().map(MapId::as_str),
-            Some("safehouse_grid")
+            Some("survivor_outpost_01_grid")
         );
         assert_eq!(snapshot.grid.map_width, Some(12));
         assert_eq!(snapshot.grid.map_height, Some(12));
@@ -426,7 +436,7 @@ mod tests {
         let contains_guard = captured
             .0
             .iter()
-            .any(|request| request.definition_id.as_str() == "safehouse_guard_liu");
+            .any(|request| request.definition_id.as_str() == "survivor_outpost_01_guard_liu");
         assert!(
             contains_guard,
             "life-enabled npc should be queued for debug"
@@ -521,7 +531,7 @@ mod tests {
                 "行尸",
             ),
             sample_definition_with_life(
-                "safehouse_guard_liu",
+                "survivor_outpost_01_guard_liu",
                 CharacterArchetype::Npc,
                 CharacterDisposition::Friendly,
                 "survivor",
@@ -535,8 +545,8 @@ mod tests {
 
     fn sample_map_library() -> MapLibrary {
         let definition = MapDefinition {
-            id: MapId("safehouse_grid".into()),
-            name: "Safehouse".into(),
+            id: MapId("survivor_outpost_01_grid".into()),
+            name: "Survivor Outpost 01".into(),
             size: MapSize {
                 width: 12,
                 height: 12,
@@ -578,7 +588,7 @@ mod tests {
                 blocks_sight: true,
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
-                        prefab_id: "safehouse_house".into(),
+                        prefab_id: "survivor_outpost_01_dormitory".into(),
                         extra: BTreeMap::new(),
                     }),
                     ..MapObjectProps::default()
@@ -595,17 +605,25 @@ mod tests {
         let definition = OverworldDefinition {
             id: OverworldId("main_overworld".into()),
             locations: vec![
-                sample_overworld_location("safehouse", "safehouse_grid", 0, 0),
-                sample_overworld_location("street_a", "safehouse_grid", -1, 0),
-                sample_overworld_location("street_b", "safehouse_grid", 1, 0),
+                sample_overworld_location("survivor_outpost_01", "survivor_outpost_01_grid", 0, 0),
+                sample_overworld_location(
+                    "survivor_outpost_01_perimeter",
+                    "survivor_outpost_01_grid",
+                    0,
+                    1,
+                ),
+                sample_overworld_location("street_a", "survivor_outpost_01_grid", -1, 0),
+                sample_overworld_location("street_b", "survivor_outpost_01_grid", 1, 0),
                 OverworldLocationDefinition {
-                    id: OverworldLocationId("safehouse_interior".into()),
-                    name: "Safehouse Interior".into(),
+                    id: OverworldLocationId("survivor_outpost_01_interior".into()),
+                    name: "Survivor Outpost 01 Interior".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Interior,
-                    map_id: MapId("safehouse_grid".into()),
+                    map_id: MapId("survivor_outpost_01_interior_grid".into()),
                     entry_point_id: "default_entry".into(),
-                    parent_outdoor_location_id: Some(OverworldLocationId("safehouse".into())),
+                    parent_outdoor_location_id: Some(OverworldLocationId(
+                        "survivor_outpost_01".into(),
+                    )),
                     return_entry_point_id: Some("default_entry".into()),
                     default_unlocked: true,
                     visible: false,
@@ -616,8 +634,9 @@ mod tests {
                 },
             ],
             edges: vec![
-                sample_overworld_edge("safehouse", "street_a"),
-                sample_overworld_edge("safehouse", "street_b"),
+                sample_overworld_edge("survivor_outpost_01", "street_a"),
+                sample_overworld_edge("survivor_outpost_01", "street_b"),
+                sample_overworld_edge("survivor_outpost_01", "survivor_outpost_01_perimeter"),
             ],
             walkable_cells: vec![
                 OverworldCellDefinition {
@@ -632,6 +651,11 @@ mod tests {
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(1, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                },
+                OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 1),
                     terrain: "road".into(),
                     extra: BTreeMap::new(),
                 },
@@ -759,7 +783,7 @@ mod tests {
     ) -> CharacterDefinition {
         CharacterDefinition {
             life: Some(CharacterLifeProfile {
-                settlement_id: "safehouse_survivor_outpost".to_string(),
+                settlement_id: "survivor_outpost_01_settlement".to_string(),
                 role: NpcRole::Guard,
                 home_anchor: "guard_home_01".to_string(),
                 duty_route_id: "guard_patrol_north".to_string(),

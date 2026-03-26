@@ -224,6 +224,13 @@ export function NarrativeWorkspace({
         : narrativeDiffSummary(selectedDocument.markdown, response, selectionText)
     : "";
 
+  async function promptConfigureWorkspace(actionLabel: string) {
+    await openOrFocusSettingsWindow("workspace");
+    onStatusChange(
+      `Cannot ${actionLabel} because no narrative workspace is configured. Opened Settings > Workspace.`,
+    );
+  }
+
   function updateSelectedDocument(
     transform: (document: NarrativeDocumentPayload) => NarrativeDocumentPayload,
   ) {
@@ -261,7 +268,7 @@ export function NarrativeWorkspace({
 
   async function createDraft(docType: NarrativeDocType) {
     if (!hasActiveWorkspace) {
-      onStatusChange("Open or configure a narrative workspace before creating drafts.");
+      await promptConfigureWorkspace("create a draft");
       return;
     }
 
@@ -570,7 +577,7 @@ export function NarrativeWorkspace({
         execute: async () => {
           await createDraft(targetDocType);
         },
-        isEnabled: () => hasActiveWorkspace && !busy,
+        isEnabled: () => !busy,
       },
       [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: {
         execute: async () => {
@@ -642,31 +649,31 @@ export function NarrativeWorkspace({
         execute: async () => {
           await createDraft("project_brief");
         },
-        isEnabled: () => hasActiveWorkspace && !busy,
+        isEnabled: () => !busy,
       },
       [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHARACTER_CARD]: {
         execute: async () => {
           await createDraft("character_card");
         },
-        isEnabled: () => hasActiveWorkspace && !busy,
+        isEnabled: () => !busy,
       },
       [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHAPTER_OUTLINE]: {
         execute: async () => {
           await createDraft("chapter_outline");
         },
-        isEnabled: () => hasActiveWorkspace && !busy,
+        isEnabled: () => !busy,
       },
       [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_BRANCH_SHEET]: {
         execute: async () => {
           await createDraft("branch_sheet");
         },
-        isEnabled: () => hasActiveWorkspace && !busy,
+        isEnabled: () => !busy,
       },
       [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_SCENE_DRAFT]: {
         execute: async () => {
           await createDraft("scene_draft");
         },
-        isEnabled: () => hasActiveWorkspace && !busy,
+        isEnabled: () => !busy,
       },
     }),
     [busy, dirtyCount, hasActiveWorkspace, onReload, onStatusChange, selectedDocument, targetDocType],

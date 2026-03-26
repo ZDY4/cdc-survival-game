@@ -109,7 +109,7 @@ func _get_location_name(location_id: String) -> String:
 		"street_b": "街道B",
 		"factory": "工厂",
 		"subway": "地铁站",
-		"safehouse": "安全屋"
+		"survivor_outpost_01": "幸存者据点01"
 	}
 	return names.get(location_id, location_id)
 

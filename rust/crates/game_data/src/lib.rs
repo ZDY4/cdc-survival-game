@@ -3,6 +3,7 @@ pub mod character;
 pub mod content;
 pub mod content_registry;
 pub mod dialogue_rules;
+pub mod dialogue_runtime;
 pub mod interaction;
 pub mod map;
 pub mod models;
@@ -44,6 +45,11 @@ pub use dialogue_rules::{
     DialogueRuleDefinition, DialogueRuleLibrary, DialogueRuleLoadError,
     DialogueRuleValidationCatalog, DialogueRuleValidationError, DialogueRuleVariant,
     DialogueValidationError,
+};
+pub use dialogue_runtime::{
+    advance_dialogue, current_dialogue_node, dialogue_runtime_state, find_dialogue_start_node,
+    resolve_dialogue_start_node_id, DialogueAdvanceError, DialogueAdvanceOutcome,
+    DialogueRuntimeState, DialogueSessionState,
 };
 pub use interaction::{
     default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,

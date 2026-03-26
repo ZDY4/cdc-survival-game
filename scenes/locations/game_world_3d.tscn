@@ -60,7 +60,7 @@ spawn_id = "default_spawn"
 [node name="InteriorReturnSpawn" type="Marker3D" parent="." unique_id=1905004214]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 0, 6.5)
 script = ExtResource("6_player_spawn")
-spawn_id = "safehouse_house_exit"
+spawn_id = "survivor_outpost_01_house_exit"
 
 [node name="MerchantSpawn" type="Marker3D" parent="." unique_id=834371492]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 0, 3.5)
@@ -108,9 +108,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0, 4.5)
 
 [node name="SubsceneEntry" parent="." unique_id=998100202 instance=ExtResource("13_subscene_entry")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 0, 6.5)
-prompt_text = "进入安全屋室内"
-target_location_id = "safehouse_interior"
-return_spawn_id = "safehouse_house_exit"
+prompt_text = "进入幸存者据点01室内"
+target_location_id = "survivor_outpost_01_interior"
+return_spawn_id = "survivor_outpost_01_house_exit"
 
 [node name="ProcWall3D" type="Node3D" parent="." unique_id=804942544]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.434925, 0, 0)

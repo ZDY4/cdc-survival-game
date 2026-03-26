@@ -42,7 +42,7 @@ const SOUND_PATHS = {
 # ===== 背景音乐 =====
 const BGM_PATHS = {
 	"main_menu": "res://assets/audio/bgm/main_menu.ogg",
-	"safehouse": "res://assets/audio/bgm/safehouse.ogg",
+	"survivor_outpost_01": "res://assets/audio/bgm/safehouse.ogg",
 	"exploration": "res://assets/audio/bgm/exploration.ogg",
 	"combat": "res://assets/audio/bgm/combat.ogg",
 	"boss": "res://assets/audio/bgm/boss.ogg"

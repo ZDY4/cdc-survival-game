@@ -10,14 +10,6 @@ describe("editorSurface", () => {
     expect(resolveEditorSurface({ label: "map-editor" })).toBe("map-editor");
   });
 
-  it("prefers the dedicated narrative-lab surface from query string", () => {
-    expect(resolveEditorSurface({ search: "?surface=narrative-lab" })).toBe("narrative-lab");
-  });
-
-  it("falls back to narrative-lab surface when the current label is narrative-lab", () => {
-    expect(resolveEditorSurface({ label: "narrative-lab" })).toBe("narrative-lab");
-  });
-
   it("prefers the dedicated settings surface from query string", () => {
     expect(resolveEditorSurface({ search: "?surface=settings&section=ai" })).toBe("settings");
   });
@@ -31,15 +23,13 @@ describe("editorSurface", () => {
   });
 
   it("reads the requested document key from the query string", () => {
-    expect(getRequestedDocumentKey("?surface=map-editor&documentKey=safehouse_grid")).toBe(
-      "safehouse_grid",
+    expect(getRequestedDocumentKey("?surface=map-editor&documentKey=survivor_outpost_01_grid")).toBe(
+      "survivor_outpost_01_grid",
     );
   });
 
   it("reads the requested settings section from the query string", () => {
-    expect(getRequestedSettingsSection("?surface=settings&section=narrative-sync")).toBe(
-      "narrative-sync",
-    );
+    expect(getRequestedSettingsSection("?surface=settings&section=ai")).toBe("ai");
   });
 
   it("falls back to ai settings section for invalid input", () => {

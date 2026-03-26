@@ -38,21 +38,21 @@ export const fallbackMapWorkspace: MapWorkspacePayload = {
   catalogs: {
     itemIds: ["1005", "1007", "1010"],
     characterIds: ["player", "trader_lao_wang", "zombie_walker"],
-    buildingPrefabs: ["safehouse_house", "safehouse_upper_room"],
+    buildingPrefabs: ["survivor_outpost_01_dormitory", "survivor_outpost_01_gatehouse"],
     interactiveKinds: ["enter_outdoor_location", "enter_subscene"],
   },
   documents: [
     {
-      documentKey: "safehouse_grid",
-      originalId: "safehouse_grid",
-      fileName: "safehouse_grid.json",
-      relativePath: "data/maps/safehouse_grid.json",
+      documentKey: "survivor_outpost_01_grid",
+      originalId: "survivor_outpost_01_grid",
+      fileName: "survivor_outpost_01_grid.json",
+      relativePath: "data/maps/survivor_outpost_01_grid.json",
       map: {
-        id: "safehouse_grid",
-        name: "Safehouse Grid",
+        id: "survivor_outpost_01_grid",
+        name: "Survivor Outpost 01 Grid",
         size: {
-          width: 12,
-          height: 12,
+          width: 32,
+          height: 32,
         },
         default_level: 0,
         levels: [
@@ -60,42 +60,37 @@ export const fallbackMapWorkspace: MapWorkspacePayload = {
             y: 0,
             cells: [],
           },
-          {
-            y: 1,
-            cells: [],
-          },
         ],
         objects: [
           {
-            object_id: "safehouse_building_ground",
+            object_id: "survivor_outpost_01_dormitory",
             kind: "building",
-            anchor: { x: 7, y: 0, z: 4 },
-            footprint: { width: 3, height: 2 },
+            anchor: { x: 6, y: 0, z: 6 },
+            footprint: { width: 6, height: 5 },
             rotation: "north",
             blocks_movement: true,
             blocks_sight: true,
             props: {
               building: {
-                prefab_id: "safehouse_house",
+                prefab_id: "survivor_outpost_01_dormitory",
               },
             },
           },
           {
-            object_id: "safehouse_spawn_zombie",
-            kind: "ai_spawn",
-            anchor: { x: 10, y: 0, z: 2 },
+            object_id: "survivor_outpost_01_perimeter_gate",
+            kind: "interactive",
+            anchor: { x: 15, y: 0, z: 28 },
             footprint: { width: 1, height: 1 },
             rotation: "north",
             blocks_movement: false,
             blocks_sight: false,
             props: {
-              ai_spawn: {
-                spawn_id: "safehouse_enemy_spawn",
-                character_id: "zombie_walker",
-                auto_spawn: true,
-                respawn_enabled: true,
-                respawn_delay: 20,
-                spawn_radius: 2,
+              interactive: {
+                display_name: "前往警戒区",
+                interaction_distance: 1.4,
+                interaction_kind: "enter_outdoor_location",
+                target_id: "survivor_outpost_01_perimeter",
+                options: [],
               },
             },
           },

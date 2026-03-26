@@ -4,9 +4,10 @@ use game_data::{
     ActorId, ItemDefinition, ItemFragment, ItemLibrary, RecipeDefinition, RecipeLibrary,
     ShopDefinition, ShopInventoryEntry, ShopLibrary, SkillDefinition, SkillLibrary,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ActorEconomyState {
     pub money: i32,
     pub level: i32,
@@ -21,7 +22,7 @@ pub struct ActorEconomyState {
     pub ammo_reserves: BTreeMap<u32, i32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquippedItemState {
     pub item_id: u32,
     pub current_durability: Option<i32>,
@@ -47,14 +48,14 @@ pub struct EquippedWeaponProfile {
     pub current_durability: Option<i32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShopRuntimeEntry {
     pub item_id: u32,
     pub count: i32,
     pub price: i32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShopRuntimeState {
     pub id: String,
     pub buy_price_modifier: f32,
@@ -240,6 +241,18 @@ pub struct HeadlessEconomyRuntime {
     shops: BTreeMap<String, ShopRuntimeState>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct HeadlessEconomyActorSnapshot {
+    pub actor_id: ActorId,
+    pub state: ActorEconomyState,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct HeadlessEconomyRuntimeSnapshot {
+    pub actors: Vec<HeadlessEconomyActorSnapshot>,
+    pub shops: Vec<ShopRuntimeState>,
+}
+
 impl HeadlessEconomyRuntime {
     pub fn from_shop_library(shops: &ShopLibrary) -> Self {
         let mut runtime = Self::default();
@@ -279,6 +292,33 @@ impl HeadlessEconomyRuntime {
 
     pub fn shop_count(&self) -> usize {
         self.shops.len()
+    }
+
+    pub(crate) fn save_snapshot(&self) -> HeadlessEconomyRuntimeSnapshot {
+        HeadlessEconomyRuntimeSnapshot {
+            actors: self
+                .actors
+                .iter()
+                .map(|(actor_id, state)| HeadlessEconomyActorSnapshot {
+                    actor_id: *actor_id,
+                    state: state.clone(),
+                })
+                .collect(),
+            shops: self.shops.values().cloned().collect(),
+        }
+    }
+
+    pub(crate) fn load_snapshot(&mut self, snapshot: HeadlessEconomyRuntimeSnapshot) {
+        self.actors = snapshot
+            .actors
+            .into_iter()
+            .map(|entry| (entry.actor_id, entry.state))
+            .collect();
+        self.shops = snapshot
+            .shops
+            .into_iter()
+            .map(|shop| (shop.id.clone(), shop))
+            .collect();
     }
 
     pub fn initialize_actor_defaults(
@@ -1397,36 +1437,40 @@ mod tests {
             .expect("money should be granted");
 
         let buy = runtime
-            .buy_item_from_shop(actor_id, "safehouse_shop", 1031, 2, &items)
+            .buy_item_from_shop(actor_id, "survivor_outpost_01_shop", 1031, 2, &items)
             .expect("buy should succeed");
         assert_eq!(buy.total_price, 30);
         assert_eq!(runtime.actor_money(actor_id), Some(70));
         assert_eq!(runtime.inventory_count(actor_id, 1031), Some(2));
         assert_eq!(
-            runtime.shop("safehouse_shop").map(|shop| shop.money),
+            runtime
+                .shop("survivor_outpost_01_shop")
+                .map(|shop| shop.money),
             Some(130)
         );
         assert_eq!(
             runtime
-                .shop("safehouse_shop")
+                .shop("survivor_outpost_01_shop")
                 .and_then(|shop| shop.inventory.get(&1031))
                 .map(|entry| entry.count),
             Some(1)
         );
 
         let sell = runtime
-            .sell_item_to_shop(actor_id, "safehouse_shop", 1031, 1, &items)
+            .sell_item_to_shop(actor_id, "survivor_outpost_01_shop", 1031, 1, &items)
             .expect("sell should succeed");
         assert_eq!(sell.total_price, 5);
         assert_eq!(runtime.actor_money(actor_id), Some(75));
         assert_eq!(runtime.inventory_count(actor_id, 1031), Some(1));
         assert_eq!(
-            runtime.shop("safehouse_shop").map(|shop| shop.money),
+            runtime
+                .shop("survivor_outpost_01_shop")
+                .map(|shop| shop.money),
             Some(125)
         );
         assert_eq!(
             runtime
-                .shop("safehouse_shop")
+                .shop("survivor_outpost_01_shop")
                 .and_then(|shop| shop.inventory.get(&1031))
                 .map(|entry| entry.count),
             Some(2)
@@ -1797,9 +1841,9 @@ mod tests {
 
     fn sample_shop_library() -> ShopLibrary {
         ShopLibrary::from(BTreeMap::from([(
-            "safehouse_shop".to_string(),
+            "survivor_outpost_01_shop".to_string(),
             ShopDefinition {
-                id: "safehouse_shop".to_string(),
+                id: "survivor_outpost_01_shop".to_string(),
                 buy_price_modifier: 1.5,
                 sell_price_modifier: 0.5,
                 money: 100,
