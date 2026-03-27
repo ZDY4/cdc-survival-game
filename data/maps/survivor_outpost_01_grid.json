@@ -67,6 +67,15 @@
         "z": 27
       },
       "facing": null
+    },
+    {
+      "id": "interior_return",
+      "grid": {
+        "x": 17,
+        "y": 0,
+        "z": 19
+      },
+      "facing": null
     }
   ],
   "objects": [
@@ -76,10 +85,18 @@
       "anchor": { "x": 14, "y": 0, "z": 25 },
       "footprint": { "width": 4, "height": 2 },
       "rotation": "north",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_gatehouse" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_gatehouse",
+          "layout": {
+            "seed": 1101,
+            "target_room_count": 1,
+            "min_room_size": { "width": 2, "height": 2 },
+            "exterior_door_count": 2
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -91,10 +108,18 @@
       "anchor": { "x": 6, "y": 0, "z": 6 },
       "footprint": { "width": 6, "height": 5 },
       "rotation": "north",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_dormitory" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_dormitory",
+          "layout": {
+            "seed": 1102,
+            "target_room_count": 3,
+            "min_room_size": { "width": 2, "height": 2 },
+            "exterior_door_count": 2
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -106,10 +131,19 @@
       "anchor": { "x": 5, "y": 0, "z": 14 },
       "footprint": { "width": 7, "height": 5 },
       "rotation": "east",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_canteen" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_canteen",
+          "layout": {
+            "seed": 1103,
+            "target_room_count": 2,
+            "min_room_size": { "width": 2, "height": 2 },
+            "max_room_size": { "width": 4, "height": 3 },
+            "exterior_door_count": 2
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -121,10 +155,18 @@
       "anchor": { "x": 20, "y": 0, "z": 8 },
       "footprint": { "width": 6, "height": 5 },
       "rotation": "north",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_clinic" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_clinic",
+          "layout": {
+            "seed": 1104,
+            "target_room_count": 3,
+            "min_room_size": { "width": 2, "height": 2 },
+            "exterior_door_count": 2
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -136,10 +178,18 @@
       "anchor": { "x": 21, "y": 0, "z": 16 },
       "footprint": { "width": 6, "height": 5 },
       "rotation": "north",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_storage" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_storage",
+          "layout": {
+            "seed": 1105,
+            "target_room_count": 3,
+            "min_room_size": { "width": 2, "height": 2 },
+            "exterior_door_count": 1
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -151,10 +201,18 @@
       "anchor": { "x": 18, "y": 0, "z": 23 },
       "footprint": { "width": 5, "height": 4 },
       "rotation": "west",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_workshop" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_workshop",
+          "layout": {
+            "seed": 1106,
+            "target_room_count": 2,
+            "min_room_size": { "width": 2, "height": 2 },
+            "exterior_door_count": 1
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -166,10 +224,32 @@
       "anchor": { "x": 25, "y": 1, "z": 24 },
       "footprint": { "width": 2, "height": 2 },
       "rotation": "north",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_watchtower" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_watchtower",
+          "layout": {
+            "seed": 1107,
+            "target_room_count": 1,
+            "min_room_size": { "width": 1, "height": 1 },
+            "exterior_door_count": 0,
+            "stories": [
+              { "level": 0 },
+              { "level": 1 }
+            ],
+            "stairs": [
+              {
+                "from_level": 0,
+                "to_level": 1,
+                "from_cells": [{ "x": 0, "z": 1 }],
+                "to_cells": [{ "x": 0, "z": 1 }],
+                "width": 1,
+                "kind": "straight"
+              }
+            ]
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -177,16 +257,17 @@
     },
     {
       "object_id": "survivor_outpost_01_perimeter_gate",
-      "kind": "interactive",
-      "anchor": { "x": 15, "y": 0, "z": 28 },
-      "footprint": { "width": 1, "height": 1 },
+      "kind": "trigger",
+      "anchor": { "x": 14, "y": 0, "z": 28 },
+      "footprint": { "width": 3, "height": 1 },
       "rotation": "north",
       "blocks_movement": false,
       "blocks_sight": false,
       "props": {
         "building": null,
         "pickup": null,
-        "interactive": {
+        "interactive": null,
+        "trigger": {
           "display_name": "前往警戒区",
           "interaction_distance": 1.4,
           "interaction_kind": "enter_outdoor_location",
@@ -198,7 +279,7 @@
     },
     {
       "object_id": "survivor_outpost_01_interior_door",
-      "kind": "interactive",
+      "kind": "trigger",
       "anchor": { "x": 17, "y": 0, "z": 18 },
       "footprint": { "width": 1, "height": 1 },
       "rotation": "north",
@@ -207,7 +288,8 @@
       "props": {
         "building": null,
         "pickup": null,
-        "interactive": {
+        "interactive": null,
+        "trigger": {
           "display_name": "进入据点室内",
           "interaction_distance": 1.4,
           "interaction_kind": "enter_subscene",

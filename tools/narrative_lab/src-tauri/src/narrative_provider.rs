@@ -2,7 +2,7 @@ use std::{thread, time::Duration};
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tauri::AppHandle;
 
 use crate::ai_settings::{read_ai_settings, AiSettings};
@@ -65,14 +65,6 @@ pub struct NarrativeGenerateResponse {
     pub agent_runs: Vec<NarrativeAgentRun>,
 }
 
-#[derive(Debug, Clone)]
-struct AgentSpec {
-    agent_id: &'static str,
-    label: &'static str,
-    focus: &'static str,
-    instructions: Vec<String>,
-}
-
 #[derive(Debug)]
 struct ProviderSuccess {
     raw_text: String,
@@ -87,23 +79,36 @@ struct ProviderFailure {
 }
 
 #[tauri::command]
-pub fn generate_narrative_draft(
+pub async fn generate_narrative_draft(
     app: AppHandle,
     workspace_root: String,
     project_root: Option<String>,
     request: NarrativeGenerateRequest,
 ) -> Result<NarrativeGenerateResponse, String> {
-    run_narrative_generation(&app, &workspace_root, project_root.as_deref(), request)
+    run_narrative_generation_in_background(app, workspace_root, project_root, request).await
 }
 
 #[tauri::command]
-pub fn revise_narrative_draft(
+pub async fn revise_narrative_draft(
     app: AppHandle,
     workspace_root: String,
     project_root: Option<String>,
     request: NarrativeGenerateRequest,
 ) -> Result<NarrativeGenerateResponse, String> {
-    run_narrative_generation(&app, &workspace_root, project_root.as_deref(), request)
+    run_narrative_generation_in_background(app, workspace_root, project_root, request).await
+}
+
+async fn run_narrative_generation_in_background(
+    app: AppHandle,
+    workspace_root: String,
+    project_root: Option<String>,
+    request: NarrativeGenerateRequest,
+) -> Result<NarrativeGenerateResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_narrative_generation(&app, &workspace_root, project_root.as_deref(), request)
+    })
+    .await
+    .map_err(|error| format!("narrative generation task failed: {error}"))?
 }
 
 fn run_narrative_generation(
@@ -128,23 +133,29 @@ fn run_narrative_generation(
         &request,
         settings.max_context_records,
     )?;
+    let payload = build_single_agent_payload(&request, &context.context, &settings);
 
-    let agent_runs = run_specialist_agents(&settings, &request, &context.context);
-    let completed_runs = agent_runs
-        .iter()
-        .filter(|run| run.status == "completed" && !run.draft_markdown.trim().is_empty())
-        .cloned()
-        .collect::<Vec<_>>();
-
-    if completed_runs.is_empty() {
-        let provider_error = summarize_agent_failures(&agent_runs);
-        return Ok(NarrativeGenerateResponse {
-            engine_mode: "multi_agent".to_string(),
+    match perform_chat_completion(&settings, &payload) {
+        Ok(success) => {
+            let agent_run = build_single_agent_run(&success.payload, &success.raw_text);
+            finalize_generation(
+                "single_agent",
+                request,
+                selection,
+                context,
+                success.raw_text,
+                success.payload,
+                vec![agent_run],
+            )
+        }
+        Err(error) => Ok(NarrativeGenerateResponse {
+            engine_mode: "single_agent".to_string(),
             draft_markdown: String::new(),
             summary: String::new(),
-            review_notes: vec!["所有写作 agent 都未能产出可用草稿。".to_string()],
+            review_notes: vec!["文档助手本轮没有生成可用草稿。".to_string()],
             risk_level: "high".to_string(),
-            change_scope: crate::narrative_review::change_scope_for_action(&request.action).to_string(),
+            change_scope: crate::narrative_review::change_scope_for_action(&request.action)
+                .to_string(),
             prompt_debug: prompt_debug_payload(
                 &request.action,
                 selection.as_ref(),
@@ -155,88 +166,34 @@ fn run_narrative_generation(
                 json!({
                     "request": request,
                     "context": context.context.clone(),
-                    "engineMode": "multi_agent",
-                    "agentRuns": &agent_runs,
+                    "engineMode": "single_agent",
+                    "providerError": normalize_provider_error(&error),
                 }),
             ),
-            raw_output: String::new(),
+            raw_output: error.raw_text.clone(),
             used_context_refs: context.used_context_refs,
             diff_preview: "暂无草稿可预览".to_string(),
-            provider_error,
-            synthesis_notes: vec!["合稿阶段未执行，因为没有可用的专长草稿。".to_string()],
-            agent_runs,
-        });
-    }
-
-    let synthesis_payload = build_synthesis_payload(&request, &context.context, &settings, &completed_runs);
-    match perform_chat_completion(&settings, &synthesis_payload) {
-        Ok(success) => finalize_generation(
-            request,
-            selection,
-            context,
-            success.raw_text,
-            success.payload,
-            agent_runs,
-            None,
-        ),
-        Err(error) => {
-            let fallback = completed_runs
-                .iter()
-                .find(|run| run.agent_id == "structure-architect")
-                .or_else(|| completed_runs.first())
-                .cloned();
-            if let Some(fallback_run) = fallback {
-                return Ok(build_fallback_response(
-                    request,
-                    selection,
-                    context,
-                    fallback_run,
-                    agent_runs,
-                    normalize_provider_error(&error),
-                ));
-            }
-
-            Ok(NarrativeGenerateResponse {
-                engine_mode: "multi_agent".to_string(),
-                draft_markdown: String::new(),
-                summary: String::new(),
-                review_notes: vec!["合稿阶段失败，且没有可回退的专长草稿。".to_string()],
-                risk_level: "high".to_string(),
-                change_scope: crate::narrative_review::change_scope_for_action(&request.action).to_string(),
-                prompt_debug: prompt_debug_payload(
-                    &request.action,
-                    selection.as_ref(),
-                    &context.workspace_context_refs,
-                    &context.project_context_refs,
-                    &context.project_context_warning,
-                    &context.source_conflicts,
-                    json!({
-                        "request": request,
-                        "context": context.context.clone(),
-                        "engineMode": "multi_agent",
-                        "agentRuns": &agent_runs,
-                        "synthesisError": normalize_provider_error(&error),
-                    }),
-                ),
-                raw_output: error.raw_text.clone(),
-                used_context_refs: context.used_context_refs,
-                diff_preview: "暂无草稿可预览".to_string(),
-                provider_error: normalize_provider_error(&error),
-                synthesis_notes: vec!["合稿阶段失败，未生成最终草稿。".to_string()],
-                agent_runs,
-            })
-        }
+            provider_error: normalize_provider_error(&error),
+            synthesis_notes: vec!["当前流程已切换为单 agent 文档助手。".to_string()],
+            agent_runs: vec![failed_agent_run(
+                "document-assistant",
+                "文档助手",
+                "负责当前文档的对话、改写与新文档生成。",
+                normalize_provider_error(&error),
+            )
+            .with_raw_output(error.raw_text)],
+        }),
     }
 }
 
 fn finalize_generation(
+    engine_mode: &str,
     request: NarrativeGenerateRequest,
     selection: Option<NarrativeSelectionRange>,
     context: crate::narrative_context::NarrativeContextBuildResult,
     raw_output: String,
     payload: Value,
     agent_runs: Vec<NarrativeAgentRun>,
-    synthesis_warning: Option<String>,
 ) -> Result<NarrativeGenerateResponse, String> {
     let object = payload
         .as_object()
@@ -266,21 +223,7 @@ fn finalize_generation(
         &draft_markdown,
         model_notes,
     );
-    let mut review_notes = review.review_notes;
-    let failed_agents = agent_runs
-        .iter()
-        .filter(|run| run.status == "failed")
-        .map(|run| format!("{}: {}", run.label, run.provider_error))
-        .collect::<Vec<_>>();
-    if !failed_agents.is_empty() {
-        review_notes.push(format!(
-            "部分专长 agent 失败，但系统仍基于可用草稿完成合稿: {}",
-            failed_agents.join(" | ")
-        ));
-    }
-    if let Some(warning) = synthesis_warning {
-        review_notes.push(warning);
-    }
+    let review_notes = review.review_notes;
 
     let summary = object
         .get("summary")
@@ -291,7 +234,7 @@ fn finalize_generation(
     let agent_risk = highest_agent_risk(&agent_runs);
 
     Ok(NarrativeGenerateResponse {
-        engine_mode: "multi_agent".to_string(),
+        engine_mode: engine_mode.to_string(),
         draft_markdown,
         summary,
         review_notes,
@@ -315,7 +258,7 @@ fn finalize_generation(
             json!({
                 "request": request,
                 "context": context.context.clone(),
-                "engineMode": "multi_agent",
+                "engineMode": engine_mode,
                 "agentRuns": &agent_runs,
             }),
         ),
@@ -326,64 +269,6 @@ fn finalize_generation(
         synthesis_notes,
         agent_runs,
     })
-}
-
-fn build_fallback_response(
-    request: NarrativeGenerateRequest,
-    selection: Option<NarrativeSelectionRange>,
-    context: crate::narrative_context::NarrativeContextBuildResult,
-    fallback_run: NarrativeAgentRun,
-    agent_runs: Vec<NarrativeAgentRun>,
-    synthesis_error: String,
-) -> NarrativeGenerateResponse {
-    let review = build_review_result(
-        &request.action,
-        &request.current_markdown,
-        selection.as_ref(),
-        &fallback_run.draft_markdown,
-        fallback_run.notes.clone(),
-    );
-
-    NarrativeGenerateResponse {
-        engine_mode: "multi_agent".to_string(),
-        draft_markdown: fallback_run.draft_markdown.clone(),
-        summary: format!("合稿阶段失败，已回退到 {} 的草稿。", fallback_run.label),
-        review_notes: {
-            let mut notes = review.review_notes;
-            notes.push(format!(
-                "多 agent 合稿失败，当前结果来自 {}。合稿错误: {}",
-                fallback_run.label, synthesis_error
-            ));
-            notes
-        },
-        risk_level: highest_risk([&review.risk_level, "high"]),
-        change_scope: review.change_scope,
-        prompt_debug: prompt_debug_payload(
-            &request.action,
-            selection.as_ref(),
-            &context.workspace_context_refs,
-            &context.project_context_refs,
-            &context.project_context_warning,
-            &context.source_conflicts,
-            json!({
-                "request": request,
-                "context": context.context.clone(),
-                "engineMode": "multi_agent",
-                "agentRuns": &agent_runs,
-                "synthesisError": synthesis_error,
-                "fallbackAgent": fallback_run.agent_id.clone(),
-            }),
-        ),
-        raw_output: fallback_run.raw_output.clone(),
-        used_context_refs: context.used_context_refs,
-        diff_preview: review.diff_preview,
-        provider_error: String::new(),
-        synthesis_notes: vec![
-            "合稿阶段失败，系统自动回退到单个专长 agent 的草稿。".to_string(),
-            synthesis_error,
-        ],
-        agent_runs,
-    }
 }
 
 fn normalize_request(request: &mut NarrativeGenerateRequest) -> Result<(), String> {
@@ -430,186 +315,10 @@ fn normalize_request(request: &mut NarrativeGenerateRequest) -> Result<(), Strin
     Ok(())
 }
 
-fn run_specialist_agents(
-    settings: &AiSettings,
-    request: &NarrativeGenerateRequest,
-    context: &Value,
-) -> Vec<NarrativeAgentRun> {
-    let specs = build_agent_specs(request);
-    let mut handles = Vec::new();
-    for spec in specs {
-        let owned_spec = spec.clone();
-        let settings_clone = settings.clone();
-        let request_clone = request.clone();
-        let context_clone = context.clone();
-        let handle =
-            thread::spawn(move || run_single_agent(settings_clone, request_clone, context_clone, owned_spec));
-        handles.push((spec, handle));
-    }
-
-    let mut results = Vec::new();
-    for (spec, handle) in handles {
-        match handle.join() {
-            Ok(result) => results.push(result),
-            Err(_) => results.push(failed_agent_run(spec, "agent thread panicked".to_string())),
-        }
-    }
-    results
-}
-
-fn run_single_agent(
-    settings: AiSettings,
-    request: NarrativeGenerateRequest,
-    context: Value,
-    spec: AgentSpec,
-) -> NarrativeAgentRun {
-    let payload = build_specialist_payload(&request, &context, &settings, &spec);
-    match perform_chat_completion_owned(settings, payload) {
-        Ok(success) => match parse_specialist_payload(&spec, success.payload, success.raw_text.clone()) {
-            Ok(run) => run,
-            Err(error) => failed_agent_run(
-                spec,
-                format!("failed to parse specialist response: {error}"),
-            )
-            .with_raw_output(success.raw_text),
-        },
-        Err(error) => failed_agent_run(spec, normalize_provider_error(&error)).with_raw_output(error.raw_text),
-    }
-}
-
-fn build_agent_specs(request: &NarrativeGenerateRequest) -> Vec<AgentSpec> {
-    if matches!(
-        request.action.as_str(),
-        "rewrite_selection" | "expand_selection" | "insert_after_selection"
-    ) {
-        return vec![
-            AgentSpec {
-                agent_id: "continuity-editor",
-                label: "连续性编辑",
-                focus: "保证与上下文设定、叙事逻辑和信息顺序连续。",
-                instructions: vec![
-                    "优先守住上下文连续性和设定一致性。".to_string(),
-                    "不要为了炫技破坏已有节奏。".to_string(),
-                ],
-            },
-            AgentSpec {
-                agent_id: "voice-director",
-                label: "文风导演",
-                focus: "优化语气、画面感、可读性和情绪推进。",
-                instructions: vec![
-                    "让文字更好读，但不要偏离原意。".to_string(),
-                    "优先处理语气、节奏、意象与情绪波形。".to_string(),
-                ],
-            },
-            AgentSpec {
-                agent_id: "drama-intensifier",
-                label: "戏剧强化",
-                focus: "提升张力、冲突和角色选择的压迫感。",
-                instructions: vec![
-                    "增强戏剧推动力，但避免凭空加入与上下文冲突的新事实。".to_string(),
-                    "如果是插入或扩写，优先补足冲突和悬念。".to_string(),
-                ],
-            },
-        ];
-    }
-
-    vec![
-        AgentSpec {
-            agent_id: "structure-architect",
-            label: "结构策划",
-            focus: "负责整体结构、信息顺序、章节推进与大纲清晰度。",
-            instructions: vec![
-                "优先保证结构完整、推进明确、章节层次清楚。".to_string(),
-                "让文稿更适合后续拆成任务、对话和分支。".to_string(),
-            ],
-        },
-        AgentSpec {
-            agent_id: "character-dramaturge",
-            label: "人物戏剧师",
-            focus: "负责人物动机、关系张力、情绪弧线和对白潜台词。",
-            instructions: vec![
-                "优先挖清角色真正想要什么，以及冲突来自哪里。".to_string(),
-                "让角色行为和表达更像有内在驱动力的人。".to_string(),
-            ],
-        },
-        AgentSpec {
-            agent_id: "branch-designer",
-            label: "分支设计师",
-            focus: "负责选择点、后果、回收和可玩分支思维。",
-            instructions: vec![
-                "优先补强决策点、代价、后果和回收线索。".to_string(),
-                "避免把分支写成只有文案差异、没有立场差异。".to_string(),
-            ],
-        },
-        AgentSpec {
-            agent_id: "prose-director",
-            label: "场景导演",
-            focus: "负责可读性、场景画面、节奏控制与叙事感染力。",
-            instructions: vec![
-                "优先提升整体读感，让文稿既清晰又有文学张力。".to_string(),
-                "保持信息密度，不要空泛抒情。".to_string(),
-            ],
-        },
-    ]
-}
-
-fn build_specialist_payload(
+fn build_single_agent_payload(
     request: &NarrativeGenerateRequest,
     context: &Value,
     settings: &AiSettings,
-    spec: &AgentSpec,
-) -> Value {
-    let contract = [
-        "只能输出一个 JSON 对象，不能输出 Markdown 解释、不能输出代码块。",
-        "输出合同：{\"draft_markdown\":\"string\",\"summary\":\"string\",\"notes\":[\"string\"],\"risk_level\":\"low|medium|high\"}。",
-        "draft_markdown 必须只包含正文 Markdown，不要包含 YAML frontmatter。",
-    ]
-    .join("\n");
-
-    json!({
-        "provider_config": {
-            "base_url": settings.base_url,
-            "model": settings.model,
-            "api_key": settings.effective_api_key(),
-            "timeout_sec": settings.timeout_sec,
-        },
-        "temperature": 0.55,
-        "max_tokens": 2200,
-        "messages": [
-            {
-                "role": "system",
-                "content": format!(
-                    "[你的身份]\n你是 Narrative Lab 中的专长写作 agent：{}。\n聚焦点：{}\n\n[输出协议]\n{}\n\n[专长要求]\n{}\n\n[通用要求]\n{}\n{}",
-                    spec.label,
-                    spec.focus,
-                    contract,
-                    spec.instructions.join("\n"),
-                    build_action_rules(request).join("\n"),
-                    "只产出你认为最强的一版草稿，不要分析过程。",
-                ),
-            },
-            {
-                "role": "user",
-                "content": serde_json::to_string_pretty(&json!({
-                    "request": request,
-                    "context": context,
-                    "specialist": {
-                        "agentId": spec.agent_id,
-                        "label": spec.label,
-                        "focus": spec.focus,
-                    }
-                }))
-                .unwrap_or_else(|_| "{}".to_string()),
-            },
-        ]
-    })
-}
-
-fn build_synthesis_payload(
-    request: &NarrativeGenerateRequest,
-    context: &Value,
-    settings: &AiSettings,
-    agent_runs: &[NarrativeAgentRun],
 ) -> Value {
     let contract = [
         "只能输出一个 JSON 对象，不能输出 Markdown 解释、不能输出代码块。",
@@ -617,22 +326,6 @@ fn build_synthesis_payload(
         "draft_markdown 必须只包含最终合稿后的正文 Markdown，不要包含 YAML frontmatter。",
     ]
     .join("\n");
-
-    let compact_agents = agent_runs
-        .iter()
-        .filter(|run| run.status == "completed")
-        .map(|run| {
-            json!({
-                "agentId": run.agent_id,
-                "label": run.label,
-                "focus": run.focus,
-                "summary": run.summary,
-                "notes": run.notes,
-                "riskLevel": run.risk_level,
-                "draftMarkdown": run.draft_markdown,
-            })
-        })
-        .collect::<Vec<_>>();
 
     json!({
         "provider_config": {
@@ -642,15 +335,16 @@ fn build_synthesis_payload(
             "timeout_sec": settings.timeout_sec,
         },
         "temperature": 0.35,
-        "max_tokens": 2800,
+        "max_tokens": 2200,
         "messages": [
             {
                 "role": "system",
                 "content": format!(
-                    "[你的身份]\n你是 Narrative Lab 的总编合稿 agent，负责整合多个专长 agent 的草稿。\n\n[输出协议]\n{}\n\n[合稿要求]\n{}\n{}\n{}",
+                    "[你的身份]\n你是 Narrative Lab 的单一文档助手，负责围绕当前文档与用户意图直接产出结果。\n\n[输出协议]\n{}\n\n[工作方式]\n{}\n{}\n{}\n{}",
                     contract,
-                    "不要把多个草稿简单拼接；要产出一份统一、自然、可直接审阅的最终稿。",
-                    "如果几个 agent 冲突，优先选择最连贯、最有执行价值、最适合后续结构化拆解的版本。",
+                    "直接给出一版可以预览、编辑、保存的最终 Markdown，不要再模拟多个角色讨论。",
+                    "如果用户只是简短打招呼，也要返回简洁、自然的 Markdown 回应，不要卡在流程解释里。",
+                    "优先保持当前文档方向和结构稳定；只有在用户明确要求时才大改。",
                     build_action_rules(request).join("\n"),
                 ),
             },
@@ -659,7 +353,6 @@ fn build_synthesis_payload(
                 "content": serde_json::to_string_pretty(&json!({
                     "request": request,
                     "context": context,
-                    "agentDrafts": compact_agents,
                 }))
                 .unwrap_or_else(|_| "{}".to_string()),
             },
@@ -697,26 +390,27 @@ fn build_action_rules(request: &NarrativeGenerateRequest) -> Vec<String> {
     }
 }
 
-fn parse_specialist_payload(
-    spec: &AgentSpec,
-    payload: Value,
-    raw_output: String,
-) -> Result<NarrativeAgentRun, String> {
-    let object = payload
-        .as_object()
-        .cloned()
-        .ok_or_else(|| "specialist response is not an object".to_string())?;
-    Ok(NarrativeAgentRun {
-        agent_id: spec.agent_id.to_string(),
-        label: spec.label.to_string(),
-        focus: spec.focus.to_string(),
+fn build_single_agent_run(payload: &Value, raw_output: &str) -> NarrativeAgentRun {
+    let object = payload.as_object().cloned().unwrap_or_default();
+
+    NarrativeAgentRun {
+        agent_id: "document-assistant".to_string(),
+        label: "文档助手".to_string(),
+        focus: "负责当前文档的对话、改写与新文档生成。".to_string(),
         status: "completed".to_string(),
         summary: object
             .get("summary")
             .and_then(Value::as_str)
-            .unwrap_or(spec.focus)
+            .unwrap_or("已完成当前文档请求。")
             .to_string(),
-        notes: read_string_list(object.get("notes")),
+        notes: read_string_list(
+            object
+                .get("review_notes")
+                .or_else(|| object.get("reviewNotes"))
+                .or_else(|| object.get("synthesis_notes"))
+                .or_else(|| object.get("synthesisNotes"))
+                .or_else(|| object.get("notes")),
+        ),
         risk_level: normalize_risk(
             object
                 .get("risk_level")
@@ -731,9 +425,9 @@ fn parse_specialist_payload(
             .unwrap_or_default()
             .trim()
             .to_string(),
-        raw_output,
+        raw_output: raw_output.to_string(),
         provider_error: String::new(),
-    })
+    }
 }
 
 fn read_string_list(value: Option<&Value>) -> Vec<String> {
@@ -749,11 +443,11 @@ fn read_string_list(value: Option<&Value>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn failed_agent_run(spec: AgentSpec, error: String) -> NarrativeAgentRun {
+fn failed_agent_run(agent_id: &str, label: &str, focus: &str, error: String) -> NarrativeAgentRun {
     NarrativeAgentRun {
-        agent_id: spec.agent_id.to_string(),
-        label: spec.label.to_string(),
-        focus: spec.focus.to_string(),
+        agent_id: agent_id.to_string(),
+        label: label.to_string(),
+        focus: focus.to_string(),
         status: "failed".to_string(),
         summary: String::new(),
         notes: Vec::new(),
@@ -772,19 +466,6 @@ impl AgentRunExt for NarrativeAgentRun {
     fn with_raw_output(mut self, raw_output: String) -> Self {
         self.raw_output = raw_output;
         self
-    }
-}
-
-fn summarize_agent_failures(agent_runs: &[NarrativeAgentRun]) -> String {
-    let summaries = agent_runs
-        .iter()
-        .filter(|run| !run.provider_error.trim().is_empty())
-        .map(|run| format!("{}: {}", run.label, run.provider_error))
-        .collect::<Vec<_>>();
-    if summaries.is_empty() {
-        "所有写作 agent 都未返回可用草稿。".to_string()
-    } else {
-        summaries.join(" | ")
     }
 }
 
@@ -894,22 +575,77 @@ fn perform_chat_completion_owned(
         error,
         raw_text: String::new(),
     })?;
-    let request_body = json!({
-        "model": model,
-        "messages": payload.get("messages").cloned().unwrap_or_else(|| json!([])),
-        "temperature": payload.get("temperature").and_then(Value::as_f64).unwrap_or(0.45),
-        "response_format": { "type": "json_object" },
-        "max_tokens": payload.get("max_tokens").and_then(Value::as_u64).unwrap_or(2600),
-    });
+    let request_body = build_chat_completion_request(&model, &payload, true);
 
+    match send_chat_completion_request(&client, &base_url, &api_key, &request_body) {
+        Ok(success) => Ok(success),
+        Err(failure) if should_retry_without_response_format(&failure) => {
+            let fallback_request = build_chat_completion_request(&model, &payload, false);
+            send_chat_completion_request(&client, &base_url, &api_key, &fallback_request)
+        }
+        Err(failure) => Err(failure),
+    }
+}
+
+fn build_http_client(timeout_sec: u64) -> Result<Client, String> {
+    Client::builder()
+        .timeout(Duration::from_secs(timeout_sec.max(5)))
+        .build()
+        .map_err(|error| format!("failed to create HTTP client: {error}"))
+}
+
+fn build_chat_completion_request(
+    model: &str,
+    payload: &Value,
+    include_json_response_format: bool,
+) -> Value {
+    let mut request = Map::new();
+    request.insert("model".to_string(), json!(model));
+    request.insert(
+        "messages".to_string(),
+        payload
+            .get("messages")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+    );
+    request.insert(
+        "temperature".to_string(),
+        json!(payload
+            .get("temperature")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.45)),
+    );
+    request.insert(
+        "max_tokens".to_string(),
+        json!(payload
+            .get("max_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(2600)),
+    );
+    if include_json_response_format {
+        request.insert(
+            "response_format".to_string(),
+            json!({ "type": "json_object" }),
+        );
+    }
+    Value::Object(request)
+}
+
+fn send_chat_completion_request(
+    client: &Client,
+    base_url: &str,
+    api_key: &str,
+    request_body: &Value,
+) -> Result<ProviderSuccess, ProviderFailure> {
     let mut last_failure: Option<ProviderFailure> = None;
+
     for attempt in 0..=1 {
         let response = client
             .post(format!("{base_url}/chat/completions"))
-            .bearer_auth(&api_key)
+            .bearer_auth(api_key)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .json(&request_body)
+            .json(request_body)
             .send();
 
         match response {
@@ -930,17 +666,19 @@ fn perform_chat_completion_owned(
                     return Err(failure);
                 }
 
-                let response_data: Value = serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
-                    status_code: status,
-                    error: format!("响应不是合法 JSON: {error}"),
-                    raw_text: raw_body.clone(),
-                })?;
+                let response_data: Value =
+                    serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
+                        status_code: status,
+                        error: format!("响应不是合法 JSON: {error}"),
+                        raw_text: raw_body.clone(),
+                    })?;
                 let raw_content = extract_message_content(&response_data);
-                let payload = extract_json_payload(&raw_content).map_err(|error| ProviderFailure {
-                    status_code: status,
-                    error,
-                    raw_text: raw_content.clone(),
-                })?;
+                let payload =
+                    extract_json_payload(&raw_content).map_err(|error| ProviderFailure {
+                        status_code: status,
+                        error,
+                        raw_text: raw_content.clone(),
+                    })?;
                 return Ok(ProviderSuccess {
                     raw_text: raw_content,
                     payload,
@@ -969,11 +707,15 @@ fn perform_chat_completion_owned(
     }))
 }
 
-fn build_http_client(timeout_sec: u64) -> Result<Client, String> {
-    Client::builder()
-        .timeout(Duration::from_secs(timeout_sec.max(5)))
-        .build()
-        .map_err(|error| format!("failed to create HTTP client: {error}"))
+fn should_retry_without_response_format(failure: &ProviderFailure) -> bool {
+    if failure.status_code != 400 {
+        return false;
+    }
+
+    let combined = format!("{} {}", failure.error, failure.raw_text).to_lowercase();
+    combined.contains("response_format")
+        && combined.contains("json_object")
+        && (combined.contains("not supported") || combined.contains("not valid"))
 }
 
 fn extract_message_content(response_data: &Value) -> String {

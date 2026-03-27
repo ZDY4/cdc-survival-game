@@ -747,6 +747,28 @@ fn collect_map_references(
                     }
                 }
             }
+            MapObjectKind::Trigger => {
+                if let Some(trigger) = object.props.trigger.as_ref() {
+                    for option in trigger.resolved_options() {
+                        push_reference(
+                            references,
+                            "maps",
+                            map_id,
+                            "dialogues",
+                            &option.dialogue_id,
+                            "objects.props.trigger.options.dialogue_id",
+                        );
+                        push_reference(
+                            references,
+                            "maps",
+                            map_id,
+                            "maps",
+                            &option.target_map_id,
+                            "objects.props.trigger.options.target_map_id",
+                        );
+                    }
+                }
+            }
             MapObjectKind::Building => {}
         }
     }
@@ -776,24 +798,6 @@ fn collect_overworld_references(
                 "locations.parent_outdoor_location_id",
             );
         }
-    }
-    for edge in &definition.edges {
-        push_reference(
-            references,
-            "overworld",
-            overworld_id,
-            "overworld_locations",
-            edge.from.as_str(),
-            "edges.from",
-        );
-        push_reference(
-            references,
-            "overworld",
-            overworld_id,
-            "overworld_locations",
-            edge.to.as_str(),
-            "edges.to",
-        );
     }
 }
 

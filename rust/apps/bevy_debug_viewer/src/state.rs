@@ -94,6 +94,22 @@ impl ViewerControlMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ViewerCameraMode {
+    #[default]
+    FollowSelectedActor,
+    ManualPan,
+}
+
+impl ViewerCameraMode {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::FollowSelectedActor => "Follow Selected Actor",
+            Self::ManualPan => "Manual Pan",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum HudEventFilter {
     #[default]
     All,
@@ -644,13 +660,11 @@ pub(crate) struct ViewerPalette {
     pub ground_dark: Color,
     pub ground_light: Color,
     pub ground_edge: Color,
-    pub blocking_cell: Color,
-    pub sight_blocker: Color,
-    pub obstacle: Color,
     pub building_base: Color,
     pub building_top: Color,
     pub pickup: Color,
     pub interactive: Color,
+    pub trigger: Color,
     pub ai_spawn: Color,
     pub player: Color,
     pub friendly: Color,
@@ -682,13 +696,11 @@ impl Default for ViewerPalette {
             ground_dark: Color::srgb(0.17, 0.18, 0.17),
             ground_light: Color::srgb(0.24, 0.235, 0.212),
             ground_edge: Color::srgb(0.115, 0.12, 0.118),
-            blocking_cell: Color::srgb(0.42, 0.27, 0.21),
-            sight_blocker: Color::srgb(0.36, 0.395, 0.41),
-            obstacle: Color::srgb(0.45, 0.31, 0.24),
-            building_base: Color::srgb(0.47, 0.39, 0.31),
-            building_top: Color::srgb(0.64, 0.56, 0.43),
+            building_base: Color::srgb(0.74, 0.755, 0.77),
+            building_top: Color::srgb(0.84, 0.845, 0.85),
             pickup: Color::srgb(0.42, 0.82, 0.62),
             interactive: Color::srgb(0.35, 0.61, 0.9),
+            trigger: Color::srgb(0.96, 0.72, 0.29),
             ai_spawn: Color::srgb(0.86, 0.35, 0.4),
             player: Color::srgb(0.25, 0.67, 0.96),
             friendly: Color::srgb(0.36, 0.79, 0.46),
@@ -801,6 +813,7 @@ pub(crate) struct ViewerState {
     pub active_dialogue: Option<ActiveDialogueState>,
     pub hud_page: ViewerHudPage,
     pub control_mode: ViewerControlMode,
+    pub camera_mode: ViewerCameraMode,
     pub event_filter: HudEventFilter,
     pub show_hud: bool,
     pub show_controls: bool,
@@ -830,6 +843,7 @@ impl Default for ViewerState {
             active_dialogue: None,
             hud_page: ViewerHudPage::Overview,
             control_mode: ViewerControlMode::PlayerControl,
+            camera_mode: ViewerCameraMode::FollowSelectedActor,
             event_filter: HudEventFilter::All,
             show_hud: true,
             show_controls: false,
@@ -864,6 +878,20 @@ impl ViewerState {
 
     pub(crate) fn can_issue_player_commands(self: &Self) -> bool {
         self.control_mode == ViewerControlMode::PlayerControl
+    }
+
+    pub(crate) fn is_camera_following_selected_actor(&self) -> bool {
+        self.camera_mode == ViewerCameraMode::FollowSelectedActor
+    }
+
+    pub(crate) fn disable_camera_follow(&mut self) {
+        self.camera_mode = ViewerCameraMode::ManualPan;
+    }
+
+    pub(crate) fn resume_camera_follow(&mut self) {
+        self.camera_mode = ViewerCameraMode::FollowSelectedActor;
+        self.camera_pan_offset = Vec2::ZERO;
+        self.camera_drag_cursor = None;
     }
 
     pub(crate) fn command_actor_id(&self, snapshot: &SimulationSnapshot) -> Option<ActorId> {
@@ -928,6 +956,9 @@ pub(crate) struct HudText;
 pub(crate) struct HudFooterText;
 
 #[derive(Component)]
+pub(crate) struct FreeObserveIndicatorRoot;
+
+#[derive(Component)]
 pub(crate) struct ViewerCamera;
 
 #[derive(Component)]
@@ -972,7 +1003,8 @@ pub(crate) struct ActiveDialogueState {
 mod tests {
     use super::{
         ActorMotionTrack, AttackLungeTrack, HitReactionTrack, ViewerActorFeedbackState,
-        ViewerCameraShakeState, ViewerControlMode, ViewerDamageNumberState, ViewerState,
+        ViewerCameraMode, ViewerCameraShakeState, ViewerControlMode, ViewerDamageNumberState,
+        ViewerState,
     };
     use game_core::{
         ActorDebugState, CombatDebugState, GridDebugState, OverworldStateSnapshot,
@@ -1003,6 +1035,36 @@ mod tests {
         viewer_state.control_mode = ViewerControlMode::FreeObserve;
 
         assert_eq!(viewer_state.command_actor_id(&snapshot), None);
+    }
+
+    #[test]
+    fn viewer_state_follows_selected_actor_by_default() {
+        let viewer_state = ViewerState::default();
+
+        assert_eq!(
+            viewer_state.camera_mode,
+            ViewerCameraMode::FollowSelectedActor
+        );
+        assert!(viewer_state.is_camera_following_selected_actor());
+    }
+
+    #[test]
+    fn resume_camera_follow_resets_manual_pan_state() {
+        let mut viewer_state = ViewerState {
+            camera_mode: ViewerCameraMode::ManualPan,
+            camera_pan_offset: bevy::prelude::Vec2::new(3.0, -2.0),
+            camera_drag_cursor: Some(bevy::prelude::Vec2::new(120.0, 48.0)),
+            ..ViewerState::default()
+        };
+
+        viewer_state.resume_camera_follow();
+
+        assert_eq!(
+            viewer_state.camera_mode,
+            ViewerCameraMode::FollowSelectedActor
+        );
+        assert_eq!(viewer_state.camera_pan_offset, bevy::prelude::Vec2::ZERO);
+        assert_eq!(viewer_state.camera_drag_cursor, None);
     }
 
     #[test]
@@ -1149,6 +1211,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            generated_buildings: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,

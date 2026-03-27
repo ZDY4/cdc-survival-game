@@ -7,6 +7,7 @@ use super::world::{GridWalkability, GridWorld};
 
 const ORTHOGONAL_COST: i32 = 1000;
 const DIAGONAL_COST: i32 = 1414;
+const LEVEL_CHANGE_COST: i32 = 1800;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GridPathfindingError {
@@ -92,8 +93,8 @@ pub fn find_path_grid(
         }
 
         let current_g = *g_score.get(&current).unwrap_or(&i32::MAX);
-        for neighbor in neighbors(current) {
-            if !can_traverse(world, actor_id, current, neighbor) {
+        for neighbor in planar_neighbors(current) {
+            if !can_traverse_planar(world, actor_id, current, neighbor) {
                 continue;
             }
 
@@ -109,12 +110,30 @@ pub fn find_path_grid(
                 f_score: tentative_g + heuristic(neighbor, goal),
             });
         }
+
+        for neighbor in world.stair_neighbors(current) {
+            if !can_traverse_stair(world, actor_id, *neighbor) {
+                continue;
+            }
+
+            let tentative_g = current_g + movement_cost(current, *neighbor);
+            if tentative_g >= *g_score.get(neighbor).unwrap_or(&i32::MAX) {
+                continue;
+            }
+
+            came_from.insert(*neighbor, current);
+            g_score.insert(*neighbor, tentative_g);
+            open.push(OpenNode {
+                grid: *neighbor,
+                f_score: tentative_g + heuristic(*neighbor, goal),
+            });
+        }
     }
 
     Err(GridPathfindingError::NoPath)
 }
 
-fn neighbors(grid: GridCoord) -> [GridCoord; 8] {
+fn planar_neighbors(grid: GridCoord) -> [GridCoord; 8] {
     [
         GridCoord::new(grid.x + 1, grid.y, grid.z),
         GridCoord::new(grid.x - 1, grid.y, grid.z),
@@ -129,13 +148,21 @@ fn neighbors(grid: GridCoord) -> [GridCoord; 8] {
 
 fn heuristic(a: GridCoord, b: GridCoord) -> i32 {
     let dx = (a.x - b.x).abs();
+    let dy = (a.y - b.y).abs();
     let dz = (a.z - b.z).abs();
     let diagonal_steps = dx.min(dz);
     let straight_steps = dx.max(dz) - diagonal_steps;
-    straight_steps * ORTHOGONAL_COST + diagonal_steps * DIAGONAL_COST
+    straight_steps * ORTHOGONAL_COST + diagonal_steps * DIAGONAL_COST + dy * LEVEL_CHANGE_COST
 }
 
 fn movement_cost(from: GridCoord, to: GridCoord) -> i32 {
+    if from.y != to.y {
+        let planar_dx = (to.x - from.x).abs();
+        let planar_dz = (to.z - from.z).abs();
+        return ORTHOGONAL_COST
+            + planar_dx.max(planar_dz) * (ORTHOGONAL_COST / 4)
+            + (to.y - from.y).abs() * LEVEL_CHANGE_COST;
+    }
     let dx = (to.x - from.x).abs();
     let dz = (to.z - from.z).abs();
     if dx == 1 && dz == 1 {
@@ -145,7 +172,7 @@ fn movement_cost(from: GridCoord, to: GridCoord) -> i32 {
     }
 }
 
-fn can_traverse(
+fn can_traverse_planar(
     world: &GridWorld,
     actor_id: Option<ActorId>,
     from: GridCoord,
@@ -169,6 +196,10 @@ fn can_traverse(
     }
 
     true
+}
+
+fn can_traverse_stair(world: &GridWorld, actor_id: Option<ActorId>, to: GridCoord) -> bool {
+    world.classify_walkability_for_actor(to, actor_id) == GridWalkability::Walkable
 }
 
 fn reconstruct_path(

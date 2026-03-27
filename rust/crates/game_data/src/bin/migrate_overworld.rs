@@ -4,9 +4,8 @@ use std::path::{Path, PathBuf};
 
 use game_data::{
     GridCoord, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
-    OverworldCellDefinition, OverworldDefinition, OverworldEdgeDefinition, OverworldId,
-    OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-    OverworldTravelRuleSet,
+    OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLocationDefinition,
+    OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
 };
 use serde_json::Value;
 
@@ -117,56 +116,6 @@ fn main() -> Result<(), String> {
     }
     location_definitions.sort_by(|left, right| left.id.cmp(&right.id));
 
-    let distances = map_data_object
-        .get("distances")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "map_data.json distances must be an object".to_string())?;
-    let connections = map_data_object
-        .get("connections")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "map_data.json connections must be an object".to_string())?;
-    let risks = map_data_object
-        .get("risks")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "map_data.json risks must be an object".to_string())?;
-
-    let mut seen_pairs = BTreeSet::<(String, String)>::new();
-    let mut edge_definitions = Vec::new();
-    for (from, raw_neighbors) in connections {
-        let neighbors = raw_neighbors.as_array().ok_or_else(|| {
-            format!("map_data.json connections[{from}] must be an array of location ids")
-        })?;
-        for neighbor in neighbors {
-            let to = neighbor
-                .as_str()
-                .ok_or_else(|| {
-                    format!("map_data.json connections[{from}] entries must be strings")
-                })?
-                .to_string();
-            let pair = canonical_pair(from, &to);
-            if !seen_pairs.insert(pair.clone()) {
-                continue;
-            }
-            let distance = lookup_distance(distances, &pair.0, &pair.1).unwrap_or(1.0);
-            let travel_hours = distance as f32;
-            let average_risk = average_risk(risks, &pair.0, &pair.1);
-            edge_definitions.push(OverworldEdgeDefinition {
-                from: OverworldLocationId(pair.0.clone()),
-                to: OverworldLocationId(pair.1.clone()),
-                bidirectional: true,
-                travel_minutes: (travel_hours * 60.0).round().max(1.0) as u32,
-                food_cost: ((travel_hours / 2.0).floor() as i32).max(1),
-                stamina_cost: (travel_hours * 8.0).floor() as i32,
-                risk_level: average_risk,
-                route_cells: Vec::new(),
-                extra: BTreeMap::new(),
-            });
-        }
-    }
-    edge_definitions.sort_by(|left, right| {
-        (left.from.as_str(), left.to.as_str()).cmp(&(right.from.as_str(), right.to.as_str()))
-    });
-
     let walkable_cells = map_data_object
         .get("overworld_walkable_cells")
         .and_then(Value::as_array)
@@ -182,7 +131,6 @@ fn main() -> Result<(), String> {
     let overworld = OverworldDefinition {
         id: OverworldId("main_overworld".into()),
         locations: location_definitions.clone(),
-        edges: edge_definitions,
         walkable_cells,
         travel_rules: OverworldTravelRuleSet::default(),
     };
@@ -258,33 +206,6 @@ fn placeholder_map_definition(map_id: &str) -> MapDefinition {
         }],
         objects: Vec::new(),
     }
-}
-
-fn canonical_pair(left: &str, right: &str) -> (String, String) {
-    if left <= right {
-        (left.to_string(), right.to_string())
-    } else {
-        (right.to_string(), left.to_string())
-    }
-}
-
-fn lookup_distance(
-    distances: &serde_json::Map<String, Value>,
-    from: &str,
-    to: &str,
-) -> Option<f64> {
-    let forward = format!("{from}_{to}");
-    let backward = format!("{to}_{from}");
-    distances
-        .get(&forward)
-        .or_else(|| distances.get(&backward))
-        .and_then(Value::as_f64)
-}
-
-fn average_risk(risks: &serde_json::Map<String, Value>, from: &str, to: &str) -> f32 {
-    let from_risk = risks.get(from).and_then(Value::as_f64).unwrap_or(0.0);
-    let to_risk = risks.get(to).and_then(Value::as_f64).unwrap_or(0.0);
-    ((from_risk + to_risk) / 2.0) as f32
 }
 
 fn parse_cell(value: &Value) -> GridCoord {

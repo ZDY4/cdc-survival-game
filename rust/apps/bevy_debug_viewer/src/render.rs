@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::asset::Asset;
 use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight};
-use bevy::pbr::{
-    ExtendedMaterial, MaterialExtension, OpaqueRendererMethod, StandardMaterial,
-};
+use bevy::pbr::{ExtendedMaterial, MaterialExtension, OpaqueRendererMethod, StandardMaterial};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{AsBindGroup, AsBindGroupShaderType, ShaderType};
@@ -17,14 +15,15 @@ use crate::geometry::{
     actor_body_translation, actor_label, actor_label_world_position, camera_focus_point,
     camera_world_distance, clamp_camera_pan_offset, grid_bounds, hovered_grid_outline_kind,
     level_base_height, occluder_blocks_target, rendered_path_preview, resolve_occlusion_target,
-    should_rebuild_static_world, GridBounds, HoveredGridOutlineKind,
+    selected_actor, should_rebuild_static_world, GridBounds, HoveredGridOutlineKind,
 };
 use crate::state::{
-    ActorLabel, ActorLabelEntities, DialoguePanelRoot, HudFooterText, HudText,
-    InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot, InteractionMenuState,
-    ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerOverlayMode, ViewerPalette, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerState, ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
+    ActorLabel, ActorLabelEntities, DialoguePanelRoot, FreeObserveIndicatorRoot, HudFooterText,
+    HudText, InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot,
+    InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
+    ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode, ViewerPalette,
+    ViewerRenderConfig, ViewerRuntimeState, ViewerState, ViewerStyleProfile, ViewerUiFont,
+    VIEWER_FONT_PATH,
 };
 
 const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
@@ -37,6 +36,7 @@ const DIALOGUE_PANEL_MAX_WIDTH_PX: f32 = 920.0;
 const GRID_LINE_ELEVATION: f32 = 0.002;
 const OVERLAY_ELEVATION: f32 = 0.03;
 const GRID_GROUND_SHADER_PATH: &str = "shaders/grid_ground.wgsl";
+const BUILDING_WALL_GRID_SHADER_PATH: &str = "shaders/building_wall_grid.wgsl";
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InteractionMenuLayout {
@@ -74,13 +74,11 @@ struct StaticWorldVisualKey {
     map_id: Option<game_data::MapId>,
     current_level: i32,
     topology_version: u64,
+    hide_building_roofs: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum StaticWorldOccluderKind {
-    BlockingCell,
-    SightCell,
-    StaticObstacle,
     MapObject(game_data::MapObjectKind),
 }
 
@@ -88,7 +86,7 @@ enum StaticWorldOccluderKind {
 #[allow(dead_code)]
 struct StaticWorldOccluderVisual {
     entity: Entity,
-    material: Handle<StandardMaterial>,
+    material: StaticWorldMaterialHandle,
     base_color: Color,
     base_alpha: f32,
     base_alpha_mode: AlphaMode,
@@ -107,12 +105,42 @@ struct StaticWorldBoxSpec {
     occluder_kind: Option<StaticWorldOccluderKind>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MergedGridRect {
+    level: i32,
+    min_x: i32,
+    max_x: i32,
+    min_z: i32,
+    max_z: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WallAxis {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WallSegment {
+    level: i32,
+    axis: WallAxis,
+    line: i32,
+    start: i32,
+    end: i32,
+}
+
 struct SpawnedBoxVisual {
     entity: Entity,
-    material: Handle<StandardMaterial>,
+    material: StaticWorldMaterialHandle,
     size: Vec3,
     translation: Vec3,
     color: Color,
+}
+
+#[derive(Debug, Clone)]
+enum StaticWorldMaterialHandle {
+    Standard(Handle<StandardMaterial>),
+    BuildingWallGrid(Handle<BuildingWallGridMaterial>),
 }
 
 #[derive(Resource, Default)]
@@ -155,6 +183,7 @@ pub(crate) struct DamageNumberLabel {
 enum MaterialStyle {
     Structure,
     StructureAccent,
+    BuildingWallGrid,
     Utility,
     UtilityAccent,
     CharacterBody,
@@ -164,6 +193,8 @@ enum MaterialStyle {
 }
 
 pub(crate) type GridGroundMaterial = ExtendedMaterial<StandardMaterial, GridGroundMaterialExt>;
+pub(crate) type BuildingWallGridMaterial =
+    ExtendedMaterial<StandardMaterial, BuildingWallGridMaterialExt>;
 
 #[derive(Asset, AsBindGroup, TypePath, Clone, Debug)]
 #[uniform(100, GridGroundMaterialUniform)]
@@ -213,6 +244,61 @@ impl AsBindGroupShaderType<GridGroundMaterialUniform> for GridGroundMaterialExt 
 impl MaterialExtension for GridGroundMaterialExt {
     fn fragment_shader() -> ShaderRef {
         GRID_GROUND_SHADER_PATH.into()
+    }
+}
+
+#[derive(Asset, AsBindGroup, TypePath, Clone, Debug)]
+#[uniform(100, BuildingWallGridMaterialUniform)]
+pub(crate) struct BuildingWallGridMaterialExt {
+    major_grid_size: f32,
+    minor_grid_size: f32,
+    major_line_width: f32,
+    minor_line_width: f32,
+    face_tint_strength: f32,
+    _padding: Vec3,
+    base_color: Color,
+    major_line_color: Color,
+    minor_line_color: Color,
+    cap_color: Color,
+}
+
+#[derive(Clone, Copy, Debug, ShaderType)]
+struct BuildingWallGridMaterialUniform {
+    major_grid_size: f32,
+    minor_grid_size: f32,
+    major_line_width: f32,
+    minor_line_width: f32,
+    face_tint_strength: f32,
+    _padding: Vec3,
+    base_color: Vec4,
+    major_line_color: Vec4,
+    minor_line_color: Vec4,
+    cap_color: Vec4,
+}
+
+impl AsBindGroupShaderType<BuildingWallGridMaterialUniform> for BuildingWallGridMaterialExt {
+    fn as_bind_group_shader_type(
+        &self,
+        _images: &bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>,
+    ) -> BuildingWallGridMaterialUniform {
+        BuildingWallGridMaterialUniform {
+            major_grid_size: self.major_grid_size.max(0.001),
+            minor_grid_size: self.minor_grid_size.max(0.001),
+            major_line_width: self.major_line_width.max(0.0005),
+            minor_line_width: self.minor_line_width.max(0.0005),
+            face_tint_strength: self.face_tint_strength.clamp(0.0, 1.0),
+            _padding: Vec3::ZERO,
+            base_color: self.base_color.to_linear().to_vec4(),
+            major_line_color: self.major_line_color.to_linear().to_vec4(),
+            minor_line_color: self.minor_line_color.to_linear().to_vec4(),
+            cap_color: self.cap_color.to_linear().to_vec4(),
+        }
+    }
+}
+
+impl MaterialExtension for BuildingWallGridMaterialExt {
+    fn fragment_shader() -> ShaderRef {
+        BUILDING_WALL_GRID_SHADER_PATH.into()
     }
 }
 
@@ -300,6 +386,23 @@ pub(crate) fn setup_viewer(
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
+            top: px(10),
+            left: px(0),
+            right: px(0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        Visibility::Hidden,
+        FreeObserveIndicatorRoot,
+        children![(
+            Text::new("自由观察模式"),
+            TextFont::from_font_size(11.0).with_font(ui_font.clone()),
+            TextColor(Color::srgba(1.0, 1.0, 1.0, 0.95)),
+        )],
+    ));
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
             left: px(0),
             top: px(0),
             width: px(INTERACTION_MENU_WIDTH_PX),
@@ -331,6 +434,7 @@ pub(crate) fn update_camera(
     time: Res<Time>,
     window: Single<&Window>,
     camera_query: Single<(&mut Projection, &mut Transform), With<ViewerCamera>>,
+    motion_state: Res<ViewerActorMotionState>,
     runtime_state: Res<ViewerRuntimeState>,
     mut camera_shake_state: ResMut<ViewerCameraShakeState>,
     mut viewer_state: ResMut<ViewerState>,
@@ -339,20 +443,33 @@ pub(crate) fn update_camera(
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
     let grid_size = snapshot.grid.grid_size;
-    viewer_state.camera_pan_offset = clamp_camera_pan_offset(
-        bounds,
-        grid_size,
-        viewer_state.camera_pan_offset,
-        window.width(),
-        window.height(),
-        *render_config,
-    );
-    let focus = camera_focus_point(
-        bounds,
-        viewer_state.current_level,
-        grid_size,
-        viewer_state.camera_pan_offset,
-    );
+    let focus = if viewer_state.is_camera_following_selected_actor() {
+        camera_focus_following_selected_actor(
+            &runtime_state,
+            &motion_state,
+            &snapshot,
+            &viewer_state,
+            bounds,
+            window.width(),
+            window.height(),
+            *render_config,
+        )
+    } else {
+        viewer_state.camera_pan_offset = clamp_camera_pan_offset(
+            bounds,
+            grid_size,
+            viewer_state.camera_pan_offset,
+            window.width(),
+            window.height(),
+            *render_config,
+        );
+        camera_focus_point(
+            bounds,
+            viewer_state.current_level,
+            grid_size,
+            viewer_state.camera_pan_offset,
+        )
+    };
     let distance = camera_world_distance(
         bounds,
         window.width(),
@@ -381,6 +498,43 @@ pub(crate) fn update_camera(
     transform.look_at(focus, Vec3::Z);
 }
 
+fn camera_focus_following_selected_actor(
+    runtime_state: &ViewerRuntimeState,
+    motion_state: &ViewerActorMotionState,
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    bounds: GridBounds,
+    viewport_width: f32,
+    viewport_height: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec3 {
+    let grid_size = snapshot.grid.grid_size;
+    let Some(actor) = selected_actor(snapshot, viewer_state) else {
+        return camera_focus_point(bounds, viewer_state.current_level, grid_size, Vec2::ZERO);
+    };
+    let actor_world = motion_state
+        .current_world(actor.actor_id)
+        .unwrap_or_else(|| runtime_state.runtime.grid_to_world(actor.grid_position));
+    let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * grid_size * 0.5;
+    let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * grid_size * 0.5;
+    let follow_offset = Vec2::new(actor_world.x - center_x, actor_world.z - center_z);
+    let clamped_offset = clamp_camera_pan_offset(
+        bounds,
+        grid_size,
+        follow_offset,
+        viewport_width,
+        viewport_height,
+        render_config,
+    );
+
+    camera_focus_point(
+        bounds,
+        viewer_state.current_level,
+        grid_size,
+        clamped_offset,
+    )
+}
+
 pub(crate) fn sync_actor_labels(
     mut commands: Commands,
     runtime_state: Res<ViewerRuntimeState>,
@@ -407,7 +561,12 @@ pub(crate) fn sync_actor_labels(
     let mut seen_actor_ids = HashSet::new();
     let hovered_actor_id = viewer_state
         .hovered_grid
-        .and_then(|grid| snapshot.actors.iter().find(|actor| actor.grid_position == grid))
+        .and_then(|grid| {
+            snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.grid_position == grid)
+        })
         .map(|actor| actor.actor_id);
 
     for actor in snapshot
@@ -526,17 +685,15 @@ pub(crate) fn sync_damage_numbers(
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     mut damage_numbers: ResMut<ViewerDamageNumberState>,
     mut visual_state: ResMut<DamageNumberVisualState>,
-    mut labels: Query<
-        (
-            Entity,
-            &mut Text,
-            &mut TextFont,
-            &mut TextColor,
-            &mut Node,
-            &mut Visibility,
-            &DamageNumberLabel,
-        ),
-    >,
+    mut labels: Query<(
+        Entity,
+        &mut Text,
+        &mut TextFont,
+        &mut TextColor,
+        &mut Node,
+        &mut Visibility,
+        &DamageNumberLabel,
+    )>,
 ) {
     damage_numbers.advance(time.delta_secs());
 
@@ -588,7 +745,8 @@ pub(crate) fn sync_damage_numbers(
         let entity = commands
             .spawn((
                 Text::new(entry.text()),
-                TextFont::from_font_size(entry.current_font_size()).with_font(viewer_font.0.clone()),
+                TextFont::from_font_size(entry.current_font_size())
+                    .with_font(viewer_font.0.clone()),
                 TextColor(entry.color()),
                 node,
                 visibility,
@@ -756,6 +914,7 @@ pub(crate) fn sync_world_visuals(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
+    mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     palette: Res<ViewerPalette>,
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
@@ -768,10 +927,13 @@ pub(crate) fn sync_world_visuals(
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
+    let hide_building_roofs =
+        should_hide_building_roofs(&snapshot, &viewer_state, viewer_state.current_level);
     let next_key = StaticWorldVisualKey {
         map_id: snapshot.grid.map_id.clone(),
         current_level: viewer_state.current_level,
         topology_version: snapshot.grid.topology_version,
+        hide_building_roofs,
     };
 
     if should_rebuild_static_world(&static_world_state.key, &next_key) {
@@ -783,10 +945,12 @@ pub(crate) fn sync_world_visuals(
             &mut meshes,
             &mut materials,
             &mut ground_materials,
+            &mut building_wall_materials,
             &palette,
             &runtime_state,
             &snapshot,
             viewer_state.current_level,
+            hide_building_roofs,
             *render_config,
             bounds,
             &mut static_world_state,
@@ -817,6 +981,7 @@ pub(crate) fn update_occluding_world_visuals(
     render_config: Res<ViewerRenderConfig>,
     camera_query: Single<&Transform, With<ViewerCamera>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     mut static_world_state: ResMut<StaticWorldVisualState>,
 ) {
     if static_world_state.occluders.is_empty() {
@@ -825,7 +990,11 @@ pub(crate) fn update_occluding_world_visuals(
 
     let snapshot = runtime_state.runtime.snapshot();
     let Some(target_actor) = resolve_occlusion_target(&snapshot, &viewer_state) else {
-        restore_all_occluders(&mut static_world_state, &mut materials);
+        restore_all_occluders(
+            &mut static_world_state,
+            &mut materials,
+            &mut building_wall_materials,
+        );
         return;
     };
 
@@ -843,7 +1012,12 @@ pub(crate) fn update_occluding_world_visuals(
             occluder.aabb_center,
             occluder.aabb_half_extents,
         );
-        set_occluder_faded(occluder, should_fade, &mut materials);
+        set_occluder_faded(
+            occluder,
+            should_fade,
+            &mut materials,
+            &mut building_wall_materials,
+        );
     }
 }
 
@@ -863,8 +1037,7 @@ pub(crate) fn draw_world(
     let grid_size = snapshot.grid.grid_size;
     let overlay_mode = render_config.overlay_mode;
     let pulse = 1.0
-        + (time.elapsed_secs() * style.selection_pulse_speed).sin()
-            * style.selection_pulse_amount;
+        + (time.elapsed_secs() * style.selection_pulse_speed).sin() * style.selection_pulse_amount;
 
     if overlay_mode != ViewerOverlayMode::Minimal {
         draw_grid_lines(
@@ -876,6 +1049,15 @@ pub(crate) fn draw_world(
             effective_grid_line_opacity(*render_config),
         );
     }
+
+    draw_generated_building_overlays(
+        &mut gizmos,
+        &runtime_state,
+        &snapshot,
+        viewer_state.current_level,
+        *render_config,
+        &palette,
+    );
 
     for actor in snapshot
         .actors
@@ -1017,10 +1199,12 @@ fn rebuild_static_world(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     ground_materials: &mut Assets<GridGroundMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     palette: &ViewerPalette,
     runtime_state: &ViewerRuntimeState,
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
+    hide_building_roofs: bool,
     render_config: ViewerRenderConfig,
     bounds: GridBounds,
     static_world_state: &mut StaticWorldVisualState,
@@ -1040,15 +1224,20 @@ fn rebuild_static_world(
     );
     static_world_state.entities.push(ground_entity);
 
-    for spec in
-        collect_static_world_box_specs(snapshot, current_level, render_config, palette, bounds, |grid| {
-            runtime_state.runtime.grid_to_world(grid)
-        })
-    {
+    for spec in collect_static_world_box_specs(
+        snapshot,
+        current_level,
+        hide_building_roofs,
+        render_config,
+        palette,
+        bounds,
+        |grid| runtime_state.runtime.grid_to_world(grid),
+    ) {
         let spawned = spawn_box(
             commands,
             meshes,
             materials,
+            building_wall_materials,
             spec.size,
             spec.translation,
             spec.color,
@@ -1066,106 +1255,36 @@ fn rebuild_static_world(
 fn collect_static_world_box_specs(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
+    hide_building_roofs: bool,
     render_config: ViewerRenderConfig,
     palette: &ViewerPalette,
     _bounds: GridBounds,
-    mut grid_to_world: impl FnMut(GridCoord) -> game_data::WorldCoord,
+    _grid_to_world: impl FnMut(GridCoord) -> game_data::WorldCoord,
 ) -> Vec<StaticWorldBoxSpec> {
     let mut specs = Vec::new();
     let grid_size = snapshot.grid.grid_size;
-    let floor_top = level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
-
-    for cell in snapshot
-        .grid
-        .map_cells
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+    let generated_building_ids: HashSet<_> = snapshot
+        .generated_buildings
         .iter()
-        .filter(|cell| cell.grid.y == current_level)
-    {
-        if !(cell.blocks_movement || cell.blocks_sight) {
-            continue;
-        }
+        .map(|building| building.object_id.as_str())
+        .collect();
 
-        let world = grid_to_world(cell.grid);
-        let noise = cell_style_noise(
-            render_config.object_style_seed.wrapping_add(101),
-            cell.grid.x,
-            cell.grid.z,
-        );
-        let height = if cell.blocks_movement { 0.92 } else { 0.54 } * grid_size;
-        let color = if cell.blocks_movement {
-            palette.blocking_cell
-        } else {
-            palette.sight_blocker
-        };
-        let occluder_kind = Some(if cell.blocks_movement {
-            StaticWorldOccluderKind::BlockingCell
-        } else {
-            StaticWorldOccluderKind::SightCell
-        });
-        let base_size = grid_size * (0.78 + noise * 0.06);
-        push_box_spec(
+    for building in snapshot.generated_buildings.iter().filter(|building| {
+        building
+            .stories
+            .iter()
+            .any(|story| story.level == current_level)
+    }) {
+        push_generated_building_specs(
             &mut specs,
-            Vec3::new(grid_size * 0.92, grid_size * 0.09, grid_size * 0.92),
-            Vec3::new(world.x, floor_top + grid_size * 0.045, world.z),
-            lerp_color(color, palette.ground_edge, 0.18),
-            MaterialStyle::StructureAccent,
-            None,
-        );
-        push_box_spec(
-            &mut specs,
-            Vec3::new(base_size, height, grid_size * (0.72 + noise * 0.08)),
-            Vec3::new(world.x, floor_top + height * 0.5, world.z),
-            color,
-            MaterialStyle::Structure,
-            occluder_kind,
-        );
-        push_box_spec(
-            &mut specs,
-            Vec3::new(base_size * 0.62, height * 0.18, base_size * 0.58),
-            Vec3::new(world.x, floor_top + height + height * 0.09, world.z),
-            lighten_color(color, 0.12),
-            MaterialStyle::StructureAccent,
-            None,
-        );
-    }
-
-    for grid in snapshot
-        .grid
-        .static_obstacles
-        .iter()
-        .copied()
-        .filter(|grid| grid.y == current_level)
-    {
-        let world = grid_to_world(grid);
-        let noise =
-            cell_style_noise(render_config.object_style_seed.wrapping_add(211), grid.x, grid.z);
-        let height = grid_size * (1.02 + noise * 0.34);
-        let width = grid_size * (0.62 + noise * 0.12);
-        let depth = grid_size * (0.56 + (1.0 - noise) * 0.14);
-        let color = lerp_color(palette.obstacle, palette.blocking_cell, 0.24);
-        push_box_spec(
-            &mut specs,
-            Vec3::new(grid_size * 0.9, grid_size * 0.1, grid_size * 0.82),
-            Vec3::new(world.x, floor_top + grid_size * 0.05, world.z),
-            lerp_color(color, palette.ground_edge, 0.22),
-            MaterialStyle::StructureAccent,
-            None,
-        );
-        push_box_spec(
-            &mut specs,
-            Vec3::new(width, height, depth),
-            Vec3::new(world.x, floor_top + height * 0.5, world.z),
-            color,
-            MaterialStyle::Structure,
-            Some(StaticWorldOccluderKind::StaticObstacle),
-        );
-        push_box_spec(
-            &mut specs,
-            Vec3::new(width * 0.56, height * 0.18, depth * 0.62),
-            Vec3::new(world.x, floor_top + height + height * 0.09, world.z),
-            lighten_color(color, 0.1),
-            MaterialStyle::StructureAccent,
-            None,
+            building,
+            current_level,
+            floor_top,
+            grid_size,
+            hide_building_roofs,
+            palette,
         );
     }
 
@@ -1175,6 +1294,15 @@ fn collect_static_world_box_specs(
         .iter()
         .filter(|object| object.anchor.y == current_level)
     {
+        if object.kind == game_data::MapObjectKind::Building
+            && generated_building_ids.contains(object.object_id.as_str())
+        {
+            continue;
+        }
+        if object.kind != game_data::MapObjectKind::Building && !object_has_viewer_function(object)
+        {
+            continue;
+        }
         let (center_x, center_z, footprint_width, footprint_depth) =
             occupied_cells_box(&object.occupied_cells, grid_size);
         let anchor_noise = cell_style_noise(
@@ -1190,7 +1318,11 @@ fn collect_static_world_box_specs(
                 let roof_height = grid_size * 0.2;
                 push_box_spec(
                     &mut specs,
-                    Vec3::new(footprint_width * 0.98, grid_size * 0.12, footprint_depth * 0.98),
+                    Vec3::new(
+                        footprint_width * 0.98,
+                        grid_size * 0.12,
+                        footprint_depth * 0.98,
+                    ),
                     Vec3::new(center_x, floor_top + grid_size * 0.06, center_z),
                     darken_color(base_color, 0.12),
                     MaterialStyle::StructureAccent,
@@ -1204,14 +1336,20 @@ fn collect_static_world_box_specs(
                     MaterialStyle::Structure,
                     Some(StaticWorldOccluderKind::MapObject(object.kind)),
                 );
-                push_box_spec(
-                    &mut specs,
-                    Vec3::new(footprint_width * 0.78, roof_height, footprint_depth * 0.76),
-                    Vec3::new(center_x, floor_top + body_height + roof_height * 0.5, center_z),
-                    palette.building_top,
-                    MaterialStyle::StructureAccent,
-                    None,
-                );
+                if !hide_building_roofs {
+                    push_box_spec(
+                        &mut specs,
+                        Vec3::new(footprint_width * 0.78, roof_height, footprint_depth * 0.76),
+                        Vec3::new(
+                            center_x,
+                            floor_top + body_height + roof_height * 0.5,
+                            center_z,
+                        ),
+                        palette.building_top,
+                        MaterialStyle::StructureAccent,
+                        None,
+                    );
+                }
             }
             game_data::MapObjectKind::Pickup => {
                 let plinth_height = grid_size * 0.08;
@@ -1228,7 +1366,11 @@ fn collect_static_world_box_specs(
                 push_box_spec(
                     &mut specs,
                     Vec3::new(side, core_height, side),
-                    Vec3::new(center_x, floor_top + plinth_height + core_height * 0.5, center_z),
+                    Vec3::new(
+                        center_x,
+                        floor_top + plinth_height + core_height * 0.5,
+                        center_z,
+                    ),
                     base_color,
                     MaterialStyle::Utility,
                     Some(StaticWorldOccluderKind::MapObject(object.kind)),
@@ -1247,7 +1389,11 @@ fn collect_static_world_box_specs(
                 );
                 push_box_spec(
                     &mut specs,
-                    Vec3::new(width.max(0.16), pillar_height, footprint_depth.min(grid_size * 0.42)),
+                    Vec3::new(
+                        width.max(0.16),
+                        pillar_height,
+                        footprint_depth.min(grid_size * 0.42),
+                    ),
                     Vec3::new(center_x, floor_top + pillar_height * 0.5, center_z),
                     base_color,
                     MaterialStyle::Utility,
@@ -1256,11 +1402,27 @@ fn collect_static_world_box_specs(
                 push_box_spec(
                     &mut specs,
                     Vec3::new(width.max(0.16) * 0.58, grid_size * 0.16, grid_size * 0.22),
-                    Vec3::new(center_x, floor_top + pillar_height + grid_size * 0.08, center_z),
+                    Vec3::new(
+                        center_x,
+                        floor_top + pillar_height + grid_size * 0.08,
+                        center_z,
+                    ),
                     lighten_color(base_color, 0.12),
                     MaterialStyle::UtilityAccent,
                     None,
                 );
+            }
+            game_data::MapObjectKind::Trigger => {
+                for cell in &object.occupied_cells {
+                    push_trigger_cell_specs(
+                        &mut specs,
+                        *cell,
+                        object.rotation,
+                        floor_top,
+                        grid_size,
+                        base_color,
+                    );
+                }
             }
             game_data::MapObjectKind::AiSpawn => {
                 let beacon_height = grid_size * (0.34 + anchor_noise * 0.16);
@@ -1284,7 +1446,11 @@ fn collect_static_world_box_specs(
                 push_box_spec(
                     &mut specs,
                     Vec3::new(side * 0.55, grid_size * 0.16, side * 0.55),
-                    Vec3::new(center_x, floor_top + beacon_height + grid_size * 0.08, center_z),
+                    Vec3::new(
+                        center_x,
+                        floor_top + beacon_height + grid_size * 0.08,
+                        center_z,
+                    ),
                     lighten_color(base_color, 0.18),
                     MaterialStyle::UtilityAccent,
                     None,
@@ -1294,6 +1460,571 @@ fn collect_static_world_box_specs(
     }
 
     specs
+}
+
+fn push_generated_building_specs(
+    specs: &mut Vec<StaticWorldBoxSpec>,
+    building: &game_core::GeneratedBuildingDebugState,
+    current_level: i32,
+    floor_top: f32,
+    grid_size: f32,
+    hide_building_roofs: bool,
+    palette: &ViewerPalette,
+) {
+    let Some(story) = building
+        .stories
+        .iter()
+        .find(|story| story.level == current_level)
+    else {
+        return;
+    };
+
+    let wall_height = grid_size * 1.42;
+    let roof_height = grid_size * 0.14;
+    let door_height = grid_size * 0.06;
+    let door_lintel_height = grid_size * 0.12;
+    let wall_color = palette.building_base;
+    let wall_accent = darken_color(wall_color, 0.12);
+    let foundation_color = darken_color(palette.building_base, 0.42);
+    let interior_floor_color = lerp_color(palette.building_top, palette.building_base, 0.38);
+    let wall_cap_color = lighten_color(wall_color, 0.08);
+    let door_cells = story
+        .interior_door_cells
+        .iter()
+        .chain(story.exterior_door_cells.iter())
+        .copied()
+        .collect::<Vec<_>>();
+
+    if is_solid_shell_story(story) {
+        push_solid_shell_story_specs(
+            specs,
+            story,
+            floor_top,
+            grid_size,
+            hide_building_roofs,
+            palette,
+        );
+        return;
+    }
+
+    for floor_rect in merge_cells_into_rects(&story.shape_cells) {
+        let center = rect_world_center(floor_rect, grid_size);
+        let size = rect_world_size(floor_rect, grid_size, grid_size * 0.98);
+        push_box_spec(
+            specs,
+            Vec3::new(size.x, grid_size * 0.05, size.z),
+            Vec3::new(center.x, floor_top + grid_size * 0.025, center.z),
+            foundation_color,
+            MaterialStyle::StructureAccent,
+            None,
+        );
+    }
+
+    let interior_cells = story
+        .walkable_cells
+        .iter()
+        .chain(door_cells.iter())
+        .copied()
+        .collect::<Vec<_>>();
+    for floor_rect in merge_cells_into_rects(&interior_cells) {
+        let center = rect_world_center(floor_rect, grid_size);
+        let size = rect_world_size(floor_rect, grid_size, grid_size * 0.9);
+        push_box_spec(
+            specs,
+            Vec3::new(size.x, grid_size * 0.035, size.z),
+            Vec3::new(center.x, floor_top + grid_size * 0.058, center.z),
+            interior_floor_color,
+            MaterialStyle::StructureAccent,
+            None,
+        );
+    }
+
+    for wall_segment in collect_story_wall_segments(story) {
+        let center = wall_segment_world_center(wall_segment, grid_size);
+        let size = wall_segment_world_size(wall_segment, grid_size, grid_size * 0.18);
+        push_box_spec(
+            specs,
+            Vec3::new(size.x * 1.06, grid_size * 0.04, size.z * 1.06),
+            Vec3::new(center.x, floor_top + grid_size * 0.04, center.z),
+            wall_accent,
+            MaterialStyle::StructureAccent,
+            None,
+        );
+        push_box_spec(
+            specs,
+            Vec3::new(size.x, wall_height, size.z),
+            Vec3::new(center.x, floor_top + wall_height * 0.5, center.z),
+            wall_color,
+            MaterialStyle::BuildingWallGrid,
+            Some(StaticWorldOccluderKind::MapObject(
+                game_data::MapObjectKind::Building,
+            )),
+        );
+        push_box_spec(
+            specs,
+            Vec3::new(size.x * 1.02, grid_size * 0.06, size.z * 1.02),
+            Vec3::new(
+                center.x,
+                floor_top + wall_height - grid_size * 0.03,
+                center.z,
+            ),
+            wall_cap_color,
+            MaterialStyle::StructureAccent,
+            None,
+        );
+    }
+
+    for door_rect in merge_cells_into_rects(&door_cells) {
+        let center = rect_world_center(door_rect, grid_size);
+        let threshold_size = rect_world_size(door_rect, grid_size, grid_size * 0.48);
+        push_box_spec(
+            specs,
+            Vec3::new(threshold_size.x, door_height, threshold_size.z),
+            Vec3::new(center.x, floor_top + door_height * 0.5, center.z),
+            lighten_color(palette.interactive, 0.18),
+            MaterialStyle::UtilityAccent,
+            None,
+        );
+        let lintel_size = rect_world_size(door_rect, grid_size, grid_size * 0.56);
+        push_box_spec(
+            specs,
+            Vec3::new(lintel_size.x, door_lintel_height, lintel_size.z),
+            Vec3::new(
+                center.x,
+                floor_top + wall_height - door_lintel_height * 0.5,
+                center.z,
+            ),
+            lighten_color(palette.interactive, 0.08),
+            MaterialStyle::UtilityAccent,
+            None,
+        );
+    }
+
+    if !hide_building_roofs {
+        for roof_rect in merge_cells_into_rects(&story.shape_cells) {
+            let center = rect_world_center(roof_rect, grid_size);
+            let size = rect_world_size(roof_rect, grid_size, grid_size * 0.9);
+            push_box_spec(
+                specs,
+                Vec3::new(size.x, roof_height, size.z),
+                Vec3::new(
+                    center.x,
+                    floor_top + wall_height + roof_height * 0.5,
+                    center.z,
+                ),
+                palette.building_top,
+                MaterialStyle::StructureAccent,
+                None,
+            );
+        }
+    }
+
+    for stair in &building.stairs {
+        push_generated_stair_specs(specs, stair, current_level, floor_top, grid_size, palette);
+    }
+}
+
+fn push_solid_shell_story_specs(
+    specs: &mut Vec<StaticWorldBoxSpec>,
+    story: &game_core::GeneratedBuildingStory,
+    floor_top: f32,
+    grid_size: f32,
+    hide_building_roofs: bool,
+    palette: &ViewerPalette,
+) {
+    let wall_height = grid_size * 1.02;
+    let roof_height = grid_size * 0.12;
+
+    for wall_rect in merge_cells_into_rects(&story.wall_cells) {
+        let center = rect_world_center(wall_rect, grid_size);
+        let size = rect_world_size(wall_rect, grid_size, grid_size * 0.9);
+        push_box_spec(
+            specs,
+            Vec3::new(size.x * 1.04, grid_size * 0.06, size.z * 1.04),
+            Vec3::new(center.x, floor_top + grid_size * 0.03, center.z),
+            darken_color(palette.building_base, 0.16),
+            MaterialStyle::StructureAccent,
+            None,
+        );
+        push_box_spec(
+            specs,
+            Vec3::new(size.x, wall_height, size.z),
+            Vec3::new(center.x, floor_top + wall_height * 0.5, center.z),
+            darken_color(palette.building_base, 0.06),
+            MaterialStyle::Structure,
+            Some(StaticWorldOccluderKind::MapObject(
+                game_data::MapObjectKind::Building,
+            )),
+        );
+    }
+
+    if !hide_building_roofs {
+        for roof_rect in merge_cells_into_rects(&story.shape_cells) {
+            let center = rect_world_center(roof_rect, grid_size);
+            let size = rect_world_size(roof_rect, grid_size, grid_size * 0.94);
+            push_box_spec(
+                specs,
+                Vec3::new(size.x, roof_height, size.z),
+                Vec3::new(
+                    center.x,
+                    floor_top + wall_height + roof_height * 0.5,
+                    center.z,
+                ),
+                darken_color(palette.building_top, 0.12),
+                MaterialStyle::StructureAccent,
+                None,
+            );
+        }
+    }
+}
+
+fn rect_world_center(rect: MergedGridRect, grid_size: f32) -> game_data::WorldCoord {
+    game_data::WorldCoord::new(
+        (rect.min_x + rect.max_x + 1) as f32 * grid_size * 0.5,
+        (rect.level as f32 + 0.5) * grid_size,
+        (rect.min_z + rect.max_z + 1) as f32 * grid_size * 0.5,
+    )
+}
+
+fn rect_world_size(rect: MergedGridRect, grid_size: f32, inset_size: f32) -> Vec3 {
+    let width_cells = (rect.max_x - rect.min_x + 1) as f32;
+    let depth_cells = (rect.max_z - rect.min_z + 1) as f32;
+    let scale = (inset_size / grid_size).clamp(0.0, 1.2);
+    Vec3::new(
+        width_cells * grid_size * scale,
+        0.0,
+        depth_cells * grid_size * scale,
+    )
+}
+
+fn merge_cells_into_rects(cells: &[GridCoord]) -> Vec<MergedGridRect> {
+    let mut remaining = cells.iter().copied().collect::<HashSet<_>>();
+    let mut rects = Vec::new();
+
+    while let Some(start) = remaining
+        .iter()
+        .min_by_key(|cell| (cell.y, cell.z, cell.x))
+        .copied()
+    {
+        let mut max_x = start.x;
+        while remaining.contains(&GridCoord::new(max_x + 1, start.y, start.z)) {
+            max_x += 1;
+        }
+
+        let mut max_z = start.z;
+        'grow_depth: loop {
+            let next_z = max_z + 1;
+            for x in start.x..=max_x {
+                if !remaining.contains(&GridCoord::new(x, start.y, next_z)) {
+                    break 'grow_depth;
+                }
+            }
+            max_z = next_z;
+        }
+
+        for z in start.z..=max_z {
+            for x in start.x..=max_x {
+                remaining.remove(&GridCoord::new(x, start.y, z));
+            }
+        }
+
+        rects.push(MergedGridRect {
+            level: start.y,
+            min_x: start.x,
+            max_x,
+            min_z: start.z,
+            max_z,
+        });
+    }
+
+    rects.sort_by_key(|rect| (rect.level, rect.min_z, rect.min_x, rect.max_z, rect.max_x));
+    rects
+}
+
+fn is_solid_shell_story(story: &game_core::GeneratedBuildingStory) -> bool {
+    story.rooms.is_empty()
+        && story.interior_door_cells.is_empty()
+        && story.exterior_door_cells.is_empty()
+        && story.walkable_cells.is_empty()
+}
+
+fn collect_story_wall_segments(story: &game_core::GeneratedBuildingStory) -> Vec<WallSegment> {
+    let wall_cells = story.wall_cells.iter().copied().collect::<HashSet<_>>();
+    let mut segments = Vec::new();
+
+    for wall in &story.wall_cells {
+        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z - 1)) {
+            segments.push(WallSegment {
+                level: wall.y,
+                axis: WallAxis::Horizontal,
+                line: wall.z,
+                start: wall.x,
+                end: wall.x + 1,
+            });
+        }
+        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z + 1)) {
+            segments.push(WallSegment {
+                level: wall.y,
+                axis: WallAxis::Horizontal,
+                line: wall.z + 1,
+                start: wall.x,
+                end: wall.x + 1,
+            });
+        }
+        if !wall_cells.contains(&GridCoord::new(wall.x - 1, wall.y, wall.z)) {
+            segments.push(WallSegment {
+                level: wall.y,
+                axis: WallAxis::Vertical,
+                line: wall.x,
+                start: wall.z,
+                end: wall.z + 1,
+            });
+        }
+        if !wall_cells.contains(&GridCoord::new(wall.x + 1, wall.y, wall.z)) {
+            segments.push(WallSegment {
+                level: wall.y,
+                axis: WallAxis::Vertical,
+                line: wall.x + 1,
+                start: wall.z,
+                end: wall.z + 1,
+            });
+        }
+    }
+
+    merge_wall_segments(segments)
+}
+
+fn merge_wall_segments(mut segments: Vec<WallSegment>) -> Vec<WallSegment> {
+    segments.sort_by_key(|segment| {
+        (
+            segment.level,
+            match segment.axis {
+                WallAxis::Horizontal => 0,
+                WallAxis::Vertical => 1,
+            },
+            segment.line,
+            segment.start,
+            segment.end,
+        )
+    });
+
+    let mut merged: Vec<WallSegment> = Vec::new();
+    for segment in segments {
+        if let Some(last) = merged.last_mut() {
+            if last.level == segment.level
+                && last.axis == segment.axis
+                && last.line == segment.line
+                && last.end == segment.start
+            {
+                last.end = segment.end;
+                continue;
+            }
+        }
+        merged.push(segment);
+    }
+    merged
+}
+
+fn wall_segment_world_center(segment: WallSegment, grid_size: f32) -> game_data::WorldCoord {
+    match segment.axis {
+        WallAxis::Horizontal => game_data::WorldCoord::new(
+            (segment.start + segment.end) as f32 * grid_size * 0.5,
+            (segment.level as f32 + 0.5) * grid_size,
+            segment.line as f32 * grid_size,
+        ),
+        WallAxis::Vertical => game_data::WorldCoord::new(
+            segment.line as f32 * grid_size,
+            (segment.level as f32 + 0.5) * grid_size,
+            (segment.start + segment.end) as f32 * grid_size * 0.5,
+        ),
+    }
+}
+
+fn wall_segment_world_size(segment: WallSegment, grid_size: f32, thickness: f32) -> Vec3 {
+    let length = (segment.end - segment.start) as f32 * grid_size;
+    match segment.axis {
+        WallAxis::Horizontal => Vec3::new(length, 0.0, thickness),
+        WallAxis::Vertical => Vec3::new(thickness, 0.0, length),
+    }
+}
+
+fn push_generated_stair_specs(
+    specs: &mut Vec<StaticWorldBoxSpec>,
+    stair: &game_core::GeneratedStairConnection,
+    current_level: i32,
+    floor_top: f32,
+    grid_size: f32,
+    palette: &ViewerPalette,
+) {
+    let step_height = grid_size * 0.09;
+    let landing_height = grid_size * 0.05;
+    let direction = stair_run_direction(stair);
+
+    if stair.from_level == current_level {
+        for rect in merge_cells_into_rects(&stair.from_cells) {
+            let center = rect_world_center(rect, grid_size);
+            let base_size = rect_world_size(rect, grid_size, grid_size * 0.84);
+            push_box_spec(
+                specs,
+                Vec3::new(base_size.x, landing_height, base_size.z),
+                Vec3::new(center.x, floor_top + landing_height * 0.5, center.z),
+                darken_color(palette.interactive, 0.18),
+                MaterialStyle::UtilityAccent,
+                None,
+            );
+
+            let run_span = if direction.x.abs() > direction.y.abs() {
+                base_size.x
+            } else {
+                base_size.z
+            };
+            for step_index in 0..3 {
+                let lift = (step_index + 1) as f32;
+                let shift = (step_index as f32 - 0.8) * run_span * 0.12;
+                let step_center = Vec3::new(
+                    center.x + direction.x * shift,
+                    floor_top + landing_height + step_height * (lift - 0.5),
+                    center.z + direction.y * shift,
+                );
+                let scale = 1.0 - step_index as f32 * 0.16;
+                let step_size = if direction.x.abs() > direction.y.abs() {
+                    Vec3::new(base_size.x * scale, step_height, base_size.z * 0.86)
+                } else {
+                    Vec3::new(base_size.x * 0.86, step_height, base_size.z * scale)
+                };
+                push_box_spec(
+                    specs,
+                    step_size,
+                    step_center,
+                    lighten_color(palette.interactive, 0.08 + step_index as f32 * 0.05),
+                    MaterialStyle::Utility,
+                    None,
+                );
+            }
+        }
+    }
+
+    if stair.to_level == current_level {
+        for rect in merge_cells_into_rects(&stair.to_cells) {
+            let center = rect_world_center(rect, grid_size);
+            let size = rect_world_size(rect, grid_size, grid_size * 0.7);
+            push_box_spec(
+                specs,
+                Vec3::new(size.x, landing_height, size.z),
+                Vec3::new(center.x, floor_top + landing_height * 0.5, center.z),
+                lighten_color(palette.current_turn, 0.12),
+                MaterialStyle::UtilityAccent,
+                None,
+            );
+        }
+    }
+}
+
+fn stair_run_direction(stair: &game_core::GeneratedStairConnection) -> Vec2 {
+    let count = stair.from_cells.len().max(1) as f32;
+    let delta_x = stair
+        .from_cells
+        .iter()
+        .zip(stair.to_cells.iter())
+        .map(|(from, to)| (to.x - from.x) as f32)
+        .sum::<f32>()
+        / count;
+    let delta_z = stair
+        .from_cells
+        .iter()
+        .zip(stair.to_cells.iter())
+        .map(|(from, to)| (to.z - from.z) as f32)
+        .sum::<f32>()
+        / count;
+
+    if delta_x.abs() > delta_z.abs() && delta_x.abs() > f32::EPSILON {
+        Vec2::new(delta_x.signum(), 0.0)
+    } else if delta_z.abs() > f32::EPSILON {
+        Vec2::new(0.0, delta_z.signum())
+    } else {
+        Vec2::new(0.0, 1.0)
+    }
+}
+
+fn draw_generated_building_overlays(
+    gizmos: &mut Gizmos,
+    runtime_state: &ViewerRuntimeState,
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+    palette: &ViewerPalette,
+) {
+    let grid_size = snapshot.grid.grid_size;
+    let wall_top_y = level_base_height(current_level, grid_size)
+        + render_config.floor_thickness_world
+        + grid_size * 1.13;
+
+    for building in &snapshot.generated_buildings {
+        for edge in building
+            .visual_outline
+            .iter()
+            .filter(|edge| edge.level == current_level)
+        {
+            gizmos.line(
+                Vec3::new(
+                    edge.from.x as f32 * grid_size,
+                    wall_top_y,
+                    edge.from.z as f32 * grid_size,
+                ),
+                Vec3::new(
+                    edge.to.x as f32 * grid_size,
+                    wall_top_y,
+                    edge.to.z as f32 * grid_size,
+                ),
+                lighten_color(palette.building_top, 0.08),
+            );
+        }
+
+        for stair in &building.stairs {
+            if stair.from_level == current_level {
+                for (from, to) in stair.from_cells.iter().zip(stair.to_cells.iter()) {
+                    draw_grid_outline(
+                        gizmos,
+                        *from,
+                        grid_size,
+                        render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.4,
+                        0.7,
+                        palette.interactive,
+                    );
+                    let from_world = runtime_state.runtime.grid_to_world(*from);
+                    let to_world = runtime_state.runtime.grid_to_world(*to);
+                    gizmos.line(
+                        Vec3::new(
+                            from_world.x,
+                            level_base_height(stair.from_level, grid_size)
+                                + render_config.floor_thickness_world
+                                + OVERLAY_ELEVATION * 2.0,
+                            from_world.z,
+                        ),
+                        Vec3::new(
+                            to_world.x,
+                            level_base_height(stair.to_level, grid_size)
+                                + render_config.floor_thickness_world
+                                + OVERLAY_ELEVATION * 2.6,
+                            to_world.z,
+                        ),
+                        palette.interactive,
+                    );
+                }
+            } else if stair.to_level == current_level {
+                for to in &stair.to_cells {
+                    draw_grid_outline(
+                        gizmos,
+                        *to,
+                        grid_size,
+                        render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.4,
+                        0.7,
+                        palette.current_turn,
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1349,14 +2080,22 @@ fn sync_actor_visuals(
             }
         }
 
-        let body_material = make_material(materials, color, MaterialStyle::CharacterBody);
-        let head_material =
-            make_material(materials, actor_head_color(color), MaterialStyle::CharacterHead);
-        let accent_material =
-            make_material(materials, accent_color, MaterialStyle::CharacterAccent);
-        let shadow_material = make_material(
+        let body_material = make_standard_material(materials, color, MaterialStyle::CharacterBody);
+        let head_material = make_standard_material(
             materials,
-            Color::srgba(0.02, 0.025, 0.032, render_config.shadow_opacity_scale * 0.62),
+            actor_head_color(color),
+            MaterialStyle::CharacterHead,
+        );
+        let accent_material =
+            make_standard_material(materials, accent_color, MaterialStyle::CharacterAccent);
+        let shadow_material = make_standard_material(
+            materials,
+            Color::srgba(
+                0.02,
+                0.025,
+                0.032,
+                render_config.shadow_opacity_scale * 0.62,
+            ),
             MaterialStyle::Shadow,
         );
         let body_height = render_config.actor_body_length_world;
@@ -1441,7 +2180,10 @@ fn spawn_ground_plane(
             ..default()
         },
         extension: GridGroundMaterialExt {
-            world_origin: Vec2::new(bounds.min_x as f32 * grid_size, bounds.min_z as f32 * grid_size),
+            world_origin: Vec2::new(
+                bounds.min_x as f32 * grid_size,
+                bounds.min_z as f32 * grid_size,
+            ),
             grid_size,
             line_width: 0.06,
             variation_strength: render_config.ground_variation_strength,
@@ -1519,13 +2261,12 @@ fn with_alpha(color: Color, alpha: f32) -> Color {
     color.into()
 }
 
-fn make_material(
+fn make_standard_material(
     materials: &mut Assets<StandardMaterial>,
     color: Color,
     style: MaterialStyle,
 ) -> Handle<StandardMaterial> {
-    let (perceptual_roughness, reflectance, metallic, alpha_mode, emissive_strength) = match style
-    {
+    let (perceptual_roughness, reflectance, metallic, alpha_mode, emissive_strength) = match style {
         MaterialStyle::Structure => (0.88, 0.04, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::StructureAccent => (0.8, 0.05, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::Utility => (0.66, 0.16, 0.0, AlphaMode::Opaque, 0.04),
@@ -1534,6 +2275,7 @@ fn make_material(
         MaterialStyle::CharacterHead => (0.76, 0.06, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::CharacterAccent => (0.7, 0.12, 0.0, AlphaMode::Opaque, 0.05),
         MaterialStyle::Shadow => (1.0, 0.0, 0.0, AlphaMode::Blend, 0.0),
+        MaterialStyle::BuildingWallGrid => (0.92, 0.035, 0.0, AlphaMode::Opaque, 0.0),
     };
     let emissive = color.with_alpha(1.0).to_linear() * emissive_strength;
 
@@ -1544,8 +2286,50 @@ fn make_material(
         metallic,
         alpha_mode,
         emissive: emissive.into(),
+        opaque_render_method: OpaqueRendererMethod::Forward,
         ..default()
     })
+}
+
+fn make_static_world_material(
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    color: Color,
+    style: MaterialStyle,
+) -> StaticWorldMaterialHandle {
+    match style {
+        MaterialStyle::BuildingWallGrid => {
+            let major_line_color = darken_color(color, 0.22);
+            let minor_line_color = darken_color(color, 0.11);
+            let cap_color = lighten_color(color, 0.055);
+            StaticWorldMaterialHandle::BuildingWallGrid(building_wall_materials.add(
+                BuildingWallGridMaterial {
+                    base: StandardMaterial {
+                        base_color: color,
+                        perceptual_roughness: 0.92,
+                        reflectance: 0.035,
+                        metallic: 0.0,
+                        alpha_mode: AlphaMode::Opaque,
+                        opaque_render_method: OpaqueRendererMethod::Forward,
+                        ..default()
+                    },
+                    extension: BuildingWallGridMaterialExt {
+                        major_grid_size: 1.0,
+                        minor_grid_size: 0.5,
+                        major_line_width: 0.048,
+                        minor_line_width: 0.022,
+                        face_tint_strength: 0.065,
+                        _padding: Vec3::ZERO,
+                        base_color: color,
+                        major_line_color,
+                        minor_line_color,
+                        cap_color,
+                    },
+                },
+            ))
+        }
+        _ => StaticWorldMaterialHandle::Standard(make_standard_material(materials, color, style)),
+    }
 }
 
 fn effective_grid_line_opacity(render_config: ViewerRenderConfig) -> f32 {
@@ -1736,6 +2520,30 @@ fn actor_visual_translation(
     ) + feedback_state.visual_offset(actor.actor_id)
 }
 
+fn should_hide_building_roofs(
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    current_level: i32,
+) -> bool {
+    let focused_actor_id = if viewer_state.is_free_observe() {
+        viewer_state.selected_actor
+    } else {
+        viewer_state.command_actor_id(snapshot)
+    };
+    focused_actor_id
+        .and_then(|actor_id| {
+            snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.actor_id == actor_id)
+        })
+        .is_some_and(|actor| actor.grid_position.y == current_level)
+}
+
+fn object_has_viewer_function(object: &game_core::MapObjectDebugState) -> bool {
+    !object.payload_summary.is_empty()
+}
+
 fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
     let mut min_x = i32::MAX;
     let mut max_x = i32::MIN;
@@ -1754,6 +2562,98 @@ fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f3
     let width = (max_x - min_x + 1) as f32 * grid_size;
     let depth = (max_z - min_z + 1) as f32 * grid_size;
     (center_x, center_z, width, depth)
+}
+
+fn push_trigger_cell_specs(
+    specs: &mut Vec<StaticWorldBoxSpec>,
+    cell: GridCoord,
+    rotation: game_data::MapRotation,
+    floor_top: f32,
+    grid_size: f32,
+    base_color: Color,
+) {
+    let center_x = (cell.x as f32 + 0.5) * grid_size;
+    let center_z = (cell.z as f32 + 0.5) * grid_size;
+    let tile_height = grid_size * 0.045;
+    let shaft_height = grid_size * 0.055;
+    let head_height = grid_size * 0.06;
+
+    push_box_spec(
+        specs,
+        Vec3::new(grid_size * 0.9, tile_height, grid_size * 0.9),
+        Vec3::new(center_x, floor_top + tile_height * 0.5, center_z),
+        darken_color(base_color, 0.08),
+        MaterialStyle::UtilityAccent,
+        None,
+    );
+
+    let (shaft_size, shaft_offset, head_size, head_offset) = match rotation {
+        game_data::MapRotation::North => (
+            Vec3::new(grid_size * 0.18, shaft_height, grid_size * 0.42),
+            Vec3::new(0.0, tile_height + shaft_height * 0.5, -grid_size * 0.04),
+            Vec3::new(grid_size * 0.5, head_height, grid_size * 0.16),
+            Vec3::new(
+                0.0,
+                tile_height + shaft_height + head_height * 0.5,
+                -grid_size * 0.24,
+            ),
+        ),
+        game_data::MapRotation::East => (
+            Vec3::new(grid_size * 0.42, shaft_height, grid_size * 0.18),
+            Vec3::new(grid_size * 0.04, tile_height + shaft_height * 0.5, 0.0),
+            Vec3::new(grid_size * 0.16, head_height, grid_size * 0.5),
+            Vec3::new(
+                grid_size * 0.24,
+                tile_height + shaft_height + head_height * 0.5,
+                0.0,
+            ),
+        ),
+        game_data::MapRotation::South => (
+            Vec3::new(grid_size * 0.18, shaft_height, grid_size * 0.42),
+            Vec3::new(0.0, tile_height + shaft_height * 0.5, grid_size * 0.04),
+            Vec3::new(grid_size * 0.5, head_height, grid_size * 0.16),
+            Vec3::new(
+                0.0,
+                tile_height + shaft_height + head_height * 0.5,
+                grid_size * 0.24,
+            ),
+        ),
+        game_data::MapRotation::West => (
+            Vec3::new(grid_size * 0.42, shaft_height, grid_size * 0.18),
+            Vec3::new(-grid_size * 0.04, tile_height + shaft_height * 0.5, 0.0),
+            Vec3::new(grid_size * 0.16, head_height, grid_size * 0.5),
+            Vec3::new(
+                -grid_size * 0.24,
+                tile_height + shaft_height + head_height * 0.5,
+                0.0,
+            ),
+        ),
+    };
+
+    push_box_spec(
+        specs,
+        shaft_size,
+        Vec3::new(
+            center_x + shaft_offset.x,
+            floor_top + shaft_offset.y,
+            center_z + shaft_offset.z,
+        ),
+        base_color,
+        MaterialStyle::Utility,
+        None,
+    );
+    push_box_spec(
+        specs,
+        head_size,
+        Vec3::new(
+            center_x + head_offset.x,
+            floor_top + head_offset.y,
+            center_z + head_offset.z,
+        ),
+        lighten_color(base_color, 0.08),
+        MaterialStyle::UtilityAccent,
+        None,
+    );
 }
 
 fn selected_ai_debug_entry<'a>(
@@ -1823,19 +2723,31 @@ fn spawn_box(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     size: Vec3,
     translation: Vec3,
     color: Color,
     material_style: MaterialStyle,
 ) -> SpawnedBoxVisual {
-    let material = make_material(materials, color, material_style);
-    let entity = commands
-        .spawn((
-            Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
-            MeshMaterial3d(material.clone()),
-            Transform::from_translation(translation),
-        ))
-        .id();
+    let mesh = meshes.add(Cuboid::new(size.x, size.y, size.z));
+    let material =
+        make_static_world_material(materials, building_wall_materials, color, material_style);
+    let entity = match &material {
+        StaticWorldMaterialHandle::Standard(material) => commands
+            .spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                Transform::from_translation(translation),
+            ))
+            .id(),
+        StaticWorldMaterialHandle::BuildingWallGrid(material) => commands
+            .spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                Transform::from_translation(translation),
+            ))
+            .id(),
+    };
 
     SpawnedBoxVisual {
         entity,
@@ -1868,26 +2780,39 @@ fn set_occluder_faded(
     occluder: &mut StaticWorldOccluderVisual,
     faded: bool,
     materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
     if occluder.currently_faded == faded {
         return;
     }
 
-    let Some(material) = materials.get_mut(&occluder.material) else {
-        occluder.currently_faded = faded;
-        return;
-    };
-
-    if faded {
-        let mut tinted = occluder.base_color.to_srgba();
-        tinted.alpha = 0.28;
-        material.base_color = tinted.into();
-        material.alpha_mode = AlphaMode::Blend;
-    } else {
-        let mut restored = occluder.base_color.to_srgba();
-        restored.alpha = occluder.base_alpha;
-        material.base_color = restored.into();
-        material.alpha_mode = occluder.base_alpha_mode.clone();
+    match &occluder.material {
+        StaticWorldMaterialHandle::Standard(handle) => {
+            let Some(material) = materials.get_mut(handle) else {
+                occluder.currently_faded = faded;
+                return;
+            };
+            apply_occluder_fade_to_standard_material(
+                material,
+                occluder.base_color,
+                occluder.base_alpha,
+                &occluder.base_alpha_mode,
+                faded,
+            );
+        }
+        StaticWorldMaterialHandle::BuildingWallGrid(handle) => {
+            let Some(material) = building_wall_materials.get_mut(handle) else {
+                occluder.currently_faded = faded;
+                return;
+            };
+            apply_occluder_fade_to_standard_material(
+                &mut material.base,
+                occluder.base_color,
+                occluder.base_alpha,
+                &occluder.base_alpha_mode,
+                faded,
+            );
+        }
     }
 
     occluder.currently_faded = faded;
@@ -1896,9 +2821,30 @@ fn set_occluder_faded(
 fn restore_all_occluders(
     static_world_state: &mut StaticWorldVisualState,
     materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
     for occluder in &mut static_world_state.occluders {
-        set_occluder_faded(occluder, false, materials);
+        set_occluder_faded(occluder, false, materials, building_wall_materials);
+    }
+}
+
+fn apply_occluder_fade_to_standard_material(
+    material: &mut StandardMaterial,
+    base_color: Color,
+    base_alpha: f32,
+    base_alpha_mode: &AlphaMode,
+    faded: bool,
+) {
+    if faded {
+        let mut tinted = base_color.to_srgba();
+        tinted.alpha = 0.28;
+        material.base_color = tinted.into();
+        material.alpha_mode = AlphaMode::Blend;
+    } else {
+        let mut restored = base_color.to_srgba();
+        restored.alpha = base_alpha;
+        material.base_color = restored.into();
+        material.alpha_mode = base_alpha_mode.clone();
     }
 }
 
@@ -1906,19 +2852,21 @@ fn restore_all_occluders(
 mod tests {
     use super::{
         actor_visual_translation, actor_visual_world_position, collect_static_world_box_specs,
-        interaction_menu_button_color, interaction_menu_layout, occupied_cells_box, GridBounds,
+        darken_color, interaction_menu_button_color, interaction_menu_layout, lighten_color,
+        merge_cells_into_rects, occupied_cells_box, should_hide_building_roofs, GridBounds,
         StaticWorldOccluderKind, INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX,
         INTERACTION_MENU_PADDING_PX,
     };
     use crate::state::{
-        InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState, ViewerRenderConfig,
-        ViewerPalette, ViewerRuntimeState,
+        InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState, ViewerControlMode,
+        ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
     };
     use bevy::prelude::*;
     use game_bevy::SettlementDebugSnapshot;
     use game_core::{
-        create_demo_runtime, CombatDebugState, GridDebugState, MapCellDebugState,
-        MapObjectDebugState, OverworldStateSnapshot, SimulationSnapshot,
+        create_demo_runtime, CombatDebugState, GeneratedBuildingDebugState, GeneratedBuildingStory,
+        GeneratedStairConnection, GridDebugState, MapCellDebugState, MapObjectDebugState,
+        OverworldStateSnapshot, SimulationSnapshot,
     };
     use game_data::{
         ActorId, GridCoord, InteractionContextSnapshot, InteractionOptionId, InteractionPrompt,
@@ -2071,10 +3019,28 @@ mod tests {
     }
 
     #[test]
-    fn static_world_specs_only_register_occluder_geometry_when_ground_is_shader_driven() {
+    fn merge_cells_into_rects_coalesces_solid_areas() {
+        let rects = merge_cells_into_rects(&[
+            GridCoord::new(0, 0, 0),
+            GridCoord::new(1, 0, 0),
+            GridCoord::new(0, 0, 1),
+            GridCoord::new(1, 0, 1),
+            GridCoord::new(3, 0, 0),
+        ]);
+
+        assert_eq!(rects.len(), 2);
+        assert_eq!(rects[0].min_x, 0);
+        assert_eq!(rects[0].max_x, 1);
+        assert_eq!(rects[0].min_z, 0);
+        assert_eq!(rects[0].max_z, 1);
+    }
+
+    #[test]
+    fn static_world_specs_hide_nonfunctional_environment_geometry() {
         let specs = collect_static_world_box_specs(
             &snapshot_with_occluders(),
             0,
+            false,
             ViewerRenderConfig::default(),
             &ViewerPalette::default(),
             GridBounds {
@@ -2096,14 +3062,22 @@ mod tests {
             .count();
 
         assert!(non_occluder_count > 0);
-        assert_eq!(occluder_count, 4);
+        assert_eq!(occluder_count, 2);
+        assert!(specs.iter().all(|spec| {
+            spec.occluder_kind.is_none()
+                || matches!(
+                    spec.occluder_kind,
+                    Some(StaticWorldOccluderKind::MapObject(_))
+                )
+        }));
     }
 
     #[test]
-    fn static_world_specs_register_all_occluder_categories() {
+    fn static_world_specs_keep_buildings_and_functional_objects() {
         let specs = collect_static_world_box_specs(
             &snapshot_with_occluders(),
             0,
+            false,
             ViewerRenderConfig::default(),
             &ViewerPalette::default(),
             GridBounds {
@@ -2115,18 +3089,162 @@ mod tests {
             world_from_grid,
         );
 
-        assert!(specs
-            .iter()
-            .any(|spec| spec.occluder_kind == Some(StaticWorldOccluderKind::BlockingCell)));
-        assert!(specs
-            .iter()
-            .any(|spec| spec.occluder_kind == Some(StaticWorldOccluderKind::SightCell)));
-        assert!(specs
-            .iter()
-            .any(|spec| spec.occluder_kind == Some(StaticWorldOccluderKind::StaticObstacle)));
         assert!(specs.iter().any(|spec| {
             spec.occluder_kind == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
         }));
+        assert!(specs.iter().any(|spec| {
+            spec.occluder_kind
+                == Some(StaticWorldOccluderKind::MapObject(
+                    MapObjectKind::Interactive,
+                ))
+        }));
+    }
+
+    #[test]
+    fn trigger_specs_render_arrow_tiles_for_each_trigger_cell() {
+        let palette = ViewerPalette::default();
+        let specs = collect_static_world_box_specs(
+            &snapshot_with_trigger_strip(),
+            0,
+            false,
+            ViewerRenderConfig::default(),
+            &palette,
+            GridBounds {
+                min_x: 0,
+                max_x: 3,
+                min_z: 0,
+                max_z: 1,
+            },
+            world_from_grid,
+        );
+
+        let trigger_specs = specs
+            .iter()
+            .filter(|spec| spec.occluder_kind.is_none())
+            .filter(|spec| {
+                let color = spec.color.to_srgba();
+                color == palette.trigger.to_srgba()
+                    || color == darken_color(palette.trigger, 0.08).to_srgba()
+                    || color == lighten_color(palette.trigger, 0.08).to_srgba()
+            })
+            .count();
+
+        assert_eq!(trigger_specs, 6);
+    }
+
+    #[test]
+    fn static_world_specs_hide_building_roofs_when_actor_is_on_same_level() {
+        let palette = ViewerPalette::default();
+        let specs_with_roof = collect_static_world_box_specs(
+            &snapshot_with_occluders(),
+            0,
+            false,
+            ViewerRenderConfig::default(),
+            &palette,
+            GridBounds {
+                min_x: 0,
+                max_x: 1,
+                min_z: 0,
+                max_z: 1,
+            },
+            world_from_grid,
+        );
+        let specs_without_roof = collect_static_world_box_specs(
+            &snapshot_with_occluders(),
+            0,
+            true,
+            ViewerRenderConfig::default(),
+            &palette,
+            GridBounds {
+                min_x: 0,
+                max_x: 1,
+                min_z: 0,
+                max_z: 1,
+            },
+            world_from_grid,
+        );
+
+        let roof_with = specs_with_roof
+            .iter()
+            .filter(|spec| spec.color.to_srgba() == palette.building_top.to_srgba())
+            .count();
+        let roof_without = specs_without_roof
+            .iter()
+            .filter(|spec| spec.color.to_srgba() == palette.building_top.to_srgba())
+            .count();
+
+        assert!(roof_with > 0);
+        assert_eq!(roof_without, 0);
+    }
+
+    #[test]
+    fn building_roofs_hide_for_controlled_or_observed_actor_on_level() {
+        let snapshot = snapshot_with_focus_actor();
+        let viewer_state = ViewerState {
+            controlled_player_actor: Some(ActorId(1)),
+            selected_actor: Some(ActorId(1)),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        assert!(should_hide_building_roofs(&snapshot, &viewer_state, 0));
+
+        let free_observe_state = ViewerState {
+            selected_actor: Some(ActorId(2)),
+            control_mode: ViewerControlMode::FreeObserve,
+            current_level: 1,
+            ..ViewerState::default()
+        };
+
+        assert!(should_hide_building_roofs(
+            &snapshot,
+            &free_observe_state,
+            1
+        ));
+        assert!(!should_hide_building_roofs(
+            &snapshot,
+            &free_observe_state,
+            0
+        ));
+    }
+
+    #[test]
+    fn generated_building_specs_render_walls_without_fallback_box() {
+        let palette = ViewerPalette::default();
+        let specs = collect_static_world_box_specs(
+            &snapshot_with_generated_building(),
+            0,
+            false,
+            ViewerRenderConfig::default(),
+            &palette,
+            GridBounds {
+                min_x: 0,
+                max_x: 3,
+                min_z: 0,
+                max_z: 3,
+            },
+            world_from_grid,
+        );
+
+        let wall_specs = specs
+            .iter()
+            .filter(|spec| {
+                spec.occluder_kind
+                    == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
+            })
+            .count();
+        let roof_specs = specs
+            .iter()
+            .filter(|spec| spec.color.to_srgba() == palette.building_top.to_srgba())
+            .count();
+        let utility_specs = specs
+            .iter()
+            .filter(|spec| spec.occluder_kind.is_none())
+            .count();
+
+        assert!(wall_specs >= 4);
+        assert_eq!(roof_specs, 1);
+        assert!(utility_specs >= 5);
     }
 
     fn sample_prompt(option_count: usize) -> InteractionPrompt {
@@ -2173,24 +3291,96 @@ mod tests {
                         terrain: "curtain".into(),
                     },
                 ],
+                map_objects: vec![
+                    MapObjectDebugState {
+                        object_id: "house".into(),
+                        kind: MapObjectKind::Building,
+                        anchor: GridCoord::new(0, 0, 1),
+                        footprint: MapObjectFootprint {
+                            width: 1,
+                            height: 1,
+                        },
+                        rotation: MapRotation::North,
+                        blocks_movement: true,
+                        blocks_sight: true,
+                        occupied_cells: vec![GridCoord::new(0, 0, 1)],
+                        payload_summary: Default::default(),
+                    },
+                    MapObjectDebugState {
+                        object_id: "terminal".into(),
+                        kind: MapObjectKind::Interactive,
+                        anchor: GridCoord::new(1, 0, 1),
+                        footprint: MapObjectFootprint {
+                            width: 1,
+                            height: 1,
+                        },
+                        rotation: MapRotation::North,
+                        blocks_movement: false,
+                        blocks_sight: false,
+                        occupied_cells: vec![GridCoord::new(1, 0, 1)],
+                        payload_summary: [("interaction_kind".to_string(), "terminal".to_string())]
+                            .into_iter()
+                            .collect(),
+                    },
+                ],
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            generated_buildings: Vec::new(),
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        }
+    }
+
+    fn snapshot_with_trigger_strip() -> SimulationSnapshot {
+        SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: Vec::new(),
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(4),
+                map_height: Some(2),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: Vec::new(),
+                map_cells: Vec::new(),
                 map_objects: vec![MapObjectDebugState {
-                    object_id: "house".into(),
-                    kind: MapObjectKind::Building,
-                    anchor: GridCoord::new(0, 0, 1),
+                    object_id: "edge_trigger".into(),
+                    kind: MapObjectKind::Trigger,
+                    anchor: GridCoord::new(1, 0, 0),
                     footprint: MapObjectFootprint {
-                        width: 1,
+                        width: 2,
                         height: 1,
                     },
-                    rotation: MapRotation::North,
-                    blocks_movement: true,
-                    blocks_sight: true,
-                    occupied_cells: vec![GridCoord::new(0, 0, 1)],
-                    payload_summary: Default::default(),
+                    rotation: MapRotation::East,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    occupied_cells: vec![GridCoord::new(1, 0, 0), GridCoord::new(2, 0, 0)],
+                    payload_summary: [
+                        (
+                            "trigger_kind".to_string(),
+                            "enter_outdoor_location".to_string(),
+                        ),
+                        ("target_id".to_string(), "street_b".to_string()),
+                    ]
+                    .into_iter()
+                    .collect(),
                 }],
                 runtime_blocked_cells: Vec::new(),
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            generated_buildings: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -2209,6 +3399,160 @@ mod tests {
             grid.y as f32 + 0.5,
             grid.z as f32 + 0.5,
         )
+    }
+
+    fn snapshot_with_focus_actor() -> SimulationSnapshot {
+        SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: vec![
+                game_core::ActorDebugState {
+                    actor_id: ActorId(1),
+                    definition_id: None,
+                    display_name: "player".into(),
+                    kind: game_data::ActorKind::Npc,
+                    side: game_data::ActorSide::Player,
+                    group_id: "player".into(),
+                    ap: 6.0,
+                    available_steps: 3,
+                    turn_open: false,
+                    in_combat: false,
+                    grid_position: GridCoord::new(0, 0, 0),
+                    level: 1,
+                    current_xp: 0,
+                    available_stat_points: 0,
+                    available_skill_points: 0,
+                    hp: 10.0,
+                    max_hp: 10.0,
+                },
+                game_core::ActorDebugState {
+                    actor_id: ActorId(2),
+                    definition_id: None,
+                    display_name: "observer".into(),
+                    kind: game_data::ActorKind::Npc,
+                    side: game_data::ActorSide::Friendly,
+                    group_id: "ally".into(),
+                    ap: 6.0,
+                    available_steps: 3,
+                    turn_open: false,
+                    in_combat: false,
+                    grid_position: GridCoord::new(0, 1, 0),
+                    level: 1,
+                    current_xp: 0,
+                    available_stat_points: 0,
+                    available_skill_points: 0,
+                    hp: 10.0,
+                    max_hp: 10.0,
+                },
+            ],
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(2),
+                map_height: Some(2),
+                default_level: Some(0),
+                levels: vec![0, 1],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: Vec::new(),
+                map_cells: Vec::new(),
+                map_objects: Vec::new(),
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            generated_buildings: Vec::new(),
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        }
+    }
+
+    fn snapshot_with_generated_building() -> SimulationSnapshot {
+        SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: Vec::new(),
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(4),
+                map_height: Some(4),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: Vec::new(),
+                map_cells: Vec::new(),
+                map_objects: vec![MapObjectDebugState {
+                    object_id: "generated_house".into(),
+                    kind: MapObjectKind::Building,
+                    anchor: GridCoord::new(0, 0, 0),
+                    footprint: MapObjectFootprint {
+                        width: 4,
+                        height: 4,
+                    },
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    occupied_cells: vec![
+                        GridCoord::new(0, 0, 0),
+                        GridCoord::new(1, 0, 0),
+                        GridCoord::new(0, 0, 1),
+                        GridCoord::new(1, 0, 1),
+                    ],
+                    payload_summary: Default::default(),
+                }],
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            generated_buildings: vec![GeneratedBuildingDebugState {
+                object_id: "generated_house".into(),
+                prefab_id: "generated_house".into(),
+                anchor: GridCoord::new(0, 0, 0),
+                rotation: MapRotation::North,
+                stories: vec![GeneratedBuildingStory {
+                    level: 0,
+                    shape_cells: vec![
+                        GridCoord::new(0, 0, 0),
+                        GridCoord::new(1, 0, 0),
+                        GridCoord::new(0, 0, 1),
+                        GridCoord::new(1, 0, 1),
+                    ],
+                    rooms: Vec::new(),
+                    wall_cells: vec![
+                        GridCoord::new(0, 0, 0),
+                        GridCoord::new(1, 0, 0),
+                        GridCoord::new(0, 0, 1),
+                        GridCoord::new(1, 0, 1),
+                    ],
+                    interior_door_cells: Vec::new(),
+                    exterior_door_cells: Vec::new(),
+                    walkable_cells: vec![GridCoord::new(0, 0, 0)],
+                }],
+                stairs: vec![GeneratedStairConnection {
+                    from_level: 0,
+                    to_level: 1,
+                    from_cells: vec![GridCoord::new(0, 0, 0)],
+                    to_cells: vec![GridCoord::new(0, 1, 0)],
+                    width: 1,
+                    kind: game_data::StairKind::Straight,
+                }],
+                visual_outline: Vec::new(),
+            }],
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        }
     }
 }
 
@@ -2367,6 +3711,7 @@ fn map_object_color(kind: game_data::MapObjectKind, palette: &ViewerPalette) -> 
         game_data::MapObjectKind::Building => palette.building_base,
         game_data::MapObjectKind::Pickup => palette.pickup,
         game_data::MapObjectKind::Interactive => palette.interactive,
+        game_data::MapObjectKind::Trigger => palette.trigger,
         game_data::MapObjectKind::AiSpawn => palette.ai_spawn,
     }
 }

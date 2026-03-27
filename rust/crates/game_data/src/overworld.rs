@@ -80,26 +80,6 @@ pub struct OverworldLocationDefinition {
     pub extra: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct OverworldEdgeDefinition {
-    pub from: OverworldLocationId,
-    pub to: OverworldLocationId,
-    #[serde(default = "default_true")]
-    pub bidirectional: bool,
-    #[serde(default = "default_travel_minutes")]
-    pub travel_minutes: u32,
-    #[serde(default = "default_food_cost")]
-    pub food_cost: i32,
-    #[serde(default)]
-    pub stamina_cost: i32,
-    #[serde(default)]
-    pub risk_level: f32,
-    #[serde(default)]
-    pub route_cells: Vec<GridCoord>,
-    #[serde(flatten)]
-    pub extra: BTreeMap<String, Value>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct OverworldCellDefinition {
     pub grid: GridCoord,
@@ -134,8 +114,6 @@ pub struct OverworldDefinition {
     pub id: OverworldId,
     #[serde(default)]
     pub locations: Vec<OverworldLocationDefinition>,
-    #[serde(default)]
-    pub edges: Vec<OverworldEdgeDefinition>,
     #[serde(default)]
     pub walkable_cells: Vec<OverworldCellDefinition>,
     #[serde(default)]
@@ -255,18 +233,6 @@ pub enum OverworldValidationError {
     InvalidParentOutdoorLocation { location_id: String },
     #[error("location {location_id} return_entry_point_id must not be empty when present")]
     EmptyReturnEntryPointId { location_id: String },
-    #[error("edge must define both from and to")]
-    MissingEdgeEndpoint,
-    #[error("edge {from}->{to} cannot reference the same location")]
-    SelfEdge { from: String, to: String },
-    #[error("edge {from}->{to} references unknown location {location_id}")]
-    UnknownEdgeLocation {
-        from: String,
-        to: String,
-        location_id: String,
-    },
-    #[error("edge {from}->{to} travel_minutes must be > 0")]
-    InvalidTravelMinutes { from: String, to: String },
     #[error("walkable cell list contains duplicate cell ({x}, {y}, {z})")]
     DuplicateWalkableCell { x: i32, y: i32, z: i32 },
     #[error("location {location_id} overworld cell ({x}, {y}, {z}) is not walkable")]
@@ -453,38 +419,6 @@ pub fn validate_overworld_definition(
         }
     }
 
-    for edge in &definition.edges {
-        if edge.from.as_str().trim().is_empty() || edge.to.as_str().trim().is_empty() {
-            return Err(OverworldValidationError::MissingEdgeEndpoint);
-        }
-        if edge.from == edge.to {
-            return Err(OverworldValidationError::SelfEdge {
-                from: edge.from.as_str().to_string(),
-                to: edge.to.as_str().to_string(),
-            });
-        }
-        if edge.travel_minutes == 0 {
-            return Err(OverworldValidationError::InvalidTravelMinutes {
-                from: edge.from.as_str().to_string(),
-                to: edge.to.as_str().to_string(),
-            });
-        }
-        if !location_ids.contains(edge.from.as_str()) {
-            return Err(OverworldValidationError::UnknownEdgeLocation {
-                from: edge.from.as_str().to_string(),
-                to: edge.to.as_str().to_string(),
-                location_id: edge.from.as_str().to_string(),
-            });
-        }
-        if !location_ids.contains(edge.to.as_str()) {
-            return Err(OverworldValidationError::UnknownEdgeLocation {
-                from: edge.from.as_str().to_string(),
-                to: edge.to.as_str().to_string(),
-                location_id: edge.to.as_str().to_string(),
-            });
-        }
-    }
-
     Ok(())
 }
 
@@ -500,14 +434,6 @@ fn default_food_item_id() -> String {
     "1007".to_string()
 }
 
-const fn default_travel_minutes() -> u32 {
-    15
-}
-
-const fn default_food_cost() -> i32 {
-    1
-}
-
 const fn default_night_minutes_multiplier() -> f32 {
     1.2
 }
@@ -520,9 +446,9 @@ const fn default_risk_multiplier() -> f32 {
 mod tests {
     use super::{
         load_overworld_library, validate_overworld_definition, OverworldCellDefinition,
-        OverworldDefinition, OverworldEdgeDefinition, OverworldId, OverworldLibrary,
-        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTravelRuleSet, OverworldValidationCatalog, OverworldValidationError,
+        OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
+        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
+        OverworldValidationCatalog, OverworldValidationError,
     };
     use crate::map::MapId;
     use crate::GridCoord;
@@ -689,17 +615,6 @@ mod tests {
                     extra: BTreeMap::new(),
                 },
             ],
-            edges: vec![OverworldEdgeDefinition {
-                from: OverworldLocationId("survivor_outpost_01".into()),
-                to: OverworldLocationId("street_a".into()),
-                bidirectional: true,
-                travel_minutes: 30,
-                food_cost: 1,
-                stamina_cost: 4,
-                risk_level: 1.0,
-                route_cells: vec![GridCoord::new(0, 0, 0), GridCoord::new(1, 0, 0)],
-                extra: BTreeMap::new(),
-            }],
             walkable_cells: vec![
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),

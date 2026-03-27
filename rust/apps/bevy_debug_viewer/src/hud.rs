@@ -9,9 +9,21 @@ use crate::geometry::{
     movement_block_reasons, rendered_path_preview, selected_actor, sight_block_reasons,
 };
 use crate::state::{
-    HudEventCategory, HudEventFilter, HudFooterText, HudText, ViewerEventEntry, ViewerHudPage,
-    ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+    FreeObserveIndicatorRoot, HudEventCategory, HudEventFilter, HudFooterText, HudText,
+    ViewerEventEntry, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
 };
+
+pub(crate) fn update_free_observe_indicator(
+    indicator_visibility: Single<&mut Visibility, With<FreeObserveIndicatorRoot>>,
+    viewer_state: Res<ViewerState>,
+) {
+    let mut indicator_visibility = indicator_visibility.into_inner();
+    *indicator_visibility = if viewer_state.is_free_observe() {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+}
 
 pub(crate) fn update_hud(
     hud_text: Single<(&mut Text, &mut Visibility), With<HudText>>,
@@ -79,6 +91,7 @@ fn format_status_summary(
                 },
             ),
             kv("Control Mode", viewer_state.control_mode.label()),
+            kv("Camera Mode", viewer_state.camera_mode.label()),
             kv("Combat Active", snapshot.combat.in_combat),
             kv("Turn Index", snapshot.combat.current_turn_index),
             kv(
@@ -623,9 +636,9 @@ fn format_controls_help() -> String {
             "Space / Enter advance dialogue".to_string(),
             "Esc close dialogue".to_string(),
             "Space cancels auto-move, otherwise ends turn (hold to repeat)".to_string(),
-            "Middle mouse drag pans camera".to_string(),
+            "Middle mouse drag switches camera to manual pan".to_string(),
             "Mouse wheel zooms".to_string(),
-            "F recenter camera".to_string(),
+            "F resumes follow camera on selected actor".to_string(),
             "PageUp/PageDown change level".to_string(),
             "Tab cycle actor on current level".to_string(),
             "A toggle auto tick".to_string(),
@@ -643,7 +656,7 @@ pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
             "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · Tab切换角色 · 自由观察下左键选AI"
         }
         ViewerHudPage::World => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 悬停看格子 · 中键拖拽 · 滚轮缩放 · F回中"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 悬停看格子 · 中键拖拽取消跟随 · 滚轮缩放 · F恢复跟随"
         }
         ViewerHudPage::Interaction => {
             "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"

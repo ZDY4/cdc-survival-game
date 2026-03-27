@@ -1324,15 +1324,14 @@ mod tests {
         ActionType, ActorKind, ActorSide, CharacterId, DialogueAction, DialogueData,
         DialogueLibrary, DialogueNode, DialogueOption, GridCoord, InteractionExecutionRequest,
         InteractionOptionId, InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary,
-        MapDefinition,
-        MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition, MapLibrary,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
-        MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldEdgeDefinition,
+        MapDefinition, MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition,
+        MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+        MapPickupProps, MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition,
         OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition,
-        QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeDefinition, RecipeLibrary,
-        RecipeMaterial, RecipeOutput, ShopDefinition, ShopInventoryEntry, ShopLibrary,
-        SkillDefinition, SkillLibrary, WorldMode,
+        OverworldLocationKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow,
+        QuestLibrary, QuestNode, QuestRewards, RecipeDefinition, RecipeLibrary, RecipeMaterial,
+        RecipeOutput, ShopDefinition, ShopInventoryEntry, ShopLibrary, SkillDefinition,
+        SkillLibrary, WorldMode,
     };
 
     use super::SimulationRuntime;
@@ -2065,7 +2064,10 @@ mod tests {
             Some("survivor_outpost_01_interior_grid")
         );
         assert_eq!(context.entry_point_id.as_deref(), Some("clinic_entry"));
-        assert_eq!(context.return_outdoor_location_id.as_deref(), Some("survivor_outpost_01"));
+        assert_eq!(
+            context.return_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
         assert_eq!(context.world_mode, WorldMode::Interior);
 
         let overworld = runtime
@@ -2082,7 +2084,10 @@ mod tests {
         );
         assert_eq!(overworld.current_map_id, None);
         assert_eq!(
-            runtime.current_interaction_context().return_outdoor_location_id.as_deref(),
+            runtime
+                .current_interaction_context()
+                .return_outdoor_location_id
+                .as_deref(),
             Some("survivor_outpost_01")
         );
     }
@@ -2717,17 +2722,6 @@ mod tests {
                         extra: BTreeMap::new(),
                     },
                 ],
-                edges: vec![OverworldEdgeDefinition {
-                    from: OverworldLocationId("survivor_outpost_01".into()),
-                    to: OverworldLocationId("survivor_outpost_01_interior".into()),
-                    bidirectional: true,
-                    travel_minutes: 0,
-                    food_cost: 0,
-                    stamina_cost: 0,
-                    risk_level: 0.0,
-                    route_cells: Vec::new(),
-                    extra: BTreeMap::new(),
-                }],
                 walkable_cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),
@@ -2930,7 +2924,10 @@ mod tests {
             )
             .expect("travel_to_map should succeed");
 
-        assert_eq!(context.current_map_id.as_deref(), Some("clinic_interior_map"));
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("clinic_interior_map")
+        );
         assert_eq!(context.entry_point_id.as_deref(), Some("clinic_entry"));
         assert_eq!(context.world_mode, WorldMode::Interior);
         assert_eq!(
@@ -2939,7 +2936,10 @@ mod tests {
         );
 
         let snapshot = runtime.current_interaction_context();
-        assert_eq!(snapshot.current_map_id.as_deref(), Some("clinic_interior_map"));
+        assert_eq!(
+            snapshot.current_map_id.as_deref(),
+            Some("clinic_interior_map")
+        );
         assert_eq!(snapshot.world_mode, WorldMode::Interior);
     }
 
@@ -3104,17 +3104,6 @@ mod tests {
                         extra: BTreeMap::new(),
                     },
                 ],
-                edges: vec![OverworldEdgeDefinition {
-                    from: OverworldLocationId("survivor_outpost_01".into()),
-                    to: OverworldLocationId("clinic_interior".into()),
-                    bidirectional: true,
-                    travel_minutes: 5,
-                    food_cost: 0,
-                    stamina_cost: 0,
-                    risk_level: 0.0,
-                    route_cells: Vec::new(),
-                    extra: BTreeMap::new(),
-                }],
                 walkable_cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),

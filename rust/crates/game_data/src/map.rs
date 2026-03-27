@@ -87,6 +87,7 @@ pub enum MapObjectKind {
     Building,
     Pickup,
     Interactive,
+    Trigger,
     AiSpawn,
 }
 
@@ -115,10 +116,126 @@ impl Default for MapObjectFootprint {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RelativeGridCell {
+    pub x: i32,
+    pub z: i32,
+}
+
+impl RelativeGridCell {
+    pub const fn new(x: i32, z: i32) -> Self {
+        Self { x, z }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RelativeGridVertex {
+    pub x: i32,
+    pub z: i32,
+}
+
+impl RelativeGridVertex {
+    pub const fn new(x: i32, z: i32) -> Self {
+        Self { x, z }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildingGeneratorKind {
+    #[default]
+    RectilinearBsp,
+    SolidShell,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StairKind {
+    #[default]
+    Straight,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapBuildingStorySpec {
+    pub level: i32,
+    #[serde(default)]
+    pub shape_cells: Vec<RelativeGridCell>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapBuildingStairSpec {
+    pub from_level: i32,
+    pub to_level: i32,
+    #[serde(default)]
+    pub from_cells: Vec<RelativeGridCell>,
+    #[serde(default)]
+    pub to_cells: Vec<RelativeGridCell>,
+    #[serde(default = "default_stair_width")]
+    pub width: u32,
+    #[serde(default)]
+    pub kind: StairKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapBuildingDiagonalEdge {
+    pub level: i32,
+    pub from: RelativeGridVertex,
+    pub to: RelativeGridVertex,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapBuildingVisualOutline {
+    #[serde(default)]
+    pub diagonal_edges: Vec<MapBuildingDiagonalEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MapBuildingLayoutSpec {
+    #[serde(default)]
+    pub shape_cells: Vec<RelativeGridCell>,
+    #[serde(default)]
+    pub seed: u64,
+    #[serde(default = "default_target_room_count")]
+    pub target_room_count: u32,
+    #[serde(default = "default_min_room_size")]
+    pub min_room_size: MapSize,
+    #[serde(default)]
+    pub max_room_size: Option<MapSize>,
+    #[serde(default = "default_exterior_door_count")]
+    pub exterior_door_count: u32,
+    #[serde(default)]
+    pub stories: Vec<MapBuildingStorySpec>,
+    #[serde(default)]
+    pub stairs: Vec<MapBuildingStairSpec>,
+    #[serde(default)]
+    pub generator: BuildingGeneratorKind,
+    #[serde(default)]
+    pub visual_outline: Option<MapBuildingVisualOutline>,
+}
+
+impl Default for MapBuildingLayoutSpec {
+    fn default() -> Self {
+        Self {
+            shape_cells: Vec::new(),
+            seed: 0,
+            target_room_count: default_target_room_count(),
+            min_room_size: default_min_room_size(),
+            max_room_size: None,
+            exterior_door_count: default_exterior_door_count(),
+            stories: Vec::new(),
+            stairs: Vec::new(),
+            generator: BuildingGeneratorKind::default(),
+            visual_outline: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MapBuildingProps {
     #[serde(default)]
     pub prefab_id: String,
+    #[serde(default)]
+    pub layout: Option<MapBuildingLayoutSpec>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -153,35 +270,41 @@ pub struct MapInteractiveProps {
 
 impl MapInteractiveProps {
     pub fn resolved_options(&self) -> Vec<InteractionOptionDefinition> {
-        if !self.options.is_empty() {
-            let mut options = self.options.clone();
-            for option in &mut options {
-                option.ensure_defaults();
-            }
-            return options;
-        }
+        resolve_map_object_options(
+            &self.display_name,
+            self.interaction_distance,
+            &self.interaction_kind,
+            self.target_id.as_deref(),
+            &self.options,
+        )
+    }
+}
 
-        let Some(kind) = parse_legacy_interaction_kind(&self.interaction_kind) else {
-            return Vec::new();
-        };
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapTriggerProps {
+    #[serde(default)]
+    pub display_name: String,
+    #[serde(default = "default_interaction_distance")]
+    pub interaction_distance: f32,
+    #[serde(default)]
+    pub interaction_kind: String,
+    #[serde(default)]
+    pub target_id: Option<String>,
+    #[serde(default)]
+    pub options: Vec<InteractionOptionDefinition>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
 
-        let mut option = InteractionOptionDefinition {
-            id: InteractionOptionId(default_option_id_for_kind(kind)),
-            display_name: if self.display_name.trim().is_empty() {
-                default_display_name_for_kind(kind).to_string()
-            } else {
-                self.display_name.clone()
-            },
-            priority: default_priority_for_kind(kind),
-            interaction_distance: self
-                .interaction_distance
-                .max(default_interaction_distance()),
-            kind,
-            target_id: self.target_id.clone().unwrap_or_default(),
-            ..InteractionOptionDefinition::default()
-        };
-        option.ensure_defaults();
-        vec![option]
+impl MapTriggerProps {
+    pub fn resolved_options(&self) -> Vec<InteractionOptionDefinition> {
+        resolve_map_object_options(
+            &self.display_name,
+            self.interaction_distance,
+            &self.interaction_kind,
+            self.target_id.as_deref(),
+            &self.options,
+        )
     }
 }
 
@@ -225,6 +348,8 @@ pub struct MapObjectProps {
     pub pickup: Option<MapPickupProps>,
     #[serde(default)]
     pub interactive: Option<MapInteractiveProps>,
+    #[serde(default)]
+    pub trigger: Option<MapTriggerProps>,
     #[serde(default)]
     pub ai_spawn: Option<MapAiSpawnProps>,
     #[serde(flatten)]
@@ -398,6 +523,36 @@ pub enum MapDefinitionValidationError {
     },
     #[error("building object {object_id} must define props.building.prefab_id")]
     MissingBuildingPrefabId { object_id: String },
+    #[error("building object {object_id} layout target_room_count must be > 0")]
+    InvalidBuildingTargetRoomCount { object_id: String },
+    #[error(
+        "building object {object_id} layout min_room_size/max_room_size must be > 0 and max >= min"
+    )]
+    InvalidBuildingRoomSize { object_id: String },
+    #[error("building object {object_id} layout stories contain duplicate level {level}")]
+    DuplicateBuildingStoryLevel { object_id: String, level: i32 },
+    #[error(
+        "building object {object_id} stair from_level={from_level} to_level={to_level} must reference existing stories"
+    )]
+    InvalidBuildingStairLevels {
+        object_id: String,
+        from_level: i32,
+        to_level: i32,
+    },
+    #[error("building object {object_id} stair endpoints must not be empty")]
+    EmptyBuildingStairEndpoints { object_id: String },
+    #[error("building object {object_id} stair width must be > 0")]
+    InvalidBuildingStairWidth { object_id: String },
+    #[error(
+        "building object {object_id} stair endpoint counts must match and be at least width={width}"
+    )]
+    InvalidBuildingStairEndpointCount { object_id: String, width: u32 },
+    #[error(
+        "building object {object_id} visual outline edge level {level} must reference an existing story"
+    )]
+    InvalidBuildingVisualOutlineLevel { object_id: String, level: i32 },
+    #[error("building object {object_id} visual outline edge must use distinct vertices")]
+    InvalidBuildingVisualOutlineEdge { object_id: String },
     #[error("pickup object {object_id} must define props.pickup.item_id")]
     MissingPickupItemId { object_id: String },
     #[error("pickup object {object_id} item_id {item_id} was not found in the item catalog")]
@@ -410,23 +565,38 @@ pub enum MapDefinitionValidationError {
     },
     #[error("interactive object {object_id} must define props.interactive.interaction_kind")]
     MissingInteractiveKind { object_id: String },
+    #[error("trigger object {object_id} must define props.trigger.interaction_kind")]
+    MissingTriggerKind { object_id: String },
     #[error(
-        "interactive object {object_id} option {option_id} uses an invalid distance {distance}"
+        "{object_kind} object {object_id} option {option_id} uses an invalid distance {distance}"
     )]
     InvalidInteractionDistance {
         object_id: String,
+        object_kind: &'static str,
         option_id: String,
         distance: f32,
     },
-    #[error("interactive object {object_id} option {option_id} pickup item_id must not be empty")]
+    #[error(
+        "{object_kind} object {object_id} option {option_id} pickup item_id must not be empty"
+    )]
     MissingInteractionPickupItemId {
         object_id: String,
+        object_kind: &'static str,
         option_id: String,
     },
-    #[error("interactive object {object_id} option {option_id} target_id must not be empty")]
+    #[error("{object_kind} object {object_id} option {option_id} target_id must not be empty")]
     MissingInteractionTargetId {
         object_id: String,
+        object_kind: &'static str,
         option_id: String,
+    },
+    #[error(
+        "trigger object {object_id} option {option_id} must use a scene transition kind, got {kind}"
+    )]
+    InvalidTriggerOptionKind {
+        object_id: String,
+        option_id: String,
+        kind: String,
     },
     #[error("ai_spawn object {object_id} must define props.ai_spawn.spawn_id")]
     MissingAiSpawnId { object_id: String },
@@ -684,11 +854,150 @@ pub fn rotated_footprint_size(footprint: MapObjectFootprint, rotation: MapRotati
 }
 
 pub fn object_effectively_blocks_movement(object: &MapObjectDefinition) -> bool {
-    object.blocks_movement || matches!(object.kind, MapObjectKind::Building)
+    object.blocks_movement
+        || matches!(object.kind, MapObjectKind::Building)
+            && object
+                .props
+                .building
+                .as_ref()
+                .and_then(|building| building.layout.as_ref())
+                .is_none()
 }
 
 pub fn object_effectively_blocks_sight(object: &MapObjectDefinition) -> bool {
-    object.blocks_sight || matches!(object.kind, MapObjectKind::Building)
+    object.blocks_sight
+        || matches!(object.kind, MapObjectKind::Building)
+            && object
+                .props
+                .building
+                .as_ref()
+                .and_then(|building| building.layout.as_ref())
+                .is_none()
+}
+
+pub fn building_layout_story_levels(object: &MapObjectDefinition) -> BTreeSet<i32> {
+    object
+        .props
+        .building
+        .as_ref()
+        .and_then(|building| building.layout.as_ref())
+        .map(|layout| {
+            if layout.stories.is_empty() {
+                BTreeSet::from([object.anchor.y])
+            } else {
+                layout.stories.iter().map(|story| story.level).collect()
+            }
+        })
+        .unwrap_or_else(|| BTreeSet::from([object.anchor.y]))
+}
+
+fn default_target_room_count() -> u32 {
+    3
+}
+
+fn default_min_room_size() -> MapSize {
+    MapSize {
+        width: 2,
+        height: 2,
+    }
+}
+
+fn default_exterior_door_count() -> u32 {
+    1
+}
+
+fn default_stair_width() -> u32 {
+    1
+}
+
+fn validate_building_layout(
+    object: &MapObjectDefinition,
+    layout: &MapBuildingLayoutSpec,
+) -> Result<(), MapDefinitionValidationError> {
+    if layout.target_room_count == 0 {
+        return Err(
+            MapDefinitionValidationError::InvalidBuildingTargetRoomCount {
+                object_id: object.object_id.clone(),
+            },
+        );
+    }
+
+    let min = layout.min_room_size;
+    let max = layout.max_room_size.unwrap_or(layout.min_room_size);
+    if min.width == 0
+        || min.height == 0
+        || max.width == 0
+        || max.height == 0
+        || max.width < min.width
+        || max.height < min.height
+    {
+        return Err(MapDefinitionValidationError::InvalidBuildingRoomSize {
+            object_id: object.object_id.clone(),
+        });
+    }
+
+    let story_levels = building_layout_story_levels(object);
+    let mut seen_story_levels = HashSet::new();
+    for story in &layout.stories {
+        if !seen_story_levels.insert(story.level) {
+            return Err(MapDefinitionValidationError::DuplicateBuildingStoryLevel {
+                object_id: object.object_id.clone(),
+                level: story.level,
+            });
+        }
+    }
+
+    for stair in &layout.stairs {
+        if stair.width == 0 {
+            return Err(MapDefinitionValidationError::InvalidBuildingStairWidth {
+                object_id: object.object_id.clone(),
+            });
+        }
+        if stair.from_cells.is_empty() || stair.to_cells.is_empty() {
+            return Err(MapDefinitionValidationError::EmptyBuildingStairEndpoints {
+                object_id: object.object_id.clone(),
+            });
+        }
+        if stair.from_cells.len() != stair.to_cells.len()
+            || stair.from_cells.len() < stair.width as usize
+        {
+            return Err(
+                MapDefinitionValidationError::InvalidBuildingStairEndpointCount {
+                    object_id: object.object_id.clone(),
+                    width: stair.width,
+                },
+            );
+        }
+        if !story_levels.contains(&stair.from_level) || !story_levels.contains(&stair.to_level) {
+            return Err(MapDefinitionValidationError::InvalidBuildingStairLevels {
+                object_id: object.object_id.clone(),
+                from_level: stair.from_level,
+                to_level: stair.to_level,
+            });
+        }
+    }
+
+    if let Some(outline) = layout.visual_outline.as_ref() {
+        for edge in &outline.diagonal_edges {
+            if edge.from == edge.to {
+                return Err(
+                    MapDefinitionValidationError::InvalidBuildingVisualOutlineEdge {
+                        object_id: object.object_id.clone(),
+                    },
+                );
+            }
+            if !story_levels.contains(&edge.level) {
+                return Err(
+                    MapDefinitionValidationError::InvalidBuildingVisualOutlineLevel {
+                        object_id: object.object_id.clone(),
+                        level: edge.level,
+                    },
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_object_payload(
@@ -707,6 +1016,9 @@ fn validate_object_payload(
                 return Err(MapDefinitionValidationError::MissingBuildingPrefabId {
                     object_id: object.object_id.clone(),
                 });
+            }
+            if let Some(layout) = building.layout.as_ref() {
+                validate_building_layout(object, layout)?;
             }
         }
         MapObjectKind::Pickup => {
@@ -749,7 +1061,30 @@ fn validate_object_payload(
                 });
             }
             for option in options {
-                validate_interaction_option(&object.object_id, &option)?;
+                validate_interaction_option(&object.object_id, "interactive", &option)?;
+            }
+        }
+        MapObjectKind::Trigger => {
+            let Some(trigger) = object.props.trigger.as_ref() else {
+                return Err(MapDefinitionValidationError::MissingTriggerKind {
+                    object_id: object.object_id.clone(),
+                });
+            };
+            let options = trigger.resolved_options();
+            if options.is_empty() {
+                return Err(MapDefinitionValidationError::MissingTriggerKind {
+                    object_id: object.object_id.clone(),
+                });
+            }
+            for option in options {
+                validate_interaction_option(&object.object_id, "trigger", &option)?;
+                if !is_scene_transition_kind(option.kind) {
+                    return Err(MapDefinitionValidationError::InvalidTriggerOptionKind {
+                        object_id: object.object_id.clone(),
+                        option_id: resolved_option_id(&option),
+                        kind: default_option_id_for_kind(option.kind),
+                    });
+                }
             }
         }
         MapObjectKind::AiSpawn => {
@@ -819,6 +1154,60 @@ fn default_interaction_distance() -> f32 {
     1.4
 }
 
+fn resolve_map_object_options(
+    display_name: &str,
+    interaction_distance: f32,
+    interaction_kind: &str,
+    target_id: Option<&str>,
+    options: &[InteractionOptionDefinition],
+) -> Vec<InteractionOptionDefinition> {
+    if !options.is_empty() {
+        let mut resolved = options.to_vec();
+        for option in &mut resolved {
+            option.ensure_defaults();
+        }
+        return resolved;
+    }
+
+    let Some(kind) = parse_legacy_interaction_kind(interaction_kind) else {
+        return Vec::new();
+    };
+
+    let mut option = InteractionOptionDefinition {
+        id: InteractionOptionId(default_option_id_for_kind(kind)),
+        display_name: if display_name.trim().is_empty() {
+            default_display_name_for_kind(kind).to_string()
+        } else {
+            display_name.to_string()
+        },
+        priority: default_priority_for_kind(kind),
+        interaction_distance: interaction_distance.max(default_interaction_distance()),
+        kind,
+        target_id: target_id.unwrap_or_default().to_string(),
+        ..InteractionOptionDefinition::default()
+    };
+    option.ensure_defaults();
+    vec![option]
+}
+
+fn resolved_option_id(option: &InteractionOptionDefinition) -> String {
+    if option.id.as_str().trim().is_empty() {
+        default_option_id_for_kind(option.kind)
+    } else {
+        option.id.as_str().to_string()
+    }
+}
+
+fn is_scene_transition_kind(kind: InteractionOptionKind) -> bool {
+    matches!(
+        kind,
+        InteractionOptionKind::EnterSubscene
+            | InteractionOptionKind::EnterOverworld
+            | InteractionOptionKind::ExitToOutdoor
+            | InteractionOptionKind::EnterOutdoorLocation
+    )
+}
+
 fn parse_legacy_interaction_kind(value: &str) -> Option<InteractionOptionKind> {
     match value.trim() {
         "talk" => Some(InteractionOptionKind::Talk),
@@ -834,17 +1223,15 @@ fn parse_legacy_interaction_kind(value: &str) -> Option<InteractionOptionKind> {
 
 fn validate_interaction_option(
     object_id: &str,
+    object_kind: &'static str,
     option: &InteractionOptionDefinition,
 ) -> Result<(), MapDefinitionValidationError> {
-    let option_id = if option.id.as_str().trim().is_empty() {
-        default_option_id_for_kind(option.kind)
-    } else {
-        option.id.as_str().to_string()
-    };
+    let option_id = resolved_option_id(option);
 
     if option.interaction_distance < 0.0 {
         return Err(MapDefinitionValidationError::InvalidInteractionDistance {
             object_id: object_id.to_string(),
+            object_kind,
             option_id,
             distance: option.interaction_distance,
         });
@@ -856,6 +1243,7 @@ fn validate_interaction_option(
                 return Err(
                     MapDefinitionValidationError::MissingInteractionPickupItemId {
                         object_id: object_id.to_string(),
+                        object_kind,
                         option_id,
                     },
                 );
@@ -868,6 +1256,7 @@ fn validate_interaction_option(
             if option.target_id.trim().is_empty() && option.target_map_id.trim().is_empty() {
                 return Err(MapDefinitionValidationError::MissingInteractionTargetId {
                     object_id: object_id.to_string(),
+                    object_kind,
                     option_id,
                 });
             }
@@ -881,11 +1270,12 @@ fn validate_interaction_option(
 #[cfg(test)]
 mod tests {
     use super::{
-        expand_object_footprint, load_map_library, validate_map_definition, MapAiSpawnProps,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapDefinitionValidationError,
-        MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectDefinition,
-        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
-        MapValidationCatalog,
+        expand_object_footprint, load_map_library, validate_map_definition, BuildingGeneratorKind,
+        MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingLayoutSpec, MapBuildingProps,
+        MapBuildingStorySpec, MapBuildingVisualOutline, MapCellDefinition, MapDefinition,
+        MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapLevelDefinition,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
+        MapRotation, MapSize, MapValidationCatalog, RelativeGridCell, RelativeGridVertex,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;
@@ -909,6 +1299,7 @@ mod tests {
             props: MapObjectProps {
                 building: Some(MapBuildingProps {
                     prefab_id: "survivor_outpost_01_dormitory".into(),
+                    layout: None,
                     extra: BTreeMap::new(),
                 }),
                 ..MapObjectProps::default()
@@ -991,6 +1382,112 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn building_layout_requires_positive_target_room_count() {
+        let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
+        building.blocks_movement = false;
+        building.blocks_sight = false;
+        building
+            .props
+            .building
+            .as_mut()
+            .expect("building props")
+            .layout = Some(MapBuildingLayoutSpec {
+            target_room_count: 0,
+            shape_cells: vec![
+                RelativeGridCell::new(0, 0),
+                RelativeGridCell::new(1, 0),
+                RelativeGridCell::new(0, 1),
+                RelativeGridCell::new(1, 1),
+            ],
+            generator: BuildingGeneratorKind::RectilinearBsp,
+            ..MapBuildingLayoutSpec::default()
+        });
+
+        let error = validate_map_definition(&sample_map(vec![building]), Some(&sample_catalog()))
+            .expect_err("zero room target should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::InvalidBuildingTargetRoomCount { .. }
+        ));
+    }
+
+    #[test]
+    fn building_layout_rejects_duplicate_story_levels() {
+        let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
+        building.blocks_movement = false;
+        building.blocks_sight = false;
+        building
+            .props
+            .building
+            .as_mut()
+            .expect("building props")
+            .layout = Some(MapBuildingLayoutSpec {
+            shape_cells: vec![
+                RelativeGridCell::new(0, 0),
+                RelativeGridCell::new(1, 0),
+                RelativeGridCell::new(0, 1),
+                RelativeGridCell::new(1, 1),
+            ],
+            stories: vec![
+                MapBuildingStorySpec {
+                    level: 0,
+                    shape_cells: Vec::new(),
+                },
+                MapBuildingStorySpec {
+                    level: 0,
+                    shape_cells: Vec::new(),
+                },
+            ],
+            ..MapBuildingLayoutSpec::default()
+        });
+
+        let error = validate_map_definition(&sample_map(vec![building]), Some(&sample_catalog()))
+            .expect_err("duplicate story level should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::DuplicateBuildingStoryLevel { .. }
+        ));
+    }
+
+    #[test]
+    fn building_layout_rejects_invalid_visual_outline_edge() {
+        let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
+        building.blocks_movement = false;
+        building.blocks_sight = false;
+        building
+            .props
+            .building
+            .as_mut()
+            .expect("building props")
+            .layout = Some(MapBuildingLayoutSpec {
+            shape_cells: vec![
+                RelativeGridCell::new(0, 0),
+                RelativeGridCell::new(1, 0),
+                RelativeGridCell::new(0, 1),
+                RelativeGridCell::new(1, 1),
+            ],
+            visual_outline: Some(MapBuildingVisualOutline {
+                diagonal_edges: vec![MapBuildingDiagonalEdge {
+                    level: 0,
+                    from: RelativeGridVertex::new(0, 0),
+                    to: RelativeGridVertex::new(0, 0),
+                }],
+            }),
+            ..MapBuildingLayoutSpec::default()
+        });
+
+        let error = validate_map_definition(&sample_map(vec![building]), Some(&sample_catalog()))
+            .expect_err("degenerate outline edge should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::InvalidBuildingVisualOutlineEdge { .. }
+        ));
+    }
+
     fn sample_map(objects: Vec<MapObjectDefinition>) -> MapDefinition {
         MapDefinition {
             id: MapId("sample_map".into()),
@@ -1044,6 +1541,7 @@ mod tests {
             props: MapObjectProps {
                 building: Some(MapBuildingProps {
                     prefab_id: "survivor_outpost_01_dormitory".into(),
+                    layout: None,
                     extra: BTreeMap::new(),
                 }),
                 ..MapObjectProps::default()

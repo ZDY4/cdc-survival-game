@@ -618,6 +618,24 @@ export type NarrativeAction =
   | "insert_after_selection"
   | "derive_new_doc";
 
+export type NarrativeDocumentViewMode = "preview" | "edit";
+
+export type AiChatMessageTone =
+  | "accent"
+  | "muted"
+  | "warning"
+  | "danger"
+  | "success";
+
+export type AiChatMessage = {
+  id: string;
+  role: "user" | "assistant" | "context";
+  label: string;
+  content: string;
+  meta?: string[];
+  tone?: AiChatMessageTone;
+};
+
 export type NarrativeSelectionRange = {
   start: number;
   end: number;
@@ -663,6 +681,33 @@ export type NarrativeGenerateResponse = {
   providerError: string;
   synthesisNotes: string[];
   agentRuns: NarrativeAgentRun[];
+};
+
+export type NarrativeCandidatePatch = {
+  id: string;
+  title: string;
+  startBlock: number;
+  endBlock: number;
+  originalText: string;
+  replacementText: string;
+};
+
+export type NarrativePatchSet = {
+  mode: "patches" | "full_document";
+  currentMarkdown: string;
+  draftMarkdown: string;
+  patches: NarrativeCandidatePatch[];
+};
+
+export type DocumentAgentSession = {
+  mode: "create" | "revise_document";
+  composerText: string;
+  chatMessages: AiChatMessage[];
+  lastRequest: NarrativeGenerateRequest | null;
+  lastResponse: NarrativeGenerateResponse | null;
+  candidatePatchSet: NarrativePatchSet | null;
+  busy: boolean;
+  documentViewMode: NarrativeDocumentViewMode;
 };
 
 export type SaveNarrativeDocumentResult = {

@@ -220,9 +220,8 @@ pub(crate) fn handle_keyboard_input(
     }
 
     if keys.just_pressed(KeyCode::KeyF) {
-        viewer_state.camera_pan_offset = Vec2::ZERO;
-        viewer_state.camera_drag_cursor = None;
-        viewer_state.status_line = "camera recentered".to_string();
+        viewer_state.resume_camera_follow();
+        viewer_state.status_line = "camera: following selected actor".to_string();
     }
 
     let snapshot = runtime_state.runtime.snapshot();
@@ -398,6 +397,10 @@ pub(crate) fn handle_camera_pan(
         else {
             return;
         };
+
+        if pan_delta.length_squared() > f32::EPSILON {
+            viewer_state.disable_camera_follow();
+        }
 
         viewer_state.camera_pan_offset += pan_delta;
         viewer_state.camera_pan_offset = clamp_camera_pan_offset(

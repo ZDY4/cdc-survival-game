@@ -16,9 +16,7 @@ use tauri::Manager;
 
 use crate::ai_provider::test_ai_provider;
 use crate::ai_settings::{load_ai_settings, save_ai_settings};
-use crate::narrative_app_settings::{
-    load_narrative_app_settings, save_narrative_app_settings,
-};
+use crate::narrative_app_settings::{load_narrative_app_settings, save_narrative_app_settings};
 use crate::narrative_provider::{generate_narrative_draft, revise_narrative_draft};
 use crate::narrative_sync::{
     create_cloud_workspace, export_project_context_snapshot, list_cloud_workspaces,
@@ -197,17 +195,34 @@ pub fn run() {
             }
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Focused(focused) = event {
-                eprintln!(
-                    "[editor-menu] window focus event window={} focused={}",
-                    window.label(),
-                    focused
-                );
-                editor_menu::remember_focused_editor_window(
-                    &window.app_handle(),
-                    window.label(),
-                    *focused,
-                );
+            match event {
+                tauri::WindowEvent::Focused(focused) => {
+                    eprintln!(
+                        "[editor-menu] window focus event window={} focused={}",
+                        window.label(),
+                        focused
+                    );
+                    editor_menu::remember_focused_editor_window(
+                        &window.app_handle(),
+                        window.label(),
+                        *focused,
+                    );
+                }
+                tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
+                    if window.label() == "main" {
+                        if let Some(settings_window) =
+                            window.app_handle().get_webview_window("settings")
+                        {
+                            if let Err(error) = settings_window.close() {
+                                eprintln!(
+                                    "[editor-menu] failed to close settings window when main closed: {}",
+                                    error
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

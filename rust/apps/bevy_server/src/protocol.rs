@@ -8,8 +8,7 @@ use game_core::{
     SimulationCommandResult, SimulationEvent,
 };
 use game_data::{
-    InteractionExecutionRequest, ItemLibrary, RecipeLibrary, ShopLibrary, SkillLibrary,
-    WorldMode,
+    InteractionExecutionRequest, ItemLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldMode,
 };
 use game_protocol::{
     ActorSnapshot, AdvanceOverworldTravelRequest, BuyItemRequest, ClientMessage,
@@ -18,9 +17,8 @@ use game_protocol::{
     OverworldRouteRequest, ProtocolError, QuestStartedPayload, RecipeCraftedPayload,
     ReloadEquippedWeaponRequest, ReturnToOverworldRequest, RuntimeEventEnvelope,
     RuntimeSnapshotLoadRequest, RuntimeSnapshotPayload, RuntimeSnapshotSaveRequest,
-    SceneTransitionNotice, SellItemRequest, ServerMessage, SkillLearnedPayload,
-    StartQuestRequest, TradeResolvedPayload, UnequipItemRequest, WeaponReloadedPayload,
-    WorldSnapshotEnvelope,
+    SceneTransitionNotice, SellItemRequest, ServerMessage, SkillLearnedPayload, StartQuestRequest,
+    TradeResolvedPayload, UnequipItemRequest, WeaponReloadedPayload, WorldSnapshotEnvelope,
 };
 use serde_json::json;
 
@@ -107,12 +105,12 @@ pub fn handle_client_message_with_definitions(
     match message {
         ClientMessage::Ping => Ok(ServerMessage::Pong),
         ClientMessage::RequestWorldSnapshot => Ok(world_snapshot_message(runtime)),
-        ClientMessage::SubscribeRuntime(_request) => {
-            Ok(ServerMessage::Snapshot(runtime_snapshot_envelope(runtime, 0)))
-        }
-        ClientMessage::RequestOverworldSnapshot => {
-            Ok(ServerMessage::OverworldState(runtime.0.snapshot().overworld))
-        }
+        ClientMessage::SubscribeRuntime(_request) => Ok(ServerMessage::Snapshot(
+            runtime_snapshot_envelope(runtime, 0),
+        )),
+        ClientMessage::RequestOverworldSnapshot => Ok(ServerMessage::OverworldState(
+            runtime.0.snapshot().overworld,
+        )),
         ClientMessage::QueryInteractionOptions {
             actor_id,
             target_id,
@@ -529,18 +527,20 @@ fn travel_to_map(
             requested_world_mode,
         )
         .map_err(|error| runtime_protocol_error("travel_to_map", error))?;
-    Ok(ServerMessage::SceneTransitionRequested(SceneTransitionNotice {
-        actor_id: request.actor_id,
-        target_map_id: context
-            .current_map_id
-            .clone()
-            .unwrap_or(request.target_map_id),
-        entry_point: context.entry_point_id.clone(),
-        location_id: context.active_location_id.clone(),
-        entry_point_id: context.entry_point_id,
-        return_location_id: context.return_outdoor_location_id.clone(),
-        world_mode: Some(world_mode_name(context.world_mode).to_string()),
-    }))
+    Ok(ServerMessage::SceneTransitionRequested(
+        SceneTransitionNotice {
+            actor_id: request.actor_id,
+            target_map_id: context
+                .current_map_id
+                .clone()
+                .unwrap_or(request.target_map_id),
+            entry_point: context.entry_point_id.clone(),
+            location_id: context.active_location_id.clone(),
+            entry_point_id: context.entry_point_id,
+            return_location_id: context.return_outdoor_location_id.clone(),
+            world_mode: Some(world_mode_name(context.world_mode).to_string()),
+        },
+    ))
 }
 
 fn enter_location(
@@ -1309,9 +1309,9 @@ mod tests {
 
     use super::{
         dispatch_protocol_requests, emit_runtime_protocol_events, handle_client_message,
-        handle_client_message_with_definitions, RuntimeProtocolPushState,
-        RuntimeProtocolSequence, RuntimeSnapshotStore, ServerProtocolDefinitions,
-        ServerProtocolRequest, ServerProtocolResponse,
+        handle_client_message_with_definitions, RuntimeProtocolPushState, RuntimeProtocolSequence,
+        RuntimeSnapshotStore, ServerProtocolDefinitions, ServerProtocolRequest,
+        ServerProtocolResponse,
     };
     use crate::config::ServerSimulationRuntime;
     use bevy_app::{App, Update};
@@ -1322,10 +1322,10 @@ mod tests {
         ActorKind, ActorSide, CharacterId, DialogueAction, DialogueData, DialogueLibrary,
         DialogueNode, DialogueOption, GridCoord, InteractionExecutionRequest, InteractionOptionId,
         InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary, MapDefinition,
-        MapEntryPointDefinition, MapId, MapLibrary, MapLevelDefinition, MapSize,
-        QuestConnection, QuestDefinition, QuestFlow, QuestLibrary, QuestNode, RecipeDefinition,
-        RecipeLibrary, RecipeMaterial, RecipeOutput, ShopDefinition, ShopInventoryEntry,
-        ShopLibrary, SkillDefinition, SkillLibrary, WorldMode,
+        MapEntryPointDefinition, MapId, MapLevelDefinition, MapLibrary, MapSize, QuestConnection,
+        QuestDefinition, QuestFlow, QuestLibrary, QuestNode, RecipeDefinition, RecipeLibrary,
+        RecipeMaterial, RecipeOutput, ShopDefinition, ShopInventoryEntry, ShopLibrary,
+        SkillDefinition, SkillLibrary, WorldMode,
     };
     use game_protocol::{
         BuyItemRequest, ClientMessage, CraftRecipeRequest, DialogueAdvanceRequest,

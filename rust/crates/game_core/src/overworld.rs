@@ -203,14 +203,13 @@ mod tests {
     use super::{compute_cell_path, compute_location_route, find_entry_point};
     use game_data::{
         GridCoord, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
-        OverworldCellDefinition, OverworldDefinition, OverworldEdgeDefinition, OverworldId,
-        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTravelRuleSet,
+        OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLocationDefinition,
+        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
 
     #[test]
-    fn location_route_prefers_explicit_edge_weights() {
+    fn location_route_uses_walkable_cell_distance() {
         let route = compute_location_route(
             &sample_overworld(),
             game_data::ActorId(1),
@@ -276,11 +275,6 @@ mod tests {
                 sample_location("b", 1, 0),
                 sample_location("c", 2, 0),
             ],
-            edges: vec![
-                sample_edge("a", "b", 10),
-                sample_edge("b", "c", 5),
-                sample_edge("a", "c", 30),
-            ],
             walkable_cells: vec![
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
@@ -317,20 +311,6 @@ mod tests {
             overworld_cell: GridCoord::new(x, 0, z),
             danger_level: 0,
             icon: String::new(),
-            extra: BTreeMap::new(),
-        }
-    }
-
-    fn sample_edge(from: &str, to: &str, travel_minutes: u32) -> OverworldEdgeDefinition {
-        OverworldEdgeDefinition {
-            from: OverworldLocationId(from.into()),
-            to: OverworldLocationId(to.into()),
-            bidirectional: true,
-            travel_minutes,
-            food_cost: 1,
-            stamina_cost: 2,
-            risk_level: 1.0,
-            route_cells: Vec::new(),
             extra: BTreeMap::new(),
         }
     }

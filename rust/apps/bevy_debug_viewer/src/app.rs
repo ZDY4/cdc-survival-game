@@ -15,21 +15,21 @@ use crate::controls::{
     handle_camera_pan, handle_interaction_menu_buttons, handle_keyboard_input, handle_mouse_input,
     handle_mouse_wheel_zoom,
 };
+use crate::hud::update_free_observe_indicator;
 use crate::render::{
-    draw_world, setup_viewer, sync_actor_labels, sync_world_visuals, update_camera,
-    sync_damage_numbers, update_dialogue_panel, update_interaction_menu,
-    update_occluding_world_visuals,
-    GridGroundMaterial,
+    draw_world, setup_viewer, sync_actor_labels, sync_damage_numbers, sync_world_visuals,
+    update_camera, update_dialogue_panel, update_interaction_menu, update_occluding_world_visuals,
+    BuildingWallGridMaterial, GridGroundMaterial,
 };
 use crate::simulation::{
     advance_actor_feedback, advance_actor_motion, advance_map_ai_spawns,
-    advance_online_npc_actions, advance_runtime_progression, collect_events,
-    prime_viewer_state, refresh_interaction_prompt, sync_npc_runtime_presence, tick_runtime,
+    advance_online_npc_actions, advance_runtime_progression, collect_events, prime_viewer_state,
+    refresh_interaction_prompt, sync_npc_runtime_presence, tick_runtime,
 };
 use crate::state::{
-    ActorLabelEntities, ViewerActorFeedbackState, ViewerActorMotionState,
-    ViewerCameraShakeState, ViewerDamageNumberState, ViewerPalette, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerState, ViewerStyleProfile,
+    ActorLabelEntities, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
+    ViewerDamageNumberState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+    ViewerStyleProfile,
 };
 
 pub(crate) fn run() {
@@ -80,6 +80,7 @@ impl Plugin for ViewerAppPlugin {
                 }),
         )
         .add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
+        .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
         .insert_resource(CharacterDefinitionPath::default())
         .insert_resource(MapDefinitionPath::default())
         .insert_resource(SettlementDefinitionPath::default())
@@ -129,6 +130,7 @@ impl Plugin for ViewerAppPlugin {
                 update_occluding_world_visuals,
                 sync_actor_labels,
                 sync_damage_numbers,
+                update_free_observe_indicator,
                 crate::hud::update_hud,
                 update_interaction_menu,
                 update_dialogue_panel,

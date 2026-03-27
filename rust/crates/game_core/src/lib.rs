@@ -1,6 +1,7 @@
 use bevy_app::prelude::*;
 
 pub mod actor;
+pub mod building;
 pub mod demo;
 pub mod economy;
 pub mod goap;
@@ -16,6 +17,11 @@ pub mod utility;
 pub use actor::{
     AiController, AiStepResult, FollowGridGoalAiController, InteractOnceAiController,
     NoopAiController,
+};
+pub use building::{
+    generate_building_layout, BuildingLayoutError, GeneratedBuildingDebugState,
+    GeneratedBuildingLayout, GeneratedBuildingStory, GeneratedOutlineEdge, GeneratedRoom,
+    GeneratedStairConnection,
 };
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
 pub use economy::{

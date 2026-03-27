@@ -88,7 +88,8 @@ pub fn save_ai_settings(app: AppHandle, settings: AiSettings) -> Result<AiSettin
 
     let raw = serde_json::to_string_pretty(&normalized)
         .map_err(|error| format!("failed to serialize ai settings: {error}"))?;
-    fs::write(&path, raw).map_err(|error| format!("failed to write {}: {error}", path.display()))?;
+    fs::write(&path, raw)
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
     Ok(normalized)
 }
 

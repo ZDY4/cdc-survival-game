@@ -157,16 +157,13 @@ pub fn sync_narrative_workspace(
                 .map(|document| NarrativeSyncPushDocument {
                     document: cloud_document_from_local(
                         document,
-                        sync_state
-                            .documents
-                            .get(&operation.slug)
-                            .and_then(|state| {
-                                if state.doc_id.trim().is_empty() {
-                                    None
-                                } else {
-                                    Some(state.doc_id.as_str())
-                                }
-                            }),
+                        sync_state.documents.get(&operation.slug).and_then(|state| {
+                            if state.doc_id.trim().is_empty() {
+                                None
+                            } else {
+                                Some(state.doc_id.as_str())
+                            }
+                        }),
                     ),
                     base_revision: operation.base_revision,
                 })
@@ -301,8 +298,7 @@ pub fn upload_project_context_snapshot(
     let uploaded: ProjectContextSnapshot = parse_json_response(response)?;
 
     let mut next_settings = settings;
-    next_settings.last_sync_status =
-        format!("Uploaded project snapshot {}", uploaded.snapshot_id);
+    next_settings.last_sync_status = format!("Uploaded project snapshot {}", uploaded.snapshot_id);
     write_narrative_sync_settings(&app, &normalize_sync_settings(next_settings.clone()))?;
 
     Ok(ProjectContextSnapshotUploadResult {
@@ -336,8 +332,7 @@ fn write_narrative_sync_settings(
     }
     let raw = serde_json::to_string_pretty(settings)
         .map_err(|error| format!("failed to serialize narrative sync settings: {error}"))?;
-    fs::write(&path, raw)
-        .map_err(|error| format!("failed to write {}: {error}", path.display()))
+    fs::write(&path, raw).map_err(|error| format!("failed to write {}: {error}", path.display()))
 }
 
 fn narrative_sync_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -685,25 +680,25 @@ mod tests {
         }];
         let sync_state = WorkspaceSyncState {
             head_revision: 4,
-            documents: [
-                (
-                    "removed-scene".to_string(),
-                    WorkspaceDocumentSyncState {
-                        doc_id: "removed-scene".to_string(),
-                        revision: 2,
-                        content_hash: 1,
-                        deleted: false,
-                        updated_at: "1".to_string(),
-                    },
-                ),
-            ]
+            documents: [(
+                "removed-scene".to_string(),
+                WorkspaceDocumentSyncState {
+                    doc_id: "removed-scene".to_string(),
+                    revision: 2,
+                    content_hash: 1,
+                    deleted: false,
+                    updated_at: "1".to_string(),
+                },
+            )]
             .into_iter()
             .collect(),
             last_sync_at: None,
         };
 
         let operations = collect_pending_operations(&documents, &sync_state);
-        assert!(operations.iter().any(|operation| operation.kind == "upsert" && operation.slug == "scene-a"));
+        assert!(operations
+            .iter()
+            .any(|operation| operation.kind == "upsert" && operation.slug == "scene-a"));
         assert!(operations
             .iter()
             .any(|operation| operation.kind == "delete" && operation.slug == "removed-scene"));

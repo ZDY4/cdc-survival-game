@@ -59,13 +59,28 @@ pub struct EditorMenuState {
 }
 
 pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let file_new_current =
-        MenuItem::with_id(app, ids::FILE_NEW_CURRENT, "New Draft", true, Some("CmdOrCtrl+N"))?;
-    let file_save_all =
-        MenuItem::with_id(app, ids::FILE_SAVE_ALL, "Save All", true, Some("CmdOrCtrl+S"))?;
+    let file_new_current = MenuItem::with_id(
+        app,
+        ids::FILE_NEW_CURRENT,
+        "New Draft",
+        true,
+        Some("CmdOrCtrl+N"),
+    )?;
+    let file_save_all = MenuItem::with_id(
+        app,
+        ids::FILE_SAVE_ALL,
+        "Save All",
+        true,
+        Some("CmdOrCtrl+S"),
+    )?;
     let file_reload = MenuItem::with_id(app, ids::FILE_RELOAD, "Reload", true, Some("F5"))?;
-    let file_delete_current =
-        MenuItem::with_id(app, ids::FILE_DELETE_CURRENT, "Delete Current", true, Some("Delete"))?;
+    let file_delete_current = MenuItem::with_id(
+        app,
+        ids::FILE_DELETE_CURRENT,
+        "Delete Current",
+        true,
+        Some("Delete"),
+    )?;
     let workbench_command_palette = MenuItem::with_id(
         app,
         ids::WORKBENCH_COMMAND_PALETTE,
@@ -117,8 +132,13 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         None::<&str>,
     )?;
 
-    let toggle_sidebar =
-        MenuItem::with_id(app, ids::VIEW_TOGGLE_SIDEBAR, "Toggle Sidebar", true, None::<&str>)?;
+    let toggle_sidebar = MenuItem::with_id(
+        app,
+        ids::VIEW_TOGGLE_SIDEBAR,
+        "Toggle Sidebar",
+        true,
+        None::<&str>,
+    )?;
     let toggle_left_sidebar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_LEFT_SIDEBAR,
@@ -147,8 +167,13 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         true,
         None::<&str>,
     )?;
-    let reset_layout =
-        MenuItem::with_id(app, ids::VIEW_RESET_LAYOUT, "Reset Layout", true, None::<&str>)?;
+    let reset_layout = MenuItem::with_id(
+        app,
+        ids::VIEW_RESET_LAYOUT,
+        "Reset Layout",
+        true,
+        None::<&str>,
+    )?;
     let restore_default_layout = MenuItem::with_id(
         app,
         ids::VIEW_RESTORE_DEFAULT_LAYOUT,
@@ -163,8 +188,13 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         true,
         None::<&str>,
     )?;
-    let expand_all_panels =
-        MenuItem::with_id(app, ids::VIEW_EXPAND_ALL_PANELS, "Expand All Panels", true, None::<&str>)?;
+    let expand_all_panels = MenuItem::with_id(
+        app,
+        ids::VIEW_EXPAND_ALL_PANELS,
+        "Expand All Panels",
+        true,
+        None::<&str>,
+    )?;
     let toggle_inspector = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_INSPECTOR,
@@ -193,8 +223,7 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         true,
         None::<&str>,
     )?;
-    let zen_mode =
-        MenuItem::with_id(app, ids::VIEW_ZEN_MODE, "Zen Mode", true, None::<&str>)?;
+    let zen_mode = MenuItem::with_id(app, ids::VIEW_ZEN_MODE, "Zen Mode", true, None::<&str>)?;
     let next_tab = MenuItem::with_id(
         app,
         ids::NAVIGATION_NEXT_TAB,
@@ -311,7 +340,12 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
 
     let help_menu = SubmenuBuilder::new(app, "Help").about(None).build()?;
 
-    Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &go_menu, &ai_menu, &help_menu])
+    Menu::with_items(
+        app,
+        &[
+            &file_menu, &edit_menu, &view_menu, &go_menu, &ai_menu, &help_menu,
+        ],
+    )
 }
 
 pub fn apply_window_menu<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> tauri::Result<()> {
@@ -329,7 +363,9 @@ pub fn apply_window_menu<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> 
         return Ok(());
     }
 
-    log_menu(format!("building narrative lab menu for window={window_label}"));
+    log_menu(format!(
+        "building narrative lab menu for window={window_label}"
+    ));
     let menu = build_narrative_lab_menu(app)?;
 
     window.set_menu(menu)?;
@@ -347,7 +383,9 @@ pub fn attach_window_menu_listener<R: Runtime>(window: WebviewWindow<R>) {
     }
 
     let should_attach = {
-        if let Ok(mut attached_menu_windows) = app.state::<EditorMenuState>().attached_menu_windows.lock() {
+        if let Ok(mut attached_menu_windows) =
+            app.state::<EditorMenuState>().attached_menu_windows.lock()
+        {
             attached_menu_windows.insert(label.clone())
         } else {
             log_menu(format!(

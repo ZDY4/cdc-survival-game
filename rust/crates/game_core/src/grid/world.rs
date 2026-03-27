@@ -1,12 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use game_data::{
-    expand_object_footprint, object_effectively_blocks_movement, ActorId, GridCoord,
-    MapCellDefinition, MapDefinition, MapId, MapObjectDefinition, MapSize, WorldCoord,
+    building_layout_story_levels, expand_object_footprint, object_effectively_blocks_movement,
+    ActorId, GridCoord, MapCellDefinition, MapDefinition, MapId, MapObjectDefinition, MapSize,
+    WorldCoord,
 };
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use super::math::{grid_to_world, world_to_grid, DEFAULT_GRID_SIZE};
+use crate::building::{generate_building_layout, GeneratedBuildingDebugState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GridWalkability {
@@ -27,10 +30,13 @@ pub struct GridWorld {
     map_size: Option<MapSize>,
     default_level: Option<i32>,
     levels: BTreeSet<i32>,
+    base_map_cells: HashMap<GridCoord, MapCellDefinition>,
     map_cells: HashMap<GridCoord, MapCellDefinition>,
     map_objects: BTreeMap<String, MapObjectDefinition>,
     map_object_cells: HashMap<GridCoord, Vec<String>>,
     map_blocked_cells: HashSet<GridCoord>,
+    generated_buildings: Vec<GeneratedBuildingDebugState>,
+    stair_adjacency: HashMap<GridCoord, Vec<GridCoord>>,
     topology_version: u64,
     runtime_obstacle_version: u64,
 }
@@ -62,8 +68,10 @@ pub(crate) struct GridWorldSnapshot {
     pub map_size: Option<MapSize>,
     pub default_level: Option<i32>,
     pub levels: Vec<i32>,
+    pub base_map_cells: Vec<GridCellSnapshotEntry>,
     pub map_cells: Vec<GridCellSnapshotEntry>,
     pub map_objects: Vec<MapObjectDefinition>,
+    pub generated_buildings: Vec<GeneratedBuildingDebugState>,
     pub topology_version: u64,
     pub runtime_obstacle_version: u64,
 }
@@ -79,10 +87,13 @@ impl Default for GridWorld {
             map_size: None,
             default_level: None,
             levels: BTreeSet::new(),
+            base_map_cells: HashMap::new(),
             map_cells: HashMap::new(),
             map_objects: BTreeMap::new(),
             map_object_cells: HashMap::new(),
             map_blocked_cells: HashSet::new(),
+            generated_buildings: Vec::new(),
+            stair_adjacency: HashMap::new(),
             topology_version: 0,
             runtime_obstacle_version: 0,
         }
@@ -111,41 +122,28 @@ impl GridWorld {
         self.map_size = Some(definition.size);
         self.default_level = Some(definition.default_level);
         self.levels = definition.levels.iter().map(|level| level.y).collect();
+        self.base_map_cells.clear();
         self.map_cells.clear();
         self.map_objects.clear();
         self.map_object_cells.clear();
         self.map_blocked_cells.clear();
+        self.generated_buildings.clear();
+        self.stair_adjacency.clear();
 
         for level in &definition.levels {
             for cell in &level.cells {
                 let coord = GridCoord::new(cell.x as i32, level.y, cell.z as i32);
-                if cell.blocks_movement {
-                    self.map_blocked_cells.insert(coord);
-                }
-                self.map_cells.insert(coord, cell.clone());
+                self.base_map_cells.insert(coord, cell.clone());
             }
         }
 
         for object in &definition.objects {
             self.map_objects
                 .insert(object.object_id.clone(), object.clone());
-
-            for cell in expand_object_footprint(object) {
-                self.map_object_cells
-                    .entry(cell)
-                    .or_default()
-                    .push(object.object_id.clone());
-                if object_effectively_blocks_movement(object) {
-                    self.map_blocked_cells.insert(cell);
-                }
-            }
+            self.levels.extend(building_layout_story_levels(object));
         }
 
-        for object_ids in self.map_object_cells.values_mut() {
-            object_ids.sort();
-            object_ids.dedup();
-        }
-
+        self.rebuild_static_topology();
         self.topology_version = self.topology_version.saturating_add(1);
     }
 
@@ -154,10 +152,13 @@ impl GridWorld {
         self.map_size = None;
         self.default_level = None;
         self.levels.clear();
+        self.base_map_cells.clear();
         self.map_cells.clear();
         self.map_objects.clear();
         self.map_object_cells.clear();
         self.map_blocked_cells.clear();
+        self.generated_buildings.clear();
+        self.stair_adjacency.clear();
         self.topology_version = self.topology_version.saturating_add(1);
     }
 
@@ -202,6 +203,17 @@ impl GridWorld {
         self.map_cells.get(&grid)
     }
 
+    pub fn generated_buildings(&self) -> &[GeneratedBuildingDebugState] {
+        &self.generated_buildings
+    }
+
+    pub fn stair_neighbors(&self, grid: GridCoord) -> &[GridCoord] {
+        self.stair_adjacency
+            .get(&grid)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
     pub fn map_object(&self, object_id: &str) -> Option<&MapObjectDefinition> {
         self.map_objects.get(object_id)
     }
@@ -237,60 +249,35 @@ impl GridWorld {
     }
 
     pub fn upsert_map_object(&mut self, object: MapObjectDefinition) {
-        if self.map_objects.contains_key(&object.object_id) {
-            let _ = self.remove_map_object(&object.object_id);
-        }
-
         let object_id = object.object_id.clone();
-        for cell in expand_object_footprint(&object) {
-            self.map_object_cells
-                .entry(cell)
-                .or_default()
-                .push(object_id.clone());
-            if object_effectively_blocks_movement(&object) {
-                self.map_blocked_cells.insert(cell);
-            }
-        }
-
-        for object_ids in self.map_object_cells.values_mut() {
-            object_ids.sort();
-            object_ids.dedup();
-        }
-
         self.map_objects.insert(object_id, object);
+        self.levels.clear();
+        if let Some(default_level) = self.default_level {
+            self.levels.insert(default_level);
+        }
+        for grid in self.base_map_cells.keys() {
+            self.levels.insert(grid.y);
+        }
+        for object in self.map_objects.values() {
+            self.levels.extend(building_layout_story_levels(object));
+        }
+        self.rebuild_static_topology();
         self.topology_version = self.topology_version.saturating_add(1);
     }
 
     pub fn remove_map_object(&mut self, object_id: &str) -> Option<MapObjectDefinition> {
         let removed = self.map_objects.remove(object_id)?;
-
-        for cell in expand_object_footprint(&removed) {
-            if let Some(object_ids) = self.map_object_cells.get_mut(&cell) {
-                object_ids.retain(|entry| entry != object_id);
-                if object_ids.is_empty() {
-                    self.map_object_cells.remove(&cell);
-                }
-            }
-
-            if object_effectively_blocks_movement(&removed) {
-                let still_blocked = self
-                    .map_object_cells
-                    .get(&cell)
-                    .into_iter()
-                    .flat_map(|ids| ids.iter())
-                    .filter_map(|id| self.map_objects.get(id))
-                    .any(object_effectively_blocks_movement);
-                if !still_blocked
-                    && !self
-                        .map_cells
-                        .get(&cell)
-                        .is_some_and(|cell| cell.blocks_movement)
-                {
-                    self.map_blocked_cells.remove(&cell);
-                }
-            }
+        self.levels.clear();
+        if let Some(default_level) = self.default_level {
+            self.levels.insert(default_level);
         }
-
+        for grid in self.base_map_cells.keys() {
+            self.levels.insert(grid.y);
+        }
+        for object in self.map_objects.values() {
+            self.levels.extend(building_layout_story_levels(object));
+        }
+        self.rebuild_static_topology();
         self.topology_version = self.topology_version.saturating_add(1);
         Some(removed)
     }
@@ -482,12 +469,21 @@ impl GridWorld {
             map_size: self.map_size,
             default_level: self.default_level,
             levels: self.levels(),
+            base_map_cells: self
+                .base_map_cells
+                .iter()
+                .map(|(grid, cell)| GridCellSnapshotEntry {
+                    grid: *grid,
+                    cell: cell.clone(),
+                })
+                .collect(),
             map_cells: self
                 .map_cell_entries()
                 .into_iter()
                 .map(|(grid, cell)| GridCellSnapshotEntry { grid, cell })
                 .collect(),
             map_objects: self.map_object_entries(),
+            generated_buildings: self.generated_buildings.clone(),
             topology_version: self.topology_version,
             runtime_obstacle_version: self.runtime_obstacle_version,
         }
@@ -516,6 +512,11 @@ impl GridWorld {
         self.map_size = snapshot.map_size;
         self.default_level = snapshot.default_level;
         self.levels = snapshot.levels.into_iter().collect();
+        self.base_map_cells = snapshot
+            .base_map_cells
+            .into_iter()
+            .map(|entry| (entry.grid, entry.cell))
+            .collect();
         self.map_cells = snapshot
             .map_cells
             .into_iter()
@@ -528,6 +529,8 @@ impl GridWorld {
             .collect();
         self.map_object_cells.clear();
         self.map_blocked_cells.clear();
+        self.generated_buildings = snapshot.generated_buildings;
+        self.stair_adjacency.clear();
 
         for (grid, cell) in &self.map_cells {
             if cell.blocks_movement {
@@ -552,7 +555,151 @@ impl GridWorld {
             object_ids.dedup();
         }
 
+        for building in self.generated_buildings.clone() {
+            self.register_stair_edges(&building);
+        }
+
         self.topology_version = snapshot.topology_version;
         self.runtime_obstacle_version = snapshot.runtime_obstacle_version;
+    }
+
+    fn rebuild_static_topology(&mut self) {
+        self.map_cells = self.base_map_cells.clone();
+        self.map_object_cells.clear();
+        self.map_blocked_cells = self
+            .map_cells
+            .iter()
+            .filter_map(|(grid, cell)| cell.blocks_movement.then_some(*grid))
+            .collect();
+        self.generated_buildings.clear();
+        self.stair_adjacency.clear();
+
+        let objects = self.map_objects.values().cloned().collect::<Vec<_>>();
+        for object in &objects {
+            for cell in expand_object_footprint(object) {
+                self.map_object_cells
+                    .entry(cell)
+                    .or_default()
+                    .push(object.object_id.clone());
+                if object_effectively_blocks_movement(object) {
+                    self.map_blocked_cells.insert(cell);
+                }
+            }
+
+            if let Some(building) = object
+                .props
+                .building
+                .as_ref()
+                .filter(|building| building.layout.is_some())
+            {
+                match generate_building_layout(
+                    building.layout.as_ref().expect("layout presence checked"),
+                    object.anchor,
+                    object.rotation,
+                    object.footprint,
+                ) {
+                    Ok(layout) => {
+                        let debug_state = GeneratedBuildingDebugState {
+                            object_id: object.object_id.clone(),
+                            prefab_id: building.prefab_id.clone(),
+                            anchor: object.anchor,
+                            rotation: object.rotation,
+                            stories: layout.stories,
+                            stairs: layout.stairs,
+                            visual_outline: layout.visual_outline,
+                        };
+                        self.apply_generated_building(&debug_state);
+                        self.generated_buildings.push(debug_state);
+                    }
+                    Err(error) => {
+                        warn!(
+                            object_id = %object.object_id,
+                            ?error,
+                            "failed to generate building layout; falling back to blocking footprint"
+                        );
+                        for cell in expand_object_footprint(object) {
+                            self.map_blocked_cells.insert(cell);
+                            let entry =
+                                self.map_cells
+                                    .entry(cell)
+                                    .or_insert_with(|| MapCellDefinition {
+                                        x: cell.x.max(0) as u32,
+                                        z: cell.z.max(0) as u32,
+                                        blocks_movement: false,
+                                        blocks_sight: false,
+                                        terrain: "generated_building_fallback".into(),
+                                        extra: Default::default(),
+                                    });
+                            entry.blocks_movement = true;
+                            entry.blocks_sight = true;
+                            entry.terrain = "generated_building_fallback".into();
+                        }
+                    }
+                }
+            }
+        }
+
+        for object_ids in self.map_object_cells.values_mut() {
+            object_ids.sort();
+            object_ids.dedup();
+        }
+        self.generated_buildings
+            .sort_by(|a, b| a.object_id.cmp(&b.object_id));
+    }
+
+    fn apply_generated_building(&mut self, building: &GeneratedBuildingDebugState) {
+        for story in &building.stories {
+            for wall in &story.wall_cells {
+                self.map_blocked_cells.insert(*wall);
+                let entry = self
+                    .map_cells
+                    .entry(*wall)
+                    .or_insert_with(|| MapCellDefinition {
+                        x: wall.x.max(0) as u32,
+                        z: wall.z.max(0) as u32,
+                        blocks_movement: false,
+                        blocks_sight: false,
+                        terrain: "generated_wall".into(),
+                        extra: Default::default(),
+                    });
+                entry.blocks_movement = true;
+                entry.blocks_sight = true;
+                if entry.terrain.is_empty() || entry.terrain == "generated_floor" {
+                    entry.terrain = "generated_wall".into();
+                }
+            }
+
+            for door in story
+                .interior_door_cells
+                .iter()
+                .chain(story.exterior_door_cells.iter())
+                .chain(story.walkable_cells.iter())
+            {
+                if let Some(cell) = self.map_cells.get_mut(door) {
+                    if cell.terrain == "generated_wall" {
+                        cell.blocks_movement = false;
+                        cell.blocks_sight = false;
+                        cell.terrain = "generated_floor".into();
+                    }
+                }
+                self.map_blocked_cells.remove(door);
+            }
+        }
+
+        self.register_stair_edges(building);
+    }
+
+    fn register_stair_edges(&mut self, building: &GeneratedBuildingDebugState) {
+        for stair in &building.stairs {
+            for (from, to) in stair.from_cells.iter().zip(stair.to_cells.iter()) {
+                self.stair_adjacency.entry(*from).or_default().push(*to);
+                self.stair_adjacency.entry(*to).or_default().push(*from);
+            }
+        }
+
+        for neighbors in self.stair_adjacency.values_mut() {
+            neighbors.sort();
+            neighbors.dedup();
+        }
     }
 }

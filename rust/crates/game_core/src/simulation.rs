@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
 use crate::actor::{ActorRecord, ActorRegistry, ActorRegistrySnapshot, AiController};
+use crate::building::GeneratedBuildingDebugState;
 use crate::economy::{HeadlessEconomyRuntime, HeadlessEconomyRuntimeSnapshot};
 use crate::goap::{ActionExecutionPhase, NpcActionKey, NpcBackgroundState, NpcRuntimeActionState};
 use crate::grid::{
@@ -456,6 +457,7 @@ pub struct SimulationSnapshot {
     pub turn: TurnState,
     pub actors: Vec<ActorDebugState>,
     pub grid: GridDebugState,
+    pub generated_buildings: Vec<GeneratedBuildingDebugState>,
     pub combat: CombatDebugState,
     pub interaction_context: InteractionContextSnapshot,
     pub overworld: OverworldStateSnapshot,
@@ -2003,6 +2005,28 @@ impl Simulation {
                             }
                         }
                     }
+                    MapObjectKind::Trigger => {
+                        if let Some(trigger) = object.props.trigger.as_ref() {
+                            let options = trigger.resolved_options();
+                            if let Some(primary) = options.first() {
+                                payload_summary.insert(
+                                    "trigger_kind".to_string(),
+                                    primary.id.as_str().to_string(),
+                                );
+                                let target_id = self.resolve_scene_target_id(primary);
+                                if !target_id.trim().is_empty() {
+                                    payload_summary.insert("target_id".to_string(), target_id);
+                                }
+                            }
+                            payload_summary.insert(
+                                "trigger_cells".to_string(),
+                                self.grid_world
+                                    .map_object_footprint_cells(&object.object_id)
+                                    .len()
+                                    .to_string(),
+                            );
+                        }
+                    }
                     MapObjectKind::AiSpawn => {
                         if let Some(ai_spawn) = object.props.ai_spawn.as_ref() {
                             payload_summary
@@ -2053,6 +2077,7 @@ impl Simulation {
                 topology_version: self.grid_world.topology_version(),
                 runtime_obstacle_version: self.grid_world.runtime_obstacle_version(),
             },
+            generated_buildings: self.grid_world.generated_buildings().to_vec(),
             combat: CombatDebugState {
                 in_combat: self.turn.combat_active,
                 current_actor_id: self.turn.current_actor_id,
@@ -2315,6 +2340,9 @@ impl Simulation {
                 step_index: step_index + 1,
                 total_steps,
             });
+            if self.try_activate_map_trigger(actor_id, next) {
+                break;
+            }
             previous = next;
         }
     }
@@ -2870,18 +2898,20 @@ impl Simulation {
                         action,
                     );
                 }
-                let target_id = self.resolve_scene_target_id(&option_definition);
-                self.apply_scene_transition(&option_definition);
-                let context_snapshot = self.current_interaction_context();
-                self.events.push(SimulationEvent::SceneTransitionRequested {
-                    actor_id: request.actor_id,
-                    option_id: option.id.clone(),
-                    target_id,
-                    world_mode: context_snapshot.world_mode,
-                    location_id: context_snapshot.active_location_id.clone(),
-                    entry_point_id: context_snapshot.entry_point_id.clone(),
-                    return_location_id: context_snapshot.return_outdoor_location_id.clone(),
-                });
+                let context_snapshot = match self
+                    .execute_scene_transition_interaction(request.actor_id, &option_definition)
+                {
+                    Ok(snapshot) => snapshot,
+                    Err(reason) => {
+                        return self.failed_interaction_execution(
+                            request.actor_id,
+                            prompt,
+                            option.id.clone(),
+                            &reason,
+                            true,
+                        );
+                    }
+                };
                 self.events.push(SimulationEvent::InteractionSucceeded {
                     actor_id: request.actor_id,
                     target_id: request.target_id.clone(),
@@ -3656,8 +3686,10 @@ impl Simulation {
             overworld_id: self.active_overworld_id.clone(),
             active_location_id,
             active_outdoor_location_id,
-            current_map_id: if matches!(runtime_world_mode, WorldMode::Overworld | WorldMode::Traveling)
-            {
+            current_map_id: if matches!(
+                runtime_world_mode,
+                WorldMode::Overworld | WorldMode::Traveling
+            ) {
                 None
             } else {
                 self.grid_world
@@ -3760,7 +3792,8 @@ impl Simulation {
         let from_cell = self
             .overworld_pawn_cell
             .or_else(|| {
-                location_by_id(definition, &from_location_id).map(|location| location.overworld_cell)
+                location_by_id(definition, &from_location_id)
+                    .map(|location| location.overworld_cell)
             })
             .ok_or_else(|| "active_overworld_cell_missing".to_string())?;
         if target_location_id != from_location_id
@@ -4153,6 +4186,18 @@ impl Simulation {
                     }
                 })
                 .unwrap_or_else(|| object.object_id.clone()),
+            MapObjectKind::Trigger => object
+                .props
+                .trigger
+                .as_ref()
+                .map(|trigger| {
+                    if trigger.display_name.trim().is_empty() {
+                        object.object_id.clone()
+                    } else {
+                        trigger.display_name.clone()
+                    }
+                })
+                .unwrap_or_else(|| object.object_id.clone()),
             _ => object.object_id.clone(),
         }
     }
@@ -4179,8 +4224,93 @@ impl Simulation {
                 .as_ref()
                 .map(|interactive| interactive.resolved_options())
                 .unwrap_or_default(),
-            MapObjectKind::Building | MapObjectKind::AiSpawn => Vec::new(),
+            MapObjectKind::Building | MapObjectKind::Trigger | MapObjectKind::AiSpawn => Vec::new(),
         }
+    }
+
+    fn map_object_trigger_options(
+        &self,
+        object: &MapObjectDefinition,
+    ) -> Vec<InteractionOptionDefinition> {
+        if object.kind != MapObjectKind::Trigger {
+            return Vec::new();
+        }
+        object
+            .props
+            .trigger
+            .as_ref()
+            .map(|trigger| trigger.resolved_options())
+            .unwrap_or_default()
+    }
+
+    fn try_activate_map_trigger(&mut self, actor_id: ActorId, grid: GridCoord) -> bool {
+        if self
+            .actors
+            .get(actor_id)
+            .map(|actor| actor.kind != ActorKind::Player)
+            .unwrap_or(true)
+        {
+            return false;
+        }
+
+        let triggered = self
+            .grid_world
+            .map_objects_at(grid)
+            .into_iter()
+            .find_map(|object| {
+                let options = self.map_object_trigger_options(object);
+                options
+                    .into_iter()
+                    .find(|option| self.is_scene_transition_option_kind(option.kind))
+                    .map(|option| (object.object_id.clone(), option))
+            });
+        let Some((object_id, option)) = triggered else {
+            return false;
+        };
+
+        match self.execute_scene_transition_interaction(actor_id, &option) {
+            Ok(context_snapshot) => {
+                self.events.push(SimulationEvent::InteractionSucceeded {
+                    actor_id,
+                    target_id: InteractionTargetId::MapObject(object_id.clone()),
+                    option_id: option.id.clone(),
+                });
+                info!(
+                    "core.interaction.trigger_scene_transition actor={:?} target={} option_id={} mode={:?}",
+                    actor_id,
+                    object_id,
+                    option.id.as_str(),
+                    context_snapshot.world_mode
+                );
+                true
+            }
+            Err(reason) => {
+                self.events.push(SimulationEvent::InteractionFailed {
+                    actor_id,
+                    target_id: InteractionTargetId::MapObject(object_id.clone()),
+                    option_id: option.id.clone(),
+                    reason: reason.clone(),
+                });
+                warn!(
+                    "core.interaction.trigger_scene_transition_failed actor={:?} target={} option_id={} reason={}",
+                    actor_id,
+                    object_id,
+                    option.id.as_str(),
+                    reason
+                );
+                false
+            }
+        }
+    }
+
+    fn is_scene_transition_option_kind(&self, kind: InteractionOptionKind) -> bool {
+        matches!(
+            kind,
+            InteractionOptionKind::EnterSubscene
+                | InteractionOptionKind::EnterOverworld
+                | InteractionOptionKind::ExitToOutdoor
+                | InteractionOptionKind::EnterOutdoorLocation
+        )
     }
 
     fn default_actor_options(
@@ -4303,44 +4433,29 @@ impl Simulation {
         }
     }
 
-    fn apply_scene_transition(&mut self, option: &InteractionOptionDefinition) {
-        self.interaction_context.current_map_id = self
-            .grid_world
-            .map_id()
-            .map(|map_id| map_id.as_str().to_string());
+    fn execute_scene_transition_interaction(
+        &mut self,
+        actor_id: ActorId,
+        option: &InteractionOptionDefinition,
+    ) -> Result<InteractionContextSnapshot, String> {
+        let target_id = self.resolve_scene_target_id(option);
+        let entry_point_override =
+            (!option.return_spawn_id.trim().is_empty()).then_some(option.return_spawn_id.as_str());
+
         match option.kind {
-            InteractionOptionKind::EnterSubscene => {
-                let target_id = self.resolve_scene_target_id(option);
-                self.active_location_id = Some(target_id.clone());
-                self.interaction_context.current_subscene_location_id = Some(target_id);
-                self.interaction_context.return_outdoor_spawn_id =
-                    if option.return_spawn_id.trim().is_empty() {
-                        None
-                    } else {
-                        Some(option.return_spawn_id.clone())
-                    };
-                self.interaction_context.return_outdoor_location_id =
-                    self.active_location_id.clone();
-                self.interaction_context.world_mode = WorldMode::Interior;
+            InteractionOptionKind::EnterSubscene
+            | InteractionOptionKind::ExitToOutdoor
+            | InteractionOptionKind::EnterOutdoorLocation => {
+                self.enter_location(actor_id, &target_id, entry_point_override)?;
             }
             InteractionOptionKind::EnterOverworld => {
-                self.active_location_id = None;
-                self.interaction_context.active_outdoor_location_id = None;
-                self.interaction_context.current_subscene_location_id = None;
-                self.interaction_context.world_mode = WorldMode::Overworld;
-            }
-            InteractionOptionKind::ExitToOutdoor | InteractionOptionKind::EnterOutdoorLocation => {
-                let target_id = self.resolve_scene_target_id(option);
-                self.active_location_id = Some(target_id.clone());
-                self.interaction_context.active_outdoor_location_id = Some(target_id);
-                self.interaction_context.current_subscene_location_id = None;
-                self.interaction_context.world_mode = WorldMode::Outdoor;
+                self.return_to_overworld(actor_id)?;
             }
             InteractionOptionKind::Talk
             | InteractionOptionKind::Attack
-            | InteractionOptionKind::Pickup => {}
+            | InteractionOptionKind::Pickup => return Ok(self.current_interaction_context()),
         }
-        self.sync_interaction_context_from_runtime();
+        Ok(self.current_interaction_context())
     }
 
     pub(crate) fn plan_interaction_approach(
@@ -5053,20 +5168,25 @@ mod tests {
         ActionPhase, ActionRequest, ActionType, ActorKind, ActorSide, CharacterId,
         CharacterLootEntry, DialogueAction, DialogueData, DialogueLibrary, DialogueNode,
         DialogueOption, DialogueRuleConditions, DialogueRuleDefinition, DialogueRuleLibrary,
-        DialogueRuleVariant, GridCoord, InteractionExecutionRequest, InteractionOptionId,
-        InteractionOptionKind, InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
-        MapInteractiveProps, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint,
-        MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, QuestConnection,
-        QuestDefinition, QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeLibrary,
-        WorldCoord, WorldMode,
+        DialogueRuleVariant, GridCoord, InteractionExecutionRequest, InteractionOptionDefinition,
+        InteractionOptionId, InteractionOptionKind, InteractionTargetId, ItemDefinition,
+        ItemFragment, ItemLibrary, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec,
+        MapBuildingStorySpec, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
+        MapInteractiveProps, MapLevelDefinition, MapLibrary, MapObjectDefinition,
+        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
+        MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
+        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow, QuestLibrary,
+        QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell, StairKind, WorldCoord, WorldMode,
     };
 
     use crate::actor::InteractOnceAiController;
     use crate::grid::GridPathfindingError;
     use crate::movement::PendingProgressionStep;
 
-    use super::{RegisterActor, Simulation, SimulationCommand, SimulationCommandResult};
+    use super::{
+        RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
+    };
 
     fn advance_next_progression(simulation: &mut Simulation) -> Option<PendingProgressionStep> {
         let step = simulation.pop_pending_progression()?;
@@ -6020,8 +6140,10 @@ mod tests {
     }
 
     #[test]
-    fn scene_transition_interaction_updates_context_snapshot() {
+    fn scene_transition_interaction_enters_target_location_map() {
         let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
         simulation
             .grid_world_mut()
             .load_map(&sample_interaction_map_definition());
@@ -6044,16 +6166,174 @@ mod tests {
         });
 
         assert!(result.success);
+        let context = result
+            .context_snapshot
+            .expect("scene transition should publish context");
         assert_eq!(
-            simulation
-                .interaction_context
-                .active_outdoor_location_id
-                .as_deref(),
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
+        assert_eq!(
+            context.active_outdoor_location_id.as_deref(),
             Some("survivor_outpost_01")
         );
         assert_eq!(
-            simulation.interaction_context.world_mode,
-            WorldMode::Outdoor
+            context.active_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.entry_point_id.as_deref(), Some("default_entry"));
+        assert_eq!(context.world_mode, WorldMode::Outdoor);
+        assert_eq!(
+            simulation.actor_grid_position(player),
+            Some(GridCoord::new(0, 0, 0))
+        );
+    }
+
+    #[test]
+    fn exit_to_outdoor_interaction_returns_to_outdoor_map_entry_point() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation
+            .enter_location(player, "survivor_outpost_01_interior", None)
+            .expect("interior entry should succeed");
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject("interior_exit".into()),
+            option_id: InteractionOptionId("exit_to_outdoor".into()),
+        });
+
+        assert!(result.success);
+        let context = result
+            .context_snapshot
+            .expect("scene transition should publish context");
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
+        assert_eq!(
+            context.active_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(
+            context.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.entry_point_id.as_deref(), Some("interior_return"));
+        assert_eq!(context.world_mode, WorldMode::Outdoor);
+        assert_eq!(
+            simulation.actor_grid_position(player),
+            Some(GridCoord::new(6, 0, 6))
+        );
+    }
+
+    #[test]
+    fn stepping_onto_trigger_enters_target_location_map() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_trigger_map_definition(
+                GridCoord::new(5, 0, 7),
+                MapObjectFootprint::default(),
+                MapRotation::East,
+            ));
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(4, 0, 7),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.move_actor_to(player, GridCoord::new(5, 0, 7));
+
+        assert!(result.success);
+        let context = simulation.current_interaction_context();
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
+        assert_eq!(
+            context.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.entry_point_id.as_deref(), Some("default_entry"));
+        assert_eq!(
+            simulation.actor_grid_position(player),
+            Some(GridCoord::new(0, 0, 0))
+        );
+
+        let events = simulation.drain_events();
+        assert!(events.iter().any(|event| matches!(
+            event,
+            SimulationEvent::InteractionSucceeded {
+                actor_id,
+                target_id: InteractionTargetId::MapObject(object_id),
+                option_id,
+            } if *actor_id == player
+                && object_id == "exit_trigger"
+                && option_id.as_str() == "enter_outdoor_location"
+        )));
+    }
+
+    #[test]
+    fn multi_cell_trigger_fires_from_any_covered_cell() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_trigger_map_definition(
+                GridCoord::new(5, 0, 7),
+                MapObjectFootprint {
+                    width: 3,
+                    height: 1,
+                },
+                MapRotation::North,
+            ));
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(8, 0, 7),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.move_actor_to(player, GridCoord::new(7, 0, 7));
+
+        assert!(result.success);
+        assert_eq!(
+            simulation
+                .current_interaction_context()
+                .current_map_id
+                .as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
+        assert_eq!(
+            simulation.actor_grid_position(player),
+            Some(GridCoord::new(0, 0, 0))
         );
     }
 
@@ -6116,6 +6396,24 @@ mod tests {
         );
 
         assert!(matches!(result, Err(GridPathfindingError::TargetBlocked)));
+    }
+
+    #[test]
+    fn generated_building_stairs_enable_cross_level_pathfinding() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_generated_building_map_definition());
+
+        let path = crate::grid::find_path_grid(
+            &world,
+            None,
+            GridCoord::new(2, 0, 2),
+            GridCoord::new(2, 1, 2),
+        )
+        .expect("stairs should allow vertical traversal");
+
+        assert_eq!(path.first().copied(), Some(GridCoord::new(2, 0, 2)));
+        assert_eq!(path.last().copied(), Some(GridCoord::new(2, 1, 2)));
+        assert!(path.iter().any(|grid| grid.y == 1));
     }
 
     #[test]
@@ -6257,6 +6555,7 @@ mod tests {
                     props: MapObjectProps {
                         building: Some(MapBuildingProps {
                             prefab_id: "survivor_outpost_01_dormitory".into(),
+                            layout: None,
                             extra: std::collections::BTreeMap::new(),
                         }),
                         ..MapObjectProps::default()
@@ -6273,6 +6572,83 @@ mod tests {
                     props: MapObjectProps::default(),
                 },
             ],
+        }
+    }
+
+    fn sample_generated_building_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("generated_building_map".into()),
+            name: "Generated Building".into(),
+            size: MapSize {
+                width: 8,
+                height: 8,
+            },
+            default_level: 0,
+            levels: vec![
+                MapLevelDefinition {
+                    y: 0,
+                    cells: Vec::new(),
+                },
+                MapLevelDefinition {
+                    y: 1,
+                    cells: Vec::new(),
+                },
+            ],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: vec![MapObjectDefinition {
+                object_id: "layout_building".into(),
+                kind: MapObjectKind::Building,
+                anchor: GridCoord::new(1, 0, 1),
+                footprint: MapObjectFootprint {
+                    width: 5,
+                    height: 5,
+                },
+                rotation: MapRotation::North,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    building: Some(MapBuildingProps {
+                        prefab_id: "generated_house".into(),
+                        layout: Some(MapBuildingLayoutSpec {
+                            seed: 7,
+                            target_room_count: 3,
+                            min_room_size: MapSize {
+                                width: 2,
+                                height: 2,
+                            },
+                            shape_cells: (0..5)
+                                .flat_map(|z| (0..5).map(move |x| RelativeGridCell::new(x, z)))
+                                .collect(),
+                            stories: vec![
+                                MapBuildingStorySpec {
+                                    level: 0,
+                                    shape_cells: Vec::new(),
+                                },
+                                MapBuildingStorySpec {
+                                    level: 1,
+                                    shape_cells: Vec::new(),
+                                },
+                            ],
+                            stairs: vec![MapBuildingStairSpec {
+                                from_level: 0,
+                                to_level: 1,
+                                from_cells: vec![RelativeGridCell::new(1, 1)],
+                                to_cells: vec![RelativeGridCell::new(1, 1)],
+                                width: 1,
+                                kind: StairKind::Straight,
+                            }],
+                            ..MapBuildingLayoutSpec::default()
+                        }),
+                        extra: BTreeMap::new(),
+                    }),
+                    ..MapObjectProps::default()
+                },
+            }],
         }
     }
 
@@ -6336,6 +6712,205 @@ mod tests {
                 },
             ],
         }
+    }
+
+    fn sample_trigger_map_definition(
+        anchor: GridCoord,
+        footprint: MapObjectFootprint,
+        rotation: MapRotation,
+    ) -> MapDefinition {
+        MapDefinition {
+            id: MapId("trigger_map".into()),
+            name: "Trigger".into(),
+            size: MapSize {
+                width: 12,
+                height: 12,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(1, 0, 7),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: vec![MapObjectDefinition {
+                object_id: "exit_trigger".into(),
+                kind: MapObjectKind::Trigger,
+                anchor,
+                footprint,
+                rotation,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    trigger: Some(MapTriggerProps {
+                        display_name: "进入幸存者据点".into(),
+                        interaction_distance: 1.4,
+                        interaction_kind: "enter_outdoor_location".into(),
+                        target_id: Some("survivor_outpost_01".into()),
+                        options: Vec::new(),
+                        extra: BTreeMap::new(),
+                    }),
+                    ..MapObjectProps::default()
+                },
+            }],
+        }
+    }
+
+    fn sample_scene_transition_map_library() -> MapLibrary {
+        MapLibrary::from(BTreeMap::from([
+            (
+                MapId("survivor_outpost_01_grid".into()),
+                sample_scene_transition_outdoor_map_definition(),
+            ),
+            (
+                MapId("survivor_outpost_01_interior_grid".into()),
+                sample_scene_transition_interior_map_definition(),
+            ),
+        ]))
+    }
+
+    fn sample_scene_transition_outdoor_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("survivor_outpost_01_grid".into()),
+            name: "Outpost Outdoor".into(),
+            size: MapSize {
+                width: 12,
+                height: 12,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            entry_points: vec![
+                MapEntryPointDefinition {
+                    id: "default_entry".into(),
+                    grid: GridCoord::new(0, 0, 0),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                },
+                MapEntryPointDefinition {
+                    id: "interior_return".into(),
+                    grid: GridCoord::new(6, 0, 6),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                },
+            ],
+            objects: Vec::new(),
+        }
+    }
+
+    fn sample_scene_transition_interior_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("survivor_outpost_01_interior_grid".into()),
+            name: "Outpost Interior".into(),
+            size: MapSize {
+                width: 8,
+                height: 8,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            entry_points: vec![
+                MapEntryPointDefinition {
+                    id: "default_entry".into(),
+                    grid: GridCoord::new(2, 0, 2),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                },
+                MapEntryPointDefinition {
+                    id: "outdoor_return".into(),
+                    grid: GridCoord::new(2, 0, 2),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                },
+            ],
+            objects: vec![MapObjectDefinition {
+                object_id: "interior_exit".into(),
+                kind: MapObjectKind::Interactive,
+                anchor: GridCoord::new(2, 0, 2),
+                footprint: MapObjectFootprint::default(),
+                rotation: MapRotation::North,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    interactive: Some(MapInteractiveProps {
+                        display_name: "Exit".into(),
+                        interaction_distance: 1.4,
+                        interaction_kind: String::new(),
+                        target_id: None,
+                        options: vec![InteractionOptionDefinition {
+                            id: InteractionOptionId("exit_to_outdoor".into()),
+                            display_name: "Exit".into(),
+                            interaction_distance: 1.4,
+                            kind: InteractionOptionKind::ExitToOutdoor,
+                            target_id: "survivor_outpost_01".into(),
+                            return_spawn_id: "interior_return".into(),
+                            ..InteractionOptionDefinition::default()
+                        }],
+                        extra: BTreeMap::new(),
+                    }),
+                    ..MapObjectProps::default()
+                },
+            }],
+        }
+    }
+
+    fn sample_scene_transition_overworld_library() -> OverworldLibrary {
+        OverworldLibrary::from(BTreeMap::from([(
+            OverworldId("scene_transition_test".into()),
+            OverworldDefinition {
+                id: OverworldId("scene_transition_test".into()),
+                locations: vec![
+                    OverworldLocationDefinition {
+                        id: OverworldLocationId("survivor_outpost_01".into()),
+                        name: "Outpost".into(),
+                        description: String::new(),
+                        kind: OverworldLocationKind::Outdoor,
+                        map_id: MapId("survivor_outpost_01_grid".into()),
+                        entry_point_id: "default_entry".into(),
+                        parent_outdoor_location_id: None,
+                        return_entry_point_id: None,
+                        default_unlocked: true,
+                        visible: true,
+                        overworld_cell: GridCoord::new(0, 0, 0),
+                        danger_level: 0,
+                        icon: String::new(),
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldLocationDefinition {
+                        id: OverworldLocationId("survivor_outpost_01_interior".into()),
+                        name: "Outpost Interior".into(),
+                        description: String::new(),
+                        kind: OverworldLocationKind::Interior,
+                        map_id: MapId("survivor_outpost_01_interior_grid".into()),
+                        entry_point_id: "default_entry".into(),
+                        parent_outdoor_location_id: Some(OverworldLocationId(
+                            "survivor_outpost_01".into(),
+                        )),
+                        return_entry_point_id: Some("outdoor_return".into()),
+                        default_unlocked: true,
+                        visible: false,
+                        overworld_cell: GridCoord::new(0, 0, 0),
+                        danger_level: 0,
+                        icon: String::new(),
+                        extra: BTreeMap::new(),
+                    },
+                ],
+                walkable_cells: vec![OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 0),
+                    terrain: "road".into(),
+                    extra: BTreeMap::new(),
+                }],
+                travel_rules: OverworldTravelRuleSet::default(),
+            },
+        )]))
     }
 
     fn sample_collect_quest_map_definition() -> MapDefinition {

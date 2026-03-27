@@ -1,5 +1,5 @@
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -139,10 +139,14 @@ pub struct NarrativeAppSettings {
 impl NarrativeAppSettings {
     pub fn normalized(mut self) -> Self {
         self.last_workspace = normalize_optional_path(self.last_workspace.as_deref());
-        self.connected_project_root = normalize_optional_path(self.connected_project_root.as_deref());
-        self.recent_workspaces = normalize_recent_paths(&self.recent_workspaces, self.last_workspace.as_deref());
-        self.recent_project_roots =
-            normalize_recent_paths(&self.recent_project_roots, self.connected_project_root.as_deref());
+        self.connected_project_root =
+            normalize_optional_path(self.connected_project_root.as_deref());
+        self.recent_workspaces =
+            normalize_recent_paths(&self.recent_workspaces, self.last_workspace.as_deref());
+        self.recent_project_roots = normalize_recent_paths(
+            &self.recent_project_roots,
+            self.connected_project_root.as_deref(),
+        );
         self.workspace_layouts = normalize_workspace_layouts(self.workspace_layouts);
         self
     }
@@ -180,7 +184,8 @@ pub fn save_narrative_app_settings(
 
     let raw = serde_json::to_string_pretty(&normalized)
         .map_err(|error| format!("failed to serialize narrative app settings: {error}"))?;
-    fs::write(&path, raw).map_err(|error| format!("failed to write {}: {error}", path.display()))?;
+    fs::write(&path, raw)
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
     Ok(normalized)
 }
 
@@ -286,7 +291,9 @@ fn resolve_existing_dir(path: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    path.canonicalize().ok().or_else(|| Some(path.to_path_buf()))
+    path.canonicalize()
+        .ok()
+        .or_else(|| Some(path.to_path_buf()))
 }
 
 fn to_forward_slashes(path: PathBuf) -> String {
@@ -407,8 +414,8 @@ fn dedupe_strings(values: Vec<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        infer_default_narrative_app_settings_from_base, normalize_workspace_layouts, NarrativeAppSettings,
-        NarrativePanelLayoutItem, NarrativeWorkspaceLayout,
+        infer_default_narrative_app_settings_from_base, normalize_workspace_layouts,
+        NarrativeAppSettings, NarrativePanelLayoutItem, NarrativeWorkspaceLayout,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -450,7 +457,10 @@ mod tests {
 
         let merged = settings.with_inferred_defaults();
 
-        assert_eq!(merged.last_workspace.as_deref(), Some("G:/custom/workspace"));
+        assert_eq!(
+            merged.last_workspace.as_deref(),
+            Some("G:/custom/workspace")
+        );
         assert_eq!(
             merged.connected_project_root.as_deref(),
             Some("G:/custom/project")

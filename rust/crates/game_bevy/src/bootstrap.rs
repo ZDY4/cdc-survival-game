@@ -5,10 +5,9 @@ use thiserror::Error;
 use crate::{
     build_runtime_from_seed, debug_seed_characters_for_map, default_debug_seed,
     load_character_definitions, load_map_definitions, load_overworld_definitions,
-    load_runtime_startup_config, resolve_startup_map_id,
-    CharacterDefinitions, CharacterLoadError, MapDefinitions, MapLoadError, OverworldDefinitions,
-    OverworldLoadError, RuntimeBuildError, RuntimeScenarioSeed, RuntimeStartupConfig,
-    RuntimeStartupConfigError,
+    load_runtime_startup_config, resolve_startup_map_id, CharacterDefinitions, CharacterLoadError,
+    MapDefinitions, MapLoadError, OverworldDefinitions, OverworldLoadError, RuntimeBuildError,
+    RuntimeScenarioSeed, RuntimeStartupConfig, RuntimeStartupConfigError,
 };
 use game_core::SimulationRuntime;
 
@@ -116,7 +115,10 @@ mod tests {
     #[test]
     fn startup_seed_aligns_location_and_characters_with_perimeter_map() {
         let maps = MapLibrary::from(BTreeMap::from([
-            (MapId("survivor_outpost_01_grid".into()), sample_map("survivor_outpost_01_grid")),
+            (
+                MapId("survivor_outpost_01_grid".into()),
+                sample_map("survivor_outpost_01_grid"),
+            ),
             (
                 MapId("survivor_outpost_01_perimeter_grid".into()),
                 sample_map("survivor_outpost_01_perimeter_grid"),
@@ -150,7 +152,10 @@ mod tests {
     #[test]
     fn startup_seed_aligns_location_and_characters_with_interior_map() {
         let maps = MapLibrary::from(BTreeMap::from([
-            (MapId("survivor_outpost_01_grid".into()), sample_map("survivor_outpost_01_grid")),
+            (
+                MapId("survivor_outpost_01_grid".into()),
+                sample_map("survivor_outpost_01_grid"),
+            ),
             (
                 MapId("survivor_outpost_01_perimeter_grid".into()),
                 sample_map("survivor_outpost_01_perimeter_grid"),
@@ -244,7 +249,6 @@ mod tests {
                         "survivor_outpost_01",
                     ),
                 ],
-                edges: Vec::new(),
                 walkable_cells: Vec::new(),
                 travel_rules: OverworldTravelRuleSet::default(),
             },
@@ -276,7 +280,9 @@ mod tests {
         parent_outdoor_location_id: &str,
     ) -> OverworldLocationDefinition {
         OverworldLocationDefinition {
-            parent_outdoor_location_id: Some(OverworldLocationId(parent_outdoor_location_id.into())),
+            parent_outdoor_location_id: Some(OverworldLocationId(
+                parent_outdoor_location_id.into(),
+            )),
             kind: OverworldLocationKind::Interior,
             ..sample_location(id, map_id)
         }

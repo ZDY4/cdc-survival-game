@@ -59,12 +59,15 @@ pub use interaction::{
     WorldMode,
 };
 pub use map::{
-    expand_object_footprint, load_map_library, load_map_library_with_catalog,
-    object_effectively_blocks_movement, object_effectively_blocks_sight, rotated_footprint_size,
-    validate_map_definition, MapAiSpawnProps, MapBuildingProps, MapCellDefinition, MapDefinition,
-    MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapInteractiveProps,
-    MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition, MapObjectFootprint,
-    MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
+    building_layout_story_levels, expand_object_footprint, load_map_library,
+    load_map_library_with_catalog, object_effectively_blocks_movement,
+    object_effectively_blocks_sight, rotated_footprint_size, validate_map_definition,
+    BuildingGeneratorKind, MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingLayoutSpec,
+    MapBuildingProps, MapBuildingStairSpec, MapBuildingStorySpec, MapBuildingVisualOutline,
+    MapCellDefinition, MapDefinition, MapDefinitionValidationError, MapEntryPointDefinition, MapId,
+    MapInteractiveProps, MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition,
+    MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
+    MapTriggerProps, MapValidationCatalog, RelativeGridCell, RelativeGridVertex, StairKind,
 };
 pub use models::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,
@@ -72,10 +75,9 @@ pub use models::{
 };
 pub use overworld::{
     load_overworld_library, load_overworld_library_with_catalog, validate_overworld_definition,
-    OverworldCellDefinition, OverworldDefinition, OverworldEdgeDefinition, OverworldId,
-    OverworldLibrary, OverworldLoadError, OverworldLocationDefinition, OverworldLocationId,
-    OverworldLocationKind, OverworldTravelRuleSet, OverworldValidationCatalog,
-    OverworldValidationError,
+    OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
+    OverworldLoadError, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+    OverworldTravelRuleSet, OverworldValidationCatalog, OverworldValidationError,
 };
 pub use quest::{
     load_quest_library, validate_quest_definition, QuestChoiceOption, QuestConnection,

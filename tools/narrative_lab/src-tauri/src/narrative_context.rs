@@ -193,7 +193,10 @@ fn load_project_context(
         runtime_indexes,
         unique_strings(project_context_refs),
         story_background,
-        format!("已连接项目上下文: {}", project_root.to_string_lossy().replace('\\', "/")),
+        format!(
+            "已连接项目上下文: {}",
+            project_root.to_string_lossy().replace('\\', "/")
+        ),
     ))
 }
 
@@ -240,19 +243,35 @@ fn load_runtime_category(
 ) -> Result<BTreeMap<String, Value>, String> {
     let mut result = BTreeMap::new();
     match category {
-        "quests" => load_directory_records(&project_root.join("data").join("quests"), "quest_id", &mut result)?,
-        "dialogues" => {
-            load_directory_records(&project_root.join("data").join("dialogues"), "dialog_id", &mut result)?
-        }
-        "characters" => {
-            load_directory_records(&project_root.join("data").join("characters"), "id", &mut result)?
-        }
-        "map_locations" => {
-            load_object_file(&project_root.join("data").join("json").join("map_locations.json"), &mut result)?
-        }
-        "structures" => {
-            load_object_file(&project_root.join("data").join("json").join("structures.json"), &mut result)?
-        }
+        "quests" => load_directory_records(
+            &project_root.join("data").join("quests"),
+            "quest_id",
+            &mut result,
+        )?,
+        "dialogues" => load_directory_records(
+            &project_root.join("data").join("dialogues"),
+            "dialog_id",
+            &mut result,
+        )?,
+        "characters" => load_directory_records(
+            &project_root.join("data").join("characters"),
+            "id",
+            &mut result,
+        )?,
+        "map_locations" => load_object_file(
+            &project_root
+                .join("data")
+                .join("json")
+                .join("map_locations.json"),
+            &mut result,
+        )?,
+        "structures" => load_object_file(
+            &project_root
+                .join("data")
+                .join("json")
+                .join("structures.json"),
+            &mut result,
+        )?,
         _ => {}
     }
     Ok(result)
@@ -313,13 +332,17 @@ fn load_object_file(path: &Path, target: &mut BTreeMap<String, Value>) -> Result
 }
 
 fn load_story_background(project_root: &Path) -> Result<Value, String> {
-    let path = project_root.join("data").join("json").join("story_chapters.json");
+    let path = project_root
+        .join("data")
+        .join("json")
+        .join("story_chapters.json");
     if !path.exists() {
         return Ok(Value::Null);
     }
     let raw = fs::read_to_string(&path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-    serde_json::from_str(&raw).map_err(|error| format!("failed to parse {}: {error}", path.display()))
+    serde_json::from_str(&raw)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))
 }
 
 fn detect_source_conflicts(
@@ -331,7 +354,10 @@ fn detect_source_conflicts(
     for (category, entries) in runtime_indexes {
         for entry in entries.as_array().into_iter().flatten() {
             let id = entry.get("id").and_then(Value::as_str).unwrap_or_default();
-            if !id.is_empty() && body.contains(id) && request.related_doc_slugs.contains(&id.to_string()) {
+            if !id.is_empty()
+                && body.contains(id)
+                && request.related_doc_slugs.contains(&id.to_string())
+            {
                 conflicts.push(format!("{category}:{id}"));
             }
         }
@@ -378,7 +404,10 @@ fn runtime_summary(category: &str, value: &Value) -> String {
     match category {
         "quests" => format!(
             "{} | {}",
-            object.and_then(|map| map.get("title")).and_then(Value::as_str).unwrap_or("quest"),
+            object
+                .and_then(|map| map.get("title"))
+                .and_then(Value::as_str)
+                .unwrap_or("quest"),
             object
                 .and_then(|map| map.get("description"))
                 .and_then(Value::as_str)
@@ -386,7 +415,10 @@ fn runtime_summary(category: &str, value: &Value) -> String {
         ),
         "dialogues" => format!(
             "{} | {} nodes",
-            object.and_then(|map| map.get("dialog_id")).and_then(Value::as_str).unwrap_or("dialog"),
+            object
+                .and_then(|map| map.get("dialog_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("dialog"),
             object
                 .and_then(|map| map.get("nodes"))
                 .and_then(Value::as_array)
@@ -395,8 +427,14 @@ fn runtime_summary(category: &str, value: &Value) -> String {
         ),
         "characters" => format!(
             "{} | {}",
-            object.and_then(|map| map.get("name")).and_then(Value::as_str).unwrap_or("character"),
-            object.and_then(|map| map.get("description")).and_then(Value::as_str).unwrap_or_default()
+            object
+                .and_then(|map| map.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("character"),
+            object
+                .and_then(|map| map.get("description"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
         ),
         _ => object
             .and_then(|map| map.get("title").or_else(|| map.get("name")))

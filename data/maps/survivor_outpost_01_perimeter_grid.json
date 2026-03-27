@@ -40,10 +40,19 @@
       "anchor": { "x": 4, "y": 0, "z": 7 },
       "footprint": { "width": 4, "height": 2 },
       "rotation": "east",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_perimeter_barricade" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_perimeter_barricade",
+          "layout": {
+            "seed": 2101,
+            "target_room_count": 1,
+            "min_room_size": { "width": 1, "height": 1 },
+            "exterior_door_count": 0,
+            "generator": "solid_shell"
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -55,10 +64,19 @@
       "anchor": { "x": 10, "y": 0, "z": 4 },
       "footprint": { "width": 3, "height": 2 },
       "rotation": "north",
-      "blocks_movement": true,
-      "blocks_sight": true,
+      "blocks_movement": false,
+      "blocks_sight": false,
       "props": {
-        "building": { "prefab_id": "survivor_outpost_01_bus_wreck" },
+        "building": {
+          "prefab_id": "survivor_outpost_01_bus_wreck",
+          "layout": {
+            "seed": 2102,
+            "target_room_count": 1,
+            "min_room_size": { "width": 1, "height": 1 },
+            "exterior_door_count": 0,
+            "generator": "solid_shell"
+          }
+        },
         "pickup": null,
         "interactive": null,
         "ai_spawn": null
@@ -66,37 +84,48 @@
     },
     {
       "object_id": "survivor_outpost_01_perimeter_return_gate",
-      "kind": "interactive",
-      "anchor": { "x": 2, "y": 0, "z": 10 },
-      "footprint": { "width": 1, "height": 1 },
+      "kind": "trigger",
+      "anchor": { "x": 0, "y": 0, "z": 8 },
+      "footprint": { "width": 1, "height": 5 },
       "rotation": "west",
       "blocks_movement": false,
       "blocks_sight": false,
       "props": {
         "building": null,
         "pickup": null,
-        "interactive": {
+        "interactive": null,
+        "trigger": {
           "display_name": "返回幸存者据点01",
           "interaction_distance": 1.4,
-          "interaction_kind": "enter_outdoor_location",
-          "target_id": "survivor_outpost_01",
-          "options": []
+          "interaction_kind": "",
+          "target_id": null,
+          "options": [
+            {
+              "id": "enter_outdoor_location",
+              "display_name": "返回幸存者据点01",
+              "interaction_distance": 1.4,
+              "kind": "enter_outdoor_location",
+              "target_id": "survivor_outpost_01",
+              "return_spawn_id": "perimeter_return"
+            }
+          ]
         },
         "ai_spawn": null
       }
     },
     {
       "object_id": "survivor_outpost_01_perimeter_to_street_b",
-      "kind": "interactive",
-      "anchor": { "x": 18, "y": 0, "z": 10 },
-      "footprint": { "width": 1, "height": 1 },
+      "kind": "trigger",
+      "anchor": { "x": 19, "y": 0, "z": 8 },
+      "footprint": { "width": 1, "height": 5 },
       "rotation": "east",
       "blocks_movement": false,
       "blocks_sight": false,
       "props": {
         "building": null,
         "pickup": null,
-        "interactive": {
+        "interactive": null,
+        "trigger": {
           "display_name": "前往废弃街道B",
           "interaction_distance": 1.4,
           "interaction_kind": "enter_outdoor_location",

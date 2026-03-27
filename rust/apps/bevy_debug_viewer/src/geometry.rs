@@ -562,8 +562,7 @@ mod tests {
         clamp_camera_pan_offset, cycle_level, grid_bounds, hovered_grid_outline_kind,
         level_plane_height, movement_block_reasons, occluder_blocks_target, pick_grid_from_ray,
         rendered_path_preview, resolve_occlusion_target, segment_aabb_intersection_fraction,
-        should_rebuild_static_world, visible_world_footprint, GridBounds,
-        HoveredGridOutlineKind,
+        should_rebuild_static_world, visible_world_footprint, GridBounds, HoveredGridOutlineKind,
     };
     use crate::state::{ViewerRenderConfig, ViewerState};
     use crate::test_support::actor_debug_state_fixture;
@@ -650,6 +649,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            generated_buildings: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -688,6 +688,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            generated_buildings: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -787,6 +788,7 @@ mod tests {
                 topology_version: 1,
                 runtime_obstacle_version: 2,
             },
+            generated_buildings: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -1149,6 +1151,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            generated_buildings: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,

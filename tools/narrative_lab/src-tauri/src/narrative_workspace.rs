@@ -139,8 +139,7 @@ pub fn load_narrative_document(
     slug: String,
 ) -> Result<NarrativeDocumentPayload, String> {
     let workspace_root_path = resolve_workspace_root(&workspace_root)?;
-    find_document_by_slug(&workspace_root_path, &slug)?
-        .ok_or_else(|| format!("未找到文稿: {slug}"))
+    find_document_by_slug(&workspace_root_path, &slug)?.ok_or_else(|| format!("未找到文稿: {slug}"))
 }
 
 #[tauri::command]
@@ -164,7 +163,10 @@ pub fn create_narrative_document(
         .as_deref()
         .map(slugify)
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| unique_slug(&workspace_root_path, &doc_type, &title).unwrap_or_else(|_| doc_type.clone()));
+        .unwrap_or_else(|| {
+            unique_slug(&workspace_root_path, &doc_type, &title)
+                .unwrap_or_else(|_| doc_type.clone())
+        });
     let meta = NarrativeDocumentMeta {
         doc_type: doc_type.clone(),
         slug: slug.clone(),
@@ -199,10 +201,17 @@ pub fn save_narrative_document(
 
     let validation = validate_document_meta(&document.meta);
     if validation.iter().any(|issue| issue.severity == "error") {
-        return Err(format!("文稿 {} 存在校验错误，无法保存", document.meta.slug));
+        return Err(format!(
+            "文稿 {} 存在校验错误，无法保存",
+            document.meta.slug
+        ));
     }
 
-    let path = narrative_file_path(&workspace_root_path, &document.meta.doc_type, &document.meta.slug)?;
+    let path = narrative_file_path(
+        &workspace_root_path,
+        &document.meta.doc_type,
+        &document.meta.slug,
+    )?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
@@ -224,7 +233,10 @@ pub fn save_narrative_document(
                 )?;
                 if old_path.exists() {
                     fs::remove_file(&old_path).map_err(|error| {
-                        format!("failed to delete renamed markdown {}: {error}", old_path.display())
+                        format!(
+                            "failed to delete renamed markdown {}: {error}",
+                            old_path.display()
+                        )
                     })?;
                 }
                 deleted_slug = Some(trimmed.to_string());
@@ -268,7 +280,11 @@ pub fn summarize_narrative_document(
     let document = find_document_by_slug(&workspace_root_path, &slug)?
         .ok_or_else(|| format!("未找到文稿: {slug}"))?;
     let markdown = current_markdown.unwrap_or(document.markdown);
-    Ok(summarize_document(&document.meta.slug, &document.meta.title, &markdown))
+    Ok(summarize_document(
+        &document.meta.slug,
+        &document.meta.title,
+        &markdown,
+    ))
 }
 
 #[tauri::command]
@@ -326,8 +342,14 @@ pub fn prepare_structuring_bundle(
     )?;
 
     Ok(StructuringBundlePayload {
-        document_slugs: collected.iter().map(|document| document.meta.slug.clone()).collect(),
-        summary: format!("已打包 {} 份 narrative 文稿，供第二阶段结构化拆解使用。", collected.len()),
+        document_slugs: collected
+            .iter()
+            .map(|document| document.meta.slug.clone())
+            .collect(),
+        summary: format!(
+            "已打包 {} 份 narrative 文稿，供第二阶段结构化拆解使用。",
+            collected.len()
+        ),
         combined_markdown,
         suggested_targets,
         source_refs,
@@ -368,11 +390,18 @@ pub fn load_narrative_documents(
 
 pub fn resolve_workspace_root(workspace_root: &str) -> Result<PathBuf, String> {
     let candidate = resolve_input_path(workspace_root)?;
-    fs::create_dir_all(&candidate)
-        .map_err(|error| format!("failed to create workspace root {}: {error}", candidate.display()))?;
-    candidate
-        .canonicalize()
-        .map_err(|error| format!("failed to resolve workspace root {}: {error}", candidate.display()))
+    fs::create_dir_all(&candidate).map_err(|error| {
+        format!(
+            "failed to create workspace root {}: {error}",
+            candidate.display()
+        )
+    })?;
+    candidate.canonicalize().map_err(|error| {
+        format!(
+            "failed to resolve workspace root {}: {error}",
+            candidate.display()
+        )
+    })
 }
 
 pub fn normalize_project_root_input(project_root: Option<&str>) -> Result<Option<String>, String> {
@@ -383,7 +412,9 @@ pub fn normalize_project_root_input(project_root: Option<&str>) -> Result<Option
     Ok(Some(to_forward_slashes(resolve_input_path(trimmed)?)))
 }
 
-pub fn resolve_connected_project_root(project_root: Option<&str>) -> Result<Option<PathBuf>, String> {
+pub fn resolve_connected_project_root(
+    project_root: Option<&str>,
+) -> Result<Option<PathBuf>, String> {
     let trimmed = project_root.unwrap_or_default().trim();
     if trimmed.is_empty() {
         return Ok(None);
@@ -394,10 +425,12 @@ pub fn resolve_connected_project_root(project_root: Option<&str>) -> Result<Opti
         return Ok(None);
     }
 
-    candidate
-        .canonicalize()
-        .map(Some)
-        .map_err(|error| format!("failed to resolve project root {}: {error}", candidate.display()))
+    candidate.canonicalize().map(Some).map_err(|error| {
+        format!(
+            "failed to resolve project root {}: {error}",
+            candidate.display()
+        )
+    })
 }
 
 fn find_document_by_slug(
@@ -421,7 +454,11 @@ fn exports_root_dir(workspace_root: &Path) -> PathBuf {
     workspace_root.join("exports")
 }
 
-fn narrative_file_path(workspace_root: &Path, doc_type: &str, slug: &str) -> Result<PathBuf, String> {
+fn narrative_file_path(
+    workspace_root: &Path,
+    doc_type: &str,
+    slug: &str,
+) -> Result<PathBuf, String> {
     Ok(narrative_root_dir(workspace_root)
         .join(doc_type_directory(doc_type))
         .join(format!("{slug}.md")))
@@ -615,8 +652,14 @@ fn serialize_document(meta: &NarrativeDocumentMeta, markdown: &str) -> String {
     output.push_str(&format!("title: {}\n", meta.title.trim()));
     output.push_str(&format!("status: {}\n", meta.status.trim()));
     output.push_str(&format!("tags: {}\n", format_list(&meta.tags)));
-    output.push_str(&format!("related_docs: {}\n", format_list(&meta.related_docs)));
-    output.push_str(&format!("source_refs: {}\n", format_list(&meta.source_refs)));
+    output.push_str(&format!(
+        "related_docs: {}\n",
+        format_list(&meta.related_docs)
+    ));
+    output.push_str(&format!(
+        "source_refs: {}\n",
+        format_list(&meta.source_refs)
+    ));
     output.push_str("---\n\n");
     output.push_str(markdown.trim_end());
     output.push('\n');
@@ -708,8 +751,12 @@ fn unique_strings(values: Vec<String>) -> Vec<String> {
 }
 
 fn ensure_workspace_layout(workspace_root: &Path) -> Result<(), String> {
-    fs::create_dir_all(workspace_root)
-        .map_err(|error| format!("failed to create workspace root {}: {error}", workspace_root.display()))?;
+    fs::create_dir_all(workspace_root).map_err(|error| {
+        format!(
+            "failed to create workspace root {}: {error}",
+            workspace_root.display()
+        )
+    })?;
     fs::create_dir_all(narrative_root_dir(workspace_root))
         .map_err(|error| format!("failed to create narrative dir: {error}"))?;
     fs::create_dir_all(exports_root_dir(workspace_root))
@@ -766,7 +813,10 @@ fn describe_project_context(project_root: Option<&str>) -> Result<String, String
 
     let resolved = resolve_input_path(raw_root)?;
     if resolved.is_dir() {
-        Ok(format!("已连接项目上下文: {}", to_forward_slashes(resolved)))
+        Ok(format!(
+            "已连接项目上下文: {}",
+            to_forward_slashes(resolved)
+        ))
     } else {
         Ok(format!(
             "项目路径不可用，已降级为纯 narrative 模式: {}",
@@ -864,7 +914,10 @@ mod tests {
     fn split_frontmatter_parses_meta_and_markdown() {
         let raw = "---\ndoc_type: chapter_outline\nslug: test\nrelated_docs: [a, b]\n---\n\n# Title\nBody";
         let (meta, markdown) = split_frontmatter(raw).expect("frontmatter should parse");
-        assert_eq!(meta.get("doc_type").map(String::as_str), Some("chapter_outline"));
+        assert_eq!(
+            meta.get("doc_type").map(String::as_str),
+            Some("chapter_outline")
+        );
         assert_eq!(meta.get("slug").map(String::as_str), Some("test"));
         assert_eq!(markdown, "# Title\nBody");
     }
@@ -872,7 +925,8 @@ mod tests {
     #[test]
     fn parse_document_infers_missing_fields() {
         let path = PathBuf::from("narrative/chapters/chapter_01.md");
-        let (meta, markdown) = parse_document(&path, "# Heading\nText").expect("document should parse");
+        let (meta, markdown) =
+            parse_document(&path, "# Heading\nText").expect("document should parse");
         assert_eq!(meta.doc_type, "chapter_outline");
         assert_eq!(meta.slug, "chapter_01");
         assert!(markdown.contains("Heading"));

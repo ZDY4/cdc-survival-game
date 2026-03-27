@@ -7,8 +7,8 @@ use bevy_ecs::schedule::IntoScheduleConfigs;
 use crate::config::NpcDebugReportState;
 use crate::protocol::{
     dispatch_protocol_requests, drain_protocol_responses, emit_runtime_protocol_events,
-    RuntimeProtocolPushState, RuntimeProtocolSequence, RuntimeSnapshotStore,
-    ServerProtocolRequest, ServerProtocolResponse,
+    RuntimeProtocolPushState, RuntimeProtocolSequence, RuntimeSnapshotStore, ServerProtocolRequest,
+    ServerProtocolResponse,
 };
 use crate::reporting::{report_npc_life_debug_snapshot, report_spawned_characters_and_exit};
 use crate::startup::{advance_map_ai_spawns, startup_demo};

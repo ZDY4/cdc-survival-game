@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use crate::config::{EconomySmokeReport, ServerConfig, ServerSimulationRuntime};
 use game_bevy::bootstrap::build_default_startup_seed;
 use game_bevy::{
-    advance_map_ai_spawn_runtime, build_runtime_from_seed, CharacterDefinitions,
-    EffectDefinitions, ItemDefinitions, MapAiSpawnRuntimeState, MapDefinitions,
-    OverworldDefinitions, QuestDefinitions, RecipeDefinitions, RuntimeStartupConfig,
-    ShopDefinitions, SkillDefinitions, SkillTreeDefinitions, SpawnCharacterRequest,
+    advance_map_ai_spawn_runtime, build_runtime_from_seed, CharacterDefinitions, EffectDefinitions,
+    ItemDefinitions, MapAiSpawnRuntimeState, MapDefinitions, OverworldDefinitions,
+    QuestDefinitions, RecipeDefinitions, RuntimeStartupConfig, ShopDefinitions, SkillDefinitions,
+    SkillTreeDefinitions, SpawnCharacterRequest,
 };
 use game_core::SimulationRuntime;
 use game_data::{load_dialogue_library, load_dialogue_rule_library, CharacterId, GridCoord};
@@ -28,7 +28,8 @@ pub fn startup_demo(
     startup_config: Res<RuntimeStartupConfig>,
     mut requests: MessageWriter<SpawnCharacterRequest>,
 ) {
-    let seed = build_default_startup_seed(&maps.0, &overworld.0, startup_config.startup_map.clone());
+    let seed =
+        build_default_startup_seed(&maps.0, &overworld.0, startup_config.startup_map.clone());
 
     println!(
         "bevy_server booted with headless loop at {} Hz",
@@ -606,6 +607,7 @@ mod tests {
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
                         prefab_id: "survivor_outpost_01_dormitory".into(),
+                        layout: None,
                         extra: BTreeMap::new(),
                     }),
                     ..MapObjectProps::default()
@@ -649,11 +651,6 @@ mod tests {
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 },
-            ],
-            edges: vec![
-                sample_overworld_edge("survivor_outpost_01", "street_a"),
-                sample_overworld_edge("survivor_outpost_01", "street_b"),
-                sample_overworld_edge("survivor_outpost_01", "survivor_outpost_01_perimeter"),
             ],
             walkable_cells: vec![
                 OverworldCellDefinition {
@@ -705,20 +702,6 @@ mod tests {
             overworld_cell: GridCoord::new(x, 0, z),
             danger_level: 0,
             icon: String::new(),
-            extra: BTreeMap::new(),
-        }
-    }
-
-    fn sample_overworld_edge(from: &str, to: &str) -> game_data::OverworldEdgeDefinition {
-        game_data::OverworldEdgeDefinition {
-            from: OverworldLocationId(from.into()),
-            to: OverworldLocationId(to.into()),
-            bidirectional: true,
-            travel_minutes: 30,
-            food_cost: 1,
-            stamina_cost: 1,
-            risk_level: 0.0,
-            route_cells: Vec::new(),
             extra: BTreeMap::new(),
         }
     }

@@ -12,15 +12,14 @@ use game_core::{
 use game_data::{
     load_character_library, load_effect_library, load_item_library, load_map_library,
     load_overworld_library, load_quest_library, load_recipe_library, load_settlement_library,
-    load_shop_library, load_skill_library, load_skill_tree_library, ActorId, ActorKind,
-    ActorSide, CharacterAiProfile, CharacterArchetype, CharacterDefinition,
-    CharacterDisposition, CharacterId, CharacterLibrary, CharacterLoadError,
-    CharacterLootEntry, CharacterPlaceholderColors, CharacterResourcePool, EffectLibrary,
-    EffectLoadError, GridCoord, ItemLibrary, ItemLoadError, MapId, MapLibrary,
-    MapLoadError, MapObjectKind, OverworldLibrary, OverworldLoadError, QuestLibrary,
-    QuestLoadError, RecipeLibrary, RecipeLoadError, SettlementLibrary, SettlementLoadError,
-    ShopLibrary, ShopLoadError, SkillLibrary, SkillLoadError, SkillTreeLibrary,
-    SkillTreeLoadError, WorldMode,
+    load_shop_library, load_skill_library, load_skill_tree_library, ActorId, ActorKind, ActorSide,
+    CharacterAiProfile, CharacterArchetype, CharacterDefinition, CharacterDisposition, CharacterId,
+    CharacterLibrary, CharacterLoadError, CharacterLootEntry, CharacterPlaceholderColors,
+    CharacterResourcePool, EffectLibrary, EffectLoadError, GridCoord, ItemLibrary, ItemLoadError,
+    MapId, MapLibrary, MapLoadError, MapObjectKind, OverworldLibrary, OverworldLoadError,
+    QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError, SettlementLibrary,
+    SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary, SkillLoadError,
+    SkillTreeLibrary, SkillTreeLoadError, WorldMode,
 };
 use npc_life::LifeProfileComponent;
 use thiserror::Error;
@@ -35,10 +34,10 @@ pub use bootstrap::{
 };
 pub use npc_life::{
     BackgroundLifeState, CurrentAction, CurrentGoal, CurrentPlan,
-    LifeProfileComponent as CharacterLifeProfileComponent, NeedState, NpcLifePlugin,
-    NpcLifeState, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
-    SettlementContext, SettlementDebugEntry, SettlementDebugSnapshot,
-    SettlementSimulationPlugin, SimClock, WorldAlertState,
+    LifeProfileComponent as CharacterLifeProfileComponent, NeedState, NpcLifePlugin, NpcLifeState,
+    ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState, SettlementContext,
+    SettlementDebugEntry, SettlementDebugSnapshot, SettlementSimulationPlugin, SimClock,
+    WorldAlertState,
 };
 pub use reservations::SmartObjectReservations;
 
@@ -653,7 +652,10 @@ pub fn build_simulation_from_seed(
     });
     let requested_map_id = seed.start_map_id.as_ref().or(seed.map_id.as_ref());
 
-    if !matches!(requested_world_mode, WorldMode::Overworld | WorldMode::Traveling) {
+    if !matches!(
+        requested_world_mode,
+        WorldMode::Overworld | WorldMode::Traveling
+    ) {
         if let Some(map_id) = requested_map_id {
             let map = maps
                 .get(map_id)
@@ -718,7 +720,10 @@ pub fn build_simulation_from_seed(
         }
     }
 
-    if matches!(requested_world_mode, WorldMode::Overworld | WorldMode::Traveling) {
+    if matches!(
+        requested_world_mode,
+        WorldMode::Overworld | WorldMode::Traveling
+    ) {
         simulation
             .seed_overworld_state(
                 requested_world_mode,
@@ -769,7 +774,8 @@ pub fn register_runtime_actor_from_definition(
     definition: &CharacterDefinition,
     grid_position: GridCoord,
 ) -> ActorId {
-    let actor_id = runtime.register_actor(register_actor_from_definition(definition, grid_position));
+    let actor_id =
+        runtime.register_actor(register_actor_from_definition(definition, grid_position));
     runtime.seed_actor_progression(
         actor_id,
         definition.progression.level as i32,
@@ -918,10 +924,7 @@ pub fn advance_map_ai_spawn_runtime(
     }
 }
 
-fn clear_active_map_ai_spawns(
-    state: &mut MapAiSpawnRuntimeState,
-    runtime: &mut SimulationRuntime,
-) {
+fn clear_active_map_ai_spawns(state: &mut MapAiSpawnRuntimeState, runtime: &mut SimulationRuntime) {
     let actor_ids: Vec<ActorId> = state.active_spawn_actors.values().copied().collect();
     for actor_id in actor_ids {
         runtime.unregister_actor(actor_id);
@@ -936,7 +939,8 @@ fn reconcile_missing_spawned_actors(
     runtime: &SimulationRuntime,
 ) {
     let snapshot = runtime.snapshot();
-    let existing_actor_ids: Vec<ActorId> = snapshot.actors.iter().map(|actor| actor.actor_id).collect();
+    let existing_actor_ids: Vec<ActorId> =
+        snapshot.actors.iter().map(|actor| actor.actor_id).collect();
 
     let active_pairs: Vec<(String, ActorId)> = state
         .active_spawn_actors
@@ -1179,8 +1183,8 @@ mod tests {
         MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
         MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
         MapObjectProps, MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition,
-        OverworldEdgeDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
+        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
+        OverworldLocationKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1390,10 +1394,7 @@ mod tests {
 
         assert_eq!(
             ids,
-            vec![
-                "player".to_string(),
-                "trader_lao_wang".to_string(),
-            ]
+            vec!["player".to_string(), "trader_lao_wang".to_string(),]
         );
         assert_eq!(
             default_debug_seed().map_id.as_ref().map(MapId::as_str),
@@ -1555,8 +1556,9 @@ mod tests {
             }],
             ..RuntimeScenarioSeed::default()
         };
-        let mut runtime = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
-            .expect("runtime should build");
+        let mut runtime =
+            build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+                .expect("runtime should build");
         let mut state = MapAiSpawnRuntimeState::default();
 
         advance_map_ai_spawn_runtime(&mut state, &mut runtime, &library, &maps, 0.0);
@@ -1584,18 +1586,18 @@ mod tests {
         assert!(state.respawn_deadlines.contains_key("spawn_walker"));
 
         advance_map_ai_spawn_runtime(&mut state, &mut runtime, &library, &maps, 23.0);
-        assert!(runtime
-            .snapshot()
-            .actors
-            .iter()
-            .all(|actor| actor.definition_id.as_ref().map(CharacterId::as_str) != Some("zombie_walker")));
+        assert!(runtime.snapshot().actors.iter().all(|actor| actor
+            .definition_id
+            .as_ref()
+            .map(CharacterId::as_str)
+            != Some("zombie_walker")));
 
         advance_map_ai_spawn_runtime(&mut state, &mut runtime, &library, &maps, 1.1);
-        assert!(runtime
-            .snapshot()
-            .actors
-            .iter()
-            .any(|actor| actor.definition_id.as_ref().map(CharacterId::as_str) == Some("zombie_walker")));
+        assert!(runtime.snapshot().actors.iter().any(|actor| actor
+            .definition_id
+            .as_ref()
+            .map(CharacterId::as_str)
+            == Some("zombie_walker")));
     }
 
     #[test]
@@ -1758,6 +1760,7 @@ startup_map =
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
                         prefab_id: "survivor_outpost_01_dormitory".into(),
+                        layout: None,
                         extra: BTreeMap::new(),
                     }),
                     ..MapObjectProps::default()
@@ -1807,17 +1810,6 @@ startup_map =
                     extra: BTreeMap::new(),
                 },
             ],
-            edges: vec![OverworldEdgeDefinition {
-                from: OverworldLocationId("survivor_outpost_01".into()),
-                to: OverworldLocationId("street_a".into()),
-                bidirectional: true,
-                travel_minutes: 30,
-                food_cost: 1,
-                stamina_cost: 1,
-                risk_level: 0.0,
-                route_cells: Vec::new(),
-                extra: BTreeMap::new(),
-            }],
             walkable_cells: vec![
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),

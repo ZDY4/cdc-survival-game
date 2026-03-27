@@ -5,8 +5,8 @@ use bevy_ecs::prelude::*;
 use game_core::{
     apply_npc_action_effects, build_plan_for_goal_with_context, rebuild_facts, score_goals,
     select_goal, tick_offline_action, ActionExecutionPhase, NpcActionKey, NpcBackgroundState,
-    NpcExecutionMode, NpcFact, NpcFactInput, NpcGoalKey, NpcGoalScore, NpcPlanRequest,
-    NpcPlanStep, NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
+    NpcExecutionMode, NpcFact, NpcFactInput, NpcGoalKey, NpcGoalScore, NpcPlanRequest, NpcPlanStep,
+    NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
 };
 use game_data::{
     ActorId, CharacterLifeProfile, GridCoord, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay,
@@ -648,12 +648,7 @@ fn execute_offline_actions_system(
                 let mut hunger = need.hunger;
                 let mut energy = need.energy;
                 let mut morale = need.morale;
-                apply_npc_action_effects(
-                    action,
-                    &mut hunger,
-                    &mut energy,
-                    &mut morale,
-                );
+                apply_npc_action_effects(action, &mut hunger, &mut energy, &mut morale);
                 need.hunger = hunger;
                 need.energy = energy;
                 need.morale = morale;
@@ -745,8 +740,7 @@ fn refresh_debug_snapshot_system(
         runtime_execution,
         runtime_link,
         trace,
-    ) in
-        &query
+    ) in &query
     {
         let (
             action_key,
@@ -873,10 +867,7 @@ fn default_duty_anchor_for_role(
     }
 }
 
-fn resolve_anchor_grid(
-    settlement: &SettlementDefinition,
-    anchor_id: &str,
-) -> Option<GridCoord> {
+fn resolve_anchor_grid(settlement: &SettlementDefinition, anchor_id: &str) -> Option<GridCoord> {
     settlement
         .anchors
         .iter()

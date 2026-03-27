@@ -9,8 +9,7 @@ use game_data::{
     current_dialogue_node as current_dialogue_node_runtime, resolve_dialogue_start_node_id,
     ActorId, CharacterId, DialogueAdvanceError, DialogueData, DialogueNode,
     DialogueResolutionContext, DialogueResolutionResult, DialogueResolutionSource,
-    DialogueRuleDefinition, DialogueRuntimeState, InteractionExecutionResult,
-    InteractionTargetId,
+    DialogueRuleDefinition, DialogueRuntimeState, InteractionExecutionResult, InteractionTargetId,
 };
 
 use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
