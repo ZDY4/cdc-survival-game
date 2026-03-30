@@ -116,7 +116,7 @@ impl Default for MapObjectFootprint {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct RelativeGridCell {
     pub x: i32,
     pub z: i32,
@@ -128,7 +128,7 @@ impl RelativeGridCell {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct RelativeGridVertex {
     pub x: i32,
     pub z: i32,
@@ -138,6 +138,12 @@ impl RelativeGridVertex {
     pub const fn new(x: i32, z: i32) -> Self {
         Self { x, z }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapBuildingFootprintPolygonSpec {
+    #[serde(default)]
+    pub outer: Vec<RelativeGridVertex>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -194,13 +200,23 @@ pub struct MapBuildingLayoutSpec {
     #[serde(default)]
     pub shape_cells: Vec<RelativeGridCell>,
     #[serde(default)]
+    pub footprint_polygon: Option<MapBuildingFootprintPolygonSpec>,
+    #[serde(default)]
     pub seed: u64,
     #[serde(default = "default_target_room_count")]
     pub target_room_count: u32,
     #[serde(default = "default_min_room_size")]
     pub min_room_size: MapSize,
+    #[serde(default = "default_min_room_area")]
+    pub min_room_area: u32,
     #[serde(default)]
     pub max_room_size: Option<MapSize>,
+    #[serde(default = "default_wall_thickness")]
+    pub wall_thickness: f32,
+    #[serde(default = "default_wall_height")]
+    pub wall_height: f32,
+    #[serde(default = "default_door_width")]
+    pub door_width: f32,
     #[serde(default = "default_exterior_door_count")]
     pub exterior_door_count: u32,
     #[serde(default)]
@@ -217,10 +233,15 @@ impl Default for MapBuildingLayoutSpec {
     fn default() -> Self {
         Self {
             shape_cells: Vec::new(),
+            footprint_polygon: None,
             seed: 0,
             target_room_count: default_target_room_count(),
             min_room_size: default_min_room_size(),
+            min_room_area: default_min_room_area(),
             max_room_size: None,
+            wall_thickness: default_wall_thickness(),
+            wall_height: default_wall_height(),
+            door_width: default_door_width(),
             exterior_door_count: default_exterior_door_count(),
             stories: Vec::new(),
             stairs: Vec::new(),
@@ -526,9 +547,17 @@ pub enum MapDefinitionValidationError {
     #[error("building object {object_id} layout target_room_count must be > 0")]
     InvalidBuildingTargetRoomCount { object_id: String },
     #[error(
-        "building object {object_id} layout min_room_size/max_room_size must be > 0 and max >= min"
+        "building object {object_id} layout min_room_size/max_room_size/min_room_area must be valid"
     )]
     InvalidBuildingRoomSize { object_id: String },
+    #[error(
+        "building object {object_id} footprint polygon must contain at least 3 distinct vertices"
+    )]
+    InvalidBuildingFootprintPolygon { object_id: String },
+    #[error(
+        "building object {object_id} geometry parameters wall_thickness/wall_height/door_width must be > 0"
+    )]
+    InvalidBuildingGeometryParameters { object_id: String },
     #[error("building object {object_id} layout stories contain duplicate level {level}")]
     DuplicateBuildingStoryLevel { object_id: String, level: i32 },
     #[error(
@@ -902,8 +931,24 @@ fn default_min_room_size() -> MapSize {
     }
 }
 
+fn default_min_room_area() -> u32 {
+    12
+}
+
 fn default_exterior_door_count() -> u32 {
     1
+}
+
+fn default_wall_thickness() -> f32 {
+    0.08
+}
+
+fn default_wall_height() -> f32 {
+    2.35
+}
+
+fn default_door_width() -> f32 {
+    1.0
 }
 
 fn default_stair_width() -> u32 {
@@ -926,6 +971,7 @@ fn validate_building_layout(
     let max = layout.max_room_size.unwrap_or(layout.min_room_size);
     if min.width == 0
         || min.height == 0
+        || layout.min_room_area == 0
         || max.width == 0
         || max.height == 0
         || max.width < min.width
@@ -934,6 +980,27 @@ fn validate_building_layout(
         return Err(MapDefinitionValidationError::InvalidBuildingRoomSize {
             object_id: object.object_id.clone(),
         });
+    }
+    if layout.wall_thickness <= 0.0 || layout.wall_height <= 0.0 || layout.door_width <= 0.0 {
+        return Err(
+            MapDefinitionValidationError::InvalidBuildingGeometryParameters {
+                object_id: object.object_id.clone(),
+            },
+        );
+    }
+    if let Some(footprint_polygon) = layout.footprint_polygon.as_ref() {
+        let distinct_vertices = footprint_polygon
+            .outer
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>();
+        if footprint_polygon.outer.len() < 3 || distinct_vertices.len() < 3 {
+            return Err(
+                MapDefinitionValidationError::InvalidBuildingFootprintPolygon {
+                    object_id: object.object_id.clone(),
+                },
+            );
+        }
     }
 
     let story_levels = building_layout_story_levels(object);
@@ -1271,11 +1338,12 @@ fn validate_interaction_option(
 mod tests {
     use super::{
         expand_object_footprint, load_map_library, validate_map_definition, BuildingGeneratorKind,
-        MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingLayoutSpec, MapBuildingProps,
-        MapBuildingStorySpec, MapBuildingVisualOutline, MapCellDefinition, MapDefinition,
-        MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapLevelDefinition,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
-        MapRotation, MapSize, MapValidationCatalog, RelativeGridCell, RelativeGridVertex,
+        MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingFootprintPolygonSpec,
+        MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec, MapBuildingVisualOutline,
+        MapCellDefinition, MapDefinition, MapDefinitionValidationError, MapEntryPointDefinition,
+        MapId, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
+        MapObjectProps, MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
+        RelativeGridCell, RelativeGridVertex,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;
@@ -1414,6 +1482,37 @@ mod tests {
     }
 
     #[test]
+    fn building_layout_requires_positive_min_room_area() {
+        let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
+        building.blocks_movement = false;
+        building.blocks_sight = false;
+        building
+            .props
+            .building
+            .as_mut()
+            .expect("building props")
+            .layout = Some(MapBuildingLayoutSpec {
+            min_room_area: 0,
+            shape_cells: vec![
+                RelativeGridCell::new(0, 0),
+                RelativeGridCell::new(1, 0),
+                RelativeGridCell::new(0, 1),
+                RelativeGridCell::new(1, 1),
+            ],
+            generator: BuildingGeneratorKind::RectilinearBsp,
+            ..MapBuildingLayoutSpec::default()
+        });
+
+        let error = validate_map_definition(&sample_map(vec![building]), Some(&sample_catalog()))
+            .expect_err("zero min room area should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::InvalidBuildingRoomSize { .. }
+        ));
+    }
+
+    #[test]
     fn building_layout_rejects_duplicate_story_levels() {
         let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
         building.blocks_movement = false;
@@ -1485,6 +1584,56 @@ mod tests {
         assert!(matches!(
             error,
             MapDefinitionValidationError::InvalidBuildingVisualOutlineEdge { .. }
+        ));
+    }
+
+    #[test]
+    fn building_layout_rejects_invalid_polygon_footprint() {
+        let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
+        building.blocks_movement = false;
+        building.blocks_sight = false;
+        building
+            .props
+            .building
+            .as_mut()
+            .expect("building props")
+            .layout = Some(MapBuildingLayoutSpec {
+            footprint_polygon: Some(MapBuildingFootprintPolygonSpec {
+                outer: vec![RelativeGridVertex::new(0, 0), RelativeGridVertex::new(0, 0)],
+            }),
+            ..MapBuildingLayoutSpec::default()
+        });
+
+        let error = validate_map_definition(&sample_map(vec![building]), Some(&sample_catalog()))
+            .expect_err("degenerate polygon should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::InvalidBuildingFootprintPolygon { .. }
+        ));
+    }
+
+    #[test]
+    fn building_layout_rejects_non_positive_geometry_parameters() {
+        let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
+        building.blocks_movement = false;
+        building.blocks_sight = false;
+        building
+            .props
+            .building
+            .as_mut()
+            .expect("building props")
+            .layout = Some(MapBuildingLayoutSpec {
+            wall_thickness: 0.0,
+            ..MapBuildingLayoutSpec::default()
+        });
+
+        let error = validate_map_definition(&sample_map(vec![building]), Some(&sample_catalog()))
+            .expect_err("non-positive geometry params should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::InvalidBuildingGeometryParameters { .. }
         ));
     }
 

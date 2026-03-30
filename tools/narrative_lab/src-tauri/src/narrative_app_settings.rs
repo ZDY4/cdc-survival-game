@@ -30,6 +30,8 @@ pub struct NarrativeWorkspaceLayout {
     pub left_sidebar_visible: bool,
     #[serde(default = "default_left_sidebar_width")]
     pub left_sidebar_width: i32,
+    #[serde(default = "default_chat_panel_width")]
+    pub chat_panel_width: i32,
     #[serde(default = "default_left_sidebar_view")]
     pub left_sidebar_view: String,
     #[serde(default = "default_right_sidebar_visible")]
@@ -64,6 +66,7 @@ impl Default for NarrativeWorkspaceLayout {
             version: current_layout_version(),
             left_sidebar_visible: default_left_sidebar_visible(),
             left_sidebar_width: default_left_sidebar_width(),
+            chat_panel_width: default_chat_panel_width(),
             left_sidebar_view: default_left_sidebar_view(),
             right_sidebar_visible: default_right_sidebar_visible(),
             right_sidebar_width: default_right_sidebar_width(),
@@ -104,6 +107,7 @@ impl NarrativeWorkspaceLayout {
             version: current_layout_version(),
             left_sidebar_visible: self.left_sidebar_visible,
             left_sidebar_width: clamp_i32(self.left_sidebar_width, 220, 460),
+            chat_panel_width: clamp_i32(self.chat_panel_width, 320, 720),
             left_sidebar_view: normalize_left_sidebar_view(self.left_sidebar_view),
             right_sidebar_visible: self.right_sidebar_visible,
             right_sidebar_width: clamp_i32(self.right_sidebar_width, 260, 520),
@@ -339,6 +343,10 @@ fn default_left_sidebar_view() -> String {
     "explorer".to_string()
 }
 
+fn default_chat_panel_width() -> i32 {
+    440
+}
+
 fn default_right_sidebar_visible() -> bool {
     true
 }
@@ -496,6 +504,7 @@ mod tests {
         assert!(layout.right_sidebar_visible);
         assert!(layout.bottom_panel_visible);
         assert_eq!(layout.left_sidebar_view, "explorer");
+        assert_eq!(layout.chat_panel_width, 440);
         assert_eq!(layout.right_sidebar_view, "inspector");
         assert_eq!(layout.bottom_panel_view, "problems");
         assert!(layout.open_document_keys.is_empty());
@@ -509,6 +518,7 @@ mod tests {
             NarrativeWorkspaceLayout {
                 version: 2,
                 left_sidebar_width: 999,
+                chat_panel_width: 999,
                 left_sidebar_view: "unknown".to_string(),
                 right_sidebar_width: 80,
                 right_sidebar_view: "review".to_string(),
@@ -529,6 +539,7 @@ mod tests {
 
         assert_eq!(layout.version, 2);
         assert_eq!(layout.left_sidebar_width, 460);
+        assert_eq!(layout.chat_panel_width, 720);
         assert_eq!(layout.left_sidebar_view, "explorer");
         assert_eq!(layout.right_sidebar_width, 260);
         assert_eq!(layout.right_sidebar_view, "review");

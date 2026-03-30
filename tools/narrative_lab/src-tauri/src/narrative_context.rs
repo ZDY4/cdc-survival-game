@@ -113,6 +113,7 @@ pub fn build_project_context_snapshot_seed(
     max_context_records: usize,
 ) -> Result<ProjectContextSnapshotSeed, String> {
     let request = NarrativeGenerateRequest {
+        request_id: None,
         doc_type: "project_brief".to_string(),
         target_slug: "snapshot".to_string(),
         action: "create".to_string(),

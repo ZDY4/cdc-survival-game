@@ -1286,6 +1286,36 @@ impl Simulation {
             .unwrap_or(0)
     }
 
+    pub fn allocate_attribute_point(
+        &mut self,
+        actor_id: ActorId,
+        attribute: &str,
+    ) -> Result<i32, String> {
+        let normalized = attribute.trim().to_ascii_lowercase();
+        if normalized.is_empty() {
+            return Err("attribute_missing".to_string());
+        }
+
+        let progression = self
+            .actor_progression
+            .get_mut(&actor_id)
+            .ok_or_else(|| format!("unknown_actor:{actor_id:?}"))?;
+        if progression.available_stat_points <= 0 {
+            return Err("attribute_points_unavailable".to_string());
+        }
+
+        let current = self
+            .economy
+            .actor(actor_id)
+            .and_then(|actor| actor.attributes.get(&normalized))
+            .copied()
+            .unwrap_or(0);
+        progression.available_stat_points -= 1;
+        self.economy
+            .set_actor_attribute(actor_id, normalized.clone(), current + 1);
+        Ok(current + 1)
+    }
+
     pub fn active_quest_ids_for_actor(&self, actor_id: ActorId) -> BTreeSet<String> {
         self.active_quests
             .values()
@@ -1495,6 +1525,18 @@ impl Simulation {
 
     pub fn actor_hit_points(&self, actor_id: ActorId) -> f32 {
         self.actor_resource_value(actor_id, "hp")
+    }
+
+    pub fn actor_resource(&self, actor_id: ActorId, resource: &str) -> f32 {
+        self.actor_resource_value(actor_id, resource)
+    }
+
+    pub fn actor_combat_attribute(&self, actor_id: ActorId, attribute: &str) -> f32 {
+        self.actor_combat_attribute_value(actor_id, attribute)
+    }
+
+    pub fn max_hit_points(&self, actor_id: ActorId) -> f32 {
+        self.actor_max_hit_points(actor_id)
     }
 
     pub fn inventory_count(&self, actor_id: ActorId, item_id: &str) -> i32 {
@@ -2912,6 +2954,7 @@ impl Simulation {
                         );
                     }
                 };
+                self.queue_turn_end_for_actor(request.actor_id);
                 self.events.push(SimulationEvent::InteractionSucceeded {
                     actor_id: request.actor_id,
                     target_id: request.target_id.clone(),
@@ -2944,11 +2987,16 @@ impl Simulation {
         }
 
         let ap_before = self.get_actor_ap(actor_id);
+        self.queue_turn_end_for_actor(actor_id);
+
+        ActionResult::accepted(ap_before, self.get_actor_ap(actor_id), 0.0, false)
+    }
+
+    fn queue_turn_end_for_actor(&mut self, actor_id: ActorId) {
         if self.turn.combat_active {
-            if self.turn.current_actor_id != Some(actor_id) {
-                return self.reject_action("not_actor_turn", actor_id);
+            if self.turn.current_actor_id == Some(actor_id) {
+                self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
             }
-            self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
         } else if self.get_actor_side(actor_id) == Some(ActorSide::Player) {
             if self.actor_turn_open(actor_id) {
                 self.end_actor_turn(actor_id);
@@ -2958,8 +3006,6 @@ impl Simulation {
         } else if self.actor_turn_open(actor_id) {
             self.end_actor_turn(actor_id);
         }
-
-        ActionResult::accepted(ap_before, self.get_actor_ap(actor_id), 0.0, false)
     }
 
     pub fn enter_combat(&mut self, trigger_actor: ActorId, target_actor: ActorId) {
@@ -5988,17 +6034,56 @@ mod tests {
             }
             other => panic!("unexpected command result: {other:?}"),
         };
-        assert_eq!(
-            action_state
-                .current_node
-                .as_ref()
-                .map(|node| node.id.as_str()),
-            Some("trade_end")
-        );
+        assert!(action_state.finished);
+        assert_eq!(action_state.end_type.as_deref(), Some("trade"));
         assert_eq!(action_state.emitted_actions.len(), 1);
         assert_eq!(action_state.emitted_actions[0].action_type, "open_trade");
+        assert!(simulation.active_dialogue_state(player).is_none());
+    }
 
-        let finished = match simulation.apply_command(SimulationCommand::AdvanceDialogue {
+    #[test]
+    fn selecting_leave_choice_finishes_dialogue_immediately() {
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(sample_dialogue_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let trader = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let opened = match simulation.apply_command(SimulationCommand::AdvanceDialogue {
+            actor_id: player,
+            target_id: Some(InteractionTargetId::Actor(trader)),
+            dialogue_id: "trader_lao_wang".into(),
+            option_id: None,
+            option_index: None,
+        }) {
+            SimulationCommandResult::DialogueState(result) => result.expect("dialogue should open"),
+            other => panic!("unexpected command result: {other:?}"),
+        };
+        assert_eq!(
+            opened.current_node.as_ref().map(|node| node.id.as_str()),
+            Some("start")
+        );
+
+        let choice = match simulation.apply_command(SimulationCommand::AdvanceDialogue {
             actor_id: player,
             target_id: Some(InteractionTargetId::Actor(trader)),
             dialogue_id: "trader_lao_wang".into(),
@@ -6006,12 +6091,29 @@ mod tests {
             option_index: None,
         }) {
             SimulationCommandResult::DialogueState(result) => {
-                result.expect("end node should resolve")
+                result.expect("choice node should appear")
+            }
+            other => panic!("unexpected command result: {other:?}"),
+        };
+        assert_eq!(
+            choice.current_node.as_ref().map(|node| node.id.as_str()),
+            Some("choice_1")
+        );
+
+        let finished = match simulation.apply_command(SimulationCommand::AdvanceDialogue {
+            actor_id: player,
+            target_id: Some(InteractionTargetId::Actor(trader)),
+            dialogue_id: "trader_lao_wang".into(),
+            option_id: Some("choice_2".into()),
+            option_index: None,
+        }) {
+            SimulationCommandResult::DialogueState(result) => {
+                result.expect("leave choice should finish dialogue")
             }
             other => panic!("unexpected command result: {other:?}"),
         };
         assert!(finished.finished);
-        assert_eq!(finished.end_type.as_deref(), Some("trade"));
+        assert_eq!(finished.end_type.as_deref(), Some("leave"));
         assert!(simulation.active_dialogue_state(player).is_none());
     }
 
@@ -6187,6 +6289,11 @@ mod tests {
             simulation.actor_grid_position(player),
             Some(GridCoord::new(0, 0, 0))
         );
+        assert!(!simulation.actor_turn_open(player));
+        assert_eq!(
+            simulation.pending_progression.front(),
+            Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
     }
 
     #[test]
@@ -6236,6 +6343,11 @@ mod tests {
         assert_eq!(
             simulation.actor_grid_position(player),
             Some(GridCoord::new(6, 0, 6))
+        );
+        assert!(!simulation.actor_turn_open(player));
+        assert_eq!(
+            simulation.pending_progression.front(),
+            Some(&PendingProgressionStep::RunNonCombatWorldCycle)
         );
     }
 

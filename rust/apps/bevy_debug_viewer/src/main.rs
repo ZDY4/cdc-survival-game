@@ -1,9 +1,12 @@
 mod app;
 mod bootstrap;
+mod console;
 mod controls;
 mod dialogue;
+mod game_ui;
 mod geometry;
 mod hud;
+mod profiling;
 mod render;
 mod simulation;
 mod state;

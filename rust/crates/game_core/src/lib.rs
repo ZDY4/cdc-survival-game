@@ -2,6 +2,7 @@ use bevy_app::prelude::*;
 
 pub mod actor;
 pub mod building;
+pub mod building_geometry;
 pub mod demo;
 pub mod economy;
 pub mod goap;
@@ -22,6 +23,12 @@ pub use building::{
     generate_building_layout, BuildingLayoutError, GeneratedBuildingDebugState,
     GeneratedBuildingLayout, GeneratedBuildingStory, GeneratedOutlineEdge, GeneratedRoom,
     GeneratedStairConnection,
+};
+pub use building_geometry::{
+    triangulate_polygon, BuildingFootprint2d, BuildingGeometryValidationError, DoorOpeningKind,
+    GeneratedBuildingGeometryDebugState, GeneratedDoorOpening, GeneratedRoomPolygon,
+    GeneratedWalkablePolygons, GeneratedWallPolygons, GeneratedWallStroke, GeometryAxis,
+    GeometryMultiPolygon2, GeometryPoint2, GeometryPolygon2, GeometrySegment2,
 };
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
 pub use economy::{

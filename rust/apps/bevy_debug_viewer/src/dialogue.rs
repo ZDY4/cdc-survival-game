@@ -115,6 +115,12 @@ pub(crate) fn current_dialogue_node(dialogue: &ActiveDialogueState) -> Option<&D
     current_dialogue_node_runtime(&dialogue.data, &dialogue.current_node_id)
 }
 
+pub(crate) fn current_dialogue_has_options(dialogue: &ActiveDialogueState) -> bool {
+    current_dialogue_node(dialogue)
+        .map(|node| !node.options.is_empty())
+        .unwrap_or(false)
+}
+
 pub(crate) fn advance_dialogue(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
@@ -144,7 +150,7 @@ pub(crate) fn advance_dialogue(
             apply_dialogue_runtime_state(viewer_state, dialogue_state, dialogue.target_name);
         }
         Err(reason) if reason.starts_with("dialogue_choice_required:") => {
-            viewer_state.status_line = "dialogue: choose an option with 1-9".to_string();
+            viewer_state.status_line = "dialogue: click an option or press 1-9".to_string();
         }
         Err(reason)
             if reason.starts_with("dialogue_invalid_choice:")
@@ -194,7 +200,7 @@ fn advance_dialogue_with_local_state(
             };
         }
         Err(DialogueAdvanceError::ChoiceRequired { .. }) => {
-            viewer_state.status_line = "dialogue: choose an option with 1-9".to_string();
+            viewer_state.status_line = "dialogue: click an option or press 1-9".to_string();
         }
         Err(DialogueAdvanceError::InvalidChoice { .. }) => {
             viewer_state.status_line = "dialogue: invalid choice".to_string();
@@ -374,6 +380,13 @@ fn apply_dialogue_runtime_state(
     dialogue_state: DialogueRuntimeState,
     target_name: String,
 ) {
+    viewer_state.pending_open_trade_target = dialogue_state
+        .emitted_actions
+        .iter()
+        .any(|action| action.action_type == "open_trade")
+        .then(|| dialogue_state.session.target_id.clone())
+        .flatten();
+
     if dialogue_state.finished {
         viewer_state.active_dialogue = None;
         viewer_state.status_line = dialogue_runtime_status(&dialogue_state);
@@ -754,8 +767,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        advance_dialogue, apply_interaction_result, resolve_dialogue_content_from_context,
-        DialogueAssetDirs,
+        advance_dialogue, apply_interaction_result, current_dialogue_has_options,
+        resolve_dialogue_content_from_context, DialogueAssetDirs,
     };
     use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
     use game_data::{
@@ -830,8 +843,38 @@ mod tests {
         assert!(viewer_state.active_dialogue.is_some());
         assert_eq!(
             viewer_state.status_line,
-            "dialogue: choose an option with 1-9"
+            "dialogue: click an option or press 1-9"
         );
+    }
+
+    #[test]
+    fn current_dialogue_has_options_detects_choice_nodes() {
+        let dialogue = ActiveDialogueState {
+            actor_id: game_data::ActorId(1),
+            target_id: Some(InteractionTargetId::MapObject("npc".into())),
+            dialogue_key: "viewer_only".into(),
+            dialog_id: "viewer_only".into(),
+            data: DialogueData {
+                dialog_id: "viewer_only".into(),
+                nodes: vec![DialogueNode {
+                    id: "start".into(),
+                    node_type: "choice".into(),
+                    text: "临时对话".into(),
+                    options: vec![DialogueOption {
+                        text: "继续".into(),
+                        next: "end".into(),
+                        ..DialogueOption::default()
+                    }],
+                    is_start: true,
+                    ..DialogueNode::default()
+                }],
+                ..DialogueData::default()
+            },
+            current_node_id: "start".into(),
+            target_name: "NPC".into(),
+        };
+
+        assert!(current_dialogue_has_options(&dialogue));
     }
 
     #[test]

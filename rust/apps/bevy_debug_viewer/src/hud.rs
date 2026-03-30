@@ -1,3 +1,4 @@
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use game_bevy::SettlementDebugEntry;
 use game_core::{ActorDebugState, SimulationSnapshot};
@@ -8,6 +9,7 @@ use crate::geometry::{
     actor_label, focused_target_summary, format_optional_grid, map_object_at_grid,
     movement_block_reasons, rendered_path_preview, selected_actor, sight_block_reasons,
 };
+use crate::profiling::ViewerSystemProfilerState;
 use crate::state::{
     FreeObserveIndicatorRoot, HudEventCategory, HudEventFilter, HudFooterText, HudText,
     ViewerEventEntry, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
@@ -28,6 +30,8 @@ pub(crate) fn update_free_observe_indicator(
 pub(crate) fn update_hud(
     hud_text: Single<(&mut Text, &mut Visibility), With<HudText>>,
     mut hud_footer: Single<&mut TextSpan, With<HudFooterText>>,
+    diagnostics: Res<DiagnosticsStore>,
+    profiler: Res<ViewerSystemProfilerState>,
     runtime_state: Res<ViewerRuntimeState>,
     render_config: Res<ViewerRenderConfig>,
     viewer_state: Res<ViewerState>,
@@ -43,7 +47,17 @@ pub(crate) fn update_hud(
     *visibility = Visibility::Visible;
     let snapshot = runtime_state.runtime.snapshot();
     let header = format!("Bevy Debug Viewer · {}", viewer_state.hud_page.title());
-    let summary = format_status_summary(&snapshot, &runtime_state, &viewer_state, *render_config);
+    let summary = format!(
+        "{}\n\n{}",
+        format_status_summary(
+            &snapshot,
+            &runtime_state,
+            &viewer_state,
+            *render_config,
+            &diagnostics,
+        ),
+        format_frame_timings_section(&profiler),
+    );
     let page_body = match viewer_state.hud_page {
         ViewerHudPage::Overview => format_overview_panel(&snapshot, &runtime_state, &viewer_state),
         ViewerHudPage::SelectedActor => {
@@ -78,6 +92,7 @@ fn format_status_summary(
     runtime_state: &ViewerRuntimeState,
     viewer_state: &ViewerState,
     render_config: ViewerRenderConfig,
+    diagnostics: &DiagnosticsStore,
 ) -> String {
     section(
         "Status",
@@ -104,8 +119,45 @@ fn format_status_summary(
             ),
             kv("Overlay", render_config.overlay_mode.label()),
             kv("Zoom", format!("{:.0}%", render_config.zoom_factor * 100.0)),
+            kv("FPS", current_fps_label(diagnostics)),
         ],
     )
+}
+
+fn current_fps_label(diagnostics: &DiagnosticsStore) -> String {
+    let fps = diagnostics
+        .get(&FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(|diagnostic| diagnostic.smoothed())
+        .or_else(|| {
+            diagnostics
+                .get(&FrameTimeDiagnosticsPlugin::FPS)
+                .and_then(|diagnostic| diagnostic.average())
+        });
+    format_fps_value(fps)
+}
+
+fn format_fps_value(fps: Option<f64>) -> String {
+    fps.map(|fps| format!("{fps:.0}"))
+        .unwrap_or_else(|| "--".to_string())
+}
+
+fn format_frame_timings_section(profiler: &ViewerSystemProfilerState) -> String {
+    let mut lines = vec![kv(
+        "Tracked Avg",
+        format!("{:.2} ms", profiler.tracked_total_smoothed_ms()),
+    )];
+    let top_entries = profiler.top_entries(6);
+    if top_entries.is_empty() {
+        lines.push("No samples yet".to_string());
+    } else {
+        lines.extend(top_entries.into_iter().map(|entry| {
+            format!(
+                "{}: {:.2} ms (last {:.2})",
+                entry.name, entry.smoothed_ms, entry.last_ms
+            )
+        }));
+    }
+    section("Frame Timings", lines)
 }
 
 fn format_overview_panel(
@@ -627,6 +679,7 @@ fn format_controls_help() -> String {
             "Ctrl+P toggle player control / free observe".to_string(),
             "H toggle HUD".to_string(),
             "/ toggle detailed help".to_string(),
+            "~ toggle debug console".to_string(),
             "V cycles overlay density (minimal / gameplay / AI debug)".to_string(),
             "[ / ] switch event filter on Events page".to_string(),
             "Left click cancels auto-move, selects actor, advances dialogue, or moves".to_string(),
@@ -650,19 +703,19 @@ fn format_controls_help() -> String {
 pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
     match page {
         ViewerHudPage::Overview => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
         }
         ViewerHudPage::SelectedActor => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · Tab切换角色 · 自由观察下左键选AI"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · Tab切换角色 · 自由观察下左键选AI"
         }
         ViewerHudPage::World => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 悬停看格子 · 中键拖拽取消跟随 · 滚轮缩放 · F恢复跟随"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 悬停看格子 · 中键拖拽取消跟随 · 滚轮缩放 · F恢复跟随"
         }
         ViewerHudPage::Interaction => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
+            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
         }
-        ViewerHudPage::Events => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · [ / ]切过滤器",
-        ViewerHudPage::Ai => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · V切换信息层级 · 查看 AI 目标 / 动作 / 预订 / 班次",
+        ViewerHudPage::Events => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · [ / ]切过滤器",
+        ViewerHudPage::Ai => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 查看 AI 目标 / 动作 / 预订 / 班次",
     }
 }
 
@@ -736,7 +789,11 @@ pub(crate) fn event_matches_filter(event: &ViewerEventEntry, filter: HudEventFil
 
 #[cfg(test)]
 mod tests {
-    use super::{event_matches_filter, footer_hint, format_event_line};
+    use super::{
+        event_matches_filter, footer_hint, format_event_line, format_fps_value,
+        format_frame_timings_section,
+    };
+    use crate::profiling::ViewerSystemProfilerState;
     use crate::simulation::classify_event;
     use crate::state::{HudEventCategory, HudEventFilter, ViewerEventEntry, ViewerHudPage};
     use game_core::SimulationEvent;
@@ -792,5 +849,28 @@ mod tests {
         let line = format_event_line(&entry);
         assert!(line.starts_with("WORLD"));
         assert!(line.contains("t=12"));
+    }
+
+    #[test]
+    fn format_fps_value_falls_back_when_no_samples_exist() {
+        assert_eq!(format_fps_value(None), "--");
+    }
+
+    #[test]
+    fn format_fps_value_formats_integer() {
+        assert_eq!(format_fps_value(Some(59.94)), "60");
+    }
+
+    #[test]
+    fn frame_timings_section_lists_hottest_systems() {
+        let mut profiler = ViewerSystemProfilerState::default();
+        profiler.record_sample("draw_world", 4.0);
+        profiler.record_sample("tick_runtime", 1.5);
+
+        let section = format_frame_timings_section(&profiler);
+
+        assert!(section.contains("Frame Timings"));
+        assert!(section.contains("draw_world"));
+        assert!(section.contains("tick_runtime"));
     }
 }

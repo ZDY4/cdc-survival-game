@@ -3,7 +3,7 @@ setlocal
 
 set "ROOT_DIR=%~dp0"
 set "EDITOR_DIR=%ROOT_DIR%tools\tauri_editor"
-set "CARGO_DIR=%USERPROFILE%\.cargo\bin"
+set "CARGO_EXE=%USERPROFILE%\.cargo\bin\cargo.exe"
 set "NPM_EXE=npm.cmd"
 set "VSDEVCMD="
 set "VSWHERE="
@@ -13,13 +13,17 @@ if not exist "%EDITOR_DIR%\package.json" (
     exit /b 1
 )
 
-if not exist "%CARGO_DIR%\cargo.exe" (
-    echo [ERROR] cargo.exe not found in "%CARGO_DIR%"
-    echo [ERROR] Please install Rust with rustup first.
-    exit /b 1
+if exist "%CARGO_EXE%" (
+    for %%F in ("%CARGO_EXE%") do set "PATH=%%~dpF;%PATH%"
+) else (
+    where cargo >nul 2>nul
+    if errorlevel 1 (
+        echo [ERROR] cargo executable not found.
+        echo [ERROR] Install Rust or add Cargo to PATH.
+        exit /b 1
+    )
+    set "CARGO_EXE=cargo"
 )
-
-set "PATH=%CARGO_DIR%;%PATH%"
 
 for %%F in (
     "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -82,7 +86,7 @@ if not exist "node_modules" (
 )
 
 echo Starting tauri_editor...
-call %NPM_EXE% run tauri -- dev
+call %NPM_EXE% run tauri:dev
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 

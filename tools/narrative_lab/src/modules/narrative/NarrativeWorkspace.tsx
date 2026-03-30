@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Badge } from "../../components/Badge";
 import { openOrFocusSettingsWindow } from "../../lib/editorWindows";
-import { invokeCommand } from "../../lib/tauri";
+import { invokeCommand, isTauriRuntime } from "../../lib/tauri";
 import {
   dispatchEditorMenuCommand,
   useRegisterEditorMenuCommands,
@@ -19,6 +20,7 @@ import type {
   NarrativeDocumentPayload,
   NarrativeDocumentViewMode,
   NarrativeGenerateRequest,
+  NarrativeGenerationProgressEvent,
   NarrativeGenerateResponse,
   NarrativeWorkspaceLayout,
   NarrativeWorkspacePayload,
@@ -61,6 +63,13 @@ type NarrativeWorkspaceProps = {
   onSaveAppSettings: (settings: NarrativeAppSettings) => Promise<NarrativeAppSettings>;
 };
 
+const DEFAULT_CHAT_PANEL_WIDTH = 440;
+const MIN_CHAT_PANEL_WIDTH = 320;
+const MAX_CHAT_PANEL_WIDTH = 720;
+const MIN_DOCUMENT_PANEL_WIDTH = 360;
+const PANEL_SPLITTER_WIDTH = 12;
+const NARRATIVE_GENERATION_PROGRESS_EVENT = "narrative:generation-progress";
+
 function snapshotDocument(document: NarrativeDocumentPayload) {
   return JSON.stringify({
     meta: document.meta,
@@ -95,11 +104,13 @@ function defaultWorkspaceLayout(
   activeDocumentKey: string | null,
   openDocumentKeys: string[],
   leftSidebarVisible: boolean,
+  chatPanelWidth = DEFAULT_CHAT_PANEL_WIDTH,
 ): NarrativeWorkspaceLayout {
   return {
     version: 2,
     leftSidebarVisible,
     leftSidebarWidth: 280,
+    chatPanelWidth,
     leftSidebarView: "explorer",
     rightSidebarVisible: false,
     rightSidebarWidth: 320,
@@ -150,6 +161,27 @@ function summarizeResponseForChat(response: {
   return notes.length ? [headline, ...notes].join("\n\n") : headline;
 }
 
+function assistantMessageIdForRequest(requestId: string) {
+  return `assistant-${requestId}`;
+}
+
+function replaceChatMessage(
+  messages: AiChatMessage[],
+  messageId: string,
+  nextMessage: AiChatMessage,
+) {
+  let replaced = false;
+  const nextMessages = messages.map((message) => {
+    if (message.id !== messageId) {
+      return message;
+    }
+    replaced = true;
+    return nextMessage;
+  });
+
+  return replaced ? nextMessages : [...nextMessages, nextMessage];
+}
+
 function extractTitleFromMarkdown(markdown: string, fallback: string) {
   const heading = markdown
     .split(/\r?\n/)
@@ -195,7 +227,12 @@ function resolveInitialTabs(
   workspace: NarrativeWorkspacePayload,
   appSettings: NarrativeAppSettings,
   documents: EditableNarrativeDocument[],
-): { tabState: NarrativeTabState; leftSidebarCollapsed: boolean; layoutSnapshot: string } {
+): {
+  tabState: NarrativeTabState;
+  leftSidebarCollapsed: boolean;
+  chatPanelWidth: number;
+  layoutSnapshot: string;
+} {
   const layout = workspace.workspaceRoot
     ? appSettings.workspaceLayouts?.[workspace.workspaceRoot]
     : undefined;
@@ -216,6 +253,7 @@ function resolveInitialTabs(
     activeDocumentKey,
     openDocumentKeys,
     layout?.leftSidebarVisible ?? true,
+    layout?.chatPanelWidth ?? DEFAULT_CHAT_PANEL_WIDTH,
   );
 
   return {
@@ -224,8 +262,20 @@ function resolveInitialTabs(
       activeTabKey: activeDocumentKey,
     },
     leftSidebarCollapsed: persistedLayout.leftSidebarVisible === false,
+    chatPanelWidth: persistedLayout.chatPanelWidth,
     layoutSnapshot: JSON.stringify(persistedLayout),
   };
+}
+
+function clampChatPanelWidth(width: number, containerWidth: number) {
+  const maxWidth = Math.min(
+    MAX_CHAT_PANEL_WIDTH,
+    Math.max(
+      MIN_CHAT_PANEL_WIDTH,
+      containerWidth - PANEL_SPLITTER_WIDTH - MIN_DOCUMENT_PANEL_WIDTH,
+    ),
+  );
+  return Math.min(Math.max(width, MIN_CHAT_PANEL_WIDTH), maxWidth);
 }
 
 function MarkdownBlock({ markdown }: { markdown: string }) {
@@ -259,10 +309,13 @@ export function NarrativeWorkspace({
   });
   const [documentAgents, setDocumentAgents] = useState<Record<string, DocumentAgentSession>>({});
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
+  const [chatPanelWidth, setChatPanelWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH);
   const [searchQuery, setSearchQuery] = useState("");
   const [aiSettings, setAiSettings] = useState<AiSettings>(defaultAiSettings());
   const [saving, setSaving] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorPanelsRef = useRef<HTMLDivElement | null>(null);
+  const isResizingPanelsRef = useRef(false);
   const documentsRef = useRef<EditableNarrativeDocument[]>(documents);
   const documentAgentsRef = useRef<Record<string, DocumentAgentSession>>(documentAgents);
   const tabStateRef = useRef<NarrativeTabState>(tabState);
@@ -288,6 +341,7 @@ export function NarrativeWorkspace({
     setDocuments(nextDocuments);
     setTabState(initial.tabState);
     setLeftSidebarCollapsed(initial.leftSidebarCollapsed);
+    setChatPanelWidth(initial.chatPanelWidth);
     layoutSnapshotRef.current = initial.layoutSnapshot;
     setDocumentAgents((current) => {
       const baseSessions = workspaceRootRef.current === workspace.workspaceRoot ? current : {};
@@ -301,6 +355,38 @@ export function NarrativeWorkspace({
     });
     workspaceRootRef.current = workspace.workspaceRoot;
   }, [appSettings, workspace]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!isResizingPanelsRef.current || !editorPanelsRef.current) {
+        return;
+      }
+
+      const bounds = editorPanelsRef.current.getBoundingClientRect();
+      setChatPanelWidth(clampChatPanelWidth(event.clientX - bounds.left, bounds.width));
+    };
+
+    const stopResizing = () => {
+      if (!isResizingPanelsRef.current) {
+        return;
+      }
+
+      isResizingPanelsRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+      stopResizing();
+    };
+  }, []);
 
   useEffect(() => {
     const activeTabKey = tabState.activeTabKey;
@@ -320,6 +406,57 @@ export function NarrativeWorkspace({
   }, [onStatusChange]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .listen<NarrativeGenerationProgressEvent>(
+        NARRATIVE_GENERATION_PROGRESS_EVENT,
+        (event) => {
+          const payload = event.payload;
+          const assistantMessageId = assistantMessageIdForRequest(payload.requestId);
+
+          setDocumentAgents((current) => {
+            let nextSessions = current;
+            let matched = false;
+
+            for (const [documentKey, session] of Object.entries(current)) {
+              if (session.inflightRequestId !== payload.requestId) {
+                continue;
+              }
+
+              matched = true;
+              nextSessions = updateDocumentAgentSession(nextSessions, documentKey, (currentSession) => ({
+                ...currentSession,
+                chatMessages: replaceChatMessage(currentSession.chatMessages, assistantMessageId, {
+                  id: assistantMessageId,
+                  role: "assistant",
+                  label: "AI",
+                  content: payload.previewText,
+                  meta: [payload.status],
+                  tone: payload.stage === "error" ? "danger" : "muted",
+                }),
+              }));
+            }
+
+            return matched ? nextSessions : current;
+          });
+
+          onStatusChange(payload.status);
+        },
+      )
+      .then((dispose) => {
+        unlisten = dispose;
+      });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [onStatusChange]);
+
+  useEffect(() => {
     if (!canPersist || !workspace.workspaceRoot.trim()) {
       return;
     }
@@ -328,6 +465,7 @@ export function NarrativeWorkspace({
       tabState.activeTabKey,
       tabState.openTabs,
       !leftSidebarCollapsed,
+      chatPanelWidth,
     );
     const serialized = JSON.stringify(persistedLayout);
     if (serialized === layoutSnapshotRef.current) {
@@ -356,6 +494,7 @@ export function NarrativeWorkspace({
   }, [
     appSettings,
     canPersist,
+    chatPanelWidth,
     leftSidebarCollapsed,
     onSaveAppSettings,
     onStatusChange,
@@ -434,6 +573,13 @@ export function NarrativeWorkspace({
     });
   }, [documents, searchQuery]);
   const dirtyCount = documents.filter((document) => document.dirty).length;
+  const editorPanelsStyle = useMemo(
+    () =>
+      ({
+        "--narrative-chat-panel-width": `${chatPanelWidth}px`,
+      }) as CSSProperties,
+    [chatPanelWidth],
+  );
 
   function getDocument(documentKey: string) {
     return documentsRef.current.find((document) => document.documentKey === documentKey) ?? null;
@@ -508,6 +654,30 @@ export function NarrativeWorkspace({
     }
 
     setTabState((current) => closeNarrativeTab(current, documentKey));
+  }
+
+  function beginPanelResize(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!editorPanelsRef.current || window.innerWidth <= 900) {
+      return;
+    }
+
+    event.preventDefault();
+    isResizingPanelsRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const bounds = editorPanelsRef.current.getBoundingClientRect();
+    setChatPanelWidth(clampChatPanelWidth(event.clientX - bounds.left, bounds.width));
+  }
+
+  function resetPanelWidth() {
+    if (!editorPanelsRef.current) {
+      setChatPanelWidth(DEFAULT_CHAT_PANEL_WIDTH);
+      return;
+    }
+
+    const bounds = editorPanelsRef.current.getBoundingClientRect();
+    setChatPanelWidth(clampChatPanelWidth(DEFAULT_CHAT_PANEL_WIDTH, bounds.width));
   }
 
   function updateDocumentState(
@@ -665,6 +835,8 @@ export function NarrativeWorkspace({
 
     const activeDocumentKey = activeDocument.documentKey;
     const action = activeSession.mode;
+    const requestId = `generation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const assistantMessageId = assistantMessageIdForRequest(requestId);
     const userMessage: AiChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -675,6 +847,7 @@ export function NarrativeWorkspace({
     };
 
     const request: NarrativeGenerateRequest = {
+      requestId,
       docType: activeDocument.meta.docType,
       targetSlug:
         action === "create"
@@ -692,8 +865,20 @@ export function NarrativeWorkspace({
       updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
         ...session,
         busy: true,
+        inflightRequestId: requestId,
         composerText: "",
-        chatMessages: [...session.chatMessages, userMessage],
+        chatMessages: [
+          ...session.chatMessages,
+          userMessage,
+          {
+            id: assistantMessageId,
+            role: "assistant",
+            label: "AI",
+            content: "正在准备生成内容...",
+            meta: ["正在准备请求"],
+            tone: "muted",
+          },
+        ],
       })),
     );
 
@@ -707,7 +892,7 @@ export function NarrativeWorkspace({
       });
 
       const assistantMessage: AiChatMessage = {
-        id: `assistant-${Date.now()}`,
+        id: assistantMessageId,
         role: "assistant",
         label: "AI",
         content: summarizeResponseForChat(narrativeResponse),
@@ -739,12 +924,12 @@ export function NarrativeWorkspace({
           const next = updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
             ...session,
             busy: false,
+            inflightRequestId: null,
             lastRequest: request,
             lastResponse: narrativeResponse,
             candidatePatchSet: null,
             chatMessages: [
-              ...session.chatMessages,
-              assistantMessage,
+              ...replaceChatMessage(session.chatMessages, assistantMessageId, assistantMessage),
               {
                 id: `context-${Date.now()}`,
                 role: "context",
@@ -773,6 +958,7 @@ export function NarrativeWorkspace({
             lastResponse: narrativeResponse,
             candidatePatchSet: null,
             busy: false,
+            inflightRequestId: null,
             documentViewMode: "preview",
             composerText: "",
           };
@@ -794,11 +980,12 @@ export function NarrativeWorkspace({
         updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
           ...session,
           busy: false,
+          inflightRequestId: null,
           lastRequest: request,
           lastResponse: narrativeResponse,
           candidatePatchSet: patchSet,
           documentViewMode: "preview",
-          chatMessages: [...session.chatMessages, assistantMessage],
+          chatMessages: replaceChatMessage(session.chatMessages, assistantMessageId, assistantMessage),
         })),
       );
       onStatusChange(
@@ -809,17 +996,15 @@ export function NarrativeWorkspace({
         updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
           ...session,
           busy: false,
-          chatMessages: [
-            ...session.chatMessages,
-            {
-              id: `assistant-error-${Date.now()}`,
-              role: "assistant",
-              label: "AI",
-              content: `本次执行失败：${String(error)}`,
-              meta: ["请检查 AI 设置、工作区路径或网络连接。"],
-              tone: "danger",
-            },
-          ],
+          inflightRequestId: null,
+          chatMessages: replaceChatMessage(session.chatMessages, assistantMessageId, {
+            id: assistantMessageId,
+            role: "assistant",
+            label: "AI",
+            content: `本次执行失败：${String(error)}`,
+            meta: ["请检查 AI 设置、工作区路径或网络连接。"],
+            tone: "danger",
+          }),
         })),
       );
       onStatusChange(`AI 执行失败：${String(error)}`);
@@ -1167,6 +1352,11 @@ export function NarrativeWorkspace({
           </aside>
         ) : null}
 
+        <div
+          ref={editorPanelsRef}
+          className="narrative-editor-panels"
+          style={editorPanelsStyle}
+        >
         <section className="narrative-chat-panel">
           <div className="narrative-pane-header">
             <div>
@@ -1304,6 +1494,15 @@ export function NarrativeWorkspace({
             </div>
           )}
         </section>
+
+        <button
+          type="button"
+          className="narrative-panel-splitter"
+          onPointerDown={beginPanelResize}
+          onDoubleClick={resetPanelWidth}
+          aria-label="调整 AI 与文档面板宽度"
+          title="拖动调整 AI 与文档面板宽度，双击恢复默认宽度"
+        />
 
         <section className="narrative-document-panel">
           <div className="narrative-pane-header">
@@ -1474,6 +1673,7 @@ export function NarrativeWorkspace({
             </div>
           )}
         </section>
+        </div>
       </div>
 
       <footer className="narrative-streamlined-statusbar">

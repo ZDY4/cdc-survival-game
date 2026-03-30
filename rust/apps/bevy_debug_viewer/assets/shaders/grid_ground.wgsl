@@ -80,7 +80,7 @@ fn fragment(vertex_output: VertexOutput, @builtin(front_facing) is_front: bool) 
 
     pbr_input.material.base_color = alpha_discard(pbr_input.material, ground_color);
     pbr_input.material.perceptual_roughness = 0.97;
-    pbr_input.material.reflectance = 0.03;
+    pbr_input.material.reflectance = vec3<f32>(0.03);
 
     var out: FragmentOutput;
     if (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u {

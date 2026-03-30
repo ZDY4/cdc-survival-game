@@ -21,7 +21,7 @@ struct BuildingWallGridMaterial {
 @group(#{MATERIAL_BIND_GROUP}) @binding(100)
 var<uniform> building_wall_material: BuildingWallGridMaterial;
 
-fn dominant_face_uv(world_position: vec3<f32>, world_normal: vec3<f32>) -> vec2<f32> {
+fn dominant_face_uv(world_position: vec4<f32>, world_normal: vec3<f32>) -> vec2<f32> {
     let normal = abs(normalize(world_normal));
     if normal.x > normal.z && normal.x > normal.y {
         return world_position.zy;
@@ -71,18 +71,19 @@ fn fragment(vertex_output: VertexOutput, @builtin(front_facing) is_front: bool) 
     var wall_color = select(building_wall_material.base_color, building_wall_material.cap_color, is_top_face);
 
     if !is_top_face {
-        wall_color.rgb = clamp(
+        let wall_rgb = clamp(
             wall_color.rgb + vec3<f32>(checker),
             vec3<f32>(0.0),
             vec3<f32>(1.0),
         );
+        wall_color = vec4<f32>(wall_rgb, wall_color.a);
         wall_color = mix(wall_color, building_wall_material.minor_line_color, minor_mask * 0.75);
         wall_color = mix(wall_color, building_wall_material.major_line_color, major_mask);
     }
 
     pbr_input.material.base_color = alpha_discard(pbr_input.material, wall_color);
     pbr_input.material.perceptual_roughness = 0.95;
-    pbr_input.material.reflectance = 0.035;
+    pbr_input.material.reflectance = vec3<f32>(0.035);
 
     var out: FragmentOutput;
     if (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u {

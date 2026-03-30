@@ -33,15 +33,16 @@ pub fn validate_selection(
     let Some(range) = selected_range.cloned() else {
         return Err("当前操作需要有效的文本选区".to_string());
     };
-    if range.start > range.end || range.end > current_markdown.len() {
+    if range.start > range.end {
         return Err("选区范围超出当前文稿长度".to_string());
     }
-    let actual = &current_markdown[range.start..range.end];
+    let normalized_range = normalize_selection_range(current_markdown, &range)?;
+    let actual = slice_markdown(current_markdown, &normalized_range)?;
     if !selected_text.is_empty() && actual != selected_text {
         return Err("选区文本与当前编辑器内容不一致，请重新选择后再生成".to_string());
     }
 
-    Ok(Some(range))
+    Ok(Some(normalized_range))
 }
 
 pub fn change_scope_for_action(action: &str) -> &'static str {
@@ -116,8 +117,11 @@ fn risk_level_for(
     match action {
         "rewrite_selection" | "expand_selection" | "insert_after_selection" => {
             if let Some(range) = selected_range {
-                let base_len = range.end.saturating_sub(range.start).max(1);
-                let ratio = draft_markdown.len() as f64 / base_len as f64;
+                let base_len = slice_markdown(current_markdown, range)
+                    .map(|selection| selection.chars().count())
+                    .unwrap_or_else(|_| range.end.saturating_sub(range.start))
+                    .max(1);
+                let ratio = draft_markdown.chars().count() as f64 / base_len as f64;
                 if ratio > 3.0 {
                     "high".to_string()
                 } else if ratio > 1.5 {
@@ -151,7 +155,8 @@ fn diff_preview_for(
     match action {
         "rewrite_selection" | "expand_selection" => {
             let before = selected_range
-                .map(|range| current_markdown[range.start..range.end].to_string())
+                .and_then(|range| slice_markdown(current_markdown, range).ok())
+                .map(ToString::to_string)
                 .unwrap_or_default();
             format!(
                 "Current selection\n{}\n\nDraft replacement\n{}",
@@ -161,7 +166,8 @@ fn diff_preview_for(
         }
         "insert_after_selection" => {
             let anchor = selected_range
-                .map(|range| current_markdown[range.start..range.end].to_string())
+                .and_then(|range| slice_markdown(current_markdown, range).ok())
+                .map(ToString::to_string)
                 .unwrap_or_default();
             format!(
                 "Insert after selection\n{}\n\nInserted text\n{}",
@@ -177,14 +183,65 @@ fn diff_preview_for(
     }
 }
 
+fn normalize_selection_range(
+    current_markdown: &str,
+    range: &NarrativeSelectionRange,
+) -> Result<NarrativeSelectionRange, String> {
+    let start = utf16_offset_to_byte_index(current_markdown, range.start)
+        .ok_or_else(|| "选区起点不是合法字符边界，请重新选择后再试".to_string())?;
+    let end = utf16_offset_to_byte_index(current_markdown, range.end)
+        .ok_or_else(|| "选区终点不是合法字符边界，请重新选择后再试".to_string())?;
+
+    if start > end || end > current_markdown.len() {
+        return Err("选区范围超出当前文稿长度".to_string());
+    }
+
+    Ok(NarrativeSelectionRange { start, end })
+}
+
+fn utf16_offset_to_byte_index(input: &str, utf16_offset: usize) -> Option<usize> {
+    if utf16_offset == 0 {
+        return Some(0);
+    }
+
+    let mut utf16_count = 0usize;
+    for (byte_index, ch) in input.char_indices() {
+        if utf16_count == utf16_offset {
+            return Some(byte_index);
+        }
+        utf16_count += ch.len_utf16();
+        if utf16_count == utf16_offset {
+            return Some(byte_index + ch.len_utf8());
+        }
+        if utf16_count > utf16_offset {
+            return None;
+        }
+    }
+
+    if utf16_count == utf16_offset {
+        Some(input.len())
+    } else {
+        None
+    }
+}
+
+fn slice_markdown<'a>(
+    current_markdown: &'a str,
+    range: &NarrativeSelectionRange,
+) -> Result<&'a str, String> {
+    current_markdown
+        .get(range.start..range.end)
+        .ok_or_else(|| "选区范围不是合法 UTF-8 字符边界".to_string())
+}
+
 fn normalize_excerpt(input: &str) -> String {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return "(empty)".to_string();
     }
     let max_chars = 1200usize;
-    if trimmed.len() <= max_chars {
+    if trimmed.chars().count() <= max_chars {
         return trimmed.to_string();
     }
-    format!("{}...", &trimmed[..max_chars])
+    trimmed.chars().take(max_chars).collect::<String>() + "..."
 }

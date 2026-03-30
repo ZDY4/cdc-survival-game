@@ -1,9 +1,13 @@
-use std::{thread, time::Duration};
+use std::{
+    io::{BufRead, BufReader},
+    thread,
+    time::Duration,
+};
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::ai_settings::{read_ai_settings, AiSettings};
 use crate::narrative_context::build_narrative_context;
@@ -13,9 +17,13 @@ use crate::narrative_review::{
 use crate::narrative_templates::{default_markdown, doc_type_label, is_known_doc_type};
 use crate::narrative_workspace::{resolve_connected_project_root, resolve_workspace_root};
 
+const NARRATIVE_GENERATION_PROGRESS_EVENT: &str = "narrative:generation-progress";
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NarrativeGenerateRequest {
+    #[serde(default)]
+    pub request_id: Option<String>,
     pub doc_type: String,
     pub target_slug: String,
     pub action: String,
@@ -63,6 +71,64 @@ pub struct NarrativeGenerateResponse {
     pub provider_error: String,
     pub synthesis_notes: Vec<String>,
     pub agent_runs: Vec<NarrativeAgentRun>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NarrativeGenerationProgressEvent {
+    request_id: String,
+    stage: String,
+    status: String,
+    preview_text: String,
+}
+
+#[derive(Clone)]
+struct NarrativeGenerationProgressEmitter {
+    app: AppHandle,
+    request_id: String,
+}
+
+impl NarrativeGenerationProgressEmitter {
+    fn from_request(app: &AppHandle, request: &NarrativeGenerateRequest) -> Option<Self> {
+        let request_id = request.request_id.as_ref()?.trim();
+        if request_id.is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            app: app.clone(),
+            request_id: request_id.to_string(),
+        })
+    }
+
+    fn emit(&self, stage: &str, status: impl Into<String>, preview_text: impl Into<String>) {
+        let payload = NarrativeGenerationProgressEvent {
+            request_id: self.request_id.clone(),
+            stage: stage.to_string(),
+            status: status.into(),
+            preview_text: preview_text.into(),
+        };
+        let _ = self
+            .app
+            .emit_to("main", NARRATIVE_GENERATION_PROGRESS_EVENT, payload);
+    }
+
+    fn status(&self, status: impl Into<String>) {
+        let status = status.into();
+        self.emit("status", status.clone(), status);
+    }
+
+    fn delta(&self, status: impl Into<String>, preview_text: impl Into<String>) {
+        self.emit("delta", status, preview_text);
+    }
+
+    fn completed(&self, status: impl Into<String>, preview_text: impl Into<String>) {
+        self.emit("completed", status, preview_text);
+    }
+
+    fn error(&self, status: impl Into<String>, preview_text: impl Into<String>) {
+        self.emit("error", status, preview_text);
+    }
 }
 
 #[derive(Debug)]
@@ -117,16 +183,29 @@ fn run_narrative_generation(
     project_root: Option<&str>,
     mut request: NarrativeGenerateRequest,
 ) -> Result<NarrativeGenerateResponse, String> {
+    let progress = NarrativeGenerationProgressEmitter::from_request(app, &request);
+    if let Some(progress) = &progress {
+        progress.status("正在准备 AI 请求...");
+    }
     normalize_request(&mut request)?;
+    if let Some(progress) = &progress {
+        progress.status("正在校验当前文档与选区...");
+    }
     let selection = validate_selection(
         &request.current_markdown,
         request.selected_range.as_ref(),
         &request.selected_text,
         &request.action,
     )?;
+    if let Some(progress) = &progress {
+        progress.status("正在读取 AI 设置...");
+    }
     let settings = read_ai_settings(app)?.normalized();
     let workspace_root_path = resolve_workspace_root(workspace_root)?;
     let project_root_path = resolve_connected_project_root(project_root)?;
+    if let Some(progress) = &progress {
+        progress.status("正在整理工作区上下文...");
+    }
     let context = build_narrative_context(
         &workspace_root_path,
         project_root_path.as_deref(),
@@ -134,11 +213,14 @@ fn run_narrative_generation(
         settings.max_context_records,
     )?;
     let payload = build_single_agent_payload(&request, &context.context, &settings);
+    if let Some(progress) = &progress {
+        progress.status("正在连接 AI 提供方...");
+    }
 
-    match perform_chat_completion(&settings, &payload) {
+    match perform_chat_completion(&settings, &payload, progress.as_ref()) {
         Ok(success) => {
             let agent_run = build_single_agent_run(&success.payload, &success.raw_text);
-            finalize_generation(
+            let response = finalize_generation(
                 "single_agent",
                 request,
                 selection,
@@ -146,43 +228,63 @@ fn run_narrative_generation(
                 success.raw_text,
                 success.payload,
                 vec![agent_run],
-            )
+            )?;
+            if let Some(progress) = &progress {
+                progress.completed(
+                    "AI 输出完成，正在整理结果...",
+                    summarize_response_preview(&response),
+                );
+            }
+            Ok(response)
         }
-        Err(error) => Ok(NarrativeGenerateResponse {
-            engine_mode: "single_agent".to_string(),
-            draft_markdown: String::new(),
-            summary: String::new(),
-            review_notes: vec!["文档助手本轮没有生成可用草稿。".to_string()],
-            risk_level: "high".to_string(),
-            change_scope: crate::narrative_review::change_scope_for_action(&request.action)
-                .to_string(),
-            prompt_debug: prompt_debug_payload(
-                &request.action,
-                selection.as_ref(),
-                &context.workspace_context_refs,
-                &context.project_context_refs,
-                &context.project_context_warning,
-                &context.source_conflicts,
-                json!({
-                    "request": request,
-                    "context": context.context.clone(),
-                    "engineMode": "single_agent",
-                    "providerError": normalize_provider_error(&error),
-                }),
-            ),
-            raw_output: error.raw_text.clone(),
-            used_context_refs: context.used_context_refs,
-            diff_preview: "暂无草稿可预览".to_string(),
-            provider_error: normalize_provider_error(&error),
-            synthesis_notes: vec!["当前流程已切换为单 agent 文档助手。".to_string()],
-            agent_runs: vec![failed_agent_run(
-                "document-assistant",
-                "文档助手",
-                "负责当前文档的对话、改写与新文档生成。",
-                normalize_provider_error(&error),
-            )
-            .with_raw_output(error.raw_text)],
-        }),
+        Err(error) => {
+            let provider_error = normalize_provider_error(&error);
+            if let Some(progress) = &progress {
+                progress.error(
+                    provider_error.clone(),
+                    if error.raw_text.trim().is_empty() {
+                        provider_error.clone()
+                    } else {
+                        error.raw_text.clone()
+                    },
+                );
+            }
+            Ok(NarrativeGenerateResponse {
+                engine_mode: "single_agent".to_string(),
+                draft_markdown: String::new(),
+                summary: String::new(),
+                review_notes: vec!["文档助手本轮没有生成可用草稿。".to_string()],
+                risk_level: "high".to_string(),
+                change_scope: crate::narrative_review::change_scope_for_action(&request.action)
+                    .to_string(),
+                prompt_debug: prompt_debug_payload(
+                    &request.action,
+                    selection.as_ref(),
+                    &context.workspace_context_refs,
+                    &context.project_context_refs,
+                    &context.project_context_warning,
+                    &context.source_conflicts,
+                    json!({
+                        "request": request,
+                        "context": context.context.clone(),
+                        "engineMode": "single_agent",
+                        "providerError": provider_error,
+                    }),
+                ),
+                raw_output: error.raw_text.clone(),
+                used_context_refs: context.used_context_refs,
+                diff_preview: "暂无草稿可预览".to_string(),
+                provider_error: normalize_provider_error(&error),
+                synthesis_notes: vec!["当前流程已切换为单 agent 文档助手。".to_string()],
+                agent_runs: vec![failed_agent_run(
+                    "document-assistant",
+                    "文档助手",
+                    "负责当前文档的对话、改写与新文档生成。",
+                    normalize_provider_error(&error),
+                )
+                .with_raw_output(error.raw_text)],
+            })
+        }
     }
 }
 
@@ -199,23 +301,13 @@ fn finalize_generation(
         .as_object()
         .cloned()
         .ok_or_else(|| "AI 返回的 narrative 结果不是 JSON 对象".to_string())?;
-    let draft_markdown = object
-        .get("draft_markdown")
-        .or_else(|| object.get("draftMarkdown"))
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let draft_markdown = read_draft_markdown(&object);
     let model_notes = read_string_list(
         object
             .get("review_notes")
             .or_else(|| object.get("reviewNotes")),
     );
-    let synthesis_notes = read_string_list(
-        object
-            .get("synthesis_notes")
-            .or_else(|| object.get("synthesisNotes")),
-    );
+    let synthesis_notes = read_synthesis_notes(&object);
     let review = build_review_result(
         &request.action,
         &request.current_markdown,
@@ -225,11 +317,7 @@ fn finalize_generation(
     );
     let review_notes = review.review_notes;
 
-    let summary = object
-        .get("summary")
-        .and_then(Value::as_str)
-        .unwrap_or_else(|| default_summary_for_action(&request.action))
-        .to_string();
+    let summary = read_summary(&object, &request.action, &draft_markdown);
 
     let agent_risk = highest_agent_risk(&agent_runs);
 
@@ -321,9 +409,9 @@ fn build_single_agent_payload(
     settings: &AiSettings,
 ) -> Value {
     let contract = [
-        "只能输出一个 JSON 对象，不能输出 Markdown 解释、不能输出代码块。",
-        "输出合同：{\"draft_markdown\":\"string\",\"summary\":\"string\",\"review_notes\":[\"string\"],\"synthesis_notes\":[\"string\"],\"risk_level\":\"low|medium|high\",\"change_scope\":\"document|selection|insertion|new_doc\"}。",
-        "draft_markdown 必须只包含最终合稿后的正文 Markdown，不要包含 YAML frontmatter。",
+        "正文优先：直接输出最终 Markdown，不要输出 JSON，不要解释，不要加代码块围栏。",
+        "输出内容必须是可直接预览、编辑、保存的 Markdown 正文。",
+        "不要包含 YAML frontmatter，不要补充“说明如下”“修改建议”等额外文字。",
     ]
     .join("\n");
 
@@ -335,7 +423,7 @@ fn build_single_agent_payload(
             "timeout_sec": settings.timeout_sec,
         },
         "temperature": 0.35,
-        "max_tokens": 2200,
+        "max_tokens": 4000,
         "messages": [
             {
                 "role": "system",
@@ -392,17 +480,14 @@ fn build_action_rules(request: &NarrativeGenerateRequest) -> Vec<String> {
 
 fn build_single_agent_run(payload: &Value, raw_output: &str) -> NarrativeAgentRun {
     let object = payload.as_object().cloned().unwrap_or_default();
+    let draft_markdown = read_draft_markdown(&object);
 
     NarrativeAgentRun {
         agent_id: "document-assistant".to_string(),
         label: "文档助手".to_string(),
         focus: "负责当前文档的对话、改写与新文档生成。".to_string(),
         status: "completed".to_string(),
-        summary: object
-            .get("summary")
-            .and_then(Value::as_str)
-            .unwrap_or("已完成当前文档请求。")
-            .to_string(),
+        summary: read_summary(&object, "revise_document", &draft_markdown),
         notes: read_string_list(
             object
                 .get("review_notes")
@@ -416,17 +501,57 @@ fn build_single_agent_run(payload: &Value, raw_output: &str) -> NarrativeAgentRu
                 .get("risk_level")
                 .or_else(|| object.get("riskLevel"))
                 .and_then(Value::as_str)
-                .unwrap_or("medium"),
+                .unwrap_or(if draft_markdown.trim().is_empty() { "high" } else { "medium" }),
         ),
-        draft_markdown: object
-            .get("draft_markdown")
-            .or_else(|| object.get("draftMarkdown"))
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
+        draft_markdown,
         raw_output: raw_output.to_string(),
         provider_error: String::new(),
+    }
+}
+
+fn read_draft_markdown(object: &Map<String, Value>) -> String {
+    object
+        .get("draft_markdown")
+        .or_else(|| object.get("draftMarkdown"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+fn read_summary(object: &Map<String, Value>, action: &str, draft_markdown: &str) -> String {
+    object
+        .get("summary")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| derive_summary_from_markdown(action, draft_markdown))
+}
+
+fn read_synthesis_notes(object: &Map<String, Value>) -> Vec<String> {
+    read_string_list(
+        object
+            .get("synthesis_notes")
+            .or_else(|| object.get("synthesisNotes")),
+    )
+}
+
+fn derive_summary_from_markdown(action: &str, draft_markdown: &str) -> String {
+    let heading = draft_markdown
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with('#'))
+        .map(|line| line.trim_start_matches('#').trim())
+        .filter(|line| !line.is_empty());
+
+    match (action, heading) {
+        ("create", Some(title)) | ("derive_new_doc", Some(title)) => {
+            format!("已生成《{title}》草稿。")
+        }
+        ("revise_document", Some(title)) => format!("已生成《{title}》的修订稿。"),
+        (_, Some(title)) => format!("已生成《{title}》的 Markdown 建议。"),
+        _ => default_summary_for_action(action).to_string(),
     }
 }
 
@@ -515,13 +640,15 @@ fn risk_score(value: &str) -> i32 {
 fn perform_chat_completion(
     settings: &AiSettings,
     payload: &Value,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
-    perform_chat_completion_owned(settings.clone(), payload.clone())
+    perform_chat_completion_owned(settings.clone(), payload.clone(), progress.cloned())
 }
 
 fn perform_chat_completion_owned(
     settings: AiSettings,
     payload: Value,
+    progress: Option<NarrativeGenerationProgressEmitter>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
     let provider_config = payload
         .get("provider_config")
@@ -575,13 +702,66 @@ fn perform_chat_completion_owned(
         error,
         raw_text: String::new(),
     })?;
-    let request_body = build_chat_completion_request(&model, &payload, true);
+    let base_max_tokens = requested_max_tokens(&payload);
 
-    match send_chat_completion_request(&client, &base_url, &api_key, &request_body) {
+    match perform_chat_completion_with_fallbacks(
+        &client,
+        &base_url,
+        &api_key,
+        &model,
+        &payload,
+        base_max_tokens,
+        progress.as_ref(),
+    ) {
         Ok(success) => Ok(success),
-        Err(failure) if should_retry_without_response_format(&failure) => {
-            let fallback_request = build_chat_completion_request(&model, &payload, false);
-            send_chat_completion_request(&client, &base_url, &api_key, &fallback_request)
+        Err(failure) if should_retry_with_more_tokens(&failure) => {
+            let expanded_max_tokens = expanded_max_tokens(base_max_tokens);
+            if expanded_max_tokens <= base_max_tokens {
+                return Err(failure);
+            }
+
+            if let Some(progress) = &progress {
+                progress.status("模型输出被截断，已自动提高输出上限后重试...");
+            }
+
+            perform_chat_completion_with_fallbacks(
+                &client,
+                &base_url,
+                &api_key,
+                &model,
+                &payload,
+                expanded_max_tokens,
+                progress.as_ref(),
+            )
+        }
+        Err(failure) => Err(failure),
+    }
+}
+
+fn perform_chat_completion_with_fallbacks(
+    client: &Client,
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    payload: &Value,
+    max_tokens: u64,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+) -> Result<ProviderSuccess, ProviderFailure> {
+    let request_body = build_chat_completion_request(model, payload, max_tokens, true);
+
+    match send_chat_completion_request(client, base_url, api_key, &request_body, progress) {
+        Ok(success) => Ok(success),
+        Err(failure) if should_retry_without_stream(&failure) => {
+            if let Some(progress) = progress {
+                progress.status("当前提供方不支持流式输出，已切回普通请求...");
+            }
+            let fallback_request =
+                build_chat_completion_request(model, payload, max_tokens, false);
+            match send_chat_completion_request(client, base_url, api_key, &fallback_request, progress)
+            {
+                Ok(success) => Ok(success),
+                Err(second_failure) => Err(second_failure),
+            }
         }
         Err(failure) => Err(failure),
     }
@@ -597,7 +777,8 @@ fn build_http_client(timeout_sec: u64) -> Result<Client, String> {
 fn build_chat_completion_request(
     model: &str,
     payload: &Value,
-    include_json_response_format: bool,
+    max_tokens: u64,
+    stream: bool,
 ) -> Value {
     let mut request = Map::new();
     request.insert("model".to_string(), json!(model));
@@ -617,17 +798,9 @@ fn build_chat_completion_request(
     );
     request.insert(
         "max_tokens".to_string(),
-        json!(payload
-            .get("max_tokens")
-            .and_then(Value::as_u64)
-            .unwrap_or(2600)),
+        json!(max_tokens),
     );
-    if include_json_response_format {
-        request.insert(
-            "response_format".to_string(),
-            json!({ "type": "json_object" }),
-        );
-    }
+    request.insert("stream".to_string(), json!(stream));
     Value::Object(request)
 }
 
@@ -636,6 +809,7 @@ fn send_chat_completion_request(
     base_url: &str,
     api_key: &str,
     request_body: &Value,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
     let mut last_failure: Option<ProviderFailure> = None;
 
@@ -651,8 +825,8 @@ fn send_chat_completion_request(
         match response {
             Ok(response) => {
                 let status = response.status().as_u16();
-                let raw_body = response.text().unwrap_or_default();
                 if !(200..300).contains(&status) {
+                    let raw_body = response.text().unwrap_or_default();
                     let failure = ProviderFailure {
                         status_code: status,
                         error: map_http_error(status, &raw_body),
@@ -666,23 +840,25 @@ fn send_chat_completion_request(
                     return Err(failure);
                 }
 
-                let response_data: Value =
-                    serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
-                        status_code: status,
-                        error: format!("响应不是合法 JSON: {error}"),
-                        raw_text: raw_body.clone(),
-                    })?;
-                let raw_content = extract_message_content(&response_data);
-                let payload =
-                    extract_json_payload(&raw_content).map_err(|error| ProviderFailure {
-                        status_code: status,
-                        error,
-                        raw_text: raw_content.clone(),
-                    })?;
-                return Ok(ProviderSuccess {
-                    raw_text: raw_content,
-                    payload,
-                });
+                let content_type = response
+                    .headers()
+                    .get(reqwest::header::CONTENT_TYPE)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_lowercase();
+
+                if content_type.contains("text/event-stream") {
+                    if let Some(progress) = progress {
+                        progress.status("正在接收模型输出...");
+                    }
+                    return read_streaming_chat_completion(response, status, progress);
+                }
+
+                if let Some(progress) = progress {
+                    progress.status("正在整理模型返回内容...");
+                }
+                let raw_body = response.text().unwrap_or_default();
+                return parse_non_stream_response(raw_body, status, progress);
             }
             Err(error) => {
                 let failure = ProviderFailure {
@@ -707,15 +883,153 @@ fn send_chat_completion_request(
     }))
 }
 
-fn should_retry_without_response_format(failure: &ProviderFailure) -> bool {
+fn should_retry_without_stream(failure: &ProviderFailure) -> bool {
     if failure.status_code != 400 {
         return false;
     }
 
     let combined = format!("{} {}", failure.error, failure.raw_text).to_lowercase();
-    combined.contains("response_format")
-        && combined.contains("json_object")
-        && (combined.contains("not supported") || combined.contains("not valid"))
+    combined.contains("stream")
+        && (combined.contains("not supported")
+            || combined.contains("unsupported")
+            || combined.contains("not valid"))
+}
+
+fn should_retry_with_more_tokens(failure: &ProviderFailure) -> bool {
+    if failure.status_code == 0 {
+        return false;
+    }
+
+    let normalized = failure.error.to_lowercase();
+    normalized.contains("ai 输出被截断")
+        || (normalized.contains("eof while parsing")
+            && (normalized.contains("json") || normalized.contains("string")))
+}
+
+fn requested_max_tokens(payload: &Value) -> u64 {
+    payload
+        .get("max_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(4000)
+        .max(1024)
+}
+
+fn expanded_max_tokens(current_max_tokens: u64) -> u64 {
+    current_max_tokens.saturating_mul(2).min(8000)
+}
+
+fn parse_non_stream_response(
+    raw_body: String,
+    status: u16,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+) -> Result<ProviderSuccess, ProviderFailure> {
+    let response_data: Value = serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
+        status_code: status,
+        error: format!("响应不是合法 JSON: {error}"),
+        raw_text: raw_body.clone(),
+    })?;
+    let raw_content = extract_message_content(&response_data);
+    if let Some(progress) = progress {
+        let preview = if raw_content.trim().is_empty() {
+            "AI 已返回响应，正在整理结果...".to_string()
+        } else {
+            raw_content.clone()
+        };
+        progress.delta("AI 已返回完整响应，正在整理结果...", preview);
+    }
+    let payload = extract_narrative_payload(&raw_content).map_err(|error| ProviderFailure {
+        status_code: status,
+        error,
+        raw_text: raw_content.clone(),
+    })?;
+    Ok(ProviderSuccess {
+        raw_text: raw_content,
+        payload,
+    })
+}
+
+fn read_streaming_chat_completion(
+    response: reqwest::blocking::Response,
+    status: u16,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+) -> Result<ProviderSuccess, ProviderFailure> {
+    let mut raw_content = String::new();
+    let reader = BufReader::new(response);
+
+    for line_result in reader.lines() {
+        let line = line_result.map_err(|error| ProviderFailure {
+            status_code: status,
+            error: format!("读取流式响应失败: {error}"),
+            raw_text: raw_content.clone(),
+        })?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with(':') {
+            continue;
+        }
+        let Some(data) = trimmed.strip_prefix("data:") else {
+            continue;
+        };
+        let data = data.trim();
+        if data == "[DONE]" {
+            break;
+        }
+
+        let event: Value = serde_json::from_str(data).map_err(|error| ProviderFailure {
+            status_code: status,
+            error: format!("流式响应片段不是合法 JSON: {error}"),
+            raw_text: raw_content.clone(),
+        })?;
+        let delta = extract_stream_delta_content(&event);
+        if !delta.is_empty() {
+            raw_content.push_str(&delta);
+            if let Some(progress) = progress {
+                progress.delta("AI 正在输出内容...", raw_content.clone());
+            }
+        }
+    }
+
+    let payload = extract_narrative_payload(&raw_content).map_err(|error| ProviderFailure {
+        status_code: status,
+        error,
+        raw_text: raw_content.clone(),
+    })?;
+    Ok(ProviderSuccess {
+        raw_text: raw_content,
+        payload,
+    })
+}
+
+fn extract_stream_delta_content(event: &Value) -> String {
+    let Some(choice) = event
+        .get("choices")
+        .and_then(Value::as_array)
+        .and_then(|choices| choices.first())
+    else {
+        return String::new();
+    };
+
+    let Some(delta) = choice.get("delta") else {
+        return String::new();
+    };
+
+    if let Some(content) = delta.get("content") {
+        if let Some(text) = content.as_str() {
+            return text.to_string();
+        }
+
+        if let Some(parts) = content.as_array() {
+            return parts
+                .iter()
+                .filter_map(|part| {
+                    part.get("text")
+                        .and_then(Value::as_str)
+                        .or_else(|| part.as_str())
+                })
+                .collect::<String>();
+        }
+    }
+
+    String::new()
 }
 
 fn extract_message_content(response_data: &Value) -> String {
@@ -730,23 +1044,99 @@ fn extract_message_content(response_data: &Value) -> String {
         .to_string()
 }
 
-fn extract_json_payload(raw_content: &str) -> Result<Value, String> {
+fn extract_narrative_payload(raw_content: &str) -> Result<Value, String> {
     let trimmed = raw_content.trim();
     if trimmed.is_empty() {
         return Err("AI 未返回可解析内容".to_string());
     }
-    serde_json::from_str(trimmed).map_err(|error| format!("AI 返回内容不是合法 JSON 对象: {error}"))
+
+    if let Ok(payload) = serde_json::from_str::<Value>(trimmed) {
+        if payload.is_object() {
+            return Ok(payload);
+        }
+    }
+
+    let draft_markdown = normalize_markdown_output(trimmed);
+    if draft_markdown.is_empty() {
+        return Err("AI 未返回可应用的 Markdown 内容".to_string());
+    }
+
+    Ok(json!({
+        "draft_markdown": draft_markdown,
+    }))
+}
+
+fn normalize_markdown_output(raw_content: &str) -> String {
+    let trimmed = raw_content.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let lines = trimmed.lines().collect::<Vec<_>>();
+    if lines.len() >= 2
+        && lines.first().is_some_and(|line| line.trim_start().starts_with("```"))
+        && lines.last().is_some_and(|line| line.trim() == "```")
+    {
+        return lines[1..lines.len() - 1].join("\n").trim().to_string();
+    }
+
+    trimmed.to_string()
 }
 
 fn map_http_error(status: u16, raw_body: &str) -> String {
+    let provider_message = extract_provider_error_message(raw_body);
+
     match status {
-        400 => format!("AI 请求无效: {}", summarize_error_body(raw_body)),
-        401 => "AI 认证失败，请检查 API Key".to_string(),
-        403 => "AI 请求被拒绝，请检查权限或账号状态".to_string(),
-        404 => "AI 接口不存在，请检查 Base URL".to_string(),
-        429 => "AI 请求过于频繁，请稍后再试".to_string(),
-        500..=599 => format!("AI 服务暂时不可用: {}", summarize_error_body(raw_body)),
-        _ => format!("AI 请求失败({status}): {}", summarize_error_body(raw_body)),
+        400 => with_provider_detail(
+            "AI 请求无效，请检查 Base URL、模型或请求参数。",
+            provider_message.as_deref(),
+        ),
+        401 => with_provider_detail(
+            "AI 认证失败，请检查 API Key 是否正确、格式是否有效。",
+            provider_message.as_deref(),
+        ),
+        403 => with_provider_detail(
+            "AI 请求被拒绝，请检查权限或账号状态。",
+            provider_message.as_deref(),
+        ),
+        404 => with_provider_detail(
+            "AI 接口不存在，请检查 Base URL 或接口路径。",
+            provider_message.as_deref(),
+        ),
+        408 => "AI 请求超时，请检查网络或增大 Timeout。".to_string(),
+        429 => with_provider_detail(
+            "AI 请求过于频繁，请稍后再试。",
+            provider_message.as_deref(),
+        ),
+        500..=599 => with_provider_detail(
+            &format!("AI 服务暂时不可用 ({status})"),
+            provider_message.as_deref(),
+        ),
+        _ => {
+            let suffix = if raw_body.trim().is_empty() {
+                String::new()
+            } else {
+                format!(": {}", summarize_error_body(raw_body))
+            };
+            format!("AI 请求失败({status}){suffix}")
+        }
+    }
+}
+
+fn extract_provider_error_message(raw_text: &str) -> Option<String> {
+    let payload: Value = serde_json::from_str(raw_text).ok()?;
+    payload
+        .get("error")
+        .and_then(|value| value.get("message"))
+        .and_then(Value::as_str)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn with_provider_detail(base: &str, detail: Option<&str>) -> String {
+    match detail {
+        Some(detail) => format!("{base} 服务端返回：{detail}"),
+        None => base.to_string(),
     }
 }
 
@@ -755,10 +1145,13 @@ fn summarize_error_body(raw_body: &str) -> String {
     if trimmed.is_empty() {
         return "empty response".to_string();
     }
-    if trimmed.len() <= 240 {
-        return trimmed.to_string();
+
+    let collapsed = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() <= 240 {
+        return collapsed;
     }
-    format!("{}...", &trimmed[..240])
+
+    collapsed.chars().take(240).collect::<String>() + "..."
 }
 
 fn normalize_provider_error(error: &ProviderFailure) -> String {
@@ -773,14 +1166,29 @@ fn normalize_provider_error(error: &ProviderFailure) -> String {
     }
 }
 
+fn summarize_response_preview(response: &NarrativeGenerateResponse) -> String {
+    let summary = response.summary.trim();
+    if !summary.is_empty() {
+        return summary.to_string();
+    }
+    let draft = response.draft_markdown.trim();
+    if !draft.is_empty() {
+        return draft.to_string();
+    }
+    if !response.provider_error.trim().is_empty() {
+        return response.provider_error.clone();
+    }
+    "AI 输出完成，正在同步到会话。".to_string()
+}
+
 fn default_summary_for_action(action: &str) -> &'static str {
     match action {
-        "create" => "Narrative draft generated from the current template.",
-        "revise_document" => "Narrative draft revised from the full document context.",
-        "rewrite_selection" => "Selection rewrite draft generated.",
-        "expand_selection" => "Selection expansion draft generated.",
-        "insert_after_selection" => "Insertion draft generated after the current selection.",
-        "derive_new_doc" => "Derived narrative draft generated as a new document.",
-        _ => "Narrative draft ready for review.",
+        "create" => "已根据当前模板生成文稿草稿。",
+        "revise_document" => "已基于当前文档上下文生成修订稿。",
+        "rewrite_selection" => "已生成选区替换内容。",
+        "expand_selection" => "已生成选区扩写内容。",
+        "insert_after_selection" => "已生成选区后的插入内容。",
+        "derive_new_doc" => "已生成派生文稿草稿。",
+        _ => "文稿草稿已生成，可开始审阅。",
     }
 }

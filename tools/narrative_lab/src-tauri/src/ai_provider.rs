@@ -64,14 +64,31 @@ fn build_http_client(timeout_sec: u64) -> Result<Client, String> {
 }
 
 fn map_http_error(status_code: u16, raw_text: &str) -> String {
+    let provider_message = extract_provider_error_message(raw_text);
+
     match status_code {
-        400 => "请求格式无效，请检查 Base URL 与模型配置。".to_string(),
-        401 => "API Key 无效或已过期。".to_string(),
-        403 => "当前 API Key 没有访问该模型的权限。".to_string(),
-        404 => "未找到对应模型或接口地址。".to_string(),
+        400 => with_provider_detail(
+            "请求格式无效，请检查 Base URL 与模型配置。",
+            provider_message.as_deref(),
+        ),
+        401 => with_provider_detail(
+            "API Key 无效、格式错误或已过期。",
+            provider_message.as_deref(),
+        ),
+        403 => with_provider_detail(
+            "当前 API Key 没有访问该模型的权限。",
+            provider_message.as_deref(),
+        ),
+        404 => with_provider_detail(
+            "未找到对应模型或接口地址。",
+            provider_message.as_deref(),
+        ),
         408 => "请求超时，请检查网络或增大 Timeout。".to_string(),
-        429 => "请求过于频繁，稍后再试。".to_string(),
-        500 | 502 | 503 | 504 => format!("AI 服务暂时不可用 ({status_code})"),
+        429 => with_provider_detail("请求过于频繁，稍后再试。", provider_message.as_deref()),
+        500 | 502 | 503 | 504 => with_provider_detail(
+            &format!("AI 服务暂时不可用 ({status_code})"),
+            provider_message.as_deref(),
+        ),
         _ => {
             let suffix = if raw_text.trim().is_empty() {
                 String::new()
@@ -80,6 +97,23 @@ fn map_http_error(status_code: u16, raw_text: &str) -> String {
             };
             format!("HTTP 错误 {status_code}{suffix}")
         }
+    }
+}
+
+fn extract_provider_error_message(raw_text: &str) -> Option<String> {
+    let payload: serde_json::Value = serde_json::from_str(raw_text).ok()?;
+    payload
+        .get("error")
+        .and_then(|value| value.get("message"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn with_provider_detail(base: &str, detail: Option<&str>) -> String {
+    match detail {
+        Some(detail) => format!("{base} 服务端返回：{detail}"),
+        None => base.to_string(),
     }
 }
 

@@ -1,16 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
-use bevy::asset::Asset;
+use bevy::asset::{Asset, RenderAssetUsages};
 use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight};
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, OpaqueRendererMethod, StandardMaterial};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
-use bevy::render::render_resource::{AsBindGroup, AsBindGroupShaderType, ShaderType};
+use bevy::render::render_resource::{
+    AsBindGroup, AsBindGroupShaderType, Extent3d, ShaderType, TextureDimension, TextureFormat,
+};
 use bevy::shader::ShaderRef;
 use game_bevy::{SettlementDebugEntry, SettlementDefinitions};
 use game_data::{ActorId, ActorSide, GridCoord};
 
-use crate::dialogue::current_dialogue_node;
+use crate::console::spawn_console_panel;
+use crate::dialogue::{current_dialogue_has_options, current_dialogue_node};
 use crate::geometry::{
     actor_body_translation, actor_label, actor_label_world_position, camera_focus_point,
     camera_world_distance, clamp_camera_pan_offset, grid_bounds, hovered_grid_outline_kind,
@@ -18,12 +21,12 @@ use crate::geometry::{
     selected_actor, should_rebuild_static_world, GridBounds, HoveredGridOutlineKind,
 };
 use crate::state::{
-    ActorLabel, ActorLabelEntities, DialoguePanelRoot, FreeObserveIndicatorRoot, HudFooterText,
-    HudText, InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot,
-    InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
-    ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode, ViewerPalette,
-    ViewerRenderConfig, ViewerRuntimeState, ViewerState, ViewerStyleProfile, ViewerUiFont,
-    VIEWER_FONT_PATH,
+    ActorLabel, ActorLabelEntities, DialogueChoiceButton, DialoguePanelRoot,
+    FreeObserveIndicatorRoot, HudFooterText, HudText, InteractionLockedActorTag,
+    InteractionMenuButton, InteractionMenuRoot, InteractionMenuState, ViewerActorFeedbackState,
+    ViewerActorMotionState, ViewerCamera, ViewerCameraShakeState, ViewerDamageNumberState,
+    ViewerOverlayMode, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+    ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
 };
 
 const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
@@ -37,6 +40,8 @@ const GRID_LINE_ELEVATION: f32 = 0.002;
 const OVERLAY_ELEVATION: f32 = 0.03;
 const GRID_GROUND_SHADER_PATH: &str = "shaders/grid_ground.wgsl";
 const BUILDING_WALL_GRID_SHADER_PATH: &str = "shaders/building_wall_grid.wgsl";
+const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
+const TRIGGER_DECAL_ELEVATION: f32 = 0.012;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InteractionMenuLayout {
@@ -105,6 +110,14 @@ struct StaticWorldBoxSpec {
     occluder_kind: Option<StaticWorldOccluderKind>,
 }
 
+#[derive(Debug, Clone)]
+struct StaticWorldDecalSpec {
+    size: Vec2,
+    translation: Vec3,
+    rotation: Quat,
+    color: Color,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MergedGridRect {
     level: i32,
@@ -112,21 +125,6 @@ struct MergedGridRect {
     max_x: i32,
     min_z: i32,
     max_z: i32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WallAxis {
-    Horizontal,
-    Vertical,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct WallSegment {
-    level: i32,
-    axis: WallAxis,
-    line: i32,
-    start: i32,
-    end: i32,
 }
 
 struct SpawnedBoxVisual {
@@ -158,6 +156,11 @@ pub(crate) struct ActorVisualState {
 #[derive(Resource, Default)]
 pub(crate) struct DamageNumberVisualState {
     by_id: HashMap<u64, Entity>,
+}
+
+#[derive(Resource, Clone)]
+pub(crate) struct TriggerDecalAssets {
+    arrow_texture: Handle<Image>,
 }
 
 #[derive(Component)]
@@ -305,14 +308,19 @@ impl MaterialExtension for BuildingWallGridMaterialExt {
 pub(crate) fn setup_viewer(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
     palette: Res<ViewerPalette>,
     style: Res<ViewerStyleProfile>,
 ) {
     let ui_font = asset_server.load(VIEWER_FONT_PATH);
+    let trigger_arrow_texture = images.add(build_trigger_arrow_texture());
     commands.insert_resource(ViewerUiFont(ui_font.clone()));
     commands.insert_resource(StaticWorldVisualState::default());
     commands.insert_resource(ActorVisualState::default());
     commands.insert_resource(DamageNumberVisualState::default());
+    commands.insert_resource(TriggerDecalAssets {
+        arrow_texture: trigger_arrow_texture,
+    });
     commands.insert_resource(GlobalAmbientLight {
         color: palette.ambient_color,
         brightness: style.ambient_brightness,
@@ -428,6 +436,7 @@ pub(crate) fn setup_viewer(
         Visibility::Hidden,
         DialoguePanelRoot,
     ));
+    spawn_console_panel(&mut commands, ui_font, &palette);
 }
 
 pub(crate) fn update_camera(
@@ -871,7 +880,7 @@ pub(crate) fn update_dialogue_panel(
     node.bottom = px(DIALOGUE_PANEL_BOTTOM_PX);
     *visibility = Visibility::Visible;
 
-    let (speaker, body_text, hint_text) = dialogue_panel_content(dialogue);
+    let (speaker, body_text, choice_labels, hint_text) = dialogue_panel_content(dialogue);
     commands.entity(entity).with_children(|parent| {
         parent.spawn((
             Text::new(format!("对话 · {}", dialogue.target_name)),
@@ -900,6 +909,25 @@ pub(crate) fn update_dialogue_panel(
                 ..default()
             },
         ));
+        if !choice_labels.is_empty() {
+            for (choice_index, label) in choice_labels.iter().enumerate() {
+                parent.spawn((
+                    Button,
+                    Node {
+                        width: Val::Percent(100.0),
+                        min_height: px(INTERACTION_MENU_BUTTON_HEIGHT_PX),
+                        padding: UiRect::axes(px(12), px(8)),
+                        margin: UiRect::bottom(px(INTERACTION_MENU_BUTTON_GAP_PX)),
+                        ..default()
+                    },
+                    BackgroundColor(interaction_menu_button_color(false, Interaction::None)),
+                    Text::new(label.clone()),
+                    TextFont::from_font_size(13.2).with_font(viewer_font.0.clone()),
+                    TextColor(Color::srgba(0.96, 0.97, 0.99, 0.98)),
+                    DialogueChoiceButton { choice_index },
+                ));
+            }
+        }
         parent.spawn((
             Text::new(hint_text),
             TextFont::from_font_size(11.0).with_font(viewer_font.0.clone()),
@@ -916,6 +944,7 @@ pub(crate) fn sync_world_visuals(
     mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
     mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     palette: Res<ViewerPalette>,
+    trigger_decal_assets: Res<TriggerDecalAssets>,
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
     feedback_state: Res<ViewerActorFeedbackState>,
@@ -947,6 +976,7 @@ pub(crate) fn sync_world_visuals(
             &mut ground_materials,
             &mut building_wall_materials,
             &palette,
+            &trigger_decal_assets,
             &runtime_state,
             &snapshot,
             viewer_state.current_level,
@@ -1049,15 +1079,6 @@ pub(crate) fn draw_world(
             effective_grid_line_opacity(*render_config),
         );
     }
-
-    draw_generated_building_overlays(
-        &mut gizmos,
-        &runtime_state,
-        &snapshot,
-        viewer_state.current_level,
-        *render_config,
-        &palette,
-    );
 
     for actor in snapshot
         .actors
@@ -1201,6 +1222,7 @@ fn rebuild_static_world(
     ground_materials: &mut Assets<GridGroundMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     palette: &ViewerPalette,
+    trigger_decal_assets: &TriggerDecalAssets,
     runtime_state: &ViewerRuntimeState,
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
@@ -1249,6 +1271,17 @@ fn rebuild_static_world(
                 .occluders
                 .push(occluder_visual_from_spawned_box(spawned, kind));
         }
+    }
+
+    for spec in collect_static_world_decal_specs(snapshot, current_level, render_config, palette) {
+        let entity = spawn_decal(
+            commands,
+            meshes,
+            materials,
+            &trigger_decal_assets.arrow_texture,
+            spec,
+        );
+        static_world_state.entities.push(entity);
     }
 }
 
@@ -1413,6 +1446,9 @@ fn collect_static_world_box_specs(
                 );
             }
             game_data::MapObjectKind::Trigger => {
+                if is_scene_transition_trigger(object) {
+                    continue;
+                }
                 for cell in &object.occupied_cells {
                     push_trigger_cell_specs(
                         &mut specs,
@@ -1462,6 +1498,40 @@ fn collect_static_world_box_specs(
     specs
 }
 
+fn collect_static_world_decal_specs(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+    palette: &ViewerPalette,
+) -> Vec<StaticWorldDecalSpec> {
+    let mut specs = Vec::new();
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+
+    for object in snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.anchor.y == current_level)
+        .filter(|object| object.kind == game_data::MapObjectKind::Trigger)
+        .filter(|object| is_scene_transition_trigger(object))
+    {
+        for cell in &object.occupied_cells {
+            push_trigger_decal_spec(
+                &mut specs,
+                *cell,
+                object.rotation,
+                floor_top,
+                grid_size,
+                palette.trigger,
+            );
+        }
+    }
+
+    specs
+}
+
 fn push_generated_building_specs(
     specs: &mut Vec<StaticWorldBoxSpec>,
     building: &game_core::GeneratedBuildingDebugState,
@@ -1479,26 +1549,55 @@ fn push_generated_building_specs(
         return;
     };
 
-    let wall_height = grid_size * 1.42;
-    let roof_height = grid_size * 0.14;
+    let wall_height = generated_building_wall_height(grid_size);
+    let roof_height = generated_building_roof_height(grid_size);
+    let wall_thickness = generated_building_wall_thickness(grid_size);
     let door_height = grid_size * 0.06;
     let door_lintel_height = grid_size * 0.12;
-    let wall_color = palette.building_base;
-    let wall_accent = darken_color(wall_color, 0.12);
+    let wall_color = darken_color(palette.building_base, 0.2);
+    let wall_accent = darken_color(wall_color, 0.18);
     let foundation_color = darken_color(palette.building_base, 0.42);
     let interior_floor_color = lerp_color(palette.building_top, palette.building_base, 0.38);
-    let wall_cap_color = lighten_color(wall_color, 0.08);
-    let door_cells = story
-        .interior_door_cells
-        .iter()
-        .chain(story.exterior_door_cells.iter())
-        .copied()
-        .collect::<Vec<_>>();
+    let footprint_cells = story
+        .footprint_polygon
+        .as_ref()
+        .map(|footprint| {
+            geometry_polygon_to_world_cells(&footprint.polygon, building.anchor, current_level)
+        })
+        .filter(|cells| !cells.is_empty())
+        .unwrap_or_else(|| story.shape_cells.clone());
+    let wall_polygon_cells = if !story.wall_polygons.polygons.polygons.is_empty() {
+        geometry_multipolygon_to_world_cells(
+            &story.wall_polygons.polygons,
+            building.anchor,
+            current_level,
+        )
+    } else {
+        story.wall_cells.clone()
+    };
+    let door_cells = if !story.door_openings.is_empty() {
+        story
+            .door_openings
+            .iter()
+            .flat_map(|opening| {
+                geometry_polygon_to_world_cells(&opening.polygon, building.anchor, current_level)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        story
+            .interior_door_cells
+            .iter()
+            .chain(story.exterior_door_cells.iter())
+            .copied()
+            .collect::<Vec<_>>()
+    };
 
     if is_solid_shell_story(story) {
         push_solid_shell_story_specs(
             specs,
             story,
+            &footprint_cells,
+            &wall_polygon_cells,
             floor_top,
             grid_size,
             hide_building_roofs,
@@ -1507,7 +1606,7 @@ fn push_generated_building_specs(
         return;
     }
 
-    for floor_rect in merge_cells_into_rects(&story.shape_cells) {
+    for floor_rect in merge_cells_into_rects(&footprint_cells) {
         let center = rect_world_center(floor_rect, grid_size);
         let size = rect_world_size(floor_rect, grid_size, grid_size * 0.98);
         push_box_spec(
@@ -1520,12 +1619,19 @@ fn push_generated_building_specs(
         );
     }
 
-    let interior_cells = story
-        .walkable_cells
-        .iter()
-        .chain(door_cells.iter())
-        .copied()
-        .collect::<Vec<_>>();
+    let mut interior_cells = if !story.walkable_polygons.polygons.polygons.is_empty() {
+        geometry_multipolygon_to_world_cells(
+            &story.walkable_polygons.polygons,
+            building.anchor,
+            current_level,
+        )
+    } else {
+        story.walkable_cells.clone()
+    };
+    interior_cells.extend(door_cells.iter().copied());
+    interior_cells.sort();
+    interior_cells.dedup();
+    let interior_cell_set = interior_cells.iter().copied().collect::<HashSet<_>>();
     for floor_rect in merge_cells_into_rects(&interior_cells) {
         let center = rect_world_center(floor_rect, grid_size);
         let size = rect_world_size(floor_rect, grid_size, grid_size * 0.9);
@@ -1539,12 +1645,12 @@ fn push_generated_building_specs(
         );
     }
 
-    for wall_segment in collect_story_wall_segments(story) {
-        let center = wall_segment_world_center(wall_segment, grid_size);
-        let size = wall_segment_world_size(wall_segment, grid_size, grid_size * 0.18);
+    for wall_rect in merge_cells_into_rects(&wall_polygon_cells) {
+        let (center, size) =
+            generated_wall_rect_transform(wall_rect, grid_size, wall_thickness, &interior_cell_set);
         push_box_spec(
             specs,
-            Vec3::new(size.x * 1.06, grid_size * 0.04, size.z * 1.06),
+            Vec3::new(size.x * 1.01, grid_size * 0.025, size.z * 1.01),
             Vec3::new(center.x, floor_top + grid_size * 0.04, center.z),
             wall_accent,
             MaterialStyle::StructureAccent,
@@ -1556,20 +1662,6 @@ fn push_generated_building_specs(
             Vec3::new(center.x, floor_top + wall_height * 0.5, center.z),
             wall_color,
             MaterialStyle::BuildingWallGrid,
-            Some(StaticWorldOccluderKind::MapObject(
-                game_data::MapObjectKind::Building,
-            )),
-        );
-        push_box_spec(
-            specs,
-            Vec3::new(size.x * 1.02, grid_size * 0.06, size.z * 1.02),
-            Vec3::new(
-                center.x,
-                floor_top + wall_height - grid_size * 0.03,
-                center.z,
-            ),
-            wall_cap_color,
-            MaterialStyle::StructureAccent,
             None,
         );
     }
@@ -1601,7 +1693,7 @@ fn push_generated_building_specs(
     }
 
     if !hide_building_roofs {
-        for roof_rect in merge_cells_into_rects(&story.shape_cells) {
+        for roof_rect in merge_cells_into_rects(&footprint_cells) {
             let center = rect_world_center(roof_rect, grid_size);
             let size = rect_world_size(roof_rect, grid_size, grid_size * 0.9);
             push_box_spec(
@@ -1626,21 +1718,23 @@ fn push_generated_building_specs(
 
 fn push_solid_shell_story_specs(
     specs: &mut Vec<StaticWorldBoxSpec>,
-    story: &game_core::GeneratedBuildingStory,
+    _story: &game_core::GeneratedBuildingStory,
+    footprint_cells: &[GridCoord],
+    wall_polygon_cells: &[GridCoord],
     floor_top: f32,
     grid_size: f32,
     hide_building_roofs: bool,
     palette: &ViewerPalette,
 ) {
-    let wall_height = grid_size * 1.02;
-    let roof_height = grid_size * 0.12;
+    let wall_height = generated_building_wall_height(grid_size);
+    let roof_height = generated_building_roof_height(grid_size);
 
-    for wall_rect in merge_cells_into_rects(&story.wall_cells) {
+    for wall_rect in merge_cells_into_rects(wall_polygon_cells) {
         let center = rect_world_center(wall_rect, grid_size);
-        let size = rect_world_size(wall_rect, grid_size, grid_size * 0.9);
+        let size = rect_world_size(wall_rect, grid_size, grid_size * 0.78);
         push_box_spec(
             specs,
-            Vec3::new(size.x * 1.04, grid_size * 0.06, size.z * 1.04),
+            Vec3::new(size.x * 1.02, grid_size * 0.06, size.z * 1.02),
             Vec3::new(center.x, floor_top + grid_size * 0.03, center.z),
             darken_color(palette.building_base, 0.16),
             MaterialStyle::StructureAccent,
@@ -1650,16 +1744,14 @@ fn push_solid_shell_story_specs(
             specs,
             Vec3::new(size.x, wall_height, size.z),
             Vec3::new(center.x, floor_top + wall_height * 0.5, center.z),
-            darken_color(palette.building_base, 0.06),
+            darken_color(palette.building_base, 0.22),
             MaterialStyle::Structure,
-            Some(StaticWorldOccluderKind::MapObject(
-                game_data::MapObjectKind::Building,
-            )),
+            None,
         );
     }
 
     if !hide_building_roofs {
-        for roof_rect in merge_cells_into_rects(&story.shape_cells) {
+        for roof_rect in merge_cells_into_rects(footprint_cells) {
             let center = rect_world_center(roof_rect, grid_size);
             let size = rect_world_size(roof_rect, grid_size, grid_size * 0.94);
             push_box_spec(
@@ -1695,6 +1787,155 @@ fn rect_world_size(rect: MergedGridRect, grid_size: f32, inset_size: f32) -> Vec
         0.0,
         depth_cells * grid_size * scale,
     )
+}
+
+fn generated_wall_rect_transform(
+    rect: MergedGridRect,
+    grid_size: f32,
+    wall_thickness: f32,
+    interior_cells: &HashSet<GridCoord>,
+) -> (game_data::WorldCoord, Vec3) {
+    let width_cells = (rect.max_x - rect.min_x + 1) as f32;
+    let depth_cells = (rect.max_z - rect.min_z + 1) as f32;
+    let thickness = wall_thickness.max(grid_size * 0.3);
+    let mut center = rect_world_center(rect, grid_size);
+
+    if depth_cells == 1.0 {
+        let north_interior = (rect.min_x..=rect.max_x)
+            .any(|x| interior_cells.contains(&GridCoord::new(x, rect.level, rect.min_z - 1)));
+        let south_interior = (rect.min_x..=rect.max_x)
+            .any(|x| interior_cells.contains(&GridCoord::new(x, rect.level, rect.max_z + 1)));
+        if south_interior && !north_interior {
+            center.z = (rect.max_z + 1) as f32 * grid_size - thickness * 0.5;
+        } else if north_interior && !south_interior {
+            center.z = rect.min_z as f32 * grid_size + thickness * 0.5;
+        }
+        return (
+            center,
+            Vec3::new(width_cells * grid_size * 1.01, 0.0, thickness),
+        );
+    }
+
+    if width_cells == 1.0 {
+        let west_interior = (rect.min_z..=rect.max_z)
+            .any(|z| interior_cells.contains(&GridCoord::new(rect.min_x - 1, rect.level, z)));
+        let east_interior = (rect.min_z..=rect.max_z)
+            .any(|z| interior_cells.contains(&GridCoord::new(rect.max_x + 1, rect.level, z)));
+        if east_interior && !west_interior {
+            center.x = (rect.max_x + 1) as f32 * grid_size - thickness * 0.5;
+        } else if west_interior && !east_interior {
+            center.x = rect.min_x as f32 * grid_size + thickness * 0.5;
+        }
+        return (
+            center,
+            Vec3::new(thickness, 0.0, depth_cells * grid_size * 1.01),
+        );
+    }
+
+    (
+        center,
+        rect_world_size(rect, grid_size, wall_thickness.max(grid_size * 0.3)),
+    )
+}
+
+fn geometry_multipolygon_to_world_cells(
+    multipolygon: &game_core::GeometryMultiPolygon2,
+    anchor: GridCoord,
+    level: i32,
+) -> Vec<GridCoord> {
+    let mut cells = multipolygon
+        .polygons
+        .iter()
+        .flat_map(|polygon| geometry_polygon_to_world_cells(polygon, anchor, level))
+        .collect::<Vec<_>>();
+    cells.sort();
+    cells.dedup();
+    cells
+}
+
+fn geometry_polygon_to_world_cells(
+    polygon: &game_core::GeometryPolygon2,
+    anchor: GridCoord,
+    level: i32,
+) -> Vec<GridCoord> {
+    if polygon.outer.len() < 3 {
+        return Vec::new();
+    }
+
+    let min_x = polygon
+        .outer
+        .iter()
+        .map(|point| point.x.floor() as i32)
+        .min()
+        .unwrap_or(0);
+    let max_x = polygon
+        .outer
+        .iter()
+        .map(|point| point.x.ceil() as i32)
+        .max()
+        .unwrap_or(0);
+    let min_z = polygon
+        .outer
+        .iter()
+        .map(|point| point.z.floor() as i32)
+        .min()
+        .unwrap_or(0);
+    let max_z = polygon
+        .outer
+        .iter()
+        .map(|point| point.z.ceil() as i32)
+        .max()
+        .unwrap_or(0);
+
+    let mut cells = Vec::new();
+    for z in min_z..max_z {
+        for x in min_x..max_x {
+            if point_in_polygon(x as f64 + 0.5, z as f64 + 0.5, polygon) {
+                cells.push(GridCoord::new(anchor.x + x, level, anchor.z + z));
+            }
+        }
+    }
+    cells
+}
+
+fn point_in_polygon(x: f64, z: f64, polygon: &game_core::GeometryPolygon2) -> bool {
+    let mut inside = point_in_ring(x, z, &polygon.outer);
+    if !inside {
+        return false;
+    }
+    for hole in &polygon.holes {
+        if point_in_ring(x, z, hole) {
+            inside = false;
+            break;
+        }
+    }
+    inside
+}
+
+fn point_in_ring(x: f64, z: f64, ring: &[game_core::GeometryPoint2]) -> bool {
+    if ring.len() < 3 {
+        return false;
+    }
+
+    let mut inside = false;
+    let mut previous = ring[ring.len() - 1];
+    for &current in ring {
+        let denominator = previous.z - current.z;
+        let intersects = ((current.z > z) != (previous.z > z))
+            && (x
+                < (previous.x - current.x) * (z - current.z)
+                    / if denominator.abs() <= f64::EPSILON {
+                        f64::EPSILON
+                    } else {
+                        denominator
+                    }
+                    + current.x);
+        if intersects {
+            inside = !inside;
+        }
+        previous = current;
+    }
+    inside
 }
 
 fn merge_cells_into_rects(cells: &[GridCoord]) -> Vec<MergedGridRect> {
@@ -1746,106 +1987,6 @@ fn is_solid_shell_story(story: &game_core::GeneratedBuildingStory) -> bool {
         && story.interior_door_cells.is_empty()
         && story.exterior_door_cells.is_empty()
         && story.walkable_cells.is_empty()
-}
-
-fn collect_story_wall_segments(story: &game_core::GeneratedBuildingStory) -> Vec<WallSegment> {
-    let wall_cells = story.wall_cells.iter().copied().collect::<HashSet<_>>();
-    let mut segments = Vec::new();
-
-    for wall in &story.wall_cells {
-        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z - 1)) {
-            segments.push(WallSegment {
-                level: wall.y,
-                axis: WallAxis::Horizontal,
-                line: wall.z,
-                start: wall.x,
-                end: wall.x + 1,
-            });
-        }
-        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z + 1)) {
-            segments.push(WallSegment {
-                level: wall.y,
-                axis: WallAxis::Horizontal,
-                line: wall.z + 1,
-                start: wall.x,
-                end: wall.x + 1,
-            });
-        }
-        if !wall_cells.contains(&GridCoord::new(wall.x - 1, wall.y, wall.z)) {
-            segments.push(WallSegment {
-                level: wall.y,
-                axis: WallAxis::Vertical,
-                line: wall.x,
-                start: wall.z,
-                end: wall.z + 1,
-            });
-        }
-        if !wall_cells.contains(&GridCoord::new(wall.x + 1, wall.y, wall.z)) {
-            segments.push(WallSegment {
-                level: wall.y,
-                axis: WallAxis::Vertical,
-                line: wall.x + 1,
-                start: wall.z,
-                end: wall.z + 1,
-            });
-        }
-    }
-
-    merge_wall_segments(segments)
-}
-
-fn merge_wall_segments(mut segments: Vec<WallSegment>) -> Vec<WallSegment> {
-    segments.sort_by_key(|segment| {
-        (
-            segment.level,
-            match segment.axis {
-                WallAxis::Horizontal => 0,
-                WallAxis::Vertical => 1,
-            },
-            segment.line,
-            segment.start,
-            segment.end,
-        )
-    });
-
-    let mut merged: Vec<WallSegment> = Vec::new();
-    for segment in segments {
-        if let Some(last) = merged.last_mut() {
-            if last.level == segment.level
-                && last.axis == segment.axis
-                && last.line == segment.line
-                && last.end == segment.start
-            {
-                last.end = segment.end;
-                continue;
-            }
-        }
-        merged.push(segment);
-    }
-    merged
-}
-
-fn wall_segment_world_center(segment: WallSegment, grid_size: f32) -> game_data::WorldCoord {
-    match segment.axis {
-        WallAxis::Horizontal => game_data::WorldCoord::new(
-            (segment.start + segment.end) as f32 * grid_size * 0.5,
-            (segment.level as f32 + 0.5) * grid_size,
-            segment.line as f32 * grid_size,
-        ),
-        WallAxis::Vertical => game_data::WorldCoord::new(
-            segment.line as f32 * grid_size,
-            (segment.level as f32 + 0.5) * grid_size,
-            (segment.start + segment.end) as f32 * grid_size * 0.5,
-        ),
-    }
-}
-
-fn wall_segment_world_size(segment: WallSegment, grid_size: f32, thickness: f32) -> Vec3 {
-    let length = (segment.end - segment.start) as f32 * grid_size;
-    match segment.axis {
-        WallAxis::Horizontal => Vec3::new(length, 0.0, thickness),
-        WallAxis::Vertical => Vec3::new(thickness, 0.0, length),
-    }
 }
 
 fn push_generated_stair_specs(
@@ -1943,87 +2084,6 @@ fn stair_run_direction(stair: &game_core::GeneratedStairConnection) -> Vec2 {
         Vec2::new(0.0, delta_z.signum())
     } else {
         Vec2::new(0.0, 1.0)
-    }
-}
-
-fn draw_generated_building_overlays(
-    gizmos: &mut Gizmos,
-    runtime_state: &ViewerRuntimeState,
-    snapshot: &game_core::SimulationSnapshot,
-    current_level: i32,
-    render_config: ViewerRenderConfig,
-    palette: &ViewerPalette,
-) {
-    let grid_size = snapshot.grid.grid_size;
-    let wall_top_y = level_base_height(current_level, grid_size)
-        + render_config.floor_thickness_world
-        + grid_size * 1.13;
-
-    for building in &snapshot.generated_buildings {
-        for edge in building
-            .visual_outline
-            .iter()
-            .filter(|edge| edge.level == current_level)
-        {
-            gizmos.line(
-                Vec3::new(
-                    edge.from.x as f32 * grid_size,
-                    wall_top_y,
-                    edge.from.z as f32 * grid_size,
-                ),
-                Vec3::new(
-                    edge.to.x as f32 * grid_size,
-                    wall_top_y,
-                    edge.to.z as f32 * grid_size,
-                ),
-                lighten_color(palette.building_top, 0.08),
-            );
-        }
-
-        for stair in &building.stairs {
-            if stair.from_level == current_level {
-                for (from, to) in stair.from_cells.iter().zip(stair.to_cells.iter()) {
-                    draw_grid_outline(
-                        gizmos,
-                        *from,
-                        grid_size,
-                        render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.4,
-                        0.7,
-                        palette.interactive,
-                    );
-                    let from_world = runtime_state.runtime.grid_to_world(*from);
-                    let to_world = runtime_state.runtime.grid_to_world(*to);
-                    gizmos.line(
-                        Vec3::new(
-                            from_world.x,
-                            level_base_height(stair.from_level, grid_size)
-                                + render_config.floor_thickness_world
-                                + OVERLAY_ELEVATION * 2.0,
-                            from_world.z,
-                        ),
-                        Vec3::new(
-                            to_world.x,
-                            level_base_height(stair.to_level, grid_size)
-                                + render_config.floor_thickness_world
-                                + OVERLAY_ELEVATION * 2.6,
-                            to_world.z,
-                        ),
-                        palette.interactive,
-                    );
-                }
-            } else if stair.to_level == current_level {
-                for to in &stair.to_cells {
-                    draw_grid_outline(
-                        gizmos,
-                        *to,
-                        grid_size,
-                        render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.4,
-                        0.7,
-                        palette.current_turn,
-                    );
-                }
-            }
-        }
     }
 }
 
@@ -2185,7 +2245,7 @@ fn spawn_ground_plane(
                 bounds.min_z as f32 * grid_size,
             ),
             grid_size,
-            line_width: 0.06,
+            line_width: 0.035,
             variation_strength: render_config.ground_variation_strength,
             seed: render_config.object_style_seed,
             dark_color: palette.ground_dark,
@@ -2299,9 +2359,9 @@ fn make_static_world_material(
 ) -> StaticWorldMaterialHandle {
     match style {
         MaterialStyle::BuildingWallGrid => {
-            let major_line_color = darken_color(color, 0.22);
-            let minor_line_color = darken_color(color, 0.11);
-            let cap_color = lighten_color(color, 0.055);
+            let major_line_color = darken_color(color, 0.28);
+            let minor_line_color = darken_color(color, 0.16);
+            let cap_color = lighten_color(color, 0.08);
             StaticWorldMaterialHandle::BuildingWallGrid(building_wall_materials.add(
                 BuildingWallGridMaterial {
                     base: StandardMaterial {
@@ -2318,7 +2378,7 @@ fn make_static_world_material(
                         minor_grid_size: 0.5,
                         major_line_width: 0.048,
                         minor_line_width: 0.022,
-                        face_tint_strength: 0.065,
+                        face_tint_strength: 0.095,
                         _padding: Vec3::ZERO,
                         base_color: color,
                         major_line_color,
@@ -2656,6 +2716,104 @@ fn push_trigger_cell_specs(
     );
 }
 
+fn push_trigger_decal_spec(
+    specs: &mut Vec<StaticWorldDecalSpec>,
+    cell: GridCoord,
+    rotation: game_data::MapRotation,
+    floor_top: f32,
+    grid_size: f32,
+    base_color: Color,
+) {
+    let center_x = (cell.x as f32 + 0.5) * grid_size;
+    let center_z = (cell.z as f32 + 0.5) * grid_size;
+    specs.push(StaticWorldDecalSpec {
+        size: Vec2::splat(grid_size * 0.9),
+        translation: Vec3::new(center_x, floor_top + TRIGGER_DECAL_ELEVATION, center_z),
+        rotation: trigger_decal_rotation(rotation),
+        color: base_color,
+    });
+}
+
+fn trigger_decal_rotation(rotation: game_data::MapRotation) -> Quat {
+    let yaw = match rotation {
+        game_data::MapRotation::North => std::f32::consts::PI,
+        game_data::MapRotation::East => -std::f32::consts::FRAC_PI_2,
+        game_data::MapRotation::South => 0.0,
+        game_data::MapRotation::West => std::f32::consts::FRAC_PI_2,
+    };
+    Quat::from_rotation_y(yaw)
+}
+
+fn is_scene_transition_trigger(object: &game_core::MapObjectDebugState) -> bool {
+    object.kind == game_data::MapObjectKind::Trigger
+        && object
+            .payload_summary
+            .get("trigger_kind")
+            .is_some_and(|kind| is_scene_transition_trigger_kind(kind))
+}
+
+fn is_scene_transition_trigger_kind(kind: &str) -> bool {
+    matches!(
+        kind.trim(),
+        "enter_subscene" | "enter_overworld" | "exit_to_outdoor" | "enter_outdoor_location"
+    )
+}
+
+fn generated_building_wall_height(grid_size: f32) -> f32 {
+    grid_size * 2.35
+}
+
+fn generated_building_roof_height(grid_size: f32) -> f32 {
+    grid_size * 0.16
+}
+
+fn generated_building_wall_thickness(grid_size: f32) -> f32 {
+    (grid_size * 0.08).max(0.06)
+}
+
+fn build_trigger_arrow_texture() -> Image {
+    let size = TRIGGER_ARROW_TEXTURE_SIZE as usize;
+    let mut data = vec![0_u8; size * size * 4];
+    let shaft_half_width = 0.11;
+    let shaft_start = 0.2;
+    let shaft_end = 0.7;
+    let head_base = 0.52;
+    let head_tip = 0.12;
+
+    for y in 0..size {
+        for x in 0..size {
+            let u = (x as f32 + 0.5) / size as f32;
+            let v = (y as f32 + 0.5) / size as f32;
+
+            let in_shaft = u >= 0.5 - shaft_half_width
+                && u <= 0.5 + shaft_half_width
+                && v >= shaft_start
+                && v <= shaft_end;
+            let head_t = ((head_base - v) / (head_base - head_tip)).clamp(0.0, 1.0);
+            let head_half_width = head_t * 0.3;
+            let in_head = v >= head_tip && v <= head_base && (u - 0.5).abs() <= head_half_width;
+            let alpha = if in_shaft || in_head { 255 } else { 0 };
+            let index = (y * size + x) * 4;
+            data[index] = 255;
+            data[index + 1] = 255;
+            data[index + 2] = 255;
+            data[index + 3] = alpha;
+        }
+    }
+
+    Image::new_fill(
+        Extent3d {
+            width: TRIGGER_ARROW_TEXTURE_SIZE,
+            height: TRIGGER_ARROW_TEXTURE_SIZE,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    )
+}
+
 fn selected_ai_debug_entry<'a>(
     actor: &game_core::ActorDebugState,
     runtime_state: &'a ViewerRuntimeState,
@@ -2758,6 +2916,33 @@ fn spawn_box(
     }
 }
 
+fn spawn_decal(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    texture: &Handle<Image>,
+    spec: StaticWorldDecalSpec,
+) -> Entity {
+    let mesh = meshes.add(Plane3d::default().mesh().size(spec.size.x, spec.size.y));
+    let material = materials.add(StandardMaterial {
+        base_color: spec.color,
+        base_color_texture: Some(texture.clone()),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        cull_mode: None,
+        perceptual_roughness: 1.0,
+        metallic: 0.0,
+        ..default()
+    });
+    commands
+        .spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(spec.translation).with_rotation(spec.rotation),
+        ))
+        .id()
+}
+
 fn occluder_visual_from_spawned_box(
     spawned: SpawnedBoxVisual,
     kind: StaticWorldOccluderKind,
@@ -2852,9 +3037,11 @@ fn apply_occluder_fade_to_standard_material(
 mod tests {
     use super::{
         actor_visual_translation, actor_visual_world_position, collect_static_world_box_specs,
-        darken_color, interaction_menu_button_color, interaction_menu_layout, lighten_color,
+        collect_static_world_decal_specs, darken_color, generated_wall_rect_transform,
+        interaction_menu_button_color, interaction_menu_layout, lighten_color,
         merge_cells_into_rects, occupied_cells_box, should_hide_building_roofs, GridBounds,
-        StaticWorldOccluderKind, INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX,
+        MergedGridRect, StaticWorldOccluderKind,
+        INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX,
         INTERACTION_MENU_PADDING_PX,
     };
     use crate::state::{
@@ -2862,6 +3049,7 @@ mod tests {
         ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
     };
     use bevy::prelude::*;
+    use std::collections::HashSet;
     use game_bevy::SettlementDebugSnapshot;
     use game_core::{
         create_demo_runtime, CombatDebugState, GeneratedBuildingDebugState, GeneratedBuildingStory,
@@ -3101,9 +3289,9 @@ mod tests {
     }
 
     #[test]
-    fn trigger_specs_render_arrow_tiles_for_each_trigger_cell() {
+    fn scene_transition_triggers_render_floor_arrow_decals_per_cell() {
         let palette = ViewerPalette::default();
-        let specs = collect_static_world_box_specs(
+        let box_specs = collect_static_world_box_specs(
             &snapshot_with_trigger_strip(),
             0,
             false,
@@ -3117,8 +3305,14 @@ mod tests {
             },
             world_from_grid,
         );
+        let decal_specs = collect_static_world_decal_specs(
+            &snapshot_with_trigger_strip(),
+            0,
+            ViewerRenderConfig::default(),
+            &palette,
+        );
 
-        let trigger_specs = specs
+        let trigger_box_specs = box_specs
             .iter()
             .filter(|spec| spec.occluder_kind.is_none())
             .filter(|spec| {
@@ -3129,7 +3323,8 @@ mod tests {
             })
             .count();
 
-        assert_eq!(trigger_specs, 6);
+        assert_eq!(trigger_box_specs, 0);
+        assert_eq!(decal_specs.len(), 2);
     }
 
     #[test]
@@ -3229,9 +3424,9 @@ mod tests {
         let wall_specs = specs
             .iter()
             .filter(|spec| {
-                spec.occluder_kind
-                    == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
+                spec.color.to_srgba() == darken_color(palette.building_base, 0.2).to_srgba()
             })
+            .filter(|spec| spec.size.y > 1.0)
             .count();
         let roof_specs = specs
             .iter()
@@ -3242,9 +3437,31 @@ mod tests {
             .filter(|spec| spec.occluder_kind.is_none())
             .count();
 
-        assert!(wall_specs >= 4);
+        assert!(wall_specs >= 1);
         assert_eq!(roof_specs, 1);
-        assert!(utility_specs >= 5);
+        assert!(utility_specs >= 3);
+    }
+
+    #[test]
+    fn generated_wall_rect_transform_aligns_horizontal_wall_to_interior_edge() {
+        let rect = MergedGridRect {
+            level: 0,
+            min_x: 2,
+            max_x: 4,
+            min_z: 1,
+            max_z: 1,
+        };
+        let interior_cells = HashSet::from([
+            GridCoord::new(2, 0, 2),
+            GridCoord::new(3, 0, 2),
+            GridCoord::new(4, 0, 2),
+        ]);
+
+        let (center, size) = generated_wall_rect_transform(rect, 1.0, 0.08, &interior_cells);
+
+        assert!((center.z - 1.85).abs() < 1e-5);
+        assert!((size.x - 3.03).abs() < 1e-5);
+        assert!((size.z - 0.3).abs() < 1e-5);
     }
 
     fn sample_prompt(option_count: usize) -> InteractionPrompt {
@@ -3522,16 +3739,32 @@ mod tests {
                         GridCoord::new(0, 0, 1),
                         GridCoord::new(1, 0, 1),
                     ],
+                    footprint_polygon: Some(game_core::BuildingFootprint2d {
+                        polygon: game_core::GeometryPolygon2 {
+                            outer: vec![
+                                game_core::GeometryPoint2::new(0.0, 0.0),
+                                game_core::GeometryPoint2::new(2.0, 0.0),
+                                game_core::GeometryPoint2::new(2.0, 2.0),
+                                game_core::GeometryPoint2::new(0.0, 2.0),
+                            ],
+                            holes: Vec::new(),
+                        },
+                    }),
                     rooms: Vec::new(),
+                    room_polygons: Vec::new(),
                     wall_cells: vec![
                         GridCoord::new(0, 0, 0),
                         GridCoord::new(1, 0, 0),
                         GridCoord::new(0, 0, 1),
                         GridCoord::new(1, 0, 1),
                     ],
+                    wall_strokes: Vec::new(),
+                    wall_polygons: game_core::GeneratedWallPolygons::default(),
                     interior_door_cells: Vec::new(),
                     exterior_door_cells: Vec::new(),
+                    door_openings: Vec::new(),
                     walkable_cells: vec![GridCoord::new(0, 0, 0)],
+                    walkable_polygons: game_core::GeneratedWalkablePolygons::default(),
                 }],
                 stairs: vec![GeneratedStairConnection {
                     from_level: 0,
@@ -3603,7 +3836,7 @@ fn format_interaction_button_label(index: usize, display_name: &str) -> String {
 
 fn dialogue_panel_content(
     dialogue: &crate::state::ActiveDialogueState,
-) -> (String, String, String) {
+) -> (String, String, Vec<String>, String) {
     let Some(node) = current_dialogue_node(dialogue) else {
         return (
             "对话数据错误".to_string(),
@@ -3611,6 +3844,7 @@ fn dialogue_panel_content(
                 "dialog_id={} node_id={} 无法找到对应节点",
                 dialogue.dialog_id, dialogue.current_node_id
             ),
+            Vec::new(),
             "Esc 关闭对话".to_string(),
         );
     };
@@ -3621,24 +3855,20 @@ fn dialogue_panel_content(
         node.speaker.clone()
     };
 
-    let mut body_lines = vec![node.text.clone()];
-    if !node.options.is_empty() {
-        body_lines.push(String::new());
-        body_lines.extend(
-            node.options
-                .iter()
-                .enumerate()
-                .map(|(index, option)| format!("{}. {}", index + 1, option.text)),
-        );
-    }
+    let choice_labels = node
+        .options
+        .iter()
+        .enumerate()
+        .map(|(index, option)| format!("{}. {}", index + 1, option.text))
+        .collect();
 
-    let hint = if node.node_type == "choice" && !node.options.is_empty() {
-        "按 1-9 选择分支，Esc 关闭对话".to_string()
+    let hint = if current_dialogue_has_options(dialogue) {
+        "点击选项 / 按 1-9 选择分支，Esc 关闭对话".to_string()
     } else {
         "左键 / Space / Enter 下一句，Esc 关闭对话".to_string()
     };
 
-    (speaker, body_lines.join("\n"), hint)
+    (speaker, node.text.clone(), choice_labels, hint)
 }
 
 pub(crate) fn interaction_menu_button_color(_is_primary: bool, interaction: Interaction) -> Color {

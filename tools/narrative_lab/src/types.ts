@@ -507,6 +507,7 @@ export type NarrativeWorkspaceLayout = {
   version: 2;
   leftSidebarVisible: boolean;
   leftSidebarWidth: number;
+  chatPanelWidth: number;
   leftSidebarView: NarrativeActivityView;
   rightSidebarVisible: boolean;
   rightSidebarWidth: number;
@@ -642,6 +643,7 @@ export type NarrativeSelectionRange = {
 };
 
 export type NarrativeGenerateRequest = {
+  requestId?: string;
   docType: NarrativeDocType;
   targetSlug: string;
   action: NarrativeAction;
@@ -668,7 +670,7 @@ export type NarrativeAgentRun = {
 };
 
 export type NarrativeGenerateResponse = {
-  engineMode: "multi_agent";
+  engineMode: "single_agent" | "multi_agent";
   draftMarkdown: string;
   summary: string;
   reviewNotes: string[];
@@ -707,7 +709,15 @@ export type DocumentAgentSession = {
   lastResponse: NarrativeGenerateResponse | null;
   candidatePatchSet: NarrativePatchSet | null;
   busy: boolean;
+  inflightRequestId?: string | null;
   documentViewMode: NarrativeDocumentViewMode;
+};
+
+export type NarrativeGenerationProgressEvent = {
+  requestId: string;
+  stage: "status" | "delta" | "completed" | "error";
+  status: string;
+  previewText: string;
 };
 
 export type SaveNarrativeDocumentResult = {

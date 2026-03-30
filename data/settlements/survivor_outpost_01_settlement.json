@@ -2,19 +2,19 @@
   "id": "survivor_outpost_01_settlement",
   "map_id": "survivor_outpost_01_grid",
   "anchors": [
-    { "id": "guard_bed_01", "grid": { "x": 8, "y": 0, "z": 8 } },
-    { "id": "guard_bed_02", "grid": { "x": 9, "y": 0, "z": 8 } },
-    { "id": "main_gate_inner", "grid": { "x": 15, "y": 0, "z": 26 } },
-    { "id": "east_watch_post", "grid": { "x": 25, "y": 0, "z": 24 } },
-    { "id": "canteen_main", "grid": { "x": 9, "y": 0, "z": 16 } },
-    { "id": "recreation_yard", "grid": { "x": 15, "y": 0, "z": 15 } },
-    { "id": "alarm_bell", "grid": { "x": 16, "y": 0, "z": 24 } },
-    { "id": "cook_home_01", "grid": { "x": 6, "y": 0, "z": 10 } },
-    { "id": "kitchen_station", "grid": { "x": 7, "y": 0, "z": 15 } },
-    { "id": "doctor_home_01", "grid": { "x": 21, "y": 0, "z": 9 } },
-    { "id": "clinic_room", "grid": { "x": 23, "y": 0, "z": 10 } },
-    { "id": "storage_main", "grid": { "x": 24, "y": 0, "z": 18 } },
-    { "id": "workshop_bench", "grid": { "x": 21, "y": 0, "z": 24 } }
+    { "id": "guard_bed_01", "grid": { "x": 9, "y": 0, "z": 8 } },
+    { "id": "guard_bed_02", "grid": { "x": 10, "y": 0, "z": 8 } },
+    { "id": "main_gate_inner", "grid": { "x": 24, "y": 0, "z": 35 } },
+    { "id": "east_watch_post", "grid": { "x": 40, "y": 0, "z": 32 } },
+    { "id": "canteen_main", "grid": { "x": 12, "y": 0, "z": 21 } },
+    { "id": "recreation_yard", "grid": { "x": 22, "y": 0, "z": 20 } },
+    { "id": "alarm_bell", "grid": { "x": 24, "y": 0, "z": 31 } },
+    { "id": "cook_home_01", "grid": { "x": 8, "y": 0, "z": 10 } },
+    { "id": "kitchen_station", "grid": { "x": 9, "y": 0, "z": 20 } },
+    { "id": "doctor_home_01", "grid": { "x": 30, "y": 0, "z": 9 } },
+    { "id": "clinic_room", "grid": { "x": 33, "y": 0, "z": 10 } },
+    { "id": "storage_main", "grid": { "x": 33, "y": 0, "z": 20 } },
+    { "id": "workshop_bench", "grid": { "x": 31, "y": 0, "z": 31 } }
   ],
   "routes": [
     {

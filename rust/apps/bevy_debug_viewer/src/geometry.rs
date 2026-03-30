@@ -115,6 +115,7 @@ pub(crate) fn ray_point_on_horizontal_plane(ray: Ray3d, plane_height: f32) -> Op
     ray.plane_intersection_point(plane_origin, InfinitePlane3d::new(Vec3::Y))
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn camera_pan_delta_from_ground_drag(
     previous_ray: Ray3d,
     current_ray: Ray3d,

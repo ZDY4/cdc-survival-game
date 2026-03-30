@@ -118,7 +118,7 @@
       "kind": "trigger",
       "anchor": { "x": 19, "y": 0, "z": 8 },
       "footprint": { "width": 1, "height": 5 },
-      "rotation": "east",
+      "rotation": "north",
       "blocks_movement": false,
       "blocks_sight": false,
       "props": {

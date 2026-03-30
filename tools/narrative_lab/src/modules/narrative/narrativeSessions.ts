@@ -21,6 +21,7 @@ export function createDocumentAgentSession(
     lastResponse: null,
     candidatePatchSet: null,
     busy: false,
+    inflightRequestId: null,
     documentViewMode: "preview",
     ...overrides,
   };

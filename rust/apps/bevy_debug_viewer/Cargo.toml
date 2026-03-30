@@ -10,4 +10,5 @@ bevy.workspace = true
 game_bevy = { path = "../../crates/game_bevy" }
 game_core = { path = "../../crates/game_core" }
 game_data = { path = "../../crates/game_data" }
+serde.workspace = true
 serde_json.workspace = true

@@ -1,11 +1,13 @@
 @import "@cdc/editor-shared/styles/base.css";
 
 .narrative-streamlined-shell {
+  height: 100vh;
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 10px;
   padding: 10px;
+  overflow: hidden;
 }
 
 .narrative-streamlined-topbar,
@@ -120,12 +122,13 @@
 .narrative-streamlined-main {
   min-height: 0;
   display: grid;
-  grid-template-columns: 40px minmax(260px, 320px) minmax(340px, 0.95fr) minmax(360px, 1.05fr);
+  grid-template-columns: 40px minmax(260px, 320px) minmax(0, 1fr);
   gap: 10px;
+  overflow: hidden;
 }
 
 .narrative-streamlined-main-collapsed {
-  grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
 }
 
 .narrative-sidebar-rail {
@@ -146,18 +149,81 @@
 .narrative-document-panel {
   min-width: 0;
   min-height: 0;
+  height: 100%;
   display: grid;
   gap: 12px;
-  align-content: start;
+  overflow: hidden;
+}
+
+.narrative-doc-sidebar {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.narrative-editor-panels {
+  --narrative-chat-panel-width: 440px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(320px, var(--narrative-chat-panel-width)) 12px minmax(360px, 1fr);
+  gap: 0;
   overflow: hidden;
 }
 
 .narrative-chat-panel {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .narrative-document-panel {
   grid-template-rows: auto auto minmax(0, 1fr);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.narrative-panel-splitter {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 12px;
+  min-height: 0;
+  cursor: col-resize;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(111, 178, 255, 0.18),
+      rgba(255, 255, 255, 0.04)
+    );
+  position: relative;
+}
+
+.narrative-panel-splitter::before {
+  content: "";
+  position: absolute;
+  inset: 50% 3px auto 3px;
+  height: 48px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.28) 0 4px,
+      transparent 4px 8px
+    );
+}
+
+.narrative-panel-splitter:hover,
+.narrative-panel-splitter:focus-visible {
+  outline: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(111, 178, 255, 0.34),
+      rgba(255, 255, 255, 0.08)
+    );
 }
 
 .narrative-pane-header,
@@ -174,9 +240,12 @@
 
 .narrative-doc-list,
 .narrative-chat-log,
-.narrative-document-preview {
+.narrative-document-preview,
+.narrative-document-editor {
   min-height: 0;
+  height: 100%;
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .narrative-mode-switch {
@@ -329,8 +398,7 @@
 }
 
 .narrative-document-editor {
-  min-height: 100%;
-  height: 100%;
+  min-height: 0;
 }
 
 .narrative-document-preview {
@@ -404,12 +472,15 @@
 
 @media (max-width: 900px) {
   .narrative-streamlined-shell {
+    height: auto;
     grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    overflow: visible;
   }
 
   .narrative-streamlined-main,
   .narrative-streamlined-main-collapsed {
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .narrative-sidebar-rail {
@@ -420,6 +491,23 @@
   .narrative-chat-panel,
   .narrative-document-panel {
     grid-column: auto;
+  }
+
+  .narrative-editor-panels {
+    height: auto;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    overflow: visible;
+  }
+
+  .narrative-chat-panel,
+  .narrative-document-panel {
+    border-radius: 12px;
+    height: auto;
+  }
+
+  .narrative-panel-splitter {
+    display: none;
   }
 
   .narrative-patch-columns {

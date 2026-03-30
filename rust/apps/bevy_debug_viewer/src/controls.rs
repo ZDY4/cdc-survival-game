@@ -1,18 +1,25 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::log::info;
 use bevy::prelude::*;
+use game_bevy::{SkillDefinitions, UiHotbarState, UiMenuPanel, UiMenuState, UiModalState};
 use game_data::{ActorId, ActorSide, InteractionOptionId, InteractionPrompt, InteractionTargetId};
 
-use crate::dialogue::{advance_dialogue, apply_interaction_result, current_dialogue_node};
+use crate::console::ViewerConsoleState;
+use crate::dialogue::{
+    advance_dialogue, apply_interaction_result, current_dialogue_has_options, current_dialogue_node,
+};
+use crate::game_ui::activate_hotbar_slot;
 use crate::geometry::{
-    actor_at_grid, camera_pan_delta_from_ground_drag, clamp_camera_pan_offset, cycle_level,
-    grid_bounds, just_pressed_hud_page, level_base_height, map_object_at_grid, pick_grid_from_ray,
+    actor_at_grid, clamp_camera_pan_offset, cycle_level, grid_bounds, just_pressed_hud_page,
+    level_base_height, map_object_at_grid, pick_grid_from_ray, ray_point_on_horizontal_plane,
+    selected_actor,
 };
 use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
-    InteractionMenuButton, InteractionMenuState, ViewerCamera, ViewerControlMode, ViewerHudPage,
-    ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+    DialogueChoiceButton, InteractionMenuButton, InteractionMenuState, ViewerActorMotionState,
+    ViewerCamera, ViewerControlMode, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState,
+    ViewerState, ViewerUiSettings,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,14 +101,134 @@ fn clear_pending_post_cancel_turn_policy(viewer_state: &mut ViewerState) {
     viewer_state.auto_end_turn_after_stop = false;
 }
 
+fn resolve_primary_target_interaction(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &ViewerState,
+    snapshot: &game_core::SimulationSnapshot,
+    target_id: InteractionTargetId,
+) -> Option<(ActorId, InteractionPrompt, InteractionOptionId)> {
+    let actor_id = viewer_state.command_actor_id(snapshot)?;
+    let prompt = runtime_state
+        .runtime
+        .query_interaction_prompt(actor_id, target_id)?;
+    let option_id = prompt
+        .primary_option_id
+        .clone()
+        .or_else(|| prompt.options.first().map(|option| option.id.clone()))?;
+    Some((actor_id, prompt, option_id))
+}
+
+fn issue_move_to_grid(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    actor_id: ActorId,
+    grid: game_data::GridCoord,
+) {
+    clear_pending_post_cancel_turn_policy(viewer_state);
+    if !runtime_state.runtime.is_grid_in_bounds(grid) {
+        viewer_state.status_line = format!(
+            "move: target out of bounds ({}, {}, {})",
+            grid.x, grid.y, grid.z
+        );
+        return;
+    }
+
+    let outcome = match runtime_state.runtime.issue_actor_move(actor_id, grid) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            viewer_state.status_line = format!("move: path error={error}");
+            return;
+        }
+    };
+
+    if outcome.plan.requested_steps() == 0 {
+        viewer_state.status_line = "move: already at target".to_string();
+        return;
+    }
+
+    viewer_state.progression_elapsed_sec = 0.0;
+    viewer_state.focused_target = None;
+    viewer_state.current_prompt = None;
+    viewer_state.interaction_menu = None;
+
+    viewer_state.status_line = if outcome.plan.is_truncated() && outcome.plan.resolved_steps() > 0 {
+        format!(
+            "move: queued toward ({}, {}, {}) via ({}, {}, {}) | {}",
+            outcome.plan.requested_goal.x,
+            outcome.plan.requested_goal.y,
+            outcome.plan.requested_goal.z,
+            outcome.plan.resolved_goal.x,
+            outcome.plan.resolved_goal.y,
+            outcome.plan.resolved_goal.z,
+            game_core::runtime::action_result_status(&outcome.result)
+        )
+    } else {
+        format!(
+            "move: {}",
+            game_core::runtime::action_result_status(&outcome.result)
+        )
+    };
+}
+
+fn handle_object_primary_click(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    snapshot: &game_core::SimulationSnapshot,
+    object: &game_core::MapObjectDebugState,
+    grid: game_data::GridCoord,
+) {
+    let target_id = InteractionTargetId::MapObject(object.object_id.clone());
+    if execute_primary_target_interaction(
+        runtime_state,
+        viewer_state,
+        snapshot,
+        target_id.clone(),
+        format!("object {}", object.object_id),
+        "mouse_primary",
+    ) {
+        return;
+    }
+
+    if let Some(actor_id) = viewer_state.command_actor_id(snapshot) {
+        if runtime_state.runtime.grid_walkable(grid) {
+            issue_move_to_grid(runtime_state, viewer_state, actor_id, grid);
+            return;
+        }
+    }
+
+    viewer_state.focused_target = Some(target_id);
+    viewer_state.current_prompt = None;
+    viewer_state.interaction_menu = None;
+    if viewer_state.command_actor_id(snapshot).is_none() {
+        viewer_state.status_line =
+            format!("focused object {}; select an actor first", object.object_id);
+    } else {
+        viewer_state.status_line = format!(
+            "focused object {} with no executable options",
+            object.object_id
+        );
+    }
+}
+
 pub(crate) fn handle_keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
     mut render_config: ResMut<ViewerRenderConfig>,
+    mut menu_state: ResMut<UiMenuState>,
+    mut modal_state: ResMut<UiModalState>,
+    mut hotbar_state: ResMut<UiHotbarState>,
+    settings: Res<ViewerUiSettings>,
+    skills: Res<SkillDefinitions>,
+    console_state: Res<ViewerConsoleState>,
 ) {
+    if console_state.is_open {
+        return;
+    }
+
     let digit_input = just_pressed_digit(&keys);
+    let hotbar_slot = just_pressed_hotbar_slot(&keys);
 
     if (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight))
         && keys.just_pressed(KeyCode::KeyP)
@@ -126,13 +253,35 @@ pub(crate) fn handle_keyboard_input(
             viewer_state.interaction_menu = None;
             viewer_state.status_line = "interaction menu: closed".to_string();
             return;
+        } else if modal_state.trade.is_some() {
+            modal_state.trade = None;
+            viewer_state.pending_open_trade_target = None;
+            viewer_state.status_line = "trade: closed".to_string();
+            return;
+        } else if menu_state.active_panel.is_some() {
+            menu_state.active_panel = None;
+            viewer_state.status_line = "menu: closed".to_string();
+            return;
+        } else if !menu_state.main_menu_open {
+            menu_state.active_panel = Some(UiMenuPanel::Settings);
+            viewer_state.status_line = "menu: settings".to_string();
+            return;
         }
     }
 
     if viewer_state.active_dialogue.is_some() {
         if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
-            log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_key", None);
-            advance_dialogue(&mut runtime_state, &mut viewer_state, None);
+            if viewer_state
+                .active_dialogue
+                .as_ref()
+                .map(current_dialogue_has_options)
+                .unwrap_or(false)
+            {
+                viewer_state.status_line = "dialogue: click an option or press 1-9".to_string();
+            } else {
+                log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_key", None);
+                advance_dialogue(&mut runtime_state, &mut viewer_state, None);
+            }
         }
 
         if let Some(index) = digit_input {
@@ -148,6 +297,40 @@ pub(crate) fn handle_keyboard_input(
     }
 
     if viewer_state.is_interaction_menu_open() {
+        return;
+    }
+
+    for (action_name, panel) in [
+        ("menu_inventory", UiMenuPanel::Inventory),
+        ("menu_character", UiMenuPanel::Character),
+        ("menu_map", UiMenuPanel::Map),
+        ("menu_journal", UiMenuPanel::Journal),
+        ("menu_skills", UiMenuPanel::Skills),
+        ("menu_crafting", UiMenuPanel::Crafting),
+    ] {
+        if binding_just_pressed(&keys, &settings, action_name) {
+            menu_state.active_panel = if menu_state.active_panel == Some(panel) {
+                None
+            } else {
+                Some(panel)
+            };
+            modal_state.trade = None;
+            viewer_state.interaction_menu = None;
+            viewer_state.status_line = format!("menu: {}", menu_panel_label(panel));
+            return;
+        }
+    }
+
+    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    {
+        return;
+    }
+
+    if let Some(slot) = hotbar_slot {
+        activate_hotbar_slot(&mut runtime_state, &skills, &mut hotbar_state, slot);
+        if let Some(status) = hotbar_state.last_activation_status.clone() {
+            viewer_state.status_line = status;
+        }
         return;
     }
 
@@ -214,7 +397,9 @@ pub(crate) fn handle_keyboard_input(
         viewer_state.status_line = format!("zoom: {:.0}%", render_config.zoom_factor * 100.0);
     }
 
-    if keys.just_pressed(KeyCode::Digit0) {
+    if (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight))
+        && keys.just_pressed(KeyCode::Digit0)
+    {
         render_config.zoom_factor = 1.0;
         viewer_state.status_line = "zoom reset".to_string();
     }
@@ -332,8 +517,22 @@ pub(crate) fn handle_mouse_wheel_zoom(
     mut mouse_wheel_events: MessageReader<MouseWheel>,
     mut viewer_state: ResMut<ViewerState>,
     mut render_config: ResMut<ViewerRenderConfig>,
+    menu_state: Res<UiMenuState>,
+    modal_state: Res<UiModalState>,
+    console_state: Res<ViewerConsoleState>,
 ) {
+    if console_state.is_open {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    }
+
     if viewer_state.is_interaction_menu_open() {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    }
+
+    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    {
         for _ in mouse_wheel_events.read() {}
         return;
     }
@@ -361,57 +560,126 @@ pub(crate) fn handle_camera_pan(
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
     runtime_state: Res<ViewerRuntimeState>,
+    motion_state: Res<ViewerActorMotionState>,
     render_config: Res<ViewerRenderConfig>,
     mut viewer_state: ResMut<ViewerState>,
+    menu_state: Res<UiMenuState>,
+    modal_state: Res<UiModalState>,
+    console_state: Res<ViewerConsoleState>,
 ) {
+    if console_state.is_open {
+        viewer_state.camera_drag_cursor = None;
+        viewer_state.camera_drag_anchor_world = None;
+        return;
+    }
+
     if viewer_state.is_interaction_menu_open() {
         viewer_state.camera_drag_cursor = None;
+        viewer_state.camera_drag_anchor_world = None;
+        return;
+    }
+
+    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    {
+        viewer_state.camera_drag_cursor = None;
+        viewer_state.camera_drag_anchor_world = None;
         return;
     }
 
     if !buttons.pressed(MouseButton::Middle) {
         viewer_state.camera_drag_cursor = None;
+        viewer_state.camera_drag_anchor_world = None;
         return;
     }
 
     let Some(cursor_position) = window.cursor_position() else {
         viewer_state.camera_drag_cursor = None;
+        viewer_state.camera_drag_anchor_world = None;
         return;
     };
 
-    if let Some(previous_cursor) = viewer_state.camera_drag_cursor.replace(cursor_position) {
-        let (camera, camera_transform) = *camera_query;
-        let camera_transform = GlobalTransform::from(*camera_transform);
-        let snapshot = runtime_state.runtime.snapshot();
-        let bounds = grid_bounds(&snapshot, viewer_state.current_level);
-        let plane_height = level_base_height(viewer_state.current_level, snapshot.grid.grid_size)
-            + render_config.floor_thickness_world;
-        let Ok(previous_ray) = camera.viewport_to_world(&camera_transform, previous_cursor) else {
-            return;
-        };
-        let Ok(current_ray) = camera.viewport_to_world(&camera_transform, cursor_position) else {
-            return;
-        };
-        let Some(pan_delta) =
-            camera_pan_delta_from_ground_drag(previous_ray, current_ray, plane_height)
-        else {
-            return;
-        };
+    let (camera, camera_transform) = *camera_query;
+    let camera_transform = GlobalTransform::from(*camera_transform);
+    let snapshot = runtime_state.runtime.snapshot();
+    let bounds = grid_bounds(&snapshot, viewer_state.current_level);
+    let plane_height = level_base_height(viewer_state.current_level, snapshot.grid.grid_size)
+        + render_config.floor_thickness_world;
+    let Ok(current_ray) = camera.viewport_to_world(&camera_transform, cursor_position) else {
+        return;
+    };
+    let Some(current_point) = ray_point_on_horizontal_plane(current_ray, plane_height) else {
+        return;
+    };
 
-        if pan_delta.length_squared() > f32::EPSILON {
-            viewer_state.disable_camera_follow();
+    if buttons.just_pressed(MouseButton::Middle) || viewer_state.camera_drag_anchor_world.is_none()
+    {
+        if viewer_state.is_camera_following_selected_actor() {
+            viewer_state.camera_pan_offset = manual_pan_offset_from_follow_focus(
+                &runtime_state,
+                &motion_state,
+                &snapshot,
+                &viewer_state,
+                bounds,
+                window.width(),
+                window.height(),
+                *render_config,
+            );
         }
-
-        viewer_state.camera_pan_offset += pan_delta;
-        viewer_state.camera_pan_offset = clamp_camera_pan_offset(
-            bounds,
-            snapshot.grid.grid_size,
-            viewer_state.camera_pan_offset,
-            window.width(),
-            window.height(),
-            *render_config,
-        );
+        viewer_state.disable_camera_follow();
+        viewer_state.camera_drag_cursor = Some(cursor_position);
+        viewer_state.camera_drag_anchor_world = Some(Vec2::new(current_point.x, current_point.z));
+        return;
     }
+
+    viewer_state.camera_drag_cursor = Some(cursor_position);
+    let Some(anchor_world) = viewer_state.camera_drag_anchor_world else {
+        return;
+    };
+    let pan_delta = anchor_world - Vec2::new(current_point.x, current_point.z);
+    if pan_delta.length_squared() <= f32::EPSILON {
+        return;
+    }
+
+    viewer_state.camera_pan_offset += pan_delta;
+    viewer_state.camera_pan_offset = clamp_camera_pan_offset(
+        bounds,
+        snapshot.grid.grid_size,
+        viewer_state.camera_pan_offset,
+        window.width(),
+        window.height(),
+        *render_config,
+    );
+}
+
+fn manual_pan_offset_from_follow_focus(
+    runtime_state: &ViewerRuntimeState,
+    motion_state: &ViewerActorMotionState,
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    bounds: crate::geometry::GridBounds,
+    viewport_width: f32,
+    viewport_height: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec2 {
+    let grid_size = snapshot.grid.grid_size;
+    let Some(actor) = selected_actor(snapshot, viewer_state) else {
+        return Vec2::ZERO;
+    };
+    let actor_world = motion_state
+        .current_world(actor.actor_id)
+        .unwrap_or_else(|| runtime_state.runtime.grid_to_world(actor.grid_position));
+    let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * grid_size * 0.5;
+    let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * grid_size * 0.5;
+    let follow_offset = Vec2::new(actor_world.x - center_x, actor_world.z - center_z);
+
+    clamp_camera_pan_offset(
+        bounds,
+        grid_size,
+        follow_offset,
+        viewport_width,
+        viewport_height,
+        render_config,
+    )
 }
 
 pub(crate) fn handle_mouse_input(
@@ -421,7 +689,14 @@ pub(crate) fn handle_mouse_input(
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
+    menu_state: Res<UiMenuState>,
+    modal_state: Res<UiModalState>,
+    console_state: Res<ViewerConsoleState>,
 ) {
+    if console_state.is_open {
+        return;
+    }
+
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
     let Some(cursor_position) = window.cursor_position() else {
@@ -454,9 +729,22 @@ pub(crate) fn handle_mouse_input(
 
     if viewer_state.active_dialogue.is_some() {
         if buttons.just_pressed(MouseButton::Left) {
+            if viewer_state
+                .active_dialogue
+                .as_ref()
+                .map(current_dialogue_has_options)
+                .unwrap_or(false)
+            {
+                return;
+            }
             log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_click", None);
             advance_dialogue(&mut runtime_state, &mut viewer_state, None);
         }
+        return;
+    }
+
+    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    {
         return;
     }
 
@@ -541,66 +829,22 @@ pub(crate) fn handle_mouse_input(
                 execute_primary_target_interaction(
                     &mut runtime_state,
                     &mut viewer_state,
+                    &snapshot,
                     target_id,
                     format!("actor {:?} ({:?})", actor.actor_id, actor.side),
                     "mouse_primary",
                 );
             }
         } else if let Some(object) = map_object_at_cursor.as_ref() {
-            let target_id = InteractionTargetId::MapObject(object.object_id.clone());
-            execute_primary_target_interaction(
+            handle_object_primary_click(
                 &mut runtime_state,
                 &mut viewer_state,
-                target_id,
-                format!("object {}", object.object_id),
-                "mouse_primary",
+                &snapshot,
+                object,
+                grid,
             );
         } else if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
-            clear_pending_post_cancel_turn_policy(&mut viewer_state);
-            if !runtime_state.runtime.is_grid_in_bounds(grid) {
-                viewer_state.status_line = format!(
-                    "move: target out of bounds ({}, {}, {})",
-                    grid.x, grid.y, grid.z
-                );
-                return;
-            }
-
-            let outcome = match runtime_state.runtime.issue_actor_move(actor_id, grid) {
-                Ok(outcome) => outcome,
-                Err(error) => {
-                    viewer_state.status_line = format!("move: path error={error}");
-                    return;
-                }
-            };
-
-            if outcome.plan.requested_steps() == 0 {
-                viewer_state.status_line = "move: already at target".to_string();
-                return;
-            }
-
-            viewer_state.progression_elapsed_sec = 0.0;
-            viewer_state.focused_target = None;
-            viewer_state.current_prompt = None;
-            viewer_state.interaction_menu = None;
-
-            viewer_state.status_line =
-                if outcome.plan.is_truncated() && outcome.plan.resolved_steps() > 0 {
-                    format!(
-                        "move: queued toward ({}, {}, {}) via ({}, {}, {}) | {}",
-                        outcome.plan.requested_goal.x,
-                        outcome.plan.requested_goal.y,
-                        outcome.plan.requested_goal.z,
-                        outcome.plan.resolved_goal.x,
-                        outcome.plan.resolved_goal.y,
-                        outcome.plan.resolved_goal.z,
-                        game_core::runtime::action_result_status(&outcome.result)
-                    )
-                } else {
-                    format!(
-                        "move: {}",
-                        game_core::runtime::action_result_status(&outcome.result)
-                    )
-                };
+            issue_move_to_grid(&mut runtime_state, &mut viewer_state, actor_id, grid);
         }
     }
 
@@ -642,33 +886,24 @@ pub(crate) fn handle_mouse_input(
 fn execute_primary_target_interaction(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
+    snapshot: &game_core::SimulationSnapshot,
     target_id: InteractionTargetId,
     target_summary: String,
     input_source: &'static str,
-) {
-    let snapshot = runtime_state.runtime.snapshot();
-    let prompt = focus_target_and_query_prompt(runtime_state, viewer_state, target_id.clone());
-    let Some(prompt) = prompt else {
+) -> bool {
+    let Some((actor_id, prompt, option_id)) = resolve_primary_target_interaction(
+        runtime_state,
+        viewer_state,
+        snapshot,
+        target_id.clone(),
+    ) else {
         viewer_state.interaction_menu = None;
         viewer_state.status_line =
             format!("focused {target_summary} with no available interactions");
-        return;
+        return false;
     };
-
-    let option_id = prompt
-        .primary_option_id
-        .clone()
-        .or_else(|| prompt.options.first().map(|option| option.id.clone()));
-    let Some(option_id) = option_id else {
-        viewer_state.interaction_menu = None;
-        viewer_state.status_line = format!("focused {target_summary} with no executable options");
-        return;
-    };
-    let Some(actor_id) = viewer_state.command_actor_id(&snapshot) else {
-        viewer_state.interaction_menu = None;
-        viewer_state.status_line = format!("focused {target_summary}; select an actor first");
-        return;
-    };
+    viewer_state.focused_target = Some(target_id.clone());
+    viewer_state.current_prompt = Some(prompt.clone());
 
     log_viewer_interaction(
         "primary",
@@ -679,6 +914,7 @@ fn execute_primary_target_interaction(
         input_source,
     );
     execute_target_interaction_option(runtime_state, viewer_state, target_id, option_id);
+    true
 }
 
 fn focus_target_and_query_prompt(
@@ -758,7 +994,12 @@ pub(crate) fn handle_interaction_menu_buttons(
     >,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
+    console_state: Res<ViewerConsoleState>,
 ) {
+    if console_state.is_open {
+        return;
+    }
+
     for (interaction, mut background, menu_button) in &mut buttons {
         *background = BackgroundColor(interaction_menu_button_color(
             menu_button.is_primary,
@@ -786,6 +1027,39 @@ pub(crate) fn handle_interaction_menu_buttons(
     }
 }
 
+pub(crate) fn handle_dialogue_choice_buttons(
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor, &DialogueChoiceButton),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut runtime_state: ResMut<ViewerRuntimeState>,
+    mut viewer_state: ResMut<ViewerState>,
+    console_state: Res<ViewerConsoleState>,
+) {
+    if console_state.is_open {
+        return;
+    }
+
+    for (interaction, mut background, choice_button) in &mut buttons {
+        *background = BackgroundColor(interaction_menu_button_color(false, *interaction));
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        log_dialogue_input(
+            &viewer_state,
+            "dialogue_choice_selected",
+            "dialogue_click",
+            Some(choice_button.choice_index),
+        );
+        advance_dialogue(
+            &mut runtime_state,
+            &mut viewer_state,
+            Some(choice_button.choice_index),
+        );
+    }
+}
+
 fn just_pressed_digit(keys: &ButtonInput<KeyCode>) -> Option<usize> {
     let bindings = [
         KeyCode::Digit1,
@@ -799,6 +1073,64 @@ fn just_pressed_digit(keys: &ButtonInput<KeyCode>) -> Option<usize> {
         KeyCode::Digit9,
     ];
     bindings.iter().position(|key| keys.just_pressed(*key))
+}
+
+fn just_pressed_hotbar_slot(keys: &ButtonInput<KeyCode>) -> Option<usize> {
+    [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
+        KeyCode::Digit0,
+    ]
+    .iter()
+    .position(|key| keys.just_pressed(*key))
+}
+
+fn binding_just_pressed(
+    keys: &ButtonInput<KeyCode>,
+    settings: &ViewerUiSettings,
+    action_name: &str,
+) -> bool {
+    settings
+        .action_bindings
+        .get(action_name)
+        .and_then(|binding| keycode_from_binding(binding))
+        .map(|key| keys.just_pressed(key))
+        .unwrap_or(false)
+}
+
+fn keycode_from_binding(binding: &str) -> Option<KeyCode> {
+    match binding {
+        "KeyI" => Some(KeyCode::KeyI),
+        "KeyC" => Some(KeyCode::KeyC),
+        "KeyM" => Some(KeyCode::KeyM),
+        "KeyJ" => Some(KeyCode::KeyJ),
+        "KeyK" => Some(KeyCode::KeyK),
+        "KeyL" => Some(KeyCode::KeyL),
+        "KeyU" => Some(KeyCode::KeyU),
+        "KeyO" => Some(KeyCode::KeyO),
+        "KeyP" => Some(KeyCode::KeyP),
+        "Escape" => Some(KeyCode::Escape),
+        _ => None,
+    }
+}
+
+fn menu_panel_label(panel: UiMenuPanel) -> &'static str {
+    match panel {
+        UiMenuPanel::Inventory => "inventory",
+        UiMenuPanel::Character => "character",
+        UiMenuPanel::Map => "map",
+        UiMenuPanel::Journal => "journal",
+        UiMenuPanel::Skills => "skills",
+        UiMenuPanel::Crafting => "crafting",
+        UiMenuPanel::Settings => "settings",
+    }
 }
 
 fn log_viewer_interaction(
@@ -857,13 +1189,17 @@ fn interaction_target_name(viewer_state: &ViewerState, target_id: &InteractionTa
 #[cfg(test)]
 mod tests {
     use super::{
-        clear_pending_post_cancel_turn_policy, post_cancel_turn_policy_for_context,
+        clear_pending_post_cancel_turn_policy, handle_object_primary_click,
+        manual_pan_offset_from_follow_focus, post_cancel_turn_policy_for_context,
         request_cancel_pending_movement, CancelMovementContext, PostCancelTurnPolicy,
     };
-    use crate::state::{ViewerRuntimeState, ViewerState};
+    use crate::geometry::{clamp_camera_pan_offset, grid_bounds, selected_actor};
+    use crate::state::{
+        ViewerActorMotionState, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+    };
     use game_bevy::SettlementDebugSnapshot;
-    use game_core::create_demo_runtime;
-    use game_data::{ActorSide, GridCoord};
+    use game_core::{create_demo_runtime, MapObjectDebugState};
+    use game_data::{ActorSide, GridCoord, MapObjectFootprint, MapObjectKind, MapRotation};
 
     #[test]
     fn keyboard_cancel_requests_auto_end_turn_out_of_combat() {
@@ -967,5 +1303,87 @@ mod tests {
         clear_pending_post_cancel_turn_policy(&mut viewer_state);
 
         assert!(!viewer_state.auto_end_turn_after_stop);
+    }
+
+    #[test]
+    fn manual_pan_offset_from_follow_focus_preserves_current_follow_focus() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let motion_state = ViewerActorMotionState::default();
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(handles.player, ActorSide::Player);
+
+        let bounds = grid_bounds(&snapshot, viewer_state.current_level);
+        let render_config = ViewerRenderConfig::default();
+        let pan_offset = manual_pan_offset_from_follow_focus(
+            &runtime_state,
+            &motion_state,
+            &snapshot,
+            &viewer_state,
+            bounds,
+            1440.0,
+            900.0,
+            render_config,
+        );
+
+        let actor = selected_actor(&snapshot, &viewer_state).expect("selected actor should exist");
+        let actor_world = runtime_state.runtime.grid_to_world(actor.grid_position);
+        let center_x = (bounds.min_x + bounds.max_x + 1) as f32 * snapshot.grid.grid_size * 0.5;
+        let center_z = (bounds.min_z + bounds.max_z + 1) as f32 * snapshot.grid.grid_size * 0.5;
+        let expected = clamp_camera_pan_offset(
+            bounds,
+            snapshot.grid.grid_size,
+            bevy::prelude::Vec2::new(actor_world.x - center_x, actor_world.z - center_z),
+            1440.0,
+            900.0,
+            render_config,
+        );
+
+        assert_eq!(pan_offset, expected);
+    }
+
+    #[test]
+    fn object_click_without_interactions_falls_back_to_move_on_walkable_grid() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let mut runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(handles.player, ActorSide::Player);
+
+        let fake_object = MapObjectDebugState {
+            object_id: "fake_building".into(),
+            kind: MapObjectKind::Building,
+            anchor: GridCoord::new(0, 0, 2),
+            footprint: MapObjectFootprint {
+                width: 1,
+                height: 1,
+            },
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: false,
+            occupied_cells: vec![GridCoord::new(0, 0, 2)],
+            payload_summary: Default::default(),
+        };
+
+        handle_object_primary_click(
+            &mut runtime_state,
+            &mut viewer_state,
+            &snapshot,
+            &fake_object,
+            GridCoord::new(0, 0, 2),
+        );
+
+        assert!(runtime_state.runtime.pending_movement().is_some());
+        assert!(viewer_state.status_line.starts_with("move:"));
+        assert!(viewer_state.focused_target.is_none());
     }
 }

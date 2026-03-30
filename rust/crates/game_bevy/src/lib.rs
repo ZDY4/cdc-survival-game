@@ -27,6 +27,7 @@ use thiserror::Error;
 pub mod bootstrap;
 pub mod npc_life;
 pub mod reservations;
+pub mod ui;
 
 pub use bootstrap::{
     build_default_startup_seed, build_runtime_from_default_startup_seed, load_runtime_bootstrap,
@@ -40,6 +41,18 @@ pub use npc_life::{
     WorldAlertState,
 };
 pub use reservations::SmartObjectReservations;
+pub use ui::{
+    ammo_item_ids, character_snapshot, classify_item, crafting_snapshot, interaction_prompt_text,
+    inventory_snapshot, item_attribute_bonuses, item_equippable, item_usable, journal_snapshot,
+    map_snapshot, player_actor_id, skills_snapshot, trade_snapshot, world_status_snapshot,
+    GameUiPlugin, UiCharacterCommand, UiCharacterSnapshot, UiCraftingSnapshot, UiDialogueCommand,
+    UiEquipmentSlotView, UiHotbarSlotState, UiHotbarState, UiInputBlockState, UiInventoryCommand,
+    UiInventoryDetailView, UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState,
+    UiInventoryPanelSnapshot, UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot,
+    UiMapLocationView, UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
+    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillsSnapshot, UiStatusBannerState,
+    UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
+};
 
 #[derive(Resource, Debug, Clone)]
 pub struct CharacterDefinitionPath(pub PathBuf);

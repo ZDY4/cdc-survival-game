@@ -1,0 +1,23 @@
+{
+  "name": "医疗基础",
+  "icon": "",
+  "description": "提升基础治疗、药剂调配与现场救护能力。",
+  "tree_id": "crafting",
+  "max_level": 5,
+  "prerequisites": [
+    "medicine"
+  ],
+  "attribute_requirements": {
+    "intelligence": 6,
+    "agility": 5
+  },
+  "id": "medical",
+  "gameplay_effect": {
+    "modifiers": {
+      "healing_power": {
+        "max_value": 0.0,
+        "per_level": 0.06
+      }
+    }
+  }
+}

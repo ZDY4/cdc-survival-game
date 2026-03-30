@@ -107,11 +107,31 @@ pub fn advance_dialogue(
         _ => normalized_next_node_id(node.next.as_str()),
     };
 
+    let mut emitted_actions = node.actions.clone();
+    let mut finished = next_node_id.is_none();
+    let mut resolved_next_node_id = next_node_id.clone();
+    let mut end_type = if finished {
+        normalized_next_node_id(node.end_type.as_str())
+    } else {
+        None
+    };
+
+    if let Some(next_node) = resolved_next_node_id
+        .as_deref()
+        .and_then(|next_node_id| current_dialogue_node(dialogue, next_node_id))
+        .filter(|next_node| next_node.node_type == "end")
+    {
+        emitted_actions.extend(next_node.actions.clone());
+        finished = true;
+        resolved_next_node_id = None;
+        end_type = normalized_next_node_id(next_node.end_type.as_str());
+    }
+
     Ok(DialogueAdvanceOutcome {
-        finished: next_node_id.is_none(),
-        next_node_id,
-        emitted_actions: node.actions.clone(),
-        end_type: normalized_next_node_id(node.end_type.as_str()),
+        finished,
+        next_node_id: resolved_next_node_id,
+        emitted_actions,
+        end_type,
     })
 }
 
@@ -211,6 +231,24 @@ mod tests {
     }
 
     #[test]
+    fn choice_node_finishes_immediately_when_selected_option_leads_to_end() {
+        let dialogue = sample_dialogue();
+
+        let outcome = advance_dialogue(&dialogue, "choice", Some(0))
+            .expect("end choice should finish dialogue immediately");
+
+        assert_eq!(
+            outcome,
+            DialogueAdvanceOutcome {
+                next_node_id: None,
+                finished: true,
+                emitted_actions: Vec::new(),
+                end_type: Some("leave".into()),
+            }
+        );
+    }
+
+    #[test]
     fn terminal_node_marks_dialogue_finished() {
         let dialogue = sample_dialogue();
 
@@ -269,7 +307,7 @@ mod tests {
                     options: vec![
                         DialogueOption {
                             text: "Decline".into(),
-                            next: "end".into(),
+                            next: "leave_end".into(),
                             ..DialogueOption::default()
                         },
                         DialogueOption {
@@ -286,8 +324,9 @@ mod tests {
                     ..DialogueNode::default()
                 },
                 DialogueNode {
-                    id: "end".into(),
+                    id: "leave_end".into(),
                     node_type: "end".into(),
+                    end_type: "leave".into(),
                     ..DialogueNode::default()
                 },
             ],

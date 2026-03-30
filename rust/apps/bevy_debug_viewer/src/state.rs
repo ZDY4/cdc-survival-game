@@ -1,12 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use bevy::prelude::*;
-use game_bevy::SettlementDebugSnapshot;
+use game_bevy::{SettlementDebugSnapshot, UiInventoryFilter, UiMenuPanel};
 use game_core::SimulationRuntime;
 use game_core::SimulationSnapshot;
 use game_data::{
     ActorId, ActorSide, DialogueData, GridCoord, InteractionPrompt, InteractionTargetId, WorldCoord,
 };
+use serde::{Deserialize, Serialize};
 
 pub(crate) const VIEWER_FONT_PATH: &str = "fonts/NotoSansCJKsc-Regular.otf";
 
@@ -41,6 +42,63 @@ pub(crate) struct ViewerRuntimeState {
     pub runtime: SimulationRuntime,
     pub recent_events: Vec<ViewerEventEntry>,
     pub ai_snapshot: SettlementDebugSnapshot,
+}
+
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ViewerUiSettings {
+    pub master_volume: f32,
+    pub music_volume: f32,
+    pub sfx_volume: f32,
+    pub window_mode: String,
+    pub vsync: bool,
+    pub ui_scale: f32,
+    pub action_bindings: BTreeMap<String, String>,
+}
+
+impl Default for ViewerUiSettings {
+    fn default() -> Self {
+        Self {
+            master_volume: 1.0,
+            music_volume: 1.0,
+            sfx_volume: 1.0,
+            window_mode: "windowed".to_string(),
+            vsync: true,
+            ui_scale: 1.0,
+            action_bindings: BTreeMap::from([
+                ("menu_inventory".to_string(), "KeyI".to_string()),
+                ("menu_character".to_string(), "KeyC".to_string()),
+                ("menu_map".to_string(), "KeyM".to_string()),
+                ("menu_journal".to_string(), "KeyJ".to_string()),
+                ("menu_skills".to_string(), "KeyK".to_string()),
+                ("menu_crafting".to_string(), "KeyL".to_string()),
+                ("menu_settings".to_string(), "Escape".to_string()),
+            ]),
+        }
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub(crate) struct ViewerUiSettingsPath(pub std::path::PathBuf);
+
+impl Default for ViewerUiSettingsPath {
+    fn default() -> Self {
+        Self(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../config/bevy_viewer_ui_settings.json"),
+        )
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub(crate) struct ViewerRuntimeSavePath(pub std::path::PathBuf);
+
+impl Default for ViewerRuntimeSavePath {
+    fn default() -> Self {
+        Self(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../saves/bevy_viewer_latest.json"),
+        )
+    }
 }
 
 #[derive(Resource, Clone)]
@@ -768,7 +826,7 @@ impl Default for ViewerRenderConfig {
             viewport_padding_px: 72.0,
             hud_reserved_width_px: 620.0,
             camera_yaw_degrees: 0.0,
-            camera_pitch_degrees: 35.0,
+            camera_pitch_degrees: 36.0,
             camera_fov_degrees: 30.0,
             camera_distance_padding_world: 8.0,
             floor_thickness_world: 0.11,
@@ -829,6 +887,8 @@ pub(crate) struct ViewerState {
     pub progression_elapsed_sec: f32,
     pub camera_pan_offset: Vec2,
     pub camera_drag_cursor: Option<Vec2>,
+    pub camera_drag_anchor_world: Option<Vec2>,
+    pub pending_open_trade_target: Option<InteractionTargetId>,
     pub status_line: String,
 }
 
@@ -859,6 +919,8 @@ impl Default for ViewerState {
             progression_elapsed_sec: 0.0,
             camera_pan_offset: Vec2::ZERO,
             camera_drag_cursor: None,
+            camera_drag_anchor_world: None,
+            pending_open_trade_target: None,
             status_line: String::new(),
         }
     }
@@ -892,6 +954,7 @@ impl ViewerState {
         self.camera_mode = ViewerCameraMode::FollowSelectedActor;
         self.camera_pan_offset = Vec2::ZERO;
         self.camera_drag_cursor = None;
+        self.camera_drag_anchor_world = None;
     }
 
     pub(crate) fn command_actor_id(&self, snapshot: &SimulationSnapshot) -> Option<ActorId> {
@@ -974,6 +1037,60 @@ pub(crate) struct InteractionMenuButton {
     pub is_primary: bool,
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DialogueChoiceButton {
+    pub choice_index: usize,
+}
+
+#[derive(Component)]
+pub(crate) struct GameUiRoot;
+
+#[derive(Component, Debug, Clone)]
+pub(crate) enum GameUiButtonAction {
+    MainMenuNewGame,
+    MainMenuContinue,
+    MainMenuExit,
+    TogglePanel(UiMenuPanel),
+    ClosePanels,
+    CloseTrade,
+    InventoryFilter(UiInventoryFilter),
+    SelectInventoryItem(u32),
+    UseInventoryItem,
+    EquipInventoryItem,
+    UnequipSlot(String),
+    MoveSelectedEquippedTo(String),
+    AllocateAttribute(String),
+    SelectSkill(String),
+    AssignSkillToHotbar {
+        skill_id: String,
+        group: usize,
+        slot: usize,
+    },
+    ActivateHotbarSlot(usize),
+    SelectHotbarGroup(usize),
+    ClearHotbarSlot {
+        group: usize,
+        slot: usize,
+    },
+    CraftRecipe(String),
+    SelectMapLocation(String),
+    BuyTradeItem {
+        shop_id: String,
+        item_id: u32,
+    },
+    SellTradeItem {
+        shop_id: String,
+        item_id: u32,
+    },
+    SettingsSetMaster(f32),
+    SettingsSetMusic(f32),
+    SettingsSetSfx(f32),
+    SettingsSetWindowMode(String),
+    SettingsSetVsync(bool),
+    SettingsSetUiScale(f32),
+    SettingsCycleBinding(String),
+}
+
 #[derive(Component)]
 pub(crate) struct InteractionLockedActorTag;
 
@@ -1054,6 +1171,7 @@ mod tests {
             camera_mode: ViewerCameraMode::ManualPan,
             camera_pan_offset: bevy::prelude::Vec2::new(3.0, -2.0),
             camera_drag_cursor: Some(bevy::prelude::Vec2::new(120.0, 48.0)),
+            camera_drag_anchor_world: Some(bevy::prelude::Vec2::new(6.5, 9.5)),
             ..ViewerState::default()
         };
 
@@ -1065,6 +1183,7 @@ mod tests {
         );
         assert_eq!(viewer_state.camera_pan_offset, bevy::prelude::Vec2::ZERO);
         assert_eq!(viewer_state.camera_drag_cursor, None);
+        assert_eq!(viewer_state.camera_drag_anchor_world, None);
     }
 
     #[test]

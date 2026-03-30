@@ -5,24 +5,41 @@ use game_data::{
     MapBuildingVisualOutline, MapObjectFootprint, MapRotation, MapSize, RelativeGridCell,
     RelativeGridVertex, StairKind,
 };
+use geo::{BooleanOps, Contains, LineString, MultiPolygon, Polygon};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+use crate::building_geometry::{
+    multipolygon_from_geo, normalize_polygon, BuildingFootprint2d, BuildingGeometryValidationError,
+    DoorOpeningKind, GeneratedDoorOpening, GeneratedRoomPolygon, GeneratedWalkablePolygons,
+    GeneratedWallPolygons, GeneratedWallStroke, GeometryAxis, GeometryMultiPolygon2,
+    GeometryPoint2, GeometryPolygon2, GeometrySegment2,
+};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneratedRoom {
     pub room_id: usize,
     pub cells: Vec<GridCoord>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneratedBuildingStory {
     pub level: i32,
     pub shape_cells: Vec<GridCoord>,
+    pub footprint_polygon: Option<BuildingFootprint2d>,
     pub rooms: Vec<GeneratedRoom>,
+    #[serde(default)]
+    pub room_polygons: Vec<GeneratedRoomPolygon>,
     pub wall_cells: Vec<GridCoord>,
+    #[serde(default)]
+    pub wall_strokes: Vec<GeneratedWallStroke>,
+    pub wall_polygons: GeneratedWallPolygons,
     pub interior_door_cells: Vec<GridCoord>,
     pub exterior_door_cells: Vec<GridCoord>,
+    #[serde(default)]
+    pub door_openings: Vec<GeneratedDoorOpening>,
     pub walkable_cells: Vec<GridCoord>,
+    pub walkable_polygons: GeneratedWalkablePolygons,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,14 +59,14 @@ pub struct GeneratedOutlineEdge {
     pub to: GridCoord,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneratedBuildingLayout {
     pub stories: Vec<GeneratedBuildingStory>,
     pub stairs: Vec<GeneratedStairConnection>,
     pub visual_outline: Vec<GeneratedOutlineEdge>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneratedBuildingDebugState {
     pub object_id: String,
     pub prefab_id: String,
@@ -60,12 +77,22 @@ pub struct GeneratedBuildingDebugState {
     pub visual_outline: Vec<GeneratedOutlineEdge>,
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, PartialEq)]
 pub enum BuildingLayoutError {
     #[error("story {level} has no valid shape cells")]
     EmptyStoryShape { level: i32 },
     #[error("story {level} contains out-of-bounds shape cells")]
     InvalidStoryShape { level: i32 },
+    #[error("story {level} footprint polygon is invalid: {source}")]
+    InvalidFootprintPolygon {
+        level: i32,
+        source: BuildingGeometryValidationError,
+    },
+    #[error("story {level} geometry generation failed: {source}")]
+    GeometryGenerationFailed {
+        level: i32,
+        source: BuildingGeometryValidationError,
+    },
     #[error("stairs from level {from_level} to {to_level} have mismatched endpoint counts")]
     StairEndpointCountMismatch { from_level: i32, to_level: i32 },
     #[error(
@@ -94,7 +121,9 @@ pub fn generate_building_layout(
     rotation: MapRotation,
     footprint: MapObjectFootprint,
 ) -> Result<GeneratedBuildingLayout, BuildingLayoutError> {
-    let root_offset = if layout.shape_cells.is_empty() {
+    let root_offset = if let Some(footprint_polygon) = layout.footprint_polygon.as_ref() {
+        normalization_offset_for_vertices(&footprint_polygon.outer, rotation)
+    } else if layout.shape_cells.is_empty() {
         (0, 0)
     } else {
         normalization_offset_for_cells(&layout.shape_cells, rotation)
@@ -129,11 +158,16 @@ pub fn generate_building_layout(
             .cloned()
             .unwrap_or_default();
         let story = match layout.generator {
-            BuildingGeneratorKind::RectilinearBsp => {
-                generate_story(level, shape_cells, &stair_cells, layout, story_index)
-            }
+            BuildingGeneratorKind::RectilinearBsp => generate_story(
+                level,
+                shape_cells,
+                &stair_cells,
+                layout,
+                story_index,
+                anchor,
+            )?,
             BuildingGeneratorKind::SolidShell => {
-                generate_solid_story(level, shape_cells, &stair_cells)
+                generate_solid_story(level, shape_cells, &stair_cells, anchor)?
             }
         };
         stories.push(story);
@@ -159,6 +193,17 @@ fn root_shape_cells(
     anchor: GridCoord,
     offset: (i32, i32),
 ) -> Vec<GridCoord> {
+    if let Some(footprint_polygon) = layout.footprint_polygon.as_ref() {
+        let vertices = relative_vertices_to_world(
+            &footprint_polygon.outer,
+            anchor,
+            anchor.y,
+            rotation,
+            offset,
+        );
+        return polygon_vertices_to_world_cells(&vertices, anchor.y);
+    }
+
     if layout.shape_cells.is_empty() {
         let (width, height) = rotated_footprint_size(footprint, rotation);
         let mut cells = Vec::with_capacity((width * height) as usize);
@@ -299,11 +344,14 @@ fn generate_story(
     stair_cells: &BTreeSet<GridCoord>,
     layout: &MapBuildingLayoutSpec,
     story_index: usize,
-) -> GeneratedBuildingStory {
+    anchor: GridCoord,
+) -> Result<GeneratedBuildingStory, BuildingLayoutError> {
     let mut wall_cells = boundary_cells(shape_cells);
     let mut interior_door_cells = BTreeSet::new();
 
-    let target_room_count = layout.target_room_count.max(1) as usize;
+    let min_room_area = layout.min_room_area.max(1) as usize;
+    let max_rooms_by_area = (shape_cells.len() / min_room_area).max(1);
+    let target_room_count = (layout.target_room_count.max(1) as usize).min(max_rooms_by_area);
     let mut working_regions = vec![shape_cells.clone()];
     let max_room_size = layout.max_room_size.unwrap_or(MapSize {
         width: u32::MAX,
@@ -314,6 +362,7 @@ fn generate_story(
         let Some((room_index, candidate)) = choose_split_candidate(
             &working_regions,
             layout.min_room_size,
+            min_room_area,
             max_room_size,
             layout.seed,
             story_index,
@@ -399,41 +448,467 @@ fn generate_story(
         .map(|(room_id, cells)| GeneratedRoom { room_id, cells })
         .collect();
 
-    GeneratedBuildingStory {
+    build_story_geometry(
         level,
-        shape_cells: sorted_cells(shape_cells),
         rooms,
-        wall_cells: sorted_cells(&wall_cells),
-        interior_door_cells: sorted_cells(&interior_door_cells),
-        exterior_door_cells: sorted_cells(&exterior_door_cells),
-        walkable_cells: sorted_cells(&walkable_cells),
-    }
+        shape_cells,
+        &wall_cells,
+        &interior_door_cells,
+        &exterior_door_cells,
+        &walkable_cells,
+        anchor,
+        Some(layout),
+        story_index,
+    )
 }
 
 fn generate_solid_story(
     level: i32,
     shape_cells: &BTreeSet<GridCoord>,
     stair_cells: &BTreeSet<GridCoord>,
-) -> GeneratedBuildingStory {
+    anchor: GridCoord,
+) -> Result<GeneratedBuildingStory, BuildingLayoutError> {
     let mut wall_cells = shape_cells.clone();
     for stair in stair_cells {
         wall_cells.remove(stair);
     }
 
-    GeneratedBuildingStory {
+    build_story_geometry(
+        level,
+        Vec::new(),
+        shape_cells,
+        &wall_cells,
+        &BTreeSet::new(),
+        &BTreeSet::new(),
+        stair_cells,
+        anchor,
+        None,
+        0,
+    )
+}
+
+fn build_story_geometry(
+    level: i32,
+    rooms: Vec<GeneratedRoom>,
+    shape_cells: &BTreeSet<GridCoord>,
+    wall_cells: &BTreeSet<GridCoord>,
+    interior_door_cells: &BTreeSet<GridCoord>,
+    exterior_door_cells: &BTreeSet<GridCoord>,
+    walkable_cells: &BTreeSet<GridCoord>,
+    anchor: GridCoord,
+    layout: Option<&MapBuildingLayoutSpec>,
+    story_index: usize,
+) -> Result<GeneratedBuildingStory, BuildingLayoutError> {
+    let footprint_polygon = local_single_polygon_from_world_cells(shape_cells, anchor)
+        .map_err(|source| BuildingLayoutError::InvalidFootprintPolygon { level, source })?;
+    let room_polygons = rooms
+        .iter()
+        .map(|room| {
+            let room_cells = room.cells.iter().copied().collect::<BTreeSet<_>>();
+            local_single_polygon_from_world_cells(&room_cells, anchor)
+                .map(|polygon| GeneratedRoomPolygon {
+                    room_id: room.room_id,
+                    polygon,
+                })
+                .map_err(|source| BuildingLayoutError::GeometryGenerationFailed { level, source })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let wall_strokes = collect_story_wall_strokes(wall_cells, anchor);
+    let door_width = layout.map(|layout| layout.door_width as f64).unwrap_or(1.0);
+    let wall_thickness = layout
+        .map(|layout| layout.wall_thickness as f64)
+        .unwrap_or(0.08);
+    let door_openings = collect_story_door_openings(
+        interior_door_cells,
+        DoorOpeningKind::Interior,
+        walkable_cells,
+        anchor,
+        door_width,
+        wall_thickness,
+        story_index * 10_000,
+    )?
+    .into_iter()
+    .chain(collect_story_door_openings(
+        exterior_door_cells,
+        DoorOpeningKind::Exterior,
+        walkable_cells,
+        anchor,
+        door_width,
+        wall_thickness,
+        story_index * 10_000 + interior_door_cells.len(),
+    )?)
+    .collect::<Vec<_>>();
+
+    let wall_polygons = local_multipolygon_from_world_cells(wall_cells, anchor)
+        .map(|polygons| GeneratedWallPolygons { polygons })
+        .map_err(|source| BuildingLayoutError::GeometryGenerationFailed { level, source })?;
+    let walkable_polygons = local_multipolygon_from_world_cells(walkable_cells, anchor)
+        .map(|polygons| GeneratedWalkablePolygons { polygons })
+        .map_err(|source| BuildingLayoutError::GeometryGenerationFailed { level, source })?;
+
+    Ok(GeneratedBuildingStory {
         level,
         shape_cells: sorted_cells(shape_cells),
-        rooms: Vec::new(),
-        wall_cells: sorted_cells(&wall_cells),
-        interior_door_cells: Vec::new(),
-        exterior_door_cells: Vec::new(),
-        walkable_cells: sorted_cells(stair_cells),
+        footprint_polygon: Some(BuildingFootprint2d {
+            polygon: footprint_polygon,
+        }),
+        rooms,
+        room_polygons,
+        wall_cells: sorted_cells(wall_cells),
+        wall_strokes,
+        wall_polygons,
+        interior_door_cells: sorted_cells(interior_door_cells),
+        exterior_door_cells: sorted_cells(exterior_door_cells),
+        door_openings,
+        walkable_cells: sorted_cells(walkable_cells),
+        walkable_polygons,
+    })
+}
+
+fn collect_story_wall_strokes(
+    wall_cells: &BTreeSet<GridCoord>,
+    anchor: GridCoord,
+) -> Vec<GeneratedWallStroke> {
+    let mut segments = Vec::new();
+
+    for wall in wall_cells {
+        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z - 1)) {
+            segments.push(LocalWallSegment {
+                axis: GeometryAxis::Horizontal,
+                line: wall.z,
+                start: wall.x,
+                end: wall.x + 1,
+            });
+        }
+        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z + 1)) {
+            segments.push(LocalWallSegment {
+                axis: GeometryAxis::Horizontal,
+                line: wall.z + 1,
+                start: wall.x,
+                end: wall.x + 1,
+            });
+        }
+        if !wall_cells.contains(&GridCoord::new(wall.x - 1, wall.y, wall.z)) {
+            segments.push(LocalWallSegment {
+                axis: GeometryAxis::Vertical,
+                line: wall.x,
+                start: wall.z,
+                end: wall.z + 1,
+            });
+        }
+        if !wall_cells.contains(&GridCoord::new(wall.x + 1, wall.y, wall.z)) {
+            segments.push(LocalWallSegment {
+                axis: GeometryAxis::Vertical,
+                line: wall.x + 1,
+                start: wall.z,
+                end: wall.z + 1,
+            });
+        }
     }
+
+    merge_local_wall_segments(segments)
+        .into_iter()
+        .enumerate()
+        .map(|(wall_id, segment)| GeneratedWallStroke {
+            wall_id,
+            axis: segment.axis,
+            exterior: true,
+            room_ids: Vec::new(),
+            center_line: match segment.axis {
+                GeometryAxis::Horizontal => GeometrySegment2::new(
+                    GeometryPoint2::new(
+                        (segment.start - anchor.x) as f64,
+                        (segment.line - anchor.z) as f64,
+                    ),
+                    GeometryPoint2::new(
+                        (segment.end - anchor.x) as f64,
+                        (segment.line - anchor.z) as f64,
+                    ),
+                ),
+                GeometryAxis::Vertical => GeometrySegment2::new(
+                    GeometryPoint2::new(
+                        (segment.line - anchor.x) as f64,
+                        (segment.start - anchor.z) as f64,
+                    ),
+                    GeometryPoint2::new(
+                        (segment.line - anchor.x) as f64,
+                        (segment.end - anchor.z) as f64,
+                    ),
+                ),
+            },
+        })
+        .collect()
+}
+
+fn collect_story_door_openings(
+    door_cells: &BTreeSet<GridCoord>,
+    kind: DoorOpeningKind,
+    walkable_cells: &BTreeSet<GridCoord>,
+    anchor: GridCoord,
+    door_width: f64,
+    wall_thickness: f64,
+    opening_id_offset: usize,
+) -> Result<Vec<GeneratedDoorOpening>, BuildingLayoutError> {
+    sorted_cells(door_cells)
+        .into_iter()
+        .enumerate()
+        .map(|(index, cell)| {
+            let axis = detect_door_axis(cell, walkable_cells);
+            let center_x = (cell.x - anchor.x) as f64 + 0.5;
+            let center_z = (cell.z - anchor.z) as f64 + 0.5;
+            let segment = match axis {
+                GeometryAxis::Horizontal => GeometrySegment2::new(
+                    GeometryPoint2::new(center_x - door_width * 0.5, center_z),
+                    GeometryPoint2::new(center_x + door_width * 0.5, center_z),
+                ),
+                GeometryAxis::Vertical => GeometrySegment2::new(
+                    GeometryPoint2::new(center_x, center_z - door_width * 0.5),
+                    GeometryPoint2::new(center_x, center_z + door_width * 0.5),
+                ),
+            };
+            let polygon = opening_polygon(&segment, axis, wall_thickness.max(0.02));
+            Ok(GeneratedDoorOpening {
+                opening_id: opening_id_offset + index,
+                axis,
+                kind,
+                segment,
+                polygon: normalize_polygon(&polygon).map_err(|source| {
+                    BuildingLayoutError::GeometryGenerationFailed {
+                        level: cell.y,
+                        source,
+                    }
+                })?,
+            })
+        })
+        .collect()
+}
+
+fn detect_door_axis(cell: GridCoord, walkable_cells: &BTreeSet<GridCoord>) -> GeometryAxis {
+    let east = walkable_cells.contains(&GridCoord::new(cell.x + 1, cell.y, cell.z));
+    let west = walkable_cells.contains(&GridCoord::new(cell.x - 1, cell.y, cell.z));
+    let north = walkable_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z - 1));
+    let south = walkable_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z + 1));
+
+    if (east || west) && !(north || south) {
+        GeometryAxis::Vertical
+    } else if (north || south) && !(east || west) {
+        GeometryAxis::Horizontal
+    } else if east || west {
+        GeometryAxis::Vertical
+    } else {
+        GeometryAxis::Horizontal
+    }
+}
+
+fn opening_polygon(
+    segment: &GeometrySegment2,
+    axis: GeometryAxis,
+    wall_thickness: f64,
+) -> GeometryPolygon2 {
+    match axis {
+        GeometryAxis::Horizontal => rectangle_polygon(
+            segment.start.x,
+            segment.end.x,
+            segment.start.z - wall_thickness * 0.5,
+            segment.start.z + wall_thickness * 0.5,
+        ),
+        GeometryAxis::Vertical => rectangle_polygon(
+            segment.start.x - wall_thickness * 0.5,
+            segment.start.x + wall_thickness * 0.5,
+            segment.start.z,
+            segment.end.z,
+        ),
+    }
+}
+
+fn local_single_polygon_from_world_cells(
+    cells: &BTreeSet<GridCoord>,
+    anchor: GridCoord,
+) -> Result<GeometryPolygon2, BuildingGeometryValidationError> {
+    let multipolygon = local_multipolygon_from_world_cells(cells, anchor)?;
+    if multipolygon.polygons.len() != 1 {
+        return Err(BuildingGeometryValidationError::MultiplePolygons {
+            count: multipolygon.polygons.len(),
+        });
+    }
+    let polygon = multipolygon
+        .polygons
+        .into_iter()
+        .next()
+        .ok_or(BuildingGeometryValidationError::EmptyResult)?;
+    normalize_polygon(&polygon)
+}
+
+fn local_multipolygon_from_world_cells(
+    cells: &BTreeSet<GridCoord>,
+    anchor: GridCoord,
+) -> Result<GeometryMultiPolygon2, BuildingGeometryValidationError> {
+    let mut polygons = cells
+        .iter()
+        .copied()
+        .map(|cell| cell_square_polygon_local(cell, anchor))
+        .collect::<Vec<_>>();
+    let Some(first) = polygons.pop() else {
+        return Ok(GeometryMultiPolygon2::default());
+    };
+    let mut merged = MultiPolygon(vec![first]);
+    for polygon in polygons {
+        merged = merged.union(&polygon);
+    }
+    Ok(multipolygon_from_geo(&merged))
+}
+
+fn cell_square_polygon_local(cell: GridCoord, anchor: GridCoord) -> Polygon<f64> {
+    let min_x = (cell.x - anchor.x) as f64;
+    let min_z = (cell.z - anchor.z) as f64;
+    Polygon::new(
+        LineString::from(vec![
+            (min_x, min_z),
+            (min_x + 1.0, min_z),
+            (min_x + 1.0, min_z + 1.0),
+            (min_x, min_z + 1.0),
+            (min_x, min_z),
+        ]),
+        Vec::new(),
+    )
+}
+
+fn polygon_vertices_to_world_cells(vertices: &[GridCoord], level: i32) -> Vec<GridCoord> {
+    if vertices.len() < 3 {
+        return Vec::new();
+    }
+    let points = vertices
+        .iter()
+        .map(|vertex| GeometryPoint2::new(vertex.x as f64, vertex.z as f64))
+        .collect::<Vec<_>>();
+    let polygon = Polygon::new(
+        LineString::from(
+            normalized_vertex_ring(&points)
+                .into_iter()
+                .map(|point| (point.x, point.z))
+                .collect::<Vec<_>>(),
+        ),
+        Vec::new(),
+    );
+    let min_x = vertices.iter().map(|vertex| vertex.x).min().unwrap_or(0);
+    let max_x = vertices.iter().map(|vertex| vertex.x).max().unwrap_or(0);
+    let min_z = vertices.iter().map(|vertex| vertex.z).min().unwrap_or(0);
+    let max_z = vertices.iter().map(|vertex| vertex.z).max().unwrap_or(0);
+    let mut cells = Vec::new();
+    for z in min_z..max_z {
+        for x in min_x..max_x {
+            let center = geo::Point::new(x as f64 + 0.5, z as f64 + 0.5);
+            if polygon.contains(&center) {
+                cells.push(GridCoord::new(x, level, z));
+            }
+        }
+    }
+    cells.sort_by_key(|cell| (cell.y, cell.z, cell.x));
+    cells.dedup();
+    cells
+}
+
+fn normalized_vertex_ring(vertices: &[GeometryPoint2]) -> Vec<GeometryPoint2> {
+    let mut ring = vertices.to_vec();
+    while ring.len() > 1 && ring.first() == ring.last() {
+        ring.pop();
+    }
+    if let Some(first) = ring.first().copied() {
+        ring.push(first);
+    }
+    ring
+}
+
+fn relative_vertices_to_world(
+    vertices: &[RelativeGridVertex],
+    anchor: GridCoord,
+    level: i32,
+    rotation: MapRotation,
+    offset: (i32, i32),
+) -> Vec<GridCoord> {
+    let mut world_vertices = vertices
+        .iter()
+        .copied()
+        .map(|vertex| rotate_vertex(vertex, rotation))
+        .map(|vertex| {
+            GridCoord::new(
+                anchor.x + vertex.x - offset.0,
+                level,
+                anchor.z + vertex.z - offset.1,
+            )
+        })
+        .collect::<Vec<_>>();
+    while world_vertices.len() > 1 && world_vertices.first() == world_vertices.last() {
+        world_vertices.pop();
+    }
+    world_vertices
+}
+
+fn normalization_offset_for_vertices(
+    vertices: &[RelativeGridVertex],
+    rotation: MapRotation,
+) -> (i32, i32) {
+    let rotated = vertices
+        .iter()
+        .copied()
+        .map(|vertex| rotate_vertex(vertex, rotation))
+        .collect::<Vec<_>>();
+    (
+        rotated.iter().map(|vertex| vertex.x).min().unwrap_or(0),
+        rotated.iter().map(|vertex| vertex.z).min().unwrap_or(0),
+    )
+}
+
+fn rectangle_polygon(min_x: f64, max_x: f64, min_z: f64, max_z: f64) -> GeometryPolygon2 {
+    GeometryPolygon2 {
+        outer: vec![
+            GeometryPoint2::new(min_x, min_z),
+            GeometryPoint2::new(max_x, min_z),
+            GeometryPoint2::new(max_x, max_z),
+            GeometryPoint2::new(min_x, max_z),
+        ],
+        holes: Vec::new(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LocalWallSegment {
+    axis: GeometryAxis,
+    line: i32,
+    start: i32,
+    end: i32,
+}
+
+fn merge_local_wall_segments(mut segments: Vec<LocalWallSegment>) -> Vec<LocalWallSegment> {
+    segments.sort_by_key(|segment| {
+        (
+            match segment.axis {
+                GeometryAxis::Horizontal => 0,
+                GeometryAxis::Vertical => 1,
+            },
+            segment.line,
+            segment.start,
+            segment.end,
+        )
+    });
+
+    let mut merged: Vec<LocalWallSegment> = Vec::new();
+    for segment in segments {
+        if let Some(last) = merged.last_mut() {
+            if last.axis == segment.axis && last.line == segment.line && last.end == segment.start {
+                last.end = segment.end;
+                continue;
+            }
+        }
+        merged.push(segment);
+    }
+    merged
 }
 
 fn choose_split_candidate(
     regions: &[BTreeSet<GridCoord>],
     min_room_size: MapSize,
+    min_room_area: usize,
     max_room_size: MapSize,
     seed: u64,
     story_index: usize,
@@ -444,7 +919,7 @@ fn choose_split_candidate(
         let width = (bounds.max_x - bounds.min_x + 1) as u32;
         let depth = (bounds.max_z - bounds.min_z + 1) as u32;
         let oversized = width > max_room_size.width || depth > max_room_size.height;
-        let split_candidates = split_candidates(region, min_room_size);
+        let split_candidates = split_candidates(region, min_room_size, min_room_area);
         if !split_candidates.is_empty() {
             room_candidates.push((index, oversized, split_candidates, region.len()));
         }
@@ -467,7 +942,11 @@ fn choose_split_candidate(
     Some((*room_index, split_candidates[candidate_index].clone()))
 }
 
-fn split_candidates(region: &BTreeSet<GridCoord>, min_room_size: MapSize) -> Vec<SplitCandidate> {
+fn split_candidates(
+    region: &BTreeSet<GridCoord>,
+    min_room_size: MapSize,
+    min_room_area: usize,
+) -> Vec<SplitCandidate> {
     let Some(bounds) = bounds_for_cells(region) else {
         return Vec::new();
     };
@@ -495,8 +974,8 @@ fn split_candidates(region: &BTreeSet<GridCoord>, min_room_size: MapSize) -> Vec
                 .copied()
                 .filter(|cell| cell.x > axis_value)
                 .collect::<BTreeSet<_>>();
-            if !region_satisfies_size(&left, min_room_size)
-                || !region_satisfies_size(&right, min_room_size)
+            if !region_satisfies_constraints(&left, min_room_size, min_room_area)
+                || !region_satisfies_constraints(&right, min_room_size, min_room_area)
             {
                 continue;
             }
@@ -542,8 +1021,8 @@ fn split_candidates(region: &BTreeSet<GridCoord>, min_room_size: MapSize) -> Vec
                 .copied()
                 .filter(|cell| cell.z > axis_value)
                 .collect::<BTreeSet<_>>();
-            if !region_satisfies_size(&top, min_room_size)
-                || !region_satisfies_size(&bottom, min_room_size)
+            if !region_satisfies_constraints(&top, min_room_size, min_room_area)
+                || !region_satisfies_constraints(&bottom, min_room_size, min_room_area)
             {
                 continue;
             }
@@ -760,11 +1239,16 @@ fn seeded_index(seed: u64, len: usize) -> usize {
     ((seed ^ seed.rotate_left(17) ^ 0x9E37_79B9_7F4A_7C15) as usize) % len
 }
 
-fn region_satisfies_size(region: &BTreeSet<GridCoord>, min_room_size: MapSize) -> bool {
+fn region_satisfies_constraints(
+    region: &BTreeSet<GridCoord>,
+    min_room_size: MapSize,
+    min_room_area: usize,
+) -> bool {
     let Some(bounds) = bounds_for_cells(region) else {
         return false;
     };
-    (bounds.max_x - bounds.min_x + 1) as u32 >= min_room_size.width
+    region.len() >= min_room_area
+        && (bounds.max_x - bounds.min_x + 1) as u32 >= min_room_size.width
         && (bounds.max_z - bounds.min_z + 1) as u32 >= min_room_size.height
 }
 
@@ -811,9 +1295,9 @@ fn bounds_for_cells(cells: &BTreeSet<GridCoord>) -> Option<CellBounds> {
 mod tests {
     use super::{generate_building_layout, GeneratedBuildingStory};
     use game_data::{
-        BuildingGeneratorKind, GridCoord, MapBuildingLayoutSpec, MapBuildingStairSpec,
-        MapBuildingStorySpec, MapObjectFootprint, MapRotation, MapSize, RelativeGridCell,
-        StairKind,
+        BuildingGeneratorKind, GridCoord, MapBuildingFootprintPolygonSpec, MapBuildingLayoutSpec,
+        MapBuildingStairSpec, MapBuildingStorySpec, MapObjectFootprint, MapRotation, MapSize,
+        RelativeGridCell, RelativeGridVertex, StairKind,
     };
 
     #[test]
@@ -919,6 +1403,92 @@ mod tests {
         assert!(story.rooms.is_empty());
         assert!(story.walkable_cells.is_empty());
         assert_eq!(story.wall_cells.len(), story.shape_cells.len());
+    }
+
+    #[test]
+    fn small_buildings_do_not_over_split_when_min_room_area_blocks_it() {
+        let layout = generate_building_layout(
+            &MapBuildingLayoutSpec {
+                seed: 77,
+                target_room_count: 3,
+                min_room_size: MapSize {
+                    width: 2,
+                    height: 2,
+                },
+                min_room_area: 12,
+                shape_cells: (0..4)
+                    .flat_map(|z| (0..5).map(move |x| RelativeGridCell::new(x, z)))
+                    .collect(),
+                ..MapBuildingLayoutSpec::default()
+            },
+            GridCoord::new(0, 0, 0),
+            MapRotation::North,
+            MapObjectFootprint {
+                width: 5,
+                height: 4,
+            },
+        )
+        .expect("layout should generate");
+
+        assert_eq!(layout.stories[0].rooms.len(), 1);
+        assert!(layout.stories[0].interior_door_cells.is_empty());
+    }
+
+    #[test]
+    fn explicit_polygon_footprint_generates_geometry_outputs() {
+        let layout = generate_building_layout(
+            &MapBuildingLayoutSpec {
+                footprint_polygon: Some(MapBuildingFootprintPolygonSpec {
+                    outer: vec![
+                        RelativeGridVertex::new(0, 0),
+                        RelativeGridVertex::new(4, 0),
+                        RelativeGridVertex::new(4, 3),
+                        RelativeGridVertex::new(0, 3),
+                    ],
+                }),
+                target_room_count: 2,
+                min_room_size: MapSize {
+                    width: 2,
+                    height: 2,
+                },
+                ..MapBuildingLayoutSpec::default()
+            },
+            GridCoord::new(10, 0, 20),
+            MapRotation::North,
+            MapObjectFootprint {
+                width: 4,
+                height: 3,
+            },
+        )
+        .expect("layout should generate");
+
+        let story = &layout.stories[0];
+        assert!(story.footprint_polygon.is_some());
+        assert!(!story.wall_polygons.polygons.polygons.is_empty());
+        assert!(!story.walkable_polygons.polygons.polygons.is_empty());
+    }
+
+    #[test]
+    fn generated_story_exposes_polygon_geometry_and_openings() {
+        let layout = generate_building_layout(
+            &sample_layout_spec(1234),
+            GridCoord::new(0, 0, 0),
+            MapRotation::North,
+            MapObjectFootprint {
+                width: 8,
+                height: 8,
+            },
+        )
+        .expect("layout should generate");
+
+        let story = &layout.stories[0];
+        assert!(story.footprint_polygon.is_some());
+        assert_eq!(story.room_polygons.len(), story.rooms.len());
+        assert!(!story.wall_strokes.is_empty());
+        assert_eq!(
+            story.door_openings.len(),
+            story.interior_door_cells.len() + story.exterior_door_cells.len()
+        );
     }
 
     fn story_signature(story: &GeneratedBuildingStory) -> (usize, usize, Vec<GridCoord>) {

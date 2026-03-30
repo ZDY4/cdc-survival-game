@@ -2,10 +2,11 @@ use std::collections::BTreeSet;
 
 use game_data::{
     ActionResult, ActionType, ActorId, ActorSide, CharacterId, DialogueLibrary,
-    DialogueRuleLibrary, DialogueRuntimeState, GridCoord, InteractionContextSnapshot,
-    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionId,
-    InteractionPrompt, InteractionTargetId, ItemLibrary, MapLibrary, OverworldLibrary,
-    QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldCoord, WorldMode,
+    DialogueRuleLibrary, DialogueRuntimeState, EffectLibrary, GridCoord,
+    InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
+    InteractionOptionId, InteractionPrompt, InteractionTargetId, ItemFragment, ItemLibrary,
+    MapLibrary, OverworldLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary,
+    WorldCoord, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -449,6 +450,115 @@ impl SimulationRuntime {
         self.simulation
             .economy_mut()
             .sell_item_to_shop(actor_id, shop_id, item_id, count, items)
+    }
+
+    pub fn move_equipped_item(
+        &mut self,
+        actor_id: ActorId,
+        from_slot: &str,
+        to_slot: &str,
+        items: &ItemLibrary,
+    ) -> Result<(), EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .move_equipped_item(actor_id, from_slot, to_slot, items)
+    }
+
+    pub fn clear_actor_loadout(&mut self, actor_id: ActorId) -> Result<(), EconomyRuntimeError> {
+        self.simulation.economy_mut().clear_actor_loadout(actor_id)
+    }
+
+    pub fn allocate_attribute_point(
+        &mut self,
+        actor_id: ActorId,
+        attribute: &str,
+    ) -> Result<i32, String> {
+        self.simulation
+            .allocate_attribute_point(actor_id, attribute)
+    }
+
+    pub fn get_actor_resource(&self, actor_id: ActorId, resource: &str) -> f32 {
+        self.simulation.actor_resource(actor_id, resource)
+    }
+
+    pub fn set_actor_resource(&mut self, actor_id: ActorId, resource: &str, value: f32) {
+        self.simulation
+            .set_actor_resource(actor_id, resource, value);
+    }
+
+    pub fn get_actor_combat_attribute(&self, actor_id: ActorId, attribute: &str) -> f32 {
+        self.simulation.actor_combat_attribute(actor_id, attribute)
+    }
+
+    pub fn get_actor_max_hit_points(&self, actor_id: ActorId) -> f32 {
+        self.simulation.max_hit_points(actor_id)
+    }
+
+    pub fn use_item(
+        &mut self,
+        actor_id: ActorId,
+        item_id: u32,
+        items: &ItemLibrary,
+        effects: &EffectLibrary,
+    ) -> Result<String, String> {
+        let definition = items
+            .get(item_id)
+            .ok_or_else(|| format!("unknown_item:{item_id}"))?;
+        let Some(ItemFragment::Usable {
+            consume_on_use,
+            effect_ids,
+            ..
+        }) = definition
+            .fragments
+            .iter()
+            .find(|fragment| matches!(fragment, ItemFragment::Usable { .. }))
+        else {
+            return Err(format!("item_not_usable:{item_id}"));
+        };
+
+        if self
+            .simulation
+            .economy()
+            .inventory_count(actor_id, item_id)
+            .unwrap_or(0)
+            <= 0
+        {
+            return Err(format!("item_missing:{item_id}"));
+        }
+
+        for effect_id in effect_ids {
+            let Some(effect) = effects.get(effect_id) else {
+                continue;
+            };
+            if let Some(gameplay_effect) = effect.gameplay_effect.as_ref() {
+                for (resource, delta) in &gameplay_effect.resource_deltas {
+                    let runtime_resource = match resource.as_str() {
+                        "health" => "hp",
+                        other => other,
+                    };
+                    let current = self.get_actor_resource(actor_id, runtime_resource);
+                    let max_value = if runtime_resource == "hp" {
+                        self.get_actor_max_hit_points(actor_id)
+                    } else {
+                        f32::MAX
+                    };
+                    self.set_actor_resource(
+                        actor_id,
+                        runtime_resource,
+                        (current + *delta).clamp(0.0, max_value),
+                    );
+                }
+            }
+        }
+
+        if *consume_on_use {
+            self.simulation
+                .economy_mut()
+                .remove_item(actor_id, item_id, 1)
+                .map_err(|error| error.to_string())?;
+        }
+
+        Ok(definition.name.clone())
     }
 
     pub fn world_to_grid(&self, world: WorldCoord) -> GridCoord {

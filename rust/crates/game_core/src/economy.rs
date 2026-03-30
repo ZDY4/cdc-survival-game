@@ -278,6 +278,10 @@ impl HeadlessEconomyRuntime {
         self.actors.get(&actor_id)
     }
 
+    pub fn actor_mut(&mut self, actor_id: ActorId) -> Option<&mut ActorEconomyState> {
+        self.actors.get_mut(&actor_id)
+    }
+
     pub fn remove_actor(&mut self, actor_id: ActorId) -> Option<ActorEconomyState> {
         self.actors.remove(&actor_id)
     }
@@ -601,6 +605,92 @@ impl HeadlessEconomyRuntime {
         })?;
         *actor.inventory.entry(equipped.item_id).or_insert(0) += 1;
         Ok(equipped.item_id)
+    }
+
+    pub fn move_equipped_item(
+        &mut self,
+        actor_id: ActorId,
+        from_slot: &str,
+        to_slot: &str,
+        items: &ItemLibrary,
+    ) -> Result<(), EconomyRuntimeError> {
+        let from_slot = from_slot.trim().to_string();
+        let to_slot = to_slot.trim().to_string();
+        if from_slot == to_slot {
+            return Ok(());
+        }
+
+        let actor = self
+            .actors
+            .get(&actor_id)
+            .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
+        let moving = actor
+            .equipped_slots
+            .get(&from_slot)
+            .cloned()
+            .ok_or_else(|| EconomyRuntimeError::EmptyEquipmentSlot {
+                actor_id,
+                slot: from_slot.clone(),
+            })?;
+        let target = actor.equipped_slots.get(&to_slot).cloned();
+
+        let moving_definition = ensure_item_exists(items, moving.item_id)?;
+        let Some(ItemFragment::Equip {
+            slots: moving_slots,
+            ..
+        }) = item_equip_fragment(moving_definition)
+        else {
+            return Err(EconomyRuntimeError::ItemNotEquippable {
+                item_id: moving.item_id,
+            });
+        };
+        if !slot_supported(moving_slots.as_slice(), &to_slot) {
+            return Err(EconomyRuntimeError::InvalidEquipmentSlot {
+                item_id: moving.item_id,
+                slot: to_slot,
+            });
+        }
+
+        if let Some(target) = target.as_ref() {
+            let target_definition = ensure_item_exists(items, target.item_id)?;
+            let Some(ItemFragment::Equip {
+                slots: target_slots,
+                ..
+            }) = item_equip_fragment(target_definition)
+            else {
+                return Err(EconomyRuntimeError::ItemNotEquippable {
+                    item_id: target.item_id,
+                });
+            };
+            if !slot_supported(target_slots.as_slice(), &from_slot) {
+                return Err(EconomyRuntimeError::InvalidEquipmentSlot {
+                    item_id: target.item_id,
+                    slot: from_slot,
+                });
+            }
+        }
+
+        let actor = self
+            .actors
+            .get_mut(&actor_id)
+            .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
+        actor.equipped_slots.remove(&from_slot);
+        if let Some(target) = target {
+            actor.equipped_slots.insert(from_slot, target);
+        }
+        actor.equipped_slots.insert(to_slot, moving);
+        Ok(())
+    }
+
+    pub fn clear_actor_loadout(&mut self, actor_id: ActorId) -> Result<(), EconomyRuntimeError> {
+        let actor = self
+            .actors
+            .get_mut(&actor_id)
+            .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
+        actor.inventory.clear();
+        actor.equipped_slots.clear();
+        actor.ammo_reserves.clear();
+        Ok(())
     }
 
     pub fn equipped_item(&self, actor_id: ActorId, slot: &str) -> Option<&EquippedItemState> {

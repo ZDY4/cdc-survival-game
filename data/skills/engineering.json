@@ -1,0 +1,24 @@
+{
+  "name": "工程基础",
+  "icon": "",
+  "description": "提升复杂器械与结构制作的稳定性。", 
+  "tree_id": "crafting",
+  "max_level": 5,
+  "prerequisites": [
+    "crafting"
+  ],
+  "attribute_requirements": {
+    "strength": 5,
+    "agility": 5,
+    "intelligence": 6
+  },
+  "id": "engineering",
+  "gameplay_effect": {
+    "modifiers": {
+      "crafting_speed": {
+        "max_value": 0.0,
+        "per_level": 0.04
+      }
+    }
+  }
+}
