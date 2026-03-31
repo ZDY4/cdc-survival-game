@@ -6,21 +6,29 @@ use game_data::InteractionPrompt;
 
 use crate::dialogue::current_dialogue_node;
 use crate::geometry::{
-    actor_label, focused_target_summary, format_optional_grid, map_object_at_grid,
-    movement_block_reasons, rendered_path_preview, selected_actor, sight_block_reasons,
+    actor_label, focused_target_summary, format_optional_grid, is_missing_generated_building,
+    map_object_at_grid, map_object_debug_label, movement_block_reasons, rendered_path_preview,
+    selected_actor, sight_block_reasons,
 };
 use crate::profiling::ViewerSystemProfilerState;
 use crate::state::{
-    FreeObserveIndicatorRoot, HudEventCategory, HudEventFilter, HudFooterText, HudText,
-    ViewerEventEntry, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+    FpsOverlayText, FreeObserveIndicatorRoot, HudEventCategory, HudEventFilter, HudFooterText,
+    HudTabBarRoot, HudTabButton, HudText, ViewerEventEntry, ViewerHudPage, ViewerRenderConfig,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
+use game_bevy::{UiMenuPanel, UiMenuState};
 
 pub(crate) fn update_free_observe_indicator(
     indicator_visibility: Single<&mut Visibility, With<FreeObserveIndicatorRoot>>,
+    scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
+    menu_state: Res<UiMenuState>,
 ) {
     let mut indicator_visibility = indicator_visibility.into_inner();
-    *indicator_visibility = if viewer_state.is_free_observe() {
+    *indicator_visibility = if scene_kind.is_gameplay()
+        && viewer_state.is_free_observe()
+        && menu_state.active_panel != Some(UiMenuPanel::Settings)
+    {
         Visibility::Visible
     } else {
         Visibility::Hidden
@@ -30,14 +38,18 @@ pub(crate) fn update_free_observe_indicator(
 pub(crate) fn update_hud(
     hud_text: Single<(&mut Text, &mut Visibility), With<HudText>>,
     mut hud_footer: Single<&mut TextSpan, With<HudFooterText>>,
-    diagnostics: Res<DiagnosticsStore>,
     profiler: Res<ViewerSystemProfilerState>,
     runtime_state: Res<ViewerRuntimeState>,
     render_config: Res<ViewerRenderConfig>,
+    scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
+    menu_state: Res<UiMenuState>,
 ) {
     let (mut hud_text, mut visibility) = hud_text.into_inner();
-    if !viewer_state.show_hud {
+    if scene_kind.is_main_menu()
+        || !viewer_state.show_hud
+        || menu_state.active_panel == Some(UiMenuPanel::Settings)
+    {
         *visibility = Visibility::Hidden;
         *hud_text = Text::new("");
         **hud_footer = TextSpan::new("");
@@ -47,17 +59,7 @@ pub(crate) fn update_hud(
     *visibility = Visibility::Visible;
     let snapshot = runtime_state.runtime.snapshot();
     let header = format!("Bevy Debug Viewer · {}", viewer_state.hud_page.title());
-    let summary = format!(
-        "{}\n\n{}",
-        format_status_summary(
-            &snapshot,
-            &runtime_state,
-            &viewer_state,
-            *render_config,
-            &diagnostics,
-        ),
-        format_frame_timings_section(&profiler),
-    );
+    let summary = format_status_summary(&snapshot, &runtime_state, &viewer_state, *render_config);
     let page_body = match viewer_state.hud_page {
         ViewerHudPage::Overview => format_overview_panel(&snapshot, &runtime_state, &viewer_state),
         ViewerHudPage::SelectedActor => {
@@ -67,6 +69,7 @@ pub(crate) fn update_hud(
         ViewerHudPage::Interaction => format_interaction_panel(&snapshot, &viewer_state),
         ViewerHudPage::Events => format_events_panel(&runtime_state, viewer_state.event_filter),
         ViewerHudPage::Ai => format_ai_panel(&runtime_state),
+        ViewerHudPage::Performance => format_performance_panel(&profiler),
     };
     let controls = if viewer_state.show_controls {
         format!("\n\n{}", format_controls_help())
@@ -76,6 +79,90 @@ pub(crate) fn update_hud(
 
     *hud_text = Text::new(format!("{header}\n{}\n\n{page_body}{controls}", summary));
     **hud_footer = TextSpan::new(format!("\n\n{}", footer_hint(viewer_state.hud_page)));
+}
+
+pub(crate) fn update_hud_tab_bar(
+    tab_bar_visibility: Single<&mut Visibility, With<HudTabBarRoot>>,
+    mut tab_buttons: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &mut TextColor,
+            &HudTabButton,
+        ),
+        With<HudTabButton>,
+    >,
+    scene_kind: Res<ViewerSceneKind>,
+    viewer_state: Res<ViewerState>,
+    menu_state: Res<UiMenuState>,
+) {
+    let hidden = scene_kind.is_main_menu()
+        || !viewer_state.show_hud
+        || menu_state.active_panel == Some(UiMenuPanel::Settings);
+    let mut tab_bar_visibility = tab_bar_visibility.into_inner();
+    *tab_bar_visibility = if hidden {
+        Visibility::Hidden
+    } else {
+        Visibility::Visible
+    };
+    if hidden {
+        return;
+    }
+
+    for (interaction, mut background, mut border, mut text_color, tab_button) in &mut tab_buttons {
+        let is_selected = viewer_state.hud_page == tab_button.page;
+        *background = BackgroundColor(hud_tab_button_color(is_selected, *interaction));
+        *border = BorderColor::all(hud_tab_button_border_color(is_selected));
+        *text_color = TextColor(if is_selected {
+            Color::srgba(0.98, 0.99, 1.0, 1.0)
+        } else {
+            Color::srgba(0.85, 0.88, 0.93, 0.98)
+        });
+    }
+}
+
+pub(crate) fn handle_hud_tab_buttons(
+    mut tab_buttons: Query<
+        (&Interaction, &HudTabButton),
+        (Changed<Interaction>, With<HudTabButton>),
+    >,
+    mut viewer_state: ResMut<ViewerState>,
+    scene_kind: Res<ViewerSceneKind>,
+    menu_state: Res<UiMenuState>,
+) {
+    if scene_kind.is_main_menu() || menu_state.active_panel == Some(UiMenuPanel::Settings) {
+        return;
+    }
+
+    for (interaction, tab_button) in &mut tab_buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        set_hud_page(&mut viewer_state, tab_button.page);
+    }
+}
+
+pub(crate) fn update_fps_overlay(
+    fps_overlay: Single<(&mut Text, &mut Visibility), With<FpsOverlayText>>,
+    diagnostics: Res<DiagnosticsStore>,
+    scene_kind: Res<ViewerSceneKind>,
+    viewer_state: Res<ViewerState>,
+) {
+    let (mut fps_overlay, mut visibility) = fps_overlay.into_inner();
+    if scene_kind.is_main_menu() || !viewer_state.show_fps_overlay {
+        *visibility = Visibility::Hidden;
+        *fps_overlay = Text::new("");
+        return;
+    }
+
+    *visibility = Visibility::Visible;
+    *fps_overlay = Text::new(format!("FPS {}", current_fps_label(&diagnostics)));
+}
+
+pub(crate) fn set_hud_page(viewer_state: &mut ViewerState, page: ViewerHudPage) {
+    viewer_state.hud_page = page;
+    viewer_state.status_line = format!("hud page: {}", page.title());
 }
 
 fn actor_overview_summary(actor: &ActorDebugState) -> String {
@@ -92,7 +179,6 @@ fn format_status_summary(
     runtime_state: &ViewerRuntimeState,
     viewer_state: &ViewerState,
     render_config: ViewerRenderConfig,
-    diagnostics: &DiagnosticsStore,
 ) -> String {
     section(
         "Status",
@@ -108,7 +194,8 @@ fn format_status_summary(
             kv("Control Mode", viewer_state.control_mode.label()),
             kv("Camera Mode", viewer_state.camera_mode.label()),
             kv("Combat Active", snapshot.combat.in_combat),
-            kv("Turn Index", snapshot.combat.current_turn_index),
+            kv("Combat Turn Index", combat_turn_index_label(snapshot)),
+            kv("Runtime Tick", runtime_state.runtime.tick_count()),
             kv(
                 "Pending Progression",
                 format!("{:?}", runtime_state.runtime.peek_pending_progression()),
@@ -119,9 +206,21 @@ fn format_status_summary(
             ),
             kv("Overlay", render_config.overlay_mode.label()),
             kv("Zoom", format!("{:.0}%", render_config.zoom_factor * 100.0)),
-            kv("FPS", current_fps_label(diagnostics)),
         ],
     )
+}
+
+fn combat_turn_index_label(snapshot: &SimulationSnapshot) -> String {
+    if snapshot.combat.in_combat {
+        // Render 1-based turn numbers for the HUD while combat is active.
+        snapshot
+            .combat
+            .current_turn_index
+            .saturating_add(1)
+            .to_string()
+    } else {
+        "inactive".to_string()
+    }
 }
 
 fn current_fps_label(diagnostics: &DiagnosticsStore) -> String {
@@ -158,6 +257,23 @@ fn format_frame_timings_section(profiler: &ViewerSystemProfilerState) -> String 
         }));
     }
     section("Frame Timings", lines)
+}
+
+fn format_performance_panel(profiler: &ViewerSystemProfilerState) -> String {
+    section(
+        "Performance",
+        vec![
+            kv(
+                "Collection",
+                if profiler.is_empty() {
+                    "warming up"
+                } else {
+                    "active"
+                },
+            ),
+            format_frame_timings_section(profiler),
+        ],
+    )
 }
 
 fn format_overview_panel(
@@ -213,7 +329,8 @@ fn format_overview_panel(
                     "Current Actor",
                     format!("{:?}", snapshot.combat.current_actor_id),
                 ),
-                kv("Turn Index", snapshot.combat.current_turn_index),
+                kv("Combat Turn Index", combat_turn_index_label(snapshot)),
+                kv("Runtime Tick", runtime_state.runtime.tick_count()),
             ],
         ),
         section(
@@ -383,23 +500,24 @@ fn format_world_panel(snapshot: &SimulationSnapshot, viewer_state: &ViewerState)
 
     if let Some(grid) = viewer_state.hovered_grid {
         if let Some(object) = map_object_at_grid(snapshot, grid) {
-            sections.push(section(
-                "Hovered Object",
-                vec![
-                    kv("Id", &object.object_id),
-                    kv("Kind", format!("{:?}", object.kind)),
-                    kv(
-                        "Anchor",
-                        format!(
-                            "({}, {}, {})",
-                            object.anchor.x, object.anchor.y, object.anchor.z
-                        ),
+            let mut lines = vec![
+                kv("Id", &object.object_id),
+                kv("Kind", format!("{:?}", object.kind)),
+                kv(
+                    "Anchor",
+                    format!(
+                        "({}, {}, {})",
+                        object.anchor.x, object.anchor.y, object.anchor.z
                     ),
-                    kv("Blocks Movement", object.blocks_movement),
-                    kv("Blocks Sight", object.blocks_sight),
-                    kv("Payload", format_payload_summary(&object.payload_summary)),
-                ],
-            ));
+                ),
+                kv("Blocks Movement", object.blocks_movement),
+                kv("Blocks Sight", object.blocks_sight),
+                kv("Payload", format_payload_summary(&object.payload_summary)),
+            ];
+            if is_missing_generated_building(snapshot, &object) {
+                lines.push(kv("Geo", "missing geo"));
+            }
+            sections.push(section("Hovered Object", lines));
         }
     }
 
@@ -427,7 +545,7 @@ fn format_hover_section(snapshot: &SimulationSnapshot, viewer_state: &ViewerStat
         .map_objects
         .iter()
         .filter(|object| object.occupied_cells.contains(&grid))
-        .map(|object| format!("{} ({:?})", object.object_id, object.kind))
+        .map(|object| map_object_debug_label(snapshot, object))
         .collect::<Vec<_>>();
     let movement_reasons = movement_block_reasons(snapshot, grid);
     let sight_reasons = sight_block_reasons(snapshot, grid);
@@ -675,11 +793,12 @@ fn format_controls_help() -> String {
     section(
         "Controls",
         vec![
-            "F1-F6 switch HUD page".to_string(),
+            "F1-F7 switch HUD page".to_string(),
             "Ctrl+P toggle player control / free observe".to_string(),
             "H toggle HUD".to_string(),
             "/ toggle detailed help".to_string(),
             "~ toggle debug console".to_string(),
+            "Console command: show fps toggles top-right FPS overlay".to_string(),
             "V cycles overlay density (minimal / gameplay / AI debug)".to_string(),
             "[ / ] switch event filter on Events page".to_string(),
             "Left click cancels auto-move, selects actor, advances dialogue, or moves".to_string(),
@@ -703,19 +822,41 @@ fn format_controls_help() -> String {
 pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
     match page {
         ViewerHudPage::Overview => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
+            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
         }
         ViewerHudPage::SelectedActor => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · Tab切换角色 · 自由观察下左键选AI"
+            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · Tab切换角色 · 自由观察下左键选AI"
         }
         ViewerHudPage::World => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 悬停看格子 · 中键拖拽取消跟随 · 滚轮缩放 · F恢复跟随"
+            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 悬停看格子 · 中键拖拽取消跟随 · 滚轮缩放 · F恢复跟随"
         }
         ViewerHudPage::Interaction => {
-            "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
+            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
         }
-        ViewerHudPage::Events => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · [ / ]切过滤器",
-        ViewerHudPage::Ai => "F1-6切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 查看 AI 目标 / 动作 / 预订 / 班次",
+        ViewerHudPage::Events => "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · [ / ]切过滤器",
+        ViewerHudPage::Ai => "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 查看 AI 目标 / 动作 / 预订 / 班次",
+        ViewerHudPage::Performance => {
+            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · show fps 开关右上角 FPS · 仅当前页统计函数耗时"
+        }
+    }
+}
+
+fn hud_tab_button_color(selected: bool, interaction: Interaction) -> Color {
+    match (selected, interaction) {
+        (true, Interaction::Pressed) => Color::srgba(0.26, 0.4, 0.58, 0.98),
+        (true, Interaction::Hovered) => Color::srgba(0.22, 0.35, 0.5, 0.98),
+        (true, Interaction::None) => Color::srgba(0.18, 0.3, 0.45, 0.96),
+        (false, Interaction::Pressed) => Color::srgba(0.23, 0.27, 0.33, 0.98),
+        (false, Interaction::Hovered) => Color::srgba(0.17, 0.2, 0.26, 0.96),
+        (false, Interaction::None) => Color::srgba(0.11, 0.13, 0.17, 0.94),
+    }
+}
+
+fn hud_tab_button_border_color(selected: bool) -> Color {
+    if selected {
+        Color::srgba(0.52, 0.74, 0.98, 1.0)
+    } else {
+        Color::srgba(0.19, 0.24, 0.32, 1.0)
     }
 }
 
@@ -791,11 +932,12 @@ pub(crate) fn event_matches_filter(event: &ViewerEventEntry, filter: HudEventFil
 mod tests {
     use super::{
         event_matches_filter, footer_hint, format_event_line, format_fps_value,
-        format_frame_timings_section,
+        format_frame_timings_section, format_performance_panel, hud_tab_button_color,
     };
     use crate::profiling::ViewerSystemProfilerState;
     use crate::simulation::classify_event;
     use crate::state::{HudEventCategory, HudEventFilter, ViewerEventEntry, ViewerHudPage};
+    use bevy::prelude::Interaction;
     use game_core::SimulationEvent;
     use game_data::{ActorId, InteractionTargetId};
 
@@ -803,10 +945,12 @@ mod tests {
     fn footer_hint_contains_global_shortcuts_and_page_specific_action() {
         let overview_hint = footer_hint(ViewerHudPage::Overview);
         let events_hint = footer_hint(ViewerHudPage::Events);
+        let perf_hint = footer_hint(ViewerHudPage::Performance);
 
-        assert!(overview_hint.contains("F1-6切页"));
+        assert!(overview_hint.contains("F1-7切页"));
         assert!(overview_hint.contains("A自动推进"));
         assert!(events_hint.contains("切过滤器"));
+        assert!(perf_hint.contains("show fps"));
     }
 
     #[test]
@@ -872,5 +1016,25 @@ mod tests {
         assert!(section.contains("Frame Timings"));
         assert!(section.contains("draw_world"));
         assert!(section.contains("tick_runtime"));
+    }
+
+    #[test]
+    fn performance_panel_mentions_frame_timings() {
+        let mut profiler = ViewerSystemProfilerState::default();
+        profiler.record_sample("draw_world", 2.0);
+
+        let panel = format_performance_panel(&profiler);
+
+        assert!(panel.contains("Performance"));
+        assert!(panel.contains("Frame Timings"));
+        assert!(panel.contains("draw_world"));
+    }
+
+    #[test]
+    fn selected_tab_uses_distinct_button_color() {
+        let selected = hud_tab_button_color(true, Interaction::None).to_srgba();
+        let unselected = hud_tab_button_color(false, Interaction::None).to_srgba();
+
+        assert_ne!(selected, unselected);
     }
 }

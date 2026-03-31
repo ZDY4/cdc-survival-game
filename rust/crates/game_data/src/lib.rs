@@ -72,7 +72,7 @@ pub use map::{
 };
 pub use models::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,
-    TurnState, WorldCoord,
+    SkillTargetRequest, TurnState, WorldCoord,
 };
 pub use overworld::{
     load_overworld_library, load_overworld_library_with_catalog, validate_overworld_definition,

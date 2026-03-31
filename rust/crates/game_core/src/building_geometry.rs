@@ -1,3 +1,4 @@
+use game_data::GridCoord;
 use geo::{Area, Coord, LineString, MultiPolygon, Polygon, Triangle, TriangulateEarcut};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -102,18 +103,9 @@ pub struct GeneratedRoomPolygon {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GeneratedWallStroke {
-    pub wall_id: usize,
-    pub axis: GeometryAxis,
-    pub exterior: bool,
-    #[serde(default)]
-    pub room_ids: Vec<usize>,
-    pub center_line: GeometrySegment2,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneratedDoorOpening {
     pub opening_id: usize,
+    pub anchor_grid: GridCoord,
     pub axis: GeometryAxis,
     pub kind: DoorOpeningKind,
     pub segment: GeometrySegment2,
@@ -121,26 +113,8 @@ pub struct GeneratedDoorOpening {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct GeneratedWallPolygons {
-    pub polygons: GeometryMultiPolygon2,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GeneratedWalkablePolygons {
     pub polygons: GeometryMultiPolygon2,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct GeneratedBuildingGeometryDebugState {
-    pub footprint: Option<BuildingFootprint2d>,
-    #[serde(default)]
-    pub room_polygons: Vec<GeneratedRoomPolygon>,
-    #[serde(default)]
-    pub wall_strokes: Vec<GeneratedWallStroke>,
-    pub wall_polygons: GeneratedWallPolygons,
-    #[serde(default)]
-    pub door_openings: Vec<GeneratedDoorOpening>,
-    pub walkable_polygons: GeneratedWalkablePolygons,
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -232,6 +206,22 @@ pub fn triangulate_polygon(
     polygon: &GeometryPolygon2,
 ) -> Result<Vec<[GeometryPoint2; 3]>, BuildingGeometryValidationError> {
     let polygon = normalize_polygon(polygon)?;
+    triangulate_polygon_inner(&polygon)
+}
+
+pub fn triangulate_polygon_with_holes(
+    polygon: &GeometryPolygon2,
+) -> Result<Vec<[GeometryPoint2; 3]>, BuildingGeometryValidationError> {
+    validate_ring(&normalized_ring(&polygon.outer))?;
+    for hole in &polygon.holes {
+        validate_ring(&normalized_ring(hole))?;
+    }
+    triangulate_polygon_inner(polygon)
+}
+
+fn triangulate_polygon_inner(
+    polygon: &GeometryPolygon2,
+) -> Result<Vec<[GeometryPoint2; 3]>, BuildingGeometryValidationError> {
     let geo_polygon = polygon_to_geo(&polygon);
     let triangles: Vec<Triangle<f64>> = geo_polygon.earcut_triangles();
     if triangles.is_empty() {

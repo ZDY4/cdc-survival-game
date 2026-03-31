@@ -2,6 +2,7 @@ use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::log::{error, info};
 use bevy::prelude::*;
+use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 use game_bevy::{
     MapAiSpawnRuntimeState, SettlementContext, SettlementDebugSnapshot, SimClock,
     SmartObjectReservations, WorldAlertState,
@@ -10,7 +11,7 @@ use game_bevy::{
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::simulation::viewer_event_entry;
 use crate::state::{
-    ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
+    UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
     ViewerDamageNumberState, ViewerPalette, ViewerRuntimeState, ViewerState,
 };
 
@@ -26,10 +27,16 @@ struct ConsoleCommandSpec {
     summary: &'static str,
 }
 
-const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[ConsoleCommandSpec {
-    name: "restart",
-    summary: "Rebuild the runtime from bootstrap and restart the current game.",
-}];
+const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[
+    ConsoleCommandSpec {
+        name: "restart",
+        summary: "Rebuild the runtime from bootstrap and restart the current game.",
+    },
+    ConsoleCommandSpec {
+        name: "show fps",
+        summary: "Toggle the top-right FPS overlay.",
+    },
+];
 
 #[derive(Resource, Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct ViewerConsoleState {
@@ -165,7 +172,10 @@ pub(crate) fn spawn_console_panel(
         },
         BackgroundColor(palette.menu_background),
         Visibility::Hidden,
+        FocusPolicy::Block,
+        RelativeCursorPosition::default(),
         ConsolePanelRoot,
+        UiMouseBlocker,
         children![(
             Text::new(""),
             TextFont::from_font_size(13.0).with_font(ui_font),
@@ -277,9 +287,10 @@ fn execute_console_command(
     camera_shake_state: &mut ViewerCameraShakeState,
     damage_number_state: &mut ViewerDamageNumberState,
 ) -> ConsoleFeedback {
-    let command_name = command_line
-        .split_whitespace()
-        .next()
+    let tokens: Vec<_> = command_line.split_whitespace().collect();
+    let command_name = tokens
+        .first()
+        .copied()
         .unwrap_or_default()
         .to_ascii_lowercase();
 
@@ -297,9 +308,37 @@ fn execute_console_command(
             camera_shake_state,
             damage_number_state,
         ),
+        "show" => execute_show_command(&tokens[1..], viewer_state),
         _ => ConsoleFeedback {
             is_error: true,
             text: format!("Unknown command: {command_name}"),
+        },
+    }
+}
+
+fn execute_show_command(args: &[&str], viewer_state: &mut ViewerState) -> ConsoleFeedback {
+    match args {
+        [target] if target.eq_ignore_ascii_case("fps") => {
+            viewer_state.show_fps_overlay = !viewer_state.show_fps_overlay;
+            ConsoleFeedback {
+                is_error: false,
+                text: format!(
+                    "fps overlay: {}",
+                    if viewer_state.show_fps_overlay {
+                        "on"
+                    } else {
+                        "off"
+                    }
+                ),
+            }
+        }
+        [] => ConsoleFeedback {
+            is_error: true,
+            text: "Usage: show fps".to_string(),
+        },
+        _ => ConsoleFeedback {
+            is_error: true,
+            text: format!("Unknown show target: {}", args.join(" ")),
         },
     }
 }
@@ -360,6 +399,7 @@ fn reset_viewer_state_for_restart(
     viewer_state.interaction_menu = None;
     viewer_state.active_dialogue = None;
     viewer_state.hovered_grid = None;
+    viewer_state.targeting_state = None;
     viewer_state.end_turn_hold_sec = 0.0;
     viewer_state.end_turn_repeat_elapsed_sec = 0.0;
     viewer_state.auto_end_turn_after_stop = false;
@@ -474,7 +514,14 @@ pub(crate) fn console_suggestions(input: &str) -> Vec<ConsoleSuggestion> {
     let prefix = input.trim().to_ascii_lowercase();
     CONSOLE_COMMANDS
         .iter()
-        .filter(|command| prefix.is_empty() || command.name.starts_with(prefix.as_str()))
+        .filter(|command| {
+            prefix.is_empty()
+                || command.name.starts_with(prefix.as_str())
+                || prefix
+                    .split_whitespace()
+                    .next()
+                    .is_some_and(|token| command.name.starts_with(token))
+        })
         .map(|command| ConsoleSuggestion {
             name: command.name,
             summary: command.summary,
@@ -493,9 +540,10 @@ fn is_printable_char(chr: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        autocomplete_console_input, console_suggestions, move_console_selection_next,
-        move_console_selection_previous, ViewerConsoleState,
+        autocomplete_console_input, console_suggestions, execute_show_command,
+        move_console_selection_next, move_console_selection_previous, ViewerConsoleState,
     };
+    use crate::state::ViewerState;
 
     #[test]
     fn console_suggestions_match_restart_prefix() {
@@ -506,17 +554,25 @@ mod tests {
     }
 
     #[test]
+    fn console_suggestions_match_show_fps_prefix() {
+        let suggestions = console_suggestions("show f");
+
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].name, "show fps");
+    }
+
+    #[test]
     fn autocomplete_fills_selected_command_name() {
         let mut console_state = ViewerConsoleState {
             is_open: true,
-            input: "res".to_string(),
+            input: "show f".to_string(),
             selected_suggestion: 0,
             last_feedback: None,
         };
 
         autocomplete_console_input(&mut console_state);
 
-        assert_eq!(console_state.input, "restart");
+        assert_eq!(console_state.input, "show fps");
     }
 
     #[test]
@@ -532,5 +588,30 @@ mod tests {
         move_console_selection_previous(&mut console_state);
 
         assert_eq!(console_state.selected_suggestion, 0);
+    }
+
+    #[test]
+    fn show_fps_toggles_overlay_flag() {
+        let mut viewer_state = ViewerState::default();
+
+        let first = execute_show_command(&["fps"], &mut viewer_state);
+        assert!(!first.is_error);
+        assert!(viewer_state.show_fps_overlay);
+        assert_eq!(first.text, "fps overlay: on");
+
+        let second = execute_show_command(&["fps"], &mut viewer_state);
+        assert!(!second.is_error);
+        assert!(!viewer_state.show_fps_overlay);
+        assert_eq!(second.text, "fps overlay: off");
+    }
+
+    #[test]
+    fn show_command_rejects_unknown_target() {
+        let mut viewer_state = ViewerState::default();
+
+        let feedback = execute_show_command(&["latency"], &mut viewer_state);
+
+        assert!(feedback.is_error);
+        assert!(feedback.text.contains("Unknown show target"));
     }
 }

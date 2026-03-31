@@ -1,7 +1,6 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet};
 
 use game_data::{
     advance_dialogue as advance_dialogue_runtime, current_dialogue_node, dialogue_runtime_state,
@@ -15,13 +14,14 @@ use game_data::{
     ItemLibrary, MapCellDefinition, MapEntryPointDefinition, MapId, MapLibrary,
     MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
     MapRotation, OverworldDefinition, OverworldLibrary, QuestLibrary, QuestNode, RecipeLibrary,
-    ResolvedInteractionOption, ShopLibrary, SkillLibrary, TurnState, WorldCoord, WorldMode,
+    ResolvedInteractionOption, ShopLibrary, SkillLibrary, SkillTargetRequest, TurnState,
+    WorldCoord, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
 use crate::actor::{ActorRecord, ActorRegistry, ActorRegistrySnapshot, AiController};
-use crate::building::GeneratedBuildingDebugState;
+use crate::building::{GeneratedBuildingDebugState, GeneratedDoorDebugState};
 use crate::economy::{HeadlessEconomyRuntime, HeadlessEconomyRuntimeSnapshot};
 use crate::goap::{ActionExecutionPhase, NpcActionKey, NpcBackgroundState, NpcRuntimeActionState};
 use crate::grid::{
@@ -90,6 +90,11 @@ pub enum SimulationCommand {
         actor_id: ActorId,
         target_actor: ActorId,
     },
+    ActivateSkill {
+        actor_id: ActorId,
+        skill_id: String,
+        target: SkillTargetRequest,
+    },
     PerformInteract {
         actor_id: ActorId,
     },
@@ -148,6 +153,7 @@ pub enum SimulationCommand {
 pub enum SimulationCommandResult {
     None,
     Action(ActionResult),
+    SkillActivation(SkillActivationResult),
     Path(Result<Vec<GridCoord>, GridPathfindingError>),
     InteractionPrompt(InteractionPrompt),
     InteractionExecution(InteractionExecutionResult),
@@ -194,6 +200,17 @@ pub enum SimulationEvent {
         actor_id: ActorId,
         action_type: ActionType,
         result: ActionResult,
+    },
+    SkillActivated {
+        actor_id: ActorId,
+        skill_id: String,
+        target: SkillTargetRequest,
+        hit_actor_ids: Vec<ActorId>,
+    },
+    SkillActivationFailed {
+        actor_id: ActorId,
+        skill_id: String,
+        reason: String,
     },
     WorldCycleCompleted,
     NpcActionStarted {
@@ -365,6 +382,85 @@ pub enum SimulationEvent {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SkillRuntimeState {
+    pub cooldown_remaining: f32,
+    pub toggled_active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SkillActivationResult {
+    pub skill_id: String,
+    pub action_result: ActionResult,
+    pub hit_actor_ids: Vec<ActorId>,
+    pub entered_cooldown: bool,
+    pub consumed_ap: bool,
+    pub toggled_active: Option<bool>,
+    pub failure_reason: Option<String>,
+}
+
+impl SkillActivationResult {
+    pub(crate) fn success(
+        skill_id: &str,
+        action_result: ActionResult,
+        hit_actor_ids: Vec<ActorId>,
+        entered_cooldown: bool,
+        toggled_active: Option<bool>,
+    ) -> Self {
+        Self {
+            skill_id: skill_id.to_string(),
+            consumed_ap: action_result.consumed > 0.0,
+            action_result,
+            hit_actor_ids,
+            entered_cooldown,
+            toggled_active,
+            failure_reason: None,
+        }
+    }
+
+    pub(crate) fn failure(
+        skill_id: &str,
+        action_result: ActionResult,
+        reason: impl Into<String>,
+    ) -> Self {
+        let reason = reason.into();
+        Self {
+            skill_id: skill_id.to_string(),
+            consumed_ap: action_result.consumed > 0.0,
+            action_result,
+            hit_actor_ids: Vec::new(),
+            entered_cooldown: false,
+            toggled_active: None,
+            failure_reason: Some(reason),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedSkillTargetContext {
+    hit_actor_ids: Vec<ActorId>,
+    target: SkillTargetRequest,
+}
+
+impl ResolvedSkillTargetContext {
+    fn primary_actor_target(&self) -> Option<ActorId> {
+        match self.target {
+            SkillTargetRequest::Actor(actor_id) => Some(actor_id),
+            SkillTargetRequest::Grid(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SkillHandlerPreview {
+    hit_actor_ids: Vec<ActorId>,
+}
+
+#[derive(Debug, Clone)]
+struct AppliedSkillHandler {
+    hit_actor_ids: Vec<ActorId>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ActorDebugState {
     pub actor_id: ActorId,
@@ -458,6 +554,7 @@ pub struct SimulationSnapshot {
     pub actors: Vec<ActorDebugState>,
     pub grid: GridDebugState,
     pub generated_buildings: Vec<GeneratedBuildingDebugState>,
+    pub generated_doors: Vec<GeneratedDoorDebugState>,
     pub combat: CombatDebugState,
     pub interaction_context: InteractionContextSnapshot,
     pub overworld: OverworldStateSnapshot,
@@ -526,6 +623,18 @@ pub(crate) struct DialogueSessionSnapshotEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SkillRuntimeSnapshotEntry {
+    pub skill_id: String,
+    pub state: SkillRuntimeState,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ActorSkillStateSnapshotEntry {
+    pub actor_id: ActorId,
+    pub states: Vec<SkillRuntimeSnapshotEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct SimulationStateSnapshot {
     pub config: TurnConfig,
     pub turn: TurnRuntime,
@@ -539,6 +648,7 @@ pub(crate) struct SimulationStateSnapshot {
     pub actor_loot_tables: Vec<ActorLootTableSnapshotEntry>,
     pub actor_progression: Vec<ActorProgressionSnapshotEntry>,
     pub actor_xp_rewards: Vec<ActorXpRewardSnapshotEntry>,
+    pub actor_skill_states: Vec<ActorSkillStateSnapshotEntry>,
     pub active_quests: Vec<QuestRuntimeState>,
     pub completed_quests: Vec<String>,
     pub actor_relationships: Vec<ActorRelationshipSnapshotEntry>,
@@ -573,6 +683,7 @@ pub struct Simulation {
     actor_loot_tables: HashMap<ActorId, Vec<CharacterLootEntry>>,
     actor_progression: HashMap<ActorId, ActorProgressionState>,
     actor_xp_rewards: HashMap<ActorId, i32>,
+    actor_skill_states: HashMap<ActorId, BTreeMap<String, SkillRuntimeState>>,
     quest_library: Option<QuestLibrary>,
     skill_library: Option<SkillLibrary>,
     recipe_library: Option<RecipeLibrary>,
@@ -620,6 +731,7 @@ impl Default for Simulation {
             actor_loot_tables: HashMap::new(),
             actor_progression: HashMap::new(),
             actor_xp_rewards: HashMap::new(),
+            actor_skill_states: HashMap::new(),
             quest_library: None,
             skill_library: None,
             recipe_library: None,
@@ -756,6 +868,38 @@ impl Simulation {
 
     pub fn set_skill_library(&mut self, skills: SkillLibrary) {
         self.skill_library = Some(skills);
+    }
+
+    pub fn attack_range(&self, actor_id: ActorId) -> f32 {
+        self.attack_interaction_distance(actor_id)
+    }
+
+    pub fn skill_state(&self, actor_id: ActorId, skill_id: &str) -> SkillRuntimeState {
+        self.actor_skill_states
+            .get(&actor_id)
+            .and_then(|states| states.get(skill_id))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn skill_cooldown_remaining(&self, actor_id: ActorId, skill_id: &str) -> f32 {
+        self.skill_state(actor_id, skill_id).cooldown_remaining
+    }
+
+    pub fn is_skill_toggled_active(&self, actor_id: ActorId, skill_id: &str) -> bool {
+        self.skill_state(actor_id, skill_id).toggled_active
+    }
+
+    pub fn advance_skill_timers(&mut self, delta_sec: f32) {
+        if delta_sec <= 0.0 {
+            return;
+        }
+
+        for states in self.actor_skill_states.values_mut() {
+            for state in states.values_mut() {
+                state.cooldown_remaining = (state.cooldown_remaining - delta_sec).max(0.0);
+            }
+        }
     }
 
     pub fn set_recipe_library(&mut self, recipes: RecipeLibrary) {
@@ -1604,6 +1748,13 @@ impl Simulation {
                 actor_id,
                 target_actor,
             } => SimulationCommandResult::Action(self.perform_attack(actor_id, target_actor)),
+            SimulationCommand::ActivateSkill {
+                actor_id,
+                skill_id,
+                target,
+            } => SimulationCommandResult::SkillActivation(
+                self.activate_skill(actor_id, &skill_id, target),
+            ),
             SimulationCommand::PerformInteract { actor_id } => {
                 SimulationCommandResult::Action(self.perform_interact(actor_id))
             }
@@ -1811,6 +1962,7 @@ impl Simulation {
         self.actor_loot_tables.remove(&actor_id);
         self.actor_progression.remove(&actor_id);
         self.actor_xp_rewards.remove(&actor_id);
+        self.actor_skill_states.remove(&actor_id);
         self.actor_relationships
             .retain(|(source_actor_id, target_actor_id), _| {
                 *source_actor_id != actor_id && *target_actor_id != actor_id
@@ -2045,6 +2197,31 @@ impl Simulation {
                             if let Some(target_id) = interactive.target_id.as_ref() {
                                 payload_summary.insert("target_id".to_string(), target_id.clone());
                             }
+                            if interactive
+                                .extra
+                                .get("generated_door")
+                                .and_then(|value| value.as_bool())
+                                .unwrap_or(false)
+                            {
+                                payload_summary
+                                    .insert("generated_door".to_string(), "true".to_string());
+                                if let Some(door_state) = interactive
+                                    .extra
+                                    .get("door_state")
+                                    .and_then(|value| value.as_str())
+                                {
+                                    payload_summary
+                                        .insert("door_state".to_string(), door_state.to_string());
+                                }
+                                if let Some(door_locked) = interactive
+                                    .extra
+                                    .get("door_locked")
+                                    .and_then(|value| value.as_bool())
+                                {
+                                    payload_summary
+                                        .insert("door_locked".to_string(), door_locked.to_string());
+                                }
+                            }
                         }
                     }
                     MapObjectKind::Trigger => {
@@ -2120,6 +2297,7 @@ impl Simulation {
                 runtime_obstacle_version: self.grid_world.runtime_obstacle_version(),
             },
             generated_buildings: self.grid_world.generated_buildings().to_vec(),
+            generated_doors: self.grid_world.generated_doors().to_vec(),
             combat: CombatDebugState {
                 in_combat: self.turn.combat_active,
                 current_actor_id: self.turn.current_actor_id,
@@ -2205,6 +2383,26 @@ impl Simulation {
             .collect::<Vec<_>>();
         actor_xp_rewards.sort_by_key(|entry| entry.actor_id);
 
+        let mut actor_skill_states = self
+            .actor_skill_states
+            .iter()
+            .map(|(actor_id, states)| {
+                let mut states = states
+                    .iter()
+                    .map(|(skill_id, state)| SkillRuntimeSnapshotEntry {
+                        skill_id: skill_id.clone(),
+                        state: state.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                states.sort_by(|left, right| left.skill_id.cmp(&right.skill_id));
+                ActorSkillStateSnapshotEntry {
+                    actor_id: *actor_id,
+                    states,
+                }
+            })
+            .collect::<Vec<_>>();
+        actor_skill_states.sort_by_key(|entry| entry.actor_id);
+
         let mut active_quests = self.active_quests.values().cloned().collect::<Vec<_>>();
         active_quests.sort_by(|left, right| left.quest_id.cmp(&right.quest_id));
 
@@ -2258,6 +2456,7 @@ impl Simulation {
             actor_loot_tables,
             actor_progression,
             actor_xp_rewards,
+            actor_skill_states,
             active_quests,
             completed_quests,
             actor_relationships,
@@ -2319,6 +2518,20 @@ impl Simulation {
             .actor_xp_rewards
             .into_iter()
             .map(|entry| (entry.actor_id, entry.xp_reward))
+            .collect();
+        self.actor_skill_states = snapshot
+            .actor_skill_states
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.actor_id,
+                    entry
+                        .states
+                        .into_iter()
+                        .map(|state| (state.skill_id, state.state))
+                        .collect(),
+                )
+            })
             .collect();
         self.active_quests = snapshot
             .active_quests
@@ -2580,6 +2793,425 @@ impl Simulation {
         result
     }
 
+    pub fn activate_skill(
+        &mut self,
+        actor_id: ActorId,
+        skill_id: &str,
+        target: SkillTargetRequest,
+    ) -> SkillActivationResult {
+        let Some(skill) = self
+            .skill_library
+            .as_ref()
+            .and_then(|skills| skills.get(skill_id))
+            .cloned()
+        else {
+            let action_result = self.reject_action("unknown_skill", actor_id);
+            self.events.push(SimulationEvent::SkillActivationFailed {
+                actor_id,
+                skill_id: skill_id.to_string(),
+                reason: "unknown_skill".to_string(),
+            });
+            return SkillActivationResult::failure(skill_id, action_result, "unknown_skill");
+        };
+
+        let learned_level = self
+            .economy
+            .actor(actor_id)
+            .and_then(|actor| actor.learned_skills.get(skill_id))
+            .copied()
+            .unwrap_or(0);
+        if learned_level <= 0 {
+            let action_result = self.reject_action("skill_not_learned", actor_id);
+            self.events.push(SimulationEvent::SkillActivationFailed {
+                actor_id,
+                skill_id: skill_id.to_string(),
+                reason: "skill_not_learned".to_string(),
+            });
+            return SkillActivationResult::failure(skill_id, action_result, "skill_not_learned");
+        }
+
+        let Some(activation) = skill.activation.as_ref() else {
+            let action_result = self.reject_action("skill_has_no_activation", actor_id);
+            self.events.push(SimulationEvent::SkillActivationFailed {
+                actor_id,
+                skill_id: skill_id.to_string(),
+                reason: "skill_has_no_activation".to_string(),
+            });
+            return SkillActivationResult::failure(
+                skill_id,
+                action_result,
+                "skill_has_no_activation",
+            );
+        };
+
+        if !matches!(activation.mode.trim(), "active" | "toggle") {
+            let action_result = self.reject_action("skill_not_activatable", actor_id);
+            self.events.push(SimulationEvent::SkillActivationFailed {
+                actor_id,
+                skill_id: skill_id.to_string(),
+                reason: "skill_not_activatable".to_string(),
+            });
+            return SkillActivationResult::failure(
+                skill_id,
+                action_result,
+                "skill_not_activatable",
+            );
+        }
+
+        let skill_state = self.skill_state(actor_id, skill_id);
+        if skill_state.cooldown_remaining > 0.0 {
+            let action_result = self.reject_action("skill_on_cooldown", actor_id);
+            self.events.push(SimulationEvent::SkillActivationFailed {
+                actor_id,
+                skill_id: skill_id.to_string(),
+                reason: "skill_on_cooldown".to_string(),
+            });
+            return SkillActivationResult::failure(skill_id, action_result, "skill_on_cooldown");
+        }
+
+        let targeting = activation
+            .targeting
+            .as_ref()
+            .filter(|targeting| targeting.enabled);
+        let resolved_target = match self.resolve_skill_target_context(actor_id, targeting, &target)
+        {
+            Ok(context) => context,
+            Err(reason) => {
+                let action_result = self.reject_action(reason, actor_id);
+                self.events.push(SimulationEvent::SkillActivationFailed {
+                    actor_id,
+                    skill_id: skill_id.to_string(),
+                    reason: reason.to_string(),
+                });
+                return SkillActivationResult::failure(skill_id, action_result, reason);
+            }
+        };
+
+        let dispatch_preview = match self.preview_skill_handler(
+            actor_id,
+            learned_level,
+            &skill,
+            activation,
+            &resolved_target,
+        ) {
+            Ok(preview) => preview,
+            Err(reason) => {
+                let action_result = self.reject_action(reason, actor_id);
+                self.events.push(SimulationEvent::SkillActivationFailed {
+                    actor_id,
+                    skill_id: skill_id.to_string(),
+                    reason: reason.to_string(),
+                });
+                return SkillActivationResult::failure(skill_id, action_result, reason);
+            }
+        };
+
+        let start_result = self.request_action(ActionRequest {
+            actor_id,
+            action_type: ActionType::Skill,
+            phase: ActionPhase::Start,
+            steps: None,
+            target_actor: resolved_target.primary_actor_target(),
+            success: true,
+        });
+        if !start_result.success {
+            let reason = start_result
+                .reason
+                .clone()
+                .unwrap_or_else(|| "skill_start_failed".to_string());
+            self.events.push(SimulationEvent::SkillActivationFailed {
+                actor_id,
+                skill_id: skill_id.to_string(),
+                reason: reason.clone(),
+            });
+            return SkillActivationResult::failure(skill_id, start_result, reason);
+        }
+
+        if !self.turn.combat_active {
+            if let Some(hostile_target) = self.first_hostile_target(&dispatch_preview.hit_actor_ids)
+            {
+                self.enter_combat(actor_id, hostile_target);
+            }
+        }
+
+        let complete_result = self.request_action(ActionRequest {
+            actor_id,
+            action_type: ActionType::Skill,
+            phase: ActionPhase::Complete,
+            steps: None,
+            target_actor: resolved_target.primary_actor_target(),
+            success: true,
+        });
+        if !complete_result.success {
+            let reason = complete_result
+                .reason
+                .clone()
+                .unwrap_or_else(|| "skill_complete_failed".to_string());
+            self.events.push(SimulationEvent::SkillActivationFailed {
+                actor_id,
+                skill_id: skill_id.to_string(),
+                reason: reason.clone(),
+            });
+            return SkillActivationResult::failure(skill_id, complete_result, reason);
+        }
+
+        let applied = self.apply_skill_handler(actor_id, skill_id, activation, dispatch_preview);
+        let state = self
+            .actor_skill_states
+            .entry(actor_id)
+            .or_default()
+            .entry(skill_id.to_string())
+            .or_default();
+        let mut toggled_active = None;
+        if activation.mode.trim() == "toggle" {
+            state.toggled_active = !state.toggled_active;
+            toggled_active = Some(state.toggled_active);
+        }
+        if activation.cooldown > 0.0 {
+            state.cooldown_remaining = activation.cooldown.max(0.0);
+        }
+
+        self.events.push(SimulationEvent::SkillActivated {
+            actor_id,
+            skill_id: skill_id.to_string(),
+            target,
+            hit_actor_ids: applied.hit_actor_ids.clone(),
+        });
+        SkillActivationResult::success(
+            skill_id,
+            complete_result,
+            applied.hit_actor_ids,
+            activation.cooldown > 0.0,
+            toggled_active,
+        )
+    }
+
+    fn resolve_skill_target_context(
+        &self,
+        actor_id: ActorId,
+        targeting: Option<&game_data::SkillTargetingDefinition>,
+        target: &SkillTargetRequest,
+    ) -> Result<ResolvedSkillTargetContext, &'static str> {
+        let Some(actor_grid) = self.actor_grid_position(actor_id) else {
+            return Err("unknown_actor");
+        };
+
+        let center_grid = match target {
+            SkillTargetRequest::Actor(target_actor) => self
+                .actor_grid_position(*target_actor)
+                .ok_or("unknown_target")?,
+            SkillTargetRequest::Grid(grid) => *grid,
+        };
+        if !self.grid_world.is_in_bounds(center_grid) {
+            return Err("target_out_of_bounds");
+        }
+
+        if let Some(targeting) = targeting {
+            let shape = targeting.shape.trim();
+            if matches!(shape, "diamond" | "square")
+                && matches!(target, SkillTargetRequest::Actor(_))
+            {
+                return Err("skill_target_type_mismatch");
+            }
+            if manhattan_grid_distance(actor_grid, center_grid) > targeting.range_cells.max(0) {
+                return Err("target_out_of_range");
+            }
+            let hit_grids =
+                self.skill_affected_grids(center_grid, shape, targeting.radius.max(0) as i32);
+            let hit_actor_ids = self
+                .actors
+                .values()
+                .filter(|actor| hit_grids.contains(&actor.grid_position))
+                .map(|actor| actor.actor_id)
+                .collect::<Vec<_>>();
+            return Ok(ResolvedSkillTargetContext {
+                hit_actor_ids,
+                target: *target,
+            });
+        }
+
+        let hit_actor_ids = self
+            .actors
+            .values()
+            .filter(|actor| actor.grid_position == center_grid)
+            .map(|actor| actor.actor_id)
+            .collect::<Vec<_>>();
+        Ok(ResolvedSkillTargetContext {
+            hit_actor_ids,
+            target: *target,
+        })
+    }
+
+    fn preview_skill_handler(
+        &self,
+        _actor_id: ActorId,
+        _learned_level: i32,
+        _skill: &game_data::SkillDefinition,
+        activation: &game_data::SkillActivationDefinition,
+        target: &ResolvedSkillTargetContext,
+    ) -> Result<SkillHandlerPreview, &'static str> {
+        if activation
+            .targeting
+            .as_ref()
+            .is_none_or(|targeting| !targeting.enabled)
+        {
+            return Ok(SkillHandlerPreview {
+                hit_actor_ids: Vec::new(),
+            });
+        }
+
+        let handler = activation
+            .targeting
+            .as_ref()
+            .map(|targeting| targeting.handler_script.trim())
+            .filter(|handler| !handler.is_empty())
+            .or_else(|| {
+                activation
+                    .extra
+                    .get("handler_script")
+                    .and_then(|value| value.as_str())
+                    .map(str::trim)
+                    .filter(|handler| !handler.is_empty())
+            })
+            .unwrap_or("");
+        if handler.is_empty() {
+            return Err("skill_handler_missing");
+        }
+
+        match handler {
+            "damage_single" => {
+                let hit_actor_ids = target
+                    .primary_actor_target()
+                    .or_else(|| target.hit_actor_ids.first().copied())
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                if hit_actor_ids.is_empty() {
+                    Err("skill_target_requires_actor")
+                } else {
+                    Ok(SkillHandlerPreview { hit_actor_ids })
+                }
+            }
+            "damage_aoe" | "toggle_status" => Ok(SkillHandlerPreview {
+                hit_actor_ids: target.hit_actor_ids.clone(),
+            }),
+            _ => Err("skill_handler_missing"),
+        }
+    }
+
+    fn apply_skill_handler(
+        &mut self,
+        actor_id: ActorId,
+        skill_id: &str,
+        activation: &game_data::SkillActivationDefinition,
+        preview: SkillHandlerPreview,
+    ) -> AppliedSkillHandler {
+        if activation
+            .targeting
+            .as_ref()
+            .is_none_or(|targeting| !targeting.enabled)
+        {
+            return AppliedSkillHandler {
+                hit_actor_ids: preview.hit_actor_ids,
+            };
+        }
+
+        let handler = activation
+            .targeting
+            .as_ref()
+            .map(|targeting| targeting.handler_script.trim())
+            .filter(|handler| !handler.is_empty())
+            .or_else(|| {
+                activation
+                    .extra
+                    .get("handler_script")
+                    .and_then(|value| value.as_str())
+                    .map(str::trim)
+                    .filter(|handler| !handler.is_empty())
+            })
+            .unwrap_or("");
+
+        match handler {
+            "damage_single" | "damage_aoe" => {
+                let damage = self.resolve_skill_damage(actor_id, skill_id);
+                for target_actor in &preview.hit_actor_ids {
+                    self.apply_damage_to_actor(actor_id, *target_actor, damage);
+                }
+            }
+            "toggle_status" | "" => {}
+            _ => {}
+        }
+
+        AppliedSkillHandler {
+            hit_actor_ids: preview.hit_actor_ids,
+        }
+    }
+
+    fn resolve_skill_damage(&self, actor_id: ActorId, skill_id: &str) -> f32 {
+        let Some(skill) = self
+            .skill_library
+            .as_ref()
+            .and_then(|skills| skills.get(skill_id))
+        else {
+            return 1.0;
+        };
+        let level = self
+            .economy
+            .actor(actor_id)
+            .and_then(|actor| actor.learned_skills.get(skill_id))
+            .copied()
+            .unwrap_or(1)
+            .max(1) as f32;
+        let configured_damage = skill
+            .activation
+            .as_ref()
+            .and_then(|activation| activation.effect.as_ref())
+            .and_then(|effect| effect.modifiers.get("damage"))
+            .map(|modifier| {
+                let value = modifier.base + modifier.per_level * (level - 1.0);
+                if modifier.max_value > 0.0 {
+                    value.min(modifier.max_value)
+                } else {
+                    value
+                }
+            })
+            .unwrap_or(0.0);
+        configured_damage
+            .max(self.actor_combat_attribute_value(actor_id, "attack_power"))
+            .max(1.0)
+    }
+
+    fn skill_affected_grids(&self, center: GridCoord, shape: &str, radius: i32) -> Vec<GridCoord> {
+        let radius = radius.max(0);
+        let mut grids = Vec::new();
+        for dx in -radius..=radius {
+            for dz in -radius..=radius {
+                let include = match shape {
+                    "diamond" => dx.abs() + dz.abs() <= radius,
+                    "square" => true,
+                    _ => dx == 0 && dz == 0,
+                };
+                if !include {
+                    continue;
+                }
+                let grid = GridCoord::new(center.x + dx, center.y, center.z + dz);
+                if self.grid_world.is_in_bounds(grid) {
+                    grids.push(grid);
+                }
+            }
+        }
+        if grids.is_empty() && self.grid_world.is_in_bounds(center) {
+            grids.push(center);
+        }
+        grids
+    }
+
+    fn first_hostile_target(&self, hit_actor_ids: &[ActorId]) -> Option<ActorId> {
+        hit_actor_ids.iter().copied().find(|actor_id| {
+            self.get_actor_side(*actor_id)
+                .is_some_and(|side| side == ActorSide::Hostile)
+        })
+    }
+
     pub fn perform_interact(&mut self, actor_id: ActorId) -> ActionResult {
         let start_result = self.request_action(ActionRequest {
             actor_id,
@@ -2628,7 +3260,11 @@ impl Simulation {
                 .cmp(&left.priority)
                 .then_with(|| left.display_name.cmp(&right.display_name))
         });
-        let primary_option_id = options.first().map(|option| option.id.clone());
+        let primary_option_id = if target.allow_primary_fallback {
+            options.first().map(|option| option.id.clone())
+        } else {
+            None
+        };
 
         Some(InteractionPrompt {
             actor_id,
@@ -2926,6 +3562,93 @@ impl Simulation {
                     ..InteractionExecutionResult::default()
                 }
             }
+            InteractionOptionKind::OpenDoor | InteractionOptionKind::CloseDoor => {
+                let InteractionTargetId::MapObject(ref object_id) = request.target_id else {
+                    return self.failed_interaction_execution(
+                        request.actor_id,
+                        prompt,
+                        option.id,
+                        "door_target_invalid",
+                        false,
+                    );
+                };
+                let Some(door) = self
+                    .grid_world
+                    .generated_door_by_object_id(object_id)
+                    .cloned()
+                else {
+                    return self.failed_interaction_execution(
+                        request.actor_id,
+                        prompt,
+                        option.id,
+                        "generated_door_missing",
+                        false,
+                    );
+                };
+                if option.kind == InteractionOptionKind::OpenDoor && door.is_locked {
+                    return self.failed_interaction_execution(
+                        request.actor_id,
+                        prompt,
+                        option.id,
+                        "door_locked",
+                        false,
+                    );
+                }
+                let next_open = option.kind == InteractionOptionKind::OpenDoor;
+                if door.is_open == next_open {
+                    return self.failed_interaction_execution(
+                        request.actor_id,
+                        prompt,
+                        option.id,
+                        if next_open {
+                            "door_already_open"
+                        } else {
+                            "door_already_closed"
+                        },
+                        false,
+                    );
+                }
+
+                let action = self.perform_interact(request.actor_id);
+                if !action.success {
+                    return self.failed_interaction_action(
+                        request.actor_id,
+                        request.target_id,
+                        prompt,
+                        option.id,
+                        action,
+                    );
+                }
+
+                self.grid_world
+                    .set_generated_door_state(&door.door_id, next_open, door.is_locked);
+                self.events.push(SimulationEvent::InteractionSucceeded {
+                    actor_id: request.actor_id,
+                    target_id: request.target_id.clone(),
+                    option_id: option.id.clone(),
+                });
+                info!(
+                    "core.interaction.generated_door actor={:?} target={:?} option_id={} open={}",
+                    request.actor_id,
+                    request.target_id,
+                    option.id.as_str(),
+                    next_open
+                );
+                InteractionExecutionResult {
+                    success: true,
+                    prompt: Some(prompt),
+                    action_result: Some(action),
+                    ..InteractionExecutionResult::default()
+                }
+            }
+            InteractionOptionKind::UnlockDoor | InteractionOptionKind::PickLockDoor => self
+                .failed_interaction_execution(
+                    request.actor_id,
+                    prompt,
+                    option.id,
+                    "door_interaction_not_implemented",
+                    false,
+                ),
             InteractionOptionKind::EnterSubscene
             | InteractionOptionKind::EnterOverworld
             | InteractionOptionKind::ExitToOutdoor
@@ -2954,7 +3677,6 @@ impl Simulation {
                         );
                     }
                 };
-                self.queue_turn_end_for_actor(request.actor_id);
                 self.events.push(SimulationEvent::InteractionSucceeded {
                     actor_id: request.actor_id,
                     target_id: request.target_id.clone(),
@@ -3160,32 +3882,7 @@ impl Simulation {
         }
 
         let damage = self.resolve_attack_damage(actor_id, target_actor);
-        let current_hp = self.actor_hit_points(target_actor);
-        let next_hp = (current_hp - damage).max(0.0);
-        let defeat_position = self.actor_grid_position(target_actor);
-        self.actor_resources
-            .entry(target_actor)
-            .or_default()
-            .insert("hp".to_string(), next_hp);
-        self.events.push(SimulationEvent::ActorDamaged {
-            actor_id,
-            target_actor,
-            damage,
-            remaining_hp: next_hp,
-        });
-
-        if next_hp <= 0.0 {
-            self.award_kill_experience(actor_id, target_actor);
-            self.advance_kill_quest_progress(actor_id, target_actor);
-            self.events.push(SimulationEvent::ActorDefeated {
-                actor_id,
-                target_actor,
-            });
-            if let Some(grid) = defeat_position {
-                self.spawn_loot_drops(actor_id, target_actor, grid);
-            }
-            self.unregister_actor(target_actor);
-        }
+        self.apply_damage_to_actor(actor_id, target_actor, damage);
     }
 
     fn resolve_attack_damage(&self, actor_id: ActorId, target_actor: ActorId) -> f32 {
@@ -3661,15 +4358,18 @@ impl Simulation {
         self.release_action_slot_if_needed(actor_id);
 
         if request.success {
-            if self.turn.combat_active && self.turn.current_actor_id == Some(actor_id) {
-                self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
-            } else if !self.turn.combat_active
-                && self.get_actor_side(actor_id) == Some(ActorSide::Player)
-            {
-                self.queue_pending_progression(PendingProgressionStep::RunNonCombatWorldCycle);
-                self.queue_pending_progression(
-                    PendingProgressionStep::StartNextNonCombatPlayerTurn,
-                );
+            let ap_after = self.get_actor_ap(actor_id);
+            if ap_after < self.config.affordable_threshold {
+                if self.turn.combat_active && self.turn.current_actor_id == Some(actor_id) {
+                    self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
+                } else if !self.turn.combat_active
+                    && self.get_actor_side(actor_id) == Some(ActorSide::Player)
+                {
+                    self.queue_pending_progression(PendingProgressionStep::RunNonCombatWorldCycle);
+                    self.queue_pending_progression(
+                        PendingProgressionStep::StartNextNonCombatPlayerTurn,
+                    );
+                }
             }
         }
 
@@ -4193,6 +4893,7 @@ impl Simulation {
                     target_name: actor.display_name.clone(),
                     anchor_grid: actor.grid_position,
                     options,
+                    allow_primary_fallback: true,
                 })
             }
             InteractionTargetId::MapObject(object_id) => {
@@ -4201,6 +4902,11 @@ impl Simulation {
                     target_name: self.map_object_display_name(object),
                     anchor_grid: object.anchor,
                     options: self.map_object_options(object),
+                    allow_primary_fallback: self
+                        .grid_world
+                        .generated_door_by_object_id(object_id)
+                        .map(|door| !door.is_locked)
+                        .unwrap_or(true),
                 })
             }
         }
@@ -4499,7 +5205,11 @@ impl Simulation {
             }
             InteractionOptionKind::Talk
             | InteractionOptionKind::Attack
-            | InteractionOptionKind::Pickup => return Ok(self.current_interaction_context()),
+            | InteractionOptionKind::Pickup
+            | InteractionOptionKind::OpenDoor
+            | InteractionOptionKind::CloseDoor
+            | InteractionOptionKind::UnlockDoor
+            | InteractionOptionKind::PickLockDoor => return Ok(self.current_interaction_context()),
         }
         Ok(self.current_interaction_context())
     }
@@ -4959,6 +5669,39 @@ impl Simulation {
         .max(1.0)
     }
 
+    fn apply_damage_to_actor(&mut self, actor_id: ActorId, target_actor: ActorId, damage: f32) {
+        if !self.actors.contains(target_actor) {
+            return;
+        }
+
+        let current_hp = self.actor_hit_points(target_actor);
+        let next_hp = (current_hp - damage).max(0.0);
+        let defeat_position = self.actor_grid_position(target_actor);
+        self.actor_resources
+            .entry(target_actor)
+            .or_default()
+            .insert("hp".to_string(), next_hp);
+        self.events.push(SimulationEvent::ActorDamaged {
+            actor_id,
+            target_actor,
+            damage,
+            remaining_hp: next_hp,
+        });
+
+        if next_hp <= 0.0 {
+            self.award_kill_experience(actor_id, target_actor);
+            self.advance_kill_quest_progress(actor_id, target_actor);
+            self.events.push(SimulationEvent::ActorDefeated {
+                actor_id,
+                target_actor,
+            });
+            if let Some(grid) = defeat_position {
+                self.spawn_loot_drops(actor_id, target_actor, grid);
+            }
+            self.unregister_actor(target_actor);
+        }
+    }
+
     fn validate_turn_access(&self, actor_id: ActorId) -> bool {
         if !self.turn.combat_active {
             return true;
@@ -4994,6 +5737,17 @@ impl Simulation {
             .get_mut(&action_state.action_type)
         {
             *count = count.saturating_sub(1);
+        }
+    }
+
+    pub(crate) fn abort_action(&mut self, actor_id: ActorId, action_type: ActionType) {
+        if self
+            .active_actions
+            .by_actor
+            .get(&actor_id)
+            .is_some_and(|state| state.action_type == action_type)
+        {
+            self.release_action_slot_if_needed(actor_id);
         }
     }
 
@@ -5070,11 +5824,16 @@ fn pathfinding_error_reason(error: &GridPathfindingError) -> &'static str {
     }
 }
 
+fn manhattan_grid_distance(left: GridCoord, right: GridCoord) -> i32 {
+    (left.x - right.x).abs() + (left.y - right.y).abs() + (left.z - right.z).abs()
+}
+
 #[derive(Debug, Clone)]
 struct TargetInteractionData {
     target_name: String,
     anchor_grid: GridCoord,
     options: Vec<InteractionOptionDefinition>,
+    allow_primary_fallback: bool,
 }
 
 fn collect_interaction_ring_cells(center: GridCoord, radius: i32) -> Vec<GridCoord> {
@@ -5338,6 +6097,47 @@ mod tests {
     }
 
     #[test]
+    fn noncombat_completed_action_with_affordable_ap_does_not_queue_progression() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.config.turn_ap_max = 2.0;
+        simulation.set_actor_ap(player, 2.0);
+
+        let start = simulation.request_action(ActionRequest {
+            actor_id: player,
+            action_type: ActionType::Interact,
+            phase: ActionPhase::Start,
+            steps: None,
+            target_actor: None,
+            success: true,
+        });
+        assert!(start.success);
+
+        let complete = simulation.request_action(ActionRequest {
+            actor_id: player,
+            action_type: ActionType::Interact,
+            phase: ActionPhase::Complete,
+            steps: None,
+            target_actor: None,
+            success: true,
+        });
+        assert!(complete.success);
+        assert_eq!(complete.ap_after, 1.0);
+        assert!(simulation.pending_progression.is_empty());
+        assert!(simulation.actor_turn_open(player));
+    }
+
+    #[test]
     fn world_cycle_runs_ai_and_reopens_player_turn() {
         let mut simulation = Simulation::new();
         let player = simulation.register_actor(RegisterActor {
@@ -5469,6 +6269,59 @@ mod tests {
             simulation.current_turn_index() >= 1,
             "combat turn index should advance after a completed combat action"
         );
+    }
+
+    #[test]
+    fn combat_completed_action_with_affordable_ap_keeps_current_actor() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.enter_combat(player, hostile);
+        simulation.config.turn_ap_max = 2.0;
+        simulation.set_actor_ap(player, 2.0);
+
+        let start = simulation.request_action(ActionRequest {
+            actor_id: player,
+            action_type: ActionType::Attack,
+            phase: ActionPhase::Start,
+            steps: None,
+            target_actor: Some(hostile),
+            success: true,
+        });
+        assert!(start.success);
+
+        let complete = simulation.request_action(ActionRequest {
+            actor_id: player,
+            action_type: ActionType::Attack,
+            phase: ActionPhase::Complete,
+            steps: None,
+            target_actor: Some(hostile),
+            success: true,
+        });
+        assert!(complete.success);
+        assert_eq!(complete.ap_after, 1.0);
+        assert!(simulation.pending_progression.is_empty());
+        assert_eq!(simulation.current_actor(), Some(player));
     }
 
     #[test]
@@ -6289,7 +7142,8 @@ mod tests {
             simulation.actor_grid_position(player),
             Some(GridCoord::new(0, 0, 0))
         );
-        assert!(!simulation.actor_turn_open(player));
+        assert!(simulation.actor_turn_open(player));
+        assert_eq!(simulation.get_actor_ap(player), 0.0);
         assert_eq!(
             simulation.pending_progression.front(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
@@ -6344,7 +7198,8 @@ mod tests {
             simulation.actor_grid_position(player),
             Some(GridCoord::new(6, 0, 6))
         );
-        assert!(!simulation.actor_turn_open(player));
+        assert!(simulation.actor_turn_open(player));
+        assert_eq!(simulation.get_actor_ap(player), 0.0);
         assert_eq!(
             simulation.pending_progression.front(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
@@ -6526,6 +7381,256 @@ mod tests {
         assert_eq!(path.first().copied(), Some(GridCoord::new(2, 0, 2)));
         assert_eq!(path.last().copied(), Some(GridCoord::new(2, 1, 2)));
         assert!(path.iter().any(|grid| grid.y == 1));
+    }
+
+    #[test]
+    fn generated_doors_default_to_closed_unlocked_and_blocking() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_generated_building_map_definition());
+
+        let door = world
+            .generated_doors()
+            .first()
+            .cloned()
+            .expect("generated building should produce at least one door");
+        let object = world
+            .map_object(&door.map_object_id)
+            .expect("generated door object should be registered");
+
+        assert!(!door.is_open);
+        assert!(!door.is_locked);
+        assert_eq!(object.kind, MapObjectKind::Interactive);
+        assert!(object.blocks_movement);
+        assert!(object.blocks_sight);
+    }
+
+    #[test]
+    fn generated_door_state_toggle_updates_runtime_blocking_flags() {
+        let mut world = crate::grid::GridWorld::default();
+        world.load_map(&sample_generated_building_map_definition());
+
+        let door = world
+            .generated_doors()
+            .first()
+            .cloned()
+            .expect("generated building should produce at least one door");
+
+        assert!(world.set_generated_door_state(&door.door_id, true, false));
+        let open_door = world
+            .generated_door_by_object_id(&door.map_object_id)
+            .expect("generated door should still exist after opening");
+        let open_object = world
+            .map_object(&door.map_object_id)
+            .expect("generated door object should stay registered");
+        assert!(open_door.is_open);
+        assert!(!open_door.is_locked);
+        assert!(!open_object.blocks_movement);
+        assert!(!open_object.blocks_sight);
+
+        assert!(world.set_generated_door_state(&door.door_id, false, true));
+        let closed_locked_door = world
+            .generated_door_by_object_id(&door.map_object_id)
+            .expect("generated door should still exist after closing");
+        let closed_locked_object = world
+            .map_object(&door.map_object_id)
+            .expect("generated door object should stay registered");
+        assert!(!closed_locked_door.is_open);
+        assert!(closed_locked_door.is_locked);
+        assert!(closed_locked_object.blocks_movement);
+        assert!(closed_locked_object.blocks_sight);
+    }
+
+    #[test]
+    fn unlocked_generated_door_primary_option_toggles_open_and_closed() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_generated_building_map_definition());
+        let door = simulation
+            .grid_world()
+            .generated_doors()
+            .first()
+            .cloned()
+            .expect("generated building should produce at least one door");
+        let player_grid = [
+            GridCoord::new(
+                door.anchor_grid.x - 1,
+                door.anchor_grid.y,
+                door.anchor_grid.z,
+            ),
+            GridCoord::new(
+                door.anchor_grid.x + 1,
+                door.anchor_grid.y,
+                door.anchor_grid.z,
+            ),
+            GridCoord::new(
+                door.anchor_grid.x,
+                door.anchor_grid.y,
+                door.anchor_grid.z - 1,
+            ),
+            GridCoord::new(
+                door.anchor_grid.x,
+                door.anchor_grid.y,
+                door.anchor_grid.z + 1,
+            ),
+        ]
+        .into_iter()
+        .find(|grid| simulation.grid_world().is_walkable(*grid))
+        .expect("generated door should have at least one walkable adjacent cell");
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: player_grid,
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_ap(player, 2.0);
+
+        let closed_prompt = simulation
+            .query_interaction_options(
+                player,
+                &InteractionTargetId::MapObject(door.map_object_id.clone()),
+            )
+            .expect("generated door should expose interaction prompt");
+        assert_eq!(
+            closed_prompt.primary_option_id,
+            Some(InteractionOptionId("open_door".into()))
+        );
+        assert_eq!(closed_prompt.options.len(), 1);
+        assert_eq!(
+            closed_prompt.options[0].kind,
+            InteractionOptionKind::OpenDoor
+        );
+
+        let open_result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject(door.map_object_id.clone()),
+            option_id: InteractionOptionId("open_door".into()),
+        });
+        assert!(open_result.success);
+        simulation.set_actor_ap(player, 2.0);
+
+        let open_prompt = simulation
+            .query_interaction_options(
+                player,
+                &InteractionTargetId::MapObject(door.map_object_id.clone()),
+            )
+            .expect("opened generated door should still expose prompt");
+        assert_eq!(
+            open_prompt.primary_option_id,
+            Some(InteractionOptionId("close_door".into()))
+        );
+        assert_eq!(open_prompt.options.len(), 1);
+        assert_eq!(
+            open_prompt.options[0].kind,
+            InteractionOptionKind::CloseDoor
+        );
+
+        let close_result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject(door.map_object_id.clone()),
+            option_id: InteractionOptionId("close_door".into()),
+        });
+        assert!(close_result.success);
+
+        let closed_again = simulation
+            .grid_world()
+            .generated_door_by_object_id(&door.map_object_id)
+            .expect("generated door should still exist after close");
+        assert!(!closed_again.is_open);
+        assert!(!closed_again.is_locked);
+    }
+
+    #[test]
+    fn locked_generated_door_exposes_placeholder_options_without_primary() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_generated_building_map_definition());
+        let door = simulation
+            .grid_world()
+            .generated_doors()
+            .first()
+            .cloned()
+            .expect("generated building should produce at least one door");
+        assert!(simulation
+            .grid_world_mut()
+            .set_generated_door_state(&door.door_id, false, true));
+        let player_grid = [
+            GridCoord::new(
+                door.anchor_grid.x - 1,
+                door.anchor_grid.y,
+                door.anchor_grid.z,
+            ),
+            GridCoord::new(
+                door.anchor_grid.x + 1,
+                door.anchor_grid.y,
+                door.anchor_grid.z,
+            ),
+            GridCoord::new(
+                door.anchor_grid.x,
+                door.anchor_grid.y,
+                door.anchor_grid.z - 1,
+            ),
+            GridCoord::new(
+                door.anchor_grid.x,
+                door.anchor_grid.y,
+                door.anchor_grid.z + 1,
+            ),
+        ]
+        .into_iter()
+        .find(|grid| simulation.grid_world().is_walkable(*grid))
+        .expect("generated door should have at least one walkable adjacent cell");
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: player_grid,
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let prompt = simulation
+            .query_interaction_options(
+                player,
+                &InteractionTargetId::MapObject(door.map_object_id.clone()),
+            )
+            .expect("locked generated door should expose interaction prompt");
+        assert!(prompt.primary_option_id.is_none());
+        assert_eq!(prompt.options.len(), 2);
+        assert!(prompt
+            .options
+            .iter()
+            .any(|option| option.kind == InteractionOptionKind::UnlockDoor));
+        assert!(prompt
+            .options
+            .iter()
+            .any(|option| option.kind == InteractionOptionKind::PickLockDoor));
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject(door.map_object_id.clone()),
+            option_id: InteractionOptionId("unlock_door".into()),
+        });
+        assert!(!result.success);
+        assert_eq!(
+            result.reason.as_deref(),
+            Some("door_interaction_not_implemented")
+        );
+
+        let locked_again = simulation
+            .grid_world()
+            .generated_door_by_object_id(&door.map_object_id)
+            .expect("generated door should remain after placeholder interaction");
+        assert!(!locked_again.is_open);
+        assert!(locked_again.is_locked);
     }
 
     #[test]

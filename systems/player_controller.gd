@@ -676,6 +676,10 @@ func _show_interaction_options(screen_pos: Vector2, interaction_system: Node, sc
 		_finalize_interaction_menu_close()
 		return
 
+	if is_moving() or has_navigation_intent():
+		# Explicit interaction intent should take precedence over legacy locomotion.
+		cancel_movement()
+
 	_pending_interaction_target = interactable
 	_pending_interaction_options = available_options
 	_set_interaction_target_from_interactable(interactable)

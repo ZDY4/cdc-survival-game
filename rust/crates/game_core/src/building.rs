@@ -12,8 +12,7 @@ use thiserror::Error;
 use crate::building_geometry::{
     multipolygon_from_geo, normalize_polygon, BuildingFootprint2d, BuildingGeometryValidationError,
     DoorOpeningKind, GeneratedDoorOpening, GeneratedRoomPolygon, GeneratedWalkablePolygons,
-    GeneratedWallPolygons, GeneratedWallStroke, GeometryAxis, GeometryMultiPolygon2,
-    GeometryPoint2, GeometryPolygon2, GeometrySegment2,
+    GeometryAxis, GeometryMultiPolygon2, GeometryPoint2, GeometryPolygon2, GeometrySegment2,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -25,21 +24,25 @@ pub struct GeneratedRoom {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneratedBuildingStory {
     pub level: i32,
+    pub wall_height: f32,
+    #[serde(default = "default_generated_wall_thickness")]
+    pub wall_thickness: f32,
     pub shape_cells: Vec<GridCoord>,
     pub footprint_polygon: Option<BuildingFootprint2d>,
     pub rooms: Vec<GeneratedRoom>,
     #[serde(default)]
     pub room_polygons: Vec<GeneratedRoomPolygon>,
     pub wall_cells: Vec<GridCoord>,
-    #[serde(default)]
-    pub wall_strokes: Vec<GeneratedWallStroke>,
-    pub wall_polygons: GeneratedWallPolygons,
     pub interior_door_cells: Vec<GridCoord>,
     pub exterior_door_cells: Vec<GridCoord>,
     #[serde(default)]
     pub door_openings: Vec<GeneratedDoorOpening>,
     pub walkable_cells: Vec<GridCoord>,
     pub walkable_polygons: GeneratedWalkablePolygons,
+}
+
+const fn default_generated_wall_thickness() -> f32 {
+    0.6
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +78,23 @@ pub struct GeneratedBuildingDebugState {
     pub stories: Vec<GeneratedBuildingStory>,
     pub stairs: Vec<GeneratedStairConnection>,
     pub visual_outline: Vec<GeneratedOutlineEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GeneratedDoorDebugState {
+    pub door_id: String,
+    pub map_object_id: String,
+    pub building_object_id: String,
+    pub building_anchor: GridCoord,
+    pub level: i32,
+    pub opening_id: usize,
+    pub anchor_grid: GridCoord,
+    pub axis: GeometryAxis,
+    pub kind: DoorOpeningKind,
+    pub polygon: GeometryPolygon2,
+    pub wall_height: f32,
+    pub is_open: bool,
+    pub is_locked: bool,
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -513,7 +533,6 @@ fn build_story_geometry(
                 .map_err(|source| BuildingLayoutError::GeometryGenerationFailed { level, source })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let wall_strokes = collect_story_wall_strokes(wall_cells, anchor);
     let door_width = layout.map(|layout| layout.door_width as f64).unwrap_or(1.0);
     let wall_thickness = layout
         .map(|layout| layout.wall_thickness as f64)
@@ -538,16 +557,14 @@ fn build_story_geometry(
         story_index * 10_000 + interior_door_cells.len(),
     )?)
     .collect::<Vec<_>>();
-
-    let wall_polygons = local_multipolygon_from_world_cells(wall_cells, anchor)
-        .map(|polygons| GeneratedWallPolygons { polygons })
-        .map_err(|source| BuildingLayoutError::GeometryGenerationFailed { level, source })?;
     let walkable_polygons = local_multipolygon_from_world_cells(walkable_cells, anchor)
         .map(|polygons| GeneratedWalkablePolygons { polygons })
         .map_err(|source| BuildingLayoutError::GeometryGenerationFailed { level, source })?;
 
     Ok(GeneratedBuildingStory {
         level,
+        wall_height: layout.map(|layout| layout.wall_height).unwrap_or(1.5),
+        wall_thickness: wall_thickness as f32,
         shape_cells: sorted_cells(shape_cells),
         footprint_polygon: Some(BuildingFootprint2d {
             polygon: footprint_polygon,
@@ -555,89 +572,12 @@ fn build_story_geometry(
         rooms,
         room_polygons,
         wall_cells: sorted_cells(wall_cells),
-        wall_strokes,
-        wall_polygons,
         interior_door_cells: sorted_cells(interior_door_cells),
         exterior_door_cells: sorted_cells(exterior_door_cells),
         door_openings,
         walkable_cells: sorted_cells(walkable_cells),
         walkable_polygons,
     })
-}
-
-fn collect_story_wall_strokes(
-    wall_cells: &BTreeSet<GridCoord>,
-    anchor: GridCoord,
-) -> Vec<GeneratedWallStroke> {
-    let mut segments = Vec::new();
-
-    for wall in wall_cells {
-        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z - 1)) {
-            segments.push(LocalWallSegment {
-                axis: GeometryAxis::Horizontal,
-                line: wall.z,
-                start: wall.x,
-                end: wall.x + 1,
-            });
-        }
-        if !wall_cells.contains(&GridCoord::new(wall.x, wall.y, wall.z + 1)) {
-            segments.push(LocalWallSegment {
-                axis: GeometryAxis::Horizontal,
-                line: wall.z + 1,
-                start: wall.x,
-                end: wall.x + 1,
-            });
-        }
-        if !wall_cells.contains(&GridCoord::new(wall.x - 1, wall.y, wall.z)) {
-            segments.push(LocalWallSegment {
-                axis: GeometryAxis::Vertical,
-                line: wall.x,
-                start: wall.z,
-                end: wall.z + 1,
-            });
-        }
-        if !wall_cells.contains(&GridCoord::new(wall.x + 1, wall.y, wall.z)) {
-            segments.push(LocalWallSegment {
-                axis: GeometryAxis::Vertical,
-                line: wall.x + 1,
-                start: wall.z,
-                end: wall.z + 1,
-            });
-        }
-    }
-
-    merge_local_wall_segments(segments)
-        .into_iter()
-        .enumerate()
-        .map(|(wall_id, segment)| GeneratedWallStroke {
-            wall_id,
-            axis: segment.axis,
-            exterior: true,
-            room_ids: Vec::new(),
-            center_line: match segment.axis {
-                GeometryAxis::Horizontal => GeometrySegment2::new(
-                    GeometryPoint2::new(
-                        (segment.start - anchor.x) as f64,
-                        (segment.line - anchor.z) as f64,
-                    ),
-                    GeometryPoint2::new(
-                        (segment.end - anchor.x) as f64,
-                        (segment.line - anchor.z) as f64,
-                    ),
-                ),
-                GeometryAxis::Vertical => GeometrySegment2::new(
-                    GeometryPoint2::new(
-                        (segment.line - anchor.x) as f64,
-                        (segment.start - anchor.z) as f64,
-                    ),
-                    GeometryPoint2::new(
-                        (segment.line - anchor.x) as f64,
-                        (segment.end - anchor.z) as f64,
-                    ),
-                ),
-            },
-        })
-        .collect()
 }
 
 fn collect_story_door_openings(
@@ -669,6 +609,7 @@ fn collect_story_door_openings(
             let polygon = opening_polygon(&segment, axis, wall_thickness.max(0.02));
             Ok(GeneratedDoorOpening {
                 opening_id: opening_id_offset + index,
+                anchor_grid: cell,
                 axis,
                 kind,
                 segment,
@@ -681,23 +622,6 @@ fn collect_story_door_openings(
             })
         })
         .collect()
-}
-
-fn detect_door_axis(cell: GridCoord, walkable_cells: &BTreeSet<GridCoord>) -> GeometryAxis {
-    let east = walkable_cells.contains(&GridCoord::new(cell.x + 1, cell.y, cell.z));
-    let west = walkable_cells.contains(&GridCoord::new(cell.x - 1, cell.y, cell.z));
-    let north = walkable_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z - 1));
-    let south = walkable_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z + 1));
-
-    if (east || west) && !(north || south) {
-        GeometryAxis::Vertical
-    } else if (north || south) && !(east || west) {
-        GeometryAxis::Horizontal
-    } else if east || west {
-        GeometryAxis::Vertical
-    } else {
-        GeometryAxis::Horizontal
-    }
 }
 
 fn opening_polygon(
@@ -718,6 +642,23 @@ fn opening_polygon(
             segment.start.z,
             segment.end.z,
         ),
+    }
+}
+
+fn detect_door_axis(cell: GridCoord, walkable_cells: &BTreeSet<GridCoord>) -> GeometryAxis {
+    let east = walkable_cells.contains(&GridCoord::new(cell.x + 1, cell.y, cell.z));
+    let west = walkable_cells.contains(&GridCoord::new(cell.x - 1, cell.y, cell.z));
+    let north = walkable_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z - 1));
+    let south = walkable_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z + 1));
+
+    if (east || west) && !(north || south) {
+        GeometryAxis::Vertical
+    } else if (north || south) && !(east || west) {
+        GeometryAxis::Horizontal
+    } else if east || west {
+        GeometryAxis::Vertical
+    } else {
+        GeometryAxis::Horizontal
     }
 }
 
@@ -871,39 +812,6 @@ fn rectangle_polygon(min_x: f64, max_x: f64, min_z: f64, max_z: f64) -> Geometry
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct LocalWallSegment {
-    axis: GeometryAxis,
-    line: i32,
-    start: i32,
-    end: i32,
-}
-
-fn merge_local_wall_segments(mut segments: Vec<LocalWallSegment>) -> Vec<LocalWallSegment> {
-    segments.sort_by_key(|segment| {
-        (
-            match segment.axis {
-                GeometryAxis::Horizontal => 0,
-                GeometryAxis::Vertical => 1,
-            },
-            segment.line,
-            segment.start,
-            segment.end,
-        )
-    });
-
-    let mut merged: Vec<LocalWallSegment> = Vec::new();
-    for segment in segments {
-        if let Some(last) = merged.last_mut() {
-            if last.axis == segment.axis && last.line == segment.line && last.end == segment.start {
-                last.end = segment.end;
-                continue;
-            }
-        }
-        merged.push(segment);
-    }
-    merged
-}
 
 fn choose_split_candidate(
     regions: &[BTreeSet<GridCoord>],
@@ -1294,6 +1202,7 @@ fn bounds_for_cells(cells: &BTreeSet<GridCoord>) -> Option<CellBounds> {
 #[cfg(test)]
 mod tests {
     use super::{generate_building_layout, GeneratedBuildingStory};
+    use crate::building_geometry::polygon_area;
     use game_data::{
         BuildingGeneratorKind, GridCoord, MapBuildingFootprintPolygonSpec, MapBuildingLayoutSpec,
         MapBuildingStairSpec, MapBuildingStorySpec, MapObjectFootprint, MapRotation, MapSize,
@@ -1464,7 +1373,7 @@ mod tests {
 
         let story = &layout.stories[0];
         assert!(story.footprint_polygon.is_some());
-        assert!(!story.wall_polygons.polygons.polygons.is_empty());
+        assert!(!story.wall_cells.is_empty());
         assert!(!story.walkable_polygons.polygons.polygons.is_empty());
     }
 
@@ -1484,11 +1393,40 @@ mod tests {
         let story = &layout.stories[0];
         assert!(story.footprint_polygon.is_some());
         assert_eq!(story.room_polygons.len(), story.rooms.len());
-        assert!(!story.wall_strokes.is_empty());
+        assert!(!story.wall_cells.is_empty());
         assert_eq!(
             story.door_openings.len(),
             story.interior_door_cells.len() + story.exterior_door_cells.len()
         );
+    }
+
+    #[test]
+    fn generated_door_openings_use_layout_door_width_and_wall_thickness() {
+        let layout_spec = sample_layout_spec(1234);
+        let anchor = GridCoord::new(0, 0, 0);
+        let layout = generate_building_layout(
+            &layout_spec,
+            anchor,
+            MapRotation::North,
+            MapObjectFootprint {
+                width: 8,
+                height: 8,
+            },
+        )
+        .expect("layout should generate");
+
+        let story = &layout.stories[0];
+        assert!(!story.door_openings.is_empty());
+        for opening in &story.door_openings {
+            let dx = opening.segment.end.x - opening.segment.start.x;
+            let dz = opening.segment.end.z - opening.segment.start.z;
+            let segment_length = (dx * dx + dz * dz).sqrt();
+            let expected_area = layout_spec.door_width as f64 * layout_spec.wall_thickness as f64;
+
+            assert!((segment_length - layout_spec.door_width as f64).abs() < 1e-6);
+            assert!((polygon_area(&opening.polygon) - expected_area).abs() < 1e-6);
+            assert_eq!(opening.anchor_grid.y, anchor.y);
+        }
     }
 
     fn story_signature(story: &GeneratedBuildingStory) -> (usize, usize, Vec<GridCoord>) {

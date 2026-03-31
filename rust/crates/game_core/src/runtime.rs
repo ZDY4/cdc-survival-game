@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 
 use game_data::{
-    ActionResult, ActionType, ActorId, ActorSide, CharacterId, DialogueLibrary,
-    DialogueRuleLibrary, DialogueRuntimeState, EffectLibrary, GridCoord,
+    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorSide, CharacterId,
+    DialogueLibrary, DialogueRuleLibrary, DialogueRuntimeState, EffectLibrary, GridCoord,
     InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
     InteractionOptionId, InteractionPrompt, InteractionTargetId, ItemFragment, ItemLibrary,
     MapLibrary, OverworldLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary,
-    WorldCoord, WorldMode,
+    SkillTargetRequest, WorldCoord, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -20,7 +20,7 @@ use crate::movement::{
 };
 use crate::simulation::{
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
-    SimulationSnapshot, SimulationStateSnapshot,
+    SimulationSnapshot, SimulationStateSnapshot, SkillActivationResult, SkillRuntimeState,
 };
 use crate::{NpcBackgroundState, NpcRuntimeActionState};
 
@@ -170,7 +170,21 @@ impl SimulationRuntime {
     }
 
     pub fn start_quest(&mut self, actor_id: ActorId, quest_id: &str) -> bool {
-        self.simulation.start_quest(actor_id, quest_id)
+        if self
+            .begin_ap_action(actor_id, ActionType::Interact, None)
+            .is_err()
+        {
+            return false;
+        }
+
+        let started = self.simulation.start_quest(actor_id, quest_id);
+        if !started {
+            self.abort_ap_action(actor_id, ActionType::Interact);
+            return false;
+        }
+
+        self.complete_ap_action(actor_id, ActionType::Interact, None)
+            .success
     }
 
     pub fn active_dialogue_state(&self, actor_id: ActorId) -> Option<DialogueRuntimeState> {
@@ -220,15 +234,24 @@ impl SimulationRuntime {
         actor_id: ActorId,
         target_location_id: &str,
     ) -> Result<crate::OverworldStateSnapshot, String> {
-        match self.submit_command(SimulationCommand::StartOverworldTravel {
+        let target_location_id = target_location_id.to_string();
+        self.run_ap_action(
             actor_id,
-            target_location_id: target_location_id.to_string(),
-        }) {
-            SimulationCommandResult::OverworldState(result) => result,
-            other => Err(format!(
-                "overworld_travel_unavailable:unexpected_result:{other:?}"
-            )),
-        }
+            ActionType::Interact,
+            None,
+            string_action_error,
+            move |simulation| match simulation.apply_command(
+                SimulationCommand::StartOverworldTravel {
+                    actor_id,
+                    target_location_id,
+                },
+            ) {
+                SimulationCommandResult::OverworldState(result) => result,
+                other => Err(format!(
+                    "overworld_travel_unavailable:unexpected_result:{other:?}"
+                )),
+            },
+        )
     }
 
     pub fn advance_overworld_travel(
@@ -251,17 +274,25 @@ impl SimulationRuntime {
         entry_point_id: Option<&str>,
         world_mode: WorldMode,
     ) -> Result<InteractionContextSnapshot, String> {
-        match self.submit_command(SimulationCommand::TravelToMap {
+        let target_map_id = target_map_id.to_string();
+        let entry_point_id = entry_point_id.map(str::to_string);
+        self.run_ap_action(
             actor_id,
-            target_map_id: target_map_id.to_string(),
-            entry_point_id: entry_point_id.map(str::to_string),
-            world_mode,
-        }) {
-            SimulationCommandResult::InteractionContext(result) => result,
-            other => Err(format!(
-                "travel_to_map_unavailable:unexpected_result:{other:?}"
-            )),
-        }
+            ActionType::Interact,
+            None,
+            string_action_error,
+            move |simulation| match simulation.apply_command(SimulationCommand::TravelToMap {
+                actor_id,
+                target_map_id,
+                entry_point_id,
+                world_mode,
+            }) {
+                SimulationCommandResult::InteractionContext(result) => result,
+                other => Err(format!(
+                    "travel_to_map_unavailable:unexpected_result:{other:?}"
+                )),
+            },
+        )
     }
 
     pub fn enter_location(
@@ -270,28 +301,44 @@ impl SimulationRuntime {
         location_id: &str,
         entry_point_id: Option<&str>,
     ) -> Result<crate::LocationTransitionContext, String> {
-        match self.submit_command(SimulationCommand::EnterLocation {
+        let location_id = location_id.to_string();
+        let entry_point_id = entry_point_id.map(str::to_string);
+        self.run_ap_action(
             actor_id,
-            location_id: location_id.to_string(),
-            entry_point_id: entry_point_id.map(str::to_string),
-        }) {
-            SimulationCommandResult::LocationTransition(result) => result,
-            other => Err(format!(
-                "location_enter_unavailable:unexpected_result:{other:?}"
-            )),
-        }
+            ActionType::Interact,
+            None,
+            string_action_error,
+            move |simulation| match simulation.apply_command(SimulationCommand::EnterLocation {
+                actor_id,
+                location_id,
+                entry_point_id,
+            }) {
+                SimulationCommandResult::LocationTransition(result) => result,
+                other => Err(format!(
+                    "location_enter_unavailable:unexpected_result:{other:?}"
+                )),
+            },
+        )
     }
 
     pub fn return_to_overworld(
         &mut self,
         actor_id: ActorId,
     ) -> Result<crate::OverworldStateSnapshot, String> {
-        match self.submit_command(SimulationCommand::ReturnToOverworld { actor_id }) {
-            SimulationCommandResult::OverworldState(result) => result,
-            other => Err(format!(
-                "return_to_overworld_unavailable:unexpected_result:{other:?}"
-            )),
-        }
+        self.run_ap_action(
+            actor_id,
+            ActionType::Interact,
+            None,
+            string_action_error,
+            move |simulation| match simulation
+                .apply_command(SimulationCommand::ReturnToOverworld { actor_id })
+            {
+                SimulationCommandResult::OverworldState(result) => result,
+                other => Err(format!(
+                    "return_to_overworld_unavailable:unexpected_result:{other:?}"
+                )),
+            },
+        )
     }
 
     pub fn current_overworld_state(&self) -> crate::OverworldStateSnapshot {
@@ -379,9 +426,21 @@ impl SimulationRuntime {
         target_slot: Option<&str>,
         items: &ItemLibrary,
     ) -> Result<Option<u32>, EconomyRuntimeError> {
-        self.simulation
-            .economy_mut()
-            .equip_item(actor_id, item_id, target_slot, items)
+        let target_slot = target_slot.map(str::to_string);
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation.economy_mut().equip_item(
+                    actor_id,
+                    item_id,
+                    target_slot.as_deref(),
+                    items,
+                )
+            },
+        )
     }
 
     pub fn unequip_item(
@@ -389,7 +448,14 @@ impl SimulationRuntime {
         actor_id: ActorId,
         slot: &str,
     ) -> Result<u32, EconomyRuntimeError> {
-        self.simulation.economy_mut().unequip_item(actor_id, slot)
+        let slot = slot.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| simulation.economy_mut().unequip_item(actor_id, &slot),
+        )
     }
 
     pub fn reload_equipped_weapon(
@@ -398,9 +464,18 @@ impl SimulationRuntime {
         slot: &str,
         items: &ItemLibrary,
     ) -> Result<i32, EconomyRuntimeError> {
-        self.simulation
-            .economy_mut()
-            .reload_equipped_weapon(actor_id, slot, items)
+        let slot = slot.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation
+                    .economy_mut()
+                    .reload_equipped_weapon(actor_id, &slot, items)
+            },
+        )
     }
 
     pub fn learn_skill(
@@ -409,9 +484,18 @@ impl SimulationRuntime {
         skill_id: &str,
         skills: &SkillLibrary,
     ) -> Result<i32, EconomyRuntimeError> {
-        self.simulation
-            .economy_mut()
-            .learn_skill(actor_id, skill_id, skills)
+        let skill_id = skill_id.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation
+                    .economy_mut()
+                    .learn_skill(actor_id, &skill_id, skills)
+            },
+        )
     }
 
     pub fn craft_recipe(
@@ -421,9 +505,18 @@ impl SimulationRuntime {
         recipes: &RecipeLibrary,
         items: &ItemLibrary,
     ) -> Result<CraftOutcome, EconomyRuntimeError> {
-        self.simulation
-            .economy_mut()
-            .craft_recipe(actor_id, recipe_id, recipes, items)
+        let recipe_id = recipe_id.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation
+                    .economy_mut()
+                    .craft_recipe(actor_id, &recipe_id, recipes, items)
+            },
+        )
     }
 
     pub fn buy_item_from_shop(
@@ -434,9 +527,18 @@ impl SimulationRuntime {
         count: i32,
         items: &ItemLibrary,
     ) -> Result<TradeOutcome, EconomyRuntimeError> {
-        self.simulation
-            .economy_mut()
-            .buy_item_from_shop(actor_id, shop_id, item_id, count, items)
+        let shop_id = shop_id.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation
+                    .economy_mut()
+                    .buy_item_from_shop(actor_id, &shop_id, item_id, count, items)
+            },
+        )
     }
 
     pub fn sell_item_to_shop(
@@ -447,9 +549,18 @@ impl SimulationRuntime {
         count: i32,
         items: &ItemLibrary,
     ) -> Result<TradeOutcome, EconomyRuntimeError> {
-        self.simulation
-            .economy_mut()
-            .sell_item_to_shop(actor_id, shop_id, item_id, count, items)
+        let shop_id = shop_id.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation
+                    .economy_mut()
+                    .sell_item_to_shop(actor_id, &shop_id, item_id, count, items)
+            },
+        )
     }
 
     pub fn move_equipped_item(
@@ -459,13 +570,29 @@ impl SimulationRuntime {
         to_slot: &str,
         items: &ItemLibrary,
     ) -> Result<(), EconomyRuntimeError> {
-        self.simulation
-            .economy_mut()
-            .move_equipped_item(actor_id, from_slot, to_slot, items)
+        let from_slot = from_slot.to_string();
+        let to_slot = to_slot.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation
+                    .economy_mut()
+                    .move_equipped_item(actor_id, &from_slot, &to_slot, items)
+            },
+        )
     }
 
     pub fn clear_actor_loadout(&mut self, actor_id: ActorId) -> Result<(), EconomyRuntimeError> {
-        self.simulation.economy_mut().clear_actor_loadout(actor_id)
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| simulation.economy_mut().clear_actor_loadout(actor_id),
+        )
     }
 
     pub fn allocate_attribute_point(
@@ -526,39 +653,51 @@ impl SimulationRuntime {
             return Err(format!("item_missing:{item_id}"));
         }
 
-        for effect_id in effect_ids {
-            let Some(effect) = effects.get(effect_id) else {
-                continue;
-            };
-            if let Some(gameplay_effect) = effect.gameplay_effect.as_ref() {
-                for (resource, delta) in &gameplay_effect.resource_deltas {
-                    let runtime_resource = match resource.as_str() {
-                        "health" => "hp",
-                        other => other,
+        let effect_ids = effect_ids.clone();
+        let item_name = definition.name.clone();
+        let consume_on_use = *consume_on_use;
+
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            string_action_error,
+            move |simulation| {
+                for effect_id in &effect_ids {
+                    let Some(effect) = effects.get(effect_id) else {
+                        continue;
                     };
-                    let current = self.get_actor_resource(actor_id, runtime_resource);
-                    let max_value = if runtime_resource == "hp" {
-                        self.get_actor_max_hit_points(actor_id)
-                    } else {
-                        f32::MAX
-                    };
-                    self.set_actor_resource(
-                        actor_id,
-                        runtime_resource,
-                        (current + *delta).clamp(0.0, max_value),
-                    );
+                    if let Some(gameplay_effect) = effect.gameplay_effect.as_ref() {
+                        for (resource, delta) in &gameplay_effect.resource_deltas {
+                            let runtime_resource = match resource.as_str() {
+                                "health" => "hp",
+                                other => other,
+                            };
+                            let current = simulation.actor_resource(actor_id, runtime_resource);
+                            let max_value = if runtime_resource == "hp" {
+                                simulation.max_hit_points(actor_id)
+                            } else {
+                                f32::MAX
+                            };
+                            simulation.set_actor_resource(
+                                actor_id,
+                                runtime_resource,
+                                (current + *delta).clamp(0.0, max_value),
+                            );
+                        }
+                    }
                 }
-            }
-        }
 
-        if *consume_on_use {
-            self.simulation
-                .economy_mut()
-                .remove_item(actor_id, item_id, 1)
-                .map_err(|error| error.to_string())?;
-        }
+                if consume_on_use {
+                    simulation
+                        .economy_mut()
+                        .remove_item(actor_id, item_id, 1)
+                        .map_err(|error| error.to_string())?;
+                }
 
-        Ok(definition.name.clone())
+                Ok(item_name)
+            },
+        )
     }
 
     pub fn world_to_grid(&self, world: WorldCoord) -> GridCoord {
@@ -571,6 +710,10 @@ impl SimulationRuntime {
 
     pub fn get_actor_grid_position(&self, actor_id: ActorId) -> Option<GridCoord> {
         self.simulation.actor_grid_position(actor_id)
+    }
+
+    pub fn get_actor_attack_range(&self, actor_id: ActorId) -> f32 {
+        self.simulation.attack_range(actor_id)
     }
 
     pub fn grid_walkable(&self, grid: GridCoord) -> bool {
@@ -731,6 +874,22 @@ impl SimulationRuntime {
         self.simulation.current_group()
     }
 
+    pub fn skill_state(&self, actor_id: ActorId, skill_id: &str) -> SkillRuntimeState {
+        self.simulation.skill_state(actor_id, skill_id)
+    }
+
+    pub fn skill_cooldown_remaining(&self, actor_id: ActorId, skill_id: &str) -> f32 {
+        self.simulation.skill_cooldown_remaining(actor_id, skill_id)
+    }
+
+    pub fn is_skill_toggled_active(&self, actor_id: ActorId, skill_id: &str) -> bool {
+        self.simulation.is_skill_toggled_active(actor_id, skill_id)
+    }
+
+    pub fn advance_skill_timers(&mut self, delta_sec: f32) {
+        self.simulation.advance_skill_timers(delta_sec);
+    }
+
     pub fn current_turn_index(&self) -> u64 {
         self.simulation.current_turn_index()
     }
@@ -759,6 +918,8 @@ impl SimulationRuntime {
         if self.ensure_player_input_actor(actor_id).is_err() {
             return None;
         }
+
+        self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
 
         match self.submit_command(SimulationCommand::QueryInteractionOptions {
             actor_id,
@@ -893,6 +1054,79 @@ impl SimulationRuntime {
         }
 
         result
+    }
+
+    pub fn perform_attack(&mut self, actor_id: ActorId, target_actor: ActorId) -> ActionResult {
+        if let Err(error) = self.ensure_player_input_actor(actor_id) {
+            return ActionResult::rejected(
+                movement_plan_error_reason(&error),
+                self.simulation.get_actor_ap(actor_id),
+                self.simulation.get_actor_ap(actor_id),
+                self.simulation.is_in_combat(),
+            );
+        }
+        self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
+        self.pending_interaction = None;
+        match self.submit_command(SimulationCommand::PerformAttack {
+            actor_id,
+            target_actor,
+        }) {
+            SimulationCommandResult::Action(result) => result,
+            _ => ActionResult::rejected(
+                "attack_command_unavailable",
+                self.simulation.get_actor_ap(actor_id),
+                self.simulation.get_actor_ap(actor_id),
+                self.simulation.is_in_combat(),
+            ),
+        }
+    }
+
+    pub fn activate_skill(
+        &mut self,
+        actor_id: ActorId,
+        skill_id: &str,
+        target: SkillTargetRequest,
+    ) -> SkillActivationResult {
+        if let Err(error) = self.ensure_player_input_actor(actor_id) {
+            let ap = self.simulation.get_actor_ap(actor_id);
+            return SkillActivationResult::failure(
+                skill_id,
+                ActionResult::rejected(
+                    movement_plan_error_reason(&error),
+                    ap,
+                    ap,
+                    self.simulation.is_in_combat(),
+                ),
+                movement_plan_error_reason(&error),
+            );
+        }
+
+        self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
+        self.pending_interaction = None;
+
+        match self.submit_command(SimulationCommand::ActivateSkill {
+            actor_id,
+            skill_id: skill_id.to_string(),
+            target,
+        }) {
+            SimulationCommandResult::SkillActivation(result) => result,
+            other => {
+                warn!(
+                    "core.skill.issue_unavailable actor={actor_id:?} skill_id={skill_id} result={other:?}"
+                );
+                let ap = self.simulation.get_actor_ap(actor_id);
+                SkillActivationResult::failure(
+                    skill_id,
+                    ActionResult::rejected(
+                        "skill_command_unavailable",
+                        ap,
+                        ap,
+                        self.simulation.is_in_combat(),
+                    ),
+                    "skill_command_unavailable",
+                )
+            }
+        }
     }
 
     pub fn plan_actor_movement(
@@ -1065,6 +1299,7 @@ impl SimulationRuntime {
             command,
             SimulationCommand::MoveActorTo { .. }
                 | SimulationCommand::PerformAttack { .. }
+                | SimulationCommand::ActivateSkill { .. }
                 | SimulationCommand::PerformInteract { .. }
                 | SimulationCommand::ExecuteInteraction(_)
                 | SimulationCommand::EndTurn { .. }
@@ -1318,6 +1553,89 @@ impl SimulationRuntime {
         }
     }
 
+    fn begin_ap_action(
+        &mut self,
+        actor_id: ActorId,
+        action_type: ActionType,
+        target_actor: Option<ActorId>,
+    ) -> Result<(), ActionResult> {
+        if let Err(error) = self.ensure_player_input_actor(actor_id) {
+            let ap = self.simulation.get_actor_ap(actor_id);
+            return Err(ActionResult::rejected(
+                movement_plan_error_reason(&error),
+                ap,
+                ap,
+                self.simulation.is_in_combat(),
+            ));
+        }
+
+        self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
+        let result = self.simulation.request_action(ActionRequest {
+            actor_id,
+            action_type,
+            phase: ActionPhase::Start,
+            steps: None,
+            target_actor,
+            success: true,
+        });
+        if result.success {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+
+    fn complete_ap_action(
+        &mut self,
+        actor_id: ActorId,
+        action_type: ActionType,
+        target_actor: Option<ActorId>,
+    ) -> ActionResult {
+        self.simulation.request_action(ActionRequest {
+            actor_id,
+            action_type,
+            phase: ActionPhase::Complete,
+            steps: None,
+            target_actor,
+            success: true,
+        })
+    }
+
+    fn abort_ap_action(&mut self, actor_id: ActorId, action_type: ActionType) {
+        self.simulation.abort_action(actor_id, action_type);
+    }
+
+    fn run_ap_action<T, E, F, M>(
+        &mut self,
+        actor_id: ActorId,
+        action_type: ActionType,
+        target_actor: Option<ActorId>,
+        map_action_error: M,
+        operation: F,
+    ) -> Result<T, E>
+    where
+        F: FnOnce(&mut Simulation) -> Result<T, E>,
+        M: Fn(ActorId, ActionResult) -> E + Copy,
+    {
+        self.begin_ap_action(actor_id, action_type, target_actor)
+            .map_err(|result| map_action_error(actor_id, result))?;
+
+        match operation(&mut self.simulation) {
+            Ok(value) => {
+                let complete = self.complete_ap_action(actor_id, action_type, target_actor);
+                if complete.success {
+                    Ok(value)
+                } else {
+                    Err(map_action_error(actor_id, complete))
+                }
+            }
+            Err(error) => {
+                self.abort_ap_action(actor_id, action_type);
+                Err(error)
+            }
+        }
+    }
+
     fn ensure_player_input_actor(&self, actor_id: ActorId) -> Result<(), MovementPlanError> {
         let Some(side) = self.simulation.get_actor_side(actor_id) else {
             return Err(MovementPlanError::UnknownActor { actor_id });
@@ -1386,6 +1704,26 @@ pub fn movement_plan_error_reason(error: &MovementPlanError) -> &'static str {
     }
 }
 
+fn action_result_reason(result: ActionResult, fallback: &str) -> String {
+    result.reason.unwrap_or_else(|| fallback.to_string())
+}
+
+fn string_action_error(_actor_id: ActorId, result: ActionResult) -> String {
+    action_result_reason(result, "action_rejected")
+}
+
+fn economy_action_error(actor_id: ActorId, result: ActionResult) -> EconomyRuntimeError {
+    match result.reason.as_deref() {
+        Some("unknown_actor") => EconomyRuntimeError::UnknownActor { actor_id },
+        Some(reason) => EconomyRuntimeError::ActionRejected {
+            reason: reason.to_string(),
+        },
+        None => EconomyRuntimeError::ActionRejected {
+            reason: "action_rejected".to_string(),
+        },
+    }
+}
+
 pub fn action_result_status(result: &ActionResult) -> String {
     if result.success {
         format!(
@@ -1431,7 +1769,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use game_data::{
-        ActionType, ActorKind, ActorSide, CharacterId, DialogueAction, DialogueData,
+        ActionType, ActorId, ActorKind, ActorSide, CharacterId, DialogueAction, DialogueData,
         DialogueLibrary, DialogueNode, DialogueOption, GridCoord, InteractionExecutionRequest,
         InteractionOptionId, InteractionTargetId, ItemDefinition, ItemFragment, ItemLibrary,
         MapDefinition, MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition,
@@ -1440,8 +1778,9 @@ mod tests {
         OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
         OverworldLocationKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow,
         QuestLibrary, QuestNode, QuestRewards, RecipeDefinition, RecipeLibrary, RecipeMaterial,
-        RecipeOutput, ShopDefinition, ShopInventoryEntry, ShopLibrary, SkillDefinition,
-        SkillLibrary, WorldMode,
+        RecipeOutput, ShopDefinition, ShopInventoryEntry, ShopLibrary, SkillActivationDefinition,
+        SkillActivationEffect, SkillDefinition, SkillLibrary, SkillModifierDefinition,
+        SkillTargetRequest, SkillTargetingDefinition, WorldMode,
     };
 
     use super::SimulationRuntime;
@@ -1463,6 +1802,15 @@ mod tests {
                 && actor.turn_open
                 && (actor.ap - 1.0).abs() < f32::EPSILON
         }));
+    }
+
+    fn set_runtime_actor_ap(runtime: &mut SimulationRuntime, actor_id: ActorId, ap: f32) {
+        let mut snapshot = runtime.save_snapshot();
+        snapshot.simulation.config.turn_ap_max = snapshot.simulation.config.turn_ap_max.max(ap);
+        runtime
+            .load_snapshot(snapshot)
+            .expect("runtime snapshot should reload");
+        runtime.simulation.set_actor_ap(actor_id, ap);
     }
 
     #[test]
@@ -1679,6 +2027,26 @@ mod tests {
         assert_eq!(
             runtime.peek_pending_progression(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+    }
+
+    #[test]
+    fn query_interaction_prompt_cancels_pending_movement() {
+        let (mut runtime, handles) = create_demo_runtime();
+
+        runtime
+            .issue_actor_move(handles.player, GridCoord::new(0, 0, 2))
+            .expect("path should be planned");
+
+        let prompt = runtime
+            .query_interaction_prompt(handles.player, InteractionTargetId::Actor(handles.friendly));
+
+        assert!(prompt.is_some());
+        assert!(runtime.pending_movement().is_none());
+        assert!(!runtime.has_pending_progression());
+        assert_eq!(
+            runtime.get_actor_grid_position(handles.player),
+            Some(GridCoord::new(0, 0, 1))
         );
     }
 
@@ -2007,6 +2375,7 @@ mod tests {
         simulation.set_actor_resource(hostile, "hp", 5.0);
 
         let mut runtime = SimulationRuntime::from_simulation(simulation);
+        set_runtime_actor_ap(&mut runtime, player, 2.0);
 
         assert!(runtime.start_quest(player, "zombie_hunter"));
         assert!(runtime.is_quest_active("zombie_hunter"));
@@ -2030,6 +2399,7 @@ mod tests {
     fn runtime_equip_reload_and_unequip_use_runtime_surface() {
         let (mut runtime, handles) = create_demo_runtime();
         let items = sample_runtime_economy_item_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 3.0);
 
         runtime.economy_mut().set_actor_level(handles.player, 8);
         runtime
@@ -2067,11 +2437,55 @@ mod tests {
     }
 
     #[test]
+    fn runtime_item_action_keeps_turn_open_when_remaining_ap_meets_threshold() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
+
+        runtime.economy_mut().set_actor_level(handles.player, 8);
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1004, 1, &items)
+            .expect("pistol should be added");
+
+        runtime
+            .equip_item(handles.player, 1004, Some("main_hand"), &items)
+            .expect("equip should succeed");
+
+        assert_eq!(runtime.get_actor_ap(handles.player), 1.0);
+        assert!(runtime.actor_turn_open(handles.player));
+        assert!(!runtime.has_pending_progression());
+    }
+
+    #[test]
+    fn runtime_item_action_rejects_on_insufficient_ap_without_mutation() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 0.0);
+
+        runtime.economy_mut().set_actor_level(handles.player, 8);
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1004, 1, &items)
+            .expect("pistol should be added");
+
+        let result = runtime.equip_item(handles.player, 1004, Some("main_hand"), &items);
+        let error = result.expect_err("equip should be rejected without AP");
+        assert_eq!(error.to_string(), "action rejected: insufficient_ap");
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1004"), 1);
+        assert!(runtime
+            .economy()
+            .equipped_item(handles.player, "main_hand")
+            .is_none());
+    }
+
+    #[test]
     fn runtime_learn_skill_and_craft_use_runtime_surface() {
         let (mut runtime, handles) = create_demo_runtime();
         let items = sample_runtime_economy_item_library();
         let skills = sample_runtime_skill_library();
         let recipes = sample_runtime_recipe_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
 
         runtime
             .economy_mut()
@@ -2107,10 +2521,81 @@ mod tests {
     }
 
     #[test]
+    fn runtime_activate_targeted_single_skill_hits_actor_and_starts_cooldown() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let skills = sample_runtime_skill_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
+        runtime.set_skill_library(skills.clone());
+        runtime
+            .economy_mut()
+            .add_skill_points(handles.player, 1)
+            .expect("skill points should be granted");
+        runtime
+            .learn_skill(handles.player, "fire_bolt", &skills)
+            .expect("fire bolt should learn");
+        runtime
+            .simulation
+            .set_actor_combat_attribute(handles.hostile, "max_hp", 12.0);
+        runtime.set_actor_resource(handles.hostile, "hp", 12.0);
+
+        let result = runtime.activate_skill(
+            handles.player,
+            "fire_bolt",
+            SkillTargetRequest::Actor(handles.hostile),
+        );
+
+        assert!(result.action_result.success);
+        assert_eq!(result.hit_actor_ids, vec![handles.hostile]);
+        assert!(runtime.skill_cooldown_remaining(handles.player, "fire_bolt") > 0.0);
+        assert!(runtime.get_actor_resource(handles.hostile, "hp") < 12.0);
+
+        let cooldown_result = runtime.activate_skill(
+            handles.player,
+            "fire_bolt",
+            SkillTargetRequest::Actor(handles.hostile),
+        );
+        assert!(!cooldown_result.action_result.success);
+        assert_eq!(
+            cooldown_result.failure_reason.as_deref(),
+            Some("skill_on_cooldown")
+        );
+    }
+
+    #[test]
+    fn runtime_activate_targeted_aoe_skill_uses_grid_target() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let skills = sample_runtime_skill_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
+        runtime.set_skill_library(skills.clone());
+        runtime
+            .economy_mut()
+            .add_skill_points(handles.player, 1)
+            .expect("skill points should be granted");
+        runtime
+            .learn_skill(handles.player, "shockwave", &skills)
+            .expect("shockwave should learn");
+        runtime
+            .simulation
+            .set_actor_combat_attribute(handles.friendly, "max_hp", 10.0);
+        runtime.set_actor_resource(handles.friendly, "hp", 10.0);
+
+        let result = runtime.activate_skill(
+            handles.player,
+            "shockwave",
+            SkillTargetRequest::Grid(GridCoord::new(1, 0, 0)),
+        );
+
+        assert!(result.action_result.success);
+        assert!(result.hit_actor_ids.contains(&handles.friendly));
+        assert!(runtime.get_actor_resource(handles.friendly, "hp") < 10.0);
+    }
+
+    #[test]
     fn runtime_buy_and_sell_use_runtime_surface() {
         let (mut runtime, handles) = create_demo_runtime();
         let items = sample_runtime_economy_item_library();
         let shops = sample_runtime_shop_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
         runtime.set_shop_library(shops);
         runtime
             .economy_mut()
@@ -2160,6 +2645,7 @@ mod tests {
             .expect("overworld state should seed");
 
         let mut runtime = SimulationRuntime::from_simulation(simulation);
+        set_runtime_actor_ap(&mut runtime, player, 2.0);
 
         let context = runtime
             .travel_to_map(
@@ -2200,6 +2686,109 @@ mod tests {
                 .as_deref(),
             Some("survivor_outpost_01")
         );
+    }
+
+    #[test]
+    fn runtime_start_quest_rejects_on_insufficient_ap_without_state_change() {
+        let mut simulation = Simulation::new();
+        simulation.set_quest_library(sample_runtime_quest_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+        set_runtime_actor_ap(&mut runtime, player, 0.0);
+
+        assert!(!runtime.start_quest(player, "zombie_hunter"));
+        assert!(!runtime.is_quest_active("zombie_hunter"));
+        assert_eq!(runtime.get_actor_ap(player), 0.0);
+    }
+
+    #[test]
+    fn runtime_travel_rejects_on_insufficient_ap_without_context_change() {
+        let (mut runtime, player) = sample_runtime_with_overworld();
+        set_runtime_actor_ap(&mut runtime, player, 0.0);
+        let before = runtime.current_interaction_context();
+
+        let error = runtime
+            .travel_to_map(
+                player,
+                "clinic_interior_map",
+                Some("clinic_entry"),
+                WorldMode::Interior,
+            )
+            .expect_err("travel should be rejected without AP");
+
+        assert_eq!(error, "insufficient_ap");
+        assert_eq!(runtime.current_interaction_context(), before);
+    }
+
+    #[test]
+    fn runtime_advance_dialogue_does_not_consume_additional_ap() {
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(sample_runtime_dialogue_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let trader = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(1, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+        set_runtime_actor_ap(&mut runtime, player, 2.0);
+
+        let talk = runtime.submit_command(SimulationCommand::ExecuteInteraction(
+            InteractionExecutionRequest {
+                actor_id: player,
+                target_id: InteractionTargetId::Actor(trader),
+                option_id: InteractionOptionId("talk".into()),
+            },
+        ));
+        match talk {
+            SimulationCommandResult::InteractionExecution(result) => assert!(result.success),
+            other => panic!("unexpected talk result: {other:?}"),
+        }
+        assert_eq!(runtime.get_actor_ap(player), 1.0);
+
+        let dialogue = runtime
+            .advance_dialogue(
+                player,
+                Some(InteractionTargetId::Actor(trader)),
+                "trader_lao_wang",
+                None,
+                None,
+            )
+            .expect("dialogue should advance");
+
+        assert_eq!(
+            dialogue.current_node.as_ref().map(|node| node.id.as_str()),
+            Some("choice_1")
+        );
+        assert_eq!(runtime.get_actor_ap(player), 1.0);
     }
 
     #[test]
@@ -2275,13 +2864,7 @@ mod tests {
         simulation.set_actor_resource(hostile, "hp", 5.0);
 
         let mut runtime = SimulationRuntime::from_simulation(simulation);
-        assert!(matches!(
-            runtime.submit_command(SimulationCommand::SetActorAp {
-                actor_id: player,
-                ap: 10.0,
-            }),
-            SimulationCommandResult::None
-        ));
+        set_runtime_actor_ap(&mut runtime, player, 10.0);
 
         let move_result = runtime.submit_command(SimulationCommand::MoveActorTo {
             actor_id: player,
@@ -2295,13 +2878,7 @@ mod tests {
             runtime.get_actor_grid_position(player),
             Some(GridCoord::new(1, 0, 1))
         );
-        assert!(matches!(
-            runtime.submit_command(SimulationCommand::SetActorAp {
-                actor_id: player,
-                ap: 10.0,
-            }),
-            SimulationCommandResult::None
-        ));
+        set_runtime_actor_ap(&mut runtime, player, 10.0);
 
         let pickup = runtime.submit_command(SimulationCommand::ExecuteInteraction(
             InteractionExecutionRequest {
@@ -2317,13 +2894,7 @@ mod tests {
         assert!(runtime.get_actor_inventory_count(player, "1005") >= 1);
 
         assert!(runtime.start_quest(player, "zombie_hunter"));
-        assert!(matches!(
-            runtime.submit_command(SimulationCommand::SetActorAp {
-                actor_id: player,
-                ap: 10.0,
-            }),
-            SimulationCommandResult::None
-        ));
+        set_runtime_actor_ap(&mut runtime, player, 10.0);
         let attack = runtime.submit_command(SimulationCommand::PerformAttack {
             actor_id: player,
             target_actor: hostile,
@@ -2335,13 +2906,7 @@ mod tests {
         assert!(runtime.is_quest_completed("zombie_hunter"));
         assert_eq!(runtime.get_actor_inventory_count(player, "1006"), 3);
 
-        assert!(matches!(
-            runtime.submit_command(SimulationCommand::SetActorAp {
-                actor_id: player,
-                ap: 10.0,
-            }),
-            SimulationCommandResult::None
-        ));
+        set_runtime_actor_ap(&mut runtime, player, 10.0);
         let talk = runtime.submit_command(SimulationCommand::ExecuteInteraction(
             InteractionExecutionRequest {
                 actor_id: player,
@@ -2675,18 +3240,90 @@ mod tests {
     }
 
     fn sample_runtime_skill_library() -> SkillLibrary {
-        SkillLibrary::from(BTreeMap::from([(
-            "crafting_basics".to_string(),
-            SkillDefinition {
-                id: "crafting_basics".to_string(),
-                name: "Crafting Basics".to_string(),
-                tree_id: "survival".to_string(),
-                max_level: 3,
-                prerequisites: Vec::new(),
-                attribute_requirements: BTreeMap::from([("intelligence".to_string(), 3)]),
-                ..SkillDefinition::default()
-            },
-        )]))
+        SkillLibrary::from(BTreeMap::from([
+            (
+                "crafting_basics".to_string(),
+                SkillDefinition {
+                    id: "crafting_basics".to_string(),
+                    name: "Crafting Basics".to_string(),
+                    tree_id: "survival".to_string(),
+                    max_level: 3,
+                    prerequisites: Vec::new(),
+                    attribute_requirements: BTreeMap::from([("intelligence".to_string(), 3)]),
+                    ..SkillDefinition::default()
+                },
+            ),
+            (
+                "fire_bolt".to_string(),
+                SkillDefinition {
+                    id: "fire_bolt".to_string(),
+                    name: "Fire Bolt".to_string(),
+                    tree_id: "combat".to_string(),
+                    max_level: 3,
+                    activation: Some(SkillActivationDefinition {
+                        mode: "active".to_string(),
+                        cooldown: 3.0,
+                        effect: Some(SkillActivationEffect {
+                            modifiers: BTreeMap::from([(
+                                "damage".to_string(),
+                                SkillModifierDefinition {
+                                    base: 4.0,
+                                    per_level: 1.0,
+                                    max_value: 6.0,
+                                    ..SkillModifierDefinition::default()
+                                },
+                            )]),
+                            ..SkillActivationEffect::default()
+                        }),
+                        targeting: Some(SkillTargetingDefinition {
+                            enabled: true,
+                            range_cells: 5,
+                            shape: "single".to_string(),
+                            radius: 0,
+                            handler_script: "damage_single".to_string(),
+                            ..SkillTargetingDefinition::default()
+                        }),
+                        ..SkillActivationDefinition::default()
+                    }),
+                    ..SkillDefinition::default()
+                },
+            ),
+            (
+                "shockwave".to_string(),
+                SkillDefinition {
+                    id: "shockwave".to_string(),
+                    name: "Shockwave".to_string(),
+                    tree_id: "combat".to_string(),
+                    max_level: 3,
+                    activation: Some(SkillActivationDefinition {
+                        mode: "active".to_string(),
+                        cooldown: 2.0,
+                        effect: Some(SkillActivationEffect {
+                            modifiers: BTreeMap::from([(
+                                "damage".to_string(),
+                                SkillModifierDefinition {
+                                    base: 2.0,
+                                    per_level: 0.5,
+                                    max_value: 3.0,
+                                    ..SkillModifierDefinition::default()
+                                },
+                            )]),
+                            ..SkillActivationEffect::default()
+                        }),
+                        targeting: Some(SkillTargetingDefinition {
+                            enabled: true,
+                            range_cells: 3,
+                            shape: "diamond".to_string(),
+                            radius: 1,
+                            handler_script: "damage_aoe".to_string(),
+                            ..SkillTargetingDefinition::default()
+                        }),
+                        ..SkillActivationDefinition::default()
+                    }),
+                    ..SkillDefinition::default()
+                },
+            ),
+        ]))
     }
 
     fn sample_runtime_recipe_library() -> RecipeLibrary {
@@ -3024,6 +3661,7 @@ mod tests {
     #[test]
     fn runtime_travel_to_map_updates_scene_context_and_return_anchor() {
         let (mut runtime, player) = sample_runtime_with_overworld();
+        set_runtime_actor_ap(&mut runtime, player, 1.0);
 
         let context = runtime
             .travel_to_map(
@@ -3056,6 +3694,7 @@ mod tests {
     #[test]
     fn runtime_enter_location_and_return_to_overworld_restore_context() {
         let (mut runtime, player) = sample_runtime_with_overworld();
+        set_runtime_actor_ap(&mut runtime, player, 2.0);
 
         let entered = runtime
             .enter_location(player, "clinic_interior", None)

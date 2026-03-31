@@ -50,8 +50,9 @@ pub use ui::{
     UiInventoryDetailView, UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState,
     UiInventoryPanelSnapshot, UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot,
     UiMapLocationView, UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
-    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillsSnapshot, UiStatusBannerState,
-    UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
+    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot,
+    UiStatusBannerState, UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot,
+    UiWorldStatusSnapshot,
 };
 
 #[derive(Resource, Debug, Clone)]

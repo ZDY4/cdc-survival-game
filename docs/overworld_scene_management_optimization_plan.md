@@ -170,7 +170,7 @@
 
 - 一个独立 GDScript 校验入口
 - 或一个 `tools/verify_map_locations.py` 脚本
-- 也可以作为 `tests/sanity` 的扩展测试
+- 也可以作为独立校验入口，在开发流程中单独执行
 
 收益：
 

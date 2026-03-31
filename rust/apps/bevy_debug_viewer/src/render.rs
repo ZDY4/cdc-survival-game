@@ -2,31 +2,39 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::asset::{Asset, RenderAssetUsages};
 use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight};
+use bevy::mesh::Indices;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, OpaqueRendererMethod, StandardMaterial};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{
-    AsBindGroup, AsBindGroupShaderType, Extent3d, ShaderType, TextureDimension, TextureFormat,
+    AsBindGroup, AsBindGroupShaderType, Extent3d, PrimitiveTopology, ShaderType, TextureDimension,
+    TextureFormat,
 };
 use bevy::shader::ShaderRef;
+use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
 use game_bevy::{SettlementDebugEntry, SettlementDefinitions};
 use game_data::{ActorId, ActorSide, GridCoord};
 
 use crate::console::spawn_console_panel;
+use crate::console::ViewerConsoleState;
 use crate::dialogue::{current_dialogue_has_options, current_dialogue_node};
+use crate::game_ui::{HOTBAR_DOCK_HEIGHT, HOTBAR_DOCK_WIDTH};
 use crate::geometry::{
     actor_body_translation, actor_label, actor_label_world_position, camera_focus_point,
-    camera_world_distance, clamp_camera_pan_offset, grid_bounds, hovered_grid_outline_kind,
-    level_base_height, occluder_blocks_target, rendered_path_preview, resolve_occlusion_target,
-    selected_actor, should_rebuild_static_world, GridBounds, HoveredGridOutlineKind,
+    camera_world_distance, clamp_camera_pan_offset, grid_bounds, grid_focus_world_position,
+    hovered_grid_outline_kind, is_missing_generated_building, level_base_height,
+    missing_geo_building_placeholder_box, occluder_blocks_target, rendered_path_preview,
+    resolve_occlusion_focus_points, selected_actor, should_rebuild_static_world, GridBounds,
+    HoveredGridOutlineKind, OcclusionFocusPoint,
 };
 use crate::state::{
-    ActorLabel, ActorLabelEntities, DialogueChoiceButton, DialoguePanelRoot,
-    FreeObserveIndicatorRoot, HudFooterText, HudText, InteractionLockedActorTag,
-    InteractionMenuButton, InteractionMenuRoot, InteractionMenuState, ViewerActorFeedbackState,
-    ViewerActorMotionState, ViewerCamera, ViewerCameraShakeState, ViewerDamageNumberState,
-    ViewerOverlayMode, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
-    ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
+    ActorLabel, ActorLabelEntities, DialogueChoiceButton, DialoguePanelRoot, FpsOverlayText,
+    FreeObserveIndicatorRoot, HudFooterText, HudTabBarRoot, HudTabButton, HudText,
+    InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot, InteractionMenuState,
+    UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
+    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerHudPage,
+    ViewerOverlayMode, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState, ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
 };
 
 const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
@@ -42,6 +50,25 @@ const GRID_GROUND_SHADER_PATH: &str = "shaders/grid_ground.wgsl";
 const BUILDING_WALL_GRID_SHADER_PATH: &str = "shaders/building_wall_grid.wgsl";
 const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
 const TRIGGER_DECAL_ELEVATION: f32 = 0.012;
+const CAMERA_FOLLOW_SMOOTHING_TAU_SEC: f32 = 0.075;
+const CAMERA_FOLLOW_RESET_DISTANCE_CELLS: f32 = 2.0;
+const GENERATED_DOOR_ROTATION_SPEED_RAD_PER_SEC: f32 = 7.5;
+const MISSING_GEO_BUILDING_PLACEHOLDER_ALPHA: f32 = 0.96;
+const WALL_NORTH: u8 = 1 << 0;
+const WALL_EAST: u8 = 1 << 1;
+const WALL_SOUTH: u8 = 1 << 2;
+const WALL_WEST: u8 = 1 << 3;
+const WALL_HORIZONTAL: u8 = WALL_EAST | WALL_WEST;
+const WALL_VERTICAL: u8 = WALL_NORTH | WALL_SOUTH;
+const WALL_CORNER_NE: u8 = WALL_NORTH | WALL_EAST;
+const WALL_CORNER_ES: u8 = WALL_EAST | WALL_SOUTH;
+const WALL_CORNER_SW: u8 = WALL_SOUTH | WALL_WEST;
+const WALL_CORNER_WN: u8 = WALL_WEST | WALL_NORTH;
+const WALL_T_NO_NORTH: u8 = WALL_EAST | WALL_SOUTH | WALL_WEST;
+const WALL_T_NO_EAST: u8 = WALL_NORTH | WALL_SOUTH | WALL_WEST;
+const WALL_T_NO_SOUTH: u8 = WALL_NORTH | WALL_EAST | WALL_WEST;
+const WALL_T_NO_WEST: u8 = WALL_NORTH | WALL_EAST | WALL_SOUTH;
+const WALL_CROSS: u8 = WALL_NORTH | WALL_EAST | WALL_SOUTH | WALL_WEST;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InteractionMenuLayout {
@@ -111,6 +138,16 @@ struct StaticWorldBoxSpec {
 }
 
 #[derive(Debug, Clone)]
+struct StaticWorldMeshSpec {
+    mesh: Mesh,
+    color: Color,
+    material_style: MaterialStyle,
+    occluder_kind: Option<StaticWorldOccluderKind>,
+    aabb_center: Vec3,
+    aabb_half_extents: Vec3,
+}
+
+#[derive(Debug, Clone)]
 struct StaticWorldDecalSpec {
     size: Vec2,
     translation: Vec3,
@@ -135,6 +172,21 @@ struct SpawnedBoxVisual {
     color: Color,
 }
 
+struct SpawnedMeshVisual {
+    entity: Entity,
+    material: StaticWorldMaterialHandle,
+    color: Color,
+    aabb_center: Vec3,
+    aabb_half_extents: Vec3,
+}
+
+#[derive(Default)]
+pub(crate) struct HoverOcclusionBuffer {
+    current: Option<GridCoord>,
+    previous: Option<GridCoord>,
+    previous_frames_remaining: u8,
+}
+
 #[derive(Debug, Clone)]
 enum StaticWorldMaterialHandle {
     Standard(Handle<StandardMaterial>),
@@ -145,6 +197,55 @@ enum StaticWorldMaterialHandle {
 pub(crate) struct StaticWorldVisualState {
     key: Option<StaticWorldVisualKey>,
     entities: Vec<Entity>,
+    occluders: Vec<StaticWorldOccluderVisual>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GeneratedDoorVisualKey {
+    map_id: Option<game_data::MapId>,
+    current_level: i32,
+}
+
+struct GeneratedDoorVisual {
+    pivot_entity: Entity,
+    leaf_entity: Entity,
+    material: StaticWorldMaterialHandle,
+    base_color: Color,
+    base_alpha: f32,
+    base_alpha_mode: AlphaMode,
+    pivot_translation: Vec3,
+    current_yaw: f32,
+    target_yaw: f32,
+    open_yaw: f32,
+    closed_aabb_center: Vec3,
+    closed_aabb_half_extents: Vec3,
+    is_open: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WallTileKind {
+    Isolated,
+    EndNorth,
+    EndEast,
+    EndSouth,
+    EndWest,
+    StraightHorizontal,
+    StraightVertical,
+    CornerNorthEast,
+    CornerEastSouth,
+    CornerSouthWest,
+    CornerWestNorth,
+    TJunctionMissingNorth,
+    TJunctionMissingEast,
+    TJunctionMissingSouth,
+    TJunctionMissingWest,
+    Cross,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct GeneratedDoorVisualState {
+    key: Option<GeneratedDoorVisualKey>,
+    by_door: HashMap<String, GeneratedDoorVisual>,
     occluders: Vec<StaticWorldOccluderVisual>,
 }
 
@@ -182,9 +283,11 @@ pub(crate) struct DamageNumberLabel {
     id: u64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Component)]
+pub(crate) struct GeneratedDoorPivot;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MaterialStyle {
-    Structure,
     StructureAccent,
     BuildingWallGrid,
     Utility,
@@ -316,6 +419,7 @@ pub(crate) fn setup_viewer(
     let trigger_arrow_texture = images.add(build_trigger_arrow_texture());
     commands.insert_resource(ViewerUiFont(ui_font.clone()));
     commands.insert_resource(StaticWorldVisualState::default());
+    commands.insert_resource(GeneratedDoorVisualState::default());
     commands.insert_resource(ActorVisualState::default());
     commands.insert_resource(DamageNumberVisualState::default());
     commands.insert_resource(TriggerDecalAssets {
@@ -370,20 +474,60 @@ pub(crate) fn setup_viewer(
     ));
     commands
         .spawn((
-            Text::new(""),
-            TextFont::from_font_size(11.2).with_font(ui_font.clone()),
-            TextLayout::new(Justify::Left, LineBreak::NoWrap),
             Node {
                 position_type: PositionType::Absolute,
-                top: px(12),
-                left: px(12),
-                width: Val::Auto,
-                min_width: px(560),
-                padding: UiRect::all(px(12)),
+                top: px(74),
+                left: px(16),
+                width: px(430),
+                padding: UiRect::all(px(8)),
+                column_gap: px(6),
+                flex_wrap: FlexWrap::Wrap,
                 ..default()
             },
             BackgroundColor(palette.hud_panel_background),
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
+            HudTabBarRoot,
+            UiMouseBlocker,
+        ))
+        .with_children(|parent| {
+            for page in ViewerHudPage::ALL {
+                parent.spawn((
+                    Button,
+                    Node {
+                        padding: UiRect::axes(px(8), px(5)),
+                        border: UiRect::all(px(1)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.11, 0.13, 0.17, 0.94)),
+                    BorderColor::all(Color::srgba(0.19, 0.24, 0.32, 1.0)),
+                    HudTabButton { page },
+                    Text::new(page.tab_label().to_string()),
+                    TextFont::from_font_size(10.5).with_font(ui_font.clone()),
+                    TextColor(Color::WHITE),
+                ));
+            }
+        });
+    commands
+        .spawn((
+            Text::new(""),
+            TextFont::from_font_size(11.2).with_font(ui_font.clone()),
+            TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(118),
+                left: px(16),
+                width: px(430),
+                bottom: px(188),
+                padding: UiRect::all(px(12)),
+                overflow: Overflow::clip_y(),
+                ..default()
+            },
+            BackgroundColor(palette.hud_panel_background),
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
             HudText,
+            UiMouseBlocker,
         ))
         .with_child((
             TextSpan::new(""),
@@ -391,6 +535,23 @@ pub(crate) fn setup_viewer(
             TextColor(palette.hud_text_secondary),
             HudFooterText,
         ));
+    commands.spawn((
+        Text::new(""),
+        TextFont::from_font_size(11.0).with_font(ui_font.clone()),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(16),
+            right: px(16),
+            padding: UiRect::axes(px(10), px(6)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.055, 0.065, 0.08, 0.88)),
+        Visibility::Hidden,
+        FocusPolicy::Block,
+        RelativeCursorPosition::default(),
+        FpsOverlayText,
+        UiMouseBlocker,
+    ));
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -401,7 +562,10 @@ pub(crate) fn setup_viewer(
             ..default()
         },
         Visibility::Hidden,
+        FocusPolicy::Block,
+        RelativeCursorPosition::default(),
         FreeObserveIndicatorRoot,
+        UiMouseBlocker,
         children![(
             Text::new("自由观察模式"),
             TextFont::from_font_size(11.0).with_font(ui_font.clone()),
@@ -420,7 +584,10 @@ pub(crate) fn setup_viewer(
         },
         BackgroundColor(palette.menu_background),
         Visibility::Hidden,
+        FocusPolicy::Block,
+        RelativeCursorPosition::default(),
         InteractionMenuRoot,
+        UiMouseBlocker,
     ));
     commands.spawn((
         Node {
@@ -434,7 +601,10 @@ pub(crate) fn setup_viewer(
         },
         BackgroundColor(palette.dialogue_background),
         Visibility::Hidden,
+        FocusPolicy::Block,
+        RelativeCursorPosition::default(),
         DialoguePanelRoot,
+        UiMouseBlocker,
     ));
     spawn_console_panel(&mut commands, ui_font, &palette);
 }
@@ -445,40 +615,58 @@ pub(crate) fn update_camera(
     camera_query: Single<(&mut Projection, &mut Transform), With<ViewerCamera>>,
     motion_state: Res<ViewerActorMotionState>,
     runtime_state: Res<ViewerRuntimeState>,
+    scene_kind: Res<ViewerSceneKind>,
     mut camera_shake_state: ResMut<ViewerCameraShakeState>,
+    mut camera_follow_state: ResMut<ViewerCameraFollowState>,
     mut viewer_state: ResMut<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
     let grid_size = snapshot.grid.grid_size;
-    let focus = if viewer_state.is_camera_following_selected_actor() {
-        camera_focus_following_selected_actor(
-            &runtime_state,
-            &motion_state,
-            &snapshot,
-            &viewer_state,
-            bounds,
-            window.width(),
-            window.height(),
-            *render_config,
-        )
-    } else {
-        viewer_state.camera_pan_offset = clamp_camera_pan_offset(
-            bounds,
-            grid_size,
-            viewer_state.camera_pan_offset,
-            window.width(),
-            window.height(),
-            *render_config,
-        );
-        camera_focus_point(
-            bounds,
-            viewer_state.current_level,
-            grid_size,
-            viewer_state.camera_pan_offset,
-        )
-    };
+    let (desired_focus, followed_actor_id, smooth_follow_enabled) =
+        if scene_kind.is_gameplay() && viewer_state.is_camera_following_selected_actor() {
+            let (focus, actor_id) = camera_focus_following_selected_actor(
+                &runtime_state,
+                &motion_state,
+                &snapshot,
+                &viewer_state,
+                bounds,
+                window.width(),
+                window.height(),
+                *render_config,
+            );
+            (focus, actor_id, true)
+        } else {
+            viewer_state.camera_pan_offset = clamp_camera_pan_offset(
+                bounds,
+                grid_size,
+                viewer_state.camera_pan_offset,
+                window.width(),
+                window.height(),
+                *render_config,
+            );
+            (
+                camera_focus_point(
+                    bounds,
+                    viewer_state.current_level,
+                    grid_size,
+                    viewer_state.camera_pan_offset,
+                ),
+                None,
+                false,
+            )
+        };
+    let focus = update_camera_follow_focus(
+        &mut camera_follow_state,
+        desired_focus,
+        followed_actor_id,
+        viewer_state.current_level,
+        grid_size,
+        time.delta_secs(),
+        *scene_kind,
+        smooth_follow_enabled,
+    );
     let distance = camera_world_distance(
         bounds,
         window.width(),
@@ -516,10 +704,13 @@ fn camera_focus_following_selected_actor(
     viewport_width: f32,
     viewport_height: f32,
     render_config: ViewerRenderConfig,
-) -> Vec3 {
+) -> (Vec3, Option<ActorId>) {
     let grid_size = snapshot.grid.grid_size;
     let Some(actor) = selected_actor(snapshot, viewer_state) else {
-        return camera_focus_point(bounds, viewer_state.current_level, grid_size, Vec2::ZERO);
+        return (
+            camera_focus_point(bounds, viewer_state.current_level, grid_size, Vec2::ZERO),
+            None,
+        );
     };
     let actor_world = motion_state
         .current_world(actor.actor_id)
@@ -536,12 +727,65 @@ fn camera_focus_following_selected_actor(
         render_config,
     );
 
-    camera_focus_point(
-        bounds,
-        viewer_state.current_level,
-        grid_size,
-        clamped_offset,
+    (
+        camera_focus_point(
+            bounds,
+            viewer_state.current_level,
+            grid_size,
+            clamped_offset,
+        ),
+        Some(actor.actor_id),
     )
+}
+
+fn update_camera_follow_focus(
+    camera_follow_state: &mut ViewerCameraFollowState,
+    desired_focus: Vec3,
+    followed_actor_id: Option<ActorId>,
+    current_level: i32,
+    grid_size: f32,
+    delta_sec: f32,
+    scene_kind: ViewerSceneKind,
+    smooth_follow_enabled: bool,
+) -> Vec3 {
+    if camera_follow_requires_reset(
+        *camera_follow_state,
+        desired_focus,
+        followed_actor_id,
+        current_level,
+        grid_size,
+        scene_kind,
+        smooth_follow_enabled,
+    ) {
+        camera_follow_state.reset(desired_focus, followed_actor_id, current_level);
+        return desired_focus;
+    }
+
+    let alpha = 1.0 - (-delta_sec.max(0.0) / CAMERA_FOLLOW_SMOOTHING_TAU_SEC).exp();
+    camera_follow_state.smoothed_focus = camera_follow_state
+        .smoothed_focus
+        .lerp(desired_focus, alpha.clamp(0.0, 1.0));
+    camera_follow_state.last_actor_id = followed_actor_id;
+    camera_follow_state.last_level = current_level;
+    camera_follow_state.smoothed_focus
+}
+
+fn camera_follow_requires_reset(
+    camera_follow_state: ViewerCameraFollowState,
+    desired_focus: Vec3,
+    followed_actor_id: Option<ActorId>,
+    current_level: i32,
+    grid_size: f32,
+    scene_kind: ViewerSceneKind,
+    smooth_follow_enabled: bool,
+) -> bool {
+    scene_kind.is_main_menu()
+        || !smooth_follow_enabled
+        || !camera_follow_state.initialized
+        || camera_follow_state.last_actor_id != followed_actor_id
+        || camera_follow_state.last_level != current_level
+        || camera_follow_state.smoothed_focus.distance(desired_focus)
+            > grid_size * CAMERA_FOLLOW_RESET_DISTANCE_CELLS
 }
 
 pub(crate) fn sync_actor_labels(
@@ -785,11 +1029,19 @@ pub(crate) fn update_interaction_menu(
         (Entity, &mut Node, &mut Visibility, Option<&Children>),
         With<InteractionMenuRoot>,
     >,
+    scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
     mut visual_cache: Local<InteractionMenuVisualCache>,
 ) {
     let (entity, mut node, mut visibility, children) = menu_root.into_inner();
+    if scene_kind.is_main_menu() {
+        clear_ui_children(&mut commands, children);
+        visual_cache.key = None;
+        visual_cache.visible = false;
+        *visibility = Visibility::Hidden;
+        return;
+    }
     let Some(menu_state) = viewer_state.interaction_menu.as_ref() else {
         if visual_cache.visible {
             clear_ui_children(&mut commands, children);
@@ -864,11 +1116,17 @@ pub(crate) fn update_dialogue_panel(
         (Entity, &mut Node, &mut Visibility, Option<&Children>),
         With<DialoguePanelRoot>,
     >,
+    scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
 ) {
     let (entity, mut node, mut visibility, children) = dialogue_root.into_inner();
     clear_ui_children(&mut commands, children);
+
+    if scene_kind.is_main_menu() {
+        *visibility = Visibility::Hidden;
+        return;
+    }
 
     let Some(dialogue) = viewer_state.active_dialogue.as_ref() else {
         *visibility = Visibility::Hidden;
@@ -943,6 +1201,7 @@ pub(crate) fn sync_world_visuals(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
     mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
+    time: Res<Time>,
     palette: Res<ViewerPalette>,
     trigger_decal_assets: Res<TriggerDecalAssets>,
     runtime_state: Res<ViewerRuntimeState>,
@@ -951,8 +1210,13 @@ pub(crate) fn sync_world_visuals(
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     mut static_world_state: ResMut<StaticWorldVisualState>,
+    mut door_visual_state: ResMut<GeneratedDoorVisualState>,
     mut actor_visual_state: ResMut<ActorVisualState>,
-    mut actor_visuals: Query<(Entity, &mut Transform, &ActorBodyVisual)>,
+    mut actor_visuals: Query<
+        (Entity, &mut Transform, &ActorBodyVisual),
+        Without<GeneratedDoorPivot>,
+    >,
+    mut door_pivots: Query<&mut Transform, (With<GeneratedDoorPivot>, Without<ActorBodyVisual>)>,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
@@ -988,6 +1252,20 @@ pub(crate) fn sync_world_visuals(
         static_world_state.key = Some(next_key);
     }
 
+    sync_generated_door_visuals(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &mut building_wall_materials,
+        &time,
+        &snapshot,
+        viewer_state.current_level,
+        *render_config,
+        &palette,
+        &mut door_visual_state,
+        &mut door_pivots,
+    );
+
     sync_actor_visuals(
         &mut commands,
         &mut meshes,
@@ -1008,47 +1286,213 @@ pub(crate) fn update_occluding_world_visuals(
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    scene_kind: Res<ViewerSceneKind>,
+    console_state: Res<ViewerConsoleState>,
     render_config: Res<ViewerRenderConfig>,
+    window: Single<&Window>,
     camera_query: Single<&Transform, With<ViewerCamera>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     mut static_world_state: ResMut<StaticWorldVisualState>,
+    mut door_visual_state: ResMut<GeneratedDoorVisualState>,
+    mut hover_occlusion_buffer: Local<HoverOcclusionBuffer>,
 ) {
-    if static_world_state.occluders.is_empty() {
+    if static_world_state.occluders.is_empty() && door_visual_state.occluders.is_empty() {
         return;
     }
 
     let snapshot = runtime_state.runtime.snapshot();
-    let Some(target_actor) = resolve_occlusion_target(&snapshot, &viewer_state) else {
-        restore_all_occluders(
-            &mut static_world_state,
+    let hover_focus_enabled = scene_kind.is_gameplay()
+        && !console_state.is_open
+        && viewer_state.active_dialogue.is_none()
+        && !cursor_blocks_world_hover(&window, &viewer_state);
+    let focus_points = resolve_occlusion_focus_world_points(
+        &snapshot,
+        &runtime_state,
+        &motion_state,
+        &viewer_state,
+        *render_config,
+        hover_focus_enabled,
+        &mut hover_occlusion_buffer,
+    );
+    if focus_points.is_empty() {
+        restore_occluder_list(
+            &mut static_world_state.occluders,
+            &mut materials,
+            &mut building_wall_materials,
+        );
+        restore_occluder_list(
+            &mut door_visual_state.occluders,
             &mut materials,
             &mut building_wall_materials,
         );
         return;
-    };
+    }
 
     let camera_position = camera_query.translation;
-    let target_position = actor_label_world_position(
-        actor_visual_world_position(&runtime_state, &motion_state, target_actor),
-        snapshot.grid.grid_size,
-        *render_config,
+    update_occluder_list_fade(
+        &mut static_world_state.occluders,
+        camera_position,
+        &focus_points,
+        &mut materials,
+        &mut building_wall_materials,
     );
+    update_occluder_list_fade(
+        &mut door_visual_state.occluders,
+        camera_position,
+        &focus_points,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+}
 
-    for occluder in &mut static_world_state.occluders {
-        let should_fade = occluder_blocks_target(
-            camera_position,
-            target_position,
-            occluder.aabb_center,
-            occluder.aabb_half_extents,
-        );
-        set_occluder_faded(
-            occluder,
-            should_fade,
-            &mut materials,
-            &mut building_wall_materials,
-        );
+fn resolve_occlusion_focus_world_points(
+    snapshot: &game_core::SimulationSnapshot,
+    runtime_state: &ViewerRuntimeState,
+    motion_state: &ViewerActorMotionState,
+    viewer_state: &ViewerState,
+    render_config: ViewerRenderConfig,
+    hover_focus_enabled: bool,
+    hover_occlusion_buffer: &mut HoverOcclusionBuffer,
+) -> Vec<Vec3> {
+    if !hover_focus_enabled {
+        hover_occlusion_buffer.current = None;
+        hover_occlusion_buffer.previous = None;
+        hover_occlusion_buffer.previous_frames_remaining = 0;
     }
+    let logical_points =
+        resolve_occlusion_focus_points(snapshot, viewer_state, hover_focus_enabled);
+    let mut world_points = Vec::new();
+    let mut hover_focus_grid = None;
+
+    for focus_point in logical_points {
+        match focus_point {
+            OcclusionFocusPoint::Actor(actor_id) => {
+                let Some(actor) = snapshot
+                    .actors
+                    .iter()
+                    .find(|actor| actor.actor_id == actor_id)
+                else {
+                    continue;
+                };
+                world_points.push(actor_label_world_position(
+                    actor_visual_world_position(runtime_state, motion_state, actor),
+                    snapshot.grid.grid_size,
+                    render_config,
+                ));
+            }
+            OcclusionFocusPoint::Grid(grid) => {
+                hover_focus_grid = Some(grid);
+            }
+        }
+    }
+
+    for grid in buffered_hover_focus_grids(hover_occlusion_buffer, hover_focus_grid) {
+        world_points.push(grid_focus_world_position(
+            grid,
+            snapshot.grid.grid_size,
+            render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.2,
+        ));
+    }
+
+    world_points
+}
+
+fn buffered_hover_focus_grids(
+    hover_occlusion_buffer: &mut HoverOcclusionBuffer,
+    current_grid: Option<GridCoord>,
+) -> Vec<GridCoord> {
+    if current_grid != hover_occlusion_buffer.current {
+        hover_occlusion_buffer.previous = hover_occlusion_buffer.current;
+        hover_occlusion_buffer.current = current_grid;
+        hover_occlusion_buffer.previous_frames_remaining =
+            u8::from(hover_occlusion_buffer.previous.is_some()) * 2;
+    } else if hover_occlusion_buffer.previous_frames_remaining > 0 {
+        hover_occlusion_buffer.previous_frames_remaining -= 1;
+        if hover_occlusion_buffer.previous_frames_remaining == 0 {
+            hover_occlusion_buffer.previous = None;
+        }
+    }
+
+    let mut grids = Vec::new();
+    if let Some(grid) = hover_occlusion_buffer.current {
+        grids.push(grid);
+    }
+    if hover_occlusion_buffer.previous_frames_remaining > 0 {
+        if let Some(previous) = hover_occlusion_buffer
+            .previous
+            .filter(|previous| Some(*previous) != hover_occlusion_buffer.current)
+        {
+            grids.push(previous);
+        }
+    }
+    grids
+}
+
+fn occluder_should_fade(
+    camera_position: Vec3,
+    focus_points: &[Vec3],
+    aabb_center: Vec3,
+    aabb_half_extents: Vec3,
+) -> bool {
+    focus_points.iter().copied().any(|focus_point| {
+        occluder_blocks_target(camera_position, focus_point, aabb_center, aabb_half_extents)
+    })
+}
+
+fn cursor_blocks_world_hover(window: &Window, viewer_state: &ViewerState) -> bool {
+    let Some(cursor_position) = window.cursor_position() else {
+        return false;
+    };
+    let Some(menu_state) = viewer_state.interaction_menu.as_ref() else {
+        return false;
+    };
+    let Some(prompt) = viewer_state.current_prompt.as_ref() else {
+        return false;
+    };
+    if prompt.target_id != menu_state.target_id || prompt.options.is_empty() {
+        return false;
+    }
+
+    interaction_menu_layout(window, menu_state, prompt).contains(cursor_position)
+}
+
+fn cursor_over_blocking_ui(
+    cursor_position: Option<Vec2>,
+    ui_blockers: &Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<UiMouseBlocker>,
+    >,
+) -> bool {
+    let Some(cursor_position) = cursor_position else {
+        return false;
+    };
+    ui_blockers
+        .iter()
+        .any(|(computed_node, transform, cursor, visibility)| {
+            if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden) {
+                return false;
+            }
+            cursor.is_some_and(RelativeCursorPosition::cursor_over)
+                || computed_node.contains_point(*transform, cursor_position)
+        })
+}
+
+fn cursor_over_hotbar_dock(window: &Window, cursor_position: Option<Vec2>) -> bool {
+    let Some(cursor_position) = cursor_position else {
+        return false;
+    };
+    let left = (window.width() - HOTBAR_DOCK_WIDTH) * 0.5;
+    let top = window.height() - HOTBAR_DOCK_HEIGHT;
+    cursor_position.x >= left
+        && cursor_position.x <= left + HOTBAR_DOCK_WIDTH
+        && cursor_position.y >= top
+        && cursor_position.y <= window.height()
 }
 
 pub(crate) fn draw_world(
@@ -1061,11 +1505,25 @@ pub(crate) fn draw_world(
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
+    window: Single<&Window>,
+    ui_blockers: Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<UiMouseBlocker>,
+    >,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
     let grid_size = snapshot.grid.grid_size;
     let overlay_mode = render_config.overlay_mode;
+    let cursor_position = window.cursor_position();
+    let world_hover_blocked = cursor_blocks_world_hover(&window, &viewer_state)
+        || cursor_over_blocking_ui(cursor_position, &ui_blockers)
+        || cursor_over_hotbar_dock(&window, cursor_position);
     let pulse = 1.0
         + (time.elapsed_secs() * style.selection_pulse_speed).sin() * style.selection_pulse_amount;
 
@@ -1079,6 +1537,13 @@ pub(crate) fn draw_world(
             effective_grid_line_opacity(*render_config),
         );
     }
+
+    draw_missing_geo_building_placeholders(
+        &mut gizmos,
+        &snapshot,
+        viewer_state.current_level,
+        *render_config,
+    );
 
     for actor in snapshot
         .actors
@@ -1129,27 +1594,98 @@ pub(crate) fn draw_world(
         );
     }
 
-    if let Some(grid) = viewer_state.hovered_grid.and_then(|grid| {
-        hovered_grid_outline_kind(&runtime_state.runtime, &snapshot, &viewer_state, grid)
-            .map(|kind| (grid, kind))
-    }) {
-        let (grid, kind) = grid;
-        let color = match kind {
-            HoveredGridOutlineKind::Reachable => palette.hover_walkable,
-            HoveredGridOutlineKind::Hostile => palette.hover_hostile,
-        };
-        draw_grid_outline(
-            &mut gizmos,
-            grid,
-            grid_size,
-            render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.5,
-            if overlay_mode == ViewerOverlayMode::Minimal {
-                0.88
-            } else {
-                0.94
-            },
-            color,
-        );
+    if let Some(targeting) = viewer_state.targeting_state.as_ref() {
+        for grid in targeting
+            .valid_grids
+            .iter()
+            .copied()
+            .filter(|grid| grid.y == viewer_state.current_level)
+        {
+            draw_grid_outline(
+                &mut gizmos,
+                grid,
+                grid_size,
+                render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.45,
+                0.34,
+                with_alpha(palette.interactive, 0.52),
+            );
+        }
+
+        for grid in targeting
+            .preview_hit_grids
+            .iter()
+            .copied()
+            .filter(|grid| grid.y == viewer_state.current_level)
+        {
+            draw_grid_outline(
+                &mut gizmos,
+                grid,
+                grid_size,
+                render_config.floor_thickness_world + OVERLAY_ELEVATION * 1.95,
+                0.72,
+                with_alpha(palette.path, 0.9),
+            );
+        }
+
+        if let Some(grid) = targeting
+            .hovered_grid
+            .filter(|grid| grid.y == viewer_state.current_level)
+            .filter(|grid| targeting.valid_grids.contains(grid))
+        {
+            draw_grid_outline(
+                &mut gizmos,
+                grid,
+                grid_size,
+                render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.55,
+                0.94,
+                with_alpha(palette.selection, 0.98),
+            );
+        }
+
+        for actor_id in &targeting.preview_hit_actor_ids {
+            if let Some(actor) = snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.actor_id == *actor_id)
+            {
+                let actor_world = actor_visual_world_position(&runtime_state, &motion_state, actor);
+                draw_actor_selection_ring(
+                    &mut gizmos,
+                    actor_world,
+                    actor.grid_position.y,
+                    snapshot.grid.grid_size,
+                    *render_config,
+                    if targeting.is_attack() {
+                        palette.hover_hostile
+                    } else {
+                        palette.selection
+                    },
+                    1.0,
+                );
+            }
+        }
+    } else if !world_hover_blocked {
+        if let Some((grid, kind)) = viewer_state.hovered_grid.and_then(|grid| {
+            hovered_grid_outline_kind(&runtime_state.runtime, &snapshot, &viewer_state, grid)
+                .map(|kind| (grid, kind))
+        }) {
+            let color = match kind {
+                HoveredGridOutlineKind::Reachable => palette.hover_walkable,
+                HoveredGridOutlineKind::Hostile => palette.hover_hostile,
+            };
+            draw_grid_outline(
+                &mut gizmos,
+                grid,
+                grid_size,
+                render_config.floor_thickness_world + OVERLAY_ELEVATION * 2.25,
+                if overlay_mode == ViewerOverlayMode::Minimal {
+                    0.92
+                } else {
+                    0.98
+                },
+                with_alpha(color, 0.98),
+            );
+        }
     }
 
     if let Some(actor) = snapshot
@@ -1273,6 +1809,23 @@ fn rebuild_static_world(
         }
     }
 
+    for spec in collect_static_world_mesh_specs(
+        snapshot,
+        current_level,
+        hide_building_roofs,
+        render_config,
+        palette,
+    ) {
+        let occluder_kind = spec.occluder_kind.clone();
+        let spawned = spawn_mesh_spec(commands, meshes, materials, building_wall_materials, spec);
+        static_world_state.entities.push(spawned.entity);
+        if let Some(kind) = occluder_kind {
+            static_world_state
+                .occluders
+                .push(occluder_visual_from_spawned_mesh(spawned, kind));
+        }
+    }
+
     for spec in collect_static_world_decal_specs(snapshot, current_level, render_config, palette) {
         let entity = spawn_decal(
             commands,
@@ -1288,7 +1841,7 @@ fn rebuild_static_world(
 fn collect_static_world_box_specs(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
-    hide_building_roofs: bool,
+    _hide_building_roofs: bool,
     render_config: ViewerRenderConfig,
     palette: &ViewerPalette,
     _bounds: GridBounds,
@@ -1310,13 +1863,12 @@ fn collect_static_world_box_specs(
             .iter()
             .any(|story| story.level == current_level)
     }) {
-        push_generated_building_specs(
+        push_generated_building_stair_specs(
             &mut specs,
             building,
             current_level,
             floor_top,
             grid_size,
-            hide_building_roofs,
             palette,
         );
     }
@@ -1327,6 +1879,9 @@ fn collect_static_world_box_specs(
         .iter()
         .filter(|object| object.anchor.y == current_level)
     {
+        if is_generated_door_object(object) {
+            continue;
+        }
         if object.kind == game_data::MapObjectKind::Building
             && generated_building_ids.contains(object.object_id.as_str())
         {
@@ -1347,42 +1902,7 @@ fn collect_static_world_box_specs(
 
         match object.kind {
             game_data::MapObjectKind::Building => {
-                let body_height = grid_size * (1.08 + anchor_noise * 0.34);
-                let roof_height = grid_size * 0.2;
-                push_box_spec(
-                    &mut specs,
-                    Vec3::new(
-                        footprint_width * 0.98,
-                        grid_size * 0.12,
-                        footprint_depth * 0.98,
-                    ),
-                    Vec3::new(center_x, floor_top + grid_size * 0.06, center_z),
-                    darken_color(base_color, 0.12),
-                    MaterialStyle::StructureAccent,
-                    None,
-                );
-                push_box_spec(
-                    &mut specs,
-                    Vec3::new(footprint_width * 0.9, body_height, footprint_depth * 0.88),
-                    Vec3::new(center_x, floor_top + body_height * 0.5, center_z),
-                    base_color,
-                    MaterialStyle::Structure,
-                    Some(StaticWorldOccluderKind::MapObject(object.kind)),
-                );
-                if !hide_building_roofs {
-                    push_box_spec(
-                        &mut specs,
-                        Vec3::new(footprint_width * 0.78, roof_height, footprint_depth * 0.76),
-                        Vec3::new(
-                            center_x,
-                            floor_top + body_height + roof_height * 0.5,
-                            center_z,
-                        ),
-                        palette.building_top,
-                        MaterialStyle::StructureAccent,
-                        None,
-                    );
-                }
+                continue;
             }
             game_data::MapObjectKind::Pickup => {
                 let plinth_height = grid_size * 0.08;
@@ -1498,6 +2018,45 @@ fn collect_static_world_box_specs(
     specs
 }
 
+fn collect_static_world_mesh_specs(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    _hide_building_roofs: bool,
+    render_config: ViewerRenderConfig,
+    palette: &ViewerPalette,
+) -> Vec<StaticWorldMeshSpec> {
+    let mut specs = Vec::new();
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+
+    for building in snapshot.generated_buildings.iter().filter(|building| {
+        building
+            .stories
+            .iter()
+            .any(|story| story.level == current_level)
+    }) {
+        push_generated_building_wall_mesh_specs(
+            &mut specs,
+            building,
+            current_level,
+            floor_top,
+            grid_size,
+            palette,
+        );
+        push_generated_building_mesh_specs(
+            &mut specs,
+            building,
+            current_level,
+            floor_top,
+            grid_size,
+            palette,
+        );
+    }
+
+    specs
+}
+
 fn collect_static_world_decal_specs(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
@@ -1532,13 +2091,25 @@ fn collect_static_world_decal_specs(
     specs
 }
 
-fn push_generated_building_specs(
+fn push_generated_building_stair_specs(
     specs: &mut Vec<StaticWorldBoxSpec>,
     building: &game_core::GeneratedBuildingDebugState,
     current_level: i32,
     floor_top: f32,
     grid_size: f32,
-    hide_building_roofs: bool,
+    palette: &ViewerPalette,
+) {
+    for stair in &building.stairs {
+        push_generated_stair_specs(specs, stair, current_level, floor_top, grid_size, palette);
+    }
+}
+
+fn push_generated_building_wall_mesh_specs(
+    specs: &mut Vec<StaticWorldMeshSpec>,
+    building: &game_core::GeneratedBuildingDebugState,
+    current_level: i32,
+    floor_top: f32,
+    grid_size: f32,
     palette: &ViewerPalette,
 ) {
     let Some(story) = building
@@ -1549,225 +2120,791 @@ fn push_generated_building_specs(
         return;
     };
 
-    let wall_height = generated_building_wall_height(grid_size);
-    let roof_height = generated_building_roof_height(grid_size);
-    let wall_thickness = generated_building_wall_thickness(grid_size);
-    let door_height = grid_size * 0.06;
-    let door_lintel_height = grid_size * 0.12;
+    let wall_height = grid_size * story.wall_height;
+    let wall_thickness = (grid_size * story.wall_thickness).clamp(0.02, grid_size);
     let wall_color = darken_color(palette.building_base, 0.2);
-    let wall_accent = darken_color(wall_color, 0.18);
-    let foundation_color = darken_color(palette.building_base, 0.42);
-    let interior_floor_color = lerp_color(palette.building_top, palette.building_base, 0.38);
-    let footprint_cells = story
-        .footprint_polygon
-        .as_ref()
-        .map(|footprint| {
-            geometry_polygon_to_world_cells(&footprint.polygon, building.anchor, current_level)
-        })
-        .filter(|cells| !cells.is_empty())
-        .unwrap_or_else(|| story.shape_cells.clone());
-    let wall_polygon_cells = if !story.wall_polygons.polygons.polygons.is_empty() {
-        geometry_multipolygon_to_world_cells(
-            &story.wall_polygons.polygons,
-            building.anchor,
-            current_level,
-        )
-    } else {
-        story.wall_cells.clone()
-    };
-    let door_cells = if !story.door_openings.is_empty() {
-        story
-            .door_openings
-            .iter()
-            .flat_map(|opening| {
-                geometry_polygon_to_world_cells(&opening.polygon, building.anchor, current_level)
-            })
-            .collect::<Vec<_>>()
-    } else {
-        story
-            .interior_door_cells
-            .iter()
-            .chain(story.exterior_door_cells.iter())
-            .copied()
-            .collect::<Vec<_>>()
-    };
 
-    if is_solid_shell_story(story) {
-        push_solid_shell_story_specs(
+    let wall_cells = story.wall_cells.iter().copied().collect::<HashSet<_>>();
+    let occluder_kind = Some(StaticWorldOccluderKind::MapObject(
+        game_data::MapObjectKind::Building,
+    ));
+    for wall in &story.wall_cells {
+        push_generated_wall_tile_mesh_spec(
             specs,
-            story,
-            &footprint_cells,
-            &wall_polygon_cells,
+            *wall,
+            &wall_cells,
             floor_top,
+            wall_height,
+            wall_thickness,
             grid_size,
-            hide_building_roofs,
-            palette,
+            wall_color,
+            occluder_kind.clone(),
         );
+    }
+}
+
+fn push_generated_building_mesh_specs(
+    specs: &mut Vec<StaticWorldMeshSpec>,
+    building: &game_core::GeneratedBuildingDebugState,
+    current_level: i32,
+    floor_top: f32,
+    grid_size: f32,
+    palette: &ViewerPalette,
+) {
+    let Some(story) = building
+        .stories
+        .iter()
+        .find(|story| story.level == current_level)
+    else {
         return;
-    }
-
-    for floor_rect in merge_cells_into_rects(&footprint_cells) {
-        let center = rect_world_center(floor_rect, grid_size);
-        let size = rect_world_size(floor_rect, grid_size, grid_size * 0.98);
-        push_box_spec(
-            specs,
-            Vec3::new(size.x, grid_size * 0.05, size.z),
-            Vec3::new(center.x, floor_top + grid_size * 0.025, center.z),
-            foundation_color,
-            MaterialStyle::StructureAccent,
-            None,
-        );
-    }
-
-    let mut interior_cells = if !story.walkable_polygons.polygons.polygons.is_empty() {
-        geometry_multipolygon_to_world_cells(
-            &story.walkable_polygons.polygons,
-            building.anchor,
-            current_level,
-        )
-    } else {
-        story.walkable_cells.clone()
     };
-    interior_cells.extend(door_cells.iter().copied());
-    interior_cells.sort();
-    interior_cells.dedup();
-    let interior_cell_set = interior_cells.iter().copied().collect::<HashSet<_>>();
-    for floor_rect in merge_cells_into_rects(&interior_cells) {
-        let center = rect_world_center(floor_rect, grid_size);
-        let size = rect_world_size(floor_rect, grid_size, grid_size * 0.9);
-        push_box_spec(
+
+    let interior_floor_color = lerp_color(palette.building_top, palette.building_base, 0.38);
+
+    for polygon in &story.walkable_polygons.polygons.polygons {
+        push_polygon_prism_mesh_spec(
             specs,
-            Vec3::new(size.x, grid_size * 0.035, size.z),
-            Vec3::new(center.x, floor_top + grid_size * 0.058, center.z),
+            polygon,
+            building.anchor,
+            grid_size,
+            floor_top + grid_size * 0.0405,
+            floor_top + grid_size * 0.0755,
             interior_floor_color,
             MaterialStyle::StructureAccent,
             None,
         );
     }
+}
 
-    for wall_rect in merge_cells_into_rects(&wall_polygon_cells) {
-        let (center, size) =
-            generated_wall_rect_transform(wall_rect, grid_size, wall_thickness, &interior_cell_set);
-        push_box_spec(
-            specs,
-            Vec3::new(size.x * 1.01, grid_size * 0.025, size.z * 1.01),
-            Vec3::new(center.x, floor_top + grid_size * 0.04, center.z),
-            wall_accent,
-            MaterialStyle::StructureAccent,
-            None,
-        );
-        push_box_spec(
-            specs,
-            Vec3::new(size.x, wall_height, size.z),
-            Vec3::new(center.x, floor_top + wall_height * 0.5, center.z),
-            wall_color,
-            MaterialStyle::BuildingWallGrid,
-            None,
-        );
+#[allow(clippy::too_many_arguments)]
+fn push_generated_wall_tile_mesh_spec(
+    specs: &mut Vec<StaticWorldMeshSpec>,
+    wall: GridCoord,
+    wall_cells: &HashSet<GridCoord>,
+    floor_top: f32,
+    wall_height: f32,
+    wall_thickness: f32,
+    grid_size: f32,
+    color: Color,
+    occluder_kind: Option<StaticWorldOccluderKind>,
+) {
+    let neighbor_mask = wall_tile_neighbor_mask(wall, wall_cells);
+    let Some((mesh, aabb_center, aabb_half_extents)) = build_wall_tile_mesh(
+        wall,
+        classify_wall_tile(neighbor_mask),
+        floor_top,
+        wall_height,
+        wall_thickness,
+        grid_size,
+    ) else {
+        return;
+    };
+
+    specs.push(StaticWorldMeshSpec {
+        mesh,
+        color,
+        material_style: MaterialStyle::BuildingWallGrid,
+        occluder_kind,
+        aabb_center,
+        aabb_half_extents,
+    });
+}
+
+fn wall_tile_neighbor_mask(cell: GridCoord, wall_cells: &HashSet<GridCoord>) -> u8 {
+    let mut mask = 0;
+    if wall_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z - 1)) {
+        mask |= WALL_NORTH;
     }
-
-    for door_rect in merge_cells_into_rects(&door_cells) {
-        let center = rect_world_center(door_rect, grid_size);
-        let threshold_size = rect_world_size(door_rect, grid_size, grid_size * 0.48);
-        push_box_spec(
-            specs,
-            Vec3::new(threshold_size.x, door_height, threshold_size.z),
-            Vec3::new(center.x, floor_top + door_height * 0.5, center.z),
-            lighten_color(palette.interactive, 0.18),
-            MaterialStyle::UtilityAccent,
-            None,
-        );
-        let lintel_size = rect_world_size(door_rect, grid_size, grid_size * 0.56);
-        push_box_spec(
-            specs,
-            Vec3::new(lintel_size.x, door_lintel_height, lintel_size.z),
-            Vec3::new(
-                center.x,
-                floor_top + wall_height - door_lintel_height * 0.5,
-                center.z,
-            ),
-            lighten_color(palette.interactive, 0.08),
-            MaterialStyle::UtilityAccent,
-            None,
-        );
+    if wall_cells.contains(&GridCoord::new(cell.x + 1, cell.y, cell.z)) {
+        mask |= WALL_EAST;
     }
-
-    if !hide_building_roofs {
-        for roof_rect in merge_cells_into_rects(&footprint_cells) {
-            let center = rect_world_center(roof_rect, grid_size);
-            let size = rect_world_size(roof_rect, grid_size, grid_size * 0.9);
-            push_box_spec(
-                specs,
-                Vec3::new(size.x, roof_height, size.z),
-                Vec3::new(
-                    center.x,
-                    floor_top + wall_height + roof_height * 0.5,
-                    center.z,
-                ),
-                palette.building_top,
-                MaterialStyle::StructureAccent,
-                None,
-            );
-        }
+    if wall_cells.contains(&GridCoord::new(cell.x, cell.y, cell.z + 1)) {
+        mask |= WALL_SOUTH;
     }
+    if wall_cells.contains(&GridCoord::new(cell.x - 1, cell.y, cell.z)) {
+        mask |= WALL_WEST;
+    }
+    mask
+}
 
-    for stair in &building.stairs {
-        push_generated_stair_specs(specs, stair, current_level, floor_top, grid_size, palette);
+fn classify_wall_tile(mask: u8) -> WallTileKind {
+    match mask {
+        0 => WallTileKind::Isolated,
+        WALL_NORTH => WallTileKind::EndNorth,
+        WALL_EAST => WallTileKind::EndEast,
+        WALL_SOUTH => WallTileKind::EndSouth,
+        WALL_WEST => WallTileKind::EndWest,
+        WALL_HORIZONTAL => WallTileKind::StraightHorizontal,
+        WALL_VERTICAL => WallTileKind::StraightVertical,
+        WALL_CORNER_NE => WallTileKind::CornerNorthEast,
+        WALL_CORNER_ES => WallTileKind::CornerEastSouth,
+        WALL_CORNER_SW => WallTileKind::CornerSouthWest,
+        WALL_CORNER_WN => WallTileKind::CornerWestNorth,
+        WALL_T_NO_NORTH => WallTileKind::TJunctionMissingNorth,
+        WALL_T_NO_EAST => WallTileKind::TJunctionMissingEast,
+        WALL_T_NO_SOUTH => WallTileKind::TJunctionMissingSouth,
+        WALL_T_NO_WEST => WallTileKind::TJunctionMissingWest,
+        WALL_CROSS => WallTileKind::Cross,
+        _ => WallTileKind::Cross,
     }
 }
 
-fn push_solid_shell_story_specs(
-    specs: &mut Vec<StaticWorldBoxSpec>,
-    _story: &game_core::GeneratedBuildingStory,
-    footprint_cells: &[GridCoord],
-    wall_polygon_cells: &[GridCoord],
+fn build_wall_tile_mesh(
+    cell: GridCoord,
+    kind: WallTileKind,
     floor_top: f32,
+    wall_height: f32,
+    wall_thickness: f32,
     grid_size: f32,
-    hide_building_roofs: bool,
-    palette: &ViewerPalette,
-) {
-    let wall_height = generated_building_wall_height(grid_size);
-    let roof_height = generated_building_roof_height(grid_size);
-
-    for wall_rect in merge_cells_into_rects(wall_polygon_cells) {
-        let center = rect_world_center(wall_rect, grid_size);
-        let size = rect_world_size(wall_rect, grid_size, grid_size * 0.78);
-        push_box_spec(
-            specs,
-            Vec3::new(size.x * 1.02, grid_size * 0.06, size.z * 1.02),
-            Vec3::new(center.x, floor_top + grid_size * 0.03, center.z),
-            darken_color(palette.building_base, 0.16),
-            MaterialStyle::StructureAccent,
-            None,
-        );
-        push_box_spec(
-            specs,
-            Vec3::new(size.x, wall_height, size.z),
-            Vec3::new(center.x, floor_top + wall_height * 0.5, center.z),
-            darken_color(palette.building_base, 0.22),
-            MaterialStyle::Structure,
-            None,
-        );
+) -> Option<(Mesh, Vec3, Vec3)> {
+    if wall_height <= 0.0 || wall_thickness <= 0.0 {
+        return None;
     }
 
-    if !hide_building_roofs {
-        for roof_rect in merge_cells_into_rects(footprint_cells) {
-            let center = rect_world_center(roof_rect, grid_size);
-            let size = rect_world_size(roof_rect, grid_size, grid_size * 0.94);
-            push_box_spec(
-                specs,
-                Vec3::new(size.x, roof_height, size.z),
-                Vec3::new(
-                    center.x,
-                    floor_top + wall_height + roof_height * 0.5,
-                    center.z,
-                ),
-                darken_color(palette.building_top, 0.12),
-                MaterialStyle::StructureAccent,
-                None,
-            );
+    let x0 = cell.x as f32 * grid_size;
+    let x1 = x0 + grid_size;
+    let z0 = cell.z as f32 * grid_size;
+    let z1 = z0 + grid_size;
+    let cx = (x0 + x1) * 0.5;
+    let cz = (z0 + z1) * 0.5;
+    let half = wall_thickness.min(grid_size) * 0.5;
+    let bottom_y = floor_top;
+    let top_y = floor_top + wall_height;
+
+    let mut builder = MeshBuilder::default();
+    push_wall_tile_core_box(
+        &mut builder,
+        cx - half,
+        cx + half,
+        z0.max(cz - half),
+        z1.min(cz + half),
+        bottom_y,
+        top_y,
+    );
+
+    for &direction in wall_tile_directions(kind) {
+        match direction {
+            WALL_NORTH => push_wall_tile_core_box(
+                &mut builder,
+                cx - half,
+                cx + half,
+                z0,
+                cz + half,
+                bottom_y,
+                top_y,
+            ),
+            WALL_EAST => push_wall_tile_core_box(
+                &mut builder,
+                cx - half,
+                x1,
+                cz - half,
+                cz + half,
+                bottom_y,
+                top_y,
+            ),
+            WALL_SOUTH => push_wall_tile_core_box(
+                &mut builder,
+                cx - half,
+                cx + half,
+                cz - half,
+                z1,
+                bottom_y,
+                top_y,
+            ),
+            WALL_WEST => push_wall_tile_core_box(
+                &mut builder,
+                x0,
+                cx + half,
+                cz - half,
+                cz + half,
+                bottom_y,
+                top_y,
+            ),
+            _ => {}
         }
     }
+
+    builder.build()
+}
+
+fn wall_tile_directions(kind: WallTileKind) -> &'static [u8] {
+    match kind {
+        WallTileKind::Isolated => &[],
+        WallTileKind::EndNorth => &[WALL_NORTH],
+        WallTileKind::EndEast => &[WALL_EAST],
+        WallTileKind::EndSouth => &[WALL_SOUTH],
+        WallTileKind::EndWest => &[WALL_WEST],
+        WallTileKind::StraightHorizontal => &[WALL_EAST, WALL_WEST],
+        WallTileKind::StraightVertical => &[WALL_NORTH, WALL_SOUTH],
+        WallTileKind::CornerNorthEast => &[WALL_NORTH, WALL_EAST],
+        WallTileKind::CornerEastSouth => &[WALL_EAST, WALL_SOUTH],
+        WallTileKind::CornerSouthWest => &[WALL_SOUTH, WALL_WEST],
+        WallTileKind::CornerWestNorth => &[WALL_WEST, WALL_NORTH],
+        WallTileKind::TJunctionMissingNorth => &[WALL_EAST, WALL_SOUTH, WALL_WEST],
+        WallTileKind::TJunctionMissingEast => &[WALL_NORTH, WALL_SOUTH, WALL_WEST],
+        WallTileKind::TJunctionMissingSouth => &[WALL_NORTH, WALL_EAST, WALL_WEST],
+        WallTileKind::TJunctionMissingWest => &[WALL_NORTH, WALL_EAST, WALL_SOUTH],
+        WallTileKind::Cross => &[WALL_NORTH, WALL_EAST, WALL_SOUTH, WALL_WEST],
+    }
+}
+
+fn push_wall_tile_core_box(
+    builder: &mut MeshBuilder,
+    min_x: f32,
+    max_x: f32,
+    min_z: f32,
+    max_z: f32,
+    min_y: f32,
+    max_y: f32,
+) {
+    if min_x >= max_x || min_z >= max_z || min_y >= max_y {
+        return;
+    }
+
+    let near_sw = Vec3::new(min_x, min_y, min_z);
+    let near_se = Vec3::new(max_x, min_y, min_z);
+    let near_ne = Vec3::new(max_x, max_y, min_z);
+    let near_nw = Vec3::new(min_x, max_y, min_z);
+    let far_sw = Vec3::new(min_x, min_y, max_z);
+    let far_se = Vec3::new(max_x, min_y, max_z);
+    let far_ne = Vec3::new(max_x, max_y, max_z);
+    let far_nw = Vec3::new(min_x, max_y, max_z);
+
+    builder.push_quad(
+        near_sw,
+        near_se,
+        far_se,
+        far_sw,
+        Vec3::NEG_Y,
+        Vec2::ZERO,
+        Vec2::ONE,
+    );
+    builder.push_quad(
+        near_nw,
+        far_nw,
+        far_ne,
+        near_ne,
+        Vec3::Y,
+        Vec2::ZERO,
+        Vec2::ONE,
+    );
+    builder.push_quad(
+        near_sw,
+        far_sw,
+        far_nw,
+        near_nw,
+        Vec3::NEG_X,
+        Vec2::ZERO,
+        Vec2::ONE,
+    );
+    builder.push_quad(
+        near_se,
+        near_ne,
+        far_ne,
+        far_se,
+        Vec3::X,
+        Vec2::ZERO,
+        Vec2::ONE,
+    );
+    builder.push_quad(
+        near_sw,
+        near_nw,
+        near_ne,
+        near_se,
+        Vec3::NEG_Z,
+        Vec2::ZERO,
+        Vec2::ONE,
+    );
+    builder.push_quad(
+        far_sw,
+        far_se,
+        far_ne,
+        far_nw,
+        Vec3::Z,
+        Vec2::ZERO,
+        Vec2::ONE,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sync_generated_door_visuals(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    time: &Time,
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+    palette: &ViewerPalette,
+    door_visual_state: &mut GeneratedDoorVisualState,
+    door_pivots: &mut Query<&mut Transform, (With<GeneratedDoorPivot>, Without<ActorBodyVisual>)>,
+) {
+    let next_key = GeneratedDoorVisualKey {
+        map_id: snapshot.grid.map_id.clone(),
+        current_level,
+    };
+    if should_rebuild_static_world(&door_visual_state.key, &next_key) {
+        restore_occluder_list(
+            &mut door_visual_state.occluders,
+            materials,
+            building_wall_materials,
+        );
+        for visual in door_visual_state.by_door.drain().map(|(_, visual)| visual) {
+            commands.entity(visual.leaf_entity).despawn();
+            commands.entity(visual.pivot_entity).despawn();
+        }
+        door_visual_state.key = Some(next_key);
+    }
+
+    let doors_on_level: HashMap<_, _> = snapshot
+        .generated_doors
+        .iter()
+        .filter(|door| door.level == current_level)
+        .map(|door| (door.door_id.clone(), door))
+        .collect();
+    let stale_doors = door_visual_state
+        .by_door
+        .keys()
+        .filter(|door_id| !doors_on_level.contains_key(*door_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    for door_id in stale_doors {
+        if let Some(visual) = door_visual_state.by_door.remove(&door_id) {
+            commands.entity(visual.leaf_entity).despawn();
+            commands.entity(visual.pivot_entity).despawn();
+        }
+    }
+
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+    for door in doors_on_level.values() {
+        let visual = door_visual_state
+            .by_door
+            .entry(door.door_id.clone())
+            .or_insert_with(|| {
+                spawn_generated_door_visual(
+                    commands,
+                    meshes,
+                    materials,
+                    building_wall_materials,
+                    door,
+                    floor_top,
+                    grid_size,
+                    palette,
+                )
+            });
+        visual.target_yaw = if door.is_open { visual.open_yaw } else { 0.0 };
+        visual.is_open = door.is_open;
+        let max_delta = GENERATED_DOOR_ROTATION_SPEED_RAD_PER_SEC * time.delta_secs();
+        visual.current_yaw = move_toward_f32(visual.current_yaw, visual.target_yaw, max_delta);
+        if let Ok(mut transform) = door_pivots.get_mut(visual.pivot_entity) {
+            transform.translation = visual.pivot_translation;
+            transform.rotation = Quat::from_rotation_y(visual.current_yaw);
+        }
+    }
+
+    restore_occluder_list(
+        &mut door_visual_state.occluders,
+        materials,
+        building_wall_materials,
+    );
+    door_visual_state.occluders = door_visual_state
+        .by_door
+        .values()
+        .filter(|visual| !visual.is_open)
+        .map(|visual| StaticWorldOccluderVisual {
+            entity: visual.leaf_entity,
+            material: visual.material.clone(),
+            base_color: visual.base_color,
+            base_alpha: visual.base_alpha,
+            base_alpha_mode: visual.base_alpha_mode.clone(),
+            aabb_center: visual.closed_aabb_center,
+            aabb_half_extents: visual.closed_aabb_half_extents,
+            kind: StaticWorldOccluderKind::MapObject(game_data::MapObjectKind::Interactive),
+            currently_faded: false,
+        })
+        .collect();
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_generated_door_visual(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    door: &game_core::GeneratedDoorDebugState,
+    floor_top: f32,
+    grid_size: f32,
+    palette: &ViewerPalette,
+) -> GeneratedDoorVisual {
+    let pivot_translation = generated_door_pivot_translation(door, floor_top, grid_size);
+    let open_yaw = generated_door_open_yaw(door.axis);
+    let door_height = floor_top + door.wall_height * grid_size;
+    let (mesh, local_center, local_half_extents) = build_polygon_prism_mesh(
+        &door.polygon,
+        door.building_anchor,
+        grid_size,
+        floor_top,
+        door_height,
+        pivot_translation,
+    )
+    .expect("generated door polygon should triangulate");
+    let color = darken_color(palette.building_base, 0.08);
+    let material = make_static_world_material(
+        materials,
+        building_wall_materials,
+        color,
+        MaterialStyle::BuildingWallGrid,
+    );
+    let mesh_handle = meshes.add(mesh);
+    let mut leaf_entity = None;
+    let pivot_entity = commands
+        .spawn((
+            Transform::from_translation(pivot_translation),
+            GeneratedDoorPivot,
+        ))
+        .with_children(|parent| {
+            let entity = match &material {
+                StaticWorldMaterialHandle::Standard(handle) => parent
+                    .spawn((
+                        Mesh3d(mesh_handle.clone()),
+                        MeshMaterial3d(handle.clone()),
+                        Transform::IDENTITY,
+                    ))
+                    .id(),
+                StaticWorldMaterialHandle::BuildingWallGrid(handle) => parent
+                    .spawn((
+                        Mesh3d(mesh_handle.clone()),
+                        MeshMaterial3d(handle.clone()),
+                        Transform::IDENTITY,
+                    ))
+                    .id(),
+            };
+            leaf_entity = Some(entity);
+        })
+        .id();
+
+    GeneratedDoorVisual {
+        pivot_entity,
+        leaf_entity: leaf_entity.expect("generated door leaf should spawn"),
+        material,
+        base_color: color,
+        base_alpha: color.to_srgba().alpha,
+        base_alpha_mode: AlphaMode::Opaque,
+        pivot_translation,
+        current_yaw: if door.is_open { open_yaw } else { 0.0 },
+        target_yaw: if door.is_open { open_yaw } else { 0.0 },
+        open_yaw,
+        closed_aabb_center: pivot_translation + local_center,
+        closed_aabb_half_extents: local_half_extents,
+        is_open: door.is_open,
+    }
+}
+
+fn generated_door_pivot_translation(
+    door: &game_core::GeneratedDoorDebugState,
+    floor_top: f32,
+    grid_size: f32,
+) -> Vec3 {
+    let (min_x, max_x, min_z, max_z) =
+        geometry_world_bounds(&door.polygon, door.building_anchor, grid_size);
+    match door.axis {
+        game_core::GeometryAxis::Horizontal => Vec3::new(min_x, floor_top, (min_z + max_z) * 0.5),
+        game_core::GeometryAxis::Vertical => Vec3::new((min_x + max_x) * 0.5, floor_top, min_z),
+    }
+}
+
+fn generated_door_open_yaw(axis: game_core::GeometryAxis) -> f32 {
+    match axis {
+        game_core::GeometryAxis::Horizontal => std::f32::consts::FRAC_PI_2,
+        game_core::GeometryAxis::Vertical => -std::f32::consts::FRAC_PI_2,
+    }
+}
+
+fn geometry_world_bounds(
+    polygon: &game_core::GeometryPolygon2,
+    anchor: GridCoord,
+    grid_size: f32,
+) -> (f32, f32, f32, f32) {
+    let mut min_x = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut min_z = f32::INFINITY;
+    let mut max_z = f32::NEG_INFINITY;
+    for point in polygon.outer.iter().chain(polygon.holes.iter().flatten()) {
+        let world_x = (anchor.x as f32 + point.x as f32) * grid_size;
+        let world_z = (anchor.z as f32 + point.z as f32) * grid_size;
+        min_x = min_x.min(world_x);
+        max_x = max_x.max(world_x);
+        min_z = min_z.min(world_z);
+        max_z = max_z.max(world_z);
+    }
+    (min_x, max_x, min_z, max_z)
+}
+
+fn move_toward_f32(current: f32, target: f32, max_delta: f32) -> f32 {
+    if (target - current).abs() <= max_delta {
+        target
+    } else {
+        current + (target - current).signum() * max_delta
+    }
+}
+
+#[derive(Default)]
+struct MeshBuilder {
+    positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    uvs: Vec<[f32; 2]>,
+    indices: Vec<u32>,
+    min: Option<Vec3>,
+    max: Option<Vec3>,
+}
+
+impl MeshBuilder {
+    fn push_vertex(&mut self, position: Vec3, normal: Vec3, uv: Vec2) -> u32 {
+        self.positions.push(position.to_array());
+        self.normals.push(normal.to_array());
+        self.uvs.push(uv.to_array());
+        self.min = Some(match self.min {
+            Some(min) => min.min(position),
+            None => position,
+        });
+        self.max = Some(match self.max {
+            Some(max) => max.max(position),
+            None => position,
+        });
+        (self.positions.len() - 1) as u32
+    }
+
+    fn push_triangle(
+        &mut self,
+        a: Vec3,
+        b: Vec3,
+        c: Vec3,
+        desired_normal: Vec3,
+        uv_a: Vec2,
+        uv_b: Vec2,
+        uv_c: Vec2,
+    ) {
+        let mut corners = [(a, uv_a), (b, uv_b), (c, uv_c)];
+        let normal = (corners[1].0 - corners[0].0)
+            .cross(corners[2].0 - corners[0].0)
+            .normalize_or_zero();
+        if normal.dot(desired_normal) < 0.0 {
+            corners.swap(1, 2);
+        }
+        let i0 = self.push_vertex(corners[0].0, desired_normal, corners[0].1);
+        let i1 = self.push_vertex(corners[1].0, desired_normal, corners[1].1);
+        let i2 = self.push_vertex(corners[2].0, desired_normal, corners[2].1);
+        self.indices.extend([i0, i1, i2]);
+    }
+
+    fn push_quad(
+        &mut self,
+        a: Vec3,
+        b: Vec3,
+        c: Vec3,
+        d: Vec3,
+        desired_normal: Vec3,
+        uv_min: Vec2,
+        uv_max: Vec2,
+    ) {
+        self.push_triangle(
+            a,
+            b,
+            c,
+            desired_normal,
+            Vec2::new(uv_min.x, uv_min.y),
+            Vec2::new(uv_max.x, uv_min.y),
+            Vec2::new(uv_max.x, uv_max.y),
+        );
+        self.push_triangle(
+            a,
+            c,
+            d,
+            desired_normal,
+            Vec2::new(uv_min.x, uv_min.y),
+            Vec2::new(uv_max.x, uv_max.y),
+            Vec2::new(uv_min.x, uv_max.y),
+        );
+    }
+
+    fn build(self) -> Option<(Mesh, Vec3, Vec3)> {
+        let (Some(min), Some(max)) = (self.min, self.max) else {
+            return None;
+        };
+        let mut mesh = Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        );
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs);
+        mesh.insert_indices(Indices::U32(self.indices));
+        let center = (min + max) * 0.5;
+        let half_extents = (max - min) * 0.5;
+        Some((mesh, center, half_extents))
+    }
+}
+
+fn push_polygon_prism_mesh_spec(
+    specs: &mut Vec<StaticWorldMeshSpec>,
+    polygon: &game_core::GeometryPolygon2,
+    anchor: GridCoord,
+    grid_size: f32,
+    bottom_y: f32,
+    top_y: f32,
+    color: Color,
+    material_style: MaterialStyle,
+    occluder_kind: Option<StaticWorldOccluderKind>,
+) {
+    let Some((mesh, aabb_center, aabb_half_extents)) =
+        build_polygon_prism_mesh(polygon, anchor, grid_size, bottom_y, top_y, Vec3::ZERO)
+    else {
+        return;
+    };
+    specs.push(StaticWorldMeshSpec {
+        mesh,
+        color,
+        material_style,
+        occluder_kind,
+        aabb_center,
+        aabb_half_extents,
+    });
+}
+
+fn build_polygon_prism_mesh(
+    polygon: &game_core::GeometryPolygon2,
+    anchor: GridCoord,
+    grid_size: f32,
+    bottom_y: f32,
+    top_y: f32,
+    origin: Vec3,
+) -> Option<(Mesh, Vec3, Vec3)> {
+    if top_y <= bottom_y {
+        return None;
+    }
+
+    let Ok(triangles) = game_core::triangulate_polygon_with_holes(polygon) else {
+        return None;
+    };
+
+    let mut builder = MeshBuilder::default();
+    for triangle in triangles {
+        let [a, b, c] = triangle;
+        builder.push_triangle(
+            world_point_from_geometry(a, anchor, top_y, grid_size) - origin,
+            world_point_from_geometry(b, anchor, top_y, grid_size) - origin,
+            world_point_from_geometry(c, anchor, top_y, grid_size) - origin,
+            Vec3::Y,
+            geometry_uv(a, grid_size),
+            geometry_uv(b, grid_size),
+            geometry_uv(c, grid_size),
+        );
+    }
+
+    push_polygon_ring_side_quads(
+        &mut builder,
+        &polygon.outer,
+        anchor,
+        grid_size,
+        bottom_y,
+        top_y,
+        origin,
+    );
+    for hole in &polygon.holes {
+        push_polygon_ring_side_quads(
+            &mut builder,
+            hole,
+            anchor,
+            grid_size,
+            bottom_y,
+            top_y,
+            origin,
+        );
+    }
+
+    builder.build()
+}
+
+fn push_polygon_ring_side_quads(
+    builder: &mut MeshBuilder,
+    ring: &[game_core::GeometryPoint2],
+    anchor: GridCoord,
+    grid_size: f32,
+    bottom_y: f32,
+    top_y: f32,
+    origin: Vec3,
+) {
+    if ring.len() < 2 {
+        return;
+    }
+
+    let orientation = ring_signed_area(ring).signum();
+    let points = normalized_ring_points(ring);
+    for edge in points.windows(2) {
+        let start = edge[0];
+        let end = edge[1];
+        let dx = (end.x - start.x) as f32;
+        let dz = (end.z - start.z) as f32;
+        let length = Vec2::new(dx, dz).length();
+        if length <= f32::EPSILON {
+            continue;
+        }
+        let outward = if orientation >= 0.0 {
+            Vec3::new(dz / length, 0.0, -dx / length)
+        } else {
+            Vec3::new(-dz / length, 0.0, dx / length)
+        };
+        let bottom_start = world_point_from_geometry(start, anchor, bottom_y, grid_size) - origin;
+        let bottom_end = world_point_from_geometry(end, anchor, bottom_y, grid_size) - origin;
+        let top_start = world_point_from_geometry(start, anchor, top_y, grid_size) - origin;
+        let top_end = world_point_from_geometry(end, anchor, top_y, grid_size) - origin;
+        builder.push_quad(
+            bottom_start,
+            bottom_end,
+            top_end,
+            top_start,
+            outward,
+            Vec2::ZERO,
+            Vec2::new(length * grid_size, top_y - bottom_y),
+        );
+    }
+}
+
+fn world_point_from_geometry(
+    point: game_core::GeometryPoint2,
+    anchor: GridCoord,
+    y: f32,
+    grid_size: f32,
+) -> Vec3 {
+    Vec3::new(
+        (anchor.x as f32 + point.x as f32) * grid_size,
+        y,
+        (anchor.z as f32 + point.z as f32) * grid_size,
+    )
+}
+
+fn geometry_uv(point: game_core::GeometryPoint2, grid_size: f32) -> Vec2 {
+    Vec2::new(point.x as f32 * grid_size, point.z as f32 * grid_size)
+}
+
+fn normalized_ring_points(ring: &[game_core::GeometryPoint2]) -> Vec<game_core::GeometryPoint2> {
+    let mut points = ring.to_vec();
+    if points.first() != points.last() {
+        points.push(points[0]);
+    }
+    points
+}
+
+fn ring_signed_area(ring: &[game_core::GeometryPoint2]) -> f64 {
+    let points = normalized_ring_points(ring);
+    points
+        .windows(2)
+        .map(|edge| edge[0].x * edge[1].z - edge[1].x * edge[0].z)
+        .sum::<f64>()
+        * 0.5
 }
 
 fn rect_world_center(rect: MergedGridRect, grid_size: f32) -> game_data::WorldCoord {
@@ -1787,155 +2924,6 @@ fn rect_world_size(rect: MergedGridRect, grid_size: f32, inset_size: f32) -> Vec
         0.0,
         depth_cells * grid_size * scale,
     )
-}
-
-fn generated_wall_rect_transform(
-    rect: MergedGridRect,
-    grid_size: f32,
-    wall_thickness: f32,
-    interior_cells: &HashSet<GridCoord>,
-) -> (game_data::WorldCoord, Vec3) {
-    let width_cells = (rect.max_x - rect.min_x + 1) as f32;
-    let depth_cells = (rect.max_z - rect.min_z + 1) as f32;
-    let thickness = wall_thickness.max(grid_size * 0.3);
-    let mut center = rect_world_center(rect, grid_size);
-
-    if depth_cells == 1.0 {
-        let north_interior = (rect.min_x..=rect.max_x)
-            .any(|x| interior_cells.contains(&GridCoord::new(x, rect.level, rect.min_z - 1)));
-        let south_interior = (rect.min_x..=rect.max_x)
-            .any(|x| interior_cells.contains(&GridCoord::new(x, rect.level, rect.max_z + 1)));
-        if south_interior && !north_interior {
-            center.z = (rect.max_z + 1) as f32 * grid_size - thickness * 0.5;
-        } else if north_interior && !south_interior {
-            center.z = rect.min_z as f32 * grid_size + thickness * 0.5;
-        }
-        return (
-            center,
-            Vec3::new(width_cells * grid_size * 1.01, 0.0, thickness),
-        );
-    }
-
-    if width_cells == 1.0 {
-        let west_interior = (rect.min_z..=rect.max_z)
-            .any(|z| interior_cells.contains(&GridCoord::new(rect.min_x - 1, rect.level, z)));
-        let east_interior = (rect.min_z..=rect.max_z)
-            .any(|z| interior_cells.contains(&GridCoord::new(rect.max_x + 1, rect.level, z)));
-        if east_interior && !west_interior {
-            center.x = (rect.max_x + 1) as f32 * grid_size - thickness * 0.5;
-        } else if west_interior && !east_interior {
-            center.x = rect.min_x as f32 * grid_size + thickness * 0.5;
-        }
-        return (
-            center,
-            Vec3::new(thickness, 0.0, depth_cells * grid_size * 1.01),
-        );
-    }
-
-    (
-        center,
-        rect_world_size(rect, grid_size, wall_thickness.max(grid_size * 0.3)),
-    )
-}
-
-fn geometry_multipolygon_to_world_cells(
-    multipolygon: &game_core::GeometryMultiPolygon2,
-    anchor: GridCoord,
-    level: i32,
-) -> Vec<GridCoord> {
-    let mut cells = multipolygon
-        .polygons
-        .iter()
-        .flat_map(|polygon| geometry_polygon_to_world_cells(polygon, anchor, level))
-        .collect::<Vec<_>>();
-    cells.sort();
-    cells.dedup();
-    cells
-}
-
-fn geometry_polygon_to_world_cells(
-    polygon: &game_core::GeometryPolygon2,
-    anchor: GridCoord,
-    level: i32,
-) -> Vec<GridCoord> {
-    if polygon.outer.len() < 3 {
-        return Vec::new();
-    }
-
-    let min_x = polygon
-        .outer
-        .iter()
-        .map(|point| point.x.floor() as i32)
-        .min()
-        .unwrap_or(0);
-    let max_x = polygon
-        .outer
-        .iter()
-        .map(|point| point.x.ceil() as i32)
-        .max()
-        .unwrap_or(0);
-    let min_z = polygon
-        .outer
-        .iter()
-        .map(|point| point.z.floor() as i32)
-        .min()
-        .unwrap_or(0);
-    let max_z = polygon
-        .outer
-        .iter()
-        .map(|point| point.z.ceil() as i32)
-        .max()
-        .unwrap_or(0);
-
-    let mut cells = Vec::new();
-    for z in min_z..max_z {
-        for x in min_x..max_x {
-            if point_in_polygon(x as f64 + 0.5, z as f64 + 0.5, polygon) {
-                cells.push(GridCoord::new(anchor.x + x, level, anchor.z + z));
-            }
-        }
-    }
-    cells
-}
-
-fn point_in_polygon(x: f64, z: f64, polygon: &game_core::GeometryPolygon2) -> bool {
-    let mut inside = point_in_ring(x, z, &polygon.outer);
-    if !inside {
-        return false;
-    }
-    for hole in &polygon.holes {
-        if point_in_ring(x, z, hole) {
-            inside = false;
-            break;
-        }
-    }
-    inside
-}
-
-fn point_in_ring(x: f64, z: f64, ring: &[game_core::GeometryPoint2]) -> bool {
-    if ring.len() < 3 {
-        return false;
-    }
-
-    let mut inside = false;
-    let mut previous = ring[ring.len() - 1];
-    for &current in ring {
-        let denominator = previous.z - current.z;
-        let intersects = ((current.z > z) != (previous.z > z))
-            && (x
-                < (previous.x - current.x) * (z - current.z)
-                    / if denominator.abs() <= f64::EPSILON {
-                        f64::EPSILON
-                    } else {
-                        denominator
-                    }
-                    + current.x);
-        if intersects {
-            inside = !inside;
-        }
-        previous = current;
-    }
-    inside
 }
 
 fn merge_cells_into_rects(cells: &[GridCoord]) -> Vec<MergedGridRect> {
@@ -1980,13 +2968,6 @@ fn merge_cells_into_rects(cells: &[GridCoord]) -> Vec<MergedGridRect> {
 
     rects.sort_by_key(|rect| (rect.level, rect.min_z, rect.min_x, rect.max_z, rect.max_x));
     rects
-}
-
-fn is_solid_shell_story(story: &game_core::GeneratedBuildingStory) -> bool {
-    story.rooms.is_empty()
-        && story.interior_door_cells.is_empty()
-        && story.exterior_door_cells.is_empty()
-        && story.walkable_cells.is_empty()
 }
 
 fn push_generated_stair_specs(
@@ -2100,7 +3081,10 @@ fn sync_actor_visuals(
     viewer_state: &ViewerState,
     render_config: ViewerRenderConfig,
     actor_visual_state: &mut ActorVisualState,
-    actor_visuals: &mut Query<(Entity, &mut Transform, &ActorBodyVisual)>,
+    actor_visuals: &mut Query<
+        (Entity, &mut Transform, &ActorBodyVisual),
+        Without<GeneratedDoorPivot>,
+    >,
 ) {
     let mut seen_actor_ids = HashSet::new();
     let grid_size = snapshot.grid.grid_size;
@@ -2327,7 +3311,6 @@ fn make_standard_material(
     style: MaterialStyle,
 ) -> Handle<StandardMaterial> {
     let (perceptual_roughness, reflectance, metallic, alpha_mode, emissive_strength) = match style {
-        MaterialStyle::Structure => (0.88, 0.04, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::StructureAccent => (0.8, 0.05, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::Utility => (0.66, 0.16, 0.0, AlphaMode::Opaque, 0.04),
         MaterialStyle::UtilityAccent => (0.58, 0.2, 0.0, AlphaMode::Opaque, 0.09),
@@ -2370,6 +3353,7 @@ fn make_static_world_material(
                         reflectance: 0.035,
                         metallic: 0.0,
                         alpha_mode: AlphaMode::Opaque,
+                        cull_mode: None,
                         opaque_render_method: OpaqueRendererMethod::Forward,
                         ..default()
                     },
@@ -2455,6 +3439,66 @@ fn draw_grid_outline(
     gizmos.line(b, c, color);
     gizmos.line(c, d, color);
     gizmos.line(d, a, color);
+}
+
+fn draw_missing_geo_building_placeholders(
+    gizmos: &mut Gizmos,
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+) {
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+    let color = with_alpha(
+        Color::srgb(1.0, 0.24, 0.18),
+        MISSING_GEO_BUILDING_PLACEHOLDER_ALPHA,
+    );
+
+    for object in snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.anchor.y == current_level)
+        .filter(|object| is_missing_generated_building(snapshot, object))
+    {
+        if let Some((center, size)) =
+            missing_geo_building_placeholder_box(object, grid_size, floor_top)
+        {
+            draw_wire_box_outline(gizmos, center, size, color);
+        }
+    }
+}
+
+fn draw_wire_box_outline(gizmos: &mut Gizmos, center: Vec3, size: Vec3, color: Color) {
+    let half = size * 0.5;
+    let min = center - half;
+    let max = center + half;
+
+    let bottom_sw = Vec3::new(min.x, min.y, min.z);
+    let bottom_se = Vec3::new(max.x, min.y, min.z);
+    let bottom_ne = Vec3::new(max.x, min.y, max.z);
+    let bottom_nw = Vec3::new(min.x, min.y, max.z);
+
+    let top_sw = Vec3::new(min.x, max.y, min.z);
+    let top_se = Vec3::new(max.x, max.y, min.z);
+    let top_ne = Vec3::new(max.x, max.y, max.z);
+    let top_nw = Vec3::new(min.x, max.y, max.z);
+
+    gizmos.line(bottom_sw, bottom_se, color);
+    gizmos.line(bottom_se, bottom_ne, color);
+    gizmos.line(bottom_ne, bottom_nw, color);
+    gizmos.line(bottom_nw, bottom_sw, color);
+
+    gizmos.line(top_sw, top_se, color);
+    gizmos.line(top_se, top_ne, color);
+    gizmos.line(top_ne, top_nw, color);
+    gizmos.line(top_nw, top_sw, color);
+
+    gizmos.line(bottom_sw, top_sw, color);
+    gizmos.line(bottom_se, top_se, color);
+    gizmos.line(bottom_ne, top_ne, color);
+    gizmos.line(bottom_nw, top_nw, color);
 }
 
 fn draw_actor_selection_ring(
@@ -2602,6 +3646,13 @@ fn should_hide_building_roofs(
 
 fn object_has_viewer_function(object: &game_core::MapObjectDebugState) -> bool {
     !object.payload_summary.is_empty()
+}
+
+fn is_generated_door_object(object: &game_core::MapObjectDebugState) -> bool {
+    object
+        .payload_summary
+        .get("generated_door")
+        .is_some_and(|value| value == "true")
 }
 
 fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
@@ -2759,18 +3810,6 @@ fn is_scene_transition_trigger_kind(kind: &str) -> bool {
     )
 }
 
-fn generated_building_wall_height(grid_size: f32) -> f32 {
-    grid_size * 2.35
-}
-
-fn generated_building_roof_height(grid_size: f32) -> f32 {
-    grid_size * 0.16
-}
-
-fn generated_building_wall_thickness(grid_size: f32) -> f32 {
-    (grid_size * 0.08).max(0.06)
-}
-
 fn build_trigger_arrow_texture() -> Image {
     let size = TRIGGER_ARROW_TEXTURE_SIZE as usize;
     let mut data = vec![0_u8; size * size * 4];
@@ -2916,6 +3955,38 @@ fn spawn_box(
     }
 }
 
+fn spawn_mesh_spec(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    spec: StaticWorldMeshSpec,
+) -> SpawnedMeshVisual {
+    let material = make_static_world_material(
+        materials,
+        building_wall_materials,
+        spec.color,
+        spec.material_style,
+    );
+    let mesh = meshes.add(spec.mesh);
+    let entity = match &material {
+        StaticWorldMaterialHandle::Standard(material) => commands
+            .spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())))
+            .id(),
+        StaticWorldMaterialHandle::BuildingWallGrid(material) => commands
+            .spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())))
+            .id(),
+    };
+
+    SpawnedMeshVisual {
+        entity,
+        material,
+        color: spec.color,
+        aabb_center: spec.aabb_center,
+        aabb_half_extents: spec.aabb_half_extents,
+    }
+}
+
 fn spawn_decal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -2961,6 +4032,24 @@ fn occluder_visual_from_spawned_box(
     }
 }
 
+fn occluder_visual_from_spawned_mesh(
+    spawned: SpawnedMeshVisual,
+    kind: StaticWorldOccluderKind,
+) -> StaticWorldOccluderVisual {
+    let base_alpha = spawned.color.to_srgba().alpha;
+    StaticWorldOccluderVisual {
+        entity: spawned.entity,
+        material: spawned.material,
+        base_color: spawned.color,
+        base_alpha,
+        base_alpha_mode: AlphaMode::Opaque,
+        aabb_center: spawned.aabb_center,
+        aabb_half_extents: spawned.aabb_half_extents,
+        kind,
+        currently_faded: false,
+    }
+}
+
 fn set_occluder_faded(
     occluder: &mut StaticWorldOccluderVisual,
     faded: bool,
@@ -2997,19 +4086,43 @@ fn set_occluder_faded(
                 &occluder.base_alpha_mode,
                 faded,
             );
+            apply_occluder_fade_to_building_wall_material_ext(
+                &mut material.extension,
+                occluder.base_color,
+                occluder.base_alpha,
+                faded,
+            );
         }
     }
 
     occluder.currently_faded = faded;
 }
 
-fn restore_all_occluders(
-    static_world_state: &mut StaticWorldVisualState,
+fn restore_occluder_list(
+    occluders: &mut [StaticWorldOccluderVisual],
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
-    for occluder in &mut static_world_state.occluders {
+    for occluder in occluders {
         set_occluder_faded(occluder, false, materials, building_wall_materials);
+    }
+}
+
+fn update_occluder_list_fade(
+    occluders: &mut [StaticWorldOccluderVisual],
+    camera_position: Vec3,
+    focus_points: &[Vec3],
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+) {
+    for occluder in occluders {
+        let should_fade = occluder_should_fade(
+            camera_position,
+            focus_points,
+            occluder.aabb_center,
+            occluder.aabb_half_extents,
+        );
+        set_occluder_faded(occluder, should_fade, materials, building_wall_materials);
     }
 }
 
@@ -3033,23 +4146,44 @@ fn apply_occluder_fade_to_standard_material(
     }
 }
 
+fn apply_occluder_fade_to_building_wall_material_ext(
+    extension: &mut BuildingWallGridMaterialExt,
+    base_color: Color,
+    base_alpha: f32,
+    faded: bool,
+) {
+    let target_alpha = if faded { 0.28 } else { base_alpha };
+    let scale_alpha = |color: Color| {
+        let mut srgb = color.to_srgba();
+        srgb.alpha = target_alpha;
+        Color::from(srgb)
+    };
+
+    extension.base_color = scale_alpha(base_color);
+    extension.major_line_color = scale_alpha(extension.major_line_color);
+    extension.minor_line_color = scale_alpha(extension.minor_line_color);
+    extension.cap_color = scale_alpha(extension.cap_color);
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_visual_translation, actor_visual_world_position, collect_static_world_box_specs,
-        collect_static_world_decal_specs, darken_color, generated_wall_rect_transform,
-        interaction_menu_button_color, interaction_menu_layout, lighten_color,
-        merge_cells_into_rects, occupied_cells_box, should_hide_building_roofs, GridBounds,
-        MergedGridRect, StaticWorldOccluderKind,
-        INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX,
-        INTERACTION_MENU_PADDING_PX,
+        actor_visual_translation, actor_visual_world_position, build_wall_tile_mesh,
+        camera_follow_requires_reset, collect_static_world_box_specs, collect_static_world_decal_specs,
+        collect_static_world_mesh_specs, classify_wall_tile, darken_color,
+        interaction_menu_button_color, interaction_menu_layout, lerp_color, lighten_color,
+        merge_cells_into_rects, occluder_should_fade, occupied_cells_box,
+        should_hide_building_roofs, update_camera_follow_focus, GridBounds, MaterialStyle,
+        StaticWorldOccluderKind, WallTileKind, WALL_EAST, WALL_NORTH, WALL_SOUTH, WALL_WEST,
+        INTERACTION_MENU_BUTTON_GAP_PX,
+        INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX,
     };
     use crate::state::{
-        InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState, ViewerControlMode,
-        ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+        InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState,
+        ViewerCameraFollowState, ViewerControlMode, ViewerPalette, ViewerRenderConfig,
+        ViewerRuntimeState, ViewerSceneKind, ViewerState,
     };
     use bevy::prelude::*;
-    use std::collections::HashSet;
     use game_bevy::SettlementDebugSnapshot;
     use game_core::{
         create_demo_runtime, CombatDebugState, GeneratedBuildingDebugState, GeneratedBuildingStory,
@@ -3061,7 +4195,6 @@ mod tests {
         InteractionTargetId, MapObjectFootprint, MapObjectKind, MapRotation,
         ResolvedInteractionOption, TurnState, WorldCoord,
     };
-
     #[test]
     fn actor_visual_world_position_prefers_motion_track() {
         let (runtime, handles) = create_demo_runtime();
@@ -3132,6 +4265,92 @@ mod tests {
         );
 
         assert_ne!(translated, baseline);
+    }
+
+    #[test]
+    fn camera_follow_focus_smooths_toward_desired_focus() {
+        let mut follow_state = ViewerCameraFollowState::default();
+        follow_state.reset(Vec3::ZERO, Some(ActorId(1)), 0);
+        let desired_focus = Vec3::new(1.5, 0.5, 0.0);
+
+        let focus = update_camera_follow_focus(
+            &mut follow_state,
+            desired_focus,
+            Some(ActorId(1)),
+            0,
+            1.0,
+            0.016,
+            ViewerSceneKind::Gameplay,
+            true,
+        );
+
+        assert!(focus.x > 0.0);
+        assert!(focus.x < desired_focus.x);
+        assert_eq!(follow_state.last_actor_id, Some(ActorId(1)));
+    }
+
+    #[test]
+    fn camera_follow_focus_resets_on_actor_or_level_change() {
+        let follow_state = ViewerCameraFollowState {
+            smoothed_focus: Vec3::new(1.0, 0.5, 1.0),
+            initialized: true,
+            last_actor_id: Some(ActorId(1)),
+            last_level: 0,
+        };
+
+        assert!(camera_follow_requires_reset(
+            follow_state,
+            Vec3::new(4.0, 0.5, 4.0),
+            Some(ActorId(2)),
+            0,
+            1.0,
+            ViewerSceneKind::Gameplay,
+            true,
+        ));
+        assert!(camera_follow_requires_reset(
+            follow_state,
+            Vec3::new(4.0, 1.5, 4.0),
+            Some(ActorId(1)),
+            1,
+            1.0,
+            ViewerSceneKind::Gameplay,
+            true,
+        ));
+    }
+
+    #[test]
+    fn camera_follow_focus_resets_when_follow_is_disabled_or_main_menu() {
+        let mut follow_state = ViewerCameraFollowState {
+            smoothed_focus: Vec3::new(3.0, 0.5, 3.0),
+            initialized: true,
+            last_actor_id: Some(ActorId(1)),
+            last_level: 0,
+        };
+        let desired_focus = Vec3::new(7.0, 0.5, 7.0);
+
+        let manual_focus = update_camera_follow_focus(
+            &mut follow_state,
+            desired_focus,
+            None,
+            0,
+            1.0,
+            0.016,
+            ViewerSceneKind::Gameplay,
+            false,
+        );
+        assert_eq!(manual_focus, desired_focus);
+
+        let menu_focus = update_camera_follow_focus(
+            &mut follow_state,
+            Vec3::new(9.0, 0.5, 9.0),
+            Some(ActorId(1)),
+            0,
+            1.0,
+            0.016,
+            ViewerSceneKind::MainMenu,
+            true,
+        );
+        assert_eq!(menu_focus, Vec3::new(9.0, 0.5, 9.0));
     }
 
     #[test]
@@ -3250,7 +4469,7 @@ mod tests {
             .count();
 
         assert!(non_occluder_count > 0);
-        assert_eq!(occluder_count, 2);
+        assert_eq!(occluder_count, 1);
         assert!(specs.iter().all(|spec| {
             spec.occluder_kind.is_none()
                 || matches!(
@@ -3261,7 +4480,7 @@ mod tests {
     }
 
     #[test]
-    fn static_world_specs_keep_buildings_and_functional_objects() {
+    fn static_world_specs_skip_missing_geo_buildings_and_keep_functional_objects() {
         let specs = collect_static_world_box_specs(
             &snapshot_with_occluders(),
             0,
@@ -3277,7 +4496,7 @@ mod tests {
             world_from_grid,
         );
 
-        assert!(specs.iter().any(|spec| {
+        assert!(!specs.iter().any(|spec| {
             spec.occluder_kind == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
         }));
         assert!(specs.iter().any(|spec| {
@@ -3328,7 +4547,7 @@ mod tests {
     }
 
     #[test]
-    fn static_world_specs_hide_building_roofs_when_actor_is_on_same_level() {
+    fn static_world_specs_do_not_emit_fallback_building_roofs() {
         let palette = ViewerPalette::default();
         let specs_with_roof = collect_static_world_box_specs(
             &snapshot_with_occluders(),
@@ -3368,7 +4587,7 @@ mod tests {
             .filter(|spec| spec.color.to_srgba() == palette.building_top.to_srgba())
             .count();
 
-        assert!(roof_with > 0);
+        assert_eq!(roof_with, 0);
         assert_eq!(roof_without, 0);
     }
 
@@ -3404,9 +4623,33 @@ mod tests {
     }
 
     #[test]
-    fn generated_building_specs_render_walls_without_fallback_box() {
+    fn occluder_fades_when_any_focus_point_is_blocked() {
+        let should_fade = occluder_should_fade(
+            Vec3::new(0.0, 2.0, -10.0),
+            &[Vec3::new(0.0, 0.2, 0.0), Vec3::new(20.0, 0.2, 0.0)],
+            Vec3::new(0.0, 1.0, -5.0),
+            Vec3::new(1.0, 2.0, 1.0),
+        );
+
+        assert!(should_fade);
+    }
+
+    #[test]
+    fn occluder_does_not_fade_without_focus_points() {
+        let should_fade = occluder_should_fade(
+            Vec3::new(0.0, 2.0, -10.0),
+            &[],
+            Vec3::new(0.0, 1.0, -5.0),
+            Vec3::new(1.0, 2.0, 1.0),
+        );
+
+        assert!(!should_fade);
+    }
+
+    #[test]
+    fn generated_building_specs_render_walls_as_tiles() {
         let palette = ViewerPalette::default();
-        let specs = collect_static_world_box_specs(
+        let box_specs = collect_static_world_box_specs(
             &snapshot_with_generated_building(),
             0,
             false,
@@ -3420,48 +4663,110 @@ mod tests {
             },
             world_from_grid,
         );
+        let mesh_specs = collect_static_world_mesh_specs(
+            &snapshot_with_generated_building(),
+            0,
+            false,
+            ViewerRenderConfig::default(),
+            &palette,
+        );
 
-        let wall_specs = specs
+        let wall_specs = mesh_specs
             .iter()
             .filter(|spec| {
                 spec.color.to_srgba() == darken_color(palette.building_base, 0.2).to_srgba()
+                    && spec.material_style == MaterialStyle::BuildingWallGrid
+                    && spec.occluder_kind
+                        == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
             })
-            .filter(|spec| spec.size.y > 1.0)
             .count();
-        let roof_specs = specs
+        let walkable_specs = mesh_specs
+            .iter()
+            .filter(|spec| {
+                spec.color.to_srgba()
+                    == lerp_color(palette.building_top, palette.building_base, 0.38).to_srgba()
+            })
+            .count();
+        let roof_specs = mesh_specs
             .iter()
             .filter(|spec| spec.color.to_srgba() == palette.building_top.to_srgba())
             .count();
-        let utility_specs = specs
+        let stair_specs = box_specs
             .iter()
-            .filter(|spec| spec.occluder_kind.is_none())
+            .filter(|spec| spec.material_style != MaterialStyle::BuildingWallGrid)
             .count();
 
-        assert!(wall_specs >= 1);
-        assert_eq!(roof_specs, 1);
-        assert!(utility_specs >= 3);
+        assert_eq!(wall_specs, 4);
+        assert!(walkable_specs >= 1);
+        assert_eq!(roof_specs, 0);
+        assert!(stair_specs >= 1);
     }
 
     #[test]
-    fn generated_wall_rect_transform_aligns_horizontal_wall_to_interior_edge() {
-        let rect = MergedGridRect {
-            level: 0,
-            min_x: 2,
-            max_x: 4,
-            min_z: 1,
-            max_z: 1,
-        };
-        let interior_cells = HashSet::from([
-            GridCoord::new(2, 0, 2),
-            GridCoord::new(3, 0, 2),
-            GridCoord::new(4, 0, 2),
-        ]);
+    fn classify_wall_tile_covers_all_adjacency_shapes() {
+        assert_eq!(classify_wall_tile(0), WallTileKind::Isolated);
+        assert_eq!(classify_wall_tile(WALL_EAST), WallTileKind::EndEast);
+        assert_eq!(
+            classify_wall_tile(WALL_EAST | WALL_WEST),
+            WallTileKind::StraightHorizontal
+        );
+        assert_eq!(
+            classify_wall_tile(WALL_NORTH | WALL_SOUTH),
+            WallTileKind::StraightVertical
+        );
+        assert_eq!(
+            classify_wall_tile(WALL_NORTH | WALL_EAST),
+            WallTileKind::CornerNorthEast
+        );
+        assert_eq!(
+            classify_wall_tile(WALL_EAST | WALL_SOUTH | WALL_WEST),
+            WallTileKind::TJunctionMissingNorth
+        );
+        assert_eq!(
+            classify_wall_tile(WALL_NORTH | WALL_EAST | WALL_SOUTH | WALL_WEST),
+            WallTileKind::Cross
+        );
+    }
 
-        let (center, size) = generated_wall_rect_transform(rect, 1.0, 0.08, &interior_cells);
+    #[test]
+    fn generated_building_wall_tiles_keep_per_cell_occluders() {
+        let palette = ViewerPalette::default();
+        let mesh_specs = collect_static_world_mesh_specs(
+            &snapshot_with_generated_building(),
+            0,
+            false,
+            ViewerRenderConfig::default(),
+            &palette,
+        );
 
-        assert!((center.z - 1.85).abs() < 1e-5);
-        assert!((size.x - 3.03).abs() < 1e-5);
-        assert!((size.z - 0.3).abs() < 1e-5);
+        let wall_specs = mesh_specs
+            .iter()
+            .filter(|spec| {
+                spec.occluder_kind
+                    == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(wall_specs.len(), 4);
+        assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.x > 0.0));
+        assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.y > 0.0));
+        assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.z > 0.0));
+    }
+
+    #[test]
+    fn wall_tile_mesh_uses_requested_visual_thickness() {
+        let (_, _, half_extents) = build_wall_tile_mesh(
+            GridCoord::new(0, 0, 0),
+            WallTileKind::StraightHorizontal,
+            0.0,
+            2.35,
+            0.5,
+            1.0,
+        )
+        .expect("wall tile mesh should build");
+
+        assert!((half_extents.x - 0.5).abs() < 1e-5);
+        assert!((half_extents.z - 0.25).abs() < 1e-5);
     }
 
     fn sample_prompt(option_count: usize) -> InteractionPrompt {
@@ -3545,6 +4850,7 @@ mod tests {
                 runtime_obstacle_version: 0,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -3598,6 +4904,7 @@ mod tests {
                 runtime_obstacle_version: 0,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -3677,6 +4984,7 @@ mod tests {
                 runtime_obstacle_version: 0,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -3733,6 +5041,8 @@ mod tests {
                 rotation: MapRotation::North,
                 stories: vec![GeneratedBuildingStory {
                     level: 0,
+                    wall_height: 2.35,
+                    wall_thickness: 0.08,
                     shape_cells: vec![
                         GridCoord::new(0, 0, 0),
                         GridCoord::new(1, 0, 0),
@@ -3758,13 +5068,23 @@ mod tests {
                         GridCoord::new(0, 0, 1),
                         GridCoord::new(1, 0, 1),
                     ],
-                    wall_strokes: Vec::new(),
-                    wall_polygons: game_core::GeneratedWallPolygons::default(),
                     interior_door_cells: Vec::new(),
                     exterior_door_cells: Vec::new(),
                     door_openings: Vec::new(),
                     walkable_cells: vec![GridCoord::new(0, 0, 0)],
-                    walkable_polygons: game_core::GeneratedWalkablePolygons::default(),
+                    walkable_polygons: game_core::GeneratedWalkablePolygons {
+                        polygons: game_core::GeometryMultiPolygon2 {
+                            polygons: vec![game_core::GeometryPolygon2 {
+                                outer: vec![
+                                    game_core::GeometryPoint2::new(0.0, 0.0),
+                                    game_core::GeometryPoint2::new(1.0, 0.0),
+                                    game_core::GeometryPoint2::new(1.0, 1.0),
+                                    game_core::GeometryPoint2::new(0.0, 1.0),
+                                ],
+                                holes: Vec::new(),
+                            }],
+                        },
+                    },
                 }],
                 stairs: vec![GeneratedStairConnection {
                     from_level: 0,
@@ -3776,6 +5096,7 @@ mod tests {
                 }],
                 visual_outline: Vec::new(),
             }],
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,

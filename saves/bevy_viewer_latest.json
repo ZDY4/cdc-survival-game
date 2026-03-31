@@ -161,6 +161,7 @@
         "xp_reward": 25
       }
     ],
+    "actor_skill_states": [],
     "active_quests": [],
     "completed_quests": [],
     "actor_relationships": [
@@ -361,100 +362,16 @@
       "base_map_cells": [
         {
           "grid": {
-            "x": 32,
+            "x": 34,
             "y": 0,
             "z": 8
           },
           "cell": {
-            "x": 32,
+            "x": 34,
             "z": 8,
             "blocks_movement": true,
             "blocks_sight": true,
             "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 35,
-            "y": 0,
-            "z": 8
-          },
-          "cell": {
-            "x": 35,
-            "z": 8,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 33,
-            "y": 0,
-            "z": 8
-          },
-          "cell": {
-            "x": 33,
-            "z": 8,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 32,
-            "y": 0,
-            "z": 33
-          },
-          "cell": {
-            "x": 32,
-            "z": 33,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "workshop_crates"
-          }
-        },
-        {
-          "grid": {
-            "x": 31,
-            "y": 0,
-            "z": 8
-          },
-          "cell": {
-            "x": 31,
-            "z": 8,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 21,
-            "y": 0,
-            "z": 38
-          },
-          "cell": {
-            "x": 21,
-            "z": 38,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "outer_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 26,
-            "y": 0,
-            "z": 38
-          },
-          "cell": {
-            "x": 26,
-            "z": 38,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "outer_wall"
           }
         },
         {
@@ -469,6 +386,34 @@
             "blocks_movement": true,
             "blocks_sight": true,
             "terrain": "watchtower_railing"
+          }
+        },
+        {
+          "grid": {
+            "x": 35,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 35,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "storage_stack"
+          }
+        },
+        {
+          "grid": {
+            "x": 32,
+            "y": 0,
+            "z": 33
+          },
+          "cell": {
+            "x": 32,
+            "z": 33,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "workshop_crates"
           }
         },
         {
@@ -487,40 +432,12 @@
         },
         {
           "grid": {
-            "x": 33,
-            "y": 0,
-            "z": 33
-          },
-          "cell": {
-            "x": 33,
-            "z": 33,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "workshop_crates"
-          }
-        },
-        {
-          "grid": {
-            "x": 21,
-            "y": 0,
-            "z": 37
-          },
-          "cell": {
-            "x": 21,
-            "z": 37,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "gate_pillar"
-          }
-        },
-        {
-          "grid": {
-            "x": 10,
+            "x": 11,
             "y": 0,
             "z": 22
           },
           "cell": {
-            "x": 10,
+            "x": 11,
             "z": 22,
             "blocks_movement": true,
             "blocks_sight": false,
@@ -543,58 +460,16 @@
         },
         {
           "grid": {
-            "x": 37,
+            "x": 27,
             "y": 0,
-            "z": 22
+            "z": 38
           },
           "cell": {
-            "x": 37,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "storage_stack"
-          }
-        },
-        {
-          "grid": {
-            "x": 11,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 11,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "canteen_counter"
-          }
-        },
-        {
-          "grid": {
-            "x": 41,
-            "y": 1,
-            "z": 31
-          },
-          "cell": {
-            "x": 41,
-            "z": 31,
+            "x": 27,
+            "z": 38,
             "blocks_movement": true,
             "blocks_sight": true,
-            "terrain": "watchtower_railing"
-          }
-        },
-        {
-          "grid": {
-            "x": 22,
-            "y": 0,
-            "z": 31
-          },
-          "cell": {
-            "x": 22,
-            "z": 31,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "inner_barricade"
+            "terrain": "outer_wall"
           }
         },
         {
@@ -613,13 +488,13 @@
         },
         {
           "grid": {
-            "x": 40,
+            "x": 41,
             "y": 1,
-            "z": 32
+            "z": 31
           },
           "cell": {
-            "x": 40,
-            "z": 32,
+            "x": 41,
+            "z": 31,
             "blocks_movement": true,
             "blocks_sight": true,
             "terrain": "watchtower_railing"
@@ -627,26 +502,26 @@
         },
         {
           "grid": {
-            "x": 41,
-            "y": 1,
-            "z": 32
-          },
-          "cell": {
-            "x": 41,
-            "z": 32,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "watchtower_railing"
-          }
-        },
-        {
-          "grid": {
-            "x": 10,
+            "x": 35,
             "y": 0,
             "z": 8
           },
           "cell": {
-            "x": 10,
+            "x": 35,
+            "z": 8,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "clinic_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 11,
+            "y": 0,
+            "z": 8
+          },
+          "cell": {
+            "x": 11,
             "z": 8,
             "blocks_movement": true,
             "blocks_sight": true,
@@ -655,12 +530,12 @@
         },
         {
           "grid": {
-            "x": 34,
+            "x": 37,
             "y": 0,
             "z": 22
           },
           "cell": {
-            "x": 34,
+            "x": 37,
             "z": 22,
             "blocks_movement": true,
             "blocks_sight": false,
@@ -669,16 +544,44 @@
         },
         {
           "grid": {
-            "x": 31,
+            "x": 10,
             "y": 0,
-            "z": 33
+            "z": 22
           },
           "cell": {
-            "x": 31,
-            "z": 33,
+            "x": 10,
+            "z": 22,
             "blocks_movement": true,
             "blocks_sight": false,
-            "terrain": "workshop_crates"
+            "terrain": "canteen_counter"
+          }
+        },
+        {
+          "grid": {
+            "x": 33,
+            "y": 0,
+            "z": 8
+          },
+          "cell": {
+            "x": 33,
+            "z": 8,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "clinic_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 21,
+            "y": 0,
+            "z": 37
+          },
+          "cell": {
+            "x": 21,
+            "z": 37,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "gate_pillar"
           }
         },
         {
@@ -697,26 +600,12 @@
         },
         {
           "grid": {
-            "x": 12,
+            "x": 36,
             "y": 0,
             "z": 22
           },
           "cell": {
-            "x": 12,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "canteen_counter"
-          }
-        },
-        {
-          "grid": {
-            "x": 35,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 35,
+            "x": 36,
             "z": 22,
             "blocks_movement": true,
             "blocks_sight": false,
@@ -725,12 +614,26 @@
         },
         {
           "grid": {
-            "x": 34,
+            "x": 31,
+            "y": 0,
+            "z": 33
+          },
+          "cell": {
+            "x": 31,
+            "z": 33,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "workshop_crates"
+          }
+        },
+        {
+          "grid": {
+            "x": 31,
             "y": 0,
             "z": 8
           },
           "cell": {
-            "x": 34,
+            "x": 31,
             "z": 8,
             "blocks_movement": true,
             "blocks_sight": true,
@@ -753,12 +656,12 @@
         },
         {
           "grid": {
-            "x": 11,
+            "x": 10,
             "y": 0,
             "z": 8
           },
           "cell": {
-            "x": 11,
+            "x": 10,
             "z": 8,
             "blocks_movement": true,
             "blocks_sight": true,
@@ -767,12 +670,96 @@
         },
         {
           "grid": {
-            "x": 36,
+            "x": 40,
+            "y": 1,
+            "z": 32
+          },
+          "cell": {
+            "x": 40,
+            "z": 32,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "watchtower_railing"
+          }
+        },
+        {
+          "grid": {
+            "x": 12,
             "y": 0,
             "z": 22
           },
           "cell": {
-            "x": 36,
+            "x": 12,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "canteen_counter"
+          }
+        },
+        {
+          "grid": {
+            "x": 41,
+            "y": 1,
+            "z": 32
+          },
+          "cell": {
+            "x": 41,
+            "z": 32,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "watchtower_railing"
+          }
+        },
+        {
+          "grid": {
+            "x": 21,
+            "y": 0,
+            "z": 38
+          },
+          "cell": {
+            "x": 21,
+            "z": 38,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "outer_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 26,
+            "y": 0,
+            "z": 38
+          },
+          "cell": {
+            "x": 26,
+            "z": 38,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "outer_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 32,
+            "y": 0,
+            "z": 8
+          },
+          "cell": {
+            "x": 32,
+            "z": 8,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "clinic_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 34,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 34,
             "z": 22,
             "blocks_movement": true,
             "blocks_sight": false,
@@ -781,16 +768,30 @@
         },
         {
           "grid": {
-            "x": 27,
+            "x": 22,
             "y": 0,
-            "z": 38
+            "z": 31
           },
           "cell": {
-            "x": 27,
-            "z": 38,
+            "x": 22,
+            "z": 31,
             "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "outer_wall"
+            "blocks_sight": false,
+            "terrain": "inner_barricade"
+          }
+        },
+        {
+          "grid": {
+            "x": 33,
+            "y": 0,
+            "z": 33
+          },
+          "cell": {
+            "x": 33,
+            "z": 33,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "workshop_crates"
           }
         }
       ],
@@ -3500,7 +3501,7 @@
                 },
                 "min_room_area": 20,
                 "max_room_size": null,
-                "wall_thickness": 0.08,
+                "wall_thickness": 0.6,
                 "wall_height": 2.35,
                 "door_width": 1.0,
                 "exterior_door_count": 2,
@@ -3545,7 +3546,7 @@
                 },
                 "min_room_area": 18,
                 "max_room_size": null,
-                "wall_thickness": 0.08,
+                "wall_thickness": 0.6,
                 "wall_height": 2.35,
                 "door_width": 1.0,
                 "exterior_door_count": 2,
@@ -3590,7 +3591,7 @@
                 },
                 "min_room_area": 18,
                 "max_room_size": null,
-                "wall_thickness": 0.08,
+                "wall_thickness": 0.6,
                 "wall_height": 2.35,
                 "door_width": 1.0,
                 "exterior_door_count": 2,
@@ -3635,7 +3636,7 @@
                 },
                 "min_room_area": 16,
                 "max_room_size": null,
-                "wall_thickness": 0.08,
+                "wall_thickness": 0.6,
                 "wall_height": 2.35,
                 "door_width": 1.0,
                 "exterior_door_count": 2,
@@ -3819,7 +3820,7 @@
                 },
                 "min_room_area": 18,
                 "max_room_size": null,
-                "wall_thickness": 0.08,
+                "wall_thickness": 0.6,
                 "wall_height": 2.35,
                 "door_width": 1.0,
                 "exterior_door_count": 1,
@@ -3864,7 +3865,7 @@
                 },
                 "min_room_area": 4,
                 "max_room_size": null,
-                "wall_thickness": 0.08,
+                "wall_thickness": 0.6,
                 "wall_height": 2.35,
                 "door_width": 1.0,
                 "exterior_door_count": 0,
@@ -3937,7 +3938,7 @@
                 },
                 "min_room_area": 18,
                 "max_room_size": null,
-                "wall_thickness": 0.08,
+                "wall_thickness": 0.6,
                 "wall_height": 2.35,
                 "door_width": 1.0,
                 "exterior_door_count": 1,
@@ -3967,6 +3968,8 @@
           "stories": [
             {
               "level": 0,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 6,
@@ -4931,264 +4934,6 @@
                   "z": 25
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 10.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 10.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 8.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 8.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 6,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 8.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 7,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 8,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 10.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 10.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 9,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 11.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 10,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 11.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 11,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 11.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 11.0,
-                      "z": 8.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 8.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 11.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 11.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 11.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 11.0,
-                          "z": 8.0
-                        }
-                      ],
-                      "holes": []
-                    },
-                    {
-                      "outer": [
-                        {
-                          "x": 10.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 11.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 11.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 10.0,
-                          "z": 6.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [
                 {
@@ -5205,6 +4950,11 @@
               "door_openings": [
                 {
                   "opening_id": 0,
+                  "anchor_grid": {
+                    "x": 16,
+                    "y": 0,
+                    "z": 19
+                  },
                   "axis": "vertical",
                   "kind": "exterior",
                   "segment": {
@@ -5220,23 +4970,23 @@
                   "polygon": {
                     "outer": [
                       {
-                        "x": 10.46000000089407,
+                        "x": 10.199999988079071,
                         "z": 1.0
                       },
                       {
-                        "x": 10.53999999910593,
+                        "x": 10.800000011920929,
                         "z": 1.0
                       },
                       {
-                        "x": 10.53999999910593,
+                        "x": 10.800000011920929,
                         "z": 2.0
                       },
                       {
-                        "x": 10.46000000089407,
+                        "x": 10.199999988079071,
                         "z": 2.0
                       },
                       {
-                        "x": 10.46000000089407,
+                        "x": 10.199999988079071,
                         "z": 1.0
                       }
                     ],
@@ -5245,6 +4995,11 @@
                 },
                 {
                   "opening_id": 1,
+                  "anchor_grid": {
+                    "x": 16,
+                    "y": 0,
+                    "z": 24
+                  },
                   "axis": "vertical",
                   "kind": "exterior",
                   "segment": {
@@ -5260,23 +5015,23 @@
                   "polygon": {
                     "outer": [
                       {
-                        "x": 10.46000000089407,
+                        "x": 10.199999988079071,
                         "z": 6.0
                       },
                       {
-                        "x": 10.53999999910593,
+                        "x": 10.800000011920929,
                         "z": 6.0
                       },
                       {
-                        "x": 10.53999999910593,
+                        "x": 10.800000011920929,
                         "z": 7.0
                       },
                       {
-                        "x": 10.46000000089407,
+                        "x": 10.199999988079071,
                         "z": 7.0
                       },
                       {
-                        "x": 10.46000000089407,
+                        "x": 10.199999988079071,
                         "z": 6.0
                       }
                     ],
@@ -5626,6 +5381,8 @@
           "stories": [
             {
               "level": 0,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 28,
@@ -6356,344 +6113,6 @@
                   "z": 12
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 6.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 7.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 6.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 7.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 3.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 6,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 3.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 7,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 8,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 9,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 10,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 3.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 3.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 11,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 12,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 6.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 6.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 13,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 7.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 7.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 14,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 8.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 15,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 9.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 7.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 6.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 6.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 3.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 3.0,
-                          "z": 7.0
-                        }
-                      ],
-                      "holes": []
-                    },
-                    {
-                      "outer": [
-                        {
-                          "x": 4.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 4.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 8.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 8.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 7.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 7.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 7.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [
                 {
@@ -6710,6 +6129,11 @@
               "door_openings": [
                 {
                   "opening_id": 0,
+                  "anchor_grid": {
+                    "x": 31,
+                    "y": 0,
+                    "z": 12
+                  },
                   "axis": "horizontal",
                   "kind": "exterior",
                   "segment": {
@@ -6726,23 +6150,23 @@
                     "outer": [
                       {
                         "x": 3.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       },
                       {
                         "x": 4.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       },
                       {
                         "x": 4.0,
-                        "z": 6.53999999910593
+                        "z": 6.800000011920929
                       },
                       {
                         "x": 3.0,
-                        "z": 6.53999999910593
+                        "z": 6.800000011920929
                       },
                       {
                         "x": 3.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       }
                     ],
                     "holes": []
@@ -6750,6 +6174,11 @@
                 },
                 {
                   "opening_id": 1,
+                  "anchor_grid": {
+                    "x": 34,
+                    "y": 0,
+                    "z": 6
+                  },
                   "axis": "horizontal",
                   "kind": "exterior",
                   "segment": {
@@ -6766,23 +6195,23 @@
                     "outer": [
                       {
                         "x": 6.0,
-                        "z": 0.46000000089406967
+                        "z": 0.19999998807907104
                       },
                       {
                         "x": 7.0,
-                        "z": 0.46000000089406967
+                        "z": 0.19999998807907104
                       },
                       {
                         "x": 7.0,
-                        "z": 0.5399999991059303
+                        "z": 0.800000011920929
                       },
                       {
                         "x": 6.0,
-                        "z": 0.5399999991059303
+                        "z": 0.800000011920929
                       },
                       {
                         "x": 6.0,
-                        "z": 0.46000000089406967
+                        "z": 0.19999998807907104
                       }
                     ],
                     "holes": []
@@ -7052,6 +6481,8 @@
           "stories": [
             {
               "level": 0,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 6,
@@ -7852,344 +7283,6 @@
                   "z": 12
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 5.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 10.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 5.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 5.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 6,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 7,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 5.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 10.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 8,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 9,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 10,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 11,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 12,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 5.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 5.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 13,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 5.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 5.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 14,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 9.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 15,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 10.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 10.0,
-                      "z": 7.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 4.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 4.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 4.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 4.0,
-                          "z": 7.0
-                        }
-                      ],
-                      "holes": []
-                    },
-                    {
-                      "outer": [
-                        {
-                          "x": 5.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 5.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 10.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 10.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 5.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 5.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 1.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [
                 {
@@ -8206,6 +7299,11 @@
               "door_openings": [
                 {
                   "opening_id": 0,
+                  "anchor_grid": {
+                    "x": 10,
+                    "y": 0,
+                    "z": 6
+                  },
                   "axis": "horizontal",
                   "kind": "exterior",
                   "segment": {
@@ -8222,23 +7320,23 @@
                     "outer": [
                       {
                         "x": 4.0,
-                        "z": 0.46000000089406967
+                        "z": 0.19999998807907104
                       },
                       {
                         "x": 5.0,
-                        "z": 0.46000000089406967
+                        "z": 0.19999998807907104
                       },
                       {
                         "x": 5.0,
-                        "z": 0.5399999991059303
+                        "z": 0.800000011920929
                       },
                       {
                         "x": 4.0,
-                        "z": 0.5399999991059303
+                        "z": 0.800000011920929
                       },
                       {
                         "x": 4.0,
-                        "z": 0.46000000089406967
+                        "z": 0.19999998807907104
                       }
                     ],
                     "holes": []
@@ -8246,6 +7344,11 @@
                 },
                 {
                   "opening_id": 1,
+                  "anchor_grid": {
+                    "x": 10,
+                    "y": 0,
+                    "z": 12
+                  },
                   "axis": "horizontal",
                   "kind": "exterior",
                   "segment": {
@@ -8262,23 +7365,23 @@
                     "outer": [
                       {
                         "x": 4.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       },
                       {
                         "x": 5.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       },
                       {
                         "x": 5.0,
-                        "z": 6.53999999910593
+                        "z": 6.800000011920929
                       },
                       {
                         "x": 4.0,
-                        "z": 6.53999999910593
+                        "z": 6.800000011920929
                       },
                       {
                         "x": 4.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       }
                     ],
                     "holes": []
@@ -8573,6 +7676,8 @@
           "stories": [
             {
               "level": 0,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 20,
@@ -8985,304 +8090,6 @@
                   "z": 36
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 7.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 3.0
-                    },
-                    "end": {
-                      "x": 3.0,
-                      "z": 3.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 3.0
-                    },
-                    "end": {
-                      "x": 7.0,
-                      "z": 3.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 4.0
-                    },
-                    "end": {
-                      "x": 3.0,
-                      "z": 4.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 6,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 4.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 4.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 7,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 8,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 3.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 4.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 9,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 10,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 3.0,
-                      "z": 3.0
-                    },
-                    "end": {
-                      "x": 3.0,
-                      "z": 4.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 11,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 4.0,
-                      "z": 3.0
-                    },
-                    "end": {
-                      "x": 4.0,
-                      "z": 4.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 12,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 7.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 7.0,
-                      "z": 3.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 13,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 8.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 4.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 8.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 8.0,
-                          "z": 4.0
-                        },
-                        {
-                          "x": 4.0,
-                          "z": 4.0
-                        },
-                        {
-                          "x": 4.0,
-                          "z": 3.0
-                        },
-                        {
-                          "x": 7.0,
-                          "z": 3.0
-                        },
-                        {
-                          "x": 7.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 2.0
-                        }
-                      ],
-                      "holes": []
-                    },
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 4.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 3.0
-                        },
-                        {
-                          "x": 3.0,
-                          "z": 3.0
-                        },
-                        {
-                          "x": 3.0,
-                          "z": 4.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [
                 {
@@ -9299,6 +8106,11 @@
               "door_openings": [
                 {
                   "opening_id": 0,
+                  "anchor_grid": {
+                    "x": 20,
+                    "y": 0,
+                    "z": 35
+                  },
                   "axis": "vertical",
                   "kind": "exterior",
                   "segment": {
@@ -9314,23 +8126,23 @@
                   "polygon": {
                     "outer": [
                       {
-                        "x": 0.46000000089406967,
+                        "x": 0.19999998807907104,
                         "z": 2.0
                       },
                       {
-                        "x": 0.5399999991059303,
+                        "x": 0.800000011920929,
                         "z": 2.0
                       },
                       {
-                        "x": 0.5399999991059303,
+                        "x": 0.800000011920929,
                         "z": 3.0
                       },
                       {
-                        "x": 0.46000000089406967,
+                        "x": 0.19999998807907104,
                         "z": 3.0
                       },
                       {
-                        "x": 0.46000000089406967,
+                        "x": 0.19999998807907104,
                         "z": 2.0
                       }
                     ],
@@ -9339,6 +8151,11 @@
                 },
                 {
                   "opening_id": 1,
+                  "anchor_grid": {
+                    "x": 23,
+                    "y": 0,
+                    "z": 36
+                  },
                   "axis": "horizontal",
                   "kind": "exterior",
                   "segment": {
@@ -9355,23 +8172,23 @@
                     "outer": [
                       {
                         "x": 3.0,
-                        "z": 3.4600000008940697
+                        "z": 3.199999988079071
                       },
                       {
                         "x": 4.0,
-                        "z": 3.4600000008940697
+                        "z": 3.199999988079071
                       },
                       {
                         "x": 4.0,
-                        "z": 3.5399999991059303
+                        "z": 3.800000011920929
                       },
                       {
                         "x": 3.0,
-                        "z": 3.5399999991059303
+                        "z": 3.800000011920929
                       },
                       {
                         "x": 3.0,
-                        "z": 3.4600000008940697
+                        "z": 3.199999988079071
                       }
                     ],
                     "holes": []
@@ -9518,6 +8335,8 @@
           "stories": [
             {
               "level": 0,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 29,
@@ -10294,219 +9113,6 @@
                   "z": 24
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 10.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 10.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 6,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 7,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 8,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 9.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 9,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 10.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 10.0,
-                      "z": 7.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 10.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 10.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 1.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [
                 {
@@ -10518,6 +9124,11 @@
               "door_openings": [
                 {
                   "opening_id": 0,
+                  "anchor_grid": {
+                    "x": 29,
+                    "y": 0,
+                    "z": 19
+                  },
                   "axis": "vertical",
                   "kind": "exterior",
                   "segment": {
@@ -10533,23 +9144,23 @@
                   "polygon": {
                     "outer": [
                       {
-                        "x": 0.46000000089406967,
+                        "x": 0.19999998807907104,
                         "z": 1.0
                       },
                       {
-                        "x": 0.5399999991059303,
+                        "x": 0.800000011920929,
                         "z": 1.0
                       },
                       {
-                        "x": 0.5399999991059303,
+                        "x": 0.800000011920929,
                         "z": 2.0
                       },
                       {
-                        "x": 0.46000000089406967,
+                        "x": 0.19999998807907104,
                         "z": 2.0
                       },
                       {
-                        "x": 0.46000000089406967,
+                        "x": 0.19999998807907104,
                         "z": 1.0
                       }
                     ],
@@ -10816,6 +9427,8 @@
           "stories": [
             {
               "level": 0,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 40,
@@ -10924,139 +9537,6 @@
                   "z": 32
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 2.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 2.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 2.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 2.0,
-                      "z": 2.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 2.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 2.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 1.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [],
               "door_openings": [],
@@ -11097,6 +9577,8 @@
             },
             {
               "level": 1,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 40,
@@ -11205,139 +9687,6 @@
                   "z": 32
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 2.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 2.0
-                    },
-                    "end": {
-                      "x": 2.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 2.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 2.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 2.0,
-                      "z": 2.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 2.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 2.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 2.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 1.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [],
               "door_openings": [],
@@ -11413,6 +9762,8 @@
           "stories": [
             {
               "level": 0,
+              "wall_height": 2.35,
+              "wall_thickness": 0.6,
               "shape_cells": [
                 {
                   "x": 27,
@@ -12119,219 +10470,6 @@
                   "z": 35
                 }
               ],
-              "wall_strokes": [
-                {
-                  "wall_id": 0,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 0.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 1,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 1.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 2,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 7.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 3,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 7.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 4,
-                  "axis": "horizontal",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 8.0,
-                      "z": 7.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 5,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 0.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 0.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 6,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 1.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 1.0,
-                      "z": 6.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 7,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 7.0,
-                      "z": 6.0
-                    },
-                    "end": {
-                      "x": 7.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 8,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 8.0,
-                      "z": 1.0
-                    },
-                    "end": {
-                      "x": 8.0,
-                      "z": 7.0
-                    }
-                  }
-                },
-                {
-                  "wall_id": 9,
-                  "axis": "vertical",
-                  "exterior": true,
-                  "room_ids": [],
-                  "center_line": {
-                    "start": {
-                      "x": 9.0,
-                      "z": 0.0
-                    },
-                    "end": {
-                      "x": 9.0,
-                      "z": 7.0
-                    }
-                  }
-                }
-              ],
-              "wall_polygons": {
-                "polygons": {
-                  "polygons": [
-                    {
-                      "outer": [
-                        {
-                          "x": 0.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 0.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 0.0
-                        },
-                        {
-                          "x": 9.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 8.0,
-                          "z": 7.0
-                        },
-                        {
-                          "x": 8.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 1.0
-                        },
-                        {
-                          "x": 1.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 7.0,
-                          "z": 6.0
-                        },
-                        {
-                          "x": 7.0,
-                          "z": 7.0
-                        }
-                      ],
-                      "holes": []
-                    }
-                  ]
-                }
-              },
               "interior_door_cells": [],
               "exterior_door_cells": [
                 {
@@ -12343,6 +10481,11 @@
               "door_openings": [
                 {
                   "opening_id": 0,
+                  "anchor_grid": {
+                    "x": 34,
+                    "y": 0,
+                    "z": 35
+                  },
                   "axis": "horizontal",
                   "kind": "exterior",
                   "segment": {
@@ -12359,23 +10502,23 @@
                     "outer": [
                       {
                         "x": 7.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       },
                       {
                         "x": 8.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       },
                       {
                         "x": 8.0,
-                        "z": 6.53999999910593
+                        "z": 6.800000011920929
                       },
                       {
                         "x": 7.0,
-                        "z": 6.53999999910593
+                        "z": 6.800000011920929
                       },
                       {
                         "x": 7.0,
-                        "z": 6.46000000089407
+                        "z": 6.199999988079071
                       }
                     ],
                     "holes": []
@@ -12603,6 +10746,478 @@
           ],
           "stairs": [],
           "visual_outline": []
+        }
+      ],
+      "generated_doors": [
+        {
+          "door_id": "survivor_outpost_01_canteen::door::0::0",
+          "map_object_id": "survivor_outpost_01_canteen::door::0::0",
+          "building_object_id": "survivor_outpost_01_canteen",
+          "building_anchor": {
+            "x": 6,
+            "y": 0,
+            "z": 18
+          },
+          "level": 0,
+          "opening_id": 0,
+          "anchor_grid": {
+            "x": 16,
+            "y": 0,
+            "z": 19
+          },
+          "axis": "vertical",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 10.199999988079071,
+                "z": 1.0
+              },
+              {
+                "x": 10.800000011920929,
+                "z": 1.0
+              },
+              {
+                "x": 10.800000011920929,
+                "z": 2.0
+              },
+              {
+                "x": 10.199999988079071,
+                "z": 2.0
+              },
+              {
+                "x": 10.199999988079071,
+                "z": 1.0
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_canteen::door::0::1",
+          "map_object_id": "survivor_outpost_01_canteen::door::0::1",
+          "building_object_id": "survivor_outpost_01_canteen",
+          "building_anchor": {
+            "x": 6,
+            "y": 0,
+            "z": 18
+          },
+          "level": 0,
+          "opening_id": 1,
+          "anchor_grid": {
+            "x": 16,
+            "y": 0,
+            "z": 24
+          },
+          "axis": "vertical",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 10.199999988079071,
+                "z": 6.0
+              },
+              {
+                "x": 10.800000011920929,
+                "z": 6.0
+              },
+              {
+                "x": 10.800000011920929,
+                "z": 7.0
+              },
+              {
+                "x": 10.199999988079071,
+                "z": 7.0
+              },
+              {
+                "x": 10.199999988079071,
+                "z": 6.0
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_clinic::door::0::0",
+          "map_object_id": "survivor_outpost_01_clinic::door::0::0",
+          "building_object_id": "survivor_outpost_01_clinic",
+          "building_anchor": {
+            "x": 28,
+            "y": 0,
+            "z": 6
+          },
+          "level": 0,
+          "opening_id": 0,
+          "anchor_grid": {
+            "x": 31,
+            "y": 0,
+            "z": 12
+          },
+          "axis": "horizontal",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 3.0,
+                "z": 6.199999988079071
+              },
+              {
+                "x": 4.0,
+                "z": 6.199999988079071
+              },
+              {
+                "x": 4.0,
+                "z": 6.800000011920929
+              },
+              {
+                "x": 3.0,
+                "z": 6.800000011920929
+              },
+              {
+                "x": 3.0,
+                "z": 6.199999988079071
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_clinic::door::0::1",
+          "map_object_id": "survivor_outpost_01_clinic::door::0::1",
+          "building_object_id": "survivor_outpost_01_clinic",
+          "building_anchor": {
+            "x": 28,
+            "y": 0,
+            "z": 6
+          },
+          "level": 0,
+          "opening_id": 1,
+          "anchor_grid": {
+            "x": 34,
+            "y": 0,
+            "z": 6
+          },
+          "axis": "horizontal",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 6.0,
+                "z": 0.19999998807907104
+              },
+              {
+                "x": 7.0,
+                "z": 0.19999998807907104
+              },
+              {
+                "x": 7.0,
+                "z": 0.800000011920929
+              },
+              {
+                "x": 6.0,
+                "z": 0.800000011920929
+              },
+              {
+                "x": 6.0,
+                "z": 0.19999998807907104
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_dormitory::door::0::0",
+          "map_object_id": "survivor_outpost_01_dormitory::door::0::0",
+          "building_object_id": "survivor_outpost_01_dormitory",
+          "building_anchor": {
+            "x": 6,
+            "y": 0,
+            "z": 6
+          },
+          "level": 0,
+          "opening_id": 0,
+          "anchor_grid": {
+            "x": 10,
+            "y": 0,
+            "z": 6
+          },
+          "axis": "horizontal",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 4.0,
+                "z": 0.19999998807907104
+              },
+              {
+                "x": 5.0,
+                "z": 0.19999998807907104
+              },
+              {
+                "x": 5.0,
+                "z": 0.800000011920929
+              },
+              {
+                "x": 4.0,
+                "z": 0.800000011920929
+              },
+              {
+                "x": 4.0,
+                "z": 0.19999998807907104
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_dormitory::door::0::1",
+          "map_object_id": "survivor_outpost_01_dormitory::door::0::1",
+          "building_object_id": "survivor_outpost_01_dormitory",
+          "building_anchor": {
+            "x": 6,
+            "y": 0,
+            "z": 6
+          },
+          "level": 0,
+          "opening_id": 1,
+          "anchor_grid": {
+            "x": 10,
+            "y": 0,
+            "z": 12
+          },
+          "axis": "horizontal",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 4.0,
+                "z": 6.199999988079071
+              },
+              {
+                "x": 5.0,
+                "z": 6.199999988079071
+              },
+              {
+                "x": 5.0,
+                "z": 6.800000011920929
+              },
+              {
+                "x": 4.0,
+                "z": 6.800000011920929
+              },
+              {
+                "x": 4.0,
+                "z": 6.199999988079071
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_gatehouse::door::0::0",
+          "map_object_id": "survivor_outpost_01_gatehouse::door::0::0",
+          "building_object_id": "survivor_outpost_01_gatehouse",
+          "building_anchor": {
+            "x": 20,
+            "y": 0,
+            "z": 33
+          },
+          "level": 0,
+          "opening_id": 0,
+          "anchor_grid": {
+            "x": 20,
+            "y": 0,
+            "z": 35
+          },
+          "axis": "vertical",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 0.19999998807907104,
+                "z": 2.0
+              },
+              {
+                "x": 0.800000011920929,
+                "z": 2.0
+              },
+              {
+                "x": 0.800000011920929,
+                "z": 3.0
+              },
+              {
+                "x": 0.19999998807907104,
+                "z": 3.0
+              },
+              {
+                "x": 0.19999998807907104,
+                "z": 2.0
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_gatehouse::door::0::1",
+          "map_object_id": "survivor_outpost_01_gatehouse::door::0::1",
+          "building_object_id": "survivor_outpost_01_gatehouse",
+          "building_anchor": {
+            "x": 20,
+            "y": 0,
+            "z": 33
+          },
+          "level": 0,
+          "opening_id": 1,
+          "anchor_grid": {
+            "x": 23,
+            "y": 0,
+            "z": 36
+          },
+          "axis": "horizontal",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 3.0,
+                "z": 3.199999988079071
+              },
+              {
+                "x": 4.0,
+                "z": 3.199999988079071
+              },
+              {
+                "x": 4.0,
+                "z": 3.800000011920929
+              },
+              {
+                "x": 3.0,
+                "z": 3.800000011920929
+              },
+              {
+                "x": 3.0,
+                "z": 3.199999988079071
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_storage::door::0::0",
+          "map_object_id": "survivor_outpost_01_storage::door::0::0",
+          "building_object_id": "survivor_outpost_01_storage",
+          "building_anchor": {
+            "x": 29,
+            "y": 0,
+            "z": 18
+          },
+          "level": 0,
+          "opening_id": 0,
+          "anchor_grid": {
+            "x": 29,
+            "y": 0,
+            "z": 19
+          },
+          "axis": "vertical",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 0.19999998807907104,
+                "z": 1.0
+              },
+              {
+                "x": 0.800000011920929,
+                "z": 1.0
+              },
+              {
+                "x": 0.800000011920929,
+                "z": 2.0
+              },
+              {
+                "x": 0.19999998807907104,
+                "z": 2.0
+              },
+              {
+                "x": 0.19999998807907104,
+                "z": 1.0
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
+        },
+        {
+          "door_id": "survivor_outpost_01_workshop::door::0::0",
+          "map_object_id": "survivor_outpost_01_workshop::door::0::0",
+          "building_object_id": "survivor_outpost_01_workshop",
+          "building_anchor": {
+            "x": 27,
+            "y": 0,
+            "z": 29
+          },
+          "level": 0,
+          "opening_id": 0,
+          "anchor_grid": {
+            "x": 34,
+            "y": 0,
+            "z": 35
+          },
+          "axis": "horizontal",
+          "kind": "exterior",
+          "polygon": {
+            "outer": [
+              {
+                "x": 7.0,
+                "z": 6.199999988079071
+              },
+              {
+                "x": 8.0,
+                "z": 6.199999988079071
+              },
+              {
+                "x": 8.0,
+                "z": 6.800000011920929
+              },
+              {
+                "x": 7.0,
+                "z": 6.800000011920929
+              },
+              {
+                "x": 7.0,
+                "z": 6.199999988079071
+              }
+            ],
+            "holes": []
+          },
+          "wall_height": 2.35,
+          "is_open": false,
+          "is_locked": false
         }
       ],
       "topology_version": 2,

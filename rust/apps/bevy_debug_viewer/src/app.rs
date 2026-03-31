@@ -33,7 +33,7 @@ use crate::hud::update_free_observe_indicator;
 use crate::profiling::{
     profiled_advance_runtime_progression, profiled_draw_world, profiled_sync_actor_labels,
     profiled_sync_world_visuals, profiled_tick_runtime, profiled_update_game_ui,
-    profiled_update_occluding_world_visuals, ViewerSystemProfilerState,
+    profiled_update_occluding_world_visuals, sync_profiler_activation, ViewerSystemProfilerState,
 };
 use crate::render::{
     setup_viewer, sync_damage_numbers, update_camera, update_dialogue_panel,
@@ -45,9 +45,10 @@ use crate::simulation::{
     sync_npc_runtime_presence,
 };
 use crate::state::{
-    ActorLabelEntities, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
-    ViewerRuntimeState, ViewerState, ViewerStyleProfile, ViewerUiSettings, ViewerUiSettingsPath,
+    ActorLabelEntities, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraFollowState,
+    ViewerCameraShakeState, ViewerDamageNumberState, ViewerPalette, ViewerRenderConfig,
+    ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
+    ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 pub(crate) fn run() {
@@ -70,8 +71,10 @@ pub(crate) fn run() {
         .insert_resource(ViewerActorMotionState::default())
         .insert_resource(ViewerActorFeedbackState::default())
         .insert_resource(ViewerCameraShakeState::default())
+        .insert_resource(ViewerCameraFollowState::default())
         .insert_resource(ViewerDamageNumberState::default())
         .insert_resource(ViewerRenderConfig::default())
+        .insert_resource(ViewerSceneKind::default())
         .insert_resource(ViewerState::default())
         .insert_resource(ViewerUiSettings::default())
         .insert_resource(ViewerUiSettingsPath::default())
@@ -83,6 +86,16 @@ pub(crate) fn run() {
 
 struct ViewerAppPlugin {
     asset_dir: std::path::PathBuf,
+}
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+enum ViewerUpdateSet {
+    RuntimeMutations,
+    EventCollection,
+    Motion,
+    Camera,
+    Visuals,
+    Hud,
 }
 
 impl Plugin for ViewerAppPlugin {
@@ -123,6 +136,18 @@ impl Plugin for ViewerAppPlugin {
             NpcLifePlugin,
             GameUiPlugin,
         ))
+        .configure_sets(
+            Update,
+            (
+                ViewerUpdateSet::RuntimeMutations,
+                ViewerUpdateSet::EventCollection,
+                ViewerUpdateSet::Motion,
+                ViewerUpdateSet::Camera,
+                ViewerUpdateSet::Visuals,
+                ViewerUpdateSet::Hud,
+            )
+                .chain(),
+        )
         .add_message::<SpawnCharacterRequest>()
         .add_message::<CharacterSpawnRejected>()
         .add_systems(
@@ -157,6 +182,9 @@ impl Plugin for ViewerAppPlugin {
                 tick_hotbar_cooldowns,
             ),
         )
+        // Keep runtime mutation -> event collection -> motion interpolation -> camera/visual sync
+        // in one deterministic pipeline so we do not render authority positions before the
+        // matching `ActorMoved` events have been converted into visual motion tracks.
         .add_systems(
             Update,
             (
@@ -170,30 +198,53 @@ impl Plugin for ViewerAppPlugin {
                 handle_keyboard_input,
                 handle_mouse_wheel_zoom,
                 handle_camera_pan,
-                update_camera,
-            ),
-        )
-        .add_systems(Update, handle_mouse_input)
-        .add_systems(Update, handle_interaction_menu_buttons)
-        .add_systems(Update, handle_dialogue_choice_buttons)
-        .add_systems(Update, handle_game_ui_buttons)
-        .add_systems(Update, profiled_tick_runtime)
-        .add_systems(Update, profiled_advance_runtime_progression)
-        .add_systems(Update, collect_events)
-        .add_systems(Update, advance_actor_motion)
-        .add_systems(Update, advance_actor_feedback)
-        .add_systems(Update, refresh_interaction_prompt)
-        .add_systems(Update, profiled_sync_world_visuals)
-        .add_systems(Update, profiled_update_occluding_world_visuals)
-        .add_systems(Update, profiled_sync_actor_labels)
-        .add_systems(Update, sync_damage_numbers)
-        .add_systems(Update, update_free_observe_indicator)
-        .add_systems(Update, crate::hud::update_hud)
-        .add_systems(Update, update_console_panel)
-        .add_systems(Update, profiled_update_game_ui)
-        .add_systems(Update, update_interaction_menu)
-        .add_systems(Update, update_dialogue_panel)
-        .add_systems(Update, profiled_draw_world.after(advance_actor_feedback));
+                handle_mouse_input,
+                crate::hud::handle_hud_tab_buttons,
+                handle_interaction_menu_buttons,
+                handle_dialogue_choice_buttons,
+                handle_game_ui_buttons,
+                sync_profiler_activation,
+                profiled_tick_runtime,
+                profiled_advance_runtime_progression,
+            )
+                .in_set(ViewerUpdateSet::RuntimeMutations),
+        );
+        app.add_systems(Update, collect_events.in_set(ViewerUpdateSet::EventCollection));
+        app.add_systems(
+            Update,
+            (
+                advance_actor_motion,
+                advance_actor_feedback,
+                refresh_interaction_prompt,
+            )
+                .in_set(ViewerUpdateSet::Motion),
+        );
+        app.add_systems(Update, update_camera.in_set(ViewerUpdateSet::Camera));
+        app.add_systems(
+            Update,
+            (
+                profiled_sync_world_visuals,
+                profiled_update_occluding_world_visuals,
+                profiled_sync_actor_labels,
+                sync_damage_numbers,
+            )
+                .in_set(ViewerUpdateSet::Visuals),
+        );
+        app.add_systems(
+            Update,
+            (
+                update_free_observe_indicator,
+                crate::hud::update_hud_tab_bar,
+                crate::hud::update_hud,
+                crate::hud::update_fps_overlay,
+                update_console_panel,
+                profiled_update_game_ui,
+                update_interaction_menu,
+                update_dialogue_panel,
+                profiled_draw_world,
+            )
+                .in_set(ViewerUpdateSet::Hud),
+        );
     }
 }
 

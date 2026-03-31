@@ -17,7 +17,7 @@ use game_data::{ActorSide, GridCoord, SettlementId};
 use crate::dialogue::sync_dialogue_from_event;
 use crate::state::{
     HudEventCategory, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerEventEntry, ViewerRuntimeState, ViewerState,
+    ViewerDamageNumberState, ViewerEventEntry, ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
 
 const ACTOR_MOTION_MIN_DURATION_SEC: f32 = 0.04;
@@ -27,6 +27,15 @@ pub(crate) fn prime_viewer_state(
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
 ) {
+    sync_viewer_runtime_basics(&mut runtime_state, &mut viewer_state);
+}
+
+pub(crate) fn sync_viewer_runtime_basics(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+) {
+    viewer_state.selected_actor = None;
+    viewer_state.controlled_player_actor = None;
     let snapshot = runtime_state.runtime.snapshot();
     if let Some(actor) = snapshot
         .actors
@@ -38,17 +47,35 @@ pub(crate) fn prime_viewer_state(
     }
     viewer_state.current_level = snapshot.grid.default_level.unwrap_or(0);
     let initial_events = runtime_state.runtime.drain_events();
-    runtime_state.recent_events.extend(
-        initial_events
-            .into_iter()
-            .map(|event| viewer_event_entry(event, snapshot.combat.current_turn_index)),
-    );
+    runtime_state.recent_events = initial_events
+        .into_iter()
+        .map(|event| viewer_event_entry(event, snapshot.combat.current_turn_index))
+        .collect();
+}
+
+pub(crate) fn reset_viewer_runtime_transients(viewer_state: &mut ViewerState) {
+    viewer_state.focused_target = None;
+    viewer_state.current_prompt = None;
+    viewer_state.interaction_menu = None;
+    viewer_state.active_dialogue = None;
+    viewer_state.hovered_grid = None;
+    viewer_state.targeting_state = None;
+    viewer_state.pending_open_trade_target = None;
+    viewer_state.auto_end_turn_after_stop = false;
+    viewer_state.end_turn_hold_sec = 0.0;
+    viewer_state.end_turn_repeat_elapsed_sec = 0.0;
+    viewer_state.progression_elapsed_sec = 0.0;
+    viewer_state.resume_camera_follow();
 }
 
 pub(crate) fn tick_runtime(
     mut runtime_state: ResMut<ViewerRuntimeState>,
+    scene_kind: Option<Res<ViewerSceneKind>>,
     viewer_state: Res<ViewerState>,
 ) {
+    if scene_kind.is_some_and(|scene_kind| scene_kind.is_main_menu()) {
+        return;
+    }
     if viewer_state.auto_tick {
         runtime_state.runtime.tick();
         if !runtime_state.runtime.has_pending_progression()
@@ -77,7 +104,11 @@ pub(crate) fn advance_map_ai_spawns(
     maps: Res<MapDefinitions>,
     mut spawn_state: ResMut<MapAiSpawnRuntimeState>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
+    scene_kind: Option<Res<ViewerSceneKind>>,
 ) {
+    if scene_kind.is_some_and(|scene_kind| scene_kind.is_main_menu()) {
+        return;
+    }
     advance_map_ai_spawn_runtime(
         &mut spawn_state,
         &mut runtime_state.runtime,
@@ -93,6 +124,7 @@ pub(crate) fn sync_npc_runtime_presence(
     settlements: Option<Res<SettlementDefinitions>>,
     mut reservations: ResMut<SmartObjectReservations>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
+    scene_kind: Option<Res<ViewerSceneKind>>,
     mut query: Query<(
         Entity,
         &CharacterDefinitionId,
@@ -109,6 +141,9 @@ pub(crate) fn sync_npc_runtime_presence(
         Option<&RuntimeActorLink>,
     )>,
 ) {
+    if scene_kind.is_some_and(|scene_kind| scene_kind.is_main_menu()) {
+        return;
+    }
     let (Some(definitions), Some(settlements)) = (definitions, settlements) else {
         return;
     };
@@ -295,6 +330,7 @@ pub(crate) fn advance_online_npc_actions(
     mut world_alert: ResMut<WorldAlertState>,
     mut reservations: ResMut<SmartObjectReservations>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
+    scene_kind: Option<Res<ViewerSceneKind>>,
     mut query: Query<(
         Entity,
         &CharacterDefinitionId,
@@ -308,6 +344,9 @@ pub(crate) fn advance_online_npc_actions(
         &RuntimeActorLink,
     )>,
 ) {
+    if scene_kind.is_some_and(|scene_kind| scene_kind.is_main_menu()) {
+        return;
+    }
     let Some(settlements) = settlements else {
         return;
     };
@@ -823,6 +862,18 @@ pub(crate) fn command_result_status(label: &str, result: SimulationCommandResult
         SimulationCommandResult::Action(action) => {
             format!("{label}: {}", action_result_status(&action))
         }
+        SimulationCommandResult::SkillActivation(result) => {
+            let status = if result.action_result.success {
+                action_result_status(&result.action_result)
+            } else {
+                result
+                    .failure_reason
+                    .clone()
+                    .or(result.action_result.reason.clone())
+                    .unwrap_or_else(|| "unknown".to_string())
+            };
+            format!("{label}: {status}")
+        }
         SimulationCommandResult::Path(result) => match result {
             Ok(path) => format!("{label}: path cells={}", path.len()),
             Err(error) => format!("{label}: path error={error:?}"),
@@ -911,8 +962,7 @@ fn queue_actor_motion(
 }
 
 fn actor_motion_duration_sec(min_progression_interval_sec: f32) -> f32 {
-    (min_progression_interval_sec * 0.9)
-        .clamp(ACTOR_MOTION_MIN_DURATION_SEC, ACTOR_MOTION_MAX_DURATION_SEC)
+    min_progression_interval_sec.clamp(ACTOR_MOTION_MIN_DURATION_SEC, ACTOR_MOTION_MAX_DURATION_SEC)
 }
 
 fn queue_attack_and_hit_feedback(
@@ -1393,7 +1443,7 @@ mod tests {
             actor_motion_duration_sec(1.0),
             ACTOR_MOTION_MAX_DURATION_SEC
         );
-        assert!((actor_motion_duration_sec(0.1) - 0.09).abs() <= 0.0001);
+        assert!((actor_motion_duration_sec(0.1) - 0.1).abs() <= 0.0001);
     }
 
     #[test]
@@ -1553,6 +1603,8 @@ pub(crate) fn classify_event(event: &SimulationEvent) -> HudEventCategory {
         | SimulationEvent::CombatStateChanged { .. }
         | SimulationEvent::ActionRejected { .. }
         | SimulationEvent::ActionResolved { .. }
+        | SimulationEvent::SkillActivated { .. }
+        | SimulationEvent::SkillActivationFailed { .. }
         | SimulationEvent::ActorDamaged { .. }
         | SimulationEvent::ActorDefeated { .. } => HudEventCategory::Combat,
         SimulationEvent::InteractionOptionsResolved { .. }
@@ -1641,6 +1693,26 @@ fn format_event_text(event: SimulationEvent) -> String {
         } => format!(
             "action resolved actor={:?} type={:?} ap={:.1}->{:.1} consumed={:.1}",
             actor_id, action_type, result.ap_before, result.ap_after, result.consumed
+        ),
+        SimulationEvent::SkillActivated {
+            actor_id,
+            skill_id,
+            target,
+            hit_actor_ids,
+        } => format!(
+            "skill activated actor={:?} skill={} target={:?} hits={}",
+            actor_id,
+            skill_id,
+            target,
+            hit_actor_ids.len()
+        ),
+        SimulationEvent::SkillActivationFailed {
+            actor_id,
+            skill_id,
+            reason,
+        } => format!(
+            "skill failed actor={:?} skill={} reason={}",
+            actor_id, skill_id, reason
         ),
         SimulationEvent::WorldCycleCompleted => "world cycle completed".to_string(),
         SimulationEvent::NpcActionStarted {

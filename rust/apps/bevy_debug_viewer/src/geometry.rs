@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use game_core::{ActorDebugState, SimulationRuntime, SimulationSnapshot};
-use game_data::{ActorSide, GridCoord, InteractionTargetId, WorldCoord};
+use game_data::{ActorId, ActorSide, GridCoord, InteractionTargetId, MapObjectKind, WorldCoord};
 
 use crate::state::{ViewerHudPage, ViewerRenderConfig, ViewerState};
 
@@ -17,6 +17,14 @@ pub(crate) enum HoveredGridOutlineKind {
     Reachable,
     Hostile,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OcclusionFocusPoint {
+    Actor(ActorId),
+    Grid(GridCoord),
+}
+
+pub(crate) const MISSING_GEO_BUILDING_PLACEHOLDER_HEIGHT_SCALE: f32 = 1.15;
 
 pub(crate) fn actor_label(actor: &ActorDebugState) -> String {
     if actor.display_name.trim().is_empty() {
@@ -274,8 +282,136 @@ pub(crate) fn map_object_at_grid(
         .grid
         .map_objects
         .iter()
-        .find(|object| object.occupied_cells.contains(&grid))
+        .filter(|object| object.occupied_cells.contains(&grid))
+        .max_by_key(|object| usize::from(is_generated_door_object(object)))
         .cloned()
+}
+
+pub(crate) fn is_missing_generated_building(
+    snapshot: &SimulationSnapshot,
+    object: &game_core::MapObjectDebugState,
+) -> bool {
+    object.kind == MapObjectKind::Building
+        && !snapshot
+            .generated_buildings
+            .iter()
+            .any(|building| building.object_id == object.object_id)
+}
+
+pub(crate) fn missing_geo_building_placeholder_box(
+    object: &game_core::MapObjectDebugState,
+    grid_size: f32,
+    floor_top: f32,
+) -> Option<(Vec3, Vec3)> {
+    if object.kind != MapObjectKind::Building {
+        return None;
+    }
+
+    let (center_x, center_z, footprint_width, footprint_depth) =
+        occupied_cells_box_world(&object.occupied_cells, grid_size)?;
+    let height = grid_size * MISSING_GEO_BUILDING_PLACEHOLDER_HEIGHT_SCALE;
+
+    Some((
+        Vec3::new(center_x, floor_top + height * 0.5, center_z),
+        Vec3::new(footprint_width, height, footprint_depth),
+    ))
+}
+
+pub(crate) fn map_object_debug_label(
+    snapshot: &SimulationSnapshot,
+    object: &game_core::MapObjectDebugState,
+) -> String {
+    let mut label = format!("{} ({:?})", object.object_id, object.kind);
+    if is_missing_generated_building(snapshot, object) {
+        label.push_str(" [missing geo]");
+    }
+    label
+}
+
+pub(crate) fn actor_hit_at_ray(
+    snapshot: &SimulationSnapshot,
+    current_level: i32,
+    ray: Ray3d,
+    render_config: ViewerRenderConfig,
+) -> Option<(ActorDebugState, f32)> {
+    let max_distance = interaction_ray_max_distance(snapshot);
+    let ray_end = ray.origin + ray.direction.as_vec3() * max_distance;
+    let grid_size = snapshot.grid.grid_size;
+
+    snapshot
+        .actors
+        .iter()
+        .filter(|actor| actor.grid_position.y == current_level)
+        .filter_map(|actor| {
+            actor_hit_fraction(actor, ray.origin, ray_end, grid_size, render_config)
+                .map(|fraction| (actor.clone(), fraction))
+        })
+        .min_by(|left, right| left.1.total_cmp(&right.1))
+}
+
+pub(crate) fn generated_door_object_hit_at_ray(
+    snapshot: &SimulationSnapshot,
+    current_level: i32,
+    ray: Ray3d,
+    floor_thickness_world: f32,
+) -> Option<(game_core::MapObjectDebugState, f32)> {
+    let max_distance = interaction_ray_max_distance(snapshot);
+    let ray_end = ray.origin + ray.direction.as_vec3() * max_distance;
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top = level_base_height(current_level, grid_size) + floor_thickness_world;
+
+    let (door_id, hit_fraction) = snapshot
+        .generated_doors
+        .iter()
+        .filter(|door| door.level == current_level)
+        .filter_map(|door| {
+            generated_door_hit_fraction(door, ray.origin, ray_end, grid_size, floor_top)
+                .map(|fraction| (door.map_object_id.as_str(), fraction))
+        })
+        .min_by(|left, right| left.1.total_cmp(&right.1))?;
+
+    snapshot
+        .grid
+        .map_objects
+        .iter()
+        .find(|object| object.object_id == door_id)
+        .cloned()
+        .map(|object| (object, hit_fraction))
+}
+
+pub(crate) fn map_object_hit_at_ray(
+    snapshot: &SimulationSnapshot,
+    current_level: i32,
+    ray: Ray3d,
+    render_config: ViewerRenderConfig,
+) -> Option<(game_core::MapObjectDebugState, f32)> {
+    let generated_door_hit = generated_door_object_hit_at_ray(
+        snapshot,
+        current_level,
+        ray,
+        render_config.floor_thickness_world,
+    );
+    let generic_hit = generic_map_object_hit_at_ray(snapshot, current_level, ray, render_config);
+
+    match (generated_door_hit, generic_hit) {
+        (Some(door), Some(object)) => {
+            if door.1 <= object.1 {
+                Some(door)
+            } else {
+                Some(object)
+            }
+        }
+        (Some(door), None) => Some(door),
+        (None, Some(object)) => Some(object),
+        (None, None) => None,
+    }
+}
+
+fn is_generated_door_object(object: &game_core::MapObjectDebugState) -> bool {
+    object
+        .payload_summary
+        .get("generated_door")
+        .is_some_and(|value| value == "true")
 }
 
 pub(crate) fn just_pressed_hud_page(keys: &ButtonInput<KeyCode>) -> Option<ViewerHudPage> {
@@ -291,6 +427,8 @@ pub(crate) fn just_pressed_hud_page(keys: &ButtonInput<KeyCode>) -> Option<Viewe
         Some(ViewerHudPage::Events)
     } else if keys.just_pressed(KeyCode::F6) {
         Some(ViewerHudPage::Ai)
+    } else if keys.just_pressed(KeyCode::F7) {
+        Some(ViewerHudPage::Performance)
     } else {
         None
     }
@@ -327,23 +465,459 @@ pub(crate) fn hovered_grid_outline_kind(
     (plan.requested_steps() > 0).then_some(HoveredGridOutlineKind::Reachable)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn resolve_occlusion_target<'a>(
     snapshot: &'a SimulationSnapshot,
     viewer_state: &ViewerState,
 ) -> Option<&'a ActorDebugState> {
-    if let Some(actor) = selected_actor(snapshot, viewer_state) {
-        if actor.side == ActorSide::Player {
-            return (actor.grid_position.y == viewer_state.current_level).then_some(actor);
-        }
-        return snapshot.actors.iter().find(|candidate| {
-            candidate.side == ActorSide::Player
-                && candidate.grid_position.y == viewer_state.current_level
-        });
+    resolve_occlusion_target_actor_id(snapshot, viewer_state).and_then(|actor_id| {
+        snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == actor_id)
+    })
+}
+
+pub(crate) fn resolve_occlusion_focus_points(
+    snapshot: &SimulationSnapshot,
+    viewer_state: &ViewerState,
+    hover_focus_enabled: bool,
+) -> Vec<OcclusionFocusPoint> {
+    let mut points = Vec::new();
+
+    if let Some(actor_id) = resolve_occlusion_target_actor_id(snapshot, viewer_state) {
+        points.push(OcclusionFocusPoint::Actor(actor_id));
     }
 
-    snapshot.actors.iter().find(|actor| {
-        actor.side == ActorSide::Player && actor.grid_position.y == viewer_state.current_level
-    })
+    if !hover_focus_enabled {
+        return points;
+    }
+
+    let targeting_hover = viewer_state.targeting_state.as_ref().and_then(|targeting| {
+        targeting
+            .hovered_grid
+            .filter(|grid| grid.y == viewer_state.current_level)
+            .filter(|grid| targeting.valid_grids.contains(grid))
+    });
+
+    if let Some(grid) = targeting_hover.or(viewer_state.hovered_grid.filter(|grid| {
+        grid.y == viewer_state.current_level && viewer_state.targeting_state.is_none()
+    })) {
+        points.push(OcclusionFocusPoint::Grid(grid));
+    }
+
+    points
+}
+
+pub(crate) fn grid_focus_world_position(grid: GridCoord, grid_size: f32, y_offset: f32) -> Vec3 {
+    Vec3::new(
+        (grid.x as f32 + 0.5) * grid_size,
+        level_base_height(grid.y, grid_size) + y_offset,
+        (grid.z as f32 + 0.5) * grid_size,
+    )
+}
+
+fn resolve_occlusion_target_actor_id(
+    snapshot: &SimulationSnapshot,
+    viewer_state: &ViewerState,
+) -> Option<ActorId> {
+    if let Some(actor) = selected_actor(snapshot, viewer_state) {
+        if actor.side == ActorSide::Player {
+            return (actor.grid_position.y == viewer_state.current_level).then_some(actor.actor_id);
+        }
+        return snapshot
+            .actors
+            .iter()
+            .find(|candidate| {
+                candidate.side == ActorSide::Player
+                    && candidate.grid_position.y == viewer_state.current_level
+            })
+            .map(|actor| actor.actor_id);
+    }
+
+    snapshot
+        .actors
+        .iter()
+        .find(|actor| {
+            actor.side == ActorSide::Player && actor.grid_position.y == viewer_state.current_level
+        })
+        .map(|actor| actor.actor_id)
+}
+
+fn interaction_ray_max_distance(snapshot: &SimulationSnapshot) -> f32 {
+    let extent = snapshot
+        .grid
+        .map_width
+        .unwrap_or(64)
+        .max(snapshot.grid.map_height.unwrap_or(64)) as f32
+        * snapshot.grid.grid_size;
+    extent.max(snapshot.grid.grid_size * 32.0) * 4.0
+}
+
+fn generic_map_object_hit_at_ray(
+    snapshot: &SimulationSnapshot,
+    current_level: i32,
+    ray: Ray3d,
+    render_config: ViewerRenderConfig,
+) -> Option<(game_core::MapObjectDebugState, f32)> {
+    let max_distance = interaction_ray_max_distance(snapshot);
+    let ray_end = ray.origin + ray.direction.as_vec3() * max_distance;
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+
+    snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.anchor.y == current_level)
+        .filter(|object| !is_generated_door_object(object))
+        .filter(|object| {
+            object.kind == game_data::MapObjectKind::Building || object_has_viewer_function(object)
+        })
+        .filter_map(|object| {
+            map_object_hit_fraction(snapshot, object, ray.origin, ray_end, floor_top, grid_size)
+                .map(|fraction| (object.clone(), fraction))
+        })
+        .min_by(|left, right| left.1.total_cmp(&right.1))
+}
+
+fn actor_hit_fraction(
+    actor: &ActorDebugState,
+    ray_origin: Vec3,
+    ray_end: Vec3,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+) -> Option<f32> {
+    let body_translation = actor_body_translation(
+        WorldCoord::new(
+            (actor.grid_position.x as f32 + 0.5) * grid_size,
+            (actor.grid_position.y as f32 + 0.5) * grid_size,
+            (actor.grid_position.z as f32 + 0.5) * grid_size,
+        ),
+        grid_size,
+        render_config,
+    );
+    let body_height = render_config.actor_body_length_world;
+    let body_width = (render_config.actor_radius_world * 1.65).max(0.18);
+    let body_depth = (render_config.actor_radius_world * 1.2).max(0.16);
+    let head_radius = (render_config.actor_radius_world * 0.92).max(0.12);
+    let min_y = (-render_config.actor_radius_world - body_height * 0.5)
+        .min(body_height * 0.5 - head_radius);
+    let max_y = (-render_config.actor_radius_world + body_height * 0.5)
+        .max(body_height * 0.5 + head_radius);
+    let local_center = Vec3::new(0.0, (min_y + max_y) * 0.5, 0.0);
+    let half_extents = Vec3::new(
+        (body_width * 0.5).max(head_radius) * grid_size,
+        ((max_y - min_y) * 0.5) * grid_size,
+        (body_depth * 0.5).max(head_radius) * grid_size,
+    );
+    let center = body_translation + local_center * grid_size;
+    segment_aabb_intersection_fraction(ray_origin, ray_end, center, half_extents)
+}
+
+fn map_object_hit_fraction(
+    snapshot: &SimulationSnapshot,
+    object: &game_core::MapObjectDebugState,
+    ray_origin: Vec3,
+    ray_end: Vec3,
+    floor_top: f32,
+    grid_size: f32,
+) -> Option<f32> {
+    match object.kind {
+        MapObjectKind::Building => {
+            if is_missing_generated_building(snapshot, object) {
+                let (center, size) =
+                    missing_geo_building_placeholder_box(object, grid_size, floor_top)?;
+                return segment_aabb_intersection_fraction(ray_origin, ray_end, center, size * 0.5);
+            }
+
+            let (center_x, center_z, footprint_width, footprint_depth) =
+                occupied_cells_box_world(&object.occupied_cells, grid_size)?;
+            let body_height = grid_size * (1.08 + object_anchor_noise(object) * 0.34);
+            segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(center_x, floor_top + body_height * 0.5, center_z),
+                Vec3::new(
+                    footprint_width * 0.9 * 0.5,
+                    body_height * 0.5,
+                    footprint_depth * 0.88 * 0.5,
+                ),
+            )
+        }
+        MapObjectKind::Pickup => {
+            let (center_x, center_z, _, _) =
+                occupied_cells_box_world(&object.occupied_cells, grid_size)?;
+            let core_height = grid_size * 0.22;
+            let side = grid_size * 0.28;
+            let plinth_height = grid_size * 0.08;
+            segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(
+                    center_x,
+                    floor_top + plinth_height + core_height * 0.5,
+                    center_z,
+                ),
+                Vec3::new(side * 0.5, core_height * 0.5, side * 0.5),
+            )
+        }
+        MapObjectKind::Interactive => {
+            let (center_x, center_z, footprint_width, footprint_depth) =
+                occupied_cells_box_world(&object.occupied_cells, grid_size)?;
+            let pillar_height = grid_size * (0.72 + object_anchor_noise(object) * 0.16);
+            let width = footprint_width.min(grid_size * 0.46).max(0.16);
+            let depth = footprint_depth.min(grid_size * 0.42).max(0.16);
+            let pillar_hit = segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(center_x, floor_top + pillar_height * 0.5, center_z),
+                Vec3::new(width * 0.5, pillar_height * 0.5, depth * 0.5),
+            );
+            let cap_hit = segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(
+                    center_x,
+                    floor_top + pillar_height + grid_size * 0.08,
+                    center_z,
+                ),
+                Vec3::new(
+                    width.max(0.16) * 0.58 * 0.5,
+                    grid_size * 0.16 * 0.5,
+                    grid_size * 0.22 * 0.5,
+                ),
+            );
+            match (pillar_hit, cap_hit) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (Some(a), None) => Some(a),
+                (None, Some(b)) => Some(b),
+                (None, None) => None,
+            }
+        }
+        MapObjectKind::Trigger => {
+            trigger_hit_fraction(object, ray_origin, ray_end, floor_top, grid_size)
+        }
+        MapObjectKind::AiSpawn => {
+            let (center_x, center_z, _, _) =
+                occupied_cells_box_world(&object.occupied_cells, grid_size)?;
+            let beacon_height = grid_size * (0.34 + object_anchor_noise(object) * 0.16);
+            let side = grid_size * 0.28;
+            let beacon_hit = segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(center_x, floor_top + beacon_height * 0.5, center_z),
+                Vec3::new(side * 0.5, beacon_height * 0.5, side * 0.5),
+            );
+            let top_hit = segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(
+                    center_x,
+                    floor_top + beacon_height + grid_size * 0.08,
+                    center_z,
+                ),
+                Vec3::new(side * 0.55 * 0.5, grid_size * 0.16 * 0.5, side * 0.55 * 0.5),
+            );
+            match (beacon_hit, top_hit) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (Some(a), None) => Some(a),
+                (None, Some(b)) => Some(b),
+                (None, None) => None,
+            }
+        }
+    }
+}
+
+fn trigger_hit_fraction(
+    object: &game_core::MapObjectDebugState,
+    ray_origin: Vec3,
+    ray_end: Vec3,
+    floor_top: f32,
+    grid_size: f32,
+) -> Option<f32> {
+    if is_scene_transition_trigger(object) {
+        return None;
+    }
+
+    object
+        .occupied_cells
+        .iter()
+        .filter_map(|cell| {
+            let center_x = (cell.x as f32 + 0.5) * grid_size;
+            let center_z = (cell.z as f32 + 0.5) * grid_size;
+            let tile_height = grid_size * 0.045;
+            segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(center_x, floor_top + tile_height * 0.5, center_z),
+                Vec3::new(
+                    grid_size * 0.9 * 0.5,
+                    tile_height * 0.5,
+                    grid_size * 0.9 * 0.5,
+                ),
+            )
+        })
+        .min_by(|left, right| left.total_cmp(right))
+}
+
+fn object_has_viewer_function(object: &game_core::MapObjectDebugState) -> bool {
+    !object.payload_summary.is_empty()
+}
+
+fn occupied_cells_box_world(cells: &[GridCoord], grid_size: f32) -> Option<(f32, f32, f32, f32)> {
+    let mut min_x = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut min_z = i32::MAX;
+    let mut max_z = i32::MIN;
+
+    for grid in cells {
+        min_x = min_x.min(grid.x);
+        max_x = max_x.max(grid.x);
+        min_z = min_z.min(grid.z);
+        max_z = max_z.max(grid.z);
+    }
+
+    if min_x == i32::MAX {
+        return None;
+    }
+
+    let center_x = (min_x + max_x + 1) as f32 * grid_size * 0.5;
+    let center_z = (min_z + max_z + 1) as f32 * grid_size * 0.5;
+    let width = (max_x - min_x + 1) as f32 * grid_size;
+    let depth = (max_z - min_z + 1) as f32 * grid_size;
+    Some((center_x, center_z, width, depth))
+}
+
+fn object_anchor_noise(object: &game_core::MapObjectDebugState) -> f32 {
+    let mut hash = 409_u32
+        .wrapping_mul(0x9E37_79B9)
+        .wrapping_add((object.anchor.x as u32).wrapping_mul(0x85EB_CA6B))
+        .wrapping_add((object.anchor.z as u32).wrapping_mul(0xC2B2_AE35));
+    hash ^= hash >> 15;
+    hash = hash.wrapping_mul(0x27D4_EB2D);
+    hash ^= hash >> 13;
+    (hash & 0xFFFF) as f32 / 65_535.0
+}
+
+fn is_scene_transition_trigger(object: &game_core::MapObjectDebugState) -> bool {
+    object.kind == game_data::MapObjectKind::Trigger
+        && object
+            .payload_summary
+            .get("trigger_kind")
+            .is_some_and(|kind| is_scene_transition_trigger_kind(kind))
+}
+
+fn is_scene_transition_trigger_kind(kind: &str) -> bool {
+    matches!(
+        kind.trim(),
+        "enter_subscene" | "enter_overworld" | "exit_to_outdoor" | "enter_outdoor_location"
+    )
+}
+
+fn generated_door_hit_fraction(
+    door: &game_core::GeneratedDoorDebugState,
+    ray_origin: Vec3,
+    ray_end: Vec3,
+    grid_size: f32,
+    floor_top: f32,
+) -> Option<f32> {
+    let (pivot, yaw) = generated_door_pick_transform(door, grid_size, floor_top);
+    let (aabb_center, aabb_half_extents) =
+        generated_door_pick_aabb(door, pivot, yaw, grid_size, floor_top);
+    segment_aabb_intersection_fraction(ray_origin, ray_end, aabb_center, aabb_half_extents)
+}
+
+fn generated_door_pick_transform(
+    door: &game_core::GeneratedDoorDebugState,
+    grid_size: f32,
+    floor_top: f32,
+) -> (Vec3, f32) {
+    let (min_x, max_x, min_z, max_z) =
+        geometry_world_bounds(&door.polygon, door.building_anchor, grid_size);
+    let pivot = match door.axis {
+        game_core::GeometryAxis::Horizontal => Vec3::new(min_x, floor_top, (min_z + max_z) * 0.5),
+        game_core::GeometryAxis::Vertical => Vec3::new((min_x + max_x) * 0.5, floor_top, min_z),
+    };
+    let yaw = if door.is_open {
+        match door.axis {
+            game_core::GeometryAxis::Horizontal => std::f32::consts::FRAC_PI_2,
+            game_core::GeometryAxis::Vertical => -std::f32::consts::FRAC_PI_2,
+        }
+    } else {
+        0.0
+    };
+    (pivot, yaw)
+}
+
+fn generated_door_pick_aabb(
+    door: &game_core::GeneratedDoorDebugState,
+    pivot: Vec3,
+    yaw: f32,
+    grid_size: f32,
+    floor_top: f32,
+) -> (Vec3, Vec3) {
+    let rotation = Quat::from_rotation_y(yaw);
+    let mut min_x = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut min_z = f32::INFINITY;
+    let mut max_z = f32::NEG_INFINITY;
+
+    for point in door
+        .polygon
+        .outer
+        .iter()
+        .chain(door.polygon.holes.iter().flatten())
+    {
+        let local = Vec3::new(
+            (door.building_anchor.x as f32 + point.x as f32) * grid_size - pivot.x,
+            0.0,
+            (door.building_anchor.z as f32 + point.z as f32) * grid_size - pivot.z,
+        );
+        let world = pivot + rotation * local;
+        min_x = min_x.min(world.x);
+        max_x = max_x.max(world.x);
+        min_z = min_z.min(world.z);
+        max_z = max_z.max(world.z);
+    }
+
+    let min_y = floor_top;
+    let max_y = floor_top + door.wall_height * grid_size;
+    let center = Vec3::new(
+        (min_x + max_x) * 0.5,
+        (min_y + max_y) * 0.5,
+        (min_z + max_z) * 0.5,
+    );
+    let mut half_extents = Vec3::new(
+        (max_x - min_x) * 0.5,
+        (max_y - min_y) * 0.5,
+        (max_z - min_z) * 0.5,
+    );
+    let inflate = grid_size * 0.08;
+    half_extents.x = half_extents.x.max(inflate);
+    half_extents.z = half_extents.z.max(inflate);
+    (center, half_extents)
+}
+
+fn geometry_world_bounds(
+    polygon: &game_core::GeometryPolygon2,
+    anchor: GridCoord,
+    grid_size: f32,
+) -> (f32, f32, f32, f32) {
+    let mut min_x = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut min_z = f32::INFINITY;
+    let mut max_z = f32::NEG_INFINITY;
+    for point in polygon.outer.iter().chain(polygon.holes.iter().flatten()) {
+        let world_x = (anchor.x as f32 + point.x as f32) * grid_size;
+        let world_z = (anchor.z as f32 + point.z as f32) * grid_size;
+        min_x = min_x.min(world_x);
+        max_x = max_x.max(world_x);
+        min_z = min_z.min(world_z);
+        max_z = max_z.max(world_z);
+    }
+    (min_x, max_x, min_z, max_z)
 }
 
 pub(crate) fn segment_aabb_intersection_fraction(
@@ -420,7 +994,7 @@ pub(crate) fn focused_target_summary(
                 .map_objects
                 .iter()
                 .find(|object| object.object_id == *object_id)
-                .map(|object| format!("{} ({:?})", object.object_id, object.kind))
+                .map(|object| map_object_debug_label(snapshot, object))
                 .unwrap_or_else(|| format!("object {}", object_id)),
         })
         .unwrap_or_else(|| "none".to_string())
@@ -559,18 +1133,22 @@ pub(crate) fn grid_bounds(snapshot: &SimulationSnapshot, level: i32) -> GridBoun
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_label, camera_focus_point, camera_pan_delta_from_ground_drag, camera_world_distance,
-        clamp_camera_pan_offset, cycle_level, grid_bounds, hovered_grid_outline_kind,
-        level_plane_height, movement_block_reasons, occluder_blocks_target, pick_grid_from_ray,
-        rendered_path_preview, resolve_occlusion_target, segment_aabb_intersection_fraction,
-        should_rebuild_static_world, visible_world_footprint, GridBounds, HoveredGridOutlineKind,
+        actor_hit_at_ray, actor_label, camera_focus_point, camera_pan_delta_from_ground_drag,
+        camera_world_distance, clamp_camera_pan_offset, cycle_level,
+        generated_door_object_hit_at_ray, grid_bounds, grid_focus_world_position,
+        hovered_grid_outline_kind, just_pressed_hud_page, level_plane_height,
+        map_object_hit_at_ray, movement_block_reasons, occluder_blocks_target, pick_grid_from_ray,
+        rendered_path_preview, resolve_occlusion_focus_points, resolve_occlusion_target,
+        segment_aabb_intersection_fraction, should_rebuild_static_world, visible_world_footprint,
+        GridBounds, HoveredGridOutlineKind, OcclusionFocusPoint,
     };
-    use crate::state::{ViewerRenderConfig, ViewerState};
+    use crate::state::{ViewerHudPage, ViewerRenderConfig, ViewerState};
     use crate::test_support::actor_debug_state_fixture;
     use bevy::prelude::*;
     use game_core::{
-        create_demo_runtime, ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState,
-        MapObjectDebugState, OverworldStateSnapshot, SimulationSnapshot,
+        create_demo_runtime, ActorDebugState, CombatDebugState, DoorOpeningKind,
+        GeneratedDoorDebugState, GeometryAxis, GeometryPoint2, GeometryPolygon2, GridDebugState,
+        MapCellDebugState, MapObjectDebugState, OverworldStateSnapshot, SimulationSnapshot,
     };
     use game_data::{
         ActorId, ActorKind, ActorSide, GridCoord, InteractionContextSnapshot, MapId,
@@ -585,6 +1163,17 @@ mod tests {
         let grid = pick_grid_from_ray(ray, 1, 1.0, level_plane_height(1, 1.0));
 
         assert_eq!(grid, Some(GridCoord::new(2, 1, 3)));
+    }
+
+    #[test]
+    fn hud_page_shortcut_maps_f7_to_performance() {
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::F7);
+
+        assert_eq!(
+            just_pressed_hud_page(&keys),
+            Some(ViewerHudPage::Performance)
+        );
     }
 
     #[test]
@@ -651,6 +1240,7 @@ mod tests {
                 runtime_obstacle_version: 0,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -690,6 +1280,7 @@ mod tests {
                 runtime_obstacle_version: 0,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -790,6 +1381,7 @@ mod tests {
                 runtime_obstacle_version: 2,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,
@@ -1098,6 +1690,102 @@ mod tests {
     }
 
     #[test]
+    fn occlusion_focus_points_include_player_and_hovered_grid() {
+        let mut player = actor_debug_state_fixture();
+        player.actor_id = ActorId(21);
+        player.side = ActorSide::Player;
+        player.grid_position = GridCoord::new(2, 0, 2);
+
+        let snapshot = demo_snapshot_with_actors(vec![player.clone()]);
+        let viewer_state = ViewerState {
+            selected_actor: Some(player.actor_id),
+            hovered_grid: Some(GridCoord::new(4, 0, 3)),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let focus_points = resolve_occlusion_focus_points(&snapshot, &viewer_state, true);
+
+        assert_eq!(
+            focus_points,
+            vec![
+                OcclusionFocusPoint::Actor(player.actor_id),
+                OcclusionFocusPoint::Grid(GridCoord::new(4, 0, 3)),
+            ]
+        );
+    }
+
+    #[test]
+    fn occlusion_focus_points_prefer_targeting_hover_when_valid() {
+        let mut player = actor_debug_state_fixture();
+        player.actor_id = ActorId(22);
+        player.side = ActorSide::Player;
+        player.grid_position = GridCoord::new(1, 0, 1);
+
+        let snapshot = demo_snapshot_with_actors(vec![player.clone()]);
+        let viewer_state = ViewerState {
+            selected_actor: Some(player.actor_id),
+            hovered_grid: Some(GridCoord::new(7, 0, 7)),
+            targeting_state: Some(crate::state::ViewerTargetingState {
+                actor_id: player.actor_id,
+                action: crate::state::ViewerTargetingAction::Attack,
+                source: crate::state::ViewerTargetingSource::AttackButton,
+                shape: "single".into(),
+                radius: 0,
+                valid_grids: std::collections::BTreeSet::from([GridCoord::new(3, 0, 2)]),
+                valid_actor_ids: Default::default(),
+                hovered_grid: Some(GridCoord::new(3, 0, 2)),
+                preview_target: None,
+                preview_hit_grids: Vec::new(),
+                preview_hit_actor_ids: Vec::new(),
+                prompt_text: String::new(),
+            }),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let focus_points = resolve_occlusion_focus_points(&snapshot, &viewer_state, true);
+
+        assert_eq!(
+            focus_points,
+            vec![
+                OcclusionFocusPoint::Actor(player.actor_id),
+                OcclusionFocusPoint::Grid(GridCoord::new(3, 0, 2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn occlusion_focus_points_drop_hover_when_hover_is_disabled() {
+        let mut player = actor_debug_state_fixture();
+        player.actor_id = ActorId(23);
+        player.side = ActorSide::Player;
+        player.grid_position = GridCoord::new(0, 0, 0);
+
+        let snapshot = demo_snapshot_with_actors(vec![player.clone()]);
+        let viewer_state = ViewerState {
+            selected_actor: Some(player.actor_id),
+            hovered_grid: Some(GridCoord::new(5, 0, 5)),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let focus_points = resolve_occlusion_focus_points(&snapshot, &viewer_state, false);
+
+        assert_eq!(
+            focus_points,
+            vec![OcclusionFocusPoint::Actor(player.actor_id)]
+        );
+    }
+
+    #[test]
+    fn grid_focus_world_position_targets_grid_center_above_floor() {
+        let point = grid_focus_world_position(GridCoord::new(3, 2, 4), 1.5, 0.11);
+
+        assert_eq!(point, Vec3::new(5.25, 3.11, 6.75));
+    }
+
+    #[test]
     fn segment_intersection_reports_hit_for_box_on_segment() {
         let hit = segment_aabb_intersection_fraction(
             Vec3::new(0.0, 0.0, 0.0),
@@ -1107,6 +1795,165 @@ mod tests {
         );
 
         assert!(hit.is_some());
+    }
+
+    #[test]
+    fn actor_ray_pick_hits_visible_actor_volume() {
+        let mut actor = actor_debug_state_fixture();
+        actor.actor_id = ActorId(99);
+        actor.display_name = "Scout".into();
+        actor.side = ActorSide::Friendly;
+        actor.grid_position = GridCoord::new(1, 0, 0);
+
+        let snapshot = demo_snapshot_with_actors(vec![actor]);
+        let ray = Ray3d::new(
+            Vec3::new(1.5, 0.6, -2.0),
+            Dir3::new(Vec3::new(0.0, 0.0, 1.0)).expect("ray direction should be valid"),
+        );
+
+        let (hit_actor, _) = actor_hit_at_ray(&snapshot, 0, ray, ViewerRenderConfig::default())
+            .expect("ray should hit actor body volume");
+
+        assert_eq!(hit_actor.actor_id, ActorId(99));
+    }
+
+    #[test]
+    fn map_object_ray_pick_hits_interactive_volume() {
+        let snapshot = SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: Vec::new(),
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(6),
+                map_height: Some(6),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: vec![GridCoord::new(2, 0, 1)],
+                map_cells: Vec::new(),
+                map_objects: vec![MapObjectDebugState {
+                    object_id: "terminal".into(),
+                    kind: MapObjectKind::Interactive,
+                    anchor: GridCoord::new(2, 0, 1),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    occupied_cells: vec![GridCoord::new(2, 0, 1)],
+                    payload_summary: BTreeMap::from([(
+                        "interaction_kind".to_string(),
+                        "terminal".to_string(),
+                    )]),
+                }],
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        };
+        let ray = Ray3d::new(
+            Vec3::new(2.5, 0.5, -2.0),
+            Dir3::new(Vec3::new(0.0, 0.0, 1.0)).expect("ray direction should be valid"),
+        );
+
+        let (hit, _) = map_object_hit_at_ray(&snapshot, 0, ray, ViewerRenderConfig::default())
+            .expect("ray should hit interactive object volume");
+
+        assert_eq!(hit.object_id, "terminal");
+    }
+
+    #[test]
+    fn generated_door_ray_pick_hits_visible_door_volume() {
+        let snapshot = SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: Vec::new(),
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(6),
+                map_height: Some(6),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: vec![GridCoord::new(1, 0, 0)],
+                map_cells: Vec::new(),
+                map_objects: vec![MapObjectDebugState {
+                    object_id: "door".into(),
+                    kind: MapObjectKind::Interactive,
+                    anchor: GridCoord::new(1, 0, 0),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: true,
+                    blocks_sight: true,
+                    occupied_cells: vec![GridCoord::new(1, 0, 0)],
+                    payload_summary: BTreeMap::from([(
+                        "generated_door".to_string(),
+                        "true".to_string(),
+                    )]),
+                }],
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            generated_buildings: Vec::new(),
+            generated_doors: vec![GeneratedDoorDebugState {
+                door_id: "door".into(),
+                map_object_id: "door".into(),
+                building_object_id: "building".into(),
+                building_anchor: GridCoord::new(0, 0, 0),
+                level: 0,
+                opening_id: 0,
+                anchor_grid: GridCoord::new(1, 0, 0),
+                axis: GeometryAxis::Vertical,
+                kind: DoorOpeningKind::Exterior,
+                polygon: GeometryPolygon2 {
+                    outer: vec![
+                        GeometryPoint2::new(1.0, 0.0),
+                        GeometryPoint2::new(2.0, 0.0),
+                        GeometryPoint2::new(2.0, 0.12),
+                        GeometryPoint2::new(1.0, 0.12),
+                    ],
+                    holes: Vec::new(),
+                },
+                wall_height: 2.35,
+                is_open: false,
+                is_locked: false,
+            }],
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        };
+        let ray = Ray3d::new(
+            Vec3::new(1.5, 1.0, -2.0),
+            Dir3::new(Vec3::new(0.0, 0.0, 1.0)).expect("ray direction should be valid"),
+        );
+
+        let hit = generated_door_object_hit_at_ray(
+            &snapshot,
+            0,
+            ray,
+            ViewerRenderConfig::default().floor_thickness_world,
+        )
+        .expect("ray should hit generated door volume");
+
+        assert_eq!(hit.0.object_id, "door");
     }
 
     #[test]
@@ -1153,6 +2000,7 @@ mod tests {
                 runtime_obstacle_version: 0,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,

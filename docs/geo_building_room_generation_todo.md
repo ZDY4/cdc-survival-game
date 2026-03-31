@@ -1,5 +1,7 @@
 # 使用 `geo` 生成建筑和房间的开发 TODO
 
+> 说明：本文档保留为 polygon/geometry 方向的历史设计记录。当前仓库中的 `bevy_debug_viewer` 建筑墙体主渲染已切换为基于 `wall_cells` 的 3D tilemap 拼装，而不是 `wall_strokes` 盒子化主路径。
+
 本文档将“使用 `geo` 在共享 Rust 层生成建筑、房间、墙体几何，并由 `bevy_debug_viewer` 消费结果”收口成可执行的分阶段 backlog。
 
 该项改动属于三端分离中的“继续强化 `Rust / Bevy` 权威实现”阶段，目标是把建筑几何权威链路从当前 `cell-first` 方案迁移到 `Rust game_core` 的 `polygon-first` 方案，同时保留一段时间的 grid 兼容输出，避免一次性打断现有运行时与 viewer。

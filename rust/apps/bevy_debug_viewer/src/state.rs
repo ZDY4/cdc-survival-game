@@ -1,15 +1,33 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use bevy::prelude::*;
 use game_bevy::{SettlementDebugSnapshot, UiInventoryFilter, UiMenuPanel};
 use game_core::SimulationRuntime;
 use game_core::SimulationSnapshot;
 use game_data::{
-    ActorId, ActorSide, DialogueData, GridCoord, InteractionPrompt, InteractionTargetId, WorldCoord,
+    ActorId, ActorSide, DialogueData, GridCoord, InteractionPrompt, InteractionTargetId,
+    SkillTargetRequest, WorldCoord,
 };
 use serde::{Deserialize, Serialize};
 
 pub(crate) const VIEWER_FONT_PATH: &str = "fonts/NotoSansCJKsc-Regular.otf";
+
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ViewerSceneKind {
+    #[default]
+    MainMenu,
+    Gameplay,
+}
+
+impl ViewerSceneKind {
+    pub(crate) fn is_main_menu(self) -> bool {
+        matches!(self, Self::MainMenu)
+    }
+
+    pub(crate) fn is_gameplay(self) -> bool {
+        matches!(self, Self::Gameplay)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum ViewerOverlayMode {
@@ -113,9 +131,20 @@ pub(crate) enum ViewerHudPage {
     Interaction,
     Events,
     Ai,
+    Performance,
 }
 
 impl ViewerHudPage {
+    pub(crate) const ALL: [Self; 7] = [
+        Self::Overview,
+        Self::SelectedActor,
+        Self::World,
+        Self::Interaction,
+        Self::Events,
+        Self::Ai,
+        Self::Performance,
+    ];
+
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
@@ -124,7 +153,24 @@ impl ViewerHudPage {
             Self::Interaction => "Interaction",
             Self::Events => "Events",
             Self::Ai => "AI",
+            Self::Performance => "Performance",
         }
+    }
+
+    pub(crate) fn tab_label(self) -> &'static str {
+        match self {
+            Self::Overview => "Overview",
+            Self::SelectedActor => "Actor",
+            Self::World => "World",
+            Self::Interaction => "Interact",
+            Self::Events => "Events",
+            Self::Ai => "AI",
+            Self::Performance => "Perf",
+        }
+    }
+
+    pub(crate) fn profiles_systems(self) -> bool {
+        matches!(self, Self::Performance)
     }
 }
 
@@ -688,6 +734,34 @@ impl ViewerCameraShakeState {
     }
 }
 
+#[derive(Resource, Debug, Clone, Copy)]
+pub(crate) struct ViewerCameraFollowState {
+    pub smoothed_focus: Vec3,
+    pub initialized: bool,
+    pub last_actor_id: Option<ActorId>,
+    pub last_level: i32,
+}
+
+impl Default for ViewerCameraFollowState {
+    fn default() -> Self {
+        Self {
+            smoothed_focus: Vec3::ZERO,
+            initialized: false,
+            last_actor_id: None,
+            last_level: 0,
+        }
+    }
+}
+
+impl ViewerCameraFollowState {
+    pub(crate) fn reset(&mut self, focus: Vec3, actor_id: Option<ActorId>, level: i32) {
+        self.smoothed_focus = focus;
+        self.initialized = true;
+        self.last_actor_id = actor_id;
+        self.last_level = level;
+    }
+}
+
 fn pseudo_random_range(seed: u64, min: f32, max: f32) -> f32 {
     let hashed = seed
         .wrapping_mul(6364136223846793005)
@@ -874,8 +948,10 @@ pub(crate) struct ViewerState {
     pub camera_mode: ViewerCameraMode,
     pub event_filter: HudEventFilter,
     pub show_hud: bool,
+    pub show_fps_overlay: bool,
     pub show_controls: bool,
     pub hovered_grid: Option<GridCoord>,
+    pub targeting_state: Option<ViewerTargetingState>,
     pub current_level: i32,
     pub auto_tick: bool,
     pub end_turn_repeat_delay_sec: f32,
@@ -906,8 +982,10 @@ impl Default for ViewerState {
             camera_mode: ViewerCameraMode::FollowSelectedActor,
             event_filter: HudEventFilter::All,
             show_hud: true,
+            show_fps_overlay: false,
             show_controls: false,
             hovered_grid: None,
+            targeting_state: None,
             current_level: 0,
             auto_tick: false,
             end_turn_repeat_delay_sec: 0.2,
@@ -923,6 +1001,52 @@ impl Default for ViewerState {
             pending_open_trade_target: None,
             status_line: String::new(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ViewerTargetingAction {
+    Attack,
+    Skill {
+        skill_id: String,
+        skill_name: String,
+    },
+}
+
+impl ViewerTargetingAction {
+    pub(crate) fn label(&self) -> &str {
+        match self {
+            Self::Attack => "普通攻击",
+            Self::Skill { skill_name, .. } => skill_name.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ViewerTargetingSource {
+    AttackButton,
+    HotbarSlot(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ViewerTargetingState {
+    pub actor_id: ActorId,
+    pub action: ViewerTargetingAction,
+    pub source: ViewerTargetingSource,
+    pub shape: String,
+    pub radius: i32,
+    pub valid_grids: BTreeSet<GridCoord>,
+    pub valid_actor_ids: BTreeSet<ActorId>,
+    pub hovered_grid: Option<GridCoord>,
+    pub preview_target: Option<SkillTargetRequest>,
+    pub preview_hit_grids: Vec<GridCoord>,
+    pub preview_hit_actor_ids: Vec<ActorId>,
+    pub prompt_text: String,
+}
+
+impl ViewerTargetingState {
+    pub(crate) fn is_attack(&self) -> bool {
+        matches!(self.action, ViewerTargetingAction::Attack)
     }
 }
 
@@ -1019,6 +1143,17 @@ pub(crate) struct HudText;
 pub(crate) struct HudFooterText;
 
 #[derive(Component)]
+pub(crate) struct HudTabBarRoot;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct HudTabButton {
+    pub page: ViewerHudPage,
+}
+
+#[derive(Component)]
+pub(crate) struct FpsOverlayText;
+
+#[derive(Component)]
 pub(crate) struct FreeObserveIndicatorRoot;
 
 #[derive(Component)]
@@ -1045,6 +1180,9 @@ pub(crate) struct DialogueChoiceButton {
 #[derive(Component)]
 pub(crate) struct GameUiRoot;
 
+#[derive(Component)]
+pub(crate) struct UiMouseBlocker;
+
 #[derive(Component, Debug, Clone)]
 pub(crate) enum GameUiButtonAction {
     MainMenuNewGame,
@@ -1060,12 +1198,15 @@ pub(crate) enum GameUiButtonAction {
     UnequipSlot(String),
     MoveSelectedEquippedTo(String),
     AllocateAttribute(String),
+    SelectSkillTree(String),
     SelectSkill(String),
+    AssignSkillToFirstEmptyHotbarSlot(String),
     AssignSkillToHotbar {
         skill_id: String,
         group: usize,
         slot: usize,
     },
+    EnterAttackTargeting,
     ActivateHotbarSlot(usize),
     SelectHotbarGroup(usize),
     ClearHotbarSlot {
@@ -1331,6 +1472,7 @@ mod tests {
                 runtime_obstacle_version: 0,
             },
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
             combat: CombatDebugState {
                 in_combat: false,
                 current_actor_id: None,

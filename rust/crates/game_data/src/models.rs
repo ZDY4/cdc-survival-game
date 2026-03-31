@@ -53,6 +53,7 @@ impl WorldCoord {
 pub enum ActionType {
     Move,
     Attack,
+    Skill,
     Interact,
     Item,
 }
@@ -72,6 +73,12 @@ pub struct ActionRequest {
     pub steps: Option<u32>,
     pub target_actor: Option<ActorId>,
     pub success: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SkillTargetRequest {
+    Actor(ActorId),
+    Grid(GridCoord),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

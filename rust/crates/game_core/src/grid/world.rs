@@ -2,14 +2,18 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use game_data::{
     building_layout_story_levels, expand_object_footprint, object_effectively_blocks_movement,
-    ActorId, GridCoord, MapCellDefinition, MapDefinition, MapId, MapObjectDefinition, MapSize,
-    WorldCoord,
+    ActorId, GridCoord, InteractionOptionDefinition, InteractionOptionKind, MapCellDefinition,
+    MapDefinition, MapId, MapInteractiveProps, MapObjectDefinition, MapObjectFootprint,
+    MapObjectKind, MapObjectProps, MapRotation, MapSize, WorldCoord,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tracing::warn;
 
 use super::math::{grid_to_world, world_to_grid, DEFAULT_GRID_SIZE};
-use crate::building::{generate_building_layout, GeneratedBuildingDebugState};
+use crate::building::{
+    generate_building_layout, GeneratedBuildingDebugState, GeneratedDoorDebugState,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GridWalkability {
@@ -36,6 +40,8 @@ pub struct GridWorld {
     map_object_cells: HashMap<GridCoord, Vec<String>>,
     map_blocked_cells: HashSet<GridCoord>,
     generated_buildings: Vec<GeneratedBuildingDebugState>,
+    generated_doors: Vec<GeneratedDoorDebugState>,
+    generated_door_object_ids: BTreeSet<String>,
     stair_adjacency: HashMap<GridCoord, Vec<GridCoord>>,
     topology_version: u64,
     runtime_obstacle_version: u64,
@@ -72,6 +78,8 @@ pub(crate) struct GridWorldSnapshot {
     pub map_cells: Vec<GridCellSnapshotEntry>,
     pub map_objects: Vec<MapObjectDefinition>,
     pub generated_buildings: Vec<GeneratedBuildingDebugState>,
+    #[serde(default)]
+    pub generated_doors: Vec<GeneratedDoorDebugState>,
     pub topology_version: u64,
     pub runtime_obstacle_version: u64,
 }
@@ -93,6 +101,8 @@ impl Default for GridWorld {
             map_object_cells: HashMap::new(),
             map_blocked_cells: HashSet::new(),
             generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
+            generated_door_object_ids: BTreeSet::new(),
             stair_adjacency: HashMap::new(),
             topology_version: 0,
             runtime_obstacle_version: 0,
@@ -234,6 +244,16 @@ impl GridWorld {
             .unwrap_or_default()
     }
 
+    pub fn generated_doors(&self) -> &[GeneratedDoorDebugState] {
+        &self.generated_doors
+    }
+
+    pub fn generated_door_by_object_id(&self, object_id: &str) -> Option<&GeneratedDoorDebugState> {
+        self.generated_doors
+            .iter()
+            .find(|door| door.map_object_id == object_id)
+    }
+
     pub fn map_cell_entries(&self) -> Vec<(GridCoord, MapCellDefinition)> {
         let mut entries: Vec<(GridCoord, MapCellDefinition)> = self
             .map_cells
@@ -280,6 +300,29 @@ impl GridWorld {
         self.rebuild_static_topology();
         self.topology_version = self.topology_version.saturating_add(1);
         Some(removed)
+    }
+
+    pub fn set_generated_door_state(
+        &mut self,
+        door_id: &str,
+        is_open: bool,
+        is_locked: bool,
+    ) -> bool {
+        let Some(door) = self
+            .generated_doors
+            .iter_mut()
+            .find(|door| door.door_id == door_id)
+        else {
+            return false;
+        };
+        if door.is_open == is_open && door.is_locked == is_locked {
+            return false;
+        }
+        door.is_open = is_open;
+        door.is_locked = is_locked;
+        self.rebuild_static_topology();
+        self.topology_version = self.topology_version.saturating_add(1);
+        true
     }
 
     pub fn map_blocked_cells(&self, level: Option<i32>) -> Vec<GridCoord> {
@@ -482,8 +525,13 @@ impl GridWorld {
                 .into_iter()
                 .map(|(grid, cell)| GridCellSnapshotEntry { grid, cell })
                 .collect(),
-            map_objects: self.map_object_entries(),
+            map_objects: self
+                .map_object_entries()
+                .into_iter()
+                .filter(|object| !self.generated_door_object_ids.contains(&object.object_id))
+                .collect(),
             generated_buildings: self.generated_buildings.clone(),
+            generated_doors: self.generated_doors.clone(),
             topology_version: self.topology_version,
             runtime_obstacle_version: self.runtime_obstacle_version,
         }
@@ -530,6 +578,16 @@ impl GridWorld {
         self.map_object_cells.clear();
         self.map_blocked_cells.clear();
         self.generated_buildings = snapshot.generated_buildings;
+        self.generated_doors = snapshot.generated_doors;
+        self.generated_door_object_ids = self
+            .generated_doors
+            .iter()
+            .map(|door| door.map_object_id.clone())
+            .collect();
+        for door in &self.generated_doors {
+            self.map_objects
+                .insert(door.map_object_id.clone(), generated_door_map_object(door));
+        }
         self.stair_adjacency.clear();
 
         for (grid, cell) in &self.map_cells {
@@ -564,6 +622,12 @@ impl GridWorld {
     }
 
     fn rebuild_static_topology(&mut self) {
+        let previous_door_states: BTreeMap<_, _> = self
+            .generated_doors
+            .iter()
+            .map(|door| (door.door_id.clone(), door.clone()))
+            .collect();
+
         self.map_cells = self.base_map_cells.clone();
         self.map_object_cells.clear();
         self.map_blocked_cells = self
@@ -572,6 +636,10 @@ impl GridWorld {
             .filter_map(|(grid, cell)| cell.blocks_movement.then_some(*grid))
             .collect();
         self.generated_buildings.clear();
+        self.generated_doors.clear();
+        for object_id in std::mem::take(&mut self.generated_door_object_ids) {
+            self.map_objects.remove(&object_id);
+        }
         self.stair_adjacency.clear();
 
         let objects = self.map_objects.values().cloned().collect::<Vec<_>>();
@@ -609,6 +677,8 @@ impl GridWorld {
                             visual_outline: layout.visual_outline,
                         };
                         self.apply_generated_building(&debug_state);
+                        self.generated_doors
+                            .extend(collect_generated_doors(&debug_state, &previous_door_states));
                         self.generated_buildings.push(debug_state);
                     }
                     Err(error) => {
@@ -639,12 +709,31 @@ impl GridWorld {
             }
         }
 
+        for door in &self.generated_doors {
+            let object = generated_door_map_object(door);
+            self.generated_door_object_ids
+                .insert(object.object_id.clone());
+            self.map_objects
+                .insert(object.object_id.clone(), object.clone());
+            for cell in expand_object_footprint(&object) {
+                self.map_object_cells
+                    .entry(cell)
+                    .or_default()
+                    .push(object.object_id.clone());
+                if object_effectively_blocks_movement(&object) {
+                    self.map_blocked_cells.insert(cell);
+                }
+            }
+        }
+
         for object_ids in self.map_object_cells.values_mut() {
             object_ids.sort();
             object_ids.dedup();
         }
         self.generated_buildings
             .sort_by(|a, b| a.object_id.cmp(&b.object_id));
+        self.generated_doors
+            .sort_by(|a, b| a.door_id.cmp(&b.door_id));
     }
 
     fn apply_generated_building(&mut self, building: &GeneratedBuildingDebugState) {
@@ -702,4 +791,109 @@ impl GridWorld {
             neighbors.dedup();
         }
     }
+}
+
+fn collect_generated_doors(
+    building: &GeneratedBuildingDebugState,
+    previous_door_states: &BTreeMap<String, GeneratedDoorDebugState>,
+) -> Vec<GeneratedDoorDebugState> {
+    let mut doors = Vec::new();
+    for story in &building.stories {
+        for opening in &story.door_openings {
+            let door_id = generated_door_id(&building.object_id, story.level, opening.opening_id);
+            let map_object_id = generated_door_map_object_id(&door_id);
+            let previous = previous_door_states.get(&door_id);
+            doors.push(GeneratedDoorDebugState {
+                door_id,
+                map_object_id,
+                building_object_id: building.object_id.clone(),
+                building_anchor: building.anchor,
+                level: story.level,
+                opening_id: opening.opening_id,
+                anchor_grid: opening.anchor_grid,
+                axis: opening.axis,
+                kind: opening.kind,
+                polygon: opening.polygon.clone(),
+                wall_height: story.wall_height,
+                is_open: previous.map(|door| door.is_open).unwrap_or(false),
+                is_locked: previous.map(|door| door.is_locked).unwrap_or(false),
+            });
+        }
+    }
+    doors
+}
+
+fn generated_door_id(building_object_id: &str, level: i32, opening_id: usize) -> String {
+    format!("{building_object_id}::door::{level}::{opening_id}")
+}
+
+fn generated_door_map_object_id(door_id: &str) -> String {
+    door_id.to_string()
+}
+
+fn generated_door_map_object(door: &GeneratedDoorDebugState) -> MapObjectDefinition {
+    let door_state = if door.is_open { "open" } else { "closed" };
+    let mut extra = BTreeMap::new();
+    extra.insert("generated_door".to_string(), Value::Bool(true));
+    extra.insert("door_id".to_string(), Value::String(door.door_id.clone()));
+    extra.insert(
+        "building_object_id".to_string(),
+        Value::String(door.building_object_id.clone()),
+    );
+    extra.insert(
+        "door_state".to_string(),
+        Value::String(door_state.to_string()),
+    );
+    extra.insert("door_locked".to_string(), Value::Bool(door.is_locked));
+
+    MapObjectDefinition {
+        object_id: door.map_object_id.clone(),
+        kind: MapObjectKind::Interactive,
+        anchor: door.anchor_grid,
+        footprint: MapObjectFootprint {
+            width: 1,
+            height: 1,
+        },
+        rotation: match door.axis {
+            crate::GeometryAxis::Horizontal => MapRotation::North,
+            crate::GeometryAxis::Vertical => MapRotation::East,
+        },
+        blocks_movement: !door.is_open,
+        blocks_sight: !door.is_open,
+        props: MapObjectProps {
+            interactive: Some(MapInteractiveProps {
+                display_name: "Door".to_string(),
+                interaction_distance: 1.4,
+                interaction_kind: String::new(),
+                target_id: None,
+                options: generated_door_interaction_options(door),
+                extra,
+            }),
+            ..MapObjectProps::default()
+        },
+    }
+}
+
+fn generated_door_interaction_options(
+    door: &GeneratedDoorDebugState,
+) -> Vec<InteractionOptionDefinition> {
+    let kinds = if door.is_locked {
+        [
+            InteractionOptionKind::UnlockDoor,
+            InteractionOptionKind::PickLockDoor,
+        ]
+        .to_vec()
+    } else if door.is_open {
+        [InteractionOptionKind::CloseDoor].to_vec()
+    } else {
+        [InteractionOptionKind::OpenDoor].to_vec()
+    };
+
+    kinds
+        .into_iter()
+        .map(|kind| InteractionOptionDefinition {
+            kind,
+            ..InteractionOptionDefinition::default()
+        })
+        .collect()
 }

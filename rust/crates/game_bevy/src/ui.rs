@@ -96,6 +96,7 @@ pub struct UiMenuState {
     pub active_panel: Option<UiMenuPanel>,
     pub selected_inventory_item: Option<u32>,
     pub selected_equipment_slot: Option<String>,
+    pub selected_skill_tree_id: Option<String>,
     pub selected_skill_id: Option<String>,
     pub selected_recipe_id: Option<String>,
     pub selected_map_location_id: Option<String>,
@@ -347,15 +348,27 @@ pub struct UiSkillEntryView {
     pub skill_id: String,
     pub tree_id: String,
     pub name: String,
+    pub description: String,
     pub learned_level: i32,
     pub max_level: i32,
-    pub has_activation: bool,
+    pub hotbar_eligible: bool,
+    pub activation_mode: String,
     pub cooldown_seconds: f32,
+    pub prerequisite_names: Vec<String>,
+    pub attribute_requirements: BTreeMap<String, i32>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UiSkillTreeView {
+    pub tree_id: String,
+    pub tree_name: String,
+    pub tree_description: String,
+    pub entries: Vec<UiSkillEntryView>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UiSkillsSnapshot {
-    pub entries: Vec<UiSkillEntryView>,
+    pub trees: Vec<UiSkillTreeView>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -585,35 +598,88 @@ pub fn skills_snapshot(
     runtime: &SimulationRuntime,
     actor_id: ActorId,
     skills: &SkillLibrary,
-    _trees: &SkillTreeLibrary,
+    trees: &SkillTreeLibrary,
 ) -> UiSkillsSnapshot {
     let learned = runtime
         .economy()
         .actor(actor_id)
         .map(|actor| actor.learned_skills.clone())
         .unwrap_or_default();
-    let mut entries = skills
+    let mut trees_by_id = trees
         .iter()
-        .map(|(skill_id, definition)| UiSkillEntryView {
+        .map(|(tree_id, definition)| {
+            (
+                tree_id.clone(),
+                UiSkillTreeView {
+                    tree_id: tree_id.clone(),
+                    tree_name: definition.name.clone(),
+                    tree_description: definition.description.clone(),
+                    entries: Vec::new(),
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    for (skill_id, definition) in skills.iter() {
+        let learned_level = learned.get(skill_id).copied().unwrap_or(0);
+        let activation_mode = definition
+            .activation
+            .as_ref()
+            .map(|activation| activation.mode.trim().to_string())
+            .filter(|mode| !mode.is_empty())
+            .unwrap_or_else(|| "passive".to_string());
+        let prerequisite_names = definition
+            .prerequisites
+            .iter()
+            .map(|prerequisite_id| {
+                skills
+                    .get(prerequisite_id)
+                    .map(|skill| skill.name.clone())
+                    .filter(|name| !name.trim().is_empty())
+                    .unwrap_or_else(|| prerequisite_id.clone())
+            })
+            .collect::<Vec<_>>();
+
+        let tree_entry = trees_by_id
+            .entry(definition.tree_id.clone())
+            .or_insert_with(|| UiSkillTreeView {
+                tree_id: definition.tree_id.clone(),
+                tree_name: definition.tree_id.clone(),
+                tree_description: String::new(),
+                entries: Vec::new(),
+            });
+
+        tree_entry.entries.push(UiSkillEntryView {
             skill_id: skill_id.clone(),
             tree_id: definition.tree_id.clone(),
             name: definition.name.clone(),
-            learned_level: learned.get(skill_id).copied().unwrap_or(0),
+            description: definition.description.clone(),
+            learned_level,
             max_level: definition.max_level,
-            has_activation: definition.activation.is_some(),
+            hotbar_eligible: learned_level > 0 && activation_mode != "passive",
+            activation_mode,
             cooldown_seconds: definition
                 .activation
                 .as_ref()
                 .map(|activation| activation.cooldown)
                 .unwrap_or_default(),
-        })
-        .collect::<Vec<_>>();
-    entries.sort_by(|left, right| {
-        left.tree_id
-            .cmp(&right.tree_id)
-            .then(left.name.cmp(&right.name))
-    });
-    UiSkillsSnapshot { entries }
+            prerequisite_names,
+            attribute_requirements: definition.attribute_requirements.clone(),
+        });
+    }
+
+    let mut tree_views = trees_by_id.into_values().collect::<Vec<_>>();
+    for tree in &mut tree_views {
+        tree.entries.sort_by(|left, right| {
+            right
+                .learned_level
+                .cmp(&left.learned_level)
+                .then(left.name.cmp(&right.name))
+        });
+    }
+    tree_views.sort_by(|left, right| left.tree_name.cmp(&right.tree_name));
+
+    UiSkillsSnapshot { trees: tree_views }
 }
 
 pub fn crafting_snapshot(

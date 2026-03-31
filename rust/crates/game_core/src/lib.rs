@@ -21,14 +21,14 @@ pub use actor::{
 };
 pub use building::{
     generate_building_layout, BuildingLayoutError, GeneratedBuildingDebugState,
-    GeneratedBuildingLayout, GeneratedBuildingStory, GeneratedOutlineEdge, GeneratedRoom,
-    GeneratedStairConnection,
+    GeneratedBuildingLayout, GeneratedBuildingStory, GeneratedDoorDebugState, GeneratedOutlineEdge,
+    GeneratedRoom, GeneratedStairConnection,
 };
 pub use building_geometry::{
-    triangulate_polygon, BuildingFootprint2d, BuildingGeometryValidationError, DoorOpeningKind,
-    GeneratedBuildingGeometryDebugState, GeneratedDoorOpening, GeneratedRoomPolygon,
-    GeneratedWalkablePolygons, GeneratedWallPolygons, GeneratedWallStroke, GeometryAxis,
-    GeometryMultiPolygon2, GeometryPoint2, GeometryPolygon2, GeometrySegment2,
+    triangulate_polygon, triangulate_polygon_with_holes, BuildingFootprint2d,
+    BuildingGeometryValidationError, DoorOpeningKind, GeneratedDoorOpening, GeneratedRoomPolygon,
+    GeneratedWalkablePolygons, GeometryAxis, GeometryMultiPolygon2, GeometryPoint2,
+    GeometryPolygon2, GeometrySegment2,
 };
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
 pub use economy::{
@@ -65,7 +65,7 @@ pub use runtime::{
 pub use simulation::{
     ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
-    SimulationSnapshot,
+    SimulationSnapshot, SkillActivationResult, SkillRuntimeState,
 };
 pub use survival::{
     ActorSurvivalState, CraftingCheck, CraftingResult, MissingInventoryEntry,

@@ -774,6 +774,36 @@ fn runtime_event_envelope(sequence: u64, event: SimulationEvent) -> RuntimeEvent
             payload: json!({ "actionType": format!("{action_type:?}"), "result": result }),
             ..RuntimeEventEnvelope::default()
         },
+        SimulationEvent::SkillActivated {
+            actor_id,
+            skill_id,
+            target,
+            hit_actor_ids,
+        } => RuntimeEventEnvelope {
+            sequence,
+            event_type: "skill_activated".into(),
+            actor_id: Some(actor_id),
+            payload: json!({
+                "skillId": skill_id,
+                "target": target,
+                "hitActorIds": hit_actor_ids
+            }),
+            ..RuntimeEventEnvelope::default()
+        },
+        SimulationEvent::SkillActivationFailed {
+            actor_id,
+            skill_id,
+            reason,
+        } => RuntimeEventEnvelope {
+            sequence,
+            event_type: "skill_activation_failed".into(),
+            actor_id: Some(actor_id),
+            payload: json!({
+                "skillId": skill_id,
+                "reason": reason
+            }),
+            ..RuntimeEventEnvelope::default()
+        },
         SimulationEvent::WorldCycleCompleted => RuntimeEventEnvelope {
             sequence,
             event_type: "world_cycle_completed".into(),
@@ -1258,6 +1288,7 @@ fn require_shops(
 fn economy_protocol_error(operation: &str, error: EconomyRuntimeError) -> ProtocolError {
     let code = match error {
         EconomyRuntimeError::UnknownActor { .. } => "unknown_actor",
+        EconomyRuntimeError::ActionRejected { ref reason } => reason.as_str(),
         EconomyRuntimeError::UnknownItem { .. } => "unknown_item",
         EconomyRuntimeError::UnknownSkill { .. } => "unknown_skill",
         EconomyRuntimeError::UnknownRecipe { .. } => "unknown_recipe",
@@ -1368,6 +1399,12 @@ mod tests {
             player,
             npc,
         )
+    }
+
+    fn advance_runtime_turn(runtime: &mut ServerSimulationRuntime) {
+        while runtime.0.has_pending_progression() {
+            runtime.0.advance_pending_progression();
+        }
     }
 
     fn sample_runtime_with_map() -> (ServerSimulationRuntime, game_data::ActorId) {
@@ -1736,6 +1773,7 @@ mod tests {
         )
         .expect("equip should succeed");
         assert!(matches!(equip, ServerMessage::ItemEquipped(_)));
+        advance_runtime_turn(&mut runtime);
 
         let reload = handle_client_message_with_definitions(
             &mut runtime,
@@ -1751,6 +1789,7 @@ mod tests {
             ServerMessage::WeaponReloaded(payload) => assert_eq!(payload.ammo_loaded, 6),
             other => panic!("unexpected server message: {other:?}"),
         }
+        advance_runtime_turn(&mut runtime);
 
         let learn = handle_client_message_with_definitions(
             &mut runtime,
@@ -1766,6 +1805,7 @@ mod tests {
             ServerMessage::SkillLearned(payload) => assert_eq!(payload.level, 1),
             other => panic!("unexpected server message: {other:?}"),
         }
+        advance_runtime_turn(&mut runtime);
 
         let craft = handle_client_message_with_definitions(
             &mut runtime,
@@ -1784,6 +1824,7 @@ mod tests {
             }
             other => panic!("unexpected server message: {other:?}"),
         }
+        advance_runtime_turn(&mut runtime);
 
         let buy = handle_client_message_with_definitions(
             &mut runtime,
@@ -1801,6 +1842,7 @@ mod tests {
             ServerMessage::ItemBought(payload) => assert_eq!(payload.total_price, 30),
             other => panic!("unexpected server message: {other:?}"),
         }
+        advance_runtime_turn(&mut runtime);
 
         let sell = handle_client_message_with_definitions(
             &mut runtime,
@@ -1818,6 +1860,7 @@ mod tests {
             ServerMessage::ItemSold(payload) => assert_eq!(payload.total_price, 5),
             other => panic!("unexpected server message: {other:?}"),
         }
+        advance_runtime_turn(&mut runtime);
 
         let start_quest = handle_client_message_with_definitions(
             &mut runtime,
@@ -1833,6 +1876,7 @@ mod tests {
             ServerMessage::QuestStarted(payload) => assert!(payload.started),
             other => panic!("unexpected server message: {other:?}"),
         }
+        advance_runtime_turn(&mut runtime);
 
         let unequip = handle_client_message_with_definitions(
             &mut runtime,

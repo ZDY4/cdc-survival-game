@@ -940,11 +940,11 @@ fn default_exterior_door_count() -> u32 {
 }
 
 fn default_wall_thickness() -> f32 {
-    0.08
+    0.6
 }
 
 fn default_wall_height() -> f32 {
-    2.35
+    1.5
 }
 
 fn default_door_width() -> f32 {
@@ -1280,6 +1280,10 @@ fn parse_legacy_interaction_kind(value: &str) -> Option<InteractionOptionKind> {
         "talk" => Some(InteractionOptionKind::Talk),
         "attack" => Some(InteractionOptionKind::Attack),
         "pickup" => Some(InteractionOptionKind::Pickup),
+        "open_door" => Some(InteractionOptionKind::OpenDoor),
+        "close_door" => Some(InteractionOptionKind::CloseDoor),
+        "unlock_door" => Some(InteractionOptionKind::UnlockDoor),
+        "pick_lock_door" => Some(InteractionOptionKind::PickLockDoor),
         "enter_subscene" => Some(InteractionOptionKind::EnterSubscene),
         "enter_overworld" => Some(InteractionOptionKind::EnterOverworld),
         "exit_to_outdoor" => Some(InteractionOptionKind::ExitToOutdoor),
@@ -1328,7 +1332,12 @@ fn validate_interaction_option(
                 });
             }
         }
-        InteractionOptionKind::Talk | InteractionOptionKind::Attack => {}
+        InteractionOptionKind::Talk
+        | InteractionOptionKind::Attack
+        | InteractionOptionKind::OpenDoor
+        | InteractionOptionKind::CloseDoor
+        | InteractionOptionKind::UnlockDoor
+        | InteractionOptionKind::PickLockDoor => {}
     }
 
     Ok(())

@@ -142,6 +142,8 @@ impl RecipeCraftCheck {
 pub enum EconomyRuntimeError {
     #[error("unknown actor {actor_id:?}")]
     UnknownActor { actor_id: ActorId },
+    #[error("action rejected: {reason}")]
+    ActionRejected { reason: String },
     #[error("unknown item {item_id}")]
     UnknownItem { item_id: u32 },
     #[error("unknown skill {skill_id}")]

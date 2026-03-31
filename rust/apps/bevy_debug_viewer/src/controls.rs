@@ -1,25 +1,31 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::log::info;
 use bevy::prelude::*;
+use bevy::ui::{ComputedNode, RelativeCursorPosition, UiGlobalTransform};
 use game_bevy::{SkillDefinitions, UiHotbarState, UiMenuPanel, UiMenuState, UiModalState};
-use game_data::{ActorId, ActorSide, InteractionOptionId, InteractionPrompt, InteractionTargetId};
+use game_data::{
+    ActorId, ActorSide, GridCoord, InteractionOptionId, InteractionOptionKind, InteractionPrompt,
+    InteractionTargetId, SkillTargetRequest,
+};
 
 use crate::console::ViewerConsoleState;
 use crate::dialogue::{
     advance_dialogue, apply_interaction_result, current_dialogue_has_options, current_dialogue_node,
 };
-use crate::game_ui::activate_hotbar_slot;
+use crate::game_ui::{activate_hotbar_slot, HOTBAR_DOCK_HEIGHT, HOTBAR_DOCK_WIDTH};
 use crate::geometry::{
-    actor_at_grid, clamp_camera_pan_offset, cycle_level, grid_bounds, just_pressed_hud_page,
-    level_base_height, map_object_at_grid, pick_grid_from_ray, ray_point_on_horizontal_plane,
-    selected_actor,
+    actor_at_grid, actor_hit_at_ray, clamp_camera_pan_offset, cycle_level, grid_bounds,
+    just_pressed_hud_page, level_base_height, map_object_at_grid, map_object_hit_at_ray,
+    pick_grid_from_ray, ray_point_on_horizontal_plane, selected_actor,
 };
+use crate::hud::set_hud_page;
 use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
-    DialogueChoiceButton, InteractionMenuButton, InteractionMenuState, ViewerActorMotionState,
-    ViewerCamera, ViewerControlMode, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState,
-    ViewerState, ViewerUiSettings,
+    DialogueChoiceButton, InteractionMenuButton, InteractionMenuState, UiMouseBlocker,
+    ViewerActorMotionState, ViewerCamera, ViewerControlMode, ViewerHudPage, ViewerRenderConfig,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
+    ViewerTargetingState, ViewerUiSettings,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,16 +112,12 @@ fn resolve_primary_target_interaction(
     viewer_state: &ViewerState,
     snapshot: &game_core::SimulationSnapshot,
     target_id: InteractionTargetId,
-) -> Option<(ActorId, InteractionPrompt, InteractionOptionId)> {
+) -> Option<(ActorId, InteractionPrompt)> {
     let actor_id = viewer_state.command_actor_id(snapshot)?;
     let prompt = runtime_state
         .runtime
         .query_interaction_prompt(actor_id, target_id)?;
-    let option_id = prompt
-        .primary_option_id
-        .clone()
-        .or_else(|| prompt.options.first().map(|option| option.id.clone()))?;
-    Some((actor_id, prompt, option_id))
+    Some((actor_id, prompt))
 }
 
 fn issue_move_to_grid(
@@ -210,6 +212,249 @@ fn handle_object_primary_click(
     }
 }
 
+pub(crate) fn cancel_targeting(viewer_state: &mut ViewerState, status: impl Into<String>) {
+    viewer_state.targeting_state = None;
+    viewer_state.status_line = status.into();
+}
+
+pub(crate) fn enter_attack_targeting(
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+) -> Result<(), String> {
+    let snapshot = runtime_state.runtime.snapshot();
+    let actor_id = viewer_state
+        .command_actor_id(&snapshot)
+        .ok_or_else(|| "请选择可控制角色".to_string())?;
+    if viewer_state.is_free_observe() {
+        return Err("自由观察模式下无法攻击".to_string());
+    }
+
+    let Some(actor_grid) = runtime_state.runtime.get_actor_grid_position(actor_id) else {
+        return Err("攻击者不存在".to_string());
+    };
+    let attack_range = runtime_state.runtime.get_actor_attack_range(actor_id);
+    let mut valid_grids = std::collections::BTreeSet::new();
+    let mut valid_actor_ids = std::collections::BTreeSet::new();
+    for actor in snapshot
+        .actors
+        .iter()
+        .filter(|actor| actor.side == ActorSide::Hostile)
+    {
+        if actor.grid_position.y != actor_grid.y {
+            continue;
+        }
+        if attack_target_in_range(
+            &runtime_state.runtime,
+            actor_grid,
+            actor.grid_position,
+            attack_range,
+        ) {
+            valid_grids.insert(actor.grid_position);
+            valid_actor_ids.insert(actor.actor_id);
+        }
+    }
+    if valid_actor_ids.is_empty() {
+        return Err("范围内没有可攻击目标".to_string());
+    }
+
+    viewer_state.targeting_state = Some(ViewerTargetingState {
+        actor_id,
+        action: ViewerTargetingAction::Attack,
+        source: ViewerTargetingSource::AttackButton,
+        shape: "single".to_string(),
+        radius: 0,
+        valid_grids,
+        valid_actor_ids,
+        hovered_grid: None,
+        preview_target: None,
+        preview_hit_grids: Vec::new(),
+        preview_hit_actor_ids: Vec::new(),
+        prompt_text: "普通攻击: 左键确认，右键/Esc 取消".to_string(),
+    });
+    viewer_state.status_line = "普通攻击: 选择目标".to_string();
+    Ok(())
+}
+
+pub(crate) fn enter_skill_targeting(
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    skills: &SkillDefinitions,
+    skill_id: &str,
+    source: ViewerTargetingSource,
+) -> Result<(), String> {
+    let snapshot = runtime_state.runtime.snapshot();
+    let actor_id = viewer_state
+        .command_actor_id(&snapshot)
+        .ok_or_else(|| "请选择可控制角色".to_string())?;
+    let Some(actor_grid) = runtime_state.runtime.get_actor_grid_position(actor_id) else {
+        return Err("施法者不存在".to_string());
+    };
+    let Some(skill) = skills.0.get(skill_id) else {
+        return Err(format!("未知技能 {skill_id}"));
+    };
+    let Some(targeting) = skill
+        .activation
+        .as_ref()
+        .and_then(|activation| activation.targeting.as_ref())
+        .filter(|targeting| targeting.enabled)
+    else {
+        return Err(format!("{} 不需要选择目标", skill.name));
+    };
+
+    let valid_grids = collect_valid_target_grids(
+        &runtime_state.runtime,
+        &snapshot,
+        actor_grid,
+        targeting.range_cells,
+    );
+    if valid_grids.is_empty() {
+        return Err(format!("{} 当前没有可选目标格", skill.name));
+    }
+    let valid_actor_ids = snapshot
+        .actors
+        .iter()
+        .filter(|actor| valid_grids.contains(&actor.grid_position))
+        .map(|actor| actor.actor_id)
+        .collect();
+
+    viewer_state.targeting_state = Some(ViewerTargetingState {
+        actor_id,
+        action: ViewerTargetingAction::Skill {
+            skill_id: skill_id.to_string(),
+            skill_name: skill.name.clone(),
+        },
+        source,
+        shape: targeting.shape.trim().to_string(),
+        radius: targeting.radius.max(0),
+        valid_grids,
+        valid_actor_ids,
+        hovered_grid: None,
+        preview_target: None,
+        preview_hit_grids: Vec::new(),
+        preview_hit_actor_ids: Vec::new(),
+        prompt_text: format!("{}: 左键确认，右键/Esc 取消", skill.name),
+    });
+    viewer_state.status_line = format!("{}: 选择目标", skill.name);
+    Ok(())
+}
+
+pub(crate) fn refresh_targeting_preview(
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    hovered_grid: Option<GridCoord>,
+) {
+    let Some(targeting) = viewer_state.targeting_state.as_mut() else {
+        return;
+    };
+    targeting.hovered_grid = hovered_grid;
+    targeting.preview_target = None;
+    targeting.preview_hit_grids.clear();
+    targeting.preview_hit_actor_ids.clear();
+
+    let Some(grid) = hovered_grid.filter(|grid| targeting.valid_grids.contains(grid)) else {
+        return;
+    };
+
+    targeting.preview_hit_grids = affected_grids_for_shape(
+        &runtime_state.runtime,
+        grid,
+        targeting.shape.as_str(),
+        targeting.radius,
+    );
+    targeting.preview_hit_actor_ids = runtime_state
+        .runtime
+        .snapshot()
+        .actors
+        .iter()
+        .filter(|actor| targeting.preview_hit_grids.contains(&actor.grid_position))
+        .map(|actor| actor.actor_id)
+        .collect();
+
+    if targeting.shape == "single" {
+        if let Some(actor) = actor_at_grid(&runtime_state.runtime.snapshot(), grid)
+            .filter(|actor| targeting.valid_actor_ids.contains(&actor.actor_id))
+        {
+            targeting.preview_target = Some(SkillTargetRequest::Actor(actor.actor_id));
+        } else {
+            targeting.preview_target = Some(SkillTargetRequest::Grid(grid));
+        }
+    } else {
+        targeting.preview_target = Some(SkillTargetRequest::Grid(grid));
+    }
+}
+
+fn collect_valid_target_grids(
+    runtime: &game_core::SimulationRuntime,
+    snapshot: &game_core::SimulationSnapshot,
+    actor_grid: GridCoord,
+    range_cells: i32,
+) -> std::collections::BTreeSet<GridCoord> {
+    let grids = snapshot
+        .grid
+        .map_cells
+        .iter()
+        .map(|cell| cell.grid)
+        .filter(|grid| grid.y == actor_grid.y)
+        .filter(|grid| runtime.is_grid_in_bounds(*grid))
+        .filter(|grid| manhattan_distance(actor_grid, *grid) <= range_cells.max(0))
+        .collect::<std::collections::BTreeSet<_>>();
+
+    if grids.is_empty() {
+        std::iter::once(actor_grid)
+            .filter(|grid| runtime.is_grid_in_bounds(*grid))
+            .collect()
+    } else {
+        grids
+    }
+}
+
+fn affected_grids_for_shape(
+    runtime: &game_core::SimulationRuntime,
+    center: GridCoord,
+    shape: &str,
+    radius: i32,
+) -> Vec<GridCoord> {
+    let radius = radius.max(0);
+    let mut grids = Vec::new();
+    for dx in -radius..=radius {
+        for dz in -radius..=radius {
+            let include = match shape {
+                "diamond" => dx.abs() + dz.abs() <= radius,
+                "square" => true,
+                _ => dx == 0 && dz == 0,
+            };
+            if !include {
+                continue;
+            }
+            let grid = GridCoord::new(center.x + dx, center.y, center.z + dz);
+            if runtime.is_grid_in_bounds(grid) {
+                grids.push(grid);
+            }
+        }
+    }
+    if grids.is_empty() {
+        grids.push(center);
+    }
+    grids
+}
+
+fn attack_target_in_range(
+    runtime: &game_core::SimulationRuntime,
+    actor_grid: GridCoord,
+    target_grid: GridCoord,
+    attack_range: f32,
+) -> bool {
+    let actor_world = runtime.grid_to_world(actor_grid);
+    let target_world = runtime.grid_to_world(target_grid);
+    let dx = actor_world.x - target_world.x;
+    let dz = actor_world.z - target_world.z;
+    (dx * dx + dz * dz).sqrt() <= attack_range + 0.05
+}
+
+fn manhattan_distance(left: GridCoord, right: GridCoord) -> i32 {
+    (left.x - right.x).abs() + (left.z - right.z).abs()
+}
+
 pub(crate) fn handle_keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
@@ -222,8 +467,14 @@ pub(crate) fn handle_keyboard_input(
     settings: Res<ViewerUiSettings>,
     skills: Res<SkillDefinitions>,
     console_state: Res<ViewerConsoleState>,
+    scene_kind: Res<ViewerSceneKind>,
 ) {
     if console_state.is_open {
+        clear_world_hover_state(&runtime_state, &mut viewer_state);
+        return;
+    }
+
+    if scene_kind.is_main_menu() {
         return;
     }
 
@@ -233,6 +484,7 @@ pub(crate) fn handle_keyboard_input(
     if (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight))
         && keys.just_pressed(KeyCode::KeyP)
     {
+        viewer_state.targeting_state = None;
         viewer_state.control_mode = viewer_state.control_mode.toggle();
         viewer_state.focused_target = None;
         viewer_state.current_prompt = None;
@@ -245,6 +497,10 @@ pub(crate) fn handle_keyboard_input(
     }
 
     if keys.just_pressed(KeyCode::Escape) {
+        if viewer_state.targeting_state.is_some() {
+            cancel_targeting(&mut viewer_state, "targeting: 已取消");
+            return;
+        }
         if viewer_state.active_dialogue.is_some() {
             viewer_state.active_dialogue = None;
             viewer_state.status_line = "dialogue closed".to_string();
@@ -262,7 +518,7 @@ pub(crate) fn handle_keyboard_input(
             menu_state.active_panel = None;
             viewer_state.status_line = "menu: closed".to_string();
             return;
-        } else if !menu_state.main_menu_open {
+        } else if scene_kind.is_gameplay() {
             menu_state.active_panel = Some(UiMenuPanel::Settings);
             viewer_state.status_line = "menu: settings".to_string();
             return;
@@ -309,6 +565,9 @@ pub(crate) fn handle_keyboard_input(
         ("menu_crafting", UiMenuPanel::Crafting),
     ] {
         if binding_just_pressed(&keys, &settings, action_name) {
+            if viewer_state.targeting_state.is_some() {
+                cancel_targeting(&mut viewer_state, "targeting: 已取消");
+            }
             menu_state.active_panel = if menu_state.active_panel == Some(panel) {
                 None
             } else {
@@ -321,13 +580,19 @@ pub(crate) fn handle_keyboard_input(
         }
     }
 
-    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
     {
         return;
     }
 
     if let Some(slot) = hotbar_slot {
-        activate_hotbar_slot(&mut runtime_state, &skills, &mut hotbar_state, slot);
+        activate_hotbar_slot(
+            &mut runtime_state,
+            &mut viewer_state,
+            &skills,
+            &mut hotbar_state,
+            slot,
+        );
         if let Some(status) = hotbar_state.last_activation_status.clone() {
             viewer_state.status_line = status;
         }
@@ -335,8 +600,7 @@ pub(crate) fn handle_keyboard_input(
     }
 
     if let Some(page) = just_pressed_hud_page(&keys) {
-        viewer_state.hud_page = page;
-        viewer_state.status_line = format!("hud page: {}", page.title());
+        set_hud_page(&mut viewer_state, page);
     }
 
     if keys.just_pressed(KeyCode::KeyH) {
@@ -520,6 +784,7 @@ pub(crate) fn handle_mouse_wheel_zoom(
     menu_state: Res<UiMenuState>,
     modal_state: Res<UiModalState>,
     console_state: Res<ViewerConsoleState>,
+    scene_kind: Res<ViewerSceneKind>,
 ) {
     if console_state.is_open {
         for _ in mouse_wheel_events.read() {}
@@ -531,7 +796,7 @@ pub(crate) fn handle_mouse_wheel_zoom(
         return;
     }
 
-    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
     {
         for _ in mouse_wheel_events.read() {}
         return;
@@ -559,6 +824,15 @@ pub(crate) fn handle_camera_pan(
     window: Single<&Window>,
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
+    ui_blockers: Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<UiMouseBlocker>,
+    >,
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
     render_config: Res<ViewerRenderConfig>,
@@ -566,6 +840,7 @@ pub(crate) fn handle_camera_pan(
     menu_state: Res<UiMenuState>,
     modal_state: Res<UiModalState>,
     console_state: Res<ViewerConsoleState>,
+    scene_kind: Res<ViewerSceneKind>,
 ) {
     if console_state.is_open {
         viewer_state.camera_drag_cursor = None;
@@ -579,7 +854,7 @@ pub(crate) fn handle_camera_pan(
         return;
     }
 
-    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
     {
         viewer_state.camera_drag_cursor = None;
         viewer_state.camera_drag_anchor_world = None;
@@ -597,6 +872,13 @@ pub(crate) fn handle_camera_pan(
         viewer_state.camera_drag_anchor_world = None;
         return;
     };
+    if cursor_over_blocking_ui(cursor_position, &ui_blockers)
+        || cursor_over_hotbar_dock(&window, cursor_position)
+    {
+        viewer_state.camera_drag_cursor = None;
+        viewer_state.camera_drag_anchor_world = None;
+        return;
+    }
 
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
@@ -686,12 +968,22 @@ pub(crate) fn handle_mouse_input(
     window: Single<&Window>,
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
+    ui_blockers: Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<UiMouseBlocker>,
+    >,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     menu_state: Res<UiMenuState>,
     modal_state: Res<UiModalState>,
     console_state: Res<ViewerConsoleState>,
+    scene_kind: Res<ViewerSceneKind>,
 ) {
     if console_state.is_open {
         return;
@@ -700,11 +992,18 @@ pub(crate) fn handle_mouse_input(
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
     let Some(cursor_position) = window.cursor_position() else {
-        viewer_state.hovered_grid = None;
+        clear_world_hover_state(&runtime_state, &mut viewer_state);
         return;
     };
+    if scene_kind.is_main_menu()
+        || cursor_over_blocking_ui(cursor_position, &ui_blockers)
+        || cursor_over_hotbar_dock(&window, cursor_position)
+    {
+        clear_world_hover_state(&runtime_state, &mut viewer_state);
+        return;
+    }
     let Ok(ray) = camera.viewport_to_world(&camera_transform, cursor_position) else {
-        viewer_state.hovered_grid = None;
+        clear_world_hover_state(&runtime_state, &mut viewer_state);
         return;
     };
     let snapshot = runtime_state.runtime.snapshot();
@@ -717,13 +1016,36 @@ pub(crate) fn handle_mouse_input(
         snapshot.grid.grid_size,
         pick_plane_height,
     ) else {
-        viewer_state.hovered_grid = None;
+        clear_world_hover_state(&runtime_state, &mut viewer_state);
         return;
     };
     viewer_state.hovered_grid = Some(grid);
+    refresh_targeting_preview(&runtime_state, &mut viewer_state, Some(grid));
 
-    let actor_at_cursor = actor_at_grid(&snapshot, grid);
-    let map_object_at_cursor = map_object_at_grid(&snapshot, grid);
+    let ray_actor_hit =
+        actor_hit_at_ray(&snapshot, viewer_state.current_level, ray, *render_config);
+    let ray_object_hit =
+        map_object_hit_at_ray(&snapshot, viewer_state.current_level, ray, *render_config);
+    let actor_at_cursor = match (&ray_actor_hit, &ray_object_hit) {
+        (Some((actor, actor_fraction)), Some((_, object_fraction)))
+            if actor_fraction <= object_fraction =>
+        {
+            Some(actor.clone())
+        }
+        (Some((actor, _)), None) => Some(actor.clone()),
+        (None, None) => actor_at_grid(&snapshot, grid),
+        _ => None,
+    };
+    let map_object_at_cursor = match (&ray_actor_hit, &ray_object_hit) {
+        (Some((_, actor_fraction)), Some((object, object_fraction)))
+            if object_fraction < actor_fraction =>
+        {
+            Some(object.clone())
+        }
+        (None, Some((object, _))) => Some(object.clone()),
+        (None, None) => map_object_at_grid(&snapshot, grid),
+        _ => None,
+    };
     let cursor_target =
         cursor_interaction_target(actor_at_cursor.as_ref(), map_object_at_cursor.as_ref());
 
@@ -743,7 +1065,7 @@ pub(crate) fn handle_mouse_input(
         return;
     }
 
-    if menu_state.main_menu_open || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
     {
         return;
     }
@@ -777,6 +1099,70 @@ pub(crate) fn handle_mouse_input(
     {
         viewer_state.status_line = "interaction: actor is busy".to_string();
         return;
+    }
+
+    if let Some(targeting) = viewer_state.targeting_state.clone() {
+        if buttons.just_pressed(MouseButton::Right) {
+            cancel_targeting(
+                &mut viewer_state,
+                format!("{}: 已取消", targeting.action.label()),
+            );
+            return;
+        }
+
+        if buttons.just_pressed(MouseButton::Left) {
+            let Some(target_request) = targeting.preview_target else {
+                viewer_state.status_line =
+                    format!("{}: 当前悬停位置不可作为目标", targeting.action.label());
+                return;
+            };
+
+            let status = match targeting.action {
+                ViewerTargetingAction::Attack => match target_request {
+                    SkillTargetRequest::Actor(target_actor) => {
+                        let result = runtime_state
+                            .runtime
+                            .perform_attack(targeting.actor_id, target_actor);
+                        format!(
+                            "普通攻击: {}",
+                            game_core::runtime::action_result_status(&result)
+                        )
+                    }
+                    SkillTargetRequest::Grid(_) => "普通攻击: 请选择敌人目标".to_string(),
+                },
+                ViewerTargetingAction::Skill {
+                    skill_id,
+                    skill_name,
+                } => {
+                    let result = runtime_state.runtime.activate_skill(
+                        targeting.actor_id,
+                        &skill_id,
+                        target_request,
+                    );
+                    if result.action_result.success {
+                        format!(
+                            "{}: {}",
+                            skill_name,
+                            game_core::runtime::action_result_status(&result.action_result)
+                        )
+                    } else {
+                        format!(
+                            "{}: {}",
+                            skill_name,
+                            result
+                                .failure_reason
+                                .clone()
+                                .or(result.action_result.reason.clone())
+                                .unwrap_or_else(|| "failed".to_string())
+                        )
+                    }
+                }
+            };
+
+            viewer_state.targeting_state = None;
+            viewer_state.status_line = status;
+            return;
+        }
     }
 
     if buttons.just_pressed(MouseButton::Left) {
@@ -883,6 +1269,43 @@ pub(crate) fn handle_mouse_input(
     }
 }
 
+fn cursor_over_blocking_ui(
+    cursor_position: Vec2,
+    ui_blockers: &Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<UiMouseBlocker>,
+    >,
+) -> bool {
+    ui_blockers
+        .iter()
+        .any(|(computed_node, transform, cursor, visibility)| {
+            if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden) {
+                return false;
+            }
+            cursor.is_some_and(RelativeCursorPosition::cursor_over)
+                || computed_node.contains_point(*transform, cursor_position)
+        })
+}
+
+fn clear_world_hover_state(runtime_state: &ViewerRuntimeState, viewer_state: &mut ViewerState) {
+    viewer_state.hovered_grid = None;
+    refresh_targeting_preview(runtime_state, viewer_state, None);
+}
+
+fn cursor_over_hotbar_dock(window: &Window, cursor_position: Vec2) -> bool {
+    let left = (window.width() - HOTBAR_DOCK_WIDTH) * 0.5;
+    let top = window.height() - HOTBAR_DOCK_HEIGHT;
+    cursor_position.x >= left
+        && cursor_position.x <= left + HOTBAR_DOCK_WIDTH
+        && cursor_position.y >= top
+        && cursor_position.y <= window.height()
+}
+
 fn execute_primary_target_interaction(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
@@ -891,7 +1314,7 @@ fn execute_primary_target_interaction(
     target_summary: String,
     input_source: &'static str,
 ) -> bool {
-    let Some((actor_id, prompt, option_id)) = resolve_primary_target_interaction(
+    let Some((actor_id, prompt)) = resolve_primary_target_interaction(
         runtime_state,
         viewer_state,
         snapshot,
@@ -900,6 +1323,17 @@ fn execute_primary_target_interaction(
         viewer_state.interaction_menu = None;
         viewer_state.status_line =
             format!("focused {target_summary} with no available interactions");
+        return false;
+    };
+    let Some(option_id) = prompt.primary_option_id.clone() else {
+        viewer_state.focused_target = Some(target_id);
+        viewer_state.current_prompt = Some(prompt.clone());
+        viewer_state.interaction_menu = None;
+        viewer_state.status_line = if prompt_has_locked_door_options(&prompt) {
+            "interaction: door is locked".to_string()
+        } else {
+            format!("focused {target_summary} with no primary interaction")
+        };
         return false;
     };
     viewer_state.focused_target = Some(target_id.clone());
@@ -915,6 +1349,15 @@ fn execute_primary_target_interaction(
     );
     execute_target_interaction_option(runtime_state, viewer_state, target_id, option_id);
     true
+}
+
+fn prompt_has_locked_door_options(prompt: &InteractionPrompt) -> bool {
+    prompt.options.iter().any(|option| {
+        matches!(
+            option.kind,
+            InteractionOptionKind::UnlockDoor | InteractionOptionKind::PickLockDoor
+        )
+    }) && prompt.primary_option_id.is_none()
 }
 
 fn focus_target_and_query_prompt(
@@ -1189,15 +1632,19 @@ fn interaction_target_name(viewer_state: &ViewerState, target_id: &InteractionTa
 #[cfg(test)]
 mod tests {
     use super::{
-        clear_pending_post_cancel_turn_policy, handle_object_primary_click,
+        clear_pending_post_cancel_turn_policy, handle_keyboard_input, handle_object_primary_click,
         manual_pan_offset_from_follow_focus, post_cancel_turn_policy_for_context,
         request_cancel_pending_movement, CancelMovementContext, PostCancelTurnPolicy,
     };
+    use crate::console::ViewerConsoleState;
     use crate::geometry::{clamp_camera_pan_offset, grid_bounds, selected_actor};
     use crate::state::{
-        ViewerActorMotionState, ViewerRenderConfig, ViewerRuntimeState, ViewerState,
+        ViewerActorMotionState, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
+        ViewerState, ViewerUiSettings,
     };
+    use bevy::prelude::*;
     use game_bevy::SettlementDebugSnapshot;
+    use game_bevy::{SkillDefinitions, UiHotbarState, UiMenuPanel, UiMenuState, UiModalState};
     use game_core::{create_demo_runtime, MapObjectDebugState};
     use game_data::{ActorSide, GridCoord, MapObjectFootprint, MapObjectKind, MapRotation};
 
@@ -1385,5 +1832,59 @@ mod tests {
         assert!(runtime_state.runtime.pending_movement().is_some());
         assert!(viewer_state.status_line.starts_with("move:"));
         assert!(viewer_state.focused_target.is_none());
+    }
+
+    #[test]
+    fn main_menu_scene_ignores_escape_shortcut() {
+        let app = keyboard_input_app(ViewerSceneKind::MainMenu, KeyCode::Escape);
+
+        let menu_state = app.world().resource::<UiMenuState>();
+        assert!(menu_state.active_panel.is_none());
+    }
+
+    #[test]
+    fn main_menu_scene_ignores_gameplay_menu_hotkeys() {
+        let app = keyboard_input_app(ViewerSceneKind::MainMenu, KeyCode::KeyI);
+
+        let menu_state = app.world().resource::<UiMenuState>();
+        assert!(menu_state.active_panel.is_none());
+    }
+
+    #[test]
+    fn gameplay_escape_opens_settings_panel() {
+        let app = keyboard_input_app(ViewerSceneKind::Gameplay, KeyCode::Escape);
+
+        let menu_state = app.world().resource::<UiMenuState>();
+        let viewer_state = app.world().resource::<ViewerState>();
+        assert_eq!(menu_state.active_panel, Some(UiMenuPanel::Settings));
+        assert_eq!(viewer_state.status_line, "menu: settings");
+    }
+
+    fn keyboard_input_app(scene_kind: ViewerSceneKind, key: KeyCode) -> App {
+        let (runtime, _) = create_demo_runtime();
+        let mut app = App::new();
+        app.insert_resource(ButtonInput::<KeyCode>::default())
+            .insert_resource(Time::<()>::default())
+            .insert_resource(ViewerRuntimeState {
+                runtime,
+                recent_events: Vec::new(),
+                ai_snapshot: SettlementDebugSnapshot::default(),
+            })
+            .insert_resource(ViewerState::default())
+            .insert_resource(ViewerRenderConfig::default())
+            .insert_resource(UiMenuState::default())
+            .insert_resource(UiModalState::default())
+            .insert_resource(UiHotbarState::default())
+            .insert_resource(ViewerUiSettings::default())
+            .insert_resource(SkillDefinitions(Default::default()))
+            .insert_resource(ViewerConsoleState::default())
+            .insert_resource(scene_kind)
+            .add_systems(Update, handle_keyboard_input);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(key);
+        app.update();
+        app
     }
 }
