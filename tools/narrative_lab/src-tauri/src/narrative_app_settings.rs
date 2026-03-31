@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 const MAX_RECENT_PATHS: usize = 8;
@@ -136,8 +137,12 @@ pub struct NarrativeAppSettings {
     pub connected_project_root: Option<String>,
     #[serde(default)]
     pub recent_project_roots: Vec<String>,
+    #[serde(default = "default_session_restore_mode")]
+    pub session_restore_mode: String,
     #[serde(default)]
     pub workspace_layouts: HashMap<String, NarrativeWorkspaceLayout>,
+    #[serde(default)]
+    pub workspace_agent_sessions: HashMap<String, Value>,
 }
 
 impl NarrativeAppSettings {
@@ -151,7 +156,10 @@ impl NarrativeAppSettings {
             &self.recent_project_roots,
             self.connected_project_root.as_deref(),
         );
+        self.session_restore_mode = normalize_session_restore_mode(&self.session_restore_mode);
         self.workspace_layouts = normalize_workspace_layouts(self.workspace_layouts);
+        self.workspace_agent_sessions =
+            normalize_workspace_agent_sessions(self.workspace_agent_sessions);
         self
     }
 
@@ -269,7 +277,9 @@ fn infer_default_narrative_app_settings_from_base(base_dir: Option<&Path>) -> Na
         last_workspace: workspace_root.map(to_forward_slashes),
         connected_project_root: project_root.map(to_forward_slashes),
         recent_project_roots: Vec::new(),
+        session_restore_mode: default_session_restore_mode(),
         workspace_layouts: HashMap::new(),
+        workspace_agent_sessions: HashMap::new(),
     }
 }
 
@@ -331,6 +341,19 @@ fn normalize_workspace_layouts(
     normalized
 }
 
+fn normalize_workspace_agent_sessions(values: HashMap<String, Value>) -> HashMap<String, Value> {
+    let mut normalized = HashMap::new();
+    for (workspace_root, payload) in values {
+        let Some(key) = normalize_optional_path(Some(workspace_root.as_str())) else {
+            continue;
+        };
+        if payload.is_object() {
+            normalized.insert(key, payload);
+        }
+    }
+    normalized
+}
+
 fn default_left_sidebar_visible() -> bool {
     true
 }
@@ -369,6 +392,18 @@ fn default_bottom_panel_height() -> i32 {
 
 fn default_bottom_panel_view() -> String {
     "problems".to_string()
+}
+
+fn default_session_restore_mode() -> String {
+    "ask".to_string()
+}
+
+fn normalize_session_restore_mode(value: &str) -> String {
+    match value.trim() {
+        "always" => "always".to_string(),
+        "documents_only" => "documents_only".to_string(),
+        _ => default_session_restore_mode(),
+    }
 }
 
 fn clamp_i32(value: i32, min: i32, max: i32) -> i32 {

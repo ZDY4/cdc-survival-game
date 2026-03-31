@@ -11,6 +11,7 @@ import {
 } from "../../menu/editorCommandRegistry";
 import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
+  AgentActionResult,
   AiChatMessage,
   AiSettings,
   DocumentAgentSession,
@@ -18,10 +19,16 @@ import type {
   NarrativeAppSettings,
   NarrativeDocType,
   NarrativeDocumentPayload,
+  NarrativeRegressionCase,
+  NarrativeRegressionSuiteResult,
   NarrativeDocumentViewMode,
   NarrativeGenerateRequest,
   NarrativeGenerationProgressEvent,
   NarrativeGenerateResponse,
+  NarrativeReviewQueueItem,
+  NarrativeDocumentSummary,
+  NarrativeSessionExportInput,
+  NarrativeSessionExportResult,
   NarrativeWorkspaceLayout,
   NarrativeWorkspacePayload,
   SaveNarrativeDocumentResult,
@@ -40,6 +47,16 @@ import {
   updateDocumentAgentSession,
   type NarrativeTabState,
 } from "./narrativeSessions";
+import {
+  buildReviewQueue,
+  buildVersionSnapshot,
+  buildWorkspaceAgentState,
+  defaultNarrativeAgentStrategy,
+  fromPersistedSessionState,
+  getWorkspacePersistedAgentState,
+  nowIso,
+  snapshotBranch,
+} from "./narrativeAgentState";
 import { docTypeDirectory } from "./narrativeTemplates";
 
 type EditableNarrativeDocument = NarrativeDocumentPayload & {
@@ -69,6 +86,38 @@ const MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_DOCUMENT_PANEL_WIDTH = 360;
 const PANEL_SPLITTER_WIDTH = 12;
 const NARRATIVE_GENERATION_PROGRESS_EVENT = "narrative:generation-progress";
+const NARRATIVE_PROMPT_TEMPLATES = [
+  "先给我 3 个方向，再继续写。",
+  "优先保证设定一致性，再处理语言润色。",
+  "把当前草稿重构成更明确的任务/场景节奏。",
+  "先问我缺失信息，不要直接大改。",
+];
+const NARRATIVE_REGRESSION_CASES: NarrativeRegressionCase[] = [
+  {
+    id: "clarification-missing-brief",
+    label: "缺少核心信息时先提问",
+    prompt: "我要写一个新篇章，但你先别动笔，先告诉我还缺哪些必要信息。",
+    expectedTurnKinds: ["clarification", "options"],
+  },
+  {
+    id: "options-branching",
+    label: "有分叉时给方向",
+    prompt: "基于当前文稿先给我三个截然不同的推进方向，不要直接改正文。",
+    expectedTurnKinds: ["options", "plan"],
+  },
+  {
+    id: "plan-complex-task",
+    label: "复杂任务先给计划",
+    prompt: "把当前文稿拆成一个分步骤执行计划，等我确认后再继续。",
+    expectedTurnKinds: ["plan"],
+  },
+  {
+    id: "final-answer-polish",
+    label: "明确改写时直接产出",
+    prompt: "在保持设定一致的前提下润色当前文稿，并直接给我可保存版本。",
+    expectedTurnKinds: ["final_answer"],
+  },
+];
 
 function snapshotDocument(document: NarrativeDocumentPayload) {
   return JSON.stringify({
@@ -128,6 +177,7 @@ function buildNarrativeChatPrompt(
   input: string,
   history: AiChatMessage[],
   selectedDocument: EditableNarrativeDocument | null,
+  pendingTurnContext?: string,
 ) {
   const sections: string[] = [];
   const turns = history
@@ -147,18 +197,103 @@ function buildNarrativeChatPrompt(
     );
   }
 
+  if (pendingTurnContext?.trim()) {
+    sections.push(pendingTurnContext.trim());
+  }
+
   sections.push(`本次请求：${input.trim()}`);
   return sections.join("\n\n");
 }
 
 function summarizeResponseForChat(response: {
+  assistantMessage: string;
   providerError: string;
   summary: string;
   synthesisNotes: string[];
 }) {
-  const headline = response.providerError.trim() || response.summary.trim() || "AI 已返回结果。";
+  const headline =
+    response.providerError.trim() ||
+    response.assistantMessage.trim() ||
+    response.summary.trim() ||
+    "AI 已返回结果。";
   const notes = response.synthesisNotes.map((note) => note.trim()).filter(Boolean).slice(0, 2);
   return notes.length ? [headline, ...notes].join("\n\n") : headline;
+}
+
+function buildStrategyInstruction(session: DocumentAgentSession) {
+  const intensityLabel =
+    session.strategy.rewriteIntensity === "light"
+      ? "保守改写"
+      : session.strategy.rewriteIntensity === "aggressive"
+        ? "激进重构"
+        : "平衡改写";
+  const priorityLabel =
+    session.strategy.priority === "drama"
+      ? "优先戏剧性"
+      : session.strategy.priority === "speed"
+        ? "优先速度"
+        : "优先一致性";
+  const questionLabel =
+    session.strategy.questionBehavior === "ask_first"
+      ? "信息不足时先提问"
+      : session.strategy.questionBehavior === "direct"
+        ? "尽量直接产出"
+        : "先判断再决定是否提问";
+  return [intensityLabel, priorityLabel, questionLabel].join("；");
+}
+
+function mergeRelatedDocSlugs(
+  activeDocument: EditableNarrativeDocument,
+  selectedContextDocuments: EditableNarrativeDocument[],
+) {
+  const slugs = [...activeDocument.meta.relatedDocs];
+  for (const document of selectedContextDocuments) {
+    if (!slugs.includes(document.meta.slug)) {
+      slugs.push(document.meta.slug);
+    }
+  }
+  return slugs;
+}
+
+function buildPendingTurnContext(session: DocumentAgentSession) {
+  if (session.pendingQuestions.length) {
+    return [
+      "上一轮 AI 正在等待这些补充信息：",
+      ...session.pendingQuestions.map((question, index) => `${index + 1}. ${question.label}`),
+    ].join("\n");
+  }
+
+  if (session.pendingOptions.length) {
+    return [
+      "上一轮 AI 给出的候选方向：",
+      ...session.pendingOptions.map((option, index) => `${index + 1}. ${option.label}：${option.description}`),
+    ].join("\n");
+  }
+
+  if (session.pendingTurnKind === "plan" && session.lastPlan?.length) {
+    return [
+      "上一轮 AI 提出的执行计划：",
+      ...session.lastPlan.map((step, index) => `${index + 1}. ${step.label}`),
+      "如果本轮用户表示继续、确认或补充约束，应基于这个计划继续执行。",
+    ].join("\n");
+  }
+
+  return "";
+}
+
+function responseMetaLabels(response: NarrativeGenerateResponse) {
+  const turnLabelLookup: Record<NarrativeGenerateResponse["turnKind"], string> = {
+    final_answer: "已生成结果",
+    clarification: "等待补充",
+    options: "等待选择",
+    plan: "等待确认计划",
+    blocked: "暂时阻塞",
+  };
+
+  return [
+    response.providerError ? "提供方返回错误" : turnLabelLookup[response.turnKind],
+    response.engineMode === "single_agent" ? "单文档助手" : "多 agent",
+  ];
 }
 
 function assistantMessageIdForRequest(requestId: string) {
@@ -180,6 +315,59 @@ function replaceChatMessage(
   });
 
   return replaced ? nextMessages : [...nextMessages, nextMessage];
+}
+
+function upsertExecutionStep(
+  steps: DocumentAgentSession["executionSteps"],
+  event: NarrativeGenerationProgressEvent,
+) {
+  if (!event.stepId || !event.stepLabel || !event.stepStatus) {
+    return steps;
+  }
+
+  const nextStep = {
+    id: event.stepId,
+    label: event.stepLabel,
+    detail: event.status,
+    status: event.stepStatus,
+    previewText: event.previewText,
+  };
+  const existingIndex = steps.findIndex((step) => step.id === event.stepId);
+  if (existingIndex === -1) {
+    return [...steps, nextStep];
+  }
+
+  const nextSteps = [...steps];
+  nextSteps[existingIndex] = nextStep;
+  return nextSteps;
+}
+
+function sessionStatusFromProgress(event: NarrativeGenerationProgressEvent): DocumentAgentSession["status"] {
+  if (event.stage === "error") {
+    return "error";
+  }
+  if (event.stepId === "review-result") {
+    return event.stepStatus === "completed" ? "completed" : "reviewing_result";
+  }
+  if (event.stepId) {
+    return "executing_step";
+  }
+  return "thinking";
+}
+
+function actionHistoryMessage(result: AgentActionResult) {
+  const lines = [result.summary];
+  if (result.documentSummaries?.length) {
+    lines.push(
+      `涉及文稿：${result.documentSummaries
+        .map((document) => document.title || document.slug)
+        .join("、")}`,
+    );
+  }
+  if (result.document?.meta.title) {
+    lines.push(`目标文稿：${result.document.meta.title}`);
+  }
+  return lines.join("\n");
 }
 
 function extractTitleFromMarkdown(markdown: string, fallback: string) {
@@ -220,6 +408,39 @@ function buildLocalDraft(
     savedSnapshot: "",
     dirty: true,
     isDraft: true,
+  };
+}
+
+function summarizeNarrativeDocumentPayload(
+  document: NarrativeDocumentPayload,
+): NarrativeDocumentSummary {
+  const headings = document.markdown
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("#"))
+    .map((line) => line.replace(/^#+\s*/, "").trim())
+    .filter(Boolean);
+  const excerpt = document.markdown
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("#"))
+    ?.slice(0, 120) ?? "";
+  return {
+    slug: document.meta.slug,
+    title: document.meta.title,
+    headingCount: headings.length,
+    headings,
+    excerpt,
+  };
+}
+
+function toEditableSavedDocument(document: NarrativeDocumentPayload): EditableNarrativeDocument {
+  const savedSnapshot = snapshotDocument(document);
+  return {
+    ...document,
+    savedSnapshot,
+    dirty: false,
+    isDraft: false,
   };
 }
 
@@ -265,6 +486,33 @@ function resolveInitialTabs(
     chatPanelWidth: persistedLayout.chatPanelWidth,
     layoutSnapshot: JSON.stringify(persistedLayout),
   };
+}
+
+function restorePersistedDocumentSessions(
+  appSettings: NarrativeAppSettings,
+  workspace: NarrativeWorkspacePayload,
+  documentKeys: Set<string>,
+) {
+  const persisted = getWorkspacePersistedAgentState(appSettings, workspace.workspaceRoot);
+  if (!persisted) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(persisted.sessions)
+      .filter(([documentKey]) => documentKeys.has(documentKey))
+      .map(([documentKey, snapshot]) => [
+        documentKey,
+        fromPersistedSessionState(snapshot, []),
+      ]),
+  ) as Record<string, DocumentAgentSession>;
+}
+
+function summarizeReviewQueue(queue: NarrativeReviewQueueItem[]) {
+  if (!queue.length) {
+    return "当前没有待审项。";
+  }
+  return queue.map((item) => `${item.title}：${item.description}`).join("\n");
 }
 
 function clampChatPanelWidth(width: number, containerWidth: number) {
@@ -313,6 +561,16 @@ export function NarrativeWorkspace({
   const [searchQuery, setSearchQuery] = useState("");
   const [aiSettings, setAiSettings] = useState<AiSettings>(defaultAiSettings());
   const [saving, setSaving] = useState(false);
+  const [pendingRestoreSessions, setPendingRestoreSessions] = useState<
+    Record<string, DocumentAgentSession> | null
+  >(null);
+  const [restoreStatus, setRestoreStatus] = useState("");
+  const [showBoundaryTips, setShowBoundaryTips] = useState(true);
+  const [regressionStatus, setRegressionStatus] = useState("");
+  const [regressionResult, setRegressionResult] = useState<NarrativeRegressionSuiteResult | null>(
+    null,
+  );
+  const [exportStatus, setExportStatus] = useState("");
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const editorPanelsRef = useRef<HTMLDivElement | null>(null);
   const isResizingPanelsRef = useRef(false);
@@ -321,6 +579,7 @@ export function NarrativeWorkspace({
   const tabStateRef = useRef<NarrativeTabState>(tabState);
   const workspaceRootRef = useRef("");
   const layoutSnapshotRef = useRef("");
+  const agentSnapshotRef = useRef("");
 
   useEffect(() => {
     documentsRef.current = documents;
@@ -337,14 +596,28 @@ export function NarrativeWorkspace({
   useEffect(() => {
     const nextDocuments = hydrateDocuments(workspace.documents);
     const initial = resolveInitialTabs(workspace, appSettings, nextDocuments);
+    const validDocumentKeys = new Set(nextDocuments.map((document) => document.documentKey));
+    const restoredSessions = restorePersistedDocumentSessions(
+      appSettings,
+      workspace,
+      validDocumentKeys,
+    );
+    const hasRestorableSessions = Object.keys(restoredSessions).length > 0;
 
     setDocuments(nextDocuments);
     setTabState(initial.tabState);
     setLeftSidebarCollapsed(initial.leftSidebarCollapsed);
     setChatPanelWidth(initial.chatPanelWidth);
     layoutSnapshotRef.current = initial.layoutSnapshot;
+    agentSnapshotRef.current = JSON.stringify(buildWorkspaceAgentState(restoredSessions));
     setDocumentAgents((current) => {
-      const baseSessions = workspaceRootRef.current === workspace.workspaceRoot ? current : {};
+      const shouldRestore = appSettings.sessionRestoreMode === "always";
+      const baseSessions =
+        workspaceRootRef.current === workspace.workspaceRoot
+          ? current
+          : shouldRestore
+            ? restoredSessions
+            : {};
       const nextSessions = { ...baseSessions };
       for (const documentKey of initial.tabState.openTabs) {
         if (!nextSessions[documentKey]) {
@@ -353,6 +626,14 @@ export function NarrativeWorkspace({
       }
       return nextSessions;
     });
+    setPendingRestoreSessions(
+      appSettings.sessionRestoreMode === "ask" && hasRestorableSessions ? restoredSessions : null,
+    );
+    setRestoreStatus(
+      hasRestorableSessions
+        ? `检测到 ${Object.keys(restoredSessions).length} 个可恢复的 agent 会话。`
+        : "",
+    );
     workspaceRootRef.current = workspace.workspaceRoot;
   }, [appSettings, workspace]);
 
@@ -430,6 +711,9 @@ export function NarrativeWorkspace({
               matched = true;
               nextSessions = updateDocumentAgentSession(nextSessions, documentKey, (currentSession) => ({
                 ...currentSession,
+                status: sessionStatusFromProgress(payload),
+                executionSteps: upsertExecutionStep(currentSession.executionSteps, payload),
+                currentStepId: payload.stepStatus === "completed" ? currentSession.currentStepId : payload.stepId ?? currentSession.currentStepId,
                 chatMessages: replaceChatMessage(currentSession.chatMessages, assistantMessageId, {
                   id: assistantMessageId,
                   role: "assistant",
@@ -504,6 +788,45 @@ export function NarrativeWorkspace({
   ]);
 
   useEffect(() => {
+    if (!canPersist || !workspace.workspaceRoot.trim()) {
+      return;
+    }
+
+    const persistedAgentState = buildWorkspaceAgentState(documentAgents);
+    const serialized = JSON.stringify(persistedAgentState);
+    if (serialized === agentSnapshotRef.current) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void onSaveAppSettings({
+        ...appSettings,
+        workspaceAgentSessions: {
+          ...(appSettings.workspaceAgentSessions ?? {}),
+          [workspace.workspaceRoot]: persistedAgentState,
+        },
+      })
+        .then(() => {
+          agentSnapshotRef.current = serialized;
+        })
+        .catch((error) => {
+          onStatusChange(`保存 Narrative Lab agent 会话失败：${String(error)}`);
+        });
+    }, 260);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    appSettings,
+    canPersist,
+    documentAgents,
+    onSaveAppSettings,
+    onStatusChange,
+    workspace.workspaceRoot,
+  ]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const modifier = event.ctrlKey || event.metaKey;
       if (!modifier) {
@@ -554,6 +877,27 @@ export function NarrativeWorkspace({
   const activeSession = activeDocument
     ? documentAgents[activeDocument.documentKey] ?? createDocumentAgentSession()
     : null;
+  const pendingQuestions = activeSession?.pendingQuestions ?? [];
+  const pendingOptions = activeSession?.pendingOptions ?? [];
+  const pendingActions = activeSession?.pendingActionRequests ?? [];
+  const activeReviewQueue = activeSession?.reviewQueue ?? [];
+  const latestPlan = activeSession?.lastPlan ?? [];
+  const latestTurnKind = activeSession?.lastResponse?.turnKind ?? null;
+  const selectedContextDocuments = activeSession
+    ? documents.filter(
+        (document) =>
+          document.documentKey !== activeDocument?.documentKey &&
+          activeSession.selectedContextDocKeys.includes(document.documentKey),
+      )
+    : [];
+  const composerPlaceholder =
+    activeSession?.status === "waiting_user" && pendingQuestions.length
+      ? pendingQuestions[0]?.placeholder?.trim() || "先回答上面的问题，我会继续推进。"
+      : activeSession?.status === "waiting_user" && pendingOptions.length
+        ? "也可以直接点上面的方向按钮，或补充你想要的版本。"
+        : activeSession?.status === "waiting_user" && activeSession.pendingTurnKind === "plan"
+          ? "如果认可这个计划，可以直接回复“继续”或补充新的约束。"
+        : "像聊天一样告诉 AI 你的修改或新文档需求。Enter 发送，Shift+Enter 换行。";
   const filteredDocuments = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) {
@@ -624,6 +968,470 @@ export function NarrativeWorkspace({
   function openDocument(documentKey: string) {
     setTabState((current) => openNarrativeTab(current, documentKey));
     setDocumentAgents((current) => ensureDocumentAgentSession(current, documentKey));
+  }
+
+  function restorePersistedAgentSessions() {
+    if (!pendingRestoreSessions) {
+      return;
+    }
+    setDocumentAgents((current) => {
+      const next = { ...current };
+      for (const [documentKey, session] of Object.entries(pendingRestoreSessions)) {
+        next[documentKey] = {
+          ...session,
+          busy: false,
+          inflightRequestId: null,
+          reviewQueue: buildReviewQueue(session),
+        };
+      }
+      return next;
+    });
+    setPendingRestoreSessions(null);
+    setRestoreStatus("已恢复上次 Narrative Lab agent 会话。");
+    onStatusChange("已恢复上次 Narrative Lab agent 会话。");
+  }
+
+  function skipPersistedAgentSessions() {
+    setPendingRestoreSessions(null);
+    setRestoreStatus("本次仅恢复文档，不恢复 AI 会话。");
+    onStatusChange("本次仅恢复文档，不恢复 AI 会话。");
+  }
+
+  function toggleContextDocument(documentKey: string) {
+    if (!activeDocument) {
+      return;
+    }
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const selected = session.selectedContextDocKeys.includes(documentKey)
+          ? session.selectedContextDocKeys.filter((entry) => entry !== documentKey)
+          : [...session.selectedContextDocKeys, documentKey];
+        const nextSession = {
+          ...session,
+          selectedContextDocKeys: selected,
+          updatedAt: nowIso(),
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+  }
+
+  function updateActiveStrategy(
+    key: keyof DocumentAgentSession["strategy"],
+    value: DocumentAgentSession["strategy"][typeof key],
+  ) {
+    if (!activeDocument) {
+      return;
+    }
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
+        ...session,
+        updatedAt: nowIso(),
+        strategy: {
+          ...session.strategy,
+          [key]: value,
+        },
+      })),
+    );
+  }
+
+  function renameCurrentSession() {
+    if (!activeDocument || !activeSession) {
+      return;
+    }
+    const nextTitle = window.prompt("输入当前会话名称", activeSession.sessionTitle)?.trim();
+    if (!nextTitle) {
+      return;
+    }
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
+        ...session,
+        sessionTitle: nextTitle,
+        updatedAt: nowIso(),
+      })),
+    );
+    onStatusChange(`已将当前会话重命名为《${nextTitle}》。`);
+  }
+
+  function forkCurrentSession() {
+    if (!activeDocument || !activeSession) {
+      return;
+    }
+    const baseTitle = activeSession.sessionTitle || "当前会话";
+    const nextTitle =
+      window.prompt("输入新分支会话名称", `${baseTitle} 分支`)?.trim() || `${baseTitle} 分支`;
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const savedBranch = snapshotBranch(session, session.sessionTitle, false);
+        const nextSession = {
+          ...session,
+          sessionId: `${session.sessionId}-fork-${Date.now()}`,
+          sessionTitle: nextTitle,
+          branchOfSessionId: session.sessionId,
+          updatedAt: nowIso(),
+          savedBranches: [...session.savedBranches, savedBranch],
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange(`已基于当前会话创建分支《${nextTitle}》。`);
+  }
+
+  function archiveCurrentSession() {
+    if (!activeDocument || !activeSession) {
+      return;
+    }
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const archivedBranch = snapshotBranch(session, session.sessionTitle, true);
+        return createDocumentAgentSession({
+          mode: session.mode,
+          documentViewMode: session.documentViewMode,
+          savedBranches: [...session.savedBranches, archivedBranch],
+        });
+      }),
+    );
+    onStatusChange("已归档当前会话，并为该文档开启一条新的空白会话。");
+  }
+
+  function restoreSavedBranch(branchId: string) {
+    if (!activeDocument || !activeSession) {
+      return;
+    }
+    const branch = activeSession.savedBranches.find((entry) => entry.id === branchId);
+    if (!branch) {
+      return;
+    }
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...fromPersistedSessionState(branch.snapshot, session.savedBranches),
+          sessionTitle: branch.title,
+          updatedAt: nowIso(),
+          savedBranches: session.savedBranches,
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange(`已恢复会话分支《${branch.title}》。`);
+  }
+
+  function clearPendingActionRequests() {
+    if (!activeDocument) {
+      return;
+    }
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...session,
+          pendingActionRequests: [],
+          updatedAt: nowIso(),
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange("已清空待批准动作。");
+  }
+
+  async function retryLastTurn() {
+    if (!activeSession) {
+      return;
+    }
+    const lastUserMessage = [...activeSession.chatMessages]
+      .reverse()
+      .find((message) => message.role === "user");
+    if (!lastUserMessage) {
+      onStatusChange("当前没有可重试的上一轮用户输入。");
+      return;
+    }
+    await runGeneration(lastUserMessage.content);
+  }
+
+  async function retryCurrentStep() {
+    await retryLastTurn();
+  }
+
+  async function approveAllPendingActions() {
+    if (!activeSession?.pendingActionRequests.length) {
+      return;
+    }
+    for (const action of [...activeSession.pendingActionRequests]) {
+      // eslint-disable-next-line no-await-in-loop
+      await approveActionRequest(action.id);
+    }
+  }
+
+  function rejectAllPendingActions() {
+    if (!activeSession?.pendingActionRequests.length) {
+      return;
+    }
+    for (const action of [...activeSession.pendingActionRequests]) {
+      rejectActionRequest(action.id);
+    }
+  }
+
+  async function runRegressionSuite() {
+    if (!activeDocument || !activeSession) {
+      onStatusChange("请先打开一个文档，再运行 Narrative Lab 回归验证。");
+      return;
+    }
+
+    setRegressionResult(null);
+    setRegressionStatus("正在运行 Narrative Lab 行为回归验证...");
+    const relatedDocSlugs = mergeRelatedDocSlugs(activeDocument, selectedContextDocuments);
+    const results: NarrativeRegressionSuiteResult["results"] = [];
+
+    try {
+      for (const caseItem of NARRATIVE_REGRESSION_CASES) {
+        const request: NarrativeGenerateRequest = {
+          requestId: `regression-${caseItem.id}-${Date.now()}`,
+          docType: activeDocument.meta.docType,
+          targetSlug: activeDocument.meta.slug,
+          action: "revise_document",
+          userPrompt: buildNarrativeChatPrompt(
+            caseItem.prompt,
+            [],
+            activeDocument,
+            `回归验证要求：仅判断最合适的 turn_kind，避免受历史对话干扰。`,
+          ),
+          editorInstruction: `Regression suite\n${buildStrategyInstruction(activeSession)}`,
+          currentMarkdown: activeDocument.markdown,
+          relatedDocSlugs: relatedDocSlugs,
+          derivedTargetDocType: null,
+        };
+        // eslint-disable-next-line no-await-in-loop
+        const response = await invokeCommand<NarrativeGenerateResponse>(
+          "revise_narrative_draft",
+          {
+            workspaceRoot: workspace.workspaceRoot,
+            projectRoot: workspace.connectedProjectRoot ?? null,
+            request,
+          },
+        );
+        results.push({
+          id: caseItem.id,
+          label: caseItem.label,
+          expectedTurnKinds: caseItem.expectedTurnKinds,
+          actualTurnKind: response.turnKind,
+          ok: caseItem.expectedTurnKinds.includes(response.turnKind),
+          summary:
+            response.summary.trim() ||
+            response.assistantMessage.trim() ||
+            response.providerError.trim() ||
+            "无摘要",
+        });
+      }
+
+      const ok = results.every((item) => item.ok);
+      const summary = ok
+        ? `回归验证通过，共 ${results.length} 项。`
+        : `回归验证发现 ${results.filter((item) => !item.ok).length} 项漂移。`;
+      setRegressionResult({ ok, results, summary });
+      setRegressionStatus(summary);
+      onStatusChange(summary);
+    } catch (error) {
+      const message = `运行 Narrative Lab 回归验证失败：${String(error)}`;
+      setRegressionStatus(message);
+      onStatusChange(message);
+    }
+  }
+
+  async function exportCurrentSession() {
+    if (!activeDocument || !activeSession) {
+      onStatusChange("请先打开一个文档，再导出 Narrative Lab 会话。");
+      return;
+    }
+
+    const input: NarrativeSessionExportInput = {
+      sessionId: activeSession.sessionId,
+      sessionTitle: activeSession.sessionTitle || "当前会话",
+      workspaceName: workspace.workspaceName,
+      activeDocument,
+      selectedContextDocuments,
+      strategySummary: buildStrategyInstruction(activeSession),
+      latestTurnKind: activeSession.lastResponse?.turnKind ?? null,
+      latestSummary:
+        activeSession.lastResponse?.summary ||
+        activeSession.lastResponse?.assistantMessage ||
+        "",
+      latestDraftMarkdown: activeSession.lastResponse?.draftMarkdown ?? "",
+      sourceDocumentKeys: activeSession.lastResponse?.sourceDocumentKeys ?? [activeDocument.meta.slug],
+      provenanceRefs: activeSession.lastResponse?.provenanceRefs ?? [],
+      planSteps: latestPlan.map((step) => `${step.label} [${step.status}]`),
+      reviewQueue: activeReviewQueue.map(
+        (item) => `${item.title} [${item.kind} / ${item.status}] ${item.description}`,
+      ),
+      pendingActions: pendingActions.map(
+        (action) =>
+          `${action.title} [${action.actionType}${action.previewOnly ? " / preview" : ""}] ${
+            action.description
+          }`,
+      ),
+      actionHistory: activeSession.actionHistory.map(
+        (result) => `${result.status} / ${result.actionType}: ${result.summary}`,
+      ),
+      versionHistory: activeSession.versionHistory.map(
+        (snapshot) => `${snapshot.createdAt} ${snapshot.title}: ${snapshot.summary}`,
+      ),
+      recentMessages: activeSession.chatMessages
+        .slice(-12)
+        .map((message) => `${message.label}(${message.role}): ${message.content}`),
+    };
+
+    try {
+      const result = await invokeCommand<NarrativeSessionExportResult>(
+        "export_narrative_session_summary",
+        {
+          workspaceRoot: workspace.workspaceRoot,
+          input,
+        },
+      );
+      setExportStatus(`${result.summary} ${result.exportPath}`);
+      onStatusChange(`${result.summary} ${result.exportPath}`);
+    } catch (error) {
+      const message = `导出 Narrative Lab 会话失败：${String(error)}`;
+      setExportStatus(message);
+      onStatusChange(message);
+    }
+  }
+
+  function reviewDerivedDocument(slug: string) {
+    const document = documentsRef.current.find((entry) => entry.meta.slug === slug);
+    if (!document) {
+      onStatusChange(`未找到待审派生文稿：${slug}`);
+      return;
+    }
+    openDocument(document.documentKey);
+    onStatusChange(`已打开派生文稿《${document.meta.title || document.meta.slug}》进行回看。`);
+  }
+
+  function markDerivedDocumentQueueItem(
+    slug: string,
+    outcome: "approved" | "rejected",
+  ) {
+    if (!activeDocument) {
+      return;
+    }
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const target = session.pendingDerivedDocuments.find((item) => item.slug === slug);
+        if (!target) {
+          return session;
+        }
+        const tone: AiChatMessage["tone"] =
+          outcome === "approved" ? "success" : "warning";
+        const nextSession = {
+          ...session,
+          updatedAt: nowIso(),
+          pendingDerivedDocuments: session.pendingDerivedDocuments.filter((item) => item.slug !== slug),
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-derived-${outcome}-${slug}-${Date.now()}`,
+              role: "context" as const,
+              label: "系统",
+                content:
+                  outcome === "approved"
+                    ? `已将派生文稿《${target.title || target.slug}》标记为已审阅。`
+                    : `已将派生文稿《${target.title || target.slug}》从待审列表移除。`,
+                tone,
+              },
+            ],
+          };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange(
+      outcome === "approved"
+        ? `已完成派生文稿 ${slug} 的审阅。`
+        : `已将派生文稿 ${slug} 从待审列表移除。`,
+    );
+  }
+
+  function reviewNextDerivedDocument() {
+    const nextSlug = activeSession?.pendingDerivedDocuments[0]?.slug;
+    if (!nextSlug) {
+      onStatusChange("当前没有待回看的派生文稿。");
+      return;
+    }
+    reviewDerivedDocument(nextSlug);
+  }
+
+  function approveAllDerivedDocuments() {
+    if (!activeDocument || !activeSession?.pendingDerivedDocuments.length) {
+      return;
+    }
+    const count = activeSession.pendingDerivedDocuments.length;
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...session,
+          updatedAt: nowIso(),
+          pendingDerivedDocuments: [],
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-derived-approved-all-${Date.now()}`,
+              role: "context" as const,
+              label: "系统",
+              content: `已批量完成 ${count} 份派生文稿的审阅。`,
+              tone: "success" as const,
+            },
+          ],
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange(`已批量完成 ${count} 份派生文稿的审阅。`);
+  }
+
+  function rejectAllDerivedDocuments() {
+    if (!activeDocument || !activeSession?.pendingDerivedDocuments.length) {
+      return;
+    }
+    const count = activeSession.pendingDerivedDocuments.length;
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...session,
+          updatedAt: nowIso(),
+          pendingDerivedDocuments: [],
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-derived-rejected-all-${Date.now()}`,
+              role: "context" as const,
+              label: "系统",
+              content: `已将 ${count} 份派生文稿从待审列表移除，文稿本身仍保留在工作区。`,
+              tone: "warning" as const,
+            },
+          ],
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange(`已将 ${count} 份派生文稿从待审列表移除。`);
   }
 
   function cycleTabs(direction: 1 | -1) {
@@ -821,13 +1629,13 @@ export function NarrativeWorkspace({
     }
   }
 
-  async function runGeneration() {
+  async function runGeneration(promptOverride?: string) {
     if (!activeDocument || !tabState.activeTabKey || !activeSession) {
       onStatusChange("请先打开一个文档标签，再和 AI 协作。");
       return;
     }
 
-    const submittedPrompt = activeSession.composerText.trim();
+    const submittedPrompt = (promptOverride ?? activeSession.composerText).trim();
     if (!submittedPrompt) {
       onStatusChange("请输入本轮要告诉 AI 的内容。");
       return;
@@ -835,6 +1643,7 @@ export function NarrativeWorkspace({
 
     const activeDocumentKey = activeDocument.documentKey;
     const action = activeSession.mode;
+    const relatedDocSlugs = mergeRelatedDocSlugs(activeDocument, selectedContextDocuments);
     const requestId = `generation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const assistantMessageId = assistantMessageIdForRequest(requestId);
     const userMessage: AiChatMessage = {
@@ -842,7 +1651,13 @@ export function NarrativeWorkspace({
       role: "user",
       label: "你",
       content: submittedPrompt,
-      meta: [action === "create" ? "生成新文档" : "修改当前文档"],
+      meta: [
+        activeSession.status === "waiting_user"
+          ? "补充上一轮信息"
+          : action === "create"
+            ? "生成新文档"
+            : "修改当前文档",
+      ],
       tone: "accent",
     };
 
@@ -854,16 +1669,34 @@ export function NarrativeWorkspace({
           ? `${activeDocument.meta.slug}-ai-${Date.now()}`
           : activeDocument.meta.slug,
       action,
-      userPrompt: buildNarrativeChatPrompt(submittedPrompt, activeSession.chatMessages, activeDocument),
-      editorInstruction: "",
+      userPrompt: buildNarrativeChatPrompt(
+        submittedPrompt,
+        activeSession.chatMessages,
+        activeDocument,
+        buildPendingTurnContext(activeSession),
+      ),
+      editorInstruction: [
+        `Agent strategy: ${buildStrategyInstruction(activeSession)}`,
+        selectedContextDocuments.length
+          ? `Selected context docs: ${selectedContextDocuments
+              .map((document) => document.meta.slug)
+              .join(", ")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
       currentMarkdown: activeDocument.markdown,
-      relatedDocSlugs: activeDocument.meta.relatedDocs,
+      relatedDocSlugs,
       derivedTargetDocType: null,
     };
 
     setDocumentAgents((current) =>
-      updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
-        ...session,
+        updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
+          ...session,
+          updatedAt: nowIso(),
+          status: "thinking",
+          executionSteps: [],
+          currentStepId: null,
         busy: true,
         inflightRequestId: requestId,
         composerText: "",
@@ -896,14 +1729,12 @@ export function NarrativeWorkspace({
         role: "assistant",
         label: "AI",
         content: summarizeResponseForChat(narrativeResponse),
-        meta: [
-          narrativeResponse.providerError ? "提供方返回错误" : "已生成结果",
-          narrativeResponse.engineMode === "single_agent" ? "单文档助手" : "多 agent",
-        ],
+        meta: responseMetaLabels(narrativeResponse),
         tone: narrativeResponse.providerError ? "danger" : "success",
       };
 
       if (
+        narrativeResponse.turnKind === "final_answer" &&
         action === "create" &&
         narrativeResponse.draftMarkdown.trim() &&
         !narrativeResponse.providerError.trim()
@@ -921,28 +1752,46 @@ export function NarrativeWorkspace({
         setDocuments((current) => [draftDocument, ...current]);
         setTabState((current) => openNarrativeTab(current, draftDocument.documentKey));
         setDocumentAgents((current) => {
+          const nextStatus: DocumentAgentSession["status"] = narrativeResponse.requiresUserReply
+            ? "waiting_user"
+            : "completed";
           const next = updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
             ...session,
+            updatedAt: nowIso(),
+            status: nextStatus,
             busy: false,
             inflightRequestId: null,
             lastRequest: request,
             lastResponse: narrativeResponse,
             candidatePatchSet: null,
+            pendingQuestions: narrativeResponse.questions,
+            pendingOptions: narrativeResponse.options,
+            lastPlan: narrativeResponse.planSteps.length ? narrativeResponse.planSteps : session.lastPlan,
+            pendingTurnKind: narrativeResponse.requiresUserReply ? narrativeResponse.turnKind : null,
+            executionSteps: narrativeResponse.executionSteps,
+            currentStepId: narrativeResponse.currentStepId ?? null,
+            pendingActionRequests: narrativeResponse.requestedActions,
             chatMessages: [
               ...replaceChatMessage(session.chatMessages, assistantMessageId, assistantMessage),
               {
                 id: `context-${Date.now()}`,
-                role: "context",
+                role: "context" as const,
                 label: "系统",
                 content: `已为当前会话生成新文档《${newTitle}》。`,
-                tone: "success",
+                tone: "success" as const,
               },
             ],
           }));
+          next[activeDocumentKey] = {
+            ...next[activeDocumentKey],
+            reviewQueue: buildReviewQueue(next[activeDocumentKey]),
+          };
 
           next[draftDocument.documentKey] = {
             ...createDocumentAgentSession(),
             mode: "revise_document",
+            updatedAt: nowIso(),
+            sessionTitle: `来自 ${activeDocument.meta.title || activeDocument.meta.slug} 的派生会话`,
             chatMessages: [
               {
                 id: `seed-${Date.now()}`,
@@ -957,10 +1806,24 @@ export function NarrativeWorkspace({
             lastRequest: request,
             lastResponse: narrativeResponse,
             candidatePatchSet: null,
+            status: "idle" as const,
+            pendingQuestions: [],
+            pendingOptions: [],
+            lastPlan: narrativeResponse.planSteps,
+            pendingTurnKind: null,
+            executionSteps: narrativeResponse.executionSteps,
+            currentStepId: narrativeResponse.currentStepId ?? null,
+            pendingActionRequests: narrativeResponse.requestedActions,
+            reviewQueue: narrativeResponse.reviewQueueItems,
+            selectedContextDocKeys: [activeDocument.documentKey],
             busy: false,
             inflightRequestId: null,
-            documentViewMode: "preview",
+            documentViewMode: "preview" as const,
             composerText: "",
+          } as DocumentAgentSession;
+          next[draftDocument.documentKey] = {
+            ...next[draftDocument.documentKey],
+            reviewQueue: buildReviewQueue(next[draftDocument.documentKey]),
           };
           return next;
         });
@@ -969,6 +1832,7 @@ export function NarrativeWorkspace({
       }
 
       const hasChanges =
+        narrativeResponse.turnKind === "final_answer" &&
         !narrativeResponse.providerError.trim() &&
         normalizeNarrativeMarkdown(activeDocument.markdown) !==
           normalizeNarrativeMarkdown(narrativeResponse.draftMarkdown);
@@ -977,24 +1841,61 @@ export function NarrativeWorkspace({
         : null;
 
       setDocumentAgents((current) =>
-        updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
-          ...session,
-          busy: false,
-          inflightRequestId: null,
-          lastRequest: request,
-          lastResponse: narrativeResponse,
-          candidatePatchSet: patchSet,
-          documentViewMode: "preview",
-          chatMessages: replaceChatMessage(session.chatMessages, assistantMessageId, assistantMessage),
-        })),
+        updateDocumentAgentSession(current, activeDocumentKey, (session) => {
+          const nextStatus: DocumentAgentSession["status"] = narrativeResponse.requiresUserReply
+            ? "waiting_user"
+            : "completed";
+          const nextSession: DocumentAgentSession = {
+            ...session,
+            updatedAt: nowIso(),
+            status: nextStatus,
+            busy: false,
+            inflightRequestId: null,
+            lastRequest: request,
+            lastResponse: narrativeResponse,
+            candidatePatchSet: patchSet,
+            pendingQuestions: narrativeResponse.questions,
+            pendingOptions: narrativeResponse.options,
+            lastPlan: narrativeResponse.planSteps.length ? narrativeResponse.planSteps : session.lastPlan,
+            pendingTurnKind: narrativeResponse.requiresUserReply ? narrativeResponse.turnKind : null,
+            executionSteps: narrativeResponse.executionSteps,
+            currentStepId: narrativeResponse.currentStepId ?? null,
+            pendingActionRequests: narrativeResponse.requestedActions,
+            documentViewMode: "preview",
+            versionHistory:
+              narrativeResponse.turnKind === "final_answer" &&
+              patchSet &&
+              !narrativeResponse.providerError.trim()
+                ? [
+                    buildVersionSnapshot(
+                      activeDocument.markdown,
+                      narrativeResponse.draftMarkdown,
+                      narrativeResponse.summary || narrativeResponse.assistantMessage,
+                      requestId,
+                    ),
+                    ...session.versionHistory,
+                  ].slice(0, 12)
+                : session.versionHistory,
+            chatMessages: replaceChatMessage(session.chatMessages, assistantMessageId, assistantMessage),
+          };
+          return {
+            ...nextSession,
+            reviewQueue: buildReviewQueue(nextSession),
+          };
+        }),
       );
       onStatusChange(
-        narrativeResponse.providerError || narrativeResponse.summary || "AI 已生成文档修改建议。",
+        narrativeResponse.providerError ||
+          narrativeResponse.assistantMessage ||
+          narrativeResponse.summary ||
+          "AI 已生成文档修改建议。",
       );
     } catch (error) {
       setDocumentAgents((current) =>
         updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
           ...session,
+          updatedAt: nowIso(),
+          status: "error",
           busy: false,
           inflightRequestId: null,
           chatMessages: replaceChatMessage(session.chatMessages, assistantMessageId, {
@@ -1036,20 +1937,27 @@ export function NarrativeWorkspace({
       normalizeNarrativeMarkdown(activeSession.lastResponse.draftMarkdown);
 
     setDocumentAgents((current) =>
-      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
-        ...session,
-        candidatePatchSet: isComplete ? null : nextPatchSet,
-        chatMessages: [
-          ...session.chatMessages,
-          {
-            id: `context-apply-${Date.now()}`,
-            role: "context",
-            label: "系统",
-            content: `已应用 ${patch.title}。`,
-            tone: "success",
-          },
-        ],
-      })),
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...session,
+          updatedAt: nowIso(),
+          candidatePatchSet: isComplete ? null : nextPatchSet,
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-apply-${Date.now()}`,
+              role: "context" as const,
+              label: "系统",
+              content: `已应用 ${patch.title}。`,
+              tone: "success" as const,
+            },
+          ],
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
     );
     onStatusChange(`已应用 ${patch.title}。`);
   }
@@ -1064,22 +1972,313 @@ export function NarrativeWorkspace({
       markdown: activeSession.lastResponse?.draftMarkdown ?? document.markdown,
     }));
     setDocumentAgents((current) =>
-      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
-        ...session,
-        candidatePatchSet: null,
-        chatMessages: [
-          ...session.chatMessages,
-          {
-            id: `context-apply-all-${Date.now()}`,
-            role: "context",
-            label: "系统",
-            content: "已应用整篇 AI 建议。",
-            tone: "success",
-          },
-        ],
-      })),
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...session,
+          updatedAt: nowIso(),
+          candidatePatchSet: null,
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-apply-all-${Date.now()}`,
+              role: "context" as const,
+              label: "系统",
+              content: "已应用整篇 AI 建议。",
+              tone: "success" as const,
+            },
+          ],
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
     );
     onStatusChange("已应用整篇 AI 建议。");
+  }
+
+  function discardCurrentSuggestions() {
+    if (!activeDocument) {
+      return;
+    }
+
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...session,
+          updatedAt: nowIso(),
+          candidatePatchSet: null,
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-discard-suggestions-${Date.now()}`,
+              role: "context" as const,
+              label: "系统",
+              content: "已清空当前 patch 建议。",
+              tone: "warning" as const,
+            },
+          ],
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange("已清空当前 patch 建议。");
+  }
+
+  function applyAgentDocumentResult(result: AgentActionResult, requestId: string) {
+    const derivedSummaries: NarrativeDocumentSummary[] = [];
+    if (result.document) {
+      derivedSummaries.push(summarizeNarrativeDocumentPayload(result.document));
+    }
+    if (result.documentSummaries?.length) {
+      for (const summary of result.documentSummaries) {
+        if (!derivedSummaries.some((entry) => entry.slug === summary.slug)) {
+          derivedSummaries.push(summary);
+        }
+      }
+    }
+
+    if (derivedSummaries.length && activeDocument) {
+      setDocumentAgents((current) =>
+        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+          const nextSession = {
+            ...session,
+            updatedAt: nowIso(),
+            pendingDerivedDocuments: [
+              ...session.pendingDerivedDocuments,
+              ...derivedSummaries.filter(
+                (summary) =>
+                  !session.pendingDerivedDocuments.some((entry) => entry.slug === summary.slug),
+              ),
+            ],
+          };
+          return {
+            ...nextSession,
+            reviewQueue: buildReviewQueue(nextSession),
+          };
+        }),
+      );
+    }
+
+    if (!result.document) {
+      return;
+    }
+
+    const nextDocument = toEditableSavedDocument(result.document);
+    const existing = documentsRef.current.find(
+      (document) =>
+        document.documentKey === nextDocument.documentKey ||
+        document.originalSlug === nextDocument.originalSlug,
+    );
+
+    setDocuments((current) => {
+      if (existing) {
+        return current.map((document) =>
+          document.documentKey === existing.documentKey ? nextDocument : document,
+        );
+      }
+      return [nextDocument, ...current];
+    });
+
+    if (existing && existing.documentKey !== nextDocument.documentKey) {
+      remapDocumentKey(existing.documentKey, nextDocument);
+    } else {
+      setDocumentAgents((current) =>
+        ensureDocumentAgentSession(current, nextDocument.documentKey, "preview"),
+      );
+    }
+
+    if (result.actionType === "create_derived_document") {
+      setTabState((current) => openNarrativeTab(current, nextDocument.documentKey));
+      setDocumentAgents((current) => {
+        const next = ensureDocumentAgentSession(current, nextDocument.documentKey, "preview");
+        return updateDocumentAgentSession(next, nextDocument.documentKey, (session) => ({
+          ...session,
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-agent-created-${requestId}`,
+              role: "context",
+              label: "系统",
+              content: `该文稿由 agent 动作创建：${result.summary}`,
+              tone: "success",
+            },
+          ],
+        }));
+      });
+    } else if (result.actionType === "split_plan_into_documents" && result.documentSummaries?.length) {
+      const firstSummary = result.documentSummaries[0];
+      if (firstSummary) {
+        const firstDocument = documentsRef.current.find((document) => document.meta.slug === firstSummary.slug);
+        if (firstDocument) {
+          setTabState((current) => openNarrativeTab(current, firstDocument.documentKey));
+        }
+      }
+    }
+  }
+
+  async function approveActionRequest(requestId: string) {
+    if (!activeDocument || !activeSession) {
+      return;
+    }
+
+    const request = activeSession.pendingActionRequests.find((entry) => entry.id === requestId);
+    if (!request) {
+      return;
+    }
+
+    const baseResult = {
+      requestId,
+      actionType: request.actionType,
+    } as const;
+
+    try {
+      let result: AgentActionResult;
+      if (request.actionType === "apply_candidate_patch") {
+        const patchId =
+          typeof request.payload.patchId === "string" ? request.payload.patchId : "";
+        if (!patchId) {
+          throw new Error("apply_candidate_patch 需要 patchId。");
+        }
+        applyPatch(patchId);
+        result = {
+          ...baseResult,
+          status: "completed",
+          summary: `已批准并执行 patch 动作：${patchId}。`,
+        };
+      } else if (request.actionType === "apply_all_patches") {
+        applyAllSuggestions();
+        result = {
+          ...baseResult,
+          status: "completed",
+          summary: "已批准并应用当前整篇 AI 建议。",
+        };
+      } else {
+        result = await invokeCommand<AgentActionResult>("execute_narrative_agent_action", {
+          workspaceRoot: workspace.workspaceRoot,
+          input: {
+            requestId,
+            actionType: request.actionType,
+            payload: request.payload,
+            currentDocument: activeDocument,
+          },
+        });
+
+        if (result.openedSlug) {
+          const existing = documentsRef.current.find((document) => document.meta.slug === result.openedSlug);
+          if (existing) {
+            openDocument(existing.documentKey);
+          }
+        }
+
+        applyAgentDocumentResult(result, requestId);
+      }
+
+      setDocumentAgents((current) =>
+        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+          const actionTone: AiChatMessage["tone"] =
+            result.status === "failed" ? "danger" : "success";
+          const nextSession = {
+            ...session,
+            updatedAt: nowIso(),
+            pendingActionRequests: session.pendingActionRequests.filter((entry) => entry.id !== requestId),
+            actionHistory: [...session.actionHistory, result],
+            chatMessages: [
+              ...session.chatMessages,
+              {
+                id: `context-agent-action-${requestId}`,
+                role: "context" as const,
+                label: "系统",
+                content: actionHistoryMessage(result),
+                tone: actionTone,
+              },
+            ],
+          };
+          return {
+            ...nextSession,
+            reviewQueue: buildReviewQueue(nextSession),
+          };
+        }),
+      );
+      onStatusChange(result.summary);
+    } catch (error) {
+      const failedResult: AgentActionResult = {
+        ...baseResult,
+        status: "failed",
+        summary: `agent 动作执行失败：${String(error)}`,
+      };
+      setDocumentAgents((current) =>
+        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+          const nextSession = {
+            ...session,
+            updatedAt: nowIso(),
+            pendingActionRequests: session.pendingActionRequests.filter((entry) => entry.id !== requestId),
+            actionHistory: [...session.actionHistory, failedResult],
+            chatMessages: [
+              ...session.chatMessages,
+              {
+                id: `context-agent-action-error-${requestId}`,
+                role: "context" as const,
+                label: "系统",
+                content: failedResult.summary,
+                tone: "danger" as const,
+              },
+            ],
+          };
+          return {
+            ...nextSession,
+            reviewQueue: buildReviewQueue(nextSession),
+          };
+        }),
+      );
+      onStatusChange(failedResult.summary);
+    }
+  }
+
+  function rejectActionRequest(requestId: string) {
+    if (!activeDocument || !activeSession) {
+      return;
+    }
+    const request = activeSession.pendingActionRequests.find((entry) => entry.id === requestId);
+    if (!request) {
+      return;
+    }
+
+    const result: AgentActionResult = {
+      requestId,
+      actionType: request.actionType,
+      status: "rejected",
+      summary: `已拒绝 agent 动作《${request.title}》。`,
+    };
+
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        const nextSession = {
+          ...session,
+          updatedAt: nowIso(),
+          pendingActionRequests: session.pendingActionRequests.filter((entry) => entry.id !== requestId),
+          actionHistory: [...session.actionHistory, result],
+          chatMessages: [
+            ...session.chatMessages,
+            {
+              id: `context-agent-action-reject-${requestId}`,
+              role: "context" as const,
+              label: "系统",
+              content: result.summary,
+              tone: "warning" as const,
+            },
+          ],
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+    onStatusChange(result.summary);
   }
 
   function clearCurrentConversation() {
@@ -1088,11 +2287,16 @@ export function NarrativeWorkspace({
     }
 
     setDocumentAgents((current) =>
-      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
-        ...createDocumentAgentSession(),
-        mode: session.mode,
-        documentViewMode: session.documentViewMode,
-      })),
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) =>
+        createDocumentAgentSession({
+          mode: session.mode,
+          documentViewMode: session.documentViewMode,
+          sessionTitle: session.sessionTitle,
+          strategy: session.strategy,
+          selectedContextDocKeys: session.selectedContextDocKeys,
+          savedBranches: session.savedBranches,
+        }),
+      ),
     );
     onStatusChange("已清空当前文档的 AI 会话。");
   }
@@ -1369,6 +2573,27 @@ export function NarrativeWorkspace({
             </div>
           </div>
 
+          {pendingRestoreSessions ? (
+            <div className="narrative-empty-state" style={{ marginBottom: 12 }}>
+              <strong>发现可恢复会话</strong>
+              <p>{restoreStatus || "检测到上次保存的 Narrative Lab agent 会话。"}</p>
+              <div className="toolbar-actions">
+                <button
+                  type="button"
+                  className="toolbar-button toolbar-accent"
+                  onClick={() => restorePersistedAgentSessions()}
+                >
+                  恢复会话
+                </button>
+                <button type="button" className="toolbar-button" onClick={() => skipPersistedAgentSessions()}>
+                  只恢复文档
+                </button>
+              </div>
+            </div>
+          ) : restoreStatus ? (
+            <p className="field-hint">{restoreStatus}</p>
+          ) : null}
+
           {activeDocument && activeSession ? (
             <>
               <div className="narrative-chat-toolbar">
@@ -1413,6 +2638,358 @@ export function NarrativeWorkspace({
                 </div>
               </div>
 
+              {showBoundaryTips ? (
+                <article className="narrative-chat-message narrative-chat-message-context">
+                  <div className="narrative-chat-message-header">
+                    <strong>操作边界</strong>
+                    <Badge tone="muted">P0</Badge>
+                  </div>
+                  <p style={{ whiteSpace: "pre-wrap" }}>
+                    `apply patch / apply all / clear pending actions` 只影响当前会话或当前编辑态；`save / rename / archive / split into documents`
+                    会真正修改或新增工作区文稿。
+                  </p>
+                  <div className="toolbar-actions">
+                    <button type="button" className="toolbar-button" onClick={() => setShowBoundaryTips(false)}>
+                      收起提示
+                    </button>
+                  </div>
+                </article>
+              ) : (
+                <div className="toolbar-actions" style={{ marginBottom: 12 }}>
+                  <button type="button" className="toolbar-button" onClick={() => setShowBoundaryTips(true)}>
+                    显示操作边界提示
+                  </button>
+                </div>
+              )}
+
+              <article className="narrative-chat-message narrative-chat-message-context">
+                <div className="narrative-chat-message-header">
+                  <strong>{activeSession.sessionTitle || "当前会话"}</strong>
+                  <Badge tone="muted">{activeSession.status}</Badge>
+                </div>
+                <div className="toolbar-summary">
+                  <Badge tone="muted">{`更新于 ${activeSession.updatedAt}`}</Badge>
+                  {activeSession.branchOfSessionId ? (
+                    <Badge tone="accent">分支会话</Badge>
+                  ) : null}
+                  <Badge tone="muted">{activeSession.strategy.rewriteIntensity}</Badge>
+                  <Badge tone="muted">{activeSession.strategy.priority}</Badge>
+                  <Badge tone="muted">{activeSession.strategy.questionBehavior}</Badge>
+                </div>
+                <div className="toolbar-actions">
+                  <button type="button" className="toolbar-button" onClick={() => renameCurrentSession()}>
+                    重命名会话
+                  </button>
+                  <button type="button" className="toolbar-button" onClick={() => forkCurrentSession()}>
+                    复制为分支
+                  </button>
+                  <button type="button" className="toolbar-button" onClick={() => archiveCurrentSession()}>
+                    归档当前会话
+                  </button>
+                  <button type="button" className="toolbar-button" onClick={() => void exportCurrentSession()}>
+                    导出会话
+                  </button>
+                  <button type="button" className="toolbar-button" onClick={() => void runRegressionSuite()}>
+                    运行回归
+                  </button>
+                </div>
+                {exportStatus ? <p style={{ whiteSpace: "pre-wrap" }}>{exportStatus}</p> : null}
+                {activeSession.savedBranches.length ? (
+                  <>
+                    <div className="toolbar-summary">
+                      {activeSession.savedBranches.map((branch) => (
+                        <Badge key={branch.id} tone={branch.archived ? "muted" : "accent"}>
+                          {branch.title}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="toolbar-actions">
+                      {activeSession.savedBranches.map((branch) => (
+                        <button
+                          key={`${branch.id}-restore`}
+                          type="button"
+                          className="toolbar-button"
+                          onClick={() => restoreSavedBranch(branch.id)}
+                        >
+                          恢复 {branch.title}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </article>
+
+              <article className="narrative-chat-message narrative-chat-message-context">
+                <div className="narrative-chat-message-header">
+                  <strong>Agent 策略</strong>
+                  <Badge tone="muted">P1</Badge>
+                </div>
+                <div className="toolbar-summary">
+                  <Badge tone="muted">{buildStrategyInstruction(activeSession)}</Badge>
+                </div>
+                <div className="segmented-control narrative-mode-switch" style={{ marginBottom: 8 }}>
+                  {(["light", "balanced", "aggressive"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`segmented-control-item ${
+                        activeSession.strategy.rewriteIntensity === value ? "segmented-control-item-active" : ""
+                      }`.trim()}
+                      onClick={() => updateActiveStrategy("rewriteIntensity", value)}
+                    >
+                      {value === "light" ? "保守改写" : value === "balanced" ? "平衡改写" : "激进重构"}
+                    </button>
+                  ))}
+                </div>
+                <div className="segmented-control narrative-mode-switch" style={{ marginBottom: 8 }}>
+                  {(["consistency", "drama", "speed"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`segmented-control-item ${
+                        activeSession.strategy.priority === value ? "segmented-control-item-active" : ""
+                      }`.trim()}
+                      onClick={() => updateActiveStrategy("priority", value)}
+                    >
+                      {value === "consistency" ? "优先一致性" : value === "drama" ? "优先戏剧性" : "优先速度"}
+                    </button>
+                  ))}
+                </div>
+                <div className="segmented-control narrative-mode-switch">
+                  {(["ask_first", "balanced", "direct"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`segmented-control-item ${
+                        activeSession.strategy.questionBehavior === value ? "segmented-control-item-active" : ""
+                      }`.trim()}
+                      onClick={() => updateActiveStrategy("questionBehavior", value)}
+                    >
+                      {value === "ask_first" ? "先提问后生成" : value === "balanced" ? "平衡" : "尽量直接产出"}
+                    </button>
+                  ))}
+                </div>
+              </article>
+
+              <article className="narrative-chat-message narrative-chat-message-context">
+                <div className="narrative-chat-message-header">
+                  <strong>多文稿上下文</strong>
+                  <Badge tone="muted">{selectedContextDocuments.length}</Badge>
+                </div>
+                <p style={{ whiteSpace: "pre-wrap" }}>
+                  本轮会把这些文稿一起作为输入，而不只依赖当前文稿的 related docs。
+                </p>
+                <div className="toolbar-summary">
+                  {selectedContextDocuments.length ? (
+                    selectedContextDocuments.map((document) => (
+                      <Badge key={document.documentKey} tone="accent">
+                        {document.meta.slug}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge tone="muted">尚未额外选择文稿</Badge>
+                  )}
+                </div>
+                <div className="toolbar-actions">
+                  {filteredDocuments
+                    .filter((document) => document.documentKey !== activeDocument.documentKey)
+                    .slice(0, 8)
+                    .map((document) => (
+                      <button
+                        key={`context-${document.documentKey}`}
+                        type="button"
+                        className={`toolbar-button ${
+                          activeSession.selectedContextDocKeys.includes(document.documentKey)
+                            ? "toolbar-accent"
+                            : ""
+                        }`.trim()}
+                        onClick={() => toggleContextDocument(document.documentKey)}
+                      >
+                        {activeSession.selectedContextDocKeys.includes(document.documentKey) ? "移除" : "加入"}{" "}
+                        {document.meta.title || document.meta.slug}
+                      </button>
+                    ))}
+                </div>
+              </article>
+
+              <article className="narrative-chat-message narrative-chat-message-context">
+                <div className="narrative-chat-message-header">
+                  <strong>审阅队列</strong>
+                  <Badge tone="muted">{activeReviewQueue.length}</Badge>
+                </div>
+                <p style={{ whiteSpace: "pre-wrap" }}>{summarizeReviewQueue(activeReviewQueue)}</p>
+                {activeReviewQueue.length ? (
+                  <ol>
+                    {activeReviewQueue.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.title}</strong> <Badge tone="muted">{item.kind}</Badge> {item.description}
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+                <div className="toolbar-actions">
+                  {previewPatchSet?.patches.length ? (
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      onClick={() => applyAllSuggestions()}
+                      disabled={activeSession.busy}
+                    >
+                      连续应用所有建议
+                    </button>
+                  ) : null}
+                  {previewPatchSet ? (
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      onClick={() => discardCurrentSuggestions()}
+                      disabled={activeSession.busy}
+                    >
+                      清空 patch 建议
+                    </button>
+                  ) : null}
+                  <button type="button" className="toolbar-button" onClick={() => void retryLastTurn()}>
+                    重试本轮
+                  </button>
+                  <button type="button" className="toolbar-button" onClick={() => void retryCurrentStep()}>
+                    重试当前步骤
+                  </button>
+                  <button type="button" className="toolbar-button" onClick={() => clearPendingActionRequests()}>
+                    清空待批准动作
+                  </button>
+                  <button
+                    type="button"
+                    className="toolbar-button"
+                    onClick={() => void approveAllPendingActions()}
+                    disabled={!pendingActions.length || activeSession.busy}
+                  >
+                    连续批准动作
+                  </button>
+                  <button
+                    type="button"
+                    className="toolbar-button"
+                    onClick={() => rejectAllPendingActions()}
+                    disabled={!pendingActions.length || activeSession.busy}
+                  >
+                    连续拒绝动作
+                  </button>
+                </div>
+                {activeSession.pendingDerivedDocuments.length ? (
+                  <>
+                    <div className="narrative-chat-message-header" style={{ marginTop: 12 }}>
+                      <strong>派生文稿待审</strong>
+                      <Badge tone="warning">{activeSession.pendingDerivedDocuments.length}</Badge>
+                    </div>
+                    <ol>
+                      {activeSession.pendingDerivedDocuments.map((document) => (
+                        <li key={`derived-review-${document.slug}`}>
+                          <strong>{document.title || document.slug}</strong>
+                          <div className="toolbar-summary">
+                            <Badge tone="muted">{document.slug}</Badge>
+                            <Badge tone="muted">{`${document.headingCount} headings`}</Badge>
+                          </div>
+                          {document.excerpt ? (
+                            <div style={{ whiteSpace: "pre-wrap" }}>{document.excerpt}</div>
+                          ) : null}
+                          <div className="toolbar-actions">
+                            <button
+                              type="button"
+                              className="toolbar-button"
+                              onClick={() => reviewDerivedDocument(document.slug)}
+                            >
+                              打开回看
+                            </button>
+                            <button
+                              type="button"
+                              className="toolbar-button toolbar-accent"
+                              onClick={() => markDerivedDocumentQueueItem(document.slug, "approved")}
+                            >
+                              标记通过
+                            </button>
+                            <button
+                              type="button"
+                              className="toolbar-button"
+                              onClick={() => markDerivedDocumentQueueItem(document.slug, "rejected")}
+                            >
+                              从列表移除
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="toolbar-actions">
+                      <button type="button" className="toolbar-button" onClick={() => reviewNextDerivedDocument()}>
+                        逐项回看下一个
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-button toolbar-accent"
+                        onClick={() => approveAllDerivedDocuments()}
+                      >
+                        连续通过派生稿
+                      </button>
+                      <button type="button" className="toolbar-button" onClick={() => rejectAllDerivedDocuments()}>
+                        连续移除派生稿
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </article>
+
+              {regressionStatus || regressionResult ? (
+                <article className="narrative-chat-message narrative-chat-message-context">
+                  <div className="narrative-chat-message-header">
+                    <strong>行为回归验证</strong>
+                    <Badge tone={regressionResult?.ok ? "success" : regressionResult ? "warning" : "muted"}>
+                      {regressionResult ? (regressionResult.ok ? "pass" : "check") : "idle"}
+                    </Badge>
+                  </div>
+                  {regressionStatus ? <p style={{ whiteSpace: "pre-wrap" }}>{regressionStatus}</p> : null}
+                  {regressionResult?.results.length ? (
+                    <ol>
+                      {regressionResult.results.map((item) => (
+                        <li key={item.id}>
+                          <Badge tone={item.ok ? "success" : "warning"}>
+                            {item.actualTurnKind}
+                          </Badge>{" "}
+                          {item.label}，期望 {item.expectedTurnKinds.join(" / ")}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                </article>
+              ) : null}
+
+              {activeSession.lastResponse ? (
+                <article className="narrative-chat-message narrative-chat-message-context">
+                  <div className="narrative-chat-message-header">
+                    <strong>Provenance</strong>
+                    <Badge tone="muted">P1</Badge>
+                  </div>
+                  <div className="toolbar-summary">
+                    {(activeSession.lastResponse.sourceDocumentKeys.length
+                      ? activeSession.lastResponse.sourceDocumentKeys
+                      : [activeDocument.meta.slug]
+                    ).map((key) => (
+                      <Badge key={`source-${key}`} tone="accent">
+                        {key}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="toolbar-summary">
+                    {activeSession.lastResponse.provenanceRefs.length ? (
+                      activeSession.lastResponse.provenanceRefs.map((ref) => (
+                        <Badge key={`prov-${ref}`} tone="muted">
+                          {ref}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge tone="muted">本轮没有额外 provenance ref</Badge>
+                    )}
+                  </div>
+                </article>
+              ) : null}
+
               <div className="narrative-chat-log">
                 {activeSession.chatMessages.length ? (
                   activeSession.chatMessages.map((message) => (
@@ -1424,7 +3001,7 @@ export function NarrativeWorkspace({
                         <strong>{message.label}</strong>
                         {message.tone ? <Badge tone={message.tone}>{message.role}</Badge> : null}
                       </div>
-                      <p>{message.content}</p>
+                      <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
                       {message.meta?.length ? (
                         <div className="toolbar-summary">
                           {message.meta.map((entry) => (
@@ -1441,9 +3018,244 @@ export function NarrativeWorkspace({
                     <p>这个文档还没有 AI 会话。告诉 AI 你想怎么写、怎么改。</p>
                   </div>
                 )}
+
+                {pendingQuestions.length ? (
+                  <article className="narrative-chat-message narrative-chat-message-context">
+                    <div className="narrative-chat-message-header">
+                      <strong>待补充信息</strong>
+                      <Badge tone="warning">clarification</Badge>
+                    </div>
+                    <p style={{ whiteSpace: "pre-wrap" }}>AI 需要这些信息后再继续生成。</p>
+                    <ol>
+                      {pendingQuestions.map((question) => (
+                        <li key={question.id}>
+                          {question.label}
+                          {question.required ? "（必填）" : ""}
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                ) : null}
+
+                {pendingOptions.length ? (
+                  <article className="narrative-chat-message narrative-chat-message-context">
+                    <div className="narrative-chat-message-header">
+                      <strong>可选方向</strong>
+                      <Badge tone="accent">options</Badge>
+                    </div>
+                    <p style={{ whiteSpace: "pre-wrap" }}>选一个方向，我会在当前会话里继续推进。</p>
+                    <div className="toolbar-actions">
+                      {pendingOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className="toolbar-button"
+                          disabled={activeSession.busy}
+                          onClick={() => void runGeneration(option.followupPrompt)}
+                          title={option.description}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="toolbar-summary">
+                      {pendingOptions.map((option) => (
+                        <Badge key={`${option.id}-desc`} tone="muted">
+                          {option.label}: {option.description}
+                        </Badge>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
+
+                {latestTurnKind === "plan" && latestPlan.length ? (
+                  <article className="narrative-chat-message narrative-chat-message-context">
+                    <div className="narrative-chat-message-header">
+                      <strong>执行计划</strong>
+                      <Badge tone="muted">plan</Badge>
+                    </div>
+                    <ol>
+                      {latestPlan.map((step) => (
+                        <li key={step.id}>
+                          {step.label}
+                          {" "}
+                          <Badge tone={step.status === "completed" ? "success" : step.status === "active" ? "accent" : "muted"}>
+                            {step.status}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                ) : null}
+
+                {activeSession.executionSteps.length ? (
+                  <article className="narrative-chat-message narrative-chat-message-context">
+                    <div className="narrative-chat-message-header">
+                      <strong>执行轨迹</strong>
+                      <Badge tone="muted">{activeSession.status}</Badge>
+                    </div>
+                    <ol>
+                      {activeSession.executionSteps.map((step) => (
+                        <li key={step.id}>
+                          <strong>{step.label}</strong>
+                          {" "}
+                          <Badge
+                            tone={
+                              step.status === "completed"
+                                ? "success"
+                                : step.status === "failed"
+                                  ? "danger"
+                                  : step.id === activeSession.currentStepId
+                                    ? "accent"
+                                    : "muted"
+                            }
+                          >
+                            {step.status}
+                          </Badge>
+                          <div style={{ whiteSpace: "pre-wrap" }}>
+                            {step.previewText?.trim() || step.detail}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                ) : null}
+
+                {pendingActions.length ? (
+                  <article className="narrative-chat-message narrative-chat-message-context">
+                    <div className="narrative-chat-message-header">
+                      <strong>待批准动作</strong>
+                      <Badge tone="warning">approval</Badge>
+                    </div>
+                    <p style={{ whiteSpace: "pre-wrap" }}>
+                      这些动作不会自动执行，只有你批准后才会继续。
+                    </p>
+                    {pendingActions.map((action) => (
+                      <div key={action.id} className="narrative-empty-state" style={{ marginBottom: 12 }}>
+                        <strong>{action.title}</strong>
+                        <p style={{ whiteSpace: "pre-wrap" }}>{action.description}</p>
+                        <div className="toolbar-summary">
+                          <Badge tone="muted">{action.actionType}</Badge>
+                          <Badge tone="muted">{action.approvalPolicy}</Badge>
+                          <Badge
+                            tone={
+                              action.riskLevel === "high"
+                                ? "danger"
+                                : action.riskLevel === "medium"
+                                  ? "warning"
+                                  : "muted"
+                            }
+                          >
+                            {action.riskLevel ?? "medium"}
+                          </Badge>
+                          {action.previewOnly ? <Badge tone="accent">preview only</Badge> : null}
+                          {action.affectedDocumentKeys?.map((key) => (
+                            <Badge key={`${action.id}-${key}`} tone="muted">
+                              {key}
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="toolbar-actions">
+                          <button
+                            type="button"
+                            className="toolbar-button toolbar-accent"
+                            disabled={activeSession.busy}
+                            onClick={() => void approveActionRequest(action.id)}
+                          >
+                            批准并执行
+                          </button>
+                          <button
+                            type="button"
+                            className="toolbar-button"
+                            disabled={activeSession.busy}
+                            onClick={() => rejectActionRequest(action.id)}
+                          >
+                            拒绝
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </article>
+                ) : null}
+
+                {activeSession.actionHistory.length ? (
+                  <article className="narrative-chat-message narrative-chat-message-context">
+                    <div className="narrative-chat-message-header">
+                      <strong>动作记录</strong>
+                      <Badge tone="muted">{activeSession.actionHistory.length}</Badge>
+                    </div>
+                    <ol>
+                      {activeSession.actionHistory.map((result) => (
+                        <li key={`${result.requestId}-${result.status}`}>
+                          <Badge
+                            tone={
+                              result.status === "completed"
+                                ? "success"
+                                : result.status === "failed"
+                                  ? "danger"
+                                  : result.status === "approved"
+                                    ? "accent"
+                                    : "muted"
+                            }
+                          >
+                            {result.status}
+                          </Badge>
+                          {" "}
+                          {result.summary}
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                ) : null}
+
+                {activeSession.versionHistory.length ? (
+                  <article className="narrative-chat-message narrative-chat-message-context">
+                    <div className="narrative-chat-message-header">
+                      <strong>版本演变</strong>
+                      <Badge tone="muted">{activeSession.versionHistory.length}</Badge>
+                    </div>
+                    <ol>
+                      {activeSession.versionHistory.map((snapshot) => (
+                        <li key={snapshot.id}>
+                          <strong>{snapshot.title}</strong>
+                          <div className="toolbar-summary">
+                            <Badge tone="muted">{snapshot.createdAt}</Badge>
+                            {snapshot.requestId ? <Badge tone="muted">{snapshot.requestId}</Badge> : null}
+                          </div>
+                          <div style={{ whiteSpace: "pre-wrap" }}>
+                            Before: {snapshot.beforeMarkdown.slice(0, 80) || "(empty)"}
+                          </div>
+                          <div style={{ whiteSpace: "pre-wrap" }}>
+                            After: {snapshot.afterMarkdown.slice(0, 80) || "(empty)"}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                ) : null}
               </div>
 
               <div className="narrative-chat-composer">
+                <div className="toolbar-actions" style={{ marginBottom: 12 }}>
+                  {NARRATIVE_PROMPT_TEMPLATES.map((template) => (
+                    <button
+                      key={template}
+                      type="button"
+                      className="toolbar-button"
+                      disabled={activeSession.busy}
+                      onClick={() =>
+                        setDocumentAgents((current) =>
+                          updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
+                            ...session,
+                            composerText: template,
+                          })),
+                        )
+                      }
+                    >
+                      {template}
+                    </button>
+                  ))}
+                </div>
                 <textarea
                   className="field-input field-textarea narrative-chat-textarea"
                   value={activeSession.composerText}
@@ -1463,7 +3275,7 @@ export function NarrativeWorkspace({
                       }
                     }
                   }}
-                  placeholder="像聊天一样告诉 AI 你的修改或新文档需求。Enter 发送，Shift+Enter 换行。"
+                  placeholder={composerPlaceholder}
                 />
                 <div className="narrative-chat-composer-footer">
                   <div className="toolbar-summary">
@@ -1471,6 +3283,9 @@ export function NarrativeWorkspace({
                       {activeSession.mode === "create" ? "生成新文档" : "修改当前文档"}
                     </Badge>
                     <Badge tone="muted">{activeDocument.meta.slug}</Badge>
+                    {activeSession.status === "waiting_user" ? (
+                      <Badge tone="warning">等待你的补充</Badge>
+                    ) : null}
                   </div>
                   <div className="toolbar-actions">
                     <button type="button" className="toolbar-button" onClick={() => clearCurrentConversation()}>

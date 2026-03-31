@@ -18,7 +18,9 @@ const defaultNarrativeAppSettings: NarrativeAppSettings = {
   lastWorkspace: null,
   connectedProjectRoot: null,
   recentProjectRoots: [],
+  sessionRestoreMode: "ask",
   workspaceLayouts: {},
+  workspaceAgentSessions: {},
 };
 
 const defaultEditorRuntimeFlags: EditorRuntimeFlags = {

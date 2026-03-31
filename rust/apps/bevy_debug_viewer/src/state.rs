@@ -808,6 +808,7 @@ pub(crate) struct ViewerPalette {
     pub path: Color,
     pub hover_walkable: Color,
     pub hover_hostile: Color,
+    pub fog_cover: Color,
     pub ai_goal: Color,
     pub ai_anchor: Color,
     pub ai_reservation: Color,
@@ -844,6 +845,7 @@ impl Default for ViewerPalette {
             path: Color::srgb(0.95, 0.76, 0.28),
             hover_walkable: Color::srgb(0.96, 0.97, 0.99),
             hover_hostile: Color::srgb(0.94, 0.36, 0.33),
+            fog_cover: Color::srgba(0.38, 0.41, 0.44, 0.72),
             ai_goal: Color::srgb(0.98, 0.71, 0.29),
             ai_anchor: Color::srgb(0.22, 0.84, 0.8),
             ai_reservation: Color::srgb(0.62, 0.48, 0.92),
@@ -1108,6 +1110,30 @@ impl ViewerState {
             })
     }
 
+    pub(crate) fn focus_actor_id(&self, snapshot: &SimulationSnapshot) -> Option<ActorId> {
+        self.selected_actor
+            .filter(|actor_id| {
+                snapshot
+                    .actors
+                    .iter()
+                    .any(|actor| actor.actor_id == *actor_id)
+            })
+            .or(self.controlled_player_actor.filter(|actor_id| {
+                snapshot
+                    .actors
+                    .iter()
+                    .any(|actor| actor.actor_id == *actor_id)
+            }))
+            .or_else(|| {
+                snapshot
+                    .actors
+                    .iter()
+                    .find(|actor| actor.side == ActorSide::Player)
+                    .map(|actor| actor.actor_id)
+            })
+            .or_else(|| snapshot.actors.first().map(|actor| actor.actor_id))
+    }
+
     pub(crate) fn is_interaction_menu_open(&self) -> bool {
         self.interaction_menu.is_some()
     }
@@ -1180,8 +1206,93 @@ pub(crate) struct DialogueChoiceButton {
 #[derive(Component)]
 pub(crate) struct GameUiRoot;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum UiHoverTooltipContent {
+    InventoryItem { item_id: u32 },
+    Skill { tree_id: String, skill_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum UiInventoryContextMenuTarget {
+    InventoryItem { item_id: u32 },
+    EquipmentSlot { slot_id: String, item_id: u32 },
+}
+
+#[derive(Resource, Debug, Clone)]
+pub(crate) struct UiHoverTooltipState {
+    pub visible: bool,
+    pub cursor_position: Vec2,
+    pub content: Option<UiHoverTooltipContent>,
+}
+
+impl Default for UiHoverTooltipState {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            cursor_position: Vec2::ZERO,
+            content: None,
+        }
+    }
+}
+
+impl UiHoverTooltipState {
+    pub(crate) fn clear(&mut self) {
+        self.visible = false;
+        self.content = None;
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub(crate) struct UiInventoryContextMenuState {
+    pub visible: bool,
+    pub cursor_position: Vec2,
+    pub target: Option<UiInventoryContextMenuTarget>,
+}
+
+impl Default for UiInventoryContextMenuState {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            cursor_position: Vec2::ZERO,
+            target: None,
+        }
+    }
+}
+
+impl UiInventoryContextMenuState {
+    pub(crate) fn clear(&mut self) {
+        self.visible = false;
+        self.target = None;
+    }
+}
+
 #[derive(Component)]
 pub(crate) struct UiMouseBlocker;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct InventoryItemHoverTarget {
+    pub item_id: u32,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SkillHoverTarget {
+    pub tree_id: String,
+    pub skill_id: String,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct InventoryItemClickTarget {
+    pub item_id: u32,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EquipmentSlotClickTarget {
+    pub slot_id: String,
+    pub item_id: Option<u32>,
+}
+
+#[derive(Component)]
+pub(crate) struct InventoryContextMenuRoot;
 
 #[derive(Component, Debug, Clone)]
 pub(crate) enum GameUiButtonAction {
@@ -1192,11 +1303,9 @@ pub(crate) enum GameUiButtonAction {
     ClosePanels,
     CloseTrade,
     InventoryFilter(UiInventoryFilter),
-    SelectInventoryItem(u32),
     UseInventoryItem,
     EquipInventoryItem,
     UnequipSlot(String),
-    MoveSelectedEquippedTo(String),
     AllocateAttribute(String),
     SelectSkillTree(String),
     SelectSkill(String),
@@ -1471,6 +1580,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {

@@ -812,7 +812,6 @@ fn rectangle_polygon(min_x: f64, max_x: f64, min_z: f64, max_z: f64) -> Geometry
     }
 }
 
-
 fn choose_split_candidate(
     regions: &[BTreeSet<GridCoord>],
     min_room_size: MapSize,

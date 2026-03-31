@@ -4,7 +4,8 @@ use bevy_app::prelude::*;
 use bevy_app::{ScheduleRunnerPlugin, TaskPoolPlugin};
 use bevy_ecs::schedule::IntoScheduleConfigs;
 
-use crate::config::NpcDebugReportState;
+use crate::config::{NpcDebugReportState, ServerVisionConfig};
+use crate::progression::advance_runtime_progression;
 use crate::protocol::{
     dispatch_protocol_requests, drain_protocol_responses, emit_runtime_protocol_events,
     RuntimeProtocolPushState, RuntimeProtocolSequence, RuntimeSnapshotStore, ServerProtocolRequest,
@@ -12,6 +13,7 @@ use crate::protocol::{
 };
 use crate::reporting::{report_npc_life_debug_snapshot, report_spawned_characters_and_exit};
 use crate::startup::{advance_map_ai_spawns, startup_demo};
+use crate::vision::{refresh_runtime_vision, ServerVisionTrackerState};
 use game_bevy::{
     load_character_definitions_on_startup, load_effect_definitions_on_startup,
     load_item_definitions_on_startup, load_map_definitions_on_startup,
@@ -51,6 +53,8 @@ impl Plugin for ServerAppPlugin {
             .insert_resource(ShopDefinitionPath::default())
             .insert_resource(RuntimeStartupConfigPath::default())
             .insert_resource(NpcDebugReportState::default())
+            .insert_resource(ServerVisionConfig::default())
+            .insert_resource(ServerVisionTrackerState::default())
             .insert_resource(MapAiSpawnRuntimeState::default())
             .insert_resource(RuntimeSnapshotStore::default())
             .insert_resource(RuntimeProtocolPushState::default())
@@ -91,6 +95,8 @@ impl Plugin for ServerAppPlugin {
                 Update,
                 (
                     dispatch_protocol_requests,
+                    advance_runtime_progression,
+                    refresh_runtime_vision,
                     emit_runtime_protocol_events,
                     drain_protocol_responses,
                     spawn_characters_from_definition,

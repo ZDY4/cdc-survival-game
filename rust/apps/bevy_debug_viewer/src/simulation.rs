@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use bevy::prelude::*;
 use game_bevy::{
     advance_map_ai_spawn_runtime, register_runtime_actor_from_definition, BackgroundLifeState,
@@ -12,7 +14,7 @@ use game_core::{
     PendingProgressionStep, ProgressionAdvanceResult, SimulationCommand, SimulationCommandResult,
     SimulationEvent,
 };
-use game_data::{ActorSide, GridCoord, SettlementId};
+use game_data::{ActorId, ActorSide, GridCoord, MapId, SettlementId};
 
 use crate::dialogue::sync_dialogue_from_event;
 use crate::state::{
@@ -22,6 +24,19 @@ use crate::state::{
 
 const ACTOR_MOTION_MIN_DURATION_SEC: f32 = 0.04;
 const ACTOR_MOTION_MAX_DURATION_SEC: f32 = 0.16;
+
+#[derive(Resource, Debug, Default)]
+pub(crate) struct ViewerVisionTrackerState {
+    tracked_actors: BTreeMap<ActorId, ViewerVisionTracker>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct ViewerVisionTracker {
+    active_map_id: Option<MapId>,
+    grid_position: Option<GridCoord>,
+    topology_version: u64,
+    runtime_obstacle_version: u64,
+}
 
 pub(crate) fn prime_viewer_state(
     mut runtime_state: ResMut<ViewerRuntimeState>,
@@ -96,6 +111,82 @@ pub(crate) fn tick_runtime(
             }
         }
     }
+}
+
+pub(crate) fn refresh_viewer_vision(
+    mut trackers: ResMut<ViewerVisionTrackerState>,
+    mut runtime_state: ResMut<ViewerRuntimeState>,
+    viewer_state: Res<ViewerState>,
+    scene_kind: Option<Res<ViewerSceneKind>>,
+) {
+    if scene_kind.is_some_and(|scene_kind| scene_kind.is_main_menu()) {
+        let stale_actor_ids = trackers.tracked_actors.keys().copied().collect::<Vec<_>>();
+        for actor_id in stale_actor_ids {
+            trackers.tracked_actors.remove(&actor_id);
+            runtime_state.runtime.clear_actor_vision(actor_id);
+        }
+        return;
+    }
+
+    let snapshot = runtime_state.runtime.snapshot();
+    let tracked_actor_id = viewer_state.focus_actor_id(&snapshot);
+
+    let stale_actor_ids = trackers
+        .tracked_actors
+        .keys()
+        .copied()
+        .filter(|actor_id| Some(*actor_id) != tracked_actor_id)
+        .collect::<Vec<_>>();
+    for actor_id in stale_actor_ids {
+        trackers.tracked_actors.remove(&actor_id);
+        runtime_state.runtime.clear_actor_vision(actor_id);
+    }
+
+    let Some(actor_id) = tracked_actor_id else {
+        return;
+    };
+    let Some(actor) = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == actor_id)
+    else {
+        return;
+    };
+
+    runtime_state
+        .runtime
+        .set_actor_vision_radius(actor_id, game_core::vision::DEFAULT_VISION_RADIUS);
+
+    let active_map_id = snapshot.grid.map_id.clone();
+    let topology_version = snapshot.grid.topology_version;
+    let runtime_obstacle_version = snapshot.grid.runtime_obstacle_version;
+    let tracker = trackers.tracked_actors.entry(actor_id).or_default();
+    let should_refresh = tracker.active_map_id != active_map_id
+        || tracker.grid_position != Some(actor.grid_position)
+        || tracker.topology_version != topology_version
+        || tracker.runtime_obstacle_version != runtime_obstacle_version
+        || runtime_state.runtime.actor_vision_snapshot(actor_id).is_none();
+    if !should_refresh {
+        return;
+    }
+
+    if let Some(update) = runtime_state.runtime.refresh_actor_vision(actor_id) {
+        runtime_state
+            .runtime
+            .push_event(SimulationEvent::ActorVisionUpdated {
+                actor_id: update.actor_id,
+                active_map_id: update.active_map_id,
+                visible_cells: update.visible_cells,
+                explored_cells: update.explored_cells,
+            });
+    }
+
+    *tracker = ViewerVisionTracker {
+        active_map_id,
+        grid_position: Some(actor.grid_position),
+        topology_version,
+        runtime_obstacle_version,
+    };
 }
 
 pub(crate) fn advance_map_ai_spawns(
@@ -1624,6 +1715,7 @@ pub(crate) fn classify_event(event: &SimulationEvent) -> HudEventCategory {
         | SimulationEvent::ActorRegistered { .. }
         | SimulationEvent::ActorUnregistered { .. }
         | SimulationEvent::ActorMoved { .. }
+        | SimulationEvent::ActorVisionUpdated { .. }
         | SimulationEvent::WorldCycleCompleted
         | SimulationEvent::PathComputed { .. }
         | SimulationEvent::SceneTransitionRequested { .. }
@@ -1752,6 +1844,21 @@ fn format_event_text(event: SimulationEvent) -> String {
         } => format!(
             "actor moved {:?} ({}, {}, {}) -> ({}, {}, {}) step={}/{}",
             actor_id, from.x, from.y, from.z, to.x, to.y, to.z, step_index, total_steps
+        ),
+        SimulationEvent::ActorVisionUpdated {
+            actor_id,
+            active_map_id,
+            visible_cells,
+            explored_cells,
+        } => format!(
+            "vision updated actor={:?} map={} visible={} explored={}",
+            actor_id,
+            active_map_id
+                .as_ref()
+                .map(|map_id| map_id.as_str())
+                .unwrap_or("none"),
+            visible_cells.len(),
+            explored_cells.len()
         ),
         SimulationEvent::PathComputed {
             actor_id,

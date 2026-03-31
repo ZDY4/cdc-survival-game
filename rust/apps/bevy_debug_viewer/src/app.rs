@@ -26,8 +26,9 @@ use crate::controls::{
     handle_keyboard_input, handle_mouse_input, handle_mouse_wheel_zoom,
 };
 use crate::game_ui::{
-    apply_ui_settings_system, handle_game_ui_buttons, load_ui_settings_on_startup,
-    save_ui_settings_system, setup_game_ui, sync_game_ui_state, tick_hotbar_cooldowns,
+    apply_ui_settings_system, handle_game_ui_buttons, handle_inventory_panel_pointer_input,
+    load_ui_settings_on_startup, save_ui_settings_system, setup_game_ui, sync_game_ui_state,
+    tick_hotbar_cooldowns, update_hover_tooltip_state,
 };
 use crate::hud::update_free_observe_indicator;
 use crate::profiling::{
@@ -36,19 +37,21 @@ use crate::profiling::{
     profiled_update_occluding_world_visuals, sync_profiler_activation, ViewerSystemProfilerState,
 };
 use crate::render::{
-    setup_viewer, sync_damage_numbers, update_camera, update_dialogue_panel,
+    setup_viewer, sync_damage_numbers, sync_fog_of_war_visuals, update_camera,
+    update_dialogue_panel,
     update_interaction_menu, BuildingWallGridMaterial, GridGroundMaterial,
 };
 use crate::simulation::{
     advance_actor_feedback, advance_actor_motion, advance_map_ai_spawns,
     advance_online_npc_actions, collect_events, prime_viewer_state, refresh_interaction_prompt,
-    sync_npc_runtime_presence,
+    refresh_viewer_vision, sync_npc_runtime_presence, ViewerVisionTrackerState,
 };
 use crate::state::{
-    ActorLabelEntities, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraFollowState,
-    ViewerCameraShakeState, ViewerDamageNumberState, ViewerPalette, ViewerRenderConfig,
-    ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
-    ViewerUiSettings, ViewerUiSettingsPath,
+    ActorLabelEntities, UiHoverTooltipState, UiInventoryContextMenuState, ViewerActorFeedbackState,
+    ViewerActorMotionState, ViewerCameraFollowState, ViewerCameraShakeState,
+    ViewerDamageNumberState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiSettings,
+    ViewerUiSettingsPath,
 };
 
 pub(crate) fn run() {
@@ -79,8 +82,11 @@ pub(crate) fn run() {
         .insert_resource(ViewerUiSettings::default())
         .insert_resource(ViewerUiSettingsPath::default())
         .insert_resource(ViewerRuntimeSavePath::default())
+        .insert_resource(UiHoverTooltipState::default())
+        .insert_resource(UiInventoryContextMenuState::default())
         .insert_resource(ViewerConsoleState::default())
         .insert_resource(ViewerSystemProfilerState::default())
+        .insert_resource(ViewerVisionTrackerState::default())
         .run();
 }
 
@@ -202,14 +208,19 @@ impl Plugin for ViewerAppPlugin {
                 crate::hud::handle_hud_tab_buttons,
                 handle_interaction_menu_buttons,
                 handle_dialogue_choice_buttons,
+                handle_inventory_panel_pointer_input,
                 handle_game_ui_buttons,
                 sync_profiler_activation,
                 profiled_tick_runtime,
                 profiled_advance_runtime_progression,
+                refresh_viewer_vision,
             )
                 .in_set(ViewerUpdateSet::RuntimeMutations),
         );
-        app.add_systems(Update, collect_events.in_set(ViewerUpdateSet::EventCollection));
+        app.add_systems(
+            Update,
+            collect_events.in_set(ViewerUpdateSet::EventCollection),
+        );
         app.add_systems(
             Update,
             (
@@ -224,6 +235,7 @@ impl Plugin for ViewerAppPlugin {
             Update,
             (
                 profiled_sync_world_visuals,
+                sync_fog_of_war_visuals,
                 profiled_update_occluding_world_visuals,
                 profiled_sync_actor_labels,
                 sync_damage_numbers,
@@ -238,6 +250,7 @@ impl Plugin for ViewerAppPlugin {
                 crate::hud::update_hud,
                 crate::hud::update_fps_overlay,
                 update_console_panel,
+                update_hover_tooltip_state,
                 profiled_update_game_ui,
                 update_interaction_menu,
                 update_dialogue_panel,

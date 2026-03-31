@@ -525,7 +525,9 @@ export type NarrativeAppSettings = {
   lastWorkspace?: string | null;
   connectedProjectRoot?: string | null;
   recentProjectRoots: string[];
+  sessionRestoreMode?: NarrativeSessionRestoreMode;
   workspaceLayouts?: Record<string, NarrativeWorkspaceLayout>;
+  workspaceAgentSessions?: Record<string, NarrativeWorkspaceAgentState>;
 };
 
 export type NarrativeExecutorMode = "desktop_local" | "cloud_mobile";
@@ -669,8 +671,181 @@ export type NarrativeAgentRun = {
   providerError: string;
 };
 
+export type NarrativeTurnKind =
+  | "final_answer"
+  | "clarification"
+  | "options"
+  | "plan"
+  | "blocked";
+
+export type AgentQuestion = {
+  id: string;
+  label: string;
+  placeholder?: string;
+  required: boolean;
+};
+
+export type AgentOption = {
+  id: string;
+  label: string;
+  description: string;
+  followupPrompt: string;
+};
+
+export type AgentPlanStep = {
+  id: string;
+  label: string;
+  status: "pending" | "active" | "completed";
+};
+
+export type AgentExecutionStep = {
+  id: string;
+  label: string;
+  detail: string;
+  status: "pending" | "running" | "completed" | "failed";
+  previewText?: string;
+};
+
+export type NarrativeSessionRestoreMode = "ask" | "always" | "documents_only";
+
+export type NarrativeAgentStrategy = {
+  rewriteIntensity: "light" | "balanced" | "aggressive";
+  priority: "consistency" | "drama" | "speed";
+  questionBehavior: "ask_first" | "balanced" | "direct";
+};
+
+export type NarrativeReviewQueueItem = {
+  id: string;
+  kind: "patch" | "plan" | "action" | "derived_doc";
+  title: string;
+  description: string;
+  status: "pending" | "approved" | "rejected" | "completed";
+};
+
+export type NarrativeVersionSnapshot = {
+  id: string;
+  title: string;
+  createdAt: string;
+  beforeMarkdown: string;
+  afterMarkdown: string;
+  summary: string;
+  requestId?: string | null;
+};
+
+export type PersistedDocumentAgentSessionState = {
+  sessionId: string;
+  sessionTitle: string;
+  branchOfSessionId?: string | null;
+  updatedAt: string;
+  mode: "create" | "revise_document";
+  composerText: string;
+  chatMessages: AiChatMessage[];
+  lastRequest: NarrativeGenerateRequest | null;
+  lastResponse: NarrativeGenerateResponse | null;
+  candidatePatchSet: NarrativePatchSet | null;
+  status:
+    | "idle"
+    | "thinking"
+    | "waiting_user"
+    | "executing_step"
+    | "reviewing_result"
+    | "completed"
+    | "error";
+  pendingQuestions: AgentQuestion[];
+  pendingOptions: AgentOption[];
+  lastPlan: AgentPlanStep[] | null;
+  pendingTurnKind: NarrativeTurnKind | null;
+  executionSteps: AgentExecutionStep[];
+  currentStepId: string | null;
+  pendingActionRequests: AgentActionRequest[];
+  actionHistory: AgentActionResult[];
+  documentViewMode: NarrativeDocumentViewMode;
+  selectedContextDocKeys: string[];
+  strategy: NarrativeAgentStrategy;
+  reviewQueue: NarrativeReviewQueueItem[];
+  versionHistory: NarrativeVersionSnapshot[];
+  pendingDerivedDocuments: NarrativeDocumentSummary[];
+};
+
+export type SavedDocumentAgentBranch = {
+  id: string;
+  title: string;
+  archived: boolean;
+  branchOfSessionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  snapshot: PersistedDocumentAgentSessionState;
+};
+
+export type NarrativeWorkspaceAgentState = {
+  savedAt: string;
+  restoredAt?: string | null;
+  sessions: Record<string, PersistedDocumentAgentSessionState>;
+};
+
+export type NarrativeRegressionCase = {
+  id: string;
+  label: string;
+  prompt: string;
+  expectedTurnKinds: NarrativeTurnKind[];
+};
+
+export type NarrativeRegressionCaseResult = {
+  id: string;
+  label: string;
+  expectedTurnKinds: NarrativeTurnKind[];
+  actualTurnKind: NarrativeTurnKind | "blocked";
+  ok: boolean;
+  summary: string;
+};
+
+export type NarrativeRegressionSuiteResult = {
+  ok: boolean;
+  results: NarrativeRegressionCaseResult[];
+  summary: string;
+};
+
+export type NarrativeAgentActionType =
+  | "read_active_document"
+  | "read_related_documents"
+  | "create_derived_document"
+  | "apply_candidate_patch"
+  | "apply_all_patches"
+  | "save_active_document"
+  | "open_document"
+  | "list_workspace_documents"
+  | "update_related_documents"
+  | "rename_active_document"
+  | "set_document_status"
+  | "split_plan_into_documents"
+  | "archive_document";
+
+export type AgentActionRequest = {
+  id: string;
+  actionType: NarrativeAgentActionType;
+  title: string;
+  description: string;
+  payload: Record<string, unknown>;
+  approvalPolicy: "always_require_user";
+  previewOnly?: boolean;
+  affectedDocumentKeys?: string[];
+  riskLevel?: "low" | "medium" | "high";
+};
+
+export type AgentActionResult = {
+  requestId: string;
+  actionType: NarrativeAgentActionType;
+  status: "approved" | "rejected" | "completed" | "failed";
+  summary: string;
+  document?: NarrativeDocumentPayload | null;
+  documentSummaries?: NarrativeDocumentSummary[];
+  openedSlug?: string | null;
+};
+
 export type NarrativeGenerateResponse = {
   engineMode: "single_agent" | "multi_agent";
+  turnKind: NarrativeTurnKind;
+  assistantMessage: string;
   draftMarkdown: string;
   summary: string;
   reviewNotes: string[];
@@ -683,6 +858,16 @@ export type NarrativeGenerateResponse = {
   providerError: string;
   synthesisNotes: string[];
   agentRuns: NarrativeAgentRun[];
+  questions: AgentQuestion[];
+  options: AgentOption[];
+  planSteps: AgentPlanStep[];
+  requiresUserReply: boolean;
+  executionSteps: AgentExecutionStep[];
+  currentStepId?: string | null;
+  requestedActions: AgentActionRequest[];
+  sourceDocumentKeys: string[];
+  provenanceRefs: string[];
+  reviewQueueItems: NarrativeReviewQueueItem[];
 };
 
 export type NarrativeCandidatePatch = {
@@ -702,12 +887,38 @@ export type NarrativePatchSet = {
 };
 
 export type DocumentAgentSession = {
+  sessionId: string;
+  sessionTitle: string;
+  branchOfSessionId?: string | null;
+  updatedAt: string;
   mode: "create" | "revise_document";
   composerText: string;
   chatMessages: AiChatMessage[];
   lastRequest: NarrativeGenerateRequest | null;
   lastResponse: NarrativeGenerateResponse | null;
   candidatePatchSet: NarrativePatchSet | null;
+  status:
+    | "idle"
+    | "thinking"
+    | "waiting_user"
+    | "executing_step"
+    | "reviewing_result"
+    | "completed"
+    | "error";
+  pendingQuestions: AgentQuestion[];
+  pendingOptions: AgentOption[];
+  lastPlan: AgentPlanStep[] | null;
+  pendingTurnKind: NarrativeTurnKind | null;
+  executionSteps: AgentExecutionStep[];
+  currentStepId: string | null;
+  pendingActionRequests: AgentActionRequest[];
+  actionHistory: AgentActionResult[];
+  selectedContextDocKeys: string[];
+  strategy: NarrativeAgentStrategy;
+  reviewQueue: NarrativeReviewQueueItem[];
+  versionHistory: NarrativeVersionSnapshot[];
+  pendingDerivedDocuments: NarrativeDocumentSummary[];
+  savedBranches: SavedDocumentAgentBranch[];
   busy: boolean;
   inflightRequestId?: string | null;
   documentViewMode: NarrativeDocumentViewMode;
@@ -718,6 +929,9 @@ export type NarrativeGenerationProgressEvent = {
   stage: "status" | "delta" | "completed" | "error";
   status: string;
   previewText: string;
+  stepId?: string | null;
+  stepLabel?: string | null;
+  stepStatus?: "pending" | "running" | "completed" | "failed" | null;
 };
 
 export type SaveNarrativeDocumentResult = {
@@ -731,6 +945,32 @@ export type NarrativeDocumentSummary = {
   headingCount: number;
   headings: string[];
   excerpt: string;
+};
+
+export type NarrativeSessionExportInput = {
+  sessionId: string;
+  sessionTitle: string;
+  workspaceName: string;
+  activeDocument: NarrativeDocumentPayload;
+  selectedContextDocuments: NarrativeDocumentPayload[];
+  strategySummary: string;
+  latestTurnKind?: NarrativeTurnKind | null;
+  latestSummary: string;
+  latestDraftMarkdown: string;
+  sourceDocumentKeys: string[];
+  provenanceRefs: string[];
+  planSteps: string[];
+  reviewQueue: string[];
+  pendingActions: string[];
+  actionHistory: string[];
+  versionHistory: string[];
+  recentMessages: string[];
+};
+
+export type NarrativeSessionExportResult = {
+  exportPath: string;
+  fileName: string;
+  summary: string;
 };
 
 export type StructuringBundlePayload = {

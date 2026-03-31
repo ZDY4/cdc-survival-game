@@ -22,6 +22,9 @@ use crate::simulation::{
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
     SimulationSnapshot, SimulationStateSnapshot, SkillActivationResult, SkillRuntimeState,
 };
+use crate::vision::{
+    ActorVisionSnapshot, ActorVisionUpdate, VisionRuntimeSnapshot, VisionRuntimeState,
+};
 use crate::{NpcBackgroundState, NpcRuntimeActionState};
 
 pub const RUNTIME_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
@@ -35,6 +38,8 @@ pub struct RuntimeSnapshot {
     #[serde(default = "default_runtime_snapshot_schema_version")]
     pub schema_version: u32,
     pub(crate) simulation: SimulationStateSnapshot,
+    #[serde(default)]
+    pub vision: VisionRuntimeSnapshot,
     #[serde(default)]
     pub pending_movement: Option<PendingMovementIntent>,
     #[serde(default)]
@@ -50,6 +55,7 @@ pub struct RuntimeSnapshot {
 #[derive(Debug)]
 pub struct SimulationRuntime {
     simulation: Simulation,
+    vision: VisionRuntimeState,
     pending_movement: Option<PendingMovementIntent>,
     pending_interaction: Option<PendingInteractionIntent>,
     pending_movement_stop_requested: bool,
@@ -67,6 +73,7 @@ impl SimulationRuntime {
     pub fn new() -> Self {
         Self {
             simulation: Simulation::new(),
+            vision: VisionRuntimeState::default(),
             pending_movement: None,
             pending_interaction: None,
             pending_movement_stop_requested: false,
@@ -78,6 +85,7 @@ impl SimulationRuntime {
     pub fn from_simulation(simulation: Simulation) -> Self {
         Self {
             simulation,
+            vision: VisionRuntimeState::default(),
             pending_movement: None,
             pending_interaction: None,
             pending_movement_stop_requested: false,
@@ -119,6 +127,7 @@ impl SimulationRuntime {
 
     pub fn unregister_actor(&mut self, actor_id: ActorId) {
         self.clear_pending_movement_internal(None);
+        self.vision.clear_actor(actor_id);
         self.simulation.unregister_actor(actor_id);
     }
 
@@ -380,13 +389,15 @@ impl SimulationRuntime {
     }
 
     pub fn snapshot(&self) -> SimulationSnapshot {
-        self.simulation.snapshot(self.path_preview.clone())
+        self.simulation
+            .snapshot(self.path_preview.clone(), self.vision.snapshot())
     }
 
     pub fn save_snapshot(&self) -> RuntimeSnapshot {
         RuntimeSnapshot {
             schema_version: RUNTIME_SNAPSHOT_SCHEMA_VERSION,
             simulation: self.simulation.save_snapshot(),
+            vision: self.vision.snapshot(),
             pending_movement: self.pending_movement,
             pending_interaction: self.pending_interaction.clone(),
             pending_movement_stop_requested: self.pending_movement_stop_requested,
@@ -403,6 +414,7 @@ impl SimulationRuntime {
             ));
         }
         self.simulation.load_snapshot(snapshot.simulation);
+        self.vision.load_snapshot(snapshot.vision);
         self.pending_movement = snapshot.pending_movement;
         self.pending_interaction = snapshot.pending_interaction;
         self.pending_movement_stop_requested = snapshot.pending_movement_stop_requested;
@@ -768,6 +780,40 @@ impl SimulationRuntime {
 
     pub fn get_actor_definition_id(&self, actor_id: ActorId) -> Option<&CharacterId> {
         self.simulation.get_actor_definition_id(actor_id)
+    }
+
+    pub fn vision_snapshot(&self) -> VisionRuntimeSnapshot {
+        self.vision.snapshot()
+    }
+
+    pub fn actor_vision_snapshot(&self, actor_id: ActorId) -> Option<ActorVisionSnapshot> {
+        self.vision.actor_snapshot(actor_id)
+    }
+
+    pub fn set_actor_vision_radius(&mut self, actor_id: ActorId, radius: i32) {
+        if self.simulation.get_actor_side(actor_id).is_none() {
+            return;
+        }
+        self.vision.set_actor_radius(actor_id, radius);
+    }
+
+    pub fn clear_actor_vision(&mut self, actor_id: ActorId) {
+        self.vision.clear_actor(actor_id);
+    }
+
+    pub fn refresh_actor_vision(&mut self, actor_id: ActorId) -> Option<ActorVisionUpdate> {
+        if self.simulation.get_actor_side(actor_id).is_none() {
+            self.vision.clear_actor(actor_id);
+            return None;
+        }
+        let active_map_id = self.simulation.grid_world().map_id().cloned();
+        let center = self.simulation.actor_grid_position(actor_id);
+        self.vision.recompute_actor(
+            actor_id,
+            active_map_id.as_ref(),
+            center,
+            self.simulation.grid_world(),
+        )
     }
 
     pub fn set_actor_autonomous_movement_goal(&mut self, actor_id: ActorId, goal: GridCoord) {
@@ -3111,6 +3157,55 @@ mod tests {
             .map_objects
             .iter()
             .all(|object| object.object_id != "pickup"));
+    }
+
+    #[test]
+    fn runtime_snapshot_round_trip_preserves_actor_vision_state() {
+        let map = sample_interaction_map_definition();
+        let map_library = MapLibrary::from(BTreeMap::from([(map.id.clone(), map.clone())]));
+
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(map_library.clone());
+        simulation.grid_world_mut().load_map(&map);
+
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(1, 0, 1),
+            interaction: None,
+            attack_range: 1.5,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+        runtime.set_actor_vision_radius(player, 5);
+        let update = runtime
+            .refresh_actor_vision(player)
+            .expect("vision should refresh");
+        assert!(!update.visible_cells.is_empty());
+        assert!(!update.explored_cells.is_empty());
+
+        let saved = runtime.save_snapshot();
+        let mut restored = SimulationRuntime::new();
+        restored.set_map_library(map_library);
+        restored
+            .load_snapshot(saved.clone())
+            .expect("snapshot should restore");
+
+        assert_eq!(restored.save_snapshot(), saved);
+        let restored_vision = restored
+            .actor_vision_snapshot(player)
+            .expect("vision snapshot should restore");
+        assert_eq!(restored_vision.radius, 5);
+        assert_eq!(
+            restored_vision.active_map_id.as_ref().map(MapId::as_str),
+            Some("interaction_map")
+        );
+        assert!(!restored_vision.visible_cells.is_empty());
+        assert!(!restored_vision.explored_maps.is_empty());
     }
 
     fn sample_reward_item_library() -> ItemLibrary {

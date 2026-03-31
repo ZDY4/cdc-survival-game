@@ -39,6 +39,7 @@ use crate::turn::{
     ActiveActionState, ActiveActions, ActiveActionsSnapshot, GroupOrderRegistry,
     GroupOrderRegistrySnapshot, TurnConfig, TurnRuntime,
 };
+use crate::vision::VisionRuntimeSnapshot;
 
 #[derive(Debug)]
 pub struct RegisterActor {
@@ -238,6 +239,12 @@ pub enum SimulationEvent {
         to: GridCoord,
         step_index: usize,
         total_steps: usize,
+    },
+    ActorVisionUpdated {
+        actor_id: ActorId,
+        active_map_id: Option<MapId>,
+        visible_cells: Vec<GridCoord>,
+        explored_cells: Vec<GridCoord>,
     },
     PathComputed {
         actor_id: Option<ActorId>,
@@ -553,6 +560,7 @@ pub struct SimulationSnapshot {
     pub turn: TurnState,
     pub actors: Vec<ActorDebugState>,
     pub grid: GridDebugState,
+    pub vision: VisionRuntimeSnapshot,
     pub generated_buildings: Vec<GeneratedBuildingDebugState>,
     pub generated_doors: Vec<GeneratedDoorDebugState>,
     pub combat: CombatDebugState,
@@ -2276,7 +2284,11 @@ impl Simulation {
             .collect()
     }
 
-    pub fn snapshot(&self, path_preview: Vec<GridCoord>) -> SimulationSnapshot {
+    pub fn snapshot(
+        &self,
+        path_preview: Vec<GridCoord>,
+        vision: VisionRuntimeSnapshot,
+    ) -> SimulationSnapshot {
         let map_size = self.grid_world.map_size();
         SimulationSnapshot {
             turn: self.turn_state(),
@@ -2296,6 +2308,7 @@ impl Simulation {
                 topology_version: self.grid_world.topology_version(),
                 runtime_obstacle_version: self.grid_world.runtime_obstacle_version(),
             },
+            vision,
             generated_buildings: self.grid_world.generated_buildings().to_vec(),
             generated_doors: self.grid_world.generated_doors().to_vec(),
             combat: CombatDebugState {
@@ -6036,7 +6049,7 @@ mod tests {
             ai_controller: None,
         });
 
-        let snapshot = simulation.snapshot(Vec::new());
+        let snapshot = simulation.snapshot(Vec::new(), Default::default());
         let actor = snapshot
             .actors
             .iter()

@@ -57,8 +57,70 @@ pub struct NarrativeAgentRun {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentQuestion {
+    pub id: String,
+    pub label: String,
+    pub placeholder: String,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentOption {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub followup_prompt: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPlanStep {
+    pub id: String,
+    pub label: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentExecutionStep {
+    pub id: String,
+    pub label: String,
+    pub detail: String,
+    pub status: String,
+    pub preview_text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentActionRequest {
+    pub id: String,
+    pub action_type: String,
+    pub title: String,
+    pub description: String,
+    pub payload: Value,
+    pub approval_policy: String,
+    pub preview_only: bool,
+    pub affected_document_keys: Vec<String>,
+    pub risk_level: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewQueueItem {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub description: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NarrativeGenerateResponse {
     pub engine_mode: String,
+    pub turn_kind: String,
+    pub assistant_message: String,
     pub draft_markdown: String,
     pub summary: String,
     pub review_notes: Vec<String>,
@@ -71,7 +133,33 @@ pub struct NarrativeGenerateResponse {
     pub provider_error: String,
     pub synthesis_notes: Vec<String>,
     pub agent_runs: Vec<NarrativeAgentRun>,
+    pub questions: Vec<AgentQuestion>,
+    pub options: Vec<AgentOption>,
+    pub plan_steps: Vec<AgentPlanStep>,
+    pub requires_user_reply: bool,
+    pub execution_steps: Vec<AgentExecutionStep>,
+    pub current_step_id: Option<String>,
+    pub requested_actions: Vec<AgentActionRequest>,
+    pub source_document_keys: Vec<String>,
+    pub provenance_refs: Vec<String>,
+    pub review_queue_items: Vec<ReviewQueueItem>,
 }
+
+const SUPPORTED_AGENT_ACTION_TYPES: &[&str] = &[
+    "read_active_document",
+    "read_related_documents",
+    "create_derived_document",
+    "apply_candidate_patch",
+    "apply_all_patches",
+    "save_active_document",
+    "open_document",
+    "list_workspace_documents",
+    "update_related_documents",
+    "rename_active_document",
+    "set_document_status",
+    "split_plan_into_documents",
+    "archive_document",
+];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,6 +168,9 @@ struct NarrativeGenerationProgressEvent {
     stage: String,
     status: String,
     preview_text: String,
+    step_id: Option<String>,
+    step_label: Option<String>,
+    step_status: Option<String>,
 }
 
 #[derive(Clone)]
@@ -101,33 +192,94 @@ impl NarrativeGenerationProgressEmitter {
         })
     }
 
-    fn emit(&self, stage: &str, status: impl Into<String>, preview_text: impl Into<String>) {
+    fn emit(
+        &self,
+        stage: &str,
+        status: impl Into<String>,
+        preview_text: impl Into<String>,
+        step_id: Option<&str>,
+        step_label: Option<&str>,
+        step_status: Option<&str>,
+    ) {
         let payload = NarrativeGenerationProgressEvent {
             request_id: self.request_id.clone(),
             stage: stage.to_string(),
             status: status.into(),
             preview_text: preview_text.into(),
+            step_id: step_id.map(ToString::to_string),
+            step_label: step_label.map(ToString::to_string),
+            step_status: step_status.map(ToString::to_string),
         };
         let _ = self
             .app
             .emit_to("main", NARRATIVE_GENERATION_PROGRESS_EVENT, payload);
     }
 
-    fn status(&self, status: impl Into<String>) {
-        let status = status.into();
-        self.emit("status", status.clone(), status);
-    }
-
-    fn delta(&self, status: impl Into<String>, preview_text: impl Into<String>) {
-        self.emit("delta", status, preview_text);
-    }
-
     fn completed(&self, status: impl Into<String>, preview_text: impl Into<String>) {
-        self.emit("completed", status, preview_text);
+        self.emit("completed", status, preview_text, None, None, None);
     }
 
-    fn error(&self, status: impl Into<String>, preview_text: impl Into<String>) {
-        self.emit("error", status, preview_text);
+    fn status_step(&self, step_id: &str, step_label: &str, status: impl Into<String>) {
+        let status = status.into();
+        self.emit(
+            "status",
+            status.clone(),
+            status,
+            Some(step_id),
+            Some(step_label),
+            Some("running"),
+        );
+    }
+
+    fn delta_step(
+        &self,
+        step_id: &str,
+        step_label: &str,
+        status: impl Into<String>,
+        preview_text: impl Into<String>,
+    ) {
+        self.emit(
+            "delta",
+            status,
+            preview_text,
+            Some(step_id),
+            Some(step_label),
+            Some("running"),
+        );
+    }
+
+    fn completed_step(
+        &self,
+        step_id: &str,
+        step_label: &str,
+        status: impl Into<String>,
+        preview_text: impl Into<String>,
+    ) {
+        self.emit(
+            "completed",
+            status,
+            preview_text,
+            Some(step_id),
+            Some(step_label),
+            Some("completed"),
+        );
+    }
+
+    fn error_step(
+        &self,
+        step_id: &str,
+        step_label: &str,
+        status: impl Into<String>,
+        preview_text: impl Into<String>,
+    ) {
+        self.emit(
+            "error",
+            status,
+            preview_text,
+            Some(step_id),
+            Some(step_label),
+            Some("failed"),
+        );
     }
 }
 
@@ -185,11 +337,17 @@ fn run_narrative_generation(
 ) -> Result<NarrativeGenerateResponse, String> {
     let progress = NarrativeGenerationProgressEmitter::from_request(app, &request);
     if let Some(progress) = &progress {
-        progress.status("正在准备 AI 请求...");
+        progress.status_step("prepare-request", "准备请求", "正在准备 AI 请求...");
     }
     normalize_request(&mut request)?;
     if let Some(progress) = &progress {
-        progress.status("正在校验当前文档与选区...");
+        progress.completed_step(
+            "prepare-request",
+            "准备请求",
+            "AI 请求准备完成。",
+            "请求参数已标准化。",
+        );
+        progress.status_step("validate-input", "校验输入", "正在校验当前文档与选区...");
     }
     let selection = validate_selection(
         &request.current_markdown,
@@ -198,13 +356,25 @@ fn run_narrative_generation(
         &request.action,
     )?;
     if let Some(progress) = &progress {
-        progress.status("正在读取 AI 设置...");
+        progress.completed_step(
+            "validate-input",
+            "校验输入",
+            "输入校验完成。",
+            "文档与选区均可用于本轮生成。",
+        );
+        progress.status_step("load-settings", "读取设置", "正在读取 AI 设置...");
     }
     let settings = read_ai_settings(app)?.normalized();
     let workspace_root_path = resolve_workspace_root(workspace_root)?;
     let project_root_path = resolve_connected_project_root(project_root)?;
     if let Some(progress) = &progress {
-        progress.status("正在整理工作区上下文...");
+        progress.completed_step(
+            "load-settings",
+            "读取设置",
+            "AI 设置读取完成。",
+            format!("当前模型：{}", settings.model),
+        );
+        progress.status_step("build-context", "整理上下文", "正在整理工作区上下文...");
     }
     let context = build_narrative_context(
         &workspace_root_path,
@@ -214,11 +384,26 @@ fn run_narrative_generation(
     )?;
     let payload = build_single_agent_payload(&request, &context.context, &settings);
     if let Some(progress) = &progress {
-        progress.status("正在连接 AI 提供方...");
+        progress.completed_step(
+            "build-context",
+            "整理上下文",
+            "上下文整理完成。",
+            format!("已收集 {} 条上下文引用。", context.used_context_refs.len()),
+        );
+        progress.status_step("request-model", "请求模型", "正在连接 AI 提供方...");
     }
 
     match perform_chat_completion(&settings, &payload, progress.as_ref()) {
         Ok(success) => {
+            if let Some(progress) = &progress {
+                progress.completed_step(
+                    "request-model",
+                    "请求模型",
+                    "模型输出接收完成。",
+                    success.raw_text.clone(),
+                );
+                progress.status_step("review-result", "整理结果", "正在整理最终结果...");
+            }
             let agent_run = build_single_agent_run(&success.payload, &success.raw_text);
             let response = finalize_generation(
                 "single_agent",
@@ -230,6 +415,12 @@ fn run_narrative_generation(
                 vec![agent_run],
             )?;
             if let Some(progress) = &progress {
+                progress.completed_step(
+                    "review-result",
+                    "整理结果",
+                    "结果整理完成。",
+                    summarize_response_preview(&response),
+                );
                 progress.completed(
                     "AI 输出完成，正在整理结果...",
                     summarize_response_preview(&response),
@@ -240,7 +431,9 @@ fn run_narrative_generation(
         Err(error) => {
             let provider_error = normalize_provider_error(&error);
             if let Some(progress) = &progress {
-                progress.error(
+                progress.error_step(
+                    "request-model",
+                    "请求模型",
                     provider_error.clone(),
                     if error.raw_text.trim().is_empty() {
                         provider_error.clone()
@@ -249,8 +442,11 @@ fn run_narrative_generation(
                     },
                 );
             }
+            let provenance_refs = context.used_context_refs.clone();
             Ok(NarrativeGenerateResponse {
                 engine_mode: "single_agent".to_string(),
+                turn_kind: "blocked".to_string(),
+                assistant_message: provider_error.clone(),
                 draft_markdown: String::new(),
                 summary: String::new(),
                 review_notes: vec!["文档助手本轮没有生成可用草稿。".to_string()],
@@ -283,6 +479,16 @@ fn run_narrative_generation(
                     normalize_provider_error(&error),
                 )
                 .with_raw_output(error.raw_text)],
+                questions: Vec::new(),
+                options: Vec::new(),
+                plan_steps: Vec::new(),
+                requires_user_reply: false,
+                execution_steps: failed_execution_steps("request-model", "请求模型", &provider_error),
+                current_step_id: Some("request-model".to_string()),
+                requested_actions: Vec::new(),
+                source_document_keys: build_source_document_keys(&request),
+                provenance_refs,
+                review_queue_items: Vec::new(),
             })
         }
     }
@@ -302,6 +508,11 @@ fn finalize_generation(
         .cloned()
         .ok_or_else(|| "AI 返回的 narrative 结果不是 JSON 对象".to_string())?;
     let draft_markdown = read_draft_markdown(&object);
+    let questions = read_agent_questions(&object);
+    let options = read_agent_options(&object);
+    let plan_steps = read_agent_plan_steps(&object);
+    let requested_actions = read_requested_actions(&object);
+    let turn_kind = resolve_turn_kind(&object, &draft_markdown, &questions, &options, &plan_steps);
     let model_notes = read_string_list(
         object
             .get("review_notes")
@@ -318,11 +529,27 @@ fn finalize_generation(
     let review_notes = review.review_notes;
 
     let summary = read_summary(&object, &request.action, &draft_markdown);
+    let assistant_message = read_assistant_message(
+        &object,
+        &turn_kind,
+        &summary,
+        &draft_markdown,
+        &questions,
+        &options,
+        &plan_steps,
+    );
 
     let agent_risk = highest_agent_risk(&agent_runs);
+    let execution_steps = completed_execution_steps(&turn_kind, &summary);
+    let source_document_keys = build_source_document_keys(&request);
+    let provenance_refs = context.used_context_refs.clone();
+    let review_queue_items =
+        build_review_queue_items(&turn_kind, &plan_steps, &requested_actions, &draft_markdown);
 
     Ok(NarrativeGenerateResponse {
         engine_mode: engine_mode.to_string(),
+        turn_kind: turn_kind.clone(),
+        assistant_message,
         draft_markdown,
         summary,
         review_notes,
@@ -356,6 +583,16 @@ fn finalize_generation(
         provider_error: String::new(),
         synthesis_notes,
         agent_runs,
+        questions,
+        options,
+        plan_steps,
+        requires_user_reply: matches!(turn_kind.as_str(), "clarification" | "options" | "plan"),
+        execution_steps,
+        current_step_id: None,
+        requested_actions,
+        source_document_keys,
+        provenance_refs,
+        review_queue_items,
     })
 }
 
@@ -409,9 +646,18 @@ fn build_single_agent_payload(
     settings: &AiSettings,
 ) -> Value {
     let contract = [
-        "正文优先：直接输出最终 Markdown，不要输出 JSON，不要解释，不要加代码块围栏。",
-        "输出内容必须是可直接预览、编辑、保存的 Markdown 正文。",
-        "不要包含 YAML frontmatter，不要补充“说明如下”“修改建议”等额外文字。",
+        "始终只返回一个 JSON 对象，不要输出 Markdown 正文，不要加代码块围栏，不要附加解释文字。",
+        "JSON 允许字段：turn_kind, assistant_message, draft_markdown, summary, review_notes, synthesis_notes, risk_level, questions, options, plan_steps, requested_actions。",
+        "turn_kind 只能是 final_answer, clarification, options, plan, blocked 之一。",
+        "当信息足够且适合直接产出结果时，使用 final_answer，并在 draft_markdown 中提供可直接保存的 Markdown 正文。",
+        "当关键信息缺失时，使用 clarification，并提供 1 到 3 个 questions。",
+        "当存在清晰方向分叉时，使用 options，并提供 2 到 4 个 options，每个 option 必须包含 followup_prompt。",
+        "当任务较复杂、适合先说明推进方式时，使用 plan，并提供简短的 plan_steps。",
+        "当当前上下文不足以安全继续时，使用 blocked，并说明阻塞原因；此时不要编造正文。",
+        "如果你希望用户批准某个 Narrative Lab 动作，使用 requested_actions；动作不会自动执行。",
+        "requested_actions 中 action_type 只能是 read_active_document, read_related_documents, create_derived_document, apply_candidate_patch, apply_all_patches, save_active_document, open_document, list_workspace_documents, update_related_documents, rename_active_document, set_document_status, split_plan_into_documents, archive_document。",
+        "requested_actions 可选字段：preview_only, affected_document_keys, risk_level；risk_level 只能是 low, medium, high。",
+        "只有 final_answer 允许返回非空 draft_markdown。不要包含 YAML frontmatter。",
     ]
     .join("\n");
 
@@ -430,8 +676,8 @@ fn build_single_agent_payload(
                 "content": format!(
                     "[你的身份]\n你是 Narrative Lab 的单一文档助手，负责围绕当前文档与用户意图直接产出结果。\n\n[输出协议]\n{}\n\n[工作方式]\n{}\n{}\n{}\n{}",
                     contract,
-                    "直接给出一版可以预览、编辑、保存的最终 Markdown，不要再模拟多个角色讨论。",
-                    "如果用户只是简短打招呼，也要返回简洁、自然的 Markdown 回应，不要卡在流程解释里。",
+                    "优先判断当前信息是否足够；如果不够，就先提问或给选项，不要硬写正文。",
+                    "如果用户只是简短打招呼，也要返回简洁自然的 JSON 回合，不要卡在流程解释里。",
                     "优先保持当前文档方向和结构稳定；只有在用户明确要求时才大改。",
                     build_action_rules(request).join("\n"),
                 ),
@@ -517,6 +763,383 @@ fn read_draft_markdown(object: &Map<String, Value>) -> String {
         .unwrap_or_default()
         .trim()
         .to_string()
+}
+
+fn read_agent_questions(object: &Map<String, Value>) -> Vec<AgentQuestion> {
+    object
+        .get("questions")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .enumerate()
+                .filter_map(|(index, value)| {
+                    let object = value.as_object()?;
+                    let label = object
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())?
+                        .to_string();
+                    let id = object
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| format!("question-{}", index + 1));
+                    let placeholder = object
+                        .get("placeholder")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or_default()
+                        .to_string();
+                    let required = object
+                        .get("required")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true);
+                    Some(AgentQuestion {
+                        id,
+                        label,
+                        placeholder,
+                        required,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn read_agent_options(object: &Map<String, Value>) -> Vec<AgentOption> {
+    object
+        .get("options")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .enumerate()
+                .filter_map(|(index, value)| {
+                    let object = value.as_object()?;
+                    let label = object
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())?
+                        .to_string();
+                    let description = object
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or_default()
+                        .to_string();
+                    let followup_prompt = object
+                        .get("followup_prompt")
+                        .or_else(|| object.get("followupPrompt"))
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or(label.as_str())
+                        .to_string();
+                    let id = object
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| format!("option-{}", index + 1));
+                    Some(AgentOption {
+                        id,
+                        label,
+                        description,
+                        followup_prompt,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn read_agent_plan_steps(object: &Map<String, Value>) -> Vec<AgentPlanStep> {
+    object
+        .get("plan_steps")
+        .or_else(|| object.get("planSteps"))
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .enumerate()
+                .filter_map(|(index, value)| {
+                    let object = value.as_object()?;
+                    let label = object
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())?
+                        .to_string();
+                    let id = object
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| format!("step-{}", index + 1));
+                    let status = normalize_plan_step_status(
+                        object
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .unwrap_or(if index == 0 { "active" } else { "pending" }),
+                    );
+                    Some(AgentPlanStep { id, label, status })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn normalize_plan_step_status(value: &str) -> String {
+    match value {
+        "active" => "active".to_string(),
+        "completed" => "completed".to_string(),
+        _ => "pending".to_string(),
+    }
+}
+
+fn resolve_turn_kind(
+    object: &Map<String, Value>,
+    draft_markdown: &str,
+    questions: &[AgentQuestion],
+    options: &[AgentOption],
+    plan_steps: &[AgentPlanStep],
+) -> String {
+    let explicit = object
+        .get("turn_kind")
+        .or_else(|| object.get("turnKind"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+
+    match explicit {
+        "final_answer" | "clarification" | "options" | "plan" | "blocked" => {
+            explicit.to_string()
+        }
+        _ if !questions.is_empty() => "clarification".to_string(),
+        _ if !options.is_empty() => "options".to_string(),
+        _ if !plan_steps.is_empty() && draft_markdown.trim().is_empty() => "plan".to_string(),
+        _ if !draft_markdown.trim().is_empty() => "final_answer".to_string(),
+        _ => "blocked".to_string(),
+    }
+}
+
+fn read_assistant_message(
+    object: &Map<String, Value>,
+    turn_kind: &str,
+    summary: &str,
+    draft_markdown: &str,
+    questions: &[AgentQuestion],
+    options: &[AgentOption],
+    plan_steps: &[AgentPlanStep],
+) -> String {
+    if let Some(message) = object
+        .get("assistant_message")
+        .or_else(|| object.get("assistantMessage"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return message.to_string();
+    }
+
+    match turn_kind {
+        "clarification" if !questions.is_empty() => {
+            let lines = questions
+                .iter()
+                .enumerate()
+                .map(|(index, question)| format!("{}. {}", index + 1, question.label))
+                .collect::<Vec<_>>();
+            format!("继续之前，我需要你补充这些信息：\n{}", lines.join("\n"))
+        }
+        "options" if !options.is_empty() => "我先整理了几个可继续推进的方向，你选一个我就继续。".to_string(),
+        "plan" if !plan_steps.is_empty() => "我建议先按这个计划推进。".to_string(),
+        "blocked" => "当前信息还不足以安全继续，我先不直接改文稿。".to_string(),
+        _ if !summary.trim().is_empty() => summary.to_string(),
+        _ if !draft_markdown.trim().is_empty() => "已生成一版可继续审阅的结果。".to_string(),
+        _ => "AI 已返回结果。".to_string(),
+    }
+}
+
+fn completed_execution_steps(turn_kind: &str, summary: &str) -> Vec<AgentExecutionStep> {
+    vec![
+        AgentExecutionStep {
+            id: "prepare-request".to_string(),
+            label: "准备请求".to_string(),
+            detail: "标准化请求并识别当前文档目标。".to_string(),
+            status: "completed".to_string(),
+            preview_text: "请求参数准备完成。".to_string(),
+        },
+        AgentExecutionStep {
+            id: "build-context".to_string(),
+            label: "整理上下文".to_string(),
+            detail: "读取当前文档与相关工作区上下文。".to_string(),
+            status: "completed".to_string(),
+            preview_text: "上下文整理完成。".to_string(),
+        },
+        AgentExecutionStep {
+            id: "request-model".to_string(),
+            label: "请求模型".to_string(),
+            detail: "向 AI 提供方发送本轮 Narrative 请求。".to_string(),
+            status: "completed".to_string(),
+            preview_text: "模型已返回结果。".to_string(),
+        },
+        AgentExecutionStep {
+            id: "review-result".to_string(),
+            label: "整理结果".to_string(),
+            detail: format!("将模型结果整理为 {turn_kind} 回合，并同步到会话。"),
+            status: "completed".to_string(),
+            preview_text: if summary.trim().is_empty() {
+                "结果整理完成。".to_string()
+            } else {
+                summary.to_string()
+            },
+        },
+    ]
+}
+
+fn failed_execution_steps(step_id: &str, step_label: &str, error: &str) -> Vec<AgentExecutionStep> {
+    vec![AgentExecutionStep {
+        id: step_id.to_string(),
+        label: step_label.to_string(),
+        detail: "本轮 Narrative 请求在模型阶段失败。".to_string(),
+        status: "failed".to_string(),
+        preview_text: error.to_string(),
+    }]
+}
+
+fn read_requested_actions(object: &Map<String, Value>) -> Vec<AgentActionRequest> {
+    object
+        .get("requested_actions")
+        .or_else(|| object.get("requestedActions"))
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .enumerate()
+                .filter_map(|(index, value)| {
+                    let object = value.as_object()?;
+                    let action_type = object
+                        .get("action_type")
+                        .or_else(|| object.get("actionType"))
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| SUPPORTED_AGENT_ACTION_TYPES.contains(value))?
+                        .to_string();
+                    let title = object
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())?
+                        .to_string();
+                    let description = object
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or_default()
+                        .to_string();
+                    let id = object
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| format!("action-{}", index + 1));
+                    let payload = object.get("payload").cloned().unwrap_or_else(|| json!({}));
+                    let preview_only = object
+                        .get("preview_only")
+                        .or_else(|| object.get("previewOnly"))
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    let affected_document_keys = read_string_list(
+                        object
+                            .get("affected_document_keys")
+                            .or_else(|| object.get("affectedDocumentKeys")),
+                    );
+                    let risk_level = normalize_risk(
+                        object
+                            .get("risk_level")
+                            .or_else(|| object.get("riskLevel"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("medium"),
+                    );
+                    Some(AgentActionRequest {
+                        id,
+                        action_type,
+                        title,
+                        description,
+                        payload,
+                        approval_policy: "always_require_user".to_string(),
+                        preview_only,
+                        affected_document_keys,
+                        risk_level,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn build_source_document_keys(request: &NarrativeGenerateRequest) -> Vec<String> {
+    let mut keys = Vec::new();
+    let target_slug = request.target_slug.trim();
+    if !target_slug.is_empty() {
+        keys.push(target_slug.to_string());
+    }
+    for slug in &request.related_doc_slugs {
+        let slug = slug.trim();
+        if !slug.is_empty() && !keys.iter().any(|entry| entry == slug) {
+            keys.push(slug.to_string());
+        }
+    }
+    keys
+}
+
+fn build_review_queue_items(
+    turn_kind: &str,
+    plan_steps: &[AgentPlanStep],
+    requested_actions: &[AgentActionRequest],
+    draft_markdown: &str,
+) -> Vec<ReviewQueueItem> {
+    let mut items = Vec::new();
+
+    if turn_kind == "plan" && !plan_steps.is_empty() {
+        items.push(ReviewQueueItem {
+            id: "review-plan".to_string(),
+            kind: "plan".to_string(),
+            title: "计划确认".to_string(),
+            description: format!("当前回合包含 {} 个执行步骤待确认。", plan_steps.len()),
+            status: "pending".to_string(),
+        });
+    }
+
+    if turn_kind == "final_answer" && !draft_markdown.trim().is_empty() {
+        items.push(ReviewQueueItem {
+            id: "review-patch".to_string(),
+            kind: "patch".to_string(),
+            title: "结果审阅".to_string(),
+            description: "当前回合生成了新的文稿内容，可继续审阅或应用。".to_string(),
+            status: "pending".to_string(),
+        });
+    }
+
+    for action in requested_actions {
+        items.push(ReviewQueueItem {
+            id: format!("review-action-{}", action.id),
+            kind: "action".to_string(),
+            title: action.title.clone(),
+            description: action.description.clone(),
+            status: "pending".to_string(),
+        });
+    }
+
+    items
 }
 
 fn read_summary(object: &Map<String, Value>, action: &str, draft_markdown: &str) -> String {
@@ -721,7 +1344,11 @@ fn perform_chat_completion_owned(
             }
 
             if let Some(progress) = &progress {
-                progress.status("模型输出被截断，已自动提高输出上限后重试...");
+                progress.status_step(
+                    "request-model",
+                    "请求模型",
+                    "模型输出被截断，已自动提高输出上限后重试...",
+                );
             }
 
             perform_chat_completion_with_fallbacks(
@@ -753,7 +1380,11 @@ fn perform_chat_completion_with_fallbacks(
         Ok(success) => Ok(success),
         Err(failure) if should_retry_without_stream(&failure) => {
             if let Some(progress) = progress {
-                progress.status("当前提供方不支持流式输出，已切回普通请求...");
+                progress.status_step(
+                    "request-model",
+                    "请求模型",
+                    "当前提供方不支持流式输出，已切回普通请求...",
+                );
             }
             let fallback_request =
                 build_chat_completion_request(model, payload, max_tokens, false);
@@ -849,13 +1480,13 @@ fn send_chat_completion_request(
 
                 if content_type.contains("text/event-stream") {
                     if let Some(progress) = progress {
-                        progress.status("正在接收模型输出...");
+                        progress.status_step("request-model", "请求模型", "正在接收模型输出...");
                     }
                     return read_streaming_chat_completion(response, status, progress);
                 }
 
                 if let Some(progress) = progress {
-                    progress.status("正在整理模型返回内容...");
+                    progress.status_step("request-model", "请求模型", "正在整理模型返回内容...");
                 }
                 let raw_body = response.text().unwrap_or_default();
                 return parse_non_stream_response(raw_body, status, progress);
@@ -935,7 +1566,12 @@ fn parse_non_stream_response(
         } else {
             raw_content.clone()
         };
-        progress.delta("AI 已返回完整响应，正在整理结果...", preview);
+        progress.delta_step(
+            "request-model",
+            "请求模型",
+            "AI 已返回完整响应，正在整理结果...",
+            preview,
+        );
     }
     let payload = extract_narrative_payload(&raw_content).map_err(|error| ProviderFailure {
         status_code: status,
@@ -983,7 +1619,12 @@ fn read_streaming_chat_completion(
         if !delta.is_empty() {
             raw_content.push_str(&delta);
             if let Some(progress) = progress {
-                progress.delta("AI 正在输出内容...", raw_content.clone());
+                progress.delta_step(
+                    "request-model",
+                    "请求模型",
+                    "AI 正在输出内容...",
+                    raw_content.clone(),
+                );
             }
         }
     }

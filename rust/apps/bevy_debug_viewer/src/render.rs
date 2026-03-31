@@ -54,6 +54,7 @@ const CAMERA_FOLLOW_SMOOTHING_TAU_SEC: f32 = 0.075;
 const CAMERA_FOLLOW_RESET_DISTANCE_CELLS: f32 = 2.0;
 const GENERATED_DOOR_ROTATION_SPEED_RAD_PER_SEC: f32 = 7.5;
 const MISSING_GEO_BUILDING_PLACEHOLDER_ALPHA: f32 = 0.96;
+const FOG_OF_WAR_HEIGHT_MARGIN_CELLS: f32 = 0.85;
 const WALL_NORTH: u8 = 1 << 0;
 const WALL_EAST: u8 = 1 << 1;
 const WALL_SOUTH: u8 = 1 << 2;
@@ -254,6 +255,22 @@ pub(crate) struct ActorVisualState {
     by_actor: HashMap<ActorId, Entity>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FogOfWarVisualKey {
+    map_id: Option<game_data::MapId>,
+    current_level: i32,
+    topology_version: u64,
+    actor_id: Option<ActorId>,
+    fog_enabled: bool,
+    visible_cells: Vec<GridCoord>,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct FogOfWarVisualState {
+    key: Option<FogOfWarVisualKey>,
+    entities: Vec<Entity>,
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct DamageNumberVisualState {
     by_id: HashMap<u64, Entity>,
@@ -421,6 +438,7 @@ pub(crate) fn setup_viewer(
     commands.insert_resource(StaticWorldVisualState::default());
     commands.insert_resource(GeneratedDoorVisualState::default());
     commands.insert_resource(ActorVisualState::default());
+    commands.insert_resource(FogOfWarVisualState::default());
     commands.insert_resource(DamageNumberVisualState::default());
     commands.insert_resource(TriggerDecalAssets {
         arrow_texture: trigger_arrow_texture,
@@ -830,13 +848,16 @@ pub(crate) fn sync_actor_labels(
         seen_actor_ids.insert(actor.actor_id);
         let interaction_locked =
             viewer_state.is_actor_interaction_locked(&runtime_state, actor.actor_id);
+        let actor_visible = current_focus_actor_vision(&snapshot, &viewer_state)
+            .map(|vision| vision.visible_cells.contains(&actor.grid_position))
+            .unwrap_or(true);
         let should_show_label = should_show_actor_label(
             *render_config,
             &viewer_state,
             actor,
             interaction_locked,
             hovered_actor_id,
-        );
+        ) && actor_visible;
         let label = if interaction_locked {
             format!("{} [交互中]", actor_label(actor))
         } else {
@@ -1344,6 +1365,82 @@ pub(crate) fn update_occluding_world_visuals(
         &mut materials,
         &mut building_wall_materials,
     );
+}
+
+pub(crate) fn sync_fog_of_war_visuals(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    palette: Res<ViewerPalette>,
+    runtime_state: Res<ViewerRuntimeState>,
+    scene_kind: Res<ViewerSceneKind>,
+    viewer_state: Res<ViewerState>,
+    render_config: Res<ViewerRenderConfig>,
+    mut fog_state: ResMut<FogOfWarVisualState>,
+) {
+    if scene_kind.is_main_menu() {
+        clear_fog_of_war_entities(&mut commands, &mut fog_state);
+        fog_state.key = None;
+        return;
+    }
+
+    let snapshot = runtime_state.runtime.snapshot();
+    let actor_id = viewer_state.focus_actor_id(&snapshot);
+    let vision = current_focus_actor_vision(&snapshot, &viewer_state);
+    let visible_cells = vision
+        .map(|vision| {
+            vision
+                .visible_cells
+                .iter()
+                .copied()
+                .filter(|grid| grid.y == viewer_state.current_level)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let next_key = FogOfWarVisualKey {
+        map_id: snapshot.grid.map_id.clone(),
+        current_level: viewer_state.current_level,
+        topology_version: snapshot.grid.topology_version,
+        actor_id,
+        fog_enabled: vision.is_some(),
+        visible_cells: visible_cells.clone(),
+    };
+
+    if fog_state.key.as_ref() == Some(&next_key) {
+        return;
+    }
+
+    clear_fog_of_war_entities(&mut commands, &mut fog_state);
+    fog_state.key = Some(next_key);
+
+    if vision.is_none() {
+        return;
+    }
+
+    let hidden_cells =
+        hidden_fog_of_war_cells(&snapshot, viewer_state.current_level, &visible_cells);
+    if hidden_cells.is_empty() {
+        return;
+    }
+
+    let fog_height = fog_of_war_plane_height(
+        &snapshot,
+        viewer_state.current_level,
+        render_config.floor_thickness_world,
+    );
+    for rect in merge_cells_into_rects(&hidden_cells) {
+        let center = rect_world_center(rect, snapshot.grid.grid_size);
+        let size = rect_world_size(rect, snapshot.grid.grid_size, snapshot.grid.grid_size);
+        let entity = spawn_fog_of_war_plane(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            Vec2::new(size.x, size.z),
+            Vec3::new(center.x, fog_height, center.z),
+            palette.fog_cover,
+        );
+        fog_state.entities.push(entity);
+    }
 }
 
 fn resolve_occlusion_focus_world_points(
@@ -2970,6 +3067,73 @@ fn merge_cells_into_rects(cells: &[GridCoord]) -> Vec<MergedGridRect> {
     rects
 }
 
+fn clear_fog_of_war_entities(commands: &mut Commands, fog_state: &mut FogOfWarVisualState) {
+    for entity in fog_state.entities.drain(..) {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn current_focus_actor_vision<'a>(
+    snapshot: &'a game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+) -> Option<&'a game_core::ActorVisionSnapshot> {
+    let actor_id = viewer_state.focus_actor_id(snapshot)?;
+    snapshot
+        .vision
+        .actors
+        .iter()
+        .find(|vision| {
+            vision.actor_id == actor_id
+                && vision.active_map_id.as_ref() == snapshot.grid.map_id.as_ref()
+        })
+}
+
+fn hidden_fog_of_war_cells(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    visible_cells: &[GridCoord],
+) -> Vec<GridCoord> {
+    let bounds = grid_bounds(snapshot, current_level);
+    let visible_cells = visible_cells.iter().copied().collect::<HashSet<_>>();
+    let mut hidden_cells = Vec::new();
+
+    for x in bounds.min_x..=bounds.max_x {
+        for z in bounds.min_z..=bounds.max_z {
+            let grid = GridCoord::new(x, current_level, z);
+            if !visible_cells.contains(&grid) {
+                hidden_cells.push(grid);
+            }
+        }
+    }
+
+    hidden_cells
+}
+
+fn fog_of_war_plane_height(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    floor_thickness_world: f32,
+) -> f32 {
+    let grid_size = snapshot.grid.grid_size.max(0.1);
+    let floor_top = level_base_height(current_level, grid_size) + floor_thickness_world.max(0.02);
+    let max_structure_height = snapshot
+        .generated_buildings
+        .iter()
+        .flat_map(|building| building.stories.iter())
+        .filter(|story| story.level == current_level)
+        .map(|story| story.wall_height)
+        .chain(
+            snapshot
+                .generated_doors
+                .iter()
+                .filter(|door| door.level == current_level)
+                .map(|door| door.wall_height),
+        )
+        .fold(1.75_f32, f32::max);
+
+    floor_top + grid_size * (max_structure_height + FOG_OF_WAR_HEIGHT_MARGIN_CELLS)
+}
+
 fn push_generated_stair_specs(
     specs: &mut Vec<StaticWorldBoxSpec>,
     stair: &game_core::GeneratedStairConnection,
@@ -3247,6 +3411,34 @@ fn spawn_ground_plane(
             ))),
             MeshMaterial3d(material),
             Transform::from_xyz(center_x, floor_y, center_z),
+        ))
+        .id()
+}
+
+fn spawn_fog_of_war_plane(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    size: Vec2,
+    translation: Vec3,
+    color: Color,
+) -> Entity {
+    let mesh = meshes.add(Plane3d::default().mesh().size(size.x.max(0.01), size.y.max(0.01)));
+    let material = materials.add(StandardMaterial {
+        base_color: color,
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        cull_mode: None,
+        perceptual_roughness: 1.0,
+        metallic: 0.0,
+        ..default()
+    });
+
+    commands
+        .spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(translation),
         ))
         .id()
 }
@@ -4169,14 +4361,14 @@ fn apply_occluder_fade_to_building_wall_material_ext(
 mod tests {
     use super::{
         actor_visual_translation, actor_visual_world_position, build_wall_tile_mesh,
-        camera_follow_requires_reset, collect_static_world_box_specs, collect_static_world_decal_specs,
-        collect_static_world_mesh_specs, classify_wall_tile, darken_color,
+        camera_follow_requires_reset, classify_wall_tile, collect_static_world_box_specs,
+        collect_static_world_decal_specs, collect_static_world_mesh_specs, darken_color,
         interaction_menu_button_color, interaction_menu_layout, lerp_color, lighten_color,
         merge_cells_into_rects, occluder_should_fade, occupied_cells_box,
         should_hide_building_roofs, update_camera_follow_focus, GridBounds, MaterialStyle,
-        StaticWorldOccluderKind, WallTileKind, WALL_EAST, WALL_NORTH, WALL_SOUTH, WALL_WEST,
-        INTERACTION_MENU_BUTTON_GAP_PX,
-        INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX,
+        StaticWorldOccluderKind, WallTileKind, INTERACTION_MENU_BUTTON_GAP_PX,
+        INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX, WALL_EAST, WALL_NORTH,
+        WALL_SOUTH, WALL_WEST,
     };
     use crate::state::{
         InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState,
@@ -4849,6 +5041,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {
@@ -4903,6 +5096,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {
@@ -4983,6 +5177,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {
@@ -5034,6 +5229,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: vec![GeneratedBuildingDebugState {
                 object_id: "generated_house".into(),
                 prefab_id: "generated_house".into(),

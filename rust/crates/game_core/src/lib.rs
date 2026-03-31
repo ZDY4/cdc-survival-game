@@ -14,6 +14,7 @@ pub mod simulation;
 pub mod survival;
 pub mod turn;
 pub mod utility;
+pub mod vision;
 
 pub use actor::{
     AiController, AiStepResult, FollowGridGoalAiController, InteractOnceAiController,
@@ -75,6 +76,9 @@ pub use survival::{
 pub use utility::{
     score_goal, score_goal_for_context, score_goals, score_goals_for_context, select_goal,
     select_goal_for_context, NpcGoalScore, NpcUtilityContext,
+};
+pub use vision::{
+    ActorVisionMapSnapshot, ActorVisionSnapshot, ActorVisionUpdate, VisionRuntimeSnapshot,
 };
 
 pub struct GameCorePlugin;

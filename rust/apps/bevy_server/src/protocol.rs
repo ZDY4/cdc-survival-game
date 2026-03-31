@@ -23,6 +23,7 @@ use game_protocol::{
 use serde_json::json;
 
 use crate::config::ServerSimulationRuntime;
+use crate::progression::drain_runtime_progression;
 
 #[derive(Resource, Debug, Default)]
 pub struct RuntimeSnapshotStore {
@@ -185,6 +186,7 @@ pub fn dispatch_protocol_requests(
     };
 
     for request in requests.read() {
+        drain_runtime_progression(&mut runtime);
         if matches!(request.message, ClientMessage::SubscribeRuntime(_)) {
             push_state.subscribed = true;
         }
@@ -194,6 +196,7 @@ pub fn dispatch_protocol_requests(
             definitions,
             request.message.clone(),
         );
+        drain_runtime_progression(&mut runtime);
         responses.write(ServerProtocolResponse { message });
     }
 }
@@ -269,6 +272,7 @@ fn runtime_snapshot_envelope(
         active_map_id: snapshot.grid.map_id.map(|value| value.as_str().to_string()),
         active_location_id: overworld.active_location_id.clone(),
         overworld_state: Some(overworld),
+        vision_state: Some(snapshot.vision),
     }
 }
 
@@ -744,6 +748,25 @@ fn runtime_event_envelope(sequence: u64, event: SimulationEvent) -> RuntimeEvent
             event_type: "actor_turn_ended".into(),
             actor_id: Some(actor_id),
             payload: json!({ "groupId": group_id, "remainingAp": remaining_ap }),
+            ..RuntimeEventEnvelope::default()
+        },
+        SimulationEvent::ActorVisionUpdated {
+            actor_id,
+            active_map_id,
+            visible_cells,
+            explored_cells,
+        } => RuntimeEventEnvelope {
+            sequence,
+            event_type: "actor_vision_updated".into(),
+            actor_id: Some(actor_id),
+            map_id: active_map_id
+                .as_ref()
+                .map(|map_id| map_id.as_str().to_string()),
+            payload: json!({
+                "activeMapId": active_map_id.as_ref().map(|map_id| map_id.as_str().to_string()),
+                "visibleCells": visible_cells,
+                "exploredCells": explored_cells
+            }),
             ..RuntimeEventEnvelope::default()
         },
         SimulationEvent::CombatStateChanged { in_combat } => RuntimeEventEnvelope {
@@ -1607,6 +1630,45 @@ mod tests {
     }
 
     #[test]
+    fn protocol_dispatch_system_drains_pending_progression_after_interaction() {
+        let (runtime, player, npc) = sample_runtime_with_player_and_npc();
+        let mut app = App::new();
+        app.insert_resource(runtime);
+        app.insert_resource(RuntimeSnapshotStore::default());
+        app.insert_resource(RuntimeProtocolPushState::default());
+        app.insert_resource(RuntimeProtocolSequence::default());
+        app.insert_resource(CapturedResponses::default());
+        app.add_message::<ServerProtocolRequest>();
+        app.add_message::<ServerProtocolResponse>();
+        app.add_systems(
+            Update,
+            (dispatch_protocol_requests, capture_protocol_responses).chain(),
+        );
+
+        app.world_mut().write_message(ServerProtocolRequest {
+            message: ClientMessage::ExecuteInteraction(InteractionExecutionRequest {
+                actor_id: player,
+                target_id: InteractionTargetId::Actor(npc),
+                option_id: InteractionOptionId("talk".into()),
+            }),
+        });
+
+        app.update();
+
+        let captured = app.world().resource::<CapturedResponses>();
+        assert_eq!(captured.0.len(), 1);
+        match &captured.0[0].message {
+            Ok(ServerMessage::InteractionExecution(result)) => assert!(result.success),
+            other => panic!("unexpected protocol response: {other:?}"),
+        }
+
+        let runtime = app.world().resource::<ServerSimulationRuntime>();
+        assert!(!runtime.0.has_pending_progression());
+        assert!(runtime.0.actor_turn_open(player));
+        assert_eq!(runtime.0.get_actor_ap(player), 1.0);
+    }
+
+    #[test]
     fn protocol_supports_runtime_snapshot_and_map_travel_requests() {
         let (mut runtime, actor_id) = sample_runtime_with_map();
         let mut store = RuntimeSnapshotStore::default();
@@ -1641,6 +1703,38 @@ mod tests {
                 assert_eq!(notice.target_map_id, "protocol_test_map");
                 assert_eq!(notice.entry_point.as_deref(), Some("default_entry"));
                 assert_eq!(notice.world_mode.as_deref(), Some("interior"));
+            }
+            other => panic!("unexpected server message: {other:?}"),
+        }
+
+        runtime.0.set_actor_vision_radius(actor_id, 10);
+        let vision = runtime
+            .0
+            .refresh_actor_vision(actor_id)
+            .expect("vision should refresh after map travel");
+        assert_eq!(
+            vision.active_map_id.as_ref().map(game_data::MapId::as_str),
+            Some("protocol_test_map")
+        );
+
+        let subscribed_after_travel = handle_client_message(
+            &mut runtime,
+            &mut store,
+            ClientMessage::SubscribeRuntime(Default::default()),
+        )
+        .expect("subscribe runtime should include vision snapshot");
+        match subscribed_after_travel {
+            ServerMessage::Snapshot(snapshot) => {
+                let vision_state = snapshot.vision_state.expect("vision snapshot should exist");
+                assert_eq!(vision_state.actors.len(), 1);
+                assert_eq!(
+                    vision_state.actors[0]
+                        .active_map_id
+                        .as_ref()
+                        .map(game_data::MapId::as_str),
+                    Some("protocol_test_map")
+                );
+                assert!(!vision_state.actors[0].visible_cells.is_empty());
             }
             other => panic!("unexpected server message: {other:?}"),
         }

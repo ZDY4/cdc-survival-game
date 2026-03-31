@@ -1,4 +1,7 @@
-use game_core::{LocationTransitionContext, OverworldRouteSnapshot, OverworldStateSnapshot};
+use game_core::{
+    LocationTransitionContext, OverworldRouteSnapshot, OverworldStateSnapshot,
+    VisionRuntimeSnapshot,
+};
 use game_data::{
     ActionRequest, ActionResult, ActorId, ActorKind, DialogueRuntimeState, GridCoord,
     InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
@@ -272,6 +275,8 @@ pub struct WorldSnapshotEnvelope {
     pub active_location_id: Option<String>,
     #[serde(default)]
     pub overworld_state: Option<OverworldStateSnapshot>,
+    #[serde(default)]
+    pub vision_state: Option<VisionRuntimeSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

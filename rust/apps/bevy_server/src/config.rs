@@ -15,6 +15,17 @@ impl Default for ServerConfig {
 #[derive(Resource, Debug)]
 pub struct ServerSimulationRuntime(pub SimulationRuntime);
 
+#[derive(Resource, Debug, Clone)]
+pub struct ServerVisionConfig {
+    pub default_radius: i32,
+}
+
+impl Default for ServerVisionConfig {
+    fn default() -> Self {
+        Self { default_radius: 10 }
+    }
+}
+
 #[derive(Resource, Debug, Clone, Default)]
 pub struct NpcDebugReportState {
     pub ticks: u32,

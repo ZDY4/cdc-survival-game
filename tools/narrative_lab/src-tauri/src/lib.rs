@@ -1,8 +1,10 @@
 mod ai_provider;
 mod ai_settings;
 mod editor_menu;
+mod narrative_agent_actions;
 mod narrative_app_settings;
 mod narrative_context;
+mod narrative_exports;
 mod narrative_provider;
 mod narrative_review;
 mod narrative_sync;
@@ -16,7 +18,9 @@ use tauri::Manager;
 
 use crate::ai_provider::test_ai_provider;
 use crate::ai_settings::{load_ai_settings, save_ai_settings};
+use crate::narrative_agent_actions::execute_narrative_agent_action;
 use crate::narrative_app_settings::{load_narrative_app_settings, save_narrative_app_settings};
+use crate::narrative_exports::export_narrative_session_summary;
 use crate::narrative_provider::{generate_narrative_draft, revise_narrative_draft};
 use crate::narrative_sync::{
     create_cloud_workspace, export_project_context_snapshot, list_cloud_workspaces,
@@ -246,7 +250,9 @@ pub fn run() {
             save_ai_settings,
             load_narrative_app_settings,
             save_narrative_app_settings,
+            export_narrative_session_summary,
             test_ai_provider,
+            execute_narrative_agent_action,
             generate_narrative_draft,
             revise_narrative_draft
         ])

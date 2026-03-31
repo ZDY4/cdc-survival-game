@@ -1239,6 +1239,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {
@@ -1279,6 +1280,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {
@@ -1380,6 +1382,7 @@ mod tests {
                 topology_version: 1,
                 runtime_obstacle_version: 2,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {
@@ -1850,6 +1853,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {
@@ -1906,6 +1910,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: vec![GeneratedDoorDebugState {
                 door_id: "door".into(),
@@ -1999,6 +2004,7 @@ mod tests {
                 topology_version: 0,
                 runtime_obstacle_version: 0,
             },
+            vision: Default::default(),
             generated_buildings: Vec::new(),
             generated_doors: Vec::new(),
             combat: CombatDebugState {

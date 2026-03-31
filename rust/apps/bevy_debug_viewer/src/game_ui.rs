@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::ui::{FocusPolicy, RelativeCursorPosition};
+use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
 use bevy::window::{PresentMode, VideoModeSelection, WindowMode};
 use game_bevy::{
     character_snapshot, interaction_prompt_text, inventory_snapshot, journal_snapshot,
@@ -20,15 +20,16 @@ use crate::controls::{cancel_targeting, enter_attack_targeting, enter_skill_targ
 use crate::render::interaction_menu_button_color;
 use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
 use crate::state::{
-    GameUiButtonAction, GameUiRoot, UiMouseBlocker, ViewerPalette, ViewerRenderConfig,
-    ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont,
-    ViewerUiSettings, ViewerUiSettingsPath,
+    EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, InventoryContextMenuRoot,
+    InventoryItemClickTarget, InventoryItemHoverTarget, SkillHoverTarget, UiHoverTooltipContent,
+    UiHoverTooltipState, UiInventoryContextMenuState, UiInventoryContextMenuTarget, UiMouseBlocker,
+    ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 const UI_PANEL_WIDTH: f32 = 448.0;
 const SKILLS_PANEL_WIDTH: f32 = 940.0;
 const SCREEN_EDGE_PADDING: f32 = 18.0;
-const TOP_INFO_WIDTH: f32 = 372.0;
 const TOP_BADGE_WIDTH: f32 = 348.0;
 const RIGHT_PANEL_TOP: f32 = 74.0;
 const RIGHT_PANEL_BOTTOM: f32 = 174.0;
@@ -40,11 +41,13 @@ const HOTBAR_ACTION_WIDTH: f32 = 88.0;
 const HOTBAR_LEFT_TABS_WIDTH: f32 = 154.0;
 const HOTBAR_RIGHT_TABS_WIDTH: f32 = 254.0;
 const BOTTOM_TAB_HEIGHT: f32 = 22.0;
+const HOVER_TOOLTIP_MAX_WIDTH: f32 = 320.0;
+const HOVER_TOOLTIP_CURSOR_OFFSET_X: f32 = 16.0;
+const HOVER_TOOLTIP_CURSOR_OFFSET_Y: f32 = 16.0;
+const HOVER_TOOLTIP_VIEWPORT_MARGIN: f32 = 8.0;
 
 #[derive(Debug, Clone)]
 struct PlayerHudStats {
-    display_name: String,
-    level: i32,
     hp: f32,
     max_hp: f32,
     ap: f32,
@@ -59,10 +62,11 @@ pub(crate) struct GameUiViewState<'w, 's> {
     viewer_state: Res<'w, ViewerState>,
     menu_state: Res<'w, UiMenuState>,
     modal_state: Res<'w, UiModalState>,
-    banner_state: Res<'w, UiStatusBannerState>,
     filter_state: Res<'w, UiInventoryFilterState>,
     hotbar_state: Res<'w, UiHotbarState>,
     settings: Res<'w, ViewerUiSettings>,
+    hover_tooltip: Res<'w, UiHoverTooltipState>,
+    inventory_context_menu: Res<'w, UiInventoryContextMenuState>,
     marker: PhantomData<&'s ()>,
 }
 
@@ -76,6 +80,7 @@ pub(crate) struct GameUiCommandState<'w, 's> {
     filter_state: ResMut<'w, UiInventoryFilterState>,
     hotbar_state: ResMut<'w, UiHotbarState>,
     settings: ResMut<'w, ViewerUiSettings>,
+    inventory_context_menu: ResMut<'w, UiInventoryContextMenuState>,
     marker: PhantomData<&'s ()>,
 }
 
@@ -154,6 +159,7 @@ pub(crate) fn sync_game_ui_state(
     mut modal_state: ResMut<UiModalState>,
     mut banner_state: ResMut<UiStatusBannerState>,
     mut input_block_state: ResMut<UiInputBlockState>,
+    mut inventory_context_menu: ResMut<UiInventoryContextMenuState>,
     shops: Res<ShopDefinitions>,
 ) {
     let context = runtime_state.runtime.current_interaction_context();
@@ -215,6 +221,217 @@ pub(crate) fn sync_game_ui_state(
     if input_block_state.blocked && viewer_state.targeting_state.is_some() {
         cancel_targeting(&mut viewer_state, "targeting: 已取消");
     }
+
+    if in_main_menu_scene
+        || modal_state.trade.is_some()
+        || menu_state.active_panel != Some(UiMenuPanel::Inventory)
+    {
+        inventory_context_menu.clear();
+    }
+}
+
+pub(crate) fn update_hover_tooltip_state(
+    window: Single<&Window>,
+    scene_kind: Res<ViewerSceneKind>,
+    menu_state: Res<UiMenuState>,
+    modal_state: Res<UiModalState>,
+    inventory_context_menu: Res<UiInventoryContextMenuState>,
+    mut tooltip_state: ResMut<UiHoverTooltipState>,
+    inventory_targets: Query<
+        (
+            &InventoryItemHoverTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+    skill_targets: Query<
+        (
+            &SkillHoverTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) {
+    let Some(cursor_position) = window.cursor_position() else {
+        tooltip_state.clear();
+        return;
+    };
+
+    tooltip_state.cursor_position = cursor_position;
+
+    if scene_kind.is_main_menu() || modal_state.trade.is_some() || inventory_context_menu.visible {
+        tooltip_state.clear();
+        return;
+    }
+
+    let hovered = match menu_state.active_panel {
+        Some(UiMenuPanel::Inventory) => {
+            find_inventory_hover_target(cursor_position, &inventory_targets)
+                .map(|item_id| UiHoverTooltipContent::InventoryItem { item_id })
+        }
+        Some(UiMenuPanel::Skills) => find_skill_hover_target(cursor_position, &skill_targets)
+            .map(|(tree_id, skill_id)| UiHoverTooltipContent::Skill { tree_id, skill_id }),
+        _ => None,
+    };
+
+    match hovered {
+        Some(content) => {
+            tooltip_state.visible = true;
+            tooltip_state.content = Some(content);
+        }
+        None => tooltip_state.clear(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn handle_inventory_panel_pointer_input(
+    window: Single<&Window>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    scene_kind: Res<ViewerSceneKind>,
+    mut menu_state: ResMut<UiMenuState>,
+    modal_state: Res<UiModalState>,
+    mut context_menu: ResMut<UiInventoryContextMenuState>,
+    mut runtime_state: ResMut<ViewerRuntimeState>,
+    save_path: Res<ViewerRuntimeSavePath>,
+    items: Res<ItemDefinitions>,
+    inventory_targets: Query<
+        (
+            &InventoryItemClickTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+    equipment_targets: Query<
+        (
+            &EquipmentSlotClickTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+    context_menu_roots: Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<InventoryContextMenuRoot>,
+    >,
+) {
+    if scene_kind.is_main_menu() || modal_state.trade.is_some() {
+        context_menu.clear();
+        return;
+    }
+    if menu_state.active_panel != Some(UiMenuPanel::Inventory) {
+        context_menu.clear();
+        return;
+    }
+    if !buttons.just_pressed(MouseButton::Left) && !buttons.just_pressed(MouseButton::Right) {
+        return;
+    }
+
+    let Some(cursor_position) = window.cursor_position() else {
+        context_menu.clear();
+        return;
+    };
+
+    let inventory_hit = find_inventory_click_target(cursor_position, &inventory_targets);
+    let equipment_hit =
+        equipment_targets
+            .iter()
+            .find_map(|(target, computed, transform, cursor, visibility)| {
+                hover_target_contains_cursor(
+                    cursor_position,
+                    computed,
+                    transform,
+                    cursor,
+                    visibility,
+                )
+                .then_some(target)
+            });
+    let clicked_context_menu =
+        context_menu_roots
+            .iter()
+            .any(|(computed, transform, cursor, visibility)| {
+                hover_target_contains_cursor(
+                    cursor_position,
+                    computed,
+                    transform,
+                    cursor,
+                    visibility,
+                )
+            });
+
+    if buttons.just_pressed(MouseButton::Right) {
+        if let Some(item_id) = inventory_hit {
+            menu_state.selected_inventory_item = Some(item_id);
+            menu_state.selected_equipment_slot = None;
+            context_menu.visible = true;
+            context_menu.cursor_position = cursor_position;
+            context_menu.target = Some(UiInventoryContextMenuTarget::InventoryItem { item_id });
+            return;
+        }
+        if let Some(target) = equipment_hit {
+            if let Some(item_id) = target.item_id {
+                context_menu.visible = true;
+                context_menu.cursor_position = cursor_position;
+                context_menu.target = Some(UiInventoryContextMenuTarget::EquipmentSlot {
+                    slot_id: target.slot_id.clone(),
+                    item_id,
+                });
+            } else {
+                context_menu.clear();
+            }
+            return;
+        }
+        if !clicked_context_menu {
+            context_menu.clear();
+        }
+        return;
+    }
+
+    if let Some(item_id) = inventory_hit {
+        menu_state.selected_inventory_item = Some(item_id);
+        menu_state.selected_equipment_slot = None;
+        context_menu.clear();
+        return;
+    }
+
+    if let Some(target) = equipment_hit {
+        context_menu.clear();
+        if let Some(actor_id) = player_actor_id(&runtime_state.runtime) {
+            if let Some(from_slot) = menu_state.selected_equipment_slot.clone() {
+                menu_state.status_text = runtime_state
+                    .runtime
+                    .move_equipped_item(actor_id, &from_slot, &target.slot_id, &items.0)
+                    .map(|_| {
+                        save_runtime_snapshot(&save_path, &runtime_state.runtime);
+                        format!("{from_slot} -> {}", target.slot_id)
+                    })
+                    .unwrap_or_else(|error| error.to_string());
+                menu_state.selected_equipment_slot = None;
+            } else {
+                menu_state.selected_equipment_slot = Some(target.slot_id.clone());
+            }
+        }
+        return;
+    }
+
+    if !clicked_context_menu {
+        context_menu.clear();
+    }
 }
 
 pub(crate) fn tick_hotbar_cooldowns(
@@ -246,10 +463,89 @@ pub(crate) fn tick_hotbar_cooldowns(
     }
 }
 
+fn find_inventory_hover_target(
+    cursor_position: Vec2,
+    targets: &Query<
+        (
+            &InventoryItemHoverTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) -> Option<u32> {
+    targets
+        .iter()
+        .find_map(|(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+                .then_some(target.item_id)
+        })
+}
+
+fn find_inventory_click_target(
+    cursor_position: Vec2,
+    targets: &Query<
+        (
+            &InventoryItemClickTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) -> Option<u32> {
+    targets
+        .iter()
+        .find_map(|(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+                .then_some(target.item_id)
+        })
+}
+
+fn find_skill_hover_target(
+    cursor_position: Vec2,
+    targets: &Query<
+        (
+            &SkillHoverTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) -> Option<(String, String)> {
+    targets
+        .iter()
+        .find_map(|(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+                .then(|| (target.tree_id.clone(), target.skill_id.clone()))
+        })
+}
+
+fn hover_target_contains_cursor(
+    cursor_position: Vec2,
+    computed: &ComputedNode,
+    transform: &UiGlobalTransform,
+    cursor: Option<&RelativeCursorPosition>,
+    visibility: Option<&Visibility>,
+) -> bool {
+    if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden) {
+        return false;
+    }
+
+    cursor.is_some_and(RelativeCursorPosition::cursor_over)
+        || computed.contains_point(*transform, cursor_position)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn update_game_ui(
     mut commands: Commands,
     root: Single<(Entity, Option<&Children>), With<GameUiRoot>>,
+    window: Single<&Window>,
     palette: Res<ViewerPalette>,
     font: Res<ViewerUiFont>,
     ui: GameUiViewState,
@@ -269,13 +565,6 @@ pub(crate) fn update_game_ui(
         if in_main_menu_scene {
             render_main_menu(parent, &font, &ui.menu_state.status_text);
         } else if !esc_menu_open {
-            render_top_left_info(
-                parent,
-                &font,
-                &ui.banner_state,
-                &ui.viewer_state,
-                player_stats.as_ref(),
-            );
             render_top_center_badges(
                 parent,
                 &font,
@@ -291,7 +580,6 @@ pub(crate) fn update_game_ui(
                 &ui.hotbar_state,
                 &content.skills.0,
                 &ui.menu_state,
-                player_stats.as_ref(),
                 ui.menu_state.active_panel == Some(UiMenuPanel::Skills),
                 ui.menu_state.selected_skill_id.as_deref(),
             );
@@ -383,6 +671,14 @@ pub(crate) fn update_game_ui(
         }
 
         let _ = &ui.viewer_state;
+
+        if ui.hover_tooltip.visible {
+            render_hover_tooltip(parent, &font, &window, player_actor, &ui, &content);
+        }
+
+        if ui.inventory_context_menu.visible {
+            render_inventory_context_menu(parent, &font, &window, player_actor, &ui, &content);
+        }
     });
 }
 
@@ -402,6 +698,7 @@ pub(crate) fn handle_game_ui_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
+        ui.inventory_context_menu.clear();
         match action.clone() {
             GameUiButtonAction::MainMenuNewGame => {
                 match rebuild_runtime_with_new_game_defaults(
@@ -486,9 +783,6 @@ pub(crate) fn handle_game_ui_buttons(
                 ui.viewer_state.pending_open_trade_target = None;
             }
             GameUiButtonAction::InventoryFilter(filter) => ui.filter_state.filter = filter,
-            GameUiButtonAction::SelectInventoryItem(item_id) => {
-                ui.menu_state.selected_inventory_item = Some(item_id)
-            }
             GameUiButtonAction::UseInventoryItem => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
                     if let Some(item_id) = ui.menu_state.selected_inventory_item {
@@ -530,23 +824,8 @@ pub(crate) fn handle_game_ui_buttons(
                             format!("已卸下 {slot_id}")
                         })
                         .unwrap_or_else(|error| error.to_string());
-                }
-            }
-            GameUiButtonAction::MoveSelectedEquippedTo(slot_id) => {
-                if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                    if let Some(from_slot) = ui.menu_state.selected_equipment_slot.clone() {
-                        ui.menu_state.status_text = ui
-                            .runtime_state
-                            .runtime
-                            .move_equipped_item(actor_id, &from_slot, &slot_id, &content.items.0)
-                            .map(|_| {
-                                save_runtime_snapshot(&save_path, &ui.runtime_state.runtime);
-                                format!("{from_slot} -> {slot_id}")
-                            })
-                            .unwrap_or_else(|error| error.to_string());
+                    if ui.menu_state.selected_equipment_slot.as_deref() == Some(slot_id.as_str()) {
                         ui.menu_state.selected_equipment_slot = None;
-                    } else {
-                        ui.menu_state.selected_equipment_slot = Some(slot_id);
                     }
                 }
             }
@@ -1216,6 +1495,275 @@ fn action_button(font: &ViewerUiFont, label: &str, action: GameUiButtonAction) -
     )
 }
 
+fn wrapped_text_bundle(font: &ViewerUiFont, text: &str, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text.to_string()),
+        TextFont::from_font_size(size).with_font(font.0.clone()),
+        TextColor(color),
+        TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+        Node {
+            width: Val::Percent(100.0),
+            ..default()
+        },
+    )
+}
+
+#[derive(Debug, Clone)]
+struct DetailTextLine {
+    text: String,
+    size: f32,
+    color: Color,
+}
+
+#[derive(Debug, Clone, Default)]
+struct DetailTextContent {
+    lines: Vec<DetailTextLine>,
+}
+
+impl DetailTextContent {
+    fn push(&mut self, text: impl Into<String>, size: f32, color: Color) {
+        self.lines.push(DetailTextLine {
+            text: text.into(),
+            size,
+            color,
+        });
+    }
+
+    fn estimated_height(&self) -> f32 {
+        self.lines.iter().map(|line| line.size + 6.0).sum::<f32>() + 26.0
+    }
+}
+
+#[derive(Debug, Clone)]
+struct InventoryDetailDisplay {
+    content: DetailTextContent,
+    can_use: bool,
+    can_equip: bool,
+}
+
+#[derive(Debug, Clone)]
+struct SkillDetailDisplay {
+    content: DetailTextContent,
+    hotbar_eligible: bool,
+}
+
+fn spawn_detail_text_content(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    content: &DetailTextContent,
+) {
+    for line in &content.lines {
+        parent.spawn(wrapped_text_bundle(font, &line.text, line.size, line.color));
+    }
+}
+
+fn build_inventory_detail_display(
+    detail: &game_bevy::UiInventoryDetailView,
+    entry: Option<&game_bevy::UiInventoryEntryView>,
+) -> InventoryDetailDisplay {
+    let can_use = entry.map(|entry| entry.can_use).unwrap_or(false);
+    let can_equip = entry.map(|entry| entry.can_equip).unwrap_or(false);
+    let mut content = DetailTextContent::default();
+
+    content.push(
+        format!(
+            "{} · {} x{}",
+            detail.name,
+            detail.item_type.as_str(),
+            detail.count
+        ),
+        11.3,
+        Color::WHITE,
+    );
+    content.push(
+        format!("重量 {:.1}kg", detail.weight),
+        10.1,
+        Color::srgba(0.78, 0.84, 0.92, 1.0),
+    );
+    if !detail.description.trim().is_empty() {
+        content.push(
+            detail.description.clone(),
+            10.1,
+            Color::srgba(0.86, 0.89, 0.95, 1.0),
+        );
+    }
+    if detail.attribute_bonuses.is_empty() {
+        content.push("属性加成: 无", 10.0, Color::srgba(0.72, 0.76, 0.82, 1.0));
+    } else {
+        content.push("属性加成", 10.0, Color::srgba(0.74, 0.79, 0.88, 1.0));
+        for (attribute, bonus) in &detail.attribute_bonuses {
+            content.push(
+                format!("{attribute} {bonus:+.1}"),
+                10.0,
+                Color::srgba(0.84, 0.88, 0.95, 1.0),
+            );
+        }
+    }
+    content.push(
+        format!("操作: {}", inventory_capability_label(can_use, can_equip)),
+        10.0,
+        Color::srgba(0.74, 0.79, 0.88, 1.0),
+    );
+
+    InventoryDetailDisplay {
+        content,
+        can_use,
+        can_equip,
+    }
+}
+
+fn inventory_capability_label(can_use: bool, can_equip: bool) -> &'static str {
+    match (can_use, can_equip) {
+        (true, true) => "可使用 / 可装备",
+        (true, false) => "可使用",
+        (false, true) => "可装备",
+        (false, false) => "无可执行操作",
+    }
+}
+
+fn render_inventory_detail_content(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    display: &InventoryDetailDisplay,
+    show_actions: bool,
+) {
+    spawn_detail_text_content(parent, font, &display.content);
+
+    if !show_actions {
+        return;
+    }
+
+    parent
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            column_gap: px(8),
+            row_gap: px(6),
+            ..default()
+        })
+        .with_children(|actions| {
+            if display.can_use {
+                actions.spawn(action_button(
+                    font,
+                    "使用",
+                    GameUiButtonAction::UseInventoryItem,
+                ));
+            }
+            if display.can_equip {
+                actions.spawn(action_button(
+                    font,
+                    "装备",
+                    GameUiButtonAction::EquipInventoryItem,
+                ));
+            }
+        });
+}
+
+fn build_skill_detail_display(
+    tree: Option<&game_bevy::UiSkillTreeView>,
+    entry: &game_bevy::UiSkillEntryView,
+    hotbar_state: &UiHotbarState,
+) -> SkillDetailDisplay {
+    let current_group_fill = hotbar_state
+        .groups
+        .get(hotbar_state.active_group)
+        .map(|group| group.iter().filter(|slot| slot.skill_id.is_some()).count())
+        .unwrap_or(0);
+    let mut content = DetailTextContent::default();
+
+    if let Some(tree) = tree {
+        content.push(
+            tree.tree_name.clone(),
+            12.0,
+            Color::srgba(0.82, 0.88, 0.96, 1.0),
+        );
+        if !tree.tree_description.trim().is_empty() {
+            content.push(
+                tree.tree_description.clone(),
+                10.0,
+                Color::srgba(0.70, 0.75, 0.82, 1.0),
+            );
+        }
+    }
+
+    content.push(entry.name.clone(), 14.0, Color::WHITE);
+    content.push(
+        format!(
+            "等级 {}/{} · {} · 冷却 {:.1}s",
+            entry.learned_level,
+            entry.max_level,
+            activation_mode_label(&entry.activation_mode),
+            entry.cooldown_seconds
+        ),
+        10.8,
+        Color::srgba(0.80, 0.86, 0.96, 1.0),
+    );
+    if !entry.description.trim().is_empty() {
+        content.push(entry.description.clone(), 10.5, Color::WHITE);
+    }
+    content.push(
+        format!("前置需求: {}", format_skill_prerequisites(entry)),
+        10.0,
+        Color::srgba(0.84, 0.88, 0.94, 1.0),
+    );
+    content.push(
+        format!("属性需求: {}", format_skill_attribute_requirements(entry)),
+        10.0,
+        Color::srgba(0.84, 0.88, 0.94, 1.0),
+    );
+    content.push(
+        format!(
+            "当前快捷栏组 {} · 已占用 {}/10",
+            hotbar_state.active_group + 1,
+            current_group_fill
+        ),
+        10.0,
+        Color::srgba(0.72, 0.78, 0.86, 1.0),
+    );
+    if let Some(slot_index) = current_group_skill_slot(hotbar_state, &entry.skill_id) {
+        content.push(
+            format!("当前组已绑定到第 {} 槽", slot_index + 1),
+            10.0,
+            Color::srgba(0.90, 0.80, 0.58, 1.0),
+        );
+    }
+    content.push(
+        if entry.hotbar_eligible {
+            "快捷栏: 可加入当前组空槽"
+        } else if entry.learned_level > 0 {
+            "快捷栏: 该技能当前不进入快捷栏"
+        } else {
+            "快捷栏: 尚未学习，暂时不能加入快捷栏"
+        },
+        10.0,
+        Color::srgba(0.72, 0.76, 0.82, 1.0),
+    );
+
+    SkillDetailDisplay {
+        content,
+        hotbar_eligible: entry.hotbar_eligible,
+    }
+}
+
+fn render_skill_detail_content(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    display: &SkillDetailDisplay,
+    entry: &game_bevy::UiSkillEntryView,
+    show_actions: bool,
+) {
+    spawn_detail_text_content(parent, font, &display.content);
+
+    if show_actions && display.hotbar_eligible {
+        parent.spawn(action_button(
+            font,
+            "加入当前组空槽",
+            GameUiButtonAction::AssignSkillToFirstEmptyHotbarSlot(entry.skill_id.clone()),
+        ));
+    }
+}
+
 fn panel_title(panel: UiMenuPanel) -> &'static str {
     match panel {
         UiMenuPanel::Inventory => "行囊",
@@ -1258,8 +1806,6 @@ fn player_hud_stats(
         .into_iter()
         .find(|actor| actor.actor_id == actor_id)
         .map(|actor| PlayerHudStats {
-            display_name: actor.display_name,
-            level: actor.level,
             hp: actor.hp,
             max_hp: actor.max_hp,
             ap: actor.ap,
@@ -1274,71 +1820,6 @@ fn action_meter_ratio(stats: &PlayerHudStats) -> f32 {
     } else {
         ((stats.available_steps as f32) / 12.0).clamp(0.0, 1.0)
     }
-}
-
-fn render_top_left_info(
-    parent: &mut ChildSpawnerCommands,
-    font: &ViewerUiFont,
-    banner_state: &UiStatusBannerState,
-    viewer_state: &ViewerState,
-    player_stats: Option<&PlayerHudStats>,
-) {
-    let mut detail_lines = Vec::new();
-    if !banner_state.detail.trim().is_empty() {
-        detail_lines.push(banner_state.detail.trim().to_string());
-    }
-    if let Some(stats) = player_stats {
-        detail_lines.push(format!(
-            "{} · Lv {} · AP {:.1} · 步数 {}",
-            stats.display_name, stats.level, stats.ap, stats.available_steps
-        ));
-    }
-    if !viewer_state.status_line.trim().is_empty()
-        && !detail_lines
-            .iter()
-            .any(|line| line == &viewer_state.status_line)
-    {
-        detail_lines.push(viewer_state.status_line.trim().to_string());
-    }
-    if detail_lines.is_empty() && !banner_state.visible {
-        return;
-    }
-
-    let title = if banner_state.title.trim().is_empty() {
-        "当前状态"
-    } else {
-        banner_state.title.as_str()
-    };
-    parent
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(SCREEN_EDGE_PADDING),
-                left: px(SCREEN_EDGE_PADDING),
-                width: px(TOP_INFO_WIDTH),
-                padding: UiRect::axes(px(14), px(12)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(4),
-                border: UiRect::all(px(1)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.04, 0.05, 0.07, 0.93)),
-            BorderColor::all(Color::srgba(0.18, 0.21, 0.29, 1.0)),
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
-            UiMouseBlocker,
-        ))
-        .with_children(|panel| {
-            panel.spawn(text_bundle(font, title, 12.8, Color::WHITE));
-            for line in detail_lines {
-                panel.spawn(text_bundle(
-                    font,
-                    &line,
-                    10.4,
-                    Color::srgba(0.82, 0.86, 0.93, 1.0),
-                ));
-            }
-        });
 }
 
 fn render_top_center_badges(
@@ -1781,16 +2262,15 @@ fn render_inventory_panel(
         ));
         body.spawn(Node {
             width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            column_gap: px(12),
-            align_items: AlignItems::Stretch,
+            flex_direction: FlexDirection::Column,
+            row_gap: px(10),
             ..default()
         })
         .with_children(|layout| {
             layout
                 .spawn((
                     Node {
-                        width: px(146),
+                        width: Val::Percent(100.0),
                         padding: UiRect::all(px(10)),
                         flex_direction: FlexDirection::Column,
                         row_gap: px(8),
@@ -1807,6 +2287,12 @@ fn render_inventory_panel(
                         11.4,
                         Color::srgba(0.94, 0.96, 1.0, 1.0),
                     ));
+                    equipment.spawn(text_bundle(
+                        font,
+                        "左键选择/交换装备槽，右键打开装备操作。",
+                        9.8,
+                        Color::srgba(0.72, 0.76, 0.82, 1.0),
+                    ));
                     if snapshot.equipment.is_empty() {
                         equipment.spawn(text_bundle(
                             font,
@@ -1815,242 +2301,170 @@ fn render_inventory_panel(
                             Color::srgba(0.72, 0.76, 0.82, 1.0),
                         ));
                     }
-                    for slot in &snapshot.equipment {
-                        let is_selected = menu_state.selected_equipment_slot.as_deref()
-                            == Some(slot.slot_id.as_str());
-                        equipment
-                            .spawn((
-                                Button,
-                                Node {
-                                    width: Val::Percent(100.0),
-                                    min_height: px(56),
-                                    padding: UiRect::all(px(8)),
-                                    flex_direction: FlexDirection::Column,
-                                    justify_content: JustifyContent::SpaceBetween,
-                                    border: UiRect::all(px(if is_selected { 2.0 } else { 1.0 })),
-                                    ..default()
-                                },
-                                BackgroundColor(if is_selected {
-                                    Color::srgba(0.16, 0.18, 0.27, 0.98).into()
-                                } else {
-                                    Color::srgba(0.08, 0.09, 0.13, 0.95).into()
-                                }),
-                                BorderColor::all(if is_selected {
-                                    Color::srgba(0.72, 0.76, 0.92, 1.0)
-                                } else {
-                                    Color::srgba(0.22, 0.25, 0.33, 1.0)
-                                }),
-                                GameUiButtonAction::MoveSelectedEquippedTo(slot.slot_id.clone()),
-                            ))
-                            .with_children(|slot_button| {
-                                slot_button.spawn(text_bundle(
-                                    font,
-                                    &slot.slot_label,
-                                    9.5,
-                                    Color::srgba(0.74, 0.78, 0.86, 1.0),
-                                ));
-                                slot_button.spawn(text_bundle(
-                                    font,
-                                    slot.item_name.as_deref().unwrap_or("空"),
-                                    10.6,
-                                    Color::WHITE,
-                                ));
-                            });
-                        if slot.item_id.is_some() {
-                            equipment.spawn(action_button(
-                                font,
-                                "卸下",
-                                GameUiButtonAction::UnequipSlot(slot.slot_id.clone()),
-                            ));
-                        }
+                    equipment
+                        .spawn(Node {
+                            width: Val::Percent(100.0),
+                            flex_wrap: FlexWrap::Wrap,
+                            column_gap: px(8),
+                            row_gap: px(8),
+                            ..default()
+                        })
+                        .with_children(|slots| {
+                            for slot in &snapshot.equipment {
+                                let is_selected = menu_state.selected_equipment_slot.as_deref()
+                                    == Some(slot.slot_id.as_str());
+                                slots
+                                    .spawn((
+                                        Button,
+                                        Node {
+                                            width: px(164),
+                                            min_height: px(62),
+                                            padding: UiRect::all(px(8)),
+                                            flex_direction: FlexDirection::Column,
+                                            justify_content: JustifyContent::SpaceBetween,
+                                            border: UiRect::all(px(if is_selected {
+                                                2.0
+                                            } else {
+                                                1.0
+                                            })),
+                                            ..default()
+                                        },
+                                        BackgroundColor(if is_selected {
+                                            Color::srgba(0.16, 0.18, 0.27, 0.98).into()
+                                        } else {
+                                            Color::srgba(0.08, 0.09, 0.13, 0.95).into()
+                                        }),
+                                        BorderColor::all(if is_selected {
+                                            Color::srgba(0.72, 0.76, 0.92, 1.0)
+                                        } else {
+                                            Color::srgba(0.22, 0.25, 0.33, 1.0)
+                                        }),
+                                        EquipmentSlotClickTarget {
+                                            slot_id: slot.slot_id.clone(),
+                                            item_id: slot.item_id,
+                                        },
+                                        RelativeCursorPosition::default(),
+                                    ))
+                                    .with_children(|slot_button| {
+                                        slot_button.spawn(text_bundle(
+                                            font,
+                                            &slot.slot_label,
+                                            9.5,
+                                            Color::srgba(0.74, 0.78, 0.86, 1.0),
+                                        ));
+                                        slot_button.spawn(text_bundle(
+                                            font,
+                                            slot.item_name.as_deref().unwrap_or("空"),
+                                            10.6,
+                                            Color::WHITE,
+                                        ));
+                                    });
+                            }
+                        });
+                });
+
+            layout
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    flex_wrap: FlexWrap::Wrap,
+                    column_gap: px(6),
+                    row_gap: px(6),
+                    ..default()
+                })
+                .with_children(|filters| {
+                    for filter in [
+                        UiInventoryFilter::All,
+                        UiInventoryFilter::Weapon,
+                        UiInventoryFilter::Armor,
+                        UiInventoryFilter::Accessory,
+                        UiInventoryFilter::Consumable,
+                        UiInventoryFilter::Material,
+                        UiInventoryFilter::Ammo,
+                        UiInventoryFilter::Misc,
+                    ] {
+                        filters.spawn(dock_tab_button(
+                            font,
+                            filter.label(),
+                            snapshot.filter == filter,
+                            GameUiButtonAction::InventoryFilter(filter),
+                        ));
                     }
                 });
 
             layout
                 .spawn((
                     Node {
-                        flex_grow: 1.0,
+                        width: Val::Percent(100.0),
+                        padding: UiRect::all(px(10)),
                         flex_direction: FlexDirection::Column,
-                        row_gap: px(8),
+                        row_gap: px(4),
+                        border: UiRect::all(px(1)),
+                        overflow: Overflow::clip_y(),
                         ..default()
                     },
-                    BackgroundColor(Color::NONE),
+                    BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.97)),
+                    BorderColor::all(Color::srgba(0.19, 0.22, 0.30, 1.0)),
                 ))
-                .with_children(|inventory| {
-                    inventory
-                        .spawn(Node {
-                            width: Val::Percent(100.0),
-                            flex_wrap: FlexWrap::Wrap,
-                            column_gap: px(6),
-                            row_gap: px(6),
-                            ..default()
-                        })
-                        .with_children(|filters| {
-                            for filter in [
-                                UiInventoryFilter::All,
-                                UiInventoryFilter::Weapon,
-                                UiInventoryFilter::Armor,
-                                UiInventoryFilter::Accessory,
-                                UiInventoryFilter::Consumable,
-                                UiInventoryFilter::Material,
-                                UiInventoryFilter::Ammo,
-                                UiInventoryFilter::Misc,
-                            ] {
-                                filters.spawn(dock_tab_button(
-                                    font,
-                                    filter.label(),
-                                    snapshot.filter == filter,
-                                    GameUiButtonAction::InventoryFilter(filter),
-                                ));
-                            }
-                        });
-                    inventory
-                        .spawn((
+                .with_children(|entries| {
+                    entries.spawn(text_bundle(
+                        font,
+                        "物品列表",
+                        11.2,
+                        Color::srgba(0.94, 0.96, 1.0, 1.0),
+                    ));
+                    entries.spawn(text_bundle(
+                        font,
+                        "左键选中物品，右键打开可执行操作。",
+                        9.8,
+                        Color::srgba(0.72, 0.76, 0.82, 1.0),
+                    ));
+                    if snapshot.entries.is_empty() {
+                        entries.spawn(text_bundle(
+                            font,
+                            "当前筛选下没有物品",
+                            10.4,
+                            Color::srgba(0.72, 0.76, 0.82, 1.0),
+                        ));
+                    }
+                    for entry in &snapshot.entries {
+                        let is_selected = menu_state.selected_inventory_item == Some(entry.item_id);
+                        entries.spawn((
+                            Button,
                             Node {
                                 width: Val::Percent(100.0),
-                                padding: UiRect::all(px(10)),
-                                flex_direction: FlexDirection::Column,
-                                row_gap: px(4),
-                                border: UiRect::all(px(1)),
-                                overflow: Overflow::clip_y(),
+                                padding: UiRect::axes(px(10), px(7)),
+                                margin: UiRect::bottom(px(4)),
+                                border: UiRect::all(px(if is_selected { 2.0 } else { 1.0 })),
                                 ..default()
                             },
-                            BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.97)),
-                            BorderColor::all(Color::srgba(0.19, 0.22, 0.30, 1.0)),
-                        ))
-                        .with_children(|entries| {
-                            entries.spawn(text_bundle(
-                                font,
-                                "物品列表",
-                                11.2,
-                                Color::srgba(0.94, 0.96, 1.0, 1.0),
-                            ));
-                            if snapshot.entries.is_empty() {
-                                entries.spawn(text_bundle(
-                                    font,
-                                    "当前筛选下没有物品",
-                                    10.4,
-                                    Color::srgba(0.72, 0.76, 0.82, 1.0),
-                                ));
-                            }
-                            for entry in &snapshot.entries {
-                                entries.spawn(action_button(
-                                    font,
-                                    &format!(
-                                        "{} x{} · {} · {:.1}kg",
-                                        entry.name,
-                                        entry.count,
-                                        entry.item_type.as_str(),
-                                        entry.total_weight
-                                    ),
-                                    GameUiButtonAction::SelectInventoryItem(entry.item_id),
-                                ));
-                            }
-                        });
-
-                    inventory
-                        .spawn((
-                            Node {
-                                width: Val::Percent(100.0),
-                                padding: UiRect::all(px(10)),
-                                flex_direction: FlexDirection::Column,
-                                row_gap: px(6),
-                                border: UiRect::all(px(1)),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgba(0.06, 0.07, 0.10, 0.96)),
-                            BorderColor::all(Color::srgba(0.18, 0.22, 0.30, 1.0)),
-                        ))
-                        .with_children(|detail_box| {
-                            if let Some(detail) = snapshot.detail.as_ref() {
-                                detail_box.spawn(text_bundle(
-                                    font,
-                                    &format!(
-                                        "{} · {} x{}",
-                                        detail.name,
-                                        detail.item_type.as_str(),
-                                        detail.count
-                                    ),
-                                    11.3,
-                                    Color::WHITE,
-                                ));
-                                detail_box.spawn(text_bundle(
-                                    font,
-                                    &format!("重量 {:.1}kg", detail.weight),
-                                    10.1,
-                                    Color::srgba(0.78, 0.84, 0.92, 1.0),
-                                ));
-                                if !detail.description.trim().is_empty() {
-                                    detail_box.spawn(text_bundle(
-                                        font,
-                                        &detail.description,
-                                        10.1,
-                                        Color::srgba(0.86, 0.89, 0.95, 1.0),
-                                    ));
-                                }
-                                if detail.attribute_bonuses.is_empty() {
-                                    detail_box.spawn(text_bundle(
-                                        font,
-                                        "属性加成: 无",
-                                        10.0,
-                                        Color::srgba(0.72, 0.76, 0.82, 1.0),
-                                    ));
-                                } else {
-                                    for (attribute, bonus) in &detail.attribute_bonuses {
-                                        detail_box.spawn(text_bundle(
-                                            font,
-                                            &format!("{attribute} {bonus:+.1}"),
-                                            10.0,
-                                            Color::srgba(0.84, 0.88, 0.95, 1.0),
-                                        ));
-                                    }
-                                }
-                                detail_box
-                                    .spawn(Node {
-                                        width: Val::Percent(100.0),
-                                        flex_direction: FlexDirection::Row,
-                                        flex_wrap: FlexWrap::Wrap,
-                                        column_gap: px(8),
-                                        row_gap: px(6),
-                                        ..default()
-                                    })
-                                    .with_children(|actions| {
-                                        if snapshot
-                                            .entries
-                                            .iter()
-                                            .find(|entry| entry.item_id == detail.item_id)
-                                            .map(|entry| entry.can_use)
-                                            .unwrap_or(false)
-                                        {
-                                            actions.spawn(action_button(
-                                                font,
-                                                "使用",
-                                                GameUiButtonAction::UseInventoryItem,
-                                            ));
-                                        }
-                                        if snapshot
-                                            .entries
-                                            .iter()
-                                            .find(|entry| entry.item_id == detail.item_id)
-                                            .map(|entry| entry.can_equip)
-                                            .unwrap_or(false)
-                                        {
-                                            actions.spawn(action_button(
-                                                font,
-                                                "装备",
-                                                GameUiButtonAction::EquipInventoryItem,
-                                            ));
-                                        }
-                                    });
+                            BackgroundColor(if is_selected {
+                                Color::srgba(0.16, 0.22, 0.31, 0.98).into()
                             } else {
-                                detail_box.spawn(text_bundle(
-                                    font,
-                                    "选择一个物品后，这里会显示详情、属性和可执行操作。",
-                                    10.2,
-                                    Color::srgba(0.72, 0.76, 0.82, 1.0),
-                                ));
-                            }
-                        });
+                                interaction_menu_button_color(false, Interaction::None).into()
+                            }),
+                            BorderColor::all(if is_selected {
+                                Color::srgba(0.64, 0.76, 0.94, 1.0)
+                            } else {
+                                Color::srgba(0.19, 0.24, 0.32, 1.0)
+                            }),
+                            Text::new(format!(
+                                "{} x{} · {} · {:.1}kg",
+                                entry.name,
+                                entry.count,
+                                entry.item_type.as_str(),
+                                entry.total_weight
+                            )),
+                            TextFont::from_font_size(11.0).with_font(font.0.clone()),
+                            TextColor(Color::WHITE),
+                            InventoryItemHoverTarget {
+                                item_id: entry.item_id,
+                            },
+                            InventoryItemClickTarget {
+                                item_id: entry.item_id,
+                            },
+                            RelativeCursorPosition::default(),
+                        ));
+                    }
                 });
         });
     });
@@ -2132,11 +2546,6 @@ fn render_skills_panel(
     let selected_tree = selected_skill_tree(snapshot, menu_state);
     let selected_entry = selected_tree
         .and_then(|tree| selected_skill_entry(tree, menu_state.selected_skill_id.as_deref()));
-    let current_group_fill = hotbar_state
-        .groups
-        .get(hotbar_state.active_group)
-        .map(|group| group.iter().filter(|slot| slot.skill_id.is_some()).count())
-        .unwrap_or(0);
 
     parent.commands().entity(body).with_children(|body| {
         body.spawn(text_bundle(
@@ -2306,6 +2715,11 @@ fn render_skills_panel(
                                         Color::srgba(0.18, 0.25, 0.33, 1.0)
                                     }),
                                     GameUiButtonAction::SelectSkill(entry.skill_id.clone()),
+                                    SkillHoverTarget {
+                                        tree_id: tree.tree_id.clone(),
+                                        skill_id: entry.skill_id.clone(),
+                                    },
+                                    RelativeCursorPosition::default(),
                                 ))
                                 .with_children(|button| {
                                     button.spawn(text_bundle(
@@ -2358,100 +2772,27 @@ fn render_skills_panel(
                     BorderColor::all(Color::srgba(0.18, 0.25, 0.33, 1.0)),
                 ))
                 .with_children(|detail_column| {
-                    if let Some(tree) = selected_tree {
-                        detail_column.spawn(text_bundle(
-                            font,
-                            &tree.tree_name,
-                            12.0,
-                            Color::srgba(0.82, 0.88, 0.96, 1.0),
-                        ));
-                        if !tree.tree_description.trim().is_empty() {
-                            detail_column.spawn(text_bundle(
-                                font,
-                                &tree.tree_description,
-                                10.0,
-                                Color::srgba(0.70, 0.75, 0.82, 1.0),
-                            ));
-                        }
-                    }
                     if let Some(entry) = selected_entry {
-                        detail_column.spawn(text_bundle(font, &entry.name, 14.0, Color::WHITE));
-                        detail_column.spawn(text_bundle(
-                            font,
-                            &format!(
-                                "等级 {}/{} · {} · 冷却 {:.1}s",
-                                entry.learned_level,
-                                entry.max_level,
-                                activation_mode_label(&entry.activation_mode),
-                                entry.cooldown_seconds
-                            ),
-                            10.8,
-                            Color::srgba(0.80, 0.86, 0.96, 1.0),
-                        ));
-                        if !entry.description.trim().is_empty() {
-                            detail_column.spawn(text_bundle(
-                                font,
-                                &entry.description,
-                                10.5,
-                                Color::WHITE,
-                            ));
-                        }
-                        detail_column.spawn(text_bundle(
-                            font,
-                            &format!("前置需求: {}", format_skill_prerequisites(entry)),
-                            10.0,
-                            Color::srgba(0.84, 0.88, 0.94, 1.0),
-                        ));
-                        detail_column.spawn(text_bundle(
-                            font,
-                            &format!(
-                                "属性需求: {}",
-                                format_skill_attribute_requirements(entry)
-                            ),
-                            10.0,
-                            Color::srgba(0.84, 0.88, 0.94, 1.0),
-                        ));
-                        detail_column.spawn(text_bundle(
-                            font,
-                            &format!(
-                                "当前快捷栏组 {} · 已占用 {}/10",
-                                hotbar_state.active_group + 1,
-                                current_group_fill
-                            ),
-                            10.0,
-                            Color::srgba(0.72, 0.78, 0.86, 1.0),
-                        ));
-                        if let Some(slot_index) =
-                            current_group_skill_slot(hotbar_state, &entry.skill_id)
-                        {
-                            detail_column.spawn(text_bundle(
-                                font,
-                                &format!("当前组已绑定到第 {} 槽", slot_index + 1),
-                                10.0,
-                                Color::srgba(0.90, 0.80, 0.58, 1.0),
-                            ));
-                        }
-                        if entry.hotbar_eligible {
-                            detail_column.spawn(action_button(
-                                font,
-                                "加入当前组空槽",
-                                GameUiButtonAction::AssignSkillToFirstEmptyHotbarSlot(
-                                    entry.skill_id.clone(),
-                                ),
-                            ));
-                        } else {
-                            detail_column.spawn(text_bundle(
-                                font,
-                                if entry.learned_level > 0 {
-                                    "该技能当前不进入快捷栏。"
-                                } else {
-                                    "尚未学习，暂时不能加入快捷栏。"
-                                },
-                                10.2,
-                                Color::srgba(0.72, 0.76, 0.82, 1.0),
-                            ));
-                        }
+                        let display =
+                            build_skill_detail_display(selected_tree, entry, hotbar_state);
+                        render_skill_detail_content(detail_column, font, &display, entry, true);
                     } else {
+                        if let Some(tree) = selected_tree {
+                            detail_column.spawn(text_bundle(
+                                font,
+                                &tree.tree_name,
+                                12.0,
+                                Color::srgba(0.82, 0.88, 0.96, 1.0),
+                            ));
+                            if !tree.tree_description.trim().is_empty() {
+                                detail_column.spawn(text_bundle(
+                                    font,
+                                    &tree.tree_description,
+                                    10.0,
+                                    Color::srgba(0.70, 0.75, 0.82, 1.0),
+                                ));
+                            }
+                        }
                         detail_column.spawn(text_bundle(
                             font,
                             "选择一个技能后，这里会显示完整描述、前置要求和快捷栏操作。",
@@ -2462,6 +2803,295 @@ fn render_skills_panel(
                 });
         });
     });
+}
+
+fn render_hover_tooltip(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    window: &Window,
+    player_actor: Option<ActorId>,
+    ui: &GameUiViewState<'_, '_>,
+    content: &GameContentRefs<'_, '_>,
+) {
+    let Some(player_actor) = player_actor else {
+        return;
+    };
+    let Some(tooltip_content) = ui.hover_tooltip.content.as_ref() else {
+        return;
+    };
+
+    match tooltip_content {
+        UiHoverTooltipContent::InventoryItem { item_id } => {
+            let snapshot = inventory_snapshot(
+                &ui.runtime_state.runtime,
+                player_actor,
+                &content.items.0,
+                ui.filter_state.filter,
+                Some(*item_id),
+            );
+            let Some(detail) = snapshot.detail.as_ref() else {
+                return;
+            };
+            let Some(entry) = snapshot
+                .entries
+                .iter()
+                .find(|entry| entry.item_id == *item_id)
+            else {
+                return;
+            };
+            let display = build_inventory_detail_display(detail, Some(entry));
+            render_tooltip_container(
+                parent,
+                window,
+                ui.hover_tooltip.cursor_position,
+                display.content.estimated_height(),
+                |tooltip| render_inventory_detail_content(tooltip, font, &display, false),
+            );
+        }
+        UiHoverTooltipContent::Skill { tree_id, skill_id } => {
+            let snapshot = skills_snapshot(
+                &ui.runtime_state.runtime,
+                player_actor,
+                &content.skills.0,
+                &content.skill_trees.0,
+            );
+            let Some(tree) = snapshot.trees.iter().find(|tree| tree.tree_id == *tree_id) else {
+                return;
+            };
+            let Some(entry) = tree
+                .entries
+                .iter()
+                .find(|entry| entry.skill_id == *skill_id)
+            else {
+                return;
+            };
+            let display = build_skill_detail_display(Some(tree), entry, &ui.hotbar_state);
+            render_tooltip_container(
+                parent,
+                window,
+                ui.hover_tooltip.cursor_position,
+                display.content.estimated_height(),
+                |tooltip| render_skill_detail_content(tooltip, font, &display, entry, false),
+            );
+        }
+    }
+}
+
+fn render_inventory_context_menu(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    window: &Window,
+    player_actor: Option<ActorId>,
+    ui: &GameUiViewState<'_, '_>,
+    content: &GameContentRefs<'_, '_>,
+) {
+    if ui.menu_state.active_panel != Some(UiMenuPanel::Inventory) {
+        return;
+    }
+    let Some(player_actor) = player_actor else {
+        return;
+    };
+    let Some(target) = ui.inventory_context_menu.target.as_ref() else {
+        return;
+    };
+
+    match target {
+        UiInventoryContextMenuTarget::InventoryItem { item_id } => {
+            let snapshot = inventory_snapshot(
+                &ui.runtime_state.runtime,
+                player_actor,
+                &content.items.0,
+                ui.filter_state.filter,
+                Some(*item_id),
+            );
+            let Some(detail) = snapshot.detail.as_ref() else {
+                return;
+            };
+            let Some(entry) = snapshot
+                .entries
+                .iter()
+                .find(|entry| entry.item_id == *item_id)
+            else {
+                return;
+            };
+            let display = build_inventory_detail_display(detail, Some(entry));
+            render_inventory_context_menu_container(
+                parent,
+                font,
+                window,
+                ui.inventory_context_menu.cursor_position,
+                152.0,
+                |menu| {
+                    menu.spawn(text_bundle(font, &detail.name, 11.5, Color::WHITE));
+                    menu.spawn(text_bundle(
+                        font,
+                        &format!("{} · x{}", detail.item_type.as_str(), detail.count),
+                        9.8,
+                        Color::srgba(0.74, 0.79, 0.88, 1.0),
+                    ));
+                    if display.can_use {
+                        menu.spawn(action_button(
+                            font,
+                            "使用",
+                            GameUiButtonAction::UseInventoryItem,
+                        ));
+                    }
+                    if display.can_equip {
+                        menu.spawn(action_button(
+                            font,
+                            "装备",
+                            GameUiButtonAction::EquipInventoryItem,
+                        ));
+                    }
+                    if !display.can_use && !display.can_equip {
+                        menu.spawn(text_bundle(
+                            font,
+                            "当前没有可执行操作",
+                            9.8,
+                            Color::srgba(0.72, 0.76, 0.82, 1.0),
+                        ));
+                    }
+                },
+            );
+        }
+        UiInventoryContextMenuTarget::EquipmentSlot { slot_id, item_id } => {
+            let snapshot = inventory_snapshot(
+                &ui.runtime_state.runtime,
+                player_actor,
+                &content.items.0,
+                ui.filter_state.filter,
+                None,
+            );
+            let slot_name = snapshot
+                .equipment
+                .iter()
+                .find(|slot| slot.slot_id == *slot_id)
+                .and_then(|slot| slot.item_name.clone())
+                .unwrap_or_else(|| item_id.to_string());
+            render_inventory_context_menu_container(
+                parent,
+                font,
+                window,
+                ui.inventory_context_menu.cursor_position,
+                118.0,
+                |menu| {
+                    menu.spawn(text_bundle(font, &slot_name, 11.5, Color::WHITE));
+                    menu.spawn(text_bundle(
+                        font,
+                        &format!("装备槽: {slot_id}"),
+                        9.8,
+                        Color::srgba(0.74, 0.79, 0.88, 1.0),
+                    ));
+                    menu.spawn(action_button(
+                        font,
+                        "卸下",
+                        GameUiButtonAction::UnequipSlot(slot_id.clone()),
+                    ));
+                },
+            );
+        }
+    }
+}
+
+fn render_inventory_context_menu_container(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    window: &Window,
+    cursor_position: Vec2,
+    estimated_height: f32,
+    content: impl FnOnce(&mut ChildSpawnerCommands),
+) {
+    let position = floating_panel_position(window, cursor_position, 220.0, estimated_height);
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(position.x),
+                top: px(position.y),
+                width: px(220),
+                padding: UiRect::all(px(10)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+                border: UiRect::all(px(1)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.05, 0.058, 0.076, 0.985)),
+            BorderColor::all(Color::srgba(0.34, 0.42, 0.54, 1.0)),
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
+            InventoryContextMenuRoot,
+            UiMouseBlocker,
+        ))
+        .with_children(|menu| {
+            menu.spawn(text_bundle(
+                font,
+                "操作",
+                10.2,
+                Color::srgba(0.84, 0.89, 0.96, 1.0),
+            ));
+            content(menu);
+        });
+}
+
+fn render_tooltip_container(
+    parent: &mut ChildSpawnerCommands,
+    window: &Window,
+    cursor_position: Vec2,
+    estimated_height: f32,
+    content: impl FnOnce(&mut ChildSpawnerCommands),
+) {
+    let position = floating_panel_position(
+        window,
+        cursor_position,
+        HOVER_TOOLTIP_MAX_WIDTH,
+        estimated_height,
+    );
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(position.x),
+                top: px(position.y),
+                width: px(HOVER_TOOLTIP_MAX_WIDTH),
+                max_width: px(HOVER_TOOLTIP_MAX_WIDTH),
+                padding: UiRect::all(px(12)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+                border: UiRect::all(px(1)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.045, 0.052, 0.068, 0.96)),
+            BorderColor::all(Color::srgba(0.28, 0.34, 0.44, 1.0)),
+            FocusPolicy::Pass,
+        ))
+        .with_children(content);
+}
+
+fn floating_panel_position(
+    window: &Window,
+    cursor_position: Vec2,
+    width: f32,
+    estimated_height: f32,
+) -> Vec2 {
+    let max_left =
+        (window.width() - width - HOVER_TOOLTIP_VIEWPORT_MARGIN).max(HOVER_TOOLTIP_VIEWPORT_MARGIN);
+    let max_top = (window.height() - estimated_height - HOVER_TOOLTIP_VIEWPORT_MARGIN)
+        .max(HOVER_TOOLTIP_VIEWPORT_MARGIN);
+
+    let mut left = cursor_position.x + HOVER_TOOLTIP_CURSOR_OFFSET_X;
+    let mut top = cursor_position.y + HOVER_TOOLTIP_CURSOR_OFFSET_Y;
+
+    if left + width > window.width() - HOVER_TOOLTIP_VIEWPORT_MARGIN {
+        left = cursor_position.x - width - HOVER_TOOLTIP_CURSOR_OFFSET_X;
+    }
+    if top + estimated_height > window.height() - HOVER_TOOLTIP_VIEWPORT_MARGIN {
+        top = cursor_position.y - estimated_height - HOVER_TOOLTIP_CURSOR_OFFSET_Y;
+    }
+
+    Vec2::new(
+        left.clamp(HOVER_TOOLTIP_VIEWPORT_MARGIN, max_left),
+        top.clamp(HOVER_TOOLTIP_VIEWPORT_MARGIN, max_top),
+    )
 }
 
 fn render_crafting_panel(
@@ -3294,7 +3924,6 @@ fn render_hotbar(
     hotbar_state: &UiHotbarState,
     skills: &game_data::SkillLibrary,
     menu_state: &UiMenuState,
-    player_stats: Option<&PlayerHudStats>,
     show_clear_controls: bool,
     selected_skill_id: Option<&str>,
 ) {
@@ -3312,22 +3941,6 @@ fn render_hotbar(
         .as_ref()
         .is_some_and(|targeting| targeting.is_attack());
     let attack_enabled = !viewer_state.is_free_observe() && viewer_state.selected_actor.is_some();
-    let hp_text = player_stats
-        .map(|stats| format!("{:.0} / {:.0}", stats.hp, stats.max_hp))
-        .unwrap_or_else(|| "-- / --".to_string());
-    let hp_ratio = player_stats
-        .map(|stats| {
-            if stats.max_hp <= 0.0 {
-                0.0
-            } else {
-                (stats.hp / stats.max_hp).clamp(0.0, 1.0)
-            }
-        })
-        .unwrap_or(0.0);
-    let action_text = player_stats
-        .map(|stats| format!("{:.1} AP · {}步", stats.ap, stats.available_steps))
-        .unwrap_or_else(|| "--".to_string());
-    let action_ratio = player_stats.map(action_meter_ratio).unwrap_or(0.0);
     let left_tabs = [
         UiMenuPanel::Character,
         UiMenuPanel::Journal,
@@ -3433,9 +4046,9 @@ fn render_hotbar(
                     .spawn((
                         Node {
                             flex_grow: 1.0,
-                            padding: UiRect::axes(px(10), px(8)),
+                            padding: UiRect::axes(px(12), px(10)),
                             flex_direction: FlexDirection::Column,
-                            row_gap: px(6),
+                            justify_content: JustifyContent::Center,
                             border: UiRect::all(px(1)),
                             ..default()
                         },
@@ -3443,34 +4056,6 @@ fn render_hotbar(
                         BorderColor::all(Color::srgba(0.18, 0.21, 0.29, 1.0)),
                     ))
                     .with_children(|stats_panel| {
-                        stats_panel
-                            .spawn(Node {
-                                width: Val::Percent(100.0),
-                                flex_direction: FlexDirection::Row,
-                                column_gap: px(10),
-                                align_items: AlignItems::FlexStart,
-                                ..default()
-                            })
-                            .with_children(|meters| {
-                                render_stat_meter(
-                                    meters,
-                                    font,
-                                    "生命",
-                                    &hp_text,
-                                    hp_ratio,
-                                    Color::srgba(0.68, 0.16, 0.18, 1.0),
-                                    Color::srgba(0.54, 0.20, 0.22, 1.0),
-                                );
-                                render_stat_meter(
-                                    meters,
-                                    font,
-                                    "行动",
-                                    &action_text,
-                                    action_ratio,
-                                    Color::srgba(0.18, 0.44, 0.70, 1.0),
-                                    Color::srgba(0.24, 0.40, 0.58, 1.0),
-                                );
-                            });
                         stats_panel.spawn(text_bundle(
                             font,
                             &binding_hint,
@@ -3757,6 +4342,9 @@ mod tests {
             .economy()
             .equipped_item(handles.player, "main_hand")
             .is_some());
-        assert!(runtime.economy().equipped_item(handles.player, "body").is_some());
+        assert!(runtime
+            .economy()
+            .equipped_item(handles.player, "body")
+            .is_some());
     }
 }

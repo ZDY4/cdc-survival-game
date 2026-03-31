@@ -4,6 +4,12 @@ import type {
   NarrativeGenerateRequest,
   NarrativeGenerateResponse,
 } from "../../types";
+import {
+  buildReviewQueue,
+  createSessionId,
+  defaultNarrativeAgentStrategy,
+  nowIso,
+} from "./narrativeAgentState";
 
 export type NarrativeTabState = {
   openTabs: string[];
@@ -14,12 +20,31 @@ export function createDocumentAgentSession(
   overrides: Partial<DocumentAgentSession> = {},
 ): DocumentAgentSession {
   return {
+    sessionId: createSessionId(),
+    sessionTitle: "当前会话",
+    branchOfSessionId: null,
+    updatedAt: nowIso(),
     mode: "revise_document",
     composerText: "",
     chatMessages: [],
     lastRequest: null,
     lastResponse: null,
     candidatePatchSet: null,
+    status: "idle",
+    pendingQuestions: [],
+    pendingOptions: [],
+    lastPlan: null,
+    pendingTurnKind: null,
+    executionSteps: [],
+    currentStepId: null,
+    pendingActionRequests: [],
+    actionHistory: [],
+    selectedContextDocKeys: [],
+    strategy: defaultNarrativeAgentStrategy(),
+    reviewQueue: [],
+    versionHistory: [],
+    pendingDerivedDocuments: [],
+    savedBranches: [],
     busy: false,
     inflightRequestId: null,
     documentViewMode: "preview",
@@ -92,8 +117,30 @@ export function stashDocumentResponse(
 ): Record<string, DocumentAgentSession> {
   return updateDocumentAgentSession(sessions, documentKey, (session) => ({
     ...session,
+    updatedAt: nowIso(),
     lastRequest: request,
     lastResponse: response,
+    status: response.requiresUserReply ? "waiting_user" : "completed",
+    pendingQuestions: response.questions,
+    pendingOptions: response.options,
+    lastPlan: response.planSteps.length ? response.planSteps : session.lastPlan,
+    pendingTurnKind: response.requiresUserReply ? response.turnKind : null,
+    executionSteps: response.executionSteps,
+    currentStepId: response.currentStepId ?? null,
+    pendingActionRequests: response.requestedActions,
+    reviewQueue: buildReviewQueue({
+      ...session,
+      lastRequest: request,
+      lastResponse: response,
+      status: response.requiresUserReply ? "waiting_user" : "completed",
+      pendingQuestions: response.questions,
+      pendingOptions: response.options,
+      lastPlan: response.planSteps.length ? response.planSteps : session.lastPlan,
+      pendingTurnKind: response.requiresUserReply ? response.turnKind : null,
+      executionSteps: response.executionSteps,
+      currentStepId: response.currentStepId ?? null,
+      pendingActionRequests: response.requestedActions,
+    }),
     busy: false,
   }));
 }
