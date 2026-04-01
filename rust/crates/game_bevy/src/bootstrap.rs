@@ -5,11 +5,15 @@ use thiserror::Error;
 use crate::{
     build_runtime_from_seed, debug_seed_characters_for_map, default_debug_seed,
     load_character_definitions, load_map_definitions, load_overworld_definitions,
-    load_runtime_startup_config, resolve_startup_map_id, CharacterDefinitions, CharacterLoadError,
-    MapDefinitions, MapLoadError, OverworldDefinitions, OverworldLoadError, RuntimeBuildError,
-    RuntimeScenarioSeed, RuntimeStartupConfig, RuntimeStartupConfigError,
+    load_runtime_startup_config, resolve_startup_map_id, CharacterDefinitions, MapDefinitions,
+    OverworldDefinitions, RuntimeBuildError, RuntimeScenarioSeed, RuntimeStartupConfig,
+    RuntimeStartupConfigError,
 };
 use game_core::SimulationRuntime;
+use game_data::{
+    CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapLoadError,
+    OverworldLoadError,
+};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeBootstrapBundle {
@@ -27,6 +31,10 @@ pub enum RuntimeBootstrapError {
     MapDefinitions(#[from] MapLoadError),
     #[error(transparent)]
     OverworldDefinitions(#[from] OverworldLoadError),
+    #[error(transparent)]
+    DialogueDefinitions(#[from] DialogueLoadError),
+    #[error(transparent)]
+    DialogueRuleDefinitions(#[from] DialogueRuleLoadError),
     #[error(transparent)]
     RuntimeStartupConfig(#[from] RuntimeStartupConfigError),
     #[error(transparent)]

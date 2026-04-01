@@ -18,6 +18,11 @@ use crate::{
     SmartObjectReservations,
 };
 
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum NpcLifeUpdateSet {
+    RuntimeState,
+}
+
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct LifeProfileComponent(pub CharacterLifeProfile);
 
@@ -208,6 +213,7 @@ pub struct NpcLifePlugin;
 
 impl Plugin for NpcLifePlugin {
     fn build(&self, app: &mut App) {
+        app.configure_sets(Update, NpcLifeUpdateSet::RuntimeState);
         app.add_systems(
             Update,
             (
@@ -220,7 +226,8 @@ impl Plugin for NpcLifePlugin {
                 refresh_debug_snapshot_system,
                 advance_sim_clock_system,
             )
-                .chain(),
+                .chain()
+                .in_set(NpcLifeUpdateSet::RuntimeState),
         );
     }
 }

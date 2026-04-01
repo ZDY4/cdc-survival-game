@@ -1,0 +1,158 @@
+use super::*;
+
+use std::collections::BTreeMap;
+
+use super::{apply_new_game_defaults, should_render_main_menu, transition_to_gameplay_scene};
+use crate::state::{
+    ActiveDialogueState, InteractionMenuState, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+};
+use game_bevy::{ItemDefinitions, UiMenuPanel, UiMenuState, UiModalState};
+use game_core::create_demo_runtime;
+use game_data::{DialogueData, InteractionTargetId, ItemDefinition, ItemFragment};
+
+fn sample_new_game_item_definitions() -> ItemDefinitions {
+    let stackable = |id: u32, name: &str| ItemDefinition {
+        id,
+        name: name.to_string(),
+        fragments: vec![ItemFragment::Stacking {
+            stackable: true,
+            max_stack: 99,
+        }],
+        ..ItemDefinition::default()
+    };
+    let equippable = |id: u32, name: &str, slot: &str| ItemDefinition {
+        id,
+        name: name.to_string(),
+        fragments: vec![
+            ItemFragment::Stacking {
+                stackable: false,
+                max_stack: 1,
+            },
+            ItemFragment::Equip {
+                slots: vec![slot.to_string()],
+                level_requirement: 1,
+                equip_effect_ids: Vec::new(),
+                unequip_effect_ids: Vec::new(),
+            },
+        ],
+        ..ItemDefinition::default()
+    };
+
+    ItemDefinitions(game_data::ItemLibrary::from(BTreeMap::from([
+        (1002, equippable(1002, "Knife", "main_hand")),
+        (1003, stackable(1003, "Bandage")),
+        (1006, stackable(1006, "Ration")),
+        (1007, stackable(1007, "Water")),
+        (1008, stackable(1008, "Scrap")),
+        (1009, stackable(1009, "Pistol Ammo")),
+        (2004, equippable(2004, "Jacket", "body")),
+        (2013, equippable(2013, "Pants", "legs")),
+        (2015, equippable(2015, "Boots", "feet")),
+    ])))
+}
+
+#[test]
+fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
+    let mut scene_kind = ViewerSceneKind::MainMenu;
+    let (runtime, _) = create_demo_runtime();
+    let mut runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: Default::default(),
+    };
+    let mut viewer_state = ViewerState {
+        focused_target: Some(InteractionTargetId::MapObject("door".into())),
+        interaction_menu: Some(InteractionMenuState {
+            target_id: InteractionTargetId::MapObject("door".into()),
+            cursor_position: bevy::prelude::Vec2::new(32.0, 48.0),
+        }),
+        active_dialogue: Some(ActiveDialogueState {
+            actor_id: game_data::ActorId(1),
+            target_id: None,
+            dialogue_key: "intro".into(),
+            dialog_id: "intro".into(),
+            data: DialogueData::default(),
+            current_node_id: "start".into(),
+            target_name: "door".into(),
+        }),
+        hovered_grid: Some(game_data::GridCoord::new(1, 0, 1)),
+        pending_open_trade_target: Some(InteractionTargetId::MapObject("shop".into())),
+        status_line: "menu".into(),
+        ..ViewerState::default()
+    };
+    let mut menu_state = UiMenuState {
+        active_panel: Some(UiMenuPanel::Inventory),
+        selected_inventory_item: Some(42),
+        selected_equipment_slot: Some("body".into()),
+        selected_skill_tree_id: Some("tree_a".into()),
+        selected_skill_id: Some("skill_a".into()),
+        selected_recipe_id: Some("recipe_a".into()),
+        selected_map_location_id: Some("street_a".into()),
+        ..UiMenuState::default()
+    };
+    let mut modal_state = UiModalState {
+        trade: Some(Default::default()),
+        ..UiModalState::default()
+    };
+
+    transition_to_gameplay_scene(
+        &mut scene_kind,
+        &mut runtime_state,
+        &mut viewer_state,
+        &mut menu_state,
+        &mut modal_state,
+        "开始新游戏",
+    );
+
+    assert_eq!(scene_kind, ViewerSceneKind::Gameplay);
+    assert!(viewer_state.focused_target.is_none());
+    assert!(viewer_state.interaction_menu.is_none());
+    assert!(viewer_state.active_dialogue.is_none());
+    assert!(viewer_state.hovered_grid.is_none());
+    assert_eq!(viewer_state.status_line, "开始新游戏");
+    assert!(viewer_state.selected_actor.is_some());
+    assert_eq!(
+        viewer_state.current_level,
+        runtime_state
+            .runtime
+            .snapshot()
+            .grid
+            .default_level
+            .unwrap_or(0)
+    );
+    assert!(menu_state.active_panel.is_none());
+    assert!(menu_state.selected_inventory_item.is_none());
+    assert!(menu_state.selected_skill_tree_id.is_none());
+    assert_eq!(menu_state.status_text, "开始新游戏");
+    assert!(modal_state.trade.is_none());
+}
+
+#[test]
+fn main_menu_ui_renders_only_in_main_menu_scene() {
+    assert!(should_render_main_menu(ViewerSceneKind::MainMenu));
+    assert!(!should_render_main_menu(ViewerSceneKind::Gameplay));
+}
+
+#[test]
+fn apply_new_game_defaults_does_not_require_ap() {
+    let (mut runtime, handles) = create_demo_runtime();
+    let items = sample_new_game_item_definitions();
+    runtime.economy_mut().set_actor_level(handles.player, 1);
+    let _ = runtime.submit_command(game_core::SimulationCommand::SetActorAp {
+        actor_id: handles.player,
+        ap: 0.0,
+    });
+
+    apply_new_game_defaults(&mut runtime, &items).expect("new game setup should succeed");
+
+    assert_eq!(runtime.get_actor_ap(handles.player), 0.0);
+    assert_eq!(runtime.get_actor_inventory_count(handles.player, "1008"), 2);
+    assert!(runtime
+        .economy()
+        .equipped_item(handles.player, "main_hand")
+        .is_some());
+    assert!(runtime
+        .economy()
+        .equipped_item(handles.player, "body")
+        .is_some());
+}

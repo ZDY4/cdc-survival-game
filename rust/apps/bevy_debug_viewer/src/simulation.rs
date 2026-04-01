@@ -165,7 +165,10 @@ pub(crate) fn refresh_viewer_vision(
         || tracker.grid_position != Some(actor.grid_position)
         || tracker.topology_version != topology_version
         || tracker.runtime_obstacle_version != runtime_obstacle_version
-        || runtime_state.runtime.actor_vision_snapshot(actor_id).is_none();
+        || runtime_state
+            .runtime
+            .actor_vision_snapshot(actor_id)
+            .is_none();
     if !should_refresh {
         return;
     }
@@ -853,6 +856,9 @@ pub(crate) fn collect_events(
                 *damage,
             );
         }
+        if scene_transition_invalidates_interaction_ui(&event) {
+            clear_interaction_ui_for_scene_transition(&mut viewer_state);
+        }
         sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
         runtime_state
             .recent_events
@@ -863,6 +869,24 @@ pub(crate) fn collect_events(
         let overflow = runtime_state.recent_events.len() - MAX_EVENTS;
         runtime_state.recent_events.drain(0..overflow);
     }
+}
+
+fn scene_transition_invalidates_interaction_ui(event: &SimulationEvent) -> bool {
+    matches!(
+        event,
+        SimulationEvent::SceneTransitionRequested { .. }
+            | SimulationEvent::LocationEntered { .. }
+            | SimulationEvent::ReturnedToOverworld { .. }
+    )
+}
+
+fn clear_interaction_ui_for_scene_transition(viewer_state: &mut ViewerState) {
+    viewer_state.focused_target = None;
+    viewer_state.current_prompt = None;
+    viewer_state.interaction_menu = None;
+    viewer_state.active_dialogue = None;
+    viewer_state.targeting_state = None;
+    viewer_state.pending_open_trade_target = None;
 }
 
 pub(crate) fn advance_actor_motion(
@@ -1337,8 +1361,9 @@ fn mark_online_replan_failure(
 #[cfg(test)]
 mod tests {
     use super::{
-        actor_motion_duration_sec, advance_online_npc_actions, maybe_auto_end_turn_after_stop,
-        queue_actor_motion, queue_attack_and_hit_feedback, sync_npc_runtime_presence,
+        actor_motion_duration_sec, advance_online_npc_actions, advance_runtime_progression,
+        collect_events, maybe_auto_end_turn_after_stop, queue_actor_motion,
+        queue_attack_and_hit_feedback, refresh_interaction_prompt, sync_npc_runtime_presence,
         ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
     };
     use crate::state::{
@@ -1354,9 +1379,10 @@ mod tests {
         NpcLifeState, RuntimeActorLink, RuntimeExecutionState, SettlementDebugSnapshot,
         SettlementDefinitionPath, SettlementSimulationPlugin, SpawnCharacterRequest,
     };
-    use game_core::create_demo_runtime;
-    use game_core::SimulationCommand;
-    use game_data::{ActorSide, GridCoord, WorldCoord};
+    use game_core::{
+        create_demo_runtime, PendingProgressionStep, SimulationCommand, SimulationEvent,
+    };
+    use game_data::{ActorSide, GridCoord, InteractionTargetId, WorldCoord};
 
     fn seed_life_debug_spawns(app: &mut App) {
         let definition_ids = app
@@ -1674,6 +1700,71 @@ mod tests {
             Some(&game_core::PendingProgressionStep::RunNonCombatWorldCycle)
         );
         assert!(!runtime_state.runtime.actor_turn_open(handles.player));
+    }
+
+    #[test]
+    fn scene_transition_events_preserve_pending_progression_during_prompt_refresh() {
+        let (mut runtime, handles) = create_demo_runtime();
+        runtime
+            .issue_actor_move(handles.player, GridCoord::new(0, 0, 1))
+            .expect("path should be planned");
+        runtime.push_event(SimulationEvent::LocationEntered {
+            actor_id: handles.player,
+            location_id: "survivor_outpost_01".into(),
+            map_id: "survivor_outpost_01_grid".into(),
+            entry_point_id: "default_entry".into(),
+            world_mode: game_core::WorldMode::Outdoor,
+        });
+
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default())
+            .insert_resource(ViewerRuntimeState {
+                runtime,
+                recent_events: Vec::new(),
+                ai_snapshot: SettlementDebugSnapshot::default(),
+            })
+            .insert_resource(ViewerActorFeedbackState::default())
+            .insert_resource(ViewerCameraShakeState::default())
+            .insert_resource(ViewerDamageNumberState::default())
+            .insert_resource(ViewerActorMotionState::default())
+            .insert_resource(ViewerState::default())
+            .add_systems(
+                Update,
+                (
+                    advance_runtime_progression,
+                    collect_events,
+                    refresh_interaction_prompt,
+                )
+                    .chain(),
+            );
+
+        {
+            let mut viewer_state = app.world_mut().resource_mut::<ViewerState>();
+            viewer_state.select_actor(handles.player, ActorSide::Player);
+            viewer_state.min_progression_interval_sec = 0.0;
+            viewer_state.focused_target =
+                Some(InteractionTargetId::MapObject("stale_exit_trigger".into()));
+        }
+
+        app.update();
+
+        {
+            let runtime_state = app.world().resource::<ViewerRuntimeState>();
+            let viewer_state = app.world().resource::<ViewerState>();
+            assert_eq!(
+                runtime_state.runtime.peek_pending_progression(),
+                Some(&PendingProgressionStep::StartNextNonCombatPlayerTurn)
+            );
+            assert!(viewer_state.focused_target.is_none());
+            assert!(viewer_state.current_prompt.is_none());
+            assert!(!runtime_state.runtime.actor_turn_open(handles.player));
+        }
+
+        app.update();
+
+        let runtime_state = app.world().resource::<ViewerRuntimeState>();
+        assert!(!runtime_state.runtime.has_pending_progression());
+        assert!(runtime_state.runtime.actor_turn_open(handles.player));
     }
 }
 

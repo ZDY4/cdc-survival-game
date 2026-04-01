@@ -2755,7 +2755,6 @@ name = "game_protocol"
 version = "0.1.0"
 dependencies = [
  "bevy_app",
- "game_core",
  "game_data",
  "serde",
  "serde_json",

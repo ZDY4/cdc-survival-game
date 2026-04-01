@@ -1,21 +1,13 @@
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 use bevy::window::WindowPlugin;
 use game_bevy::{
-    load_character_definitions_on_startup, load_effect_definitions_on_startup,
-    load_item_definitions_on_startup, load_map_definitions_on_startup,
-    load_overworld_definitions_on_startup, load_quest_definitions_on_startup,
-    load_recipe_definitions_on_startup, load_settlement_definitions_on_startup,
-    load_shop_definitions_on_startup, load_skill_definitions_on_startup,
-    load_skill_tree_definitions_on_startup, spawn_characters_from_definition,
-    CharacterDefinitionPath, CharacterSpawnRejected, EffectDefinitionPath, GameUiPlugin,
-    ItemDefinitionPath, MapAiSpawnRuntimeState, MapDefinitionPath, NpcLifePlugin,
-    OverworldDefinitionPath, QuestDefinitionPath, RecipeDefinitionPath, SettlementDefinitionPath,
-    SettlementSimulationPlugin, ShopDefinitionPath, SkillDefinitionPath, SkillTreeDefinitionPath,
-    SpawnCharacterRequest,
+    apply_gameplay_libraries, spawn_characters_from_definition, CharacterSpawnRejected,
+    GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin, NpcLifeUpdateSet, RuntimeContentPlugin,
+    SettlementSimulationPlugin, SpawnCharacterRequest,
 };
-use game_data::GameDataPlugin;
 
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::console::{
@@ -38,8 +30,7 @@ use crate::profiling::{
 };
 use crate::render::{
     setup_viewer, sync_damage_numbers, sync_fog_of_war_visuals, update_camera,
-    update_dialogue_panel,
-    update_interaction_menu, BuildingWallGridMaterial, GridGroundMaterial,
+    update_dialogue_panel, update_interaction_menu, BuildingWallGridMaterial, GridGroundMaterial,
 };
 use crate::simulation::{
     advance_actor_feedback, advance_actor_motion, advance_map_ai_spawns,
@@ -55,8 +46,21 @@ use crate::state::{
 };
 
 pub(crate) fn run() {
-    let bootstrap = load_viewer_bootstrap()
-        .unwrap_or_else(|error| panic!("failed to load bevy_debug_viewer bootstrap: {error}"));
+    let (bootstrap, bootstrap_status) = match load_viewer_bootstrap() {
+        Ok(bootstrap) => (bootstrap, ViewerBootstrapStatus::Ready),
+        Err(error) => {
+            eprintln!("failed to load bevy_debug_viewer bootstrap: {error}");
+            (
+                crate::bootstrap::ViewerBootstrap {
+                    runtime: game_core::SimulationRuntime::new(),
+                    asset_dir: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"),
+                },
+                ViewerBootstrapStatus::Failed {
+                    error: error.to_string(),
+                },
+            )
+        }
+    };
 
     App::new()
         .add_plugins(ViewerAppPlugin {
@@ -87,11 +91,18 @@ pub(crate) fn run() {
         .insert_resource(ViewerConsoleState::default())
         .insert_resource(ViewerSystemProfilerState::default())
         .insert_resource(ViewerVisionTrackerState::default())
+        .insert_resource(bootstrap_status)
         .run();
 }
 
 struct ViewerAppPlugin {
     asset_dir: std::path::PathBuf,
+}
+
+#[derive(Resource, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ViewerBootstrapStatus {
+    Ready,
+    Failed { error: String },
 }
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
@@ -124,20 +135,9 @@ impl Plugin for ViewerAppPlugin {
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
         .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
-        .insert_resource(CharacterDefinitionPath::default())
-        .insert_resource(MapDefinitionPath::default())
-        .insert_resource(OverworldDefinitionPath::default())
-        .insert_resource(SettlementDefinitionPath::default())
-        .insert_resource(EffectDefinitionPath::default())
-        .insert_resource(ItemDefinitionPath::default())
-        .insert_resource(SkillDefinitionPath::default())
-        .insert_resource(SkillTreeDefinitionPath::default())
-        .insert_resource(RecipeDefinitionPath::default())
-        .insert_resource(QuestDefinitionPath::default())
-        .insert_resource(ShopDefinitionPath::default())
         .insert_resource(MapAiSpawnRuntimeState::default())
         .add_plugins((
-            GameDataPlugin,
+            RuntimeContentPlugin,
             SettlementSimulationPlugin,
             NpcLifePlugin,
             GameUiPlugin,
@@ -145,6 +145,7 @@ impl Plugin for ViewerAppPlugin {
         .configure_sets(
             Update,
             (
+                NpcLifeUpdateSet::RuntimeState,
                 ViewerUpdateSet::RuntimeMutations,
                 ViewerUpdateSet::EventCollection,
                 ViewerUpdateSet::Motion,
@@ -157,19 +158,8 @@ impl Plugin for ViewerAppPlugin {
         .add_message::<SpawnCharacterRequest>()
         .add_message::<CharacterSpawnRejected>()
         .add_systems(
-            Startup,
+            PostStartup,
             (
-                load_character_definitions_on_startup,
-                load_map_definitions_on_startup,
-                load_overworld_definitions_on_startup,
-                load_settlement_definitions_on_startup,
-                load_effect_definitions_on_startup,
-                load_item_definitions_on_startup,
-                load_skill_definitions_on_startup,
-                load_skill_tree_definitions_on_startup,
-                load_recipe_definitions_on_startup,
-                load_quest_definitions_on_startup,
-                load_shop_definitions_on_startup,
                 configure_runtime_gameplay_content,
                 queue_life_debug_spawns,
                 setup_viewer,
@@ -262,9 +252,13 @@ impl Plugin for ViewerAppPlugin {
 }
 
 fn queue_life_debug_spawns(
-    definitions: Res<game_bevy::CharacterDefinitions>,
+    definitions: Option<Res<game_bevy::CharacterDefinitions>>,
     mut requests: MessageWriter<SpawnCharacterRequest>,
 ) {
+    let Some(definitions) = definitions else {
+        return;
+    };
+
     let mut next_spawn_x = 8;
     for (definition_id, definition) in definitions.0.iter() {
         if definition.life.is_none() {
@@ -289,19 +283,26 @@ fn sync_ai_snapshot(
 
 fn configure_runtime_gameplay_content(
     mut runtime_state: ResMut<ViewerRuntimeState>,
-    items: Res<game_bevy::ItemDefinitions>,
-    skills: Res<game_bevy::SkillDefinitions>,
-    recipes: Res<game_bevy::RecipeDefinitions>,
-    quests: Res<game_bevy::QuestDefinitions>,
-    shops: Res<game_bevy::ShopDefinitions>,
-    overworld: Res<game_bevy::OverworldDefinitions>,
+    items: Option<Res<game_bevy::ItemDefinitions>>,
+    skills: Option<Res<game_bevy::SkillDefinitions>>,
+    recipes: Option<Res<game_bevy::RecipeDefinitions>>,
+    quests: Option<Res<game_bevy::QuestDefinitions>>,
+    shops: Option<Res<game_bevy::ShopDefinitions>>,
+    overworld: Option<Res<game_bevy::OverworldDefinitions>>,
 ) {
-    runtime_state.runtime.set_item_library(items.0.clone());
-    runtime_state.runtime.set_skill_library(skills.0.clone());
-    runtime_state.runtime.set_recipe_library(recipes.0.clone());
-    runtime_state.runtime.set_quest_library(quests.0.clone());
-    runtime_state.runtime.set_shop_library(shops.0.clone());
-    runtime_state
-        .runtime
-        .set_overworld_library(overworld.0.clone());
+    let (Some(items), Some(skills), Some(recipes), Some(quests), Some(shops), Some(overworld)) =
+        (items, skills, recipes, quests, shops, overworld)
+    else {
+        return;
+    };
+
+    apply_gameplay_libraries(
+        &mut runtime_state.runtime,
+        &items,
+        &skills,
+        &recipes,
+        &quests,
+        &shops,
+        &overworld,
+    );
 }

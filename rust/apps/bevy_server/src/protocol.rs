@@ -14,15 +14,18 @@ use game_protocol::{
     ActorSnapshot, AdvanceOverworldTravelRequest, BuyItemRequest, ClientMessage,
     CraftRecipeRequest, DialogueAdvanceRequest, EnterLocationRequest, EquipItemRequest,
     ItemEquippedPayload, ItemUnequippedPayload, LearnSkillRequest, MapTravelRequest,
-    OverworldRouteRequest, ProtocolError, QuestStartedPayload, RecipeCraftedPayload,
-    ReloadEquippedWeaponRequest, ReturnToOverworldRequest, RuntimeEventEnvelope,
-    RuntimeSnapshotLoadRequest, RuntimeSnapshotPayload, RuntimeSnapshotSaveRequest,
-    SceneTransitionNotice, SellItemRequest, ServerMessage, SkillLearnedPayload, StartQuestRequest,
-    TradeResolvedPayload, UnequipItemRequest, WeaponReloadedPayload, WorldSnapshotEnvelope,
+    OverworldRouteRequest, ProtocolActorVisionMapSnapshot, ProtocolActorVisionSnapshot,
+    ProtocolError, ProtocolLocationTransitionContext, ProtocolOverworldRouteSnapshot,
+    ProtocolOverworldStateSnapshot, ProtocolOverworldTravelState, ProtocolVisionRuntimeSnapshot,
+    QuestStartedPayload, RecipeCraftedPayload, ReloadEquippedWeaponRequest,
+    ReturnToOverworldRequest, RuntimeEventEnvelope, RuntimeSnapshotLoadRequest,
+    RuntimeSnapshotPayload, RuntimeSnapshotSaveRequest, SceneTransitionNotice, SellItemRequest,
+    ServerMessage, SkillLearnedPayload, StartQuestRequest, TradeResolvedPayload,
+    UnequipItemRequest, WeaponReloadedPayload, WorldSnapshotEnvelope,
 };
 use serde_json::json;
 
-use crate::config::ServerSimulationRuntime;
+use crate::config::{ServerSimulationRuntime, ServerStartupState};
 use crate::progression::drain_runtime_progression;
 
 #[derive(Resource, Debug, Default)]
@@ -110,7 +113,7 @@ pub fn handle_client_message_with_definitions(
             runtime_snapshot_envelope(runtime, 0),
         )),
         ClientMessage::RequestOverworldSnapshot => Ok(ServerMessage::OverworldState(
-            runtime.0.snapshot().overworld,
+            protocol_overworld_state(runtime.0.snapshot().overworld),
         )),
         ClientMessage::QueryInteractionOptions {
             actor_id,
@@ -171,6 +174,7 @@ pub fn dispatch_protocol_requests(
     mut requests: MessageReader<ServerProtocolRequest>,
     mut responses: MessageWriter<ServerProtocolResponse>,
     mut runtime: ResMut<ServerSimulationRuntime>,
+    startup: Res<ServerStartupState>,
     mut snapshots: ResMut<RuntimeSnapshotStore>,
     mut push_state: ResMut<RuntimeProtocolPushState>,
     items: Option<Res<ItemDefinitions>>,
@@ -186,6 +190,18 @@ pub fn dispatch_protocol_requests(
     };
 
     for request in requests.read() {
+        if let ServerStartupState::Failed { error } = startup.as_ref() {
+            let message = match &request.message {
+                ClientMessage::Ping => Ok(ServerMessage::Pong),
+                ClientMessage::Handshake { protocol_version } => Ok(ServerMessage::Hello {
+                    protocol_version: *protocol_version,
+                }),
+                _ => Err(protocol_error("startup_failed", error.clone(), false)),
+            };
+            responses.write(ServerProtocolResponse { message });
+            continue;
+        }
+
         drain_runtime_progression(&mut runtime);
         if matches!(request.message, ClientMessage::SubscribeRuntime(_)) {
             push_state.subscribed = true;
@@ -254,7 +270,7 @@ fn runtime_snapshot_envelope(
     sequence: u64,
 ) -> WorldSnapshotEnvelope {
     let snapshot = runtime.0.snapshot();
-    let overworld = snapshot.overworld.clone();
+    let active_location_id = snapshot.overworld.active_location_id.clone();
     let actors = snapshot
         .actors
         .into_iter()
@@ -270,9 +286,82 @@ fn runtime_snapshot_envelope(
         turn_state: snapshot.turn,
         interaction_context: Some(snapshot.interaction_context),
         active_map_id: snapshot.grid.map_id.map(|value| value.as_str().to_string()),
-        active_location_id: overworld.active_location_id.clone(),
-        overworld_state: Some(overworld),
-        vision_state: Some(snapshot.vision),
+        active_location_id,
+        overworld_state: Some(protocol_overworld_state(snapshot.overworld)),
+        vision_state: Some(protocol_vision_state(snapshot.vision)),
+    }
+}
+
+fn protocol_overworld_route(
+    route: game_core::OverworldRouteSnapshot,
+) -> ProtocolOverworldRouteSnapshot {
+    ProtocolOverworldRouteSnapshot {
+        actor_id: route.actor_id,
+        from_location_id: route.from_location_id,
+        to_location_id: route.to_location_id,
+        location_path: route.location_path,
+        cell_path: route.cell_path,
+        travel_minutes: route.travel_minutes,
+        food_cost: route.food_cost,
+        stamina_cost: route.stamina_cost,
+        risk_level: route.risk_level,
+    }
+}
+
+fn protocol_overworld_state(
+    state: game_core::OverworldStateSnapshot,
+) -> ProtocolOverworldStateSnapshot {
+    ProtocolOverworldStateSnapshot {
+        overworld_id: state.overworld_id,
+        active_location_id: state.active_location_id,
+        active_outdoor_location_id: state.active_outdoor_location_id,
+        current_map_id: state.current_map_id,
+        current_entry_point_id: state.current_entry_point_id,
+        current_overworld_cell: state.current_overworld_cell,
+        unlocked_locations: state.unlocked_locations,
+        travel: state.travel.map(|travel| ProtocolOverworldTravelState {
+            actor_id: travel.actor_id,
+            route: protocol_overworld_route(travel.route),
+            remaining_minutes: travel.remaining_minutes,
+            progressed_minutes: travel.progressed_minutes,
+        }),
+        world_mode: state.world_mode,
+    }
+}
+
+fn protocol_location_transition(
+    transition: game_core::LocationTransitionContext,
+) -> ProtocolLocationTransitionContext {
+    ProtocolLocationTransitionContext {
+        location_id: transition.location_id,
+        map_id: transition.map_id,
+        entry_point_id: transition.entry_point_id,
+        return_outdoor_location_id: transition.return_outdoor_location_id,
+        return_entry_point_id: transition.return_entry_point_id,
+        world_mode: transition.world_mode,
+    }
+}
+
+fn protocol_vision_state(state: game_core::VisionRuntimeSnapshot) -> ProtocolVisionRuntimeSnapshot {
+    ProtocolVisionRuntimeSnapshot {
+        actors: state
+            .actors
+            .into_iter()
+            .map(|actor| ProtocolActorVisionSnapshot {
+                actor_id: actor.actor_id,
+                radius: actor.radius,
+                active_map_id: actor.active_map_id,
+                visible_cells: actor.visible_cells,
+                explored_maps: actor
+                    .explored_maps
+                    .into_iter()
+                    .map(|map| ProtocolActorVisionMapSnapshot {
+                        map_id: map.map_id,
+                        explored_cells: map.explored_cells,
+                    })
+                    .collect(),
+            })
+            .collect(),
     }
 }
 
@@ -488,7 +577,9 @@ fn request_overworld_route(
         .0
         .request_overworld_route(request.actor_id, &request.target_location_id)
         .map_err(|error| runtime_protocol_error("overworld_route", error))?;
-    Ok(ServerMessage::OverworldRouteComputed(route))
+    Ok(ServerMessage::OverworldRouteComputed(
+        protocol_overworld_route(route),
+    ))
 }
 
 fn start_overworld_travel(
@@ -499,7 +590,9 @@ fn start_overworld_travel(
         .0
         .start_overworld_travel(request.actor_id, &request.target_location_id)
         .map_err(|error| runtime_protocol_error("overworld_travel_start", error))?;
-    Ok(ServerMessage::OverworldState(state))
+    Ok(ServerMessage::OverworldState(protocol_overworld_state(
+        state,
+    )))
 }
 
 fn advance_overworld_travel(
@@ -510,7 +603,9 @@ fn advance_overworld_travel(
         .0
         .advance_overworld_travel(request.actor_id, request.minutes)
         .map_err(|error| runtime_protocol_error("overworld_travel_advance", error))?;
-    Ok(ServerMessage::OverworldState(state))
+    Ok(ServerMessage::OverworldState(protocol_overworld_state(
+        state,
+    )))
 }
 
 fn travel_to_map(
@@ -559,7 +654,9 @@ fn enter_location(
             request.entry_point_id.as_deref(),
         )
         .map_err(|error| runtime_protocol_error("enter_location", error))?;
-    Ok(ServerMessage::LocationTransition(transition))
+    Ok(ServerMessage::LocationTransition(
+        protocol_location_transition(transition),
+    ))
 }
 
 fn return_to_overworld(
@@ -570,7 +667,9 @@ fn return_to_overworld(
         .0
         .return_to_overworld(request.actor_id)
         .map_err(|error| runtime_protocol_error("return_to_overworld", error))?;
-    Ok(ServerMessage::OverworldState(state))
+    Ok(ServerMessage::OverworldState(protocol_overworld_state(
+        state,
+    )))
 }
 
 fn save_runtime_snapshot(
@@ -1367,7 +1466,7 @@ mod tests {
         RuntimeSnapshotStore, ServerProtocolDefinitions, ServerProtocolRequest,
         ServerProtocolResponse,
     };
-    use crate::config::ServerSimulationRuntime;
+    use crate::config::{ServerSimulationRuntime, ServerStartupState};
     use bevy_app::{App, Update};
     use bevy_ecs::message::MessageReader;
     use bevy_ecs::prelude::*;
@@ -1600,6 +1699,7 @@ mod tests {
         let (runtime, _, _) = sample_runtime_with_player_and_npc();
         let mut app = App::new();
         app.insert_resource(runtime);
+        app.insert_resource(ServerStartupState::Ready);
         app.insert_resource(RuntimeSnapshotStore::default());
         app.insert_resource(RuntimeProtocolPushState::default());
         app.insert_resource(RuntimeProtocolSequence::default());
@@ -1634,6 +1734,7 @@ mod tests {
         let (runtime, player, npc) = sample_runtime_with_player_and_npc();
         let mut app = App::new();
         app.insert_resource(runtime);
+        app.insert_resource(ServerStartupState::Ready);
         app.insert_resource(RuntimeSnapshotStore::default());
         app.insert_resource(RuntimeProtocolPushState::default());
         app.insert_resource(RuntimeProtocolSequence::default());

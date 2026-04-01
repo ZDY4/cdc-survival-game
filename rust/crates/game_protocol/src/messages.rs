@@ -1,11 +1,7 @@
-use game_core::{
-    LocationTransitionContext, OverworldRouteSnapshot, OverworldStateSnapshot,
-    VisionRuntimeSnapshot,
-};
 use game_data::{
     ActionRequest, ActionResult, ActorId, ActorKind, DialogueRuntimeState, GridCoord,
     InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
-    InteractionPrompt, InteractionTargetId, TurnState, WorldCoord,
+    InteractionPrompt, InteractionTargetId, MapId, TurnState, WorldCoord, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -258,6 +254,109 @@ pub struct RuntimeSnapshotPayload {
     pub snapshot: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolOverworldRouteSnapshot {
+    pub actor_id: ActorId,
+    #[serde(default)]
+    pub from_location_id: String,
+    #[serde(default)]
+    pub to_location_id: String,
+    #[serde(default)]
+    pub location_path: Vec<String>,
+    #[serde(default)]
+    pub cell_path: Vec<GridCoord>,
+    #[serde(default)]
+    pub travel_minutes: u32,
+    #[serde(default)]
+    pub food_cost: i32,
+    #[serde(default)]
+    pub stamina_cost: i32,
+    #[serde(default)]
+    pub risk_level: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolOverworldTravelState {
+    pub actor_id: ActorId,
+    #[serde(default)]
+    pub route: ProtocolOverworldRouteSnapshot,
+    #[serde(default)]
+    pub remaining_minutes: u32,
+    #[serde(default)]
+    pub progressed_minutes: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolLocationTransitionContext {
+    #[serde(default)]
+    pub location_id: String,
+    #[serde(default)]
+    pub map_id: String,
+    #[serde(default)]
+    pub entry_point_id: String,
+    #[serde(default)]
+    pub return_outdoor_location_id: Option<String>,
+    #[serde(default)]
+    pub return_entry_point_id: Option<String>,
+    #[serde(default)]
+    pub world_mode: WorldMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolOverworldStateSnapshot {
+    #[serde(default)]
+    pub overworld_id: Option<String>,
+    #[serde(default)]
+    pub active_location_id: Option<String>,
+    #[serde(default)]
+    pub active_outdoor_location_id: Option<String>,
+    #[serde(default)]
+    pub current_map_id: Option<String>,
+    #[serde(default)]
+    pub current_entry_point_id: Option<String>,
+    #[serde(default)]
+    pub current_overworld_cell: Option<GridCoord>,
+    #[serde(default)]
+    pub unlocked_locations: Vec<String>,
+    #[serde(default)]
+    pub travel: Option<ProtocolOverworldTravelState>,
+    #[serde(default)]
+    pub world_mode: WorldMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolActorVisionMapSnapshot {
+    pub map_id: MapId,
+    #[serde(default)]
+    pub explored_cells: Vec<GridCoord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolActorVisionSnapshot {
+    pub actor_id: ActorId,
+    #[serde(default)]
+    pub radius: i32,
+    #[serde(default)]
+    pub active_map_id: Option<MapId>,
+    #[serde(default)]
+    pub visible_cells: Vec<GridCoord>,
+    #[serde(default)]
+    pub explored_maps: Vec<ProtocolActorVisionMapSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolVisionRuntimeSnapshot {
+    #[serde(default)]
+    pub actors: Vec<ProtocolActorVisionSnapshot>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct WorldSnapshotEnvelope {
@@ -274,9 +373,9 @@ pub struct WorldSnapshotEnvelope {
     #[serde(default)]
     pub active_location_id: Option<String>,
     #[serde(default)]
-    pub overworld_state: Option<OverworldStateSnapshot>,
+    pub overworld_state: Option<ProtocolOverworldStateSnapshot>,
     #[serde(default)]
-    pub vision_state: Option<VisionRuntimeSnapshot>,
+    pub vision_state: Option<ProtocolVisionRuntimeSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -391,9 +490,9 @@ pub enum ServerMessage {
     InteractionExecution(InteractionExecutionResult),
     DialogueState(DialogueRuntimeState),
     SceneTransitionRequested(SceneTransitionNotice),
-    OverworldRouteComputed(OverworldRouteSnapshot),
-    OverworldState(OverworldStateSnapshot),
-    LocationTransition(LocationTransitionContext),
+    OverworldRouteComputed(ProtocolOverworldRouteSnapshot),
+    OverworldState(ProtocolOverworldStateSnapshot),
+    LocationTransition(ProtocolLocationTransitionContext),
     ItemEquipped(ItemEquippedPayload),
     ItemUnequipped(ItemUnequippedPayload),
     WeaponReloaded(WeaponReloadedPayload),
@@ -423,4 +522,91 @@ const fn default_true() -> bool {
 
 const fn default_snapshot_schema_version() -> u32 {
     1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ActorSnapshot, ProtocolActorVisionMapSnapshot, ProtocolActorVisionSnapshot,
+        ProtocolOverworldRouteSnapshot, ProtocolOverworldStateSnapshot,
+        ProtocolOverworldTravelState, ProtocolVisionRuntimeSnapshot, WorldSnapshotEnvelope,
+    };
+    use game_data::{ActorId, ActorKind, GridCoord, InteractionContextSnapshot, MapId, TurnState};
+
+    #[test]
+    fn world_snapshot_envelope_round_trips_with_protocol_owned_dtos() {
+        let envelope = WorldSnapshotEnvelope {
+            sequence: 42,
+            actors: vec![ActorSnapshot {
+                actor_id: ActorId(7),
+                kind: ActorKind::Player,
+                position: game_data::WorldCoord::new(1.0, 0.0, 2.0),
+            }],
+            turn_state: TurnState {
+                combat_active: true,
+                current_actor_id: Some(ActorId(7)),
+                current_group_id: Some("player".into()),
+                current_turn_index: 3,
+            },
+            interaction_context: Some(InteractionContextSnapshot::default()),
+            active_map_id: Some("test_map".into()),
+            active_location_id: Some("safe_house".into()),
+            overworld_state: Some(ProtocolOverworldStateSnapshot {
+                current_map_id: Some("test_map".into()),
+                active_location_id: Some("safe_house".into()),
+                unlocked_locations: vec!["safe_house".into()],
+                travel: Some(ProtocolOverworldTravelState {
+                    actor_id: ActorId(7),
+                    route: ProtocolOverworldRouteSnapshot {
+                        actor_id: ActorId(7),
+                        from_location_id: "safe_house".into(),
+                        to_location_id: "clinic".into(),
+                        location_path: vec!["safe_house".into(), "clinic".into()],
+                        cell_path: vec![GridCoord::new(0, 0, 0), GridCoord::new(1, 0, 0)],
+                        travel_minutes: 15,
+                        food_cost: 1,
+                        stamina_cost: 3,
+                        risk_level: 0.25,
+                    },
+                    remaining_minutes: 10,
+                    progressed_minutes: 5,
+                }),
+                ..Default::default()
+            }),
+            vision_state: Some(ProtocolVisionRuntimeSnapshot {
+                actors: vec![ProtocolActorVisionSnapshot {
+                    actor_id: ActorId(7),
+                    radius: 8,
+                    active_map_id: Some(MapId("test_map".into())),
+                    visible_cells: vec![GridCoord::new(1, 0, 2)],
+                    explored_maps: vec![ProtocolActorVisionMapSnapshot {
+                        map_id: MapId("test_map".into()),
+                        explored_cells: vec![GridCoord::new(1, 0, 2)],
+                    }],
+                }],
+            }),
+        };
+
+        let value = serde_json::to_value(&envelope).expect("snapshot should serialize");
+        let decoded: WorldSnapshotEnvelope =
+            serde_json::from_value(value).expect("snapshot should deserialize");
+
+        assert_eq!(decoded.sequence, 42);
+        assert_eq!(
+            decoded
+                .overworld_state
+                .as_ref()
+                .and_then(|state| state.current_map_id.as_deref()),
+            Some("test_map")
+        );
+        assert_eq!(
+            decoded
+                .vision_state
+                .as_ref()
+                .and_then(|state| state.actors.first())
+                .and_then(|actor| actor.active_map_id.as_ref())
+                .map(MapId::as_str),
+            Some("test_map")
+        );
+    }
 }

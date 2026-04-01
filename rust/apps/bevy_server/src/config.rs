@@ -15,6 +15,18 @@ impl Default for ServerConfig {
 #[derive(Resource, Debug)]
 pub struct ServerSimulationRuntime(pub SimulationRuntime);
 
+#[derive(Resource, Debug, Clone, PartialEq, Eq)]
+pub enum ServerStartupState {
+    Ready,
+    Failed { error: String },
+}
+
+impl Default for ServerStartupState {
+    fn default() -> Self {
+        Self::Ready
+    }
+}
+
 #[derive(Resource, Debug, Clone)]
 pub struct ServerVisionConfig {
     pub default_radius: i32,

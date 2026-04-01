@@ -1,33 +1,94 @@
 use bevy_ecs::prelude::*;
-use std::path::PathBuf;
+use bevy_ecs::system::SystemParam;
 
-use crate::config::{EconomySmokeReport, ServerConfig, ServerSimulationRuntime};
+use crate::config::{
+    EconomySmokeReport, ServerConfig, ServerSimulationRuntime, ServerStartupState,
+};
 use game_bevy::bootstrap::build_default_startup_seed;
 use game_bevy::{
-    advance_map_ai_spawn_runtime, build_runtime_from_seed, CharacterDefinitions, EffectDefinitions,
-    ItemDefinitions, MapAiSpawnRuntimeState, MapDefinitions, OverworldDefinitions,
-    QuestDefinitions, RecipeDefinitions, RuntimeStartupConfig, ShopDefinitions, SkillDefinitions,
-    SkillTreeDefinitions, SpawnCharacterRequest,
+    advance_map_ai_spawn_runtime, apply_dialogue_libraries, apply_gameplay_libraries,
+    build_runtime_from_seed, CharacterDefinitions, DialogueDefinitions, DialogueRuleDefinitions,
+    EffectDefinitions, ItemDefinitions, MapAiSpawnRuntimeState, MapDefinitions,
+    OverworldDefinitions, QuestDefinitions, RecipeDefinitions, RuntimeContentLoadState,
+    RuntimeStartupConfig, ShopDefinitions, SkillDefinitions, SkillTreeDefinitions,
+    SpawnCharacterRequest,
 };
 use game_core::SimulationRuntime;
-use game_data::{load_dialogue_library, load_dialogue_rule_library, CharacterId, GridCoord};
+use game_data::{CharacterId, GridCoord};
+
+#[derive(SystemParam)]
+pub struct StartupContent<'w, 's> {
+    definitions: Option<Res<'w, CharacterDefinitions>>,
+    effects: Option<Res<'w, EffectDefinitions>>,
+    items: Option<Res<'w, ItemDefinitions>>,
+    maps: Option<Res<'w, MapDefinitions>>,
+    overworld: Option<Res<'w, OverworldDefinitions>>,
+    skills: Option<Res<'w, SkillDefinitions>>,
+    skill_trees: Option<Res<'w, SkillTreeDefinitions>>,
+    recipes: Option<Res<'w, RecipeDefinitions>>,
+    quests: Option<Res<'w, QuestDefinitions>>,
+    shops: Option<Res<'w, ShopDefinitions>>,
+    dialogues: Option<Res<'w, DialogueDefinitions>>,
+    dialogue_rules: Option<Res<'w, DialogueRuleDefinitions>>,
+    startup_config: Option<Res<'w, RuntimeStartupConfig>>,
+    _marker: std::marker::PhantomData<&'s ()>,
+}
 
 pub fn startup_demo(
     mut commands: Commands,
     config: Res<ServerConfig>,
-    definitions: Res<CharacterDefinitions>,
-    effects: Res<EffectDefinitions>,
-    items: Res<ItemDefinitions>,
-    maps: Res<MapDefinitions>,
-    overworld: Res<OverworldDefinitions>,
-    skills: Res<SkillDefinitions>,
-    skill_trees: Res<SkillTreeDefinitions>,
-    recipes: Res<RecipeDefinitions>,
-    quests: Res<QuestDefinitions>,
-    shops: Res<ShopDefinitions>,
-    startup_config: Res<RuntimeStartupConfig>,
+    content_state: Res<RuntimeContentLoadState>,
+    content: StartupContent,
     mut requests: MessageWriter<SpawnCharacterRequest>,
 ) {
+    if !content_state.is_ready() {
+        let error = format!(
+            "runtime content failed to load: {:?}",
+            content_state.failures
+        );
+        eprintln!("{error}");
+        commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
+        commands.insert_resource(ServerStartupState::Failed { error });
+        return;
+    }
+
+    let (
+        Some(definitions),
+        Some(effects),
+        Some(items),
+        Some(maps),
+        Some(overworld),
+        Some(skills),
+        Some(skill_trees),
+        Some(recipes),
+        Some(quests),
+        Some(shops),
+        Some(dialogues),
+        Some(dialogue_rules),
+        Some(startup_config),
+    ) = (
+        content.definitions,
+        content.effects,
+        content.items,
+        content.maps,
+        content.overworld,
+        content.skills,
+        content.skill_trees,
+        content.recipes,
+        content.quests,
+        content.shops,
+        content.dialogues,
+        content.dialogue_rules,
+        content.startup_config,
+    )
+    else {
+        let error = "runtime content resources are incomplete after shared startup".to_string();
+        eprintln!("{error}");
+        commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
+        commands.insert_resource(ServerStartupState::Failed { error });
+        return;
+    };
+
     let seed =
         build_default_startup_seed(&maps.0, &overworld.0, startup_config.startup_map.clone());
 
@@ -78,10 +139,14 @@ pub fn startup_demo(
     match seed.map_id.as_ref() {
         Some(map_id) => {
             if maps.0.get(map_id).is_none() {
-                panic!(
+                let error = format!(
                     "configured startup_map {} was not found in loaded map definitions",
                     map_id
                 );
+                eprintln!("{error}");
+                commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
+                commands.insert_resource(ServerStartupState::Failed { error });
+                return;
             }
             println!(
                 "selected startup_map={} from shared bevy runtime config",
@@ -93,26 +158,28 @@ pub fn startup_demo(
         }
     }
 
-    let mut runtime = build_runtime_from_seed(&definitions.0, &maps.0, &overworld.0, &seed)
-        .unwrap_or_else(|error| {
-            panic!("failed to build bevy_server runtime from startup seed: {error}")
-        });
+    let mut runtime = match build_runtime_from_seed(&definitions.0, &maps.0, &overworld.0, &seed) {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            let error = format!("failed to build bevy_server runtime from startup seed: {error}");
+            eprintln!("{error}");
+            commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
+            commands.insert_resource(ServerStartupState::Failed { error });
+            return;
+        }
+    };
     runtime.set_map_library(maps.0.clone());
     runtime.set_overworld_library(overworld.0.clone());
-    runtime.set_item_library(items.0.clone());
-    runtime.set_skill_library(skills.0.clone());
-    runtime.set_recipe_library(recipes.0.clone());
-    runtime.set_quest_library(quests.0.clone());
-    runtime.set_shop_library(shops.0.clone());
-    let dialogue_data_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data");
-    let dialogue_library = load_dialogue_library(dialogue_data_root.join("dialogues"))
-        .unwrap_or_else(|error| panic!("failed to load dialogue library for bevy_server: {error}"));
-    let dialogue_rule_library =
-        load_dialogue_rule_library(dialogue_data_root.join("dialogue_rules"), None).unwrap_or_else(
-            |error| panic!("failed to load dialogue rule library for bevy_server: {error}"),
-        );
-    runtime.set_dialogue_library(dialogue_library);
-    runtime.set_dialogue_rule_library(dialogue_rule_library);
+    apply_gameplay_libraries(
+        &mut runtime,
+        &items,
+        &skills,
+        &recipes,
+        &quests,
+        &shops,
+        &overworld,
+    );
+    apply_dialogue_libraries(&mut runtime, &dialogues, &dialogue_rules);
     let snapshot = runtime.snapshot();
     println!(
         "initialized simulation runtime map_id={} size={}x{} levels={:?}",
@@ -148,6 +215,7 @@ pub fn startup_demo(
         smoke_report.sold_item_id,
     );
     commands.insert_resource(ServerSimulationRuntime(runtime));
+    commands.insert_resource(ServerStartupState::Ready);
     commands.insert_resource(smoke_report);
 
     let mut total_requests = 0usize;
@@ -336,8 +404,9 @@ mod tests {
     use bevy_ecs::message::MessageReader;
     use bevy_ecs::prelude::*;
     use game_bevy::{
-        default_debug_seed, CharacterDefinitions, EffectDefinitions, ItemDefinitions,
-        MapDefinitions, OverworldDefinitions, QuestDefinitions, RecipeDefinitions,
+        default_debug_seed, CharacterDefinitions, DialogueDefinitions, DialogueRuleDefinitions,
+        EffectDefinitions, ItemDefinitions, MapDefinitions, OverworldDefinitions,
+        QuestDefinitions, RecipeDefinitions, RuntimeContentLoadState, RuntimeContentLoadStatus,
         RuntimeStartupConfig, ShopDefinitions, SkillDefinitions, SkillTreeDefinitions,
         SpawnCharacterRequest,
     };
@@ -345,25 +414,27 @@ mod tests {
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterLootEntry,
-        CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
-        CharacterResourcePool, EffectLibrary, GridCoord, ItemLibrary, MapBuildingProps,
-        MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
-        MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
-        MapRotation, MapSize, NeedProfile, NpcRole, OverworldCellDefinition, OverworldDefinition,
-        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet, QuestLibrary, RecipeLibrary, ScheduleBlock,
-        ScheduleDay, ShopLibrary, SkillLibrary, SkillTreeLibrary,
+        CharacterPlaceholderColors, CharacterPresentation, CharacterProgression, CharacterResourcePool,
+        DialogueLibrary, DialogueRuleLibrary, EffectLibrary, GridCoord, ItemLibrary,
+        MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
+        MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
+        MapObjectProps, MapRotation, MapSize, NeedProfile, NpcRole, OverworldCellDefinition,
+        OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
+        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet, QuestLibrary,
+        RecipeLibrary, ScheduleBlock, ScheduleDay, ShopLibrary, SkillLibrary, SkillTreeLibrary,
     };
     use std::collections::BTreeMap;
 
     #[derive(Resource, Debug, Default)]
     struct CapturedRequests(Vec<SpawnCharacterRequest>);
 
-    #[test]
-    fn startup_demo_queues_shared_default_seed_requests() {
-        let mut app = App::new();
+    fn insert_startup_resources(app: &mut App, characters: CharacterDefinitions) {
         app.insert_resource(ServerConfig::default());
-        app.insert_resource(CharacterDefinitions(sample_character_library()));
+        app.insert_resource(RuntimeContentLoadState {
+            status: RuntimeContentLoadStatus::Ready,
+            failures: Vec::new(),
+        });
+        app.insert_resource(characters);
         app.insert_resource(EffectDefinitions(EffectLibrary::default()));
         app.insert_resource(ItemDefinitions(ItemLibrary::default()));
         app.insert_resource(MapDefinitions(sample_map_library()));
@@ -373,6 +444,14 @@ mod tests {
         app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
         app.insert_resource(QuestDefinitions(QuestLibrary::default()));
         app.insert_resource(ShopDefinitions(ShopLibrary::default()));
+        app.insert_resource(DialogueDefinitions(DialogueLibrary::default()));
+        app.insert_resource(DialogueRuleDefinitions(DialogueRuleLibrary::default()));
+    }
+
+    #[test]
+    fn startup_demo_queues_shared_default_seed_requests() {
+        let mut app = App::new();
+        insert_startup_resources(&mut app, CharacterDefinitions(sample_character_library()));
         app.insert_resource(RuntimeStartupConfig { startup_map: None });
         app.insert_resource(CapturedRequests::default());
         app.add_message::<SpawnCharacterRequest>();
@@ -399,17 +478,7 @@ mod tests {
     #[test]
     fn startup_demo_builds_runtime_with_configured_startup_map() {
         let mut app = App::new();
-        app.insert_resource(ServerConfig::default());
-        app.insert_resource(CharacterDefinitions(sample_character_library()));
-        app.insert_resource(EffectDefinitions(EffectLibrary::default()));
-        app.insert_resource(ItemDefinitions(ItemLibrary::default()));
-        app.insert_resource(MapDefinitions(sample_map_library()));
-        app.insert_resource(OverworldDefinitions(sample_overworld_library()));
-        app.insert_resource(SkillDefinitions(SkillLibrary::default()));
-        app.insert_resource(SkillTreeDefinitions(SkillTreeLibrary::default()));
-        app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
-        app.insert_resource(QuestDefinitions(QuestLibrary::default()));
-        app.insert_resource(ShopDefinitions(ShopLibrary::default()));
+        insert_startup_resources(&mut app, CharacterDefinitions(sample_character_library()));
         app.insert_resource(RuntimeStartupConfig {
             startup_map: Some(MapId("survivor_outpost_01_grid".into())),
         });
@@ -432,17 +501,10 @@ mod tests {
     #[test]
     fn startup_demo_adds_life_enabled_npcs_for_debug_visibility() {
         let mut app = App::new();
-        app.insert_resource(ServerConfig::default());
-        app.insert_resource(CharacterDefinitions(sample_character_library_with_life()));
-        app.insert_resource(EffectDefinitions(EffectLibrary::default()));
-        app.insert_resource(ItemDefinitions(ItemLibrary::default()));
-        app.insert_resource(MapDefinitions(sample_map_library()));
-        app.insert_resource(OverworldDefinitions(sample_overworld_library()));
-        app.insert_resource(SkillDefinitions(SkillLibrary::default()));
-        app.insert_resource(SkillTreeDefinitions(SkillTreeLibrary::default()));
-        app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
-        app.insert_resource(QuestDefinitions(QuestLibrary::default()));
-        app.insert_resource(ShopDefinitions(ShopLibrary::default()));
+        insert_startup_resources(
+            &mut app,
+            CharacterDefinitions(sample_character_library_with_life()),
+        );
         app.insert_resource(RuntimeStartupConfig { startup_map: None });
         app.insert_resource(CapturedRequests::default());
         app.add_message::<SpawnCharacterRequest>();
@@ -464,17 +526,7 @@ mod tests {
     #[test]
     fn startup_demo_inserts_default_economy_smoke_report() {
         let mut app = App::new();
-        app.insert_resource(ServerConfig::default());
-        app.insert_resource(CharacterDefinitions(sample_character_library()));
-        app.insert_resource(EffectDefinitions(EffectLibrary::default()));
-        app.insert_resource(ItemDefinitions(ItemLibrary::default()));
-        app.insert_resource(MapDefinitions(sample_map_library()));
-        app.insert_resource(OverworldDefinitions(sample_overworld_library()));
-        app.insert_resource(SkillDefinitions(SkillLibrary::default()));
-        app.insert_resource(SkillTreeDefinitions(SkillTreeLibrary::default()));
-        app.insert_resource(RecipeDefinitions(RecipeLibrary::default()));
-        app.insert_resource(QuestDefinitions(QuestLibrary::default()));
-        app.insert_resource(ShopDefinitions(ShopLibrary::default()));
+        insert_startup_resources(&mut app, CharacterDefinitions(sample_character_library()));
         app.insert_resource(RuntimeStartupConfig { startup_map: None });
         app.add_message::<SpawnCharacterRequest>();
         app.add_systems(Startup, startup_demo);

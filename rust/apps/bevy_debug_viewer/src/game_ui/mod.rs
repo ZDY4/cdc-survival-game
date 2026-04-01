@@ -1,0 +1,116 @@
+use std::fs;
+use std::marker::PhantomData;
+
+use bevy::ecs::system::SystemParam;
+use bevy::prelude::*;
+use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
+use bevy::window::{PresentMode, VideoModeSelection, WindowMode};
+use game_bevy::{
+    character_snapshot, interaction_prompt_text, inventory_snapshot, journal_snapshot,
+    player_actor_id, skills_snapshot, trade_snapshot, world_status_snapshot, EffectDefinitions,
+    ItemDefinitions, OverworldDefinitions, QuestDefinitions, RecipeDefinitions, ShopDefinitions,
+    SkillDefinitions, SkillTreeDefinitions, UiHotbarState, UiInputBlockState, UiInventoryFilter,
+    UiInventoryFilterState, UiMenuPanel, UiMenuState, UiModalState, UiStatusBannerState,
+};
+use game_core::RuntimeSnapshot;
+use game_data::{ActorId, InteractionTargetId};
+
+use crate::bootstrap::load_viewer_gameplay_bootstrap;
+use crate::controls::{cancel_targeting, enter_attack_targeting, enter_skill_targeting};
+use crate::render::interaction_menu_button_color;
+use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
+use crate::state::{
+    EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, InventoryContextMenuRoot,
+    InventoryItemClickTarget, InventoryItemHoverTarget, SkillHoverTarget, UiHoverTooltipContent,
+    UiHoverTooltipState, UiInventoryContextMenuState, UiInventoryContextMenuTarget, UiMouseBlocker,
+    ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
+};
+
+const UI_PANEL_WIDTH: f32 = 448.0;
+const SKILLS_PANEL_WIDTH: f32 = 940.0;
+const SCREEN_EDGE_PADDING: f32 = 18.0;
+const TOP_BADGE_WIDTH: f32 = 348.0;
+const RIGHT_PANEL_TOP: f32 = 74.0;
+const RIGHT_PANEL_BOTTOM: f32 = 174.0;
+const RIGHT_PANEL_HEADER_HEIGHT: f32 = 58.0;
+pub(crate) const HOTBAR_DOCK_WIDTH: f32 = 1088.0;
+pub(crate) const HOTBAR_DOCK_HEIGHT: f32 = 124.0;
+const HOTBAR_SLOT_SIZE: f32 = 56.0;
+const HOTBAR_ACTION_WIDTH: f32 = 88.0;
+const HOTBAR_LEFT_TABS_WIDTH: f32 = 154.0;
+const HOTBAR_RIGHT_TABS_WIDTH: f32 = 254.0;
+const BOTTOM_TAB_HEIGHT: f32 = 22.0;
+const HOVER_TOOLTIP_MAX_WIDTH: f32 = 320.0;
+const HOVER_TOOLTIP_CURSOR_OFFSET_X: f32 = 16.0;
+const HOVER_TOOLTIP_CURSOR_OFFSET_Y: f32 = 16.0;
+const HOVER_TOOLTIP_VIEWPORT_MARGIN: f32 = 8.0;
+
+#[derive(Debug, Clone)]
+struct PlayerHudStats {
+    hp: f32,
+    max_hp: f32,
+    ap: f32,
+    available_steps: i32,
+    in_combat: bool,
+}
+
+#[derive(SystemParam)]
+pub(crate) struct GameUiViewState<'w, 's> {
+    runtime_state: Res<'w, ViewerRuntimeState>,
+    scene_kind: Res<'w, ViewerSceneKind>,
+    viewer_state: Res<'w, ViewerState>,
+    menu_state: Res<'w, UiMenuState>,
+    modal_state: Res<'w, UiModalState>,
+    filter_state: Res<'w, UiInventoryFilterState>,
+    hotbar_state: Res<'w, UiHotbarState>,
+    settings: Res<'w, ViewerUiSettings>,
+    hover_tooltip: Res<'w, UiHoverTooltipState>,
+    inventory_context_menu: Res<'w, UiInventoryContextMenuState>,
+    marker: PhantomData<&'s ()>,
+}
+
+#[derive(SystemParam)]
+pub(crate) struct GameUiCommandState<'w, 's> {
+    runtime_state: ResMut<'w, ViewerRuntimeState>,
+    scene_kind: ResMut<'w, ViewerSceneKind>,
+    viewer_state: ResMut<'w, ViewerState>,
+    menu_state: ResMut<'w, UiMenuState>,
+    modal_state: ResMut<'w, UiModalState>,
+    filter_state: ResMut<'w, UiInventoryFilterState>,
+    hotbar_state: ResMut<'w, UiHotbarState>,
+    settings: ResMut<'w, ViewerUiSettings>,
+    inventory_context_menu: ResMut<'w, UiInventoryContextMenuState>,
+    marker: PhantomData<&'s ()>,
+}
+
+#[derive(SystemParam)]
+pub(crate) struct GameContentRefs<'w, 's> {
+    items: Res<'w, ItemDefinitions>,
+    effects: Res<'w, EffectDefinitions>,
+    skills: Res<'w, SkillDefinitions>,
+    skill_trees: Res<'w, SkillTreeDefinitions>,
+    quests: Res<'w, QuestDefinitions>,
+    recipes: Res<'w, RecipeDefinitions>,
+    shops: Res<'w, ShopDefinitions>,
+    overworld: Res<'w, OverworldDefinitions>,
+    marker: PhantomData<&'s ()>,
+}
+
+mod hotbar;
+mod input;
+mod overlay;
+mod panels;
+mod settings;
+mod state_sync;
+#[cfg(test)]
+mod tests;
+mod widgets;
+
+pub(super) use hotbar::*;
+pub(super) use input::*;
+pub(super) use overlay::*;
+use panels::*;
+pub(super) use settings::*;
+pub(super) use state_sync::*;
+use widgets::*;
