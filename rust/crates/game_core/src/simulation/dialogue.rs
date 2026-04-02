@@ -6,10 +6,15 @@ use game_data::{
 };
 use tracing::warn;
 
-use crate::simulation::{dialogue_advance_error_reason, npc_action_key_name, Simulation, SimulationEvent};
+use crate::simulation::{
+    dialogue_advance_error_reason, npc_action_key_name, Simulation, SimulationEvent,
+};
 
 impl Simulation {
-    pub fn active_dialogue_state(&self, actor_id: game_data::ActorId) -> Option<DialogueRuntimeState> {
+    pub fn active_dialogue_state(
+        &self,
+        actor_id: game_data::ActorId,
+    ) -> Option<DialogueRuntimeState> {
         self.active_dialogues.get(&actor_id).and_then(|session| {
             self.dialogue_state_from_session(session.clone(), Vec::new(), false, None)
         })
@@ -414,28 +419,6 @@ impl Simulation {
                 "return_to_overworld" => {
                     if let Err(error) = self.return_to_overworld(actor_id) {
                         warn!("dialogue return_to_overworld failed actor={actor_id:?}: {error}");
-                    }
-                }
-                "start_overworld_travel" => {
-                    let Some(target_location_id) = super::dialogue_action_string(
-                        action,
-                        &[
-                            "target_location_id",
-                            "targetLocationId",
-                            "location_id",
-                            "locationId",
-                        ],
-                    ) else {
-                        warn!(
-                            "dialogue start_overworld_travel missing target location: {:?}",
-                            action
-                        );
-                        continue;
-                    };
-                    if let Err(error) = self.start_overworld_travel(actor_id, &target_location_id) {
-                        warn!(
-                            "dialogue start_overworld_travel failed actor={actor_id:?} target_location_id={target_location_id}: {error}"
-                        );
                     }
                 }
                 _ => {}

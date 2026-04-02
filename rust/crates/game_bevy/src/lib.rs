@@ -38,15 +38,16 @@ pub use spawn::{register_runtime_actor_from_definition, spawn_characters_from_de
 pub use ui::{
     ammo_item_ids, character_snapshot, classify_item, crafting_snapshot, interaction_prompt_text,
     inventory_snapshot, item_attribute_bonuses, item_equippable, item_usable, journal_snapshot,
-    map_snapshot, player_actor_id, skills_snapshot, trade_snapshot, world_status_snapshot,
-    GameUiPlugin, UiCharacterCommand, UiCharacterSnapshot, UiCraftingSnapshot, UiDialogueCommand,
-    UiDiscardQuantityModalState, UiEquipmentSlotView, UiHotbarSlotState, UiHotbarState,
-    UiInputBlockState, UiInventoryCommand, UiInventoryDetailView, UiInventoryEntryView,
-    UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot, UiItemType,
-    UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView, UiMapSnapshot,
-    UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState, UiSettingsCommand, UiSkillCommand,
-    UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCommand,
-    UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
+    map_snapshot, overworld_location_prompt_snapshot, player_actor_id, skills_snapshot,
+    trade_snapshot, world_status_snapshot, GameUiPlugin, UiCharacterCommand, UiCharacterSnapshot,
+    UiCraftingSnapshot, UiDialogueCommand, UiDiscardQuantityModalState, UiEquipmentSlotView,
+    UiHotbarSlotState, UiHotbarState, UiInputBlockState, UiInventoryCommand, UiInventoryDetailView,
+    UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot,
+    UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView,
+    UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
+    UiOverworldLocationPromptSnapshot, UiSettingsCommand, UiSkillCommand, UiSkillEntryView,
+    UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCommand, UiTradeEntryView,
+    UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
 };
 
 #[derive(Message, Debug, Clone, PartialEq, Eq)]
@@ -187,17 +188,11 @@ pub fn build_simulation_from_seed(
     });
     let requested_map_id = seed.start_map_id.as_ref().or(seed.map_id.as_ref());
 
-    if !matches!(
-        requested_world_mode,
-        WorldMode::Overworld | WorldMode::Traveling
-    ) {
-        if let Some(map_id) = requested_map_id {
-            let map = maps
-                .get(map_id)
-                .ok_or_else(|| RuntimeBuildError::UnknownMapDefinition {
-                    map_id: map_id.clone(),
-                })?;
-            simulation.grid_world_mut().load_map(map);
+    if let Some(map_id) = requested_map_id {
+        if maps.get(map_id).is_none() {
+            return Err(RuntimeBuildError::UnknownMapDefinition {
+                map_id: map_id.clone(),
+            });
         }
     }
 
@@ -255,10 +250,13 @@ pub fn build_simulation_from_seed(
         }
     }
 
-    if matches!(
-        requested_world_mode,
-        WorldMode::Overworld | WorldMode::Traveling
-    ) {
+    if requested_world_mode == WorldMode::Traveling {
+        return Err(RuntimeBuildError::InvalidOverworldSeed {
+            message: "unsupported_world_mode:Traveling".to_string(),
+        });
+    }
+
+    if requested_world_mode == WorldMode::Overworld {
         simulation
             .seed_overworld_state(
                 requested_world_mode,
@@ -267,6 +265,27 @@ pub fn build_simulation_from_seed(
                 Vec::<String>::new(),
             )
             .map_err(|message| RuntimeBuildError::InvalidOverworldSeed { message })?;
+        if let Some(player_actor_id) = player_actor_id {
+            let start_location_id = seed.start_location_id.as_deref().ok_or_else(|| {
+                RuntimeBuildError::InvalidOverworldSeed {
+                    message: "missing_overworld_start_location".to_string(),
+                }
+            })?;
+            let Some((_, definition)) = overworld.iter().next() else {
+                return Err(RuntimeBuildError::InvalidOverworldSeed {
+                    message: "missing_overworld_definition".to_string(),
+                });
+            };
+            let overworld_cell = definition
+                .locations
+                .iter()
+                .find(|location| location.id.as_str() == start_location_id)
+                .map(|location| location.overworld_cell)
+                .ok_or_else(|| RuntimeBuildError::InvalidOverworldSeed {
+                    message: format!("unknown_location:{start_location_id}"),
+                })?;
+            simulation.update_actor_grid_position(player_actor_id, overworld_cell);
+        }
     } else if let Some(location_id) = seed.start_location_id.as_ref() {
         let Some(player_actor_id) = player_actor_id else {
             return Err(RuntimeBuildError::InvalidOverworldSeed {
@@ -285,6 +304,28 @@ pub fn build_simulation_from_seed(
             other => {
                 return Err(RuntimeBuildError::InvalidOverworldSeed {
                     message: format!("unexpected enter location result: {other:?}"),
+                });
+            }
+        }
+    } else if let Some(map_id) = requested_map_id.as_ref() {
+        let Some(player_actor_id) = player_actor_id else {
+            return Err(RuntimeBuildError::InvalidOverworldSeed {
+                message: "missing_player_actor_for_map_start".to_string(),
+            });
+        };
+        match simulation.apply_command(game_core::SimulationCommand::TravelToMap {
+            actor_id: player_actor_id,
+            target_map_id: map_id.as_str().to_string(),
+            entry_point_id: seed.start_entry_point_id.clone(),
+            world_mode: requested_world_mode,
+        }) {
+            game_core::SimulationCommandResult::InteractionContext(Ok(_)) => {}
+            game_core::SimulationCommandResult::InteractionContext(Err(message)) => {
+                return Err(RuntimeBuildError::InvalidOverworldSeed { message });
+            }
+            other => {
+                return Err(RuntimeBuildError::InvalidOverworldSeed {
+                    message: format!("unexpected travel_to_map result: {other:?}"),
                 });
             }
         }
@@ -408,7 +449,7 @@ mod tests {
         MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
         MapObjectProps, MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition,
         OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet,
+        OverworldLocationKind, OverworldTravelRuleSet, WorldMode,
     };
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -528,6 +569,129 @@ mod tests {
             error,
             RuntimeBuildError::UnknownMapDefinition {
                 map_id: MapId("missing_map".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn direct_map_start_populates_runtime_context_without_location_transition() {
+        let library = sample_library();
+        let maps = sample_map_library();
+        let seed = RuntimeScenarioSeed {
+            map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_world_mode: Some(WorldMode::Outdoor),
+            start_entry_point_id: Some("default_entry".into()),
+            characters: vec![RuntimeSpawnEntry {
+                definition_id: CharacterId("player".into()),
+                grid_position: GridCoord::new(4, 0, 4),
+            }],
+            ..RuntimeScenarioSeed::default()
+        };
+
+        let runtime = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+            .expect("runtime should build");
+        let context = runtime.current_interaction_context();
+
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
+        assert!(context.active_location_id.is_none());
+        assert_eq!(context.entry_point_id.as_deref(), Some("default_entry"));
+        assert_eq!(context.world_mode, WorldMode::Outdoor);
+    }
+
+    #[test]
+    fn location_start_populates_runtime_context_via_location_transition() {
+        let library = sample_library();
+        let maps = sample_map_library();
+        let seed = RuntimeScenarioSeed {
+            map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_location_id: Some("survivor_outpost_01".into()),
+            start_world_mode: Some(WorldMode::Outdoor),
+            start_entry_point_id: Some("default_entry".into()),
+            characters: vec![RuntimeSpawnEntry {
+                definition_id: CharacterId("player".into()),
+                grid_position: GridCoord::new(4, 0, 4),
+            }],
+            ..RuntimeScenarioSeed::default()
+        };
+
+        let runtime = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+            .expect("runtime should build");
+        let context = runtime.current_interaction_context();
+
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
+        assert_eq!(
+            context.active_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.entry_point_id.as_deref(), Some("default_entry"));
+        assert_eq!(context.world_mode, WorldMode::Outdoor);
+    }
+
+    #[test]
+    fn overworld_start_clears_scene_context_and_keeps_overworld_anchor() {
+        let library = sample_library();
+        let maps = sample_map_library();
+        let seed = RuntimeScenarioSeed {
+            map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_location_id: Some("survivor_outpost_01".into()),
+            start_world_mode: Some(WorldMode::Overworld),
+            start_entry_point_id: Some("default_entry".into()),
+            characters: vec![RuntimeSpawnEntry {
+                definition_id: CharacterId("player".into()),
+                grid_position: GridCoord::new(4, 0, 4),
+            }],
+            ..RuntimeScenarioSeed::default()
+        };
+
+        let runtime = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+            .expect("runtime should build");
+        let context = runtime.current_interaction_context();
+
+        assert_eq!(context.current_map_id, None);
+        assert_eq!(
+            context.active_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(
+            context.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.entry_point_id, None);
+        assert_eq!(context.world_mode, WorldMode::Overworld);
+    }
+
+    #[test]
+    fn traveling_start_returns_explicit_error() {
+        let library = sample_library();
+        let maps = sample_map_library();
+        let seed = RuntimeScenarioSeed {
+            map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            start_location_id: Some("survivor_outpost_01".into()),
+            start_world_mode: Some(WorldMode::Traveling),
+            start_entry_point_id: Some("default_entry".into()),
+            characters: vec![RuntimeSpawnEntry {
+                definition_id: CharacterId("player".into()),
+                grid_position: GridCoord::new(4, 0, 4),
+            }],
+            ..RuntimeScenarioSeed::default()
+        };
+
+        let error = build_runtime_from_seed(&library, &maps, &sample_overworld_library(), &seed)
+            .expect_err("traveling startup should be rejected");
+        assert_eq!(
+            error,
+            RuntimeBuildError::InvalidOverworldSeed {
+                message: "unsupported_world_mode:Traveling".to_string(),
             }
         );
     }

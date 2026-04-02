@@ -30,11 +30,15 @@ impl SimulationRuntime {
                 snapshot.schema_version
             ));
         }
+        if snapshot.simulation.interaction_context.world_mode == WorldMode::Traveling {
+            return Err("unsupported_runtime_snapshot_world_mode:Traveling".to_string());
+        }
         self.simulation.load_snapshot(snapshot.simulation);
         self.vision.load_snapshot(snapshot.vision);
         self.pending_movement = snapshot.pending_movement;
         self.pending_interaction = snapshot.pending_interaction;
         self.pending_movement_stop_requested = snapshot.pending_movement_stop_requested;
+        self.recent_overworld_arrival = None;
         self.path_preview = snapshot.path_preview;
         self.tick_count = snapshot.tick_count;
         Ok(())
@@ -78,6 +82,10 @@ impl SimulationRuntime {
         self.pending_movement.as_ref()
     }
 
+    pub fn recent_overworld_arrival(&self) -> Option<&RecentOverworldArrival> {
+        self.recent_overworld_arrival.as_ref()
+    }
+
     pub fn has_pending_progression(&self) -> bool {
         self.simulation.has_pending_progression()
     }
@@ -94,6 +102,7 @@ impl SimulationRuntime {
         self.pending_movement = None;
         self.pending_interaction = None;
         self.pending_movement_stop_requested = false;
+        self.recent_overworld_arrival = None;
         self.path_preview.clear();
     }
 }

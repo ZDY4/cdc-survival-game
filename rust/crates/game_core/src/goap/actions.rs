@@ -20,7 +20,9 @@ pub fn build_action_set_for_context(context: &NpcPlanningContext) -> Vec<Action>
         .actions
         .iter()
         .filter(|action| {
-            context.is_anchor_reachable(resolve_target_anchor(request, action.target_anchor.as_ref()).as_deref())
+            context.is_anchor_reachable(
+                resolve_target_anchor(request, action.target_anchor.as_ref()).as_deref(),
+            )
         })
         .map(build_action)
         .collect()

@@ -74,7 +74,13 @@ pub fn validate_ai_content(
     }
 
     for (character_id, definition) in characters.iter() {
-        validate_character_life_profile(character_id, definition, settlements, ai_library, &mut issues);
+        validate_character_life_profile(
+            character_id,
+            definition,
+            settlements,
+            ai_library,
+            &mut issues,
+        );
     }
 
     validate_guard_coverage(characters, settlements, &mut issues);

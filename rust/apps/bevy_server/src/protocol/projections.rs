@@ -44,22 +44,6 @@ pub(super) fn runtime_snapshot_envelope(
     }
 }
 
-pub(super) fn protocol_overworld_route(
-    route: game_core::OverworldRouteSnapshot,
-) -> ProtocolOverworldRouteSnapshot {
-    ProtocolOverworldRouteSnapshot {
-        actor_id: route.actor_id,
-        from_location_id: route.from_location_id,
-        to_location_id: route.to_location_id,
-        location_path: route.location_path,
-        cell_path: route.cell_path,
-        travel_minutes: route.travel_minutes,
-        food_cost: route.food_cost,
-        stamina_cost: route.stamina_cost,
-        risk_level: route.risk_level,
-    }
-}
-
 pub(super) fn protocol_overworld_state(
     state: game_core::OverworldStateSnapshot,
 ) -> ProtocolOverworldStateSnapshot {
@@ -71,12 +55,6 @@ pub(super) fn protocol_overworld_state(
         current_entry_point_id: state.current_entry_point_id,
         current_overworld_cell: state.current_overworld_cell,
         unlocked_locations: state.unlocked_locations,
-        travel: state.travel.map(|travel| ProtocolOverworldTravelState {
-            actor_id: travel.actor_id,
-            route: protocol_overworld_route(travel.route),
-            remaining_minutes: travel.remaining_minutes,
-            progressed_minutes: travel.progressed_minutes,
-        }),
         world_mode: state.world_mode,
     }
 }

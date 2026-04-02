@@ -4,14 +4,13 @@ use bevy_ecs::system::SystemParam;
 use crate::config::{
     EconomySmokeReport, ServerConfig, ServerSimulationRuntime, ServerStartupState,
 };
-use game_bevy::bootstrap::build_default_startup_seed;
 use game_bevy::{
     advance_map_ai_spawn_runtime, apply_dialogue_libraries, apply_gameplay_libraries,
-    build_runtime_from_seed, CharacterDefinitions, DialogueDefinitions, DialogueRuleDefinitions,
-    EffectDefinitions, ItemDefinitions, MapAiSpawnRuntimeState, MapDefinitions,
-    OverworldDefinitions, QuestDefinitions, RecipeDefinitions, RuntimeContentLoadState,
-    RuntimeStartupConfig, ShopDefinitions, SkillDefinitions, SkillTreeDefinitions,
-    SpawnCharacterRequest,
+    build_default_startup_seed, build_runtime_from_default_startup_seed, CharacterDefinitions,
+    DialogueDefinitions, DialogueRuleDefinitions, EffectDefinitions, ItemDefinitions,
+    MapAiSpawnRuntimeState, MapDefinitions, OverworldDefinitions, QuestDefinitions,
+    RecipeDefinitions, RuntimeBootstrapBundle, RuntimeContentLoadState, RuntimeStartupConfig,
+    ShopDefinitions, SkillDefinitions, SkillTreeDefinitions, SpawnCharacterRequest,
 };
 use game_core::SimulationRuntime;
 use game_data::{CharacterId, GridCoord};
@@ -89,8 +88,17 @@ pub fn startup_demo(
         return;
     };
 
-    let seed =
-        build_default_startup_seed(&maps.0, &overworld.0, startup_config.startup_map.clone());
+    let bootstrap_bundle = RuntimeBootstrapBundle {
+        character_definitions: definitions.as_ref().clone(),
+        map_definitions: maps.as_ref().clone(),
+        overworld_definitions: overworld.as_ref().clone(),
+        runtime_startup_config: startup_config.as_ref().clone(),
+    };
+    let seed = build_default_startup_seed(
+        &bootstrap_bundle.map_definitions.0,
+        &bootstrap_bundle.overworld_definitions.0,
+        bootstrap_bundle.runtime_startup_config.startup_map.clone(),
+    );
 
     println!(
         "bevy_server booted with headless loop at {} Hz",
@@ -158,7 +166,7 @@ pub fn startup_demo(
         }
     }
 
-    let mut runtime = match build_runtime_from_seed(&definitions.0, &maps.0, &overworld.0, &seed) {
+    let mut runtime = match build_runtime_from_default_startup_seed(&bootstrap_bundle) {
         Ok(runtime) => runtime,
         Err(error) => {
             let error = format!("failed to build bevy_server runtime from startup seed: {error}");

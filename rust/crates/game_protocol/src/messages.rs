@@ -45,22 +45,6 @@ pub struct MapTravelRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct OverworldRouteRequest {
-    pub actor_id: ActorId,
-    #[serde(default)]
-    pub target_location_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct AdvanceOverworldTravelRequest {
-    pub actor_id: ActorId,
-    #[serde(default)]
-    pub minutes: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct EnterLocationRequest {
     pub actor_id: ActorId,
     #[serde(default)]
@@ -256,40 +240,6 @@ pub struct RuntimeSnapshotPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct ProtocolOverworldRouteSnapshot {
-    pub actor_id: ActorId,
-    #[serde(default)]
-    pub from_location_id: String,
-    #[serde(default)]
-    pub to_location_id: String,
-    #[serde(default)]
-    pub location_path: Vec<String>,
-    #[serde(default)]
-    pub cell_path: Vec<GridCoord>,
-    #[serde(default)]
-    pub travel_minutes: u32,
-    #[serde(default)]
-    pub food_cost: i32,
-    #[serde(default)]
-    pub stamina_cost: i32,
-    #[serde(default)]
-    pub risk_level: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ProtocolOverworldTravelState {
-    pub actor_id: ActorId,
-    #[serde(default)]
-    pub route: ProtocolOverworldRouteSnapshot,
-    #[serde(default)]
-    pub remaining_minutes: u32,
-    #[serde(default)]
-    pub progressed_minutes: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub struct ProtocolLocationTransitionContext {
     #[serde(default)]
     pub location_id: String,
@@ -322,8 +272,6 @@ pub struct ProtocolOverworldStateSnapshot {
     pub current_overworld_cell: Option<GridCoord>,
     #[serde(default)]
     pub unlocked_locations: Vec<String>,
-    #[serde(default)]
-    pub travel: Option<ProtocolOverworldTravelState>,
     #[serde(default)]
     pub world_mode: WorldMode,
 }
@@ -448,9 +396,6 @@ pub enum ClientMessage {
         destination: WorldCoord,
     },
     TravelToMap(MapTravelRequest),
-    RequestOverworldRoute(OverworldRouteRequest),
-    StartOverworldTravel(OverworldRouteRequest),
-    AdvanceOverworldTravel(AdvanceOverworldTravelRequest),
     EnterLocation(EnterLocationRequest),
     ReturnToOverworld(ReturnToOverworldRequest),
     RequestEquipItem(EquipItemRequest),
@@ -490,7 +435,6 @@ pub enum ServerMessage {
     InteractionExecution(InteractionExecutionResult),
     DialogueState(DialogueRuntimeState),
     SceneTransitionRequested(SceneTransitionNotice),
-    OverworldRouteComputed(ProtocolOverworldRouteSnapshot),
     OverworldState(ProtocolOverworldStateSnapshot),
     LocationTransition(ProtocolLocationTransitionContext),
     ItemEquipped(ItemEquippedPayload),
@@ -528,8 +472,7 @@ const fn default_snapshot_schema_version() -> u32 {
 mod tests {
     use super::{
         ActorSnapshot, ProtocolActorVisionMapSnapshot, ProtocolActorVisionSnapshot,
-        ProtocolOverworldRouteSnapshot, ProtocolOverworldStateSnapshot,
-        ProtocolOverworldTravelState, ProtocolVisionRuntimeSnapshot, WorldSnapshotEnvelope,
+        ProtocolOverworldStateSnapshot, ProtocolVisionRuntimeSnapshot, WorldSnapshotEnvelope,
     };
     use game_data::{ActorId, ActorKind, GridCoord, InteractionContextSnapshot, MapId, TurnState};
 
@@ -555,22 +498,6 @@ mod tests {
                 current_map_id: Some("test_map".into()),
                 active_location_id: Some("safe_house".into()),
                 unlocked_locations: vec!["safe_house".into()],
-                travel: Some(ProtocolOverworldTravelState {
-                    actor_id: ActorId(7),
-                    route: ProtocolOverworldRouteSnapshot {
-                        actor_id: ActorId(7),
-                        from_location_id: "safe_house".into(),
-                        to_location_id: "clinic".into(),
-                        location_path: vec!["safe_house".into(), "clinic".into()],
-                        cell_path: vec![GridCoord::new(0, 0, 0), GridCoord::new(1, 0, 0)],
-                        travel_minutes: 15,
-                        food_cost: 1,
-                        stamina_cost: 3,
-                        risk_level: 0.25,
-                    },
-                    remaining_minutes: 10,
-                    progressed_minutes: 5,
-                }),
                 ..Default::default()
             }),
             vision_state: Some(ProtocolVisionRuntimeSnapshot {

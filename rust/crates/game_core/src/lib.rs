@@ -53,12 +53,11 @@ pub use goap::{
 pub use movement::{
     AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
     PendingInteractionIntent, PendingMovementIntent, PendingProgressionStep,
-    ProgressionAdvanceResult,
+    ProgressionAdvanceResult, RecentOverworldArrival,
 };
 pub use overworld::{
-    compute_cell_path, compute_location_route, find_entry_point, location_by_id,
-    world_mode_for_location_kind, LocationTransitionContext, OverworldRouteSnapshot,
-    OverworldStateSnapshot, OverworldTravelState, UnlockedLocationSet,
+    compute_cell_path, find_entry_point, location_by_id, world_mode_for_location_kind,
+    LocationTransitionContext, OverworldStateSnapshot, UnlockedLocationSet,
 };
 pub use runtime::{
     action_result_status, DropItemOutcome, RuntimeSnapshot, SimulationRuntime,

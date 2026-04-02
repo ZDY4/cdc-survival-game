@@ -1,3 +1,5 @@
+// Viewer 运行时状态定义：集中声明 viewer 资源、交互状态、场景状态和共享数据结构。
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use bevy::prelude::*;
@@ -1076,6 +1078,10 @@ impl ViewerState {
         self.control_mode == ViewerControlMode::PlayerControl
     }
 
+    pub(crate) fn is_player_control(self: &Self) -> bool {
+        self.can_issue_player_commands()
+    }
+
     pub(crate) fn is_camera_following_selected_actor(&self) -> bool {
         self.camera_mode == ViewerCameraMode::FollowSelectedActor
     }
@@ -1338,6 +1344,7 @@ pub(crate) enum GameUiButtonAction {
     },
     CraftRecipe(String),
     SelectMapLocation(String),
+    EnterOverworldLocation(String),
     BuyTradeItem {
         shop_id: String,
         item_id: u32,

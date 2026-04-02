@@ -639,6 +639,12 @@ impl Simulation {
             return false;
         };
 
+        if self.interaction_context.world_mode == WorldMode::Overworld
+            && option.kind == InteractionOptionKind::EnterOutdoorLocation
+        {
+            return false;
+        }
+
         match self.execute_scene_transition_interaction(actor_id, &option) {
             Ok(context_snapshot) => {
                 self.events.push(SimulationEvent::InteractionSucceeded {
@@ -796,10 +802,7 @@ impl Simulation {
         }
     }
 
-    pub(super) fn resolve_scene_target_id(
-        &self,
-        option: &InteractionOptionDefinition,
-    ) -> String {
+    pub(super) fn resolve_scene_target_id(&self, option: &InteractionOptionDefinition) -> String {
         if !option.target_id.trim().is_empty() {
             option.target_id.clone()
         } else {

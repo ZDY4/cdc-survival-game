@@ -626,13 +626,13 @@ pub(super) fn render_map_panel(
             if menu_state.selected_map_location_id.as_deref() == Some(location.id.as_str()) {
                 body.spawn(text_bundle(
                     font,
-                    "地图面板仅提供信息预览。正式旅行请改用场景内入口。",
+                    "地图面板仅提供地点信息；世界大地图上的实际移动改为直接点格子逐格前进。",
                     10.5,
                     Color::WHITE,
                 ));
                 body.spawn(text_bundle(
                     font,
-                    "旅行时间/食物/风险预览由 Rust 运行时路由查询提供。",
+                    "到达对应 overworld 格子后，会通过地图触发器进入 outdoor / interior / dungeon。",
                     10.5,
                     Color::WHITE,
                 ));

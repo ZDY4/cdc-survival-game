@@ -1,3 +1,5 @@
+//! 交易界面子模块：负责交易会话解析、交易面板渲染与交易按钮行为处理。
+
 use super::*;
 
 const TRADE_PAGE_LEFT_WIDTH: f32 = 612.0;
@@ -487,22 +489,25 @@ fn render_trade_sell_action(
                     },
                 ));
             } else {
-                footer.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        padding: UiRect::axes(px(10), px(7)),
-                        border: UiRect::all(px(1)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.07, 0.08, 0.11, 0.90)),
-                    BorderColor::all(Color::srgba(0.18, 0.21, 0.28, 1.0)),
-                    children![text_bundle(
-                        font,
-                        "卖出已选 x1",
-                        11.0,
-                        Color::srgba(0.52, 0.56, 0.63, 1.0)
-                    )],
-                ));
+                footer
+                    .spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            padding: UiRect::axes(px(10), px(7)),
+                            border: UiRect::all(px(1)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.07, 0.08, 0.11, 0.90)),
+                        BorderColor::all(Color::srgba(0.18, 0.21, 0.28, 1.0)),
+                    ))
+                    .with_children(|empty_state| {
+                        empty_state.spawn(text_bundle(
+                            font,
+                            "卖出已选 x1",
+                            11.0,
+                            Color::srgba(0.52, 0.56, 0.63, 1.0),
+                        ));
+                    });
             }
         });
 }

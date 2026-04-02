@@ -4,9 +4,7 @@ use std::hash::{Hash, Hasher};
 use game_core::SimulationRuntime;
 use game_data::{ActorId, CharacterId, GridCoord, MapId, MapLibrary, MapObjectKind};
 
-use crate::{
-    register_runtime_actor_from_definition, MapAiSpawnRuntimeState, RuntimeAiSpawnPoint,
-};
+use crate::{register_runtime_actor_from_definition, MapAiSpawnRuntimeState, RuntimeAiSpawnPoint};
 
 pub fn advance_map_ai_spawn_runtime(
     state: &mut MapAiSpawnRuntimeState,

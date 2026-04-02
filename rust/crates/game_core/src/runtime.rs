@@ -16,7 +16,7 @@ use crate::grid::GridPathfindingError;
 use crate::movement::{
     AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
     PendingInteractionIntent, PendingMovementIntent, PendingProgressionStep,
-    ProgressionAdvanceResult,
+    ProgressionAdvanceResult, RecentOverworldArrival,
 };
 use crate::simulation::{
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
@@ -77,6 +77,7 @@ pub struct SimulationRuntime {
     pending_movement: Option<PendingMovementIntent>,
     pending_interaction: Option<PendingInteractionIntent>,
     pending_movement_stop_requested: bool,
+    recent_overworld_arrival: Option<RecentOverworldArrival>,
     path_preview: Vec<GridCoord>,
     tick_count: u64,
 }
@@ -1628,6 +1629,20 @@ mod tests {
     }
 
     #[test]
+    fn runtime_snapshot_load_rejects_legacy_traveling_world_mode() {
+        let (runtime, _handles) = create_demo_runtime();
+        let mut snapshot = runtime.save_snapshot();
+        snapshot.simulation.interaction_context.world_mode = WorldMode::Traveling;
+
+        let mut restored = SimulationRuntime::new();
+        let error = restored
+            .load_snapshot(snapshot)
+            .expect_err("legacy traveling snapshot should be rejected");
+
+        assert_eq!(error, "unsupported_runtime_snapshot_world_mode:Traveling");
+    }
+
+    #[test]
     fn runtime_snapshot_round_trip_preserves_actor_vision_state() {
         let map = sample_interaction_map_definition();
         let map_library = MapLibrary::from(BTreeMap::from([(map.id.clone(), map.clone())]));
@@ -2313,6 +2328,115 @@ mod tests {
         assert_eq!(context.world_mode, WorldMode::Overworld);
     }
 
+    #[test]
+    fn overworld_exact_goal_arrival_records_recent_arrival_without_auto_entering_location() {
+        let (mut runtime, player) = sample_runtime_with_overworld_prompt();
+        set_runtime_actor_ap(&mut runtime, player, 2.0);
+
+        let outcome = runtime
+            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .expect("move should succeed");
+
+        assert!(outcome.result.success);
+        assert!(runtime.pending_movement().is_none());
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(1, 0, 0))
+        );
+        assert_eq!(
+            runtime.current_interaction_context().world_mode,
+            WorldMode::Overworld
+        );
+        assert_eq!(runtime.current_interaction_context().current_map_id, None);
+        assert_eq!(
+            runtime.overworld_outdoor_location_id_at(GridCoord::new(1, 0, 0)),
+            Some("prompt_outpost".to_string())
+        );
+        assert_eq!(
+            runtime.recent_overworld_arrival(),
+            Some(&crate::RecentOverworldArrival {
+                actor_id: player,
+                requested_goal: GridCoord::new(1, 0, 0),
+                final_position: GridCoord::new(1, 0, 0),
+                arrived_exactly: true,
+            })
+        );
+    }
+
+    #[test]
+    fn overworld_passing_through_trigger_only_records_final_goal_tile() {
+        let (mut runtime, player) = sample_runtime_with_overworld_prompt();
+        set_runtime_actor_ap(&mut runtime, player, 3.0);
+
+        runtime
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
+            .expect("move should succeed");
+
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(2, 0, 0))
+        );
+        assert_eq!(
+            runtime.recent_overworld_arrival(),
+            Some(&crate::RecentOverworldArrival {
+                actor_id: player,
+                requested_goal: GridCoord::new(2, 0, 0),
+                final_position: GridCoord::new(2, 0, 0),
+                arrived_exactly: true,
+            })
+        );
+        assert_eq!(
+            runtime.overworld_outdoor_location_id_at(GridCoord::new(2, 0, 0)),
+            None
+        );
+    }
+
+    #[test]
+    fn overworld_recent_arrival_is_cleared_by_cancel_enter_and_restore() {
+        let (mut runtime, player) = sample_runtime_with_overworld_prompt();
+        set_runtime_actor_ap(&mut runtime, player, 3.0);
+
+        runtime
+            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .expect("first move should succeed");
+        assert!(runtime.recent_overworld_arrival().is_some());
+
+        runtime
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
+            .expect("second move should succeed");
+        assert_eq!(
+            runtime
+                .recent_overworld_arrival()
+                .expect("second move should refresh arrival")
+                .requested_goal,
+            GridCoord::new(2, 0, 0)
+        );
+
+        let saved = runtime.save_snapshot();
+        let mut restored = SimulationRuntime::new();
+        restored.set_map_library(sample_prompt_map_library());
+        restored.set_overworld_library(sample_prompt_overworld_library());
+        restored
+            .load_snapshot(saved)
+            .expect("snapshot should restore without prompt state");
+        assert!(restored.recent_overworld_arrival().is_none());
+
+        restored
+            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .expect("move after restore should succeed");
+        assert!(restored.recent_overworld_arrival().is_some());
+        set_runtime_actor_ap(&mut restored, player, 1.0);
+
+        restored
+            .enter_location(player, "prompt_outpost", None)
+            .expect("manual enter should succeed");
+        assert!(restored.recent_overworld_arrival().is_none());
+        assert_eq!(
+            restored.current_interaction_context().world_mode,
+            WorldMode::Outdoor
+        );
+    }
+
     fn sample_runtime_with_overworld() -> (SimulationRuntime, game_data::ActorId) {
         let mut runtime = SimulationRuntime::new();
         runtime.set_map_library(sample_scene_context_map_library());
@@ -2336,6 +2460,32 @@ mod tests {
                 ["survivor_outpost_01".into(), "clinic_interior".into()],
             )
             .expect("overworld state should seed");
+        (runtime, actor_id)
+    }
+
+    fn sample_runtime_with_overworld_prompt() -> (SimulationRuntime, game_data::ActorId) {
+        let mut runtime = SimulationRuntime::new();
+        runtime.set_map_library(sample_prompt_map_library());
+        runtime.set_overworld_library(sample_prompt_overworld_library());
+        runtime
+            .seed_overworld_state(
+                WorldMode::Overworld,
+                Some("prompt_outpost".into()),
+                None,
+                ["prompt_outpost".into()],
+            )
+            .expect("overworld state should seed");
+        let actor_id = runtime.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
         (runtime, actor_id)
     }
 
@@ -2398,6 +2548,32 @@ mod tests {
         ]))
     }
 
+    fn sample_prompt_map_library() -> MapLibrary {
+        MapLibrary::from(BTreeMap::from([(
+            MapId("prompt_outpost_map".into()),
+            MapDefinition {
+                id: MapId("prompt_outpost_map".into()),
+                name: "Prompt Outpost".into(),
+                size: MapSize {
+                    width: 8,
+                    height: 8,
+                },
+                default_level: 0,
+                levels: vec![MapLevelDefinition {
+                    y: 0,
+                    cells: Vec::new(),
+                }],
+                entry_points: vec![MapEntryPointDefinition {
+                    id: "default_entry".into(),
+                    grid: GridCoord::new(1, 0, 1),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                }],
+                objects: Vec::new(),
+            },
+        )]))
+    }
+
     fn sample_scene_context_overworld_library() -> OverworldLibrary {
         OverworldLibrary::from(BTreeMap::from([(
             OverworldId("scene_context_world".into()),
@@ -2444,6 +2620,49 @@ mod tests {
                     terrain: "road".into(),
                     extra: BTreeMap::new(),
                 }],
+                travel_rules: OverworldTravelRuleSet::default(),
+            },
+        )]))
+    }
+
+    fn sample_prompt_overworld_library() -> OverworldLibrary {
+        OverworldLibrary::from(BTreeMap::from([(
+            OverworldId("prompt_world".into()),
+            OverworldDefinition {
+                id: OverworldId("prompt_world".into()),
+                locations: vec![OverworldLocationDefinition {
+                    id: OverworldLocationId("prompt_outpost".into()),
+                    name: "Prompt Outpost".into(),
+                    description: String::new(),
+                    kind: OverworldLocationKind::Outdoor,
+                    map_id: MapId("prompt_outpost_map".into()),
+                    entry_point_id: "default_entry".into(),
+                    parent_outdoor_location_id: None,
+                    return_entry_point_id: None,
+                    default_unlocked: true,
+                    visible: true,
+                    overworld_cell: GridCoord::new(1, 0, 0),
+                    danger_level: 0,
+                    icon: String::new(),
+                    extra: BTreeMap::new(),
+                }],
+                walkable_cells: vec![
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(0, 0, 0),
+                        terrain: "road".into(),
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(1, 0, 0),
+                        terrain: "road".into(),
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(2, 0, 0),
+                        terrain: "road".into(),
+                        extra: BTreeMap::new(),
+                    },
+                ],
                 travel_rules: OverworldTravelRuleSet::default(),
             },
         )]))

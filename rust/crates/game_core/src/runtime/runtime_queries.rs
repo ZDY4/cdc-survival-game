@@ -1,4 +1,5 @@
 use super::*;
+use game_data::{InteractionOptionKind, MapObjectKind};
 
 impl SimulationRuntime {
     pub fn world_to_grid(&self, world: WorldCoord) -> GridCoord {
@@ -43,6 +44,25 @@ impl SimulationRuntime {
 
     pub fn get_actor_level(&self, actor_id: ActorId) -> i32 {
         self.simulation.actor_level(actor_id)
+    }
+
+    pub fn overworld_outdoor_location_id_at(&self, grid: GridCoord) -> Option<String> {
+        self.simulation
+            .grid_world()
+            .map_objects_at(grid)
+            .into_iter()
+            .find_map(|object| {
+                if object.kind != MapObjectKind::Trigger {
+                    return None;
+                }
+                let trigger = object.props.trigger.as_ref()?;
+                trigger
+                    .resolved_options()
+                    .into_iter()
+                    .find(|option| option.kind == InteractionOptionKind::EnterOutdoorLocation)
+                    .map(|option| option.target_id)
+                    .filter(|location_id| !location_id.trim().is_empty())
+            })
     }
 
     pub fn get_actor_current_xp(&self, actor_id: ActorId) -> i32 {

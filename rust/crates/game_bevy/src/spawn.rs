@@ -1,17 +1,15 @@
 use bevy_ecs::prelude::*;
-use game_core::{
-    FollowGridGoalAiController, NoopAiController, RegisterActor, SimulationRuntime,
-};
+use game_core::{FollowGridGoalAiController, NoopAiController, RegisterActor, SimulationRuntime};
 use game_data::{
-    ActorId, ActorKind, ActorSide, CharacterArchetype, CharacterDefinition,
-    CharacterDisposition, GridCoord,
+    ActorId, ActorKind, ActorSide, CharacterArchetype, CharacterDefinition, CharacterDisposition,
+    GridCoord,
 };
 
 use crate::npc_life::LifeProfileComponent;
 use crate::{
     AiCombatProfile, AvatarPath, BaseAttributeSet, BehaviorProfile, CampId,
     CharacterArchetypeComponent, CharacterDefinitionId, CharacterDefinitions,
-    CharacterSpawnRejected, CombatAttributeSet, Description, Disposition, DisplayName,
+    CharacterSpawnRejected, CombatAttributeSet, Description, DisplayName, Disposition,
     GridPosition, Level, LootTable, ModelPath, PlaceholderColors, PortraitPath, ResourcePools,
     SpawnCharacterRequest, XpReward,
 };

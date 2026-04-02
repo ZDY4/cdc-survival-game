@@ -1,3 +1,5 @@
+//! 世界可视化主模块：负责静态世界、角色、门、迷雾同步以及各类 3D 调试表现生成。
+
 use super::*;
 
 pub(crate) fn clear_world_visuals(
@@ -167,47 +169,52 @@ pub(crate) fn sync_fog_of_war_visuals(
     runtime_state: Res<ViewerRuntimeState>,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
-    mut fog_state: ResMut<FogOfWarMaskState>,
+    mut fog_of_war_state: ResMut<FogOfWarMaskState>,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
-    let next_mask =
+    let next_fog_of_war_mask =
         build_fog_of_war_mask_snapshot(&snapshot, &viewer_state, scene_kind.is_main_menu());
 
-    if fog_state.key == next_mask.key
-        && fog_state.bounds == next_mask.bounds
-        && fog_state.mask_size == next_mask.mask_size
-        && fog_state.current_bytes == next_mask.bytes
-        && fog_state.actor_id == next_mask.actor_id
-        && fog_state.map_id == next_mask.map_id
-        && fog_state.current_level == next_mask.current_level
+    if fog_of_war_state.key == next_fog_of_war_mask.key
+        && fog_of_war_state.bounds == next_fog_of_war_mask.bounds
+        && fog_of_war_state.mask_size == next_fog_of_war_mask.mask_size
+        && fog_of_war_state.current_bytes == next_fog_of_war_mask.bytes
+        && fog_of_war_state.actor_id == next_fog_of_war_mask.actor_id
+        && fog_of_war_state.map_id == next_fog_of_war_mask.map_id
+        && fog_of_war_state.current_level == next_fog_of_war_mask.current_level
     {
         return;
     }
 
-    fog_state.previous_bytes = fog_state.current_bytes.clone();
-    fog_state.current_bytes = next_mask.bytes;
-    fog_state.key = next_mask.key;
-    fog_state.actor_id = next_mask.actor_id;
-    fog_state.map_id = next_mask.map_id;
-    fog_state.current_level = next_mask.current_level;
-    fog_state.bounds = next_mask.bounds;
-    fog_state.map_min_world_xz = next_mask.map_min_world_xz;
-    fog_state.map_size_world_xz = next_mask.map_size_world_xz;
-    fog_state.mask_size = next_mask.mask_size;
-    fog_state.mask_texel_size = next_mask.mask_texel_size;
-    fog_state.transition_elapsed_sec = 0.0;
+    let previous_mask_bytes = if fog_of_war_state.mask_size == next_fog_of_war_mask.mask_size {
+        fog_of_war_state.current_bytes.clone()
+    } else {
+        next_fog_of_war_mask.bytes.clone()
+    };
+    fog_of_war_state.previous_bytes = previous_mask_bytes;
+    fog_of_war_state.current_bytes = next_fog_of_war_mask.bytes;
+    fog_of_war_state.key = next_fog_of_war_mask.key;
+    fog_of_war_state.actor_id = next_fog_of_war_mask.actor_id;
+    fog_of_war_state.map_id = next_fog_of_war_mask.map_id;
+    fog_of_war_state.current_level = next_fog_of_war_mask.current_level;
+    fog_of_war_state.bounds = next_fog_of_war_mask.bounds;
+    fog_of_war_state.map_min_world_xz = next_fog_of_war_mask.map_min_world_xz;
+    fog_of_war_state.map_size_world_xz = next_fog_of_war_mask.map_size_world_xz;
+    fog_of_war_state.mask_size = next_fog_of_war_mask.mask_size;
+    fog_of_war_state.mask_texel_size = next_fog_of_war_mask.mask_texel_size;
+    fog_of_war_state.transition_elapsed_sec = 0.0;
 
     update_fog_of_war_mask_image(
         &mut images,
-        &fog_state.previous_mask,
-        fog_state.mask_size,
-        &fog_state.previous_bytes,
+        &fog_of_war_state.previous_mask,
+        fog_of_war_state.mask_size,
+        &fog_of_war_state.previous_bytes,
     );
     update_fog_of_war_mask_image(
         &mut images,
-        &fog_state.current_mask,
-        fog_state.mask_size,
-        &fog_state.current_bytes,
+        &fog_of_war_state.current_mask,
+        fog_of_war_state.mask_size,
+        &fog_of_war_state.current_bytes,
     );
 }
 
@@ -833,9 +840,13 @@ pub(super) fn spawn_generated_door_visual(
     );
     let mesh_handle = meshes.add(mesh);
     let mut leaf_entity = None;
+    let pivot_transform = Transform::from_translation(pivot_translation);
     let pivot_entity = commands
         .spawn((
-            Transform::from_translation(pivot_translation),
+            pivot_transform,
+            GlobalTransform::from(pivot_transform),
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
             GeneratedDoorPivot,
         ))
         .with_children(|parent| {
@@ -1095,9 +1106,14 @@ pub(super) fn sync_actor_visuals(
         let shadow_width = body_width * 1.55;
         let shadow_depth = body_depth * 1.7;
 
+        let actor_transform =
+            Transform::from_translation(translation).with_scale(Vec3::splat(grid_size));
         let entity = commands
             .spawn((
-                Transform::from_translation(translation).with_scale(Vec3::splat(grid_size)),
+                actor_transform,
+                GlobalTransform::from(actor_transform),
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
                 ActorBodyVisual {
                     actor_id: actor.actor_id,
                     body_material: body_material.clone(),

@@ -1,3 +1,5 @@
+//! 快捷栏子模块：负责快捷栏状态同步、技能绑定校验、激活逻辑与底栏渲染。
+
 use super::*;
 
 pub(crate) fn tick_hotbar_cooldowns(
@@ -258,13 +260,17 @@ pub(super) fn render_hotbar_slots(
     };
 
     parent
-        .spawn(Node {
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            column_gap: px(4),
-            justify_content: JustifyContent::Center,
-            ..default()
-        })
+        .spawn((
+            Node {
+                width: Val::Auto,
+                flex_direction: FlexDirection::Row,
+                column_gap: px(2),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::FlexEnd,
+                ..default()
+            },
+            ui_hierarchy_bundle(),
+        ))
         .with_children(|slots| {
             for (slot_index, slot) in active_group.iter().enumerate() {
                 let skill_name = slot
@@ -312,12 +318,15 @@ pub(super) fn render_hotbar_slots(
                     Color::srgba(0.08, 0.11, 0.17, 0.98)
                 };
                 slots
-                    .spawn(Node {
-                        width: px(HOTBAR_SLOT_SIZE),
-                        min_height: px(HOTBAR_SLOT_SIZE),
-                        position_type: PositionType::Relative,
-                        ..default()
-                    })
+                    .spawn((
+                        Node {
+                            width: px(HOTBAR_SLOT_SIZE),
+                            min_height: px(HOTBAR_SLOT_SIZE),
+                            position_type: PositionType::Relative,
+                            ..default()
+                        },
+                        ui_hierarchy_bundle(),
+                    ))
                     .with_children(|slot_wrapper| {
                         slot_wrapper
                             .spawn((
@@ -325,7 +334,7 @@ pub(super) fn render_hotbar_slots(
                                 Node {
                                     width: px(HOTBAR_SLOT_SIZE),
                                     min_height: px(HOTBAR_SLOT_SIZE),
-                                    padding: UiRect::all(px(6)),
+                                    padding: UiRect::all(px(4)),
                                     flex_direction: FlexDirection::Column,
                                     justify_content: JustifyContent::SpaceBetween,
                                     border: UiRect::all(px(if slot.toggled || is_selected_skill {
@@ -337,21 +346,25 @@ pub(super) fn render_hotbar_slots(
                                 },
                                 BackgroundColor(background.into()),
                                 BorderColor::all(border_color),
+                                ui_hierarchy_bundle(),
                                 primary_action,
                             ))
                             .with_children(|button| {
                                 button
-                                    .spawn(Node {
-                                        width: Val::Percent(100.0),
-                                        flex_direction: FlexDirection::Row,
-                                        justify_content: JustifyContent::SpaceBetween,
-                                        ..default()
-                                    })
+                                    .spawn((
+                                        Node {
+                                            width: Val::Percent(100.0),
+                                            flex_direction: FlexDirection::Row,
+                                            justify_content: JustifyContent::SpaceBetween,
+                                            ..default()
+                                        },
+                                        ui_hierarchy_bundle(),
+                                    ))
                                     .with_children(|top_row| {
                                         top_row.spawn(text_bundle(
                                             font,
                                             hotbar_key_label(slot_index),
-                                            8.2,
+                                            7.2,
                                             if slot.skill_id.is_some() {
                                                 Color::srgba(0.82, 0.86, 0.94, 1.0)
                                             } else {
@@ -362,7 +375,7 @@ pub(super) fn render_hotbar_slots(
                                             top_row.spawn(text_bundle(
                                                 font,
                                                 "ON",
-                                                7.8,
+                                                6.8,
                                                 Color::srgba(0.56, 0.88, 0.62, 1.0),
                                             ));
                                         }
@@ -370,7 +383,7 @@ pub(super) fn render_hotbar_slots(
                                 button.spawn(text_bundle(
                                     font,
                                     &skill_abbreviation,
-                                    13.0,
+                                    10.8,
                                     if slot.skill_id.is_some() {
                                         Color::WHITE
                                     } else {
@@ -380,7 +393,7 @@ pub(super) fn render_hotbar_slots(
                                 button.spawn(text_bundle(
                                     font,
                                     &footer_label,
-                                    8.0,
+                                    7.0,
                                     if slot.skill_id.is_some() {
                                         Color::srgba(0.80, 0.84, 0.92, 1.0)
                                     } else {
@@ -398,16 +411,17 @@ pub(super) fn render_hotbar_slots(
                                                 height: Val::Percent(100.0),
                                                 justify_content: JustifyContent::FlexEnd,
                                                 align_items: AlignItems::FlexEnd,
-                                                padding: UiRect::all(px(6)),
+                                                padding: UiRect::all(px(4)),
                                                 ..default()
                                             },
                                             BackgroundColor(Color::srgba(0.01, 0.02, 0.04, 0.55)),
+                                            ui_hierarchy_bundle(),
                                         ))
                                         .with_children(|overlay| {
                                             overlay.spawn(text_bundle(
                                                 font,
                                                 &format!("{:.1}s", slot.cooldown_remaining),
-                                                8.2,
+                                                7.2,
                                                 Color::WHITE,
                                             ));
                                         });
@@ -420,10 +434,10 @@ pub(super) fn render_hotbar_slots(
                                     Button,
                                     Node {
                                         position_type: PositionType::Absolute,
-                                        top: px(-4),
-                                        right: px(-4),
-                                        width: px(18),
-                                        height: px(18),
+                                        top: px(-3),
+                                        right: px(-3),
+                                        width: px(16),
+                                        height: px(16),
                                         justify_content: JustifyContent::Center,
                                         align_items: AlignItems::Center,
                                         border: UiRect::all(px(1)),
@@ -431,13 +445,14 @@ pub(super) fn render_hotbar_slots(
                                     },
                                     BackgroundColor(Color::srgba(0.22, 0.08, 0.08, 0.94).into()),
                                     BorderColor::all(Color::srgba(0.74, 0.40, 0.40, 1.0)),
+                                    ui_hierarchy_bundle(),
                                     GameUiButtonAction::ClearHotbarSlot {
                                         group: hotbar_state.active_group,
                                         slot: slot_index,
                                     },
                                 ))
                                 .with_children(|clear| {
-                                    clear.spawn(text_bundle(font, "×", 8.8, Color::WHITE));
+                                    clear.spawn(text_bundle(font, "×", 7.8, Color::WHITE));
                                 });
                         }
                     });
@@ -518,21 +533,27 @@ pub(super) fn render_hotbar_legacy(
             UiMouseBlocker,
         ))
         .with_children(|body| {
-            body.spawn(Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceBetween,
-                align_items: AlignItems::Center,
-                ..default()
-            })
+            body.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ui_hierarchy_bundle(),
+            ))
             .with_children(|header| {
                 header
-                    .spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        column_gap: px(8),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    })
+                    .spawn((
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            column_gap: px(8),
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        ui_hierarchy_bundle(),
+                    ))
                     .with_children(|left| {
                         left.spawn((
                             Node {
@@ -542,13 +563,16 @@ pub(super) fn render_hotbar_legacy(
                             },
                             BackgroundColor(Color::srgba(0.10, 0.13, 0.18, 1.0)),
                             BorderColor::all(Color::srgba(0.34, 0.46, 0.62, 1.0)),
-                            children![text_bundle(
+                            ui_hierarchy_bundle(),
+                        ))
+                        .with_children(|group_badge| {
+                            group_badge.spawn(text_bundle(
                                 font,
                                 &format!("组 {}", hotbar_state.active_group + 1),
                                 9.8,
-                                Color::WHITE
-                            )],
-                        ));
+                                Color::WHITE,
+                            ));
+                        });
                         left.spawn((
                             Button,
                             Node {
@@ -574,6 +598,7 @@ pub(super) fn render_hotbar_legacy(
                             } else {
                                 Color::srgba(0.20, 0.20, 0.22, 1.0)
                             }),
+                            ui_hierarchy_bundle(),
                             GameUiButtonAction::EnterAttackTargeting,
                         ))
                         .with_children(|button| {
@@ -600,13 +625,16 @@ pub(super) fn render_hotbar_legacy(
                     Color::srgba(0.78, 0.83, 0.92, 1.0),
                 ));
             });
-            body.spawn(Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                column_gap: px(10),
-                align_items: AlignItems::FlexStart,
-                ..default()
-            })
+            body.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: px(10),
+                    align_items: AlignItems::FlexStart,
+                    ..default()
+                },
+                ui_hierarchy_bundle(),
+            ))
             .with_children(|content| {
                 content
                     .spawn((
@@ -620,6 +648,7 @@ pub(super) fn render_hotbar_legacy(
                         },
                         BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.98)),
                         BorderColor::all(Color::srgba(0.18, 0.21, 0.29, 1.0)),
+                        ui_hierarchy_bundle(),
                     ))
                     .with_children(|left| {
                         left.spawn(text_bundle(
@@ -628,13 +657,16 @@ pub(super) fn render_hotbar_legacy(
                             9.4,
                             Color::srgba(0.70, 0.75, 0.84, 1.0),
                         ));
-                        left.spawn(Node {
-                            width: Val::Percent(100.0),
-                            flex_direction: FlexDirection::Row,
-                            column_gap: px(6),
-                            flex_wrap: FlexWrap::Wrap,
-                            ..default()
-                        })
+                        left.spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                flex_direction: FlexDirection::Row,
+                                column_gap: px(6),
+                                flex_wrap: FlexWrap::Wrap,
+                                ..default()
+                            },
+                            ui_hierarchy_bundle(),
+                        ))
                         .with_children(|groups| {
                             for group_index in 0..hotbar_state.groups.len() {
                                 let is_selected = group_index == hotbar_state.active_group;
@@ -663,6 +695,7 @@ pub(super) fn render_hotbar_legacy(
                                         } else {
                                             Color::srgba(0.18, 0.25, 0.33, 1.0)
                                         }),
+                                        ui_hierarchy_bundle(),
                                         GameUiButtonAction::SelectHotbarGroup(group_index),
                                     ))
                                     .with_children(|button| {
@@ -700,12 +733,15 @@ pub(super) fn render_hotbar_legacy(
                     });
 
                 content
-                    .spawn(Node {
-                        flex_grow: 1.0,
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(8),
-                        ..default()
-                    })
+                    .spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            flex_direction: FlexDirection::Column,
+                            row_gap: px(8),
+                            ..default()
+                        },
+                        ui_hierarchy_bundle(),
+                    ))
                     .with_children(|main| {
                         render_hotbar_slots(
                             main,
@@ -715,22 +751,28 @@ pub(super) fn render_hotbar_legacy(
                             show_clear_controls,
                             selected_skill_id,
                         );
-                        main.spawn(Node {
-                            width: Val::Percent(100.0),
-                            flex_direction: FlexDirection::Row,
-                            justify_content: JustifyContent::SpaceBetween,
-                            align_items: AlignItems::Center,
-                            column_gap: px(8),
-                            ..default()
-                        })
+                        main.spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                flex_direction: FlexDirection::Row,
+                                justify_content: JustifyContent::SpaceBetween,
+                                align_items: AlignItems::Center,
+                                column_gap: px(8),
+                                ..default()
+                            },
+                            ui_hierarchy_bundle(),
+                        ))
                         .with_children(|footer| {
                             footer
-                                .spawn(Node {
-                                    flex_direction: FlexDirection::Row,
-                                    column_gap: px(6),
-                                    flex_wrap: FlexWrap::Wrap,
-                                    ..default()
-                                })
+                                .spawn((
+                                    Node {
+                                        flex_direction: FlexDirection::Row,
+                                        column_gap: px(6),
+                                        flex_wrap: FlexWrap::Wrap,
+                                        ..default()
+                                    },
+                                    ui_hierarchy_bundle(),
+                                ))
                                 .with_children(|tabs| {
                                     for panel in [
                                         UiMenuPanel::Inventory,
@@ -771,15 +813,6 @@ pub(super) fn render_hotbar(
     show_clear_controls: bool,
     selected_skill_id: Option<&str>,
 ) {
-    let binding_hint = selected_skill_id
-        .and_then(|skill_id| skills.get(skill_id).map(|skill| skill.name.as_str()))
-        .map(|skill_name| {
-            format!(
-                "绑定模式 · 已选 {}，点击底栏槽位可精确放入当前组",
-                skill_name
-            )
-        })
-        .unwrap_or_else(|| "数字键 1-0 激活当前组槽位".to_string());
     let attack_targeting_active = viewer_state
         .targeting_state
         .as_ref()
@@ -810,41 +843,47 @@ pub(super) fn render_hotbar(
                 width: px(HOTBAR_DOCK_WIDTH),
                 min_height: px(HOTBAR_DOCK_HEIGHT),
                 padding: UiRect {
-                    left: px(12),
-                    right: px(12),
-                    top: px(10),
-                    bottom: px(8),
+                    left: px(8),
+                    right: px(8),
+                    top: px(4),
+                    bottom: px(0),
                 },
-                flex_direction: FlexDirection::Column,
-                row_gap: px(8),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::FlexEnd,
                 border: UiRect::all(px(1)),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.03, 0.035, 0.05, 0.93)),
             BorderColor::all(Color::srgba(0.24, 0.28, 0.37, 1.0)),
         ))
-        .with_children(|body| {
-            body.spawn(Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                column_gap: px(10),
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|header| {
-                header
-                    .spawn(Node {
-                        width: px(HOTBAR_ACTION_WIDTH),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::FlexStart,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    })
+        .with_children(|row| {
+            row.spawn((
+                Node {
+                    flex_grow: 1.0,
+                    flex_basis: px(0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: px(4),
+                    justify_content: JustifyContent::FlexEnd,
+                    align_items: AlignItems::FlexEnd,
+                    ..default()
+                },
+                ui_hierarchy_bundle(),
+            ))
+            .with_children(|left_cluster| {
+                left_cluster
+                    .spawn((
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::FlexEnd,
+                            ..default()
+                        },
+                        ui_hierarchy_bundle(),
+                    ))
                     .with_children(|left| {
                         left.spawn((
                             Button,
                             Node {
-                                padding: UiRect::axes(px(10), px(5)),
+                                padding: UiRect::axes(px(8), px(4)),
                                 border: UiRect::all(px(if attack_targeting_active {
                                     2.0
                                 } else {
@@ -866,6 +905,7 @@ pub(super) fn render_hotbar(
                             } else {
                                 Color::srgba(0.20, 0.20, 0.22, 1.0)
                             }),
+                            ui_hierarchy_bundle(),
                             GameUiButtonAction::EnterAttackTargeting,
                         ))
                         .with_children(|button| {
@@ -876,7 +916,7 @@ pub(super) fn render_hotbar(
                                 } else {
                                     "普通攻击"
                                 },
-                                9.2,
+                                8.6,
                                 if attack_enabled {
                                     Color::WHITE
                                 } else {
@@ -885,96 +925,76 @@ pub(super) fn render_hotbar(
                             ));
                         });
                     });
-
-                header
+                left_cluster
                     .spawn((
                         Node {
-                            flex_grow: 1.0,
-                            padding: UiRect::axes(px(12), px(10)),
-                            flex_direction: FlexDirection::Column,
-                            justify_content: JustifyContent::Center,
-                            border: UiRect::all(px(1)),
+                            flex_direction: FlexDirection::Row,
+                            column_gap: px(4),
+                            justify_content: JustifyContent::FlexStart,
+                            align_items: AlignItems::FlexEnd,
                             ..default()
                         },
-                        BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.98)),
-                        BorderColor::all(Color::srgba(0.18, 0.21, 0.29, 1.0)),
+                        ui_hierarchy_bundle(),
                     ))
-                    .with_children(|stats_panel| {
-                        stats_panel.spawn(text_bundle(
-                            font,
-                            &binding_hint,
-                            9.0,
-                            Color::srgba(0.70, 0.75, 0.84, 1.0),
-                        ));
+                    .with_children(|tabs| {
+                        for panel in left_tabs {
+                            tabs.spawn(dock_tab_button(
+                                font,
+                                panel_tab_label(panel),
+                                menu_state.active_panel == Some(panel),
+                                GameUiButtonAction::TogglePanel(panel),
+                            ));
+                        }
                     });
             });
 
-            body.spawn(Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: px(8),
-                ..default()
-            })
-            .with_children(|row| {
-                row.spawn(Node {
-                    width: px(HOTBAR_LEFT_TABS_WIDTH),
+            row.spawn((
+                Node {
                     flex_direction: FlexDirection::Row,
-                    column_gap: px(6),
-                    justify_content: JustifyContent::FlexStart,
-                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::FlexEnd,
                     ..default()
-                })
-                .with_children(|tabs| {
-                    for panel in left_tabs {
-                        tabs.spawn(dock_tab_button(
-                            font,
-                            panel_tab_label(panel),
-                            menu_state.active_panel == Some(panel),
-                            GameUiButtonAction::TogglePanel(panel),
-                        ));
-                    }
-                });
+                },
+                ui_hierarchy_bundle(),
+            ))
+            .with_children(|slots_wrap| {
+                render_hotbar_slots(
+                    slots_wrap,
+                    font,
+                    hotbar_state,
+                    skills,
+                    show_clear_controls,
+                    selected_skill_id,
+                );
+            });
 
-                row.spawn(Node {
+            row.spawn((
+                Node {
                     flex_grow: 1.0,
-                    ..default()
-                })
-                .with_children(|slots_wrap| {
-                    render_hotbar_slots(
-                        slots_wrap,
-                        font,
-                        hotbar_state,
-                        skills,
-                        show_clear_controls,
-                        selected_skill_id,
-                    );
-                });
-
-                row.spawn(Node {
-                    width: px(HOTBAR_RIGHT_TABS_WIDTH),
+                    flex_basis: px(0),
                     flex_direction: FlexDirection::Row,
-                    column_gap: px(6),
-                    justify_content: JustifyContent::FlexEnd,
-                    align_items: AlignItems::Center,
+                    column_gap: px(4),
+                    justify_content: JustifyContent::FlexStart,
+                    align_items: AlignItems::FlexEnd,
                     ..default()
-                })
-                .with_children(|tabs| {
-                    for panel in right_tabs {
-                        tabs.spawn(dock_tab_button(
-                            font,
-                            panel_tab_label(panel),
-                            menu_state.active_panel == Some(panel),
-                            GameUiButtonAction::TogglePanel(panel),
-                        ));
-                    }
+                },
+                ui_hierarchy_bundle(),
+            ))
+            .with_children(|tabs| {
+                for panel in right_tabs {
                     tabs.spawn(dock_tab_button(
                         font,
-                        "关闭",
-                        menu_state.active_panel.is_none(),
-                        GameUiButtonAction::ClosePanels,
+                        panel_tab_label(panel),
+                        menu_state.active_panel == Some(panel),
+                        GameUiButtonAction::TogglePanel(panel),
                     ));
-                });
+                }
+                tabs.spawn(dock_tab_button(
+                    font,
+                    "关闭",
+                    menu_state.active_panel.is_none(),
+                    GameUiButtonAction::ClosePanels,
+                ));
             });
         });
 }

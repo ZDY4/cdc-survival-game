@@ -332,7 +332,9 @@ pub enum AiModuleValidationError {
     ConditionCycle { condition_id: String },
 }
 
-pub fn load_ai_module_library(path: impl AsRef<Path>) -> Result<AiModuleLibrary, AiModuleLoadError> {
+pub fn load_ai_module_library(
+    path: impl AsRef<Path>,
+) -> Result<AiModuleLibrary, AiModuleLoadError> {
     let root = path.as_ref();
     let mut library = AiModuleLibrary::default();
     load_module_dir(root.join("modules"), &mut library)?;
@@ -511,10 +513,7 @@ pub fn resolve_ai_behavior_profile(
     })
 }
 
-fn load_module_dir(
-    dir: PathBuf,
-    library: &mut AiModuleLibrary,
-) -> Result<(), AiModuleLoadError> {
+fn load_module_dir(dir: PathBuf, library: &mut AiModuleLibrary) -> Result<(), AiModuleLoadError> {
     if !dir.exists() {
         return Ok(());
     }
@@ -535,10 +534,7 @@ fn load_module_dir(
     Ok(())
 }
 
-fn load_behavior_dir(
-    dir: PathBuf,
-    library: &mut AiModuleLibrary,
-) -> Result<(), AiModuleLoadError> {
+fn load_behavior_dir(dir: PathBuf, library: &mut AiModuleLibrary) -> Result<(), AiModuleLoadError> {
     if !dir.exists() {
         return Ok(());
     }
@@ -577,7 +573,9 @@ fn merge_module_pack(
     insert_unique(
         "condition",
         &mut library.conditions,
-        pack.conditions.into_iter().map(|item| (item.id.clone(), item)),
+        pack.conditions
+            .into_iter()
+            .map(|item| (item.id.clone(), item)),
     )?;
     insert_unique(
         "fact",
@@ -587,7 +585,9 @@ fn merge_module_pack(
     insert_unique(
         "score_rule",
         &mut library.score_rules,
-        pack.score_rules.into_iter().map(|item| (item.id.clone(), item)),
+        pack.score_rules
+            .into_iter()
+            .map(|item| (item.id.clone(), item)),
     )?;
     insert_unique(
         "goal",
@@ -602,7 +602,9 @@ fn merge_module_pack(
     insert_unique(
         "executor",
         &mut library.executors,
-        pack.executors.into_iter().map(|item| (item.id.clone(), item)),
+        pack.executors
+            .into_iter()
+            .map(|item| (item.id.clone(), item)),
     )?;
     Ok(())
 }
@@ -660,12 +662,11 @@ fn validate_condition_tree(
                     condition_id: condition_id.as_str().to_string(),
                 });
             }
-            let referenced = library
-                .conditions
-                .get(condition_id)
-                .ok_or_else(|| AiModuleValidationError::MissingConditionReference {
+            let referenced = library.conditions.get(condition_id).ok_or_else(|| {
+                AiModuleValidationError::MissingConditionReference {
                     condition_id: condition_id.as_str().to_string(),
-                })?;
+                }
+            })?;
             validate_condition_tree(library, &referenced.condition, stack)?;
             stack.remove(condition_id);
         }
@@ -695,12 +696,11 @@ fn collect_condition_refs(
 ) -> Result<(), AiModuleValidationError> {
     match condition {
         AiConditionDefinition::ConditionRef { condition_id } => {
-            let definition = library
-                .conditions
-                .get(condition_id)
-                .ok_or_else(|| AiModuleValidationError::MissingConditionReference {
+            let definition = library.conditions.get(condition_id).ok_or_else(|| {
+                AiModuleValidationError::MissingConditionReference {
                     condition_id: condition_id.as_str().to_string(),
-                })?;
+                }
+            })?;
             ids.insert(condition_id.clone());
             collect_condition_refs(library, &definition.condition, ids)?;
         }
@@ -827,7 +827,8 @@ mod tests {
                 },
             },
         );
-        let error = validate_ai_module_library(&library).expect_err("missing condition should fail");
+        let error =
+            validate_ai_module_library(&library).expect_err("missing condition should fail");
         assert!(matches!(
             error,
             super::AiModuleValidationError::MissingConditionReference { .. }

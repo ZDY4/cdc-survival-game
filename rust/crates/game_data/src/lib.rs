@@ -20,13 +20,12 @@ use bevy_app::prelude::*;
 pub use ai::{
     load_ai_module_library, resolve_ai_behavior_profile, validate_ai_module_library,
     AiActionDefinition, AiActionId, AiAnchorBinding, AiBehaviorDefinition, AiBehaviorProfile,
-    AiBehaviorProfileRef, AiComparisonOperator, AiConditionalPlannerRequirements,
-    AiConditionDefinition, AiConditionId, AiConditionModuleDefinition,
-    AiExecutorBindingDefinition, AiExecutorBindingId, AiFactId, AiFactModuleDefinition,
-    AiGoalDefinition, AiGoalId, AiModuleLibrary, AiModuleLoadError, AiModulePack,
-    AiModuleValidationError, AiNeedEffectDefinition, AiPlannerDatumAssignment,
-    AiReservationBinding, AiScoreRuleDefinition, AiScoreRuleId, AiWorldStateEffectDefinition,
-    BuiltinAiExecutorKind,
+    AiBehaviorProfileRef, AiComparisonOperator, AiConditionDefinition, AiConditionId,
+    AiConditionModuleDefinition, AiConditionalPlannerRequirements, AiExecutorBindingDefinition,
+    AiExecutorBindingId, AiFactId, AiFactModuleDefinition, AiGoalDefinition, AiGoalId,
+    AiModuleLibrary, AiModuleLoadError, AiModulePack, AiModuleValidationError,
+    AiNeedEffectDefinition, AiPlannerDatumAssignment, AiReservationBinding, AiScoreRuleDefinition,
+    AiScoreRuleId, AiWorldStateEffectDefinition, BuiltinAiExecutorKind,
 };
 pub use ai_content::{validate_ai_content, AiContentIssue, AiContentIssueSeverity};
 pub use character::{

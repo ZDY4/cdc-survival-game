@@ -11,17 +11,16 @@ use game_data::{
     InteractionExecutionRequest, ItemLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, WorldMode,
 };
 use game_protocol::{
-    ActorSnapshot, AdvanceOverworldTravelRequest, BuyItemRequest, ClientMessage,
-    CraftRecipeRequest, DialogueAdvanceRequest, EnterLocationRequest, EquipItemRequest,
-    ItemEquippedPayload, ItemUnequippedPayload, LearnSkillRequest, MapTravelRequest,
-    OverworldRouteRequest, ProtocolActorVisionMapSnapshot, ProtocolActorVisionSnapshot,
-    ProtocolError, ProtocolLocationTransitionContext, ProtocolOverworldRouteSnapshot,
-    ProtocolOverworldStateSnapshot, ProtocolOverworldTravelState, ProtocolVisionRuntimeSnapshot,
-    QuestStartedPayload, RecipeCraftedPayload, ReloadEquippedWeaponRequest,
-    ReturnToOverworldRequest, RuntimeEventEnvelope, RuntimeSnapshotLoadRequest,
-    RuntimeSnapshotPayload, RuntimeSnapshotSaveRequest, SceneTransitionNotice, SellItemRequest,
-    ServerMessage, SkillLearnedPayload, StartQuestRequest, TradeResolvedPayload,
-    UnequipItemRequest, WeaponReloadedPayload, WorldSnapshotEnvelope,
+    ActorSnapshot, BuyItemRequest, ClientMessage, CraftRecipeRequest, DialogueAdvanceRequest,
+    EnterLocationRequest, EquipItemRequest, ItemEquippedPayload, ItemUnequippedPayload,
+    LearnSkillRequest, MapTravelRequest, ProtocolActorVisionMapSnapshot,
+    ProtocolActorVisionSnapshot, ProtocolError, ProtocolLocationTransitionContext,
+    ProtocolOverworldStateSnapshot, ProtocolVisionRuntimeSnapshot, QuestStartedPayload,
+    RecipeCraftedPayload, ReloadEquippedWeaponRequest, ReturnToOverworldRequest,
+    RuntimeEventEnvelope, RuntimeSnapshotLoadRequest, RuntimeSnapshotPayload,
+    RuntimeSnapshotSaveRequest, SceneTransitionNotice, SellItemRequest, ServerMessage,
+    SkillLearnedPayload, StartQuestRequest, TradeResolvedPayload, UnequipItemRequest,
+    WeaponReloadedPayload, WorldSnapshotEnvelope,
 };
 use serde_json::json;
 
@@ -34,10 +33,9 @@ mod projections;
 mod subscriptions;
 
 use dispatch::{
-    advance_dialogue, advance_overworld_travel, buy_item, craft_recipe, enter_location, equip_item,
-    execute_interaction, learn_skill, load_runtime_snapshot, reload_equipped_weapon,
-    request_overworld_route, return_to_overworld, save_runtime_snapshot, sell_item,
-    start_overworld_travel, start_quest, travel_to_map, unequip_item,
+    advance_dialogue, buy_item, craft_recipe, enter_location, equip_item, execute_interaction,
+    learn_skill, load_runtime_snapshot, reload_equipped_weapon, return_to_overworld,
+    save_runtime_snapshot, sell_item, start_quest, travel_to_map, unequip_item,
 };
 use errors::protocol_error;
 use projections::{protocol_overworld_state, runtime_snapshot_envelope, world_snapshot_message};
@@ -153,11 +151,6 @@ pub fn handle_client_message_with_definitions(
         }
         ClientMessage::ExecuteInteraction(request) => execute_interaction(runtime, request),
         ClientMessage::AdvanceDialogue(request) => advance_dialogue(runtime, request),
-        ClientMessage::RequestOverworldRoute(request) => request_overworld_route(runtime, request),
-        ClientMessage::StartOverworldTravel(request) => start_overworld_travel(runtime, request),
-        ClientMessage::AdvanceOverworldTravel(request) => {
-            advance_overworld_travel(runtime, request)
-        }
         ClientMessage::TravelToMap(request) => travel_to_map(runtime, request),
         ClientMessage::EnterLocation(request) => enter_location(runtime, request),
         ClientMessage::ReturnToOverworld(request) => return_to_overworld(runtime, request),
@@ -294,7 +287,7 @@ fn normalize_snapshot_id(snapshot_id: Option<String>) -> Option<String> {
 fn world_mode_name(world_mode: WorldMode) -> &'static str {
     match world_mode {
         WorldMode::Overworld => "overworld",
-        WorldMode::Traveling => "traveling",
+        WorldMode::Traveling => "traveling_legacy",
         WorldMode::Outdoor => "outdoor",
         WorldMode::Interior => "interior",
         WorldMode::Dungeon => "dungeon",
@@ -614,62 +607,6 @@ fn runtime_event_envelope(sequence: u64, event: SimulationEvent) -> RuntimeEvent
                 "entryPointId": entry_point_id,
                 "returnLocationId": return_location_id
             }),
-            ..RuntimeEventEnvelope::default()
-        },
-        SimulationEvent::OverworldRouteComputed {
-            actor_id,
-            target_location_id,
-            travel_minutes,
-            path_length,
-        } => RuntimeEventEnvelope {
-            sequence,
-            event_type: "overworld_route_computed".into(),
-            actor_id: Some(actor_id),
-            payload: json!({
-                "targetLocationId": target_location_id,
-                "travelMinutes": travel_minutes,
-                "pathLength": path_length
-            }),
-            ..RuntimeEventEnvelope::default()
-        },
-        SimulationEvent::OverworldTravelStarted {
-            actor_id,
-            target_location_id,
-            travel_minutes,
-        } => RuntimeEventEnvelope {
-            sequence,
-            event_type: "overworld_travel_started".into(),
-            actor_id: Some(actor_id),
-            payload: json!({
-                "targetLocationId": target_location_id,
-                "travelMinutes": travel_minutes
-            }),
-            ..RuntimeEventEnvelope::default()
-        },
-        SimulationEvent::OverworldTravelProgressed {
-            actor_id,
-            target_location_id,
-            progressed_minutes,
-            remaining_minutes,
-        } => RuntimeEventEnvelope {
-            sequence,
-            event_type: "overworld_travel_progressed".into(),
-            actor_id: Some(actor_id),
-            payload: json!({
-                "targetLocationId": target_location_id,
-                "progressedMinutes": progressed_minutes,
-                "remainingMinutes": remaining_minutes
-            }),
-            ..RuntimeEventEnvelope::default()
-        },
-        SimulationEvent::OverworldTravelCompleted {
-            actor_id,
-            target_location_id,
-        } => RuntimeEventEnvelope {
-            sequence,
-            event_type: "overworld_travel_completed".into(),
-            actor_id: Some(actor_id),
-            payload: json!({ "targetLocationId": target_location_id }),
             ..RuntimeEventEnvelope::default()
         },
         SimulationEvent::LocationEntered {

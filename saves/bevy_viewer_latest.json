@@ -362,16 +362,114 @@
       "base_map_cells": [
         {
           "grid": {
-            "x": 9,
+            "x": 33,
+            "y": 0,
+            "z": 33
+          },
+          "cell": {
+            "x": 33,
+            "z": 33,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "workshop_crates"
+          }
+        },
+        {
+          "grid": {
+            "x": 40,
+            "y": 1,
+            "z": 32
+          },
+          "cell": {
+            "x": 40,
+            "z": 32,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "watchtower_railing"
+          }
+        },
+        {
+          "grid": {
+            "x": 32,
+            "y": 0,
+            "z": 33
+          },
+          "cell": {
+            "x": 32,
+            "z": 33,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "workshop_crates"
+          }
+        },
+        {
+          "grid": {
+            "x": 35,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 35,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "storage_stack"
+          }
+        },
+        {
+          "grid": {
+            "x": 34,
             "y": 0,
             "z": 8
           },
           "cell": {
-            "x": 9,
+            "x": 34,
             "z": 8,
             "blocks_movement": true,
             "blocks_sight": true,
-            "terrain": "dorm_wall"
+            "terrain": "clinic_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 26,
+            "y": 0,
+            "z": 38
+          },
+          "cell": {
+            "x": 26,
+            "z": 38,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "outer_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 11,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 11,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "canteen_counter"
+          }
+        },
+        {
+          "grid": {
+            "x": 21,
+            "y": 0,
+            "z": 38
+          },
+          "cell": {
+            "x": 21,
+            "z": 38,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "outer_wall"
           }
         },
         {
@@ -386,6 +484,160 @@
             "blocks_movement": true,
             "blocks_sight": true,
             "terrain": "watchtower_railing"
+          }
+        },
+        {
+          "grid": {
+            "x": 27,
+            "y": 0,
+            "z": 38
+          },
+          "cell": {
+            "x": 27,
+            "z": 38,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "outer_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 31,
+            "y": 0,
+            "z": 33
+          },
+          "cell": {
+            "x": 31,
+            "z": 33,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "workshop_crates"
+          }
+        },
+        {
+          "grid": {
+            "x": 31,
+            "y": 0,
+            "z": 8
+          },
+          "cell": {
+            "x": 31,
+            "z": 8,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "clinic_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 35,
+            "y": 0,
+            "z": 8
+          },
+          "cell": {
+            "x": 35,
+            "z": 8,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "clinic_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 32,
+            "y": 0,
+            "z": 8
+          },
+          "cell": {
+            "x": 32,
+            "z": 8,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "clinic_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 37,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 37,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "storage_stack"
+          }
+        },
+        {
+          "grid": {
+            "x": 41,
+            "y": 1,
+            "z": 31
+          },
+          "cell": {
+            "x": 41,
+            "z": 31,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "watchtower_railing"
+          }
+        },
+        {
+          "grid": {
+            "x": 9,
+            "y": 0,
+            "z": 8
+          },
+          "cell": {
+            "x": 9,
+            "z": 8,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "dorm_wall"
+          }
+        },
+        {
+          "grid": {
+            "x": 33,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 33,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "storage_stack"
+          }
+        },
+        {
+          "grid": {
+            "x": 10,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 10,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "canteen_counter"
+          }
+        },
+        {
+          "grid": {
+            "x": 20,
+            "y": 0,
+            "z": 38
+          },
+          "cell": {
+            "x": 20,
+            "z": 38,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "outer_wall"
           }
         },
         {
@@ -406,216 +658,6 @@
           "grid": {
             "x": 26,
             "y": 0,
-            "z": 38
-          },
-          "cell": {
-            "x": 26,
-            "z": 38,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "outer_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 40,
-            "y": 1,
-            "z": 32
-          },
-          "cell": {
-            "x": 40,
-            "z": 32,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "watchtower_railing"
-          }
-        },
-        {
-          "grid": {
-            "x": 41,
-            "y": 1,
-            "z": 31
-          },
-          "cell": {
-            "x": 41,
-            "z": 31,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "watchtower_railing"
-          }
-        },
-        {
-          "grid": {
-            "x": 32,
-            "y": 0,
-            "z": 8
-          },
-          "cell": {
-            "x": 32,
-            "z": 8,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 34,
-            "y": 0,
-            "z": 8
-          },
-          "cell": {
-            "x": 34,
-            "z": 8,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 11,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 11,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "canteen_counter"
-          }
-        },
-        {
-          "grid": {
-            "x": 35,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 35,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "storage_stack"
-          }
-        },
-        {
-          "grid": {
-            "x": 11,
-            "y": 0,
-            "z": 8
-          },
-          "cell": {
-            "x": 11,
-            "z": 8,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "dorm_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 21,
-            "y": 0,
-            "z": 38
-          },
-          "cell": {
-            "x": 21,
-            "z": 38,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "outer_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 10,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 10,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "canteen_counter"
-          }
-        },
-        {
-          "grid": {
-            "x": 37,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 37,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "storage_stack"
-          }
-        },
-        {
-          "grid": {
-            "x": 22,
-            "y": 0,
-            "z": 31
-          },
-          "cell": {
-            "x": 22,
-            "z": 31,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "inner_barricade"
-          }
-        },
-        {
-          "grid": {
-            "x": 25,
-            "y": 0,
-            "z": 31
-          },
-          "cell": {
-            "x": 25,
-            "z": 31,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "inner_barricade"
-          }
-        },
-        {
-          "grid": {
-            "x": 34,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 34,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "storage_stack"
-          }
-        },
-        {
-          "grid": {
-            "x": 33,
-            "y": 0,
-            "z": 33
-          },
-          "cell": {
-            "x": 33,
-            "z": 33,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "workshop_crates"
-          }
-        },
-        {
-          "grid": {
-            "x": 26,
-            "y": 0,
             "z": 37
           },
           "cell": {
@@ -628,72 +670,16 @@
         },
         {
           "grid": {
-            "x": 20,
+            "x": 34,
             "y": 0,
-            "z": 38
+            "z": 22
           },
           "cell": {
-            "x": 20,
-            "z": 38,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "outer_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 35,
-            "y": 0,
-            "z": 8
-          },
-          "cell": {
-            "x": 35,
-            "z": 8,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 21,
-            "y": 0,
-            "z": 37
-          },
-          "cell": {
-            "x": 21,
-            "z": 37,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "gate_pillar"
-          }
-        },
-        {
-          "grid": {
-            "x": 27,
-            "y": 0,
-            "z": 38
-          },
-          "cell": {
-            "x": 27,
-            "z": 38,
-            "blocks_movement": true,
-            "blocks_sight": true,
-            "terrain": "outer_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 32,
-            "y": 0,
-            "z": 33
-          },
-          "cell": {
-            "x": 32,
-            "z": 33,
+            "x": 34,
+            "z": 22,
             "blocks_movement": true,
             "blocks_sight": false,
-            "terrain": "workshop_crates"
+            "terrain": "storage_stack"
           }
         },
         {
@@ -712,16 +698,44 @@
         },
         {
           "grid": {
-            "x": 31,
+            "x": 25,
             "y": 0,
-            "z": 33
+            "z": 31
           },
           "cell": {
-            "x": 31,
-            "z": 33,
+            "x": 25,
+            "z": 31,
             "blocks_movement": true,
             "blocks_sight": false,
-            "terrain": "workshop_crates"
+            "terrain": "inner_barricade"
+          }
+        },
+        {
+          "grid": {
+            "x": 22,
+            "y": 0,
+            "z": 31
+          },
+          "cell": {
+            "x": 22,
+            "z": 31,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "inner_barricade"
+          }
+        },
+        {
+          "grid": {
+            "x": 36,
+            "y": 0,
+            "z": 22
+          },
+          "cell": {
+            "x": 36,
+            "z": 22,
+            "blocks_movement": true,
+            "blocks_sight": false,
+            "terrain": "storage_stack"
           }
         },
         {
@@ -754,44 +768,30 @@
         },
         {
           "grid": {
-            "x": 31,
+            "x": 21,
+            "y": 0,
+            "z": 37
+          },
+          "cell": {
+            "x": 21,
+            "z": 37,
+            "blocks_movement": true,
+            "blocks_sight": true,
+            "terrain": "gate_pillar"
+          }
+        },
+        {
+          "grid": {
+            "x": 11,
             "y": 0,
             "z": 8
           },
           "cell": {
-            "x": 31,
+            "x": 11,
             "z": 8,
             "blocks_movement": true,
             "blocks_sight": true,
-            "terrain": "clinic_wall"
-          }
-        },
-        {
-          "grid": {
-            "x": 33,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 33,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "storage_stack"
-          }
-        },
-        {
-          "grid": {
-            "x": 36,
-            "y": 0,
-            "z": 22
-          },
-          "cell": {
-            "x": 36,
-            "z": 22,
-            "blocks_movement": true,
-            "blocks_sight": false,
-            "terrain": "storage_stack"
+            "terrain": "dorm_wall"
           }
         }
       ],

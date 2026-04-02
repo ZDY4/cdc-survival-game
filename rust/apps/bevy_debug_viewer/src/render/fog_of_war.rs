@@ -1,3 +1,5 @@
+//! 战争迷雾后处理模块：负责战争迷雾 mask 纹理、后处理管线和可见区域快照构建。
+
 use super::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::core_pipeline::{
@@ -321,21 +323,21 @@ pub(super) fn update_fog_of_war_mask_image(
 pub(crate) fn tick_fog_of_war_transition(
     time: Res<Time>,
     render_config: Res<ViewerRenderConfig>,
-    mut fog_state: ResMut<FogOfWarMaskState>,
+    mut fog_of_war_state: ResMut<FogOfWarMaskState>,
 ) {
-    if fog_state.key.is_none() {
+    if fog_of_war_state.key.is_none() {
         return;
     }
 
     let duration = render_config.fow_transition_duration_sec.max(0.0);
-    fog_state.transition_elapsed_sec =
-        (fog_state.transition_elapsed_sec + time.delta_secs()).min(duration);
+    fog_of_war_state.transition_elapsed_sec =
+        (fog_of_war_state.transition_elapsed_sec + time.delta_secs()).min(duration);
 }
 
 pub(crate) fn sync_fog_of_war_post_process_camera(
     scene_kind: Res<ViewerSceneKind>,
     render_config: Res<ViewerRenderConfig>,
-    fog_state: Res<FogOfWarMaskState>,
+    fog_of_war_state: Res<FogOfWarMaskState>,
     camera_query: Single<
         (
             &mut FogOfWarPostProcessSettings,
@@ -347,24 +349,24 @@ pub(crate) fn sync_fog_of_war_post_process_camera(
     >,
 ) {
     let (mut settings, mut textures, projection, transform) = camera_query.into_inner();
-    textures.current_mask = fog_state.current_mask.clone();
-    textures.previous_mask = fog_state.previous_mask.clone();
+    textures.current_mask = fog_of_war_state.current_mask.clone();
+    textures.previous_mask = fog_of_war_state.previous_mask.clone();
 
     let duration = render_config.fow_transition_duration_sec.max(0.0);
     let transition_progress = if duration <= f32::EPSILON {
         1.0
     } else {
-        (fog_state.transition_elapsed_sec / duration).clamp(0.0, 1.0)
+        (fog_of_war_state.transition_elapsed_sec / duration).clamp(0.0, 1.0)
     };
 
     let clip_from_view = projection.get_clip_from_view();
     let world_from_view = transform.to_matrix();
     let world_from_clip = world_from_view * clip_from_view.inverse();
-    let fog_enabled = !scene_kind.is_main_menu() && fog_state.key.is_some();
+    let fog_of_war_enabled = !scene_kind.is_main_menu() && fog_of_war_state.key.is_some();
 
     *settings = FogOfWarPostProcessSettings {
         effect_params: Vec4::new(
-            if fog_enabled { 1.0 } else { 0.0 },
+            if fog_of_war_enabled { 1.0 } else { 0.0 },
             transition_progress,
             render_config.fow_explored_alpha.clamp(0.0, 1.0),
             render_config.fow_unexplored_alpha.clamp(0.0, 1.0),
@@ -376,9 +378,9 @@ pub(crate) fn sync_fog_of_war_post_process_camera(
             0.0,
         ),
         fog_color: render_config.fow_fog_color.to_linear().to_vec4(),
-        map_min_world_xz: fog_state.map_min_world_xz,
-        map_size_world_xz: fog_state.map_size_world_xz,
-        mask_texel_size: fog_state.mask_texel_size,
+        map_min_world_xz: fog_of_war_state.map_min_world_xz,
+        map_size_world_xz: fog_of_war_state.map_size_world_xz,
+        mask_texel_size: fog_of_war_state.mask_texel_size,
         _padding: Vec2::ZERO,
         world_from_clip,
     };
@@ -678,14 +680,14 @@ mod tests {
         state.key = first_mask.key.clone();
         state.transition_elapsed_sec = 0.18;
 
-        let next_mask = build_fog_of_war_mask_snapshot(&second, &viewer_state, false);
+        let next_fog_of_war_mask = build_fog_of_war_mask_snapshot(&second, &viewer_state, false);
         state.previous_bytes = state.current_bytes.clone();
-        state.current_bytes = next_mask.bytes.clone();
-        state.key = next_mask.key.clone();
+        state.current_bytes = next_fog_of_war_mask.bytes.clone();
+        state.key = next_fog_of_war_mask.key.clone();
         state.transition_elapsed_sec = 0.0;
 
         assert_eq!(state.previous_bytes, first_mask.bytes);
-        assert_eq!(state.current_bytes, next_mask.bytes);
+        assert_eq!(state.current_bytes, next_fog_of_war_mask.bytes);
         assert_eq!(state.transition_elapsed_sec, 0.0);
     }
 

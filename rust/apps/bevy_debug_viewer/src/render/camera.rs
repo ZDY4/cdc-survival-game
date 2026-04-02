@@ -1,3 +1,5 @@
+//! Viewer 相机与基础场景入口：负责相机、灯光、UI 根节点初始化以及相机跟随更新。
+
 use super::*;
 use bevy::core_pipeline::prepass::DepthPrepass;
 
@@ -159,26 +161,29 @@ pub(crate) fn setup_viewer(
         FpsOverlayText,
         UiMouseBlocker,
     ));
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(10),
-            left: px(0),
-            right: px(0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        Visibility::Hidden,
-        FocusPolicy::Block,
-        RelativeCursorPosition::default(),
-        FreeObserveIndicatorRoot,
-        UiMouseBlocker,
-        children![(
-            Text::new("自由观察模式"),
-            TextFont::from_font_size(11.0).with_font(ui_font.clone()),
-            TextColor(Color::srgba(1.0, 1.0, 1.0, 0.95)),
-        )],
-    ));
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(10),
+                left: px(0),
+                right: px(0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            Visibility::Hidden,
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
+            FreeObserveIndicatorRoot,
+            UiMouseBlocker,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("自由观察模式"),
+                TextFont::from_font_size(11.0).with_font(ui_font.clone()),
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.95)),
+            ));
+        });
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,

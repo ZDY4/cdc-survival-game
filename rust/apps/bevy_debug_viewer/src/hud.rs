@@ -1,3 +1,5 @@
+//! 左侧调试 HUD 模块：负责调试页签、正文内容和 viewer 运行时调试信息的组织。
+
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use game_bevy::SettlementDebugEntry;
@@ -746,11 +748,11 @@ fn format_controls_help() -> String {
         "Controls",
         vec![
             "F1-F7 switch HUD page".to_string(),
-            "Ctrl+P toggle player control / free observe".to_string(),
             "H toggle HUD".to_string(),
             "/ toggle detailed help".to_string(),
             "~ toggle debug console".to_string(),
             "Console command: show fps toggles top-right FPS overlay".to_string(),
+            "Console command: ob mode toggles player control / free observe".to_string(),
             "V cycles overlay density (minimal / gameplay / AI debug)".to_string(),
             "[ / ] switch event filter on Events page".to_string(),
             "Left click cancels auto-move, selects actor, advances dialogue, or moves".to_string(),

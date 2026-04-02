@@ -4,8 +4,8 @@ use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::*;
 use game_core::SimulationRuntime;
 use game_data::{
-    ActorId, ActorSide, InteractionContextSnapshot, InteractionPrompt, ItemDefinition,
-    ItemFragment, ItemLibrary, OverworldLibrary, OverworldLocationDefinition,
+    ActorId, ActorSide, GridCoord, InteractionContextSnapshot, InteractionPrompt, ItemDefinition,
+    ItemFragment, ItemLibrary, OverworldDefinition, OverworldLibrary, OverworldLocationDefinition,
     OverworldLocationKind, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary,
     SkillTreeLibrary, WorldMode,
 };
@@ -391,14 +391,20 @@ pub struct UiMapLocationView {
     pub kind: String,
     pub unlocked: bool,
     pub current: bool,
-    pub travel_minutes: Option<u32>,
-    pub food_cost: Option<i32>,
-    pub risk_level: Option<f32>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UiMapSnapshot {
     pub locations: Vec<UiMapLocationView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UiOverworldLocationPromptSnapshot {
+    pub visible: bool,
+    pub location_id: String,
+    pub location_name: String,
+    pub grid: GridCoord,
+    pub enter_label: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -440,8 +446,8 @@ pub fn world_status_snapshot(context: &InteractionContextSnapshot) -> UiWorldSta
             true,
         ),
         WorldMode::Traveling => (
-            "切换中".to_string(),
-            "正在切换到目标世界模式".to_string(),
+            "无效状态".to_string(),
+            "旧版 traveling 状态已不再支持".to_string(),
             true,
         ),
         WorldMode::Outdoor | WorldMode::Interior | WorldMode::Dungeon => (
@@ -714,8 +720,8 @@ pub fn crafting_snapshot(
 }
 
 pub fn map_snapshot(
-    runtime: &mut SimulationRuntime,
-    actor_id: ActorId,
+    runtime: &SimulationRuntime,
+    _actor_id: ActorId,
     overworld: &OverworldLibrary,
 ) -> UiMapSnapshot {
     let current = runtime.current_overworld_state();
@@ -734,8 +740,6 @@ pub fn map_snapshot(
         .iter()
         .map(|location| {
             map_location_view(
-                runtime,
-                actor_id,
                 location,
                 unlocked.contains(location.id.as_str()),
                 &current.active_outdoor_location_id,
@@ -746,21 +750,63 @@ pub fn map_snapshot(
     UiMapSnapshot { locations }
 }
 
-fn map_location_view(
-    runtime: &mut SimulationRuntime,
+pub fn overworld_location_prompt_snapshot(
+    runtime: &SimulationRuntime,
     actor_id: ActorId,
+    overworld: &OverworldLibrary,
+) -> UiOverworldLocationPromptSnapshot {
+    let hidden = UiOverworldLocationPromptSnapshot {
+        enter_label: "进入".to_string(),
+        ..UiOverworldLocationPromptSnapshot::default()
+    };
+    if runtime.current_interaction_context().world_mode != WorldMode::Overworld {
+        return hidden;
+    }
+    if runtime.pending_movement().is_some() {
+        return hidden;
+    }
+
+    let Some(actor_grid) = runtime.get_actor_grid_position(actor_id) else {
+        return hidden;
+    };
+    let Some(arrival) = runtime.recent_overworld_arrival() else {
+        return hidden;
+    };
+    if arrival.actor_id != actor_id
+        || !arrival.arrived_exactly
+        || arrival.requested_goal != actor_grid
+        || arrival.final_position != actor_grid
+    {
+        return hidden;
+    }
+
+    let Some(location_id) = runtime.overworld_outdoor_location_id_at(actor_grid) else {
+        return hidden;
+    };
+    let Some(definition) = active_overworld_definition(runtime, overworld) else {
+        return hidden;
+    };
+    let Some(location) = definition.locations.iter().find(|location| {
+        location.kind == OverworldLocationKind::Outdoor
+            && location.id.as_str() == location_id.as_str()
+    }) else {
+        return hidden;
+    };
+
+    UiOverworldLocationPromptSnapshot {
+        visible: true,
+        location_id,
+        location_name: location.name.clone(),
+        grid: actor_grid,
+        enter_label: "进入".to_string(),
+    }
+}
+
+fn map_location_view(
     location: &OverworldLocationDefinition,
     unlocked: bool,
     active_outdoor_location_id: &Option<String>,
 ) -> UiMapLocationView {
-    let preview = if unlocked {
-        runtime
-            .request_overworld_route(actor_id, location.id.as_str())
-            .ok()
-    } else {
-        None
-    };
-
     UiMapLocationView {
         location_id: location.id.as_str().to_string(),
         name: location.name.clone(),
@@ -771,9 +817,21 @@ fn map_location_view(
         },
         unlocked,
         current: active_outdoor_location_id.as_deref() == Some(location.id.as_str()),
-        travel_minutes: preview.as_ref().map(|route| route.travel_minutes),
-        food_cost: preview.as_ref().map(|route| route.food_cost),
-        risk_level: preview.as_ref().map(|route| route.risk_level),
+    }
+}
+
+fn active_overworld_definition<'a>(
+    runtime: &SimulationRuntime,
+    overworld: &'a OverworldLibrary,
+) -> Option<&'a OverworldDefinition> {
+    let current = runtime.current_overworld_state();
+    if let Some(overworld_id) = current.overworld_id.as_deref() {
+        overworld
+            .iter()
+            .find(|(id, _)| id.as_str() == overworld_id)
+            .map(|(_, definition)| definition)
+    } else {
+        overworld.iter().next().map(|(_, definition)| definition)
     }
 }
 
@@ -946,4 +1004,179 @@ pub fn item_usable(definition: &ItemDefinition) -> bool {
         .fragments
         .iter()
         .any(|fragment| matches!(fragment, ItemFragment::Usable { .. }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{overworld_location_prompt_snapshot, UiOverworldLocationPromptSnapshot};
+    use game_core::SimulationRuntime;
+    use game_data::{
+        ActorId, ActorSide, CharacterId, GridCoord, MapDefinition, MapEntryPointDefinition, MapId,
+        MapLevelDefinition, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
+        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTravelRuleSet, WorldMode,
+    };
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn overworld_prompt_snapshot_is_visible_after_exact_trigger_arrival() {
+        let (mut runtime, player, overworld) = sample_overworld_prompt_runtime();
+        runtime
+            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .expect("move should succeed");
+
+        let snapshot = overworld_location_prompt_snapshot(&runtime, player, &overworld);
+
+        assert_eq!(
+            snapshot,
+            UiOverworldLocationPromptSnapshot {
+                visible: true,
+                location_id: "prompt_outpost".to_string(),
+                location_name: "Prompt Outpost".to_string(),
+                grid: GridCoord::new(1, 0, 0),
+                enter_label: "进入".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn overworld_prompt_snapshot_stays_hidden_while_pending_movement_crosses_trigger() {
+        let (mut runtime, player, overworld) = sample_overworld_prompt_runtime();
+        runtime.submit_command(game_core::SimulationCommand::SetActorAp {
+            actor_id: player,
+            ap: 1.0,
+        });
+        runtime
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
+            .expect("move should start");
+
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(1, 0, 0))
+        );
+        assert!(runtime.pending_movement().is_some());
+        assert_eq!(
+            overworld_location_prompt_snapshot(&runtime, player, &overworld),
+            UiOverworldLocationPromptSnapshot {
+                enter_label: "进入".to_string(),
+                ..UiOverworldLocationPromptSnapshot::default()
+            }
+        );
+    }
+
+    #[test]
+    fn overworld_prompt_snapshot_hides_after_entering_location() {
+        let (mut runtime, player, overworld) = sample_overworld_prompt_runtime();
+        runtime
+            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .expect("move should succeed");
+        runtime.submit_command(game_core::SimulationCommand::SetActorAp {
+            actor_id: player,
+            ap: 1.0,
+        });
+        runtime
+            .enter_location(player, "prompt_outpost", None)
+            .expect("enter should succeed");
+
+        let snapshot = overworld_location_prompt_snapshot(&runtime, player, &overworld);
+
+        assert!(!snapshot.visible);
+    }
+
+    fn sample_overworld_prompt_runtime() -> (SimulationRuntime, ActorId, OverworldLibrary) {
+        let overworld = sample_overworld_prompt_library();
+        let mut runtime = SimulationRuntime::new();
+        runtime.set_map_library(sample_overworld_prompt_map_library());
+        runtime.set_overworld_library(overworld.clone());
+        runtime
+            .seed_overworld_state(
+                WorldMode::Overworld,
+                Some("prompt_outpost".into()),
+                None,
+                ["prompt_outpost".into()],
+            )
+            .expect("overworld state should seed");
+        let actor_id = runtime.register_actor(game_core::RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: game_data::ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        runtime.submit_command(game_core::SimulationCommand::SetActorAp { actor_id, ap: 3.0 });
+        (runtime, actor_id, overworld)
+    }
+
+    fn sample_overworld_prompt_map_library() -> game_data::MapLibrary {
+        game_data::MapLibrary::from(BTreeMap::from([(
+            MapId("prompt_outpost_map".into()),
+            MapDefinition {
+                id: MapId("prompt_outpost_map".into()),
+                name: "Prompt Outpost".into(),
+                size: MapSize {
+                    width: 8,
+                    height: 8,
+                },
+                default_level: 0,
+                levels: vec![MapLevelDefinition {
+                    y: 0,
+                    cells: Vec::new(),
+                }],
+                entry_points: vec![MapEntryPointDefinition {
+                    id: "default_entry".into(),
+                    grid: GridCoord::new(1, 0, 1),
+                    facing: None,
+                    extra: BTreeMap::new(),
+                }],
+                objects: Vec::new(),
+            },
+        )]))
+    }
+
+    fn sample_overworld_prompt_library() -> OverworldLibrary {
+        OverworldLibrary::from(BTreeMap::from([(
+            OverworldId("prompt_world".into()),
+            OverworldDefinition {
+                id: OverworldId("prompt_world".into()),
+                locations: vec![OverworldLocationDefinition {
+                    id: OverworldLocationId("prompt_outpost".into()),
+                    name: "Prompt Outpost".into(),
+                    description: String::new(),
+                    kind: OverworldLocationKind::Outdoor,
+                    map_id: MapId("prompt_outpost_map".into()),
+                    entry_point_id: "default_entry".into(),
+                    parent_outdoor_location_id: None,
+                    return_entry_point_id: None,
+                    default_unlocked: true,
+                    visible: true,
+                    overworld_cell: GridCoord::new(1, 0, 0),
+                    danger_level: 0,
+                    icon: String::new(),
+                    extra: BTreeMap::new(),
+                }],
+                walkable_cells: vec![
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(0, 0, 0),
+                        terrain: "road".into(),
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(1, 0, 0),
+                        terrain: "road".into(),
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(2, 0, 0),
+                        terrain: "road".into(),
+                        extra: BTreeMap::new(),
+                    },
+                ],
+                travel_rules: OverworldTravelRuleSet::default(),
+            },
+        )]))
+    }
 }

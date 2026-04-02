@@ -1,3 +1,5 @@
+//! UI 通用组件与格式化 helper：负责文本、按钮、详情展示结构和共享渲染辅助。
+
 use super::*;
 
 pub(super) fn clear_ui_children(commands: &mut Commands, children: Option<&Children>) {
@@ -6,6 +8,14 @@ pub(super) fn clear_ui_children(commands: &mut Commands, children: Option<&Child
             commands.entity(child).despawn();
         }
     }
+}
+
+pub(super) fn ui_hierarchy_bundle() -> impl Bundle {
+    (
+        Visibility::Inherited,
+        InheritedVisibility::VISIBLE,
+        ViewVisibility::default(),
+    )
 }
 
 pub(super) fn text_bundle(font: &ViewerUiFont, text: &str, size: f32, color: Color) -> impl Bundle {
@@ -416,15 +426,19 @@ pub(super) fn render_top_center_badges(
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             UiMouseBlocker,
+            ui_hierarchy_bundle(),
         ))
         .with_children(|wrap| {
-            wrap.spawn(Node {
-                padding: UiRect::axes(px(10), px(8)),
-                column_gap: px(6),
-                flex_wrap: FlexWrap::Wrap,
-                justify_content: JustifyContent::Center,
-                ..default()
-            })
+            wrap.spawn((
+                Node {
+                    padding: UiRect::axes(px(10), px(8)),
+                    column_gap: px(6),
+                    flex_wrap: FlexWrap::Wrap,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                ui_hierarchy_bundle(),
+            ))
             .with_children(|row| {
                 for badge in badges {
                     row.spawn((
@@ -436,13 +450,16 @@ pub(super) fn render_top_center_badges(
                         },
                         BackgroundColor(Color::srgba(0.08, 0.09, 0.13, 0.94)),
                         BorderColor::all(Color::srgba(0.24, 0.27, 0.37, 1.0)),
-                        children![text_bundle(
+                        ui_hierarchy_bundle(),
+                    ))
+                    .with_children(|badge_node| {
+                        badge_node.spawn(text_bundle(
                             font,
                             &badge,
                             9.6,
-                            Color::srgba(0.92, 0.95, 1.0, 1.0)
-                        )],
-                    ));
+                            Color::srgba(0.92, 0.95, 1.0, 1.0),
+                        ));
+                    });
                 }
             });
         });
@@ -467,15 +484,19 @@ pub(super) fn render_stat_meter(
                 ..default()
             },
             BackgroundColor(Color::NONE),
+            ui_hierarchy_bundle(),
         ))
         .with_children(|meter| {
             meter
-                .spawn(Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::SpaceBetween,
-                    ..default()
-                })
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceBetween,
+                        ..default()
+                    },
+                    ui_hierarchy_bundle(),
+                ))
                 .with_children(|labels| {
                     labels.spawn(text_bundle(
                         font,
@@ -496,6 +517,7 @@ pub(super) fn render_stat_meter(
                     },
                     BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.98)),
                     BorderColor::all(border_color),
+                    ui_hierarchy_bundle(),
                 ))
                 .with_children(|track| {
                     track.spawn((

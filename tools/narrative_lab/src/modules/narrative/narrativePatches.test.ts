@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { applyNarrativePatch, buildNarrativePatchSet } from "./narrativePatches";
 
+import { splitNarrativeMarkdownBlocks } from "./narrativePatches";
+
 describe("narrativePatches", () => {
   it("builds block-level patches for changed markdown sections", () => {
     const current = "# A\n\nkeep\n\nold block\n\n# Tail";
@@ -31,5 +33,24 @@ describe("narrativePatches", () => {
 
     expect(patchSet.mode).toBe("full_document");
     expect(patchSet.patches).toHaveLength(0);
+  });
+
+  it("treats heading plus following text as a single block", () => {
+    const blocks = splitNarrativeMarkdownBlocks("# 标题\n段落 A\n\n# 另一个标题\n段落 B");
+
+    expect(blocks[0]).toContain("# 标题");
+    expect(blocks[0]).toContain("段落 A");
+    expect(blocks).toHaveLength(2);
+  });
+
+  it("uses anchor match to avoid full-document fallback when heading matches", () => {
+    const current = "# 章节\n\nkeep\n\nold";
+    const draft = "# 章节\n\nkeep\n\nnew";
+
+    const patchSet = buildNarrativePatchSet(current, draft);
+
+    expect(patchSet.mode).toBe("patches");
+    expect(patchSet.patches).toHaveLength(1);
+    expect(patchSet.patches[0].originalText).toBe("old");
   });
 });

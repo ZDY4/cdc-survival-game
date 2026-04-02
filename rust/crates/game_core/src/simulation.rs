@@ -28,8 +28,7 @@ use crate::movement::{
     MovementCommandOutcome, MovementPlan, MovementPlanError, PendingProgressionStep,
 };
 use crate::overworld::{
-    location_by_id, LocationTransitionContext, OverworldRouteSnapshot, OverworldStateSnapshot,
-    OverworldTravelState, UnlockedLocationSet,
+    location_by_id, LocationTransitionContext, OverworldStateSnapshot, UnlockedLocationSet,
 };
 use crate::runtime::DropItemOutcome;
 use crate::turn::{
@@ -38,11 +37,12 @@ use crate::turn::{
 };
 use crate::vision::VisionRuntimeSnapshot;
 
+mod combat;
 mod dialogue;
 mod interaction;
+mod level_transition;
 mod overworld;
 mod progression;
-mod combat;
 
 const DROP_ITEM_SEARCH_RADIUS: i32 = 4;
 
@@ -124,18 +124,6 @@ pub enum SimulationCommand {
         start: GridCoord,
         goal: GridCoord,
     },
-    RequestOverworldRoute {
-        actor_id: ActorId,
-        target_location_id: String,
-    },
-    StartOverworldTravel {
-        actor_id: ActorId,
-        target_location_id: String,
-    },
-    AdvanceOverworldTravel {
-        actor_id: ActorId,
-        minutes: u32,
-    },
     TravelToMap {
         actor_id: ActorId,
         target_map_id: String,
@@ -164,7 +152,6 @@ pub enum SimulationCommandResult {
     InteractionPrompt(InteractionPrompt),
     InteractionExecution(InteractionExecutionResult),
     DialogueState(Result<DialogueRuntimeState, String>),
-    OverworldRoute(Result<OverworldRouteSnapshot, String>),
     OverworldState(Result<OverworldStateSnapshot, String>),
     InteractionContext(Result<InteractionContextSnapshot, String>),
     LocationTransition(Result<LocationTransitionContext, String>),
@@ -301,27 +288,6 @@ pub enum SimulationEvent {
         location_id: Option<String>,
         entry_point_id: Option<String>,
         return_location_id: Option<String>,
-    },
-    OverworldRouteComputed {
-        actor_id: ActorId,
-        target_location_id: String,
-        travel_minutes: u32,
-        path_length: usize,
-    },
-    OverworldTravelStarted {
-        actor_id: ActorId,
-        target_location_id: String,
-        travel_minutes: u32,
-    },
-    OverworldTravelProgressed {
-        actor_id: ActorId,
-        target_location_id: String,
-        progressed_minutes: u32,
-        remaining_minutes: u32,
-    },
-    OverworldTravelCompleted {
-        actor_id: ActorId,
-        target_location_id: String,
     },
     LocationEntered {
         actor_id: ActorId,
@@ -675,7 +641,6 @@ pub(crate) struct SimulationStateSnapshot {
     pub return_outdoor_location_id: Option<String>,
     pub unlocked_locations: Vec<String>,
     pub active_overworld_id: Option<String>,
-    pub overworld_travel: Option<OverworldTravelState>,
     pub grid_world: GridWorldSnapshot,
     pub pending_progression: Vec<PendingProgressionStep>,
     pub next_actor_id: u64,
@@ -720,7 +685,6 @@ pub struct Simulation {
     return_outdoor_location_id: Option<String>,
     unlocked_locations: UnlockedLocationSet,
     active_overworld_id: Option<String>,
-    overworld_travel: Option<OverworldTravelState>,
     ai_controllers: HashMap<ActorId, Box<dyn AiController>>,
     grid_world: GridWorld,
     pending_progression: VecDeque<PendingProgressionStep>,
@@ -768,7 +732,6 @@ impl Default for Simulation {
             return_outdoor_location_id: None,
             unlocked_locations: BTreeSet::new(),
             active_overworld_id: None,
-            overworld_travel: None,
             ai_controllers: HashMap::new(),
             grid_world: GridWorld::default(),
             pending_progression: VecDeque::new(),
@@ -842,36 +805,13 @@ impl Simulation {
         unlocked_locations: impl IntoIterator<Item = String>,
     ) -> Result<(), String> {
         self.unlocked_locations.extend(unlocked_locations);
-        self.active_location_id = active_location_id;
-        self.current_entry_point_id = entry_point_id;
-
-        if let Some(location_id) = self.active_location_id.as_deref() {
-            let definition = self.current_overworld_definition()?;
-            let location = location_by_id(definition, location_id)
-                .ok_or_else(|| format!("unknown_location:{location_id}"))?;
-            let overworld_cell = location.overworld_cell;
-            let return_outdoor_location_id = match location.kind {
-                game_data::OverworldLocationKind::Outdoor => Some(location.id.as_str().to_string()),
-                game_data::OverworldLocationKind::Interior
-                | game_data::OverworldLocationKind::Dungeon => location
-                    .parent_outdoor_location_id
-                    .as_ref()
-                    .map(|location_id| location_id.as_str().to_string()),
-            };
-            self.overworld_pawn_cell = Some(overworld_cell);
-            self.return_outdoor_location_id = return_outdoor_location_id;
-        }
-
-        self.interaction_context.world_mode = world_mode;
-        if matches!(world_mode, WorldMode::Overworld | WorldMode::Traveling) {
-            self.grid_world.clear_map();
+        let _ =
+            self.apply_seeded_overworld_transition(world_mode, active_location_id, entry_point_id)?;
+        if world_mode == WorldMode::Overworld {
             self.reset_runtime_actor_occupancy();
-            self.current_entry_point_id = None;
-            self.interaction_context.current_map_id = None;
-            self.interaction_context.entry_point_id = None;
-            self.interaction_context.current_subscene_location_id = None;
+            self.load_overworld_topology()?;
+            self.sync_interaction_context_from_runtime();
         }
-        self.sync_interaction_context_from_runtime();
         Ok(())
     }
 
@@ -1281,23 +1221,6 @@ impl Simulation {
                     });
                 }
                 SimulationCommandResult::Path(result)
-            }
-            SimulationCommand::RequestOverworldRoute {
-                actor_id,
-                target_location_id,
-            } => SimulationCommandResult::OverworldRoute(
-                self.request_overworld_route(actor_id, &target_location_id),
-            ),
-            SimulationCommand::StartOverworldTravel {
-                actor_id,
-                target_location_id,
-            } => SimulationCommandResult::OverworldState(
-                self.start_overworld_travel(actor_id, &target_location_id),
-            ),
-            SimulationCommand::AdvanceOverworldTravel { actor_id, minutes } => {
-                SimulationCommandResult::OverworldState(
-                    self.advance_overworld_travel(actor_id, minutes),
-                )
             }
             SimulationCommand::TravelToMap {
                 actor_id,
@@ -2002,7 +1925,6 @@ impl Simulation {
             return_outdoor_location_id: self.return_outdoor_location_id.clone(),
             unlocked_locations: self.unlocked_locations.iter().cloned().collect(),
             active_overworld_id: self.active_overworld_id.clone(),
-            overworld_travel: self.overworld_travel.clone(),
             grid_world: self.grid_world.save_snapshot(),
             pending_progression: self.pending_progression.iter().copied().collect(),
             next_actor_id: self.next_actor_id,
@@ -2095,7 +2017,6 @@ impl Simulation {
         self.return_outdoor_location_id = snapshot.return_outdoor_location_id;
         self.unlocked_locations = snapshot.unlocked_locations.into_iter().collect();
         self.active_overworld_id = snapshot.active_overworld_id;
-        self.overworld_travel = snapshot.overworld_travel;
         self.ai_controllers.clear();
         self.grid_world.load_snapshot(snapshot.grid_world);
         self.pending_progression = snapshot.pending_progression.into();
@@ -2959,10 +2880,7 @@ impl Simulation {
             overworld_id: self.active_overworld_id.clone(),
             active_location_id,
             active_outdoor_location_id,
-            current_map_id: if matches!(
-                runtime_world_mode,
-                WorldMode::Overworld | WorldMode::Traveling
-            ) {
+            current_map_id: if matches!(runtime_world_mode, WorldMode::Overworld) {
                 None
             } else {
                 self.grid_world
@@ -2970,10 +2888,7 @@ impl Simulation {
                     .map(|map_id| map_id.as_str().to_string())
                     .or_else(|| self.interaction_context.current_map_id.clone())
             },
-            current_entry_point_id: if matches!(
-                runtime_world_mode,
-                WorldMode::Overworld | WorldMode::Traveling
-            ) {
+            current_entry_point_id: if matches!(runtime_world_mode, WorldMode::Overworld) {
                 None
             } else {
                 self.current_entry_point_id
@@ -2984,7 +2899,6 @@ impl Simulation {
                 .overworld_pawn_cell
                 .or(self.interaction_context.overworld_pawn_cell),
             unlocked_locations: self.unlocked_locations.iter().cloned().collect(),
-            travel: self.overworld_travel.clone(),
             world_mode: runtime_world_mode,
         }
     }
@@ -4635,6 +4549,86 @@ mod tests {
             simulation.pending_progression.front(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
         );
+    }
+
+    #[test]
+    fn seed_overworld_state_outdoor_preserves_loaded_map_and_entry_point() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_scene_transition_outdoor_map_definition());
+
+        simulation
+            .seed_overworld_state(
+                WorldMode::Outdoor,
+                Some("survivor_outpost_01".into()),
+                Some("default_entry".into()),
+                ["survivor_outpost_01".to_string()],
+            )
+            .expect("outdoor overworld state should seed");
+
+        let context = simulation.current_interaction_context();
+        assert_eq!(
+            simulation.grid_world().map_id().map(MapId::as_str),
+            Some("survivor_outpost_01_grid")
+        );
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
+        assert_eq!(
+            context.active_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(
+            context.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.entry_point_id.as_deref(), Some("default_entry"));
+        assert_eq!(context.world_mode, WorldMode::Outdoor);
+    }
+
+    #[test]
+    fn seed_overworld_state_overworld_clears_loaded_map_and_entry_point() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_scene_transition_outdoor_map_definition());
+
+        simulation
+            .seed_overworld_state(
+                WorldMode::Overworld,
+                Some("survivor_outpost_01".into()),
+                Some("default_entry".into()),
+                ["survivor_outpost_01".to_string()],
+            )
+            .expect("overworld state should seed");
+
+        let context = simulation.current_interaction_context();
+        assert_eq!(simulation.grid_world().map_id(), None);
+        assert!(simulation.grid_world().is_walkable(GridCoord::new(0, 0, 0)));
+        assert!(!simulation
+            .grid_world()
+            .is_in_bounds(GridCoord::new(1, 0, 0)));
+        assert!(simulation
+            .grid_world()
+            .map_object("overworld_trigger::survivor_outpost_01")
+            .is_some());
+        assert_eq!(context.current_map_id, None);
+        assert_eq!(
+            context.active_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(
+            context.active_outdoor_location_id.as_deref(),
+            Some("survivor_outpost_01")
+        );
+        assert_eq!(context.entry_point_id, None);
+        assert_eq!(context.world_mode, WorldMode::Overworld);
     }
 
     #[test]

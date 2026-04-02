@@ -1,3 +1,6 @@
+//! 渲染模块门面：统一组织 viewer 的相机、世界可视化、战争迷雾、遮挡和屏幕叠加层子模块，
+//! 并对外暴露 app 装配所需的稳定入口与共享渲染类型。
+
 use std::collections::{HashMap, HashSet};
 
 use bevy::asset::{Asset, RenderAssetUsages};
@@ -460,7 +463,7 @@ impl MaterialExtension for BuildingWallGridMaterialExt {
 
 mod camera;
 mod debug_draw;
-mod fog;
+mod fog_of_war;
 mod materials;
 mod mesh_builders;
 mod occlusion;
@@ -471,7 +474,7 @@ mod world;
 
 pub(super) use camera::*;
 pub(super) use debug_draw::*;
-pub(super) use fog::*;
+pub(super) use fog_of_war::*;
 use materials::*;
 use mesh_builders::*;
 use occlusion::*;

@@ -1023,67 +1023,70 @@ fn read_requested_actions(object: &Map<String, Value>) -> Vec<AgentActionRequest
             values
                 .iter()
                 .enumerate()
-                .filter_map(|(index, value)| {
-                    let object = value.as_object()?;
-                    let action_type = object
-                        .get("action_type")
-                        .or_else(|| object.get("actionType"))
-                        .and_then(Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| SUPPORTED_AGENT_ACTION_TYPES.contains(value))?
-                        .to_string();
-                    let title = object
-                        .get("title")
-                        .and_then(Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())?
-                        .to_string();
-                    let description = object
-                        .get("description")
-                        .and_then(Value::as_str)
-                        .map(str::trim)
-                        .unwrap_or_default()
-                        .to_string();
-                    let id = object
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .map(ToString::to_string)
-                        .unwrap_or_else(|| format!("action-{}", index + 1));
-                    let payload = object.get("payload").cloned().unwrap_or_else(|| json!({}));
-                    let preview_only = object
-                        .get("preview_only")
-                        .or_else(|| object.get("previewOnly"))
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
-                    let affected_document_keys = read_string_list(
-                        object
-                            .get("affected_document_keys")
-                            .or_else(|| object.get("affectedDocumentKeys")),
-                    );
-                    let risk_level = normalize_risk(
-                        object
-                            .get("risk_level")
-                            .or_else(|| object.get("riskLevel"))
-                            .and_then(Value::as_str)
-                            .unwrap_or("medium"),
-                    );
-                    Some(AgentActionRequest {
-                        id,
-                        action_type,
-                        title,
-                        description,
-                        payload,
-                        approval_policy: "always_require_user".to_string(),
-                        preview_only,
-                        affected_document_keys,
-                        risk_level,
-                    })
-                })
+                .filter_map(|(index, value)| parse_agent_action_request(value, index))
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+fn parse_agent_action_request(value: &Value, index: usize) -> Option<AgentActionRequest> {
+    let object = value.as_object()?;
+    let action_type = object
+        .get("action_type")
+        .or_else(|| object.get("actionType"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_lowercase)
+        .filter(|value| SUPPORTED_AGENT_ACTION_TYPES.contains(&value.as_str()))?;
+    let title = object
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let description = object
+        .get("description")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let id = object
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| format!("action-{}", index + 1));
+    let payload = object.get("payload").cloned().unwrap_or_else(|| json!({}));
+    let preview_only = object
+        .get("preview_only")
+        .or_else(|| object.get("previewOnly"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let affected_document_keys = read_string_list(
+        object
+            .get("affected_document_keys")
+            .or_else(|| object.get("affectedDocumentKeys")),
+    );
+    let risk_level = normalize_risk(
+        object
+            .get("risk_level")
+            .or_else(|| object.get("riskLevel"))
+            .and_then(Value::as_str)
+            .unwrap_or("medium"),
+    );
+    Some(AgentActionRequest {
+        id,
+        action_type,
+        title,
+        description,
+        payload,
+        approval_policy: "always_require_user".to_string(),
+        preview_only,
+        affected_document_keys,
+        risk_level,
+    })
 }
 
 fn build_source_document_keys(request: &NarrativeGenerateRequest) -> Vec<String> {
@@ -1245,10 +1248,86 @@ where
 }
 
 fn normalize_risk(value: &str) -> String {
-    match value {
+    let normalized = value.trim().to_lowercase();
+    match normalized.as_str() {
         "high" => "high".to_string(),
         "medium" => "medium".to_string(),
         _ => "low".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_agent_action_request_normalizes_fields_and_defaults() {
+        let action_value = json!({
+            "action_type": "CREATE_DERIVED_DOCUMENT",
+            "title": "派生文稿",
+            "riskLevel": "HIGH",
+            "previewOnly": true
+        });
+        let action = parse_agent_action_request(&action_value, 0).unwrap();
+        assert_eq!(action.id, "action-1");
+        assert_eq!(action.action_type, "create_derived_document");
+        assert_eq!(action.title, "派生文稿");
+        assert!(action.preview_only);
+        assert_eq!(action.risk_level, "high");
+    }
+
+    #[test]
+    fn parse_agent_action_request_skips_unsupported_types() {
+        let unsupported = json!({
+            "action_type": "unsupported_action",
+            "title": "不支持的"
+        });
+        assert!(parse_agent_action_request(&unsupported, 0).is_none());
+    }
+
+    #[test]
+    fn read_requested_actions_filters_blank_titles() {
+        let list = json!({
+            "requested_actions": [
+                {
+                    "action_type": "create_derived_document",
+                    "title": "有效",
+                    "description": "有描述"
+                },
+                {
+                    "action_type": "create_derived_document",
+                    "title": "   "
+                }
+            ]
+        });
+        let parsed = read_requested_actions(list.as_object().unwrap());
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].description, "有描述");
+    }
+
+    #[test]
+    fn read_requested_actions_respects_multiple_entries() {
+        let list = json!({
+            "requested_actions": [
+                {
+                    "action_type": "create_derived_document",
+                    "title": "文稿 A"
+                },
+                {
+                    "actionType": "apply_all_patches",
+                    "title": "补丁",
+                    "preview_only": false,
+                    "risk_level": "Medium"
+                }
+            ]
+        });
+        let parsed = read_requested_actions(list.as_object().unwrap());
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].id, "action-1");
+        assert_eq!(parsed[1].id, "action-2");
+        assert_eq!(parsed[1].risk_level, "medium");
+        assert!(!parsed[1].preview_only);
     }
 }
 

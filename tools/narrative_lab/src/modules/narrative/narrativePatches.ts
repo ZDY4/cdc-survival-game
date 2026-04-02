@@ -8,17 +8,42 @@ export function normalizeNarrativeMarkdown(markdown: string): string {
   return markdown.replace(/\r\n/g, "\n").trim();
 }
 
+function isHeadingLine(line: string) {
+  return /^#{1,6}(\s|$)/.test(line.trim());
+}
+
 function splitMarkdownBlocks(markdown: string): MarkdownBlock[] {
   const normalized = normalizeNarrativeMarkdown(markdown);
   if (!normalized) {
     return [];
   }
 
-  return normalized
-    .split(/\n{2,}/)
-    .map((text) => text.trim())
-    .filter(Boolean)
-    .map((text) => ({ text }));
+  const blocks: MarkdownBlock[] = [];
+  let buffer: string[] = [];
+  const flush = () => {
+    if (!buffer.length) {
+      return;
+    }
+    const chunk = buffer.join("\n").trim();
+    if (chunk) {
+      blocks.push({ text: chunk });
+    }
+    buffer = [];
+  };
+
+  for (const line of normalized.split("\n")) {
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    if (isHeadingLine(line) && buffer.length) {
+      flush();
+    }
+    buffer.push(line);
+  }
+  flush();
+
+  return blocks;
 }
 
 function joinMarkdownBlocks(blocks: MarkdownBlock[]): string {
@@ -70,6 +95,21 @@ function buildLcsMatches(currentBlocks: MarkdownBlock[], draftBlocks: MarkdownBl
   return matches;
 }
 
+function findAnchoredMatch(
+  currentBlocks: MarkdownBlock[],
+  draftBlocks: MarkdownBlock[],
+) {
+  for (let currentIndex = 0; currentIndex < currentBlocks.length; currentIndex += 1) {
+    const entry = currentBlocks[currentIndex];
+    for (let draftIndex = 0; draftIndex < draftBlocks.length; draftIndex += 1) {
+      if (entry.text === draftBlocks[draftIndex].text) {
+        return { currentIndex, draftIndex };
+      }
+    }
+  }
+  return null;
+}
+
 export function buildNarrativePatchSet(
   currentMarkdown: string,
   draftMarkdown: string,
@@ -86,14 +126,19 @@ export function buildNarrativePatchSet(
     };
   }
 
-  const matches = buildLcsMatches(currentBlocks, draftBlocks);
+  let matches = buildLcsMatches(currentBlocks, draftBlocks);
   if (!matches.length) {
-    return {
-      mode: "full_document",
-      currentMarkdown,
-      draftMarkdown,
-      patches: [],
-    };
+    const anchor = findAnchoredMatch(currentBlocks, draftBlocks);
+    if (anchor) {
+      matches = [anchor];
+    } else {
+      return {
+        mode: "full_document",
+        currentMarkdown,
+        draftMarkdown,
+        patches: [],
+      };
+    }
   }
 
   const patches: NarrativeCandidatePatch[] = [];

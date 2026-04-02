@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use game_data::{
-    AiBehaviorProfile, AiComparisonOperator, AiConditionDefinition, AiConditionalPlannerRequirements,
-    AiGoalDefinition, AiPlannerDatumAssignment, NpcRole,
+    AiBehaviorProfile, AiComparisonOperator, AiConditionDefinition,
+    AiConditionalPlannerRequirements, AiGoalDefinition, AiPlannerDatumAssignment, NpcRole,
 };
 
 use super::{NpcFact, NpcPlanRequest};
@@ -57,7 +57,9 @@ pub fn evaluate_condition(
         AiConditionDefinition::ConditionRef { condition_id } => behavior
             .conditions
             .get(condition_id)
-            .map(|definition| evaluate_condition(&definition.condition, behavior, facts, blackboard, role))
+            .map(|definition| {
+                evaluate_condition(&definition.condition, behavior, facts, blackboard, role)
+            })
             .unwrap_or(false),
         AiConditionDefinition::FactTrue { fact_id } => {
             facts.contains(&NpcFact::from(fact_id.as_str().to_string()))
@@ -81,7 +83,9 @@ pub fn evaluate_condition(
             (Some(left), Some(right)) => left == right,
             _ => false,
         },
-        AiConditionDefinition::RoleIs { role: expected_role } => role == *expected_role,
+        AiConditionDefinition::RoleIs {
+            role: expected_role,
+        } => role == *expected_role,
         AiConditionDefinition::AllOf { conditions } => conditions
             .iter()
             .all(|child| evaluate_condition(child, behavior, facts, blackboard, role)),

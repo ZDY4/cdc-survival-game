@@ -12,8 +12,8 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use game_data::{
-    AiBehaviorProfile, AiNeedEffectDefinition, AiWorldStateEffectDefinition,
-    BuiltinAiExecutorKind, GridCoord, MapId, NpcRole,
+    AiBehaviorProfile, AiNeedEffectDefinition, AiWorldStateEffectDefinition, BuiltinAiExecutorKind,
+    GridCoord, MapId, NpcRole,
 };
 
 pub use behavior::AiBlackboard;
@@ -29,7 +29,17 @@ pub use planner::{
 
 macro_rules! npc_string_id {
     ($name:ident) => {
-        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, Default)]
+        #[derive(
+            Clone,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            serde::Serialize,
+            serde::Deserialize,
+            Default,
+        )]
         #[serde(transparent)]
         pub struct $name(pub Cow<'static, str>);
 
@@ -84,8 +94,7 @@ impl NpcFact {
     pub const AtDutyArea: Self = Self(Cow::Borrowed("at_duty_area"));
     pub const HasReservedBed: Self = Self(Cow::Borrowed("has_reserved_bed"));
     pub const HasReservedMealSeat: Self = Self(Cow::Borrowed("has_reserved_meal_seat"));
-    pub const GuardCoverageInsufficient: Self =
-        Self(Cow::Borrowed("guard_coverage_insufficient"));
+    pub const GuardCoverageInsufficient: Self = Self(Cow::Borrowed("guard_coverage_insufficient"));
 }
 
 #[allow(non_upper_case_globals)]

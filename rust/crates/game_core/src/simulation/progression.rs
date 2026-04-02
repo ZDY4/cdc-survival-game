@@ -319,9 +319,9 @@ impl Simulation {
                     .economy
                     .add_item(actor_id, reward_item.id, reward_item.count, items);
             } else {
-                let _ = self
-                    .economy
-                    .add_item_unchecked(actor_id, reward_item.id, reward_item.count);
+                let _ =
+                    self.economy
+                        .add_item_unchecked(actor_id, reward_item.id, reward_item.count);
             }
         }
         if node.rewards.experience > 0 {

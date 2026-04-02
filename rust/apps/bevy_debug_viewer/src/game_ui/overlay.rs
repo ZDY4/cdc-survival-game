@@ -1,9 +1,12 @@
+//! UI 叠加层子模块：负责主菜单、顶部徽章、面板外壳、tooltip、上下文菜单与模态层渲染。
+
 use super::*;
 
 pub(crate) fn update_game_ui(
     mut commands: Commands,
     root: Single<(Entity, Option<&Children>), With<GameUiRoot>>,
     window: Single<&Window>,
+    camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     palette: Res<ViewerPalette>,
     font: Res<ViewerUiFont>,
     ui: GameUiViewState,
@@ -12,6 +15,8 @@ pub(crate) fn update_game_ui(
     let (entity, children) = root.into_inner();
     clear_ui_children(&mut commands, children);
     let _ = palette;
+    let (camera, camera_transform) = *camera_query;
+    let camera_transform = GlobalTransform::from(*camera_transform);
     let player_actor = player_actor_id(&ui.runtime_state.runtime);
     let player_stats =
         player_actor.and_then(|actor_id| player_hud_stats(&ui.runtime_state, actor_id));
@@ -138,6 +143,26 @@ pub(crate) fn update_game_ui(
                 );
                 render_trade_page(parent, &font, &trade_snapshot, &inventory, &ui.menu_state);
             }
+
+            let prompt_blocked = ui.input_block_state.blocked || ui.inventory_context_menu.visible;
+            if !prompt_blocked {
+                let prompt = overworld_location_prompt_snapshot(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    &content.overworld.0,
+                );
+                if prompt.visible {
+                    render_overworld_location_prompt(
+                        parent,
+                        &font,
+                        &window,
+                        camera,
+                        &camera_transform,
+                        &ui.runtime_state.runtime,
+                        &prompt,
+                    );
+                }
+            }
         }
 
         let _ = &ui.viewer_state;
@@ -222,35 +247,36 @@ pub(super) fn render_panel_shell(
     panel: UiMenuPanel,
 ) {
     let width = panel_width(panel);
-    parent.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(RIGHT_PANEL_TOP),
-            right: px(SCREEN_EDGE_PADDING),
-            width: px(width),
-            height: px(RIGHT_PANEL_HEADER_HEIGHT),
-            padding: UiRect::axes(px(16), px(12)),
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            flex_direction: FlexDirection::Row,
-            border: UiRect::all(px(1)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.98)),
-        BorderColor::all(Color::srgba(0.26, 0.29, 0.38, 1.0)),
-        FocusPolicy::Block,
-        RelativeCursorPosition::default(),
-        UiMouseBlocker,
-        children![
-            text_bundle(font, panel_title(panel), 15.0, Color::WHITE),
-            text_bundle(
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(RIGHT_PANEL_TOP),
+                right: px(SCREEN_EDGE_PADDING),
+                width: px(width),
+                height: px(RIGHT_PANEL_HEADER_HEIGHT),
+                padding: UiRect::axes(px(16), px(12)),
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Row,
+                border: UiRect::all(px(1)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.98)),
+            BorderColor::all(Color::srgba(0.26, 0.29, 0.38, 1.0)),
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
+            UiMouseBlocker,
+        ))
+        .with_children(|header| {
+            header.spawn(text_bundle(font, panel_title(panel), 15.0, Color::WHITE));
+            header.spawn(text_bundle(
                 font,
                 panel_tab_label(panel),
                 10.0,
-                Color::srgba(0.76, 0.81, 0.88, 1.0)
-            )
-        ],
-    ));
+                Color::srgba(0.76, 0.81, 0.88, 1.0),
+            ));
+        });
 }
 
 pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) -> Entity {
@@ -565,6 +591,54 @@ pub(super) fn render_discard_quantity_modal(
                         GameUiButtonAction::CancelDiscardQuantity,
                     ));
                 });
+        });
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn render_overworld_location_prompt(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    window: &Window,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    runtime: &game_core::SimulationRuntime,
+    prompt: &game_bevy::UiOverworldLocationPromptSnapshot,
+) {
+    let world = runtime.grid_to_world(prompt.grid);
+    let world_position = Vec3::new(world.x, world.y + 0.95, world.z);
+    let Ok(viewport) = camera.world_to_viewport(camera_transform, world_position) else {
+        return;
+    };
+
+    let width = 220.0;
+    let height = 92.0;
+    let left = (viewport.x - width * 0.5).clamp(12.0, (window.width() - width - 12.0).max(12.0));
+    let top = (viewport.y - height - 26.0).clamp(12.0, (window.height() - height - 12.0).max(12.0));
+
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(left),
+                top: px(top),
+                width: px(width),
+                padding: UiRect::all(px(12.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(8.0),
+                border: UiRect::all(px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.05, 0.058, 0.076, 0.96)),
+            BorderColor::all(Color::srgba(0.34, 0.42, 0.54, 1.0)),
+            UiMouseBlocker,
+        ))
+        .with_children(|bubble| {
+            bubble.spawn(text_bundle(font, &prompt.location_name, 13.0, Color::WHITE));
+            bubble.spawn(action_button(
+                font,
+                &prompt.enter_label,
+                GameUiButtonAction::EnterOverworldLocation(prompt.location_id.clone()),
+            ));
         });
 }
 

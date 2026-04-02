@@ -166,12 +166,7 @@ pub(super) fn configure_runtime_after_restore(
     shops: &ShopDefinitions,
     overworld: &OverworldDefinitions,
 ) {
-    runtime.set_item_library(items.0.clone());
-    runtime.set_skill_library(skills.0.clone());
-    runtime.set_recipe_library(recipes.0.clone());
-    runtime.set_quest_library(quests.0.clone());
-    runtime.set_shop_library(shops.0.clone());
-    runtime.set_overworld_library(overworld.0.clone());
+    apply_gameplay_libraries(runtime, items, skills, recipes, quests, shops, overworld);
 }
 
 pub(super) fn apply_new_game_defaults(

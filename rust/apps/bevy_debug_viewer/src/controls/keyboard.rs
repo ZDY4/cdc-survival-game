@@ -1,3 +1,5 @@
+//! 键盘输入分发：负责 gameplay 阶段的键盘热键、Esc 关闭链路与快捷栏激活。
+
 use super::*;
 
 pub(crate) fn handle_keyboard_input(
@@ -25,21 +27,6 @@ pub(crate) fn handle_keyboard_input(
 
     let digit_input = just_pressed_digit(&keys);
     let hotbar_slot = just_pressed_hotbar_slot(&keys);
-
-    if (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight))
-        && keys.just_pressed(KeyCode::KeyP)
-    {
-        viewer_state.targeting_state = None;
-        viewer_state.control_mode = viewer_state.control_mode.toggle();
-        viewer_state.focused_target = None;
-        viewer_state.current_prompt = None;
-        viewer_state.interaction_menu = None;
-        if viewer_state.control_mode == ViewerControlMode::PlayerControl {
-            viewer_state.selected_actor =
-                viewer_state.command_actor_id(&runtime_state.runtime.snapshot());
-        }
-        viewer_state.status_line = format!("control mode: {}", viewer_state.control_mode.label());
-    }
 
     if keys.just_pressed(KeyCode::Escape) {
         if viewer_state.targeting_state.is_some() {

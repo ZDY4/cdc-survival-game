@@ -24,7 +24,10 @@ fn main() {
         )
     });
     let ai_library = load_ai_module_library(&ai_dir).unwrap_or_else(|error| {
-        panic!("failed to load ai library from {}: {error}", ai_dir.display())
+        panic!(
+            "failed to load ai library from {}: {error}",
+            ai_dir.display()
+        )
     });
 
     let issues = validate_ai_content(&characters, &settlements, &ai_library);

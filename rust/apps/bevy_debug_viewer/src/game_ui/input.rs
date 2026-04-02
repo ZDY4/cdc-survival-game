@@ -679,6 +679,36 @@ pub(crate) fn handle_game_ui_buttons(
             GameUiButtonAction::SelectMapLocation(location_id) => {
                 ui.menu_state.selected_map_location_id = Some(location_id);
             }
+            GameUiButtonAction::EnterOverworldLocation(location_id) => {
+                if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
+                    match ui
+                        .runtime_state
+                        .runtime
+                        .enter_location(actor_id, &location_id, None)
+                    {
+                        Ok(_) => {
+                            let location_name = content
+                                .overworld
+                                .0
+                                .iter()
+                                .flat_map(|(_, definition)| definition.locations.iter())
+                                .find(|location| location.id.as_str() == location_id.as_str())
+                                .map(|location| location.name.clone())
+                                .unwrap_or_else(|| location_id.clone());
+                            reset_viewer_runtime_transients(&mut ui.viewer_state);
+                            sync_viewer_runtime_basics(&mut ui.runtime_state, &mut ui.viewer_state);
+                            let status = format!("已进入 {location_name}");
+                            ui.viewer_state.status_line = status.clone();
+                            ui.menu_state.status_text = status;
+                            save_runtime_snapshot(&save_path, &ui.runtime_state.runtime);
+                        }
+                        Err(error) => {
+                            ui.viewer_state.status_line = error.clone();
+                            ui.menu_state.status_text = error;
+                        }
+                    }
+                }
+            }
             GameUiButtonAction::SettingsSetMaster(value) => ui.settings.master_volume = value,
             GameUiButtonAction::SettingsSetMusic(value) => ui.settings.music_volume = value,
             GameUiButtonAction::SettingsSetSfx(value) => ui.settings.sfx_volume = value,

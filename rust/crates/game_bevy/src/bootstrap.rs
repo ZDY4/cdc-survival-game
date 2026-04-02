@@ -11,8 +11,7 @@ use crate::{
 };
 use game_core::SimulationRuntime;
 use game_data::{
-    CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapLoadError,
-    OverworldLoadError,
+    CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapLoadError, OverworldLoadError,
 };
 
 #[derive(Debug, Clone)]

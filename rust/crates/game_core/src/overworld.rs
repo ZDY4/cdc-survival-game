@@ -1,33 +1,12 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use game_data::{
-    ActorId, GridCoord, MapDefinition, OverworldDefinition, OverworldLocationDefinition,
+    GridCoord, MapDefinition, OverworldDefinition, OverworldLocationDefinition,
     OverworldLocationKind, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 
 pub type UnlockedLocationSet = BTreeSet<String>;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct OverworldRouteSnapshot {
-    pub actor_id: ActorId,
-    pub from_location_id: String,
-    pub to_location_id: String,
-    pub location_path: Vec<String>,
-    pub cell_path: Vec<GridCoord>,
-    pub travel_minutes: u32,
-    pub food_cost: i32,
-    pub stamina_cost: i32,
-    pub risk_level: f32,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct OverworldTravelState {
-    pub actor_id: ActorId,
-    pub route: OverworldRouteSnapshot,
-    pub remaining_minutes: u32,
-    pub progressed_minutes: u32,
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LocationTransitionContext {
@@ -48,7 +27,6 @@ pub struct OverworldStateSnapshot {
     pub current_entry_point_id: Option<String>,
     pub current_overworld_cell: Option<GridCoord>,
     pub unlocked_locations: Vec<String>,
-    pub travel: Option<OverworldTravelState>,
     pub world_mode: WorldMode,
 }
 
@@ -77,61 +55,6 @@ pub fn world_mode_for_location_kind(kind: OverworldLocationKind) -> WorldMode {
         OverworldLocationKind::Interior => WorldMode::Interior,
         OverworldLocationKind::Dungeon => WorldMode::Dungeon,
     }
-}
-
-pub fn compute_location_route(
-    definition: &OverworldDefinition,
-    actor_id: ActorId,
-    from_location_id: &str,
-    from_cell: GridCoord,
-    to_location_id: &str,
-) -> Result<OverworldRouteSnapshot, String> {
-    if to_location_id.trim().is_empty() {
-        return Err("missing_overworld_location".to_string());
-    }
-    let to_location = location_by_id(definition, to_location_id)
-        .ok_or_else(|| format!("unknown_location:{to_location_id}"))?;
-
-    if from_cell == to_location.overworld_cell {
-        return Ok(OverworldRouteSnapshot {
-            actor_id,
-            from_location_id: from_location_id.to_string(),
-            to_location_id: to_location_id.to_string(),
-            location_path: vec![from_location_id.to_string(), to_location_id.to_string()],
-            cell_path: vec![from_cell],
-            travel_minutes: 0,
-            food_cost: 0,
-            stamina_cost: 0,
-            risk_level: 0.0,
-        });
-    }
-
-    let cell_path = compute_cell_path(definition, from_cell, to_location.overworld_cell)
-        .ok_or_else(|| "overworld_cell_route_unavailable".to_string())?;
-    let steps = cell_path.len().saturating_sub(1) as u32;
-    let total_minutes = steps.saturating_mul(5);
-    let total_food = if total_minutes == 0 {
-        0
-    } else {
-        ((total_minutes as f32) / 60.0).ceil() as i32
-    };
-    let total_stamina = steps as i32 * 2;
-    let source_danger = location_by_id(definition, from_location_id)
-        .map(|location| location.danger_level.max(0) as f32)
-        .unwrap_or(0.0);
-    let total_risk = (source_danger + to_location.danger_level.max(0) as f32) / 2.0;
-
-    Ok(OverworldRouteSnapshot {
-        actor_id,
-        from_location_id: from_location_id.to_string(),
-        to_location_id: to_location_id.to_string(),
-        location_path: vec![from_location_id.to_string(), to_location_id.to_string()],
-        cell_path,
-        travel_minutes: total_minutes,
-        food_cost: total_food,
-        stamina_cost: total_stamina,
-        risk_level: total_risk,
-    })
 }
 
 pub fn compute_cell_path(
@@ -200,27 +123,13 @@ fn neighbors(current: GridCoord) -> [GridCoord; 4] {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_cell_path, compute_location_route, find_entry_point};
+    use super::{compute_cell_path, find_entry_point};
     use game_data::{
         GridCoord, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
         OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLocationDefinition,
         OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
-
-    #[test]
-    fn location_route_uses_walkable_cell_distance() {
-        let route = compute_location_route(
-            &sample_overworld(),
-            game_data::ActorId(1),
-            "a",
-            GridCoord::new(0, 0, 0),
-            "c",
-        )
-        .expect("route should resolve");
-        assert_eq!(route.location_path, vec!["a", "c"]);
-        assert_eq!(route.travel_minutes, 10);
-    }
 
     #[test]
     fn cell_path_uses_walkable_cells_only() {

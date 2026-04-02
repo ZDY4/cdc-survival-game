@@ -1,3 +1,5 @@
+//! 游戏内通用输入控制：负责鼠标、滚轮与快捷键驱动的镜头、交互、选择和面板切换协调。
+
 use bevy::input::mouse::MouseWheel;
 use bevy::log::info;
 use bevy::prelude::*;
@@ -23,8 +25,8 @@ use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
     DialogueChoiceButton, InteractionMenuButton, InteractionMenuState, UiMouseBlocker,
-    ViewerActorMotionState, ViewerCamera, ViewerControlMode, ViewerHudPage, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
+    ViewerActorMotionState, ViewerCamera, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState,
+    ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
     ViewerTargetingState, ViewerUiSettings,
 };
 
@@ -1105,6 +1107,40 @@ mod tests {
         assert!(modal_state.discard_quantity.is_none());
         assert!(modal_state.trade.is_some());
         assert_eq!(viewer_state.status_line, "discard: closed");
+    }
+
+    #[test]
+    fn ctrl_p_no_longer_toggles_free_observe_mode() {
+        let (runtime, _) = create_demo_runtime();
+        let mut app = App::new();
+        app.insert_resource(ButtonInput::<KeyCode>::default())
+            .insert_resource(Time::<()>::default())
+            .insert_resource(ViewerRuntimeState {
+                runtime,
+                recent_events: Vec::new(),
+                ai_snapshot: SettlementDebugSnapshot::default(),
+            })
+            .insert_resource(ViewerState::default())
+            .insert_resource(ViewerRenderConfig::default())
+            .insert_resource(UiMenuState::default())
+            .insert_resource(UiModalState::default())
+            .insert_resource(UiHotbarState::default())
+            .insert_resource(ViewerUiSettings::default())
+            .insert_resource(SkillDefinitions(Default::default()))
+            .insert_resource(ViewerConsoleState::default())
+            .insert_resource(ViewerSceneKind::Gameplay)
+            .add_systems(Update, handle_keyboard_input);
+
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.press(KeyCode::ControlLeft);
+            keys.press(KeyCode::KeyP);
+        }
+
+        app.update();
+
+        let viewer_state = app.world().resource::<ViewerState>();
+        assert!(viewer_state.is_player_control());
     }
 
     fn keyboard_input_app(scene_kind: ViewerSceneKind, key: KeyCode) -> App {

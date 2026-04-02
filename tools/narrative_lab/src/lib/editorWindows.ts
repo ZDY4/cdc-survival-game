@@ -23,7 +23,7 @@ export async function openOrFocusSettingsWindow(section: EditorSettingsSection =
 
   await new Promise<void>((resolve, reject) => {
     const next = new WebviewWindow(SETTINGS_WINDOW_LABEL, {
-      title: "Editor Settings",
+      title: "设置",
       width: 1240,
       height: 860,
       minWidth: 980,

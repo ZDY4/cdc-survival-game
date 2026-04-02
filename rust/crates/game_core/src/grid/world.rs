@@ -32,6 +32,7 @@ pub struct GridWorld {
     runtime_actor_cells: HashMap<ActorId, GridCoord>,
     map_id: Option<MapId>,
     map_size: Option<MapSize>,
+    uses_explicit_cells_as_bounds: bool,
     default_level: Option<i32>,
     levels: BTreeSet<i32>,
     base_map_cells: HashMap<GridCoord, MapCellDefinition>,
@@ -72,6 +73,8 @@ pub(crate) struct GridWorldSnapshot {
     pub runtime_actor_cells: Vec<GridRuntimeActorCellSnapshot>,
     pub map_id: Option<MapId>,
     pub map_size: Option<MapSize>,
+    #[serde(default)]
+    pub uses_explicit_cells_as_bounds: bool,
     pub default_level: Option<i32>,
     pub levels: Vec<i32>,
     pub base_map_cells: Vec<GridCellSnapshotEntry>,
@@ -93,6 +96,7 @@ impl Default for GridWorld {
             runtime_actor_cells: HashMap::new(),
             map_id: None,
             map_size: None,
+            uses_explicit_cells_as_bounds: false,
             default_level: None,
             levels: BTreeSet::new(),
             base_map_cells: HashMap::new(),
@@ -130,6 +134,7 @@ impl GridWorld {
     pub fn load_map(&mut self, definition: &MapDefinition) {
         self.map_id = Some(definition.id.clone());
         self.map_size = Some(definition.size);
+        self.uses_explicit_cells_as_bounds = false;
         self.default_level = Some(definition.default_level);
         self.levels = definition.levels.iter().map(|level| level.y).collect();
         self.base_map_cells.clear();
@@ -157,9 +162,49 @@ impl GridWorld {
         self.topology_version = self.topology_version.saturating_add(1);
     }
 
+    pub fn load_explicit_topology(
+        &mut self,
+        default_level: Option<i32>,
+        cells: impl IntoIterator<Item = (GridCoord, MapCellDefinition)>,
+        objects: impl IntoIterator<Item = MapObjectDefinition>,
+    ) {
+        self.map_id = None;
+        self.map_size = None;
+        self.uses_explicit_cells_as_bounds = true;
+        self.default_level = default_level;
+        self.levels.clear();
+        self.base_map_cells.clear();
+        self.map_cells.clear();
+        self.map_objects.clear();
+        self.map_object_cells.clear();
+        self.map_blocked_cells.clear();
+        self.generated_buildings.clear();
+        self.generated_doors.clear();
+        self.generated_door_object_ids.clear();
+        self.stair_adjacency.clear();
+
+        if let Some(default_level) = default_level {
+            self.levels.insert(default_level);
+        }
+
+        for (grid, cell) in cells {
+            self.levels.insert(grid.y);
+            self.base_map_cells.insert(grid, cell);
+        }
+
+        for object in objects {
+            self.levels.extend(building_layout_story_levels(&object));
+            self.map_objects.insert(object.object_id.clone(), object);
+        }
+
+        self.rebuild_static_topology();
+        self.topology_version = self.topology_version.saturating_add(1);
+    }
+
     pub fn clear_map(&mut self) {
         self.map_id = None;
         self.map_size = None;
+        self.uses_explicit_cells_as_bounds = false;
         self.default_level = None;
         self.levels.clear();
         self.base_map_cells.clear();
@@ -193,6 +238,10 @@ impl GridWorld {
     }
 
     pub fn is_in_bounds(&self, grid: GridCoord) -> bool {
+        if self.uses_explicit_cells_as_bounds && !self.map_cells.contains_key(&grid) {
+            return false;
+        }
+
         if let Some(size) = self.map_size {
             if grid.x < 0 || grid.z < 0 {
                 return false;
@@ -386,6 +435,10 @@ impl GridWorld {
         grid: GridCoord,
         actor_id: Option<ActorId>,
     ) -> GridWalkability {
+        if self.uses_explicit_cells_as_bounds && !self.map_cells.contains_key(&grid) {
+            return GridWalkability::OutOfBounds;
+        }
+
         if let Some(size) = self.map_size {
             if grid.x < 0 || grid.z < 0 {
                 return GridWalkability::OutOfBounds;
@@ -510,6 +563,7 @@ impl GridWorld {
             runtime_actor_cells,
             map_id: self.map_id.clone(),
             map_size: self.map_size,
+            uses_explicit_cells_as_bounds: self.uses_explicit_cells_as_bounds,
             default_level: self.default_level,
             levels: self.levels(),
             base_map_cells: self
@@ -558,6 +612,7 @@ impl GridWorld {
             .collect();
         self.map_id = snapshot.map_id;
         self.map_size = snapshot.map_size;
+        self.uses_explicit_cells_as_bounds = snapshot.uses_explicit_cells_as_bounds;
         self.default_level = snapshot.default_level;
         self.levels = snapshot.levels.into_iter().collect();
         self.base_map_cells = snapshot

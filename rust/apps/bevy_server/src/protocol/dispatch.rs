@@ -2,9 +2,7 @@ use super::errors::{
     economy_protocol_error, protocol_error, require_items, require_recipes, require_shops,
     require_skills, runtime_protocol_error,
 };
-use super::projections::{
-    protocol_location_transition, protocol_overworld_route, protocol_overworld_state,
-};
+use super::projections::{protocol_location_transition, protocol_overworld_state};
 use super::*;
 
 pub(super) fn equip_item(
@@ -206,45 +204,6 @@ pub(super) fn advance_dialogue(
     Ok(ServerMessage::DialogueState(state))
 }
 
-pub(super) fn request_overworld_route(
-    runtime: &mut ServerSimulationRuntime,
-    request: OverworldRouteRequest,
-) -> Result<ServerMessage, ProtocolError> {
-    let route = runtime
-        .0
-        .request_overworld_route(request.actor_id, &request.target_location_id)
-        .map_err(|error| runtime_protocol_error("overworld_route", error))?;
-    Ok(ServerMessage::OverworldRouteComputed(
-        protocol_overworld_route(route),
-    ))
-}
-
-pub(super) fn start_overworld_travel(
-    runtime: &mut ServerSimulationRuntime,
-    request: OverworldRouteRequest,
-) -> Result<ServerMessage, ProtocolError> {
-    let state = runtime
-        .0
-        .start_overworld_travel(request.actor_id, &request.target_location_id)
-        .map_err(|error| runtime_protocol_error("overworld_travel_start", error))?;
-    Ok(ServerMessage::OverworldState(protocol_overworld_state(
-        state,
-    )))
-}
-
-pub(super) fn advance_overworld_travel(
-    runtime: &mut ServerSimulationRuntime,
-    request: AdvanceOverworldTravelRequest,
-) -> Result<ServerMessage, ProtocolError> {
-    let state = runtime
-        .0
-        .advance_overworld_travel(request.actor_id, request.minutes)
-        .map_err(|error| runtime_protocol_error("overworld_travel_advance", error))?;
-    Ok(ServerMessage::OverworldState(protocol_overworld_state(
-        state,
-    )))
-}
-
 pub(super) fn travel_to_map(
     runtime: &mut ServerSimulationRuntime,
     request: MapTravelRequest,
@@ -385,7 +344,11 @@ fn parse_world_mode(
     };
     match raw {
         "overworld" => Ok(WorldMode::Overworld),
-        "traveling" => Ok(WorldMode::Traveling),
+        "traveling" => Err(protocol_error(
+            format!("{operation}_invalid_world_mode"),
+            "unsupported world_mode: traveling".to_string(),
+            false,
+        )),
         "outdoor" => Ok(WorldMode::Outdoor),
         "interior" => Ok(WorldMode::Interior),
         "dungeon" => Ok(WorldMode::Dungeon),

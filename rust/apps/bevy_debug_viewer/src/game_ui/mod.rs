@@ -1,3 +1,6 @@
+//! 游戏 UI 模块门面：统一组织状态同步、输入处理、面板、快捷栏、浮层和通用组件子模块，
+//! 并对外暴露 viewer UI 更新链路所需的稳定入口与共享常量。
+
 use std::fs;
 use std::marker::PhantomData;
 
@@ -6,10 +9,11 @@ use bevy::prelude::*;
 use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
 use bevy::window::{PresentMode, VideoModeSelection, WindowMode};
 use game_bevy::{
-    character_snapshot, interaction_prompt_text, inventory_snapshot, journal_snapshot,
-    player_actor_id, skills_snapshot, trade_snapshot, world_status_snapshot, EffectDefinitions,
-    ItemDefinitions, OverworldDefinitions, QuestDefinitions, RecipeDefinitions, ShopDefinitions,
-    SkillDefinitions, SkillTreeDefinitions, UiHotbarState, UiInputBlockState, UiInventoryFilter,
+    apply_gameplay_libraries, character_snapshot, interaction_prompt_text, inventory_snapshot,
+    journal_snapshot, overworld_location_prompt_snapshot, player_actor_id, skills_snapshot,
+    trade_snapshot, world_status_snapshot, EffectDefinitions, ItemDefinitions,
+    OverworldDefinitions, QuestDefinitions, RecipeDefinitions, ShopDefinitions, SkillDefinitions,
+    SkillTreeDefinitions, UiHotbarState, UiInputBlockState, UiInventoryFilter,
     UiInventoryFilterState, UiMenuPanel, UiMenuState, UiModalState, UiStatusBannerState,
 };
 use game_core::RuntimeSnapshot;
@@ -23,8 +27,8 @@ use crate::state::{
     EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, InventoryContextMenuRoot,
     InventoryItemClickTarget, InventoryItemHoverTarget, SkillHoverTarget, UiHoverTooltipContent,
     UiHoverTooltipState, UiInventoryContextMenuState, UiInventoryContextMenuTarget, UiMouseBlocker,
-    ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind,
-    ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
+    ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState,
+    ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 const UI_PANEL_WIDTH: f32 = 448.0;
@@ -35,11 +39,8 @@ const RIGHT_PANEL_TOP: f32 = 74.0;
 const RIGHT_PANEL_BOTTOM: f32 = 174.0;
 const RIGHT_PANEL_HEADER_HEIGHT: f32 = 58.0;
 pub(crate) const HOTBAR_DOCK_WIDTH: f32 = 1088.0;
-pub(crate) const HOTBAR_DOCK_HEIGHT: f32 = 124.0;
-const HOTBAR_SLOT_SIZE: f32 = 56.0;
-const HOTBAR_ACTION_WIDTH: f32 = 88.0;
-const HOTBAR_LEFT_TABS_WIDTH: f32 = 154.0;
-const HOTBAR_RIGHT_TABS_WIDTH: f32 = 254.0;
+pub(crate) const HOTBAR_DOCK_HEIGHT: f32 = 76.0;
+const HOTBAR_SLOT_SIZE: f32 = 45.0;
 const BOTTOM_TAB_HEIGHT: f32 = 22.0;
 const HOVER_TOOLTIP_MAX_WIDTH: f32 = 320.0;
 const HOVER_TOOLTIP_CURSOR_OFFSET_X: f32 = 16.0;
@@ -62,6 +63,7 @@ pub(crate) struct GameUiViewState<'w, 's> {
     viewer_state: Res<'w, ViewerState>,
     menu_state: Res<'w, UiMenuState>,
     modal_state: Res<'w, UiModalState>,
+    input_block_state: Res<'w, UiInputBlockState>,
     filter_state: Res<'w, UiInventoryFilterState>,
     hotbar_state: Res<'w, UiHotbarState>,
     settings: Res<'w, ViewerUiSettings>,

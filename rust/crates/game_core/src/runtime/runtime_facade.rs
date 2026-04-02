@@ -8,6 +8,7 @@ impl SimulationRuntime {
             pending_movement: None,
             pending_interaction: None,
             pending_movement_stop_requested: false,
+            recent_overworld_arrival: None,
             path_preview: Vec::new(),
             tick_count: 0,
         }
@@ -20,6 +21,7 @@ impl SimulationRuntime {
             pending_movement: None,
             pending_interaction: None,
             pending_movement_stop_requested: false,
+            recent_overworld_arrival: None,
             path_preview: Vec::new(),
             tick_count: 0,
         }
@@ -58,6 +60,7 @@ impl SimulationRuntime {
 
     pub fn unregister_actor(&mut self, actor_id: ActorId) {
         self.clear_pending_movement_internal(None);
+        self.clear_recent_overworld_arrival();
         self.vision.clear_actor(actor_id);
         self.simulation.unregister_actor(actor_id);
     }
@@ -126,6 +129,15 @@ impl SimulationRuntime {
     }
 
     pub fn submit_command(&mut self, command: SimulationCommand) -> SimulationCommandResult {
+        if matches!(
+            command,
+            SimulationCommand::MoveActorTo { .. }
+                | SimulationCommand::TravelToMap { .. }
+                | SimulationCommand::EnterLocation { .. }
+                | SimulationCommand::ReturnToOverworld { .. }
+        ) {
+            self.clear_recent_overworld_arrival();
+        }
         self.cancel_pending_for_command(&command);
         self.capture_path_preview(&command);
         self.simulation.apply_command(command)

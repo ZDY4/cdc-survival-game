@@ -1,4 +1,5 @@
 use super::*;
+use game_data::WorldMode;
 
 impl SimulationRuntime {
     pub fn plan_actor_movement(
@@ -27,6 +28,7 @@ impl SimulationRuntime {
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
         let plan = self.plan_actor_movement(actor_id, goal)?;
+        self.clear_recent_overworld_arrival();
         self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
         self.path_preview = plan.requested_path.clone();
 
@@ -54,6 +56,12 @@ impl SimulationRuntime {
                 .queue_pending_progression(PendingProgressionStep::ContinuePendingMovement);
         } else {
             self.pending_movement = None;
+            self.record_recent_overworld_arrival(
+                actor_id,
+                goal,
+                self.simulation.actor_grid_position(actor_id),
+                true,
+            );
         }
 
         Ok(outcome)
@@ -65,6 +73,7 @@ impl SimulationRuntime {
             .map(|intent| intent.actor_id == actor_id)
             .unwrap_or(false)
         {
+            self.clear_recent_overworld_arrival();
             self.clear_pending_movement_internal(Some(
                 AutoMoveInterruptReason::CancelledByNewCommand,
             ));
@@ -84,6 +93,7 @@ impl SimulationRuntime {
         {
             self.pending_movement_stop_requested = true;
         } else {
+            self.clear_recent_overworld_arrival();
             self.clear_pending_movement_internal(Some(
                 AutoMoveInterruptReason::CancelledByNewCommand,
             ));
@@ -166,6 +176,35 @@ impl SimulationRuntime {
         }
     }
 
+    pub(super) fn clear_recent_overworld_arrival(&mut self) {
+        self.recent_overworld_arrival = None;
+    }
+
+    fn record_recent_overworld_arrival(
+        &mut self,
+        actor_id: ActorId,
+        requested_goal: GridCoord,
+        final_position: Option<GridCoord>,
+        arrived_exactly: bool,
+    ) {
+        if self.current_interaction_context().world_mode != WorldMode::Overworld {
+            self.clear_recent_overworld_arrival();
+            return;
+        }
+
+        let Some(final_position) = final_position else {
+            self.clear_recent_overworld_arrival();
+            return;
+        };
+
+        self.recent_overworld_arrival = Some(RecentOverworldArrival {
+            actor_id,
+            requested_goal,
+            final_position,
+            arrived_exactly: arrived_exactly && final_position == requested_goal,
+        });
+    }
+
     pub(super) fn cancel_pending_for_command(&mut self, command: &SimulationCommand) {
         let should_cancel = matches!(
             command,
@@ -224,6 +263,12 @@ impl SimulationRuntime {
                 Ok(None) => {
                     let final_position = self.simulation.actor_grid_position(intent.actor_id);
                     self.pending_movement = None;
+                    self.record_recent_overworld_arrival(
+                        intent.actor_id,
+                        intent.requested_goal,
+                        final_position,
+                        true,
+                    );
                     self.path_preview.clear();
                     return ProgressionAdvanceResult {
                         applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
@@ -287,6 +332,12 @@ impl SimulationRuntime {
             let final_position = Some(plan.start);
             self.pending_movement = None;
             self.pending_movement_stop_requested = false;
+            self.record_recent_overworld_arrival(
+                intent.actor_id,
+                requested_goal,
+                final_position,
+                true,
+            );
             return ProgressionAdvanceResult {
                 applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
                 final_position,
@@ -360,6 +411,12 @@ impl SimulationRuntime {
             self.clear_pending_movement_state_preserving_progression(Some(
                 AutoMoveInterruptReason::CancelledByNewCommand,
             ));
+            self.record_recent_overworld_arrival(
+                intent.actor_id,
+                requested_goal,
+                final_position,
+                false,
+            );
             return ProgressionAdvanceResult {
                 applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
                 final_position,
@@ -379,6 +436,12 @@ impl SimulationRuntime {
         }
 
         let reached_goal = !outcome.plan.is_truncated();
+        self.record_recent_overworld_arrival(
+            intent.actor_id,
+            requested_goal,
+            final_position,
+            reached_goal,
+        );
         ProgressionAdvanceResult {
             applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
             final_position,

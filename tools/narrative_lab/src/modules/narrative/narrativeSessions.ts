@@ -16,6 +16,8 @@ export type NarrativeTabState = {
   activeTabKey: string | null;
 };
 
+export type DocumentAgentSessionMap = Record<string, DocumentAgentSession>;
+
 export function createDocumentAgentSession(
   overrides: Partial<DocumentAgentSession> = {},
 ): DocumentAgentSession {
@@ -53,10 +55,10 @@ export function createDocumentAgentSession(
 }
 
 export function ensureDocumentAgentSession(
-  sessions: Record<string, DocumentAgentSession>,
+  sessions: DocumentAgentSessionMap,
   documentKey: string,
   viewMode: NarrativeDocumentViewMode = "preview",
-): Record<string, DocumentAgentSession> {
+): DocumentAgentSessionMap {
   if (sessions[documentKey]) {
     return sessions;
   }
@@ -98,10 +100,10 @@ export function closeNarrativeTab(
 }
 
 export function updateDocumentAgentSession(
-  sessions: Record<string, DocumentAgentSession>,
+  sessions: DocumentAgentSessionMap,
   documentKey: string,
   transform: (session: DocumentAgentSession) => DocumentAgentSession,
-): Record<string, DocumentAgentSession> {
+): DocumentAgentSessionMap {
   const session = sessions[documentKey] ?? createDocumentAgentSession();
   return {
     ...sessions,
@@ -109,13 +111,99 @@ export function updateDocumentAgentSession(
   };
 }
 
+export function withComputedReviewQueue(
+  session: DocumentAgentSession,
+): DocumentAgentSession {
+  return {
+    ...session,
+    reviewQueue: buildReviewQueue(session),
+  };
+}
+
+export function updateDocumentAgentSessionWithReviewQueue(
+  sessions: DocumentAgentSessionMap,
+  documentKey: string,
+  transform: (session: DocumentAgentSession) => DocumentAgentSession,
+): DocumentAgentSessionMap {
+  return updateDocumentAgentSession(sessions, documentKey, (session) => {
+    const nextSession = transform(session);
+    if (nextSession === session) {
+      return session;
+    }
+    return withComputedReviewQueue(nextSession);
+  });
+}
+
+export function restoreDocumentAgentSessions(
+  sessions: DocumentAgentSessionMap | null | undefined,
+  validDocumentKeys: Iterable<string>,
+): {
+  restoredSessions: DocumentAgentSessionMap;
+  restoreTargetKey: string | null;
+} {
+  const validKeys = new Set(validDocumentKeys);
+  const restoredEntries = Object.entries(sessions ?? {}).filter(([documentKey]) =>
+    validKeys.has(documentKey),
+  );
+  const restoreTargetKey =
+    restoredEntries
+      .slice()
+      .sort((left, right) => {
+        const leftTime = Date.parse(left[1].updatedAt || "");
+        const rightTime = Date.parse(right[1].updatedAt || "");
+        return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
+      })[0]?.[0] ?? null;
+
+  return {
+    restoredSessions: Object.fromEntries(
+      restoredEntries.map(([documentKey, session]) => [
+        documentKey,
+        withComputedReviewQueue({
+          ...session,
+          busy: false,
+          inflightRequestId: null,
+        }),
+      ]),
+    ),
+    restoreTargetKey,
+  };
+}
+
+export function addSelectedContextDocument(
+  session: DocumentAgentSession,
+  documentKey: string,
+): DocumentAgentSession {
+  if (session.selectedContextDocKeys.includes(documentKey)) {
+    return session;
+  }
+  return {
+    ...session,
+    updatedAt: nowIso(),
+    selectedContextDocKeys: [...session.selectedContextDocKeys, documentKey],
+  };
+}
+
+export function removeSelectedContextDocument(
+  session: DocumentAgentSession,
+  documentKey: string,
+): DocumentAgentSession {
+  if (!session.selectedContextDocKeys.includes(documentKey)) {
+    return session;
+  }
+  return {
+    ...session,
+    updatedAt: nowIso(),
+    selectedContextDocKeys: session.selectedContextDocKeys.filter((entry) => entry !== documentKey),
+  };
+}
+
 export function stashDocumentResponse(
-  sessions: Record<string, DocumentAgentSession>,
+  sessions: DocumentAgentSessionMap,
   documentKey: string,
   request: NarrativeGenerateRequest,
   response: NarrativeGenerateResponse,
-): Record<string, DocumentAgentSession> {
-  return updateDocumentAgentSession(sessions, documentKey, (session) => ({
+): DocumentAgentSessionMap {
+  return updateDocumentAgentSessionWithReviewQueue(sessions, documentKey, (session) => ({
     ...session,
     updatedAt: nowIso(),
     lastRequest: request,
@@ -128,19 +216,6 @@ export function stashDocumentResponse(
     executionSteps: response.executionSteps,
     currentStepId: response.currentStepId ?? null,
     pendingActionRequests: response.requestedActions,
-    reviewQueue: buildReviewQueue({
-      ...session,
-      lastRequest: request,
-      lastResponse: response,
-      status: response.requiresUserReply ? "waiting_user" : "completed",
-      pendingQuestions: response.questions,
-      pendingOptions: response.options,
-      lastPlan: response.planSteps.length ? response.planSteps : session.lastPlan,
-      pendingTurnKind: response.requiresUserReply ? response.turnKind : null,
-      executionSteps: response.executionSteps,
-      currentStepId: response.currentStepId ?? null,
-      pendingActionRequests: response.requestedActions,
-    }),
     busy: false,
   }));
 }

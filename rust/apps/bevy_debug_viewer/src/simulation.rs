@@ -258,13 +258,6 @@ pub(crate) fn command_result_status(label: &str, result: SimulationCommandResult
             ),
             Err(error) => format!("{label}: dialogue error={error}"),
         },
-        SimulationCommandResult::OverworldRoute(result) => match result {
-            Ok(route) => format!(
-                "{label}: route {} -> {} mins={}",
-                route.from_location_id, route.to_location_id, route.travel_minutes
-            ),
-            Err(error) => format!("{label}: route error={error}"),
-        },
         SimulationCommandResult::OverworldState(result) => match result {
             Ok(state) => format!(
                 "{label}: mode={:?} location={}",
@@ -755,10 +748,6 @@ pub(crate) fn classify_event(event: &SimulationEvent) -> HudEventCategory {
         | SimulationEvent::QuestStarted { .. }
         | SimulationEvent::QuestObjectiveProgressed { .. }
         | SimulationEvent::QuestCompleted { .. }
-        | SimulationEvent::OverworldRouteComputed { .. }
-        | SimulationEvent::OverworldTravelStarted { .. }
-        | SimulationEvent::OverworldTravelProgressed { .. }
-        | SimulationEvent::OverworldTravelCompleted { .. }
         | SimulationEvent::LocationEntered { .. }
         | SimulationEvent::ReturnedToOverworld { .. }
         | SimulationEvent::LocationUnlocked { .. } => HudEventCategory::World,
@@ -962,39 +951,6 @@ fn format_event_text(event: SimulationEvent) -> String {
         } => format!(
             "scene transition actor={:?} option={} target={} mode={:?}",
             actor_id, option_id, target_id, world_mode
-        ),
-        SimulationEvent::OverworldRouteComputed {
-            actor_id,
-            target_location_id,
-            travel_minutes,
-            path_length,
-        } => format!(
-            "overworld route actor={:?} target={} mins={} path={}",
-            actor_id, target_location_id, travel_minutes, path_length
-        ),
-        SimulationEvent::OverworldTravelStarted {
-            actor_id,
-            target_location_id,
-            travel_minutes,
-        } => format!(
-            "overworld travel started actor={:?} target={} mins={}",
-            actor_id, target_location_id, travel_minutes
-        ),
-        SimulationEvent::OverworldTravelProgressed {
-            actor_id,
-            target_location_id,
-            progressed_minutes,
-            remaining_minutes,
-        } => format!(
-            "overworld travel actor={:?} target={} progress={} remaining={}",
-            actor_id, target_location_id, progressed_minutes, remaining_minutes
-        ),
-        SimulationEvent::OverworldTravelCompleted {
-            actor_id,
-            target_location_id,
-        } => format!(
-            "overworld travel completed actor={:?} target={}",
-            actor_id, target_location_id
         ),
         SimulationEvent::LocationEntered {
             actor_id,

@@ -300,6 +300,7 @@ pub(crate) fn profiled_update_game_ui(
     commands: Commands,
     root: Single<(Entity, Option<&Children>), With<GameUiRoot>>,
     window: Single<&Window>,
+    camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     palette: Res<ViewerPalette>,
     font: Res<ViewerUiFont>,
     ui: GameUiViewState,
@@ -309,7 +310,16 @@ pub(crate) fn profiled_update_game_ui(
 ) {
     let should_record = should_profile(&viewer_state);
     let start = should_record.then(Instant::now);
-    crate::game_ui::update_game_ui(commands, root, window, palette, font, ui, content);
+    crate::game_ui::update_game_ui(
+        commands,
+        root,
+        window,
+        camera_query,
+        palette,
+        font,
+        ui,
+        content,
+    );
     if let Some(start) = start {
         profiler.record_sample("update_game_ui", elapsed_ms(start));
     }

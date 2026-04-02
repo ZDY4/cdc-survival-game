@@ -1,3 +1,5 @@
+//! 调试控制台模块：负责 viewer 内命令输入、提示、执行反馈与控制台面板渲染。
+
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::log::{error, info};
@@ -28,6 +30,10 @@ struct ConsoleCommandSpec {
 }
 
 const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[
+    ConsoleCommandSpec {
+        name: "ob mode",
+        summary: "Toggle player control / free observe mode.",
+    },
     ConsoleCommandSpec {
         name: "restart",
         summary: "Rebuild the runtime from bootstrap and restart the current game.",
@@ -160,28 +166,31 @@ pub(crate) fn spawn_console_panel(
     ui_font: Handle<Font>,
     palette: &ViewerPalette,
 ) {
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(CONSOLE_PANEL_TOP_PX),
-            left: px(CONSOLE_PANEL_HORIZONTAL_MARGIN_PX),
-            width: px(CONSOLE_PANEL_MIN_WIDTH_PX),
-            padding: UiRect::all(px(CONSOLE_PANEL_PADDING_PX)),
-            flex_direction: FlexDirection::Column,
-            ..default()
-        },
-        BackgroundColor(palette.menu_background),
-        Visibility::Hidden,
-        FocusPolicy::Block,
-        RelativeCursorPosition::default(),
-        ConsolePanelRoot,
-        UiMouseBlocker,
-        children![(
-            Text::new(""),
-            TextFont::from_font_size(13.0).with_font(ui_font),
-            TextColor(Color::srgba(0.97, 0.98, 0.99, 0.98)),
-        )],
-    ));
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(CONSOLE_PANEL_TOP_PX),
+                left: px(CONSOLE_PANEL_HORIZONTAL_MARGIN_PX),
+                width: px(CONSOLE_PANEL_MIN_WIDTH_PX),
+                padding: UiRect::all(px(CONSOLE_PANEL_PADDING_PX)),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(palette.menu_background),
+            Visibility::Hidden,
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
+            ConsolePanelRoot,
+            UiMouseBlocker,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new(""),
+                TextFont::from_font_size(13.0).with_font(ui_font),
+                TextColor(Color::srgba(0.97, 0.98, 0.99, 0.98)),
+            ));
+        });
 }
 
 pub(crate) fn update_console_panel(
@@ -295,6 +304,7 @@ fn execute_console_command(
         .to_ascii_lowercase();
 
     match command_name.as_str() {
+        "ob" => execute_ob_command(&tokens[1..], runtime_state, viewer_state),
         "restart" => restart_runtime(
             runtime_state,
             viewer_state,
@@ -312,6 +322,40 @@ fn execute_console_command(
         _ => ConsoleFeedback {
             is_error: true,
             text: format!("Unknown command: {command_name}"),
+        },
+    }
+}
+
+fn execute_ob_command(
+    args: &[&str],
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+) -> ConsoleFeedback {
+    match args {
+        [target] if target.eq_ignore_ascii_case("mode") => {
+            viewer_state.targeting_state = None;
+            viewer_state.control_mode = viewer_state.control_mode.toggle();
+            viewer_state.focused_target = None;
+            viewer_state.current_prompt = None;
+            viewer_state.interaction_menu = None;
+            if viewer_state.is_player_control() {
+                viewer_state.selected_actor =
+                    viewer_state.command_actor_id(&runtime_state.runtime.snapshot());
+            }
+            let status = format!("control mode: {}", viewer_state.control_mode.label());
+            viewer_state.status_line = status.clone();
+            ConsoleFeedback {
+                is_error: false,
+                text: status,
+            }
+        }
+        [] => ConsoleFeedback {
+            is_error: true,
+            text: "Usage: ob mode".to_string(),
+        },
+        _ => ConsoleFeedback {
+            is_error: true,
+            text: format!("Unknown ob target: {}", args.join(" ")),
         },
     }
 }
@@ -540,10 +584,11 @@ fn is_printable_char(chr: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        autocomplete_console_input, console_suggestions, execute_show_command,
+        autocomplete_console_input, console_suggestions, execute_ob_command, execute_show_command,
         move_console_selection_next, move_console_selection_previous, ViewerConsoleState,
     };
-    use crate::state::ViewerState;
+    use crate::state::{ViewerRuntimeState, ViewerState};
+    use game_core::create_demo_runtime;
 
     #[test]
     fn console_suggestions_match_restart_prefix() {
@@ -559,6 +604,14 @@ mod tests {
 
         assert_eq!(suggestions.len(), 1);
         assert_eq!(suggestions[0].name, "show fps");
+    }
+
+    #[test]
+    fn console_suggestions_match_observe_mode_prefix() {
+        let suggestions = console_suggestions("ob");
+
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].name, "ob mode");
     }
 
     #[test]
@@ -603,6 +656,43 @@ mod tests {
         assert!(!second.is_error);
         assert!(!viewer_state.show_fps_overlay);
         assert_eq!(second.text, "fps overlay: off");
+    }
+
+    #[test]
+    fn ob_mode_toggles_control_mode() {
+        let (runtime, _) = create_demo_runtime();
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: Default::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+
+        let first = execute_ob_command(&["mode"], &runtime_state, &mut viewer_state);
+        assert!(!first.is_error);
+        assert!(viewer_state.is_free_observe());
+        assert_eq!(first.text, "control mode: Free Observe");
+
+        let second = execute_ob_command(&["mode"], &runtime_state, &mut viewer_state);
+        assert!(!second.is_error);
+        assert!(viewer_state.is_player_control());
+        assert_eq!(second.text, "control mode: Player Control");
+    }
+
+    #[test]
+    fn ob_command_rejects_unknown_target() {
+        let (runtime, _) = create_demo_runtime();
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: Default::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+
+        let feedback = execute_ob_command(&["camera"], &runtime_state, &mut viewer_state);
+
+        assert!(feedback.is_error);
+        assert!(feedback.text.contains("Unknown ob target"));
     }
 
     #[test]

@@ -102,6 +102,14 @@ pub struct PendingMovementIntent {
     pub requested_goal: GridCoord,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecentOverworldArrival {
+    pub actor_id: ActorId,
+    pub requested_goal: GridCoord,
+    pub final_position: GridCoord,
+    pub arrived_exactly: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingInteractionIntent {
     pub actor_id: ActorId,
