@@ -662,20 +662,20 @@ mod tests {
     #[test]
     fn collect_pending_operations_marks_changed_and_deleted_documents() {
         let documents = vec![NarrativeDocumentPayload {
-            document_key: "scene-a".to_string(),
-            original_slug: "scene-a".to_string(),
-            file_name: "scene-a.md".to_string(),
-            relative_path: "narrative/scenes/scene-a.md".to_string(),
+            document_key: "task-a".to_string(),
+            original_slug: "task-a".to_string(),
+            file_name: "task-a.md".to_string(),
+            relative_path: "narrative/tasks/task-a.md".to_string(),
             meta: NarrativeDocumentMeta {
-                doc_type: "scene_draft".to_string(),
-                slug: "scene-a".to_string(),
-                title: "Scene A".to_string(),
+                doc_type: "task_setup".to_string(),
+                slug: "task-a".to_string(),
+                title: "Task A".to_string(),
                 status: "draft".to_string(),
                 tags: vec![],
                 related_docs: vec![],
                 source_refs: vec![],
             },
-            markdown: "# Scene A".to_string(),
+            markdown: "# Task A".to_string(),
             validation: Vec::new(),
         }];
         let sync_state = WorkspaceSyncState {
@@ -698,7 +698,7 @@ mod tests {
         let operations = collect_pending_operations(&documents, &sync_state);
         assert!(operations
             .iter()
-            .any(|operation| operation.kind == "upsert" && operation.slug == "scene-a"));
+            .any(|operation| operation.kind == "upsert" && operation.slug == "task-a"));
         assert!(operations
             .iter()
             .any(|operation| operation.kind == "delete" && operation.slug == "removed-scene"));
