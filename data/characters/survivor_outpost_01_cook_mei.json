@@ -58,6 +58,7 @@
   "life": {
     "settlement_id": "survivor_outpost_01_settlement",
     "role": "cook",
+    "ai_behavior_profile_id": "cook_settlement",
     "home_anchor": "cook_home_01",
     "duty_route_id": "cook_service_loop",
     "schedule": [

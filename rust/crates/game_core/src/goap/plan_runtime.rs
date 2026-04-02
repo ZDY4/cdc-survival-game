@@ -105,7 +105,7 @@ pub fn tick_offline_action(state: &mut OfflineActionState, delta_minutes: u32) -
             ActionExecutionPhase::Complete => {
                 result.finished = true;
                 result.current_anchor = state.current_anchor.clone();
-                result.completed_action = Some(state.step.action);
+                result.completed_action = Some(state.step.action.clone());
                 break;
             }
             ActionExecutionPhase::Failed => {

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::NpcPlanRequest;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NpcPlanningContext {
     pub request: NpcPlanRequest,
     pub current_anchor: Option<String>,

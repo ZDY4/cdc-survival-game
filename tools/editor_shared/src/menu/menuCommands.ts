@@ -38,6 +38,10 @@ export const EDITOR_MENU_COMMANDS = {
   NARRATIVE_NEW_CHAPTER_OUTLINE: "narrative.new.chapter-outline",
   NARRATIVE_NEW_BRANCH_SHEET: "narrative.new.branch-sheet",
   NARRATIVE_NEW_SCENE_DRAFT: "narrative.new.scene-draft",
+  NARRATIVE_NEW_TASK_SETUP: "narrative.new.task-setup",
+  NARRATIVE_NEW_LOCATION_NOTE: "narrative.new.location-note",
+  NARRATIVE_NEW_MONSTER_NOTE: "narrative.new.monster-note",
+  NARRATIVE_NEW_ITEM_NOTE: "narrative.new.item-note",
 } as const;
 
 export type EditorMenuCommandId =
@@ -53,7 +57,7 @@ export type EditorMenuCommandMap = Partial<
 >;
 
 const COMMAND_LABELS: Record<EditorMenuCommandId, string> = {
-  [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: "新建",
+  [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: "新建草稿",
   [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: "全部保存",
   [EDITOR_MENU_COMMANDS.FILE_RELOAD]: "重新加载",
   [EDITOR_MENU_COMMANDS.FILE_DELETE_CURRENT]: "删除当前项",
@@ -88,10 +92,14 @@ const COMMAND_LABELS: Record<EditorMenuCommandId, string> = {
   [EDITOR_MENU_COMMANDS.MODULE_MAPS]: "地图",
   [EDITOR_MENU_COMMANDS.MODULE_NARRATIVE]: "叙事实验室",
   [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_PROJECT_BRIEF]: "新建项目简介",
-  [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHARACTER_CARD]: "新建角色卡",
+  [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHARACTER_CARD]: "新建人物设定",
   [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHAPTER_OUTLINE]: "新建章节提纲",
   [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_BRANCH_SHEET]: "新建分支表",
   [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_SCENE_DRAFT]: "新建场景草稿",
+  [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_TASK_SETUP]: "新建任务设定",
+  [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_LOCATION_NOTE]: "新建地点设定",
+  [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_MONSTER_NOTE]: "新建怪物设定",
+  [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_ITEM_NOTE]: "新建物品设定",
 };
 
 export function formatEditorMenuCommandLabel(commandId: EditorMenuCommandId): string {

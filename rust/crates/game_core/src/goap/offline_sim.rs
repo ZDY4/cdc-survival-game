@@ -55,7 +55,7 @@ pub fn advance_offline_sim(
             result.released_reservations.push(reservation.clone());
         }
         if let Some(action) = tick.completed_action {
-            state.completed_actions.push(action);
+            state.completed_actions.push(action.clone());
             result.finished_actions.push(action);
             state.current_action = None;
         }

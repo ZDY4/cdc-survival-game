@@ -39,11 +39,11 @@ pub mod ids {
     pub const NAVIGATION_NEXT_TAB: &str = "navigation.next-tab";
     pub const NAVIGATION_PREV_TAB: &str = "navigation.prev-tab";
     pub const NAVIGATION_CLOSE_ACTIVE_TAB: &str = "navigation.close-active-tab";
-    pub const NARRATIVE_NEW_PROJECT_BRIEF: &str = "narrative.new.project-brief";
     pub const NARRATIVE_NEW_CHARACTER_CARD: &str = "narrative.new.character-card";
-    pub const NARRATIVE_NEW_CHAPTER_OUTLINE: &str = "narrative.new.chapter-outline";
-    pub const NARRATIVE_NEW_BRANCH_SHEET: &str = "narrative.new.branch-sheet";
-    pub const NARRATIVE_NEW_SCENE_DRAFT: &str = "narrative.new.scene-draft";
+    pub const NARRATIVE_NEW_TASK_SETUP: &str = "narrative.new.task-setup";
+    pub const NARRATIVE_NEW_LOCATION_NOTE: &str = "narrative.new.location-note";
+    pub const NARRATIVE_NEW_MONSTER_NOTE: &str = "narrative.new.monster-note";
+    pub const NARRATIVE_NEW_ITEM_NOTE: &str = "narrative.new.item-note";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,72 +62,72 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     let file_new_current = MenuItem::with_id(
         app,
         ids::FILE_NEW_CURRENT,
-        "New Draft",
+        "新建草稿",
         true,
         Some("CmdOrCtrl+N"),
     )?;
     let file_save_all = MenuItem::with_id(
         app,
         ids::FILE_SAVE_ALL,
-        "Save All",
+        "全部保存",
         true,
         Some("CmdOrCtrl+S"),
     )?;
-    let file_reload = MenuItem::with_id(app, ids::FILE_RELOAD, "Reload", true, Some("F5"))?;
+    let file_reload = MenuItem::with_id(app, ids::FILE_RELOAD, "重新加载", true, Some("F5"))?;
     let file_delete_current = MenuItem::with_id(
         app,
         ids::FILE_DELETE_CURRENT,
-        "Delete Current",
+        "删除当前项",
         true,
         Some("Delete"),
     )?;
     let workbench_command_palette = MenuItem::with_id(
         app,
         ids::WORKBENCH_COMMAND_PALETTE,
-        "Command Palette",
+        "命令面板",
         true,
         Some("CmdOrCtrl+Shift+P"),
     )?;
     let workbench_quick_open = MenuItem::with_id(
         app,
         ids::WORKBENCH_QUICK_OPEN,
-        "Quick Open",
+        "快速打开",
         true,
         Some("CmdOrCtrl+P"),
     )?;
 
-    let narrative_new_project_brief = MenuItem::with_id(
+    let narrative_new_task_setup = MenuItem::with_id(
         app,
-        ids::NARRATIVE_NEW_PROJECT_BRIEF,
-        "Project Brief",
+        ids::NARRATIVE_NEW_TASK_SETUP,
+        "任务设定",
+        true,
+        None::<&str>,
+    )?;
+    let narrative_new_location_note = MenuItem::with_id(
+        app,
+        ids::NARRATIVE_NEW_LOCATION_NOTE,
+        "地点设定",
         true,
         None::<&str>,
     )?;
     let narrative_new_character_card = MenuItem::with_id(
         app,
         ids::NARRATIVE_NEW_CHARACTER_CARD,
-        "Character Card",
+        "人物设定",
         true,
         None::<&str>,
     )?;
-    let narrative_new_chapter_outline = MenuItem::with_id(
+    let narrative_new_monster_note = MenuItem::with_id(
         app,
-        ids::NARRATIVE_NEW_CHAPTER_OUTLINE,
-        "Chapter Outline",
+        ids::NARRATIVE_NEW_MONSTER_NOTE,
+        "怪物设定",
         true,
         None::<&str>,
     )?;
-    let narrative_new_branch_sheet = MenuItem::with_id(
+    let narrative_new_item_note = MenuItem::with_id(
         app,
-        ids::NARRATIVE_NEW_BRANCH_SHEET,
-        "Branch Sheet",
-        true,
-        None::<&str>,
-    )?;
-    let narrative_new_scene_draft = MenuItem::with_id(
-        app,
-        ids::NARRATIVE_NEW_SCENE_DRAFT,
-        "Scene Draft",
+        ids::NARRATIVE_NEW_ITEM_NOTE,
+        "物品设定",
         true,
         None::<&str>,
     )?;
@@ -135,113 +135,113 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     let toggle_sidebar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_SIDEBAR,
-        "Toggle Sidebar",
+        "切换侧边栏",
         true,
         None::<&str>,
     )?;
     let toggle_left_sidebar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_LEFT_SIDEBAR,
-        "Toggle Left Sidebar",
+        "切换左侧边栏",
         true,
         Some("CmdOrCtrl+B"),
     )?;
     let toggle_right_sidebar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_RIGHT_SIDEBAR,
-        "Toggle Right Sidebar",
+        "切换右侧边栏",
         true,
         None::<&str>,
     )?;
     let toggle_bottom_panel = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_BOTTOM_PANEL,
-        "Toggle Bottom Panel",
+        "切换底部面板",
         true,
         Some("CmdOrCtrl+J"),
     )?;
     let toggle_status_bar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_STATUS_BAR,
-        "Toggle Status Bar",
+        "切换状态栏",
         true,
         None::<&str>,
     )?;
     let reset_layout = MenuItem::with_id(
         app,
         ids::VIEW_RESET_LAYOUT,
-        "Reset Layout",
+        "重置布局",
         true,
         None::<&str>,
     )?;
     let restore_default_layout = MenuItem::with_id(
         app,
         ids::VIEW_RESTORE_DEFAULT_LAYOUT,
-        "Restore Default Layout",
+        "恢复默认布局",
         true,
         None::<&str>,
     )?;
     let collapse_advanced_panels = MenuItem::with_id(
         app,
         ids::VIEW_COLLAPSE_ADVANCED_PANELS,
-        "Collapse Advanced Panels",
+        "收起高级面板",
         true,
         None::<&str>,
     )?;
     let expand_all_panels = MenuItem::with_id(
         app,
         ids::VIEW_EXPAND_ALL_PANELS,
-        "Expand All Panels",
+        "展开全部面板",
         true,
         None::<&str>,
     )?;
     let toggle_inspector = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_INSPECTOR,
-        "Toggle Inspector",
+        "切换检查器",
         true,
         None::<&str>,
     )?;
     let focus_explorer = MenuItem::with_id(
         app,
         ids::VIEW_FOCUS_EXPLORER,
-        "Focus Explorer",
+        "聚焦资源栏",
         true,
         None::<&str>,
     )?;
     let focus_editor = MenuItem::with_id(
         app,
         ids::VIEW_FOCUS_EDITOR,
-        "Focus Editor",
+        "聚焦编辑器",
         true,
         None::<&str>,
     )?;
     let focus_problems = MenuItem::with_id(
         app,
         ids::VIEW_FOCUS_PROBLEMS,
-        "Focus Problems",
+        "聚焦问题面板",
         true,
         None::<&str>,
     )?;
-    let zen_mode = MenuItem::with_id(app, ids::VIEW_ZEN_MODE, "Zen Mode", true, None::<&str>)?;
+    let zen_mode = MenuItem::with_id(app, ids::VIEW_ZEN_MODE, "专注模式", true, None::<&str>)?;
     let next_tab = MenuItem::with_id(
         app,
         ids::NAVIGATION_NEXT_TAB,
-        "Next Tab",
+        "下一个标签页",
         true,
         Some("CmdOrCtrl+Tab"),
     )?;
     let prev_tab = MenuItem::with_id(
         app,
         ids::NAVIGATION_PREV_TAB,
-        "Previous Tab",
+        "上一个标签页",
         true,
         Some("CmdOrCtrl+Shift+Tab"),
     )?;
     let close_active_tab = MenuItem::with_id(
         app,
         ids::NAVIGATION_CLOSE_ACTIVE_TAB,
-        "Close Active Tab",
+        "关闭当前标签页",
         true,
         Some("CmdOrCtrl+W"),
     )?;
@@ -249,39 +249,39 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     let ai_generate = MenuItem::with_id(
         app,
         ids::AI_GENERATE,
-        "AI Generate",
+        "AI 生成",
         true,
         Some("CmdOrCtrl+Shift+G"),
     )?;
     let ai_test_provider = MenuItem::with_id(
         app,
         ids::AI_TEST_PROVIDER_CONNECTION,
-        "Test Provider Connection",
+        "测试提供方连接",
         true,
         None::<&str>,
     )?;
     let ai_open_provider = MenuItem::with_id(
         app,
         ids::AI_OPEN_PROVIDER_SETTINGS,
-        "Open Provider Settings",
+        "打开提供方设置",
         true,
         None::<&str>,
     )?;
 
     let new_narrative_submenu = Submenu::with_items(
         app,
-        "New Narrative",
+        "新建叙事文稿",
         true,
         &[
-            &narrative_new_project_brief,
+            &narrative_new_task_setup,
+            &narrative_new_location_note,
             &narrative_new_character_card,
-            &narrative_new_chapter_outline,
-            &narrative_new_branch_sheet,
-            &narrative_new_scene_draft,
+            &narrative_new_monster_note,
+            &narrative_new_item_note,
         ],
     )?;
 
-    let file_menu = SubmenuBuilder::new(app, "File")
+    let file_menu = SubmenuBuilder::new(app, "文件")
         .item(&file_new_current)
         .item(&new_narrative_submenu)
         .separator()
@@ -293,7 +293,7 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         .item(&PredefinedMenuItem::quit(app, None)?)
         .build()?;
 
-    let edit_menu = SubmenuBuilder::new(app, "Edit")
+    let edit_menu = SubmenuBuilder::new(app, "编辑")
         .undo()
         .redo()
         .separator()
@@ -303,7 +303,7 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         .select_all()
         .build()?;
 
-    let view_menu = SubmenuBuilder::new(app, "View")
+    let view_menu = SubmenuBuilder::new(app, "视图")
         .item(&workbench_command_palette)
         .separator()
         .item(&toggle_sidebar)
@@ -324,7 +324,7 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         .item(&expand_all_panels)
         .build()?;
 
-    let go_menu = SubmenuBuilder::new(app, "Go")
+    let go_menu = SubmenuBuilder::new(app, "导航")
         .item(&workbench_quick_open)
         .separator()
         .item(&next_tab)
@@ -338,7 +338,7 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         .item(&ai_open_provider)
         .build()?;
 
-    let help_menu = SubmenuBuilder::new(app, "Help").about(None).build()?;
+    let help_menu = SubmenuBuilder::new(app, "帮助").about(None).build()?;
 
     Menu::with_items(
         app,

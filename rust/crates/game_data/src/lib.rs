@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod ai_content;
 pub mod character;
 pub mod content;
@@ -16,6 +17,17 @@ pub mod skill;
 
 use bevy_app::prelude::*;
 
+pub use ai::{
+    load_ai_module_library, resolve_ai_behavior_profile, validate_ai_module_library,
+    AiActionDefinition, AiActionId, AiAnchorBinding, AiBehaviorDefinition, AiBehaviorProfile,
+    AiBehaviorProfileRef, AiComparisonOperator, AiConditionalPlannerRequirements,
+    AiConditionDefinition, AiConditionId, AiConditionModuleDefinition,
+    AiExecutorBindingDefinition, AiExecutorBindingId, AiFactId, AiFactModuleDefinition,
+    AiGoalDefinition, AiGoalId, AiModuleLibrary, AiModuleLoadError, AiModulePack,
+    AiModuleValidationError, AiNeedEffectDefinition, AiPlannerDatumAssignment,
+    AiReservationBinding, AiScoreRuleDefinition, AiScoreRuleId, AiWorldStateEffectDefinition,
+    BuiltinAiExecutorKind,
+};
 pub use ai_content::{validate_ai_content, AiContentIssue, AiContentIssueSeverity};
 pub use character::{
     load_character_library, validate_character_definition, CharacterAiProfile, CharacterArchetype,

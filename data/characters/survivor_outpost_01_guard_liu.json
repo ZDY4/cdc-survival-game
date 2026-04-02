@@ -58,6 +58,7 @@
   "life": {
     "settlement_id": "survivor_outpost_01_settlement",
     "role": "guard",
+    "ai_behavior_profile_id": "guard_settlement",
     "home_anchor": "guard_bed_01",
     "duty_route_id": "guard_patrol_main",
     "schedule": [

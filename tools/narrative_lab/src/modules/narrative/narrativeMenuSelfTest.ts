@@ -40,7 +40,7 @@ function buildNarrativeMenuSelfTestChecks(): SelfTestCheck[] {
       expected: "enabled",
     },
     {
-      commandId: EDITOR_MENU_COMMANDS.NARRATIVE_NEW_PROJECT_BRIEF,
+      commandId: EDITOR_MENU_COMMANDS.NARRATIVE_NEW_TASK_SETUP,
       expected: "enabled",
     },
     {

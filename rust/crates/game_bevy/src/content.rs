@@ -7,15 +7,16 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::{IntoScheduleConfigs, SystemSet};
 use game_core::{HeadlessEconomyRuntime, SimulationRuntime};
 use game_data::{
-    load_character_library, load_dialogue_library, load_dialogue_rule_library, load_effect_library,
-    load_item_library, load_map_library, load_overworld_library, load_quest_library,
-    load_recipe_library, load_settlement_library, load_shop_library, load_skill_library,
-    load_skill_tree_library, CharacterLibrary, CharacterLoadError, DialogueLibrary,
-    DialogueLoadError, DialogueRuleLibrary, DialogueRuleLoadError, EffectLibrary, EffectLoadError,
-    ItemLibrary, ItemLoadError, MapId, MapLibrary, MapLoadError, OverworldLibrary,
-    OverworldLoadError, QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError,
-    SettlementLibrary, SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary,
-    SkillLoadError, SkillTreeLibrary, SkillTreeLoadError,
+    load_ai_module_library, load_character_library, load_dialogue_library,
+    load_dialogue_rule_library, load_effect_library, load_item_library, load_map_library,
+    load_overworld_library, load_quest_library, load_recipe_library, load_settlement_library,
+    load_shop_library, load_skill_library, load_skill_tree_library, AiModuleLibrary,
+    AiModuleLoadError, CharacterLibrary, CharacterLoadError, DialogueLibrary, DialogueLoadError,
+    DialogueRuleLibrary, DialogueRuleLoadError, EffectLibrary, EffectLoadError, ItemLibrary,
+    ItemLoadError, MapId, MapLibrary, MapLoadError, OverworldLibrary, OverworldLoadError,
+    QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError, SettlementLibrary,
+    SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary, SkillLoadError,
+    SkillTreeLibrary, SkillTreeLoadError,
 };
 use thiserror::Error;
 
@@ -66,6 +67,18 @@ impl Default for SettlementDefinitionPath {
 
 #[derive(Resource, Debug, Clone)]
 pub struct SettlementDefinitions(pub SettlementLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct AiDefinitionPath(pub PathBuf);
+
+impl Default for AiDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/ai"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct AiDefinitions(pub AiModuleLibrary);
 
 #[derive(Resource, Debug, Clone)]
 pub struct EffectDefinitionPath(pub PathBuf);
@@ -261,6 +274,7 @@ impl Plugin for RuntimeContentPlugin {
             .init_resource::<MapDefinitionPath>()
             .init_resource::<OverworldDefinitionPath>()
             .init_resource::<SettlementDefinitionPath>()
+            .init_resource::<AiDefinitionPath>()
             .init_resource::<EffectDefinitionPath>()
             .init_resource::<ItemDefinitionPath>()
             .init_resource::<SkillDefinitionPath>()
@@ -284,6 +298,7 @@ impl Plugin for RuntimeContentPlugin {
                 Startup,
                 (
                     load_character_definitions_on_startup,
+                    load_ai_definitions_on_startup,
                     load_effect_definitions_on_startup,
                     load_item_definitions_on_startup,
                     load_map_definitions_on_startup,
@@ -318,6 +333,10 @@ pub fn load_effect_definitions(
     path: impl AsRef<Path>,
 ) -> Result<EffectDefinitions, EffectLoadError> {
     Ok(EffectDefinitions(load_effect_library(path)?))
+}
+
+pub fn load_ai_definitions(path: impl AsRef<Path>) -> Result<AiDefinitions, AiModuleLoadError> {
+    Ok(AiDefinitions(load_ai_module_library(path)?))
 }
 
 pub fn load_item_definitions(
@@ -528,6 +547,20 @@ pub fn load_effect_definitions_on_startup(
         &mut state,
         "effect_definitions",
         load_effect_definitions(&path.0),
+        &path.0,
+    );
+}
+
+pub fn load_ai_definitions_on_startup(
+    mut commands: Commands,
+    path: Res<AiDefinitionPath>,
+    mut state: ResMut<RuntimeContentLoadState>,
+) {
+    insert_loaded_resource(
+        &mut commands,
+        &mut state,
+        "ai_definitions",
+        load_ai_definitions(&path.0),
         &path.0,
     );
 }

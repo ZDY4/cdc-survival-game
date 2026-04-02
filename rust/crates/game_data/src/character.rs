@@ -116,6 +116,7 @@ impl Default for NeedProfile {
 pub struct CharacterLifeProfile {
     pub settlement_id: String,
     pub role: NpcRole,
+    pub ai_behavior_profile_id: String,
     pub home_anchor: String,
     #[serde(default)]
     pub duty_route_id: String,
@@ -302,6 +303,8 @@ pub enum CharacterDefinitionValidationError {
     InvalidPlayerDisposition { disposition: CharacterDisposition },
     #[error("life settlement_id must not be empty")]
     MissingLifeSettlementId,
+    #[error("life ai_behavior_profile_id must not be empty")]
+    MissingLifeAiBehaviorProfileId,
     #[error("life home_anchor must not be empty")]
     MissingLifeHomeAnchor,
     #[error("life schedule block {index} has invalid window {start_minute}..{end_minute}")]
@@ -361,6 +364,9 @@ pub fn validate_character_definition(
     if let Some(life) = &definition.life {
         if life.settlement_id.trim().is_empty() {
             return Err(CharacterDefinitionValidationError::MissingLifeSettlementId);
+        }
+        if life.ai_behavior_profile_id.trim().is_empty() {
+            return Err(CharacterDefinitionValidationError::MissingLifeAiBehaviorProfileId);
         }
         if life.home_anchor.trim().is_empty() {
             return Err(CharacterDefinitionValidationError::MissingLifeHomeAnchor);

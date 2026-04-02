@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod behavior;
 pub mod context;
 pub mod facts;
 pub mod goals;
@@ -6,10 +7,16 @@ pub mod offline_sim;
 pub mod plan_runtime;
 pub mod planner;
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::fmt;
 
-use game_data::{GridCoord, MapId, NpcRole};
+use game_data::{
+    AiBehaviorProfile, AiNeedEffectDefinition, AiWorldStateEffectDefinition,
+    BuiltinAiExecutorKind, GridCoord, MapId, NpcRole,
+};
 
+pub use behavior::AiBlackboard;
 pub use context::NpcPlanningContext;
 pub use facts::rebuild_facts;
 pub use offline_sim::{advance_offline_sim, NpcOfflineSimState, OfflineSimAdvanceResult};
@@ -20,106 +27,111 @@ pub use planner::{
     build_plan, build_plan_for_context, build_plan_for_goal, build_plan_for_goal_with_context,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum NpcFact {
-    Hungry,
-    VeryHungry,
-    Sleepy,
-    Exhausted,
-    NeedMorale,
-    OnShift,
-    ShiftStartingSoon,
-    ThreatDetected,
-    MealWindowOpen,
-    AtHome,
-    AtDutyArea,
-    HasReservedBed,
-    HasReservedMealSeat,
-    GuardCoverageInsufficient,
-}
+macro_rules! npc_string_id {
+    ($name:ident) => {
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, Default)]
+        #[serde(transparent)]
+        pub struct $name(pub Cow<'static, str>);
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct NpcFactInput {
-    pub hunger: f32,
-    pub energy: f32,
-    pub morale: f32,
-    pub current_anchor: Option<String>,
-    pub home_anchor: Option<String>,
-    pub duty_anchor: Option<String>,
-    pub on_shift: bool,
-    pub shift_starting_soon: bool,
-    pub threat_detected: bool,
-    pub meal_window_open: bool,
-    pub has_reserved_bed: bool,
-    pub has_reserved_meal_seat: bool,
-    pub guard_coverage_insufficient: bool,
-}
-
-impl Default for NpcFactInput {
-    fn default() -> Self {
-        Self {
-            hunger: 100.0,
-            energy: 100.0,
-            morale: 100.0,
-            current_anchor: None,
-            home_anchor: None,
-            duty_anchor: None,
-            on_shift: false,
-            shift_starting_soon: false,
-            threat_detected: false,
-            meal_window_open: false,
-            has_reserved_bed: false,
-            has_reserved_meal_seat: false,
-            guard_coverage_insufficient: false,
+        impl $name {
+            pub fn as_str(&self) -> &str {
+                self.0.as_ref()
+            }
         }
-    }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                Self(Cow::Owned(value.to_string()))
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                Self(Cow::Owned(value))
+            }
+        }
+    };
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum NpcGoalKey {
-    RespondThreat,
-    PreserveLife,
-    SatisfyShift,
-    EatMeal,
-    Sleep,
-    RecoverMorale,
-    ReturnHome,
-    IdleSafely,
+npc_string_id!(NpcFact);
+npc_string_id!(NpcGoalKey);
+npc_string_id!(NpcActionKey);
+
+#[allow(non_upper_case_globals)]
+impl NpcFact {
+    pub const Hungry: Self = Self(Cow::Borrowed("hungry"));
+    pub const VeryHungry: Self = Self(Cow::Borrowed("very_hungry"));
+    pub const Sleepy: Self = Self(Cow::Borrowed("sleepy"));
+    pub const Exhausted: Self = Self(Cow::Borrowed("exhausted"));
+    pub const NeedMorale: Self = Self(Cow::Borrowed("need_morale"));
+    pub const OnShift: Self = Self(Cow::Borrowed("on_shift"));
+    pub const ShiftStartingSoon: Self = Self(Cow::Borrowed("shift_starting_soon"));
+    pub const ThreatDetected: Self = Self(Cow::Borrowed("threat_detected"));
+    pub const MealWindowOpen: Self = Self(Cow::Borrowed("meal_window_open"));
+    pub const AtHome: Self = Self(Cow::Borrowed("at_home"));
+    pub const AtDutyArea: Self = Self(Cow::Borrowed("at_duty_area"));
+    pub const HasReservedBed: Self = Self(Cow::Borrowed("has_reserved_bed"));
+    pub const HasReservedMealSeat: Self = Self(Cow::Borrowed("has_reserved_meal_seat"));
+    pub const GuardCoverageInsufficient: Self =
+        Self(Cow::Borrowed("guard_coverage_insufficient"));
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum NpcActionKey {
-    TravelToDutyArea,
-    ReserveGuardPost,
-    StandGuard,
-    PatrolRoute,
-    TravelToCanteen,
-    EatMeal,
-    RestockMealService,
-    TreatPatients,
-    TravelToLeisure,
-    Relax,
-    TravelHome,
-    ReserveBed,
-    Sleep,
-    RaiseAlarm,
-    RespondAlarm,
-    IdleSafely,
+#[allow(non_upper_case_globals)]
+impl NpcGoalKey {
+    pub const RespondThreat: Self = Self(Cow::Borrowed("respond_threat"));
+    pub const PreserveLife: Self = Self(Cow::Borrowed("preserve_life"));
+    pub const SatisfyShift: Self = Self(Cow::Borrowed("satisfy_shift"));
+    pub const EatMeal: Self = Self(Cow::Borrowed("eat_meal"));
+    pub const Sleep: Self = Self(Cow::Borrowed("sleep"));
+    pub const RecoverMorale: Self = Self(Cow::Borrowed("recover_morale"));
+    pub const ReturnHome: Self = Self(Cow::Borrowed("return_home"));
+    pub const IdleSafely: Self = Self(Cow::Borrowed("idle_safely"));
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NpcPlanStep {
-    pub action: NpcActionKey,
-    pub target_anchor: Option<String>,
-    pub reservation_target: Option<String>,
-    pub travel_minutes: u32,
-    pub perform_minutes: u32,
-    pub expected_facts: Vec<NpcFact>,
+#[allow(non_upper_case_globals)]
+impl NpcActionKey {
+    pub const TravelToDutyArea: Self = Self(Cow::Borrowed("travel_to_duty_area"));
+    pub const ReserveGuardPost: Self = Self(Cow::Borrowed("reserve_guard_post"));
+    pub const StandGuard: Self = Self(Cow::Borrowed("stand_guard"));
+    pub const PatrolRoute: Self = Self(Cow::Borrowed("patrol_route"));
+    pub const TravelToCanteen: Self = Self(Cow::Borrowed("travel_to_canteen"));
+    pub const EatMeal: Self = Self(Cow::Borrowed("eat_meal"));
+    pub const RestockMealService: Self = Self(Cow::Borrowed("restock_meal_service"));
+    pub const TreatPatients: Self = Self(Cow::Borrowed("treat_patients"));
+    pub const TravelToLeisure: Self = Self(Cow::Borrowed("travel_to_leisure"));
+    pub const Relax: Self = Self(Cow::Borrowed("relax"));
+    pub const TravelHome: Self = Self(Cow::Borrowed("travel_home"));
+    pub const ReserveBed: Self = Self(Cow::Borrowed("reserve_bed"));
+    pub const Sleep: Self = Self(Cow::Borrowed("sleep"));
+    pub const RaiseAlarm: Self = Self(Cow::Borrowed("raise_alarm"));
+    pub const RespondAlarm: Self = Self(Cow::Borrowed("respond_alarm"));
+    pub const IdleSafely: Self = Self(Cow::Borrowed("idle_safely"));
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct NpcGoalScore {
+    pub goal: NpcGoalKey,
+    pub score: i32,
+    pub matched_rule_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct NpcPlanRequest {
     pub role: NpcRole,
+    pub behavior: AiBehaviorProfile,
+    pub blackboard: AiBlackboard,
     pub facts: Vec<NpcFact>,
     pub home_anchor: Option<String>,
     pub duty_anchor: Option<String>,
@@ -134,25 +146,20 @@ pub struct NpcPlanRequest {
     pub patrol_route_id: Option<String>,
 }
 
-impl Default for NpcPlanRequest {
-    fn default() -> Self {
-        Self {
-            role: NpcRole::Resident,
-            facts: Vec::new(),
-            home_anchor: None,
-            duty_anchor: None,
-            canteen_anchor: None,
-            leisure_anchor: None,
-            alarm_anchor: None,
-            guard_post_id: None,
-            bed_id: None,
-            meal_object_id: None,
-            leisure_object_id: None,
-            medical_station_id: None,
-            patrol_route_id: None,
-        }
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub struct NpcPlanStep {
+    pub action: NpcActionKey,
+    pub target_anchor: Option<String>,
+    pub reservation_target: Option<String>,
+    pub travel_minutes: u32,
+    pub perform_minutes: u32,
+    pub expected_facts: Vec<NpcFact>,
+    pub executor_kind: BuiltinAiExecutorKind,
+    pub need_effects: AiNeedEffectDefinition,
+    pub world_state_effects: AiWorldStateEffectDefinition,
 }
+
+impl Eq for NpcPlanStep {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NpcPlanResult {
@@ -220,351 +227,12 @@ pub struct NpcBackgroundState {
 }
 
 pub fn apply_npc_action_effects(
-    action: NpcActionKey,
+    step: &NpcPlanStep,
     hunger: &mut f32,
     energy: &mut f32,
     morale: &mut f32,
 ) {
-    match action {
-        NpcActionKey::EatMeal => {
-            *hunger = (*hunger + 55.0).clamp(0.0, 100.0);
-        }
-        NpcActionKey::Sleep => {
-            *energy = (*energy + 75.0).clamp(0.0, 100.0);
-            *morale = (*morale + 10.0).clamp(0.0, 100.0);
-        }
-        NpcActionKey::Relax => {
-            *morale = (*morale + 35.0).clamp(0.0, 100.0);
-        }
-        NpcActionKey::TreatPatients => {
-            *morale = (*morale + 18.0).clamp(0.0, 100.0);
-        }
-        _ => {}
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use game_data::NpcRole;
-
-    use super::{
-        advance_offline_sim, build_plan, build_plan_for_goal_with_context, rebuild_facts,
-        tick_offline_action, ActionExecutionPhase, NpcActionKey, NpcFact, NpcFactInput, NpcGoalKey,
-        NpcOfflineSimState, NpcPlanRequest, NpcPlanStep, NpcPlanningContext, OfflineActionState,
-    };
-
-    #[test]
-    fn rebuild_facts_marks_thresholds() {
-        let facts = rebuild_facts(&NpcFactInput {
-            hunger: 20.0,
-            energy: 24.0,
-            morale: 30.0,
-            current_anchor: Some("home".into()),
-            home_anchor: Some("home".into()),
-            duty_anchor: Some("duty".into()),
-            on_shift: false,
-            shift_starting_soon: true,
-            threat_detected: false,
-            meal_window_open: true,
-            has_reserved_bed: false,
-            has_reserved_meal_seat: false,
-            guard_coverage_insufficient: false,
-        });
-
-        assert!(facts.contains(&NpcFact::Hungry));
-        assert!(facts.contains(&NpcFact::VeryHungry));
-        assert!(facts.contains(&NpcFact::Sleepy));
-        assert!(facts.contains(&NpcFact::Exhausted));
-        assert!(facts.contains(&NpcFact::NeedMorale));
-        assert!(facts.contains(&NpcFact::ShiftStartingSoon));
-        assert!(facts.contains(&NpcFact::MealWindowOpen));
-        assert!(facts.contains(&NpcFact::AtHome));
-    }
-
-    #[test]
-    fn guard_shift_plan_prefers_patrol() {
-        let result = build_plan(&NpcPlanRequest {
-            role: NpcRole::Guard,
-            facts: vec![NpcFact::OnShift],
-            home_anchor: Some("guard_home".into()),
-            duty_anchor: Some("north_gate".into()),
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: Some("guard_post_north".into()),
-            bed_id: Some("guard_bed".into()),
-            meal_object_id: Some("seat_01".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: None,
-            patrol_route_id: Some("guard_patrol".into()),
-        });
-
-        assert_eq!(result.selected_goal, NpcGoalKey::SatisfyShift);
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::PatrolRoute));
-    }
-
-    #[test]
-    fn hungry_guard_plans_meal() {
-        let result = build_plan(&NpcPlanRequest {
-            role: NpcRole::Guard,
-            facts: vec![
-                NpcFact::Hungry,
-                NpcFact::MealWindowOpen,
-                NpcFact::AtDutyArea,
-            ],
-            home_anchor: Some("guard_home".into()),
-            duty_anchor: Some("north_gate".into()),
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: Some("guard_post_north".into()),
-            bed_id: Some("guard_bed".into()),
-            meal_object_id: Some("seat_01".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: None,
-            patrol_route_id: Some("guard_patrol".into()),
-        });
-
-        assert_eq!(result.selected_goal, NpcGoalKey::EatMeal);
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::EatMeal));
-    }
-
-    #[test]
-    fn low_morale_guard_plans_relaxation() {
-        let result = build_plan(&NpcPlanRequest {
-            role: NpcRole::Guard,
-            facts: vec![NpcFact::NeedMorale, NpcFact::AtHome],
-            home_anchor: Some("guard_home".into()),
-            duty_anchor: Some("north_gate".into()),
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: Some("guard_post_north".into()),
-            bed_id: Some("guard_bed".into()),
-            meal_object_id: Some("seat_01".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: None,
-            patrol_route_id: Some("guard_patrol".into()),
-        });
-
-        assert_eq!(result.selected_goal, NpcGoalKey::RecoverMorale);
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::Relax));
-    }
-
-    #[test]
-    fn sleepy_guard_returns_home_and_sleeps() {
-        let result = build_plan(&NpcPlanRequest {
-            role: NpcRole::Guard,
-            facts: vec![NpcFact::Sleepy],
-            home_anchor: Some("guard_home".into()),
-            duty_anchor: Some("north_gate".into()),
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: Some("guard_post_north".into()),
-            bed_id: Some("guard_bed".into()),
-            meal_object_id: Some("seat_01".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: None,
-            patrol_route_id: Some("guard_patrol".into()),
-        });
-
-        assert_eq!(result.selected_goal, NpcGoalKey::Sleep);
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::TravelHome));
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::Sleep));
-    }
-
-    #[test]
-    fn alert_preempts_other_goals() {
-        let result = build_plan(&NpcPlanRequest {
-            role: NpcRole::Guard,
-            facts: vec![
-                NpcFact::ThreatDetected,
-                NpcFact::Hungry,
-                NpcFact::MealWindowOpen,
-            ],
-            home_anchor: Some("guard_home".into()),
-            duty_anchor: Some("north_gate".into()),
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: Some("guard_post_north".into()),
-            bed_id: Some("guard_bed".into()),
-            meal_object_id: Some("seat_01".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: None,
-            patrol_route_id: Some("guard_patrol".into()),
-        });
-
-        assert_eq!(result.selected_goal, NpcGoalKey::RespondThreat);
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::RespondAlarm));
-    }
-
-    #[test]
-    fn cook_shift_plan_restocks_meal_service() {
-        let result = build_plan(&NpcPlanRequest {
-            role: NpcRole::Cook,
-            facts: vec![NpcFact::OnShift],
-            home_anchor: Some("cook_home".into()),
-            duty_anchor: None,
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: None,
-            bed_id: Some("cook_bed".into()),
-            meal_object_id: Some("kitchen_station".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: None,
-            patrol_route_id: None,
-        });
-
-        assert_eq!(result.selected_goal, NpcGoalKey::SatisfyShift);
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::RestockMealService));
-    }
-
-    #[test]
-    fn doctor_shift_plan_treats_patients() {
-        let result = build_plan(&NpcPlanRequest {
-            role: NpcRole::Doctor,
-            facts: vec![NpcFact::OnShift],
-            home_anchor: Some("doctor_home".into()),
-            duty_anchor: Some("clinic".into()),
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: None,
-            bed_id: Some("doctor_bed".into()),
-            meal_object_id: Some("seat_01".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: Some("clinic_station".into()),
-            patrol_route_id: None,
-        });
-
-        assert_eq!(result.selected_goal, NpcGoalKey::SatisfyShift);
-        assert!(result
-            .steps
-            .iter()
-            .any(|step| step.action == NpcActionKey::TreatPatients));
-    }
-
-    #[test]
-    fn planning_context_overrides_travel_minutes() {
-        let request = NpcPlanRequest {
-            role: NpcRole::Doctor,
-            facts: vec![NpcFact::OnShift],
-            home_anchor: Some("doctor_home".into()),
-            duty_anchor: Some("clinic".into()),
-            canteen_anchor: Some("canteen".into()),
-            leisure_anchor: Some("bench".into()),
-            alarm_anchor: Some("alarm".into()),
-            guard_post_id: None,
-            bed_id: Some("doctor_bed".into()),
-            meal_object_id: Some("seat_01".into()),
-            leisure_object_id: Some("bench_01".into()),
-            medical_station_id: Some("clinic_station".into()),
-            patrol_route_id: None,
-        };
-        let mut context = NpcPlanningContext::from_plan_request(&request)
-            .with_current_anchor(Some("doctor_home".into()));
-        context.register_reachable_anchor("clinic".into(), 35);
-
-        let result = build_plan_for_goal_with_context(&context, NpcGoalKey::SatisfyShift);
-        let travel = result
-            .steps
-            .iter()
-            .find(|step| step.action == NpcActionKey::TravelToDutyArea)
-            .expect("travel step should exist");
-        assert_eq!(travel.travel_minutes, 35);
-    }
-
-    #[test]
-    fn tick_offline_action_runs_sleep_lifecycle() {
-        let mut action = OfflineActionState::new(
-            NpcPlanStep {
-                action: NpcActionKey::Sleep,
-                target_anchor: Some("guard_home".into()),
-                reservation_target: Some("guard_bed".into()),
-                travel_minutes: 0,
-                perform_minutes: 5,
-                expected_facts: vec![NpcFact::AtHome],
-            },
-            Some("guard_home".into()),
-        );
-        action.advance_after_acquire();
-
-        let tick = tick_offline_action(&mut action, 5);
-
-        assert!(tick.finished);
-        assert_eq!(tick.completed_action, Some(NpcActionKey::Sleep));
-        assert_eq!(tick.released_reservations, vec!["guard_bed".to_string()]);
-    }
-
-    #[test]
-    fn offline_sim_tracks_completed_steps() {
-        let mut state = NpcOfflineSimState::default();
-        state.queued_steps.push_back(NpcPlanStep {
-            action: NpcActionKey::TravelHome,
-            target_anchor: Some("guard_home".into()),
-            reservation_target: None,
-            travel_minutes: 5,
-            perform_minutes: 0,
-            expected_facts: vec![NpcFact::AtHome],
-        });
-        state.queued_steps.push_back(NpcPlanStep {
-            action: NpcActionKey::IdleSafely,
-            target_anchor: Some("guard_home".into()),
-            reservation_target: None,
-            travel_minutes: 0,
-            perform_minutes: 5,
-            expected_facts: vec![NpcFact::AtHome],
-        });
-
-        let result = advance_offline_sim(&mut state, 10);
-
-        assert_eq!(
-            result.finished_actions,
-            vec![NpcActionKey::TravelHome, NpcActionKey::IdleSafely]
-        );
-        assert_eq!(result.current_anchor, Some("guard_home".into()));
-    }
-
-    #[test]
-    fn acquire_phase_can_be_held_by_runtime() {
-        let mut action = OfflineActionState::new(
-            NpcPlanStep {
-                action: NpcActionKey::ReserveBed,
-                target_anchor: Some("guard_home".into()),
-                reservation_target: Some("guard_bed".into()),
-                travel_minutes: 0,
-                perform_minutes: 0,
-                expected_facts: Vec::new(),
-            },
-            Some("guard_home".into()),
-        );
-
-        assert_eq!(action.phase, ActionExecutionPhase::AcquireReservation);
-        action.advance_after_acquire();
-        assert_eq!(action.phase, ActionExecutionPhase::Travel);
-    }
+    *hunger = (*hunger + step.need_effects.hunger_delta).clamp(0.0, 100.0);
+    *energy = (*energy + step.need_effects.energy_delta).clamp(0.0, 100.0);
+    *morale = (*morale + step.need_effects.morale_delta).clamp(0.0, 100.0);
 }

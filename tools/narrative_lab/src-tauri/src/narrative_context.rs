@@ -114,7 +114,7 @@ pub fn build_project_context_snapshot_seed(
 ) -> Result<ProjectContextSnapshotSeed, String> {
     let request = NarrativeGenerateRequest {
         request_id: None,
-        doc_type: "project_brief".to_string(),
+        doc_type: "location_note".to_string(),
         target_slug: "snapshot".to_string(),
         action: "create".to_string(),
         user_prompt: "build project context snapshot".to_string(),
@@ -372,13 +372,21 @@ fn template_hints(doc_type: &str) -> Vec<String> {
             "聚焦角色动机、秘密、关系与成长轨迹".to_string(),
             "写法应便于后续拆成对白、事件和个人任务".to_string(),
         ],
-        "chapter_outline" => vec![
-            "明确章节目标、关键事件、分支点和角色推进".to_string(),
-            "为后续任务拆解留下清晰的事件链".to_string(),
+        "task_setup" => vec![
+            "明确任务目标、推进阶段、条件、分支与回收关系".to_string(),
+            "写法应便于后续拆成任务链、触发条件和结局状态".to_string(),
         ],
-        "branch_sheet" => vec![
-            "把每个选择的即时结果、中期影响和长期回收说清楚".to_string(),
-            "避免只写概念，不写触发条件".to_string(),
+        "location_note" => vec![
+            "聚焦区域背景、环境氛围、驻留关系与可探索内容".to_string(),
+            "写法应便于后续拆成地点资料、环境线索和区域事件".to_string(),
+        ],
+        "monster_note" => vec![
+            "突出怪物生态、威胁来源、目击印象与传闻恐惧感".to_string(),
+            "这是世界观文稿，不直接代替数值或战斗参数定义".to_string(),
+        ],
+        "item_note" => vec![
+            "强调物品的背景、用途语境、稀缺性与象征意义".to_string(),
+            "这是叙事设定文稿，不直接代替结构化物品数据".to_string(),
         ],
         _ => vec!["保持文稿可读、可审稿，并保留结构化落地提示".to_string()],
     }

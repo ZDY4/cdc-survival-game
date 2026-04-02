@@ -1,13 +1,15 @@
 use std::path::PathBuf;
 
 use game_data::{
-    load_character_library, load_settlement_library, validate_ai_content, AiContentIssueSeverity,
+    load_ai_module_library, load_character_library, load_settlement_library, validate_ai_content,
+    AiContentIssueSeverity,
 };
 
 fn main() {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let character_dir = repo_root.join("data/characters");
     let settlement_dir = repo_root.join("data/settlements");
+    let ai_dir = repo_root.join("data/ai");
 
     let characters = load_character_library(&character_dir).unwrap_or_else(|error| {
         panic!(
@@ -21,8 +23,11 @@ fn main() {
             settlement_dir.display()
         )
     });
+    let ai_library = load_ai_module_library(&ai_dir).unwrap_or_else(|error| {
+        panic!("failed to load ai library from {}: {error}", ai_dir.display())
+    });
 
-    let issues = validate_ai_content(&characters, &settlements);
+    let issues = validate_ai_content(&characters, &settlements, &ai_library);
     if issues.is_empty() {
         println!("ai_content_check: clean");
         return;

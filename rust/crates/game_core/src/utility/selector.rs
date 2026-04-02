@@ -11,7 +11,18 @@ pub fn select_goal(request: &NpcPlanRequest) -> NpcGoalKey {
 pub fn select_goal_for_context(context: &NpcUtilityContext) -> NpcGoalKey {
     score_goals_for_context(context)
         .into_iter()
-        .max_by_key(|entry| entry.score)
+        .max_by(|left, right| {
+            left.score
+                .cmp(&right.score)
+                .then_with(|| right.goal.as_str().cmp(left.goal.as_str()))
+        })
         .map(|entry| entry.goal)
-        .unwrap_or(NpcGoalKey::IdleSafely)
+        .or_else(|| {
+            context
+                .behavior
+                .default_goal_id
+                .clone()
+                .map(|goal| NpcGoalKey::from(goal.as_str().to_string()))
+        })
+        .unwrap_or_else(|| NpcGoalKey::from("idle_safely"))
 }

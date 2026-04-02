@@ -33,7 +33,18 @@ pub fn report_npc_life_debug_snapshot(
             .goal_scores
             .iter()
             .take(3)
-            .map(|score| format!("{:?}:{}", score.goal, score.score))
+            .map(|score| {
+                if score.matched_rule_ids.is_empty() {
+                    format!("{:?}:{}", score.goal, score.score)
+                } else {
+                    format!(
+                        "{:?}:{} ({})",
+                        score.goal,
+                        score.score,
+                        score.matched_rule_ids.join("+")
+                    )
+                }
+            })
             .collect::<Vec<_>>()
             .join(",");
         let top_facts = entry

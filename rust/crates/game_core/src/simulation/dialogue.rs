@@ -64,7 +64,7 @@ impl Simulation {
                 let npc_action = self
                     .actor_runtime_actions
                     .get(target_actor_id)
-                    .map(|state| npc_action_key_name(state.step.action));
+                    .map(|state| npc_action_key_name(state.step.action.clone()));
                 let npc_morale = self
                     .actor_resources
                     .get(target_actor_id)

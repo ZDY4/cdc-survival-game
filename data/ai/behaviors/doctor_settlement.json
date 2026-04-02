@@ -1,0 +1,45 @@
+{
+  "id": "doctor_settlement",
+  "fact_ids": [
+    "hungry",
+    "very_hungry",
+    "sleepy",
+    "exhausted",
+    "need_morale",
+    "on_shift",
+    "shift_starting_soon",
+    "threat_detected",
+    "meal_window_open",
+    "at_home",
+    "at_duty_area",
+    "has_reserved_bed",
+    "has_reserved_meal_seat",
+    "guard_coverage_insufficient"
+  ],
+  "goal_ids": [
+    "respond_threat",
+    "preserve_life",
+    "satisfy_shift",
+    "eat_meal",
+    "sleep",
+    "recover_morale",
+    "return_home",
+    "idle_safely"
+  ],
+  "action_ids": [
+    "travel_to_duty_area",
+    "travel_to_canteen",
+    "eat_meal",
+    "treat_patients",
+    "travel_to_leisure",
+    "relax",
+    "travel_home",
+    "reserve_bed",
+    "sleep",
+    "raise_alarm",
+    "respond_alarm",
+    "idle_safely"
+  ],
+  "default_goal_id": "idle_safely",
+  "alert_goal_id": "respond_threat"
+}

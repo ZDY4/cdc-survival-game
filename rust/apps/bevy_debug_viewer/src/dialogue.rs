@@ -648,7 +648,7 @@ fn build_dialogue_resolution_context(
                 }
             })
             .unwrap_or_default(),
-        npc_action: npc_debug_entry.and_then(|entry| entry.action.map(npc_action_key_name)),
+        npc_action: npc_debug_entry.and_then(|entry| entry.action.clone().map(npc_action_key_name)),
         npc_morale: npc_debug_entry.map(|entry| f32::from(entry.need_morale)),
     }
 }
@@ -677,25 +677,7 @@ fn default_dialogue_asset_dirs() -> DialogueAssetDirs {
 }
 
 fn npc_action_key_name(action: NpcActionKey) -> String {
-    match action {
-        NpcActionKey::TravelToDutyArea => "travel_to_duty_area",
-        NpcActionKey::ReserveGuardPost => "reserve_guard_post",
-        NpcActionKey::StandGuard => "stand_guard",
-        NpcActionKey::PatrolRoute => "patrol_route",
-        NpcActionKey::TravelToCanteen => "travel_to_canteen",
-        NpcActionKey::EatMeal => "eat_meal",
-        NpcActionKey::RestockMealService => "restock_meal_service",
-        NpcActionKey::TreatPatients => "treat_patients",
-        NpcActionKey::TravelToLeisure => "travel_to_leisure",
-        NpcActionKey::Relax => "relax",
-        NpcActionKey::TravelHome => "travel_home",
-        NpcActionKey::ReserveBed => "reserve_bed",
-        NpcActionKey::Sleep => "sleep",
-        NpcActionKey::RaiseAlarm => "raise_alarm",
-        NpcActionKey::RespondAlarm => "respond_alarm",
-        NpcActionKey::IdleSafely => "idle_safely",
-    }
-    .to_string()
+    action.as_str().to_string()
 }
 
 enum RuleLoadState {

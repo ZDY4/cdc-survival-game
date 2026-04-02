@@ -30,7 +30,7 @@ pub fn build_plan_for_goal_with_context(
     selected_goal: NpcGoalKey,
 ) -> NpcPlanResult {
     let start = build_start_state(&context.request);
-    let goal = goal_requirements(&context.request, selected_goal);
+    let goal = goal_requirements(&context.request, &selected_goal);
     let actions = build_action_set_for_context(context);
 
     if let Some(plan) = make_plan(&start, &actions, &goal) {
@@ -38,9 +38,8 @@ pub fn build_plan_for_goal_with_context(
         let debug_plan = format_plan(plan.clone());
         let mut steps = Vec::new();
         for effect in get_effects_from_plan(plan.0) {
-            if let Some(action) = parse_action_key(&effect.action) {
-                steps.push(step_for_action_with_context(action, context));
-            }
+            let action = parse_action_key(&effect.action);
+            steps.push(step_for_action_with_context(&action, context));
         }
 
         NpcPlanResult {

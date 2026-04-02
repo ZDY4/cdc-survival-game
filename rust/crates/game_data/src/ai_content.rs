@@ -1,8 +1,9 @@
 use std::fmt;
 
 use crate::{
-    CharacterDefinition, CharacterId, CharacterLibrary, NpcRole, ScheduleDay, SettlementDefinition,
-    SettlementId, SettlementLibrary, SmartObjectKind,
+    resolve_ai_behavior_profile, AiModuleLibrary, CharacterDefinition, CharacterId,
+    CharacterLibrary, NpcRole, ScheduleDay, SettlementDefinition, SettlementId, SettlementLibrary,
+    SmartObjectKind,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +65,7 @@ impl AiContentIssue {
 pub fn validate_ai_content(
     characters: &CharacterLibrary,
     settlements: &SettlementLibrary,
+    ai_library: &AiModuleLibrary,
 ) -> Vec<AiContentIssue> {
     let mut issues = Vec::new();
 
@@ -72,7 +74,7 @@ pub fn validate_ai_content(
     }
 
     for (character_id, definition) in characters.iter() {
-        validate_character_life_profile(character_id, definition, settlements, &mut issues);
+        validate_character_life_profile(character_id, definition, settlements, ai_library, &mut issues);
     }
 
     validate_guard_coverage(characters, settlements, &mut issues);
@@ -109,6 +111,7 @@ fn validate_character_life_profile(
     character_id: &CharacterId,
     definition: &CharacterDefinition,
     settlements: &SettlementLibrary,
+    ai_library: &AiModuleLibrary,
     issues: &mut Vec<AiContentIssue>,
 ) {
     let Some(life) = &definition.life else {
@@ -207,6 +210,19 @@ fn validate_character_life_profile(
             ),
         ));
     }
+
+    if resolve_ai_behavior_profile(ai_library, &life.ai_behavior_profile_id.clone().into()).is_err()
+    {
+        issues.push(AiContentIssue::error(
+            "missing_ai_behavior_profile",
+            Some(settlement.id.as_str().to_string()),
+            Some(character_id.as_str().to_string()),
+            format!(
+                "character {} ai_behavior_profile_id {} is not present in AI content",
+                character_id, life.ai_behavior_profile_id
+            ),
+        ));
+    }
 }
 
 fn required_smart_object_kinds(role: NpcRole) -> &'static [SmartObjectKind] {
@@ -283,13 +299,14 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        validate_ai_content, CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate,
-        CharacterCombatProfile, CharacterDefinition, CharacterDisposition, CharacterFaction,
-        CharacterId, CharacterIdentity, CharacterLibrary, CharacterLifeProfile,
-        CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
-        CharacterResourcePool, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay, ServiceRules,
-        SettlementAnchorDefinition, SettlementDefinition, SettlementId, SettlementLibrary,
-        SettlementRouteDefinition, SmartObjectDefinition, SmartObjectKind,
+        validate_ai_content, AiBehaviorDefinition, AiBehaviorProfileRef, AiModuleLibrary,
+        CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
+        CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
+        CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterPlaceholderColors,
+        CharacterPresentation, CharacterProgression, CharacterResourcePool, NeedProfile, NpcRole,
+        ScheduleBlock, ScheduleDay, ServiceRules, SettlementAnchorDefinition, SettlementDefinition,
+        SettlementId, SettlementLibrary, SettlementRouteDefinition, SmartObjectDefinition,
+        SmartObjectKind,
     };
 
     #[test]
@@ -301,6 +318,7 @@ mod tests {
                 Some(CharacterLifeProfile {
                     settlement_id: "survivor_outpost_01_settlement".into(),
                     role: NpcRole::Doctor,
+                    ai_behavior_profile_id: "doctor_settlement".into(),
                     home_anchor: "home".into(),
                     duty_route_id: "missing_route".into(),
                     schedule: vec![ScheduleBlock {
@@ -339,7 +357,7 @@ mod tests {
             },
         )]));
 
-        let issues = validate_ai_content(&characters, &settlements);
+        let issues = validate_ai_content(&characters, &settlements, &sample_ai_library());
 
         assert!(issues
             .iter()
@@ -361,6 +379,7 @@ mod tests {
                 Some(CharacterLifeProfile {
                     settlement_id: "survivor_outpost_01_settlement".into(),
                     role: NpcRole::Guard,
+                    ai_behavior_profile_id: "guard_settlement".into(),
                     home_anchor: "guard_home".into(),
                     duty_route_id: "guard_patrol".into(),
                     schedule: vec![ScheduleBlock {
@@ -424,10 +443,37 @@ mod tests {
             },
         )]));
 
-        let issues = validate_ai_content(&characters, &settlements);
+        let issues = validate_ai_content(&characters, &settlements, &sample_ai_library());
         assert!(issues
             .iter()
             .any(|issue| issue.code == "guard_coverage_insufficient"));
+    }
+
+    fn sample_ai_library() -> AiModuleLibrary {
+        let mut library = AiModuleLibrary::default();
+        library.behaviors.insert(
+            AiBehaviorProfileRef::from("doctor_settlement"),
+            AiBehaviorDefinition {
+                id: AiBehaviorProfileRef::from("doctor_settlement"),
+                fact_ids: Vec::new(),
+                goal_ids: Vec::new(),
+                action_ids: Vec::new(),
+                default_goal_id: None,
+                alert_goal_id: None,
+            },
+        );
+        library.behaviors.insert(
+            AiBehaviorProfileRef::from("guard_settlement"),
+            AiBehaviorDefinition {
+                id: AiBehaviorProfileRef::from("guard_settlement"),
+                fact_ids: Vec::new(),
+                goal_ids: Vec::new(),
+                action_ids: Vec::new(),
+                default_goal_id: None,
+                alert_goal_id: None,
+            },
+        );
+        library
     }
 
     fn sample_character(id: &str, life: Option<CharacterLifeProfile>) -> CharacterDefinition {

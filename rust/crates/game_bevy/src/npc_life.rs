@@ -4,17 +4,18 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use game_core::{
     apply_npc_action_effects, build_plan_for_goal_with_context, rebuild_facts, score_goals,
-    select_goal, tick_offline_action, ActionExecutionPhase, NpcActionKey, NpcBackgroundState,
-    NpcExecutionMode, NpcFact, NpcFactInput, NpcGoalKey, NpcGoalScore, NpcPlanRequest, NpcPlanStep,
-    NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
+    select_goal, tick_offline_action, ActionExecutionPhase, AiBlackboard, NpcActionKey,
+    NpcBackgroundState, NpcExecutionMode, NpcFact, NpcGoalKey, NpcGoalScore, NpcPlanRequest,
+    NpcPlanStep, NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
 };
 use game_data::{
-    ActorId, CharacterLifeProfile, GridCoord, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay,
-    SettlementDefinition, SettlementId, SmartObjectDefinition, SmartObjectKind,
+    resolve_ai_behavior_profile, ActorId, AiBehaviorProfile, CharacterLifeProfile, GridCoord,
+    NeedProfile, NpcRole, ScheduleBlock, ScheduleDay, SettlementDefinition, SettlementId,
+    SmartObjectDefinition, SmartObjectKind,
 };
 
 use crate::{
-    reservations::ReservationConflict, CharacterDefinitionId, SettlementDefinitions,
+    reservations::ReservationConflict, AiDefinitions, CharacterDefinitionId, SettlementDefinitions,
     SmartObjectReservations,
 };
 
@@ -25,6 +26,9 @@ pub enum NpcLifeUpdateSet {
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct LifeProfileComponent(pub CharacterLifeProfile);
+
+#[derive(Component, Debug, Clone, PartialEq, Default)]
+pub struct AiBehaviorProfileComponent(pub AiBehaviorProfile);
 
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct NpcLifeState {
@@ -159,7 +163,7 @@ pub struct PlannedActionDebug {
     pub reservation_target: Option<String>,
 }
 
-#[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Component, Debug, Clone, PartialEq, Default)]
 pub struct DecisionTrace {
     pub facts: Vec<NpcFact>,
     pub goal_scores: Vec<NpcGoalScore>,
@@ -167,7 +171,7 @@ pub struct DecisionTrace {
     pub decision_summary: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SettlementDebugEntry {
     pub entity: Entity,
     pub definition_id: String,
@@ -204,7 +208,7 @@ pub struct SettlementDebugEntry {
     pub last_failure_reason: Option<String>,
 }
 
-#[derive(Resource, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Resource, Debug, Clone, PartialEq, Default)]
 pub struct SettlementDebugSnapshot {
     pub entries: Vec<SettlementDebugEntry>,
 }
@@ -247,9 +251,13 @@ impl Plugin for SettlementSimulationPlugin {
 fn initialize_npc_life_entities(
     mut commands: Commands,
     settlements: Option<Res<SettlementDefinitions>>,
+    ai_definitions: Option<Res<AiDefinitions>>,
     query: Query<(Entity, &LifeProfileComponent), Without<NpcLifeState>>,
 ) {
     let Some(settlements) = settlements else {
+        return;
+    };
+    let Some(ai_definitions) = ai_definitions else {
         return;
     };
 
@@ -273,8 +281,15 @@ fn initialize_npc_life_entities(
         } else {
             None
         };
+        let Ok(ai_behavior_profile) = resolve_ai_behavior_profile(
+            &ai_definitions.0,
+            &profile.ai_behavior_profile_id.clone().into(),
+        ) else {
+            continue;
+        };
 
         commands.entity(entity).insert((
+            AiBehaviorProfileComponent(ai_behavior_profile),
             NpcLifeState {
                 settlement_id: profile.settlement_id.clone(),
                 role: profile.role,
@@ -375,6 +390,7 @@ fn plan_npc_life_system(
         Query<(Entity, &NpcLifeState, &ScheduleState, &CurrentAction)>,
         Query<(
             Entity,
+            &AiBehaviorProfileComponent,
             &mut NpcLifeState,
             &NeedState,
             &ScheduleState,
@@ -399,14 +415,7 @@ fn plan_npc_life_system(
             || current_action
                 .0
                 .as_ref()
-                .map(|action| {
-                    matches!(
-                        action.step.action,
-                        NpcActionKey::StandGuard
-                            | NpcActionKey::PatrolRoute
-                            | NpcActionKey::RespondAlarm
-                    )
-                })
+                .map(|action| action.step.target_anchor == life.duty_anchor)
                 .unwrap_or(false);
         if is_covering {
             *guard_coverage
@@ -417,6 +426,7 @@ fn plan_npc_life_system(
 
     for (
         entity,
+        behavior_profile,
         mut life,
         need,
         schedule,
@@ -427,7 +437,12 @@ fn plan_npc_life_system(
         mut trace,
     ) in &mut queries.p1()
     {
-        if world_alert.active && current_goal.0 != Some(NpcGoalKey::RespondThreat) {
+        let alert_goal = behavior_profile
+            .0
+            .alert_goal_id
+            .as_ref()
+            .map(|goal| NpcGoalKey::from(goal.as_str().to_string()));
+        if world_alert.active && current_goal.0 != alert_goal {
             current_action.0 = None;
             life.replan_required = true;
         }
@@ -509,33 +524,24 @@ fn plan_npc_life_system(
             .get(&life.settlement_id)
             .copied()
             .unwrap_or_default();
-        let facts = rebuild_facts(&NpcFactInput {
-            hunger: need.hunger,
-            energy: need.energy,
-            morale: need.morale,
-            current_anchor: life.current_anchor.clone(),
-            home_anchor: Some(life.home_anchor.clone()),
-            duty_anchor: life.duty_anchor.clone(),
-            on_shift: schedule.on_shift,
-            shift_starting_soon: schedule.shift_starting_soon,
-            threat_detected: world_alert.active,
-            meal_window_open: schedule.meal_window_open,
-            has_reserved_bed: life
-                .bed_id
-                .as_ref()
-                .map(|id| reservations.active.contains(id))
-                .unwrap_or(false),
-            has_reserved_meal_seat: life
-                .meal_object_id
-                .as_ref()
-                .map(|id| reservations.active.contains(id))
-                .unwrap_or(false),
-            guard_coverage_insufficient: life.role == NpcRole::Guard
-                && schedule.on_shift
-                && active_guards < settlement.service_rules.min_guard_on_duty,
-        });
+        let blackboard = build_ai_blackboard(
+            &life,
+            need,
+            schedule,
+            reservations,
+            world_alert.active,
+            active_guards,
+            settlement.service_rules.min_guard_on_duty,
+            selected_guard_post_id.is_some(),
+            selected_meal_object_id.is_some(),
+            selected_leisure_object_id.is_some(),
+            selected_medical_station_id.is_some(),
+        );
+        let facts = rebuild_facts(&behavior_profile.0, &blackboard, life.role);
         let plan_request = NpcPlanRequest {
             role: life.role,
+            behavior: behavior_profile.0.clone(),
+            blackboard,
             facts,
             home_anchor: Some(life.home_anchor.clone()),
             duty_anchor: life.duty_anchor.clone(),
@@ -552,16 +558,16 @@ fn plan_npc_life_system(
         let selected_goal = select_goal(&plan_request);
         let planning_context =
             build_planning_context(settlement, &plan_request, life.current_anchor.clone());
-        let plan = build_plan_for_goal_with_context(&planning_context, selected_goal);
+        let plan = build_plan_for_goal_with_context(&planning_context, selected_goal.clone());
         let mut goal_scores = score_goals(&plan_request);
         goal_scores.sort_by(|left, right| right.score.cmp(&left.score));
         let decision_summary = build_decision_summary(
-            selected_goal,
+            &selected_goal,
             &goal_scores,
             &plan_request.facts,
             plan.planned,
         );
-        current_goal.0 = Some(selected_goal);
+        current_goal.0 = Some(selected_goal.clone());
         current_plan.steps = plan.steps;
         current_plan.next_index = 0;
         current_plan.total_cost = plan.total_cost;
@@ -618,6 +624,10 @@ fn execute_offline_actions_system(
         }
 
         let mut reservation_conflict = false;
+        let completed_step = current_action
+            .0
+            .as_ref()
+            .map(|action_state| action_state.step.clone());
         let tick = {
             let action_state = current_action.0.as_mut().expect("action exists");
             if action_state.phase == ActionExecutionPhase::AcquireReservation {
@@ -651,11 +661,16 @@ fn execute_offline_actions_system(
             continue;
         }
         if tick.finished {
-            if let Some(action) = tick.completed_action {
+            if completed_step.is_some() && tick.completed_action.is_some() {
                 let mut hunger = need.hunger;
                 let mut energy = need.energy;
                 let mut morale = need.morale;
-                apply_npc_action_effects(action, &mut hunger, &mut energy, &mut morale);
+                apply_npc_action_effects(
+                    completed_step.as_ref().expect("completed step exists"),
+                    &mut hunger,
+                    &mut energy,
+                    &mut morale,
+                );
                 need.hunger = hunger;
                 need.energy = energy;
                 need.morale = morale;
@@ -756,7 +771,7 @@ fn refresh_debug_snapshot_system(
             action_perform_remaining_minutes,
         ) = if let Some(current_action) = action.0.as_ref() {
             (
-                Some(current_action.step.action),
+                Some(current_action.step.action.clone()),
                 Some(current_action.phase),
                 Some(current_action.travel_remaining_minutes),
                 Some(current_action.perform_remaining_minutes),
@@ -770,7 +785,7 @@ fn refresh_debug_snapshot_system(
             .skip(plan.next_index)
             .take(4)
             .map(|step| PlannedActionDebug {
-                action: step.action,
+                action: step.action.clone(),
                 target_anchor: step.target_anchor.clone(),
                 reservation_target: step.reservation_target.clone(),
             })
@@ -802,8 +817,8 @@ fn refresh_debug_snapshot_system(
             execution_mode: runtime_execution.mode,
             settlement_id: life.settlement_id.clone(),
             role: life.role,
-            goal: goal.0,
-            selected_goal: trace.selected_goal,
+            goal: goal.0.clone(),
+            selected_goal: trace.selected_goal.clone(),
             action: action_key,
             action_phase,
             action_travel_remaining_minutes,
@@ -999,8 +1014,64 @@ fn quantize_need(value: f32) -> u8 {
     value.round().clamp(0.0, 100.0) as u8
 }
 
+fn build_ai_blackboard(
+    life: &NpcLifeState,
+    need: &NeedState,
+    schedule: &ScheduleState,
+    reservations: &ReservationState,
+    world_alert_active: bool,
+    active_guards: u32,
+    min_guard_on_duty: u32,
+    guard_post_available: bool,
+    meal_object_available: bool,
+    leisure_object_available: bool,
+    medical_station_available: bool,
+) -> AiBlackboard {
+    let mut blackboard = AiBlackboard::default();
+    blackboard.set_number("need.hunger", need.hunger);
+    blackboard.set_number("need.energy", need.energy);
+    blackboard.set_number("need.morale", need.morale);
+    blackboard.set_number("settlement.active_guards", active_guards as f32);
+    blackboard.set_number("settlement.min_guard_on_duty", min_guard_on_duty as f32);
+    blackboard.set_bool("schedule.on_shift", schedule.on_shift);
+    blackboard.set_bool("schedule.shift_starting_soon", schedule.shift_starting_soon);
+    blackboard.set_bool("schedule.meal_window_open", schedule.meal_window_open);
+    blackboard.set_bool("schedule.quiet_hours", schedule.quiet_hours);
+    blackboard.set_bool("world.alert_active", world_alert_active);
+    blackboard.set_bool(
+        "reservation.bed.active",
+        life.bed_id
+            .as_ref()
+            .map(|id| reservations.active.contains(id))
+            .unwrap_or(false),
+    );
+    blackboard.set_bool(
+        "reservation.meal_object.active",
+        life.meal_object_id
+            .as_ref()
+            .map(|id| reservations.active.contains(id))
+            .unwrap_or(false),
+    );
+    blackboard.set_bool(
+        "settlement.guard_coverage_insufficient",
+        life.role == NpcRole::Guard && schedule.on_shift && active_guards < min_guard_on_duty,
+    );
+    blackboard.set_bool("availability.guard_post", guard_post_available);
+    blackboard.set_bool("availability.meal_object", meal_object_available);
+    blackboard.set_bool("availability.leisure_object", leisure_object_available);
+    blackboard.set_bool("availability.medical_station", medical_station_available);
+    blackboard.set_bool("availability.patrol_route", life.duty_route_id.is_some());
+    blackboard.set_optional_text("anchor.current", life.current_anchor.clone());
+    blackboard.set_text("anchor.home", life.home_anchor.clone());
+    blackboard.set_optional_text("anchor.duty", life.duty_anchor.clone());
+    blackboard.set_optional_text("anchor.canteen", life.canteen_anchor.clone());
+    blackboard.set_optional_text("anchor.leisure", life.leisure_anchor.clone());
+    blackboard.set_optional_text("anchor.alarm", life.alarm_anchor.clone());
+    blackboard
+}
+
 fn build_decision_summary(
-    selected_goal: NpcGoalKey,
+    selected_goal: &NpcGoalKey,
     goal_scores: &[NpcGoalScore],
     facts: &[NpcFact],
     planned: bool,
@@ -1008,7 +1079,18 @@ fn build_decision_summary(
     let top_scores: Vec<String> = goal_scores
         .iter()
         .take(3)
-        .map(|entry| format!("{:?}:{}", entry.goal, entry.score))
+        .map(|entry| {
+            if entry.matched_rule_ids.is_empty() {
+                format!("{:?}:{}", entry.goal, entry.score)
+            } else {
+                format!(
+                    "{:?}:{} ({})",
+                    entry.goal,
+                    entry.score,
+                    entry.matched_rule_ids.join("+")
+                )
+            }
+        })
         .collect();
     let top_facts: Vec<String> = facts
         .iter()
@@ -1128,7 +1210,7 @@ mod tests {
                 .world()
                 .entity(entity)
                 .get::<CurrentAction>()
-                .and_then(|current| current.0.as_ref().map(|state| state.step.action))
+                .and_then(|current| current.0.as_ref().map(|state| state.step.action.clone()))
             {
                 seen_actions.insert(action);
             }
@@ -1372,6 +1454,7 @@ mod tests {
         CharacterLifeProfile {
             settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Guard,
+            ai_behavior_profile_id: "guard_settlement".into(),
             home_anchor: "guard_home_01".into(),
             duty_route_id: "guard_patrol_north".into(),
             schedule: vec![ScheduleBlock {
@@ -1401,6 +1484,7 @@ mod tests {
         CharacterLifeProfile {
             settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Cook,
+            ai_behavior_profile_id: "cook_settlement".into(),
             home_anchor: "cook_home_01".into(),
             duty_route_id: "cook_service_loop".into(),
             schedule: vec![ScheduleBlock {
@@ -1428,6 +1512,7 @@ mod tests {
         CharacterLifeProfile {
             settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Doctor,
+            ai_behavior_profile_id: "doctor_settlement".into(),
             home_anchor: "doctor_home_01".into(),
             duty_route_id: "doctor_clinic_rounds".into(),
             schedule: vec![ScheduleBlock {

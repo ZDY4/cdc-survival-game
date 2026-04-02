@@ -45,9 +45,9 @@ pub use game_data::{
 pub use goap::{
     advance_offline_sim, apply_npc_action_effects, build_plan, build_plan_for_context,
     build_plan_for_goal, build_plan_for_goal_with_context, rebuild_facts, tick_offline_action,
-    ActionExecutionPhase, ActionTickResult, NpcActionKey, NpcBackgroundState, NpcExecutionMode,
-    NpcFact, NpcFactInput, NpcGoalKey, NpcOfflineSimState, NpcPlanRequest, NpcPlanResult,
-    NpcPlanStep, NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
+    ActionExecutionPhase, ActionTickResult, AiBlackboard, NpcActionKey, NpcBackgroundState,
+    NpcExecutionMode, NpcFact, NpcGoalKey, NpcGoalScore, NpcOfflineSimState, NpcPlanRequest,
+    NpcPlanResult, NpcPlanStep, NpcPlanningContext, NpcRuntimeActionState, OfflineActionState,
     OfflineSimAdvanceResult,
 };
 pub use movement::{
@@ -76,7 +76,7 @@ pub use survival::{
 };
 pub use utility::{
     score_goal, score_goal_for_context, score_goals, score_goals_for_context, select_goal,
-    select_goal_for_context, NpcGoalScore, NpcUtilityContext,
+    select_goal_for_context, NpcUtilityContext,
 };
 pub use vision::{
     ActorVisionMapSnapshot, ActorVisionSnapshot, ActorVisionUpdate, VisionRuntimeSnapshot,

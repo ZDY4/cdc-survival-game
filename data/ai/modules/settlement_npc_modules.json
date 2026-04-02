@@ -1,0 +1,940 @@
+{
+  "conditions": [],
+  "facts": [
+    {
+      "id": "hungry",
+      "condition": {
+        "kind": "number_compare",
+        "key": "need.hunger",
+        "op": "less_than_or_equal",
+        "value": 50.0
+      }
+    },
+    {
+      "id": "very_hungry",
+      "condition": {
+        "kind": "number_compare",
+        "key": "need.hunger",
+        "op": "less_than_or_equal",
+        "value": 25.0
+      }
+    },
+    {
+      "id": "sleepy",
+      "condition": {
+        "kind": "number_compare",
+        "key": "need.energy",
+        "op": "less_than_or_equal",
+        "value": 50.0
+      }
+    },
+    {
+      "id": "exhausted",
+      "condition": {
+        "kind": "number_compare",
+        "key": "need.energy",
+        "op": "less_than_or_equal",
+        "value": 25.0
+      }
+    },
+    {
+      "id": "need_morale",
+      "condition": {
+        "kind": "number_compare",
+        "key": "need.morale",
+        "op": "less_than_or_equal",
+        "value": 40.0
+      }
+    },
+    {
+      "id": "on_shift",
+      "condition": {
+        "kind": "bool_equals",
+        "key": "schedule.on_shift",
+        "value": true
+      }
+    },
+    {
+      "id": "shift_starting_soon",
+      "condition": {
+        "kind": "bool_equals",
+        "key": "schedule.shift_starting_soon",
+        "value": true
+      }
+    },
+    {
+      "id": "threat_detected",
+      "condition": {
+        "kind": "bool_equals",
+        "key": "world.alert_active",
+        "value": true
+      }
+    },
+    {
+      "id": "meal_window_open",
+      "condition": {
+        "kind": "bool_equals",
+        "key": "schedule.meal_window_open",
+        "value": true
+      }
+    },
+    {
+      "id": "at_home",
+      "condition": {
+        "kind": "text_key_equals",
+        "left_key": "anchor.current",
+        "right_key": "anchor.home"
+      }
+    },
+    {
+      "id": "at_duty_area",
+      "condition": {
+        "kind": "text_key_equals",
+        "left_key": "anchor.current",
+        "right_key": "anchor.duty"
+      }
+    },
+    {
+      "id": "has_reserved_bed",
+      "condition": {
+        "kind": "bool_equals",
+        "key": "reservation.bed.active",
+        "value": true
+      }
+    },
+    {
+      "id": "has_reserved_meal_seat",
+      "condition": {
+        "kind": "bool_equals",
+        "key": "reservation.meal_object.active",
+        "value": true
+      }
+    },
+    {
+      "id": "guard_coverage_insufficient",
+      "condition": {
+        "kind": "bool_equals",
+        "key": "settlement.guard_coverage_insufficient",
+        "value": true
+      }
+    }
+  ],
+  "score_rules": [
+    {
+      "id": "respond_threat_if_alert",
+      "when": {
+        "kind": "fact_true",
+        "fact_id": "threat_detected"
+      },
+      "score_delta": 1000
+    },
+    {
+      "id": "preserve_life_if_urgent_need",
+      "when": {
+        "kind": "any_of",
+        "conditions": [
+          {
+            "kind": "fact_true",
+            "fact_id": "very_hungry"
+          },
+          {
+            "kind": "fact_true",
+            "fact_id": "exhausted"
+          }
+        ]
+      },
+      "score_delta": 900
+    },
+    {
+      "id": "satisfy_shift_if_shift_active",
+      "when": {
+        "kind": "any_of",
+        "conditions": [
+          {
+            "kind": "fact_true",
+            "fact_id": "on_shift"
+          },
+          {
+            "kind": "fact_true",
+            "fact_id": "shift_starting_soon"
+          }
+        ]
+      },
+      "score_delta": 800
+    },
+    {
+      "id": "eat_meal_if_window_open",
+      "when": {
+        "kind": "all_of",
+        "conditions": [
+          {
+            "kind": "fact_true",
+            "fact_id": "hungry"
+          },
+          {
+            "kind": "fact_true",
+            "fact_id": "meal_window_open"
+          }
+        ]
+      },
+      "score_delta": 700
+    },
+    {
+      "id": "sleep_if_sleepy",
+      "when": {
+        "kind": "fact_true",
+        "fact_id": "sleepy"
+      },
+      "score_delta": 600
+    },
+    {
+      "id": "recover_morale_if_needed",
+      "when": {
+        "kind": "fact_true",
+        "fact_id": "need_morale"
+      },
+      "score_delta": 500
+    },
+    {
+      "id": "return_home_if_not_home",
+      "when": {
+        "kind": "not",
+        "condition": {
+          "kind": "fact_true",
+          "fact_id": "at_home"
+        }
+      },
+      "score_delta": 400
+    },
+    {
+      "id": "idle_fallback",
+      "score_delta": 100
+    },
+    {
+      "id": "guard_bonus_respond_threat",
+      "when": {
+        "kind": "role_is",
+        "role": "guard"
+      },
+      "score_delta": 50
+    },
+    {
+      "id": "guard_bonus_satisfy_shift",
+      "when": {
+        "kind": "role_is",
+        "role": "guard"
+      },
+      "score_delta": 40
+    },
+    {
+      "id": "cook_bonus_satisfy_shift",
+      "when": {
+        "kind": "role_is",
+        "role": "cook"
+      },
+      "score_delta": 60
+    },
+    {
+      "id": "cook_penalty_eat_meal",
+      "when": {
+        "kind": "role_is",
+        "role": "cook"
+      },
+      "score_delta": -20
+    },
+    {
+      "id": "cook_penalty_recover_morale",
+      "when": {
+        "kind": "role_is",
+        "role": "cook"
+      },
+      "score_delta": -20
+    },
+    {
+      "id": "doctor_bonus_satisfy_shift",
+      "when": {
+        "kind": "role_is",
+        "role": "doctor"
+      },
+      "score_delta": 30
+    }
+  ],
+  "goals": [
+    {
+      "id": "respond_threat",
+      "score_rule_ids": [
+        "respond_threat_if_alert",
+        "guard_bonus_respond_threat"
+      ],
+      "planner_requirements": [
+        {
+          "key": "threat_resolved",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "preserve_life",
+      "score_rule_ids": [
+        "preserve_life_if_urgent_need"
+      ],
+      "conditional_requirements": [
+        {
+          "when": {
+            "kind": "any_of",
+            "conditions": [
+              {
+                "kind": "fact_true",
+                "fact_id": "very_hungry"
+              },
+              {
+                "kind": "fact_true",
+                "fact_id": "hungry"
+              }
+            ]
+          },
+          "requirements": [
+            {
+              "key": "is_hungry",
+              "value": false
+            }
+          ]
+        },
+        {
+          "requirements": [
+            {
+              "key": "is_rested",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "satisfy_shift",
+      "score_rule_ids": [
+        "satisfy_shift_if_shift_active",
+        "guard_bonus_satisfy_shift",
+        "cook_bonus_satisfy_shift",
+        "doctor_bonus_satisfy_shift"
+      ],
+      "conditional_requirements": [
+        {
+          "when": {
+            "kind": "all_of",
+            "conditions": [
+              {
+                "kind": "role_is",
+                "role": "guard"
+              },
+              {
+                "kind": "fact_true",
+                "fact_id": "guard_coverage_insufficient"
+              }
+            ]
+          },
+          "requirements": [
+            {
+              "key": "guard_coverage_secured",
+              "value": true
+            }
+          ]
+        },
+        {
+          "when": {
+            "kind": "all_of",
+            "conditions": [
+              {
+                "kind": "role_is",
+                "role": "guard"
+              },
+              {
+                "kind": "not",
+                "condition": {
+                  "kind": "bool_equals",
+                  "key": "availability.patrol_route",
+                  "value": true
+                }
+              }
+            ]
+          },
+          "requirements": [
+            {
+              "key": "guard_coverage_secured",
+              "value": true
+            }
+          ]
+        },
+        {
+          "when": {
+            "kind": "role_is",
+            "role": "guard"
+          },
+          "requirements": [
+            {
+              "key": "patrol_completed",
+              "value": true
+            }
+          ]
+        },
+        {
+          "when": {
+            "kind": "role_is",
+            "role": "cook"
+          },
+          "requirements": [
+            {
+              "key": "meal_service_restocked",
+              "value": true
+            }
+          ]
+        },
+        {
+          "when": {
+            "kind": "role_is",
+            "role": "doctor"
+          },
+          "requirements": [
+            {
+              "key": "patients_treated",
+              "value": true
+            }
+          ]
+        },
+        {
+          "requirements": [
+            {
+              "key": "at_duty_area",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "eat_meal",
+      "score_rule_ids": [
+        "eat_meal_if_window_open",
+        "cook_penalty_eat_meal"
+      ],
+      "planner_requirements": [
+        {
+          "key": "is_hungry",
+          "value": false
+        }
+      ]
+    },
+    {
+      "id": "sleep",
+      "score_rule_ids": [
+        "sleep_if_sleepy"
+      ],
+      "planner_requirements": [
+        {
+          "key": "is_rested",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "recover_morale",
+      "score_rule_ids": [
+        "recover_morale_if_needed",
+        "cook_penalty_recover_morale"
+      ],
+      "planner_requirements": [
+        {
+          "key": "morale_recovered",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "return_home",
+      "score_rule_ids": [
+        "return_home_if_not_home"
+      ],
+      "planner_requirements": [
+        {
+          "key": "at_home",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "idle_safely",
+      "score_rule_ids": [
+        "idle_fallback"
+      ],
+      "planner_requirements": [
+        {
+          "key": "is_idle_safe",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "travel_to_duty_area",
+      "preconditions": [
+        {
+          "key": "at_duty_area",
+          "value": false
+        }
+      ],
+      "effects": [
+        {
+          "key": "at_duty_area",
+          "value": true
+        },
+        {
+          "key": "at_home",
+          "value": false
+        },
+        {
+          "key": "at_canteen",
+          "value": false
+        },
+        {
+          "key": "at_leisure",
+          "value": false
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "duty",
+      "executor_binding_id": "travel_to_anchor",
+      "default_travel_minutes": 15
+    },
+    {
+      "id": "reserve_guard_post",
+      "preconditions": [
+        {
+          "key": "at_duty_area",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "has_reserved_guard_post",
+          "value": true
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "duty",
+      "reservation_target": "guard_post",
+      "executor_binding_id": "use_smart_object"
+    },
+    {
+      "id": "stand_guard",
+      "preconditions": [
+        {
+          "key": "on_shift",
+          "value": true
+        },
+        {
+          "key": "at_duty_area",
+          "value": true
+        },
+        {
+          "key": "has_reserved_guard_post",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "guard_duty_satisfied",
+          "value": true
+        },
+        {
+          "key": "guard_coverage_secured",
+          "value": true
+        }
+      ],
+      "planner_cost": 2,
+      "target_anchor": "duty",
+      "reservation_target": "guard_post",
+      "executor_binding_id": "use_smart_object",
+      "perform_minutes": 60,
+      "expected_fact_ids": [
+        "at_duty_area"
+      ]
+    },
+    {
+      "id": "patrol_route",
+      "preconditions": [
+        {
+          "key": "on_shift",
+          "value": true
+        },
+        {
+          "key": "at_duty_area",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "patrol_completed",
+          "value": true
+        },
+        {
+          "key": "guard_duty_satisfied",
+          "value": true
+        }
+      ],
+      "planner_cost": 2,
+      "target_anchor": "duty",
+      "executor_binding_id": "follow_patrol_route",
+      "perform_minutes": 120,
+      "expected_fact_ids": [
+        "at_duty_area"
+      ]
+    },
+    {
+      "id": "travel_to_canteen",
+      "effects": [
+        {
+          "key": "at_canteen",
+          "value": true
+        },
+        {
+          "key": "at_home",
+          "value": false
+        },
+        {
+          "key": "at_duty_area",
+          "value": false
+        },
+        {
+          "key": "has_reserved_meal_seat",
+          "value": true
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "canteen",
+      "reservation_target": "meal_object",
+      "executor_binding_id": "use_smart_object",
+      "default_travel_minutes": 15
+    },
+    {
+      "id": "eat_meal",
+      "preconditions": [
+        {
+          "key": "at_canteen",
+          "value": true
+        },
+        {
+          "key": "has_reserved_meal_seat",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "is_hungry",
+          "value": false
+        },
+        {
+          "key": "is_very_hungry",
+          "value": false
+        }
+      ],
+      "planner_cost": 2,
+      "target_anchor": "canteen",
+      "reservation_target": "meal_object",
+      "executor_binding_id": "use_smart_object",
+      "perform_minutes": 30,
+      "need_effects": {
+        "hunger_delta": 55.0
+      }
+    },
+    {
+      "id": "restock_meal_service",
+      "preconditions": [
+        {
+          "key": "on_shift",
+          "value": true
+        },
+        {
+          "key": "at_canteen",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "meal_service_restocked",
+          "value": true
+        }
+      ],
+      "planner_cost": 2,
+      "target_anchor": "canteen",
+      "reservation_target": "meal_object",
+      "executor_binding_id": "use_smart_object",
+      "perform_minutes": 45
+    },
+    {
+      "id": "treat_patients",
+      "preconditions": [
+        {
+          "key": "on_shift",
+          "value": true
+        },
+        {
+          "key": "at_duty_area",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "patients_treated",
+          "value": true
+        }
+      ],
+      "planner_cost": 2,
+      "target_anchor": "duty",
+      "reservation_target": "medical_station",
+      "executor_binding_id": "use_smart_object",
+      "perform_minutes": 45,
+      "expected_fact_ids": [
+        "at_duty_area"
+      ],
+      "need_effects": {
+        "morale_delta": 18.0
+      }
+    },
+    {
+      "id": "travel_to_leisure",
+      "effects": [
+        {
+          "key": "at_leisure",
+          "value": true
+        },
+        {
+          "key": "at_home",
+          "value": false
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "leisure",
+      "reservation_target": "leisure_object",
+      "executor_binding_id": "use_smart_object",
+      "default_travel_minutes": 15
+    },
+    {
+      "id": "relax",
+      "preconditions": [
+        {
+          "key": "at_leisure",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "need_morale",
+          "value": false
+        },
+        {
+          "key": "morale_recovered",
+          "value": true
+        }
+      ],
+      "planner_cost": 2,
+      "target_anchor": "leisure",
+      "reservation_target": "leisure_object",
+      "executor_binding_id": "use_smart_object",
+      "perform_minutes": 60,
+      "need_effects": {
+        "morale_delta": 35.0
+      }
+    },
+    {
+      "id": "travel_home",
+      "preconditions": [
+        {
+          "key": "at_home",
+          "value": false
+        }
+      ],
+      "effects": [
+        {
+          "key": "at_home",
+          "value": true
+        },
+        {
+          "key": "at_duty_area",
+          "value": false
+        },
+        {
+          "key": "at_canteen",
+          "value": false
+        },
+        {
+          "key": "at_leisure",
+          "value": false
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "home",
+      "executor_binding_id": "travel_to_anchor",
+      "default_travel_minutes": 15,
+      "expected_fact_ids": [
+        "at_home"
+      ]
+    },
+    {
+      "id": "reserve_bed",
+      "preconditions": [
+        {
+          "key": "at_home",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "has_reserved_bed",
+          "value": true
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "home",
+      "reservation_target": "bed",
+      "executor_binding_id": "use_smart_object"
+    },
+    {
+      "id": "sleep",
+      "preconditions": [
+        {
+          "key": "at_home",
+          "value": true
+        },
+        {
+          "key": "has_reserved_bed",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "sleepy",
+          "value": false
+        },
+        {
+          "key": "exhausted",
+          "value": false
+        },
+        {
+          "key": "is_rested",
+          "value": true
+        }
+      ],
+      "planner_cost": 2,
+      "target_anchor": "home",
+      "reservation_target": "bed",
+      "executor_binding_id": "use_smart_object",
+      "perform_minutes": 480,
+      "expected_fact_ids": [
+        "at_home"
+      ],
+      "need_effects": {
+        "energy_delta": 75.0,
+        "morale_delta": 10.0
+      }
+    },
+    {
+      "id": "raise_alarm",
+      "preconditions": [
+        {
+          "key": "threat_detected",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "alarm_raised",
+          "value": true
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "alarm",
+      "executor_binding_id": "resolve_alarm",
+      "default_travel_minutes": 5,
+      "world_state_effects": {
+        "set_world_alert_active": true
+      }
+    },
+    {
+      "id": "respond_alarm",
+      "preconditions": [
+        {
+          "key": "threat_detected",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "threat_detected",
+          "value": false
+        },
+        {
+          "key": "threat_resolved",
+          "value": true
+        },
+        {
+          "key": "at_duty_area",
+          "value": true
+        }
+      ],
+      "planner_cost": 1,
+      "target_anchor": "duty",
+      "reservation_target": "guard_post",
+      "executor_binding_id": "resolve_alarm",
+      "default_travel_minutes": 10,
+      "perform_minutes": 45,
+      "expected_fact_ids": [
+        "at_duty_area"
+      ]
+    },
+    {
+      "id": "idle_safely",
+      "preconditions": [
+        {
+          "key": "at_home",
+          "value": true
+        }
+      ],
+      "effects": [
+        {
+          "key": "is_idle_safe",
+          "value": true
+        }
+      ],
+      "planner_cost": 3,
+      "target_anchor": "home",
+      "executor_binding_id": "idle_at_anchor",
+      "perform_minutes": 30,
+      "expected_fact_ids": [
+        "at_home"
+      ]
+    }
+  ],
+  "executors": [
+    {
+      "id": "travel_to_anchor",
+      "kind": "travel_to_anchor"
+    },
+    {
+      "id": "use_smart_object",
+      "kind": "use_smart_object"
+    },
+    {
+      "id": "follow_patrol_route",
+      "kind": "follow_patrol_route"
+    },
+    {
+      "id": "idle_at_anchor",
+      "kind": "idle_at_anchor"
+    },
+    {
+      "id": "resolve_alarm",
+      "kind": "resolve_alarm"
+    }
+  ]
+}

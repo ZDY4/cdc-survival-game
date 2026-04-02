@@ -734,7 +734,18 @@ fn format_ai_panel(runtime_state: &ViewerRuntimeState) -> String {
             .goal_scores
             .iter()
             .take(3)
-            .map(|score| format!("{:?}:{}", score.goal, score.score))
+            .map(|score| {
+                if score.matched_rule_ids.is_empty() {
+                    format!("{:?}:{}", score.goal, score.score)
+                } else {
+                    format!(
+                        "{:?}:{} ({})",
+                        score.goal,
+                        score.score,
+                        score.matched_rule_ids.join("+")
+                    )
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ");
         lines.push(format!("Entry {}:", index + 1));
@@ -781,7 +792,18 @@ fn format_selected_ai_lines(entry: &SettlementDebugEntry) -> Vec<String> {
                 .goal_scores
                 .iter()
                 .take(3)
-                .map(|score| format!("{:?}:{}", score.goal, score.score))
+                .map(|score| {
+                    if score.matched_rule_ids.is_empty() {
+                        format!("{:?}:{}", score.goal, score.score)
+                    } else {
+                        format!(
+                            "{:?}:{} ({})",
+                            score.goal,
+                            score.score,
+                            score.matched_rule_ids.join("+")
+                        )
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(", "),
         ),

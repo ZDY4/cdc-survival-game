@@ -405,23 +405,23 @@ mod tests {
     use bevy_ecs::prelude::*;
     use game_bevy::{
         default_debug_seed, CharacterDefinitions, DialogueDefinitions, DialogueRuleDefinitions,
-        EffectDefinitions, ItemDefinitions, MapDefinitions, OverworldDefinitions,
-        QuestDefinitions, RecipeDefinitions, RuntimeContentLoadState, RuntimeContentLoadStatus,
-        RuntimeStartupConfig, ShopDefinitions, SkillDefinitions, SkillTreeDefinitions,
-        SpawnCharacterRequest,
+        EffectDefinitions, ItemDefinitions, MapDefinitions, OverworldDefinitions, QuestDefinitions,
+        RecipeDefinitions, RuntimeContentLoadState, RuntimeContentLoadStatus, RuntimeStartupConfig,
+        ShopDefinitions, SkillDefinitions, SkillTreeDefinitions, SpawnCharacterRequest,
     };
     use game_data::{
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterLootEntry,
-        CharacterPlaceholderColors, CharacterPresentation, CharacterProgression, CharacterResourcePool,
-        DialogueLibrary, DialogueRuleLibrary, EffectLibrary, GridCoord, ItemLibrary,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
-        MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-        MapObjectProps, MapRotation, MapSize, NeedProfile, NpcRole, OverworldCellDefinition,
-        OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet, QuestLibrary,
-        RecipeLibrary, ScheduleBlock, ScheduleDay, ShopLibrary, SkillLibrary, SkillTreeLibrary,
+        CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
+        CharacterResourcePool, DialogueLibrary, DialogueRuleLibrary, EffectLibrary, GridCoord,
+        ItemLibrary, MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition,
+        MapId, MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint,
+        MapObjectKind, MapObjectProps, MapRotation, MapSize, NeedProfile, NpcRole,
+        OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
+        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTravelRuleSet, QuestLibrary, RecipeLibrary, ScheduleBlock, ScheduleDay,
+        ShopLibrary, SkillLibrary, SkillTreeLibrary,
     };
     use std::collections::BTreeMap;
 
@@ -837,6 +837,7 @@ mod tests {
             life: Some(CharacterLifeProfile {
                 settlement_id: "survivor_outpost_01_settlement".to_string(),
                 role: NpcRole::Guard,
+                ai_behavior_profile_id: "guard_settlement".to_string(),
                 home_anchor: "guard_home_01".to_string(),
                 duty_route_id: "guard_patrol_north".to_string(),
                 schedule: vec![ScheduleBlock {

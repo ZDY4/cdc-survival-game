@@ -449,6 +449,67 @@
   font-size: 0.8rem;
 }
 
+.narrative-chat-context-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.narrative-chat-context-strip-label {
+  color: #edf2f7;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  flex: none;
+}
+
+.narrative-chat-context-empty {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.narrative-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(184, 154, 114, 0.2);
+  background: rgba(184, 154, 114, 0.08);
+  color: #edf2f7;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.narrative-context-chip > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.narrative-context-chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.narrative-context-chip-remove:hover,
+.narrative-context-chip-remove:focus-visible {
+  outline: none;
+  color: #edf2f7;
+}
+
 .narrative-chat-composer {
   align-self: end;
   padding-top: 10px;
@@ -847,6 +908,17 @@
   font-size: 0.75rem;
 }
 
+.narrative-chat-context-strip {
+  gap: 6px;
+  padding: 7px 9px;
+}
+
+.narrative-chat-context-strip-label,
+.narrative-chat-context-empty,
+.narrative-context-chip {
+  font-size: 0.78rem;
+}
+
 .narrative-chat-message-user {
   border-color: rgba(184, 154, 114, 0.28);
   background: rgba(184, 154, 114, 0.05);
@@ -906,6 +978,17 @@
   outline: none;
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(184, 154, 114, 0.18);
+}
+
+.narrative-context-menu-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.narrative-context-menu-item:disabled:hover,
+.narrative-context-menu-item:disabled:focus-visible {
+  background: transparent;
+  border-color: transparent;
 }
 
 .narrative-advanced-panel {

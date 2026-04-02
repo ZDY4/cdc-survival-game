@@ -62,6 +62,7 @@
   "life": {
     "settlement_id": "survivor_outpost_01_settlement",
     "role": "doctor",
+    "ai_behavior_profile_id": "doctor_settlement",
     "home_anchor": "doctor_home_01",
     "duty_route_id": "doctor_clinic_rounds",
     "schedule": [

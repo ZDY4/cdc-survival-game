@@ -426,15 +426,11 @@ export type AiGenerationResponse<TRecord = Record<string, unknown>> = {
 };
 
 export type NarrativeDocType =
-  | "project_brief"
-  | "world_bible"
-  | "faction_note"
+  | "task_setup"
+  | "location_note"
   | "character_card"
-  | "arc_outline"
-  | "chapter_outline"
-  | "branch_sheet"
-  | "scene_draft"
-  | "dialogue_tone_sheet";
+  | "monster_note"
+  | "item_note";
 
 export type NarrativeDocumentMeta = {
   docType: NarrativeDocType;

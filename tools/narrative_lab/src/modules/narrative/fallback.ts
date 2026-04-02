@@ -12,7 +12,7 @@ export const fallbackNarrativeWorkspace: NarrativeWorkspacePayload = {
         id: "phase-1",
         title: "Phase 1: Narrative Authoring",
         description:
-          "Create markdown-first planning docs for outlines, scenes, branches, and character notes.",
+          "Create markdown-first planning docs for tasks, locations, characters, monsters, and items.",
       },
       {
         id: "phase-2",
@@ -27,8 +27,8 @@ export const fallbackNarrativeWorkspace: NarrativeWorkspacePayload = {
     ],
     editorDomains: [
       "Narrative planning and review",
-      "Character, arc, chapter, and scene drafting",
-      "Branch ideation and tone sheets",
+      "Task, location, character, monster, and item drafting",
+      "Worldbuilding and background reference writing",
       "Structuring bundle export",
     ],
   },

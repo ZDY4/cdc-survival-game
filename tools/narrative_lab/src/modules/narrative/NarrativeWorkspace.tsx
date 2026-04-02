@@ -60,7 +60,12 @@ import {
   nowIso,
   snapshotBranch,
 } from "./narrativeAgentState";
-import { docTypeDirectory } from "./narrativeTemplates";
+import {
+  defaultNarrativeMarkdown,
+  defaultNarrativeTitle,
+  docTypeDirectory,
+  docTypeLabel,
+} from "./narrativeTemplates";
 
 type EditableNarrativeDocument = NarrativeDocumentPayload & {
   savedSnapshot: string;
@@ -1038,13 +1043,38 @@ export function NarrativeWorkspace({
   const latestPlan = activeSession?.lastPlan ?? [];
   const latestTurnKind = activeSession?.lastResponse?.turnKind ?? null;
   const workspaceLabel = compactPathLabel(workspace.workspaceRoot);
-  const selectedContextDocuments = activeSession
-    ? documents.filter(
-        (document) =>
-          document.documentKey !== activeDocument?.documentKey &&
-          activeSession.selectedContextDocKeys.includes(document.documentKey),
-      )
-    : [];
+  const selectedContextDocuments = useMemo(() => {
+    if (!activeSession) {
+      return [];
+    }
+
+    const documentMap = new Map(
+      documents.map((document) => [document.documentKey, document] as const),
+    );
+
+    return activeSession.selectedContextDocKeys
+      .filter((documentKey) => documentKey !== activeDocument?.documentKey)
+      .map((documentKey) => documentMap.get(documentKey) ?? null)
+      .filter(Boolean) as EditableNarrativeDocument[];
+  }, [activeDocument?.documentKey, activeSession, documents]);
+  const docContextMenuTarget = docContextMenu ? getDocument(docContextMenu.documentKey) : null;
+  const canAddContextFromMenu = Boolean(
+    activeDocument &&
+      activeSession &&
+      docContextMenuTarget &&
+      docContextMenuTarget.documentKey !== activeDocument.documentKey &&
+      !activeSession.selectedContextDocKeys.includes(docContextMenuTarget.documentKey),
+  );
+  const contextMenuAddLabel =
+    !activeDocument || !activeSession
+      ? "请先打开一个 AI 会话文档"
+      : !docContextMenuTarget
+        ? "文档不可用"
+        : docContextMenuTarget.documentKey === activeDocument.documentKey
+          ? "当前主文档已默认包含"
+          : activeSession.selectedContextDocKeys.includes(docContextMenuTarget.documentKey)
+            ? "已添加到当前对话上下文"
+            : "添加当前对话上下文";
   const hasAdvancedPanelContent = Boolean(
     activeSession &&
       (activeSession.savedBranches.length ||
@@ -1100,9 +1130,10 @@ export function NarrativeWorkspace({
   function defaultDocType(): NarrativeDocType {
     return (
       activeDocument?.meta.docType ??
-      workspace.docTypes.find((entry) => entry.value === "scene_draft")?.value ??
+      workspace.docTypes.find((entry) => entry.value === "task_setup")?.value ??
+      workspace.docTypes.find((entry) => entry.value === "location_note")?.value ??
       workspace.docTypes[0]?.value ??
-      "project_brief"
+      "task_setup"
     );
   }
 
@@ -1166,18 +1197,33 @@ export function NarrativeWorkspace({
     onStatusChange("本次仅恢复文档，不恢复 AI 会话。");
   }
 
-  function toggleContextDocument(documentKey: string) {
+  function addContextDocument(documentKey: string) {
     if (!activeDocument) {
+      onStatusChange("请先打开一个 AI 会话文档。");
       return;
     }
+    if (documentKey === activeDocument.documentKey) {
+      onStatusChange("当前主文档已经默认参与会话，不需要重复添加。");
+      return;
+    }
+
+    const targetDocument = getDocument(documentKey);
+    if (!targetDocument) {
+      onStatusChange("要添加的上下文文档不存在。");
+      return;
+    }
+
+    let added = false;
     setDocumentAgents((current) =>
       updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
-        const selected = session.selectedContextDocKeys.includes(documentKey)
-          ? session.selectedContextDocKeys.filter((entry) => entry !== documentKey)
-          : [...session.selectedContextDocKeys, documentKey];
+        if (session.selectedContextDocKeys.includes(documentKey)) {
+          return session;
+        }
+
+        added = true;
         const nextSession = {
           ...session,
-          selectedContextDocKeys: selected,
+          selectedContextDocKeys: [...session.selectedContextDocKeys, documentKey],
           updatedAt: nowIso(),
         };
         return {
@@ -1186,6 +1232,46 @@ export function NarrativeWorkspace({
         };
       }),
     );
+
+    setDocContextMenu(null);
+    onStatusChange(
+      added
+        ? `已将《${targetDocument.meta.title || targetDocument.meta.slug}》添加到当前对话上下文。`
+        : `《${targetDocument.meta.title || targetDocument.meta.slug}》已在当前对话上下文中。`,
+    );
+  }
+
+  function removeContextDocument(documentKey: string) {
+    if (!activeDocument) {
+      return;
+    }
+
+    const targetDocument = getDocument(documentKey);
+    let removed = false;
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        if (!session.selectedContextDocKeys.includes(documentKey)) {
+          return session;
+        }
+
+        removed = true;
+        const nextSession = {
+          ...session,
+          selectedContextDocKeys: session.selectedContextDocKeys.filter(
+            (entry) => entry !== documentKey,
+          ),
+          updatedAt: nowIso(),
+        };
+        return {
+          ...nextSession,
+          reviewQueue: buildReviewQueue(nextSession),
+        };
+      }),
+    );
+
+    if (removed && targetDocument) {
+      onStatusChange(`已将《${targetDocument.meta.title || targetDocument.meta.slug}》移出当前对话上下文。`);
+    }
   }
 
   function updateActiveStrategy(
@@ -1806,16 +1892,48 @@ export function NarrativeWorkspace({
     );
   }
 
-  function createBlankDocument() {
-    const docType = defaultDocType();
-    const title = `未命名文档 ${documentsRef.current.filter((document) => document.isDraft).length + 1}`;
-    const draft = buildLocalDraft(docType, title, `# ${title}\n\n`);
+  async function createTypedDraft(docType: NarrativeDocType) {
+    const title = defaultNarrativeTitle(docType);
+
+    if (canPersist && workspace.workspaceRoot.trim()) {
+      const created = await invokeCommand<NarrativeDocumentPayload>("create_narrative_document", {
+        workspaceRoot: workspace.workspaceRoot,
+        input: {
+          docType,
+          title,
+        },
+      });
+      const draft = {
+        ...created,
+        savedSnapshot: "",
+        dirty: true,
+        isDraft: true,
+      } satisfies EditableNarrativeDocument;
+
+      setDocuments((current) => [draft, ...current]);
+      openDocument(draft.documentKey);
+      setDocumentAgents((current) =>
+        ensureDocumentAgentSession(current, draft.documentKey, "edit"),
+      );
+      onStatusChange(`已新建${docTypeLabel(docType)}。`);
+      return;
+    }
+
+    const draft = buildLocalDraft(
+      docType,
+      title,
+      defaultNarrativeMarkdown(docType, title),
+    );
     setDocuments((current) => [draft, ...current]);
     openDocument(draft.documentKey);
     setDocumentAgents((current) =>
       ensureDocumentAgentSession(current, draft.documentKey, "edit"),
     );
-    onStatusChange(`已创建本地草稿 ${title}。`);
+    onStatusChange(`已创建本地${docTypeLabel(docType)}草稿。`);
+  }
+
+  function createBlankDocument() {
+    void createTypedDraft(defaultDocType());
   }
 
   async function saveDocument(documentKey: string) {
@@ -2566,8 +2684,33 @@ export function NarrativeWorkspace({
   const menuCommands = useMemo(
     () => ({
       [EDITOR_MENU_COMMANDS.FILE_NEW_CURRENT]: {
-        execute: () => {
-          createBlankDocument();
+        execute: async () => {
+          await createTypedDraft(defaultDocType());
+        },
+      },
+      [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_TASK_SETUP]: {
+        execute: async () => {
+          await createTypedDraft("task_setup");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_LOCATION_NOTE]: {
+        execute: async () => {
+          await createTypedDraft("location_note");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_CHARACTER_CARD]: {
+        execute: async () => {
+          await createTypedDraft("character_card");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_MONSTER_NOTE]: {
+        execute: async () => {
+          await createTypedDraft("monster_note");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.NARRATIVE_NEW_ITEM_NOTE]: {
+        execute: async () => {
+          await createTypedDraft("item_note");
         },
       },
       [EDITOR_MENU_COMMANDS.FILE_SAVE_ALL]: {
@@ -2649,6 +2792,7 @@ export function NarrativeWorkspace({
       saving,
       tabState.activeTabKey,
       tabState.openTabs.length,
+      workspace.workspaceRoot,
     ],
   );
 
@@ -2794,8 +2938,9 @@ export function NarrativeWorkspace({
                     }}
                   >
                     <div className="narrative-doc-row-main">
-                      <strong>{document.meta.title || document.meta.slug}</strong>
-                      <span>{document.relativePath}</span>
+                      <strong title={document.relativePath}>
+                        {document.meta.title || document.meta.slug}
+                      </strong>
                     </div>
                     <div className="narrative-doc-row-side">
                       {tabState.openTabs.includes(document.documentKey) ? (
@@ -2848,9 +2993,10 @@ export function NarrativeWorkspace({
           {activeDocument && activeSession ? (
             <>
               <div className="narrative-chat-toolbar">
-                <div className="narrative-chat-context-inline" title={activeDocument.relativePath}>
-                  <strong>{activeDocument.meta.title || activeDocument.meta.slug}</strong>
-                  <span>{activeDocument.relativePath}</span>
+                <div className="narrative-chat-context-inline">
+                  <strong title={activeDocument.relativePath}>
+                    {activeDocument.meta.title || activeDocument.meta.slug}
+                  </strong>
                 </div>
 
                 <div className="segmented-control narrative-mode-switch">
@@ -2887,6 +3033,39 @@ export function NarrativeWorkspace({
                     生成新文档
                   </button>
                 </div>
+              </div>
+
+              <div className="narrative-chat-context-strip">
+                <span className="narrative-chat-context-strip-label">当前对话上下文</span>
+                {selectedContextDocuments.length ? (
+                  selectedContextDocuments.map((document) => (
+                    <span
+                      key={`context-chip-${document.documentKey}`}
+                      className="narrative-context-chip"
+                      title={document.relativePath}
+                    >
+                      <span>{document.meta.title || document.meta.slug}</span>
+                      <button
+                        type="button"
+                        className="narrative-context-chip-remove"
+                        aria-label={`移除 ${document.meta.title || document.meta.slug}`}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          removeContextDocument(document.documentKey);
+                        }}
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))
+                ) : (
+                  <span className="narrative-chat-context-empty">当前仅使用主文稿上下文</span>
+                )}
               </div>
 
               <div className="narrative-chat-meta-row">
@@ -3024,47 +3203,6 @@ export function NarrativeWorkspace({
                       {value === "ask_first" ? "先提问后生成" : value === "balanced" ? "平衡" : "尽量直接产出"}
                     </button>
                   ))}
-                </div>
-              </article>
-
-              <article className="narrative-chat-message narrative-chat-message-context">
-                <div className="narrative-chat-message-header">
-                  <strong>多文稿上下文</strong>
-                  <Badge tone="muted">{selectedContextDocuments.length}</Badge>
-                </div>
-                <p style={{ whiteSpace: "pre-wrap" }}>
-                  本轮会把这些文稿一起作为输入，而不只依赖当前文稿的 related docs。
-                </p>
-                <div className="toolbar-summary">
-                  {selectedContextDocuments.length ? (
-                    selectedContextDocuments.map((document) => (
-                      <Badge key={document.documentKey} tone="accent">
-                        {document.meta.slug}
-                      </Badge>
-                    ))
-                  ) : (
-                    <Badge tone="muted">尚未额外选择文稿</Badge>
-                  )}
-                </div>
-                <div className="toolbar-actions">
-                  {filteredDocuments
-                    .filter((document) => document.documentKey !== activeDocument.documentKey)
-                    .slice(0, 8)
-                    .map((document) => (
-                      <button
-                        key={`context-${document.documentKey}`}
-                        type="button"
-                        className={`toolbar-button ${
-                          activeSession.selectedContextDocKeys.includes(document.documentKey)
-                            ? "toolbar-accent"
-                            : ""
-                        }`.trim()}
-                        onClick={() => toggleContextDocument(document.documentKey)}
-                      >
-                        {activeSession.selectedContextDocKeys.includes(document.documentKey) ? "移除" : "加入"}{" "}
-                        {document.meta.title || document.meta.slug}
-                      </button>
-                    ))}
                 </div>
               </article>
 
@@ -3715,6 +3853,15 @@ export function NarrativeWorkspace({
           style={{ left: docContextMenu.x, top: docContextMenu.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          <button
+            type="button"
+            className="narrative-context-menu-item"
+            disabled={!canAddContextFromMenu}
+            title={contextMenuAddLabel}
+            onClick={() => addContextDocument(docContextMenu.documentKey)}
+          >
+            {contextMenuAddLabel}
+          </button>
           <button
             type="button"
             className="narrative-context-menu-item"

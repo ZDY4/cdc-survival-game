@@ -1,15 +1,11 @@
 import type { NarrativeDocType, NarrativeDocTypeEntry, NarrativeDocumentMeta } from "../../types";
 
 export const NARRATIVE_DOC_TYPES: NarrativeDocTypeEntry[] = [
-  { value: "project_brief", label: "项目总纲", directory: "project" },
-  { value: "world_bible", label: "世界观手册", directory: "world" },
-  { value: "faction_note", label: "势力设定", directory: "world" },
+  { value: "task_setup", label: "任务设定", directory: "tasks" },
+  { value: "location_note", label: "地点设定", directory: "locations" },
   { value: "character_card", label: "人物设定", directory: "characters" },
-  { value: "arc_outline", label: "剧情弧大纲", directory: "arcs" },
-  { value: "chapter_outline", label: "章节大纲", directory: "chapters" },
-  { value: "branch_sheet", label: "分支设计", directory: "branches" },
-  { value: "scene_draft", label: "场景稿", directory: "scenes" },
-  { value: "dialogue_tone_sheet", label: "对白语气设定", directory: "scenes" },
+  { value: "monster_note", label: "怪物设定", directory: "monsters" },
+  { value: "item_note", label: "物品设定", directory: "items" },
 ];
 
 export function docTypeLabel(docType: NarrativeDocType): string {
@@ -26,15 +22,11 @@ export function defaultNarrativeTitle(docType: NarrativeDocType): string {
 
 export function docTypeSummary(docType: NarrativeDocType): string {
   const summaries: Record<NarrativeDocType, string> = {
-    project_brief: "定义项目定位、主题、整体走向与核心人物关系。",
-    world_bible: "整理世界规则、地点氛围与长期可复用背景资料。",
-    faction_note: "记录阵营目标、外部形象与和主角的动态关系。",
-    character_card: "沉淀角色动机、秘密、口吻与任务挂钩。",
-    arc_outline: "梳理一条剧情弧线的起点、转折和收束。",
-    chapter_outline: "把单章目标、事件推进和分支节点写清楚。",
-    branch_sheet: "集中设计关键选择、即时反馈和长期回收。",
-    scene_draft: "直接起草场景推进、对白重点和后续钩子。",
-    dialogue_tone_sheet: "规范角色语气、情绪切换与对白风格样例。",
+    task_setup: "梳理任务目标、推进阶段、关键选择与回收条件。",
+    location_note: "沉淀地点背景、区域功能、危险与可探索内容。",
+    character_card: "沉淀角色动机、秘密、关系与任务挂钩。",
+    monster_note: "定义怪物谱系、生态、威胁来源与传闻印象。",
+    item_note: "记录物品背景、用途语境、稀缺性与象征意义。",
   };
 
   return summaries[docType];
@@ -43,65 +35,46 @@ export function docTypeSummary(docType: NarrativeDocType): string {
 export function defaultNarrativeMarkdown(docType: NarrativeDocType, title = defaultNarrativeTitle(docType)): string {
   const heading = `# ${title}`;
   const sections: Record<NarrativeDocType, string[]> = {
-    project_brief: [
-      "## 项目定位\n一句话说明这是怎样的末日叙事体验。",
-      "## 核心主题\n明确主题、情绪、价值冲突与最终想抵达的表达。",
-      "## 故事总体走向\n概括主线推进、转折和结局方向。",
-      "## 关键人物与关系\n列出核心人物、诉求与关系张力。",
-      "## 结构化落地提示\n可拆为主线任务、关键对话、章节推进条件、结局状态。",
+    task_setup: [
+      "## 任务目标\n说明玩家为什么要做这件事，以及完成后会改变什么。",
+      "## 前置条件\n列出任务开启前必须满足的状态、关系、地点或物品条件。",
+      "## 推进阶段\n按顺序拆解任务步骤、触发点和阶段性反馈。",
+      "## 关键选择\n列出任务中的重要抉择，以及各自的即时与长期后果。",
+      "## 涉及要素\n注明会关联到的人物、地点、怪物、物品与线索。",
+      "## 结构化落地提示\n可拆为任务节点、对白触发、状态变量、分支条件与结局回收。",
     ],
-    world_bible: [
-      "## 世界状态\n描述灾变后的世界现状、秩序、资源与危险。",
-      "## 关键规则\n记录会影响叙事和玩法的世界规则。",
-      "## 典型地点\n列出主要区域、氛围、可探索内容和故事功能。",
-      "## 结构化落地提示\n可拆为地点资料、背景线索、区域任务池、环境对白。",
-    ],
-    faction_note: [
-      "## 势力概述\n介绍势力定位、口号、外部形象。",
-      "## 内部目标\n说明势力真正想要什么。",
-      "## 与主角的关系\n描述初始关系与可变化的信任路径。",
-      "## 结构化落地提示\n可拆为阵营关系、任务发布者、敌对条件、特殊奖励。",
+    location_note: [
+      "## 地点背景\n说明这个地点的来历、现状和它在世界中的位置。",
+      "## 区域功能\n列出这个地点承担的叙事或玩法功能。",
+      "## 氛围与视觉线索\n记录环境气质、声音、气味、地标与玩家第一印象。",
+      "## 资源与危险\n说明这里常见的资源、风险、禁区和潜在冲突。",
+      "## 驻留关系\n记录常驻人物、势力影响、传闻和关联任务。",
+      "## 结构化落地提示\n可拆为地点数据、环境线索、区域对白、探索事件与地图标注。",
     ],
     character_card: [
       "## 角色定位\n一句话说明这个角色在故事中的作用。",
       "## 公开形象\n玩家最先看到的外在表现。",
       "## 隐藏信息\n这个角色不会轻易说出的秘密、伤口或立场。",
       "## 动机与欲望\n这个角色最在意什么，失去什么会崩。",
-      "## 结构化落地提示\n可拆为角色数据、对白语气、好感条件、个人任务、事件触发。",
+      "## 关系网络\n列出与其他角色、地点、任务的连接方式。",
+      "## 成长轨迹\n说明这个角色可能的变化、崩塌点与回收方式。",
+      "## 结构化落地提示\n可拆为角色资料、对白风格、关系条件、个人任务与事件触发。",
     ],
-    arc_outline: [
-      "## 剧情弧目标\n说明这条弧线负责推进什么主题或人物变化。",
-      "## 起点状态\n故事开始时的局面。",
-      "## 关键转折\n按顺序列出转折点、冲突升级和抉择。",
-      "## 结构化落地提示\n可拆为章节任务链、分支节点、状态判定与收束结局。",
+    monster_note: [
+      "## 怪物概述\n说明这种怪物的来源、俗称与玩家印象。",
+      "## 生态与出没环境\n描述它通常出现在哪些地点、与哪些环境共生。",
+      "## 威胁特征\n总结它最危险的行为、压迫感来源和玩家应对感受。",
+      "## 目击印象与传闻\n记录幸存者口中的见闻、谣言和恐惧叙述。",
+      "## 相关要素\n注明会关联的人物、地点、任务或关键物品。",
+      "## 结构化落地提示\n可映射为敌对角色、遭遇事件或传闻线索，但不直接代替数值定义。",
     ],
-    chapter_outline: [
-      "## 章节目标\n这一章要解决什么问题。",
-      "## 前情承接\n承接哪些旧信息或旧选择。",
-      "## 关键事件\n按顺序列出事件推进。",
-      "## 分支点\n列出本章核心选择与结果差异。",
-      "## 结构化落地提示\n可拆为章节任务、关键对话、分支条件、回收钩子。",
-    ],
-    branch_sheet: [
-      "## 分支前提\n玩家做出选择前需要满足或知道什么。",
-      "## 选择点\n明确玩家看到的几个选择。",
-      "## 即时结果\n说明各选择的立刻反馈。",
-      "## 长期回收\n说明哪些后果会在更晚阶段结算。",
-      "## 结构化落地提示\n可拆为条件表达式、状态变量、任务分流、对白差异。",
-    ],
-    scene_draft: [
-      "## 场景目标\n这一场景必须达成什么叙事目的。",
-      "## 参与者\n列出出场角色、立场和初始气氛。",
-      "## 场景推进\n按阶段描述冲突、动作、对白重点。",
-      "## 后续钩子\n离开场景后留下什么问题或动力。",
-      "## 结构化落地提示\n可拆为对白树、场景事件、交互对象、任务步骤推进。",
-    ],
-    dialogue_tone_sheet: [
-      "## 角色语气\n描述角色说话方式、节奏、常用词。",
-      "## 情绪变化\n角色在不同状态下的语气切换。",
-      "## 禁区与敏感点\n哪些话题会触发防御或爆发。",
-      "## 示例台词\n写几组可直接参考的短对白。",
-      "## 结构化落地提示\n可拆为对白节点文风、分支语气条件、关系值反馈。",
+    item_note: [
+      "## 物品概述\n说明这件物品在世界中的来历、俗称和核心用途。",
+      "## 获取语境\n描述它通常出现在哪些地点、由谁持有、为什么稀缺或常见。",
+      "## 文化与象征意义\n记录它在幸存者社会中的价值、身份意味或禁忌。",
+      "## 使用体验\n说明玩家接触它时应感受到的质感、风险或机会。",
+      "## 关联要素\n注明会关联的人物、地点、任务或怪物。",
+      "## 结构化落地提示\n可映射为物品定义、线索或任务奖励，但不直接代替结构化物品数据。",
     ],
   };
 

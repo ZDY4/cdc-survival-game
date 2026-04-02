@@ -57,13 +57,13 @@ describe("menuBridge", () => {
     dispatchEditorMenuCommandMock.mockResolvedValue({ ok: false, reason: "disabled" });
 
     await handleEditorMenuCommand(
-      EDITOR_MENU_COMMANDS.NARRATIVE_NEW_PROJECT_BRIEF,
+      EDITOR_MENU_COMMANDS.NARRATIVE_NEW_TASK_SETUP,
       onStatusChange,
       "main",
     );
 
     expect(onStatusChange).toHaveBeenCalledWith(
-      "新建项目简介 在当前上下文中不可用。",
+      "新建任务设定 在当前上下文中不可用。",
     );
   });
 
@@ -77,7 +77,7 @@ describe("menuBridge", () => {
       "main",
     );
 
-    expect(onStatusChange).toHaveBeenCalledWith("新建 在此窗口中不受支持。");
+    expect(onStatusChange).toHaveBeenCalledWith("新建草稿 在此窗口中不受支持。");
   });
 
   it("reports execution errors to the status bar", async () => {
