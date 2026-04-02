@@ -636,13 +636,12 @@ fn parse_document(path: &Path, raw: &str) -> Result<(NarrativeDocumentMeta, Stri
         .and_then(|value| value.file_name())
         .and_then(|value| value.to_str())
         .and_then(doc_type_from_directory)
-        .unwrap_or("scene_draft");
+        .unwrap_or("task_setup");
     let inferred_slug = path
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_string();
-
     let meta = NarrativeDocumentMeta {
         doc_type: meta_map
             .get("doc_type")
@@ -736,13 +735,11 @@ fn format_list(values: &[String]) -> String {
 
 fn doc_type_from_directory(directory: &str) -> Option<&'static str> {
     match directory {
-        "project" => Some("project_brief"),
-        "world" => Some("world_bible"),
+        "tasks" => Some("task_setup"),
+        "locations" => Some("location_note"),
         "characters" => Some("character_card"),
-        "arcs" => Some("arc_outline"),
-        "chapters" => Some("chapter_outline"),
-        "branches" => Some("branch_sheet"),
-        "scenes" => Some("scene_draft"),
+        "monsters" => Some("monster_note"),
+        "items" => Some("item_note"),
         _ => None,
     }
 }
@@ -778,11 +775,13 @@ fn summarize_document(slug: &str, title: &str, markdown: &str) -> NarrativeDocum
 
 fn suggested_targets_for_doc_type(doc_type: &str) -> Vec<&'static str> {
     match doc_type {
-        "character_card" | "dialogue_tone_sheet" => vec!["character", "dialogue"],
-        "chapter_outline" | "arc_outline" | "branch_sheet" | "scene_draft" => {
+        "character_card" => vec!["character", "dialogue"],
+        "task_setup" => {
             vec!["quest", "dialogue", "branch_condition"]
         }
-        "world_bible" | "faction_note" | "project_brief" => vec!["quest", "dialogue", "clue"],
+        "location_note" => vec!["quest", "dialogue", "clue", "map_location"],
+        "monster_note" => vec!["character", "quest", "clue"],
+        "item_note" => vec!["item", "quest", "clue"],
         _ => vec!["quest", "dialogue"],
     }
 }
@@ -877,33 +876,33 @@ fn narrative_bootstrap(workspace_root: &Path, project_root: Option<&str>) -> Edi
     EditorBootstrap {
         app_name: "CDC Narrative Lab",
         workspace_root: to_forward_slashes(workspace_root),
-        shared_rust_path: project_root.unwrap_or("Not connected").to_string(),
-        active_stage: "Phase 1: Narrative Authoring",
+        shared_rust_path: project_root.unwrap_or("未连接项目").to_string(),
+        active_stage: "阶段 1：叙事设定创作",
         stages: vec![
             MigrationStage {
                 id: "phase-1",
-                title: "Phase 1: Narrative Authoring",
+                title: "阶段 1：叙事设定创作",
                 description:
-                    "Use markdown-first planning docs to explore worldbuilding, arcs, scenes, and branches.",
+                    "使用 Markdown 文稿沉淀任务、地点、人物、怪物与物品设定，聚焦世界观资料整理。",
             },
             MigrationStage {
                 id: "phase-2",
-                title: "Phase 2: Structuring Handoff",
+                title: "阶段 2：结构化移交",
                 description:
-                    "Prepare curated bundles that can later be decomposed into quests, dialogues, and character data.",
+                    "整理经过筛选的设定文稿，为后续拆解成任务、对白、角色与地图数据做准备。",
             },
             MigrationStage {
                 id: "phase-3",
-                title: "Phase 3: Project Integration",
+                title: "阶段 3：项目联动",
                 description:
-                    "Optionally connect a game project to enrich AI context with story chapters and runtime constraints.",
+                    "按需连接游戏项目，让 AI 能参考运行时任务、对白与世界数据进行创作。",
             },
         ],
         editor_domains: vec![
-            "Narrative planning and review",
-            "Character, arc, chapter, and scene drafting",
-            "Branch ideation and tone sheets",
-            "Structuring bundle export for stage-two editors",
+            "任务、地点、人物、怪物、物品设定创作",
+            "叙事资料审稿与 AI 协作",
+            "多文稿上下文整理与结构化移交",
+            "为后续编辑器准备资料包导出",
         ],
     }
 }
@@ -960,23 +959,20 @@ mod tests {
 
     #[test]
     fn split_frontmatter_parses_meta_and_markdown() {
-        let raw = "---\ndoc_type: chapter_outline\nslug: test\nrelated_docs: [a, b]\n---\n\n# Title\nBody";
+        let raw = "---\ndoc_type: task_setup\nslug: test\nrelated_docs: [a, b]\n---\n\n# Title\nBody";
         let (meta, markdown) = split_frontmatter(raw).expect("frontmatter should parse");
-        assert_eq!(
-            meta.get("doc_type").map(String::as_str),
-            Some("chapter_outline")
-        );
+        assert_eq!(meta.get("doc_type").map(String::as_str), Some("task_setup"));
         assert_eq!(meta.get("slug").map(String::as_str), Some("test"));
         assert_eq!(markdown, "# Title\nBody");
     }
 
     #[test]
     fn parse_document_infers_missing_fields() {
-        let path = PathBuf::from("narrative/chapters/chapter_01.md");
+        let path = PathBuf::from("narrative/tasks/task_01.md");
         let (meta, markdown) =
             parse_document(&path, "# Heading\nText").expect("document should parse");
-        assert_eq!(meta.doc_type, "chapter_outline");
-        assert_eq!(meta.slug, "chapter_01");
+        assert_eq!(meta.doc_type, "task_setup");
+        assert_eq!(meta.slug, "task_01");
         assert!(markdown.contains("Heading"));
     }
 
@@ -984,9 +980,9 @@ mod tests {
     fn serialize_document_writes_frontmatter() {
         let raw = serialize_document(
             &NarrativeDocumentMeta {
-                doc_type: "scene_draft".to_string(),
-                slug: "test-scene".to_string(),
-                title: "Test Scene".to_string(),
+                doc_type: "task_setup".to_string(),
+                slug: "test-task".to_string(),
+                title: "Test Task".to_string(),
                 status: "draft".to_string(),
                 tags: vec!["dark".to_string()],
                 related_docs: vec!["chapter-a".to_string()],
@@ -995,7 +991,7 @@ mod tests {
             "# Test\n\nBody",
         );
         assert!(raw.starts_with("---\n"));
-        assert!(raw.contains("doc_type: scene_draft"));
+        assert!(raw.contains("doc_type: task_setup"));
         assert!(raw.contains("related_docs: [chapter-a]"));
     }
 }

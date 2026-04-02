@@ -145,7 +145,7 @@ pub fn build_project_context_snapshot_seed(
 
     Ok(ProjectContextSnapshotSeed {
         summary: format!(
-            "Project snapshot includes {quest_count} quests, {dialogue_count} dialogues, and {character_count} characters."
+            "项目快照包含 {quest_count} 个任务、{dialogue_count} 份对白和 {character_count} 名角色。"
         ),
         source_refs: project_context_refs,
         runtime_indexes: serde_json::to_value(runtime_indexes)

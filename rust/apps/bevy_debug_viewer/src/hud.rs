@@ -1,4 +1,4 @@
-use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use game_bevy::SettlementDebugEntry;
 use game_core::{ActorDebugState, SimulationSnapshot};
@@ -12,11 +12,20 @@ use crate::geometry::{
 };
 use crate::profiling::ViewerSystemProfilerState;
 use crate::state::{
-    FpsOverlayText, FreeObserveIndicatorRoot, HudEventCategory, HudEventFilter, HudFooterText,
-    HudTabBarRoot, HudTabButton, HudText, ViewerEventEntry, ViewerHudPage, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    FpsOverlayText, FreeObserveIndicatorRoot, HudFooterText, HudTabBarRoot, HudTabButton, HudText,
+    ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
 use game_bevy::{UiMenuPanel, UiMenuState};
+
+mod events;
+mod footer;
+mod performance;
+mod tabs;
+
+use events::format_events_panel;
+use footer::footer_hint;
+use performance::{current_fps_label, format_performance_panel};
+use tabs::{hud_tab_button_border_color, hud_tab_button_color};
 
 pub(crate) fn update_free_observe_indicator(
     indicator_visibility: Single<&mut Visibility, With<FreeObserveIndicatorRoot>>,
@@ -221,59 +230,6 @@ fn combat_turn_index_label(snapshot: &SimulationSnapshot) -> String {
     } else {
         "inactive".to_string()
     }
-}
-
-fn current_fps_label(diagnostics: &DiagnosticsStore) -> String {
-    let fps = diagnostics
-        .get(&FrameTimeDiagnosticsPlugin::FPS)
-        .and_then(|diagnostic| diagnostic.smoothed())
-        .or_else(|| {
-            diagnostics
-                .get(&FrameTimeDiagnosticsPlugin::FPS)
-                .and_then(|diagnostic| diagnostic.average())
-        });
-    format_fps_value(fps)
-}
-
-fn format_fps_value(fps: Option<f64>) -> String {
-    fps.map(|fps| format!("{fps:.0}"))
-        .unwrap_or_else(|| "--".to_string())
-}
-
-fn format_frame_timings_section(profiler: &ViewerSystemProfilerState) -> String {
-    let mut lines = vec![kv(
-        "Tracked Avg",
-        format!("{:.2} ms", profiler.tracked_total_smoothed_ms()),
-    )];
-    let top_entries = profiler.top_entries(6);
-    if top_entries.is_empty() {
-        lines.push("No samples yet".to_string());
-    } else {
-        lines.extend(top_entries.into_iter().map(|entry| {
-            format!(
-                "{}: {:.2} ms (last {:.2})",
-                entry.name, entry.smoothed_ms, entry.last_ms
-            )
-        }));
-    }
-    section("Frame Timings", lines)
-}
-
-fn format_performance_panel(profiler: &ViewerSystemProfilerState) -> String {
-    section(
-        "Performance",
-        vec![
-            kv(
-                "Collection",
-                if profiler.is_empty() {
-                    "warming up"
-                } else {
-                    "active"
-                },
-            ),
-            format_frame_timings_section(profiler),
-        ],
-    )
 }
 
 fn format_overview_panel(
@@ -696,32 +652,6 @@ fn format_dialogue_section(dialogue: Option<&crate::state::ActiveDialogueState>)
     section("Dialogue", lines)
 }
 
-fn format_events_panel(runtime_state: &ViewerRuntimeState, event_filter: HudEventFilter) -> String {
-    let events: Vec<String> = runtime_state
-        .recent_events
-        .iter()
-        .filter(|entry| event_matches_filter(entry, event_filter))
-        .rev()
-        .take(20)
-        .map(format_event_line)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect();
-
-    section(
-        "Events",
-        if events.is_empty() {
-            vec![kv("Filter", event_filter.label()), kv("Visible", 0)]
-        } else {
-            std::iter::once(kv("Filter", event_filter.label()))
-                .chain(std::iter::once(kv("Visible", events.len())))
-                .chain(events)
-                .collect()
-        },
-    )
-}
-
 fn format_ai_panel(runtime_state: &ViewerRuntimeState) -> String {
     let snapshot = &runtime_state.ai_snapshot;
     if snapshot.entries.is_empty() {
@@ -841,48 +771,7 @@ fn format_controls_help() -> String {
     )
 }
 
-pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
-    match page {
-        ViewerHudPage::Overview => {
-            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · A自动推进 · PgUp/Dn楼层 · Tab切换角色"
-        }
-        ViewerHudPage::SelectedActor => {
-            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · Tab切换角色 · 自由观察下左键选AI"
-        }
-        ViewerHudPage::World => {
-            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 悬停看格子 · 中键拖拽取消跟随 · 滚轮缩放 · F恢复跟随"
-        }
-        ViewerHudPage::Interaction => {
-            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 左键主交互 · 右键开菜单 · 点击按钮执行交互 · 1-9选对话分支"
-        }
-        ViewerHudPage::Events => "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · [ / ]切过滤器",
-        ViewerHudPage::Ai => "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · V切换信息层级 · 查看 AI 目标 / 动作 / 预订 / 班次",
-        ViewerHudPage::Performance => {
-            "F1-7切页 · Ctrl+P控制/观察切换 · H隐藏HUD · /帮助 · ~控制台 · show fps 开关右上角 FPS · 仅当前页统计函数耗时"
-        }
-    }
-}
-
-fn hud_tab_button_color(selected: bool, interaction: Interaction) -> Color {
-    match (selected, interaction) {
-        (true, Interaction::Pressed) => Color::srgba(0.26, 0.4, 0.58, 0.98),
-        (true, Interaction::Hovered) => Color::srgba(0.22, 0.35, 0.5, 0.98),
-        (true, Interaction::None) => Color::srgba(0.18, 0.3, 0.45, 0.96),
-        (false, Interaction::Pressed) => Color::srgba(0.23, 0.27, 0.33, 0.98),
-        (false, Interaction::Hovered) => Color::srgba(0.17, 0.2, 0.26, 0.96),
-        (false, Interaction::None) => Color::srgba(0.11, 0.13, 0.17, 0.94),
-    }
-}
-
-fn hud_tab_button_border_color(selected: bool) -> Color {
-    if selected {
-        Color::srgba(0.52, 0.74, 0.98, 1.0)
-    } else {
-        Color::srgba(0.19, 0.24, 0.32, 1.0)
-    }
-}
-
-fn section(title: &str, lines: Vec<String>) -> String {
+pub(crate) fn section(title: &str, lines: Vec<String>) -> String {
     let mut text = String::from(title);
     for line in lines {
         text.push_str("\n  ");
@@ -891,7 +780,7 @@ fn section(title: &str, lines: Vec<String>) -> String {
     text
 }
 
-fn kv(label: &str, value: impl std::fmt::Display) -> String {
+pub(crate) fn kv(label: &str, value: impl std::fmt::Display) -> String {
     format!("{label}: {value}")
 }
 
@@ -900,23 +789,6 @@ fn format_string_list(values: &[String]) -> String {
         "none".to_string()
     } else {
         values.join(", ")
-    }
-}
-
-pub(crate) fn format_event_line(entry: &ViewerEventEntry) -> String {
-    format!(
-        "{} · t={} · {}",
-        event_badge(entry.category),
-        entry.turn_index,
-        entry.text
-    )
-}
-
-fn event_badge(category: HudEventCategory) -> &'static str {
-    match category {
-        HudEventCategory::Combat => "COMBAT",
-        HudEventCategory::Interaction => "INTERACT",
-        HudEventCategory::World => "WORLD",
     }
 }
 
@@ -931,7 +803,6 @@ fn format_payload_summary(payload_summary: &std::collections::BTreeMap<String, S
             .join(", ")
     }
 }
-
 fn compact_text(text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -941,21 +812,14 @@ fn compact_text(text: &str) -> String {
     }
 }
 
-pub(crate) fn event_matches_filter(event: &ViewerEventEntry, filter: HudEventFilter) -> bool {
-    match filter {
-        HudEventFilter::All => true,
-        HudEventFilter::Combat => event.category == HudEventCategory::Combat,
-        HudEventFilter::Interaction => event.category == HudEventCategory::Interaction,
-        HudEventFilter::World => event.category == HudEventCategory::World,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        event_matches_filter, footer_hint, format_event_line, format_fps_value,
-        format_frame_timings_section, format_performance_panel, hud_tab_button_color,
+    use crate::hud::events::{event_matches_filter, format_event_line};
+    use crate::hud::footer::footer_hint;
+    use crate::hud::performance::{
+        format_fps_value, format_frame_timings_section, format_performance_panel,
     };
+    use crate::hud::tabs::hud_tab_button_color;
     use crate::profiling::ViewerSystemProfilerState;
     use crate::simulation::classify_event;
     use crate::state::{HudEventCategory, HudEventFilter, ViewerEventEntry, ViewerHudPage};
@@ -970,8 +834,8 @@ mod tests {
         let perf_hint = footer_hint(ViewerHudPage::Performance);
 
         assert!(overview_hint.contains("F1-7切页"));
-        assert!(overview_hint.contains("A自动推进"));
-        assert!(events_hint.contains("切过滤器"));
+        assert!(overview_hint.contains("show fps"));
+        assert!(events_hint.contains("切换事件过滤"));
         assert!(perf_hint.contains("show fps"));
     }
 

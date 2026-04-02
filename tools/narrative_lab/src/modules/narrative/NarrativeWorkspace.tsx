@@ -1174,9 +1174,21 @@ export function NarrativeWorkspace({
     if (!pendingRestoreSessions) {
       return;
     }
+    const restoredEntries = Object.entries(pendingRestoreSessions).filter(([documentKey]) =>
+      documentsRef.current.some((document) => document.documentKey === documentKey),
+    );
+    const restoreTargetKey =
+      restoredEntries
+        .slice()
+        .sort((left, right) => {
+          const leftTime = Date.parse(left[1].updatedAt || "");
+          const rightTime = Date.parse(right[1].updatedAt || "");
+          return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
+        })[0]?.[0] ?? null;
+
     setDocumentAgents((current) => {
       const next = { ...current };
-      for (const [documentKey, session] of Object.entries(pendingRestoreSessions)) {
+      for (const [documentKey, session] of restoredEntries) {
         next[documentKey] = {
           ...session,
           busy: false,
@@ -1186,9 +1198,29 @@ export function NarrativeWorkspace({
       }
       return next;
     });
+    if (restoredEntries.length) {
+      setTabState((current) => ({
+        openTabs: restoredEntries.reduce((openTabs, [documentKey]) => {
+          if (openTabs.includes(documentKey)) {
+            return openTabs;
+          }
+          return [...openTabs, documentKey];
+        }, current.openTabs),
+        activeTabKey: restoreTargetKey ?? current.activeTabKey,
+      }));
+    }
     setPendingRestoreSessions(null);
-    setRestoreStatus("已恢复上次 Narrative Lab agent 会话。");
-    onStatusChange("已恢复上次 Narrative Lab agent 会话。");
+    const restoreTargetTitle =
+      restoreTargetKey
+        ? documentsRef.current.find((document) => document.documentKey === restoreTargetKey)?.meta.title ||
+          documentsRef.current.find((document) => document.documentKey === restoreTargetKey)?.meta.slug ||
+          restoreTargetKey
+        : null;
+    const statusMessage = restoreTargetTitle
+      ? `已恢复上次 Narrative Lab agent 会话，并切换到《${restoreTargetTitle}》。`
+      : "已恢复上次 Narrative Lab agent 会话。";
+    setRestoreStatus(statusMessage);
+    onStatusChange(statusMessage);
   }
 
   function skipPersistedAgentSessions() {
@@ -1903,12 +1935,12 @@ export function NarrativeWorkspace({
           title,
         },
       });
-      const draft = {
+      const draft: EditableNarrativeDocument = {
         ...created,
         savedSnapshot: "",
         dirty: true,
         isDraft: true,
-      } satisfies EditableNarrativeDocument;
+      };
 
       setDocuments((current) => [draft, ...current]);
       openDocument(draft.documentKey);
@@ -1933,7 +1965,10 @@ export function NarrativeWorkspace({
   }
 
   function createBlankDocument() {
-    void createTypedDraft(defaultDocType());
+    void createTypedDraft(defaultDocType()).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      onStatusChange(`新建草稿失败：${message}`);
+    });
   }
 
   async function saveDocument(documentKey: string) {
@@ -2827,7 +2862,7 @@ export function NarrativeWorkspace({
 
         <div className="narrative-topbar-actions">
           <button type="button" className="toolbar-button toolbar-accent" onClick={() => createBlankDocument()}>
-            新建空白文档
+            新建草稿
           </button>
           <button
             type="button"
