@@ -136,6 +136,7 @@ pub(super) fn transition_to_gameplay_scene(
     status_text: &str,
 ) {
     *scene_kind = ViewerSceneKind::Gameplay;
+    runtime_state.runtime.clear_gameplay_entry_transients();
     reset_viewer_runtime_transients(viewer_state);
     sync_viewer_runtime_basics(runtime_state, viewer_state);
     viewer_state.status_line = status_text.to_string();

@@ -826,6 +826,13 @@ impl SimulationRuntime {
         self.pending_interaction.as_ref()
     }
 
+    pub fn clear_gameplay_entry_transients(&mut self) {
+        self.pending_movement = None;
+        self.pending_interaction = None;
+        self.pending_movement_stop_requested = false;
+        self.path_preview.clear();
+    }
+
     pub fn perform_attack(&mut self, actor_id: ActorId, target_actor: ActorId) -> ActionResult {
         if let Err(error) = self.ensure_player_input_actor(actor_id) {
             return ActionResult::rejected(
@@ -1384,7 +1391,6 @@ impl SimulationRuntime {
         }
         Ok(())
     }
-
 }
 
 pub fn pathfinding_error_reason(error: &GridPathfindingError) -> &'static str {

@@ -134,6 +134,52 @@ fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
 }
 
 #[test]
+fn transition_to_gameplay_scene_clears_runtime_movement_transients() {
+    let mut scene_kind = ViewerSceneKind::MainMenu;
+    let (mut runtime, handles) = create_demo_runtime();
+    runtime
+        .issue_actor_move(handles.player, game_data::GridCoord::new(0, 0, 2))
+        .expect("path should be planned");
+    let expected_position = runtime
+        .get_actor_grid_position(handles.player)
+        .expect("player should remain registered");
+    let mut runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: Default::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    let mut menu_state = UiMenuState::default();
+    let mut modal_state = UiModalState::default();
+
+    assert!(runtime_state.runtime.pending_movement().is_some());
+    assert!(!runtime_state.runtime.snapshot().path_preview.is_empty());
+
+    transition_to_gameplay_scene(
+        &mut scene_kind,
+        &mut runtime_state,
+        &mut viewer_state,
+        &mut menu_state,
+        &mut modal_state,
+        "已继续最近存档",
+    );
+
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert!(runtime_state.runtime.snapshot().path_preview.is_empty());
+
+    for _ in 0..3 {
+        let _ = runtime_state.runtime.advance_pending_progression();
+    }
+
+    assert_eq!(
+        runtime_state
+            .runtime
+            .get_actor_grid_position(handles.player),
+        Some(expected_position)
+    );
+}
+
+#[test]
 fn main_menu_ui_renders_only_in_main_menu_scene() {
     assert!(should_render_main_menu(ViewerSceneKind::MainMenu));
     assert!(!should_render_main_menu(ViewerSceneKind::Gameplay));
