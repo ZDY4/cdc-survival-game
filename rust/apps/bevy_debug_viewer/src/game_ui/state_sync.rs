@@ -20,7 +20,7 @@ pub(crate) fn sync_game_ui_state(
     runtime_state: Res<ViewerRuntimeState>,
     scene_kind: Res<ViewerSceneKind>,
     mut viewer_state: ResMut<ViewerState>,
-    menu_state: ResMut<UiMenuState>,
+    mut menu_state: ResMut<UiMenuState>,
     mut modal_state: ResMut<UiModalState>,
     mut banner_state: ResMut<UiStatusBannerState>,
     mut input_block_state: ResMut<UiInputBlockState>,
@@ -51,18 +51,23 @@ pub(crate) fn sync_game_ui_state(
 
     if let Some(target) = viewer_state.pending_open_trade_target.as_ref() {
         if modal_state.trade.is_none() {
-            modal_state.trade = trade_session_for_target(&runtime_state, target, &shops.0);
+            modal_state.trade = resolve_trade_session_for_target(&runtime_state, target, &shops.0);
+        }
+        if modal_state.trade.is_some() {
+            menu_state.active_panel = None;
         }
     }
 
     let in_main_menu_scene = should_render_main_menu(*scene_kind);
     input_block_state.blocked = in_main_menu_scene
         || menu_state.active_panel.is_some()
+        || modal_state.discard_quantity.is_some()
         || modal_state.trade.is_some()
         || viewer_state.active_dialogue.is_some()
         || viewer_state.interaction_menu.is_some();
     if (in_main_menu_scene
         || menu_state.active_panel.is_some()
+        || modal_state.discard_quantity.is_some()
         || modal_state.trade.is_some()
         || viewer_state.active_dialogue.is_some())
         && viewer_state.interaction_menu.is_some()
@@ -71,6 +76,8 @@ pub(crate) fn sync_game_ui_state(
     }
     input_block_state.reason = if in_main_menu_scene {
         "main_menu_scene".to_string()
+    } else if modal_state.discard_quantity.is_some() {
+        "discard_quantity".to_string()
     } else if modal_state.trade.is_some() {
         "trade".to_string()
     } else if viewer_state.active_dialogue.is_some() {
@@ -88,6 +95,7 @@ pub(crate) fn sync_game_ui_state(
     }
 
     if in_main_menu_scene
+        || modal_state.discard_quantity.is_some()
         || modal_state.trade.is_some()
         || menu_state.active_panel != Some(UiMenuPanel::Inventory)
     {
@@ -140,6 +148,7 @@ pub(super) fn transition_to_gameplay_scene(
     menu_state.selected_recipe_id = None;
     menu_state.selected_map_location_id = None;
     menu_state.status_text = status_text.to_string();
+    modal_state.discard_quantity = None;
     modal_state.trade = None;
 }
 
@@ -275,37 +284,4 @@ pub(super) fn find_skill_tree_id<'a>(
             .any(|entry| entry.skill_id == skill_id)
             .then_some(tree.tree_id.as_str())
     })
-}
-
-pub(super) fn trade_session_for_target(
-    runtime_state: &ViewerRuntimeState,
-    target: &InteractionTargetId,
-    shops: &game_data::ShopLibrary,
-) -> Option<game_bevy::UiTradeSessionState> {
-    let target_actor_id = match target {
-        InteractionTargetId::Actor(actor_id) => Some(*actor_id),
-        _ => None,
-    };
-    let snapshot = runtime_state.runtime.snapshot();
-    let mut resolved_shop_id = None;
-    if let Some(target_actor_id) = target_actor_id {
-        if let Some(actor) = snapshot
-            .actors
-            .iter()
-            .find(|actor| actor.actor_id == target_actor_id)
-        {
-            if let Some(definition_id) = actor.definition_id.as_ref() {
-                let candidate = format!("{}_shop", definition_id.as_str());
-                if shops.get(&candidate).is_some() {
-                    resolved_shop_id = Some(candidate);
-                }
-            }
-        }
-    }
-    resolved_shop_id
-        .or_else(|| shops.iter().next().map(|(shop_id, _)| shop_id.clone()))
-        .map(|shop_id| game_bevy::UiTradeSessionState {
-            shop_id,
-            target_actor_id,
-        })
 }

@@ -6,14 +6,13 @@ use game_data::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide,
     CharacterId, CharacterInteractionProfile, CharacterLootEntry, CharacterResourcePool,
     DialogueAction, DialogueLibrary, DialogueRuleLibrary, DialogueRuntimeState,
-    DialogueSessionState, GridCoord, InteractionContextSnapshot,
-    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionDefinition,
-    InteractionOptionId, InteractionOptionKind, InteractionPrompt, InteractionTargetId,
-    ItemLibrary, MapCellDefinition, MapId, MapLibrary,
-    MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
-    MapRotation, OverworldDefinition, OverworldLibrary, QuestLibrary, QuestNode, RecipeLibrary,
-    ResolvedInteractionOption, ShopLibrary, SkillLibrary, SkillTargetRequest, TurnState,
-    WorldCoord, WorldMode,
+    DialogueSessionState, GridCoord, InteractionContextSnapshot, InteractionExecutionRequest,
+    InteractionExecutionResult, InteractionOptionDefinition, InteractionOptionId,
+    InteractionOptionKind, InteractionPrompt, InteractionTargetId, ItemLibrary, MapCellDefinition,
+    MapId, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+    MapPickupProps, MapRotation, OverworldDefinition, OverworldLibrary, QuestLibrary, QuestNode,
+    RecipeLibrary, ResolvedInteractionOption, ShopLibrary, SkillLibrary, SkillTargetRequest,
+    TurnState, WorldCoord, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
@@ -32,6 +31,7 @@ use crate::overworld::{
     location_by_id, LocationTransitionContext, OverworldRouteSnapshot, OverworldStateSnapshot,
     OverworldTravelState, UnlockedLocationSet,
 };
+use crate::runtime::DropItemOutcome;
 use crate::turn::{
     ActiveActionState, ActiveActions, ActiveActionsSnapshot, GroupOrderRegistry,
     GroupOrderRegistrySnapshot, TurnConfig, TurnRuntime,
@@ -40,6 +40,8 @@ use crate::vision::VisionRuntimeSnapshot;
 
 mod dialogue;
 mod overworld;
+
+const DROP_ITEM_SEARCH_RADIUS: i32 = 4;
 
 #[derive(Debug)]
 pub struct RegisterActor {
@@ -1685,6 +1687,57 @@ impl Simulation {
 
     pub fn grid_walkable(&self, grid: GridCoord) -> bool {
         self.grid_world.is_walkable(grid)
+    }
+
+    pub fn drop_item_to_ground(
+        &mut self,
+        actor_id: ActorId,
+        item_id: u32,
+        count: i32,
+    ) -> Result<DropItemOutcome, String> {
+        if count <= 0 {
+            return Err("invalid_drop_count".to_string());
+        }
+
+        let actor_grid = self
+            .actor_grid_position(actor_id)
+            .ok_or_else(|| format!("unknown_actor:{}", actor_id.0))?;
+        let inventory_count = self.economy.inventory_count(actor_id, item_id).unwrap_or(0);
+        if inventory_count < count {
+            return Err(format!("insufficient_item_count:{item_id}"));
+        }
+
+        self.economy
+            .remove_item(actor_id, item_id, count)
+            .map_err(|error| error.to_string())?;
+
+        let drop_grid = self.find_ground_drop_grid(actor_grid);
+        let object_id = self.next_drop_pickup_object_id(actor_id, item_id);
+        self.grid_world.upsert_map_object(MapObjectDefinition {
+            object_id: object_id.clone(),
+            kind: MapObjectKind::Pickup,
+            anchor: drop_grid,
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                pickup: Some(MapPickupProps {
+                    item_id: item_id.to_string(),
+                    min_count: count,
+                    max_count: count,
+                    extra: BTreeMap::new(),
+                }),
+                ..MapObjectProps::default()
+            },
+        });
+
+        Ok(DropItemOutcome {
+            object_id,
+            item_id,
+            count,
+            grid: drop_grid,
+        })
     }
 
     pub fn grid_runtime_blocked_cells(&self) -> Vec<GridCoord> {
@@ -3562,6 +3615,35 @@ impl Simulation {
                 count,
                 grid,
             });
+        }
+    }
+
+    fn find_ground_drop_grid(&self, actor_grid: GridCoord) -> GridCoord {
+        for radius in 1..=DROP_ITEM_SEARCH_RADIUS {
+            for candidate in collect_interaction_ring_cells(actor_grid, radius) {
+                if self.grid_world.is_in_bounds(candidate) && self.grid_world.is_walkable(candidate)
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        actor_grid
+    }
+
+    fn next_drop_pickup_object_id(&self, actor_id: ActorId, item_id: u32) -> String {
+        let base = format!("drop_{}_{}_{}", actor_id.0, item_id, self.events.len());
+        if self.grid_world.map_object(&base).is_none() {
+            return base;
+        }
+
+        let mut suffix = 1u32;
+        loop {
+            let candidate = format!("{base}_{suffix}");
+            if self.grid_world.map_object(&candidate).is_none() {
+                return candidate;
+            }
+            suffix = suffix.saturating_add(1);
         }
     }
 

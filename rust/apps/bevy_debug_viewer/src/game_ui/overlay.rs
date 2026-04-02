@@ -19,10 +19,15 @@ pub(crate) fn update_game_ui(
 
     commands.entity(entity).with_children(|parent| {
         let in_main_menu_scene = should_render_main_menu(*ui.scene_kind);
+        let trade_state = if !esc_menu_open {
+            ui.modal_state.trade.as_ref()
+        } else {
+            None
+        };
 
         if in_main_menu_scene {
             render_main_menu(parent, &font, &ui.menu_state.status_text);
-        } else if !esc_menu_open {
+        } else if !esc_menu_open && trade_state.is_none() {
             render_top_center_badges(
                 parent,
                 &font,
@@ -44,87 +49,94 @@ pub(crate) fn update_game_ui(
         }
 
         if let Some(actor_id) = player_actor {
-            if let Some(panel) = ui.menu_state.active_panel {
-                match panel {
-                    UiMenuPanel::Inventory => {
-                        render_panel_shell(parent, &font, panel);
-                        let snapshot = inventory_snapshot(
-                            &ui.runtime_state.runtime,
-                            actor_id,
-                            &content.items.0,
-                            ui.filter_state.filter,
-                            ui.menu_state.selected_inventory_item,
-                        );
-                        render_inventory_panel(parent, &font, &snapshot, &ui.menu_state);
-                    }
-                    UiMenuPanel::Character => {
-                        render_panel_shell(parent, &font, panel);
-                        let snapshot = character_snapshot(&ui.runtime_state.runtime, actor_id);
-                        render_character_panel(parent, &font, &snapshot);
-                    }
-                    UiMenuPanel::Journal => {
-                        render_panel_shell(parent, &font, panel);
-                        let snapshot = journal_snapshot(
-                            &ui.runtime_state.runtime,
-                            actor_id,
-                            &content.quests.0,
-                        );
-                        render_journal_panel(parent, &font, &snapshot);
-                    }
-                    UiMenuPanel::Skills => {
-                        render_panel_shell(parent, &font, panel);
-                        let snapshot = skills_snapshot(
-                            &ui.runtime_state.runtime,
-                            actor_id,
-                            &content.skills.0,
-                            &content.skill_trees.0,
-                        );
-                        render_skills_panel(
-                            parent,
-                            &font,
-                            &snapshot,
-                            &ui.menu_state,
-                            &ui.hotbar_state,
-                        );
-                    }
-                    UiMenuPanel::Crafting => {
-                        render_panel_shell(parent, &font, panel);
-                        let snapshot = game_bevy::crafting_snapshot(
-                            &ui.runtime_state.runtime,
-                            actor_id,
-                            &content.recipes.0,
-                        );
-                        render_crafting_panel(parent, &font, &snapshot);
-                    }
-                    UiMenuPanel::Map => {
-                        render_panel_shell(parent, &font, panel);
-                        let _ = actor_id;
-                        render_map_panel(
-                            parent,
-                            &font,
-                            &ui.runtime_state.runtime.current_overworld_state(),
-                            &content.overworld.0,
-                            &ui.menu_state,
-                        );
-                    }
-                    UiMenuPanel::Settings => {
-                        render_settings_panel(parent, &font, &ui.settings);
+            if trade_state.is_none() {
+                if let Some(panel) = ui.menu_state.active_panel {
+                    match panel {
+                        UiMenuPanel::Inventory => {
+                            render_panel_shell(parent, &font, panel);
+                            let snapshot = inventory_snapshot(
+                                &ui.runtime_state.runtime,
+                                actor_id,
+                                &content.items.0,
+                                ui.filter_state.filter,
+                                ui.menu_state.selected_inventory_item,
+                            );
+                            render_inventory_panel(parent, &font, &snapshot, &ui.menu_state);
+                        }
+                        UiMenuPanel::Character => {
+                            render_panel_shell(parent, &font, panel);
+                            let snapshot = character_snapshot(&ui.runtime_state.runtime, actor_id);
+                            render_character_panel(parent, &font, &snapshot);
+                        }
+                        UiMenuPanel::Journal => {
+                            render_panel_shell(parent, &font, panel);
+                            let snapshot = journal_snapshot(
+                                &ui.runtime_state.runtime,
+                                actor_id,
+                                &content.quests.0,
+                            );
+                            render_journal_panel(parent, &font, &snapshot);
+                        }
+                        UiMenuPanel::Skills => {
+                            render_panel_shell(parent, &font, panel);
+                            let snapshot = skills_snapshot(
+                                &ui.runtime_state.runtime,
+                                actor_id,
+                                &content.skills.0,
+                                &content.skill_trees.0,
+                            );
+                            render_skills_panel(
+                                parent,
+                                &font,
+                                &snapshot,
+                                &ui.menu_state,
+                                &ui.hotbar_state,
+                            );
+                        }
+                        UiMenuPanel::Crafting => {
+                            render_panel_shell(parent, &font, panel);
+                            let snapshot = game_bevy::crafting_snapshot(
+                                &ui.runtime_state.runtime,
+                                actor_id,
+                                &content.recipes.0,
+                            );
+                            render_crafting_panel(parent, &font, &snapshot);
+                        }
+                        UiMenuPanel::Map => {
+                            render_panel_shell(parent, &font, panel);
+                            let _ = actor_id;
+                            render_map_panel(
+                                parent,
+                                &font,
+                                &ui.runtime_state.runtime.current_overworld_state(),
+                                &content.overworld.0,
+                                &ui.menu_state,
+                            );
+                        }
+                        UiMenuPanel::Settings => {
+                            render_settings_panel(parent, &font, &ui.settings);
+                        }
                     }
                 }
             }
 
-            if !esc_menu_open {
-                if let Some(trade) = ui.modal_state.trade.as_ref() {
-                    let snapshot = trade_snapshot(
-                        &ui.runtime_state.runtime,
-                        actor_id,
-                        trade.target_actor_id,
-                        &trade.shop_id,
-                        &content.items.0,
-                        &content.shops.0,
-                    );
-                    render_trade_modal(parent, &font, &snapshot);
-                }
+            if let Some(trade) = trade_state {
+                let trade_snapshot = trade_snapshot(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    trade.target_actor_id,
+                    &trade.shop_id,
+                    &content.items.0,
+                    &content.shops.0,
+                );
+                let inventory = inventory_snapshot(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    &content.items.0,
+                    ui.filter_state.filter,
+                    ui.menu_state.selected_inventory_item,
+                );
+                render_trade_page(parent, &font, &trade_snapshot, &inventory, &ui.menu_state);
             }
         }
 
@@ -136,6 +148,10 @@ pub(crate) fn update_game_ui(
 
         if ui.inventory_context_menu.visible {
             render_inventory_context_menu(parent, &font, &window, player_actor, &ui, &content);
+        }
+
+        if let Some(discard_modal) = ui.modal_state.discard_quantity.as_ref() {
+            render_discard_quantity_modal(parent, &font, discard_modal, &content.items);
         }
     });
 }
@@ -386,27 +402,12 @@ pub(super) fn render_inventory_context_menu(
                         9.8,
                         Color::srgba(0.74, 0.79, 0.88, 1.0),
                     ));
-                    if display.can_use {
-                        menu.spawn(action_button(
-                            font,
-                            "使用",
-                            GameUiButtonAction::UseInventoryItem,
-                        ));
-                    }
-                    if display.can_equip {
-                        menu.spawn(action_button(
-                            font,
-                            "装备",
-                            GameUiButtonAction::EquipInventoryItem,
-                        ));
-                    }
-                    if !display.can_use && !display.can_equip {
-                        menu.spawn(text_bundle(
-                            font,
-                            "当前没有可执行操作",
-                            9.8,
-                            Color::srgba(0.72, 0.76, 0.82, 1.0),
-                        ));
+                    for (label, action) in inventory_context_menu_actions(
+                        display.can_use,
+                        display.can_equip,
+                        detail.count,
+                    ) {
+                        menu.spawn(action_button(font, label, action));
                     }
                 },
             );
@@ -448,6 +449,123 @@ pub(super) fn render_inventory_context_menu(
             );
         }
     }
+}
+
+pub(super) fn inventory_context_menu_actions(
+    can_use: bool,
+    can_equip: bool,
+    count: i32,
+) -> Vec<(&'static str, GameUiButtonAction)> {
+    let mut actions = Vec::new();
+    if can_use {
+        actions.push(("使用", GameUiButtonAction::UseInventoryItem));
+    }
+    if can_equip {
+        actions.push(("装备", GameUiButtonAction::EquipInventoryItem));
+    }
+    if count > 0 {
+        actions.push(("丢弃", GameUiButtonAction::DropInventoryItem));
+    }
+    actions
+}
+
+pub(super) fn render_discard_quantity_modal(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    modal: &game_bevy::UiDiscardQuantityModalState,
+    items: &ItemDefinitions,
+) {
+    let item_name = items
+        .0
+        .get(modal.item_id)
+        .map(|item| item.name.as_str())
+        .unwrap_or("未知物品");
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                top: px(0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.01, 0.02, 0.03, 0.66)),
+            UiMouseBlocker,
+        ))
+        .with_children(|overlay| {
+            overlay
+                .spawn((
+                    Node {
+                        width: px(360.0),
+                        padding: UiRect::all(px(18.0)),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(10.0),
+                        border: UiRect::all(px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.05, 0.058, 0.076, 0.98)),
+                    BorderColor::all(Color::srgba(0.34, 0.42, 0.54, 1.0)),
+                    UiMouseBlocker,
+                ))
+                .with_children(|panel| {
+                    panel.spawn(text_bundle(font, "丢弃物品", 15.0, Color::WHITE));
+                    panel.spawn(text_bundle(
+                        font,
+                        item_name,
+                        12.0,
+                        Color::srgba(0.9, 0.94, 1.0, 1.0),
+                    ));
+                    panel.spawn(text_bundle(
+                        font,
+                        &format!("当前持有 x{}", modal.available_count),
+                        10.5,
+                        Color::srgba(0.74, 0.79, 0.88, 1.0),
+                    ));
+                    panel.spawn(text_bundle(
+                        font,
+                        &format!("待丢弃 x{}", modal.selected_count),
+                        11.2,
+                        Color::srgba(0.95, 0.85, 0.58, 1.0),
+                    ));
+                    panel
+                        .spawn(Node {
+                            width: Val::Percent(100.0),
+                            flex_direction: FlexDirection::Row,
+                            column_gap: px(8.0),
+                            ..default()
+                        })
+                        .with_children(|actions| {
+                            actions.spawn(action_button(
+                                font,
+                                "-1",
+                                GameUiButtonAction::DecreaseDiscardQuantity,
+                            ));
+                            actions.spawn(action_button(
+                                font,
+                                "+1",
+                                GameUiButtonAction::IncreaseDiscardQuantity,
+                            ));
+                            actions.spawn(action_button(
+                                font,
+                                "全部",
+                                GameUiButtonAction::SetDiscardQuantityToMax,
+                            ));
+                        });
+                    panel.spawn(action_button(
+                        font,
+                        "确认丢弃",
+                        GameUiButtonAction::ConfirmDiscardQuantity,
+                    ));
+                    panel.spawn(action_button(
+                        font,
+                        "取消",
+                        GameUiButtonAction::CancelDiscardQuantity,
+                    ));
+                });
+        });
 }
 
 pub(super) fn render_inventory_context_menu_container(
@@ -551,107 +669,17 @@ pub(super) fn floating_panel_position(
     )
 }
 
-pub(super) fn render_trade_modal(
-    parent: &mut ChildSpawnerCommands,
-    font: &ViewerUiFont,
-    snapshot: &game_bevy::UiTradeSnapshot,
-) {
-    parent.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            top: Val::Percent(50.0),
-            margin: UiRect {
-                left: px(-340),
-                top: px(-220),
-                ..default()
-            },
-            width: px(680),
-            padding: UiRect::all(px(16)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(6),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.02, 0.03, 0.05, 0.98)),
-        FocusPolicy::Block,
-        RelativeCursorPosition::default(),
-        UiMouseBlocker,
-        children![
-            text_bundle(
-                font,
-                &format!(
-                    "交易 {} · 友好度 {} · 玩家 {} · 商店 {}",
-                    snapshot.shop_id,
-                    snapshot.relation_score,
-                    snapshot.player_money,
-                    snapshot.shop_money
-                ),
-                12.0,
-                Color::WHITE
-            ),
-            action_button(font, "关闭交易", GameUiButtonAction::CloseTrade),
-        ],
-    ));
-    parent
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Percent(50.0),
-                top: Val::Percent(50.0),
-                margin: UiRect {
-                    left: px(-340),
-                    top: px(-154),
-                    ..default()
-                },
-                width: px(680),
-                height: px(288),
-                padding: UiRect::all(px(14)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(6),
-                overflow: Overflow::clip_y(),
-                border: UiRect::all(px(1)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.04, 0.045, 0.06, 0.98)),
-            BorderColor::all(Color::srgba(0.22, 0.25, 0.33, 1.0)),
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
-            UiMouseBlocker,
-        ))
-        .with_children(|body| {
-            body.spawn(text_bundle(font, "玩家库存", 11.0, Color::WHITE));
-            if snapshot.player_items.is_empty() {
-                body.spawn(text_bundle(font, "玩家没有可售物品", 11.0, Color::WHITE));
-            }
-            for item in &snapshot.player_items {
-                body.spawn(action_button(
-                    font,
-                    &format!(
-                        "卖出 {} x{} · {} · {:.1}kg",
-                        item.name, item.count, item.unit_price, item.total_weight
-                    ),
-                    GameUiButtonAction::SellTradeItem {
-                        shop_id: snapshot.shop_id.clone(),
-                        item_id: item.item_id,
-                    },
-                ));
-            }
-            body.spawn(text_bundle(font, "商店库存", 11.0, Color::WHITE));
-            if snapshot.shop_items.is_empty() {
-                body.spawn(text_bundle(font, "商店库存为空", 11.0, Color::WHITE));
-            }
-            for item in &snapshot.shop_items {
-                body.spawn(action_button(
-                    font,
-                    &format!(
-                        "买入 {} x{} · {} · {:.1}kg",
-                        item.name, item.count, item.unit_price, item.total_weight
-                    ),
-                    GameUiButtonAction::BuyTradeItem {
-                        shop_id: snapshot.shop_id.clone(),
-                        item_id: item.item_id,
-                    },
-                ));
-            }
-        });
+#[cfg(test)]
+mod tests {
+    use super::inventory_context_menu_actions;
+
+    #[test]
+    fn inventory_context_menu_shows_drop_even_without_use_or_equip() {
+        let labels: Vec<_> = inventory_context_menu_actions(false, false, 3)
+            .into_iter()
+            .map(|(label, _)| label)
+            .collect();
+
+        assert_eq!(labels, vec!["丢弃"]);
+    }
 }

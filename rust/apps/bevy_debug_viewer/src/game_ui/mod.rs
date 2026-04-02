@@ -105,6 +105,7 @@ mod settings;
 mod state_sync;
 #[cfg(test)]
 mod tests;
+mod trade_ui;
 mod widgets;
 
 pub(super) use hotbar::*;
@@ -113,4 +114,5 @@ pub(super) use overlay::*;
 use panels::*;
 pub(super) use settings::*;
 pub(super) use state_sync::*;
+use trade_ui::*;
 use widgets::*;

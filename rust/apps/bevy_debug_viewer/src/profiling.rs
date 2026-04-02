@@ -175,6 +175,12 @@ pub(crate) fn profiled_sync_world_visuals(
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
     if scene_kind.is_main_menu() {
+        crate::render::clear_world_visuals(
+            params.commands,
+            params.static_world_state,
+            params.door_visual_state,
+            params.actor_visual_state,
+        );
         return;
     }
     let should_record = should_profile(&viewer_state);
@@ -268,6 +274,7 @@ pub(crate) fn profiled_sync_actor_labels(
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
     if scene_kind.is_main_menu() {
+        crate::render::clear_actor_labels(commands, label_entities);
         return;
     }
     let should_record = should_profile(&viewer_state);
@@ -351,6 +358,46 @@ pub(crate) fn profiled_draw_world(
     );
     if let Some(start) = start {
         profiler.record_sample("draw_world", elapsed_ms(start));
+    }
+}
+
+pub(crate) fn profiled_sync_damage_numbers(
+    commands: Commands,
+    time: Res<Time>,
+    scene_kind: Res<ViewerSceneKind>,
+    viewer_state: Res<ViewerState>,
+    viewer_font: Res<ViewerUiFont>,
+    camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
+    damage_numbers: ResMut<crate::state::ViewerDamageNumberState>,
+    visual_state: ResMut<crate::render::DamageNumberVisualState>,
+    labels: Query<(
+        Entity,
+        &mut Text,
+        &mut TextFont,
+        &mut TextColor,
+        &mut Node,
+        &mut Visibility,
+        &crate::render::DamageNumberLabel,
+    )>,
+    mut profiler: ResMut<ViewerSystemProfilerState>,
+) {
+    if scene_kind.is_main_menu() {
+        crate::render::clear_damage_numbers(commands, damage_numbers, visual_state);
+        return;
+    }
+    let should_record = should_profile(&viewer_state);
+    let start = should_record.then(Instant::now);
+    crate::render::sync_damage_numbers(
+        commands,
+        time,
+        viewer_font,
+        camera_query,
+        damage_numbers,
+        visual_state,
+        labels,
+    );
+    if let Some(start) = start {
+        profiler.record_sample("sync_damage_numbers", elapsed_ms(start));
     }
 }
 

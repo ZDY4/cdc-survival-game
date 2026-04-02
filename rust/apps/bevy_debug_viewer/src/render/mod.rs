@@ -54,7 +54,6 @@ const CAMERA_FOLLOW_SMOOTHING_TAU_SEC: f32 = 0.075;
 const CAMERA_FOLLOW_RESET_DISTANCE_CELLS: f32 = 2.0;
 const GENERATED_DOOR_ROTATION_SPEED_RAD_PER_SEC: f32 = 7.5;
 const MISSING_GEO_BUILDING_PLACEHOLDER_ALPHA: f32 = 0.96;
-const FOG_OF_WAR_HEIGHT_MARGIN_CELLS: f32 = 0.85;
 const WALL_NORTH: u8 = 1 << 0;
 const WALL_EAST: u8 = 1 << 1;
 const WALL_SOUTH: u8 = 1 << 2;
@@ -256,19 +255,53 @@ pub(crate) struct ActorVisualState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct FogOfWarVisualKey {
+struct FogOfWarMaskKey {
     map_id: Option<game_data::MapId>,
     current_level: i32,
     topology_version: u64,
     actor_id: Option<ActorId>,
-    fog_enabled: bool,
+    bounds: GridBounds,
     visible_cells: Vec<GridCoord>,
+    explored_cells: Vec<GridCoord>,
 }
 
-#[derive(Resource, Default)]
-pub(crate) struct FogOfWarVisualState {
-    key: Option<FogOfWarVisualKey>,
-    entities: Vec<Entity>,
+#[derive(Resource)]
+pub(crate) struct FogOfWarMaskState {
+    key: Option<FogOfWarMaskKey>,
+    actor_id: Option<ActorId>,
+    map_id: Option<game_data::MapId>,
+    current_level: i32,
+    bounds: Option<GridBounds>,
+    map_min_world_xz: Vec2,
+    map_size_world_xz: Vec2,
+    mask_size: UVec2,
+    mask_texel_size: Vec2,
+    current_mask: Handle<Image>,
+    previous_mask: Handle<Image>,
+    current_bytes: Vec<u8>,
+    previous_bytes: Vec<u8>,
+    transition_elapsed_sec: f32,
+}
+
+impl FogOfWarMaskState {
+    pub(crate) fn new(current_mask: Handle<Image>, previous_mask: Handle<Image>) -> Self {
+        Self {
+            key: None,
+            actor_id: None,
+            map_id: None,
+            current_level: 0,
+            bounds: None,
+            map_min_world_xz: Vec2::ZERO,
+            map_size_world_xz: Vec2::ZERO,
+            mask_size: UVec2::ONE,
+            mask_texel_size: Vec2::ONE,
+            current_mask,
+            previous_mask,
+            current_bytes: vec![255],
+            previous_bytes: vec![255],
+            transition_elapsed_sec: 0.0,
+        }
+    }
 }
 
 #[derive(Resource, Default)]
@@ -438,7 +471,7 @@ mod world;
 
 pub(super) use camera::*;
 pub(super) use debug_draw::*;
-use fog::*;
+pub(super) use fog::*;
 use materials::*;
 use mesh_builders::*;
 use occlusion::*;

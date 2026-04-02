@@ -1,5 +1,14 @@
 use super::*;
 
+pub(crate) fn clear_actor_labels(
+    mut commands: Commands,
+    mut label_entities: ResMut<ActorLabelEntities>,
+) {
+    for entity in label_entities.by_actor.drain().map(|(_, entity)| entity) {
+        commands.entity(entity).despawn();
+    }
+}
+
 pub(crate) fn sync_actor_labels(
     mut commands: Commands,
     runtime_state: Res<ViewerRuntimeState>,
@@ -143,6 +152,17 @@ pub(crate) fn sync_actor_labels(
         if let Some(entity) = label_entities.by_actor.remove(&actor_id) {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+pub(crate) fn clear_damage_numbers(
+    mut commands: Commands,
+    mut damage_numbers: ResMut<ViewerDamageNumberState>,
+    mut visual_state: ResMut<DamageNumberVisualState>,
+) {
+    damage_numbers.entries.clear();
+    for entity in visual_state.by_id.drain().map(|(_, entity)| entity) {
+        commands.entity(entity).despawn();
     }
 }
 

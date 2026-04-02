@@ -109,10 +109,18 @@ pub struct UiTradeSessionState {
     pub target_actor_id: Option<ActorId>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UiDiscardQuantityModalState {
+    pub item_id: u32,
+    pub available_count: i32,
+    pub selected_count: i32,
+}
+
 #[derive(Resource, Debug, Clone, Default)]
 pub struct UiModalState {
     pub message: Option<String>,
     pub trade: Option<UiTradeSessionState>,
+    pub discard_quantity: Option<UiDiscardQuantityModalState>,
 }
 
 #[derive(Resource, Debug, Clone, Default)]

@@ -509,6 +509,10 @@ pub(crate) fn handle_keyboard_input(
             viewer_state.interaction_menu = None;
             viewer_state.status_line = "interaction menu: closed".to_string();
             return;
+        } else if modal_state.discard_quantity.is_some() {
+            modal_state.discard_quantity = None;
+            viewer_state.status_line = "discard: closed".to_string();
+            return;
         } else if modal_state.trade.is_some() {
             modal_state.trade = None;
             viewer_state.pending_open_trade_target = None;
@@ -556,6 +560,10 @@ pub(crate) fn handle_keyboard_input(
         return;
     }
 
+    if modal_state.discard_quantity.is_some() {
+        return;
+    }
+
     for (action_name, panel) in [
         ("menu_inventory", UiMenuPanel::Inventory),
         ("menu_character", UiMenuPanel::Character),
@@ -580,7 +588,10 @@ pub(crate) fn handle_keyboard_input(
         }
     }
 
-    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu()
+        || menu_state.active_panel.is_some()
+        || modal_state.discard_quantity.is_some()
+        || modal_state.trade.is_some()
     {
         return;
     }
@@ -796,7 +807,10 @@ pub(crate) fn handle_mouse_wheel_zoom(
         return;
     }
 
-    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu()
+        || menu_state.active_panel.is_some()
+        || modal_state.discard_quantity.is_some()
+        || modal_state.trade.is_some()
     {
         for _ in mouse_wheel_events.read() {}
         return;
@@ -854,7 +868,10 @@ pub(crate) fn handle_camera_pan(
         return;
     }
 
-    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu()
+        || menu_state.active_panel.is_some()
+        || modal_state.discard_quantity.is_some()
+        || modal_state.trade.is_some()
     {
         viewer_state.camera_drag_cursor = None;
         viewer_state.camera_drag_anchor_world = None;
@@ -996,6 +1013,7 @@ pub(crate) fn handle_mouse_input(
         return;
     };
     if scene_kind.is_main_menu()
+        || modal_state.discard_quantity.is_some()
         || cursor_over_blocking_ui(cursor_position, &ui_blockers)
         || cursor_over_hotbar_dock(&window, cursor_position)
     {
@@ -1065,7 +1083,10 @@ pub(crate) fn handle_mouse_input(
         return;
     }
 
-    if scene_kind.is_main_menu() || menu_state.active_panel.is_some() || modal_state.trade.is_some()
+    if scene_kind.is_main_menu()
+        || menu_state.active_panel.is_some()
+        || modal_state.discard_quantity.is_some()
+        || modal_state.trade.is_some()
     {
         return;
     }
@@ -1858,6 +1879,56 @@ mod tests {
         let viewer_state = app.world().resource::<ViewerState>();
         assert_eq!(menu_state.active_panel, Some(UiMenuPanel::Settings));
         assert_eq!(viewer_state.status_line, "menu: settings");
+    }
+
+    #[test]
+    fn gameplay_escape_closes_trade_before_opening_settings() {
+        let mut app = keyboard_input_app(ViewerSceneKind::Gameplay, KeyCode::Escape);
+        app.world_mut().resource_mut::<UiMenuState>().active_panel = None;
+        app.world_mut().resource_mut::<UiModalState>().trade = Some(Default::default());
+        app.world_mut()
+            .resource_mut::<ViewerState>()
+            .pending_open_trade_target =
+            Some(game_data::InteractionTargetId::MapObject("shop".into()));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Escape);
+
+        app.update();
+
+        let menu_state = app.world().resource::<UiMenuState>();
+        let modal_state = app.world().resource::<UiModalState>();
+        let viewer_state = app.world().resource::<ViewerState>();
+        assert!(menu_state.active_panel.is_none());
+        assert!(modal_state.trade.is_none());
+        assert!(viewer_state.pending_open_trade_target.is_none());
+        assert_eq!(viewer_state.status_line, "trade: closed");
+    }
+
+    #[test]
+    fn gameplay_escape_closes_discard_modal_before_trade() {
+        let mut app = keyboard_input_app(ViewerSceneKind::Gameplay, KeyCode::Escape);
+        app.world_mut().resource_mut::<UiMenuState>().active_panel = None;
+        {
+            let mut modal_state = app.world_mut().resource_mut::<UiModalState>();
+            modal_state.discard_quantity = Some(game_bevy::UiDiscardQuantityModalState {
+                item_id: 1006,
+                available_count: 3,
+                selected_count: 2,
+            });
+            modal_state.trade = Some(Default::default());
+        }
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Escape);
+
+        app.update();
+
+        let modal_state = app.world().resource::<UiModalState>();
+        let viewer_state = app.world().resource::<ViewerState>();
+        assert!(modal_state.discard_quantity.is_none());
+        assert!(modal_state.trade.is_some());
+        assert_eq!(viewer_state.status_line, "discard: closed");
     }
 
     fn keyboard_input_app(scene_kind: ViewerSceneKind, key: KeyCode) -> App {

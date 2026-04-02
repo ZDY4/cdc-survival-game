@@ -29,7 +29,7 @@ use crate::narrative_sync::{
 };
 use crate::narrative_workspace::{
     create_narrative_document, delete_narrative_document, load_narrative_document,
-    load_narrative_workspace, prepare_structuring_bundle, save_narrative_document,
+    load_narrative_workspace, open_narrative_document_folder, prepare_structuring_bundle, save_narrative_document,
     summarize_narrative_document,
 };
 
@@ -237,6 +237,7 @@ pub fn run() {
             save_narrative_document,
             create_narrative_document,
             delete_narrative_document,
+            open_narrative_document_folder,
             summarize_narrative_document,
             prepare_structuring_bundle,
             load_narrative_sync_settings,

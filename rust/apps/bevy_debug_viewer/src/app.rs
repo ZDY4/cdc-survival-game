@@ -25,12 +25,14 @@ use crate::game_ui::{
 use crate::hud::update_free_observe_indicator;
 use crate::profiling::{
     profiled_advance_runtime_progression, profiled_draw_world, profiled_sync_actor_labels,
-    profiled_sync_world_visuals, profiled_tick_runtime, profiled_update_game_ui,
-    profiled_update_occluding_world_visuals, sync_profiler_activation, ViewerSystemProfilerState,
+    profiled_sync_damage_numbers, profiled_sync_world_visuals, profiled_tick_runtime,
+    profiled_update_game_ui, profiled_update_occluding_world_visuals, sync_profiler_activation,
+    ViewerSystemProfilerState,
 };
 use crate::render::{
-    setup_viewer, sync_damage_numbers, sync_fog_of_war_visuals, update_camera,
-    update_dialogue_panel, update_interaction_menu, BuildingWallGridMaterial, GridGroundMaterial,
+    setup_viewer, sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals,
+    tick_fog_of_war_transition, update_camera, update_dialogue_panel, update_interaction_menu,
+    BuildingWallGridMaterial, FogOfWarPostProcessPlugin, GridGroundMaterial,
 };
 use crate::simulation::{
     advance_actor_feedback, advance_actor_motion, advance_map_ai_spawns,
@@ -135,6 +137,7 @@ impl Plugin for ViewerAppPlugin {
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
         .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
+        .add_plugins(FogOfWarPostProcessPlugin)
         .insert_resource(MapAiSpawnRuntimeState::default())
         .add_plugins((
             RuntimeContentPlugin,
@@ -226,9 +229,11 @@ impl Plugin for ViewerAppPlugin {
             (
                 profiled_sync_world_visuals,
                 sync_fog_of_war_visuals,
+                tick_fog_of_war_transition,
+                sync_fog_of_war_post_process_camera,
                 profiled_update_occluding_world_visuals,
                 profiled_sync_actor_labels,
-                sync_damage_numbers,
+                profiled_sync_damage_numbers,
             )
                 .in_set(ViewerUpdateSet::Visuals),
         );

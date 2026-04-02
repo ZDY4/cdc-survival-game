@@ -13,7 +13,6 @@ import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   AgentActionResult,
   AiChatMessage,
-  AiSettings,
   DocumentAgentSession,
   EditorMenuSelfTestScenario,
   NarrativeAppSettings,
@@ -25,6 +24,7 @@ import type {
   NarrativeGenerateRequest,
   NarrativeGenerationProgressEvent,
   NarrativeGenerateResponse,
+  NarrativeTurnKind,
   NarrativeReviewQueueItem,
   NarrativeDocumentSummary,
   NarrativeSessionExportInput,
@@ -65,6 +65,12 @@ type EditableNarrativeDocument = NarrativeDocumentPayload & {
   isDraft: boolean;
 };
 
+type NarrativeDocContextMenuState = {
+  documentKey: string;
+  x: number;
+  y: number;
+};
+
 type NarrativeWorkspaceProps = {
   workspace: NarrativeWorkspacePayload;
   appSettings: NarrativeAppSettings;
@@ -72,7 +78,6 @@ type NarrativeWorkspaceProps = {
   startupReady: boolean;
   selfTestScenario: EditorMenuSelfTestScenario | null;
   status: string;
-  runtimeLabel: string;
   onStatusChange: (status: string) => void;
   onReload: () => Promise<void>;
   onOpenWorkspace: (workspaceRoot: string) => Promise<void>;
@@ -86,12 +91,6 @@ const MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_DOCUMENT_PANEL_WIDTH = 360;
 const PANEL_SPLITTER_WIDTH = 12;
 const NARRATIVE_GENERATION_PROGRESS_EVENT = "narrative:generation-progress";
-const NARRATIVE_PROMPT_TEMPLATES = [
-  "先给我 3 个方向，再继续写。",
-  "优先保证设定一致性，再处理语言润色。",
-  "把当前草稿重构成更明确的任务/场景节奏。",
-  "先问我缺失信息，不要直接大改。",
-];
 const NARRATIVE_REGRESSION_CASES: NarrativeRegressionCase[] = [
   {
     id: "clarification-missing-brief",
@@ -137,16 +136,6 @@ function hydrateDocuments(documents: NarrativeDocumentPayload[]): EditableNarrat
 
 function documentDirty(document: NarrativeDocumentPayload, savedSnapshot: string) {
   return snapshotDocument(document) !== savedSnapshot;
-}
-
-function defaultAiSettings(): AiSettings {
-  return {
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-4.1-mini",
-    apiKey: "",
-    timeoutSec: 45,
-    maxContextRecords: 24,
-  };
 }
 
 function defaultWorkspaceLayout(
@@ -205,8 +194,64 @@ function buildNarrativeChatPrompt(
   return sections.join("\n\n");
 }
 
+function extractDraftPreview(markdown: string, maxLength = 220) {
+  const lines = markdown
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        Boolean(line) &&
+        line !== "---" &&
+        line !== "***" &&
+        !/^```/.test(line),
+    );
+
+  if (!lines.length) {
+    return "";
+  }
+
+  const preview = lines
+    .slice(0, 3)
+    .join(" ")
+    .replace(/^#{1,6}\s*/g, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
+    .replace(/[>*_~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!preview) {
+    return "";
+  }
+
+  if (preview.length <= maxLength) {
+    return preview;
+  }
+
+  return `${preview.slice(0, maxLength).trimEnd()}...`;
+}
+
+function headlineNeedsDraftPreview(headline: string) {
+  const trimmed = headline.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  return (
+    /(?:如下|如下所示|如下内容|如下建议)(?:[：:]?)$/.test(trimmed) ||
+    /(?:依据|建议|结果|内容|说明|分析)(?:[：:])$/.test(trimmed) ||
+    trimmed === "AI 已返回结果。"
+  );
+}
+
 function summarizeResponseForChat(response: {
+  turnKind: NarrativeTurnKind;
   assistantMessage: string;
+  draftMarkdown: string;
   providerError: string;
   summary: string;
   synthesisNotes: string[];
@@ -217,7 +262,23 @@ function summarizeResponseForChat(response: {
     response.summary.trim() ||
     "AI 已返回结果。";
   const notes = response.synthesisNotes.map((note) => note.trim()).filter(Boolean).slice(0, 2);
-  return notes.length ? [headline, ...notes].join("\n\n") : headline;
+  const sections = notes.length ? [headline, ...notes] : [headline];
+  const draftPreview = extractDraftPreview(response.draftMarkdown);
+  const shouldAppendDraftPreview =
+    !response.providerError.trim() &&
+    response.turnKind === "final_answer" &&
+    Boolean(response.draftMarkdown.trim()) &&
+    (headlineNeedsDraftPreview(headline) || sections.join(" ").trim().length < 80);
+
+  if (shouldAppendDraftPreview) {
+    sections.push(
+      draftPreview
+        ? `内容预览：${draftPreview}`
+        : "已生成具体内容，请查看右侧文档预览与建议区域。",
+    );
+  }
+
+  return sections.join("\n\n");
 }
 
 function buildStrategyInstruction(session: DocumentAgentSession) {
@@ -515,6 +576,19 @@ function summarizeReviewQueue(queue: NarrativeReviewQueueItem[]) {
   return queue.map((item) => `${item.title}：${item.description}`).join("\n");
 }
 
+function compactPathLabel(path: string | null | undefined) {
+  if (!path?.trim()) {
+    return "未选择工作区";
+  }
+
+  const normalized = path.replace(/\\/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= 2) {
+    return parts.join(" / ") || path;
+  }
+  return parts.slice(-2).join(" / ");
+}
+
 function clampChatPanelWidth(width: number, containerWidth: number) {
   const maxWidth = Math.min(
     MAX_CHAT_PANEL_WIDTH,
@@ -541,7 +615,6 @@ export function NarrativeWorkspace({
   startupReady,
   selfTestScenario: _selfTestScenario,
   status,
-  runtimeLabel,
   onStatusChange,
   onReload,
   onOpenWorkspace: _onOpenWorkspace,
@@ -559,13 +632,13 @@ export function NarrativeWorkspace({
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH);
   const [searchQuery, setSearchQuery] = useState("");
-  const [aiSettings, setAiSettings] = useState<AiSettings>(defaultAiSettings());
   const [saving, setSaving] = useState(false);
   const [pendingRestoreSessions, setPendingRestoreSessions] = useState<
     Record<string, DocumentAgentSession> | null
   >(null);
   const [restoreStatus, setRestoreStatus] = useState("");
-  const [showBoundaryTips, setShowBoundaryTips] = useState(true);
+  const [showAdvancedPanel, setShowAdvancedPanel] = useState(false);
+  const [docContextMenu, setDocContextMenu] = useState<NarrativeDocContextMenuState | null>(null);
   const [regressionStatus, setRegressionStatus] = useState("");
   const [regressionResult, setRegressionResult] = useState<NarrativeRegressionSuiteResult | null>(
     null,
@@ -635,7 +708,7 @@ export function NarrativeWorkspace({
         : "",
     );
     workspaceRootRef.current = workspace.workspaceRoot;
-  }, [appSettings, workspace]);
+  }, [workspace]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -679,12 +752,31 @@ export function NarrativeWorkspace({
   }, [tabState.activeTabKey]);
 
   useEffect(() => {
-    void invokeCommand<AiSettings>("load_ai_settings")
-      .then(setAiSettings)
-      .catch((error) => {
-        onStatusChange(`加载 AI 设置失败：${String(error)}`);
-      });
-  }, [onStatusChange]);
+    if (!docContextMenu) {
+      return;
+    }
+
+    const closeMenu = () => {
+      setDocContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("blur", closeMenu);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("blur", closeMenu);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [docContextMenu]);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -883,6 +975,7 @@ export function NarrativeWorkspace({
   const activeReviewQueue = activeSession?.reviewQueue ?? [];
   const latestPlan = activeSession?.lastPlan ?? [];
   const latestTurnKind = activeSession?.lastResponse?.turnKind ?? null;
+  const workspaceLabel = compactPathLabel(workspace.workspaceRoot);
   const selectedContextDocuments = activeSession
     ? documents.filter(
         (document) =>
@@ -890,6 +983,19 @@ export function NarrativeWorkspace({
           activeSession.selectedContextDocKeys.includes(document.documentKey),
       )
     : [];
+  const hasAdvancedPanelContent = Boolean(
+    activeSession &&
+      (activeSession.savedBranches.length ||
+        activeReviewQueue.length ||
+        regressionStatus ||
+        regressionResult ||
+        activeSession.lastResponse ||
+        activeSession.executionSteps.length ||
+        activeSession.actionHistory.length ||
+        activeSession.versionHistory.length ||
+        activeSession.pendingDerivedDocuments.length ||
+        pendingActions.length),
+  );
   const composerPlaceholder =
     activeSession?.status === "waiting_user" && pendingQuestions.length
       ? pendingQuestions[0]?.placeholder?.trim() || "先回答上面的问题，我会继续推进。"
@@ -966,6 +1072,7 @@ export function NarrativeWorkspace({
   }
 
   function openDocument(documentKey: string) {
+    setDocContextMenu(null);
     setTabState((current) => openNarrativeTab(current, documentKey));
     setDocumentAgents((current) => ensureDocumentAgentSession(current, documentKey));
   }
@@ -1452,16 +1559,136 @@ export function NarrativeWorkspace({
   }
 
   function closeTab(documentKey: string) {
+    setDocContextMenu(null);
     const document = getDocument(documentKey);
     if (!document) {
       return;
     }
     if (document.dirty) {
-      onStatusChange(`请先保存 ${document.meta.title || document.meta.slug}，再关闭标签页。`);
+      const confirmed = window.confirm(
+        `《${document.meta.title || document.meta.slug}》有未保存修改。要放弃这些修改并关闭标签页吗？`,
+      );
+      if (!confirmed) {
+        onStatusChange(`已取消关闭《${document.meta.title || document.meta.slug}》。`);
+        return;
+      }
+
+      if (document.isDraft) {
+        setDocuments((current) =>
+          current.filter((entry) => entry.documentKey !== document.documentKey),
+        );
+        setDocumentAgents((current) => {
+          const next = { ...current };
+          delete next[document.documentKey];
+          return next;
+        });
+        setTabState((current) => closeNarrativeTab(current, document.documentKey));
+        onStatusChange(`已放弃本地草稿《${document.meta.title || document.meta.slug}》并关闭标签页。`);
+        return;
+      }
+
+      const restoredSnapshot = JSON.parse(document.savedSnapshot) as Pick<
+        NarrativeDocumentPayload,
+        "meta" | "markdown"
+      >;
+      setDocuments((current) =>
+        current.map((entry) => {
+          if (entry.documentKey !== document.documentKey) {
+            return entry;
+          }
+          return {
+            ...entry,
+            meta: restoredSnapshot.meta,
+            markdown: restoredSnapshot.markdown,
+            dirty: false,
+          };
+        }),
+      );
+      invalidateSuggestions(document.documentKey);
+      setTabState((current) => closeNarrativeTab(current, document.documentKey));
+      onStatusChange(`已放弃《${document.meta.title || document.meta.slug}》的未保存修改并关闭标签页。`);
       return;
     }
 
     setTabState((current) => closeNarrativeTab(current, documentKey));
+  }
+
+  async function deleteDocumentByKey(documentKey: string) {
+    const document = getDocument(documentKey);
+    if (!document) {
+      onStatusChange("未找到要删除的文档。");
+      return;
+    }
+
+    setDocContextMenu(null);
+
+    if (document.isDraft) {
+      setDocuments((current) =>
+        current.filter((entry) => entry.documentKey !== document.documentKey),
+      );
+      setDocumentAgents((current) => {
+        const next = { ...current };
+        delete next[document.documentKey];
+        return next;
+      });
+      setTabState((current) => closeNarrativeTab(current, document.documentKey));
+      onStatusChange(`已移除本地草稿 ${document.meta.title || document.meta.slug}。`);
+      return;
+    }
+
+    if (!canPersist) {
+      onStatusChange("当前运行在回退模式，无法删除文档。");
+      return;
+    }
+
+    try {
+      await invokeCommand("delete_narrative_document", {
+        workspaceRoot: workspace.workspaceRoot,
+        slug: document.meta.slug,
+      });
+      setDocuments((current) =>
+        current.filter((entry) => entry.documentKey !== document.documentKey),
+      );
+      setDocumentAgents((current) => {
+        const next = { ...current };
+        delete next[document.documentKey];
+        return next;
+      });
+      setTabState((current) => closeNarrativeTab(current, document.documentKey));
+      onStatusChange(`已删除文档 ${document.meta.title || document.meta.slug}。`);
+    } catch (error) {
+      onStatusChange(`删除文档失败：${String(error)}`);
+    }
+  }
+
+  async function openDocumentFolder(documentKey: string) {
+    const document = getDocument(documentKey);
+    if (!document) {
+      onStatusChange("未找到要打开文件夹的文档。");
+      return;
+    }
+
+    setDocContextMenu(null);
+
+    if (document.isDraft) {
+      onStatusChange("本地草稿尚未保存到磁盘，暂时没有可打开的文件夹。");
+      return;
+    }
+
+    if (!canPersist || !workspace.workspaceRoot.trim()) {
+      onStatusChange("当前运行在回退模式，无法打开文档所在文件夹。");
+      return;
+    }
+
+    try {
+      await invokeCommand("open_narrative_document_folder", {
+        workspaceRoot: workspace.workspaceRoot,
+        slug: document.meta.slug,
+      });
+      onStatusChange(`已打开《${document.meta.title || document.meta.slug}》所在文件夹。`);
+    } catch (error) {
+      onStatusChange(`打开所在文件夹失败：${String(error)}`);
+    }
   }
 
   function beginPanelResize(event: React.PointerEvent<HTMLButtonElement>) {
@@ -1599,34 +1826,7 @@ export function NarrativeWorkspace({
       onStatusChange("请先打开一个文档标签。");
       return;
     }
-
-    if (activeDocument.isDraft) {
-      setDocuments((current) =>
-        current.filter((document) => document.documentKey !== activeDocument.documentKey),
-      );
-      setTabState((current) => closeNarrativeTab(current, activeDocument.documentKey));
-      onStatusChange(`已移除本地草稿 ${activeDocument.meta.title || activeDocument.meta.slug}。`);
-      return;
-    }
-
-    if (!canPersist) {
-      onStatusChange("当前运行在回退模式，无法删除文档。");
-      return;
-    }
-
-    try {
-      await invokeCommand("delete_narrative_document", {
-        workspaceRoot: workspace.workspaceRoot,
-        slug: activeDocument.meta.slug,
-      });
-      setDocuments((current) =>
-        current.filter((document) => document.documentKey !== activeDocument.documentKey),
-      );
-      setTabState((current) => closeNarrativeTab(current, activeDocument.documentKey));
-      onStatusChange(`已删除文档 ${activeDocument.meta.title || activeDocument.meta.slug}。`);
-    } catch (error) {
-      onStatusChange(`删除文档失败：${String(error)}`);
-    }
+    await deleteDocumentByKey(activeDocument.documentKey);
   }
 
   async function runGeneration(promptOverride?: string) {
@@ -2414,14 +2614,8 @@ export function NarrativeWorkspace({
       <header className="narrative-streamlined-topbar">
         <div className="narrative-topbar-brand">
           <div>
-            <span className="section-label">Narrative Lab</span>
-            <h2>多文档 AI 写作台</h2>
-          </div>
-          <div className="narrative-topbar-meta">
-            <Badge tone="accent">{runtimeLabel}</Badge>
-            <Badge tone={workspace.workspaceRoot ? "success" : "warning"}>
-              {workspace.workspaceRoot ? "工作区已连接" : "未选择工作区"}
-            </Badge>
+            <h2>Narrative Lab</h2>
+            <span className="narrative-topbar-subtitle">{workspaceLabel}</span>
           </div>
         </div>
 
@@ -2445,14 +2639,7 @@ export function NarrativeWorkspace({
             className="toolbar-button"
             onClick={() => void openOrFocusSettingsWindow("workspace")}
           >
-            工作区设置
-          </button>
-          <button
-            type="button"
-            className="toolbar-button"
-            onClick={() => void openOrFocusSettingsWindow("ai")}
-          >
-            AI 设置
+            设置
           </button>
         </div>
       </header>
@@ -2474,7 +2661,12 @@ export function NarrativeWorkspace({
               {document.dirty ? <span className="narrative-streamlined-tab-dirty" /> : null}
               <span
                 className="narrative-streamlined-tab-close"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
                 onClick={(event) => {
+                  event.preventDefault();
                   event.stopPropagation();
                   closeTab(document.documentKey);
                 }}
@@ -2509,11 +2701,7 @@ export function NarrativeWorkspace({
         {!leftSidebarCollapsed ? (
           <aside className="narrative-doc-sidebar">
             <div className="narrative-pane-header">
-              <div>
-                <span className="section-label">文档</span>
-                <h3>工作区文章列表</h3>
-              </div>
-              <Badge tone="muted">{documents.length}</Badge>
+              <h3>文档</h3>
             </div>
 
             <input
@@ -2534,6 +2722,14 @@ export function NarrativeWorkspace({
                       document.documentKey === tabState.activeTabKey ? "narrative-doc-row-active" : ""
                     }`.trim()}
                     onClick={() => openDocument(document.documentKey)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setDocContextMenu({
+                        documentKey: document.documentKey,
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
+                    }}
                   >
                     <div className="narrative-doc-row-main">
                       <strong>{document.meta.title || document.meta.slug}</strong>
@@ -2563,20 +2759,13 @@ export function NarrativeWorkspace({
         >
         <section className="narrative-chat-panel">
           <div className="narrative-pane-header">
-            <div>
-              <span className="section-label">AI</span>
-              <h3>文档专属 Agent 会话</h3>
-            </div>
-            <div className="toolbar-summary">
-              <Badge tone="muted">{aiSettings.model || "未配置模型"}</Badge>
-              {activeSession?.busy ? <Badge tone="warning">生成中</Badge> : null}
-            </div>
+            <h3>AI</h3>
+            {activeSession?.busy ? <Badge tone="warning">生成中</Badge> : null}
           </div>
 
           {pendingRestoreSessions ? (
-            <div className="narrative-empty-state" style={{ marginBottom: 12 }}>
-              <strong>发现可恢复会话</strong>
-              <p>{restoreStatus || "检测到上次保存的 Narrative Lab agent 会话。"}</p>
+            <div className="narrative-inline-banner">
+              <span>{restoreStatus || "检测到上次保存的 Narrative Lab agent 会话。"}</span>
               <div className="toolbar-actions">
                 <button
                   type="button"
@@ -2638,29 +2827,31 @@ export function NarrativeWorkspace({
                 </div>
               </div>
 
-              {showBoundaryTips ? (
-                <article className="narrative-chat-message narrative-chat-message-context">
-                  <div className="narrative-chat-message-header">
-                    <strong>操作边界</strong>
-                    <Badge tone="muted">P0</Badge>
-                  </div>
-                  <p style={{ whiteSpace: "pre-wrap" }}>
-                    `apply patch / apply all / clear pending actions` 只影响当前会话或当前编辑态；`save / rename / archive / split into documents`
-                    会真正修改或新增工作区文稿。
-                  </p>
-                  <div className="toolbar-actions">
-                    <button type="button" className="toolbar-button" onClick={() => setShowBoundaryTips(false)}>
-                      收起提示
-                    </button>
-                  </div>
-                </article>
-              ) : (
-                <div className="toolbar-actions" style={{ marginBottom: 12 }}>
-                  <button type="button" className="toolbar-button" onClick={() => setShowBoundaryTips(true)}>
-                    显示操作边界提示
-                  </button>
-                </div>
-              )}
+              <div className="narrative-chat-meta-row">
+                <Badge tone="muted">{activeSession.mode === "create" ? "生成新文档" : "修改当前文档"}</Badge>
+                {activeSession.status === "waiting_user" ? <Badge tone="warning">等待你的补充</Badge> : null}
+                <button
+                  type="button"
+                  className={`toolbar-button ${
+                    !showAdvancedPanel && hasAdvancedPanelContent ? "toolbar-accent" : ""
+                  }`.trim()}
+                  onClick={() => setShowAdvancedPanel((current) => !current)}
+                >
+                  {showAdvancedPanel ? "收起高级" : "高级"}
+                </button>
+              </div>
+
+              {showAdvancedPanel ? (
+                <section className="narrative-advanced-panel">
+                  <article className="narrative-chat-message narrative-chat-message-context narrative-chat-message-compact">
+                    <div className="narrative-chat-message-header">
+                      <strong>操作边界</strong>
+                    </div>
+                    <p style={{ whiteSpace: "pre-wrap" }}>
+                      `apply patch / apply all / clear pending actions` 只影响当前会话或当前编辑态；`save / rename / archive / split into documents`
+                      会真正修改或新增工作区文稿。
+                    </p>
+                  </article>
 
               <article className="narrative-chat-message narrative-chat-message-context">
                 <div className="narrative-chat-message-header">
@@ -2685,6 +2876,9 @@ export function NarrativeWorkspace({
                   </button>
                   <button type="button" className="toolbar-button" onClick={() => archiveCurrentSession()}>
                     归档当前会话
+                  </button>
+                  <button type="button" className="toolbar-button" onClick={() => clearCurrentConversation()}>
+                    清空会话
                   </button>
                   <button type="button" className="toolbar-button" onClick={() => void exportCurrentSession()}>
                     导出会话
@@ -2989,6 +3183,8 @@ export function NarrativeWorkspace({
                   </div>
                 </article>
               ) : null}
+                </section>
+              ) : null}
 
               <div className="narrative-chat-log">
                 {activeSession.chatMessages.length ? (
@@ -3088,7 +3284,7 @@ export function NarrativeWorkspace({
                   </article>
                 ) : null}
 
-                {activeSession.executionSteps.length ? (
+                {showAdvancedPanel && activeSession.executionSteps.length ? (
                   <article className="narrative-chat-message narrative-chat-message-context">
                     <div className="narrative-chat-message-header">
                       <strong>执行轨迹</strong>
@@ -3178,7 +3374,7 @@ export function NarrativeWorkspace({
                   </article>
                 ) : null}
 
-                {activeSession.actionHistory.length ? (
+                {showAdvancedPanel && activeSession.actionHistory.length ? (
                   <article className="narrative-chat-message narrative-chat-message-context">
                     <div className="narrative-chat-message-header">
                       <strong>动作记录</strong>
@@ -3208,7 +3404,7 @@ export function NarrativeWorkspace({
                   </article>
                 ) : null}
 
-                {activeSession.versionHistory.length ? (
+                {showAdvancedPanel && activeSession.versionHistory.length ? (
                   <article className="narrative-chat-message narrative-chat-message-context">
                     <div className="narrative-chat-message-header">
                       <strong>版本演变</strong>
@@ -3236,26 +3432,6 @@ export function NarrativeWorkspace({
               </div>
 
               <div className="narrative-chat-composer">
-                <div className="toolbar-actions" style={{ marginBottom: 12 }}>
-                  {NARRATIVE_PROMPT_TEMPLATES.map((template) => (
-                    <button
-                      key={template}
-                      type="button"
-                      className="toolbar-button"
-                      disabled={activeSession.busy}
-                      onClick={() =>
-                        setDocumentAgents((current) =>
-                          updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
-                            ...session,
-                            composerText: template,
-                          })),
-                        )
-                      }
-                    >
-                      {template}
-                    </button>
-                  ))}
-                </div>
                 <textarea
                   className="field-input field-textarea narrative-chat-textarea"
                   value={activeSession.composerText}
@@ -3279,18 +3455,12 @@ export function NarrativeWorkspace({
                 />
                 <div className="narrative-chat-composer-footer">
                   <div className="toolbar-summary">
-                    <Badge tone="muted">
-                      {activeSession.mode === "create" ? "生成新文档" : "修改当前文档"}
-                    </Badge>
                     <Badge tone="muted">{activeDocument.meta.slug}</Badge>
                     {activeSession.status === "waiting_user" ? (
                       <Badge tone="warning">等待你的补充</Badge>
                     ) : null}
                   </div>
                   <div className="toolbar-actions">
-                    <button type="button" className="toolbar-button" onClick={() => clearCurrentConversation()}>
-                      清空会话
-                    </button>
                     <button
                       type="button"
                       className="toolbar-button toolbar-accent"
@@ -3321,20 +3491,12 @@ export function NarrativeWorkspace({
 
         <section className="narrative-document-panel">
           <div className="narrative-pane-header">
-            <div>
-              <span className="section-label">文档</span>
-              <h3>{activeDocument ? activeDocument.meta.title || activeDocument.meta.slug : "未选择文档"}</h3>
-            </div>
-            <div className="toolbar-summary">
-              {activeDocument ? (
-                <>
-                  <Badge tone={activeDocument.dirty ? "warning" : "success"}>
-                    {activeDocument.dirty ? "未保存" : "已保存"}
-                  </Badge>
-                  <Badge tone="muted">{activeDocument.meta.slug}</Badge>
-                </>
-              ) : null}
-            </div>
+            <h3>{activeDocument ? activeDocument.meta.title || activeDocument.meta.slug : "未选择文档"}</h3>
+            {activeDocument ? (
+              <Badge tone={activeDocument.dirty ? "warning" : "success"}>
+                {activeDocument.dirty ? "未保存" : "已保存"}
+              </Badge>
+            ) : null}
           </div>
 
           {activeDocument && activeSession ? (
@@ -3407,7 +3569,7 @@ export function NarrativeWorkspace({
                                   className="toolbar-button toolbar-accent"
                                   onClick={() => applyPatch(patch.id)}
                                 >
-                                  Apply
+                                  应用
                                 </button>
                               </div>
                               <MarkdownBlock markdown={patch.replacementText || "_AI 建议插入内容为空_"} />
@@ -3432,7 +3594,7 @@ export function NarrativeWorkspace({
                                     className="toolbar-button toolbar-accent"
                                     onClick={() => applyPatch(patch.id)}
                                   >
-                                    Apply
+                                    应用
                                   </button>
                                 </div>
                                 {patch.originalText ? (
@@ -3473,7 +3635,7 @@ export function NarrativeWorkspace({
                           className="toolbar-button toolbar-accent"
                           onClick={() => applyAllSuggestions()}
                         >
-                          Apply All
+                          全部应用
                         </button>
                       </div>
                       <MarkdownBlock markdown={activeSession.lastResponse.draftMarkdown} />
@@ -3491,17 +3653,33 @@ export function NarrativeWorkspace({
         </div>
       </div>
 
+      {docContextMenu ? (
+        <div
+          className="narrative-context-menu"
+          style={{ left: docContextMenu.x, top: docContextMenu.y }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="narrative-context-menu-item"
+            onClick={() => void deleteDocumentByKey(docContextMenu.documentKey)}
+          >
+            删除
+          </button>
+          <button
+            type="button"
+            className="narrative-context-menu-item"
+            onClick={() => void openDocumentFolder(docContextMenu.documentKey)}
+          >
+            打开所在文件夹
+          </button>
+        </div>
+      ) : null}
+
       <footer className="narrative-streamlined-statusbar">
         <div className="narrative-streamlined-status-main">
           <span className="status-dot" />
           <span>{status}</span>
-        </div>
-        <div className="toolbar-summary">
-          <Badge tone="muted">{`${documents.length} 篇文档`}</Badge>
-          <Badge tone={dirtyCount > 0 ? "warning" : "success"}>
-            {dirtyCount > 0 ? `${dirtyCount} 篇未保存` : "全部已保存"}
-          </Badge>
-          {activeDocument ? <Badge tone="accent">{activeDocument.meta.docType}</Badge> : null}
         </div>
       </footer>
     </div>

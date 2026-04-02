@@ -2,11 +2,11 @@ use std::collections::BTreeSet;
 
 use game_data::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorSide, CharacterId,
-    DialogueLibrary, DialogueRuleLibrary, EffectLibrary, GridCoord,
-    InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
-    InteractionOptionId, InteractionPrompt, InteractionTargetId, ItemFragment, ItemLibrary,
-    MapLibrary, OverworldLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary,
-    SkillTargetRequest, WorldCoord, WorldMode,
+    DialogueLibrary, DialogueRuleLibrary, EffectLibrary, GridCoord, InteractionContextSnapshot,
+    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionId,
+    InteractionPrompt, InteractionTargetId, ItemFragment, ItemLibrary, MapLibrary,
+    OverworldLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, SkillTargetRequest,
+    WorldCoord, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -27,8 +27,8 @@ use crate::vision::{
 };
 use crate::{NpcBackgroundState, NpcRuntimeActionState};
 
-mod overworld;
 mod dialogue;
+mod overworld;
 
 pub const RUNTIME_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
@@ -53,6 +53,14 @@ pub struct RuntimeSnapshot {
     pub path_preview: Vec<GridCoord>,
     #[serde(default)]
     pub tick_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DropItemOutcome {
+    pub object_id: String,
+    pub item_id: u32,
+    pub count: i32,
+    pub grid: GridCoord,
 }
 
 #[derive(Debug)]
@@ -417,6 +425,22 @@ impl SimulationRuntime {
                     .economy_mut()
                     .sell_item_to_shop(actor_id, &shop_id, item_id, count, items)
             },
+        )
+    }
+
+    pub fn drop_item_to_ground(
+        &mut self,
+        actor_id: ActorId,
+        item_id: u32,
+        count: i32,
+        _items: &ItemLibrary,
+    ) -> Result<DropItemOutcome, String> {
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            string_action_error,
+            move |simulation| simulation.drop_item_to_ground(actor_id, item_id, count),
         )
     }
 
@@ -2508,6 +2532,114 @@ mod tests {
     }
 
     #[test]
+    fn runtime_drop_item_to_ground_creates_pickup_and_removes_single_item() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1002, 1, &items)
+            .expect("knife should be added");
+
+        let outcome = runtime
+            .drop_item_to_ground(handles.player, 1002, 1, &items)
+            .expect("drop should succeed");
+
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1002"), 0);
+        assert_eq!(outcome.grid, GridCoord::new(-1, 0, 0));
+        let object = runtime
+            .simulation
+            .grid_world()
+            .map_object(&outcome.object_id)
+            .expect("pickup object should exist");
+        let pickup = object
+            .props
+            .pickup
+            .as_ref()
+            .expect("pickup payload should exist");
+        assert_eq!(object.kind, MapObjectKind::Pickup);
+        assert_eq!(object.anchor, outcome.grid);
+        assert_eq!(pickup.item_id, "1002");
+        assert_eq!(pickup.min_count, 1);
+        assert_eq!(pickup.max_count, 1);
+    }
+
+    #[test]
+    fn runtime_drop_item_to_ground_supports_partial_stack_drops() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1003, 5, &items)
+            .expect("bandage should be added");
+
+        let outcome = runtime
+            .drop_item_to_ground(handles.player, 1003, 2, &items)
+            .expect("drop should succeed");
+
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1003"), 3);
+        let pickup = runtime
+            .simulation
+            .grid_world()
+            .map_object(&outcome.object_id)
+            .and_then(|object| object.props.pickup.as_ref())
+            .expect("pickup payload should exist");
+        assert_eq!(pickup.item_id, "1003");
+        assert_eq!(pickup.min_count, 2);
+        assert_eq!(pickup.max_count, 2);
+    }
+
+    #[test]
+    fn runtime_drop_item_to_ground_falls_back_to_actor_grid_when_ring_search_misses() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1003, 1, &items)
+            .expect("bandage should be added");
+        runtime
+            .simulation
+            .grid_world_mut()
+            .load_map(&single_tile_map_definition());
+
+        let outcome = runtime
+            .drop_item_to_ground(handles.player, 1003, 1, &items)
+            .expect("drop should succeed");
+
+        assert_eq!(outcome.grid, GridCoord::new(0, 0, 0));
+        let object = runtime
+            .simulation
+            .grid_world()
+            .map_object(&outcome.object_id)
+            .expect("pickup object should exist");
+        assert_eq!(object.anchor, GridCoord::new(0, 0, 0));
+    }
+
+    #[test]
+    fn runtime_drop_item_to_ground_rejects_invalid_count_without_mutation() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_runtime_economy_item_library();
+        set_runtime_actor_ap(&mut runtime, handles.player, 2.0);
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1003, 3, &items)
+            .expect("bandage should be added");
+
+        let zero_error = runtime
+            .drop_item_to_ground(handles.player, 1003, 0, &items)
+            .expect_err("zero-count drop should fail");
+        let overflow_error = runtime
+            .drop_item_to_ground(handles.player, 1003, 4, &items)
+            .expect_err("overflow drop should fail");
+
+        assert_eq!(zero_error, "invalid_drop_count");
+        assert_eq!(overflow_error, "insufficient_item_count:1003");
+        assert_eq!(runtime.get_actor_inventory_count(handles.player, "1003"), 3);
+    }
+
+    #[test]
     fn runtime_travel_to_map_and_return_to_overworld_preserve_scene_context() {
         let mut simulation = Simulation::new();
         simulation.set_map_library(sample_runtime_map_library());
@@ -3366,6 +3498,29 @@ mod tests {
                 },
             ),
         ]))
+    }
+
+    fn single_tile_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("single_tile_drop_test".into()),
+            name: "Single Tile".into(),
+            size: MapSize {
+                width: 1,
+                height: 1,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: Vec::new(),
+        }
     }
 
     fn sample_runtime_overworld_library() -> OverworldLibrary {

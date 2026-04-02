@@ -808,7 +808,6 @@ pub(crate) struct ViewerPalette {
     pub path: Color,
     pub hover_walkable: Color,
     pub hover_hostile: Color,
-    pub fog_cover: Color,
     pub ai_goal: Color,
     pub ai_anchor: Color,
     pub ai_reservation: Color,
@@ -845,7 +844,6 @@ impl Default for ViewerPalette {
             path: Color::srgb(0.95, 0.76, 0.28),
             hover_walkable: Color::srgb(0.96, 0.97, 0.99),
             hover_hostile: Color::srgb(0.94, 0.36, 0.33),
-            fog_cover: Color::srgba(0.38, 0.41, 0.44, 0.72),
             ai_goal: Color::srgb(0.98, 0.71, 0.29),
             ai_anchor: Color::srgb(0.22, 0.84, 0.8),
             ai_reservation: Color::srgb(0.62, 0.48, 0.92),
@@ -893,6 +891,11 @@ pub(crate) struct ViewerRenderConfig {
     pub overlay_mode: ViewerOverlayMode,
     pub ground_variation_strength: f32,
     pub object_style_seed: u32,
+    pub fow_fog_color: Color,
+    pub fow_explored_alpha: f32,
+    pub fow_unexplored_alpha: f32,
+    pub fow_edge_softness: f32,
+    pub fow_transition_duration_sec: f32,
 }
 
 impl Default for ViewerRenderConfig {
@@ -915,6 +918,11 @@ impl Default for ViewerRenderConfig {
             overlay_mode: ViewerOverlayMode::Gameplay,
             ground_variation_strength: 0.32,
             object_style_seed: 17,
+            fow_fog_color: Color::srgba(0.05, 0.05, 0.05, 1.0),
+            fow_explored_alpha: 0.55,
+            fow_unexplored_alpha: 0.85,
+            fow_edge_softness: 0.01,
+            fow_transition_duration_sec: 0.2,
         }
     }
 }
@@ -983,7 +991,7 @@ impl Default for ViewerState {
             control_mode: ViewerControlMode::PlayerControl,
             camera_mode: ViewerCameraMode::FollowSelectedActor,
             event_filter: HudEventFilter::All,
-            show_hud: true,
+            show_hud: false,
             show_fps_overlay: false,
             show_controls: false,
             hovered_grid: None,
@@ -1305,6 +1313,12 @@ pub(crate) enum GameUiButtonAction {
     InventoryFilter(UiInventoryFilter),
     UseInventoryItem,
     EquipInventoryItem,
+    DropInventoryItem,
+    DecreaseDiscardQuantity,
+    IncreaseDiscardQuantity,
+    SetDiscardQuantityToMax,
+    ConfirmDiscardQuantity,
+    CancelDiscardQuantity,
     UnequipSlot(String),
     AllocateAttribute(String),
     SelectSkillTree(String),

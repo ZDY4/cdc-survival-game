@@ -3,13 +3,13 @@ use std::collections::BTreeMap;
 use bevy_ecs::prelude::*;
 use game_core::simulation::Simulation;
 use game_core::SimulationRuntime;
+#[cfg(test)]
+use game_data::MapObjectKind;
 use game_data::{
     ActorId, CharacterAiProfile, CharacterArchetype, CharacterDisposition, CharacterId,
     CharacterLibrary, CharacterLootEntry, CharacterPlaceholderColors, CharacterResourcePool,
     GridCoord, MapId, MapLibrary, OverworldLibrary, WorldMode,
 };
-#[cfg(test)]
-use game_data::MapObjectKind;
 use spawn::register_actor_from_definition;
 
 mod ai_spawn;
@@ -40,13 +40,13 @@ pub use ui::{
     inventory_snapshot, item_attribute_bonuses, item_equippable, item_usable, journal_snapshot,
     map_snapshot, player_actor_id, skills_snapshot, trade_snapshot, world_status_snapshot,
     GameUiPlugin, UiCharacterCommand, UiCharacterSnapshot, UiCraftingSnapshot, UiDialogueCommand,
-    UiEquipmentSlotView, UiHotbarSlotState, UiHotbarState, UiInputBlockState, UiInventoryCommand,
-    UiInventoryDetailView, UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState,
-    UiInventoryPanelSnapshot, UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot,
-    UiMapLocationView, UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
-    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot,
-    UiStatusBannerState, UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot,
-    UiWorldStatusSnapshot,
+    UiDiscardQuantityModalState, UiEquipmentSlotView, UiHotbarSlotState, UiHotbarState,
+    UiInputBlockState, UiInventoryCommand, UiInventoryDetailView, UiInventoryEntryView,
+    UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot, UiItemType,
+    UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView, UiMapSnapshot,
+    UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState, UiSettingsCommand, UiSkillCommand,
+    UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCommand,
+    UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
 };
 
 #[derive(Message, Debug, Clone, PartialEq, Eq)]

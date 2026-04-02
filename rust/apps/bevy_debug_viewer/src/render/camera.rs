@@ -1,4 +1,5 @@
 use super::*;
+use bevy::core_pipeline::prepass::DepthPrepass;
 
 pub(crate) fn setup_viewer(
     mut commands: Commands,
@@ -9,11 +10,16 @@ pub(crate) fn setup_viewer(
 ) {
     let ui_font = asset_server.load(VIEWER_FONT_PATH);
     let trigger_arrow_texture = images.add(build_trigger_arrow_texture());
+    let current_fow_mask = images.add(build_fog_of_war_mask_image(UVec2::ONE, &[255]));
+    let previous_fow_mask = images.add(build_fog_of_war_mask_image(UVec2::ONE, &[255]));
     commands.insert_resource(ViewerUiFont(ui_font.clone()));
     commands.insert_resource(StaticWorldVisualState::default());
     commands.insert_resource(GeneratedDoorVisualState::default());
     commands.insert_resource(ActorVisualState::default());
-    commands.insert_resource(FogOfWarVisualState::default());
+    commands.insert_resource(FogOfWarMaskState::new(
+        current_fow_mask.clone(),
+        previous_fow_mask.clone(),
+    ));
     commands.insert_resource(DamageNumberVisualState::default());
     commands.insert_resource(TriggerDecalAssets {
         arrow_texture: trigger_arrow_texture,
@@ -26,6 +32,8 @@ pub(crate) fn setup_viewer(
     commands.insert_resource(DirectionalLightShadowMap { size: 2048 });
     commands.spawn((
         Camera3d::default(),
+        Msaa::Off,
+        DepthPrepass,
         Projection::from(PerspectiveProjection {
             fov: 30.0_f32.to_radians(),
             near: 0.1,
@@ -34,6 +42,12 @@ pub(crate) fn setup_viewer(
         }),
         Transform::from_xyz(0.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Z),
         ViewerCamera,
+        FogOfWarOverlay,
+        FogOfWarPostProcessSettings::default(),
+        FogOfWarPostProcessTextures {
+            current_mask: current_fow_mask,
+            previous_mask: previous_fow_mask,
+        },
     ));
     commands.spawn((
         DirectionalLight {

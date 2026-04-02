@@ -35,7 +35,11 @@ pub(crate) fn update_hover_tooltip_state(
 
     tooltip_state.cursor_position = cursor_position;
 
-    if scene_kind.is_main_menu() || modal_state.trade.is_some() || inventory_context_menu.visible {
+    if scene_kind.is_main_menu()
+        || modal_state.discard_quantity.is_some()
+        || modal_state.trade.is_some()
+        || inventory_context_menu.visible
+    {
         tooltip_state.clear();
         return;
     }
@@ -100,11 +104,17 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         With<InventoryContextMenuRoot>,
     >,
 ) {
-    if scene_kind.is_main_menu() || modal_state.trade.is_some() {
+    let trade_active = modal_state.trade.is_some();
+    let discard_modal_open = modal_state.discard_quantity.is_some();
+    if scene_kind.is_main_menu() {
         context_menu.clear();
         return;
     }
-    if menu_state.active_panel != Some(UiMenuPanel::Inventory) {
+    if discard_modal_open {
+        context_menu.clear();
+        return;
+    }
+    if !trade_active && menu_state.active_panel != Some(UiMenuPanel::Inventory) {
         context_menu.clear();
         return;
     }
@@ -145,6 +155,10 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             });
 
     if buttons.just_pressed(MouseButton::Right) {
+        if trade_active {
+            context_menu.clear();
+            return;
+        }
         if let Some(item_id) = inventory_hit {
             menu_state.selected_inventory_item = Some(item_id);
             menu_state.selected_equipment_slot = None;
@@ -179,27 +193,29 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         return;
     }
 
-    if let Some(target) = equipment_hit {
-        context_menu.clear();
-        if let Some(actor_id) = player_actor_id(&runtime_state.runtime) {
-            if let Some(from_slot) = menu_state.selected_equipment_slot.clone() {
-                menu_state.status_text = runtime_state
-                    .runtime
-                    .move_equipped_item(actor_id, &from_slot, &target.slot_id, &items.0)
-                    .map(|_| {
-                        save_runtime_snapshot(&save_path, &runtime_state.runtime);
-                        format!("{from_slot} -> {}", target.slot_id)
-                    })
-                    .unwrap_or_else(|error| error.to_string());
-                menu_state.selected_equipment_slot = None;
-            } else {
-                menu_state.selected_equipment_slot = Some(target.slot_id.clone());
+    if !trade_active {
+        if let Some(target) = equipment_hit {
+            context_menu.clear();
+            if let Some(actor_id) = player_actor_id(&runtime_state.runtime) {
+                if let Some(from_slot) = menu_state.selected_equipment_slot.clone() {
+                    menu_state.status_text = runtime_state
+                        .runtime
+                        .move_equipped_item(actor_id, &from_slot, &target.slot_id, &items.0)
+                        .map(|_| {
+                            save_runtime_snapshot(&save_path, &runtime_state.runtime);
+                            format!("{from_slot} -> {}", target.slot_id)
+                        })
+                        .unwrap_or_else(|error| error.to_string());
+                    menu_state.selected_equipment_slot = None;
+                } else {
+                    menu_state.selected_equipment_slot = Some(target.slot_id.clone());
+                }
             }
+            return;
         }
-        return;
     }
 
-    if !clicked_context_menu {
+    if !trade_active && !clicked_context_menu {
         context_menu.clear();
     }
 }
@@ -298,6 +314,9 @@ pub(crate) fn handle_game_ui_buttons(
             continue;
         }
         ui.inventory_context_menu.clear();
+        if handle_trade_button_action(action, &mut ui, &save_path, &content) {
+            continue;
+        }
         match action.clone() {
             GameUiButtonAction::MainMenuNewGame => {
                 match rebuild_runtime_with_new_game_defaults(
@@ -375,11 +394,8 @@ pub(crate) fn handle_game_ui_buttons(
             }
             GameUiButtonAction::ClosePanels => {
                 ui.menu_state.active_panel = None;
+                ui.modal_state.discard_quantity = None;
                 ui.modal_state.trade = None;
-            }
-            GameUiButtonAction::CloseTrade => {
-                ui.modal_state.trade = None;
-                ui.viewer_state.pending_open_trade_target = None;
             }
             GameUiButtonAction::InventoryFilter(filter) => ui.filter_state.filter = filter,
             GameUiButtonAction::UseInventoryItem => {
@@ -411,6 +427,69 @@ pub(crate) fn handle_game_ui_buttons(
                             .unwrap_or_else(|error| error.to_string());
                     }
                 }
+            }
+            GameUiButtonAction::DropInventoryItem => {
+                if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
+                    if let Some(item_id) = ui.menu_state.selected_inventory_item {
+                        if let Some(plan) =
+                            plan_inventory_drop(&ui.runtime_state.runtime, actor_id, item_id)
+                        {
+                            match plan {
+                                InventoryDropPlan::Immediate { count } => execute_inventory_drop(
+                                    &mut ui.runtime_state,
+                                    &mut ui.viewer_state,
+                                    &mut ui.menu_state,
+                                    &mut ui.modal_state,
+                                    &save_path,
+                                    &content.items,
+                                    actor_id,
+                                    item_id,
+                                    count,
+                                ),
+                                InventoryDropPlan::OpenModal(modal) => {
+                                    ui.modal_state.discard_quantity = Some(modal);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            GameUiButtonAction::DecreaseDiscardQuantity => {
+                if let Some(modal) = ui.modal_state.discard_quantity.as_mut() {
+                    modal.selected_count =
+                        adjust_discard_quantity(modal.selected_count, modal.available_count, -1);
+                }
+            }
+            GameUiButtonAction::IncreaseDiscardQuantity => {
+                if let Some(modal) = ui.modal_state.discard_quantity.as_mut() {
+                    modal.selected_count =
+                        adjust_discard_quantity(modal.selected_count, modal.available_count, 1);
+                }
+            }
+            GameUiButtonAction::SetDiscardQuantityToMax => {
+                if let Some(modal) = ui.modal_state.discard_quantity.as_mut() {
+                    modal.selected_count = modal.available_count.max(1);
+                }
+            }
+            GameUiButtonAction::ConfirmDiscardQuantity => {
+                if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
+                    if let Some(modal) = ui.modal_state.discard_quantity.clone() {
+                        execute_inventory_drop(
+                            &mut ui.runtime_state,
+                            &mut ui.viewer_state,
+                            &mut ui.menu_state,
+                            &mut ui.modal_state,
+                            &save_path,
+                            &content.items,
+                            actor_id,
+                            modal.item_id,
+                            modal.selected_count,
+                        );
+                    }
+                }
+            }
+            GameUiButtonAction::CancelDiscardQuantity => {
+                ui.modal_state.discard_quantity = None;
             }
             GameUiButtonAction::UnequipSlot(slot_id) => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
@@ -600,32 +679,6 @@ pub(crate) fn handle_game_ui_buttons(
             GameUiButtonAction::SelectMapLocation(location_id) => {
                 ui.menu_state.selected_map_location_id = Some(location_id);
             }
-            GameUiButtonAction::BuyTradeItem { shop_id, item_id } => {
-                if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                    ui.menu_state.status_text = ui
-                        .runtime_state
-                        .runtime
-                        .buy_item_from_shop(actor_id, &shop_id, item_id, 1, &content.items.0)
-                        .map(|_| {
-                            save_runtime_snapshot(&save_path, &ui.runtime_state.runtime);
-                            "买入成功".to_string()
-                        })
-                        .unwrap_or_else(|error| error.to_string());
-                }
-            }
-            GameUiButtonAction::SellTradeItem { shop_id, item_id } => {
-                if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                    ui.menu_state.status_text = ui
-                        .runtime_state
-                        .runtime
-                        .sell_item_to_shop(actor_id, &shop_id, item_id, 1, &content.items.0)
-                        .map(|_| {
-                            save_runtime_snapshot(&save_path, &ui.runtime_state.runtime);
-                            "卖出成功".to_string()
-                        })
-                        .unwrap_or_else(|error| error.to_string());
-                }
-            }
             GameUiButtonAction::SettingsSetMaster(value) => ui.settings.master_volume = value,
             GameUiButtonAction::SettingsSetMusic(value) => ui.settings.music_volume = value,
             GameUiButtonAction::SettingsSetSfx(value) => ui.settings.sfx_volume = value,
@@ -635,8 +688,77 @@ pub(crate) fn handle_game_ui_buttons(
             GameUiButtonAction::SettingsCycleBinding(action_name) => {
                 cycle_binding(&mut ui.settings, &action_name);
             }
+            GameUiButtonAction::CloseTrade
+            | GameUiButtonAction::BuyTradeItem { .. }
+            | GameUiButtonAction::SellTradeItem { .. } => unreachable!(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum InventoryDropPlan {
+    Immediate { count: i32 },
+    OpenModal(game_bevy::UiDiscardQuantityModalState),
+}
+
+fn plan_inventory_drop(
+    runtime: &game_core::SimulationRuntime,
+    actor_id: ActorId,
+    item_id: u32,
+) -> Option<InventoryDropPlan> {
+    let available_count = runtime
+        .economy()
+        .inventory_count(actor_id, item_id)
+        .unwrap_or(0);
+    if available_count <= 0 {
+        return None;
+    }
+    if available_count == 1 {
+        return Some(InventoryDropPlan::Immediate { count: 1 });
+    }
+    Some(InventoryDropPlan::OpenModal(
+        game_bevy::UiDiscardQuantityModalState {
+            item_id,
+            available_count,
+            selected_count: 1,
+        },
+    ))
+}
+
+fn adjust_discard_quantity(current: i32, available_count: i32, delta: i32) -> i32 {
+    (current + delta).clamp(1, available_count.max(1))
+}
+
+fn execute_inventory_drop(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    menu_state: &mut UiMenuState,
+    modal_state: &mut UiModalState,
+    save_path: &ViewerRuntimeSavePath,
+    items: &ItemDefinitions,
+    actor_id: ActorId,
+    item_id: u32,
+    count: i32,
+) {
+    let item_name = items
+        .0
+        .get(item_id)
+        .map(|item| item.name.clone())
+        .unwrap_or_else(|| format!("item:{item_id}"));
+    let status = runtime_state
+        .runtime
+        .drop_item_to_ground(actor_id, item_id, count, &items.0)
+        .map(|outcome| {
+            save_runtime_snapshot(save_path, &runtime_state.runtime);
+            format!(
+                "已丢弃 {} x{} 到 ({}, {}, {})",
+                item_name, outcome.count, outcome.grid.x, outcome.grid.y, outcome.grid.z
+            )
+        })
+        .unwrap_or_else(|error| error);
+    modal_state.discard_quantity = None;
+    viewer_state.status_line = status.clone();
+    menu_state.status_text = status;
 }
 
 pub(super) fn cycle_binding(settings: &mut ViewerUiSettings, action_name: &str) {
@@ -664,5 +786,149 @@ pub(super) fn cycle_binding(settings: &mut ViewerUiSettings, action_name: &str) 
                 .insert(action_name.to_string(), candidate);
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        adjust_discard_quantity, execute_inventory_drop, plan_inventory_drop, InventoryDropPlan,
+    };
+    use crate::state::{ViewerRuntimeSavePath, ViewerRuntimeState, ViewerState};
+    use game_bevy::{ItemDefinitions, UiMenuState, UiModalState};
+    use game_core::{create_demo_runtime, SimulationCommand};
+    use game_data::{ItemDefinition, ItemFragment};
+    use std::collections::BTreeMap;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn single_item_drop_is_planned_as_immediate() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_item_definitions();
+        let _ = runtime.submit_command(SimulationCommand::SetActorAp {
+            actor_id: handles.player,
+            ap: 2.0,
+        });
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1006, 1, &items.0)
+            .expect("item should be added");
+
+        let plan = plan_inventory_drop(&runtime, handles.player, 1006);
+
+        assert_eq!(plan, Some(InventoryDropPlan::Immediate { count: 1 }));
+    }
+
+    #[test]
+    fn stacked_item_drop_opens_quantity_modal() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_item_definitions();
+        let _ = runtime.submit_command(SimulationCommand::SetActorAp {
+            actor_id: handles.player,
+            ap: 2.0,
+        });
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1006, 4, &items.0)
+            .expect("item should be added");
+
+        let plan = plan_inventory_drop(&runtime, handles.player, 1006);
+
+        assert_eq!(
+            plan,
+            Some(InventoryDropPlan::OpenModal(
+                game_bevy::UiDiscardQuantityModalState {
+                    item_id: 1006,
+                    available_count: 4,
+                    selected_count: 1,
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn discard_quantity_adjustment_clamps_to_valid_range() {
+        assert_eq!(adjust_discard_quantity(1, 4, -1), 1);
+        assert_eq!(adjust_discard_quantity(1, 4, 1), 2);
+        assert_eq!(adjust_discard_quantity(4, 4, 1), 4);
+        assert_eq!(adjust_discard_quantity(2, 1, 3), 1);
+    }
+
+    #[test]
+    fn execute_discard_updates_status_and_closes_modal() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let items = sample_item_definitions();
+        let _ = runtime.submit_command(SimulationCommand::SetActorAp {
+            actor_id: handles.player,
+            ap: 2.0,
+        });
+        runtime
+            .economy_mut()
+            .add_item(handles.player, 1006, 3, &items.0)
+            .expect("item should be added");
+        let mut runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: Default::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        let mut menu_state = UiMenuState::default();
+        let mut modal_state = UiModalState {
+            discard_quantity: Some(game_bevy::UiDiscardQuantityModalState {
+                item_id: 1006,
+                available_count: 3,
+                selected_count: 2,
+            }),
+            ..UiModalState::default()
+        };
+        let save_path = temp_save_path();
+
+        execute_inventory_drop(
+            &mut runtime_state,
+            &mut viewer_state,
+            &mut menu_state,
+            &mut modal_state,
+            &save_path,
+            &items,
+            handles.player,
+            1006,
+            2,
+        );
+
+        assert!(modal_state.discard_quantity.is_none());
+        assert!(viewer_state.status_line.contains("已丢弃 绷带 x2 到"));
+        assert_eq!(menu_state.status_text, viewer_state.status_line);
+        assert_eq!(
+            runtime_state
+                .runtime
+                .economy()
+                .inventory_count(handles.player, 1006),
+            Some(1)
+        );
+    }
+
+    fn sample_item_definitions() -> ItemDefinitions {
+        ItemDefinitions(game_data::ItemLibrary::from(BTreeMap::from([(
+            1006,
+            ItemDefinition {
+                id: 1006,
+                name: "绷带".to_string(),
+                fragments: vec![ItemFragment::Stacking {
+                    stackable: true,
+                    max_stack: 99,
+                }],
+                ..ItemDefinition::default()
+            },
+        )])))
+    }
+
+    fn temp_save_path() -> ViewerRuntimeSavePath {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be available")
+            .as_nanos();
+        ViewerRuntimeSavePath(
+            std::env::temp_dir().join(format!("bevy_viewer_drop_test_{nanos}.json")),
+        )
     }
 }

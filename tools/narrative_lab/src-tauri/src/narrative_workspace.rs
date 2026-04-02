@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -271,6 +272,25 @@ pub fn delete_narrative_document(
 }
 
 #[tauri::command]
+pub fn open_narrative_document_folder(
+    workspace_root: String,
+    slug: String,
+) -> Result<(), String> {
+    let workspace_root_path = resolve_workspace_root(&workspace_root)?;
+    let document = find_document_by_slug(&workspace_root_path, &slug)?
+        .ok_or_else(|| format!("未找到文稿: {slug}"))?;
+    let path = narrative_file_path(
+        &workspace_root_path,
+        &document.meta.doc_type,
+        &document.meta.slug,
+    )?;
+    let folder = path
+        .parent()
+        .ok_or_else(|| format!("无法定位文稿目录: {}", path.display()))?;
+    open_in_file_manager(folder)
+}
+
+#[tauri::command]
 pub fn summarize_narrative_document(
     workspace_root: String,
     slug: String,
@@ -285,6 +305,34 @@ pub fn summarize_narrative_document(
         &document.meta.title,
         &markdown,
     ))
+}
+
+fn open_in_file_manager(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command.arg(path);
+        command
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(path);
+        command
+    };
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+
+    command
+        .spawn()
+        .map_err(|error| format!("failed to open {}: {error}", path.display()))?;
+    Ok(())
 }
 
 #[tauri::command]

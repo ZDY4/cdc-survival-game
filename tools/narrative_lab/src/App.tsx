@@ -234,24 +234,29 @@ function App() {
   useEditorMenuBridge(setStatus, true);
 
   if (surface === "settings") {
-    return <SettingsWindow status={status} onStatusChange={setStatus} />;
+    return (
+      <div className="narrative-lab-app narrative-lab-app-settings">
+        <SettingsWindow status={status} onStatusChange={setStatus} />
+      </div>
+    );
   }
 
   return (
-    <NarrativeWorkspace
-      workspace={narrativeWorkspace}
-      appSettings={narrativeAppSettings}
-      canPersist={canPersist}
-      startupReady={narrativeStartupReady}
-      selfTestScenario={editorRuntimeFlags.menuSelfTestScenario ?? null}
-      status={status}
-      runtimeLabel={isTauriRuntime() && canPersist ? "Tauri 宿主已连接" : "界面回退模式"}
-      onStatusChange={setStatus}
-      onReload={loadNarrativeWorkspaceOnly}
-      onOpenWorkspace={openNarrativeWorkspace}
-      onConnectProject={connectNarrativeProject}
-      onSaveAppSettings={saveNarrativeSettings}
-    />
+    <div className="narrative-lab-app narrative-lab-app-workspace">
+      <NarrativeWorkspace
+        workspace={narrativeWorkspace}
+        appSettings={narrativeAppSettings}
+        canPersist={canPersist}
+        startupReady={narrativeStartupReady}
+        selfTestScenario={editorRuntimeFlags.menuSelfTestScenario ?? null}
+        status={status}
+        onStatusChange={setStatus}
+        onReload={loadNarrativeWorkspaceOnly}
+        onOpenWorkspace={openNarrativeWorkspace}
+        onConnectProject={connectNarrativeProject}
+        onSaveAppSettings={saveNarrativeSettings}
+      />
+    </div>
   );
 }
 

@@ -1,5 +1,16 @@
 use super::*;
 
+pub(crate) fn clear_world_visuals(
+    mut commands: Commands,
+    mut static_world_state: ResMut<StaticWorldVisualState>,
+    mut door_visual_state: ResMut<GeneratedDoorVisualState>,
+    mut actor_visual_state: ResMut<ActorVisualState>,
+) {
+    clear_static_world_entities(&mut commands, &mut static_world_state);
+    clear_generated_door_entities(&mut commands, &mut door_visual_state);
+    clear_actor_visual_entities(&mut commands, &mut actor_visual_state);
+}
+
 pub(crate) fn sync_world_visuals(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -152,78 +163,83 @@ pub(crate) fn update_occluding_world_visuals(
 }
 
 pub(crate) fn sync_fog_of_war_visuals(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    palette: Res<ViewerPalette>,
+    mut images: ResMut<Assets<Image>>,
     runtime_state: Res<ViewerRuntimeState>,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
-    render_config: Res<ViewerRenderConfig>,
-    mut fog_state: ResMut<FogOfWarVisualState>,
+    mut fog_state: ResMut<FogOfWarMaskState>,
 ) {
-    if scene_kind.is_main_menu() {
-        clear_fog_of_war_entities(&mut commands, &mut fog_state);
-        fog_state.key = None;
-        return;
-    }
-
     let snapshot = runtime_state.runtime.snapshot();
-    let actor_id = viewer_state.focus_actor_id(&snapshot);
-    let vision = current_focus_actor_vision(&snapshot, &viewer_state);
-    let visible_cells = vision
-        .map(|vision| {
-            vision
-                .visible_cells
-                .iter()
-                .copied()
-                .filter(|grid| grid.y == viewer_state.current_level)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let next_key = FogOfWarVisualKey {
-        map_id: snapshot.grid.map_id.clone(),
-        current_level: viewer_state.current_level,
-        topology_version: snapshot.grid.topology_version,
-        actor_id,
-        fog_enabled: vision.is_some(),
-        visible_cells: visible_cells.clone(),
-    };
+    let next_mask =
+        build_fog_of_war_mask_snapshot(&snapshot, &viewer_state, scene_kind.is_main_menu());
 
-    if fog_state.key.as_ref() == Some(&next_key) {
+    if fog_state.key == next_mask.key
+        && fog_state.bounds == next_mask.bounds
+        && fog_state.mask_size == next_mask.mask_size
+        && fog_state.current_bytes == next_mask.bytes
+        && fog_state.actor_id == next_mask.actor_id
+        && fog_state.map_id == next_mask.map_id
+        && fog_state.current_level == next_mask.current_level
+    {
         return;
     }
 
-    clear_fog_of_war_entities(&mut commands, &mut fog_state);
-    fog_state.key = Some(next_key);
+    fog_state.previous_bytes = fog_state.current_bytes.clone();
+    fog_state.current_bytes = next_mask.bytes;
+    fog_state.key = next_mask.key;
+    fog_state.actor_id = next_mask.actor_id;
+    fog_state.map_id = next_mask.map_id;
+    fog_state.current_level = next_mask.current_level;
+    fog_state.bounds = next_mask.bounds;
+    fog_state.map_min_world_xz = next_mask.map_min_world_xz;
+    fog_state.map_size_world_xz = next_mask.map_size_world_xz;
+    fog_state.mask_size = next_mask.mask_size;
+    fog_state.mask_texel_size = next_mask.mask_texel_size;
+    fog_state.transition_elapsed_sec = 0.0;
 
-    if vision.is_none() {
-        return;
-    }
-
-    let hidden_cells =
-        hidden_fog_of_war_cells(&snapshot, viewer_state.current_level, &visible_cells);
-    if hidden_cells.is_empty() {
-        return;
-    }
-
-    let fog_height = fog_of_war_plane_height(
-        &snapshot,
-        viewer_state.current_level,
-        render_config.floor_thickness_world,
+    update_fog_of_war_mask_image(
+        &mut images,
+        &fog_state.previous_mask,
+        fog_state.mask_size,
+        &fog_state.previous_bytes,
     );
-    for rect in merge_cells_into_rects(&hidden_cells) {
-        let center = rect_world_center(rect, snapshot.grid.grid_size);
-        let size = rect_world_size(rect, snapshot.grid.grid_size, snapshot.grid.grid_size);
-        let entity = spawn_fog_of_war_plane(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            Vec2::new(size.x, size.z),
-            Vec3::new(center.x, fog_height, center.z),
-            palette.fog_cover,
-        );
-        fog_state.entities.push(entity);
+    update_fog_of_war_mask_image(
+        &mut images,
+        &fog_state.current_mask,
+        fog_state.mask_size,
+        &fog_state.current_bytes,
+    );
+}
+
+fn clear_static_world_entities(
+    commands: &mut Commands,
+    static_world_state: &mut StaticWorldVisualState,
+) {
+    for entity in static_world_state.entities.drain(..) {
+        commands.entity(entity).despawn();
+    }
+    static_world_state.occluders.clear();
+    static_world_state.key = None;
+}
+
+fn clear_generated_door_entities(
+    commands: &mut Commands,
+    door_visual_state: &mut GeneratedDoorVisualState,
+) {
+    for visual in door_visual_state.by_door.drain().map(|(_, visual)| visual) {
+        commands.entity(visual.pivot_entity).despawn();
+    }
+    door_visual_state.occluders.clear();
+    door_visual_state.key = None;
+}
+
+fn clear_actor_visual_entities(commands: &mut Commands, actor_visual_state: &mut ActorVisualState) {
+    for entity in actor_visual_state
+        .by_actor
+        .drain()
+        .map(|(_, entity)| entity)
+    {
+        commands.entity(entity).despawn();
     }
 }
 
@@ -1177,38 +1193,6 @@ pub(super) fn spawn_ground_plane(
             ))),
             MeshMaterial3d(material),
             Transform::from_xyz(center_x, floor_y, center_z),
-        ))
-        .id()
-}
-
-pub(super) fn spawn_fog_of_war_plane(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    size: Vec2,
-    translation: Vec3,
-    color: Color,
-) -> Entity {
-    let mesh = meshes.add(
-        Plane3d::default()
-            .mesh()
-            .size(size.x.max(0.01), size.y.max(0.01)),
-    );
-    let material = materials.add(StandardMaterial {
-        base_color: color,
-        alpha_mode: AlphaMode::Blend,
-        unlit: true,
-        cull_mode: None,
-        perceptual_roughness: 1.0,
-        metallic: 0.0,
-        ..default()
-    });
-
-    commands
-        .spawn((
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
-            Transform::from_translation(translation),
         ))
         .id()
 }

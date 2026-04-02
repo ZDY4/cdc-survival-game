@@ -4,7 +4,7 @@ use game_data::{ActorId, ActorSide, GridCoord, InteractionTargetId, MapObjectKin
 
 use crate::state::{ViewerHudPage, ViewerRenderConfig, ViewerState};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct GridBounds {
     pub min_x: i32,
     pub max_x: i32,

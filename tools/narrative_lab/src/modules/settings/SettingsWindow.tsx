@@ -423,7 +423,6 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
       <header className="settings-window-chrome">
         <div className="settings-window-drag" data-tauri-drag-region>
           <strong>Settings</strong>
-          <span>{activeSectionDefinition.label}</span>
         </div>
         <div className="settings-window-controls">
           <button
@@ -448,42 +447,20 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
               onClick={() => setActiveSection(section.id)}
             >
               <strong>{section.label}</strong>
-              <span>{section.description}</span>
             </button>
           ))}
         </nav>
-
-        <div className="settings-sidebar-status">
-          <Badge tone="accent">{activeSectionDefinition.label}</Badge>
-          <Badge tone="muted">{busy ? "busy" : "ready"}</Badge>
-        </div>
       </aside>
 
       <main className="settings-main">
         <header className="settings-header">
-          <div>
-            <h2>{activeSectionDefinition.label}</h2>
-          </div>
-          <div className="workspace-meta">
-            <div>
-              <span className="meta-label">Status</span>
-              <strong>{status}</strong>
-            </div>
-          </div>
+          <h2>{activeSectionDefinition.label}</h2>
+          <p className="settings-header-status">{status}</p>
         </header>
 
         <section className="settings-body">
           {activeSection === "ai" ? (
-            <PanelSection
-              label="AI"
-              title="Provider settings"
-              summary={
-                <div className="toolbar-summary">
-                  <Badge tone="accent">{aiSettings.model || "No model"}</Badge>
-                  <Badge tone="muted">{aiSettings.baseUrl || "No endpoint"}</Badge>
-                </div>
-              }
-            >
+            <PanelSection label="AI" title="Provider settings">
               <div className="form-grid">
                 <TextField
                   label="Base URL"
@@ -534,16 +511,7 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
 
           {activeSection === "narrative-sync" ? (
             <>
-              <PanelSection
-                label="Narrative Sync"
-                title="Cloud sync and mobile handoff"
-                summary={
-                  <div className="toolbar-summary">
-                    <Badge tone="accent">{syncSettings.workspaceId || "No workspace ID"}</Badge>
-                    <Badge tone="muted">{syncSettings.deviceLabel || "desktop-local"}</Badge>
-                  </div>
-                }
-              >
+              <PanelSection label="Narrative Sync" title="Cloud sync and mobile handoff">
                 <div className="form-grid">
                   <TextField
                     label="Server URL"
@@ -578,16 +546,7 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
                 {syncStatus ? <p className="field-hint">{syncStatus}</p> : null}
               </PanelSection>
 
-              <PanelSection
-                label="Cloud"
-                title="Workspace binding"
-                summary={
-                  <div className="toolbar-summary">
-                    <Badge tone="muted">{cloudWorkspaces.length} known</Badge>
-                    <Badge tone="muted">{syncSettings.lastSyncStatus || "No recent sync"}</Badge>
-                  </div>
-                }
-              >
+              <PanelSection label="Cloud" title="Workspace binding">
                 <div className="form-grid">
                   <TextField
                     label="Create cloud workspace"
@@ -611,16 +570,7 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
           ) : null}
 
           {activeSection === "workspace" ? (
-            <PanelSection
-              label="Workspace"
-              title="Narrative workspace and project context"
-              summary={
-                <div className="toolbar-summary">
-                  <Badge tone="accent">{appSettings.lastWorkspace || "No workspace"}</Badge>
-                  <Badge tone="muted">{appSettings.connectedProjectRoot || "No project"}</Badge>
-                </div>
-              }
-            >
+            <PanelSection label="Workspace" title="Narrative workspace and project context">
               <div className="form-grid">
                 <TextField
                   label="Workspace root"

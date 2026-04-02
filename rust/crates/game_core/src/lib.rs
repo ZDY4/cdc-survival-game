@@ -61,7 +61,8 @@ pub use overworld::{
     OverworldStateSnapshot, OverworldTravelState, UnlockedLocationSet,
 };
 pub use runtime::{
-    action_result_status, RuntimeSnapshot, SimulationRuntime, RUNTIME_SNAPSHOT_SCHEMA_VERSION,
+    action_result_status, DropItemOutcome, RuntimeSnapshot, SimulationRuntime,
+    RUNTIME_SNAPSHOT_SCHEMA_VERSION,
 };
 pub use simulation::{
     ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
