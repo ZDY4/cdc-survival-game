@@ -12,6 +12,9 @@ import {
 import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   AgentActionResult,
+  AgentOption,
+  AgentPlanStep,
+  AgentQuestion,
   AiChatMessage,
   DocumentAgentSession,
   EditorMenuSelfTestScenario,
@@ -255,14 +258,61 @@ function summarizeResponseForChat(response: {
   providerError: string;
   summary: string;
   synthesisNotes: string[];
+  questions: AgentQuestion[];
+  options: AgentOption[];
+  planSteps: AgentPlanStep[];
 }) {
   const headline =
     response.providerError.trim() ||
     response.assistantMessage.trim() ||
     response.summary.trim() ||
     "AI 已返回结果。";
+  const sections = [headline];
+
+  if (!response.providerError.trim()) {
+    if (response.turnKind === "clarification" && response.questions.length) {
+      sections.push(
+        [
+          "还需要你补充这些信息：",
+          ...response.questions.map(
+            (question, index) => `${index + 1}. ${question.label}${question.required ? "（必填）" : ""}`,
+          ),
+        ].join("\n"),
+      );
+    }
+
+    if (response.turnKind === "options" && response.options.length) {
+      sections.push(
+        [
+          "我整理了这些可继续推进的方向：",
+          ...response.options.map((option, index) =>
+            [
+              `${index + 1}. **${option.label}**`,
+              option.description.trim() ? `   ${option.description.trim()}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          ),
+        ].join("\n"),
+      );
+    }
+
+    if (response.turnKind === "plan" && response.planSteps.length) {
+      sections.push(
+        [
+          "建议按这个计划继续：",
+          ...response.planSteps.map(
+            (step, index) => `${index + 1}. ${step.label}${step.status === "completed" ? "（已完成）" : ""}`,
+          ),
+        ].join("\n"),
+      );
+    }
+  }
+
   const notes = response.synthesisNotes.map((note) => note.trim()).filter(Boolean).slice(0, 2);
-  const sections = notes.length ? [headline, ...notes] : [headline];
+  if (notes.length) {
+    sections.push(["补充说明：", ...notes.map((note) => `- ${note}`)].join("\n"));
+  }
   const draftPreview = extractDraftPreview(response.draftMarkdown);
   const shouldAppendDraftPreview =
     !response.providerError.trim() &&
@@ -606,6 +656,18 @@ function MarkdownBlock({ markdown }: { markdown: string }) {
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
     </div>
   );
+}
+
+function ChatMessageContent({ message }: { message: AiChatMessage }) {
+  if (message.role === "assistant" || message.role === "context") {
+    return (
+      <div className="narrative-chat-markdown">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  return <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>;
 }
 
 export function NarrativeWorkspace({
@@ -3197,7 +3259,7 @@ export function NarrativeWorkspace({
                         <strong>{message.label}</strong>
                         {message.tone ? <Badge tone={message.tone}>{message.role}</Badge> : null}
                       </div>
-                      <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
+                      <ChatMessageContent message={message} />
                       {message.meta?.length ? (
                         <div className="toolbar-summary">
                           {message.meta.map((entry) => (
@@ -3240,25 +3302,19 @@ export function NarrativeWorkspace({
                       <Badge tone="accent">options</Badge>
                     </div>
                     <p style={{ whiteSpace: "pre-wrap" }}>选一个方向，我会在当前会话里继续推进。</p>
-                    <div className="toolbar-actions">
+                    <div className="narrative-option-list">
                       {pendingOptions.map((option) => (
                         <button
                           key={option.id}
                           type="button"
-                          className="toolbar-button"
+                          className="narrative-option-card"
                           disabled={activeSession.busy}
                           onClick={() => void runGeneration(option.followupPrompt)}
-                          title={option.description}
+                          title={option.followupPrompt || option.description}
                         >
-                          {option.label}
+                          <strong>{option.label}</strong>
+                          <span>{option.description || "选择这个方向继续推进当前会话。"}</span>
                         </button>
-                      ))}
-                    </div>
-                    <div className="toolbar-summary">
-                      {pendingOptions.map((option) => (
-                        <Badge key={`${option.id}-desc`} tone="muted">
-                          {option.label}: {option.description}
-                        </Badge>
                       ))}
                     </div>
                   </article>
