@@ -5,13 +5,15 @@ use thiserror::Error;
 use crate::{
     build_runtime_from_seed, debug_seed_characters_for_map, default_debug_seed,
     load_character_definitions, load_map_definitions, load_overworld_definitions,
-    load_runtime_startup_config, resolve_startup_map_id, CharacterDefinitions, MapDefinitions,
+    load_runtime_startup_config, resolve_startup_map_id,
+    validate_runtime_outdoor_transition_layout, CharacterDefinitions, MapDefinitions,
     OverworldDefinitions, RuntimeBuildError, RuntimeScenarioSeed, RuntimeStartupConfig,
     RuntimeStartupConfigError,
 };
 use game_core::SimulationRuntime;
 use game_data::{
-    CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapLoadError, OverworldLoadError,
+    CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapLoadError,
+    OutdoorTransitionTriggerLayoutValidationError, OverworldLoadError,
 };
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,8 @@ pub enum RuntimeBootstrapError {
     #[error(transparent)]
     DialogueRuleDefinitions(#[from] DialogueRuleLoadError),
     #[error(transparent)]
+    OutdoorTransitionTriggerLayout(#[from] OutdoorTransitionTriggerLayoutValidationError),
+    #[error(transparent)]
     RuntimeStartupConfig(#[from] RuntimeStartupConfigError),
     #[error(transparent)]
     RuntimeBuild(#[from] RuntimeBuildError),
@@ -46,10 +50,15 @@ pub fn load_runtime_bootstrap(
     overworld_path: impl AsRef<Path>,
     runtime_startup_config_path: impl AsRef<Path>,
 ) -> Result<RuntimeBootstrapBundle, RuntimeBootstrapError> {
+    let character_definitions = load_character_definitions(character_path)?;
+    let map_definitions = load_map_definitions(map_path)?;
+    let overworld_definitions = load_overworld_definitions(overworld_path)?;
+    validate_runtime_outdoor_transition_layout(&map_definitions, &overworld_definitions)?;
+
     Ok(RuntimeBootstrapBundle {
-        character_definitions: load_character_definitions(character_path)?,
-        map_definitions: load_map_definitions(map_path)?,
-        overworld_definitions: load_overworld_definitions(overworld_path)?,
+        character_definitions,
+        map_definitions,
+        overworld_definitions,
         runtime_startup_config: load_runtime_startup_config(runtime_startup_config_path)?,
     })
 }

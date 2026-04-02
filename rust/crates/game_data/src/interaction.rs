@@ -26,6 +26,7 @@ impl fmt::Display for InteractionOptionId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InteractionOptionKind {
+    Wait,
     Talk,
     Attack,
     Pickup,
@@ -255,6 +256,7 @@ pub struct InteractionExecutionResult {
 
 pub fn default_option_id_for_kind(kind: InteractionOptionKind) -> String {
     match kind {
+        InteractionOptionKind::Wait => "wait",
         InteractionOptionKind::Talk => "talk",
         InteractionOptionKind::Attack => "attack",
         InteractionOptionKind::Pickup => "pickup",
@@ -272,6 +274,7 @@ pub fn default_option_id_for_kind(kind: InteractionOptionKind) -> String {
 
 pub fn default_display_name_for_kind(kind: InteractionOptionKind) -> &'static str {
     match kind {
+        InteractionOptionKind::Wait => "等待",
         InteractionOptionKind::Talk => "Talk",
         InteractionOptionKind::Attack => "Attack",
         InteractionOptionKind::Pickup => "Pickup",
@@ -288,6 +291,7 @@ pub fn default_display_name_for_kind(kind: InteractionOptionKind) -> &'static st
 
 pub fn default_priority_for_kind(kind: InteractionOptionKind) -> i32 {
     match kind {
+        InteractionOptionKind::Wait => 950,
         InteractionOptionKind::Pickup => 900,
         InteractionOptionKind::OpenDoor => 880,
         InteractionOptionKind::CloseDoor => 880,

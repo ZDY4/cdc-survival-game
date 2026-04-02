@@ -120,9 +120,10 @@ const MIN_CHAT_PANEL_WIDTH = 320;
 const MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_DOCUMENT_PANEL_WIDTH = 360;
 const PANEL_SPLITTER_WIDTH = 12;
-const DEFAULT_LEFT_SIDEBAR_WIDTH = 280;
+const DEFAULT_LEFT_SIDEBAR_WIDTH = 240;
 const MIN_LEFT_SIDEBAR_WIDTH = 220;
 const MAX_LEFT_SIDEBAR_WIDTH = 520;
+const MAX_INITIAL_LEFT_SIDEBAR_RATIO = 0.28;
 const MIN_EDITOR_PANELS_WIDTH = MIN_CHAT_PANEL_WIDTH + PANEL_SPLITTER_WIDTH + MIN_DOCUMENT_PANEL_WIDTH;
 const SIDEBAR_RAIL_WIDTH = 40;
 const SIDEBAR_SPLITTER_WIDTH = 12;
@@ -501,7 +502,7 @@ function resolveInitialTabs(
       activeTabKey: activeDocumentKey,
     },
     leftSidebarCollapsed: persistedLayout.leftSidebarVisible === false,
-    leftSidebarWidth: persistedLayout.leftSidebarWidth || DEFAULT_LEFT_SIDEBAR_WIDTH,
+    leftSidebarWidth: resolveInitialLeftSidebarWidth(persistedLayout.leftSidebarWidth),
     chatPanelWidth: persistedLayout.chatPanelWidth,
     layoutSnapshot: JSON.stringify(persistedLayout),
   };
@@ -547,6 +548,27 @@ function clampLeftSidebarWidth(width: number, containerWidth: number) {
     ),
   );
   return Math.min(Math.max(width, MIN_LEFT_SIDEBAR_WIDTH), maxWidth);
+}
+
+function estimateMainPanelsWidth() {
+  if (typeof window === "undefined") {
+    return SIDEBAR_RAIL_WIDTH + SIDEBAR_SPLITTER_WIDTH + MIN_EDITOR_PANELS_WIDTH + DEFAULT_LEFT_SIDEBAR_WIDTH;
+  }
+
+  return Math.max(
+    SIDEBAR_RAIL_WIDTH + SIDEBAR_SPLITTER_WIDTH + MIN_EDITOR_PANELS_WIDTH + MIN_LEFT_SIDEBAR_WIDTH,
+    window.innerWidth - 48,
+  );
+}
+
+function resolveInitialLeftSidebarWidth(width: number | null | undefined) {
+  const mainPanelsWidth = estimateMainPanelsWidth();
+  const compactMaxWidth = Math.max(
+    DEFAULT_LEFT_SIDEBAR_WIDTH,
+    Math.min(MAX_LEFT_SIDEBAR_WIDTH, Math.floor(mainPanelsWidth * MAX_INITIAL_LEFT_SIDEBAR_RATIO)),
+  );
+  const requestedWidth = width && width > 0 ? width : DEFAULT_LEFT_SIDEBAR_WIDTH;
+  return clampLeftSidebarWidth(Math.min(requestedWidth, compactMaxWidth), mainPanelsWidth);
 }
 
 function MarkdownBlock({ markdown }: { markdown: string }) {
@@ -2564,11 +2586,6 @@ export function NarrativeWorkspace({
           style={editorPanelsStyle}
         >
         <section className="narrative-chat-panel">
-          <div className="narrative-pane-header">
-            <h3>AI</h3>
-            {activeSession?.busy ? <Badge tone="warning">生成中</Badge> : null}
-          </div>
-
           {pendingRestoreSessions ? (
             <div className="narrative-inline-banner">
               <span>{restoreStatus || "检测到上次保存的 Narrative Lab agent 会话。"}</span>
@@ -2591,92 +2608,90 @@ export function NarrativeWorkspace({
 
           {activeDocument && activeSession ? (
             <>
-              <div className="narrative-chat-toolbar">
-                <div className="narrative-chat-context-inline">
-                  <strong title={activeDocument.relativePath}>
-                    {activeDocument.meta.title || activeDocument.meta.slug}
-                  </strong>
-                </div>
-
-                <div className="segmented-control narrative-mode-switch">
-                  <button
-                    type="button"
-                    className={`segmented-control-item ${
-                      activeSession.mode === "revise_document" ? "segmented-control-item-active" : ""
-                    }`.trim()}
-                    onClick={() =>
-                      setDocumentAgents((current) =>
-                        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
-                          ...session,
-                          mode: "revise_document",
-                        })),
-                      )
-                    }
-                  >
-                    修改当前文档
-                  </button>
-                  <button
-                    type="button"
-                    className={`segmented-control-item ${
-                      activeSession.mode === "create" ? "segmented-control-item-active" : ""
-                    }`.trim()}
-                    onClick={() =>
-                      setDocumentAgents((current) =>
-                        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
-                          ...session,
-                          mode: "create",
-                        })),
-                      )
-                    }
-                  >
-                    生成新文档
-                  </button>
-                </div>
-              </div>
-
-              <div className="narrative-chat-context-strip">
-                <span className="narrative-chat-context-strip-label">当前对话上下文</span>
-                {selectedContextDocuments.length ? (
-                  selectedContextDocuments.map((document) => (
-                    <span
-                      key={`context-chip-${document.documentKey}`}
-                      className="narrative-context-chip"
-                      title={document.relativePath}
+              <div className="narrative-chat-sticky-topbar">
+                <div className="narrative-chat-topbar-row">
+                  <div className="segmented-control narrative-mode-switch">
+                    <button
+                      type="button"
+                      className={`segmented-control-item ${
+                        activeSession.mode === "revise_document" ? "segmented-control-item-active" : ""
+                      }`.trim()}
+                      onClick={() =>
+                        setDocumentAgents((current) =>
+                          updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
+                            ...session,
+                            mode: "revise_document",
+                          })),
+                        )
+                      }
                     >
-                      <span>{document.meta.title || document.meta.slug}</span>
-                      <button
-                        type="button"
-                        className="narrative-context-chip-remove"
-                        aria-label={`移除 ${document.meta.title || document.meta.slug}`}
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          removeContextDocument(document.documentKey);
-                        }}
-                      >
-                        x
-                      </button>
-                    </span>
-                  ))
-                ) : (
-                  <span className="narrative-chat-context-empty">当前仅使用主文稿上下文</span>
-                )}
-              </div>
+                      修改当前文档
+                    </button>
+                    <button
+                      type="button"
+                      className={`segmented-control-item ${
+                        activeSession.mode === "create" ? "segmented-control-item-active" : ""
+                      }`.trim()}
+                      onClick={() =>
+                        setDocumentAgents((current) =>
+                          updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
+                            ...session,
+                            mode: "create",
+                          })),
+                        )
+                      }
+                    >
+                      生成新文档
+                    </button>
+                  </div>
 
-              <div className="narrative-chat-meta-row">
-                <Badge tone="muted">{activeSession.mode === "create" ? "生成新文档" : "修改当前文档"}</Badge>
-                {activeSession.status === "waiting_user" ? <Badge tone="warning">等待你的补充</Badge> : null}
-                <button
-                  type="button"
-                  className="toolbar-button"
-                  onClick={() => void openOrFocusSettingsWindow("ai")}
-                >
-                  设置
-                </button>
+                  <div className="narrative-chat-topbar-actions">
+                    {activeSession.busy ? <Badge tone="warning">生成中</Badge> : null}
+                    {activeSession.status === "waiting_user" ? <Badge tone="warning">等待补充</Badge> : null}
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      onClick={() => void openOrFocusSettingsWindow("ai")}
+                    >
+                      设置
+                    </button>
+                  </div>
+                </div>
+
+                <div className="narrative-chat-context-strip narrative-chat-context-strip-compact">
+                  <span className="narrative-chat-context-strip-label">上下文</span>
+                  <div className="narrative-chat-context-strip-scroller">
+                    {selectedContextDocuments.length ? (
+                      selectedContextDocuments.map((document) => (
+                        <span
+                          key={`context-chip-${document.documentKey}`}
+                          className="narrative-context-chip"
+                          title={document.relativePath}
+                        >
+                          <span>{document.meta.title || document.meta.slug}</span>
+                          <button
+                            type="button"
+                            className="narrative-context-chip-remove"
+                            aria-label={`移除 ${document.meta.title || document.meta.slug}`}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              removeContextDocument(document.documentKey);
+                            }}
+                          >
+                            x
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="narrative-chat-context-empty">仅主文稿</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="narrative-chat-log">
@@ -2862,7 +2877,7 @@ export function NarrativeWorkspace({
                   <div className="toolbar-actions">
                     <button
                       type="button"
-                      className="toolbar-button toolbar-accent"
+                      className="toolbar-button toolbar-accent narrative-chat-send-button"
                       onClick={() => void runGeneration()}
                       disabled={activeSession.busy}
                     >
@@ -2890,7 +2905,29 @@ export function NarrativeWorkspace({
 
         <section className="narrative-document-panel">
           <div className="narrative-pane-header">
-            <h3>{activeDocument ? activeDocument.meta.title || activeDocument.meta.slug : "未选择文档"}</h3>
+            {activeDocument && activeSession ? (
+              <div className="segmented-control narrative-document-view-switch">
+                {(["preview", "edit"] as NarrativeDocumentViewMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`segmented-control-item ${
+                      activeSession.documentViewMode === mode ? "segmented-control-item-active" : ""
+                    }`.trim()}
+                    onClick={() =>
+                      setDocumentAgents((current) =>
+                        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
+                          ...session,
+                          documentViewMode: mode,
+                        })),
+                      )
+                    }
+                  >
+                    {mode === "preview" ? "预览" : "编辑"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {activeDocument ? (
               <Badge tone={activeDocument.dirty ? "warning" : "success"}>
                 {activeDocument.dirty ? "未保存" : "已保存"}
@@ -2900,44 +2937,25 @@ export function NarrativeWorkspace({
 
           {activeDocument && activeSession ? (
             <>
-              <div className="narrative-document-toolbar">
-                <input
-                  className="field-input narrative-document-title"
-                  type="text"
-                  value={activeDocument.meta.title}
-                  onChange={(event) =>
-                    updateDocumentState(activeDocument.documentKey, (document) => ({
-                      ...document,
-                      meta: {
-                        ...document.meta,
-                        title: event.target.value,
-                      },
-                    }))
-                  }
-                  placeholder="文档标题"
-                />
-                <div className="segmented-control">
-                  {(["preview", "edit"] as NarrativeDocumentViewMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className={`segmented-control-item ${
-                        activeSession.documentViewMode === mode ? "segmented-control-item-active" : ""
-                      }`.trim()}
-                      onClick={() =>
-                        setDocumentAgents((current) =>
-                          updateDocumentAgentSession(current, activeDocument.documentKey, (session) => ({
-                            ...session,
-                            documentViewMode: mode,
-                          })),
-                        )
-                      }
-                    >
-                      {mode === "preview" ? "预览" : "编辑"}
-                    </button>
-                  ))}
+              {activeSession.documentViewMode === "edit" ? (
+                <div className="narrative-document-toolbar">
+                  <input
+                    className="field-input narrative-document-title"
+                    type="text"
+                    value={activeDocument.meta.title}
+                    onChange={(event) =>
+                      updateDocumentState(activeDocument.documentKey, (document) => ({
+                        ...document,
+                        meta: {
+                          ...document.meta,
+                          title: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="文档标题"
+                  />
                 </div>
-              </div>
+              ) : null}
 
               {activeSession.documentViewMode === "edit" ? (
                 <textarea

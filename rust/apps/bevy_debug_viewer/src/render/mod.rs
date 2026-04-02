@@ -31,13 +31,12 @@ use crate::geometry::{
     HoveredGridOutlineKind, OcclusionFocusPoint,
 };
 use crate::state::{
-    ActorLabel, ActorLabelEntities, DialogueChoiceButton, DialoguePanelRoot, FpsOverlayText,
-    FreeObserveIndicatorRoot, HudFooterText, HudTabBarRoot, HudTabButton, HudText,
+    ActorLabel, ActorLabelEntities, DialogueChoiceButton, DialoguePanelRoot,
     InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot, InteractionMenuState,
     UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
-    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerHudPage,
-    ViewerOverlayMode, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
-    ViewerState, ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
+    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode,
+    ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
 };
 
 const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;

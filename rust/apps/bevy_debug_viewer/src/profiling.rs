@@ -8,8 +8,8 @@ use bevy::ui::{ComputedNode, RelativeCursorPosition, UiGlobalTransform};
 use crate::game_ui::{GameContentRefs, GameUiViewState};
 use crate::state::{
     ActorLabelEntities, GameUiRoot, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
-    ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
-    ViewerStyleProfile, ViewerUiFont,
+    ViewerHudPage, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState,
+    ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiFont,
 };
 
 const SYSTEM_TIMING_SMOOTHING_ALPHA: f64 = 0.18;
@@ -90,15 +90,15 @@ fn elapsed_ms(start: Instant) -> f64 {
     start.elapsed().as_secs_f64() * 1000.0
 }
 
-fn should_profile(viewer_state: &ViewerState) -> bool {
-    viewer_state.hud_page.profiles_systems()
+fn should_profile(info_panel_state: &ViewerInfoPanelState) -> bool {
+    info_panel_state.active_page() == Some(ViewerHudPage::Performance)
 }
 
 pub(crate) fn sync_profiler_activation(
-    viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
-    profiler.sync_enabled(should_profile(&viewer_state));
+    profiler.sync_enabled(should_profile(&info_panel_state));
 }
 
 #[derive(SystemParam)]
@@ -136,9 +136,10 @@ pub(crate) fn profiled_tick_runtime(
     runtime_state: ResMut<ViewerRuntimeState>,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::simulation::tick_runtime(runtime_state, Some(scene_kind), viewer_state);
     if let Some(start) = start {
@@ -150,9 +151,10 @@ pub(crate) fn profiled_advance_runtime_progression(
     time: Res<Time>,
     runtime_state: ResMut<ViewerRuntimeState>,
     viewer_state: ResMut<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::simulation::advance_runtime_progression(time, runtime_state, viewer_state);
     if let Some(start) = start {
@@ -171,6 +173,7 @@ pub(crate) fn profiled_sync_world_visuals(
     motion_state: Res<ViewerActorMotionState>,
     feedback_state: Res<ViewerActorFeedbackState>,
     viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     render_config: Res<ViewerRenderConfig>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
@@ -183,7 +186,7 @@ pub(crate) fn profiled_sync_world_visuals(
         );
         return;
     }
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::render::sync_world_visuals(
         params.commands,
@@ -215,6 +218,7 @@ pub(crate) fn profiled_update_occluding_world_visuals(
     scene_kind: Res<ViewerSceneKind>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     console_state: Res<crate::console::ViewerConsoleState>,
     render_config: Res<ViewerRenderConfig>,
     window: Single<&Window>,
@@ -229,7 +233,7 @@ pub(crate) fn profiled_update_occluding_world_visuals(
     if scene_kind.is_main_menu() {
         return;
     }
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::render::update_occluding_world_visuals(
         runtime_state,
@@ -257,6 +261,7 @@ pub(crate) fn profiled_sync_actor_labels(
     scene_kind: Res<ViewerSceneKind>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     palette: Res<ViewerPalette>,
     render_config: Res<ViewerRenderConfig>,
     viewer_font: Res<ViewerUiFont>,
@@ -277,7 +282,7 @@ pub(crate) fn profiled_sync_actor_labels(
         crate::render::clear_actor_labels(commands, label_entities);
         return;
     }
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::render::sync_actor_labels(
         commands,
@@ -305,10 +310,11 @@ pub(crate) fn profiled_update_game_ui(
     font: Res<ViewerUiFont>,
     ui: GameUiViewState,
     content: GameContentRefs,
-    viewer_state: Res<ViewerState>,
+    _viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::game_ui::update_game_ui(
         commands,
@@ -335,6 +341,7 @@ pub(crate) fn profiled_draw_world(
     settlements: Option<Res<game_bevy::SettlementDefinitions>>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     render_config: Res<ViewerRenderConfig>,
     window: Single<&Window>,
     ui_blockers: Query<
@@ -351,7 +358,7 @@ pub(crate) fn profiled_draw_world(
     if scene_kind.is_main_menu() {
         return;
     }
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::render::draw_world(
         time,
@@ -375,7 +382,8 @@ pub(crate) fn profiled_sync_damage_numbers(
     commands: Commands,
     time: Res<Time>,
     scene_kind: Res<ViewerSceneKind>,
-    viewer_state: Res<ViewerState>,
+    _viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     viewer_font: Res<ViewerUiFont>,
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     damage_numbers: ResMut<crate::state::ViewerDamageNumberState>,
@@ -395,7 +403,7 @@ pub(crate) fn profiled_sync_damage_numbers(
         crate::render::clear_damage_numbers(commands, damage_numbers, visual_state);
         return;
     }
-    let should_record = should_profile(&viewer_state);
+    let should_record = should_profile(&info_panel_state);
     let start = should_record.then(Instant::now);
     crate::render::sync_damage_numbers(
         commands,
@@ -414,7 +422,7 @@ pub(crate) fn profiled_sync_damage_numbers(
 #[cfg(test)]
 mod tests {
     use super::{should_profile, ViewerSystemProfilerState};
-    use crate::state::{ViewerHudPage, ViewerState};
+    use crate::state::{ViewerHudPage, ViewerInfoPanelState};
 
     #[test]
     fn top_entries_sort_by_smoothed_cost() {
@@ -446,10 +454,10 @@ mod tests {
 
     #[test]
     fn should_profile_only_on_performance_page() {
-        let mut viewer_state = ViewerState::default();
-        assert!(!should_profile(&viewer_state));
+        let mut info_panel_state = ViewerInfoPanelState::default();
+        assert!(!should_profile(&info_panel_state));
 
-        viewer_state.hud_page = ViewerHudPage::Performance;
-        assert!(should_profile(&viewer_state));
+        info_panel_state.toggle(ViewerHudPage::Performance);
+        assert!(should_profile(&info_panel_state));
     }
 }

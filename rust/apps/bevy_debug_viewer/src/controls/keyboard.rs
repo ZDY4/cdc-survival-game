@@ -7,6 +7,7 @@ pub(crate) fn handle_keyboard_input(
     time: Res<Time>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
+    mut info_panel_state: ResMut<ViewerInfoPanelState>,
     mut render_config: ResMut<ViewerRenderConfig>,
     mut menu_state: ResMut<UiMenuState>,
     mut modal_state: ResMut<UiModalState>,
@@ -142,19 +143,6 @@ pub(crate) fn handle_keyboard_input(
         return;
     }
 
-    if let Some(page) = just_pressed_hud_page(&keys) {
-        set_hud_page(&mut viewer_state, page);
-    }
-
-    if keys.just_pressed(KeyCode::KeyH) {
-        viewer_state.show_hud = !viewer_state.show_hud;
-        viewer_state.status_line = if viewer_state.show_hud {
-            "hud: visible".to_string()
-        } else {
-            "hud: hidden".to_string()
-        };
-    }
-
     if keys.just_pressed(KeyCode::KeyV) {
         render_config.overlay_mode = render_config.overlay_mode.next();
         viewer_state.status_line = format!("overlay: {}", render_config.overlay_mode.label());
@@ -169,22 +157,23 @@ pub(crate) fn handle_keyboard_input(
         };
     }
 
-    if viewer_state.hud_page == ViewerHudPage::Events {
+    if info_panel_state.enabled_pages().len() > 1 {
         if keys.just_pressed(KeyCode::BracketLeft) {
-            viewer_state.event_filter = viewer_state.event_filter.previous();
-            viewer_state.status_line =
-                format!("events filter: {}", viewer_state.event_filter.label());
+            if let Some(page) = info_panel_state.cycle_previous() {
+                viewer_state.status_line = format!("info panel: {}", page.title());
+            }
         }
 
         if keys.just_pressed(KeyCode::BracketRight) {
-            viewer_state.event_filter = viewer_state.event_filter.next();
-            viewer_state.status_line =
-                format!("events filter: {}", viewer_state.event_filter.label());
+            if let Some(page) = info_panel_state.cycle_next() {
+                viewer_state.status_line = format!("info panel: {}", page.title());
+            }
         }
     }
 
+    let snapshot = runtime_state.runtime.snapshot();
     let selected_actor_locked = viewer_state
-        .selected_actor
+        .command_actor_id(&snapshot)
         .filter(|_| viewer_state.can_issue_player_commands())
         .map(|actor_id| viewer_state.is_actor_interaction_locked(&runtime_state, actor_id))
         .unwrap_or(false);
@@ -216,7 +205,6 @@ pub(crate) fn handle_keyboard_input(
         viewer_state.status_line = "camera: following selected actor".to_string();
     }
 
-    let snapshot = runtime_state.runtime.snapshot();
     if keys.just_pressed(KeyCode::PageUp) {
         if let Some(next_level) = cycle_level(&snapshot.grid.levels, viewer_state.current_level, -1)
         {
@@ -258,7 +246,7 @@ pub(crate) fn handle_keyboard_input(
             .collect();
         if !actor_ids.is_empty() {
             let next_index = viewer_state
-                .selected_actor
+                .focus_actor_id(&snapshot)
                 .and_then(|selected| actor_ids.iter().position(|actor_id| *actor_id == selected))
                 .map(|index| (index + 1) % actor_ids.len())
                 .unwrap_or(0);

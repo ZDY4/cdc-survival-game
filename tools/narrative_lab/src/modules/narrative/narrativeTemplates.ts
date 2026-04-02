@@ -1,6 +1,7 @@
 import type { NarrativeDocType, NarrativeDocTypeEntry, NarrativeDocumentMeta } from "../../types";
 
 export const NARRATIVE_DOC_TYPES: NarrativeDocTypeEntry[] = [
+  { value: "world_bible", label: "世界观手册", directory: "world" },
   { value: "task_setup", label: "任务设定", directory: "tasks" },
   { value: "location_note", label: "地点设定", directory: "locations" },
   { value: "character_card", label: "人物设定", directory: "characters" },
@@ -22,6 +23,7 @@ export function defaultNarrativeTitle(docType: NarrativeDocType): string {
 
 export function docTypeSummary(docType: NarrativeDocType): string {
   const summaries: Record<NarrativeDocType, string> = {
+    world_bible: "沉淀世界状态、关键规则、典型地点与长期冲突背景。",
     task_setup: "梳理任务目标、推进阶段、关键选择与回收条件。",
     location_note: "沉淀地点背景、区域功能、危险与可探索内容。",
     character_card: "沉淀角色动机、秘密、关系与任务挂钩。",
@@ -35,6 +37,13 @@ export function docTypeSummary(docType: NarrativeDocType): string {
 export function defaultNarrativeMarkdown(docType: NarrativeDocType, title = defaultNarrativeTitle(docType)): string {
   const heading = `# ${title}`;
   const sections: Record<NarrativeDocType, string[]> = {
+    world_bible: [
+      "## 世界状态\n描述灾变后的世界现状、秩序、资源与危险。",
+      "## 关键规则\n记录会影响叙事和玩法的世界规则。",
+      "## 典型地点\n列出主要区域、氛围、可探索内容和故事功能。",
+      "## 典型冲突\n总结这个世界中反复出现的矛盾类型。",
+      "## 结构化落地提示\n可拆为地点资料、背景线索、区域任务池、环境对白。",
+    ],
     task_setup: [
       "## 任务目标\n说明玩家为什么要做这件事，以及完成后会改变什么。",
       "## 前置条件\n列出任务开启前必须满足的状态、关系、地点或物品条件。",

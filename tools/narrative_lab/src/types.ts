@@ -426,6 +426,7 @@ export type AiGenerationResponse<TRecord = Record<string, unknown>> = {
 };
 
 export type NarrativeDocType =
+  | "world_bible"
   | "task_setup"
   | "location_note"
   | "character_card"

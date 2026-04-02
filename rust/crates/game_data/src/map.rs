@@ -1277,6 +1277,7 @@ fn is_scene_transition_kind(kind: InteractionOptionKind) -> bool {
 
 fn parse_legacy_interaction_kind(value: &str) -> Option<InteractionOptionKind> {
     match value.trim() {
+        "wait" => Some(InteractionOptionKind::Wait),
         "talk" => Some(InteractionOptionKind::Talk),
         "attack" => Some(InteractionOptionKind::Attack),
         "pickup" => Some(InteractionOptionKind::Pickup),
@@ -1332,7 +1333,8 @@ fn validate_interaction_option(
                 });
             }
         }
-        InteractionOptionKind::Talk
+        InteractionOptionKind::Wait
+        | InteractionOptionKind::Talk
         | InteractionOptionKind::Attack
         | InteractionOptionKind::OpenDoor
         | InteractionOptionKind::CloseDoor

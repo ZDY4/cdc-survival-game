@@ -4069,6 +4069,68 @@ mod tests {
     }
 
     #[test]
+    fn self_interaction_prompt_exposes_wait_as_primary_option() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let prompt = simulation
+            .query_interaction_options(player, &InteractionTargetId::Actor(player))
+            .expect("player should be able to interact with self");
+
+        assert_eq!(prompt.options.len(), 1);
+        assert_eq!(prompt.options[0].kind, InteractionOptionKind::Wait);
+        assert_eq!(prompt.options[0].display_name, "等待");
+        assert_eq!(prompt.primary_option_id, Some(InteractionOptionId("wait".into())));
+    }
+
+    #[test]
+    fn self_wait_interaction_ends_turn_without_spending_ap() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::Actor(player),
+            option_id: InteractionOptionId("wait".into()),
+        });
+
+        assert!(result.success);
+        let action = result.action_result.expect("wait should yield an action result");
+        assert_eq!(action.ap_before, 1.0);
+        assert_eq!(action.ap_after, 1.0);
+        assert_eq!(action.consumed, 0.0);
+        assert!(!simulation.actor_turn_open(player));
+        assert_eq!(
+            advance_next_progression(&mut simulation),
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert_eq!(
+            advance_next_progression(&mut simulation),
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+    }
+
+    #[test]
     fn pickup_interaction_grants_inventory_and_consumes_target() {
         let mut simulation = Simulation::new();
         simulation

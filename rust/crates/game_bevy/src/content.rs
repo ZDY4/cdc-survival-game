@@ -10,13 +10,14 @@ use game_data::{
     load_ai_module_library, load_character_library, load_dialogue_library,
     load_dialogue_rule_library, load_effect_library, load_item_library, load_map_library,
     load_overworld_library, load_quest_library, load_recipe_library, load_settlement_library,
-    load_shop_library, load_skill_library, load_skill_tree_library, AiModuleLibrary,
-    AiModuleLoadError, CharacterLibrary, CharacterLoadError, DialogueLibrary, DialogueLoadError,
-    DialogueRuleLibrary, DialogueRuleLoadError, EffectLibrary, EffectLoadError, ItemLibrary,
-    ItemLoadError, MapId, MapLibrary, MapLoadError, OverworldLibrary, OverworldLoadError,
-    QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError, SettlementLibrary,
-    SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary, SkillLoadError,
-    SkillTreeLibrary, SkillTreeLoadError,
+    load_shop_library, load_skill_library, load_skill_tree_library,
+    validate_outdoor_transition_trigger_layout, AiModuleLibrary, AiModuleLoadError,
+    CharacterLibrary, CharacterLoadError, DialogueLibrary, DialogueLoadError, DialogueRuleLibrary,
+    DialogueRuleLoadError, EffectLibrary, EffectLoadError, ItemLibrary, ItemLoadError, MapId,
+    MapLibrary, MapLoadError, OutdoorTransitionTriggerLayoutValidationError, OverworldLibrary,
+    OverworldLoadError, QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError,
+    SettlementLibrary, SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary,
+    SkillLoadError, SkillTreeLibrary, SkillTreeLoadError,
 };
 use thiserror::Error;
 
@@ -318,7 +319,12 @@ impl Plugin for RuntimeContentPlugin {
             )
             .add_systems(
                 Startup,
-                finalize_runtime_content_load_state.in_set(RuntimeContentStartupSet::Finalize),
+                (
+                    validate_outdoor_transition_trigger_layout_on_startup,
+                    finalize_runtime_content_load_state,
+                )
+                    .chain()
+                    .in_set(RuntimeContentStartupSet::Finalize),
             );
     }
 }
@@ -453,6 +459,13 @@ pub fn load_runtime_startup_config(
         message: error.to_string(),
     })?;
     parse_runtime_startup_config(&raw)
+}
+
+pub fn validate_runtime_outdoor_transition_layout(
+    maps: &MapDefinitions,
+    overworld: &OverworldDefinitions,
+) -> Result<(), OutdoorTransitionTriggerLayoutValidationError> {
+    validate_outdoor_transition_trigger_layout(&maps.0, &overworld.0)
 }
 
 pub fn apply_gameplay_libraries(
@@ -698,6 +711,19 @@ fn finalize_runtime_content_load_state(mut state: ResMut<RuntimeContentLoadState
         state.status = RuntimeContentLoadStatus::Ready;
     } else {
         state.status = RuntimeContentLoadStatus::Failed;
+    }
+}
+
+fn validate_outdoor_transition_trigger_layout_on_startup(
+    maps: Option<Res<MapDefinitions>>,
+    overworld: Option<Res<OverworldDefinitions>>,
+    mut state: ResMut<RuntimeContentLoadState>,
+) {
+    let (Some(maps), Some(overworld)) = (maps, overworld) else {
+        return;
+    };
+    if let Err(error) = validate_runtime_outdoor_transition_layout(&maps, &overworld) {
+        state.record_failure("outdoor_transition_trigger_layout", error.to_string());
     }
 }
 

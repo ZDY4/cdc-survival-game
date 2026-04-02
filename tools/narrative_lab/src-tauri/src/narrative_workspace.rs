@@ -279,11 +279,7 @@ pub fn open_narrative_document_folder(
     let workspace_root_path = resolve_workspace_root(&workspace_root)?;
     let document = find_document_by_slug(&workspace_root_path, &slug)?
         .ok_or_else(|| format!("未找到文稿: {slug}"))?;
-    let path = narrative_file_path(
-        &workspace_root_path,
-        &document.meta.doc_type,
-        &document.meta.slug,
-    )?;
+    let path = workspace_root_path.join(document.relative_path.replace('/', std::path::MAIN_SEPARATOR_STR));
     let folder = path
         .parent()
         .ok_or_else(|| format!("无法定位文稿目录: {}", path.display()))?;
@@ -310,7 +306,7 @@ pub fn summarize_narrative_document(
 fn open_in_file_manager(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let mut command = {
-        let mut command = Command::new("explorer");
+        let mut command = Command::new("explorer.exe");
         command.arg(path);
         command
     };

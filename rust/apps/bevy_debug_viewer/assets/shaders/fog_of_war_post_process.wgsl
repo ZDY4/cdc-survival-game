@@ -42,12 +42,16 @@ fn sample_soft_mask(mask_texture: texture_2d<f32>, uv: vec2<f32>) -> f32 {
         settings.mask_texel_size,
         vec2<f32>(settings.edge_softness_and_padding.x, settings.edge_softness_and_padding.x),
     );
+    let dominant_texel = max(settings.mask_texel_size.x, settings.mask_texel_size.y);
+    let softness = settings.edge_softness_and_padding.x;
+    let softness_t = clamp(softness / max(dominant_texel, 0.00001), 0.0, 1.0);
     let center = textureSampleLevel(mask_texture, mask_sampler, uv, 0.0).r;
     let north = textureSampleLevel(mask_texture, mask_sampler, uv + vec2<f32>(0.0, -offset.y), 0.0).r;
     let south = textureSampleLevel(mask_texture, mask_sampler, uv + vec2<f32>(0.0, offset.y), 0.0).r;
     let east = textureSampleLevel(mask_texture, mask_sampler, uv + vec2<f32>(offset.x, 0.0), 0.0).r;
     let west = textureSampleLevel(mask_texture, mask_sampler, uv + vec2<f32>(-offset.x, 0.0), 0.0).r;
-    return center * 0.4 + (north + south + east + west) * 0.15;
+    let softened = center * 0.7 + (north + south + east + west) * 0.075;
+    return mix(center, softened, softness_t);
 }
 
 fn fog_alpha_from_mask(mask_value: f32) -> f32 {

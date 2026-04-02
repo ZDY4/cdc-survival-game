@@ -37,6 +37,7 @@ pub(super) fn action_button(
             padding: UiRect::axes(px(10), px(7)),
             margin: UiRect::bottom(px(4)),
             border: UiRect::all(px(1)),
+            align_items: AlignItems::Center,
             ..default()
         },
         BackgroundColor(interaction_menu_button_color(false, Interaction::None)),

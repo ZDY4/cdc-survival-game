@@ -35,9 +35,9 @@ pub(crate) use camera::{
 };
 #[allow(unused_imports)]
 pub(crate) use occlusion::{
-    focused_target_summary, format_optional_grid, hovered_grid_outline_kind, just_pressed_hud_page,
-    movement_block_reasons, occluder_blocks_target, resolve_occlusion_focus_points,
-    resolve_occlusion_target, sight_block_reasons,
+    focused_target_summary, hovered_grid_outline_kind, movement_block_reasons,
+    occluder_blocks_target, resolve_occlusion_focus_points, resolve_occlusion_target,
+    sight_block_reasons,
 };
 #[allow(unused_imports)]
 pub(crate) use picking::{
@@ -58,13 +58,13 @@ mod tests {
         actor_hit_at_ray, actor_label, camera_focus_point, camera_pan_delta_from_ground_drag,
         camera_world_distance, clamp_camera_pan_offset, cycle_level,
         generated_door_object_hit_at_ray, grid_bounds, grid_focus_world_position,
-        hovered_grid_outline_kind, just_pressed_hud_page, level_plane_height,
-        map_object_hit_at_ray, movement_block_reasons, occluder_blocks_target, pick_grid_from_ray,
-        rendered_path_preview, resolve_occlusion_focus_points, resolve_occlusion_target,
+        hovered_grid_outline_kind, level_plane_height, map_object_hit_at_ray,
+        movement_block_reasons, occluder_blocks_target, pick_grid_from_ray, rendered_path_preview,
+        resolve_occlusion_focus_points, resolve_occlusion_target,
         segment_aabb_intersection_fraction, should_rebuild_static_world, visible_world_footprint,
         GridBounds, HoveredGridOutlineKind, OcclusionFocusPoint,
     };
-    use crate::state::{ViewerHudPage, ViewerRenderConfig, ViewerState};
+    use crate::state::{ViewerRenderConfig, ViewerState};
     use crate::test_support::actor_debug_state_fixture;
     use bevy::prelude::*;
     use game_core::{
@@ -85,17 +85,6 @@ mod tests {
         let grid = pick_grid_from_ray(ray, 1, 1.0, level_plane_height(1, 1.0));
 
         assert_eq!(grid, Some(GridCoord::new(2, 1, 3)));
-    }
-
-    #[test]
-    fn hud_page_shortcut_maps_f7_to_performance() {
-        let mut keys = ButtonInput::<KeyCode>::default();
-        keys.press(KeyCode::F7);
-
-        assert_eq!(
-            just_pressed_hud_page(&keys),
-            Some(ViewerHudPage::Performance)
-        );
     }
 
     #[test]
@@ -881,6 +870,104 @@ mod tests {
         .expect("ray should hit generated door volume");
 
         assert_eq!(hit.0.object_id, "door");
+    }
+
+    #[test]
+    fn map_object_ray_pick_prefers_generated_door_over_parent_building() {
+        let building_cells = (0..=2)
+            .flat_map(|x| (0..=2).map(move |z| GridCoord::new(x, 0, z)))
+            .collect::<Vec<_>>();
+        let snapshot = SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: Vec::new(),
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(6),
+                map_height: Some(6),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: building_cells.clone(),
+                map_cells: Vec::new(),
+                map_objects: vec![
+                    MapObjectDebugState {
+                        object_id: "building".into(),
+                        kind: MapObjectKind::Building,
+                        anchor: GridCoord::new(0, 0, 0),
+                        footprint: MapObjectFootprint {
+                            width: 3,
+                            height: 3,
+                        },
+                        rotation: MapRotation::North,
+                        blocks_movement: false,
+                        blocks_sight: false,
+                        occupied_cells: building_cells,
+                        payload_summary: BTreeMap::new(),
+                    },
+                    MapObjectDebugState {
+                        object_id: "door".into(),
+                        kind: MapObjectKind::Interactive,
+                        anchor: GridCoord::new(1, 0, 1),
+                        footprint: MapObjectFootprint::default(),
+                        rotation: MapRotation::East,
+                        blocks_movement: true,
+                        blocks_sight: true,
+                        occupied_cells: vec![GridCoord::new(1, 0, 1)],
+                        payload_summary: BTreeMap::from([
+                            ("generated_door".to_string(), "true".to_string()),
+                            ("building_object_id".to_string(), "building".to_string()),
+                        ]),
+                    },
+                ],
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            vision: Default::default(),
+            generated_buildings: Vec::new(),
+            generated_doors: vec![GeneratedDoorDebugState {
+                door_id: "door".into(),
+                map_object_id: "door".into(),
+                building_object_id: "building".into(),
+                building_anchor: GridCoord::new(0, 0, 0),
+                level: 0,
+                opening_id: 0,
+                anchor_grid: GridCoord::new(1, 0, 1),
+                axis: GeometryAxis::Vertical,
+                kind: DoorOpeningKind::Exterior,
+                polygon: GeometryPolygon2 {
+                    outer: vec![
+                        GeometryPoint2::new(1.2, 1.0),
+                        GeometryPoint2::new(1.8, 1.0),
+                        GeometryPoint2::new(1.8, 2.0),
+                        GeometryPoint2::new(1.2, 2.0),
+                    ],
+                    holes: Vec::new(),
+                },
+                wall_height: 1.5,
+                is_open: false,
+                is_locked: false,
+            }],
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot::default(),
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        };
+        let ray = Ray3d::new(
+            Vec3::new(1.5, 0.9, -2.0),
+            Dir3::new(Vec3::new(0.0, 0.0, 1.0)).expect("ray direction should be valid"),
+        );
+
+        let (hit, _) = map_object_hit_at_ray(&snapshot, 0, ray, ViewerRenderConfig::default())
+            .expect("ray should prefer the generated door hit");
+
+        assert_eq!(hit.object_id, "door");
     }
 
     #[test]

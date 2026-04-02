@@ -193,34 +193,36 @@ pub(crate) fn draw_world(
         }
     }
 
-    if let Some(actor) = snapshot
-        .actors
-        .iter()
-        .find(|actor| Some(actor.actor_id) == viewer_state.selected_actor)
-    {
-        let actor_world = actor_visual_world_position(&runtime_state, &motion_state, actor);
-        draw_actor_selection_ring(
-            &mut gizmos,
-            actor_world,
-            actor.grid_position.y,
-            snapshot.grid.grid_size,
-            *render_config,
-            actor_selection_ring_color(actor.side, &palette),
-            1.0 + pulse * 0.08,
-        );
-        if overlay_mode == ViewerOverlayMode::AiDebug {
-            if let Some(entry) = selected_ai_debug_entry(actor, &runtime_state) {
-                draw_selected_ai_overlay(
-                    &mut gizmos,
-                    &palette,
-                    &runtime_state,
-                    &snapshot,
-                    settlements.as_deref(),
-                    actor,
-                    actor_world,
-                    entry,
-                    *render_config,
-                );
+    if let Some(focused_actor_id) = viewer_state.focus_actor_id(&snapshot) {
+        if let Some(actor) = snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == focused_actor_id)
+        {
+            let actor_world = actor_visual_world_position(&runtime_state, &motion_state, actor);
+            draw_actor_selection_ring(
+                &mut gizmos,
+                actor_world,
+                actor.grid_position.y,
+                snapshot.grid.grid_size,
+                *render_config,
+                actor_selection_ring_color(actor.side, &palette),
+                1.0 + pulse * 0.08,
+            );
+            if overlay_mode == ViewerOverlayMode::AiDebug {
+                if let Some(entry) = selected_ai_debug_entry(actor, &runtime_state) {
+                    draw_selected_ai_overlay(
+                        &mut gizmos,
+                        &palette,
+                        &runtime_state,
+                        &snapshot,
+                        settlements.as_deref(),
+                        actor,
+                        actor_world,
+                        entry,
+                        *render_config,
+                    );
+                }
             }
         }
     }

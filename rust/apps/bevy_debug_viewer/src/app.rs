@@ -22,7 +22,7 @@ use crate::game_ui::{
     load_ui_settings_on_startup, save_ui_settings_system, setup_game_ui, sync_game_ui_state,
     tick_hotbar_cooldowns, update_hover_tooltip_state,
 };
-use crate::hud::update_free_observe_indicator;
+use crate::info_panels::update_free_observe_indicator;
 use crate::profiling::{
     profiled_advance_runtime_progression, profiled_draw_world, profiled_sync_actor_labels,
     profiled_sync_damage_numbers, profiled_sync_world_visuals, profiled_tick_runtime,
@@ -42,9 +42,9 @@ use crate::simulation::{
 use crate::state::{
     ActorLabelEntities, UiHoverTooltipState, UiInventoryContextMenuState, ViewerActorFeedbackState,
     ViewerActorMotionState, ViewerCameraFollowState, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiSettings,
-    ViewerUiSettingsPath,
+    ViewerDamageNumberState, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig,
+    ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
+    ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 pub(crate) fn run() {
@@ -90,6 +90,7 @@ pub(crate) fn run() {
         .insert_resource(ViewerRuntimeSavePath::default())
         .insert_resource(UiHoverTooltipState::default())
         .insert_resource(UiInventoryContextMenuState::default())
+        .insert_resource(ViewerInfoPanelState::default())
         .insert_resource(ViewerConsoleState::default())
         .insert_resource(ViewerSystemProfilerState::default())
         .insert_resource(ViewerVisionTrackerState::default())
@@ -198,7 +199,7 @@ impl Plugin for ViewerAppPlugin {
                 handle_mouse_wheel_zoom,
                 handle_camera_pan,
                 handle_mouse_input,
-                crate::hud::handle_hud_tab_buttons,
+                crate::info_panels::handle_info_panel_tab_buttons,
                 handle_interaction_menu_buttons,
                 handle_dialogue_choice_buttons,
                 handle_inventory_panel_pointer_input,
@@ -241,9 +242,9 @@ impl Plugin for ViewerAppPlugin {
             Update,
             (
                 update_free_observe_indicator,
-                crate::hud::update_hud_tab_bar,
-                crate::hud::update_hud,
-                crate::hud::update_fps_overlay,
+                crate::info_panels::update_info_panel_tab_bar,
+                crate::info_panels::update_info_panel,
+                crate::info_panels::update_fps_overlay,
                 update_console_panel,
                 update_hover_tooltip_state,
                 profiled_update_game_ui,

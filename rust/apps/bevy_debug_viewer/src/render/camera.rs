@@ -1,6 +1,7 @@
 //! Viewer 相机与基础场景入口：负责相机、灯光、UI 根节点初始化以及相机跟随更新。
 
 use super::*;
+use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
 
 pub(crate) fn setup_viewer(
@@ -81,109 +82,7 @@ pub(crate) fn setup_viewer(
         Transform::from_xyz(15.0, 10.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
         FillLight,
     ));
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(74),
-                left: px(16),
-                width: px(430),
-                padding: UiRect::all(px(8)),
-                column_gap: px(6),
-                flex_wrap: FlexWrap::Wrap,
-                ..default()
-            },
-            BackgroundColor(palette.hud_panel_background),
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
-            HudTabBarRoot,
-            UiMouseBlocker,
-        ))
-        .with_children(|parent| {
-            for page in ViewerHudPage::ALL {
-                parent.spawn((
-                    Button,
-                    Node {
-                        padding: UiRect::axes(px(8), px(5)),
-                        border: UiRect::all(px(1)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.11, 0.13, 0.17, 0.94)),
-                    BorderColor::all(Color::srgba(0.19, 0.24, 0.32, 1.0)),
-                    HudTabButton { page },
-                    Text::new(page.tab_label().to_string()),
-                    TextFont::from_font_size(10.5).with_font(ui_font.clone()),
-                    TextColor(Color::WHITE),
-                ));
-            }
-        });
-    commands
-        .spawn((
-            Text::new(""),
-            TextFont::from_font_size(11.2).with_font(ui_font.clone()),
-            TextLayout::new(Justify::Left, LineBreak::WordBoundary),
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(118),
-                left: px(16),
-                width: px(430),
-                bottom: px(188),
-                padding: UiRect::all(px(12)),
-                overflow: Overflow::clip_y(),
-                ..default()
-            },
-            BackgroundColor(palette.hud_panel_background),
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
-            HudText,
-            UiMouseBlocker,
-        ))
-        .with_child((
-            TextSpan::new(""),
-            TextFont::from_font_size(9.0).with_font(ui_font.clone()),
-            TextColor(palette.hud_text_secondary),
-            HudFooterText,
-        ));
-    commands.spawn((
-        Text::new(""),
-        TextFont::from_font_size(11.0).with_font(ui_font.clone()),
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(16),
-            right: px(16),
-            padding: UiRect::axes(px(10), px(6)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.055, 0.065, 0.08, 0.88)),
-        Visibility::Hidden,
-        FocusPolicy::Block,
-        RelativeCursorPosition::default(),
-        FpsOverlayText,
-        UiMouseBlocker,
-    ));
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(10),
-                left: px(0),
-                right: px(0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            Visibility::Hidden,
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
-            FreeObserveIndicatorRoot,
-            UiMouseBlocker,
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new("自由观察模式"),
-                TextFont::from_font_size(11.0).with_font(ui_font.clone()),
-                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.95)),
-            ));
-        });
+    spawn_info_panel_ui(&mut commands, ui_font.clone(), &palette);
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,

@@ -1589,14 +1589,19 @@ pub(super) fn should_show_actor_label(
     interaction_locked: bool,
     hovered_actor_id: Option<ActorId>,
 ) -> bool {
+    let focused_actor_id = if viewer_state.is_free_observe() {
+        viewer_state.selected_actor
+    } else {
+        viewer_state.controlled_player_actor
+    };
     match render_config.overlay_mode {
         ViewerOverlayMode::Minimal => {
-            Some(actor.actor_id) == viewer_state.selected_actor
+            Some(actor.actor_id) == focused_actor_id
                 || Some(actor.actor_id) == hovered_actor_id
                 || interaction_locked
         }
         ViewerOverlayMode::Gameplay => {
-            Some(actor.actor_id) == viewer_state.selected_actor
+            Some(actor.actor_id) == focused_actor_id
                 || Some(actor.actor_id) == hovered_actor_id
                 || actor.side == ActorSide::Player
                 || interaction_locked

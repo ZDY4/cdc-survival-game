@@ -83,8 +83,11 @@ pub(crate) fn handle_mouse_input(
         (None, None) => map_object_at_grid(&snapshot, grid),
         _ => None,
     };
-    let cursor_target =
-        cursor_interaction_target(actor_at_cursor.as_ref(), map_object_at_cursor.as_ref());
+    let cursor_target = cursor_interaction_target(
+        viewer_state.command_actor_id(&snapshot),
+        actor_at_cursor.as_ref(),
+        map_object_at_cursor.as_ref(),
+    );
 
     if viewer_state.active_dialogue.is_some() {
         if buttons.just_pressed(MouseButton::Left) {
@@ -130,7 +133,7 @@ pub(crate) fn handle_mouse_input(
     }
 
     let selected_actor_locked = viewer_state
-        .selected_actor
+        .command_actor_id(&snapshot)
         .filter(|_| viewer_state.can_issue_player_commands())
         .map(|actor_id| viewer_state.is_actor_interaction_locked(&runtime_state, actor_id))
         .unwrap_or(false);
@@ -224,33 +227,37 @@ pub(crate) fn handle_mouse_input(
             return;
         }
 
-        let cancel_context = if actor_at_cursor.is_none() && map_object_at_cursor.is_none() {
-            CancelMovementContext::EmptyGroundClick
-        } else {
-            CancelMovementContext::TargetClick
-        };
-        let cancel_outcome = request_cancel_pending_movement(
-            &mut runtime_state,
-            &mut viewer_state,
-            cancel_context,
-            snapshot.combat.in_combat,
-        );
-        if cancel_outcome.cancelled
-            && matches!(cancel_context, CancelMovementContext::EmptyGroundClick)
-        {
-            viewer_state.interaction_menu = None;
-            return;
-        }
-
         if let Some(ref actor) = actor_at_cursor {
+            if is_command_actor_self_target(&snapshot, &viewer_state, actor) {
+                viewer_state.interaction_menu = None;
+                viewer_state.focused_target = None;
+                viewer_state.current_prompt = None;
+                let cancel_outcome = request_cancel_pending_movement(
+                    &mut runtime_state,
+                    &mut viewer_state,
+                    CancelMovementContext::KeyboardShortcut,
+                    snapshot.combat.in_combat,
+                );
+                if !cancel_outcome.cancelled {
+                    submit_end_turn(&mut runtime_state, &mut viewer_state);
+                }
+                return;
+            }
+
             if actor.side == ActorSide::Player {
                 viewer_state.select_actor(actor.actor_id, actor.side);
                 viewer_state.focused_target = None;
                 viewer_state.current_prompt = None;
                 viewer_state.interaction_menu = None;
                 viewer_state.status_line =
-                    format!("selected actor {:?} ({:?})", actor.actor_id, actor.side);
+                    format!("controlled actor {:?} ({:?})", actor.actor_id, actor.side);
             } else {
+                request_cancel_pending_movement(
+                    &mut runtime_state,
+                    &mut viewer_state,
+                    CancelMovementContext::TargetClick,
+                    snapshot.combat.in_combat,
+                );
                 let target_id = InteractionTargetId::Actor(actor.actor_id);
                 execute_primary_target_interaction(
                     &mut runtime_state,
@@ -262,6 +269,12 @@ pub(crate) fn handle_mouse_input(
                 );
             }
         } else if let Some(object) = map_object_at_cursor.as_ref() {
+            request_cancel_pending_movement(
+                &mut runtime_state,
+                &mut viewer_state,
+                CancelMovementContext::TargetClick,
+                snapshot.combat.in_combat,
+            );
             handle_object_primary_click(
                 &mut runtime_state,
                 &mut viewer_state,
@@ -269,8 +282,20 @@ pub(crate) fn handle_mouse_input(
                 object,
                 grid,
             );
-        } else if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
-            issue_move_to_grid(&mut runtime_state, &mut viewer_state, actor_id, grid);
+        } else {
+            let cancel_outcome = request_cancel_pending_movement(
+                &mut runtime_state,
+                &mut viewer_state,
+                CancelMovementContext::EmptyGroundClick,
+                snapshot.combat.in_combat,
+            );
+            if cancel_outcome.cancelled {
+                viewer_state.interaction_menu = None;
+                return;
+            }
+            if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
+                issue_move_to_grid(&mut runtime_state, &mut viewer_state, actor_id, grid);
+            }
         }
     }
 

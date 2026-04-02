@@ -322,6 +322,7 @@ pub(crate) fn update_interaction_menu(
                         min_height: px(INTERACTION_MENU_BUTTON_HEIGHT_PX),
                         padding: UiRect::axes(px(12), px(8)),
                         margin: UiRect::bottom(px(INTERACTION_MENU_BUTTON_GAP_PX)),
+                        align_items: AlignItems::Center,
                         ..default()
                     },
                     BackgroundColor(interaction_menu_button_color(is_primary, Interaction::None)),
@@ -411,6 +412,7 @@ pub(crate) fn update_dialogue_panel(
                         min_height: px(INTERACTION_MENU_BUTTON_HEIGHT_PX),
                         padding: UiRect::axes(px(12), px(8)),
                         margin: UiRect::bottom(px(INTERACTION_MENU_BUTTON_GAP_PX)),
+                        align_items: AlignItems::Center,
                         ..default()
                     },
                     BackgroundColor(interaction_menu_button_color(false, Interaction::None)),
@@ -475,7 +477,8 @@ pub(super) fn interaction_menu_visual_key(
 }
 
 pub(super) fn format_interaction_button_label(index: usize, display_name: &str) -> String {
-    format!("{}. {}", index + 1, display_name)
+    let _ = index;
+    display_name.to_string()
 }
 
 pub(super) fn dialogue_panel_content(

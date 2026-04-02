@@ -115,7 +115,7 @@ fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
     assert!(viewer_state.active_dialogue.is_none());
     assert!(viewer_state.hovered_grid.is_none());
     assert_eq!(viewer_state.status_line, "开始新游戏");
-    assert!(viewer_state.selected_actor.is_some());
+    assert!(viewer_state.controlled_player_actor.is_some());
     assert_eq!(
         viewer_state.current_level,
         runtime_state

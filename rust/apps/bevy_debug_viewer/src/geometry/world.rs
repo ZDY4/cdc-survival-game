@@ -86,7 +86,7 @@ pub(crate) fn selected_actor<'a>(
     snapshot: &'a SimulationSnapshot,
     viewer_state: &ViewerState,
 ) -> Option<&'a ActorDebugState> {
-    viewer_state.selected_actor.and_then(|actor_id| {
+    viewer_state.focus_actor_id(snapshot).and_then(|actor_id| {
         snapshot
             .actors
             .iter()

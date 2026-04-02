@@ -33,7 +33,7 @@ impl Simulation {
             return None;
         }
 
-        let target = self.resolve_target_interaction_data(target_id)?;
+        let target = self.resolve_target_interaction_data(actor_id, target_id)?;
         let mut options: Vec<ResolvedInteractionOption> = target
             .options
             .into_iter()
@@ -110,7 +110,7 @@ impl Simulation {
             };
         };
         let Some(option_definition) =
-            self.resolve_option_definition(&request.target_id, &option.id)
+            self.resolve_option_definition(request.actor_id, &request.target_id, &option.id)
         else {
             warn!(
                 "core.interaction.option_definition_missing actor={:?} target={:?} option_id={}",
@@ -229,6 +229,35 @@ impl Simulation {
                     ..InteractionExecutionResult::default()
                 }
             }
+            InteractionOptionKind::Wait => {
+                let action = self.end_turn(request.actor_id);
+                if !action.success {
+                    return self.failed_interaction_action(
+                        request.actor_id,
+                        request.target_id,
+                        prompt,
+                        option.id,
+                        action,
+                    );
+                }
+                self.events.push(SimulationEvent::InteractionSucceeded {
+                    actor_id: request.actor_id,
+                    target_id: request.target_id.clone(),
+                    option_id: option.id.clone(),
+                });
+                info!(
+                    "core.interaction.wait actor={:?} target={:?} option_id={}",
+                    request.actor_id,
+                    request.target_id,
+                    option.id.as_str()
+                );
+                InteractionExecutionResult {
+                    success: true,
+                    prompt: Some(prompt),
+                    action_result: Some(action),
+                    ..InteractionExecutionResult::default()
+                }
+            }
             InteractionOptionKind::Talk => {
                 let action = self.perform_interact(request.actor_id);
                 if !action.success {
@@ -241,7 +270,7 @@ impl Simulation {
                     );
                 }
                 let dialogue_id = self
-                    .resolve_dialogue_id(&request.target_id, &option)
+                    .resolve_dialogue_id(request.actor_id, &request.target_id, &option)
                     .filter(|value| !value.trim().is_empty());
                 let dialogue_state = dialogue_id.as_ref().and_then(|dialogue_id| {
                     self.start_dialogue_session(
@@ -491,11 +520,20 @@ impl Simulation {
 
     fn resolve_target_interaction_data(
         &self,
+        actor_id: ActorId,
         target_id: &InteractionTargetId,
     ) -> Option<TargetInteractionData> {
         match target_id {
             InteractionTargetId::Actor(target_actor) => {
                 let actor = self.actors.get(*target_actor)?;
+                if *target_actor == actor_id {
+                    return Some(TargetInteractionData {
+                        target_name: actor.display_name.clone(),
+                        anchor_grid: actor.grid_position,
+                        options: self.self_actor_options(),
+                        allow_primary_fallback: true,
+                    });
+                }
                 let mut options = self
                     .actor_interactions
                     .get(target_actor)
@@ -529,6 +567,19 @@ impl Simulation {
                 })
             }
         }
+    }
+
+    fn self_actor_options(&self) -> Vec<InteractionOptionDefinition> {
+        let mut wait = InteractionOptionDefinition {
+            kind: InteractionOptionKind::Wait,
+            display_name: "等待".to_string(),
+            description: "结束当前回合".to_string(),
+            requires_proximity: false,
+            priority: 950,
+            ..InteractionOptionDefinition::default()
+        };
+        wait.ensure_defaults();
+        vec![wait]
     }
 
     fn map_object_display_name(&self, object: &MapObjectDefinition) -> String {
@@ -766,10 +817,11 @@ impl Simulation {
 
     fn resolve_option_definition(
         &self,
+        actor_id: ActorId,
         target_id: &InteractionTargetId,
         option_id: &InteractionOptionId,
     ) -> Option<InteractionOptionDefinition> {
-        let target = self.resolve_target_interaction_data(target_id)?;
+        let target = self.resolve_target_interaction_data(actor_id, target_id)?;
         target
             .options
             .into_iter()
@@ -782,10 +834,12 @@ impl Simulation {
 
     fn resolve_dialogue_id(
         &self,
+        actor_id: ActorId,
         target_id: &InteractionTargetId,
         option: &ResolvedInteractionOption,
     ) -> Option<String> {
-        let Some(definition) = self.resolve_option_definition(target_id, &option.id) else {
+        let Some(definition) = self.resolve_option_definition(actor_id, target_id, &option.id)
+        else {
             return None;
         };
         if !definition.dialogue_id.trim().is_empty() {
@@ -828,7 +882,8 @@ impl Simulation {
             InteractionOptionKind::EnterOverworld => {
                 self.return_to_overworld(actor_id)?;
             }
-            InteractionOptionKind::Talk
+            InteractionOptionKind::Wait
+            | InteractionOptionKind::Talk
             | InteractionOptionKind::Attack
             | InteractionOptionKind::Pickup
             | InteractionOptionKind::OpenDoor
@@ -848,7 +903,7 @@ impl Simulation {
         let Some(actor_grid) = self.actor_grid_position(actor_id) else {
             return Err("unknown_actor".to_string());
         };
-        let Some(target) = self.resolve_target_interaction_data(target_id) else {
+        let Some(target) = self.resolve_target_interaction_data(actor_id, target_id) else {
             return Err("interaction_target_unavailable".to_string());
         };
 

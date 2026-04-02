@@ -8,6 +8,7 @@ pub mod dialogue_runtime;
 pub mod interaction;
 pub mod map;
 pub mod models;
+pub mod outdoor_transition;
 pub mod overworld;
 pub mod quest;
 pub mod recipe;
@@ -84,6 +85,9 @@ pub use map::{
 pub use models::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,
     SkillTargetRequest, TurnState, WorldCoord,
+};
+pub use outdoor_transition::{
+    validate_outdoor_transition_trigger_layout, OutdoorTransitionTriggerLayoutValidationError,
 };
 pub use overworld::{
     load_overworld_library, load_overworld_library_with_catalog, validate_overworld_definition,

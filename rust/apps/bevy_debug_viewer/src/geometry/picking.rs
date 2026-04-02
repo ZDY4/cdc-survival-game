@@ -139,7 +139,7 @@ pub(crate) fn map_object_hit_at_ray(
 
     match (generated_door_hit, generic_hit) {
         (Some(door), Some(object)) => {
-            if door.1 <= object.1 {
+            if should_prefer_generated_door_hit(&door.0, &object.0) || door.1 <= object.1 {
                 Some(door)
             } else {
                 Some(object)
@@ -196,6 +196,17 @@ fn is_generated_door_object(object: &game_core::MapObjectDebugState) -> bool {
         .payload_summary
         .get("generated_door")
         .is_some_and(|value| value == "true")
+}
+
+fn should_prefer_generated_door_hit(
+    door: &game_core::MapObjectDebugState,
+    object: &game_core::MapObjectDebugState,
+) -> bool {
+    object.kind == MapObjectKind::Building
+        && door
+            .payload_summary
+            .get("building_object_id")
+            .is_some_and(|building_id| building_id == &object.object_id)
 }
 
 fn interaction_ray_max_distance(snapshot: &SimulationSnapshot) -> f32 {

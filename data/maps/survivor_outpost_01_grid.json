@@ -62,9 +62,9 @@
     {
       "id": "perimeter_return",
       "grid": {
-        "x": 24,
+        "x": 46,
         "y": 0,
-        "z": 36
+        "z": 10
       },
       "facing": null
     },
@@ -264,8 +264,8 @@
     {
       "object_id": "survivor_outpost_01_perimeter_gate",
       "kind": "trigger",
-      "anchor": { "x": 22, "y": 0, "z": 38 },
-      "footprint": { "width": 4, "height": 1 },
+      "anchor": { "x": 47, "y": 0, "z": 8 },
+      "footprint": { "width": 1, "height": 5 },
       "rotation": "north",
       "blocks_movement": false,
       "blocks_sight": false,

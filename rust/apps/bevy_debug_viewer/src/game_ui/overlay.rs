@@ -312,15 +312,15 @@ pub(super) fn render_hover_tooltip(
     ui: &GameUiViewState<'_, '_>,
     content: &GameContentRefs<'_, '_>,
 ) {
-    let Some(player_actor) = player_actor else {
-        return;
-    };
     let Some(tooltip_content) = ui.hover_tooltip.content.as_ref() else {
         return;
     };
 
     match tooltip_content {
         UiHoverTooltipContent::InventoryItem { item_id } => {
+            let Some(player_actor) = player_actor else {
+                return;
+            };
             let snapshot = inventory_snapshot(
                 &ui.runtime_state.runtime,
                 player_actor,
@@ -348,6 +348,9 @@ pub(super) fn render_hover_tooltip(
             );
         }
         UiHoverTooltipContent::Skill { tree_id, skill_id } => {
+            let Some(player_actor) = player_actor else {
+                return;
+            };
             let snapshot = skills_snapshot(
                 &ui.runtime_state.runtime,
                 player_actor,
@@ -371,6 +374,23 @@ pub(super) fn render_hover_tooltip(
                 ui.hover_tooltip.cursor_position,
                 display.content.estimated_height(),
                 |tooltip| render_skill_detail_content(tooltip, font, &display, entry, false),
+            );
+        }
+        UiHoverTooltipContent::SceneTransition { target_name } => {
+            render_tooltip_container(
+                parent,
+                window,
+                ui.hover_tooltip.cursor_position,
+                56.0,
+                |tooltip| {
+                    tooltip.spawn(text_bundle(
+                        font,
+                        "前往",
+                        10.0,
+                        Color::srgba(0.70, 0.76, 0.86, 1.0),
+                    ));
+                    tooltip.spawn(text_bundle(font, target_name, 14.0, Color::WHITE));
+                },
             );
         }
     }

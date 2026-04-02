@@ -14,7 +14,8 @@ use crate::bootstrap::load_viewer_bootstrap;
 use crate::simulation::viewer_event_entry;
 use crate::state::{
     UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerPalette, ViewerRuntimeState, ViewerState,
+    ViewerDamageNumberState, ViewerHudPage, ViewerInfoPanelState, ViewerPalette,
+    ViewerRuntimeState, ViewerState,
 };
 
 const CONSOLE_PANEL_TOP_PX: f32 = 42.0;
@@ -41,6 +42,42 @@ const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[
     ConsoleCommandSpec {
         name: "show fps",
         summary: "Toggle the top-right FPS overlay.",
+    },
+    ConsoleCommandSpec {
+        name: "show overview",
+        summary: "Toggle the Overview info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show selection",
+        summary: "Toggle the Selection info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show actor",
+        summary: "Toggle the Actor info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show world",
+        summary: "Toggle the World info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show interaction",
+        summary: "Toggle the Interaction info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show turn_sys",
+        summary: "Toggle the Turn System info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show events",
+        summary: "Toggle the Events info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show ai",
+        summary: "Toggle the AI info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show performance",
+        summary: "Toggle the Performance info panel.",
     },
 ];
 
@@ -91,6 +128,7 @@ pub(crate) fn handle_console_input(
     mut console_state: ResMut<ViewerConsoleState>,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
+    mut info_panel_state: ResMut<ViewerInfoPanelState>,
     mut spawn_state: ResMut<MapAiSpawnRuntimeState>,
     mut sim_clock: ResMut<SimClock>,
     mut world_alert: ResMut<WorldAlertState>,
@@ -125,6 +163,7 @@ pub(crate) fn handle_console_input(
                     &mut console_state,
                     &mut runtime_state,
                     &mut viewer_state,
+                    &mut info_panel_state,
                     &mut spawn_state,
                     &mut sim_clock,
                     &mut world_alert,
@@ -243,6 +282,7 @@ fn submit_console_command(
     console_state: &mut ViewerConsoleState,
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
+    info_panel_state: &mut ViewerInfoPanelState,
     spawn_state: &mut MapAiSpawnRuntimeState,
     sim_clock: &mut SimClock,
     world_alert: &mut WorldAlertState,
@@ -253,7 +293,7 @@ fn submit_console_command(
     camera_shake_state: &mut ViewerCameraShakeState,
     damage_number_state: &mut ViewerDamageNumberState,
 ) {
-    let command_line = console_state.input.trim().to_string();
+    let command_line = submission_command_line(console_state);
     if command_line.is_empty() {
         console_state.last_feedback = Some(ConsoleFeedback {
             is_error: true,
@@ -266,6 +306,7 @@ fn submit_console_command(
         command_line.as_str(),
         runtime_state,
         viewer_state,
+        info_panel_state,
         spawn_state,
         sim_clock,
         world_alert,
@@ -276,9 +317,32 @@ fn submit_console_command(
         camera_shake_state,
         damage_number_state,
     );
+    let command_succeeded = !feedback.is_error;
     console_state.last_feedback = Some(feedback);
     console_state.input.clear();
     console_state.selected_suggestion = 0;
+    if command_succeeded {
+        console_state.is_open = false;
+    }
+}
+
+fn submission_command_line(console_state: &ViewerConsoleState) -> String {
+    let typed = console_state.input.trim();
+    let suggestions = console_suggestions(typed);
+    let selected = suggestions
+        .get(normalized_selected_index(console_state, suggestions.len()))
+        .or_else(|| suggestions.first())
+        .map(|suggestion| suggestion.name);
+
+    if typed.is_empty() {
+        return selected.unwrap_or_default().to_string();
+    }
+
+    if selected.is_some_and(|suggestion| suggestion.eq_ignore_ascii_case(typed)) {
+        return typed.to_string();
+    }
+
+    selected.unwrap_or(typed).to_string()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -286,6 +350,7 @@ fn execute_console_command(
     command_line: &str,
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
+    info_panel_state: &mut ViewerInfoPanelState,
     spawn_state: &mut MapAiSpawnRuntimeState,
     sim_clock: &mut SimClock,
     world_alert: &mut WorldAlertState,
@@ -318,7 +383,7 @@ fn execute_console_command(
             camera_shake_state,
             damage_number_state,
         ),
-        "show" => execute_show_command(&tokens[1..], viewer_state),
+        "show" => execute_show_command(&tokens[1..], viewer_state, info_panel_state),
         _ => ConsoleFeedback {
             is_error: true,
             text: format!("Unknown command: {command_name}"),
@@ -338,9 +403,11 @@ fn execute_ob_command(
             viewer_state.focused_target = None;
             viewer_state.current_prompt = None;
             viewer_state.interaction_menu = None;
+            let snapshot = runtime_state.runtime.snapshot();
             if viewer_state.is_player_control() {
-                viewer_state.selected_actor =
-                    viewer_state.command_actor_id(&runtime_state.runtime.snapshot());
+                viewer_state.selected_actor = None;
+            } else {
+                viewer_state.selected_actor = viewer_state.focus_actor_id(&snapshot);
             }
             let status = format!("control mode: {}", viewer_state.control_mode.label());
             viewer_state.status_line = status.clone();
@@ -360,25 +427,53 @@ fn execute_ob_command(
     }
 }
 
-fn execute_show_command(args: &[&str], viewer_state: &mut ViewerState) -> ConsoleFeedback {
+fn execute_show_command(
+    args: &[&str],
+    viewer_state: &mut ViewerState,
+    info_panel_state: &mut ViewerInfoPanelState,
+) -> ConsoleFeedback {
     match args {
         [target] if target.eq_ignore_ascii_case("fps") => {
             viewer_state.show_fps_overlay = !viewer_state.show_fps_overlay;
+            let status = format!(
+                "fps overlay: {}",
+                if viewer_state.show_fps_overlay {
+                    "on"
+                } else {
+                    "off"
+                }
+            );
+            viewer_state.status_line = status.clone();
             ConsoleFeedback {
                 is_error: false,
-                text: format!(
-                    "fps overlay: {}",
-                    if viewer_state.show_fps_overlay {
-                        "on"
-                    } else {
-                        "off"
-                    }
-                ),
+                text: status,
+            }
+        }
+        [target] => {
+            let normalized = target.to_ascii_lowercase();
+            let Some(page) = ViewerHudPage::from_console_name(normalized.as_str()) else {
+                return ConsoleFeedback {
+                    is_error: true,
+                    text: format!("Unknown show target: {}", args.join(" ")),
+                };
+            };
+
+            let enabled = info_panel_state.toggle(page);
+            let status = format!(
+                "info panel {}: {}",
+                page.console_name(),
+                if enabled { "on" } else { "off" }
+            );
+            viewer_state.status_line = status.clone();
+            ConsoleFeedback {
+                is_error: false,
+                text: status,
             }
         }
         [] => ConsoleFeedback {
             is_error: true,
-            text: "Usage: show fps".to_string(),
+            text: "Usage: show fps|overview|selection|actor|world|interaction|turn_sys|events|ai|performance"
+                .to_string(),
         },
         _ => ConsoleFeedback {
             is_error: true,
@@ -559,9 +654,16 @@ pub(crate) fn console_suggestions(input: &str) -> Vec<ConsoleSuggestion> {
     CONSOLE_COMMANDS
         .iter()
         .filter(|command| {
-            prefix.is_empty()
-                || command.name.starts_with(prefix.as_str())
-                || prefix
+            if prefix.is_empty() {
+                return true;
+            }
+
+            if command.name.starts_with(prefix.as_str()) {
+                return true;
+            }
+
+            !prefix.contains(' ')
+                && prefix
                     .split_whitespace()
                     .next()
                     .is_some_and(|token| command.name.starts_with(token))
@@ -585,9 +687,10 @@ fn is_printable_char(chr: char) -> bool {
 mod tests {
     use super::{
         autocomplete_console_input, console_suggestions, execute_ob_command, execute_show_command,
-        move_console_selection_next, move_console_selection_previous, ViewerConsoleState,
+        move_console_selection_next, move_console_selection_previous, submission_command_line,
+        ViewerConsoleState,
     };
-    use crate::state::{ViewerRuntimeState, ViewerState};
+    use crate::state::{ViewerHudPage, ViewerInfoPanelState, ViewerRuntimeState, ViewerState};
     use game_core::create_demo_runtime;
 
     #[test]
@@ -618,14 +721,14 @@ mod tests {
     fn autocomplete_fills_selected_command_name() {
         let mut console_state = ViewerConsoleState {
             is_open: true,
-            input: "show f".to_string(),
+            input: "show ov".to_string(),
             selected_suggestion: 0,
             last_feedback: None,
         };
 
         autocomplete_console_input(&mut console_state);
 
-        assert_eq!(console_state.input, "show fps");
+        assert_eq!(console_state.input, "show overview");
     }
 
     #[test]
@@ -644,18 +747,63 @@ mod tests {
     }
 
     #[test]
+    fn submission_uses_selected_suggestion_for_partial_input() {
+        let console_state = ViewerConsoleState {
+            is_open: true,
+            input: "show a".to_string(),
+            selected_suggestion: 0,
+            last_feedback: None,
+        };
+
+        assert_eq!(submission_command_line(&console_state), "show actor");
+    }
+
+    #[test]
+    fn submission_uses_selected_suggestion_for_empty_input() {
+        let console_state = ViewerConsoleState {
+            is_open: true,
+            input: String::new(),
+            selected_suggestion: 1,
+            last_feedback: None,
+        };
+
+        assert_eq!(submission_command_line(&console_state), "restart");
+    }
+
+    #[test]
     fn show_fps_toggles_overlay_flag() {
         let mut viewer_state = ViewerState::default();
+        let mut info_panel_state = ViewerInfoPanelState::default();
 
-        let first = execute_show_command(&["fps"], &mut viewer_state);
+        let first = execute_show_command(&["fps"], &mut viewer_state, &mut info_panel_state);
         assert!(!first.is_error);
         assert!(viewer_state.show_fps_overlay);
         assert_eq!(first.text, "fps overlay: on");
 
-        let second = execute_show_command(&["fps"], &mut viewer_state);
+        let second = execute_show_command(&["fps"], &mut viewer_state, &mut info_panel_state);
         assert!(!second.is_error);
         assert!(!viewer_state.show_fps_overlay);
         assert_eq!(second.text, "fps overlay: off");
+    }
+
+    #[test]
+    fn show_overview_toggles_info_panel_state() {
+        let mut viewer_state = ViewerState::default();
+        let mut info_panel_state = ViewerInfoPanelState::default();
+
+        let first = execute_show_command(&["overview"], &mut viewer_state, &mut info_panel_state);
+        assert!(!first.is_error);
+        assert_eq!(first.text, "info panel overview: on");
+        assert_eq!(
+            info_panel_state.active_page(),
+            Some(ViewerHudPage::Overview)
+        );
+        assert!(info_panel_state.is_enabled(ViewerHudPage::Overview));
+
+        let second = execute_show_command(&["overview"], &mut viewer_state, &mut info_panel_state);
+        assert!(!second.is_error);
+        assert_eq!(second.text, "info panel overview: off");
+        assert!(info_panel_state.is_empty());
     }
 
     #[test]
@@ -698,8 +846,9 @@ mod tests {
     #[test]
     fn show_command_rejects_unknown_target() {
         let mut viewer_state = ViewerState::default();
+        let mut info_panel_state = ViewerInfoPanelState::default();
 
-        let feedback = execute_show_command(&["latency"], &mut viewer_state);
+        let feedback = execute_show_command(&["latency"], &mut viewer_state, &mut info_panel_state);
 
         assert!(feedback.is_error);
         assert!(feedback.text.contains("Unknown show target"));

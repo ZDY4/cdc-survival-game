@@ -1,6 +1,18 @@
 use super::*;
 
 impl SimulationRuntime {
+    pub fn peek_interaction_prompt(
+        &self,
+        actor_id: ActorId,
+        target_id: &InteractionTargetId,
+    ) -> Option<InteractionPrompt> {
+        if self.ensure_player_input_actor(actor_id).is_err() {
+            return None;
+        }
+
+        self.simulation.query_interaction_options(actor_id, target_id)
+    }
+
     pub fn query_interaction_prompt(
         &mut self,
         actor_id: ActorId,

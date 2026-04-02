@@ -490,7 +490,8 @@ pub(super) fn render_hotbar_legacy(
         .targeting_state
         .as_ref()
         .is_some_and(|targeting| targeting.is_attack());
-    let attack_enabled = !viewer_state.is_free_observe() && viewer_state.selected_actor.is_some();
+    let attack_enabled =
+        !viewer_state.is_free_observe() && viewer_state.controlled_player_actor.is_some();
     let hp_text = player_stats
         .map(|stats| format!("{:.0} / {:.0}", stats.hp, stats.max_hp))
         .unwrap_or_else(|| "-- / --".to_string());
@@ -582,6 +583,7 @@ pub(super) fn render_hotbar_legacy(
                                 } else {
                                     1.0
                                 })),
+                                align_items: AlignItems::Center,
                                 ..default()
                             },
                             BackgroundColor(if attack_targeting_active {
@@ -817,7 +819,8 @@ pub(super) fn render_hotbar(
         .targeting_state
         .as_ref()
         .is_some_and(|targeting| targeting.is_attack());
-    let attack_enabled = !viewer_state.is_free_observe() && viewer_state.selected_actor.is_some();
+    let attack_enabled =
+        !viewer_state.is_free_observe() && viewer_state.controlled_player_actor.is_some();
     let left_tabs = [
         UiMenuPanel::Character,
         UiMenuPanel::Journal,
@@ -889,6 +892,7 @@ pub(super) fn render_hotbar(
                                 } else {
                                     1.0
                                 })),
+                                align_items: AlignItems::Center,
                                 ..default()
                             },
                             BackgroundColor(if attack_targeting_active {

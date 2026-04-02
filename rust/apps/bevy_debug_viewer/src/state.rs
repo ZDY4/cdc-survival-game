@@ -128,20 +128,24 @@ pub(crate) struct ViewerUiFont(pub Handle<Font>);
 pub(crate) enum ViewerHudPage {
     #[default]
     Overview,
+    Selection,
     SelectedActor,
     World,
     Interaction,
+    TurnSys,
     Events,
     Ai,
     Performance,
 }
 
 impl ViewerHudPage {
-    pub(crate) const ALL: [Self; 7] = [
+    pub(crate) const ALL: [Self; 9] = [
         Self::Overview,
+        Self::Selection,
         Self::SelectedActor,
         Self::World,
         Self::Interaction,
+        Self::TurnSys,
         Self::Events,
         Self::Ai,
         Self::Performance,
@@ -150,9 +154,11 @@ impl ViewerHudPage {
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
+            Self::Selection => "Selection",
             Self::SelectedActor => "Selected Actor",
             Self::World => "World",
             Self::Interaction => "Interaction",
+            Self::TurnSys => "Turn System",
             Self::Events => "Events",
             Self::Ai => "AI",
             Self::Performance => "Performance",
@@ -162,17 +168,140 @@ impl ViewerHudPage {
     pub(crate) fn tab_label(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
+            Self::Selection => "Select",
             Self::SelectedActor => "Actor",
             Self::World => "World",
             Self::Interaction => "Interact",
+            Self::TurnSys => "Turn",
             Self::Events => "Events",
             Self::Ai => "AI",
             Self::Performance => "Perf",
         }
     }
 
-    pub(crate) fn profiles_systems(self) -> bool {
-        matches!(self, Self::Performance)
+    pub(crate) fn console_name(self) -> &'static str {
+        match self {
+            Self::Overview => "overview",
+            Self::Selection => "selection",
+            Self::SelectedActor => "actor",
+            Self::World => "world",
+            Self::Interaction => "interaction",
+            Self::TurnSys => "turn_sys",
+            Self::Events => "events",
+            Self::Ai => "ai",
+            Self::Performance => "performance",
+        }
+    }
+
+    pub(crate) fn from_console_name(name: &str) -> Option<Self> {
+        match name {
+            "overview" => Some(Self::Overview),
+            "selection" => Some(Self::Selection),
+            "actor" => Some(Self::SelectedActor),
+            "world" => Some(Self::World),
+            "interaction" => Some(Self::Interaction),
+            "turn_sys" => Some(Self::TurnSys),
+            "events" => Some(Self::Events),
+            "ai" => Some(Self::Ai),
+            "performance" => Some(Self::Performance),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Resource, Debug, Clone, Default)]
+pub(crate) struct ViewerInfoPanelState {
+    pub enabled_pages: Vec<ViewerHudPage>,
+    pub active_page: Option<ViewerHudPage>,
+}
+
+impl ViewerInfoPanelState {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.enabled_pages.is_empty() || self.active_page.is_none()
+    }
+
+    pub(crate) fn active_page(&self) -> Option<ViewerHudPage> {
+        self.active_page
+    }
+
+    pub(crate) fn enabled_pages(&self) -> &[ViewerHudPage] {
+        &self.enabled_pages
+    }
+
+    pub(crate) fn is_enabled(&self, page: ViewerHudPage) -> bool {
+        self.enabled_pages.contains(&page)
+    }
+
+    pub(crate) fn set_active(&mut self, page: ViewerHudPage) -> bool {
+        if self.is_enabled(page) {
+            self.active_page = Some(page);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn toggle(&mut self, page: ViewerHudPage) -> bool {
+        if self.is_enabled(page) {
+            self.disable(page);
+            false
+        } else {
+            self.enable(page);
+            true
+        }
+    }
+
+    pub(crate) fn cycle_next(&mut self) -> Option<ViewerHudPage> {
+        let active = self.active_page?;
+        let current_index = self.enabled_pages.iter().position(|page| *page == active)?;
+        let next_index = (current_index + 1) % self.enabled_pages.len();
+        let next = self.enabled_pages[next_index];
+        self.active_page = Some(next);
+        Some(next)
+    }
+
+    pub(crate) fn cycle_previous(&mut self) -> Option<ViewerHudPage> {
+        let active = self.active_page?;
+        let current_index = self.enabled_pages.iter().position(|page| *page == active)?;
+        let previous_index = if current_index == 0 {
+            self.enabled_pages.len().saturating_sub(1)
+        } else {
+            current_index - 1
+        };
+        let previous = self.enabled_pages[previous_index];
+        self.active_page = Some(previous);
+        Some(previous)
+    }
+
+    fn enable(&mut self, page: ViewerHudPage) {
+        self.enabled_pages.push(page);
+        self.enabled_pages.sort_by_key(|enabled| {
+            ViewerHudPage::ALL
+                .iter()
+                .position(|candidate| candidate == enabled)
+                .unwrap_or(usize::MAX)
+        });
+        self.active_page = Some(page);
+    }
+
+    fn disable(&mut self, page: ViewerHudPage) {
+        let removed_index = self
+            .enabled_pages
+            .iter()
+            .position(|enabled| *enabled == page);
+        self.enabled_pages.retain(|enabled| *enabled != page);
+
+        if self.enabled_pages.is_empty() {
+            self.active_page = None;
+            return;
+        }
+
+        if self.active_page == Some(page) {
+            let next_index = removed_index
+                .map(|index| index.min(self.enabled_pages.len().saturating_sub(1)))
+                .unwrap_or(0);
+            self.active_page = self.enabled_pages.get(next_index).copied();
+        }
     }
 }
 
@@ -215,6 +344,7 @@ impl ViewerCameraMode {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum HudEventFilter {
     #[default]
@@ -224,6 +354,7 @@ pub(crate) enum HudEventFilter {
     World,
 }
 
+#[allow(dead_code)]
 impl HudEventFilter {
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -786,7 +917,6 @@ pub(crate) struct ViewerPalette {
     pub ambient_color: Color,
     pub key_light_color: Color,
     pub fill_light_color: Color,
-    pub hud_panel_background: Color,
     pub hud_text_secondary: Color,
     pub menu_background: Color,
     pub dialogue_background: Color,
@@ -822,7 +952,6 @@ impl Default for ViewerPalette {
             ambient_color: Color::srgb(0.72, 0.76, 0.82),
             key_light_color: Color::srgb(0.99, 0.94, 0.87),
             fill_light_color: Color::srgb(0.52, 0.62, 0.72),
-            hud_panel_background: Color::srgba(0.055, 0.065, 0.08, 0.92),
             hud_text_secondary: Color::srgba(0.78, 0.81, 0.87, 0.94),
             menu_background: Color::srgba(0.055, 0.065, 0.08, 0.96),
             dialogue_background: Color::srgba(0.05, 0.058, 0.074, 0.95),
@@ -923,7 +1052,7 @@ impl Default for ViewerRenderConfig {
             fow_fog_color: Color::srgba(0.05, 0.05, 0.05, 1.0),
             fow_explored_alpha: 0.55,
             fow_unexplored_alpha: 0.85,
-            fow_edge_softness: 0.01,
+            fow_edge_softness: 0.0075,
             fow_transition_duration_sec: 0.2,
         }
     }
@@ -955,11 +1084,9 @@ pub(crate) struct ViewerState {
     pub current_prompt: Option<InteractionPrompt>,
     pub interaction_menu: Option<InteractionMenuState>,
     pub active_dialogue: Option<ActiveDialogueState>,
-    pub hud_page: ViewerHudPage,
     pub control_mode: ViewerControlMode,
     pub camera_mode: ViewerCameraMode,
     pub event_filter: HudEventFilter,
-    pub show_hud: bool,
     pub show_fps_overlay: bool,
     pub show_controls: bool,
     pub hovered_grid: Option<GridCoord>,
@@ -989,11 +1116,9 @@ impl Default for ViewerState {
             current_prompt: None,
             interaction_menu: None,
             active_dialogue: None,
-            hud_page: ViewerHudPage::Overview,
             control_mode: ViewerControlMode::PlayerControl,
             camera_mode: ViewerCameraMode::FollowSelectedActor,
             event_filter: HudEventFilter::All,
-            show_hud: false,
             show_fps_overlay: false,
             show_controls: false,
             hovered_grid: None,
@@ -1064,7 +1189,12 @@ impl ViewerTargetingState {
 
 impl ViewerState {
     pub(crate) fn select_actor(&mut self, actor_id: ActorId, side: ActorSide) {
-        self.selected_actor = Some(actor_id);
+        if self.is_free_observe() {
+            self.selected_actor = Some(actor_id);
+            return;
+        }
+
+        self.selected_actor = None;
         if side == ActorSide::Player {
             self.controlled_player_actor = Some(actor_id);
         }
@@ -1177,16 +1307,16 @@ impl ViewerState {
 }
 
 #[derive(Component)]
-pub(crate) struct HudText;
+pub(crate) struct InfoPanelText;
 
 #[derive(Component)]
-pub(crate) struct HudFooterText;
+pub(crate) struct InfoPanelFooterText;
 
 #[derive(Component)]
-pub(crate) struct HudTabBarRoot;
+pub(crate) struct InfoPanelTabBarRoot;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct HudTabButton {
+pub(crate) struct InfoPanelTabButton {
     pub page: ViewerHudPage,
 }
 
@@ -1224,6 +1354,7 @@ pub(crate) struct GameUiRoot;
 pub(crate) enum UiHoverTooltipContent {
     InventoryItem { item_id: u32 },
     Skill { tree_id: String, skill_id: String },
+    SceneTransition { target_name: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1404,7 +1535,7 @@ mod tests {
     };
 
     #[test]
-    fn command_actor_uses_selected_player_in_player_control_mode() {
+    fn command_actor_uses_controlled_player_in_player_control_mode() {
         let snapshot = snapshot_with_actors(vec![
             actor(ActorId(1), ActorSide::Player, "player"),
             actor(ActorId(2), ActorSide::Friendly, "guard"),
@@ -1412,7 +1543,20 @@ mod tests {
         let mut viewer_state = ViewerState::default();
         viewer_state.select_actor(ActorId(1), ActorSide::Player);
 
+        assert_eq!(viewer_state.selected_actor, None);
+        assert_eq!(viewer_state.controlled_player_actor, Some(ActorId(1)));
         assert_eq!(viewer_state.command_actor_id(&snapshot), Some(ActorId(1)));
+    }
+
+    #[test]
+    fn select_actor_only_sets_selected_actor_in_free_observe_mode() {
+        let mut viewer_state = ViewerState::default();
+        viewer_state.control_mode = ViewerControlMode::FreeObserve;
+
+        viewer_state.select_actor(ActorId(7), ActorSide::Friendly);
+
+        assert_eq!(viewer_state.selected_actor, Some(ActorId(7)));
+        assert_eq!(viewer_state.controlled_player_actor, None);
     }
 
     #[test]

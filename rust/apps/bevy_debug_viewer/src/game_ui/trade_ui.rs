@@ -422,6 +422,7 @@ fn render_trade_inventory_entries(
                         padding: UiRect::axes(px(10), px(7)),
                         margin: UiRect::bottom(px(4)),
                         border: UiRect::all(px(if is_selected { 2.0 } else { 1.0 })),
+                        align_items: AlignItems::Center,
                         ..default()
                     },
                     BackgroundColor(if is_selected {

@@ -6,27 +6,7 @@ use crate::geometry::{
     actor_at_grid, actor_label, map_object_debug_label, segment_aabb_intersection_fraction,
     selected_actor, HoveredGridOutlineKind, OcclusionFocusPoint,
 };
-use crate::state::{ViewerHudPage, ViewerState};
-
-pub(crate) fn just_pressed_hud_page(keys: &ButtonInput<KeyCode>) -> Option<ViewerHudPage> {
-    if keys.just_pressed(KeyCode::F1) {
-        Some(ViewerHudPage::Overview)
-    } else if keys.just_pressed(KeyCode::F2) {
-        Some(ViewerHudPage::SelectedActor)
-    } else if keys.just_pressed(KeyCode::F3) {
-        Some(ViewerHudPage::World)
-    } else if keys.just_pressed(KeyCode::F4) {
-        Some(ViewerHudPage::Interaction)
-    } else if keys.just_pressed(KeyCode::F5) {
-        Some(ViewerHudPage::Events)
-    } else if keys.just_pressed(KeyCode::F6) {
-        Some(ViewerHudPage::Ai)
-    } else if keys.just_pressed(KeyCode::F7) {
-        Some(ViewerHudPage::Performance)
-    } else {
-        None
-    }
-}
+use crate::state::ViewerState;
 
 pub(crate) fn hovered_grid_outline_kind(
     runtime: &SimulationRuntime,
@@ -38,7 +18,7 @@ pub(crate) fn hovered_grid_outline_kind(
         return Some(HoveredGridOutlineKind::Hostile);
     }
 
-    let actor_id = viewer_state.selected_actor?;
+    let actor_id = viewer_state.command_actor_id(snapshot)?;
     if !runtime.is_grid_in_bounds(grid) {
         return None;
     }
@@ -128,11 +108,6 @@ pub(crate) fn focused_target_summary(
                 .map(|object| map_object_debug_label(snapshot, object))
                 .unwrap_or_else(|| format!("object {}", object_id)),
         })
-        .unwrap_or_else(|| "none".to_string())
-}
-
-pub(crate) fn format_optional_grid(grid: Option<GridCoord>) -> String {
-    grid.map(|grid| format!("({}, {}, {})", grid.x, grid.y, grid.z))
         .unwrap_or_else(|| "none".to_string())
 }
 

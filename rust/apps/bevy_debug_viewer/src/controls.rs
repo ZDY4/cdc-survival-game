@@ -17,16 +17,15 @@ use crate::dialogue::{
 use crate::game_ui::{activate_hotbar_slot, HOTBAR_DOCK_HEIGHT, HOTBAR_DOCK_WIDTH};
 use crate::geometry::{
     actor_at_grid, actor_hit_at_ray, clamp_camera_pan_offset, cycle_level, grid_bounds,
-    just_pressed_hud_page, level_base_height, map_object_at_grid, map_object_hit_at_ray,
-    pick_grid_from_ray, ray_point_on_horizontal_plane, selected_actor,
+    level_base_height, map_object_at_grid, map_object_hit_at_ray, pick_grid_from_ray,
+    ray_point_on_horizontal_plane, selected_actor,
 };
-use crate::hud::set_hud_page;
 use crate::render::{interaction_menu_button_color, interaction_menu_layout};
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
     DialogueChoiceButton, InteractionMenuButton, InteractionMenuState, UiMouseBlocker,
-    ViewerActorMotionState, ViewerCamera, ViewerHudPage, ViewerRenderConfig, ViewerRuntimeState,
-    ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
+    ViewerActorMotionState, ViewerCamera, ViewerInfoPanelState, ViewerRenderConfig,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
     ViewerTargetingState, ViewerUiSettings,
 };
 
@@ -578,16 +577,26 @@ fn focus_target_and_query_prompt(
 }
 
 fn cursor_interaction_target(
+    command_actor_id: Option<ActorId>,
     actor: Option<&game_core::ActorDebugState>,
     map_object: Option<&game_core::MapObjectDebugState>,
 ) -> Option<InteractionTargetId> {
     if let Some(actor) = actor {
-        if actor.side != ActorSide::Player {
+        if actor.side != ActorSide::Player || Some(actor.actor_id) == command_actor_id {
             return Some(InteractionTargetId::Actor(actor.actor_id));
         }
     }
 
     map_object.map(|object| InteractionTargetId::MapObject(object.object_id.clone()))
+}
+
+fn is_command_actor_self_target(
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    actor: &game_core::ActorDebugState,
+) -> bool {
+    actor.side == ActorSide::Player
+        && viewer_state.command_actor_id(snapshot) == Some(actor.actor_id)
 }
 
 fn execute_target_interaction_option(
@@ -831,21 +840,24 @@ fn interaction_target_name(viewer_state: &ViewerState, target_id: &InteractionTa
 #[cfg(test)]
 mod tests {
     use super::{
-        clear_pending_post_cancel_turn_policy, handle_keyboard_input, handle_object_primary_click,
+        clear_pending_post_cancel_turn_policy, cursor_interaction_target, handle_keyboard_input,
+        handle_object_primary_click, is_command_actor_self_target,
         manual_pan_offset_from_follow_focus, post_cancel_turn_policy_for_context,
         request_cancel_pending_movement, CancelMovementContext, PostCancelTurnPolicy,
     };
     use crate::console::ViewerConsoleState;
     use crate::geometry::{clamp_camera_pan_offset, grid_bounds, selected_actor};
     use crate::state::{
-        ViewerActorMotionState, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
-        ViewerState, ViewerUiSettings,
+        ViewerActorMotionState, ViewerInfoPanelState, ViewerRenderConfig, ViewerRuntimeState,
+        ViewerSceneKind, ViewerState, ViewerUiSettings,
     };
     use bevy::prelude::*;
     use game_bevy::SettlementDebugSnapshot;
     use game_bevy::{SkillDefinitions, UiHotbarState, UiMenuPanel, UiMenuState, UiModalState};
     use game_core::{create_demo_runtime, MapObjectDebugState};
-    use game_data::{ActorSide, GridCoord, MapObjectFootprint, MapObjectKind, MapRotation};
+    use game_data::{
+        ActorSide, GridCoord, InteractionTargetId, MapObjectFootprint, MapObjectKind, MapRotation,
+    };
 
     #[test]
     fn keyboard_cancel_requests_auto_end_turn_out_of_combat() {
@@ -1034,6 +1046,29 @@ mod tests {
     }
 
     #[test]
+    fn command_actor_self_target_is_detected_for_wait_interaction() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let actor = snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == handles.player)
+            .expect("player actor should exist");
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(handles.player, ActorSide::Player);
+
+        assert!(is_command_actor_self_target(
+            &snapshot,
+            &viewer_state,
+            actor
+        ));
+        assert_eq!(
+            cursor_interaction_target(Some(handles.player), Some(actor), None),
+            Some(InteractionTargetId::Actor(handles.player))
+        );
+    }
+
+    #[test]
     fn main_menu_scene_ignores_escape_shortcut() {
         let app = keyboard_input_app(ViewerSceneKind::MainMenu, KeyCode::Escape);
 
@@ -1121,6 +1156,7 @@ mod tests {
                 ai_snapshot: SettlementDebugSnapshot::default(),
             })
             .insert_resource(ViewerState::default())
+            .insert_resource(ViewerInfoPanelState::default())
             .insert_resource(ViewerRenderConfig::default())
             .insert_resource(UiMenuState::default())
             .insert_resource(UiModalState::default())
@@ -1154,6 +1190,7 @@ mod tests {
                 ai_snapshot: SettlementDebugSnapshot::default(),
             })
             .insert_resource(ViewerState::default())
+            .insert_resource(ViewerInfoPanelState::default())
             .insert_resource(ViewerRenderConfig::default())
             .insert_resource(UiMenuState::default())
             .insert_resource(UiModalState::default())

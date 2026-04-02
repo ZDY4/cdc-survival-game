@@ -54,7 +54,8 @@ pub(crate) fn apply_interaction_result(
 
     let dialogue_key = result.dialogue_id.clone();
     if let Some(dialogue_key) = dialogue_key.as_deref() {
-        if let Some(actor_id) = viewer_state.selected_actor {
+        let snapshot = runtime_state.runtime.snapshot();
+        if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
             let target_id = viewer_state
                 .current_prompt
                 .as_ref()

@@ -11,6 +11,7 @@ pub struct NarrativeDocTypeEntry {
 }
 
 const DOC_TYPES: &[(&str, &str, &str)] = &[
+    ("world_bible", "世界观手册", "world"),
     ("task_setup", "任务设定", "tasks"),
     ("location_note", "地点设定", "locations"),
     ("character_card", "人物设定", "characters"),
@@ -61,6 +62,13 @@ pub fn default_markdown(doc_type: &str, title: &str) -> String {
     };
 
     let sections = match doc_type {
+        "world_bible" => vec![
+            ("世界状态", "描述灾变后的世界现状、秩序、资源与危险。"),
+            ("关键规则", "记录会影响叙事和玩法的世界规则。"),
+            ("典型地点", "列出主要区域、氛围、可探索内容和故事功能。"),
+            ("典型冲突", "总结这个世界中反复出现的矛盾类型。"),
+            ("结构化落地提示", "可拆为地点资料、背景线索、区域任务池、环境对白。"),
+        ],
         "task_setup" => vec![
             ("任务目标", "说明玩家为什么要做这件事，以及完成后会改变什么。"),
             (
