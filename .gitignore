@@ -85,6 +85,10 @@ tools/narrative_lab/.env.*
 tools/editor_shared/.env
 tools/editor_shared/.env.*
 
+# Local Bevy viewer runtime state
+saves/bevy_viewer_latest.json
+config/bevy_viewer_ui_settings.json
+
 # Rust lockfiles should be versioned for app crates
 !rust/Cargo.lock
 
