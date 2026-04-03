@@ -1,3 +1,7 @@
+#![cfg_attr(not(test), allow(dead_code))]
+
+//! 几何拾取 helper：负责 actor、门、地图对象的射线命中和占位包围盒计算。
+
 use bevy::prelude::*;
 use game_core::{ActorDebugState, SimulationSnapshot};
 use game_data::{GridCoord, MapObjectKind, WorldCoord};

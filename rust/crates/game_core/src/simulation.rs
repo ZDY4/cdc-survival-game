@@ -1510,6 +1510,10 @@ impl Simulation {
         self.grid_world.is_walkable(grid)
     }
 
+    pub fn grid_walkable_for_actor(&self, grid: GridCoord, actor_id: Option<ActorId>) -> bool {
+        self.grid_world.is_walkable_for_actor(grid, actor_id)
+    }
+
     pub fn drop_item_to_ground(
         &mut self,
         actor_id: ActorId,
@@ -4090,7 +4094,10 @@ mod tests {
         assert_eq!(prompt.options.len(), 1);
         assert_eq!(prompt.options[0].kind, InteractionOptionKind::Wait);
         assert_eq!(prompt.options[0].display_name, "等待");
-        assert_eq!(prompt.primary_option_id, Some(InteractionOptionId("wait".into())));
+        assert_eq!(
+            prompt.primary_option_id,
+            Some(InteractionOptionId("wait".into()))
+        );
     }
 
     #[test]
@@ -4115,7 +4122,9 @@ mod tests {
         });
 
         assert!(result.success);
-        let action = result.action_result.expect("wait should yield an action result");
+        let action = result
+            .action_result
+            .expect("wait should yield an action result");
         assert_eq!(action.ap_before, 1.0);
         assert_eq!(action.ap_after, 1.0);
         assert_eq!(action.consumed, 0.0);

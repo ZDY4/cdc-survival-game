@@ -1,7 +1,10 @@
 use game_core::SimulationSnapshot;
 use game_data::{InteractionPrompt, InteractionTargetId};
 
-use crate::geometry::{actor_at_grid, actor_label, map_object_at_grid, map_object_debug_label};
+use crate::geometry::{
+    actor_at_grid, actor_label, grid_walkability_debug_info, map_object_at_grid,
+    map_object_debug_label,
+};
 use crate::state::{ViewerRuntimeState, ViewerState};
 
 use super::{kv, section};
@@ -28,11 +31,33 @@ pub(crate) fn format_selection_panel(
         .filter(|object| object.occupied_cells.contains(&grid))
         .map(|object| map_object_debug_label(snapshot, object))
         .collect::<Vec<_>>();
+    let terrain = snapshot
+        .grid
+        .map_cells
+        .iter()
+        .find(|cell| cell.grid == grid)
+        .map(|cell| cell.terrain.as_str())
+        .unwrap_or("none");
+    let walkability =
+        grid_walkability_debug_info(&runtime_state.runtime, snapshot, viewer_state, grid);
 
     let mut sections = vec![section(
         "Selection",
         vec![
             kv("Grid", format!("({}, {}, {})", grid.x, grid.y, grid.z)),
+            kv("Terrain", terrain),
+            kv(
+                "Walkable",
+                if walkability.is_walkable { "yes" } else { "no" },
+            ),
+            kv(
+                "Walkability Detail",
+                if walkability.reasons.is_empty() {
+                    "clear".to_string()
+                } else {
+                    walkability.reasons.join(", ")
+                },
+            ),
             kv(
                 "Actors",
                 if actor_names.is_empty() {
@@ -144,4 +169,64 @@ fn format_prompt_section(prompt: Option<&InteractionPrompt>) -> String {
     }
 
     section("Interaction Options", lines)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_selection_panel;
+    use crate::state::{ViewerRuntimeState, ViewerState};
+    use game_bevy::SettlementDebugSnapshot;
+    use game_core::create_demo_runtime;
+    use game_data::GridCoord;
+
+    #[test]
+    fn selection_panel_shows_walkable_yes_for_command_actor_cell() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let viewer_state = ViewerState {
+            selected_actor: Some(handles.player),
+            hovered_grid: snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.actor_id == handles.player)
+                .map(|actor| actor.grid_position),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let panel = format_selection_panel(&snapshot, &runtime_state, &viewer_state);
+
+        assert!(panel.contains("Terrain:"));
+        assert!(panel.contains("Walkable: yes"));
+        assert!(panel.contains("Walkability Detail: clear"));
+    }
+
+    #[test]
+    fn selection_panel_shows_block_reasons_for_unwalkable_cell() {
+        let (runtime, handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let viewer_state = ViewerState {
+            selected_actor: Some(handles.player),
+            hovered_grid: Some(GridCoord::new(2, 0, 1)),
+            current_level: 0,
+            ..ViewerState::default()
+        };
+
+        let panel = format_selection_panel(&snapshot, &runtime_state, &viewer_state);
+
+        assert!(panel.contains("Terrain:"));
+        assert!(panel.contains("Walkable: no"));
+        assert!(panel.contains("Walkability Detail:"));
+        assert!(!panel.contains("Walkability Detail: clear"));
+    }
 }

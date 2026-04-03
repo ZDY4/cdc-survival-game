@@ -107,7 +107,11 @@ fn render_session_export(input: &NarrativeSessionExportInput) -> String {
         input.active_document.meta.status.trim()
     ));
 
-    push_section(&mut output, "Strategy", &[input.strategy_summary.trim().to_string()]);
+    push_section(
+        &mut output,
+        "Strategy",
+        &[input.strategy_summary.trim().to_string()],
+    );
 
     if let Some(turn_kind) = &input.latest_turn_kind {
         push_section(
@@ -126,11 +130,7 @@ fn render_session_export(input: &NarrativeSessionExportInput) -> String {
         );
     }
 
-    push_section(
-        &mut output,
-        "Source Documents",
-        &input.source_document_keys,
-    );
+    push_section(&mut output, "Source Documents", &input.source_document_keys);
     push_section(&mut output, "Provenance Refs", &input.provenance_refs);
 
     if !input.selected_context_documents.is_empty() {

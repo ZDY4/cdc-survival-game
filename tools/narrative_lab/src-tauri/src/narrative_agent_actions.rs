@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
-use crate::narrative_templates::doc_type_label;
+use crate::narrative_templates::{doc_type_label, is_known_doc_type};
 use crate::narrative_workspace::{
     create_narrative_document, load_narrative_documents, resolve_workspace_root,
     save_narrative_document, CreateNarrativeDocumentInput, NarrativeDocumentPayload,
@@ -49,14 +49,16 @@ pub fn execute_narrative_agent_action(
         "set_document_status" => execute_set_document_status(&workspace_root, input),
         "split_plan_into_documents" => execute_split_plan_into_documents(&workspace_root, input),
         "archive_document" => execute_archive_document(&workspace_root, input),
-        unsupported => Err(format!("Narrative Lab agent action is not supported by backend: {unsupported}")),
+        unsupported => Err(format!(
+            "Narrative Lab agent action is not supported by backend: {unsupported}"
+        )),
     }
 }
 
 fn execute_read_active_document(
     input: ExecuteNarrativeAgentActionInput,
 ) -> Result<NarrativeAgentActionExecutionResult, String> {
-    let Some(document) = input.current_document else {
+    let Some(document) = input.current_document.clone() else {
         return Err("read_active_document 需要 currentDocument".to_string());
     };
 
@@ -78,10 +80,14 @@ fn execute_read_related_documents(
     let workspace_root_path = resolve_workspace_root(workspace_root)?;
     let documents = load_narrative_documents(&workspace_root_path)?;
     let requested_slugs = read_slug_list(
-        input.payload.get("documentSlugs").or_else(|| input.payload.get("document_slugs")),
+        input
+            .payload
+            .get("documentSlugs")
+            .or_else(|| input.payload.get("document_slugs")),
     );
     let related_slugs = if requested_slugs.is_empty() {
-        input.current_document
+        input
+            .current_document
             .as_ref()
             .map(|document| document.meta.related_docs.clone())
             .unwrap_or_default()
@@ -115,32 +121,29 @@ fn execute_create_derived_document(
     input: ExecuteNarrativeAgentActionInput,
 ) -> Result<NarrativeAgentActionExecutionResult, String> {
     let payload = input.payload.as_object().cloned().unwrap_or_default();
-    let doc_type = payload
-        .get("docType")
-        .or_else(|| payload.get("doc_type"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "create_derived_document 需要 docType".to_string())?
-        .to_string();
-    let title = payload
-        .get("title")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string);
-    let slug = payload
-        .get("slug")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string);
-    let markdown_override = payload
-        .get("markdown")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string);
+    let doc_type = required_payload_string(
+        &payload,
+        &["docType", "doc_type"],
+        "create_derived_document 需要 docType",
+    )?;
+    if !is_known_doc_type(&doc_type) {
+        return Err(format!("未知文稿类型: {}", doc_type));
+    }
+    let title = payload_string_value(&payload, &["title"]);
+    let slug = payload_string_value(&payload, &["slug"]);
+    let markdown_override = payload_string_value(&payload, &["markdown"]);
+
+    if is_preview_only(&input) {
+        return Ok(NarrativeAgentActionExecutionResult {
+            request_id: input.request_id,
+            action_type: input.action_type,
+            status: "completed".to_string(),
+            summary: preview_summary_for_create(&doc_type, title.as_deref()),
+            document: None,
+            document_summaries: Vec::new(),
+            opened_slug: None,
+        });
+    }
 
     let mut document = create_narrative_document(
         workspace_root.to_string(),
@@ -160,7 +163,12 @@ fn execute_create_derived_document(
         .map(|document| document.meta.slug.clone())
         .filter(|value| !value.is_empty())
     {
-        if !document.meta.related_docs.iter().any(|slug| slug == &source_slug) {
+        if !document
+            .meta
+            .related_docs
+            .iter()
+            .any(|slug| slug == &source_slug)
+        {
             document.meta.related_docs.push(source_slug);
         }
     }
@@ -198,9 +206,21 @@ fn execute_save_active_document(
     workspace_root: &str,
     input: ExecuteNarrativeAgentActionInput,
 ) -> Result<NarrativeAgentActionExecutionResult, String> {
-    let Some(document) = input.current_document else {
+    let Some(document) = input.current_document.clone() else {
         return Err("save_active_document 需要 currentDocument".to_string());
     };
+
+    if is_preview_only(&input) {
+        return Ok(NarrativeAgentActionExecutionResult {
+            request_id: input.request_id,
+            action_type: input.action_type,
+            status: "completed".to_string(),
+            summary: preview_summary_for_save(&document.meta.title),
+            document: None,
+            document_summaries: Vec::new(),
+            opened_slug: None,
+        });
+    }
 
     let save_result = save_narrative_document(
         workspace_root.to_string(),
@@ -287,17 +307,23 @@ fn execute_update_related_documents(
 ) -> Result<NarrativeAgentActionExecutionResult, String> {
     let mut document = input
         .current_document
+        .clone()
         .ok_or_else(|| "update_related_documents 需要 currentDocument".to_string())?;
     let replacement = read_slug_list(
-        input.payload.get("relatedDocs").or_else(|| input.payload.get("related_docs")),
+        input
+            .payload
+            .get("relatedDocs")
+            .or_else(|| input.payload.get("related_docs")),
     );
     let adds = read_slug_list(
-        input.payload
+        input
+            .payload
             .get("addDocumentSlugs")
             .or_else(|| input.payload.get("add_document_slugs")),
     );
     let removes = read_slug_list(
-        input.payload
+        input
+            .payload
             .get("removeDocumentSlugs")
             .or_else(|| input.payload.get("remove_document_slugs")),
     );
@@ -315,6 +341,21 @@ fn execute_update_related_documents(
     }
     next_related.retain(|slug| !removes.iter().any(|entry| entry == slug));
     document.meta.related_docs = next_related;
+
+    if is_preview_only(&input) {
+        return Ok(NarrativeAgentActionExecutionResult {
+            request_id: input.request_id,
+            action_type: input.action_type,
+            status: "completed".to_string(),
+            summary: preview_summary_for_related_update(
+                &document.meta.title,
+                document.meta.related_docs.len(),
+            ),
+            document: None,
+            document_summaries: Vec::new(),
+            opened_slug: None,
+        });
+    }
 
     let saved_document = save_existing_document(workspace_root, document)?;
     Ok(NarrativeAgentActionExecutionResult {
@@ -338,6 +379,7 @@ fn execute_rename_active_document(
 ) -> Result<NarrativeAgentActionExecutionResult, String> {
     let mut document = input
         .current_document
+        .clone()
         .ok_or_else(|| "rename_active_document 需要 currentDocument".to_string())?;
     let next_title = input
         .payload
@@ -358,11 +400,23 @@ fn execute_rename_active_document(
         return Err("rename_active_document 至少需要 title 或 slug".to_string());
     }
 
-    if let Some(title) = next_title {
+    if let Some(title) = next_title.clone() {
         document.meta.title = title;
     }
-    if let Some(slug) = next_slug {
+    if let Some(slug) = next_slug.clone() {
         document.meta.slug = slug;
+    }
+
+    if is_preview_only(&input) {
+        return Ok(NarrativeAgentActionExecutionResult {
+            request_id: input.request_id,
+            action_type: input.action_type,
+            status: "completed".to_string(),
+            summary: preview_summary_for_rename(next_title.as_deref(), next_slug.as_deref()),
+            document: None,
+            document_summaries: Vec::new(),
+            opened_slug: None,
+        });
     }
 
     let saved_document = save_existing_document(workspace_root, document)?;
@@ -383,6 +437,7 @@ fn execute_set_document_status(
 ) -> Result<NarrativeAgentActionExecutionResult, String> {
     let mut document = input
         .current_document
+        .clone()
         .ok_or_else(|| "set_document_status 需要 currentDocument".to_string())?;
     let next_status = input
         .payload
@@ -392,6 +447,18 @@ fn execute_set_document_status(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "set_document_status 需要 status".to_string())?;
     document.meta.status = next_status.to_string();
+
+    if is_preview_only(&input) {
+        return Ok(NarrativeAgentActionExecutionResult {
+            request_id: input.request_id,
+            action_type: input.action_type,
+            status: "completed".to_string(),
+            summary: preview_summary_for_status(&document.meta.status),
+            document: None,
+            document_summaries: Vec::new(),
+            opened_slug: None,
+        });
+    }
 
     let saved_document = save_existing_document(workspace_root, document)?;
     Ok(NarrativeAgentActionExecutionResult {
@@ -416,6 +483,7 @@ fn execute_archive_document(
     input.payload = Value::Object(payload);
     let mut document = input
         .current_document
+        .clone()
         .ok_or_else(|| "archive_document 需要 currentDocument".to_string())?;
     document.meta.status = "archived".to_string();
     if let Some(title_suffix) = input
@@ -426,6 +494,18 @@ fn execute_archive_document(
         .filter(|value| !value.is_empty())
     {
         document.meta.title = format!("{} {}", document.meta.title.trim(), title_suffix);
+    }
+
+    if is_preview_only(&input) {
+        return Ok(NarrativeAgentActionExecutionResult {
+            request_id: input.request_id,
+            action_type: input.action_type,
+            status: "completed".to_string(),
+            summary: preview_summary_for_archive(&document.meta.title),
+            document: None,
+            document_summaries: Vec::new(),
+            opened_slug: None,
+        });
     }
 
     let saved_document = save_existing_document(workspace_root, document)?;
@@ -449,61 +529,86 @@ fn execute_split_plan_into_documents(
         .as_ref()
         .map(|document| document.meta.slug.clone())
         .unwrap_or_default();
-    let specs = input
+    let specs_value = input
         .payload
         .get("documents")
         .or_else(|| input.payload.get("documentSpecs"))
         .and_then(Value::as_array)
         .ok_or_else(|| "split_plan_into_documents 需要 documents".to_string())?;
 
+    struct SplitPlanSpec {
+        doc_type: String,
+        title: Option<String>,
+        slug: Option<String>,
+        markdown: Option<String>,
+        status: Option<String>,
+    }
+
+    let specs = specs_value
+        .iter()
+        .enumerate()
+        .map(|(index, spec)| {
+            let spec_object = spec.as_object().ok_or_else(|| {
+                format!("split_plan_into_documents.documents[{index}] 必须是对象")
+            })?;
+            let doc_type = required_payload_string(
+                spec_object,
+                &["docType", "doc_type"],
+                &format!("split_plan_into_documents.documents[{index}] 缺少 docType"),
+            )?;
+            if !is_known_doc_type(&doc_type) {
+                return Err(format!(
+                    "split_plan_into_documents.documents[{index}] 包含未知文稿类型: {doc_type}"
+                ));
+            }
+            let title = payload_string_value(spec_object, &["title"]);
+            let slug = payload_string_value(spec_object, &["slug"]);
+            let markdown = payload_string_value(spec_object, &["markdown"]);
+            let status = payload_string_value(spec_object, &["status"]);
+            Ok(SplitPlanSpec {
+                doc_type,
+                title,
+                slug,
+                markdown,
+                status,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    if is_preview_only(&input) {
+        return Ok(NarrativeAgentActionExecutionResult {
+            request_id: input.request_id,
+            action_type: input.action_type,
+            status: "completed".to_string(),
+            summary: preview_summary_for_split(specs.len()),
+            document: None,
+            document_summaries: Vec::new(),
+            opened_slug: None,
+        });
+    }
+
     let mut saved_documents = Vec::new();
-    for (index, spec) in specs.iter().enumerate() {
-        let spec_object = spec
-            .as_object()
-            .ok_or_else(|| format!("split_plan_into_documents.documents[{index}] 必须是对象"))?;
-        let doc_type = spec_object
-            .get("docType")
-            .or_else(|| spec_object.get("doc_type"))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| format!("split_plan_into_documents.documents[{index}] 缺少 docType"))?
-            .to_string();
-        let title = spec_object
-            .get("title")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string);
-        let slug = spec_object
-            .get("slug")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string);
-        let markdown = spec_object
-            .get("markdown")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string);
-        let status = spec_object
-            .get("status")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string);
+    for spec in specs {
         let mut document = create_narrative_document(
             workspace_root.to_string(),
-            CreateNarrativeDocumentInput { doc_type, slug, title },
+            CreateNarrativeDocumentInput {
+                doc_type: spec.doc_type,
+                slug: spec.slug,
+                title: spec.title,
+            },
         )?;
-        if let Some(markdown) = markdown {
+        if let Some(markdown) = spec.markdown {
             document.markdown = markdown;
         }
-        if let Some(status) = status {
+        if let Some(status) = spec.status {
             document.meta.status = status;
         }
-        if !source_slug.is_empty() && !document.meta.related_docs.iter().any(|entry| entry == &source_slug)
+        if !source_slug.is_empty()
+            && !document
+                .meta
+                .related_docs
+                .iter()
+                .any(|entry| entry == &source_slug)
         {
             document.meta.related_docs.push(source_slug.clone());
         }
@@ -598,5 +703,123 @@ fn summarize_payload(document: &NarrativeDocumentPayload) -> NarrativeDocumentSu
         heading_count: headings.len(),
         headings,
         excerpt,
+    }
+}
+
+fn is_preview_only(input: &ExecuteNarrativeAgentActionInput) -> bool {
+    bool_from_payload(input.payload.get("previewOnly"))
+        .or_else(|| bool_from_payload(input.payload.get("preview_only")))
+        .unwrap_or(false)
+}
+
+fn bool_from_payload(value: Option<&Value>) -> Option<bool> {
+    value.and_then(Value::as_bool)
+}
+
+fn payload_string_value(payload: &Map<String, Value>, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        if let Some(value) = payload.get(*key).and_then(Value::as_str) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn required_payload_string(
+    payload: &Map<String, Value>,
+    keys: &[&str],
+    message: &str,
+) -> Result<String, String> {
+    payload_string_value(payload, keys).ok_or_else(|| message.to_string())
+}
+
+fn preview_summary_for_create(doc_type: &str, title: Option<&str>) -> String {
+    let label = doc_type_label(doc_type);
+    match title {
+        Some(title) => format!("预览：将创建 {}《{}》。", label, title),
+        None => format!("预览：将创建 {}。", label),
+    }
+}
+
+fn preview_summary_for_save(title: &str) -> String {
+    format!("预览：将保存《{}》。", title)
+}
+
+fn preview_summary_for_rename(next_title: Option<&str>, next_slug: Option<&str>) -> String {
+    if let Some(title) = next_title {
+        format!("预览：将当前文稿重命名为《{}》。", title)
+    } else if let Some(slug) = next_slug {
+        format!("预览：将当前文稿 slug 修改为 {}。", slug)
+    } else {
+        "预览：将当前文稿重命名。".to_string()
+    }
+}
+
+fn preview_summary_for_status(status: &str) -> String {
+    format!("预览：将当前文稿状态设置为 {}。", status)
+}
+
+fn preview_summary_for_related_update(title: &str, count: usize) -> String {
+    format!("预览：将《{}》的关联文稿调整为 {} 项。", title, count)
+}
+
+fn preview_summary_for_archive(title: &str) -> String {
+    format!("预览：将《{}》归档。", title)
+}
+
+fn preview_summary_for_split(count: usize) -> String {
+    if count <= 1 {
+        "预览：将按计划拆分并创建 1 份文稿。".to_string()
+    } else {
+        format!("预览：将按计划拆分并创建 {} 份文稿。", count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn payload_string_value_respects_keys_order() {
+        let mut payload = Map::new();
+        payload.insert("title".to_string(), Value::String("  标题  ".to_string()));
+        assert_eq!(
+            payload_string_value(&payload, &["title", "slug"]),
+            Some("标题".to_string())
+        );
+    }
+
+    #[test]
+    fn required_payload_string_errors_when_missing() {
+        let payload = Map::new();
+        let err = required_payload_string(&payload, &["docType"], "缺少字段").unwrap_err();
+        assert_eq!(err, "缺少字段");
+    }
+
+    #[test]
+    fn is_preview_only_detects_payload_flags() {
+        let input = ExecuteNarrativeAgentActionInput {
+            request_id: "1".to_string(),
+            action_type: "create_derived_document".to_string(),
+            payload: json!({ "previewOnly": true }),
+            current_document: None,
+        };
+        assert!(is_preview_only(&input));
+    }
+
+    #[test]
+    fn preview_summary_for_create_includes_label() {
+        let summary = preview_summary_for_create("task_setup", Some("任务草稿"));
+        assert!(summary.contains("任务设定"));
+    }
+
+    #[test]
+    fn preview_summary_for_split_handles_multiple() {
+        let summary = preview_summary_for_split(3);
+        assert!(summary.contains("3 份"));
     }
 }

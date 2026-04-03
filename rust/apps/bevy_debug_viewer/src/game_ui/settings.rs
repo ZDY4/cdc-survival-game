@@ -1,3 +1,5 @@
+//! UI 设置模块：负责读取、保存与应用 viewer 的界面缩放和按键绑定配置。
+
 use super::*;
 
 pub(crate) fn load_ui_settings_on_startup(

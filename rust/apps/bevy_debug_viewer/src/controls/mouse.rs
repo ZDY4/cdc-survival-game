@@ -1,4 +1,7 @@
+//! 鼠标输入分发：负责场景点击、悬停拾取、交互菜单命中和世界坐标转换。
+
 use super::*;
+use crate::picking::{ViewerPickTarget, ViewerPickingState};
 
 pub(crate) fn handle_mouse_input(
     window: Single<&Window>,
@@ -20,6 +23,7 @@ pub(crate) fn handle_mouse_input(
     modal_state: Res<UiModalState>,
     console_state: Res<ViewerConsoleState>,
     scene_kind: Res<ViewerSceneKind>,
+    picking_state: Res<ViewerPickingState>,
 ) {
     if console_state.is_open {
         return;
@@ -59,35 +63,29 @@ pub(crate) fn handle_mouse_input(
     viewer_state.hovered_grid = Some(grid);
     refresh_targeting_preview(&runtime_state, &mut viewer_state, Some(grid));
 
-    let ray_actor_hit =
-        actor_hit_at_ray(&snapshot, viewer_state.current_level, ray, *render_config);
-    let ray_object_hit =
-        map_object_hit_at_ray(&snapshot, viewer_state.current_level, ray, *render_config);
-    let actor_at_cursor = match (&ray_actor_hit, &ray_object_hit) {
-        (Some((actor, actor_fraction)), Some((_, object_fraction)))
-            if actor_fraction <= object_fraction =>
-        {
-            Some(actor.clone())
-        }
-        (Some((actor, _)), None) => Some(actor.clone()),
-        (None, None) => actor_at_grid(&snapshot, grid),
-        _ => None,
+    let hovered_pick = picking_state.hovered.as_ref();
+    let primary_pick = picking_state.primary_click.as_ref().or(hovered_pick);
+    let secondary_pick = picking_state.secondary_click.as_ref().or(hovered_pick);
+    let has_hovered_pick = hovered_pick.is_some();
+    let actor_at_cursor = pick_actor_from_resolved(&snapshot, hovered_pick).or_else(|| {
+        (!has_hovered_pick)
+            .then(|| actor_at_grid(&snapshot, grid))
+            .flatten()
+    });
+    let grid_map_object = (!has_hovered_pick)
+        .then(|| map_object_at_grid(&snapshot, grid))
+        .flatten();
+    let cursor_target = if let Some(target) = pick_interaction_target(secondary_pick) {
+        Some(target)
+    } else if !has_hovered_pick {
+        cursor_interaction_target(
+            viewer_state.command_actor_id(&snapshot),
+            actor_at_cursor.as_ref(),
+            grid_map_object.as_ref(),
+        )
+    } else {
+        None
     };
-    let map_object_at_cursor = match (&ray_actor_hit, &ray_object_hit) {
-        (Some((_, actor_fraction)), Some((object, object_fraction)))
-            if object_fraction < actor_fraction =>
-        {
-            Some(object.clone())
-        }
-        (None, Some((object, _))) => Some(object.clone()),
-        (None, None) => map_object_at_grid(&snapshot, grid),
-        _ => None,
-    };
-    let cursor_target = cursor_interaction_target(
-        viewer_state.command_actor_id(&snapshot),
-        actor_at_cursor.as_ref(),
-        map_object_at_cursor.as_ref(),
-    );
 
     if viewer_state.active_dialogue.is_some() {
         if buttons.just_pressed(MouseButton::Left) {
@@ -227,8 +225,12 @@ pub(crate) fn handle_mouse_input(
             return;
         }
 
-        if let Some(ref actor) = actor_at_cursor {
-            if is_command_actor_self_target(&snapshot, &viewer_state, actor) {
+        if let Some(actor) = pick_actor_from_resolved(&snapshot, primary_pick).or_else(|| {
+            (!primary_pick.is_some())
+                .then(|| actor_at_grid(&snapshot, grid))
+                .flatten()
+        }) {
+            if is_command_actor_self_target(&snapshot, &viewer_state, &actor) {
                 viewer_state.interaction_menu = None;
                 viewer_state.focused_target = None;
                 viewer_state.current_prompt = None;
@@ -268,7 +270,11 @@ pub(crate) fn handle_mouse_input(
                     "mouse_primary",
                 );
             }
-        } else if let Some(object) = map_object_at_cursor.as_ref() {
+        } else if let Some(object_id) = pick_map_object_id(primary_pick).or_else(|| {
+            (!primary_pick.is_some())
+                .then(|| map_object_at_grid(&snapshot, grid).map(|object| object.object_id))
+                .flatten()
+        }) {
             request_cancel_pending_movement(
                 &mut runtime_state,
                 &mut viewer_state,
@@ -279,7 +285,7 @@ pub(crate) fn handle_mouse_input(
                 &mut runtime_state,
                 &mut viewer_state,
                 &snapshot,
-                object,
+                &object_id,
                 grid,
             );
         } else {
@@ -332,4 +338,38 @@ pub(crate) fn handle_mouse_input(
             viewer_state.status_line = "interaction menu: closed".to_string();
         }
     }
+}
+
+fn pick_actor_from_resolved(
+    snapshot: &game_core::SimulationSnapshot,
+    pick: Option<&crate::picking::ViewerResolvedPick>,
+) -> Option<game_core::ActorDebugState> {
+    let pick = pick?;
+    let actor_id = match &pick.semantic {
+        ViewerPickTarget::Actor(actor_id) => actor_id,
+        ViewerPickTarget::MapObject(_) | ViewerPickTarget::BuildingPart(_) => {
+            match pick.interaction.as_ref() {
+                Some(InteractionTargetId::Actor(actor_id)) => actor_id,
+                _ => return None,
+            }
+        }
+    };
+    snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == *actor_id)
+        .cloned()
+}
+
+fn pick_map_object_id(pick: Option<&crate::picking::ViewerResolvedPick>) -> Option<String> {
+    match pick?.interaction.as_ref()? {
+        InteractionTargetId::MapObject(object_id) => Some(object_id.clone()),
+        InteractionTargetId::Actor(_) => None,
+    }
+}
+
+fn pick_interaction_target(
+    pick: Option<&crate::picking::ViewerResolvedPick>,
+) -> Option<InteractionTargetId> {
+    pick.and_then(|pick| pick.interaction.clone())
 }

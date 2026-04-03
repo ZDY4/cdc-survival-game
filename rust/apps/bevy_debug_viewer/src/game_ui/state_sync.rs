@@ -1,3 +1,5 @@
+//! UI 状态同步：负责场景切换后的默认值恢复、运行时快照同步和存档读写辅助。
+
 use super::*;
 
 pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMenuState>) {
@@ -12,6 +14,7 @@ pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMen
             height: Val::Percent(100.0),
             ..default()
         },
+        viewer_ui_passthrough_bundle(),
         GameUiRoot,
     ));
 }

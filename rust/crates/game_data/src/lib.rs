@@ -7,6 +7,7 @@ pub mod dialogue_rules;
 pub mod dialogue_runtime;
 pub mod interaction;
 pub mod map;
+pub mod map_edit;
 pub mod models;
 pub mod outdoor_transition;
 pub mod overworld;
@@ -81,6 +82,10 @@ pub use map::{
     MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition, MapObjectFootprint,
     MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, MapTriggerProps,
     MapValidationCatalog, RelativeGridCell, RelativeGridVertex, StairKind,
+};
+pub use map_edit::{
+    normalize_map_definition, MapEditCommand, MapEditDiagnostic, MapEditDiagnosticSeverity,
+    MapEditError, MapEditOperationSummary, MapEditResult, MapEditTarget, MapEditorService,
 };
 pub use models::{
     ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,

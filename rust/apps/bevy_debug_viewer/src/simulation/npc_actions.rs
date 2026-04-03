@@ -1,3 +1,5 @@
+//! NPC 行为模块：负责调试 viewer 中的 NPC 动作触发与目标行动辅助。
+
 use bevy::prelude::*;
 use game_bevy::{
     CharacterDefinitionId, CurrentAction, CurrentPlan, GridPosition, NeedState, NpcLifeState,

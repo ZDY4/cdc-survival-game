@@ -1,19 +1,18 @@
 //! 渲染模块门面：统一组织 viewer 的相机、世界可视化、战争迷雾、遮挡和屏幕叠加层子模块，
 //! 并对外暴露 app 装配所需的稳定入口与共享渲染类型。
 
-use std::collections::{HashMap, HashSet};
+pub(super) use std::collections::{HashMap, HashSet};
 
-use bevy::asset::{Asset, RenderAssetUsages};
-use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight};
-use bevy::mesh::Indices;
-use bevy::pbr::{ExtendedMaterial, MaterialExtension, OpaqueRendererMethod, StandardMaterial};
-use bevy::prelude::*;
-use bevy::reflect::TypePath;
-use bevy::render::render_resource::{
-    AsBindGroup, AsBindGroupShaderType, Extent3d, PrimitiveTopology, ShaderType, TextureDimension,
-    TextureFormat,
+pub(super) use bevy::asset::RenderAssetUsages;
+pub(super) use bevy::light::{
+    CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight,
 };
-use bevy::shader::ShaderRef;
+pub(super) use bevy::mesh::Indices;
+pub(super) use bevy::pbr::{OpaqueRendererMethod, StandardMaterial};
+use bevy::prelude::*;
+pub(super) use bevy::render::render_resource::{
+    Extent3d, PrimitiveTopology, ShaderType, TextureDimension, TextureFormat,
+};
 use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
 use game_bevy::{SettlementDebugEntry, SettlementDefinitions};
 use game_data::{ActorId, ActorSide, GridCoord};
@@ -27,455 +26,41 @@ use crate::geometry::{
     camera_world_distance, clamp_camera_pan_offset, grid_bounds, grid_focus_world_position,
     hovered_grid_outline_kind, is_missing_generated_building, level_base_height,
     missing_geo_building_placeholder_box, occluder_blocks_target, rendered_path_preview,
-    resolve_occlusion_focus_points, selected_actor, should_rebuild_static_world, GridBounds,
-    HoveredGridOutlineKind, OcclusionFocusPoint,
+    resolve_occlusion_focus_points, selected_actor, should_rebuild_static_world,
+    viewer_grid_is_walkable, GridBounds, HoveredGridOutlineKind, OcclusionFocusPoint,
 };
+pub(super) use crate::picking::{pickable_target, BuildingPartKind, ViewerPickBindingSpec};
 use crate::state::{
     ActorLabel, ActorLabelEntities, DialogueChoiceButton, DialoguePanelRoot,
     InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot, InteractionMenuState,
     UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
     ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode,
     ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
-    ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
+    ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH, viewer_ui_passthrough_bundle,
 };
 
-const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
-const INTERACTION_MENU_PADDING_PX: f32 = 12.0;
-const INTERACTION_MENU_BUTTON_HEIGHT_PX: f32 = 34.0;
-const INTERACTION_MENU_BUTTON_GAP_PX: f32 = 8.0;
-const DIALOGUE_PANEL_BOTTOM_PX: f32 = 24.0;
-const DIALOGUE_PANEL_MIN_WIDTH_PX: f32 = 360.0;
-const DIALOGUE_PANEL_MAX_WIDTH_PX: f32 = 920.0;
-const GRID_LINE_ELEVATION: f32 = 0.002;
-const OVERLAY_ELEVATION: f32 = 0.03;
-const GRID_GROUND_SHADER_PATH: &str = "shaders/grid_ground.wgsl";
-const BUILDING_WALL_GRID_SHADER_PATH: &str = "shaders/building_wall_grid.wgsl";
-const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
-const TRIGGER_DECAL_ELEVATION: f32 = 0.012;
-const CAMERA_FOLLOW_SMOOTHING_TAU_SEC: f32 = 0.075;
-const CAMERA_FOLLOW_RESET_DISTANCE_CELLS: f32 = 2.0;
-const GENERATED_DOOR_ROTATION_SPEED_RAD_PER_SEC: f32 = 7.5;
-const MISSING_GEO_BUILDING_PLACEHOLDER_ALPHA: f32 = 0.96;
-const WALL_NORTH: u8 = 1 << 0;
-const WALL_EAST: u8 = 1 << 1;
-const WALL_SOUTH: u8 = 1 << 2;
-const WALL_WEST: u8 = 1 << 3;
-const WALL_HORIZONTAL: u8 = WALL_EAST | WALL_WEST;
-const WALL_VERTICAL: u8 = WALL_NORTH | WALL_SOUTH;
-const WALL_CORNER_NE: u8 = WALL_NORTH | WALL_EAST;
-const WALL_CORNER_ES: u8 = WALL_EAST | WALL_SOUTH;
-const WALL_CORNER_SW: u8 = WALL_SOUTH | WALL_WEST;
-const WALL_CORNER_WN: u8 = WALL_WEST | WALL_NORTH;
-const WALL_T_NO_NORTH: u8 = WALL_EAST | WALL_SOUTH | WALL_WEST;
-const WALL_T_NO_EAST: u8 = WALL_NORTH | WALL_SOUTH | WALL_WEST;
-const WALL_T_NO_SOUTH: u8 = WALL_NORTH | WALL_EAST | WALL_WEST;
-const WALL_T_NO_WEST: u8 = WALL_NORTH | WALL_EAST | WALL_SOUTH;
-const WALL_CROSS: u8 = WALL_NORTH | WALL_EAST | WALL_SOUTH | WALL_WEST;
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct InteractionMenuLayout {
-    pub left: f32,
-    pub top: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-impl InteractionMenuLayout {
-    pub(crate) fn contains(self, cursor_position: Vec2) -> bool {
-        cursor_position.x >= self.left
-            && cursor_position.x <= self.left + self.width
-            && cursor_position.y >= self.top
-            && cursor_position.y <= self.top + self.height
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct InteractionMenuVisualKey {
-    target_id: game_data::InteractionTargetId,
-    target_name: String,
-    primary_option_id: Option<game_data::InteractionOptionId>,
-    options: Vec<(game_data::InteractionOptionId, String)>,
-}
-
-#[derive(Default)]
-pub(crate) struct InteractionMenuVisualCache {
-    key: Option<InteractionMenuVisualKey>,
-    visible: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct StaticWorldVisualKey {
-    map_id: Option<game_data::MapId>,
-    current_level: i32,
-    topology_version: u64,
-    hide_building_roofs: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum StaticWorldOccluderKind {
-    MapObject(game_data::MapObjectKind),
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct StaticWorldOccluderVisual {
-    entity: Entity,
-    material: StaticWorldMaterialHandle,
-    base_color: Color,
-    base_alpha: f32,
-    base_alpha_mode: AlphaMode,
-    aabb_center: Vec3,
-    aabb_half_extents: Vec3,
-    kind: StaticWorldOccluderKind,
-    currently_faded: bool,
-}
-
-#[derive(Debug, Clone)]
-struct StaticWorldBoxSpec {
-    size: Vec3,
-    translation: Vec3,
-    color: Color,
-    material_style: MaterialStyle,
-    occluder_kind: Option<StaticWorldOccluderKind>,
-}
-
-#[derive(Debug, Clone)]
-struct StaticWorldMeshSpec {
-    mesh: Mesh,
-    color: Color,
-    material_style: MaterialStyle,
-    occluder_kind: Option<StaticWorldOccluderKind>,
-    aabb_center: Vec3,
-    aabb_half_extents: Vec3,
-}
-
-#[derive(Debug, Clone)]
-struct StaticWorldDecalSpec {
-    size: Vec2,
-    translation: Vec3,
-    rotation: Quat,
-    color: Color,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct MergedGridRect {
-    level: i32,
-    min_x: i32,
-    max_x: i32,
-    min_z: i32,
-    max_z: i32,
-}
-
-struct SpawnedBoxVisual {
-    entity: Entity,
-    material: StaticWorldMaterialHandle,
-    size: Vec3,
-    translation: Vec3,
-    color: Color,
-}
-
-struct SpawnedMeshVisual {
-    entity: Entity,
-    material: StaticWorldMaterialHandle,
-    color: Color,
-    aabb_center: Vec3,
-    aabb_half_extents: Vec3,
-}
-
-#[derive(Default)]
-pub(crate) struct HoverOcclusionBuffer {
-    current: Option<GridCoord>,
-    previous: Option<GridCoord>,
-    previous_frames_remaining: u8,
-}
-
-#[derive(Debug, Clone)]
-enum StaticWorldMaterialHandle {
-    Standard(Handle<StandardMaterial>),
-    BuildingWallGrid(Handle<BuildingWallGridMaterial>),
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct StaticWorldVisualState {
-    key: Option<StaticWorldVisualKey>,
-    entities: Vec<Entity>,
-    occluders: Vec<StaticWorldOccluderVisual>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct GeneratedDoorVisualKey {
-    map_id: Option<game_data::MapId>,
-    current_level: i32,
-}
-
-struct GeneratedDoorVisual {
-    pivot_entity: Entity,
-    leaf_entity: Entity,
-    material: StaticWorldMaterialHandle,
-    base_color: Color,
-    base_alpha: f32,
-    base_alpha_mode: AlphaMode,
-    pivot_translation: Vec3,
-    current_yaw: f32,
-    target_yaw: f32,
-    open_yaw: f32,
-    closed_aabb_center: Vec3,
-    closed_aabb_half_extents: Vec3,
-    is_open: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WallTileKind {
-    Isolated,
-    EndNorth,
-    EndEast,
-    EndSouth,
-    EndWest,
-    StraightHorizontal,
-    StraightVertical,
-    CornerNorthEast,
-    CornerEastSouth,
-    CornerSouthWest,
-    CornerWestNorth,
-    TJunctionMissingNorth,
-    TJunctionMissingEast,
-    TJunctionMissingSouth,
-    TJunctionMissingWest,
-    Cross,
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct GeneratedDoorVisualState {
-    key: Option<GeneratedDoorVisualKey>,
-    by_door: HashMap<String, GeneratedDoorVisual>,
-    occluders: Vec<StaticWorldOccluderVisual>,
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct ActorVisualState {
-    by_actor: HashMap<ActorId, Entity>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct FogOfWarMaskKey {
-    map_id: Option<game_data::MapId>,
-    current_level: i32,
-    topology_version: u64,
-    actor_id: Option<ActorId>,
-    bounds: GridBounds,
-    visible_cells: Vec<GridCoord>,
-    explored_cells: Vec<GridCoord>,
-}
-
-#[derive(Resource)]
-pub(crate) struct FogOfWarMaskState {
-    key: Option<FogOfWarMaskKey>,
-    actor_id: Option<ActorId>,
-    map_id: Option<game_data::MapId>,
-    current_level: i32,
-    bounds: Option<GridBounds>,
-    map_min_world_xz: Vec2,
-    map_size_world_xz: Vec2,
-    mask_size: UVec2,
-    mask_texel_size: Vec2,
-    current_mask: Handle<Image>,
-    previous_mask: Handle<Image>,
-    current_bytes: Vec<u8>,
-    previous_bytes: Vec<u8>,
-    transition_elapsed_sec: f32,
-}
-
-impl FogOfWarMaskState {
-    pub(crate) fn new(current_mask: Handle<Image>, previous_mask: Handle<Image>) -> Self {
-        Self {
-            key: None,
-            actor_id: None,
-            map_id: None,
-            current_level: 0,
-            bounds: None,
-            map_min_world_xz: Vec2::ZERO,
-            map_size_world_xz: Vec2::ZERO,
-            mask_size: UVec2::ONE,
-            mask_texel_size: Vec2::ONE,
-            current_mask,
-            previous_mask,
-            current_bytes: vec![255],
-            previous_bytes: vec![255],
-            transition_elapsed_sec: 0.0,
-        }
-    }
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct DamageNumberVisualState {
-    by_id: HashMap<u64, Entity>,
-}
-
-#[derive(Resource, Clone)]
-pub(crate) struct TriggerDecalAssets {
-    arrow_texture: Handle<Image>,
-}
-
-#[derive(Component)]
-pub(crate) struct ActorBodyVisual {
-    actor_id: ActorId,
-    body_material: Handle<StandardMaterial>,
-    head_material: Handle<StandardMaterial>,
-    accent_material: Handle<StandardMaterial>,
-}
-
-#[derive(Component)]
-struct KeyLight;
-
-#[derive(Component)]
-struct FillLight;
-
-#[derive(Component)]
-pub(crate) struct DamageNumberLabel {
-    id: u64,
-}
-
-#[derive(Component)]
-pub(crate) struct GeneratedDoorPivot;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MaterialStyle {
-    StructureAccent,
-    BuildingWallGrid,
-    Utility,
-    UtilityAccent,
-    CharacterBody,
-    CharacterHead,
-    CharacterAccent,
-    Shadow,
-}
-
-pub(crate) type GridGroundMaterial = ExtendedMaterial<StandardMaterial, GridGroundMaterialExt>;
-pub(crate) type BuildingWallGridMaterial =
-    ExtendedMaterial<StandardMaterial, BuildingWallGridMaterialExt>;
-
-#[derive(Asset, AsBindGroup, TypePath, Clone, Debug)]
-#[uniform(100, GridGroundMaterialUniform)]
-pub(crate) struct GridGroundMaterialExt {
-    world_origin: Vec2,
-    grid_size: f32,
-    line_width: f32,
-    variation_strength: f32,
-    seed: u32,
-    dark_color: Color,
-    light_color: Color,
-    edge_color: Color,
-}
-
-#[derive(Clone, Copy, Debug, ShaderType)]
-struct GridGroundMaterialUniform {
-    world_origin: Vec2,
-    grid_size: f32,
-    line_width: f32,
-    variation_strength: f32,
-    seed: f32,
-    _padding: Vec2,
-    dark_color: Vec4,
-    light_color: Vec4,
-    edge_color: Vec4,
-}
-
-impl AsBindGroupShaderType<GridGroundMaterialUniform> for GridGroundMaterialExt {
-    fn as_bind_group_shader_type(
-        &self,
-        _images: &bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>,
-    ) -> GridGroundMaterialUniform {
-        GridGroundMaterialUniform {
-            world_origin: self.world_origin,
-            grid_size: self.grid_size.max(0.001),
-            line_width: self.line_width,
-            variation_strength: self.variation_strength,
-            seed: self.seed as f32,
-            _padding: Vec2::ZERO,
-            dark_color: self.dark_color.to_linear().to_vec4(),
-            light_color: self.light_color.to_linear().to_vec4(),
-            edge_color: self.edge_color.to_linear().to_vec4(),
-        }
-    }
-}
-
-impl MaterialExtension for GridGroundMaterialExt {
-    fn fragment_shader() -> ShaderRef {
-        GRID_GROUND_SHADER_PATH.into()
-    }
-}
-
-#[derive(Asset, AsBindGroup, TypePath, Clone, Debug)]
-#[uniform(100, BuildingWallGridMaterialUniform)]
-pub(crate) struct BuildingWallGridMaterialExt {
-    major_grid_size: f32,
-    minor_grid_size: f32,
-    major_line_width: f32,
-    minor_line_width: f32,
-    face_tint_strength: f32,
-    _padding: Vec3,
-    base_color: Color,
-    major_line_color: Color,
-    minor_line_color: Color,
-    cap_color: Color,
-}
-
-#[derive(Clone, Copy, Debug, ShaderType)]
-struct BuildingWallGridMaterialUniform {
-    major_grid_size: f32,
-    minor_grid_size: f32,
-    major_line_width: f32,
-    minor_line_width: f32,
-    face_tint_strength: f32,
-    _padding: Vec3,
-    base_color: Vec4,
-    major_line_color: Vec4,
-    minor_line_color: Vec4,
-    cap_color: Vec4,
-}
-
-impl AsBindGroupShaderType<BuildingWallGridMaterialUniform> for BuildingWallGridMaterialExt {
-    fn as_bind_group_shader_type(
-        &self,
-        _images: &bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>,
-    ) -> BuildingWallGridMaterialUniform {
-        BuildingWallGridMaterialUniform {
-            major_grid_size: self.major_grid_size.max(0.001),
-            minor_grid_size: self.minor_grid_size.max(0.001),
-            major_line_width: self.major_line_width.max(0.0005),
-            minor_line_width: self.minor_line_width.max(0.0005),
-            face_tint_strength: self.face_tint_strength.clamp(0.0, 1.0),
-            _padding: Vec3::ZERO,
-            base_color: self.base_color.to_linear().to_vec4(),
-            major_line_color: self.major_line_color.to_linear().to_vec4(),
-            minor_line_color: self.minor_line_color.to_linear().to_vec4(),
-            cap_color: self.cap_color.to_linear().to_vec4(),
-        }
-    }
-}
-
-impl MaterialExtension for BuildingWallGridMaterialExt {
-    fn fragment_shader() -> ShaderRef {
-        BUILDING_WALL_GRID_SHADER_PATH.into()
-    }
-}
-
 mod camera;
+mod constants;
 mod debug_draw;
 mod fog_of_war;
 mod materials;
 mod mesh_builders;
 mod occlusion;
 mod overlay;
+mod resources;
 #[cfg(test)]
 mod tests;
+mod types;
 mod world;
 
 pub(super) use camera::*;
+pub(super) use constants::*;
 pub(super) use debug_draw::*;
 pub(super) use fog_of_war::*;
 use materials::*;
 use mesh_builders::*;
 use occlusion::*;
 pub(super) use overlay::*;
+pub(super) use resources::*;
+pub(super) use types::*;
 pub(super) use world::*;

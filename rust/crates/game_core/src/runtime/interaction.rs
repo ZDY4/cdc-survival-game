@@ -10,7 +10,8 @@ impl SimulationRuntime {
             return None;
         }
 
-        self.simulation.query_interaction_options(actor_id, target_id)
+        self.simulation
+            .query_interaction_options(actor_id, target_id)
     }
 
     pub fn query_interaction_prompt(

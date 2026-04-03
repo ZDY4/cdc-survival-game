@@ -1,4 +1,18 @@
+//! 调试绘制模块：负责 gizmo 网格、选中轮廓、路径预览和调试文本等即时绘制。
+
 use super::*;
+use crate::geometry::MISSING_GEO_BUILDING_PLACEHOLDER_HEIGHT_SCALE;
+use crate::picking::{BuildingPartKind, ViewerPickTarget, ViewerPickingState};
+
+const WALKABLE_TILE_OVERLAY_LINE_COUNT: usize = 4;
+const WALKABLE_TILE_OVERLAY_INSET_RATIO: f32 = 0.12;
+const WALKABLE_TILE_OVERLAY_ELEVATION_MULTIPLIER: f32 = 0.55;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum WalkableTileOverlayKind {
+    Walkable,
+    Blocked,
+}
 
 pub(crate) fn draw_world(
     time: Res<Time>,
@@ -8,6 +22,7 @@ pub(crate) fn draw_world(
     runtime_state: Res<ViewerRuntimeState>,
     settlements: Option<Res<SettlementDefinitions>>,
     motion_state: Res<ViewerActorMotionState>,
+    picking_state: Res<ViewerPickingState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     window: Single<&Window>,
@@ -40,6 +55,18 @@ pub(crate) fn draw_world(
             grid_size,
             render_config.floor_thickness_world,
             effective_grid_line_opacity(*render_config),
+        );
+    }
+
+    if viewer_state.show_walkable_tiles_overlay {
+        draw_walkable_tiles_overlay(
+            &mut gizmos,
+            &runtime_state.runtime,
+            &snapshot,
+            &viewer_state,
+            &palette,
+            *render_config,
+            bounds,
         );
     }
 
@@ -191,6 +218,18 @@ pub(crate) fn draw_world(
                 with_alpha(color, 0.98),
             );
         }
+
+        draw_hovered_pick_outline(
+            &mut gizmos,
+            &snapshot,
+            &runtime_state,
+            &motion_state,
+            &picking_state,
+            &palette,
+            *render_config,
+            pulse,
+            viewer_state.current_level,
+        );
     }
 
     if let Some(focused_actor_id) = viewer_state.focus_actor_id(&snapshot) {
@@ -226,6 +265,356 @@ pub(crate) fn draw_world(
             }
         }
     }
+}
+
+pub(super) fn collect_walkable_tile_overlay_cells(
+    runtime: &game_core::SimulationRuntime,
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    bounds: crate::geometry::GridBounds,
+) -> Vec<(GridCoord, WalkableTileOverlayKind)> {
+    let mut cells = Vec::new();
+    for z in bounds.min_z..=bounds.max_z {
+        for x in bounds.min_x..=bounds.max_x {
+            let grid = GridCoord::new(x, viewer_state.current_level, z);
+            if !runtime.is_grid_in_bounds(grid) {
+                continue;
+            }
+
+            let kind = if viewer_grid_is_walkable(runtime, snapshot, viewer_state, grid) {
+                WalkableTileOverlayKind::Walkable
+            } else {
+                WalkableTileOverlayKind::Blocked
+            };
+            cells.push((grid, kind));
+        }
+    }
+    cells
+}
+
+fn draw_walkable_tiles_overlay(
+    gizmos: &mut Gizmos,
+    runtime: &game_core::SimulationRuntime,
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    palette: &ViewerPalette,
+    render_config: ViewerRenderConfig,
+    bounds: crate::geometry::GridBounds,
+) {
+    for (grid, kind) in collect_walkable_tile_overlay_cells(runtime, snapshot, viewer_state, bounds)
+    {
+        let color = match kind {
+            WalkableTileOverlayKind::Walkable => with_alpha(palette.friendly, 0.34),
+            WalkableTileOverlayKind::Blocked => with_alpha(palette.hostile, 0.34),
+        };
+        draw_grid_tile_overlay(
+            gizmos,
+            grid,
+            snapshot.grid.grid_size,
+            render_config.floor_thickness_world
+                + OVERLAY_ELEVATION * WALKABLE_TILE_OVERLAY_ELEVATION_MULTIPLIER,
+            color,
+        );
+    }
+}
+
+fn draw_grid_tile_overlay(
+    gizmos: &mut Gizmos,
+    grid: GridCoord,
+    grid_size: f32,
+    y_offset: f32,
+    color: Color,
+) {
+    let inset = grid_size * WALKABLE_TILE_OVERLAY_INSET_RATIO;
+    let x0 = grid.x as f32 * grid_size + inset;
+    let x1 = (grid.x + 1) as f32 * grid_size - inset;
+    let z0 = grid.z as f32 * grid_size + inset;
+    let z1 = (grid.z + 1) as f32 * grid_size - inset;
+    let y = level_base_height(grid.y, grid_size) + y_offset;
+
+    for index in 0..WALKABLE_TILE_OVERLAY_LINE_COUNT {
+        let t = (index as f32 + 1.0) / (WALKABLE_TILE_OVERLAY_LINE_COUNT as f32 + 1.0);
+        let z = z0 + (z1 - z0) * t;
+        gizmos.line(Vec3::new(x0, y, z), Vec3::new(x1, y, z), color);
+    }
+
+    draw_grid_outline(gizmos, grid, grid_size, y_offset, 0.94, color);
+}
+
+pub(super) fn hovered_pick_outline_box(
+    snapshot: &game_core::SimulationSnapshot,
+    picking_state: &ViewerPickingState,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+) -> Option<(Vec3, Vec3)> {
+    let hovered = picking_state.hovered.as_ref()?;
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+
+    match &hovered.semantic {
+        ViewerPickTarget::Actor(_) => None,
+        ViewerPickTarget::MapObject(object_id) => {
+            let object = snapshot
+                .grid
+                .map_objects
+                .iter()
+                .find(|object| object.object_id == *object_id)?;
+            map_object_outline_box(snapshot, object, current_level, render_config)
+        }
+        ViewerPickTarget::BuildingPart(part) => match part.kind {
+            BuildingPartKind::WallCell => {
+                let story = snapshot
+                    .generated_buildings
+                    .iter()
+                    .find(|building| building.object_id == part.building_object_id)?
+                    .stories
+                    .iter()
+                    .find(|story| story.level == current_level)?;
+                let height = (story.wall_height * grid_size).max(grid_size * 0.35);
+                Some((
+                    Vec3::new(
+                        (part.anchor_cell.x as f32 + 0.5) * grid_size,
+                        floor_top + height * 0.5,
+                        (part.anchor_cell.z as f32 + 0.5) * grid_size,
+                    ),
+                    Vec3::new(grid_size * 0.92, height, grid_size * 0.92),
+                ))
+            }
+            BuildingPartKind::TriggerCell => Some((
+                Vec3::new(
+                    (part.anchor_cell.x as f32 + 0.5) * grid_size,
+                    floor_top + grid_size * 0.06,
+                    (part.anchor_cell.z as f32 + 0.5) * grid_size,
+                ),
+                Vec3::new(grid_size * 0.92, grid_size * 0.12, grid_size * 0.92),
+            )),
+            BuildingPartKind::DoorFrame
+            | BuildingPartKind::FloorCell
+            | BuildingPartKind::RoofCell => None,
+        },
+    }
+}
+
+fn draw_hovered_pick_outline(
+    gizmos: &mut Gizmos,
+    snapshot: &game_core::SimulationSnapshot,
+    runtime_state: &ViewerRuntimeState,
+    motion_state: &ViewerActorMotionState,
+    picking_state: &ViewerPickingState,
+    palette: &ViewerPalette,
+    render_config: ViewerRenderConfig,
+    pulse: f32,
+    current_level: i32,
+) {
+    let Some(hovered) = picking_state.hovered.as_ref() else {
+        return;
+    };
+
+    let outline_color = hovered_pick_outline_color(snapshot, hovered, palette);
+    match &hovered.semantic {
+        ViewerPickTarget::Actor(actor_id) => {
+            let Some(actor) = snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.actor_id == *actor_id)
+            else {
+                return;
+            };
+            let actor_world = actor_visual_world_position(runtime_state, motion_state, actor);
+            draw_actor_selection_ring(
+                gizmos,
+                actor_world,
+                actor.grid_position.y,
+                snapshot.grid.grid_size,
+                render_config,
+                outline_color,
+                0.94 + (pulse - 1.0) * 0.45,
+            );
+        }
+        ViewerPickTarget::MapObject(_) | ViewerPickTarget::BuildingPart(_) => {
+            let Some((center, size)) =
+                hovered_pick_outline_box(snapshot, picking_state, current_level, render_config)
+            else {
+                return;
+            };
+            let grid_size = snapshot.grid.grid_size;
+            let scale = 1.06 + (pulse - 1.0) * 0.42;
+            let expanded_size = size * scale + Vec3::splat(grid_size * 0.035);
+            let lifted_center = center + Vec3::Y * (grid_size * 0.02);
+            draw_wire_box_outline(gizmos, lifted_center, expanded_size, outline_color);
+            draw_wire_box_outline(
+                gizmos,
+                lifted_center + Vec3::Y * (grid_size * 0.012),
+                expanded_size + Vec3::splat(grid_size * 0.018),
+                with_alpha(outline_color, 0.48),
+            );
+        }
+    }
+}
+
+pub(super) fn hovered_pick_outline_color(
+    snapshot: &game_core::SimulationSnapshot,
+    hovered: &crate::picking::ViewerResolvedPick,
+    palette: &ViewerPalette,
+) -> Color {
+    let base = match &hovered.semantic {
+        ViewerPickTarget::Actor(actor_id) => snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == *actor_id)
+            .filter(|actor| actor.side == ActorSide::Hostile)
+            .map(|_| palette.hover_hostile)
+            .unwrap_or(palette.hover_walkable),
+        ViewerPickTarget::MapObject(object_id) => snapshot
+            .grid
+            .map_objects
+            .iter()
+            .find(|object| object.object_id == *object_id)
+            .filter(|object| object.kind == game_data::MapObjectKind::AiSpawn)
+            .map(|_| palette.hover_hostile)
+            .unwrap_or(palette.hover_walkable),
+        ViewerPickTarget::BuildingPart(part) => {
+            if part.kind == BuildingPartKind::TriggerCell {
+                palette.hover_walkable
+            } else {
+                snapshot
+                    .grid
+                    .map_objects
+                    .iter()
+                    .find(|object| object.object_id == part.building_object_id)
+                    .filter(|object| object.kind == game_data::MapObjectKind::AiSpawn)
+                    .map(|_| palette.hover_hostile)
+                    .unwrap_or(palette.hover_walkable)
+            }
+        }
+    };
+    with_alpha(base, 0.98)
+}
+
+fn map_object_outline_box(
+    snapshot: &game_core::SimulationSnapshot,
+    object: &game_core::MapObjectDebugState,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+) -> Option<(Vec3, Vec3)> {
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+    let cells_on_level = occupied_cells_for_level(object, current_level);
+    let occupied_cells = if cells_on_level.is_empty() {
+        object.occupied_cells.as_slice()
+    } else {
+        cells_on_level.as_slice()
+    };
+    let (center_x, center_z, footprint_width, footprint_depth) =
+        occupied_cells_box(occupied_cells, grid_size);
+
+    match object.kind {
+        game_data::MapObjectKind::Building => {
+            if is_missing_generated_building(snapshot, object) {
+                return missing_geo_building_placeholder_box(object, grid_size, floor_top);
+            }
+
+            if let Some(story) = snapshot
+                .generated_buildings
+                .iter()
+                .find(|building| building.object_id == object.object_id)
+                .and_then(|building| {
+                    building
+                        .stories
+                        .iter()
+                        .find(|story| story.level == current_level)
+                })
+            {
+                let story_cells = if story.shape_cells.is_empty() {
+                    &story.wall_cells
+                } else {
+                    &story.shape_cells
+                };
+                let (center_x, center_z, width, depth) = occupied_cells_box(story_cells, grid_size);
+                let height = (story.wall_height * grid_size).max(grid_size * 0.35);
+                return Some((
+                    Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                    Vec3::new(
+                        width.max(grid_size * 0.3),
+                        height,
+                        depth.max(grid_size * 0.3),
+                    ),
+                ));
+            }
+
+            let height = grid_size * MISSING_GEO_BUILDING_PLACEHOLDER_HEIGHT_SCALE;
+            Some((
+                Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                Vec3::new(footprint_width, height, footprint_depth),
+            ))
+        }
+        game_data::MapObjectKind::Pickup => {
+            let height = grid_size * 0.3;
+            Some((
+                Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                Vec3::new(grid_size * 0.42, height, grid_size * 0.42),
+            ))
+        }
+        game_data::MapObjectKind::Interactive => {
+            let anchor_noise = cell_style_noise(
+                render_config.object_style_seed.wrapping_add(409),
+                object.anchor.x,
+                object.anchor.z,
+            );
+            let pillar_height = grid_size * (0.72 + anchor_noise * 0.16);
+            let height = pillar_height + grid_size * 0.16;
+            Some((
+                Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                Vec3::new(
+                    footprint_width.min(grid_size * 0.52).max(grid_size * 0.3),
+                    height,
+                    footprint_depth.min(grid_size * 0.52).max(grid_size * 0.22),
+                ),
+            ))
+        }
+        game_data::MapObjectKind::Trigger => {
+            let height = if is_scene_transition_trigger(object) {
+                grid_size * 0.12
+            } else {
+                grid_size * 0.16
+            };
+            Some((
+                Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                Vec3::new(
+                    footprint_width.max(grid_size * 0.3),
+                    height,
+                    footprint_depth.max(grid_size * 0.3),
+                ),
+            ))
+        }
+        game_data::MapObjectKind::AiSpawn => {
+            let anchor_noise = cell_style_noise(
+                render_config.object_style_seed.wrapping_add(409),
+                object.anchor.x,
+                object.anchor.z,
+            );
+            let beacon_height = grid_size * (0.34 + anchor_noise * 0.16);
+            let height = beacon_height + grid_size * 0.16;
+            Some((
+                Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                Vec3::new(grid_size * 0.42, height, grid_size * 0.42),
+            ))
+        }
+    }
+}
+
+fn occupied_cells_for_level(
+    object: &game_core::MapObjectDebugState,
+    current_level: i32,
+) -> Vec<GridCoord> {
+    object
+        .occupied_cells
+        .iter()
+        .copied()
+        .filter(|grid| grid.y == current_level)
+        .collect()
 }
 
 pub(super) fn effective_grid_line_opacity(render_config: ViewerRenderConfig) -> f32 {

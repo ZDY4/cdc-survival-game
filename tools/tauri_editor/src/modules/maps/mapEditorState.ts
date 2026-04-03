@@ -13,6 +13,7 @@ import type {
 } from "../../types";
 import {
   applyPlacement,
+  buildPlacementObject,
   changeObjectKind,
   createDraftMap,
   createPlacementDraft,
@@ -25,6 +26,17 @@ import {
   type GridPoint,
   type PlacementDraft,
 } from "./mapEditorUtils";
+import {
+  addMapLevel,
+  clearMapCells,
+  createMapDraft,
+  paintMapCells,
+  removeMapLevel,
+  removeMapEntryPoint,
+  removeMapObject,
+  upsertMapEntryPoint,
+  upsertMapObject,
+} from "./mapEditorBackend";
 import { MapEditorPendingIntent, shouldDeferPendingIntent } from "./mapEditorGuards";
 import { NEW_MAP_DOCUMENT_KEY } from "./mapWindowing";
 
@@ -334,26 +346,32 @@ export function useMapEditorState({
   function commitSelection(documentKey: string) {
     if (documentKey === NEW_MAP_DOCUMENT_KEY) {
       const nextId = `map_${Date.now()}`;
-      const draftMap = createDraftMap(nextId);
-      const draft: EditableMapDocument = {
-        documentKey: `draft-${nextId}`,
-        originalId: nextId,
-        fileName: `${nextId}.json`,
-        relativePath: `data/maps/${nextId}.json`,
-        map: draftMap,
-        validation: [],
-        savedSnapshot: "",
-        dirty: true,
-        isDraft: true,
-      };
-      setDocuments((current) => [draft, ...current]);
-      setSelectedKey(draft.documentKey);
-      setCurrentLevel(draftMap.default_level);
-      setSelectedObjectId(null);
-      setSelectedEntryPointId(null);
-      setSelectedCellKey(null);
-      setHoveredCell(null);
-      onStatusChange(`Created draft map ${nextId}.`);
+      void (async () => {
+        try {
+          const draftMap = canPersist ? await createMapDraft(nextId) : createDraftMap(nextId);
+          const draft: EditableMapDocument = {
+            documentKey: `draft-${nextId}`,
+            originalId: nextId,
+            fileName: `${nextId}.json`,
+            relativePath: `data/maps/${nextId}.json`,
+            map: normalizeMapDocument(draftMap),
+            validation: [],
+            savedSnapshot: "",
+            dirty: true,
+            isDraft: true,
+          };
+          setDocuments((current) => [draft, ...current]);
+          setSelectedKey(draft.documentKey);
+          setCurrentLevel(draftMap.default_level);
+          setSelectedObjectId(null);
+          setSelectedEntryPointId(null);
+          setSelectedCellKey(null);
+          setHoveredCell(null);
+          onStatusChange(`Created draft map ${nextId}.`);
+        } catch (error) {
+          onStatusChange(`Create map draft failed: ${String(error)}`);
+        }
+      })();
       return;
     }
 
@@ -384,6 +402,40 @@ export function useMapEditorState({
         };
       }),
     );
+  }
+
+  function replaceDocumentMap(documentKey: string, nextMap: MapDefinition) {
+    setDocuments((current) =>
+      current.map((document) => {
+        if (document.documentKey !== documentKey) {
+          return document;
+        }
+        const normalized = normalizeMapDocument(nextMap);
+        return {
+          ...document,
+          map: normalized,
+          dirty: getMapDirtyState(normalized, document.savedSnapshot),
+        };
+      }),
+    );
+  }
+
+  async function runDocumentMutation(
+    documentKey: string,
+    localTransform: () => MapDefinition,
+    remoteTransform: () => Promise<MapDefinition>,
+    errorPrefix: string,
+    onSuccess?: (nextMap: MapDefinition) => void,
+  ) {
+    try {
+      const nextMap = canPersist ? await remoteTransform() : localTransform();
+      replaceDocumentMap(documentKey, nextMap);
+      onSuccess?.(nextMap);
+      return nextMap;
+    } catch (error) {
+      onStatusChange(`${errorPrefix}: ${String(error)}`);
+      return null;
+    }
   }
 
   function requestOpenDocument(documentKey: string) {
@@ -445,24 +497,44 @@ export function useMapEditorState({
   }
 
   function deleteSelectedObject() {
-    if (!selectedObject) {
+    if (!selectedObject || !selectedDocument) {
       return;
     }
-    updateSelectedMap((map) => removeObject(map, selectedObject.object_id));
+    const objectId = selectedObject.object_id;
+    const documentKey = selectedDocument.documentKey;
+    const currentMap = selectedDocument.map;
     setSelectedObjectId(null);
-    onStatusChange(`Deleted object ${selectedObject.object_id}.`);
+    void runDocumentMutation(
+      documentKey,
+      () => removeObject(currentMap, objectId),
+      () => removeMapObject(currentMap, objectId),
+      "Delete object failed",
+      () => {
+        onStatusChange(`Deleted object ${objectId}.`);
+      },
+    );
   }
 
   function deleteSelectedEntryPoint() {
-    if (!selectedEntryPoint) {
+    if (!selectedEntryPoint || !selectedDocument) {
       return;
     }
-    updateSelectedMap((map) => ({
-      ...map,
-      entry_points: map.entry_points.filter((entryPoint) => entryPoint.id !== selectedEntryPoint.id),
-    }));
+    const entryPointId = selectedEntryPoint.id;
+    const documentKey = selectedDocument.documentKey;
+    const currentMap = selectedDocument.map;
     setSelectedEntryPointId(null);
-    onStatusChange(`Deleted entry point ${selectedEntryPoint.id}.`);
+    void runDocumentMutation(
+      documentKey,
+      () => ({
+        ...currentMap,
+        entry_points: currentMap.entry_points.filter((entryPoint) => entryPoint.id !== entryPointId),
+      }),
+      () => removeMapEntryPoint(currentMap, entryPointId),
+      "Delete entry point failed",
+      () => {
+        onStatusChange(`Deleted entry point ${entryPointId}.`);
+      },
+    );
   }
 
   function addLevel() {
@@ -471,12 +543,21 @@ export function useMapEditorState({
     }
     const nextLevel =
       selectedDocument.map.levels.reduce((maxLevel, level) => Math.max(maxLevel, level.y), 0) + 1;
-    updateSelectedMap((map) => ({
-      ...map,
-      levels: [...map.levels, { y: nextLevel, cells: [] }],
-    }));
-    setCurrentLevel(nextLevel);
-    onStatusChange(`Added level ${nextLevel}.`);
+    const documentKey = selectedDocument.documentKey;
+    const currentMap = selectedDocument.map;
+    void runDocumentMutation(
+      documentKey,
+      () => ({
+        ...currentMap,
+        levels: [...currentMap.levels, { y: nextLevel, cells: [] }],
+      }),
+      () => addMapLevel(currentMap, nextLevel),
+      "Add level failed",
+      () => {
+        setCurrentLevel(nextLevel);
+        onStatusChange(`Added level ${nextLevel}.`);
+      },
+    );
   }
 
   function stepLevel(delta: -1 | 1) {
@@ -501,20 +582,29 @@ export function useMapEditorState({
       onStatusChange("A map must keep at least one level.");
       return;
     }
-    const nextLevels = selectedDocument.map.levels.filter((level) => level.y !== currentLevel);
-    updateSelectedMap((map) => ({
-      ...map,
-      default_level:
-        map.default_level === currentLevel ? nextLevels[0]?.y ?? 0 : map.default_level,
-      levels: nextLevels,
-      entry_points: map.entry_points.filter((entryPoint) => entryPoint.grid.y !== currentLevel),
-      objects: map.objects.filter((object) => object.anchor.y !== currentLevel),
-    }));
-    setCurrentLevel(nextLevels[0]?.y ?? 0);
+    const documentKey = selectedDocument.documentKey;
+    const currentMap = selectedDocument.map;
+    const nextLevels = currentMap.levels.filter((level) => level.y !== currentLevel);
     setSelectedObjectId(null);
     setSelectedEntryPointId(null);
     setSelectedCellKey(null);
-    onStatusChange(`Removed level ${currentLevel} and its placed objects.`);
+    void runDocumentMutation(
+      documentKey,
+      () => ({
+        ...currentMap,
+        default_level:
+          currentMap.default_level === currentLevel ? nextLevels[0]?.y ?? 0 : currentMap.default_level,
+        levels: nextLevels,
+        entry_points: currentMap.entry_points.filter((entryPoint) => entryPoint.grid.y !== currentLevel),
+        objects: currentMap.objects.filter((object) => object.anchor.y !== currentLevel),
+      }),
+      () => removeMapLevel(currentMap, currentLevel),
+      "Remove level failed",
+      (nextMap) => {
+        setCurrentLevel(nextMap.default_level);
+        onStatusChange(`Removed level ${currentLevel} and its placed objects.`);
+      },
+    );
   }
 
   function handleGridCellClick(grid: GridPoint) {
@@ -540,48 +630,67 @@ export function useMapEditorState({
       }
 
       if (tool === "erase") {
-        updateSelectedMap((map) => ({
-          ...map,
-          levels: map.levels.map((level) =>
-            level.y === grid.y
-              ? {
-                  ...level,
-                  cells: level.cells.filter((cell) => !(cell.x === grid.x && cell.z === grid.z)),
-                }
-              : level,
-          ),
-        }));
+        const documentKey = selectedDocument.documentKey;
+        const currentMap = selectedDocument.map;
+        void runDocumentMutation(
+          documentKey,
+          () => ({
+            ...currentMap,
+            levels: currentMap.levels.map((level) =>
+              level.y === grid.y
+                ? {
+                    ...level,
+                    cells: level.cells.filter((cell) => !(cell.x === grid.x && cell.z === grid.z)),
+                  }
+                : level,
+            ),
+          }),
+          () => clearMapCells(currentMap, grid.y, [grid]),
+          "Clear cell failed",
+          () => {
+            onStatusChange(`Cleared cell ${grid.x}, ${grid.z} on level ${grid.y}.`);
+          },
+        );
         if (selectedCellKey === gridKey(grid)) {
           setSelectedCellKey(null);
         }
-        onStatusChange(`Cleared cell ${grid.x}, ${grid.z} on level ${grid.y}.`);
         return;
       }
 
-      updateSelectedMap((map) => ({
-        ...map,
-        levels: map.levels.map((level) =>
-          level.y === grid.y
-            ? {
-                ...level,
-                cells: [
-                  ...level.cells.filter((cell) => !(cell.x === grid.x && cell.z === grid.z)),
-                  {
-                    x: grid.x,
-                    z: grid.z,
-                    blocks_movement: cellDraft.blocksMovement,
-                    blocks_sight: cellDraft.blocksSight,
-                    terrain: cellDraft.terrain,
-                  },
-                ],
-              }
-            : level,
-        ),
-      }));
+      const documentKey = selectedDocument.documentKey;
+      const currentMap = selectedDocument.map;
+      const paintedCell = {
+        x: grid.x,
+        z: grid.z,
+        blocks_movement: cellDraft.blocksMovement,
+        blocks_sight: cellDraft.blocksSight,
+        terrain: cellDraft.terrain,
+      };
+      void runDocumentMutation(
+        documentKey,
+        () => ({
+          ...currentMap,
+          levels: currentMap.levels.map((level) =>
+            level.y === grid.y
+              ? {
+                  ...level,
+                  cells: [
+                    ...level.cells.filter((cell) => !(cell.x === grid.x && cell.z === grid.z)),
+                    paintedCell,
+                  ],
+                }
+              : level,
+          ),
+        }),
+        () => paintMapCells(currentMap, grid.y, [paintedCell]),
+        "Paint cell failed",
+        () => {
+          onStatusChange(`Painted cell ${grid.x}, ${grid.z} on level ${grid.y}.`);
+        },
+      );
       setSelectedCellKey(gridKey(grid));
       setSelectedObjectId(null);
       setSelectedEntryPointId(null);
-      onStatusChange(`Painted cell ${grid.x}, ${grid.z} on level ${grid.y}.`);
       return;
     }
 
@@ -604,36 +713,56 @@ export function useMapEditorState({
         if (!entryPoint) {
           return;
         }
-        updateSelectedMap((map) => ({
-          ...map,
-          entry_points: map.entry_points.filter((candidate) => candidate.id !== entryPoint.id),
-        }));
+        const documentKey = selectedDocument.documentKey;
+        const currentMap = selectedDocument.map;
+        void runDocumentMutation(
+          documentKey,
+          () => ({
+            ...currentMap,
+            entry_points: currentMap.entry_points.filter(
+              (candidate) => candidate.id !== entryPoint.id,
+            ),
+          }),
+          () => removeMapEntryPoint(currentMap, entryPoint.id),
+          "Delete entry point failed",
+          () => {
+            onStatusChange(`Deleted entry point ${entryPoint.id}.`);
+          },
+        );
         if (selectedEntryPointId === entryPoint.id) {
           setSelectedEntryPointId(null);
         }
-        onStatusChange(`Deleted entry point ${entryPoint.id}.`);
         return;
       }
 
       const nextEntryPointId =
         entryPointDraft.id.trim() || `entry_${selectedDocument.map.entry_points.length + 1}`;
-      updateSelectedMap((map) => ({
-        ...map,
-        entry_points: [
-          ...map.entry_points.filter((candidate) => candidate.id !== nextEntryPointId),
-          {
-            id: nextEntryPointId,
-            grid: { x: grid.x, y: grid.y, z: grid.z },
-            facing: entryPointDraft.facing.trim() ? entryPointDraft.facing.trim() : null,
-          },
-        ],
-        default_level:
-          nextEntryPointId === "default_entry" ? grid.y : map.default_level,
-      }));
+      const documentKey = selectedDocument.documentKey;
+      const currentMap = selectedDocument.map;
+      const nextEntryPoint = {
+        id: nextEntryPointId,
+        grid: { x: grid.x, y: grid.y, z: grid.z },
+        facing: entryPointDraft.facing.trim() ? entryPointDraft.facing.trim() : null,
+      };
+      void runDocumentMutation(
+        documentKey,
+        () => ({
+          ...currentMap,
+          entry_points: [
+            ...currentMap.entry_points.filter((candidate) => candidate.id !== nextEntryPointId),
+            nextEntryPoint,
+          ],
+          default_level: nextEntryPointId === "default_entry" ? grid.y : currentMap.default_level,
+        }),
+        () => upsertMapEntryPoint(currentMap, nextEntryPoint),
+        "Place entry point failed",
+        () => {
+          onStatusChange(`Placed entry point ${nextEntryPointId}.`);
+        },
+      );
       setSelectedEntryPointId(nextEntryPointId);
       setSelectedObjectId(null);
       setSelectedCellKey(null);
-      onStatusChange(`Placed entry point ${nextEntryPointId}.`);
       return;
     }
 
@@ -649,11 +778,20 @@ export function useMapEditorState({
       if (!target) {
         return;
       }
-      updateSelectedMap((map) => removeObject(map, target.object_id));
+      const documentKey = selectedDocument.documentKey;
+      const currentMap = selectedDocument.map;
+      void runDocumentMutation(
+        documentKey,
+        () => removeObject(currentMap, target.object_id),
+        () => removeMapObject(currentMap, target.object_id),
+        "Erase object failed",
+        () => {
+          onStatusChange(`Erased ${target.object_id}.`);
+        },
+      );
       if (selectedObjectId === target.object_id) {
         setSelectedObjectId(null);
       }
-      onStatusChange(`Erased ${target.object_id}.`);
       return;
     }
 
@@ -662,20 +800,37 @@ export function useMapEditorState({
     }
 
     const nextObjectId = `${tool}_${objectSequence}`;
+    const documentKey = selectedDocument.documentKey;
+    const currentMap = selectedDocument.map;
+    const nextObject = buildPlacementObject(
+      {
+        ...placementDraft,
+        kind: tool,
+      },
+      grid,
+      nextObjectId,
+    );
     setObjectSequence((current) => current + 1);
     setSelectedObjectId(nextObjectId);
     setSelectedEntryPointId(null);
     setSelectedCellKey(null);
-    updateSelectedMap((map) =>
-      applyPlacement(
-        map,
-        {
-          ...placementDraft,
-          kind: tool,
-        },
-        grid,
-        nextObjectId,
-      ),
+    void runDocumentMutation(
+      documentKey,
+      () =>
+        applyPlacement(
+          currentMap,
+          {
+            ...placementDraft,
+            kind: tool,
+          },
+          grid,
+          nextObjectId,
+        ),
+      () => upsertMapObject(currentMap, nextObject),
+      "Place object failed",
+      () => {
+        onStatusChange(`Placed object ${nextObjectId}.`);
+      },
     );
   }
 

@@ -11,10 +11,7 @@ pub struct AiDiffSummary {
     pub risk_level: String,
 }
 
-pub fn validate_draft_contract(
-    data_type: &str,
-    draft: &Map<String, Value>,
-) -> Vec<String> {
+pub fn validate_draft_contract(data_type: &str, draft: &Map<String, Value>) -> Vec<String> {
     let mut errors = Vec::new();
 
     let record_type = draft
@@ -158,7 +155,11 @@ pub fn empty_record(record: Option<&Map<String, Value>>) -> bool {
     record.map(Map::is_empty).unwrap_or(true)
 }
 
-fn build_diff_summary(before: &Value, after: &Value, mut summary_lines: Vec<String>) -> AiDiffSummary {
+fn build_diff_summary(
+    before: &Value,
+    after: &Value,
+    mut summary_lines: Vec<String>,
+) -> AiDiffSummary {
     let mut added_paths = Vec::new();
     let mut changed_paths = Vec::new();
     let mut removed_paths = Vec::new();
@@ -277,8 +278,16 @@ fn collect_diff_paths(
 
 fn primary_id_changed(before: &Value, after: &Value) -> bool {
     for key in ["id", "dialog_id", "quest_id"] {
-        let before_id = before.get(key).and_then(Value::as_str).unwrap_or_default().trim();
-        let after_id = after.get(key).and_then(Value::as_str).unwrap_or_default().trim();
+        let before_id = before
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim();
+        let after_id = after
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim();
         if !before_id.is_empty() && !after_id.is_empty() && before_id != after_id {
             return true;
         }
@@ -289,15 +298,7 @@ fn primary_id_changed(before: &Value, after: &Value) -> bool {
 fn looks_like_minimal_change_request(user_prompt: &str, adjustment_prompt: &str) -> bool {
     let prompt_text = format!("{user_prompt} {adjustment_prompt}").to_lowercase();
     for token in [
-        "微调",
-        "润色",
-        "小改",
-        "只改",
-        "minor",
-        "small",
-        "tweak",
-        "polish",
-        "refine",
+        "微调", "润色", "小改", "只改", "minor", "small", "tweak", "polish", "refine",
     ] {
         if prompt_text.contains(token) {
             return true;
@@ -384,7 +385,9 @@ fn collect_quest_objective_types(value: &Value) -> Vec<String> {
 
 fn collect_quest_reward_item_refs(value: &Value) -> Vec<String> {
     let mut result = Vec::new();
-    for node in iter_quest_nodes(value).filter(|node| node.get("type").and_then(Value::as_str) == Some("reward")) {
+    for node in iter_quest_nodes(value)
+        .filter(|node| node.get("type").and_then(Value::as_str) == Some("reward"))
+    {
         for item in node
             .get("rewards")
             .and_then(|value| value.get("items"))

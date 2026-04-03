@@ -20,15 +20,16 @@ use game_core::RuntimeSnapshot;
 use game_data::{ActorId, InteractionTargetId};
 
 use crate::bootstrap::load_viewer_gameplay_bootstrap;
-use crate::controls::{cancel_targeting, enter_attack_targeting, enter_skill_targeting};
+use crate::controls::{cancel_targeting, enter_attack_targeting};
 use crate::render::interaction_menu_button_color;
 use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
 use crate::state::{
     EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, InventoryContextMenuRoot,
     InventoryItemClickTarget, InventoryItemHoverTarget, SkillHoverTarget, UiHoverTooltipContent,
-    UiHoverTooltipState, UiInventoryContextMenuState, UiInventoryContextMenuTarget, UiMouseBlocker,
-    ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState,
-    ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
+    UiHoverTooltipState, UiInventoryContextMenuState, UiInventoryContextMenuTarget,
+    UiMouseBlocker, ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings,
+    ViewerUiSettingsPath, viewer_ui_passthrough_bundle,
 };
 
 const UI_PANEL_WIDTH: f32 = 448.0;

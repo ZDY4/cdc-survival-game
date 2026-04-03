@@ -1,15 +1,20 @@
+//! 渲染模块测试：覆盖静态世界规格、角色可视化、交互菜单和遮挡淡化等回归场景。
+
 use super::*;
 
 use super::{
     actor_visual_translation, actor_visual_world_position, build_wall_tile_mesh,
     camera_follow_requires_reset, classify_wall_tile, collect_static_world_box_specs,
-    collect_static_world_decal_specs, collect_static_world_mesh_specs, darken_color,
-    interaction_menu_button_color, interaction_menu_layout, lerp_color, lighten_color,
-    merge_cells_into_rects, occluder_should_fade, occupied_cells_box, should_hide_building_roofs,
-    update_camera_follow_focus, GridBounds, MaterialStyle, StaticWorldOccluderKind, WallTileKind,
-    INTERACTION_MENU_BUTTON_GAP_PX, INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX,
-    WALL_EAST, WALL_NORTH, WALL_SOUTH, WALL_WEST,
+    collect_static_world_decal_specs, collect_static_world_mesh_specs,
+    collect_walkable_tile_overlay_cells, darken_color, interaction_menu_button_color,
+    interaction_menu_layout, lerp_color, lighten_color, merge_cells_into_rects,
+    occluder_should_fade, occupied_cells_box, should_hide_building_roofs,
+    update_camera_follow_focus, GridBounds, MaterialStyle, StaticWorldOccluderKind,
+    WalkableTileOverlayKind, WallTileKind, INTERACTION_MENU_BUTTON_GAP_PX,
+    INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX, WALL_EAST, WALL_NORTH,
+    WALL_SOUTH, WALL_WEST,
 };
+use crate::picking::{BuildingPartKind, ViewerPickTarget};
 use crate::state::{
     InteractionMenuState, ViewerActorFeedbackState, ViewerActorMotionState,
     ViewerCameraFollowState, ViewerControlMode, ViewerPalette, ViewerRenderConfig,
@@ -339,6 +344,71 @@ fn static_world_specs_skip_missing_geo_buildings_and_keep_functional_objects() {
 }
 
 #[test]
+fn static_world_specs_add_wireframe_boxes_for_unrendered_blocked_map_cells() {
+    let specs = collect_static_world_box_specs(
+        &snapshot_with_occluders(),
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 1,
+            min_z: 0,
+            max_z: 1,
+        },
+        world_from_grid,
+    );
+
+    let wireframe_spec_count = specs
+        .iter()
+        .filter(|spec| {
+            let color = spec.color.to_srgba();
+            spec.material_style == MaterialStyle::UtilityAccent
+                && (color.red - 0.95).abs() < 0.001
+                && (color.green - 0.18).abs() < 0.001
+                && (color.blue - 0.18).abs() < 0.001
+        })
+        .count();
+
+    assert_eq!(wireframe_spec_count, 12);
+}
+
+#[test]
+fn static_world_specs_skip_wireframe_fallback_when_cell_already_has_visible_object() {
+    let mut snapshot = snapshot_with_occluders();
+    snapshot.grid.map_cells[0].grid = GridCoord::new(1, 0, 1);
+
+    let specs = collect_static_world_box_specs(
+        &snapshot,
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 1,
+            min_z: 0,
+            max_z: 1,
+        },
+        world_from_grid,
+    );
+
+    let wireframe_spec_count = specs
+        .iter()
+        .filter(|spec| {
+            let color = spec.color.to_srgba();
+            spec.material_style == MaterialStyle::UtilityAccent
+                && (color.red - 0.95).abs() < 0.001
+                && (color.green - 0.18).abs() < 0.001
+                && (color.blue - 0.18).abs() < 0.001
+        })
+        .count();
+
+    assert_eq!(wireframe_spec_count, 0);
+}
+
+#[test]
 fn scene_transition_triggers_render_floor_arrow_decals_per_cell() {
     let palette = ViewerPalette::default();
     let box_specs = collect_static_world_box_specs(
@@ -375,6 +445,20 @@ fn scene_transition_triggers_render_floor_arrow_decals_per_cell() {
 
     assert_eq!(trigger_box_specs, 0);
     assert_eq!(decal_specs.len(), 2);
+    let pick_proxy_specs = box_specs
+        .iter()
+        .filter(|spec| spec.material_style == MaterialStyle::InvisiblePickProxy)
+        .collect::<Vec<_>>();
+    assert_eq!(pick_proxy_specs.len(), 2);
+    assert!(pick_proxy_specs
+        .iter()
+        .all(|spec| spec.pick_binding.is_some()));
+    assert!(pick_proxy_specs.iter().all(|spec| {
+        spec.pick_binding
+            .as_ref()
+            .and_then(|binding| binding.interaction.as_ref())
+            == Some(&InteractionTargetId::MapObject("edge_trigger".into()))
+    }));
 }
 
 #[test]
@@ -581,6 +665,231 @@ fn generated_building_wall_tiles_keep_per_cell_occluders() {
     assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.x > 0.0));
     assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.y > 0.0));
     assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.z > 0.0));
+    assert!(wall_specs.iter().all(|spec| {
+        spec.pick_binding.as_ref().is_some_and(|binding| {
+            binding.interaction == Some(InteractionTargetId::MapObject("generated_house".into()))
+                && matches!(
+                    binding.semantic,
+                    ViewerPickTarget::BuildingPart(ref part)
+                        if part.kind == BuildingPartKind::WallCell
+                            && part.building_object_id == "generated_house"
+                )
+        })
+    }));
+}
+
+#[test]
+fn generated_building_walkable_meshes_do_not_become_pickable() {
+    let palette = ViewerPalette::default();
+    let mesh_specs = collect_static_world_mesh_specs(
+        &snapshot_with_generated_building(),
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &palette,
+    );
+
+    let walkable_specs = mesh_specs
+        .iter()
+        .filter(|spec| spec.material_style == MaterialStyle::StructureAccent)
+        .collect::<Vec<_>>();
+
+    assert!(!walkable_specs.is_empty());
+    assert!(walkable_specs
+        .iter()
+        .all(|spec| spec.pick_binding.is_none()));
+}
+
+#[test]
+fn hovered_scene_trigger_resolves_pick_outline_proxy_box() {
+    let snapshot = snapshot_with_trigger_strip();
+    let picking_state = crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(1),
+            semantic: ViewerPickTarget::BuildingPart(crate::picking::BuildingPartPickTarget {
+                building_object_id: "edge_trigger".into(),
+                story_level: 0,
+                kind: BuildingPartKind::TriggerCell,
+                anchor_cell: GridCoord::new(1, 0, 0),
+            }),
+            interaction: Some(InteractionTargetId::MapObject("edge_trigger".into())),
+            priority: crate::picking::ViewerPickPriority::Trigger,
+            depth: 0.0,
+            position: None,
+        }),
+        ..Default::default()
+    };
+
+    let (center, size) =
+        hovered_pick_outline_box(&snapshot, &picking_state, 0, ViewerRenderConfig::default())
+            .expect("trigger hover should resolve outline box");
+
+    assert_eq!(center, Vec3::new(1.5, 0.17, 0.5));
+    assert_eq!(size, Vec3::new(0.92, 0.12, 0.92));
+}
+
+#[test]
+fn hovered_wall_tile_resolves_per_cell_outline_box() {
+    let snapshot = snapshot_with_generated_building();
+    let picking_state = crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(2),
+            semantic: ViewerPickTarget::BuildingPart(crate::picking::BuildingPartPickTarget {
+                building_object_id: "generated_house".into(),
+                story_level: 0,
+                kind: BuildingPartKind::WallCell,
+                anchor_cell: GridCoord::new(1, 0, 0),
+            }),
+            interaction: Some(InteractionTargetId::MapObject("generated_house".into())),
+            priority: crate::picking::ViewerPickPriority::BuildingPart,
+            depth: 0.0,
+            position: None,
+        }),
+        ..Default::default()
+    };
+
+    let (center, size) =
+        hovered_pick_outline_box(&snapshot, &picking_state, 0, ViewerRenderConfig::default())
+            .expect("wall hover should resolve outline box");
+
+    assert_eq!(center, Vec3::new(1.5, 1.285, 0.5));
+    assert_eq!(size, Vec3::new(0.92, 2.35, 0.92));
+}
+
+#[test]
+fn hovered_hostile_actor_uses_hostile_outline_color() {
+    let snapshot = SimulationSnapshot {
+        actors: vec![game_core::ActorDebugState {
+            actor_id: ActorId(9),
+            definition_id: None,
+            display_name: "hostile".into(),
+            kind: game_data::ActorKind::Npc,
+            side: ActorSide::Hostile,
+            group_id: "enemy".into(),
+            ap: 6.0,
+            available_steps: 3,
+            turn_open: false,
+            in_combat: false,
+            grid_position: GridCoord::new(0, 0, 0),
+            level: 1,
+            current_xp: 0,
+            available_stat_points: 0,
+            available_skill_points: 0,
+            hp: 10.0,
+            max_hp: 10.0,
+        }],
+        ..snapshot_with_occluders()
+    };
+    let hovered = crate::picking::ViewerResolvedPick {
+        entity: Entity::from_bits(3),
+        semantic: ViewerPickTarget::Actor(ActorId(9)),
+        interaction: Some(InteractionTargetId::Actor(ActorId(9))),
+        priority: crate::picking::ViewerPickPriority::Actor,
+        depth: 0.0,
+        position: None,
+    };
+
+    assert_eq!(
+        hovered_pick_outline_color(&snapshot, &hovered, &ViewerPalette::default()).to_srgba(),
+        with_alpha(ViewerPalette::default().hover_hostile, 0.98).to_srgba()
+    );
+}
+
+#[test]
+fn hovered_pickup_uses_neutral_outline_color() {
+    let snapshot = snapshot_with_occluders();
+    let hovered = crate::picking::ViewerResolvedPick {
+        entity: Entity::from_bits(4),
+        semantic: ViewerPickTarget::MapObject("terminal".into()),
+        interaction: Some(InteractionTargetId::MapObject("terminal".into())),
+        priority: crate::picking::ViewerPickPriority::MapObject,
+        depth: 0.0,
+        position: None,
+    };
+
+    assert_eq!(
+        hovered_pick_outline_color(&snapshot, &hovered, &ViewerPalette::default()).to_srgba(),
+        with_alpha(ViewerPalette::default().hover_walkable, 0.98).to_srgba()
+    );
+}
+
+#[test]
+fn walkable_tile_overlay_marks_selected_actor_cell_walkable() {
+    let (runtime, handles) = create_demo_runtime();
+    let snapshot = runtime.snapshot();
+    let player_grid = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == handles.player)
+        .expect("player actor should exist")
+        .grid_position;
+    let viewer_state = ViewerState {
+        selected_actor: Some(handles.player),
+        current_level: player_grid.y,
+        show_walkable_tiles_overlay: true,
+        ..ViewerState::default()
+    };
+
+    let cells = collect_walkable_tile_overlay_cells(
+        &runtime,
+        &snapshot,
+        &viewer_state,
+        grid_bounds(&snapshot, player_grid.y),
+    );
+
+    assert!(cells
+        .iter()
+        .any(|(grid, kind)| *grid == player_grid && *kind == WalkableTileOverlayKind::Walkable));
+}
+
+#[test]
+fn walkable_tile_overlay_falls_back_to_runtime_blocking_without_command_actor() {
+    let (runtime, handles) = create_demo_runtime();
+    let snapshot = runtime.snapshot();
+    let player_grid = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == handles.player)
+        .expect("player actor should exist")
+        .grid_position;
+    let viewer_state = ViewerState {
+        control_mode: ViewerControlMode::FreeObserve,
+        current_level: player_grid.y,
+        show_walkable_tiles_overlay: true,
+        ..ViewerState::default()
+    };
+
+    let cells = collect_walkable_tile_overlay_cells(
+        &runtime,
+        &snapshot,
+        &viewer_state,
+        grid_bounds(&snapshot, player_grid.y),
+    );
+
+    assert!(cells
+        .iter()
+        .any(|(grid, kind)| *grid == player_grid && *kind == WalkableTileOverlayKind::Blocked));
+}
+
+#[test]
+fn walkable_tile_overlay_only_collects_cells_on_current_level() {
+    let (runtime, _) = create_demo_runtime();
+    let snapshot = runtime.snapshot();
+    let viewer_state = ViewerState {
+        current_level: 0,
+        show_walkable_tiles_overlay: true,
+        ..ViewerState::default()
+    };
+
+    let cells = collect_walkable_tile_overlay_cells(
+        &runtime,
+        &snapshot,
+        &viewer_state,
+        grid_bounds(&snapshot, 0),
+    );
+
+    assert!(!cells.is_empty());
+    assert!(cells.iter().all(|(grid, _)| grid.y == 0));
 }
 
 #[test]

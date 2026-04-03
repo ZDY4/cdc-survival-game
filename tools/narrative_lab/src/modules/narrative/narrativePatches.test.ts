@@ -14,6 +14,8 @@ describe("narrativePatches", () => {
     expect(patchSet.patches).toHaveLength(1);
     expect(patchSet.patches[0].originalText).toBe("old block");
     expect(patchSet.patches[0].replacementText).toBe("new block");
+    expect(patchSet.patches[0].sectionTitle).toBe("A");
+    expect(patchSet.patches[0].patchKind).toBe("replace");
   });
 
   it("applies a single block patch back into the source markdown", () => {
@@ -52,5 +54,20 @@ describe("narrativePatches", () => {
     expect(patchSet.mode).toBe("patches");
     expect(patchSet.patches).toHaveLength(1);
     expect(patchSet.patches[0].originalText).toBe("old");
+  });
+
+  it("marks insertions and deletions with patch kinds", () => {
+    const insertion = buildNarrativePatchSet("# 标题\n\n原文", "# 标题\n\n原文\n\n新增段落");
+    const deletion = buildNarrativePatchSet("# 标题\n\n原文\n\n删掉我", "# 标题\n\n原文");
+
+    expect(insertion.patches[0]?.patchKind).toBe("insert");
+    expect(deletion.patches[0]?.patchKind).toBe("delete");
+  });
+
+  it("keeps code fences as standalone blocks", () => {
+    const blocks = splitNarrativeMarkdownBlocks("# 标题\n\n```ts\nconst value = 1;\n```\n\n普通段落");
+
+    expect(blocks).toHaveLength(3);
+    expect(blocks[1]).toContain("```ts");
   });
 });

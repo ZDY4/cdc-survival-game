@@ -1,3 +1,5 @@
+//! 运行时基础操作：负责新游戏初始化、基础命令包装和 viewer 运行时快捷操作。
+
 use super::*;
 
 #[derive(Resource, Debug, Default)]

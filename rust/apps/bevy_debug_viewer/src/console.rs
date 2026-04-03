@@ -15,7 +15,7 @@ use crate::simulation::viewer_event_entry;
 use crate::state::{
     UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
     ViewerDamageNumberState, ViewerHudPage, ViewerInfoPanelState, ViewerPalette,
-    ViewerRuntimeState, ViewerState,
+    ViewerRuntimeState, ViewerState, viewer_ui_passthrough_bundle,
 };
 
 const CONSOLE_PANEL_TOP_PX: f32 = 42.0;
@@ -50,6 +50,10 @@ const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[
     ConsoleCommandSpec {
         name: "show selection",
         summary: "Toggle the Selection info panel.",
+    },
+    ConsoleCommandSpec {
+        name: "show walkable_tiles",
+        summary: "Toggle the walkable tiles debug overlay.",
     },
     ConsoleCommandSpec {
         name: "show actor",
@@ -220,6 +224,7 @@ pub(crate) fn spawn_console_panel(
             Visibility::Hidden,
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
             ConsolePanelRoot,
             UiMouseBlocker,
         ))
@@ -449,6 +454,22 @@ fn execute_show_command(
                 text: status,
             }
         }
+        [target] if target.eq_ignore_ascii_case("walkable_tiles") => {
+            viewer_state.show_walkable_tiles_overlay = !viewer_state.show_walkable_tiles_overlay;
+            let status = format!(
+                "walkable tiles overlay: {}",
+                if viewer_state.show_walkable_tiles_overlay {
+                    "on"
+                } else {
+                    "off"
+                }
+            );
+            viewer_state.status_line = status.clone();
+            ConsoleFeedback {
+                is_error: false,
+                text: status,
+            }
+        }
         [target] => {
             let normalized = target.to_ascii_lowercase();
             let Some(page) = ViewerHudPage::from_console_name(normalized.as_str()) else {
@@ -472,7 +493,7 @@ fn execute_show_command(
         }
         [] => ConsoleFeedback {
             is_error: true,
-            text: "Usage: show fps|overview|selection|actor|world|interaction|turn_sys|events|ai|performance"
+            text: "Usage: show fps|walkable_tiles|overview|selection|actor|world|interaction|turn_sys|events|ai|performance"
                 .to_string(),
         },
         _ => ConsoleFeedback {
@@ -710,6 +731,14 @@ mod tests {
     }
 
     #[test]
+    fn console_suggestions_match_show_walkable_tiles_prefix() {
+        let suggestions = console_suggestions("show wa");
+
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].name, "show walkable_tiles");
+    }
+
+    #[test]
     fn console_suggestions_match_observe_mode_prefix() {
         let suggestions = console_suggestions("ob");
 
@@ -759,6 +788,21 @@ mod tests {
     }
 
     #[test]
+    fn submission_uses_selected_suggestion_for_walkable_tiles_prefix() {
+        let console_state = ViewerConsoleState {
+            is_open: true,
+            input: "show wa".to_string(),
+            selected_suggestion: 0,
+            last_feedback: None,
+        };
+
+        assert_eq!(
+            submission_command_line(&console_state),
+            "show walkable_tiles"
+        );
+    }
+
+    #[test]
     fn submission_uses_selected_suggestion_for_empty_input() {
         let console_state = ViewerConsoleState {
             is_open: true,
@@ -804,6 +848,30 @@ mod tests {
         assert!(!second.is_error);
         assert_eq!(second.text, "info panel overview: off");
         assert!(info_panel_state.is_empty());
+    }
+
+    #[test]
+    fn show_walkable_tiles_toggles_overlay_flag() {
+        let mut viewer_state = ViewerState::default();
+        let mut info_panel_state = ViewerInfoPanelState::default();
+
+        let first = execute_show_command(
+            &["walkable_tiles"],
+            &mut viewer_state,
+            &mut info_panel_state,
+        );
+        assert!(!first.is_error);
+        assert!(viewer_state.show_walkable_tiles_overlay);
+        assert_eq!(first.text, "walkable tiles overlay: on");
+
+        let second = execute_show_command(
+            &["walkable_tiles"],
+            &mut viewer_state,
+            &mut info_panel_state,
+        );
+        assert!(!second.is_error);
+        assert!(!viewer_state.show_walkable_tiles_overlay);
+        assert_eq!(second.text, "walkable tiles overlay: off");
     }
 
     #[test]

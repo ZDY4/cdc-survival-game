@@ -1,3 +1,5 @@
+//! 模拟门面：统一组织运行时桥接、推进、交互、移动和反馈系统的对外入口。
+
 use std::collections::BTreeMap;
 
 use bevy::prelude::*;
@@ -18,281 +20,39 @@ use crate::state::{
 };
 
 mod event_feedback;
+mod interaction;
+mod motion;
 mod npc_actions;
 mod npc_presence;
+mod progression;
 mod runtime_basics;
+mod runtime_bridge;
 
 pub(crate) use event_feedback::collect_events;
+pub(crate) use interaction::refresh_interaction_prompt;
+pub(crate) use motion::{advance_actor_feedback, advance_actor_motion};
 pub(crate) use npc_actions::advance_online_npc_actions;
 pub(crate) use npc_presence::sync_npc_runtime_presence;
+pub(crate) use progression::{
+    advance_runtime_progression, cancel_pending_movement, submit_end_turn,
+};
 pub(crate) use runtime_basics::{
     advance_map_ai_spawns, prime_viewer_state, refresh_viewer_vision,
     reset_viewer_runtime_transients, sync_viewer_runtime_basics, tick_runtime,
     ViewerVisionTrackerState,
 };
+pub(crate) use runtime_bridge::viewer_event_entry;
 
 const ACTOR_MOTION_MIN_DURATION_SEC: f32 = 0.04;
 const ACTOR_MOTION_MAX_DURATION_SEC: f32 = 0.16;
 
-pub(crate) fn cancel_pending_movement(
-    runtime_state: &mut ViewerRuntimeState,
-    viewer_state: &mut ViewerState,
-) -> bool {
-    let Some(intent) = runtime_state.runtime.pending_movement().copied() else {
-        return false;
-    };
-    if runtime_state.runtime.get_actor_side(intent.actor_id) != Some(ActorSide::Player) {
-        return false;
-    }
-
-    let stop_after_current_step = runtime_state.runtime.peek_pending_progression()
-        == Some(&PendingProgressionStep::ContinuePendingMovement);
-    runtime_state
-        .runtime
-        .request_pending_movement_stop(intent.actor_id);
-    viewer_state.progression_elapsed_sec = 0.0;
-    viewer_state.end_turn_hold_sec = 0.0;
-    viewer_state.end_turn_repeat_elapsed_sec = 0.0;
-    viewer_state.status_line = if stop_after_current_step {
-        format!(
-            "move: stopping after current step for actor {:?}",
-            intent.actor_id
-        )
-    } else {
-        format!("move: cancelled actor {:?}", intent.actor_id)
-    };
-    true
-}
-
-pub(crate) fn submit_end_turn(
-    runtime_state: &mut ViewerRuntimeState,
-    viewer_state: &mut ViewerState,
-) {
-    viewer_state.auto_end_turn_after_stop = false;
-    let snapshot = runtime_state.runtime.snapshot();
-    if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
-        viewer_state.progression_elapsed_sec = 0.0;
-        let result = runtime_state
-            .runtime
-            .submit_command(SimulationCommand::EndTurn { actor_id });
-        viewer_state.status_line = command_result_status("end turn", result);
-    }
-}
-
-fn maybe_auto_end_turn_after_stop(
-    runtime_state: &mut ViewerRuntimeState,
-    viewer_state: &mut ViewerState,
-) {
-    if !viewer_state.auto_end_turn_after_stop {
-        return;
-    }
-    if runtime_state.runtime.has_pending_progression()
-        || runtime_state.runtime.pending_movement().is_some()
-    {
-        return;
-    }
-    if viewer_state.active_dialogue.is_some()
-        || runtime_state.runtime.pending_interaction().is_some()
-    {
-        return;
-    }
-
-    let snapshot = runtime_state.runtime.snapshot();
-    if snapshot.combat.in_combat || viewer_state.command_actor_id(&snapshot).is_none() {
-        viewer_state.auto_end_turn_after_stop = false;
-        return;
-    }
-
-    submit_end_turn(runtime_state, viewer_state);
-}
-
-pub(crate) fn advance_runtime_progression(
-    time: Res<Time>,
-    mut runtime_state: ResMut<ViewerRuntimeState>,
-    mut viewer_state: ResMut<ViewerState>,
-) {
-    if !runtime_state.runtime.has_pending_progression() {
-        viewer_state.progression_elapsed_sec = 0.0;
-        maybe_auto_end_turn_after_stop(&mut runtime_state, &mut viewer_state);
-        return;
-    }
-
-    viewer_state.progression_elapsed_sec += time.delta_secs();
-    if viewer_state.progression_elapsed_sec < viewer_state.min_progression_interval_sec {
-        return;
-    }
-    viewer_state.progression_elapsed_sec = 0.0;
-
-    let result = runtime_state.runtime.advance_pending_progression();
-    if result.applied_step.is_some() {
-        viewer_state.status_line = event_feedback::progression_result_status(&result);
-    }
-    maybe_auto_end_turn_after_stop(&mut runtime_state, &mut viewer_state);
-}
-
-pub(crate) fn advance_actor_motion(
-    time: Res<Time>,
-    runtime_state: Res<ViewerRuntimeState>,
-    viewer_state: Res<ViewerState>,
-    mut motion_state: ResMut<ViewerActorMotionState>,
-) {
-    if motion_state.tracks.is_empty() {
-        return;
-    }
-
-    let snapshot = runtime_state.runtime.snapshot();
-    let grid_size = snapshot.grid.grid_size;
-    let tracked_actor_ids: Vec<_> = motion_state.tracks.keys().copied().collect();
-
-    for actor_id in tracked_actor_ids {
-        let Some(actor) = snapshot
-            .actors
-            .iter()
-            .find(|actor| actor.actor_id == actor_id)
-        else {
-            motion_state.tracks.remove(&actor_id);
-            continue;
-        };
-
-        let authority_world = runtime_state.runtime.grid_to_world(actor.grid_position);
-        let authority_level = actor.grid_position.y;
-        let Some(track) = motion_state.tracks.get_mut(&actor_id) else {
-            continue;
-        };
-
-        let should_snap = authority_level != track.level
-            || authority_level != viewer_state.current_level
-            || event_feedback::horizontal_world_distance(track.to_world, authority_world)
-                > grid_size + 0.001;
-        if should_snap {
-            track.snap_to(authority_world, authority_level);
-            motion_state.tracks.remove(&actor_id);
-            continue;
-        }
-
-        track.advance(time.delta_secs());
-        if !track.active {
-            if !event_feedback::approx_world_coord(track.current_world, authority_world) {
-                track.snap_to(authority_world, authority_level);
-            }
-            motion_state.tracks.remove(&actor_id);
-        }
-    }
-}
-
-pub(crate) fn advance_actor_feedback(
-    time: Res<Time>,
-    mut feedback_state: ResMut<ViewerActorFeedbackState>,
-) {
-    if feedback_state.tracks.is_empty() {
-        return;
-    }
-
-    feedback_state.advance(time.delta_secs());
-}
-
-pub(crate) fn refresh_interaction_prompt(
-    mut runtime_state: ResMut<ViewerRuntimeState>,
-    mut viewer_state: ResMut<ViewerState>,
-) {
-    if viewer_state.is_free_observe() {
-        viewer_state.current_prompt = None;
-        return;
-    }
-
-    let snapshot = runtime_state.runtime.snapshot();
-    let Some(actor_id) = viewer_state.command_actor_id(&snapshot) else {
-        viewer_state.current_prompt = None;
-        return;
-    };
-    let Some(target_id) = viewer_state.focused_target.clone() else {
-        viewer_state.current_prompt = None;
-        return;
-    };
-    viewer_state.current_prompt = runtime_state
-        .runtime
-        .query_interaction_prompt(actor_id, target_id);
-}
-
-pub(crate) fn command_result_status(label: &str, result: SimulationCommandResult) -> String {
-    match result {
-        SimulationCommandResult::Action(action) => {
-            format!("{label}: {}", action_result_status(&action))
-        }
-        SimulationCommandResult::SkillActivation(result) => {
-            let status = if result.action_result.success {
-                action_result_status(&result.action_result)
-            } else {
-                result
-                    .failure_reason
-                    .clone()
-                    .or(result.action_result.reason.clone())
-                    .unwrap_or_else(|| "unknown".to_string())
-            };
-            format!("{label}: {status}")
-        }
-        SimulationCommandResult::Path(result) => match result {
-            Ok(path) => format!("{label}: path cells={}", path.len()),
-            Err(error) => format!("{label}: path error={error:?}"),
-        },
-        SimulationCommandResult::InteractionPrompt(prompt) => {
-            format!("{label}: options={}", prompt.options.len())
-        }
-        SimulationCommandResult::InteractionExecution(result) => {
-            format!(
-                "{label}: {}",
-                if result.success {
-                    "ok".to_string()
-                } else {
-                    format!(
-                        "failed {}",
-                        result.reason.unwrap_or_else(|| "unknown".to_string())
-                    )
-                }
-            )
-        }
-        SimulationCommandResult::DialogueState(result) => match result {
-            Ok(state) => format!(
-                "{label}: dialogue node={} finished={}",
-                state.session.current_node_id, state.finished
-            ),
-            Err(error) => format!("{label}: dialogue error={error}"),
-        },
-        SimulationCommandResult::OverworldState(result) => match result {
-            Ok(state) => format!(
-                "{label}: mode={:?} location={}",
-                state.world_mode,
-                state.active_location_id.as_deref().unwrap_or("unknown")
-            ),
-            Err(error) => format!("{label}: world error={error}"),
-        },
-        SimulationCommandResult::LocationTransition(result) => match result {
-            Ok(context) => format!(
-                "{label}: entered {} map={} entry={}",
-                context.location_id, context.map_id, context.entry_point_id
-            ),
-            Err(error) => format!("{label}: transition error={error}"),
-        },
-        SimulationCommandResult::InteractionContext(result) => match result {
-            Ok(context) => format!(
-                "{label}: mode={:?} map={:?} outdoor={:?} subscene={:?}",
-                context.world_mode,
-                context.current_map_id,
-                context.active_outdoor_location_id,
-                context.current_subscene_location_id
-            ),
-            Err(error) => format!("{label}: interaction context error={error}"),
-        },
-        SimulationCommandResult::None => format!("{label}: ok"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::progression::maybe_auto_end_turn_after_stop;
     use super::{
         advance_online_npc_actions, advance_runtime_progression, collect_events, event_feedback,
-        maybe_auto_end_turn_after_stop, refresh_interaction_prompt, sync_npc_runtime_presence,
-        ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
+        refresh_interaction_prompt, sync_npc_runtime_presence, ACTOR_MOTION_MAX_DURATION_SEC,
+        ACTOR_MOTION_MIN_DURATION_SEC,
     };
     use crate::state::{
         ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
@@ -698,357 +458,46 @@ mod tests {
         assert!(!runtime_state.runtime.has_pending_progression());
         assert!(runtime_state.runtime.actor_turn_open(handles.player));
     }
-}
 
-pub(crate) fn viewer_event_entry(event: SimulationEvent, turn_index: u64) -> ViewerEventEntry {
-    let category = classify_event(&event);
-    let text = format_event_text(event);
-    ViewerEventEntry {
-        category,
-        turn_index,
-        text,
-    }
-}
+    #[test]
+    fn prompt_refresh_preserves_pending_progression() {
+        let (mut runtime, handles) = create_demo_runtime();
+        let move_result = runtime.submit_command(SimulationCommand::MoveActorTo {
+            actor_id: handles.player,
+            goal: GridCoord::new(0, 0, 1),
+        });
+        assert!(matches!(
+            move_result,
+            game_core::SimulationCommandResult::Action(_)
+        ));
+        assert_eq!(
+            runtime.peek_pending_progression(),
+            Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
 
-pub(crate) fn classify_event(event: &SimulationEvent) -> HudEventCategory {
-    match event {
-        SimulationEvent::ActorTurnStarted { .. }
-        | SimulationEvent::ActorTurnEnded { .. }
-        | SimulationEvent::CombatStateChanged { .. }
-        | SimulationEvent::ActionRejected { .. }
-        | SimulationEvent::ActionResolved { .. }
-        | SimulationEvent::SkillActivated { .. }
-        | SimulationEvent::SkillActivationFailed { .. }
-        | SimulationEvent::ActorDamaged { .. }
-        | SimulationEvent::ActorDefeated { .. } => HudEventCategory::Combat,
-        SimulationEvent::InteractionOptionsResolved { .. }
-        | SimulationEvent::InteractionApproachPlanned { .. }
-        | SimulationEvent::InteractionStarted { .. }
-        | SimulationEvent::InteractionSucceeded { .. }
-        | SimulationEvent::InteractionFailed { .. }
-        | SimulationEvent::DialogueStarted { .. }
-        | SimulationEvent::DialogueAdvanced { .. }
-        | SimulationEvent::PickupGranted { .. }
-        | SimulationEvent::RelationChanged { .. }
-        | SimulationEvent::NpcActionStarted { .. }
-        | SimulationEvent::NpcActionPhaseChanged { .. }
-        | SimulationEvent::NpcActionCompleted { .. }
-        | SimulationEvent::NpcActionFailed { .. } => HudEventCategory::Interaction,
-        SimulationEvent::GroupRegistered { .. }
-        | SimulationEvent::ActorRegistered { .. }
-        | SimulationEvent::ActorUnregistered { .. }
-        | SimulationEvent::ActorMoved { .. }
-        | SimulationEvent::ActorVisionUpdated { .. }
-        | SimulationEvent::WorldCycleCompleted
-        | SimulationEvent::PathComputed { .. }
-        | SimulationEvent::SceneTransitionRequested { .. }
-        | SimulationEvent::LootDropped { .. }
-        | SimulationEvent::ExperienceGranted { .. }
-        | SimulationEvent::ActorLeveledUp { .. }
-        | SimulationEvent::QuestStarted { .. }
-        | SimulationEvent::QuestObjectiveProgressed { .. }
-        | SimulationEvent::QuestCompleted { .. }
-        | SimulationEvent::LocationEntered { .. }
-        | SimulationEvent::ReturnedToOverworld { .. }
-        | SimulationEvent::LocationUnlocked { .. } => HudEventCategory::World,
-    }
-}
+        let mut app = App::new();
+        app.insert_resource(ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        })
+        .insert_resource(ViewerState::default())
+        .add_systems(Update, refresh_interaction_prompt);
 
-fn format_event_text(event: SimulationEvent) -> String {
-    match event {
-        SimulationEvent::GroupRegistered { group_id, order } => {
-            format!("group registered {group_id} -> {order}")
+        {
+            let mut viewer_state = app.world_mut().resource_mut::<ViewerState>();
+            viewer_state.select_actor(handles.player, ActorSide::Player);
+            viewer_state.focused_target = Some(InteractionTargetId::Actor(handles.friendly));
         }
-        SimulationEvent::ActorRegistered {
-            actor_id,
-            group_id,
-            side,
-        } => format!(
-            "actor {:?} registered group={} side={:?}",
-            actor_id, group_id, side
-        ),
-        SimulationEvent::ActorUnregistered { actor_id } => {
-            format!("actor {:?} unregistered", actor_id)
-        }
-        SimulationEvent::ActorTurnStarted {
-            actor_id,
-            group_id,
-            ap,
-        } => format!(
-            "turn started {:?} group={} ap={:.1}",
-            actor_id, group_id, ap
-        ),
-        SimulationEvent::ActorTurnEnded {
-            actor_id,
-            group_id,
-            remaining_ap,
-        } => format!(
-            "turn ended {:?} group={} remaining_ap={:.1}",
-            actor_id, group_id, remaining_ap
-        ),
-        SimulationEvent::CombatStateChanged { in_combat } => {
-            format!("combat state -> {}", in_combat)
-        }
-        SimulationEvent::ActionRejected {
-            actor_id,
-            action_type,
-            reason,
-        } => format!(
-            "action rejected actor={:?} type={:?} reason={}",
-            actor_id, action_type, reason
-        ),
-        SimulationEvent::ActionResolved {
-            actor_id,
-            action_type,
-            result,
-        } => format!(
-            "action resolved actor={:?} type={:?} ap={:.1}->{:.1} consumed={:.1}",
-            actor_id, action_type, result.ap_before, result.ap_after, result.consumed
-        ),
-        SimulationEvent::SkillActivated {
-            actor_id,
-            skill_id,
-            target,
-            hit_actor_ids,
-        } => format!(
-            "skill activated actor={:?} skill={} target={:?} hits={}",
-            actor_id,
-            skill_id,
-            target,
-            hit_actor_ids.len()
-        ),
-        SimulationEvent::SkillActivationFailed {
-            actor_id,
-            skill_id,
-            reason,
-        } => format!(
-            "skill failed actor={:?} skill={} reason={}",
-            actor_id, skill_id, reason
-        ),
-        SimulationEvent::WorldCycleCompleted => "world cycle completed".to_string(),
-        SimulationEvent::NpcActionStarted {
-            actor_id,
-            action,
-            phase,
-        } => format!(
-            "npc action started actor={:?} action={:?} phase={:?}",
-            actor_id, action, phase
-        ),
-        SimulationEvent::NpcActionPhaseChanged {
-            actor_id,
-            action,
-            phase,
-        } => format!(
-            "npc action phase actor={:?} action={:?} phase={:?}",
-            actor_id, action, phase
-        ),
-        SimulationEvent::NpcActionCompleted { actor_id, action } => format!(
-            "npc action completed actor={:?} action={:?}",
-            actor_id, action
-        ),
-        SimulationEvent::NpcActionFailed {
-            actor_id,
-            action,
-            reason,
-        } => format!(
-            "npc action failed actor={:?} action={:?} reason={}",
-            actor_id, action, reason
-        ),
-        SimulationEvent::ActorMoved {
-            actor_id,
-            from,
-            to,
-            step_index,
-            total_steps,
-        } => format!(
-            "actor moved {:?} ({}, {}, {}) -> ({}, {}, {}) step={}/{}",
-            actor_id, from.x, from.y, from.z, to.x, to.y, to.z, step_index, total_steps
-        ),
-        SimulationEvent::ActorVisionUpdated {
-            actor_id,
-            active_map_id,
-            visible_cells,
-            explored_cells,
-        } => format!(
-            "vision updated actor={:?} map={} visible={} explored={}",
-            actor_id,
-            active_map_id
-                .as_ref()
-                .map(|map_id| map_id.as_str())
-                .unwrap_or("none"),
-            visible_cells.len(),
-            explored_cells.len()
-        ),
-        SimulationEvent::PathComputed {
-            actor_id,
-            path_length,
-        } => format!("path computed actor={:?} len={}", actor_id, path_length),
-        SimulationEvent::InteractionOptionsResolved {
-            actor_id,
-            target_id,
-            option_count,
-        } => format!(
-            "interaction options actor={:?} target={:?} count={}",
-            actor_id, target_id, option_count
-        ),
-        SimulationEvent::InteractionApproachPlanned {
-            actor_id,
-            target_id,
-            option_id,
-            goal,
-            path_length,
-        } => format!(
-            "interaction approach actor={:?} target={:?} option={} goal=({}, {}, {}) len={}",
-            actor_id, target_id, option_id, goal.x, goal.y, goal.z, path_length
-        ),
-        SimulationEvent::InteractionStarted {
-            actor_id,
-            target_id,
-            option_id,
-        } => format!(
-            "interaction started actor={:?} target={:?} option={}",
-            actor_id, target_id, option_id
-        ),
-        SimulationEvent::InteractionSucceeded {
-            actor_id,
-            target_id,
-            option_id,
-        } => format!(
-            "interaction ok actor={:?} target={:?} option={}",
-            actor_id, target_id, option_id
-        ),
-        SimulationEvent::InteractionFailed {
-            actor_id,
-            target_id,
-            option_id,
-            reason,
-        } => format!(
-            "interaction failed actor={:?} target={:?} option={} reason={}",
-            actor_id, target_id, option_id, reason
-        ),
-        SimulationEvent::DialogueStarted {
-            actor_id,
-            target_id,
-            dialogue_id,
-        } => format!(
-            "dialogue started actor={:?} target={:?} id={}",
-            actor_id, target_id, dialogue_id
-        ),
-        SimulationEvent::DialogueAdvanced {
-            actor_id,
-            dialogue_id,
-            node_id,
-        } => format!(
-            "dialogue advanced actor={:?} id={} node={}",
-            actor_id, dialogue_id, node_id
-        ),
-        SimulationEvent::SceneTransitionRequested {
-            actor_id,
-            option_id,
-            target_id,
-            world_mode,
-            ..
-        } => format!(
-            "scene transition actor={:?} option={} target={} mode={:?}",
-            actor_id, option_id, target_id, world_mode
-        ),
-        SimulationEvent::LocationEntered {
-            actor_id,
-            location_id,
-            map_id,
-            entry_point_id,
-            world_mode,
-        } => format!(
-            "location entered actor={:?} location={} map={} entry={} mode={:?}",
-            actor_id, location_id, map_id, entry_point_id, world_mode
-        ),
-        SimulationEvent::ReturnedToOverworld {
-            actor_id,
-            active_outdoor_location_id,
-        } => format!(
-            "returned to overworld actor={:?} location={}",
-            actor_id,
-            active_outdoor_location_id.as_deref().unwrap_or("unknown")
-        ),
-        SimulationEvent::LocationUnlocked { location_id } => {
-            format!("location unlocked {}", location_id)
-        }
-        SimulationEvent::PickupGranted {
-            actor_id,
-            target_id,
-            item_id,
-            count,
-        } => format!(
-            "pickup granted actor={:?} target={:?} item={} count={}",
-            actor_id, target_id, item_id, count
-        ),
-        SimulationEvent::ActorDamaged {
-            actor_id,
-            target_actor,
-            damage,
-            remaining_hp,
-        } => format!(
-            "actor damaged attacker={:?} target={:?} damage={:.1} hp={:.1}",
-            actor_id, target_actor, damage, remaining_hp
-        ),
-        SimulationEvent::ActorDefeated {
-            actor_id,
-            target_actor,
-        } => format!(
-            "actor defeated attacker={:?} target={:?}",
-            actor_id, target_actor
-        ),
-        SimulationEvent::LootDropped {
-            actor_id,
-            target_actor,
-            object_id,
-            item_id,
-            count,
-            grid,
-        } => format!(
-            "loot dropped attacker={:?} target={:?} object={} item={} count={} grid=({}, {}, {})",
-            actor_id, target_actor, object_id, item_id, count, grid.x, grid.y, grid.z
-        ),
-        SimulationEvent::ExperienceGranted {
-            actor_id,
-            amount,
-            total_xp,
-        } => format!(
-            "xp granted actor={:?} amount={} total={}",
-            actor_id, amount, total_xp
-        ),
-        SimulationEvent::ActorLeveledUp {
-            actor_id,
-            new_level,
-            available_stat_points,
-            available_skill_points,
-        } => format!(
-            "level up actor={:?} level={} stat_points={} skill_points={}",
-            actor_id, new_level, available_stat_points, available_skill_points
-        ),
-        SimulationEvent::QuestStarted { actor_id, quest_id } => {
-            format!("quest started actor={:?} quest={}", actor_id, quest_id)
-        }
-        SimulationEvent::QuestObjectiveProgressed {
-            actor_id,
-            quest_id,
-            node_id,
-            current,
-            target,
-        } => format!(
-            "quest progress actor={:?} quest={} node={} {}/{}",
-            actor_id, quest_id, node_id, current, target
-        ),
-        SimulationEvent::QuestCompleted { actor_id, quest_id } => {
-            format!("quest completed actor={:?} quest={}", actor_id, quest_id)
-        }
-        SimulationEvent::RelationChanged {
-            actor_id,
-            target_id,
-            disposition,
-        } => format!(
-            "relation changed actor={:?} target={:?} side={:?}",
-            actor_id, target_id, disposition
-        ),
+
+        app.update();
+
+        let runtime_state = app.world().resource::<ViewerRuntimeState>();
+        let viewer_state = app.world().resource::<ViewerState>();
+        assert_eq!(
+            runtime_state.runtime.peek_pending_progression(),
+            Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert!(viewer_state.current_prompt.is_some());
     }
 }

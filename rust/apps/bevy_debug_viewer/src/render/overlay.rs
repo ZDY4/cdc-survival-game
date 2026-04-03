@@ -1,3 +1,5 @@
+//! 屏幕叠加层模块：负责角色标签、伤害数字、交互菜单和对话面板等 2D 叠加内容。
+
 use super::*;
 
 pub(crate) fn clear_actor_labels(

@@ -1,3 +1,5 @@
+//! 世界空间 helper：负责网格边界、角色标签、路径预览和楼层切换等纯世界换算。
+
 use bevy::prelude::*;
 use game_core::{ActorDebugState, SimulationRuntime, SimulationSnapshot};
 use game_data::{GridCoord, WorldCoord};

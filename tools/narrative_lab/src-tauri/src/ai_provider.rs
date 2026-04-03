@@ -79,10 +79,7 @@ fn map_http_error(status_code: u16, raw_text: &str) -> String {
             "当前 API Key 没有访问该模型的权限。",
             provider_message.as_deref(),
         ),
-        404 => with_provider_detail(
-            "未找到对应模型或接口地址。",
-            provider_message.as_deref(),
-        ),
+        404 => with_provider_detail("未找到对应模型或接口地址。", provider_message.as_deref()),
         408 => "请求超时，请检查网络或增大 Timeout。".to_string(),
         429 => with_provider_detail("请求过于频繁，稍后再试。", provider_message.as_deref()),
         500 | 502 | 503 | 504 => with_provider_detail(

@@ -221,6 +221,8 @@
 .narrative-chat-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -600,9 +602,11 @@
 }
 
 .narrative-chat-composer {
+  flex: 0 0 auto;
   align-self: stretch;
   width: 100%;
   padding-top: 10px;
+  padding-bottom: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -612,6 +616,7 @@
   justify-content: space-between;
   gap: 6px;
   flex-wrap: wrap;
+  padding-bottom: 2px;
 }
 
 .narrative-chat-composer-footer .toolbar-summary {
@@ -638,6 +643,7 @@
 
 .narrative-chat-send-button {
   min-width: 96px;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -167,13 +167,8 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         true,
         None::<&str>,
     )?;
-    let reset_layout = MenuItem::with_id(
-        app,
-        ids::VIEW_RESET_LAYOUT,
-        "重置布局",
-        true,
-        None::<&str>,
-    )?;
+    let reset_layout =
+        MenuItem::with_id(app, ids::VIEW_RESET_LAYOUT, "重置布局", true, None::<&str>)?;
     let restore_default_layout = MenuItem::with_id(
         app,
         ids::VIEW_RESTORE_DEFAULT_LAYOUT,

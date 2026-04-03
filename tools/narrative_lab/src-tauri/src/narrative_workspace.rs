@@ -272,14 +272,15 @@ pub fn delete_narrative_document(
 }
 
 #[tauri::command]
-pub fn open_narrative_document_folder(
-    workspace_root: String,
-    slug: String,
-) -> Result<(), String> {
+pub fn open_narrative_document_folder(workspace_root: String, slug: String) -> Result<(), String> {
     let workspace_root_path = resolve_workspace_root(&workspace_root)?;
     let document = find_document_by_slug(&workspace_root_path, &slug)?
         .ok_or_else(|| format!("未找到文稿: {slug}"))?;
-    let path = workspace_root_path.join(document.relative_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+    let path = workspace_root_path.join(
+        document
+            .relative_path
+            .replace('/', std::path::MAIN_SEPARATOR_STR),
+    );
     let folder = path
         .parent()
         .ok_or_else(|| format!("无法定位文稿目录: {}", path.display()))?;
@@ -890,8 +891,7 @@ fn narrative_bootstrap(workspace_root: &Path, project_root: Option<&str>) -> Edi
             MigrationStage {
                 id: "phase-3",
                 title: "阶段 3：项目联动",
-                description:
-                    "按需连接游戏项目，让 AI 能参考运行时任务、对白与世界数据进行创作。",
+                description: "按需连接游戏项目，让 AI 能参考运行时任务、对白与世界数据进行创作。",
             },
         ],
         editor_domains: vec![
@@ -955,7 +955,8 @@ mod tests {
 
     #[test]
     fn split_frontmatter_parses_meta_and_markdown() {
-        let raw = "---\ndoc_type: task_setup\nslug: test\nrelated_docs: [a, b]\n---\n\n# Title\nBody";
+        let raw =
+            "---\ndoc_type: task_setup\nslug: test\nrelated_docs: [a, b]\n---\n\n# Title\nBody";
         let (meta, markdown) = split_frontmatter(raw).expect("frontmatter should parse");
         assert_eq!(meta.get("doc_type").map(String::as_str), Some("task_setup"));
         assert_eq!(meta.get("slug").map(String::as_str), Some("test"));

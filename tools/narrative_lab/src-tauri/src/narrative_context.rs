@@ -44,32 +44,33 @@ pub fn build_narrative_context(
 ) -> Result<NarrativeContextBuildResult, String> {
     let narrative_documents = load_narrative_documents(workspace_root)?;
     let mut workspace_context_refs = Vec::new();
+    let selected_context_slugs = unique_strings(
+        request
+            .related_doc_slugs
+            .iter()
+            .map(|slug| slug.trim().to_string())
+            .filter(|slug| !slug.is_empty())
+            .collect(),
+    );
 
-    let related_doc_records = narrative_documents
+    let related_doc_records = selected_context_slugs
         .iter()
-        .filter(|document| request.related_doc_slugs.contains(&document.meta.slug))
+        .filter_map(|slug| narrative_documents.iter().find(|document| document.meta.slug == *slug))
         .map(|document| {
             workspace_context_refs.push(format!("narrative:{}", document.meta.slug));
-            json!({
-                "slug": document.meta.slug,
-                "docType": document.meta.doc_type,
-                "title": document.meta.title,
-                "summary": summarize_markdown(&document.markdown),
-            })
+            narrative_context_record(document, true)
         })
         .collect::<Vec<_>>();
 
     let same_type_docs = narrative_documents
         .iter()
         .filter(|document| document.meta.doc_type == request.doc_type)
+        .filter(|document| document.meta.slug != request.target_slug)
+        .filter(|document| !selected_context_slugs.iter().any(|slug| slug == &document.meta.slug))
         .take(max_context_records.clamp(3, 10))
         .map(|document| {
             workspace_context_refs.push(format!("narrative:{}", document.meta.slug));
-            json!({
-                "slug": document.meta.slug,
-                "title": document.meta.title,
-                "summary": summarize_markdown(&document.markdown),
-            })
+            narrative_context_record(document, false)
         })
         .collect::<Vec<_>>();
 
@@ -96,6 +97,11 @@ pub fn build_narrative_context(
             "templateHints": template_hints(&request.doc_type),
             "sameTypeDocuments": same_type_docs,
             "relatedDocuments": related_doc_records,
+            "contextSelection": {
+                "selectedContextFirst": true,
+                "selectedContextSlugs": selected_context_slugs,
+                "sameTypeFallbackCount": same_type_docs.len(),
+            },
             "runtimeIndexes": runtime_indexes,
             "storyBackground": story_background,
             "projectContextStatus": project_context_warning,
@@ -105,6 +111,19 @@ pub fn build_narrative_context(
         project_context_refs,
         source_conflicts,
         project_context_warning,
+    })
+}
+
+fn narrative_context_record(
+    document: &crate::narrative_workspace::NarrativeDocumentPayload,
+    selected: bool,
+) -> Value {
+    json!({
+        "slug": document.meta.slug,
+        "docType": document.meta.doc_type,
+        "title": document.meta.title,
+        "summary": summarize_markdown(&document.markdown),
+        "selectionReason": if selected { "selected_context" } else { "same_type_fallback" },
     })
 }
 

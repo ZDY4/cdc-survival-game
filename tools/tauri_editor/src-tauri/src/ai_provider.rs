@@ -138,14 +138,21 @@ fn generate_draft(
         .as_object()
         .cloned()
         .ok_or_else(|| "failed to encode ai request object".to_string())?;
-    let context_result = build_context(&repo_root, data_type, &request_object, settings.max_context_records)?;
+    let context_result = build_context(
+        &repo_root,
+        data_type,
+        &request_object,
+        settings.max_context_records,
+    )?;
     let rules = generation_rules(data_type);
     let request_meta = build_request_meta(
         data_type,
         &request,
         &settings,
         &context_result,
-        rules.len() + additional_constraints(data_type).len() + minimal_change_rules(&request).len(),
+        rules.len()
+            + additional_constraints(data_type).len()
+            + minimal_change_rules(&request).len(),
     );
     let prompt_payload = build_prompt_payload(
         data_type,
@@ -295,7 +302,8 @@ fn type_specific_validation(
             if dialog_id.is_empty() {
                 errors.push("dialog_id 不能为空".to_string());
             }
-            if mode == "create" && !dialog_id.is_empty() && dialogue_file_path(dialog_id)?.exists() {
+            if mode == "create" && !dialog_id.is_empty() && dialogue_file_path(dialog_id)?.exists()
+            {
                 errors.push(format!("新建模式下不能复用已有 dialog_id: {dialog_id}"));
             }
             if mode == "revise" && !target_id.trim().is_empty() && dialog_id != target_id.trim() {
@@ -567,17 +575,19 @@ fn perform_chat_completion(
                     return Err(failure);
                 }
 
-                let response_data: Value = serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
-                    status_code: status,
-                    error: format!("响应不是合法 JSON: {error}"),
-                    raw_text: raw_body.clone(),
-                })?;
+                let response_data: Value =
+                    serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
+                        status_code: status,
+                        error: format!("响应不是合法 JSON: {error}"),
+                        raw_text: raw_body.clone(),
+                    })?;
                 let raw_content = extract_message_content(&response_data);
-                let payload = extract_json_payload(&raw_content).map_err(|error| ProviderFailure {
-                    status_code: status,
-                    error,
-                    raw_text: raw_content.clone(),
-                })?;
+                let payload =
+                    extract_json_payload(&raw_content).map_err(|error| ProviderFailure {
+                        status_code: status,
+                        error,
+                        raw_text: raw_content.clone(),
+                    })?;
 
                 return Ok(ProviderSuccess {
                     raw_text: raw_content,
@@ -625,8 +635,12 @@ fn extract_json_payload(raw_text: &str) -> Result<Value, String> {
         }
     }
 
-    let start_index = trimmed.find('{').ok_or_else(|| "响应中未找到 JSON 对象".to_string())?;
-    let end_index = trimmed.rfind('}').ok_or_else(|| "响应中未找到 JSON 对象".to_string())?;
+    let start_index = trimmed
+        .find('{')
+        .ok_or_else(|| "响应中未找到 JSON 对象".to_string())?;
+    let end_index = trimmed
+        .rfind('}')
+        .ok_or_else(|| "响应中未找到 JSON 对象".to_string())?;
     if end_index < start_index {
         return Err("响应中未找到 JSON 对象".to_string());
     }
@@ -716,5 +730,8 @@ fn repo_root() -> Result<PathBuf, String> {
 }
 
 fn dialogue_file_path(dialog_id: &str) -> Result<PathBuf, String> {
-    Ok(repo_root()?.join("data").join("dialogues").join(format!("{dialog_id}.json")))
+    Ok(repo_root()?
+        .join("data")
+        .join("dialogues")
+        .join(format!("{dialog_id}.json")))
 }

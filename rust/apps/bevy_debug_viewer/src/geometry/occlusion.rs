@@ -1,10 +1,12 @@
+//! 遮挡几何 helper：负责焦点解析、遮挡检测和高亮/阻挡原因计算。
+
 use bevy::prelude::*;
 use game_core::{ActorDebugState, SimulationRuntime, SimulationSnapshot};
 use game_data::{ActorId, ActorSide, GridCoord, InteractionTargetId};
 
 use crate::geometry::{
     actor_at_grid, actor_label, map_object_debug_label, segment_aabb_intersection_fraction,
-    selected_actor, HoveredGridOutlineKind, OcclusionFocusPoint,
+    selected_actor, GridWalkabilityDebugInfo, HoveredGridOutlineKind, OcclusionFocusPoint,
 };
 use crate::state::ViewerState;
 
@@ -111,9 +113,61 @@ pub(crate) fn focused_target_summary(
         .unwrap_or_else(|| "none".to_string())
 }
 
+pub(crate) fn viewer_grid_is_walkable(
+    runtime: &SimulationRuntime,
+    snapshot: &SimulationSnapshot,
+    viewer_state: &ViewerState,
+    grid: GridCoord,
+) -> bool {
+    if !runtime.is_grid_in_bounds(grid) {
+        return false;
+    }
+
+    viewer_state
+        .command_actor_id(snapshot)
+        .map(|actor_id| runtime.grid_walkable_for_actor(grid, Some(actor_id)))
+        .unwrap_or_else(|| runtime.grid_walkable(grid))
+}
+
+pub(crate) fn grid_walkability_debug_info(
+    runtime: &SimulationRuntime,
+    snapshot: &SimulationSnapshot,
+    viewer_state: &ViewerState,
+    grid: GridCoord,
+) -> GridWalkabilityDebugInfo {
+    if !runtime.is_grid_in_bounds(grid) {
+        return GridWalkabilityDebugInfo {
+            is_walkable: false,
+            reasons: vec!["out_of_bounds".to_string()],
+        };
+    }
+
+    let actor_id = viewer_state.command_actor_id(snapshot);
+    let is_walkable = actor_id
+        .map(|actor_id| runtime.grid_walkable_for_actor(grid, Some(actor_id)))
+        .unwrap_or_else(|| runtime.grid_walkable(grid));
+
+    GridWalkabilityDebugInfo {
+        is_walkable,
+        reasons: if is_walkable {
+            Vec::new()
+        } else {
+            movement_block_reasons_for_actor(snapshot, grid, actor_id)
+        },
+    }
+}
+
 pub(crate) fn movement_block_reasons(
     snapshot: &SimulationSnapshot,
     grid: GridCoord,
+) -> Vec<String> {
+    movement_block_reasons_for_actor(snapshot, grid, None)
+}
+
+pub(crate) fn movement_block_reasons_for_actor(
+    snapshot: &SimulationSnapshot,
+    grid: GridCoord,
+    actor_id: Option<ActorId>,
 ) -> Vec<String> {
     let mut reasons = Vec::new();
 
@@ -137,7 +191,7 @@ pub(crate) fn movement_block_reasons(
     let actor_names: Vec<String> = snapshot
         .actors
         .iter()
-        .filter(|actor| actor.grid_position == grid)
+        .filter(|actor| actor.grid_position == grid && Some(actor.actor_id) != actor_id)
         .map(actor_label)
         .collect();
     if !actor_names.is_empty() {

@@ -1,3 +1,5 @@
+//! 渲染材质模块：定义地面网格和建筑墙体扩展材质及其 shader 绑定类型。
+
 use super::*;
 
 pub(super) fn cell_style_noise(seed: u32, x: i32, z: i32) -> f32 {
@@ -46,6 +48,7 @@ pub(super) fn make_standard_material(
         MaterialStyle::StructureAccent => (0.8, 0.05, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::Utility => (0.66, 0.16, 0.0, AlphaMode::Opaque, 0.04),
         MaterialStyle::UtilityAccent => (0.58, 0.2, 0.0, AlphaMode::Opaque, 0.09),
+        MaterialStyle::InvisiblePickProxy => (1.0, 0.0, 0.0, AlphaMode::Blend, 0.0),
         MaterialStyle::CharacterBody => (0.84, 0.05, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::CharacterHead => (0.76, 0.06, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::CharacterAccent => (0.7, 0.12, 0.0, AlphaMode::Opaque, 0.05),
@@ -55,7 +58,10 @@ pub(super) fn make_standard_material(
     let emissive = color.with_alpha(1.0).to_linear() * emissive_strength;
 
     materials.add(StandardMaterial {
-        base_color: color,
+        base_color: match style {
+            MaterialStyle::InvisiblePickProxy => color.with_alpha(0.0),
+            _ => color,
+        },
         perceptual_roughness,
         reflectance,
         metallic,

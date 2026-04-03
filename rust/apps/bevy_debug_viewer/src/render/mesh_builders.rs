@@ -1,3 +1,5 @@
+//! 网格构建 helper：负责墙片、棱柱和网格矩形等纯 Mesh 几何生成。
+
 use super::*;
 
 pub(super) fn push_generated_wall_tile_mesh_spec(
@@ -10,6 +12,7 @@ pub(super) fn push_generated_wall_tile_mesh_spec(
     grid_size: f32,
     color: Color,
     occluder_kind: Option<StaticWorldOccluderKind>,
+    pick_binding: Option<ViewerPickBindingSpec>,
 ) {
     let neighbor_mask = wall_tile_neighbor_mask(wall, wall_cells);
     let Some((mesh, aabb_center, aabb_half_extents)) = build_wall_tile_mesh(
@@ -30,6 +33,7 @@ pub(super) fn push_generated_wall_tile_mesh_spec(
         occluder_kind,
         aabb_center,
         aabb_half_extents,
+        pick_binding,
     });
 }
 
@@ -365,6 +369,7 @@ pub(super) fn push_polygon_prism_mesh_spec(
     color: Color,
     material_style: MaterialStyle,
     occluder_kind: Option<StaticWorldOccluderKind>,
+    pick_binding: Option<ViewerPickBindingSpec>,
 ) {
     let Some((mesh, aabb_center, aabb_half_extents)) =
         build_polygon_prism_mesh(polygon, anchor, grid_size, bottom_y, top_y, Vec3::ZERO)
@@ -378,6 +383,7 @@ pub(super) fn push_polygon_prism_mesh_spec(
         occluder_kind,
         aabb_center,
         aabb_half_extents,
+        pick_binding,
     });
 }
 

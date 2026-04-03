@@ -1,5 +1,6 @@
 use bevy_app::AppExit;
 use bevy_ecs::prelude::*;
+use tracing::{info, warn};
 
 use crate::config::NpcDebugReportState;
 use game_bevy::{
@@ -22,7 +23,7 @@ pub fn report_npc_life_debug_snapshot(
     }
     debug_state.printed_frames += 1;
 
-    println!(
+    info!(
         "npc_debug_snapshot day={:?} minute={} entries={}",
         clock.day,
         clock.minute_of_day,
@@ -60,7 +61,7 @@ pub fn report_npc_life_debug_snapshot(
             .map(|step| format!("{:?}@{:?}", step.action, step.target_anchor))
             .collect::<Vec<_>>()
             .join(" -> ");
-        println!(
+        info!(
             "npc entity={:?} role={:?} goal={:?} action={:?}/{:?} anchor={:?} needs(h/e/m)={}/{}/{} on_shift={} replan={} top_scores=[{}] facts=[{}] pending=[{}] summary={}",
             entry.entity,
             entry.role,
@@ -120,7 +121,7 @@ pub fn report_spawned_characters_and_exit(
         ) in &spawned_characters
         {
             spawned_count += 1;
-            println!(
+            info!(
                 "spawned entity={entity:?} id={} archetype={:?} disposition={:?} camp={} name={} level={} grid=({}, {}, {}) behavior={} xp={} loot={} ai_attack_range={}",
                 definition_id.0,
                 archetype.0,
@@ -139,7 +140,7 @@ pub fn report_spawned_characters_and_exit(
         }
 
         for rejection in rejections.read() {
-            println!(
+            warn!(
                 "character spawn rejected: definition_id={} reason={}",
                 rejection.definition_id, rejection.reason
             );
@@ -152,7 +153,7 @@ pub fn report_spawned_characters_and_exit(
     }
 
     for rejection in rejections.read() {
-        println!(
+        warn!(
             "character spawn rejected: definition_id={} reason={}",
             rejection.definition_id, rejection.reason
         );
@@ -163,7 +164,7 @@ pub fn report_spawned_characters_and_exit(
     let timeout_reached = debug_state.ticks >= 600;
     if (enough_debug_cycles && has_npc_debug_entries) || timeout_reached {
         if timeout_reached && !has_npc_debug_entries {
-            println!("npc_debug_snapshot timeout reached without npc entries; shutting down");
+            warn!("npc_debug_snapshot timeout reached without npc entries; shutting down");
         }
         app_exit.write(AppExit::Success);
     }

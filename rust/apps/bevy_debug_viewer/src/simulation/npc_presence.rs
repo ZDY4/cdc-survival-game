@@ -1,3 +1,5 @@
+//! NPC 在场状态模块：负责调试 viewer 对在线 NPC、目标和驻留状态的同步辅助。
+
 use bevy::prelude::*;
 use game_bevy::{
     register_runtime_actor_from_definition, BackgroundLifeState, CharacterDefinitionId,

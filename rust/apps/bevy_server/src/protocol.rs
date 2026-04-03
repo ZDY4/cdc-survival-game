@@ -23,6 +23,7 @@ use game_protocol::{
     WeaponReloadedPayload, WorldSnapshotEnvelope,
 };
 use serde_json::json;
+use tracing::warn;
 
 use crate::config::{ServerSimulationRuntime, ServerStartupState};
 use crate::progression::drain_runtime_progression;
@@ -246,7 +247,7 @@ pub fn emit_runtime_protocol_events(
 pub fn drain_protocol_responses(mut responses: MessageReader<ServerProtocolResponse>) {
     for response in responses.read() {
         if let Err(error) = &response.message {
-            eprintln!(
+            warn!(
                 "bevy_server protocol error code={} retryable={} message={}",
                 error.code, error.retryable, error.message
             );

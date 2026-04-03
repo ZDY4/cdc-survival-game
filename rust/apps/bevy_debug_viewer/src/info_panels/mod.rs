@@ -7,6 +7,7 @@ use crate::state::{
     FpsOverlayText, FreeObserveIndicatorRoot, InfoPanelFooterText, InfoPanelTabBarRoot,
     InfoPanelTabButton, InfoPanelText, UiMouseBlocker, ViewerHudPage, ViewerInfoPanelState,
     ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    viewer_ui_passthrough_bundle,
 };
 use game_bevy::{UiMenuPanel, UiMenuState};
 
@@ -56,6 +57,7 @@ pub(crate) fn spawn_info_panel_ui(
             },
             BackgroundColor(Color::NONE),
             Visibility::Hidden,
+            viewer_ui_passthrough_bundle(),
             InfoPanelTabBarRoot,
         ))
         .with_children(|parent| {
@@ -71,6 +73,7 @@ pub(crate) fn spawn_info_panel_ui(
                     BackgroundColor(Color::NONE),
                     BorderColor::all(Color::NONE),
                     Visibility::Hidden,
+                    viewer_ui_passthrough_bundle(),
                     InfoPanelTabButton { page },
                     Text::new(page.tab_label().to_string()),
                     TextFont::from_font_size(10.5).with_font(ui_font.clone()),
@@ -96,6 +99,7 @@ pub(crate) fn spawn_info_panel_ui(
             },
             BackgroundColor(Color::NONE),
             Visibility::Hidden,
+            viewer_ui_passthrough_bundle(),
             InfoPanelText,
         ))
         .with_child((
@@ -119,6 +123,7 @@ pub(crate) fn spawn_info_panel_ui(
         Visibility::Hidden,
         FocusPolicy::Block,
         RelativeCursorPosition::default(),
+        viewer_ui_passthrough_bundle(),
         FpsOverlayText,
         UiMouseBlocker,
     ));
@@ -136,6 +141,7 @@ pub(crate) fn spawn_info_panel_ui(
             Visibility::Hidden,
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
             FreeObserveIndicatorRoot,
             UiMouseBlocker,
         ))
@@ -322,10 +328,10 @@ pub(crate) fn update_fps_overlay(
 pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
     match page {
         ViewerHudPage::Overview => {
-            "[ / ] 切信息分类 · /帮助 · ~控制台 · show fps 开关右上角 FPS · show overview/selection/actor/... 开关信息面板"
+            "[ / ] 切信息分类 · /帮助 · ~控制台 · show fps 开关右上角 FPS · show walkable_tiles 开关可行走格叠层 · show overview/selection/actor/... 开关信息面板"
         }
         ViewerHudPage::Selection => {
-            "[ / ] 切信息分类 · /帮助 · ~控制台 · show selection 查看当前悬停格与交互选项"
+            "[ / ] 切信息分类 · /帮助 · ~控制台 · show selection 查看当前悬停格与交互选项 · show walkable_tiles 查看可行走格"
         }
         ViewerHudPage::SelectedActor => {
             "[ / ] 切信息分类 · /帮助 · ~控制台 · A切换自动tick · V切换调试叠层 · ob mode 切换控制/观察"
@@ -358,6 +364,7 @@ fn format_controls_help() -> String {
             "~ toggle debug console".to_string(),
             "Console command: show overview/selection/actor/world/interaction/turn_sys/events/ai/performance toggles info panels".to_string(),
             "Console command: show fps toggles top-right FPS overlay".to_string(),
+            "Console command: show walkable_tiles toggles the walkable tiles overlay".to_string(),
             "Console command: ob mode toggles player control / free observe".to_string(),
             "[ / ] switch visible info tabs when multiple panels are enabled".to_string(),
             "/ toggle detailed help".to_string(),

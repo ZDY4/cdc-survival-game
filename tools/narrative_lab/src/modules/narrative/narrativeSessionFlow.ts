@@ -17,6 +17,8 @@ import {
 } from "./narrativeAgentState";
 import { createDocumentAgentSession } from "./narrativeSessions";
 
+// Agent 会话结果应用层：
+// 负责生成结果落会话、派生文稿分支、审阅队列、动作批准/拒绝，以及错误回填。
 export function assistantMessageIdForRequest(requestId: string) {
   return `assistant-${requestId}`;
 }

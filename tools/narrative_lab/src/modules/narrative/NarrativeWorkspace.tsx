@@ -12,22 +12,17 @@ import {
 import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   AgentActionResult,
-  AgentOption,
-  AgentPlanStep,
-  AgentQuestion,
   AiChatMessage,
   DocumentAgentSession,
   EditorMenuSelfTestScenario,
   NarrativeAppSettings,
   NarrativeDocType,
   NarrativeDocumentPayload,
-  NarrativeRegressionCase,
   NarrativeRegressionSuiteResult,
   NarrativeDocumentViewMode,
   NarrativeGenerateRequest,
   NarrativeGenerationProgressEvent,
   NarrativeGenerateResponse,
-  NarrativeTurnKind,
   NarrativeDocumentSummary,
   NarrativeSessionExportInput,
   NarrativeSessionExportResult,
@@ -59,14 +54,23 @@ import {
   defaultNarrativeAgentStrategy,
   fromPersistedSessionState,
   getWorkspacePersistedAgentState,
-  nowIso,
 } from "./narrativeAgentState";
 import {
-  buildPendingTurnContext,
   EditableNarrativeDocument,
   mergeRelatedDocSlugs,
   responseMetaLabels,
 } from "./narrativeSessionHelpers";
+import {
+  applySavedDocumentResult,
+  buildEditableDraftDocument,
+  hydrateEditableDocuments,
+  markDocumentDirtyState,
+  removeEditableDocument,
+  replaceEditableDocument,
+  revertDocumentToSnapshot,
+  snapshotNarrativeDocument,
+  updateEditableDocument,
+} from "./narrativeDocumentState";
 import {
   applyGenerationErrorToSession,
   applyGenerationResponseToSession,
@@ -89,9 +93,18 @@ import {
   upsertExecutionStep,
 } from "./narrativeSessionFlow";
 import {
+  beginGenerationSession,
+  buildGenerationRequest,
+  buildGenerationUserMessage,
+  buildStrategyInstruction,
+  buildUsedContextSummary,
+  extractTitleFromMarkdown,
+  summarizeGenerationResponseForChat,
+} from "./narrativeGenerationFlow";
+import { runNarrativeRegressionSuite } from "./narrativeRegressionSuite";
+import {
   defaultNarrativeMarkdown,
   defaultNarrativeTitle,
-  docTypeDirectory,
   docTypeLabel,
 } from "./narrativeTemplates";
 
@@ -120,60 +133,13 @@ const MIN_CHAT_PANEL_WIDTH = 320;
 const MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_DOCUMENT_PANEL_WIDTH = 360;
 const PANEL_SPLITTER_WIDTH = 12;
-const DEFAULT_LEFT_SIDEBAR_WIDTH = 240;
-const MIN_LEFT_SIDEBAR_WIDTH = 220;
+const DEFAULT_LEFT_SIDEBAR_WIDTH = 168;
+const MIN_LEFT_SIDEBAR_WIDTH = 160;
 const MAX_LEFT_SIDEBAR_WIDTH = 520;
-const MAX_INITIAL_LEFT_SIDEBAR_RATIO = 0.28;
 const MIN_EDITOR_PANELS_WIDTH = MIN_CHAT_PANEL_WIDTH + PANEL_SPLITTER_WIDTH + MIN_DOCUMENT_PANEL_WIDTH;
 const SIDEBAR_RAIL_WIDTH = 40;
 const SIDEBAR_SPLITTER_WIDTH = 12;
 const NARRATIVE_GENERATION_PROGRESS_EVENT = "narrative:generation-progress";
-const NARRATIVE_REGRESSION_CASES: NarrativeRegressionCase[] = [
-  {
-    id: "clarification-missing-brief",
-    label: "缺少核心信息时先提问",
-    prompt: "我要写一个新篇章，但你先别动笔，先告诉我还缺哪些必要信息。",
-    expectedTurnKinds: ["clarification", "options"],
-  },
-  {
-    id: "options-branching",
-    label: "有分叉时给方向",
-    prompt: "基于当前文稿先给我三个截然不同的推进方向，不要直接改正文。",
-    expectedTurnKinds: ["options", "plan"],
-  },
-  {
-    id: "plan-complex-task",
-    label: "复杂任务先给计划",
-    prompt: "把当前文稿拆成一个分步骤执行计划，等我确认后再继续。",
-    expectedTurnKinds: ["plan"],
-  },
-  {
-    id: "final-answer-polish",
-    label: "明确改写时直接产出",
-    prompt: "在保持设定一致的前提下润色当前文稿，并直接给我可保存版本。",
-    expectedTurnKinds: ["final_answer"],
-  },
-];
-
-function snapshotDocument(document: NarrativeDocumentPayload) {
-  return JSON.stringify({
-    meta: document.meta,
-    markdown: document.markdown,
-  });
-}
-
-function hydrateDocuments(documents: NarrativeDocumentPayload[]): EditableNarrativeDocument[] {
-  return documents.map((document) => ({
-    ...document,
-    savedSnapshot: snapshotDocument(document),
-    dirty: false,
-    isDraft: false,
-  }));
-}
-
-function documentDirty(document: NarrativeDocumentPayload, savedSnapshot: string) {
-  return snapshotDocument(document) !== savedSnapshot;
-}
 
 function defaultWorkspaceLayout(
   activeDocumentKey: string | null,
@@ -197,235 +163,6 @@ function defaultWorkspaceLayout(
     openDocumentKeys,
     activeDocumentKey,
     zenMode: false,
-  };
-}
-
-function buildNarrativeChatPrompt(
-  input: string,
-  history: AiChatMessage[],
-  selectedDocument: EditableNarrativeDocument | null,
-  pendingTurnContext?: string,
-) {
-  const sections: string[] = [];
-  const turns = history
-    .filter((message) => message.role === "user" || message.role === "assistant")
-    .slice(-6);
-
-  if (selectedDocument) {
-    sections.push(`当前文档：${selectedDocument.meta.title || selectedDocument.meta.slug}`);
-  }
-
-  if (turns.length) {
-    sections.push(
-      [
-        "最近对话上下文：",
-        ...turns.map((message) => `${message.role === "user" ? "用户" : "AI"}：${message.content}`),
-      ].join("\n"),
-    );
-  }
-
-  if (pendingTurnContext?.trim()) {
-    sections.push(pendingTurnContext.trim());
-  }
-
-  sections.push(`本次请求：${input.trim()}`);
-  return sections.join("\n\n");
-}
-
-function extractDraftPreview(markdown: string, maxLength = 220) {
-  const lines = markdown
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        Boolean(line) &&
-        line !== "---" &&
-        line !== "***" &&
-        !/^```/.test(line),
-    );
-
-  if (!lines.length) {
-    return "";
-  }
-
-  const preview = lines
-    .slice(0, 3)
-    .join(" ")
-    .replace(/^#{1,6}\s*/g, "")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
-    .replace(/[>*_~]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!preview) {
-    return "";
-  }
-
-  if (preview.length <= maxLength) {
-    return preview;
-  }
-
-  return `${preview.slice(0, maxLength).trimEnd()}...`;
-}
-
-function headlineNeedsDraftPreview(headline: string) {
-  const trimmed = headline.trim();
-  if (!trimmed) {
-    return true;
-  }
-
-  return (
-    /(?:如下|如下所示|如下内容|如下建议)(?:[：:]?)$/.test(trimmed) ||
-    /(?:依据|建议|结果|内容|说明|分析)(?:[：:])$/.test(trimmed) ||
-    trimmed === "AI 已返回结果。"
-  );
-}
-
-function summarizeResponseForChat(response: {
-  turnKind: NarrativeTurnKind;
-  assistantMessage: string;
-  draftMarkdown: string;
-  providerError: string;
-  summary: string;
-  synthesisNotes: string[];
-  questions: AgentQuestion[];
-  options: AgentOption[];
-  planSteps: AgentPlanStep[];
-}) {
-  const headline =
-    response.providerError.trim() ||
-    response.assistantMessage.trim() ||
-    response.summary.trim() ||
-    "AI 已返回结果。";
-  const sections = [headline];
-
-  if (!response.providerError.trim()) {
-    if (response.turnKind === "clarification" && response.questions.length) {
-      sections.push(
-        [
-          "还需要你补充这些信息：",
-          ...response.questions.map(
-            (question, index) => `${index + 1}. ${question.label}${question.required ? "（必填）" : ""}`,
-          ),
-        ].join("\n"),
-      );
-    }
-
-    if (response.turnKind === "options" && response.options.length) {
-      sections.push(
-        [
-          "我整理了这些可继续推进的方向：",
-          ...response.options.map((option, index) =>
-            [
-              `${index + 1}. **${option.label}**`,
-              option.description.trim() ? `   ${option.description.trim()}` : "",
-            ]
-              .filter(Boolean)
-              .join("\n"),
-          ),
-        ].join("\n"),
-      );
-    }
-
-    if (response.turnKind === "plan" && response.planSteps.length) {
-      sections.push(
-        [
-          "建议按这个计划继续：",
-          ...response.planSteps.map(
-            (step, index) => `${index + 1}. ${step.label}${step.status === "completed" ? "（已完成）" : ""}`,
-          ),
-        ].join("\n"),
-      );
-    }
-  }
-
-  const notes = response.synthesisNotes.map((note) => note.trim()).filter(Boolean).slice(0, 2);
-  if (notes.length) {
-    sections.push(["补充说明：", ...notes.map((note) => `- ${note}`)].join("\n"));
-  }
-  const draftPreview = extractDraftPreview(response.draftMarkdown);
-  const shouldAppendDraftPreview =
-    !response.providerError.trim() &&
-    response.turnKind === "final_answer" &&
-    Boolean(response.draftMarkdown.trim()) &&
-    (headlineNeedsDraftPreview(headline) || sections.join(" ").trim().length < 80);
-
-  if (shouldAppendDraftPreview) {
-    sections.push(
-      draftPreview
-        ? `内容预览：${draftPreview}`
-        : "已生成具体内容，请查看右侧文档预览与建议区域。",
-    );
-  }
-
-  return sections.join("\n\n");
-}
-
-function buildStrategyInstruction(session: DocumentAgentSession) {
-  const intensityLabel =
-    session.strategy.rewriteIntensity === "light"
-      ? "保守改写"
-      : session.strategy.rewriteIntensity === "aggressive"
-        ? "激进重构"
-        : "平衡改写";
-  const priorityLabel =
-    session.strategy.priority === "drama"
-      ? "优先戏剧性"
-      : session.strategy.priority === "speed"
-        ? "优先速度"
-        : "优先一致性";
-  const questionLabel =
-    session.strategy.questionBehavior === "ask_first"
-      ? "信息不足时先提问"
-      : session.strategy.questionBehavior === "direct"
-        ? "尽量直接产出"
-        : "先判断再决定是否提问";
-  return [intensityLabel, priorityLabel, questionLabel].join("；");
-}
-
-function extractTitleFromMarkdown(markdown: string, fallback: string) {
-  const heading = markdown
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.startsWith("# "));
-  return heading ? heading.replace(/^#\s+/, "").trim() || fallback : fallback;
-}
-
-function buildLocalDraft(
-  docType: NarrativeDocType,
-  title: string,
-  markdown: string,
-): EditableNarrativeDocument {
-  const stamp = Date.now();
-  const slug = `draft-${stamp}`;
-  const document: NarrativeDocumentPayload = {
-    documentKey: slug,
-    originalSlug: slug,
-    fileName: `${slug}.md`,
-    relativePath: `narrative/${docTypeDirectory(docType)}/${slug}.md`,
-    meta: {
-      docType,
-      slug,
-      title,
-      status: "draft",
-      tags: [],
-      relatedDocs: [],
-      sourceRefs: [],
-    },
-    markdown,
-    validation: [],
-  };
-
-  return {
-    ...document,
-    savedSnapshot: "",
-    dirty: true,
-    isDraft: true,
   };
 }
 
@@ -453,13 +190,24 @@ function summarizeNarrativeDocumentPayload(
 }
 
 function toEditableSavedDocument(document: NarrativeDocumentPayload): EditableNarrativeDocument {
-  const savedSnapshot = snapshotDocument(document);
+  const savedSnapshot = snapshotNarrativeDocument(document);
   return {
     ...document,
     savedSnapshot,
     dirty: false,
     isDraft: false,
   };
+}
+
+function patchKindLabel(kind?: "replace" | "insert" | "delete") {
+  switch (kind) {
+    case "insert":
+      return "插入";
+    case "delete":
+      return "删除";
+    default:
+      return "替换";
+  }
 }
 
 function resolveInitialTabs(
@@ -493,6 +241,7 @@ function resolveInitialTabs(
     activeDocumentKey,
     openDocumentKeys,
     layout?.leftSidebarVisible ?? true,
+    layout?.leftSidebarWidth ?? DEFAULT_LEFT_SIDEBAR_WIDTH,
     layout?.chatPanelWidth ?? DEFAULT_CHAT_PANEL_WIDTH,
   );
 
@@ -563,12 +312,8 @@ function estimateMainPanelsWidth() {
 
 function resolveInitialLeftSidebarWidth(width: number | null | undefined) {
   const mainPanelsWidth = estimateMainPanelsWidth();
-  const compactMaxWidth = Math.max(
-    DEFAULT_LEFT_SIDEBAR_WIDTH,
-    Math.min(MAX_LEFT_SIDEBAR_WIDTH, Math.floor(mainPanelsWidth * MAX_INITIAL_LEFT_SIDEBAR_RATIO)),
-  );
   const requestedWidth = width && width > 0 ? width : DEFAULT_LEFT_SIDEBAR_WIDTH;
-  return clampLeftSidebarWidth(Math.min(requestedWidth, compactMaxWidth), mainPanelsWidth);
+  return clampLeftSidebarWidth(requestedWidth, mainPanelsWidth);
 }
 
 function MarkdownBlock({ markdown }: { markdown: string }) {
@@ -605,7 +350,7 @@ export function NarrativeWorkspace({
   onSaveAppSettings,
 }: NarrativeWorkspaceProps) {
   const [documents, setDocuments] = useState<EditableNarrativeDocument[]>(
-    hydrateDocuments(workspace.documents),
+    hydrateEditableDocuments(workspace.documents),
   );
   const [tabState, setTabState] = useState<NarrativeTabState>({
     openTabs: workspace.documents[0] ? [workspace.documents[0].documentKey] : [],
@@ -652,7 +397,7 @@ export function NarrativeWorkspace({
   }, [tabState]);
 
   useEffect(() => {
-    const nextDocuments = hydrateDocuments(workspace.documents);
+    const nextDocuments = hydrateEditableDocuments(workspace.documents);
     const initial = resolveInitialTabs(workspace, appSettings, nextDocuments);
     const validDocumentKeys = new Set(nextDocuments.map((document) => document.documentKey));
     const restoredSessions = restorePersistedDocumentSessions(
@@ -1299,57 +1044,52 @@ export function NarrativeWorkspace({
 
     setRegressionResult(null);
     setRegressionStatus("正在运行 Narrative Lab 行为回归验证...");
-    const relatedDocSlugs = mergeRelatedDocSlugs(activeDocument, selectedContextDocuments);
-    const results: NarrativeRegressionSuiteResult["results"] = [];
 
     try {
-      for (const caseItem of NARRATIVE_REGRESSION_CASES) {
-        const request: NarrativeGenerateRequest = {
-          requestId: `regression-${caseItem.id}-${Date.now()}`,
-          docType: activeDocument.meta.docType,
-          targetSlug: activeDocument.meta.slug,
-          action: "revise_document",
-          userPrompt: buildNarrativeChatPrompt(
-            caseItem.prompt,
-            [],
-            activeDocument,
-            `回归验证要求：仅判断最合适的 turn_kind，避免受历史对话干扰。`,
-          ),
-          editorInstruction: `Regression suite\n${buildStrategyInstruction(activeSession)}`,
-          currentMarkdown: activeDocument.markdown,
-          relatedDocSlugs: relatedDocSlugs,
-          derivedTargetDocType: null,
-        };
-        // eslint-disable-next-line no-await-in-loop
-        const response = await invokeCommand<NarrativeGenerateResponse>(
-          "revise_narrative_draft",
-          {
-            workspaceRoot: workspace.workspaceRoot,
-            projectRoot: workspace.connectedProjectRoot ?? null,
-            request,
-          },
-        );
-        results.push({
-          id: caseItem.id,
-          label: caseItem.label,
-          expectedTurnKinds: caseItem.expectedTurnKinds,
-          actualTurnKind: response.turnKind,
-          ok: caseItem.expectedTurnKinds.includes(response.turnKind),
-          summary:
-            response.summary.trim() ||
-            response.assistantMessage.trim() ||
-            response.providerError.trim() ||
-            "无摘要",
-        });
-      }
+      const result = await runNarrativeRegressionSuite({
+        runCase: async (caseItem) => {
+          const request: NarrativeGenerateRequest = {
+            requestId: `regression-${caseItem.id}-${Date.now()}`,
+            docType: activeDocument.meta.docType,
+            targetSlug: activeDocument.meta.slug,
+            action: "revise_document",
+            userPrompt: `回归验证上下文\n\n${caseItem.prompt}`,
+            editorInstruction: [
+              "Regression suite",
+              buildStrategyInstruction(activeSession),
+              "仅判断最合适的 turn_kind，避免受历史对话干扰。",
+            ].join("\n"),
+            currentMarkdown: activeDocument.markdown,
+            relatedDocSlugs: mergeRelatedDocSlugs(activeDocument, selectedContextDocuments),
+            derivedTargetDocType: null,
+          };
+          const response = await invokeCommand<NarrativeGenerateResponse>(
+            "revise_narrative_draft",
+            {
+              workspaceRoot: workspace.workspaceRoot,
+              projectRoot: workspace.connectedProjectRoot ?? null,
+              request,
+            },
+          );
 
-      const ok = results.every((item) => item.ok);
-      const summary = ok
-        ? `回归验证通过，共 ${results.length} 项。`
-        : `回归验证发现 ${results.filter((item) => !item.ok).length} 项漂移。`;
-      setRegressionResult({ ok, results, summary });
-      setRegressionStatus(summary);
-      onStatusChange(summary);
+          return {
+            id: caseItem.id,
+            label: caseItem.label,
+            expectedTurnKinds: caseItem.expectedTurnKinds,
+            actualTurnKind: response.turnKind,
+            ok: caseItem.expectedTurnKinds.includes(response.turnKind),
+            summary:
+              response.summary.trim() ||
+              response.assistantMessage.trim() ||
+              response.providerError.trim() ||
+              "无摘要",
+          };
+        },
+      });
+
+      setRegressionResult(result);
+      setRegressionStatus(result.summary);
+      onStatusChange(result.summary);
     } catch (error) {
       const message = `运行 Narrative Lab 回归验证失败：${String(error)}`;
       setRegressionStatus(message);
@@ -1513,9 +1253,7 @@ export function NarrativeWorkspace({
       }
 
       if (document.isDraft) {
-        setDocuments((current) =>
-          current.filter((entry) => entry.documentKey !== document.documentKey),
-        );
+        setDocuments((current) => removeEditableDocument(current, document.documentKey));
         setDocumentAgents((current) => {
           const next = { ...current };
           delete next[document.documentKey];
@@ -1526,22 +1264,12 @@ export function NarrativeWorkspace({
         return;
       }
 
-      const restoredSnapshot = JSON.parse(document.savedSnapshot) as Pick<
-        NarrativeDocumentPayload,
-        "meta" | "markdown"
-      >;
       setDocuments((current) =>
-        current.map((entry) => {
-          if (entry.documentKey !== document.documentKey) {
-            return entry;
-          }
-          return {
-            ...entry,
-            meta: restoredSnapshot.meta,
-            markdown: restoredSnapshot.markdown,
-            dirty: false,
-          };
-        }),
+        replaceEditableDocument(
+          current,
+          document.documentKey,
+          revertDocumentToSnapshot(document, document.savedSnapshot),
+        ),
       );
       invalidateSuggestions(document.documentKey);
       setTabState((current) => closeNarrativeTab(current, document.documentKey));
@@ -1562,9 +1290,7 @@ export function NarrativeWorkspace({
     setDocContextMenu(null);
 
     if (document.isDraft) {
-      setDocuments((current) =>
-        current.filter((entry) => entry.documentKey !== document.documentKey),
-      );
+      setDocuments((current) => removeEditableDocument(current, document.documentKey));
       setDocumentAgents((current) => {
         const next = { ...current };
         delete next[document.documentKey];
@@ -1585,9 +1311,7 @@ export function NarrativeWorkspace({
         workspaceRoot: workspace.workspaceRoot,
         slug: document.meta.slug,
       });
-      setDocuments((current) =>
-        current.filter((entry) => entry.documentKey !== document.documentKey),
-      );
+      setDocuments((current) => removeEditableDocument(current, document.documentKey));
       setDocumentAgents((current) => {
         const next = { ...current };
         delete next[document.documentKey];
@@ -1684,20 +1408,7 @@ export function NarrativeWorkspace({
     documentKey: string,
     transform: (document: EditableNarrativeDocument) => EditableNarrativeDocument,
   ) {
-    setDocuments((current) =>
-      current.map((document) => {
-        if (document.documentKey !== documentKey) {
-          return document;
-        }
-        const next = transform(document);
-        return {
-          ...next,
-          dirty: documentDirty(next, document.savedSnapshot),
-          savedSnapshot: document.savedSnapshot,
-          isDraft: document.isDraft,
-        };
-      }),
-    );
+    setDocuments((current) => updateEditableDocument(current, documentKey, transform));
   }
 
   function invalidateSuggestions(documentKey: string) {
@@ -1720,12 +1431,12 @@ export function NarrativeWorkspace({
           title,
         },
       });
-      const draft: EditableNarrativeDocument = {
+      const draft = markDocumentDirtyState({
         ...created,
-        savedSnapshot: "",
-        dirty: true,
+        savedSnapshot: snapshotNarrativeDocument(created),
+        dirty: false,
         isDraft: true,
-      };
+      }, snapshotNarrativeDocument(created));
 
       setDocuments((current) => [draft, ...current]);
       openDocument(draft.documentKey);
@@ -1736,7 +1447,7 @@ export function NarrativeWorkspace({
       return;
     }
 
-    const draft = buildLocalDraft(
+    const draft = buildEditableDraftDocument(
       docType,
       title,
       defaultNarrativeMarkdown(docType, title),
@@ -1778,26 +1489,9 @@ export function NarrativeWorkspace({
       },
     });
 
-    const savedSlug = result.savedSlug;
-    const nextDocument: EditableNarrativeDocument = {
-      ...document,
-      documentKey: savedSlug,
-      originalSlug: savedSlug,
-      fileName: `${savedSlug}.md`,
-      relativePath: `narrative/${docTypeDirectory(document.meta.docType)}/${savedSlug}.md`,
-      meta: {
-        ...document.meta,
-        slug: savedSlug,
-      },
-      dirty: false,
-      isDraft: false,
-      savedSnapshot: "",
-    };
-    nextDocument.savedSnapshot = snapshotDocument(nextDocument);
+    const nextDocument = applySavedDocumentResult(document, result);
 
-    setDocuments((current) =>
-      current.map((entry) => (entry.documentKey === documentKey ? nextDocument : entry)),
-    );
+    setDocuments((current) => replaceEditableDocument(current, documentKey, nextDocument));
     remapDocumentKey(documentKey, nextDocument);
   }
 
@@ -1843,76 +1537,28 @@ export function NarrativeWorkspace({
 
     const activeDocumentKey = activeDocument.documentKey;
     const action = activeSession.mode;
-    const relatedDocSlugs = mergeRelatedDocSlugs(activeDocument, selectedContextDocuments);
     const requestId = `generation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const assistantMessageId = assistantMessageIdForRequest(requestId);
-    const userMessage: AiChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      label: "你",
-      content: submittedPrompt,
-      meta: [
-        activeSession.status === "waiting_user"
-          ? "补充上一轮信息"
-          : action === "create"
-            ? "生成新文档"
-            : "修改当前文档",
-      ],
-      tone: "accent",
-    };
-
-    const request: NarrativeGenerateRequest = {
+    const userMessage = buildGenerationUserMessage({
+      submittedPrompt,
+      session: activeSession,
+    });
+    const request = buildGenerationRequest({
       requestId,
-      docType: activeDocument.meta.docType,
-      targetSlug:
-        action === "create"
-          ? `${activeDocument.meta.slug}-ai-${Date.now()}`
-          : activeDocument.meta.slug,
-      action,
-      userPrompt: buildNarrativeChatPrompt(
-        submittedPrompt,
-        activeSession.chatMessages,
-        activeDocument,
-        buildPendingTurnContext(activeSession),
-      ),
-      editorInstruction: [
-        `Agent strategy: ${buildStrategyInstruction(activeSession)}`,
-        selectedContextDocuments.length
-          ? `Selected context docs: ${selectedContextDocuments
-              .map((document) => document.meta.slug)
-              .join(", ")}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      currentMarkdown: activeDocument.markdown,
-      relatedDocSlugs,
-      derivedTargetDocType: null,
-    };
+      submittedPrompt,
+      activeDocument,
+      session: activeSession,
+      selectedContextDocuments,
+    });
 
     setDocumentAgents((current) =>
-        updateDocumentAgentSession(current, activeDocumentKey, (session) => ({
-          ...session,
-          updatedAt: nowIso(),
-          status: "thinking",
-          executionSteps: [],
-          currentStepId: null,
-        busy: true,
-        inflightRequestId: requestId,
-        composerText: "",
-        chatMessages: [
-          ...session.chatMessages,
+      updateDocumentAgentSession(current, activeDocumentKey, (session) =>
+        beginGenerationSession(session, {
+          requestId,
           userMessage,
-          {
-            id: assistantMessageId,
-            role: "assistant",
-            label: "AI",
-            content: "正在准备生成内容...",
-            meta: ["正在准备请求"],
-            tone: "muted",
-          },
-        ],
-      })),
+          assistantMessageId,
+        }),
+      ),
     );
 
     try {
@@ -1928,7 +1574,7 @@ export function NarrativeWorkspace({
         id: assistantMessageId,
         role: "assistant",
         label: "AI",
-        content: summarizeResponseForChat(narrativeResponse),
+        content: summarizeGenerationResponseForChat(narrativeResponse),
         meta: responseMetaLabels(narrativeResponse),
         tone: narrativeResponse.providerError ? "danger" : "success",
       };
@@ -1943,7 +1589,7 @@ export function NarrativeWorkspace({
           narrativeResponse.draftMarkdown,
           `${activeDocument.meta.title} AI 草稿`,
         );
-        const draftDocument = buildLocalDraft(
+        const draftDocument = buildEditableDraftDocument(
           activeDocument.meta.docType,
           newTitle,
           narrativeResponse.draftMarkdown,
@@ -2394,7 +2040,10 @@ export function NarrativeWorkspace({
         execute: async () => {
           await runGeneration();
         },
-        isEnabled: () => Boolean(activeDocument) && !activeSession?.busy,
+        isEnabled: () =>
+          Boolean(activeDocument) &&
+          !activeSession?.busy &&
+          !(activeSession?.pendingActionRequests.length ?? 0),
       },
       [EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS]: {
         execute: async () => {
@@ -2431,6 +2080,7 @@ export function NarrativeWorkspace({
       activeDocument,
       activeSession?.busy,
       activeSession?.documentViewMode,
+      activeSession?.pendingActionRequests.length,
       dirtyCount,
       onReload,
       saving,
@@ -2692,6 +2342,9 @@ export function NarrativeWorkspace({
                     )}
                   </div>
                 </div>
+                <p className="field-hint narrative-chat-context-used">
+                  {buildUsedContextSummary(activeSession.lastResponse?.usedContextRefs ?? [])}
+                </p>
               </div>
 
               <div className="narrative-chat-log">
@@ -2980,7 +2633,13 @@ export function NarrativeWorkspace({
                           .map((patch) => (
                             <div key={patch.id} className="narrative-patch-card">
                               <div className="narrative-patch-card-header">
-                                <strong>{patch.title}</strong>
+                                <div>
+                                  <strong>{patch.title}</strong>
+                                  <div className="toolbar-summary">
+                                    {patch.sectionTitle ? <Badge tone="muted">{patch.sectionTitle}</Badge> : null}
+                                    <Badge tone="muted">{patchKindLabel(patch.patchKind)}</Badge>
+                                  </div>
+                                </div>
                                 <button
                                   type="button"
                                   className="toolbar-button toolbar-accent"
@@ -3005,7 +2664,13 @@ export function NarrativeWorkspace({
                             {inlinePatches.map((patch) => (
                               <div key={patch.id} className="narrative-patch-card">
                                 <div className="narrative-patch-card-header">
-                                  <strong>{patch.title}</strong>
+                                  <div>
+                                    <strong>{patch.title}</strong>
+                                    <div className="toolbar-summary">
+                                      {patch.sectionTitle ? <Badge tone="muted">{patch.sectionTitle}</Badge> : null}
+                                      <Badge tone="muted">{patchKindLabel(patch.patchKind)}</Badge>
+                                    </div>
+                                  </div>
                                   <button
                                     type="button"
                                     className="toolbar-button toolbar-accent"
@@ -3055,6 +2720,9 @@ export function NarrativeWorkspace({
                           全部应用
                         </button>
                       </div>
+                      <p className="field-hint">
+                        当前无法稳定拆成局部 patch，整篇应用会直接覆盖当前文稿，建议先通读后再执行。
+                      </p>
                       <MarkdownBlock markdown={activeSession.lastResponse.draftMarkdown} />
                     </div>
                   ) : null}

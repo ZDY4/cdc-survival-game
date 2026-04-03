@@ -1,45 +1,6 @@
-//! 交易界面子模块：负责交易会话解析、交易面板渲染与交易按钮行为处理。
+//! 交易页面渲染模块：负责交易主布局、玩家背包栏与商店栏的具体构建。
 
 use super::*;
-
-const TRADE_PAGE_LEFT_WIDTH: f32 = 612.0;
-const TRADE_PAGE_RIGHT_WIDTH: f32 = 404.0;
-const TRADE_PAGE_TOP: f32 = 72.0;
-const TRADE_PAGE_BOTTOM: f32 = 158.0;
-const TRADE_PAGE_GAP: f32 = 14.0;
-
-pub(super) fn resolve_trade_session_for_target(
-    runtime_state: &ViewerRuntimeState,
-    target: &InteractionTargetId,
-    shops: &game_data::ShopLibrary,
-) -> Option<game_bevy::UiTradeSessionState> {
-    let target_actor_id = match target {
-        InteractionTargetId::Actor(actor_id) => Some(*actor_id),
-        _ => None,
-    };
-    let snapshot = runtime_state.runtime.snapshot();
-    let mut resolved_shop_id = None;
-    if let Some(target_actor_id) = target_actor_id {
-        if let Some(actor) = snapshot
-            .actors
-            .iter()
-            .find(|actor| actor.actor_id == target_actor_id)
-        {
-            if let Some(definition_id) = actor.definition_id.as_ref() {
-                let candidate = format!("{}_shop", definition_id.as_str());
-                if shops.get(&candidate).is_some() {
-                    resolved_shop_id = Some(candidate);
-                }
-            }
-        }
-    }
-    resolved_shop_id
-        .or_else(|| shops.iter().next().map(|(shop_id, _)| shop_id.clone()))
-        .map(|shop_id| game_bevy::UiTradeSessionState {
-            shop_id,
-            target_actor_id,
-        })
-}
 
 pub(super) fn render_trade_page(
     parent: &mut ChildSpawnerCommands,
@@ -153,50 +114,6 @@ pub(super) fn render_trade_page(
                     render_trade_shop_column(columns, font, trade_snapshot);
                 });
         });
-}
-
-pub(super) fn handle_trade_button_action(
-    action: &GameUiButtonAction,
-    ui: &mut GameUiCommandState,
-    save_path: &ViewerRuntimeSavePath,
-    content: &GameContentRefs<'_, '_>,
-) -> bool {
-    match action {
-        GameUiButtonAction::CloseTrade => {
-            ui.modal_state.trade = None;
-            ui.viewer_state.pending_open_trade_target = None;
-            true
-        }
-        GameUiButtonAction::BuyTradeItem { shop_id, item_id } => {
-            if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                ui.menu_state.status_text = ui
-                    .runtime_state
-                    .runtime
-                    .buy_item_from_shop(actor_id, shop_id, *item_id, 1, &content.items.0)
-                    .map(|_| {
-                        save_runtime_snapshot(save_path, &ui.runtime_state.runtime);
-                        "买入成功".to_string()
-                    })
-                    .unwrap_or_else(|error| error.to_string());
-            }
-            true
-        }
-        GameUiButtonAction::SellTradeItem { shop_id, item_id } => {
-            if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                ui.menu_state.status_text = ui
-                    .runtime_state
-                    .runtime
-                    .sell_item_to_shop(actor_id, shop_id, *item_id, 1, &content.items.0)
-                    .map(|_| {
-                        save_runtime_snapshot(save_path, &ui.runtime_state.runtime);
-                        "卖出成功".to_string()
-                    })
-                    .unwrap_or_else(|error| error.to_string());
-            }
-            true
-        }
-        _ => false,
-    }
 }
 
 fn render_trade_inventory_column(
@@ -623,7 +540,7 @@ fn render_trade_shop_column(
         });
 }
 
-fn selected_player_trade_entry(
+pub(super) fn selected_player_trade_entry(
     snapshot: &game_bevy::UiTradeSnapshot,
     selected_inventory_item: Option<u32>,
 ) -> Option<&game_bevy::UiTradeEntryView> {
@@ -634,7 +551,7 @@ fn selected_player_trade_entry(
         .find(|entry| entry.item_id == item_id && entry.count > 0)
 }
 
-fn trade_sell_button_label(
+pub(super) fn trade_sell_button_label(
     snapshot: &game_bevy::UiTradeSnapshot,
     selected_inventory_item: Option<u32>,
 ) -> String {
@@ -647,126 +564,5 @@ fn trade_sell_button_label(
             "该物品当前不可交易，请重新选择一个可售物品".to_string()
         }
         None => "选择一个物品后，可在这里卖出 x1".to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::BTreeMap;
-
-    use crate::bootstrap::load_viewer_gameplay_bootstrap;
-    use game_data::{CharacterId, InteractionTargetId, ShopDefinition, ShopInventoryEntry};
-
-    fn sample_shops() -> game_data::ShopLibrary {
-        game_data::ShopLibrary::from(BTreeMap::from([
-            (
-                "fallback_shop".to_string(),
-                ShopDefinition {
-                    id: "fallback_shop".to_string(),
-                    inventory: vec![ShopInventoryEntry {
-                        item_id: 1001,
-                        count: 1,
-                        price: 12,
-                    }],
-                    ..ShopDefinition::default()
-                },
-            ),
-            (
-                "trader_lao_wang_shop".to_string(),
-                ShopDefinition {
-                    id: "trader_lao_wang_shop".to_string(),
-                    inventory: vec![ShopInventoryEntry {
-                        item_id: 1002,
-                        count: 2,
-                        price: 18,
-                    }],
-                    ..ShopDefinition::default()
-                },
-            ),
-        ]))
-    }
-
-    #[test]
-    fn resolve_trade_session_prefers_actor_matched_shop() {
-        let bootstrap = load_viewer_gameplay_bootstrap().expect("viewer bootstrap should load");
-        let trader_actor_id = bootstrap
-            .runtime
-            .snapshot()
-            .actors
-            .iter()
-            .find(|actor| {
-                actor.definition_id.as_ref().map(CharacterId::as_str) == Some("trader_lao_wang")
-            })
-            .map(|actor| actor.actor_id)
-            .expect("trader actor should exist");
-        let runtime_state = ViewerRuntimeState {
-            runtime: bootstrap.runtime,
-            recent_events: Vec::new(),
-            ai_snapshot: Default::default(),
-        };
-        let shops = sample_shops();
-
-        let session = resolve_trade_session_for_target(
-            &runtime_state,
-            &InteractionTargetId::Actor(trader_actor_id),
-            &shops,
-        )
-        .expect("trade session should resolve");
-
-        assert_eq!(session.shop_id, "trader_lao_wang_shop");
-        assert_eq!(session.target_actor_id, Some(trader_actor_id));
-    }
-
-    #[test]
-    fn resolve_trade_session_falls_back_to_first_shop_for_non_actor_target() {
-        let bootstrap = load_viewer_gameplay_bootstrap().expect("viewer bootstrap should load");
-        let runtime_state = ViewerRuntimeState {
-            runtime: bootstrap.runtime,
-            recent_events: Vec::new(),
-            ai_snapshot: Default::default(),
-        };
-        let shops = sample_shops();
-
-        let session = resolve_trade_session_for_target(
-            &runtime_state,
-            &InteractionTargetId::MapObject("shelf".into()),
-            &shops,
-        )
-        .expect("fallback trade session should resolve");
-
-        assert_eq!(session.shop_id, "fallback_shop");
-        assert_eq!(session.target_actor_id, None);
-    }
-
-    #[test]
-    fn trade_sell_button_label_reflects_selected_item() {
-        let snapshot = game_bevy::UiTradeSnapshot {
-            shop_id: "test_shop".into(),
-            relation_score: 0,
-            player_money: 20,
-            shop_money: 80,
-            player_items: vec![game_bevy::UiTradeEntryView {
-                item_id: 1008,
-                name: "Scrap".into(),
-                count: 3,
-                unit_price: 7,
-                total_weight: 1.5,
-            }],
-            shop_items: Vec::new(),
-        };
-
-        assert_eq!(
-            trade_sell_button_label(&snapshot, None),
-            "选择一个物品后，可在这里卖出 x1"
-        );
-        assert_eq!(
-            trade_sell_button_label(&snapshot, Some(1008)),
-            "已选中 Scrap · 库存 x3 · 预计卖出 7 货币"
-        );
-        assert_eq!(
-            trade_sell_button_label(&snapshot, Some(9999)),
-            "该物品当前不可交易，请重新选择一个可售物品"
-        );
     }
 }

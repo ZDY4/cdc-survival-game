@@ -160,6 +160,13 @@ const SUPPORTED_AGENT_ACTION_TYPES: &[&str] = &[
     "split_plan_into_documents",
     "archive_document",
 ];
+const SUPPORTED_DOCUMENT_STATUSES: &[&str] = &[
+    "draft",
+    "review",
+    "active",
+    "completed",
+    "archived",
+];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -483,7 +490,11 @@ fn run_narrative_generation(
                 options: Vec::new(),
                 plan_steps: Vec::new(),
                 requires_user_reply: false,
-                execution_steps: failed_execution_steps("request-model", "请求模型", &provider_error),
+                execution_steps: failed_execution_steps(
+                    "request-model",
+                    "请求模型",
+                    &provider_error,
+                ),
                 current_step_id: Some("request-model".to_string()),
                 requested_actions: Vec::new(),
                 source_document_keys: build_source_document_keys(&request),
@@ -747,7 +758,11 @@ fn build_single_agent_run(payload: &Value, raw_output: &str) -> NarrativeAgentRu
                 .get("risk_level")
                 .or_else(|| object.get("riskLevel"))
                 .and_then(Value::as_str)
-                .unwrap_or(if draft_markdown.trim().is_empty() { "high" } else { "medium" }),
+                .unwrap_or(if draft_markdown.trim().is_empty() {
+                    "high"
+                } else {
+                    "medium"
+                }),
         ),
         draft_markdown,
         raw_output: raw_output.to_string(),
@@ -811,7 +826,7 @@ fn read_agent_questions(object: &Map<String, Value>) -> Vec<AgentQuestion> {
 }
 
 fn read_agent_options(object: &Map<String, Value>) -> Vec<AgentOption> {
-    object
+    let options = object
         .get("options")
         .and_then(Value::as_array)
         .map(|values| {
@@ -856,7 +871,13 @@ fn read_agent_options(object: &Map<String, Value>) -> Vec<AgentOption> {
                 })
                 .collect::<Vec<_>>()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    if options.len() < 2 {
+        Vec::new()
+    } else {
+        options.into_iter().take(4).collect()
+    }
 }
 
 fn read_agent_plan_steps(object: &Map<String, Value>) -> Vec<AgentPlanStep> {
@@ -919,9 +940,7 @@ fn resolve_turn_kind(
         .unwrap_or_default();
 
     match explicit {
-        "final_answer" | "clarification" | "options" | "plan" | "blocked" => {
-            explicit.to_string()
-        }
+        "final_answer" | "clarification" | "options" | "plan" | "blocked" => explicit.to_string(),
         _ if !questions.is_empty() => "clarification".to_string(),
         _ if !options.is_empty() => "options".to_string(),
         _ if !plan_steps.is_empty() && draft_markdown.trim().is_empty() => "plan".to_string(),
@@ -958,7 +977,9 @@ fn read_assistant_message(
                 .collect::<Vec<_>>();
             format!("继续之前，我需要你补充这些信息：\n{}", lines.join("\n"))
         }
-        "options" if !options.is_empty() => "我先整理了几个可继续推进的方向，你选一个我就继续。".to_string(),
+        "options" if !options.is_empty() => {
+            "我先整理了几个可继续推进的方向，你选一个我就继续。".to_string()
+        }
         "plan" if !plan_steps.is_empty() => "我建议先按这个计划推进。".to_string(),
         "blocked" => "当前信息还不足以安全继续，我先不直接改文稿。".to_string(),
         _ if !summary.trim().is_empty() => summary.to_string(),
@@ -1029,6 +1050,179 @@ fn read_requested_actions(object: &Map<String, Value>) -> Vec<AgentActionRequest
         .unwrap_or_default()
 }
 
+fn read_trimmed_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn read_trimmed_string_list(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn action_supports_preview(action_type: &str) -> bool {
+    matches!(
+        action_type,
+        "create_derived_document"
+            | "save_active_document"
+            | "update_related_documents"
+            | "rename_active_document"
+            | "set_document_status"
+            | "split_plan_into_documents"
+            | "archive_document"
+    )
+}
+
+fn validate_action_payload(action_type: &str, payload: Value) -> Option<Value> {
+    let map = payload.as_object().cloned().unwrap_or_default();
+    match action_type {
+        "apply_candidate_patch" => {
+            let patch_id = read_trimmed_string(
+                map.get("patchId").or_else(|| map.get("patch_id")),
+            )?;
+            Some(json!({ "patchId": patch_id }))
+        }
+        "create_derived_document" => {
+            let doc_type = read_trimmed_string(
+                map.get("docType").or_else(|| map.get("doc_type")),
+            )?;
+            if !is_known_doc_type(&doc_type) {
+                return None;
+            }
+            let mut next = Map::new();
+            next.insert("docType".to_string(), Value::String(doc_type));
+            if let Some(title) = read_trimmed_string(map.get("title")) {
+                next.insert("title".to_string(), Value::String(title));
+            }
+            if let Some(slug) = read_trimmed_string(map.get("slug")) {
+                next.insert("slug".to_string(), Value::String(slug));
+            }
+            if let Some(markdown) = read_trimmed_string(map.get("markdown")) {
+                next.insert("markdown".to_string(), Value::String(markdown));
+            }
+            Some(Value::Object(next))
+        }
+        "rename_active_document" => {
+            let title = read_trimmed_string(map.get("title"));
+            let slug = read_trimmed_string(map.get("slug"));
+            if title.is_none() && slug.is_none() {
+                return None;
+            }
+            let mut next = Map::new();
+            if let Some(title) = title {
+                next.insert("title".to_string(), Value::String(title));
+            }
+            if let Some(slug) = slug {
+                next.insert("slug".to_string(), Value::String(slug));
+            }
+            Some(Value::Object(next))
+        }
+        "set_document_status" => {
+            let status = read_trimmed_string(map.get("status"))?;
+            if !SUPPORTED_DOCUMENT_STATUSES.contains(&status.as_str()) {
+                return None;
+            }
+            Some(json!({ "status": status }))
+        }
+        "open_document" => {
+            let slug = read_trimmed_string(
+                map.get("slug")
+                    .or_else(|| map.get("documentKey"))
+                    .or_else(|| map.get("document_key")),
+            )?;
+            Some(json!({ "slug": slug }))
+        }
+        "read_related_documents" => Some(json!({
+            "documentSlugs": read_trimmed_string_list(
+                map.get("documentSlugs").or_else(|| map.get("document_slugs"))
+            )
+        })),
+        "update_related_documents" => {
+            let related_docs = read_trimmed_string_list(
+                map.get("relatedDocs").or_else(|| map.get("related_docs")),
+            );
+            let add_document_slugs = read_trimmed_string_list(
+                map.get("addDocumentSlugs")
+                    .or_else(|| map.get("add_document_slugs")),
+            );
+            let remove_document_slugs = read_trimmed_string_list(
+                map.get("removeDocumentSlugs")
+                    .or_else(|| map.get("remove_document_slugs")),
+            );
+            if related_docs.is_empty()
+                && add_document_slugs.is_empty()
+                && remove_document_slugs.is_empty()
+            {
+                return None;
+            }
+            Some(json!({
+                "relatedDocs": related_docs,
+                "addDocumentSlugs": add_document_slugs,
+                "removeDocumentSlugs": remove_document_slugs,
+            }))
+        }
+        "split_plan_into_documents" => {
+            let specs = map
+                .get("documents")
+                .or_else(|| map.get("documentSpecs"))
+                .and_then(Value::as_array)?
+                .iter()
+                .filter_map(|spec| {
+                    let object = spec.as_object()?;
+                    let doc_type = read_trimmed_string(
+                        object.get("docType").or_else(|| object.get("doc_type")),
+                    )?;
+                    if !is_known_doc_type(&doc_type) {
+                        return None;
+                    }
+                    let mut next = Map::new();
+                    next.insert("docType".to_string(), Value::String(doc_type));
+                    if let Some(title) = read_trimmed_string(object.get("title")) {
+                        next.insert("title".to_string(), Value::String(title));
+                    }
+                    if let Some(slug) = read_trimmed_string(object.get("slug")) {
+                        next.insert("slug".to_string(), Value::String(slug));
+                    }
+                    if let Some(markdown) = read_trimmed_string(object.get("markdown")) {
+                        next.insert("markdown".to_string(), Value::String(markdown));
+                    }
+                    if let Some(status) = read_trimmed_string(object.get("status")) {
+                        if SUPPORTED_DOCUMENT_STATUSES.contains(&status.as_str()) {
+                            next.insert("status".to_string(), Value::String(status));
+                        }
+                    }
+                    Some(Value::Object(next))
+                })
+                .collect::<Vec<_>>();
+            if specs.is_empty() {
+                return None;
+            }
+            Some(json!({ "documents": specs }))
+        }
+        "archive_document" => {
+            let mut next = Map::new();
+            if let Some(title_suffix) = read_trimmed_string(map.get("titleSuffix")) {
+                next.insert("titleSuffix".to_string(), Value::String(title_suffix));
+            }
+            Some(Value::Object(next))
+        }
+        _ => Some(Value::Object(map)),
+    }
+}
+
 fn parse_agent_action_request(value: &Value, index: usize) -> Option<AgentActionRequest> {
     let object = value.as_object()?;
     let action_type = object
@@ -1058,12 +1252,19 @@ fn parse_agent_action_request(value: &Value, index: usize) -> Option<AgentAction
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .unwrap_or_else(|| format!("action-{}", index + 1));
-    let payload = object.get("payload").cloned().unwrap_or_else(|| json!({}));
-    let preview_only = object
+    let preview_only_requested = object
         .get("preview_only")
         .or_else(|| object.get("previewOnly"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let preview_only = preview_only_requested && action_supports_preview(&action_type);
+    let payload = inject_preview_flag(
+        validate_action_payload(
+            &action_type,
+            object.get("payload").cloned().unwrap_or_else(|| json!({})),
+        )?,
+        preview_only,
+    );
     let affected_document_keys = read_string_list(
         object
             .get("affected_document_keys")
@@ -1087,6 +1288,13 @@ fn parse_agent_action_request(value: &Value, index: usize) -> Option<AgentAction
         affected_document_keys,
         risk_level,
     })
+}
+
+fn inject_preview_flag(payload: Value, preview_only: bool) -> Value {
+    let mut map = payload.as_object().cloned().unwrap_or_default();
+    map.insert("previewOnly".to_string(), Value::Bool(preview_only));
+    map.insert("preview_only".to_string(), Value::Bool(preview_only));
+    Value::Object(map)
 }
 
 fn build_source_document_keys(request: &NarrativeGenerateRequest) -> Vec<String> {
@@ -1182,16 +1390,7 @@ fn derive_summary_from_markdown(action: &str, draft_markdown: &str) -> String {
 }
 
 fn read_string_list(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(Value::as_str)
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
+    read_trimmed_string_list(value)
 }
 
 fn failed_agent_run(agent_id: &str, label: &str, focus: &str, error: String) -> NarrativeAgentRun {
@@ -1267,7 +1466,10 @@ mod tests {
             "action_type": "CREATE_DERIVED_DOCUMENT",
             "title": "派生文稿",
             "riskLevel": "HIGH",
-            "previewOnly": true
+            "previewOnly": true,
+            "payload": {
+                "docType": "task_setup"
+            }
         });
         let action = parse_agent_action_request(&action_value, 0).unwrap();
         assert_eq!(action.id, "action-1");
@@ -1293,11 +1495,17 @@ mod tests {
                 {
                     "action_type": "create_derived_document",
                     "title": "有效",
-                    "description": "有描述"
+                    "description": "有描述",
+                    "payload": {
+                        "docType": "task_setup"
+                    }
                 },
                 {
                     "action_type": "create_derived_document",
-                    "title": "   "
+                    "title": "   ",
+                    "payload": {
+                        "docType": "task_setup"
+                    }
                 }
             ]
         });
@@ -1312,7 +1520,10 @@ mod tests {
             "requested_actions": [
                 {
                     "action_type": "create_derived_document",
-                    "title": "文稿 A"
+                    "title": "文稿 A",
+                    "payload": {
+                        "docType": "task_setup"
+                    }
                 },
                 {
                     "actionType": "apply_all_patches",
@@ -1328,6 +1539,85 @@ mod tests {
         assert_eq!(parsed[1].id, "action-2");
         assert_eq!(parsed[1].risk_level, "medium");
         assert!(!parsed[1].preview_only);
+    }
+
+    #[test]
+    fn parse_agent_action_request_injects_preview_flag() {
+        let action = json!({
+            "action_type": "create_derived_document",
+            "title": "派生",
+            "previewOnly": true,
+            "payload": {
+                "docType": "task_setup"
+            }
+        });
+        let parsed = parse_agent_action_request(&action, 0).unwrap();
+        assert_eq!(
+            parsed.payload.get("previewOnly").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            parsed.payload.get("preview_only").and_then(Value::as_bool),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn parse_agent_action_request_skips_invalid_payloads() {
+        let action = json!({
+            "action_type": "set_document_status",
+            "title": "非法状态",
+            "payload": {
+                "status": "  "
+            }
+        });
+        assert!(parse_agent_action_request(&action, 0).is_none());
+    }
+
+    #[test]
+    fn parse_agent_action_request_disables_preview_for_unsupported_action() {
+        let action = json!({
+            "action_type": "open_document",
+            "title": "打开文稿",
+            "previewOnly": true,
+            "payload": {
+                "slug": "doc-a"
+            }
+        });
+        let parsed = parse_agent_action_request(&action, 0).unwrap();
+        assert!(!parsed.preview_only);
+        assert_eq!(
+            parsed.payload.get("previewOnly").and_then(Value::as_bool),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn resolve_turn_kind_falls_back_to_final_answer_when_draft_exists() {
+        let object = Map::new();
+        let turn_kind = resolve_turn_kind(&object, "# 标题", &[], &[], &[]);
+        assert_eq!(turn_kind, "final_answer");
+    }
+
+    #[test]
+    fn read_agent_options_requires_between_two_and_four_entries() {
+        let too_few = json!({
+            "options": [
+                { "label": "只给一个" }
+            ]
+        });
+        assert!(read_agent_options(too_few.as_object().unwrap()).is_empty());
+
+        let too_many = json!({
+            "options": [
+                { "label": "A" },
+                { "label": "B" },
+                { "label": "C" },
+                { "label": "D" },
+                { "label": "E" }
+            ]
+        });
+        assert_eq!(read_agent_options(too_many.as_object().unwrap()).len(), 4);
     }
 }
 
@@ -1465,10 +1755,14 @@ fn perform_chat_completion_with_fallbacks(
                     "当前提供方不支持流式输出，已切回普通请求...",
                 );
             }
-            let fallback_request =
-                build_chat_completion_request(model, payload, max_tokens, false);
-            match send_chat_completion_request(client, base_url, api_key, &fallback_request, progress)
-            {
+            let fallback_request = build_chat_completion_request(model, payload, max_tokens, false);
+            match send_chat_completion_request(
+                client,
+                base_url,
+                api_key,
+                &fallback_request,
+                progress,
+            ) {
                 Ok(success) => Ok(success),
                 Err(second_failure) => Err(second_failure),
             }
@@ -1506,10 +1800,7 @@ fn build_chat_completion_request(
             .and_then(Value::as_f64)
             .unwrap_or(0.45)),
     );
-    request.insert(
-        "max_tokens".to_string(),
-        json!(max_tokens),
-    );
+    request.insert("max_tokens".to_string(), json!(max_tokens));
     request.insert("stream".to_string(), json!(stream));
     Value::Object(request)
 }
@@ -1633,11 +1924,12 @@ fn parse_non_stream_response(
     status: u16,
     progress: Option<&NarrativeGenerationProgressEmitter>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
-    let response_data: Value = serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
-        status_code: status,
-        error: format!("响应不是合法 JSON: {error}"),
-        raw_text: raw_body.clone(),
-    })?;
+    let response_data: Value =
+        serde_json::from_str(&raw_body).map_err(|error| ProviderFailure {
+            status_code: status,
+            error: format!("响应不是合法 JSON: {error}"),
+            raw_text: raw_body.clone(),
+        })?;
     let raw_content = extract_message_content(&response_data);
     if let Some(progress) = progress {
         let preview = if raw_content.trim().is_empty() {
@@ -1794,7 +2086,9 @@ fn normalize_markdown_output(raw_content: &str) -> String {
 
     let lines = trimmed.lines().collect::<Vec<_>>();
     if lines.len() >= 2
-        && lines.first().is_some_and(|line| line.trim_start().starts_with("```"))
+        && lines
+            .first()
+            .is_some_and(|line| line.trim_start().starts_with("```"))
         && lines.last().is_some_and(|line| line.trim() == "```")
     {
         return lines[1..lines.len() - 1].join("\n").trim().to_string();
@@ -1824,10 +2118,7 @@ fn map_http_error(status: u16, raw_body: &str) -> String {
             provider_message.as_deref(),
         ),
         408 => "AI 请求超时，请检查网络或增大 Timeout。".to_string(),
-        429 => with_provider_detail(
-            "AI 请求过于频繁，请稍后再试。",
-            provider_message.as_deref(),
-        ),
+        429 => with_provider_detail("AI 请求过于频繁，请稍后再试。", provider_message.as_deref()),
         500..=599 => with_provider_detail(
             &format!("AI 服务暂时不可用 ({status})"),
             provider_message.as_deref(),

@@ -70,7 +70,13 @@ pub fn build_context(
         let mut ids = records.keys().cloned().collect::<Vec<_>>();
         ids.sort_by(|left, right| {
             score_record(category, left, records.get(left), &intent_text, &target_id)
-                .cmp(&score_record(category, right, records.get(right), &intent_text, &target_id))
+                .cmp(&score_record(
+                    category,
+                    right,
+                    records.get(right),
+                    &intent_text,
+                    &target_id,
+                ))
                 .reverse()
                 .then_with(|| left.cmp(right))
         });
@@ -88,12 +94,20 @@ pub fn build_context(
             same_type_index = ids
                 .iter()
                 .take(index_limit)
-                .filter_map(|id| records.get(id).map(|record| summarize_record(category, id, record)))
+                .filter_map(|id| {
+                    records
+                        .get(id)
+                        .map(|record| summarize_record(category, id, record))
+                })
                 .collect();
             same_type_examples = ids
                 .iter()
                 .take(example_limit)
-                .filter_map(|id| records.get(id).map(|record| example_record(category, &normalized_type, record)))
+                .filter_map(|id| {
+                    records
+                        .get(id)
+                        .map(|record| example_record(category, &normalized_type, record))
+                })
                 .collect();
 
             included_index_records += same_type_index.len();
@@ -113,7 +127,11 @@ pub fn build_context(
             let entries = ids
                 .iter()
                 .take(related_limit)
-                .filter_map(|id| records.get(id).map(|record| summarize_record(category, id, record)))
+                .filter_map(|id| {
+                    records
+                        .get(id)
+                        .map(|record| summarize_record(category, id, record))
+                })
                 .collect::<Vec<_>>();
             included_index_records += entries.len();
             related_indexes.insert(category.to_string(), json!(entries));
@@ -178,14 +196,8 @@ pub fn build_context(
         context,
         context_stats,
         truncation: Value::Object(truncation),
-        allowed_reference_groups: allowed_reference_ids
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        suggested_reference_groups: suggested_reference_ids
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
+        allowed_reference_groups: allowed_reference_ids.keys().cloned().collect::<Vec<_>>(),
+        suggested_reference_groups: suggested_reference_ids.keys().cloned().collect::<Vec<_>>(),
     })
 }
 
@@ -260,7 +272,9 @@ fn build_search_text(category: &str, record_id: &str, record: Option<&Value>) ->
 
 fn tokenize_intent(intent_text: &str) -> Vec<String> {
     let mut tokens = intent_text
-        .split(|character: char| !character.is_alphanumeric() && character != '_' && character != '-')
+        .split(|character: char| {
+            !character.is_alphanumeric() && character != '_' && character != '-'
+        })
         .map(str::trim)
         .filter(|value| value.len() >= 2)
         .map(|value| value.to_lowercase())
@@ -365,7 +379,10 @@ fn trim_dialogue_example(record: &Value, max_nodes: usize) -> Value {
 }
 
 fn load_story_background(repo_root: &Path) -> Result<Value, String> {
-    let path = repo_root.join("data").join("json").join("story_chapters.json");
+    let path = repo_root
+        .join("data")
+        .join("json")
+        .join("story_chapters.json");
     if !path.exists() {
         return Ok(Value::Null);
     }
@@ -460,15 +477,12 @@ fn load_directory_records(dir: &Path, id_field: &str) -> Result<BTreeMap<String,
             .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
         let parsed: Value = serde_json::from_str(&raw)
             .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-        let id = parsed
-            .get(id_field)
-            .map(value_to_id)
-            .unwrap_or_else(|| {
-                path.file_stem()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or_default()
-                    .to_string()
-            });
+        let id = parsed.get(id_field).map(value_to_id).unwrap_or_else(|| {
+            path.file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_string()
+        });
         if !id.trim().is_empty() {
             result.insert(id, parsed);
         }

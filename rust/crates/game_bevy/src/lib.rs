@@ -15,6 +15,7 @@ use spawn::register_actor_from_definition;
 mod ai_spawn;
 pub mod bootstrap;
 mod content;
+mod logging;
 pub mod npc_life;
 pub mod reservations;
 mod spawn;
@@ -26,6 +27,7 @@ pub use bootstrap::{
     RuntimeBootstrapBundle, RuntimeBootstrapError,
 };
 pub use content::*;
+pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
 pub use npc_life::{
     BackgroundLifeState, CurrentAction, CurrentGoal, CurrentPlan,
     LifeProfileComponent as CharacterLifeProfileComponent, NeedState, NpcLifePlugin, NpcLifeState,

@@ -3,6 +3,7 @@
 use super::*;
 use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
+use bevy::picking::prelude::MeshPickingCamera;
 
 pub(crate) fn setup_viewer(
     mut commands: Commands,
@@ -45,6 +46,7 @@ pub(crate) fn setup_viewer(
         }),
         Transform::from_xyz(0.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Z),
         ViewerCamera,
+        MeshPickingCamera,
         FogOfWarOverlay,
         FogOfWarPostProcessSettings::default(),
         FogOfWarPostProcessTextures {
@@ -97,6 +99,7 @@ pub(crate) fn setup_viewer(
         Visibility::Hidden,
         FocusPolicy::Block,
         RelativeCursorPosition::default(),
+        viewer_ui_passthrough_bundle(),
         InteractionMenuRoot,
         UiMouseBlocker,
     ));
@@ -114,6 +117,7 @@ pub(crate) fn setup_viewer(
         Visibility::Hidden,
         FocusPolicy::Block,
         RelativeCursorPosition::default(),
+        viewer_ui_passthrough_bundle(),
         DialoguePanelRoot,
         UiMouseBlocker,
     ));

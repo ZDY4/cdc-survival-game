@@ -14,6 +14,7 @@ use game_bevy::{
 };
 use game_core::SimulationRuntime;
 use game_data::{CharacterId, GridCoord};
+use tracing::{error, info};
 
 #[derive(SystemParam)]
 pub struct StartupContent<'w, 's> {
@@ -45,7 +46,7 @@ pub fn startup_demo(
             "runtime content failed to load: {:?}",
             content_state.failures
         );
-        eprintln!("{error}");
+        error!("{error}");
         commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
         commands.insert_resource(ServerStartupState::Failed { error });
         return;
@@ -82,7 +83,7 @@ pub fn startup_demo(
     )
     else {
         let error = "runtime content resources are incomplete after shared startup".to_string();
-        eprintln!("{error}");
+        error!("{error}");
         commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
         commands.insert_resource(ServerStartupState::Failed { error });
         return;
@@ -100,47 +101,47 @@ pub fn startup_demo(
         bootstrap_bundle.runtime_startup_config.startup_map.clone(),
     );
 
-    println!(
+    info!(
         "bevy_server booted with headless loop at {} Hz",
         config.tick_rate_hz
     );
-    println!(
+    info!(
         "loaded {} effect definitions from Rust game_data authority",
         effects.0.len()
     );
-    println!(
+    info!(
         "loaded {} item definitions from Rust game_data authority",
         items.0.len()
     );
-    println!(
+    info!(
         "loaded {} character definitions from Rust game_data authority",
         definitions.0.len()
     );
-    println!(
+    info!(
         "loaded {} map definitions from Rust game_data authority",
         maps.0.len()
     );
-    println!(
+    info!(
         "loaded {} overworld definitions from Rust game_data authority",
         overworld.0.len()
     );
-    println!(
+    info!(
         "loaded {} skill definitions from Rust game_data authority",
         skills.0.len()
     );
-    println!(
+    info!(
         "loaded {} skill tree definitions from Rust game_data authority",
         skill_trees.0.len()
     );
-    println!(
+    info!(
         "loaded {} recipe definitions from Rust game_data authority",
         recipes.0.len()
     );
-    println!(
+    info!(
         "loaded {} quest definitions from Rust game_data authority",
         quests.0.len()
     );
-    println!(
+    info!(
         "loaded {} shop definitions from Rust game_data authority",
         shops.0.len()
     );
@@ -151,18 +152,18 @@ pub fn startup_demo(
                     "configured startup_map {} was not found in loaded map definitions",
                     map_id
                 );
-                eprintln!("{error}");
+                error!("{error}");
                 commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
                 commands.insert_resource(ServerStartupState::Failed { error });
                 return;
             }
-            println!(
+            info!(
                 "selected startup_map={} from shared bevy runtime config",
                 map_id
             );
         }
         None => {
-            println!("selected startup_map=<none>; no map definitions available");
+            info!("selected startup_map=<none>; no map definitions available");
         }
     }
 
@@ -170,7 +171,7 @@ pub fn startup_demo(
         Ok(runtime) => runtime,
         Err(error) => {
             let error = format!("failed to build bevy_server runtime from startup seed: {error}");
-            eprintln!("{error}");
+            error!("{error}");
             commands.insert_resource(ServerSimulationRuntime(SimulationRuntime::new()));
             commands.insert_resource(ServerStartupState::Failed { error });
             return;
@@ -189,7 +190,7 @@ pub fn startup_demo(
     );
     apply_dialogue_libraries(&mut runtime, &dialogues, &dialogue_rules);
     let snapshot = runtime.snapshot();
-    println!(
+    info!(
         "initialized simulation runtime map_id={} size={}x{} levels={:?}",
         snapshot
             .grid
@@ -209,12 +210,12 @@ pub fn startup_demo(
         &recipes.0,
         &shops.0,
     );
-    println!(
+    info!(
         "initialized headless economy actors={} shops={} default_recipe_domains_ready=true",
         runtime.economy().actor_count(),
         runtime.economy().shop_count(),
     );
-    println!(
+    info!(
         "economy_smoke learned_skill={:?} crafted_recipe={:?} crafted_output={:?} bought_item={:?} sold_item={:?}",
         smoke_report.learned_skill_id,
         smoke_report.crafted_recipe_id,
@@ -257,9 +258,9 @@ pub fn startup_demo(
     }
 
     if next_spawn_index > 0 {
-        println!("queued {next_spawn_index} life-enabled npc spawns for AI debug visibility");
+        info!("queued {next_spawn_index} life-enabled npc spawns for AI debug visibility");
     }
-    println!("startup queued total spawn requests={total_requests}");
+    info!("startup queued total spawn requests={total_requests}");
 }
 
 pub fn advance_map_ai_spawns(

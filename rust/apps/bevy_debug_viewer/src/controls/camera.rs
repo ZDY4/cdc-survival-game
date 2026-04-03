@@ -1,3 +1,5 @@
+//! 相机输入子模块：负责拖拽平移、滚轮缩放和跟随相机时的手动偏移换算。
+
 use super::*;
 
 pub(crate) fn handle_mouse_wheel_zoom(

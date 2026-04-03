@@ -1,0 +1,34 @@
+//! 渲染常量：集中定义交互菜单、对话面板、网格和墙体相关的共享尺寸参数。
+
+pub(crate) const INTERACTION_MENU_WIDTH_PX: f32 = 304.0;
+pub(crate) const INTERACTION_MENU_PADDING_PX: f32 = 12.0;
+pub(crate) const INTERACTION_MENU_BUTTON_HEIGHT_PX: f32 = 34.0;
+pub(crate) const INTERACTION_MENU_BUTTON_GAP_PX: f32 = 8.0;
+pub(crate) const DIALOGUE_PANEL_BOTTOM_PX: f32 = 24.0;
+pub(crate) const DIALOGUE_PANEL_MIN_WIDTH_PX: f32 = 360.0;
+pub(crate) const DIALOGUE_PANEL_MAX_WIDTH_PX: f32 = 920.0;
+pub(crate) const GRID_LINE_ELEVATION: f32 = 0.002;
+pub(crate) const OVERLAY_ELEVATION: f32 = 0.03;
+pub(crate) const GRID_GROUND_SHADER_PATH: &str = "shaders/grid_ground.wgsl";
+pub(crate) const BUILDING_WALL_GRID_SHADER_PATH: &str = "shaders/building_wall_grid.wgsl";
+pub(crate) const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
+pub(crate) const TRIGGER_DECAL_ELEVATION: f32 = 0.012;
+pub(crate) const CAMERA_FOLLOW_SMOOTHING_TAU_SEC: f32 = 0.075;
+pub(crate) const CAMERA_FOLLOW_RESET_DISTANCE_CELLS: f32 = 2.0;
+pub(crate) const GENERATED_DOOR_ROTATION_SPEED_RAD_PER_SEC: f32 = 7.5;
+pub(crate) const MISSING_GEO_BUILDING_PLACEHOLDER_ALPHA: f32 = 0.96;
+pub(crate) const WALL_NORTH: u8 = 1 << 0;
+pub(crate) const WALL_EAST: u8 = 1 << 1;
+pub(crate) const WALL_SOUTH: u8 = 1 << 2;
+pub(crate) const WALL_WEST: u8 = 1 << 3;
+pub(crate) const WALL_HORIZONTAL: u8 = WALL_EAST | WALL_WEST;
+pub(crate) const WALL_VERTICAL: u8 = WALL_NORTH | WALL_SOUTH;
+pub(crate) const WALL_CORNER_NE: u8 = WALL_NORTH | WALL_EAST;
+pub(crate) const WALL_CORNER_ES: u8 = WALL_EAST | WALL_SOUTH;
+pub(crate) const WALL_CORNER_SW: u8 = WALL_SOUTH | WALL_WEST;
+pub(crate) const WALL_CORNER_WN: u8 = WALL_WEST | WALL_NORTH;
+pub(crate) const WALL_T_NO_NORTH: u8 = WALL_EAST | WALL_SOUTH | WALL_WEST;
+pub(crate) const WALL_T_NO_EAST: u8 = WALL_NORTH | WALL_SOUTH | WALL_WEST;
+pub(crate) const WALL_T_NO_SOUTH: u8 = WALL_NORTH | WALL_EAST | WALL_WEST;
+pub(crate) const WALL_T_NO_WEST: u8 = WALL_NORTH | WALL_EAST | WALL_SOUTH;
+pub(crate) const WALL_CROSS: u8 = WALL_NORTH | WALL_EAST | WALL_SOUTH | WALL_WEST;

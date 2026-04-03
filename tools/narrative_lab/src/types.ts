@@ -870,6 +870,8 @@ export type NarrativeGenerateResponse = {
 export type NarrativeCandidatePatch = {
   id: string;
   title: string;
+  sectionTitle?: string | null;
+  patchKind?: "replace" | "insert" | "delete";
   startBlock: number;
   endBlock: number;
   originalText: string;

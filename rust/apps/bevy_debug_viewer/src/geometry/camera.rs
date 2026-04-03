@@ -1,3 +1,5 @@
+//! 几何相机 helper：负责相机距离、平移边界、地面投影和楼层平面换算。
+
 use bevy::prelude::*;
 use game_data::GridCoord;
 

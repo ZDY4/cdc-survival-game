@@ -13,14 +13,7 @@ use crate::{EditorBootstrap, ValidationIssue};
 const DEFAULT_QUEST_NODE_TYPES: &[&str] =
     &["start", "objective", "dialog", "choice", "reward", "end"];
 const DEFAULT_OBJECTIVE_TYPES: &[&str] = &[
-    "travel",
-    "search",
-    "collect",
-    "kill",
-    "sleep",
-    "survive",
-    "craft",
-    "build",
+    "travel", "search", "collect", "kill", "sleep", "survive", "craft", "build",
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -174,7 +167,9 @@ pub fn delete_quest_document(quest_id: String) -> Result<DeleteQuestResult, Stri
         fs::remove_file(&path)
             .map_err(|error| format!("failed to delete {}: {error}", path.display()))?;
     }
-    Ok(DeleteQuestResult { deleted_id: quest_id })
+    Ok(DeleteQuestResult {
+        deleted_id: quest_id,
+    })
 }
 
 pub fn validate_quest_record(
@@ -196,7 +191,10 @@ pub fn quest_validation_catalog(
         item_ids: load_numeric_ids(&repo_root.join("data").join("items"))?,
         dialog_ids: stem_ids(&repo_root.join("data").join("dialogues"))?,
         map_location_ids: object_ids_from_file(
-            &repo_root.join("data").join("json").join("map_locations.json"),
+            &repo_root
+                .join("data")
+                .join("json")
+                .join("map_locations.json"),
         )?,
         recipe_ids: stem_ids(&repo_root.join("data").join("recipes"))?,
     };
@@ -273,14 +271,20 @@ fn collect_quest_catalogs(
             .collect(),
         dialog_ids: validation_catalog.dialog_ids.iter().cloned().collect(),
         quest_ids: validation_catalog.quest_ids.iter().cloned().collect(),
-        location_ids: validation_catalog.map_location_ids.iter().cloned().collect(),
+        location_ids: validation_catalog
+            .map_location_ids
+            .iter()
+            .cloned()
+            .collect(),
         recipe_ids: validation_catalog.recipe_ids.iter().cloned().collect(),
     }
 }
 
 fn map_quest_validation_error(error: QuestDefinitionValidationError) -> ValidationIssue {
     match error {
-        QuestDefinitionValidationError::MissingQuestId => crate::document_error("questId", "quest_id cannot be empty"),
+        QuestDefinitionValidationError::MissingQuestId => {
+            crate::document_error("questId", "quest_id cannot be empty")
+        }
         QuestDefinitionValidationError::MissingTitle { quest_id } => {
             crate::document_error("title", format!("Quest {quest_id} title cannot be empty."))
         }
@@ -293,10 +297,12 @@ fn map_quest_validation_error(error: QuestDefinitionValidationError) -> Validati
         QuestDefinitionValidationError::MissingStartNodeId { .. } => {
             crate::document_error("flow.startNodeId", "flow.start_node_id cannot be empty.")
         }
-        QuestDefinitionValidationError::InvalidStartNodeCount { count, .. } => crate::document_error(
-            "flow.nodes",
-            format!("Quest must contain exactly one start node, found {count}."),
-        ),
+        QuestDefinitionValidationError::InvalidStartNodeCount { count, .. } => {
+            crate::document_error(
+                "flow.nodes",
+                format!("Quest must contain exactly one start node, found {count}."),
+            )
+        }
         QuestDefinitionValidationError::MissingEndNode { .. } => {
             crate::document_error("flow.nodes", "Quest must contain at least one end node.")
         }
@@ -309,10 +315,9 @@ fn map_quest_validation_error(error: QuestDefinitionValidationError) -> Validati
             "type",
             "flow.start_node_id must point to a start node.".to_string(),
         ),
-        QuestDefinitionValidationError::MissingNodeId { node_key, .. } => crate::document_error(
-            "flow.nodes",
-            format!("Node {node_key} is missing its id."),
-        ),
+        QuestDefinitionValidationError::MissingNodeId { node_key, .. } => {
+            crate::document_error("flow.nodes", format!("Node {node_key} is missing its id."))
+        }
         QuestDefinitionValidationError::NodeIdMismatch {
             node_key, node_id, ..
         } => crate::document_error(
@@ -369,9 +374,7 @@ fn map_quest_validation_error(error: QuestDefinitionValidationError) -> Validati
             format!("Reward node references unknown location id {location_id}."),
         ),
         QuestDefinitionValidationError::UnknownUnlockRecipe {
-            node_id,
-            recipe_id,
-            ..
+            node_id, recipe_id, ..
         } => crate::node_error(
             &node_id,
             "rewards.unlockRecipes",

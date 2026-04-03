@@ -1,13 +1,17 @@
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::log::error;
+use bevy::log::LogPlugin;
 use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 use bevy::window::WindowPlugin;
 use game_bevy::{
-    apply_gameplay_libraries, spawn_characters_from_definition, CharacterSpawnRejected,
-    GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin, NpcLifeUpdateSet, RuntimeContentPlugin,
-    SettlementSimulationPlugin, SpawnCharacterRequest,
+    apply_gameplay_libraries, init_runtime_logging, spawn_characters_from_definition,
+    CharacterSpawnRejected, GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin, NpcLifeUpdateSet,
+    RuntimeContentPlugin, RuntimeLogSettings, SettlementSimulationPlugin, SpawnCharacterRequest,
 };
+use time::macros::format_description;
+use time::OffsetDateTime;
 
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::console::{
@@ -23,6 +27,7 @@ use crate::game_ui::{
     tick_hotbar_cooldowns, update_hover_tooltip_state,
 };
 use crate::info_panels::update_free_observe_indicator;
+use crate::picking::{sync_viewer_picking_state, ViewerPickingPlugin, ViewerPickingState};
 use crate::profiling::{
     profiled_advance_runtime_progression, profiled_draw_world, profiled_sync_actor_labels,
     profiled_sync_damage_numbers, profiled_sync_world_visuals, profiled_tick_runtime,
@@ -44,14 +49,19 @@ use crate::state::{
     ViewerActorMotionState, ViewerCameraFollowState, ViewerCameraShakeState,
     ViewerDamageNumberState, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig,
     ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
-    ViewerUiSettings, ViewerUiSettingsPath,
+    ViewerUiSettings, ViewerUiSettingsPath, sync_viewer_ui_pick_passthrough,
 };
 
 pub(crate) fn run() {
+    let log_settings = RuntimeLogSettings::new("bevy_debug_viewer")
+        .with_file_name(single_run_viewer_log_file_name());
+    if let Err(error) = init_runtime_logging(&log_settings) {
+        eprintln!("failed to initialize bevy_debug_viewer logging: {error}");
+    }
     let (bootstrap, bootstrap_status) = match load_viewer_bootstrap() {
         Ok(bootstrap) => (bootstrap, ViewerBootstrapStatus::Ready),
         Err(error) => {
-            eprintln!("failed to load bevy_debug_viewer bootstrap: {error}");
+            error!("failed to load bevy_debug_viewer bootstrap: {error}");
             (
                 crate::bootstrap::ViewerBootstrap {
                     runtime: game_core::SimulationRuntime::new(),
@@ -84,6 +94,7 @@ pub(crate) fn run() {
         .insert_resource(ViewerDamageNumberState::default())
         .insert_resource(ViewerRenderConfig::default())
         .insert_resource(ViewerSceneKind::default())
+        .insert_resource(ViewerPickingState::default())
         .insert_resource(ViewerState::default())
         .insert_resource(ViewerUiSettings::default())
         .insert_resource(ViewerUiSettingsPath::default())
@@ -110,6 +121,7 @@ pub(crate) enum ViewerBootstrapStatus {
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 enum ViewerUpdateSet {
+    Picking,
     RuntimeMutations,
     EventCollection,
     Motion,
@@ -122,6 +134,8 @@ impl Plugin for ViewerAppPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(
             DefaultPlugins
+                .build()
+                .disable::<LogPlugin>()
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "CDC Survival Game - Bevy Debug Viewer".into(),
@@ -139,6 +153,7 @@ impl Plugin for ViewerAppPlugin {
         .add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
         .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
         .add_plugins(FogOfWarPostProcessPlugin)
+        .add_plugins(ViewerPickingPlugin)
         .insert_resource(MapAiSpawnRuntimeState::default())
         .add_plugins((
             RuntimeContentPlugin,
@@ -150,6 +165,7 @@ impl Plugin for ViewerAppPlugin {
             Update,
             (
                 NpcLifeUpdateSet::RuntimeState,
+                ViewerUpdateSet::Picking,
                 ViewerUpdateSet::RuntimeMutations,
                 ViewerUpdateSet::EventCollection,
                 ViewerUpdateSet::Motion,
@@ -158,6 +174,10 @@ impl Plugin for ViewerAppPlugin {
                 ViewerUpdateSet::Hud,
             )
                 .chain(),
+        )
+        .add_systems(
+            Update,
+            sync_viewer_picking_state.in_set(ViewerUpdateSet::Picking),
         )
         .add_message::<SpawnCharacterRequest>()
         .add_message::<CharacterSpawnRejected>()
@@ -250,6 +270,7 @@ impl Plugin for ViewerAppPlugin {
                 profiled_update_game_ui,
                 update_interaction_menu,
                 update_dialogue_panel,
+                sync_viewer_ui_pick_passthrough,
                 profiled_draw_world,
             )
                 .in_set(ViewerUpdateSet::Hud),
@@ -311,4 +332,24 @@ fn configure_runtime_gameplay_content(
         &shops,
         &overworld,
     );
+}
+
+fn single_run_viewer_log_file_name() -> String {
+    let timestamp =
+        local_log_timestamp().unwrap_or_else(|| format!("unix-{}", unix_timestamp_millis()));
+    format!("runtime.{timestamp}.log")
+}
+
+fn local_log_timestamp() -> Option<String> {
+    let now = OffsetDateTime::now_local().ok()?;
+    let format =
+        format_description!("[year]-[month]-[day]_[hour]-[minute]-[second].[subsecond digits:3]");
+    now.format(&format).ok()
+}
+
+fn unix_timestamp_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_millis())
+        .unwrap_or_default()
 }

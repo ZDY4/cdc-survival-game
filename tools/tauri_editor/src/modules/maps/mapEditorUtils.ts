@@ -177,25 +177,31 @@ export function applyPlacement(
 ): MapDefinition {
   const next = normalizeMapDocument(map);
   ensureLevel(next, anchor.y);
-  next.objects.push(
-    normalizeObject({
-      object_id: objectId,
-      kind: placement.kind,
-      anchor,
-      footprint:
-        placement.kind === "building"
-          ? placement.footprint
-          : {
-              width: 1,
-              height: 1,
-            },
-      rotation: placement.rotation,
-      blocks_movement: placement.blocksMovement,
-      blocks_sight: placement.blocksSight,
-      props: buildProps(placement),
-    }),
-  );
+  next.objects.push(buildPlacementObject(placement, anchor, objectId));
   return normalizeMapDocument(next);
+}
+
+export function buildPlacementObject(
+  placement: PlacementDraft,
+  anchor: GridPoint,
+  objectId: string,
+): MapObjectDefinition {
+  return normalizeObject({
+    object_id: objectId,
+    kind: placement.kind,
+    anchor,
+    footprint:
+      placement.kind === "building"
+        ? placement.footprint
+        : {
+            width: 1,
+            height: 1,
+          },
+    rotation: placement.rotation,
+    blocks_movement: placement.blocksMovement,
+    blocks_sight: placement.blocksSight,
+    props: buildProps(placement),
+  });
 }
 
 export function updateObject(

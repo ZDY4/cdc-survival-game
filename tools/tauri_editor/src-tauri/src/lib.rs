@@ -13,18 +13,17 @@ use std::{
 
 use game_data::{
     load_character_library, load_effect_library, load_shared_content_registry,
-    validate_item_definition, validate_map_definition, validate_overworld_definition,
-    DialogueConnection, DialogueData, ItemDefinition, ItemDefinitionValidationError,
-    ItemFragment, ItemValidationCatalog, MapDefinition, MapValidationCatalog,
-    OverworldDefinition, OverworldLocationKind, OverworldValidationCatalog,
+    validate_item_definition, validate_overworld_definition, DialogueConnection, DialogueData,
+    GridCoord, ItemDefinition, ItemDefinitionValidationError, ItemFragment, ItemValidationCatalog,
+    MapCellDefinition, MapDefinition, MapEditDiagnostic, MapEditDiagnosticSeverity, MapEditResult,
+    MapEditorService, MapEntryPointDefinition, MapId, MapObjectDefinition, MapSize,
+    MapValidationCatalog, OverworldDefinition, OverworldLocationKind, OverworldValidationCatalog,
     SharedContentRegistry,
 };
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-use crate::ai_provider::{
-    generate_dialogue_draft, generate_quest_draft, test_ai_provider,
-};
+use crate::ai_provider::{generate_dialogue_draft, generate_quest_draft, test_ai_provider};
 use crate::ai_settings::{load_ai_settings, save_ai_settings};
 use crate::quest_workspace::{
     delete_quest_document, load_quest_workspace, save_quest_documents, validate_quest_document,
@@ -55,34 +54,9 @@ const DEFAULT_EQUIPMENT_SLOTS: &[&str] = &[
     "accessory_2",
 ];
 const DEFAULT_KNOWN_SUBTYPES: &[&str] = &[
-    "unarmed",
-    "dagger",
-    "sword",
-    "blunt",
-    "axe",
-    "spear",
-    "polearm",
-    "bow",
-    "gun",
-    "pistol",
-    "rifle",
-    "shotgun",
-    "tool",
-    "tools",
-    "watch",
-    "backpack",
-    "healing",
-    "food",
-    "drink",
-    "water",
-    "metal",
-    "wood",
-    "fabric",
-    "medical",
-    "chemical",
-    "key",
-    "device",
-    "misc",
+    "unarmed", "dagger", "sword", "blunt", "axe", "spear", "polearm", "bow", "gun", "pistol",
+    "rifle", "shotgun", "tool", "tools", "watch", "backpack", "healing", "food", "drink", "water",
+    "metal", "wood", "fabric", "medical", "chemical", "key", "device", "misc",
 ];
 const DEFAULT_DIALOG_NODE_TYPES: &[&str] = &["dialog", "choice", "condition", "action", "end"];
 const DEFAULT_BUILDING_PREFABS: &[&str] = &[
@@ -463,7 +437,10 @@ fn validate_item_document(item: ItemDefinition) -> Result<Vec<ValidationIssue>, 
     }
     item_ids.insert(item.id);
 
-    let catalog = ItemValidationCatalog { item_ids, effect_ids };
+    let catalog = ItemValidationCatalog {
+        item_ids,
+        effect_ids,
+    };
     Ok(validate_item(&item, &catalog, false))
 }
 
@@ -480,7 +457,10 @@ fn save_item_documents(documents: Vec<SaveItemDocumentInput>) -> Result<SaveItem
     let mut seen_original_ids = HashSet::new();
     for document in &documents {
         if !seen_ids.insert(document.item.id) {
-            return Err(format!("duplicate item id in save batch: {}", document.item.id));
+            return Err(format!(
+                "duplicate item id in save batch: {}",
+                document.item.id
+            ));
         }
 
         if let Some(original_id) = document.original_id {
@@ -506,7 +486,10 @@ fn save_item_documents(documents: Vec<SaveItemDocumentInput>) -> Result<SaveItem
             continue;
         }
 
-        if final_items.insert(document.item.id, document.item).is_some() {
+        if final_items
+            .insert(document.item.id, document.item)
+            .is_some()
+        {
             return Err("existing item data contains duplicate ids".to_string());
         }
     }
@@ -583,7 +566,9 @@ fn delete_item_document(item_id: u32) -> Result<DeleteItemResult, String> {
             .map_err(|error| format!("failed to delete {}: {error}", path.display()))?;
     }
 
-    Ok(DeleteItemResult { deleted_id: item_id })
+    Ok(DeleteItemResult {
+        deleted_id: item_id,
+    })
 }
 
 #[tauri::command]
@@ -682,7 +667,9 @@ fn delete_dialogue_document(dialog_id: String) -> Result<DeleteDialogueResult, S
             .map_err(|error| format!("failed to delete {}: {error}", path.display()))?;
     }
 
-    Ok(DeleteDialogueResult { deleted_id: dialog_id })
+    Ok(DeleteDialogueResult {
+        deleted_id: dialog_id,
+    })
 }
 
 #[tauri::command]
@@ -690,7 +677,8 @@ fn load_map_workspace() -> Result<MapWorkspacePayload, String> {
     let item_documents = load_item_documents()?;
     let character_ids = load_character_ids()?;
     let validation_catalog = map_validation_catalog(&item_documents, &character_ids);
-    let documents = load_map_documents(&validation_catalog)?;
+    let map_editor = map_editor_service()?;
+    let documents = load_map_documents(&map_editor)?;
     let bootstrap = editor_bootstrap()?;
     let data_directory = to_forward_slashes(&map_data_dir()?);
     let map_count = documents.len();
@@ -707,10 +695,105 @@ fn load_map_workspace() -> Result<MapWorkspacePayload, String> {
 
 #[tauri::command]
 fn validate_map_document(map: MapDefinition) -> Result<Vec<ValidationIssue>, String> {
-    let item_documents = load_item_documents()?;
-    let character_ids = load_character_ids()?;
-    let validation_catalog = map_validation_catalog(&item_documents, &character_ids);
-    Ok(validate_map(&map, &validation_catalog))
+    let map_editor = map_editor_service()?;
+    validate_map_with_editor(&map_editor, &map)
+}
+
+#[tauri::command]
+fn create_map_draft(map_id: String) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .create_map_definition(
+            MapId(map_id),
+            Some("New map".to_string()),
+            MapSize {
+                width: 12,
+                height: 12,
+            },
+            0,
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn upsert_map_entry_point(
+    map: MapDefinition,
+    entry_point: MapEntryPointDefinition,
+) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .upsert_entry_point_definition(&map, entry_point)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn remove_map_entry_point(
+    map: MapDefinition,
+    entry_point_id: String,
+) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .remove_entry_point_definition(&map, &entry_point_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn upsert_map_object(
+    map: MapDefinition,
+    object: MapObjectDefinition,
+) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .upsert_object_definition(&map, object)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn remove_map_object(map: MapDefinition, object_id: String) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .remove_object_definition(&map, &object_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn paint_map_cells(
+    map: MapDefinition,
+    level: i32,
+    cells: Vec<MapCellDefinition>,
+) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .paint_cells_definition(&map, level, cells)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn clear_map_cells(
+    map: MapDefinition,
+    level: i32,
+    cells: Vec<GridCoord>,
+) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .clear_cells_definition(&map, level, cells)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn add_map_level(map: MapDefinition, level: i32) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .add_level_definition(&map, level)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn remove_map_level(map: MapDefinition, level: i32) -> Result<MapDefinition, String> {
+    let map_editor = map_editor_service()?;
+    map_editor
+        .remove_level_definition(&map, level)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -722,9 +805,7 @@ fn save_map_documents(documents: Vec<SaveMapDocumentInput>) -> Result<SaveMapsRe
         });
     }
 
-    let item_documents = load_item_documents()?;
-    let character_ids = load_character_ids()?;
-    let validation_catalog = map_validation_catalog(&item_documents, &character_ids);
+    let map_editor = map_editor_service()?;
     let mut seen_ids = HashSet::new();
 
     for document in &documents {
@@ -736,39 +817,33 @@ fn save_map_documents(documents: Vec<SaveMapDocumentInput>) -> Result<SaveMapsRe
             return Err(format!("duplicate map id in save batch: {map_id}"));
         }
 
-        let issues = validate_map(&document.map, &validation_catalog);
+        let issues = validate_map_with_editor(&map_editor, &document.map)?;
         if issues.iter().any(|issue| issue.severity == "error") {
-            return Err(format!("map {} has validation errors and cannot be saved", map_id));
+            return Err(format!(
+                "map {} has validation errors and cannot be saved",
+                map_id
+            ));
         }
     }
-
-    let data_dir = map_data_dir()?;
-    fs::create_dir_all(&data_dir)
-        .map_err(|error| format!("failed to create map directory: {error}"))?;
 
     let mut saved_ids = Vec::new();
     let mut deleted_ids = Vec::new();
 
     for document in documents {
         let map = document.map;
-        let target_path = map_file_path(map.id.as_str())?;
-        let json = serde_json::to_string_pretty(&map)
-            .map_err(|error| format!("failed to serialize map {}: {error}", map.id))?;
-        fs::write(&target_path, json)
-            .map_err(|error| format!("failed to write {}: {error}", target_path.display()))?;
-
-        if let Some(original_id) = document.original_id {
-            if original_id != map.id.as_str() {
-                let old_path = map_file_path(&original_id)?;
+        let original_id = document.original_id.map(game_data::MapId);
+        if let Some(original_id) = &original_id {
+            if original_id != &map.id {
+                let old_path = map_file_path(original_id.as_str())?;
                 if old_path.exists() {
-                    fs::remove_file(&old_path).map_err(|error| {
-                        format!("failed to remove renamed map {}: {error}", original_id)
-                    })?;
-                    deleted_ids.push(original_id);
+                    deleted_ids.push(original_id.as_str().to_string());
                 }
             }
         }
 
+        map_editor
+            .save_map_definition(original_id.as_ref(), &map)
+            .map_err(|error| error.to_string())?;
         saved_ids.push(map.id.0);
     }
 
@@ -793,7 +868,9 @@ fn delete_map_document(map_id: String) -> Result<DeleteMapResult, String> {
 fn load_overworld_workspace() -> Result<OverworldWorkspacePayload, String> {
     let item_documents = load_item_documents()?;
     let character_ids = load_character_ids()?;
-    let map_documents = load_map_documents(&map_validation_catalog(&item_documents, &character_ids))?;
+    let _validation_catalog = map_validation_catalog(&item_documents, &character_ids);
+    let map_editor = map_editor_service()?;
+    let map_documents = load_map_documents(&map_editor)?;
     let validation_catalog = overworld_validation_catalog_from_map_documents(&map_documents);
     let documents = load_overworld_documents(&validation_catalog)?;
     let bootstrap = editor_bootstrap()?;
@@ -811,10 +888,14 @@ fn load_overworld_workspace() -> Result<OverworldWorkspacePayload, String> {
 }
 
 #[tauri::command]
-fn validate_overworld_document(overworld: OverworldDefinition) -> Result<Vec<ValidationIssue>, String> {
+fn validate_overworld_document(
+    overworld: OverworldDefinition,
+) -> Result<Vec<ValidationIssue>, String> {
     let item_documents = load_item_documents()?;
     let character_ids = load_character_ids()?;
-    let map_documents = load_map_documents(&map_validation_catalog(&item_documents, &character_ids))?;
+    let _validation_catalog = map_validation_catalog(&item_documents, &character_ids);
+    let map_editor = map_editor_service()?;
+    let map_documents = load_map_documents(&map_editor)?;
     let validation_catalog = overworld_validation_catalog_from_map_documents(&map_documents);
     Ok(validate_overworld(&overworld, &validation_catalog))
 }
@@ -832,7 +913,9 @@ fn save_overworld_documents(
 
     let item_documents = load_item_documents()?;
     let character_ids = load_character_ids()?;
-    let map_documents = load_map_documents(&map_validation_catalog(&item_documents, &character_ids))?;
+    let _validation_catalog = map_validation_catalog(&item_documents, &character_ids);
+    let map_editor = map_editor_service()?;
+    let map_documents = load_map_documents(&map_editor)?;
     let validation_catalog = overworld_validation_catalog_from_map_documents(&map_documents);
     let mut seen_ids = HashSet::new();
 
@@ -842,7 +925,9 @@ fn save_overworld_documents(
             return Err("overworld id cannot be empty".to_string());
         }
         if !seen_ids.insert(overworld_id.to_string()) {
-            return Err(format!("duplicate overworld id in save batch: {overworld_id}"));
+            return Err(format!(
+                "duplicate overworld id in save batch: {overworld_id}"
+            ));
         }
 
         let issues = validate_overworld(&document.overworld, &validation_catalog);
@@ -962,7 +1047,11 @@ fn load_item_documents_with_effects(
     let mut documents = parsed_documents
         .into_iter()
         .map(|document| {
-            let duplicate_id = id_counts.get(&document.item.id).copied().unwrap_or_default() > 1;
+            let duplicate_id = id_counts
+                .get(&document.item.id)
+                .copied()
+                .unwrap_or_default()
+                > 1;
             let validation = validate_item(&document.item, &catalog, duplicate_id);
 
             ItemDocumentPayload {
@@ -1077,9 +1166,7 @@ fn load_dialogue_documents() -> Result<Vec<DialogueDocumentPayload>, String> {
     Ok(documents)
 }
 
-fn load_map_documents(
-    validation_catalog: &MapValidationCatalog,
-) -> Result<Vec<MapDocumentPayload>, String> {
+fn load_map_documents(map_editor: &MapEditorService) -> Result<Vec<MapDocumentPayload>, String> {
     let data_dir = map_data_dir()?;
     if !data_dir.exists() {
         return Ok(Vec::new());
@@ -1099,11 +1186,10 @@ fn load_map_documents(
             continue;
         }
 
-        let raw = fs::read_to_string(&path)
-            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-        let map: MapDefinition = serde_json::from_str(&raw)
-            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-        let validation = validate_map(&map, validation_catalog);
+        let (map, _) = map_editor
+            .load_map(&game_data::MapEditTarget::Path(path.clone()))
+            .map_err(|error| error.to_string())?;
+        let validation = validate_map_with_editor(map_editor, &map)?;
         let file_name = path
             .file_name()
             .and_then(|value| value.to_str())
@@ -1297,7 +1383,10 @@ fn build_item_previews(documents: &[ItemDocumentPayload]) -> Vec<ItemReferencePr
 }
 
 fn derive_item_tags(item: &ItemDefinition) -> Vec<String> {
-    let has_weapon = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Weapon { .. }));
+    let has_weapon = item
+        .fragments
+        .iter()
+        .any(|fragment| matches!(fragment, ItemFragment::Weapon { .. }));
     let equip_slots = item.fragments.iter().find_map(|fragment| {
         if let ItemFragment::Equip { slots, .. } = fragment {
             Some(slots)
@@ -1305,9 +1394,18 @@ fn derive_item_tags(item: &ItemDefinition) -> Vec<String> {
             None
         }
     });
-    let has_usable = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Usable { .. }));
-    let has_crafting = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Crafting { .. }));
-    let has_stacking = item.fragments.iter().any(|fragment| matches!(fragment, ItemFragment::Stacking { .. }));
+    let has_usable = item
+        .fragments
+        .iter()
+        .any(|fragment| matches!(fragment, ItemFragment::Usable { .. }));
+    let has_crafting = item
+        .fragments
+        .iter()
+        .any(|fragment| matches!(fragment, ItemFragment::Crafting { .. }));
+    let has_stacking = item
+        .fragments
+        .iter()
+        .any(|fragment| matches!(fragment, ItemFragment::Stacking { .. }));
 
     let mut tags = Vec::new();
     if has_weapon {
@@ -1316,9 +1414,12 @@ fn derive_item_tags(item: &ItemDefinition) -> Vec<String> {
 
     if let Some(slots) = equip_slots {
         if !has_weapon
-            && slots
-                .iter()
-                .any(|slot| matches!(slot.as_str(), "head" | "body" | "hands" | "legs" | "feet" | "back"))
+            && slots.iter().any(|slot| {
+                matches!(
+                    slot.as_str(),
+                    "head" | "body" | "hands" | "legs" | "feet" | "back"
+                )
+            })
         {
             tags.push("armor".to_string());
         }
@@ -1375,7 +1476,10 @@ fn summarize_item_fragments(item: &ItemDefinition) -> Vec<String> {
                 damage,
                 on_hit_effect_ids,
                 ..
-            } => format!("weapon: {subtype}, dmg {damage}, {} hit fx", on_hit_effect_ids.len()),
+            } => format!(
+                "weapon: {subtype}, dmg {damage}, {} hit fx",
+                on_hit_effect_ids.len()
+            ),
             ItemFragment::Usable {
                 subtype,
                 effect_ids,
@@ -1541,7 +1645,8 @@ fn build_reference_indexes(
                                     source_item_id: item.id,
                                     source_item_name: source_name.clone(),
                                     fragment_kind: "crafting".to_string(),
-                                    path: "fragments.crafting.crafting_recipe.materials".to_string(),
+                                    path: "fragments.crafting.crafting_recipe.materials"
+                                        .to_string(),
                                     note: format!("crafting material x{}", entry.count),
                                 },
                             );
@@ -1731,11 +1836,17 @@ fn item_validation_issue(
     validation_error: ItemDefinitionValidationError,
 ) -> ValidationIssue {
     match validation_error {
-        ItemDefinitionValidationError::InvalidId => item_error("id", "Item id must be a positive integer.", "id"),
-        ItemDefinitionValidationError::MissingName { .. } => item_error("name", "Item name cannot be empty.", "name"),
-        ItemDefinitionValidationError::MissingFragments { .. } => {
-            item_error("fragments", "Item must define at least one fragment.", "fragments")
+        ItemDefinitionValidationError::InvalidId => {
+            item_error("id", "Item id must be a positive integer.", "id")
         }
+        ItemDefinitionValidationError::MissingName { .. } => {
+            item_error("name", "Item name cannot be empty.", "name")
+        }
+        ItemDefinitionValidationError::MissingFragments { .. } => item_error(
+            "fragments",
+            "Item must define at least one fragment.",
+            "fragments",
+        ),
         ItemDefinitionValidationError::NegativeWeight { .. } => {
             item_error("weight", "Item weight cannot be negative.", "weight")
         }
@@ -1747,25 +1858,21 @@ fn item_validation_issue(
             format!("Fragment kind {kind} cannot appear more than once."),
             &format!("fragments.{kind}"),
         ),
-        ItemDefinitionValidationError::EquipWithoutSlots { .. } => {
-            item_error(
-                "equip.slots",
-                "Equip fragment must define at least one slot.",
-                "fragments.equip.slots",
-            )
-        }
+        ItemDefinitionValidationError::EquipWithoutSlots { .. } => item_error(
+            "equip.slots",
+            "Equip fragment must define at least one slot.",
+            "fragments.equip.slots",
+        ),
         ItemDefinitionValidationError::WeaponWithoutEquip { .. } => item_error(
             "weapon",
             "Weapon fragment requires an equip fragment on the same item.",
             "fragments.weapon",
         ),
-        ItemDefinitionValidationError::InvalidMaxStack { .. } => {
-            item_error(
-                "stacking.max_stack",
-                "Stacking fragment must use max_stack >= 1.",
-                "fragments.stacking.max_stack",
-            )
-        }
+        ItemDefinitionValidationError::InvalidMaxStack { .. } => item_error(
+            "stacking.max_stack",
+            "Stacking fragment must use max_stack >= 1.",
+            "fragments.stacking.max_stack",
+        ),
         ItemDefinitionValidationError::InvalidNonStackableMaxStack { .. } => item_error(
             "stacking.max_stack",
             "Non-stackable items must use a max_stack of 1.",
@@ -1800,13 +1907,11 @@ fn item_validation_issue(
                 path.as_str(),
             )
         }
-        ItemDefinitionValidationError::EmptyEquipSlot { .. } => {
-            item_error(
-                "equip.slots",
-                "Equip slots cannot contain blank values.",
-                "fragments.equip.slots",
-            )
-        }
+        ItemDefinitionValidationError::EmptyEquipSlot { .. } => item_error(
+            "equip.slots",
+            "Equip slots cannot contain blank values.",
+            "fragments.equip.slots",
+        ),
         ItemDefinitionValidationError::EmptyEffectId { fragment, .. } => {
             let path = resolve_effect_path(item, &fragment, "");
             item_error(
@@ -1836,11 +1941,16 @@ fn resolve_effect_path(item: &ItemDefinition, fragment: &str, effect_id: &str) -
                 ..
             } if fragment == "equip" => {
                 if normalized.is_empty()
-                    || equip_effect_ids.iter().any(|value| value.trim() == normalized)
+                    || equip_effect_ids
+                        .iter()
+                        .any(|value| value.trim() == normalized)
                 {
                     return "fragments.equip.equip_effect_ids".to_string();
                 }
-                if unequip_effect_ids.iter().any(|value| value.trim() == normalized) {
+                if unequip_effect_ids
+                    .iter()
+                    .any(|value| value.trim() == normalized)
+                {
                     return "fragments.equip.unequip_effect_ids".to_string();
                 }
                 return "fragments.equip.equip_effect_ids".to_string();
@@ -1978,7 +2088,10 @@ pub(crate) fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
         issues.push(document_error("dialogId", "Dialog id cannot be empty."));
     }
     if dialog.nodes.is_empty() {
-        issues.push(document_error("nodes", "Dialog must contain at least one node."));
+        issues.push(document_error(
+            "nodes",
+            "Dialog must contain at least one node.",
+        ));
         return issues;
     }
 
@@ -2037,7 +2150,10 @@ pub(crate) fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
     if start_count == 0 {
         issues.push(document_error("nodes", "Dialog requires one start node."));
     } else if start_count > 1 {
-        issues.push(document_error("nodes", "Dialog can only have one start node."));
+        issues.push(document_error(
+            "nodes",
+            "Dialog can only have one start node.",
+        ));
     }
 
     for connection in &normalized_connections {
@@ -2053,14 +2169,20 @@ pub(crate) fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
             issues.push(edge_error(
                 connection_edge_key(connection),
                 "connections",
-                format!("Connection references missing source node {}.", connection.from),
+                format!(
+                    "Connection references missing source node {}.",
+                    connection.from
+                ),
             ));
         }
         if !node_ids.contains(&connection.to) {
             issues.push(edge_error(
                 connection_edge_key(connection),
                 "connections",
-                format!("Connection references missing target node {}.", connection.to),
+                format!(
+                    "Connection references missing target node {}.",
+                    connection.to
+                ),
             ));
         }
     }
@@ -2132,14 +2254,14 @@ pub(crate) fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
     issues
 }
 
-fn validate_map(
+fn validate_map_with_editor(
+    map_editor: &MapEditorService,
     map: &MapDefinition,
-    validation_catalog: &MapValidationCatalog,
-) -> Vec<ValidationIssue> {
-    match validate_map_definition(map, Some(validation_catalog)) {
-        Ok(()) => Vec::new(),
-        Err(error) => vec![document_error("map", error.to_string())],
-    }
+) -> Result<Vec<ValidationIssue>, String> {
+    let result = map_editor
+        .validate_definition_result(map)
+        .map_err(|error| error.to_string())?;
+    Ok(map_edit_result_to_validation_issues(&result))
 }
 
 fn validate_overworld(
@@ -2149,6 +2271,33 @@ fn validate_overworld(
     match validate_overworld_definition(overworld, Some(validation_catalog)) {
         Ok(()) => Vec::new(),
         Err(error) => vec![document_error("overworld", error.to_string())],
+    }
+}
+
+fn map_edit_result_to_validation_issues(result: &MapEditResult) -> Vec<ValidationIssue> {
+    result
+        .diagnostics
+        .iter()
+        .map(|diagnostic| map_edit_diagnostic_to_validation_issue("map", diagnostic))
+        .collect()
+}
+
+fn map_edit_diagnostic_to_validation_issue(
+    field: impl Into<String>,
+    diagnostic: &MapEditDiagnostic,
+) -> ValidationIssue {
+    ValidationIssue {
+        severity: match diagnostic.severity {
+            MapEditDiagnosticSeverity::Error => "error".to_string(),
+            MapEditDiagnosticSeverity::Warning => "warning".to_string(),
+            MapEditDiagnosticSeverity::Info => "warning".to_string(),
+        },
+        field: field.into(),
+        message: diagnostic.message.clone(),
+        scope: Some("document".to_string()),
+        node_id: None,
+        edge_key: None,
+        path: None,
     }
 }
 
@@ -2375,6 +2524,10 @@ fn map_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("maps"))
 }
 
+fn map_editor_service() -> Result<MapEditorService, String> {
+    Ok(MapEditorService::new(map_data_dir()?))
+}
+
 fn overworld_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("overworld"))
 }
@@ -2401,7 +2554,8 @@ fn load_effect_catalog() -> Result<game_data::EffectLibrary, String> {
         return Ok(game_data::EffectLibrary::default());
     }
 
-    load_effect_library(&data_dir).map_err(|error| format!("failed to load effect catalog: {error}"))
+    load_effect_library(&data_dir)
+        .map_err(|error| format!("failed to load effect catalog: {error}"))
 }
 
 fn load_character_ids() -> Result<BTreeSet<String>, String> {
@@ -2528,6 +2682,15 @@ pub fn run() {
             delete_quest_document,
             load_map_workspace,
             validate_map_document,
+            create_map_draft,
+            upsert_map_entry_point,
+            remove_map_entry_point,
+            upsert_map_object,
+            remove_map_object,
+            paint_map_cells,
+            clear_map_cells,
+            add_map_level,
+            remove_map_level,
             save_map_documents,
             delete_map_document,
             load_overworld_workspace,

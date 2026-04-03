@@ -6,6 +6,7 @@ mod dialogue;
 mod game_ui;
 mod geometry;
 mod info_panels;
+mod picking;
 mod profiling;
 mod render;
 mod simulation;

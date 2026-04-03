@@ -1,7 +1,13 @@
 import type { NarrativeCandidatePatch, NarrativePatchSet } from "../../types";
 
+// Markdown patch 构建层：
+// 负责分块、标题归属、patch 类型判定，以及无法稳定拆块时的整篇回退逻辑。
+type MarkdownBlockType = "heading" | "list" | "quote" | "code" | "paragraph";
+
 type MarkdownBlock = {
   text: string;
+  type: MarkdownBlockType;
+  sectionTitle: string | null;
 };
 
 export function normalizeNarrativeMarkdown(markdown: string): string {
@@ -12,6 +18,39 @@ function isHeadingLine(line: string) {
   return /^#{1,6}(\s|$)/.test(line.trim());
 }
 
+function detectBlockType(text: string): MarkdownBlockType {
+  const firstLine = text.split("\n").find((line) => line.trim())?.trim() ?? "";
+  if (!firstLine) {
+    return "paragraph";
+  }
+  if (isHeadingLine(firstLine)) {
+    return "heading";
+  }
+  if (/^```/.test(firstLine)) {
+    return "code";
+  }
+  if (/^>/.test(firstLine)) {
+    return "quote";
+  }
+  if (/^(?:[-*+]|\d+\.)\s/.test(firstLine)) {
+    return "list";
+  }
+  return "paragraph";
+}
+
+function extractHeadingTitle(text: string): string | null {
+  const heading = text
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => isHeadingLine(line));
+
+  if (!heading) {
+    return null;
+  }
+
+  return heading.replace(/^#{1,6}\s*/, "").trim() || null;
+}
+
 function splitMarkdownBlocks(markdown: string): MarkdownBlock[] {
   const normalized = normalizeNarrativeMarkdown(markdown);
   if (!normalized) {
@@ -20,25 +59,55 @@ function splitMarkdownBlocks(markdown: string): MarkdownBlock[] {
 
   const blocks: MarkdownBlock[] = [];
   let buffer: string[] = [];
+  let inCodeFence = false;
+  let currentSection: string | null = null;
+
   const flush = () => {
     if (!buffer.length) {
       return;
     }
     const chunk = buffer.join("\n").trim();
     if (chunk) {
-      blocks.push({ text: chunk });
+      const headingTitle = extractHeadingTitle(chunk);
+      const sectionTitle = headingTitle ?? currentSection;
+      blocks.push({
+        text: chunk,
+        type: detectBlockType(chunk),
+        sectionTitle,
+      });
+      if (headingTitle) {
+        currentSection = headingTitle;
+      }
     }
     buffer = [];
   };
 
   for (const line of normalized.split("\n")) {
-    if (!line.trim()) {
+    const trimmed = line.trim();
+
+    if (/^```/.test(trimmed)) {
+      buffer.push(line);
+      inCodeFence = !inCodeFence;
+      if (!inCodeFence) {
+        flush();
+      }
+      continue;
+    }
+
+    if (inCodeFence) {
+      buffer.push(line);
+      continue;
+    }
+
+    if (!trimmed) {
       flush();
       continue;
     }
+
     if (isHeadingLine(line) && buffer.length) {
       flush();
     }
+
     buffer.push(line);
   }
   flush();
@@ -95,10 +164,7 @@ function buildLcsMatches(currentBlocks: MarkdownBlock[], draftBlocks: MarkdownBl
   return matches;
 }
 
-function findAnchoredMatch(
-  currentBlocks: MarkdownBlock[],
-  draftBlocks: MarkdownBlock[],
-) {
+function findAnchoredMatch(currentBlocks: MarkdownBlock[], draftBlocks: MarkdownBlock[]) {
   for (let currentIndex = 0; currentIndex < currentBlocks.length; currentIndex += 1) {
     const entry = currentBlocks[currentIndex];
     for (let draftIndex = 0; draftIndex < draftBlocks.length; draftIndex += 1) {
@@ -108,6 +174,37 @@ function findAnchoredMatch(
     }
   }
   return null;
+}
+
+function resolveSectionTitle(
+  currentBlocks: MarkdownBlock[],
+  draftBlocks: MarkdownBlock[],
+  currentStart: number,
+  draftStart: number,
+): string | null {
+  return (
+    draftBlocks[draftStart]?.sectionTitle ??
+    currentBlocks[currentStart]?.sectionTitle ??
+    draftBlocks[draftStart - 1]?.sectionTitle ??
+    currentBlocks[currentStart - 1]?.sectionTitle ??
+    "未命名区块"
+  );
+}
+
+function resolvePatchKind(originalText: string, replacementText: string) {
+  if (!originalText && replacementText) {
+    return "insert";
+  }
+  if (originalText && !replacementText) {
+    return "delete";
+  }
+  return "replace";
+}
+
+function buildPatchTitle(index: number, patchKind: NarrativeCandidatePatch["patchKind"], sectionTitle: string | null) {
+  const kindLabel =
+    patchKind === "insert" ? "插入" : patchKind === "delete" ? "删除" : "替换";
+  return sectionTitle ? `建议 ${index} · ${sectionTitle} · ${kindLabel}` : `建议 ${index} · ${kindLabel}`;
 }
 
 export function buildNarrativePatchSet(
@@ -150,9 +247,18 @@ export function buildNarrativePatchSet(
       const originalText = joinMarkdownBlocks(currentBlocks.slice(currentCursor, match.currentIndex));
       const replacementText = joinMarkdownBlocks(draftBlocks.slice(draftCursor, match.draftIndex));
       if (originalText !== replacementText) {
+        const patchKind = resolvePatchKind(originalText, replacementText);
+        const sectionTitle = resolveSectionTitle(
+          currentBlocks,
+          draftBlocks,
+          currentCursor,
+          draftCursor,
+        );
         patches.push({
           id: `patch-${patches.length + 1}`,
-          title: `建议 ${patches.length + 1}`,
+          title: buildPatchTitle(patches.length + 1, patchKind, sectionTitle),
+          sectionTitle,
+          patchKind,
           startBlock: currentCursor,
           endBlock: match.currentIndex,
           originalText,
@@ -168,9 +274,13 @@ export function buildNarrativePatchSet(
     const originalText = joinMarkdownBlocks(currentBlocks.slice(currentCursor));
     const replacementText = joinMarkdownBlocks(draftBlocks.slice(draftCursor));
     if (originalText !== replacementText) {
+      const patchKind = resolvePatchKind(originalText, replacementText);
+      const sectionTitle = resolveSectionTitle(currentBlocks, draftBlocks, currentCursor, draftCursor);
       patches.push({
         id: `patch-${patches.length + 1}`,
-        title: `建议 ${patches.length + 1}`,
+        title: buildPatchTitle(patches.length + 1, patchKind, sectionTitle),
+        sectionTitle,
+        patchKind,
         startBlock: currentCursor,
         endBlock: currentBlocks.length,
         originalText,

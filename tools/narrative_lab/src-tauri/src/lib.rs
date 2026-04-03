@@ -29,8 +29,8 @@ use crate::narrative_sync::{
 };
 use crate::narrative_workspace::{
     create_narrative_document, delete_narrative_document, load_narrative_document,
-    load_narrative_workspace, open_narrative_document_folder, prepare_structuring_bundle, save_narrative_document,
-    summarize_narrative_document,
+    load_narrative_workspace, open_narrative_document_folder, prepare_structuring_bundle,
+    save_narrative_document, summarize_narrative_document,
 };
 
 #[derive(Debug, Clone, Serialize)]

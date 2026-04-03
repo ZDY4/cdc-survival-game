@@ -1,11 +1,16 @@
+//! 游戏 UI 测试：覆盖主菜单渲染、场景切换和新游戏默认值等关键回归场景。
+
 use super::*;
 
 use std::collections::BTreeMap;
 
 use super::{apply_new_game_defaults, should_render_main_menu, transition_to_gameplay_scene};
 use crate::state::{
-    ActiveDialogueState, InteractionMenuState, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    ActiveDialogueState, GameUiRoot, InteractionMenuState, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState,
 };
+use bevy::picking::prelude::Pickable;
+use bevy::prelude::App;
 use game_bevy::{ItemDefinitions, UiMenuPanel, UiMenuState, UiModalState};
 use game_core::create_demo_runtime;
 use game_data::{DialogueData, InteractionTargetId, ItemDefinition, ItemFragment};
@@ -207,4 +212,21 @@ fn apply_new_game_defaults_does_not_require_ap() {
         .economy()
         .equipped_item(handles.player, "body")
         .is_some());
+}
+
+#[test]
+fn setup_game_ui_spawns_non_pickable_root() {
+    let mut app = App::new();
+    app.init_resource::<UiMenuState>();
+    app.add_systems(Startup, setup_game_ui);
+
+    app.update();
+
+    let mut roots = app
+        .world_mut()
+        .query_filtered::<&Pickable, With<GameUiRoot>>();
+    let pickable = roots
+        .single(app.world())
+        .expect("game ui root should be spawned with pickable override");
+    assert_eq!(*pickable, Pickable::IGNORE);
 }

@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use bevy::ui::{ComputedNode, RelativeCursorPosition, UiGlobalTransform};
 
 use crate::game_ui::{GameContentRefs, GameUiViewState};
+use crate::picking::ViewerPickingState;
 use crate::state::{
     ActorLabelEntities, GameUiRoot, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
     ViewerHudPage, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState,
@@ -340,6 +341,7 @@ pub(crate) fn profiled_draw_world(
     scene_kind: Res<ViewerSceneKind>,
     settlements: Option<Res<game_bevy::SettlementDefinitions>>,
     motion_state: Res<ViewerActorMotionState>,
+    picking_state: Res<ViewerPickingState>,
     viewer_state: Res<ViewerState>,
     info_panel_state: Res<ViewerInfoPanelState>,
     render_config: Res<ViewerRenderConfig>,
@@ -368,6 +370,7 @@ pub(crate) fn profiled_draw_world(
         runtime_state,
         settlements,
         motion_state,
+        picking_state,
         viewer_state,
         render_config,
         window,

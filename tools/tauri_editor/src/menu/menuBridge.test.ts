@@ -63,7 +63,7 @@ describe("menuBridge", () => {
     );
 
     expect(onStatusChange).toHaveBeenCalledWith(
-      "新建 在当前上下文中不可用。",
+      "新建草稿 在当前上下文中不可用。",
     );
   });
 
@@ -77,7 +77,7 @@ describe("menuBridge", () => {
       "main",
     );
 
-    expect(onStatusChange).toHaveBeenCalledWith("新建 在此窗口中不受支持。");
+    expect(onStatusChange).toHaveBeenCalledWith("新建草稿 在此窗口中不受支持。");
   });
 
   it("reports execution errors to the status bar", async () => {

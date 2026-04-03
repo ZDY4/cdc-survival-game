@@ -51,11 +51,21 @@ pub struct EditorMenuState {
 pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let file_new_current =
         MenuItem::with_id(app, ids::FILE_NEW_CURRENT, "New", true, Some("CmdOrCtrl+N"))?;
-    let file_save_all =
-        MenuItem::with_id(app, ids::FILE_SAVE_ALL, "Save All", true, Some("CmdOrCtrl+S"))?;
+    let file_save_all = MenuItem::with_id(
+        app,
+        ids::FILE_SAVE_ALL,
+        "Save All",
+        true,
+        Some("CmdOrCtrl+S"),
+    )?;
     let file_reload = MenuItem::with_id(app, ids::FILE_RELOAD, "Reload", true, Some("F5"))?;
-    let file_delete_current =
-        MenuItem::with_id(app, ids::FILE_DELETE_CURRENT, "Delete Current", true, Some("Delete"))?;
+    let file_delete_current = MenuItem::with_id(
+        app,
+        ids::FILE_DELETE_CURRENT,
+        "Delete Current",
+        true,
+        Some("Delete"),
+    )?;
 
     let validate_current = MenuItem::with_id(
         app,
@@ -79,8 +89,13 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
         None::<&str>,
     )?;
 
-    let toggle_sidebar =
-        MenuItem::with_id(app, ids::VIEW_TOGGLE_SIDEBAR, "Toggle Sidebar", true, None::<&str>)?;
+    let toggle_sidebar = MenuItem::with_id(
+        app,
+        ids::VIEW_TOGGLE_SIDEBAR,
+        "Toggle Sidebar",
+        true,
+        None::<&str>,
+    )?;
     let toggle_status_bar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_STATUS_BAR,
@@ -88,8 +103,13 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
         true,
         None::<&str>,
     )?;
-    let reset_layout =
-        MenuItem::with_id(app, ids::VIEW_RESET_LAYOUT, "Reset Layout", true, None::<&str>)?;
+    let reset_layout = MenuItem::with_id(
+        app,
+        ids::VIEW_RESET_LAYOUT,
+        "Reset Layout",
+        true,
+        None::<&str>,
+    )?;
     let restore_default_layout = MenuItem::with_id(
         app,
         ids::VIEW_RESTORE_DEFAULT_LAYOUT,
@@ -104,10 +124,20 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
         true,
         None::<&str>,
     )?;
-    let expand_all_panels =
-        MenuItem::with_id(app, ids::VIEW_EXPAND_ALL_PANELS, "Expand All Panels", true, None::<&str>)?;
-    let toggle_inspector =
-        MenuItem::with_id(app, ids::VIEW_TOGGLE_INSPECTOR, "Show/Hide Inspector", true, None::<&str>)?;
+    let expand_all_panels = MenuItem::with_id(
+        app,
+        ids::VIEW_EXPAND_ALL_PANELS,
+        "Expand All Panels",
+        true,
+        None::<&str>,
+    )?;
+    let toggle_inspector = MenuItem::with_id(
+        app,
+        ids::VIEW_TOGGLE_INSPECTOR,
+        "Show/Hide Inspector",
+        true,
+        None::<&str>,
+    )?;
 
     let ai_generate = MenuItem::with_id(
         app,
@@ -134,8 +164,7 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
     let module_items = MenuItem::with_id(app, ids::MODULE_ITEMS, "Items", true, Some("Alt+1"))?;
     let module_dialogues =
         MenuItem::with_id(app, ids::MODULE_DIALOGUES, "Dialogues", true, Some("Alt+2"))?;
-    let module_quests =
-        MenuItem::with_id(app, ids::MODULE_QUESTS, "Quests", true, Some("Alt+3"))?;
+    let module_quests = MenuItem::with_id(app, ids::MODULE_QUESTS, "Quests", true, Some("Alt+3"))?;
     let module_maps = MenuItem::with_id(app, ids::MODULE_MAPS, "Maps", true, Some("Alt+4"))?;
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&file_new_current)
@@ -186,9 +215,7 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
         .item(&module_maps)
         .build()?;
 
-    let help_menu = SubmenuBuilder::new(app, "Help")
-        .about(None)
-        .build()?;
+    let help_menu = SubmenuBuilder::new(app, "Help").about(None).build()?;
 
     Menu::with_items(
         app,
@@ -218,7 +245,9 @@ pub fn apply_window_menu<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> 
         return Ok(());
     }
 
-    log_menu(format!("building main editor menu for window={window_label}"));
+    log_menu(format!(
+        "building main editor menu for window={window_label}"
+    ));
     let menu = build_main_editor_menu(app)?;
 
     window.set_menu(menu)?;
@@ -236,7 +265,9 @@ pub fn attach_window_menu_listener<R: Runtime>(window: WebviewWindow<R>) {
     }
 
     let should_attach = {
-        if let Ok(mut attached_menu_windows) = app.state::<EditorMenuState>().attached_menu_windows.lock() {
+        if let Ok(mut attached_menu_windows) =
+            app.state::<EditorMenuState>().attached_menu_windows.lock()
+        {
             attached_menu_windows.insert(label.clone())
         } else {
             log_menu(format!(

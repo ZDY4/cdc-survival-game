@@ -1,3 +1,5 @@
+//! 事件反馈模块：负责把运行时事件转成伤害数字、命中反馈和状态提示。
+
 use super::*;
 
 pub(crate) fn collect_events(

@@ -1,3 +1,5 @@
+//! 遮挡可视化模块：负责 occluder 状态构建、材质淡化和世界悬停屏蔽判定。
+
 use super::*;
 
 pub(super) fn resolve_occlusion_focus_world_points(
@@ -151,36 +153,30 @@ pub(super) fn cursor_over_hotbar_dock(window: &Window, cursor_position: Option<V
 
 pub(super) fn occluder_visual_from_spawned_box(
     spawned: SpawnedBoxVisual,
-    kind: StaticWorldOccluderKind,
 ) -> StaticWorldOccluderVisual {
     let base_alpha = spawned.color.to_srgba().alpha;
     StaticWorldOccluderVisual {
-        entity: spawned.entity,
         material: spawned.material,
         base_color: spawned.color,
         base_alpha,
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: spawned.translation,
         aabb_half_extents: spawned.size * 0.5,
-        kind,
         currently_faded: false,
     }
 }
 
 pub(super) fn occluder_visual_from_spawned_mesh(
     spawned: SpawnedMeshVisual,
-    kind: StaticWorldOccluderKind,
 ) -> StaticWorldOccluderVisual {
     let base_alpha = spawned.color.to_srgba().alpha;
     StaticWorldOccluderVisual {
-        entity: spawned.entity,
         material: spawned.material,
         base_color: spawned.color,
         base_alpha,
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: spawned.aabb_center,
         aabb_half_extents: spawned.aabb_half_extents,
-        kind,
         currently_faded: false,
     }
 }
