@@ -108,15 +108,22 @@ impl SimulationRuntime {
         };
 
         if step == PendingProgressionStep::ContinuePendingMovement {
-            let result = self.advance_pending_movement();
+            let mut result = self.advance_pending_movement();
             if result.reached_goal {
-                let _ = self.execute_pending_interaction_after_movement();
+                result.interaction_outcome = self.execute_pending_interaction_after_movement();
             }
             return result;
         }
 
         self.simulation.apply_pending_progression_step(step);
-        ProgressionAdvanceResult::applied(step, self.pending_movement_position())
+        let mut result = ProgressionAdvanceResult::applied(step, self.pending_movement_position());
+        if step == PendingProgressionStep::StartNextNonCombatPlayerTurn
+            && self.pending_movement.is_none()
+            && self.pending_interaction.is_some()
+        {
+            result.interaction_outcome = self.execute_pending_interaction_after_movement();
+        }
+        result
     }
 
     pub(super) fn capture_path_preview(&mut self, command: &SimulationCommand) {
@@ -277,6 +284,7 @@ impl SimulationRuntime {
                         interrupted: false,
                         interrupt_reason: Some(AutoMoveInterruptReason::ReachedGoal),
                         movement_outcome: None,
+                        interaction_outcome: None,
                     };
                 }
                 Err(interrupt_reason) => {
@@ -289,6 +297,7 @@ impl SimulationRuntime {
                         interrupted: true,
                         interrupt_reason: Some(interrupt_reason),
                         movement_outcome: None,
+                        interaction_outcome: None,
                     };
                 }
             }
@@ -304,6 +313,7 @@ impl SimulationRuntime {
                 interrupted: true,
                 interrupt_reason: Some(AutoMoveInterruptReason::EnteredCombat),
                 movement_outcome: None,
+                interaction_outcome: None,
             };
         }
 
@@ -323,6 +333,7 @@ impl SimulationRuntime {
                     interrupted: true,
                     interrupt_reason: Some(interrupt_reason),
                     movement_outcome: None,
+                    interaction_outcome: None,
                 };
             }
         };
@@ -353,6 +364,7 @@ impl SimulationRuntime {
                         self.simulation.is_in_combat(),
                     ),
                 }),
+                interaction_outcome: None,
             };
         }
 
@@ -374,6 +386,7 @@ impl SimulationRuntime {
                         self.simulation.is_in_combat(),
                     ),
                 }),
+                interaction_outcome: None,
             };
         }
 
@@ -390,6 +403,7 @@ impl SimulationRuntime {
                     interrupted: true,
                     interrupt_reason: Some(interrupt_reason),
                     movement_outcome: None,
+                    interaction_outcome: None,
                 };
             }
         };
@@ -404,6 +418,7 @@ impl SimulationRuntime {
                 interrupted: true,
                 interrupt_reason: Some(AutoMoveInterruptReason::NoProgress),
                 movement_outcome: Some(outcome),
+                interaction_outcome: None,
             };
         }
 
@@ -424,6 +439,7 @@ impl SimulationRuntime {
                 interrupted: true,
                 interrupt_reason: Some(AutoMoveInterruptReason::CancelledByNewCommand),
                 movement_outcome: Some(outcome),
+                interaction_outcome: None,
             };
         }
 
@@ -449,6 +465,7 @@ impl SimulationRuntime {
             interrupted: false,
             interrupt_reason: reached_goal.then_some(AutoMoveInterruptReason::ReachedGoal),
             movement_outcome: Some(outcome),
+            interaction_outcome: None,
         }
     }
 }

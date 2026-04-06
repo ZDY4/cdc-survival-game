@@ -24,7 +24,7 @@ pub(super) fn render_main_menu(
                 row_gap: px(8),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.05, 0.96)),
+            BackgroundColor(ui_panel_background()),
         ))
         .with_children(|menu| {
             menu.spawn(text_bundle(font, "CDC Survival Game", 20.0, Color::WHITE));
@@ -32,7 +32,7 @@ pub(super) fn render_main_menu(
                 font,
                 "Bevy 主流程界面",
                 12.0,
-                Color::srgba(0.82, 0.86, 0.93, 1.0),
+                ui_text_secondary_color(),
             ));
             if !status_text.trim().is_empty() {
                 menu.spawn(text_bundle(
@@ -81,8 +81,8 @@ pub(super) fn render_panel_shell(
                 border: UiRect::all(px(1)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.05, 0.06, 0.09, 0.98)),
-            BorderColor::all(Color::srgba(0.26, 0.29, 0.38, 1.0)),
+            BackgroundColor(ui_panel_background()),
+            BorderColor::all(ui_border_strong_color()),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             UiMouseBlocker,
@@ -93,7 +93,7 @@ pub(super) fn render_panel_shell(
                 font,
                 panel_tab_label(panel),
                 10.0,
-                Color::srgba(0.76, 0.81, 0.88, 1.0),
+                ui_text_muted_color(),
             ));
         });
 }
@@ -114,8 +114,8 @@ pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) 
                 border: UiRect::all(px(1)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.04, 0.045, 0.06, 0.97)),
-            BorderColor::all(Color::srgba(0.22, 0.25, 0.33, 1.0)),
+            BackgroundColor(ui_panel_background()),
+            BorderColor::all(ui_border_color()),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             UiMouseBlocker,

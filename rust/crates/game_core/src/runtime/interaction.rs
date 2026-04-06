@@ -185,10 +185,22 @@ impl SimulationRuntime {
         let result = self
             .simulation
             .apply_command(SimulationCommand::ExecuteInteraction(request));
-        self.pending_interaction = None;
         match result {
-            SimulationCommandResult::InteractionExecution(result) => Some(result),
+            SimulationCommandResult::InteractionExecution(result) => {
+                if result.reason.as_deref() == Some("insufficient_ap") {
+                    info!(
+                        "core.interaction.resume_deferred actor={:?} target={:?} option_id={} reason=insufficient_ap",
+                        intent.actor_id, resume_target_id, resume_option_id
+                    );
+                    self.pending_interaction = Some(intent);
+                    None
+                } else {
+                    self.pending_interaction = None;
+                    Some(result)
+                }
+            }
             _ => {
+                self.pending_interaction = None;
                 warn!(
                     "core.interaction.resume_unavailable actor={:?} target={:?} option_id={}",
                     intent.actor_id, resume_target_id, resume_option_id

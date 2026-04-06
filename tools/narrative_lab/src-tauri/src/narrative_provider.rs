@@ -40,6 +40,28 @@ pub struct NarrativeGenerateRequest {
     pub derived_target_doc_type: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveNarrativeActionIntentInput {
+    pub submitted_prompt: String,
+    pub doc_type: String,
+    pub target_slug: String,
+    pub user_prompt: String,
+    pub editor_instruction: String,
+    pub current_markdown: String,
+    #[serde(default)]
+    pub related_doc_slugs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveNarrativeActionIntentResult {
+    pub action: Option<String>,
+    pub assistant_message: String,
+    pub questions: Vec<AgentQuestion>,
+    pub options: Vec<AgentOption>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NarrativeAgentRun {
@@ -323,6 +345,20 @@ pub async fn revise_narrative_draft(
     run_narrative_generation_in_background(app, workspace_root, project_root, request).await
 }
 
+#[tauri::command]
+pub async fn resolve_narrative_action_intent(
+    app: AppHandle,
+    workspace_root: String,
+    project_root: Option<String>,
+    input: ResolveNarrativeActionIntentInput,
+) -> Result<ResolveNarrativeActionIntentResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_narrative_action_intent_resolution(&app, &workspace_root, project_root.as_deref(), input)
+    })
+    .await
+    .map_err(|error| format!("narrative action intent task failed: {error}"))?
+}
+
 async fn run_narrative_generation_in_background(
     app: AppHandle,
     workspace_root: String,
@@ -334,6 +370,63 @@ async fn run_narrative_generation_in_background(
     })
     .await
     .map_err(|error| format!("narrative generation task failed: {error}"))?
+}
+
+fn run_narrative_action_intent_resolution(
+    app: &AppHandle,
+    workspace_root: &str,
+    project_root: Option<&str>,
+    mut input: ResolveNarrativeActionIntentInput,
+) -> Result<ResolveNarrativeActionIntentResult, String> {
+    input.submitted_prompt = input.submitted_prompt.trim().to_string();
+    input.doc_type = input.doc_type.trim().to_lowercase();
+    input.target_slug = input.target_slug.trim().to_string();
+    input.user_prompt = input.user_prompt.trim().to_string();
+    input.editor_instruction = input.editor_instruction.trim().to_string();
+    input.current_markdown = input.current_markdown.trim().to_string();
+    input.related_doc_slugs = input
+        .related_doc_slugs
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+
+    if !is_known_doc_type(&input.doc_type) {
+        return Err(format!("未知文稿类型: {}", input.doc_type));
+    }
+    if input.submitted_prompt.is_empty() {
+        return Err("请至少填写本轮需求".to_string());
+    }
+
+    let settings = read_ai_settings(app)?.normalized();
+    let workspace_root_path = resolve_workspace_root(workspace_root)?;
+    let project_root_path = resolve_connected_project_root(project_root)?;
+    let context_request = NarrativeGenerateRequest {
+        request_id: None,
+        doc_type: input.doc_type.clone(),
+        target_slug: input.target_slug.clone(),
+        action: "revise_document".to_string(),
+        user_prompt: input.user_prompt.clone(),
+        editor_instruction: input.editor_instruction.clone(),
+        current_markdown: input.current_markdown.clone(),
+        selected_range: None,
+        selected_text: String::new(),
+        related_doc_slugs: input.related_doc_slugs.clone(),
+        derived_target_doc_type: None,
+    };
+    let context = build_narrative_context(
+        &workspace_root_path,
+        project_root_path.as_deref(),
+        &context_request,
+        settings.max_context_records,
+    )?;
+    let payload = build_action_intent_resolution_payload(&input, &context.context, &settings);
+    let success = perform_chat_completion(&settings, &payload, None)
+        .map_err(|failure| normalize_provider_error(&failure))?;
+    Ok(parse_action_intent_resolution_payload(
+        &success.payload,
+        &input.submitted_prompt,
+    ))
 }
 
 fn run_narrative_generation(
@@ -703,6 +796,142 @@ fn build_single_agent_payload(
             },
         ]
     })
+}
+
+fn build_action_intent_resolution_payload(
+    input: &ResolveNarrativeActionIntentInput,
+    context: &Value,
+    settings: &AiSettings,
+) -> Value {
+    let contract = [
+        "始终只返回一个 JSON 对象，不要输出 Markdown，不要加代码块围栏，不要附加解释文字。",
+        "JSON 允许字段：action, assistant_message, questions, options。",
+        "action 只能是 create, revise_document, unclear 之一。",
+        "如果用户明显是在当前文档上继续修改、润色、补全、扩写、调整，返回 revise_document。",
+        "如果用户明显是在基于当前文档拆分、派生、抽取、另起一份独立文档，返回 create。",
+        "如果仅凭当前信息仍无法稳定判断，返回 unclear，并提供 1 个 questions 和 2 个 options。",
+        "当 action 为 create 或 revise_document 时，questions 和 options 必须为空数组。",
+        "当 action 为 unclear 时，assistant_message 要简短说明歧义点。",
+        "当 action 为 unclear 时，questions[0].label 必须明确询问“修改当前文档”还是“创建新文档”。",
+        "当 action 为 unclear 时，options 必须正好提供两个方向：修改当前文档、创建新文档。",
+        "options 的 followup_prompt 必须是面向同一需求的明确后续指令，能让系统下一轮直接执行，不要丢掉原需求。",
+    ]
+    .join("\n");
+
+    json!({
+        "provider_config": {
+            "base_url": settings.base_url,
+            "model": settings.model,
+            "api_key": settings.effective_api_key(),
+            "timeout_sec": settings.timeout_sec,
+        },
+        "temperature": 0.1,
+        "max_tokens": 900,
+        "messages": [
+            {
+                "role": "system",
+                "content": format!(
+                    "[你的身份]\n你是 Narrative Lab 的动作判定助手，负责判断当前这轮需求应该“修改当前文档”还是“创建一份新文档”。\n\n[输出协议]\n{}\n\n[判定原则]\n{}\n{}\n{}\n{}",
+                    contract,
+                    "优先理解用户意图，而不是机械匹配词语。",
+                    "“抽出来放到单独文档”“拆成独立文档”“基于当前内容另写一份”都更接近 create。",
+                    "“润色当前文稿”“补全这篇”“继续改这篇”都更接近 revise_document。",
+                    "如果用户表达本身已经很明确，不要多问。",
+                ),
+            },
+            {
+                "role": "user",
+                "content": serde_json::to_string_pretty(&json!({
+                    "submittedPrompt": input.submitted_prompt,
+                    "request": {
+                        "docType": input.doc_type,
+                        "targetSlug": input.target_slug,
+                        "userPrompt": input.user_prompt,
+                        "editorInstruction": input.editor_instruction,
+                        "currentMarkdown": input.current_markdown,
+                        "relatedDocSlugs": input.related_doc_slugs,
+                    },
+                    "context": context,
+                }))
+                .unwrap_or_else(|_| "{}".to_string()),
+            },
+        ],
+    })
+}
+
+fn parse_action_intent_resolution_payload(
+    payload: &Value,
+    submitted_prompt: &str,
+) -> ResolveNarrativeActionIntentResult {
+    let object = payload.as_object().cloned().unwrap_or_default();
+    let action = object
+        .get("action")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .map(str::to_lowercase)
+        .and_then(|value| match value.as_str() {
+            "create" => Some("create".to_string()),
+            "revise_document" => Some("revise_document".to_string()),
+            _ => None,
+        });
+
+    if action.is_some() {
+        return ResolveNarrativeActionIntentResult {
+            action,
+            assistant_message: object
+                .get("assistant_message")
+                .or_else(|| object.get("assistantMessage"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or_default()
+                .to_string(),
+            questions: Vec::new(),
+            options: Vec::new(),
+        };
+    }
+
+    let mut questions = read_agent_questions(&object);
+    if questions.is_empty() {
+        questions.push(AgentQuestion {
+            id: "action-intent".to_string(),
+            label: "这轮是要修改当前文档，还是基于当前文档创建一份新文档？".to_string(),
+            placeholder: "也可以直接回复“修改当前文档”或“创建新文档”。".to_string(),
+            required: true,
+        });
+    }
+
+    let mut options = read_agent_options(&object);
+    if options.len() < 2 {
+        options = vec![
+            AgentOption {
+                id: "action-intent-revise".to_string(),
+                label: "修改当前文档".to_string(),
+                description: "保留这篇文档主体，直接在当前文稿上继续修改。".to_string(),
+                followup_prompt: format!("请修改当前文档：{}", submitted_prompt.trim()),
+            },
+            AgentOption {
+                id: "action-intent-create".to_string(),
+                label: "创建新文档".to_string(),
+                description: "基于当前文稿内容另起一份新的文档草稿。".to_string(),
+                followup_prompt: format!("请基于当前文档创建一份新文档：{}", submitted_prompt.trim()),
+            },
+        ];
+    }
+
+    ResolveNarrativeActionIntentResult {
+        action: None,
+        assistant_message: object
+            .get("assistant_message")
+            .or_else(|| object.get("assistantMessage"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("我还不能稳定判断这轮应该修改当前文档，还是基于它创建一份新文档。请先确认一次。")
+            .to_string(),
+        questions,
+        options,
+    }
 }
 
 fn build_action_rules(request: &NarrativeGenerateRequest) -> Vec<String> {

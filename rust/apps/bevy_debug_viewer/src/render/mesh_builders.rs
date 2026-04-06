@@ -13,7 +13,8 @@ pub(super) fn push_generated_wall_tile_mesh_spec(
     color: Color,
     occluder_kind: Option<StaticWorldOccluderKind>,
     pick_binding: Option<ViewerPickBindingSpec>,
-) {
+) -> Option<(Vec3, Vec3)> {
+    let outline_target = pick_binding.as_ref().map(|binding| binding.semantic.clone());
     let neighbor_mask = wall_tile_neighbor_mask(wall, wall_cells);
     let Some((mesh, aabb_center, aabb_half_extents)) = build_wall_tile_mesh(
         wall,
@@ -23,7 +24,7 @@ pub(super) fn push_generated_wall_tile_mesh_spec(
         wall_thickness,
         grid_size,
     ) else {
-        return;
+        return None;
     };
 
     specs.push(StaticWorldMeshSpec {
@@ -31,9 +32,50 @@ pub(super) fn push_generated_wall_tile_mesh_spec(
         color,
         material_style: MaterialStyle::BuildingWallGrid,
         occluder_kind,
+        occluder_cells: vec![wall],
         aabb_center,
         aabb_half_extents,
         pick_binding,
+        outline_target,
+    });
+    Some((aabb_center, aabb_half_extents))
+}
+
+pub(super) fn push_generated_wall_tile_cap_mesh_spec(
+    specs: &mut Vec<StaticWorldMeshSpec>,
+    wall: GridCoord,
+    wall_cells: &HashSet<GridCoord>,
+    wall_top: f32,
+    cap_height: f32,
+    wall_thickness: f32,
+    grid_size: f32,
+    color: Color,
+    occluder_kind: Option<StaticWorldOccluderKind>,
+    occluder_aabb_center: Vec3,
+    occluder_aabb_half_extents: Vec3,
+) {
+    let neighbor_mask = wall_tile_neighbor_mask(wall, wall_cells);
+    let Some((mesh, _, _)) = build_wall_tile_mesh(
+        wall,
+        classify_wall_tile(neighbor_mask),
+        wall_top,
+        cap_height,
+        wall_thickness,
+        grid_size,
+    ) else {
+        return;
+    };
+
+    specs.push(StaticWorldMeshSpec {
+        mesh,
+        color,
+        material_style: MaterialStyle::BuildingWallCapGrid,
+        occluder_kind,
+        occluder_cells: vec![wall],
+        aabb_center: occluder_aabb_center,
+        aabb_half_extents: occluder_aabb_half_extents,
+        pick_binding: None,
+        outline_target: None,
     });
 }
 
@@ -97,61 +139,64 @@ pub(super) fn build_wall_tile_mesh(
     let half = wall_thickness.min(grid_size) * 0.5;
     let bottom_y = floor_top;
     let top_y = floor_top + wall_height;
+    let x_edges = [x0, cx - half, cx + half, x1];
+    let z_edges = [z0, cz - half, cz + half, z1];
+    let occupied = wall_tile_subcell_mask(kind);
 
     let mut builder = MeshBuilder::default();
-    push_wall_tile_core_box(
-        &mut builder,
-        cx - half,
-        cx + half,
-        z0.max(cz - half),
-        z1.min(cz + half),
-        bottom_y,
-        top_y,
-    );
+    for row in 0..3 {
+        for col in 0..3 {
+            if !occupied[row * 3 + col] {
+                continue;
+            }
 
-    for &direction in wall_tile_directions(kind) {
-        match direction {
-            WALL_NORTH => push_wall_tile_core_box(
+            let min_x = x_edges[col];
+            let max_x = x_edges[col + 1];
+            let min_z = z_edges[row];
+            let max_z = z_edges[row + 1];
+            if min_x >= max_x || min_z >= max_z {
+                continue;
+            }
+
+            push_wall_tile_subcell_shell(
                 &mut builder,
-                cx - half,
-                cx + half,
-                z0,
-                cz + half,
+                min_x,
+                max_x,
+                min_z,
+                max_z,
                 bottom_y,
                 top_y,
-            ),
-            WALL_EAST => push_wall_tile_core_box(
-                &mut builder,
-                cx - half,
-                x1,
-                cz - half,
-                cz + half,
-                bottom_y,
-                top_y,
-            ),
-            WALL_SOUTH => push_wall_tile_core_box(
-                &mut builder,
-                cx - half,
-                cx + half,
-                cz - half,
-                z1,
-                bottom_y,
-                top_y,
-            ),
-            WALL_WEST => push_wall_tile_core_box(
-                &mut builder,
-                x0,
-                cx + half,
-                cz - half,
-                cz + half,
-                bottom_y,
-                top_y,
-            ),
-            _ => {}
+                wall_tile_subcell_occupied(&occupied, row as i32 - 1, col as i32),
+                wall_tile_subcell_occupied(&occupied, row as i32 + 1, col as i32),
+                wall_tile_subcell_occupied(&occupied, row as i32, col as i32 - 1),
+                wall_tile_subcell_occupied(&occupied, row as i32, col as i32 + 1),
+            );
         }
     }
 
     builder.build()
+}
+
+fn wall_tile_subcell_mask(kind: WallTileKind) -> [bool; 9] {
+    let mut occupied = [false; 9];
+    occupied[4] = true;
+    for &direction in wall_tile_directions(kind) {
+        match direction {
+            WALL_NORTH => occupied[1] = true,
+            WALL_EAST => occupied[5] = true,
+            WALL_SOUTH => occupied[7] = true,
+            WALL_WEST => occupied[3] = true,
+            _ => {}
+        }
+    }
+    occupied
+}
+
+fn wall_tile_subcell_occupied(occupied: &[bool; 9], row: i32, col: i32) -> bool {
+    if !(0..3).contains(&row) || !(0..3).contains(&col) {
+        return false;
+    }
+    occupied[(row as usize) * 3 + col as usize]
 }
 
 pub(super) fn wall_tile_directions(kind: WallTileKind) -> &'static [u8] {
@@ -175,7 +220,7 @@ pub(super) fn wall_tile_directions(kind: WallTileKind) -> &'static [u8] {
     }
 }
 
-fn push_wall_tile_core_box(
+fn push_wall_tile_subcell_shell(
     builder: &mut MeshBuilder,
     min_x: f32,
     max_x: f32,
@@ -183,6 +228,10 @@ fn push_wall_tile_core_box(
     max_z: f32,
     min_y: f32,
     max_y: f32,
+    occupied_north: bool,
+    occupied_south: bool,
+    occupied_west: bool,
+    occupied_east: bool,
 ) {
     if min_x >= max_x || min_z >= max_z || min_y >= max_y {
         return;
@@ -197,6 +246,7 @@ fn push_wall_tile_core_box(
     let far_ne = Vec3::new(max_x, max_y, max_z);
     let far_nw = Vec3::new(min_x, max_y, max_z);
 
+    // Bottom/top stay visible under transparency; neighboring subcells are coplanar, not internal.
     builder.push_quad(
         near_sw,
         near_se,
@@ -215,42 +265,50 @@ fn push_wall_tile_core_box(
         Vec2::ZERO,
         Vec2::ONE,
     );
-    builder.push_quad(
-        near_sw,
-        far_sw,
-        far_nw,
-        near_nw,
-        Vec3::NEG_X,
-        Vec2::ZERO,
-        Vec2::ONE,
-    );
-    builder.push_quad(
-        near_se,
-        near_ne,
-        far_ne,
-        far_se,
-        Vec3::X,
-        Vec2::ZERO,
-        Vec2::ONE,
-    );
-    builder.push_quad(
-        near_sw,
-        near_nw,
-        near_ne,
-        near_se,
-        Vec3::NEG_Z,
-        Vec2::ZERO,
-        Vec2::ONE,
-    );
-    builder.push_quad(
-        far_sw,
-        far_se,
-        far_ne,
-        far_nw,
-        Vec3::Z,
-        Vec2::ZERO,
-        Vec2::ONE,
-    );
+    if !occupied_west {
+        builder.push_quad(
+            near_sw,
+            far_sw,
+            far_nw,
+            near_nw,
+            Vec3::NEG_X,
+            Vec2::ZERO,
+            Vec2::ONE,
+        );
+    }
+    if !occupied_east {
+        builder.push_quad(
+            near_se,
+            near_ne,
+            far_ne,
+            far_se,
+            Vec3::X,
+            Vec2::ZERO,
+            Vec2::ONE,
+        );
+    }
+    if !occupied_north {
+        builder.push_quad(
+            near_sw,
+            near_nw,
+            near_ne,
+            near_se,
+            Vec3::NEG_Z,
+            Vec2::ZERO,
+            Vec2::ONE,
+        );
+    }
+    if !occupied_south {
+        builder.push_quad(
+            far_sw,
+            far_se,
+            far_ne,
+            far_nw,
+            Vec3::Z,
+            Vec2::ZERO,
+            Vec2::ONE,
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -268,12 +326,29 @@ struct MeshBuilder {
     normals: Vec<[f32; 3]>,
     uvs: Vec<[f32; 2]>,
     indices: Vec<u32>,
+    vertex_lookup: HashMap<MeshVertexKey, u32>,
     min: Option<Vec3>,
     max: Option<Vec3>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct MeshVertexKey {
+    position: [u32; 3],
+    normal: [u32; 3],
+    uv: [u32; 2],
+}
+
 impl MeshBuilder {
     fn push_vertex(&mut self, position: Vec3, normal: Vec3, uv: Vec2) -> u32 {
+        let key = MeshVertexKey {
+            position: position.to_array().map(f32::to_bits),
+            normal: normal.to_array().map(f32::to_bits),
+            uv: uv.to_array().map(f32::to_bits),
+        };
+        if let Some(index) = self.vertex_lookup.get(&key).copied() {
+            return index;
+        }
+
         self.positions.push(position.to_array());
         self.normals.push(normal.to_array());
         self.uvs.push(uv.to_array());
@@ -285,7 +360,9 @@ impl MeshBuilder {
             Some(max) => max.max(position),
             None => position,
         });
-        (self.positions.len() - 1) as u32
+        let index = (self.positions.len() - 1) as u32;
+        self.vertex_lookup.insert(key, index);
+        index
     }
 
     fn push_triangle(
@@ -371,6 +448,7 @@ pub(super) fn push_polygon_prism_mesh_spec(
     occluder_kind: Option<StaticWorldOccluderKind>,
     pick_binding: Option<ViewerPickBindingSpec>,
 ) {
+    let outline_target = pick_binding.as_ref().map(|binding| binding.semantic.clone());
     let Some((mesh, aabb_center, aabb_half_extents)) =
         build_polygon_prism_mesh(polygon, anchor, grid_size, bottom_y, top_y, Vec3::ZERO)
     else {
@@ -381,9 +459,11 @@ pub(super) fn push_polygon_prism_mesh_spec(
         color,
         material_style,
         occluder_kind,
+        occluder_cells: Vec::new(),
         aabb_center,
         aabb_half_extents,
         pick_binding,
+        outline_target,
     });
 }
 

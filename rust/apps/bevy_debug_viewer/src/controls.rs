@@ -19,7 +19,7 @@ use crate::geometry::{
     actor_at_grid, clamp_camera_pan_offset, cycle_level, grid_bounds, level_base_height,
     map_object_at_grid, pick_grid_from_ray, ray_point_on_horizontal_plane, selected_actor,
 };
-use crate::render::{interaction_menu_button_color, interaction_menu_layout};
+use crate::render::interaction_menu_layout;
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
     DialogueChoiceButton, InteractionMenuButton, InteractionMenuState, UiMouseBlocker,
@@ -27,19 +27,22 @@ use crate::state::{
     ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
     ViewerTargetingState, ViewerUiSettings,
 };
+use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
 
 mod camera;
-mod interaction;
+mod interaction_input;
 mod keyboard;
 mod mouse;
 mod targeting;
 
 pub(crate) use camera::{handle_camera_pan, handle_mouse_wheel_zoom};
-use interaction::{
+use interaction_input::{
     cursor_interaction_target, execute_primary_target_interaction, focus_target_and_query_prompt,
     handle_object_primary_click, interaction_menu_contains_cursor, is_command_actor_self_target,
 };
-pub(crate) use interaction::{handle_dialogue_choice_buttons, handle_interaction_menu_buttons};
+pub(crate) use interaction_input::{
+    handle_dialogue_choice_buttons, handle_interaction_menu_buttons,
+};
 pub(crate) use keyboard::handle_keyboard_input;
 pub(crate) use mouse::handle_mouse_input;
 pub(crate) use targeting::{

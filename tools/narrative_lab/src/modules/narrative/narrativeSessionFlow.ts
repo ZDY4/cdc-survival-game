@@ -189,6 +189,7 @@ export function applyGenerationResponseToSession({
   const nextSession: DocumentAgentSession = {
     ...session,
     updatedAt: nowIso(),
+    mode: request.action === "create" ? "create" : "revise_document",
     status: generationStatusFromResponse(response),
     busy: false,
     inflightRequestId: null,
@@ -243,7 +244,7 @@ export function buildDerivedDraftSession({
 }: BuildDerivedDraftSessionInput): DocumentAgentSession {
   return {
     ...createDocumentAgentSession(),
-    mode: "revise_document",
+    mode: request.action === "create" ? "create" : "revise_document",
     updatedAt: nowIso(),
     sessionTitle: `来自 ${sourceDocumentTitle} 的派生会话`,
     chatMessages: [

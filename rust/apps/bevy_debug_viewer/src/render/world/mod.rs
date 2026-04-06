@@ -51,6 +51,8 @@ pub(crate) fn sync_world_visuals(
         current_level: viewer_state.current_level,
         topology_version: snapshot.grid.topology_version,
         hide_building_roofs,
+        camera_yaw_degrees: render_config.camera_yaw_degrees.round() as i32,
+        camera_pitch_degrees: render_config.camera_pitch_degrees.round() as i32,
     };
 
     if should_rebuild_static_world(&static_world_state.key, &next_key) {
@@ -110,6 +112,7 @@ pub(crate) fn update_occluding_world_visuals(
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    stable_hover: Res<StableInteractionHoverState>,
     scene_kind: Res<ViewerSceneKind>,
     console_state: Res<ViewerConsoleState>,
     render_config: Res<ViewerRenderConfig>,
@@ -126,6 +129,17 @@ pub(crate) fn update_occluding_world_visuals(
     }
 
     let snapshot = runtime_state.runtime.snapshot();
+    let visible_cells = current_focus_actor_vision(&snapshot, &viewer_state)
+        .filter(|vision| vision.active_map_id.as_ref() == snapshot.grid.map_id.as_ref())
+        .map(|vision| {
+            vision
+                .visible_cells
+                .iter()
+                .copied()
+                .filter(|grid| grid.y == viewer_state.current_level)
+                .collect::<HashSet<_>>()
+        })
+        .unwrap_or_default();
     let hover_focus_enabled = scene_kind.is_gameplay()
         && !console_state.is_open
         && viewer_state.active_dialogue.is_none()
@@ -139,25 +153,17 @@ pub(crate) fn update_occluding_world_visuals(
         hover_focus_enabled,
         &mut hover_occlusion_buffer,
     );
-    if focus_points.is_empty() {
-        restore_occluder_list(
-            &mut static_world_state.occluders,
-            &mut materials,
-            &mut building_wall_materials,
-        );
-        restore_occluder_list(
-            &mut door_visual_state.occluders,
-            &mut materials,
-            &mut building_wall_materials,
-        );
-        return;
-    }
-
     let camera_position = camera_query.translation;
+    let hovered_door_object_id = stable_hover.active.as_ref().and_then(|hovered| match &hovered.semantic {
+        ViewerPickTarget::MapObject(object_id) => Some(object_id.as_str()),
+        _ => None,
+    });
     update_occluder_list_fade(
         &mut static_world_state.occluders,
         camera_position,
         &focus_points,
+        &visible_cells,
+        None,
         &mut materials,
         &mut building_wall_materials,
     );
@@ -165,6 +171,8 @@ pub(crate) fn update_occluding_world_visuals(
         &mut door_visual_state.occluders,
         camera_position,
         &focus_points,
+        &visible_cells,
+        hovered_door_object_id,
         &mut materials,
         &mut building_wall_materials,
     );
@@ -265,6 +273,21 @@ pub(crate) fn interaction_menu_layout(
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn collect_closed_door_occluders(
+    door_visual_state: &GeneratedDoorVisualState,
+) -> Vec<StaticWorldOccluderVisual> {
+    doors::collect_closed_door_occluders(door_visual_state)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn generated_door_render_polygon(
+    door: &game_core::GeneratedDoorDebugState,
+    grid_size: f32,
+) -> game_core::GeometryPolygon2 {
+    doors::generated_door_render_polygon(door, grid_size)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn collect_static_world_box_specs(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
@@ -283,6 +306,15 @@ pub(super) fn collect_static_world_box_specs(
         bounds,
         grid_to_world,
     )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn collect_ground_cells_to_render(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    bounds: GridBounds,
+) -> Vec<GridCoord> {
+    static_world::collect_ground_cells_to_render(snapshot, current_level, bounds)
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -410,8 +442,17 @@ pub(super) fn push_trigger_decal_spec(
     floor_top: f32,
     grid_size: f32,
     base_color: Color,
+    outline_target: Option<ViewerPickTarget>,
 ) {
-    helpers::push_trigger_decal_spec(specs, cell, rotation, floor_top, grid_size, base_color)
+    helpers::push_trigger_decal_spec(
+        specs,
+        cell,
+        rotation,
+        floor_top,
+        grid_size,
+        base_color,
+        outline_target,
+    )
 }
 
 pub(super) fn is_scene_transition_trigger(object: &game_core::MapObjectDebugState) -> bool {
@@ -460,6 +501,7 @@ pub(super) fn push_box_spec(
     material_style: MaterialStyle,
     occluder_kind: Option<StaticWorldOccluderKind>,
     pick_binding: Option<ViewerPickBindingSpec>,
+    outline_target: Option<ViewerPickTarget>,
 ) {
     static_world::push_box_spec(
         specs,
@@ -469,6 +511,7 @@ pub(super) fn push_box_spec(
         material_style,
         occluder_kind,
         pick_binding,
+        outline_target,
     )
 }
 

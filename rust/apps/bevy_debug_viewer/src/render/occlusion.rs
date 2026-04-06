@@ -153,8 +153,13 @@ pub(super) fn cursor_over_hotbar_dock(window: &Window, cursor_position: Option<V
 
 pub(super) fn occluder_visual_from_spawned_box(
     spawned: SpawnedBoxVisual,
+    base_cells: Vec<GridCoord>,
+    floor_top: f32,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
 ) -> StaticWorldOccluderVisual {
     let base_alpha = spawned.color.to_srgba().alpha;
+    let top_y = spawned.translation.y + spawned.size.y * 0.5;
     StaticWorldOccluderVisual {
         material: spawned.material,
         base_color: spawned.color,
@@ -162,14 +167,27 @@ pub(super) fn occluder_visual_from_spawned_box(
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: spawned.translation,
         aabb_half_extents: spawned.size * 0.5,
+        shadowed_visible_cells: project_shadowed_visible_cells(
+            &base_cells,
+            floor_top,
+            top_y,
+            grid_size,
+            render_config,
+        ),
+        hover_map_object_id: None,
         currently_faded: false,
     }
 }
 
 pub(super) fn occluder_visual_from_spawned_mesh(
     spawned: SpawnedMeshVisual,
+    base_cells: Vec<GridCoord>,
+    floor_top: f32,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
 ) -> StaticWorldOccluderVisual {
     let base_alpha = spawned.color.to_srgba().alpha;
+    let top_y = spawned.aabb_center.y + spawned.aabb_half_extents.y;
     StaticWorldOccluderVisual {
         material: spawned.material,
         base_color: spawned.color,
@@ -177,8 +195,109 @@ pub(super) fn occluder_visual_from_spawned_mesh(
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: spawned.aabb_center,
         aabb_half_extents: spawned.aabb_half_extents,
+        shadowed_visible_cells: project_shadowed_visible_cells(
+            &base_cells,
+            floor_top,
+            top_y,
+            grid_size,
+            render_config,
+        ),
+        hover_map_object_id: None,
         currently_faded: false,
     }
+}
+
+pub(super) fn project_shadowed_visible_cells(
+    base_cells: &[GridCoord],
+    floor_top: f32,
+    top_y: f32,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+) -> Vec<GridCoord> {
+    if base_cells.is_empty() {
+        return Vec::new();
+    }
+
+    let pitch = render_config.camera_pitch_radians();
+    let tan_pitch = pitch.tan();
+    if tan_pitch <= f32::EPSILON {
+        return Vec::new();
+    }
+
+    let height = (top_y - floor_top).max(0.0);
+    if height <= f32::EPSILON {
+        return Vec::new();
+    }
+
+    let projected_distance_cells = height / tan_pitch / grid_size.max(0.0001);
+    if projected_distance_cells <= 0.05 {
+        return Vec::new();
+    }
+
+    let yaw = render_config.camera_yaw_radians();
+    let direction = Vec2::new(-yaw.sin(), yaw.cos());
+    if direction.length_squared() <= f32::EPSILON {
+        return Vec::new();
+    }
+    let direction = direction.normalize();
+    let base_cells_set = base_cells.iter().copied().collect::<HashSet<_>>();
+    let mut shadowed = HashSet::new();
+    let step = 0.2_f32;
+    let sample_offsets = [
+        Vec2::new(0.5, 0.5),
+        Vec2::new(0.2, 0.2),
+        Vec2::new(0.5, 0.2),
+        Vec2::new(0.8, 0.2),
+        Vec2::new(0.2, 0.5),
+        Vec2::new(0.8, 0.5),
+        Vec2::new(0.2, 0.8),
+        Vec2::new(0.5, 0.8),
+        Vec2::new(0.8, 0.8),
+    ];
+
+    for base_cell in base_cells {
+        for sample in sample_offsets {
+            let start = Vec2::new(base_cell.x as f32 + sample.x, base_cell.z as f32 + sample.y);
+            let mut distance = step;
+            while distance <= projected_distance_cells + step * 0.5 {
+                let point = start + direction * distance;
+                let grid =
+                    GridCoord::new(point.x.floor() as i32, base_cell.y, point.y.floor() as i32);
+                if !base_cells_set.contains(&grid) {
+                    shadowed.insert(grid);
+                }
+                distance += step;
+            }
+        }
+    }
+
+    let mut shadowed = shadowed.into_iter().collect::<Vec<_>>();
+    shadowed.sort_unstable_by_key(|grid| (grid.y, grid.z, grid.x));
+    shadowed
+}
+
+pub(super) fn occluder_blocks_visible_cells(
+    occluder: &StaticWorldOccluderVisual,
+    visible_cells: &HashSet<GridCoord>,
+) -> bool {
+    occluder
+        .shadowed_visible_cells
+        .iter()
+        .any(|cell| visible_cells.contains(cell))
+}
+
+pub(super) fn should_fade_occluder(
+    camera_position: Vec3,
+    focus_points: &[Vec3],
+    occluder: &StaticWorldOccluderVisual,
+    visible_cells: &HashSet<GridCoord>,
+) -> bool {
+    occluder_should_fade(
+        camera_position,
+        focus_points,
+        occluder.aabb_center,
+        occluder.aabb_half_extents,
+    ) || occluder_blocks_visible_cells(occluder, visible_cells)
 }
 
 pub(super) fn set_occluder_faded(
@@ -243,16 +362,17 @@ pub(super) fn update_occluder_list_fade(
     occluders: &mut [StaticWorldOccluderVisual],
     camera_position: Vec3,
     focus_points: &[Vec3],
+    visible_cells: &HashSet<GridCoord>,
+    hovered_map_object_id: Option<&str>,
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
     for occluder in occluders {
-        let should_fade = occluder_should_fade(
-            camera_position,
-            focus_points,
-            occluder.aabb_center,
-            occluder.aabb_half_extents,
-        );
+        let should_fade = if occluder.hover_map_object_id.as_deref() == hovered_map_object_id {
+            false
+        } else {
+            should_fade_occluder(camera_position, focus_points, occluder, visible_cells)
+        };
         set_occluder_faded(occluder, should_fade, materials, building_wall_materials);
     }
 }

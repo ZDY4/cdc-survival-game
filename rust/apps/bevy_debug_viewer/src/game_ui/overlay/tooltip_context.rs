@@ -1,6 +1,10 @@
-//! UI 浮层细节模块：负责 tooltip、背包右键菜单及其通用浮动容器。
+//! UI 浮层细节模块：负责 tooltip、背包/技能右键菜单及其通用浮动容器。
 
 use super::*;
+use crate::ui_context_menu::{
+    context_menu_header_text_bundle, context_menu_muted_text_color, spawn_context_menu_button,
+    spawn_context_menu_shell, ContextMenuItemVisual, ContextMenuStyle, ContextMenuVariant,
+};
 
 pub(super) fn render_hover_tooltip(
     parent: &mut ChildSpawnerCommands,
@@ -81,12 +85,7 @@ pub(super) fn render_hover_tooltip(
                 ui.hover_tooltip.cursor_position,
                 56.0,
                 |tooltip| {
-                    tooltip.spawn(text_bundle(
-                        font,
-                        "前往",
-                        10.0,
-                        Color::srgba(0.70, 0.76, 0.86, 1.0),
-                    ));
+                    tooltip.spawn(text_bundle(font, "前往", 10.0, ui_text_muted_color()));
                     tooltip.spawn(text_bundle(font, target_name, 14.0, Color::WHITE));
                 },
             );
@@ -102,7 +101,13 @@ pub(super) fn render_inventory_context_menu(
     ui: &GameUiViewState<'_, '_>,
     content: &GameContentRefs<'_, '_>,
 ) {
-    if ui.menu_state.active_panel != Some(UiMenuPanel::Inventory) {
+    let trade_state = ui.modal_state.trade.as_ref();
+    let trade_active = trade_state.is_some();
+    let skills_panel_active = ui.menu_state.active_panel == Some(UiMenuPanel::Skills);
+    if !trade_active
+        && ui.menu_state.active_panel != Some(UiMenuPanel::Inventory)
+        && !skills_panel_active
+    {
         return;
     }
     let Some(player_actor) = player_actor else {
@@ -113,7 +118,7 @@ pub(super) fn render_inventory_context_menu(
     };
 
     match target {
-        UiInventoryContextMenuTarget::InventoryItem { item_id } => {
+        UiContextMenuTarget::InventoryItem { item_id } => {
             let snapshot = inventory_snapshot(
                 &ui.runtime_state.runtime,
                 player_actor,
@@ -132,31 +137,44 @@ pub(super) fn render_inventory_context_menu(
                 return;
             };
             let display = build_inventory_detail_display(detail, Some(entry));
-            render_inventory_context_menu_container(
+            let actions = inventory_context_menu_actions(
+                trade_state.map(|trade| trade.shop_id.as_str()),
+                *item_id,
+                display.can_use,
+                display.can_equip,
+                detail.count,
+            );
+            render_ui_context_menu_container(
                 parent,
                 font,
                 window,
                 ui.inventory_context_menu.cursor_position,
-                152.0,
+                context_menu_estimated_height(actions.len(), true),
                 |menu| {
-                    menu.spawn(text_bundle(font, &detail.name, 11.5, Color::WHITE));
-                    menu.spawn(text_bundle(
+                    spawn_ui_context_menu_header(
+                        menu,
                         font,
+                        "操作",
+                        &detail.name,
                         &format!("{} · x{}", detail.item_type.as_str(), detail.count),
-                        9.8,
-                        Color::srgba(0.74, 0.79, 0.88, 1.0),
-                    ));
-                    for (label, action) in inventory_context_menu_actions(
-                        display.can_use,
-                        display.can_equip,
-                        detail.count,
-                    ) {
-                        menu.spawn(action_button(font, label, action));
+                    );
+                    for (label, action) in actions {
+                        spawn_context_menu_button(
+                            menu,
+                            font,
+                            ContextMenuStyle::for_variant(ContextMenuVariant::UiContext),
+                            &ContextMenuItemVisual {
+                                label: label.to_string(),
+                                is_primary: false,
+                                is_disabled: false,
+                            },
+                            action,
+                        );
                     }
                 },
             );
         }
-        UiInventoryContextMenuTarget::EquipmentSlot { slot_id, item_id } => {
+        UiContextMenuTarget::EquipmentSlot { slot_id, item_id } => {
             let snapshot = inventory_snapshot(
                 &ui.runtime_state.runtime,
                 player_actor,
@@ -170,37 +188,134 @@ pub(super) fn render_inventory_context_menu(
                 .find(|slot| slot.slot_id == *slot_id)
                 .and_then(|slot| slot.item_name.clone())
                 .unwrap_or_else(|| item_id.to_string());
-            render_inventory_context_menu_container(
+            let actions =
+                equipment_context_menu_actions(trade_state.map(|trade| trade.shop_id.as_str()), slot_id);
+            render_ui_context_menu_container(
                 parent,
                 font,
                 window,
                 ui.inventory_context_menu.cursor_position,
-                118.0,
+                context_menu_estimated_height(actions.len(), true),
                 |menu| {
-                    menu.spawn(text_bundle(font, &slot_name, 11.5, Color::WHITE));
-                    menu.spawn(text_bundle(
+                    spawn_ui_context_menu_header(
+                        menu,
                         font,
+                        "操作",
+                        &slot_name,
                         &format!("装备槽: {slot_id}"),
-                        9.8,
-                        Color::srgba(0.74, 0.79, 0.88, 1.0),
-                    ));
-                    menu.spawn(action_button(
+                    );
+                    for (label, action) in actions {
+                        spawn_context_menu_button(
+                            menu,
+                            font,
+                            ContextMenuStyle::for_variant(ContextMenuVariant::UiContext),
+                            &ContextMenuItemVisual {
+                                label: label.to_string(),
+                                is_primary: false,
+                                is_disabled: false,
+                            },
+                            action,
+                        );
+                    }
+                },
+            );
+        }
+        UiContextMenuTarget::SkillEntry { tree_id, skill_id } => {
+            let snapshot = skills_snapshot(
+                &ui.runtime_state.runtime,
+                player_actor,
+                &content.skills.0,
+                &content.skill_trees.0,
+            );
+            let Some(tree) = snapshot.trees.iter().find(|tree| tree.tree_id == *tree_id) else {
+                return;
+            };
+            let Some(entry) = tree.entries.iter().find(|entry| entry.skill_id == *skill_id) else {
+                return;
+            };
+            let can_bind =
+                validate_hotbar_skill_binding(&ui.runtime_state, &content.skills, skill_id).is_ok();
+            let actions = skill_context_menu_actions(skill_id, can_bind);
+            render_ui_context_menu_container(
+                parent,
+                font,
+                window,
+                ui.inventory_context_menu.cursor_position,
+                context_menu_estimated_height(actions.len(), true),
+                |menu| {
+                    spawn_ui_context_menu_header(
+                        menu,
                         font,
-                        "卸下",
-                        GameUiButtonAction::UnequipSlot(slot_id.clone()),
-                    ));
+                        "操作",
+                        &entry.name,
+                        &format!(
+                            "{} · Lv {}/{}",
+                            activation_mode_label(&entry.activation_mode),
+                            entry.learned_level,
+                            entry.max_level
+                        ),
+                    );
+                    for (item, action) in actions {
+                        spawn_context_menu_button(
+                            menu,
+                            font,
+                            ContextMenuStyle::for_variant(ContextMenuVariant::UiContext),
+                            &item,
+                            action,
+                        );
+                    }
                 },
             );
         }
     }
 }
 
+fn spawn_ui_context_menu_header(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    kicker: &str,
+    title: &str,
+    subtitle: &str,
+) {
+    let style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
+    parent.spawn(context_menu_header_text_bundle(
+        font,
+        kicker,
+        style.title_font_size,
+        ui_text_secondary_color(),
+    ));
+    parent.spawn(context_menu_header_text_bundle(font, title, 11.5, Color::WHITE));
+    parent.spawn(context_menu_header_text_bundle(
+        font,
+        subtitle,
+        style.subtitle_font_size,
+        context_menu_muted_text_color(),
+    ));
+}
+
 pub(super) fn inventory_context_menu_actions(
+    trade_shop_id: Option<&str>,
+    item_id: u32,
     can_use: bool,
     can_equip: bool,
     count: i32,
 ) -> Vec<(&'static str, GameUiButtonAction)> {
     let mut actions = Vec::new();
+    if let Some(shop_id) = trade_shop_id {
+        if can_equip {
+            actions.push(("装备", GameUiButtonAction::EquipInventoryItem));
+        }
+        if count > 0 {
+            actions.push((
+                "卖出",
+                GameUiButtonAction::SellTradeItem {
+                    shop_id: shop_id.to_string(),
+                    item_id,
+                },
+            ));
+        }
+        return actions;
+    }
     if can_use {
         actions.push(("使用", GameUiButtonAction::UseInventoryItem));
     }
@@ -213,44 +328,58 @@ pub(super) fn inventory_context_menu_actions(
     actions
 }
 
-pub(super) fn render_inventory_context_menu_container(
+pub(super) fn equipment_context_menu_actions(
+    trade_shop_id: Option<&str>,
+    slot_id: &str,
+) -> Vec<(&'static str, GameUiButtonAction)> {
+    let mut actions = vec![("卸下", GameUiButtonAction::UnequipSlot(slot_id.to_string()))];
+    if let Some(shop_id) = trade_shop_id {
+        actions.push((
+            "卖出",
+            GameUiButtonAction::SellEquippedTradeItem {
+                shop_id: shop_id.to_string(),
+                slot_id: slot_id.to_string(),
+            },
+        ));
+    }
+    actions
+}
+
+pub(super) fn skill_context_menu_actions(
+    skill_id: &str,
+    enabled: bool,
+) -> Vec<(ContextMenuItemVisual, GameUiButtonAction)> {
+    vec![(
+        ContextMenuItemVisual {
+            label: "添加到快捷栏".to_string(),
+            is_primary: false,
+            is_disabled: !enabled,
+        },
+        GameUiButtonAction::AssignSkillToFirstEmptyHotbarSlot(skill_id.to_string()),
+    )]
+}
+
+pub(super) fn render_ui_context_menu_container(
     parent: &mut ChildSpawnerCommands,
-    font: &ViewerUiFont,
+    _font: &ViewerUiFont,
     window: &Window,
     cursor_position: Vec2,
     estimated_height: f32,
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
-    let position = floating_panel_position(window, cursor_position, 220.0, estimated_height);
-    parent
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(position.x),
-                top: px(position.y),
-                width: px(220),
-                padding: UiRect::all(px(10)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(6),
-                border: UiRect::all(px(1)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.05, 0.058, 0.076, 0.985)),
-            BorderColor::all(Color::srgba(0.34, 0.42, 0.54, 1.0)),
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
-            InventoryContextMenuRoot,
-            UiMouseBlocker,
-        ))
-        .with_children(|menu| {
-            menu.spawn(text_bundle(
-                font,
-                "操作",
-                10.2,
-                Color::srgba(0.84, 0.89, 0.96, 1.0),
-            ));
-            content(menu);
-        });
+    let style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
+    let position = floating_panel_position(window, cursor_position, style.width, estimated_height);
+    spawn_context_menu_shell(parent, style, position, UiContextMenuRoot, content);
+}
+
+pub(super) fn context_menu_estimated_height(action_count: usize, has_header: bool) -> f32 {
+    let style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
+    let header_rows = if has_header { 3.0 } else { 0.0 };
+    style.border_width * 2.0
+        + style.padding * 2.0
+        + header_rows * 18.0
+        + action_count as f32 * style.item_min_height
+        + action_count.saturating_sub(1) as f32 * style.item_gap
 }
 
 pub(super) fn render_tooltip_container(
@@ -280,8 +409,8 @@ pub(super) fn render_tooltip_container(
                 border: UiRect::all(px(1)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.045, 0.052, 0.068, 0.96)),
-            BorderColor::all(Color::srgba(0.28, 0.34, 0.44, 1.0)),
+            BackgroundColor(ui_panel_background()),
+            BorderColor::all(ui_border_color()),
             FocusPolicy::Pass,
         ))
         .with_children(content);
@@ -316,15 +445,45 @@ pub(super) fn floating_panel_position(
 
 #[cfg(test)]
 mod tests {
-    use super::inventory_context_menu_actions;
+    use super::{equipment_context_menu_actions, inventory_context_menu_actions, skill_context_menu_actions};
 
     #[test]
     fn inventory_context_menu_shows_drop_even_without_use_or_equip() {
-        let labels: Vec<_> = inventory_context_menu_actions(false, false, 3)
+        let labels: Vec<_> = inventory_context_menu_actions(None, 1001, false, false, 3)
             .into_iter()
             .map(|(label, _)| label)
             .collect();
 
         assert_eq!(labels, vec!["丢弃"]);
+    }
+
+    #[test]
+    fn trade_inventory_context_menu_hides_use_and_drop() {
+        let labels: Vec<_> = inventory_context_menu_actions(Some("npc_shop"), 1001, true, true, 3)
+            .into_iter()
+            .map(|(label, _)| label)
+            .collect();
+
+        assert_eq!(labels, vec!["装备", "卖出"]);
+    }
+
+    #[test]
+    fn trade_equipment_context_menu_includes_sell() {
+        let labels: Vec<_> = equipment_context_menu_actions(Some("npc_shop"), "weapon")
+            .into_iter()
+            .map(|(label, _)| label)
+            .collect();
+
+        assert_eq!(labels, vec!["卸下", "卖出"]);
+    }
+
+    #[test]
+    fn skill_context_menu_only_shows_add_to_hotbar() {
+        let labels: Vec<_> = skill_context_menu_actions("fireball", true)
+            .into_iter()
+            .map(|(item, _)| item.label)
+            .collect();
+
+        assert_eq!(labels, vec!["添加到快捷栏"]);
     }
 }

@@ -13,16 +13,24 @@ use game_bevy::{
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::simulation::viewer_event_entry;
 use crate::state::{
-    UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerHudPage, ViewerInfoPanelState, ViewerPalette,
-    ViewerRuntimeState, ViewerState, viewer_ui_passthrough_bundle,
+    viewer_ui_passthrough_bundle, UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState,
+    ViewerCameraShakeState, ViewerDamageNumberState, ViewerHudPage, ViewerInfoPanelState,
+    ViewerPalette, ViewerRuntimeState, ViewerState, ViewerUiFont,
 };
 
-const CONSOLE_PANEL_TOP_PX: f32 = 42.0;
+const CONSOLE_PANEL_BOTTOM_PX: f32 = 18.0;
 const CONSOLE_PANEL_MIN_WIDTH_PX: f32 = 420.0;
 const CONSOLE_PANEL_MAX_WIDTH_PX: f32 = 760.0;
 const CONSOLE_PANEL_HORIZONTAL_MARGIN_PX: f32 = 24.0;
 const CONSOLE_PANEL_PADDING_PX: f32 = 14.0;
+const CONSOLE_SECTION_GAP_PX: f32 = 10.0;
+const CONSOLE_ROW_GAP_PX: f32 = 4.0;
+const CONSOLE_SUGGESTION_COMMAND_SIZE_PX: f32 = 13.0;
+const CONSOLE_SUGGESTION_SUMMARY_SIZE_PX: f32 = 10.5;
+const CONSOLE_SECTION_LABEL_SIZE_PX: f32 = 10.5;
+const CONSOLE_TAG_SIZE_PX: f32 = 8.8;
+const CONSOLE_HINT_SIZE_PX: f32 = 10.0;
+const CONSOLE_FEEDBACK_SIZE_PX: f32 = 11.5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ConsoleCommandSpec {
@@ -107,6 +115,21 @@ pub(crate) struct ConsoleFeedback {
 
 #[derive(Component)]
 pub(crate) struct ConsolePanelRoot;
+
+#[derive(Component)]
+pub(crate) struct ConsoleTitleText;
+
+#[derive(Component)]
+pub(crate) struct ConsoleInputText;
+
+#[derive(Component)]
+pub(crate) struct ConsoleSuggestionsRoot;
+
+#[derive(Component)]
+pub(crate) struct ConsoleFeedbackText;
+
+#[derive(Component)]
+pub(crate) struct ConsoleHintText;
 
 pub(crate) fn toggle_console(
     keys: Res<ButtonInput<KeyCode>>,
@@ -213,11 +236,12 @@ pub(crate) fn spawn_console_panel(
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: px(CONSOLE_PANEL_TOP_PX),
+                bottom: px(CONSOLE_PANEL_BOTTOM_PX),
                 left: px(CONSOLE_PANEL_HORIZONTAL_MARGIN_PX),
                 width: px(CONSOLE_PANEL_MIN_WIDTH_PX),
                 padding: UiRect::all(px(CONSOLE_PANEL_PADDING_PX)),
                 flex_direction: FlexDirection::Column,
+                row_gap: px(CONSOLE_SECTION_GAP_PX),
                 ..default()
             },
             BackgroundColor(palette.menu_background),
@@ -230,23 +254,91 @@ pub(crate) fn spawn_console_panel(
         ))
         .with_children(|parent| {
             parent.spawn((
+                Text::new("Console"),
+                TextFont::from_font_size(13.0).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.94, 0.93, 0.90, 0.98)),
+                viewer_ui_passthrough_bundle(),
+                ConsoleTitleText,
+            ));
+            parent.spawn((
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(CONSOLE_ROW_GAP_PX),
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+                ConsoleSuggestionsRoot,
+            ));
+            parent.spawn((
                 Text::new(""),
-                TextFont::from_font_size(13.0).with_font(ui_font),
-                TextColor(Color::srgba(0.97, 0.98, 0.99, 0.98)),
+                TextFont::from_font_size(CONSOLE_FEEDBACK_SIZE_PX).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.82, 0.81, 0.78, 0.98)),
+                viewer_ui_passthrough_bundle(),
+                ConsoleFeedbackText,
+            ));
+            parent.spawn((
+                Text::new(""),
+                TextFont::from_font_size(CONSOLE_HINT_SIZE_PX).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.56, 0.55, 0.52, 0.94)),
+                viewer_ui_passthrough_bundle(),
+                ConsoleHintText,
+            ));
+            parent.spawn((
+                Text::new(""),
+                TextFont::from_font_size(13.0).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.92, 0.91, 0.88, 0.98)),
+                viewer_ui_passthrough_bundle(),
+                ConsoleInputText,
             ));
         });
 }
 
 pub(crate) fn update_console_panel(
+    mut commands: Commands,
     window: Single<&Window>,
-    console_root: Single<
-        (&mut Node, &mut Visibility, &Children),
-        (With<ConsolePanelRoot>, Without<Text>),
+    console_root: Single<(&mut Node, &mut Visibility), With<ConsolePanelRoot>>,
+    mut title_text: Single<
+        &mut Text,
+        (
+            With<ConsoleTitleText>,
+            Without<ConsoleInputText>,
+            Without<ConsoleFeedbackText>,
+            Without<ConsoleHintText>,
+        ),
     >,
-    mut text_query: Query<(&mut Text, &mut TextColor), Without<ConsolePanelRoot>>,
+    mut input_text: Single<
+        &mut Text,
+        (
+            With<ConsoleInputText>,
+            Without<ConsoleTitleText>,
+            Without<ConsoleFeedbackText>,
+            Without<ConsoleHintText>,
+        ),
+    >,
+    suggestions_root: Single<(Entity, Option<&Children>), With<ConsoleSuggestionsRoot>>,
+    mut feedback_text: Single<
+        &mut Text,
+        (
+            With<ConsoleFeedbackText>,
+            Without<ConsoleTitleText>,
+            Without<ConsoleInputText>,
+            Without<ConsoleHintText>,
+        ),
+    >,
+    mut feedback_color: Single<&mut TextColor, With<ConsoleFeedbackText>>,
+    mut hint_text: Single<
+        &mut Text,
+        (
+            With<ConsoleHintText>,
+            Without<ConsoleTitleText>,
+            Without<ConsoleInputText>,
+            Without<ConsoleFeedbackText>,
+        ),
+    >,
     console_state: Res<ViewerConsoleState>,
+    ui_font: Res<ViewerUiFont>,
 ) {
-    let (mut node, mut visibility, children) = console_root.into_inner();
+    let (mut node, mut visibility) = console_root.into_inner();
     if !console_state.is_open {
         *visibility = Visibility::Hidden;
         return;
@@ -258,29 +350,40 @@ pub(crate) fn update_console_panel(
     node.left = px((window.width() - width) * 0.5);
     *visibility = Visibility::Visible;
 
-    let Some(text_entity) = children.first() else {
-        return;
-    };
-    let Ok((mut text, mut text_color)) = text_query.get_mut(*text_entity) else {
-        return;
-    };
-
     let suggestions = console_suggestions(console_state.input.as_str());
     let hint = "Enter execute  |  Tab autocomplete  |  Up/Down select  |  Esc/~ close";
-    let content = format_console_text(&console_state, &suggestions, hint);
-    *text = Text::new(content);
-    *text_color = TextColor(
-        if console_state
-            .last_feedback
-            .as_ref()
-            .is_some_and(|feedback| feedback.is_error)
-            && console_state.input.trim().is_empty()
-        {
-            Color::srgba(0.99, 0.93, 0.93, 0.98)
-        } else {
-            Color::srgba(0.97, 0.98, 0.99, 0.98)
-        },
+
+    **title_text = Text::new("Console");
+    **input_text = Text::new(format!("> {}_", console_state.input));
+
+    let (suggestions_root_entity, suggestion_children) = suggestions_root.into_inner();
+    if let Some(children) = suggestion_children {
+        for child in children.iter() {
+            commands.entity(child).despawn();
+        }
+    }
+    spawn_console_suggestions(
+        &mut commands,
+        suggestions_root_entity,
+        ui_font.0.clone(),
+        &console_state,
+        &suggestions,
     );
+
+    if let Some(feedback) = console_state.last_feedback.as_ref() {
+        let label = if feedback.is_error { "Error" } else { "Result" };
+        **feedback_text = Text::new(format!("{label}: {}", feedback.text));
+        **feedback_color = TextColor(if feedback.is_error {
+            Color::srgba(0.99, 0.82, 0.82, 0.98)
+        } else {
+            Color::srgba(0.82, 0.81, 0.78, 0.98)
+        });
+    } else {
+        **feedback_text = Text::new("");
+        **feedback_color = TextColor(Color::srgba(0.82, 0.81, 0.78, 0.98));
+    }
+
+    **hint_text = Text::new(hint);
 }
 
 fn submit_console_command(
@@ -411,8 +514,10 @@ fn execute_ob_command(
             let snapshot = runtime_state.runtime.snapshot();
             if viewer_state.is_player_control() {
                 viewer_state.selected_actor = None;
+                viewer_state.reset_observe_playback_defaults(false);
             } else {
                 viewer_state.selected_actor = viewer_state.focus_actor_id(&snapshot);
+                viewer_state.reset_observe_playback_defaults(true);
             }
             let status = format!("control mode: {}", viewer_state.control_mode.label());
             viewer_state.status_line = status.clone();
@@ -588,34 +693,131 @@ fn reset_viewer_state_for_restart(
     );
 }
 
-fn format_console_text(
+fn spawn_console_suggestions(
+    commands: &mut Commands,
+    parent: Entity,
+    ui_font: Handle<Font>,
     console_state: &ViewerConsoleState,
     suggestions: &[ConsoleSuggestion],
-    hint: &str,
-) -> String {
-    let mut lines = vec!["Console".to_string(), format!("> {}_", console_state.input)];
+) {
+    commands.entity(parent).with_children(|parent| {
+        parent.spawn((
+            Text::new("Suggestions"),
+            TextFont::from_font_size(CONSOLE_SECTION_LABEL_SIZE_PX).with_font(ui_font.clone()),
+            TextColor(Color::srgba(0.72, 0.71, 0.68, 0.94)),
+            viewer_ui_passthrough_bundle(),
+        ));
 
-    if suggestions.is_empty() {
-        lines.push("Suggestions: none".to_string());
-    } else {
-        lines.push("Suggestions:".to_string());
-        lines.extend(suggestions.iter().enumerate().map(|(index, suggestion)| {
-            let marker = if index == normalized_selected_index(console_state, suggestions.len()) {
-                ">"
-            } else {
-                " "
-            };
-            format!("{marker} {}  {}", suggestion.name, suggestion.summary)
-        }));
-    }
+        if suggestions.is_empty() {
+            parent.spawn((
+                Text::new("No matching commands"),
+                TextFont::from_font_size(CONSOLE_SUGGESTION_SUMMARY_SIZE_PX)
+                    .with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.56, 0.55, 0.52, 0.92)),
+                viewer_ui_passthrough_bundle(),
+            ));
+            return;
+        }
 
-    if let Some(feedback) = console_state.last_feedback.as_ref() {
-        let label = if feedback.is_error { "Error" } else { "Result" };
-        lines.push(format!("{label}: {}", feedback.text));
-    }
+        let selected_index = normalized_selected_index(console_state, suggestions.len());
+        for (index, suggestion) in suggestions.iter().enumerate() {
+            let is_selected = index == selected_index;
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        padding: UiRect::axes(px(8), px(5)),
+                        column_gap: px(8),
+                        justify_content: JustifyContent::SpaceBetween,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(px(if is_selected { 1.0 } else { 0.0 })),
+                        ..default()
+                    },
+                    BackgroundColor(if is_selected {
+                        Color::srgba(0.15, 0.15, 0.14, 0.86)
+                    } else {
+                        Color::NONE
+                    }),
+                    BorderColor::all(if is_selected {
+                        Color::srgba(0.34, 0.33, 0.30, 0.92)
+                    } else {
+                        Color::NONE
+                    }),
+                    viewer_ui_passthrough_bundle(),
+                ))
+                .with_children(|row| {
+                    row.spawn((
+                        Node {
+                            padding: UiRect::axes(px(5), px(2)),
+                            min_width: px(34),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(px(1)),
+                            ..default()
+                        },
+                        BackgroundColor(if is_selected {
+                            Color::srgba(0.20, 0.19, 0.17, 0.98)
+                        } else {
+                            Color::srgba(0.10, 0.10, 0.09, 0.92)
+                        }),
+                        BorderColor::all(if is_selected {
+                            Color::srgba(0.60, 0.58, 0.54, 0.98)
+                        } else {
+                            Color::srgba(0.24, 0.24, 0.22, 0.94)
+                        }),
+                        viewer_ui_passthrough_bundle(),
+                    ))
+                    .with_children(|tag| {
+                        tag.spawn((
+                            Text::new(if is_selected { "TAB" } else { "CMD" }),
+                            TextFont::from_font_size(CONSOLE_TAG_SIZE_PX)
+                                .with_font(ui_font.clone()),
+                            TextColor(if is_selected {
+                                Color::WHITE
+                            } else {
+                                Color::srgba(0.74, 0.73, 0.70, 0.95)
+                            }),
+                            viewer_ui_passthrough_bundle(),
+                        ));
+                    });
 
-    lines.push(hint.to_string());
-    lines.join("\n")
+                    row.spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            flex_basis: px(0.0),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: px(1),
+                            ..default()
+                        },
+                        viewer_ui_passthrough_bundle(),
+                    ))
+                    .with_children(|texts| {
+                        texts.spawn((
+                            Text::new(suggestion.name),
+                            TextFont::from_font_size(CONSOLE_SUGGESTION_COMMAND_SIZE_PX)
+                                .with_font(ui_font.clone()),
+                            TextColor(if is_selected {
+                                Color::srgba(0.96, 0.95, 0.92, 1.0)
+                            } else {
+                                Color::srgba(0.86, 0.84, 0.80, 0.98)
+                            }),
+                            viewer_ui_passthrough_bundle(),
+                        ));
+                        texts.spawn((
+                            Text::new(suggestion.summary),
+                            TextFont::from_font_size(CONSOLE_SUGGESTION_SUMMARY_SIZE_PX)
+                                .with_font(ui_font.clone()),
+                            TextColor(if is_selected {
+                                Color::srgba(0.72, 0.71, 0.68, 0.96)
+                            } else {
+                                Color::srgba(0.58, 0.57, 0.54, 0.94)
+                            }),
+                            viewer_ui_passthrough_bundle(),
+                        ));
+                    });
+                });
+        }
+    });
 }
 
 fn autocomplete_console_input(console_state: &mut ViewerConsoleState) {
@@ -711,7 +913,9 @@ mod tests {
         move_console_selection_next, move_console_selection_previous, submission_command_line,
         ViewerConsoleState,
     };
-    use crate::state::{ViewerHudPage, ViewerInfoPanelState, ViewerRuntimeState, ViewerState};
+    use crate::state::{
+        ViewerHudPage, ViewerInfoPanelState, ViewerObserveSpeed, ViewerRuntimeState, ViewerState,
+    };
     use game_core::create_demo_runtime;
 
     #[test]
@@ -887,11 +1091,17 @@ mod tests {
         let first = execute_ob_command(&["mode"], &runtime_state, &mut viewer_state);
         assert!(!first.is_error);
         assert!(viewer_state.is_free_observe());
+        assert!(viewer_state.auto_tick);
+        assert_eq!(viewer_state.observe_speed, ViewerObserveSpeed::X1);
+        assert_eq!(viewer_state.min_progression_interval_sec, 0.1);
         assert_eq!(first.text, "control mode: Free Observe");
 
         let second = execute_ob_command(&["mode"], &runtime_state, &mut viewer_state);
         assert!(!second.is_error);
         assert!(viewer_state.is_player_control());
+        assert!(!viewer_state.auto_tick);
+        assert_eq!(viewer_state.observe_speed, ViewerObserveSpeed::X1);
+        assert_eq!(viewer_state.min_progression_interval_sec, 0.1);
         assert_eq!(second.text, "control mode: Player Control");
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { detectCurrentSurface } from "./lib/editorSurface";
 import { invokeCommand, isTauriRuntime } from "./lib/tauri";
@@ -13,12 +13,39 @@ import type {
   NarrativeWorkspacePayload,
 } from "./types";
 
+function normalizeNarrativeAppSettings(
+  settings: NarrativeAppSettings,
+): NarrativeAppSettings {
+  return {
+    ...settings,
+    sessionRestoreMode: "always",
+  };
+}
+
+function mergeNarrativeAppSettings(
+  current: NarrativeAppSettings,
+  next: NarrativeAppSettings,
+): NarrativeAppSettings {
+  return {
+    ...current,
+    ...next,
+    workspaceLayouts: {
+      ...(current.workspaceLayouts ?? {}),
+      ...(next.workspaceLayouts ?? {}),
+    },
+    workspaceAgentSessions: {
+      ...(current.workspaceAgentSessions ?? {}),
+      ...(next.workspaceAgentSessions ?? {}),
+    },
+  };
+}
+
 const defaultNarrativeAppSettings: NarrativeAppSettings = {
   recentWorkspaces: [],
   lastWorkspace: null,
   connectedProjectRoot: null,
   recentProjectRoots: [],
-  sessionRestoreMode: "ask",
+  sessionRestoreMode: "always",
   workspaceLayouts: {},
   workspaceAgentSessions: {},
 };
@@ -35,11 +62,16 @@ function App() {
   const [narrativeAppSettings, setNarrativeAppSettings] = useState<NarrativeAppSettings>(
     defaultNarrativeAppSettings,
   );
+  const narrativeAppSettingsRef = useRef<NarrativeAppSettings>(defaultNarrativeAppSettings);
   const [editorRuntimeFlags, setEditorRuntimeFlags] =
     useState<EditorRuntimeFlags>(defaultEditorRuntimeFlags);
   const [status, setStatus] = useState("正在加载叙事实验室...");
   const [canPersist, setCanPersist] = useState(false);
   const [narrativeStartupReady, setNarrativeStartupReady] = useState(surface === "settings");
+
+  useEffect(() => {
+    narrativeAppSettingsRef.current = narrativeAppSettings;
+  }, [narrativeAppSettings]);
 
   async function loadNarrativeWorkspaceOnly() {
     const workspaceRoot = narrativeAppSettings.lastWorkspace?.trim();
@@ -72,7 +104,9 @@ function App() {
   }
 
   async function refreshNarrativeSessionFromSettings() {
-    const settings = await invokeCommand<NarrativeAppSettings>("load_narrative_app_settings");
+    const settings = normalizeNarrativeAppSettings(
+      await invokeCommand<NarrativeAppSettings>("load_narrative_app_settings"),
+    );
     setNarrativeAppSettings(settings);
     setCanPersist(true);
 
@@ -96,11 +130,16 @@ function App() {
   }
 
   async function saveNarrativeSettings(nextSettings: NarrativeAppSettings) {
+    const merged = normalizeNarrativeAppSettings(
+      mergeNarrativeAppSettings(narrativeAppSettingsRef.current, nextSettings),
+    );
     const saved = await invokeCommand<NarrativeAppSettings>("save_narrative_app_settings", {
-      settings: nextSettings,
+      settings: merged,
     });
-    setNarrativeAppSettings(saved);
-    return saved;
+    const normalized = normalizeNarrativeAppSettings(saved);
+    narrativeAppSettingsRef.current = normalized;
+    setNarrativeAppSettings(normalized);
+    return normalized;
   }
 
   async function openNarrativeWorkspace(workspaceRoot: string) {
@@ -175,7 +214,8 @@ function App() {
 
     setNarrativeStartupReady(false);
     void invokeCommand<NarrativeAppSettings>("load_narrative_app_settings")
-      .then((settings) => {
+      .then((loadedSettings) => {
+        const settings = normalizeNarrativeAppSettings(loadedSettings);
         setNarrativeAppSettings(settings);
         setCanPersist(true);
         if (!settings.lastWorkspace?.trim()) {

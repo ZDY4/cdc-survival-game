@@ -50,6 +50,35 @@ impl ViewerCameraMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ViewerObserveSpeed {
+    #[default]
+    X1,
+    X2,
+    X5,
+    X10,
+}
+
+impl ViewerObserveSpeed {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::X1 => "1X",
+            Self::X2 => "2X",
+            Self::X5 => "5X",
+            Self::X10 => "10X",
+        }
+    }
+
+    pub(crate) fn progression_interval_sec(self) -> f32 {
+        match self {
+            Self::X1 => 0.1,
+            Self::X2 => 0.05,
+            Self::X5 => 0.02,
+            Self::X10 => 0.01,
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum HudEventFilter {
@@ -113,6 +142,7 @@ pub(crate) struct ViewerState {
     pub end_turn_hold_sec: f32,
     pub end_turn_repeat_elapsed_sec: f32,
     pub auto_end_turn_after_stop: bool,
+    pub observe_speed: ViewerObserveSpeed,
     pub min_progression_interval_sec: f32,
     pub progression_elapsed_sec: f32,
     pub camera_pan_offset: Vec2,
@@ -146,7 +176,8 @@ impl Default for ViewerState {
             end_turn_hold_sec: 0.0,
             end_turn_repeat_elapsed_sec: 0.0,
             auto_end_turn_after_stop: false,
-            min_progression_interval_sec: 0.1,
+            observe_speed: ViewerObserveSpeed::X1,
+            min_progression_interval_sec: ViewerObserveSpeed::X1.progression_interval_sec(),
             progression_elapsed_sec: 0.0,
             camera_pan_offset: Vec2::ZERO,
             camera_drag_cursor: None,
@@ -251,6 +282,37 @@ impl ViewerState {
 
     pub(crate) fn disable_camera_follow(&mut self) {
         self.camera_mode = ViewerCameraMode::ManualPan;
+    }
+
+    pub(crate) fn set_observe_speed(&mut self, speed: ViewerObserveSpeed) {
+        self.observe_speed = speed;
+        self.min_progression_interval_sec = speed.progression_interval_sec();
+    }
+
+    pub(crate) fn set_observe_playback(&mut self, playing: bool) {
+        self.auto_tick = playing;
+        self.end_turn_hold_sec = 0.0;
+        self.end_turn_repeat_elapsed_sec = 0.0;
+    }
+
+    pub(crate) fn toggle_observe_playback(&mut self) -> bool {
+        let next = !self.auto_tick;
+        self.set_observe_playback(next);
+        next
+    }
+
+    pub(crate) fn reset_observe_playback_defaults(&mut self, playing: bool) {
+        self.set_observe_playback(playing);
+        self.set_observe_speed(ViewerObserveSpeed::X1);
+        self.progression_elapsed_sec = 0.0;
+    }
+
+    pub(crate) fn observe_playback_status(&self) -> String {
+        format!(
+            "ob playback: {} ({})",
+            if self.auto_tick { "playing" } else { "paused" },
+            self.observe_speed.label()
+        )
     }
 
     pub(crate) fn resume_camera_follow(&mut self) {

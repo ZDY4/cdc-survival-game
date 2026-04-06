@@ -14,6 +14,9 @@ pub(crate) fn update_game_ui(
 ) {
     let (entity, children) = root.into_inner();
     clear_ui_children(&mut commands, children);
+    if ui.console_state.is_open {
+        return;
+    }
     let _ = palette;
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
@@ -74,7 +77,14 @@ pub(crate) fn update_game_ui(
                     ui.filter_state.filter,
                     ui.menu_state.selected_inventory_item,
                 );
-                render_trade_page(parent, &font, &trade_snapshot, &inventory, &ui.menu_state);
+                render_trade_page(
+                    parent,
+                    &font,
+                    &trade_snapshot,
+                    &inventory,
+                    &ui.menu_state,
+                    &ui.drag_state,
+                );
             }
 
             let prompt_blocked = ui.input_block_state.blocked || ui.inventory_context_menu.visible;
@@ -108,8 +118,12 @@ pub(crate) fn update_game_ui(
             render_inventory_context_menu(parent, &font, &window, player_actor, &ui, &content);
         }
 
-        if let Some(discard_modal) = ui.modal_state.discard_quantity.as_ref() {
-            render_discard_quantity_modal(parent, &font, discard_modal, &content.items);
+        if ui.drag_state.dragging {
+            render_drag_preview(parent, &font, &ui.drag_state);
+        }
+
+        if let Some(item_modal) = ui.modal_state.item_quantity.as_ref() {
+            render_item_quantity_modal(parent, &font, item_modal, &content.items);
         }
     });
 }
@@ -135,7 +149,7 @@ fn render_active_panel(
                 ui.filter_state.filter,
                 ui.menu_state.selected_inventory_item,
             );
-            render_inventory_panel(parent, font, &snapshot, &ui.menu_state);
+            render_inventory_panel(parent, font, &snapshot, &ui.menu_state, &ui.drag_state);
         }
         UiMenuPanel::Character => {
             render_panel_shell(parent, font, panel);
@@ -180,4 +194,34 @@ fn render_active_panel(
             render_settings_panel(parent, font, &ui.settings);
         }
     }
+}
+
+fn render_drag_preview(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    drag_state: &UiInventoryDragState,
+) {
+    let label = if drag_state.preview_label.trim().is_empty() {
+        "拖拽物品"
+    } else {
+        drag_state.preview_label.as_str()
+    };
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(drag_state.cursor_position.x + 18.0),
+                top: px(drag_state.cursor_position.y + 18.0),
+                padding: UiRect::axes(px(10), px(7)),
+                border: UiRect::all(px(1)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.08, 0.10, 0.14, 0.96)),
+            BorderColor::all(Color::srgba(0.92, 0.80, 0.48, 1.0)),
+            FocusPolicy::Pass,
+            viewer_ui_passthrough_bundle(),
+        ))
+        .with_children(|preview| {
+            preview.spawn(text_bundle(font, label, 11.0, Color::WHITE));
+        });
 }

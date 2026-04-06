@@ -61,16 +61,16 @@ pub(super) fn render_hotbar_slots(
                 } else if is_selected_skill {
                     Color::srgba(0.92, 0.74, 0.38, 1.0)
                 } else if slot.skill_id.is_some() {
-                    Color::srgba(0.22, 0.32, 0.44, 1.0)
+                    ui_border_color()
                 } else {
-                    Color::srgba(0.14, 0.18, 0.24, 1.0)
+                    ui_border_color()
                 };
                 let background = if slot.skill_id.is_none() {
-                    Color::srgba(0.05, 0.06, 0.09, 0.94)
+                    ui_panel_background()
                 } else if slot.cooldown_remaining > 0.0 {
-                    Color::srgba(0.08, 0.10, 0.16, 0.96)
+                    ui_panel_background_alt()
                 } else {
-                    Color::srgba(0.08, 0.11, 0.17, 0.98)
+                    ui_panel_background_alt()
                 };
                 slots
                     .spawn((
@@ -121,9 +121,9 @@ pub(super) fn render_hotbar_slots(
                                             hotbar_key_label(slot_index),
                                             7.2,
                                             if slot.skill_id.is_some() {
-                                                Color::srgba(0.82, 0.86, 0.94, 1.0)
+                                                ui_text_secondary_color()
                                             } else {
-                                                Color::srgba(0.52, 0.57, 0.66, 1.0)
+                                                ui_text_dim_color()
                                             },
                                         ));
                                         if slot.toggled {
@@ -142,7 +142,7 @@ pub(super) fn render_hotbar_slots(
                                     if slot.skill_id.is_some() {
                                         Color::WHITE
                                     } else {
-                                        Color::srgba(0.46, 0.50, 0.58, 1.0)
+                                        ui_text_dim_color()
                                     },
                                 ));
                                 button.spawn(text_bundle(
@@ -150,9 +150,9 @@ pub(super) fn render_hotbar_slots(
                                     &footer_label,
                                     7.0,
                                     if slot.skill_id.is_some() {
-                                        Color::srgba(0.80, 0.84, 0.92, 1.0)
+                                        ui_text_secondary_color()
                                     } else {
-                                        Color::srgba(0.44, 0.48, 0.56, 1.0)
+                                        ui_text_dim_color()
                                     },
                                 ));
                                 if slot.cooldown_remaining > 0.0 {

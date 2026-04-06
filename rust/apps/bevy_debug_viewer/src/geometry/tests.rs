@@ -332,7 +332,7 @@ fn rendered_path_preview_starts_from_current_position() {
 }
 
 #[test]
-fn hovered_grid_outline_marks_reachable_empty_cell() {
+fn hovered_grid_outline_marks_hovered_empty_cell() {
     let (runtime, handles) = create_demo_runtime();
     let snapshot = runtime.snapshot();
     let viewer_state = ViewerState {
@@ -344,7 +344,7 @@ fn hovered_grid_outline_marks_reachable_empty_cell() {
     let outline =
         hovered_grid_outline_kind(&runtime, &snapshot, &viewer_state, GridCoord::new(0, 0, 1));
 
-    assert_eq!(outline, Some(HoveredGridOutlineKind::Reachable));
+    assert_eq!(outline, Some(HoveredGridOutlineKind::Neutral));
 }
 
 #[test]
@@ -364,7 +364,7 @@ fn hovered_grid_outline_marks_hostile_cell_red() {
 }
 
 #[test]
-fn hovered_grid_outline_hides_unreachable_cell() {
+fn hovered_grid_outline_keeps_showing_for_blocked_in_bounds_cell() {
     let (runtime, handles) = create_demo_runtime();
     let snapshot = runtime.snapshot();
     let viewer_state = ViewerState {
@@ -375,6 +375,22 @@ fn hovered_grid_outline_hides_unreachable_cell() {
 
     let outline =
         hovered_grid_outline_kind(&runtime, &snapshot, &viewer_state, GridCoord::new(2, 0, 1));
+
+    assert_eq!(outline, Some(HoveredGridOutlineKind::Neutral));
+}
+
+#[test]
+fn hovered_grid_outline_hides_out_of_bounds_cell() {
+    let (runtime, handles) = create_demo_runtime();
+    let snapshot = runtime.snapshot();
+    let viewer_state = ViewerState {
+        selected_actor: Some(handles.player),
+        current_level: 0,
+        ..ViewerState::default()
+    };
+
+    let outline =
+        hovered_grid_outline_kind(&runtime, &snapshot, &viewer_state, GridCoord::new(99, 0, 99));
 
     assert_eq!(outline, None);
 }

@@ -47,6 +47,7 @@ pub(crate) fn push_trigger_cell_specs(
     let tile_height = grid_size * 0.045;
     let shaft_height = grid_size * 0.055;
     let head_height = grid_size * 0.06;
+    let outline_target = pick_binding.semantic.clone();
 
     push_box_spec(
         specs,
@@ -56,6 +57,7 @@ pub(crate) fn push_trigger_cell_specs(
         MaterialStyle::UtilityAccent,
         None,
         Some(pick_binding.clone()),
+        Some(outline_target.clone()),
     );
 
     let (shaft_size, shaft_offset, head_size, head_offset) = match rotation {
@@ -113,6 +115,7 @@ pub(crate) fn push_trigger_cell_specs(
         MaterialStyle::Utility,
         None,
         Some(pick_binding.clone()),
+        Some(outline_target.clone()),
     );
     push_box_spec(
         specs,
@@ -126,6 +129,7 @@ pub(crate) fn push_trigger_cell_specs(
         MaterialStyle::UtilityAccent,
         None,
         Some(pick_binding),
+        Some(outline_target),
     );
 }
 
@@ -136,6 +140,7 @@ pub(crate) fn push_trigger_decal_spec(
     floor_top: f32,
     grid_size: f32,
     base_color: Color,
+    outline_target: Option<ViewerPickTarget>,
 ) {
     let center_x = (cell.x as f32 + 0.5) * grid_size;
     let center_z = (cell.z as f32 + 0.5) * grid_size;
@@ -144,6 +149,7 @@ pub(crate) fn push_trigger_decal_spec(
         translation: Vec3::new(center_x, floor_top + TRIGGER_DECAL_ELEVATION, center_z),
         rotation: trigger_decal_rotation(rotation),
         color: base_color,
+        outline_target,
     });
 }
 
@@ -223,6 +229,7 @@ pub(crate) fn spawn_box(
     spec: StaticWorldBoxSpec,
 ) -> SpawnedBoxVisual {
     let mesh = meshes.add(Cuboid::new(spec.size.x, spec.size.y, spec.size.z));
+    let outline_target = spec.outline_target.clone();
     let material = make_static_world_material(
         materials,
         building_wall_materials,
@@ -230,36 +237,34 @@ pub(crate) fn spawn_box(
         spec.material_style,
     );
     let entity = match (&material, spec.pick_binding.clone()) {
-        (&StaticWorldMaterialHandle::Standard(ref material), Some(binding)) => commands
-            .spawn((
+        (&StaticWorldMaterialHandle::Standard(ref material), binding) => {
+            let mut entity = commands.spawn((
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material.clone()),
                 Transform::from_translation(spec.translation),
-                pickable_target(binding.into()),
-            ))
-            .id(),
-        (&StaticWorldMaterialHandle::Standard(ref material), None) => commands
-            .spawn((
+            ));
+            if let Some(binding) = binding {
+                entity.insert(pickable_target(binding.into()));
+            }
+            if let Some(outline_target) = outline_target.clone() {
+                entity.insert(HoverOutlineMember::new(outline_target));
+            }
+            entity.id()
+        }
+        (&StaticWorldMaterialHandle::BuildingWallGrid(ref material), binding) => {
+            let mut entity = commands.spawn((
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material.clone()),
                 Transform::from_translation(spec.translation),
-            ))
-            .id(),
-        (&StaticWorldMaterialHandle::BuildingWallGrid(ref material), Some(binding)) => commands
-            .spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                Transform::from_translation(spec.translation),
-                pickable_target(binding.into()),
-            ))
-            .id(),
-        (&StaticWorldMaterialHandle::BuildingWallGrid(ref material), None) => commands
-            .spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                Transform::from_translation(spec.translation),
-            ))
-            .id(),
+            ));
+            if let Some(binding) = binding {
+                entity.insert(pickable_target(binding.into()));
+            }
+            if let Some(outline_target) = outline_target {
+                entity.insert(HoverOutlineMember::new(outline_target));
+            }
+            entity.id()
+        }
     };
 
     SpawnedBoxVisual {
@@ -278,6 +283,7 @@ pub(crate) fn spawn_mesh_spec(
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     spec: StaticWorldMeshSpec,
 ) -> SpawnedMeshVisual {
+    let outline_target = spec.outline_target.clone();
     let material = make_static_world_material(
         materials,
         building_wall_materials,
@@ -286,26 +292,28 @@ pub(crate) fn spawn_mesh_spec(
     );
     let mesh = meshes.add(spec.mesh);
     let entity = match (&material, spec.pick_binding.clone()) {
-        (&StaticWorldMaterialHandle::Standard(ref material), Some(binding)) => commands
-            .spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                pickable_target(binding.into()),
-            ))
-            .id(),
-        (&StaticWorldMaterialHandle::Standard(ref material), None) => commands
-            .spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())))
-            .id(),
-        (&StaticWorldMaterialHandle::BuildingWallGrid(ref material), Some(binding)) => commands
-            .spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                pickable_target(binding.into()),
-            ))
-            .id(),
-        (&StaticWorldMaterialHandle::BuildingWallGrid(ref material), None) => commands
-            .spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())))
-            .id(),
+        (&StaticWorldMaterialHandle::Standard(ref material), binding) => {
+            let mut entity =
+                commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
+            if let Some(binding) = binding {
+                entity.insert(pickable_target(binding.into()));
+            }
+            if let Some(outline_target) = outline_target.clone() {
+                entity.insert(HoverOutlineMember::new(outline_target));
+            }
+            entity.id()
+        }
+        (&StaticWorldMaterialHandle::BuildingWallGrid(ref material), binding) => {
+            let mut entity =
+                commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
+            if let Some(binding) = binding {
+                entity.insert(pickable_target(binding.into()));
+            }
+            if let Some(outline_target) = outline_target {
+                entity.insert(HoverOutlineMember::new(outline_target));
+            }
+            entity.id()
+        }
     };
 
     SpawnedMeshVisual {
@@ -335,13 +343,15 @@ pub(crate) fn spawn_decal(
         metallic: 0.0,
         ..default()
     });
-    commands
-        .spawn((
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
-            Transform::from_translation(spec.translation).with_rotation(spec.rotation),
-        ))
-        .id()
+    let mut entity = commands.spawn((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::from_translation(spec.translation).with_rotation(spec.rotation),
+    ));
+    if let Some(outline_target) = spec.outline_target {
+        entity.insert(HoverOutlineMember::new(outline_target));
+    }
+    entity.id()
 }
 
 pub(crate) fn map_object_color(kind: game_data::MapObjectKind, palette: &ViewerPalette) -> Color {

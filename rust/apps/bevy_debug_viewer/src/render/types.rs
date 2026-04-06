@@ -1,7 +1,7 @@
 //! 渲染共享类型：定义交互菜单布局、静态世界规格、材质句柄和相关组件类型。
 
 use super::constants::{BUILDING_WALL_GRID_SHADER_PATH, GRID_GROUND_SHADER_PATH};
-use crate::picking::ViewerPickBindingSpec;
+use crate::picking::{ViewerPickBindingSpec, ViewerPickTarget};
 use bevy::asset::Asset;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, StandardMaterial};
 use bevy::prelude::*;
@@ -49,6 +49,8 @@ pub(crate) struct StaticWorldVisualKey {
     pub current_level: i32,
     pub topology_version: u64,
     pub hide_building_roofs: bool,
+    pub camera_yaw_degrees: i32,
+    pub camera_pitch_degrees: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +66,8 @@ pub(crate) struct StaticWorldOccluderVisual {
     pub base_alpha_mode: AlphaMode,
     pub aabb_center: Vec3,
     pub aabb_half_extents: Vec3,
+    pub shadowed_visible_cells: Vec<GridCoord>,
+    pub hover_map_object_id: Option<String>,
     pub currently_faded: bool,
 }
 
@@ -74,7 +78,9 @@ pub(crate) struct StaticWorldBoxSpec {
     pub color: Color,
     pub material_style: MaterialStyle,
     pub occluder_kind: Option<StaticWorldOccluderKind>,
+    pub occluder_cells: Vec<GridCoord>,
     pub pick_binding: Option<ViewerPickBindingSpec>,
+    pub outline_target: Option<ViewerPickTarget>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,9 +89,11 @@ pub(crate) struct StaticWorldMeshSpec {
     pub color: Color,
     pub material_style: MaterialStyle,
     pub occluder_kind: Option<StaticWorldOccluderKind>,
+    pub occluder_cells: Vec<GridCoord>,
     pub aabb_center: Vec3,
     pub aabb_half_extents: Vec3,
     pub pick_binding: Option<ViewerPickBindingSpec>,
+    pub outline_target: Option<ViewerPickTarget>,
 }
 
 #[derive(Debug, Clone)]
@@ -94,6 +102,7 @@ pub(crate) struct StaticWorldDecalSpec {
     pub translation: Vec3,
     pub rotation: Quat,
     pub color: Color,
+    pub outline_target: Option<ViewerPickTarget>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,12 +147,15 @@ pub(crate) enum StaticWorldMaterialHandle {
 pub(crate) struct GeneratedDoorVisualKey {
     pub map_id: Option<MapId>,
     pub current_level: i32,
+    pub camera_yaw_degrees: i32,
+    pub camera_pitch_degrees: i32,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratedDoorVisual {
     pub pivot_entity: Entity,
     pub leaf_entity: Entity,
+    pub map_object_id: String,
     pub material: StaticWorldMaterialHandle,
     pub base_color: Color,
     pub base_alpha: f32,
@@ -154,6 +166,7 @@ pub(crate) struct GeneratedDoorVisual {
     pub open_yaw: f32,
     pub closed_aabb_center: Vec3,
     pub closed_aabb_half_extents: Vec3,
+    pub shadowed_visible_cells: Vec<GridCoord>,
     pub is_open: bool,
 }
 
@@ -181,6 +194,8 @@ pub(crate) enum WallTileKind {
 pub(crate) enum MaterialStyle {
     StructureAccent,
     BuildingWallGrid,
+    BuildingWallCapGrid,
+    BuildingDoor,
     Utility,
     UtilityAccent,
     InvisiblePickProxy,
@@ -253,7 +268,9 @@ pub(crate) struct BuildingWallGridMaterialExt {
     pub major_line_width: f32,
     pub minor_line_width: f32,
     pub face_tint_strength: f32,
-    pub _padding: Vec3,
+    pub grid_line_visibility: f32,
+    pub top_face_grid_visibility: f32,
+    pub _padding: f32,
     pub base_color: Color,
     pub major_line_color: Color,
     pub minor_line_color: Color,
@@ -267,7 +284,9 @@ pub(crate) struct BuildingWallGridMaterialUniform {
     pub major_line_width: f32,
     pub minor_line_width: f32,
     pub face_tint_strength: f32,
-    pub _padding: Vec3,
+    pub grid_line_visibility: f32,
+    pub top_face_grid_visibility: f32,
+    pub _padding: f32,
     pub base_color: Vec4,
     pub major_line_color: Vec4,
     pub minor_line_color: Vec4,
@@ -285,7 +304,9 @@ impl AsBindGroupShaderType<BuildingWallGridMaterialUniform> for BuildingWallGrid
             major_line_width: self.major_line_width.max(0.0005),
             minor_line_width: self.minor_line_width.max(0.0005),
             face_tint_strength: self.face_tint_strength.clamp(0.0, 1.0),
-            _padding: Vec3::ZERO,
+            grid_line_visibility: self.grid_line_visibility.clamp(0.0, 1.0),
+            top_face_grid_visibility: self.top_face_grid_visibility.clamp(0.0, 1.0),
+            _padding: 0.0,
             base_color: self.base_color.to_linear().to_vec4(),
             major_line_color: self.major_line_color.to_linear().to_vec4(),
             minor_line_color: self.minor_line_color.to_linear().to_vec4(),

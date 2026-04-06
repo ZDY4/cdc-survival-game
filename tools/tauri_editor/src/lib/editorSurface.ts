@@ -1,10 +1,12 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { MAP_EDITOR_WINDOW_LABEL } from "../modules/maps/mapWindowing";
-import { SETTINGS_WINDOW_LABEL, isEditorSettingsSection } from "../modules/settings/settingsWindowing";
+import {
+  EDITOR_BOOTSTRAP_WINDOW_LABEL,
+  type EditorSurface,
+  isOpenableEditorSurface,
+} from "./editorSurfaces";
+import { isEditorSettingsSection } from "../modules/settings/settingsWindowing";
 import type { EditorSettingsSection, SpatialDocumentType } from "../types";
 import { isTauriRuntime } from "./tauri";
-
-export type EditorSurface = "main" | "map-editor" | "settings";
 
 type ResolveEditorSurfaceOptions = {
   search?: string;
@@ -16,12 +18,15 @@ export function resolveEditorSurface({
   label = null,
 }: ResolveEditorSurfaceOptions): EditorSurface {
   const params = new URLSearchParams(search);
-  const surface = params.get("surface");
-  if (surface === "map-editor" || label === MAP_EDITOR_WINDOW_LABEL) {
-    return "map-editor";
+  const surface = params.get("surface")?.trim();
+  if (isOpenableEditorSurface(surface)) {
+    return surface;
   }
-  if (surface === "settings" || label === SETTINGS_WINDOW_LABEL) {
-    return "settings";
+  if (isOpenableEditorSurface(label)) {
+    return label;
+  }
+  if (label === EDITOR_BOOTSTRAP_WINDOW_LABEL || surface === "main") {
+    return "main";
   }
   return "main";
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DocumentAgentSession } from "../../types";
 import {
+  buildActionIntentRequest,
   beginGenerationSession,
   buildGenerationRequest,
   buildGenerationUserMessage,
@@ -14,20 +15,43 @@ import { createDocumentAgentSession } from "./narrativeSessions";
 
 function buildSession(overrides: Partial<DocumentAgentSession> = {}): DocumentAgentSession {
   return {
-    ...createDocumentAgentSession("revise_document"),
+    ...createDocumentAgentSession({ mode: "revise_document" }),
     ...overrides,
   };
 }
 
 describe("narrativeGenerationFlow", () => {
-  it("builds a generation user message from the current session mode", () => {
+  it("builds a generation user message from the resolved action", () => {
     const message = buildGenerationUserMessage({
       submittedPrompt: "请润色这一段",
-      session: buildSession({ mode: "revise_document" }),
+      action: "revise_document",
     });
 
     expect(message.role).toBe("user");
-    expect(message.meta).toEqual(["修改当前文档"]);
+    expect(message.meta).toEqual(["将修改当前文档"]);
+  });
+
+  it("builds an action intent request from current document and context", () => {
+    const activeDocument = buildEditableDraftDocument("task_setup", "主文稿", "# 主文稿");
+    const contextDocument = buildEditableDraftDocument("character_card", "角色文稿", "# 角色文稿");
+    const session = buildSession({
+      chatMessages: [
+        { id: "user-1", role: "user", label: "你", content: "先看一下", tone: "accent" },
+      ],
+    });
+
+    const request = buildActionIntentRequest({
+      submittedPrompt: "把这个拆成单独文档",
+      activeDocument,
+      session,
+      selectedContextDocuments: [contextDocument],
+    });
+
+    expect(request.submittedPrompt).toBe("把这个拆成单独文档");
+    expect(request.docType).toBe(activeDocument.meta.docType);
+    expect(request.targetSlug).toBe(activeDocument.meta.slug);
+    expect(request.userPrompt).toContain("本轮需求：把这个拆成单独文档");
+    expect(request.relatedDocSlugs).toContain(contextDocument.meta.slug);
   });
 
   it("builds a generation request with selected context ordering", () => {
@@ -51,6 +75,7 @@ describe("narrativeGenerationFlow", () => {
       activeDocument,
       session,
       selectedContextDocuments: [contextA, contextB],
+      action: "revise_document",
     });
 
     expect(request.requestId).toBe("request-1");

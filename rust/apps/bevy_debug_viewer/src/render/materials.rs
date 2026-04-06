@@ -39,6 +39,26 @@ pub(super) fn with_alpha(color: Color, alpha: f32) -> Color {
     color.into()
 }
 
+pub(super) fn building_wall_grid_face_color() -> Color {
+    Color::srgb(0.62, 0.62, 0.62)
+}
+
+pub(super) fn building_wall_grid_major_line_color() -> Color {
+    Color::srgb(0.28, 0.28, 0.28)
+}
+
+pub(super) fn building_wall_grid_minor_line_color() -> Color {
+    Color::srgb(0.4, 0.4, 0.4)
+}
+
+pub(super) fn building_wall_cap_face_color() -> Color {
+    Color::srgb(0.49, 0.49, 0.49)
+}
+
+pub(super) fn building_door_color() -> Color {
+    Color::srgb(0.48, 0.48, 0.48)
+}
+
 pub(super) fn make_standard_material(
     materials: &mut Assets<StandardMaterial>,
     color: Color,
@@ -46,6 +66,7 @@ pub(super) fn make_standard_material(
 ) -> Handle<StandardMaterial> {
     let (perceptual_roughness, reflectance, metallic, alpha_mode, emissive_strength) = match style {
         MaterialStyle::StructureAccent => (0.8, 0.05, 0.0, AlphaMode::Opaque, 0.0),
+        MaterialStyle::BuildingDoor => (0.9, 0.04, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::Utility => (0.66, 0.16, 0.0, AlphaMode::Opaque, 0.04),
         MaterialStyle::UtilityAccent => (0.58, 0.2, 0.0, AlphaMode::Opaque, 0.09),
         MaterialStyle::InvisiblePickProxy => (1.0, 0.0, 0.0, AlphaMode::Blend, 0.0),
@@ -53,7 +74,9 @@ pub(super) fn make_standard_material(
         MaterialStyle::CharacterHead => (0.76, 0.06, 0.0, AlphaMode::Opaque, 0.0),
         MaterialStyle::CharacterAccent => (0.7, 0.12, 0.0, AlphaMode::Opaque, 0.05),
         MaterialStyle::Shadow => (1.0, 0.0, 0.0, AlphaMode::Blend, 0.0),
-        MaterialStyle::BuildingWallGrid => (0.92, 0.035, 0.0, AlphaMode::Opaque, 0.0),
+        MaterialStyle::BuildingWallGrid | MaterialStyle::BuildingWallCapGrid => {
+            (0.92, 0.035, 0.0, AlphaMode::Opaque, 0.0)
+        }
     };
     let emissive = color.with_alpha(1.0).to_linear() * emissive_strength;
 
@@ -80,13 +103,14 @@ pub(super) fn make_static_world_material(
 ) -> StaticWorldMaterialHandle {
     match style {
         MaterialStyle::BuildingWallGrid => {
-            let major_line_color = darken_color(color, 0.28);
-            let minor_line_color = darken_color(color, 0.16);
-            let cap_color = lighten_color(color, 0.08);
+            let wall_color = building_wall_grid_face_color();
+            let major_line_color = building_wall_grid_major_line_color();
+            let minor_line_color = building_wall_grid_minor_line_color();
+            let cap_color = wall_color;
             StaticWorldMaterialHandle::BuildingWallGrid(building_wall_materials.add(
                 BuildingWallGridMaterial {
                     base: StandardMaterial {
-                        base_color: color,
+                        base_color: wall_color,
                         perceptual_roughness: 0.92,
                         reflectance: 0.035,
                         metallic: 0.0,
@@ -98,11 +122,47 @@ pub(super) fn make_static_world_material(
                     extension: BuildingWallGridMaterialExt {
                         major_grid_size: 1.0,
                         minor_grid_size: 0.5,
-                        major_line_width: 0.048,
-                        minor_line_width: 0.022,
-                        face_tint_strength: 0.095,
-                        _padding: Vec3::ZERO,
-                        base_color: color,
+                        major_line_width: 0.016,
+                        minor_line_width: 0.0073333335,
+                        face_tint_strength: 0.0,
+                        grid_line_visibility: 1.0,
+                        top_face_grid_visibility: 0.0,
+                        _padding: 0.0,
+                        base_color: wall_color,
+                        major_line_color,
+                        minor_line_color,
+                        cap_color,
+                    },
+                },
+            ))
+        }
+        MaterialStyle::BuildingWallCapGrid => {
+            let wall_color = building_wall_cap_face_color();
+            let major_line_color = building_wall_grid_major_line_color();
+            let minor_line_color = building_wall_grid_minor_line_color();
+            let cap_color = wall_color;
+            StaticWorldMaterialHandle::BuildingWallGrid(building_wall_materials.add(
+                BuildingWallGridMaterial {
+                    base: StandardMaterial {
+                        base_color: wall_color,
+                        perceptual_roughness: 0.92,
+                        reflectance: 0.035,
+                        metallic: 0.0,
+                        alpha_mode: AlphaMode::Opaque,
+                        cull_mode: None,
+                        opaque_render_method: OpaqueRendererMethod::Forward,
+                        ..default()
+                    },
+                    extension: BuildingWallGridMaterialExt {
+                        major_grid_size: 1.0,
+                        minor_grid_size: 0.5,
+                        major_line_width: 0.016,
+                        minor_line_width: 0.0073333335,
+                        face_tint_strength: 0.0,
+                        grid_line_visibility: 1.0,
+                        top_face_grid_visibility: 1.0,
+                        _padding: 0.0,
+                        base_color: wall_color,
                         major_line_color,
                         minor_line_color,
                         cap_color,
@@ -151,4 +211,5 @@ pub(super) fn apply_occluder_fade_to_building_wall_material_ext(
     extension.major_line_color = scale_alpha(extension.major_line_color);
     extension.minor_line_color = scale_alpha(extension.minor_line_color);
     extension.cap_color = scale_alpha(extension.cap_color);
+    extension.grid_line_visibility = if faded { 0.0 } else { 1.0 };
 }

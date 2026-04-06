@@ -63,6 +63,7 @@ type QuestWorkspaceProps = {
   canPersist: boolean;
   onStatusChange: (status: string) => void;
   onReload: () => Promise<void>;
+  indexVisible?: boolean;
 };
 
 type QuestViewMode = "relationship" | "flow";
@@ -219,6 +220,7 @@ export function QuestWorkspace({
   canPersist,
   onStatusChange,
   onReload,
+  indexVisible = true,
 }: QuestWorkspaceProps) {
   const [documents, setDocuments] = useState<EditableQuestDocument[]>(hydrateDocuments(workspace.documents));
   const [selectedKey, setSelectedKey] = useState(workspace.documents[0]?.documentKey ?? "");
@@ -1056,7 +1058,7 @@ export function QuestWorkspace({
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace workspace-quests">
       <Toolbar actions={actions}>
         <div className="toolbar-actions">
           <button
@@ -1117,8 +1119,16 @@ export function QuestWorkspace({
         ) : null}
       </Toolbar>
 
-      <div className="workspace-grid">
-        <aside className="column">
+      <div
+        className={[
+          "workspace-grid",
+          "workspace-grid-quests",
+          viewMode === "relationship" ? "workspace-grid-quests-relationship" : "workspace-grid-quests-flow",
+          indexVisible ? "" : "workspace-grid-left-hidden",
+        ].filter(Boolean).join(" ")}
+      >
+        {indexVisible ? (
+        <aside className="column workspace-index-column">
           <PanelSection label="Quest index" title="Project quests">
             <TextField
               label="Search"
@@ -1154,6 +1164,7 @@ export function QuestWorkspace({
             </div>
           </PanelSection>
         </aside>
+        ) : null}
 
         <main className="column column-main">
           {selectedDocument ? (
@@ -1206,7 +1217,7 @@ export function QuestWorkspace({
           )}
         </main>
 
-        <aside className="column">
+        <aside className="column workspace-inspector-column workspace-quest-inspector">
           <PanelSection
             label="Inspector"
             title={

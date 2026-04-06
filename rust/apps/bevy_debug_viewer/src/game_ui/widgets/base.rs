@@ -33,11 +33,52 @@ pub(in crate::game_ui) fn text_bundle(
     )
 }
 
+pub(in crate::game_ui) fn ui_panel_background() -> Color {
+    Color::srgba(0.05, 0.05, 0.048, 0.97)
+}
+
+pub(in crate::game_ui) fn ui_panel_background_alt() -> Color {
+    Color::srgba(0.07, 0.07, 0.066, 0.95)
+}
+
+pub(in crate::game_ui) fn ui_panel_background_selected() -> Color {
+    Color::srgba(0.16, 0.155, 0.145, 0.98)
+}
+
+pub(in crate::game_ui) fn ui_border_color() -> Color {
+    Color::srgba(0.22, 0.22, 0.21, 1.0)
+}
+
+pub(in crate::game_ui) fn ui_border_strong_color() -> Color {
+    Color::srgba(0.30, 0.30, 0.29, 1.0)
+}
+
+pub(in crate::game_ui) fn ui_border_selected_color() -> Color {
+    Color::srgba(0.58, 0.57, 0.54, 1.0)
+}
+
+pub(in crate::game_ui) fn ui_text_heading_color() -> Color {
+    Color::srgba(0.92, 0.91, 0.88, 1.0)
+}
+
+pub(in crate::game_ui) fn ui_text_secondary_color() -> Color {
+    Color::srgba(0.82, 0.81, 0.78, 1.0)
+}
+
+pub(in crate::game_ui) fn ui_text_muted_color() -> Color {
+    Color::srgba(0.72, 0.71, 0.68, 1.0)
+}
+
+pub(in crate::game_ui) fn ui_text_dim_color() -> Color {
+    Color::srgba(0.56, 0.55, 0.52, 1.0)
+}
+
 pub(in crate::game_ui) fn action_button(
     font: &ViewerUiFont,
     label: &str,
     action: GameUiButtonAction,
 ) -> impl Bundle {
+    let style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
     (
         Button,
         Node {
@@ -47,8 +88,8 @@ pub(in crate::game_ui) fn action_button(
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(interaction_menu_button_color(false, Interaction::None)),
-        BorderColor::all(Color::srgba(0.19, 0.24, 0.32, 1.0)),
+        BackgroundColor(context_menu_button_color(style, false, false, Interaction::None)),
+        BorderColor::all(ui_border_color()),
         action,
         Text::new(label.to_string()),
         TextFont::from_font_size(11.0).with_font(font.0.clone()),
@@ -94,9 +135,9 @@ pub(in crate::game_ui) fn render_top_center_badges(
             "HP --".to_string()
         },
         if let Some(stats) = player_stats {
-            format!("行动 {:.1} / {}", stats.ap, stats.available_steps)
+            format!("AP {:.1}", stats.ap)
         } else {
-            "行动 --".to_string()
+            "AP --".to_string()
         },
         format!("楼层 {}", viewer_state.current_level),
         format!("模式 {}", viewer_state.control_mode.label()),
@@ -144,8 +185,8 @@ pub(in crate::game_ui) fn render_top_center_badges(
                             border: UiRect::all(px(1)),
                             ..default()
                         },
-                        BackgroundColor(Color::srgba(0.08, 0.09, 0.13, 0.94)),
-                        BorderColor::all(Color::srgba(0.24, 0.27, 0.37, 1.0)),
+                        BackgroundColor(ui_panel_background_alt()),
+                        BorderColor::all(ui_border_color()),
                         ui_hierarchy_bundle(),
                     ))
                     .with_children(|badge_node| {
@@ -153,78 +194,11 @@ pub(in crate::game_ui) fn render_top_center_badges(
                             font,
                             &badge,
                             9.6,
-                            Color::srgba(0.92, 0.95, 1.0, 1.0),
+                            ui_text_heading_color(),
                         ));
                     });
                 }
             });
-        });
-}
-
-pub(in crate::game_ui) fn render_stat_meter(
-    parent: &mut ChildSpawnerCommands,
-    font: &ViewerUiFont,
-    label: &str,
-    value_text: &str,
-    ratio: f32,
-    fill_color: Color,
-    border_color: Color,
-) {
-    parent
-        .spawn((
-            Node {
-                flex_grow: 1.0,
-                min_width: px(120),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(4),
-                ..default()
-            },
-            BackgroundColor(Color::NONE),
-            ui_hierarchy_bundle(),
-        ))
-        .with_children(|meter| {
-            meter
-                .spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        ..default()
-                    },
-                    ui_hierarchy_bundle(),
-                ))
-                .with_children(|labels| {
-                    labels.spawn(text_bundle(
-                        font,
-                        label,
-                        9.6,
-                        Color::srgba(0.84, 0.88, 0.95, 1.0),
-                    ));
-                    labels.spawn(text_bundle(font, value_text, 9.6, Color::WHITE));
-                });
-            meter
-                .spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        height: px(18),
-                        padding: UiRect::all(px(2)),
-                        border: UiRect::all(px(1)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.98)),
-                    BorderColor::all(border_color),
-                    ui_hierarchy_bundle(),
-                ))
-                .with_children(|track| {
-                    track.spawn((
-                        Node {
-                            width: Val::Percent((ratio.clamp(0.0, 1.0)) * 100.0),
-                            height: Val::Percent(100.0),
-                            ..default()
-                        },
-                        BackgroundColor(fill_color),
-                    ));
-                });
         });
 }
 
@@ -245,14 +219,14 @@ pub(in crate::game_ui) fn dock_tab_button(
             ..default()
         },
         BackgroundColor(if active {
-            Color::srgba(0.15, 0.18, 0.26, 0.98).into()
+            ui_panel_background_selected().into()
         } else {
-            Color::srgba(0.07, 0.08, 0.11, 0.95).into()
+            ui_panel_background_alt().into()
         }),
         BorderColor::all(if active {
-            Color::srgba(0.62, 0.72, 0.90, 1.0)
+            ui_border_selected_color()
         } else {
-            Color::srgba(0.21, 0.24, 0.31, 1.0)
+            ui_border_color()
         }),
         action,
         Text::new(label.to_string()),
@@ -260,8 +234,9 @@ pub(in crate::game_ui) fn dock_tab_button(
         TextColor(if active {
             Color::WHITE
         } else {
-            Color::srgba(0.80, 0.84, 0.90, 1.0)
+            ui_text_secondary_color()
         }),
+        TextLayout::new(Justify::Center, LineBreak::NoWrap),
     )
 }
 
@@ -280,14 +255,5 @@ pub(in crate::game_ui) fn player_hud_stats(
             max_hp: actor.max_hp,
             ap: actor.ap,
             available_steps: actor.available_steps,
-            in_combat: actor.in_combat,
         })
-}
-
-pub(in crate::game_ui) fn action_meter_ratio(stats: &PlayerHudStats) -> f32 {
-    if stats.in_combat {
-        (stats.ap / 10.0).clamp(0.0, 1.0)
-    } else {
-        ((stats.available_steps as f32) / 12.0).clamp(0.0, 1.0)
-    }
 }

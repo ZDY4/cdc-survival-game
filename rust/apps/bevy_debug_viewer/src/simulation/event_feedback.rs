@@ -1,6 +1,7 @@
 //! 事件反馈模块：负责把运行时事件转成伤害数字、命中反馈和状态提示。
 
 use super::*;
+use game_data::InteractionTargetId;
 
 pub(crate) fn collect_events(
     mut runtime_state: ResMut<ViewerRuntimeState>,
@@ -47,6 +48,9 @@ pub(crate) fn collect_events(
         if scene_transition_invalidates_interaction_ui(&event) {
             clear_interaction_ui_for_scene_transition(&mut viewer_state);
         }
+        if let SimulationEvent::PickupGranted { target_id, .. } = &event {
+            clear_interaction_ui_for_consumed_target(&mut viewer_state, target_id);
+        }
         sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
         runtime_state
             .recent_events
@@ -77,6 +81,19 @@ fn clear_interaction_ui_for_scene_transition(viewer_state: &mut ViewerState) {
     viewer_state.pending_open_trade_target = None;
 }
 
+fn clear_interaction_ui_for_consumed_target(
+    viewer_state: &mut ViewerState,
+    target_id: &InteractionTargetId,
+) {
+    if viewer_state.focused_target.as_ref() != Some(target_id) {
+        return;
+    }
+
+    viewer_state.focused_target = None;
+    viewer_state.current_prompt = None;
+    viewer_state.interaction_menu = None;
+}
+
 pub(super) fn queue_actor_motion(
     motion_state: &mut ViewerActorMotionState,
     runtime_state: &ViewerRuntimeState,
@@ -102,7 +119,8 @@ pub(super) fn queue_actor_motion(
 }
 
 pub(super) fn actor_motion_duration_sec(min_progression_interval_sec: f32) -> f32 {
-    min_progression_interval_sec.clamp(ACTOR_MOTION_MIN_DURATION_SEC, ACTOR_MOTION_MAX_DURATION_SEC)
+    (min_progression_interval_sec * ACTOR_MOTION_DURATION_SCALE)
+        .clamp(ACTOR_MOTION_MIN_DURATION_SEC, ACTOR_MOTION_MAX_DURATION_SEC)
 }
 
 pub(super) fn queue_attack_and_hit_feedback(

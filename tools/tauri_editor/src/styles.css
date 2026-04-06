@@ -47,6 +47,74 @@ button {
   min-height: 100vh;
 }
 
+.data-editor-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px;
+}
+
+.data-editor-header {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  padding: 14px;
+  display: grid;
+  gap: 14px;
+}
+
+.data-editor-header-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.data-editor-title-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.data-editor-title {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.data-editor-subtitle {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.data-editor-meta {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.data-editor-meta-item {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.data-editor-meta-item strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-editor-main {
+  min-width: 0;
+  min-height: 0;
+}
+
 .shell {
   min-height: 100vh;
   display: grid;
@@ -271,10 +339,16 @@ button {
 .workspace {
   display: grid;
   gap: 12px;
+  min-height: 0;
 }
 
 .graph-panel {
   min-height: 640px;
+}
+
+.workspace-dialogues .graph-panel,
+.workspace-quests .graph-panel {
+  min-height: 720px;
 }
 
 .workspace-grid {
@@ -282,6 +356,44 @@ button {
   gap: 12px;
   grid-template-columns: 260px minmax(0, 1fr) 308px;
   align-items: start;
+}
+
+.workspace-index-column,
+.workspace-inspector-column {
+  min-width: 0;
+}
+
+.workspace-grid-left-hidden {
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.workspace-grid-items {
+  grid-template-columns: 280px minmax(0, 1.75fr) 280px;
+}
+
+.workspace-grid-dialogues {
+  grid-template-columns: 250px minmax(0, 1.95fr) 280px;
+}
+
+.workspace-grid-quests-flow {
+  grid-template-columns: 250px minmax(0, 1.85fr) 290px;
+}
+
+.workspace-grid-quests-relationship {
+  grid-template-columns: 250px minmax(0, 1fr);
+}
+
+.workspace-grid-quests-relationship.workspace-grid-left-hidden,
+.workspace-grid-maps.workspace-grid-left-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace-grid-quests-relationship > .workspace-quest-inspector {
+  grid-column: 1 / -1;
+}
+
+.workspace-grid-maps {
+  grid-template-columns: 300px minmax(0, 1.3fr);
 }
 
 .map-library-grid {
@@ -294,6 +406,7 @@ button {
   display: grid;
   gap: 12px;
   align-content: start;
+  min-height: 0;
 }
 
 .panel {
@@ -1434,12 +1547,30 @@ button {
 }
 
 @media (max-width: 1320px) {
-  .workspace-grid {
+  .workspace-grid,
+  .workspace-grid-items,
+  .workspace-grid-dialogues,
+  .workspace-grid-quests-flow,
+  .workspace-grid-maps {
     grid-template-columns: 280px minmax(0, 1fr);
   }
 
-  .workspace-grid > .column:last-child {
+  .workspace-grid > .column:last-child,
+  .workspace-grid-items > .column:last-child,
+  .workspace-grid-dialogues > .column:last-child,
+  .workspace-grid-quests-flow > .column:last-child,
+  .workspace-grid-maps > .column:last-child {
     grid-column: 1 / -1;
+  }
+
+  .workspace-grid-left-hidden,
+  .workspace-grid-quests-relationship {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-grid-left-hidden > .column:last-child,
+  .workspace-grid-quests-relationship > .column:last-child {
+    grid-column: auto;
   }
 
   .map-editor-layout {
@@ -1465,6 +1596,10 @@ button {
   .settings-window {
     grid-template-columns: 240px minmax(0, 1fr);
   }
+
+  .data-editor-meta {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -1487,6 +1622,11 @@ button {
   }
 
   .workspace-grid,
+  .workspace-grid-items,
+  .workspace-grid-dialogues,
+  .workspace-grid-quests-flow,
+  .workspace-grid-quests-relationship,
+  .workspace-grid-maps,
   .narrative-shell,
   .narrative-grid,
   .map-library-grid,
@@ -1511,11 +1651,11 @@ button {
     min-width: 0;
   }
 
-  .narrative-workbench {
-    min-height: 0;
+  .data-editor-shell {
+    padding: 12px;
   }
 
-  .workspace-meta {
-    min-width: 0;
+  .narrative-workbench {
+    min-height: 0;
   }
 }

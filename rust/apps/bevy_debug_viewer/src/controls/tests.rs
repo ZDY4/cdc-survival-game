@@ -3,19 +3,19 @@
 use super::{
     clear_pending_post_cancel_turn_policy, cursor_interaction_target, handle_keyboard_input,
     handle_object_primary_click, is_command_actor_self_target, manual_pan_offset_from_follow_focus,
-    post_cancel_turn_policy_for_context, request_cancel_pending_movement, CancelMovementContext,
-    PostCancelTurnPolicy,
+    post_cancel_turn_policy_for_context, request_cancel_pending_movement,
+    execute_primary_target_interaction, CancelMovementContext, PostCancelTurnPolicy,
 };
 use crate::console::ViewerConsoleState;
 use crate::geometry::{clamp_camera_pan_offset, grid_bounds, selected_actor};
 use crate::state::{
-    ViewerActorMotionState, ViewerInfoPanelState, ViewerRenderConfig, ViewerRuntimeState,
-    ViewerSceneKind, ViewerState, ViewerUiSettings,
+    ViewerActorMotionState, ViewerControlMode, ViewerInfoPanelState, ViewerRenderConfig,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiSettings,
 };
 use bevy::prelude::*;
 use game_bevy::SettlementDebugSnapshot;
 use game_bevy::{SkillDefinitions, UiHotbarState, UiMenuPanel, UiMenuState, UiModalState};
-use game_core::{create_demo_runtime, MapObjectDebugState};
+use game_core::{create_demo_runtime, MapObjectDebugState, PendingProgressionStep};
 use game_data::{
     ActorSide, GridCoord, InteractionTargetId, MapObjectFootprint, MapObjectKind, MapRotation,
 };
@@ -230,6 +230,47 @@ fn command_actor_self_target_is_detected_for_wait_interaction() {
 }
 
 #[test]
+fn self_primary_interaction_wait_queues_turn_progression() {
+    let (runtime, handles) = create_demo_runtime();
+    let snapshot = runtime.snapshot();
+    let mut runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    viewer_state.select_actor(handles.player, ActorSide::Player);
+
+    let executed = execute_primary_target_interaction(
+        &mut runtime_state,
+        &mut viewer_state,
+        &snapshot,
+        InteractionTargetId::Actor(handles.player),
+        "self".to_string(),
+        "test",
+    );
+
+    assert!(executed);
+    assert_eq!(
+        runtime_state.runtime.peek_pending_progression(),
+        Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+    );
+    assert!(runtime_state.runtime.pending_interaction().is_none());
+    assert_eq!(
+        viewer_state.focused_target,
+        Some(InteractionTargetId::Actor(handles.player))
+    );
+    assert_eq!(
+        viewer_state
+            .current_prompt
+            .as_ref()
+            .and_then(|prompt| prompt.primary_option_id.clone())
+            .map(|id| id.0),
+        Some("wait".to_string())
+    );
+}
+
+#[test]
 fn main_menu_scene_ignores_escape_shortcut() {
     let app = keyboard_input_app(ViewerSceneKind::MainMenu, KeyCode::Escape);
 
@@ -284,10 +325,12 @@ fn gameplay_escape_closes_discard_modal_before_trade() {
     app.world_mut().resource_mut::<UiMenuState>().active_panel = None;
     {
         let mut modal_state = app.world_mut().resource_mut::<UiModalState>();
-        modal_state.discard_quantity = Some(game_bevy::UiDiscardQuantityModalState {
+        modal_state.item_quantity = Some(game_bevy::UiItemQuantityModalState {
             item_id: 1006,
+            source_count: 3,
             available_count: 3,
             selected_count: 2,
+            intent: game_bevy::UiItemQuantityIntent::Discard,
         });
         modal_state.trade = Some(Default::default());
     }
@@ -299,9 +342,9 @@ fn gameplay_escape_closes_discard_modal_before_trade() {
 
     let modal_state = app.world().resource::<UiModalState>();
     let viewer_state = app.world().resource::<ViewerState>();
-    assert!(modal_state.discard_quantity.is_none());
+    assert!(modal_state.item_quantity.is_none());
     assert!(modal_state.trade.is_some());
-    assert_eq!(viewer_state.status_line, "discard: closed");
+    assert_eq!(viewer_state.status_line, "item quantity: closed");
 }
 
 #[test]
@@ -337,6 +380,45 @@ fn ctrl_p_no_longer_toggles_free_observe_mode() {
 
     let viewer_state = app.world().resource::<ViewerState>();
     assert!(viewer_state.is_player_control());
+}
+
+#[test]
+fn space_toggles_ob_playback_in_free_observe_mode() {
+    let (runtime, _) = create_demo_runtime();
+    let mut app = App::new();
+    app.insert_resource(ButtonInput::<KeyCode>::default())
+        .insert_resource(Time::<()>::default())
+        .insert_resource(ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        })
+        .insert_resource(ViewerState {
+            control_mode: ViewerControlMode::FreeObserve,
+            auto_tick: true,
+            ..ViewerState::default()
+        })
+        .insert_resource(ViewerInfoPanelState::default())
+        .insert_resource(ViewerRenderConfig::default())
+        .insert_resource(UiMenuState::default())
+        .insert_resource(UiModalState::default())
+        .insert_resource(UiHotbarState::default())
+        .insert_resource(ViewerUiSettings::default())
+        .insert_resource(SkillDefinitions(Default::default()))
+        .insert_resource(ViewerConsoleState::default())
+        .insert_resource(ViewerSceneKind::Gameplay)
+        .add_systems(Update, handle_keyboard_input);
+
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Space);
+
+    app.update();
+
+    let viewer_state = app.world().resource::<ViewerState>();
+    assert!(viewer_state.is_free_observe());
+    assert!(!viewer_state.auto_tick);
+    assert_eq!(viewer_state.status_line, "ob playback: paused (1X)");
 }
 
 fn keyboard_input_app(scene_kind: ViewerSceneKind, key: KeyCode) -> App {

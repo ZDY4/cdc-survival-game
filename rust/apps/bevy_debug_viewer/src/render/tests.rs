@@ -4,15 +4,27 @@ use super::*;
 
 use super::{
     actor_visual_translation, actor_visual_world_position, build_wall_tile_mesh,
-    camera_follow_requires_reset, classify_wall_tile, collect_static_world_box_specs,
+    building_door_color, building_wall_cap_face_color, building_wall_grid_face_color,
+    building_wall_grid_major_line_color, building_wall_grid_minor_line_color,
+    camera_follow_requires_reset, classify_wall_tile,
+    collect_closed_door_occluders, collect_ground_cells_to_render, collect_static_world_box_specs,
     collect_static_world_decal_specs, collect_static_world_mesh_specs,
-    collect_walkable_tile_overlay_cells, darken_color, interaction_menu_button_color,
-    interaction_menu_layout, lerp_color, lighten_color, merge_cells_into_rects,
-    occluder_should_fade, occupied_cells_box, should_hide_building_roofs,
-    update_camera_follow_focus, GridBounds, MaterialStyle, StaticWorldOccluderKind,
-    WalkableTileOverlayKind, WallTileKind, INTERACTION_MENU_BUTTON_GAP_PX,
-    INTERACTION_MENU_BUTTON_HEIGHT_PX, INTERACTION_MENU_PADDING_PX, WALL_EAST, WALL_NORTH,
-    WALL_SOUTH, WALL_WEST,
+    collect_walkable_tile_overlay_cells, darken_color, generated_door_render_polygon,
+    interaction_menu_border_color, interaction_menu_button_color,
+    interaction_menu_button_font_size_for_label, interaction_menu_button_label_node,
+    interaction_menu_button_node, interaction_menu_layout,
+    interaction_menu_panel_color, interaction_menu_text_color, lerp_color, lighten_color,
+    merge_cells_into_rects, occluder_blocks_visible_cells, occluder_should_fade,
+    occupied_cells_box, project_shadowed_visible_cells, should_fade_occluder,
+    resolve_active_interaction_hover, should_hide_building_roofs, sync_hover_mesh_outlines,
+    update_camera_follow_focus, GridBounds, HoverOutlineMember, MaterialStyle,
+    StaticWorldOccluderKind, WalkableTileOverlayKind,
+    WallTileKind, HOVER_MESH_OUTLINE_WIDTH_PX,
+    INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
+    INTERACTION_MENU_ITEM_HEIGHT_PX, INTERACTION_MENU_ITEM_PADDING_X_PX,
+    INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX, INTERACTION_MENU_ITEM_PADDING_Y_PX,
+    INTERACTION_MENU_ITEM_FONT_SIZE_PX, INTERACTION_MENU_PADDING_PX, INTERACTION_MENU_WIDTH_PX,
+    WALL_EAST, WALL_NORTH, WALL_SOUTH, WALL_WEST,
 };
 use crate::picking::{BuildingPartKind, ViewerPickTarget};
 use crate::state::{
@@ -20,6 +32,8 @@ use crate::state::{
     ViewerCameraFollowState, ViewerControlMode, ViewerPalette, ViewerRenderConfig,
     ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
+use bevy::mesh::VertexAttributeValues;
+use bevy_mesh_outline::MeshOutline;
 use game_bevy::SettlementDebugSnapshot;
 use game_core::{
     create_demo_runtime, CombatDebugState, GeneratedBuildingDebugState, GeneratedBuildingStory,
@@ -203,10 +217,11 @@ fn interaction_menu_layout_clamps_to_window_bounds() {
 
     let layout = interaction_menu_layout(&window, &menu_state, &prompt);
 
+    assert_eq!(layout.width, INTERACTION_MENU_WIDTH_PX);
     assert!(layout.left >= 0.0);
     assert!(layout.top >= 0.0);
-    assert!(layout.left + layout.width <= window.width() - 11.0);
-    assert!(layout.top + layout.height <= window.height() - 11.0);
+    assert!(layout.left + layout.width <= window.width() - INTERACTION_MENU_PADDING_PX);
+    assert!(layout.top + layout.height <= window.height() - INTERACTION_MENU_PADDING_PX);
 }
 
 #[test]
@@ -225,9 +240,10 @@ fn interaction_menu_layout_height_only_accounts_for_option_list() {
 
     assert_eq!(
         layout.height,
-        INTERACTION_MENU_PADDING_PX * 2.0
-            + 3.0 * INTERACTION_MENU_BUTTON_HEIGHT_PX
-            + 2.0 * INTERACTION_MENU_BUTTON_GAP_PX
+        INTERACTION_MENU_BORDER_WIDTH_PX * 2.0
+            + INTERACTION_MENU_PADDING_PX * 2.0
+            + 3.0 * INTERACTION_MENU_ITEM_HEIGHT_PX
+            + 2.0 * INTERACTION_MENU_ITEM_GAP_PX
     );
 }
 
@@ -240,6 +256,67 @@ fn primary_button_is_not_always_highlighted_when_idle() {
     assert_eq!(
         interaction_menu_button_color(true, Interaction::Hovered).to_srgba(),
         interaction_menu_button_color(false, Interaction::Hovered).to_srgba()
+    );
+}
+
+#[test]
+fn interaction_menu_button_node_is_compact_and_centered() {
+    let node = interaction_menu_button_node();
+
+    assert_eq!(node.min_height, px(INTERACTION_MENU_ITEM_HEIGHT_PX));
+    assert_eq!(node.padding.left, px(INTERACTION_MENU_ITEM_PADDING_X_PX));
+    assert_eq!(node.padding.right, px(INTERACTION_MENU_ITEM_PADDING_X_PX));
+    assert_eq!(node.padding.top, px(INTERACTION_MENU_ITEM_PADDING_Y_PX));
+    assert_eq!(node.padding.bottom, px(INTERACTION_MENU_ITEM_PADDING_Y_PX));
+    assert_eq!(node.margin.bottom, px(INTERACTION_MENU_ITEM_GAP_PX));
+    assert_eq!(node.justify_content, JustifyContent::FlexStart);
+    assert_eq!(node.align_items, AlignItems::Center);
+}
+
+#[test]
+fn interaction_menu_button_label_node_fills_button_width_for_left_aligned_text() {
+    let node = interaction_menu_button_label_node();
+
+    assert_eq!(node.width, Val::Percent(100.0));
+}
+
+#[test]
+fn interaction_menu_button_font_size_shrinks_for_long_labels() {
+    assert_eq!(
+        interaction_menu_button_font_size_for_label("开门"),
+        INTERACTION_MENU_ITEM_FONT_SIZE_PX
+    );
+
+    let long_label_size = interaction_menu_button_font_size_for_label("打开非常远处的厚重铁门");
+    assert!(long_label_size < INTERACTION_MENU_ITEM_FONT_SIZE_PX);
+    assert!(long_label_size >= INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX);
+}
+
+#[test]
+fn interaction_menu_panel_and_buttons_use_flat_pixel_style_colors() {
+    assert_eq!(
+        interaction_menu_panel_color().to_srgba(),
+        Color::srgba(0.06, 0.06, 0.055, 0.98).to_srgba()
+    );
+    assert_eq!(
+        interaction_menu_border_color().to_srgba(),
+        Color::srgba(0.26, 0.26, 0.24, 1.0).to_srgba()
+    );
+    assert_eq!(
+        interaction_menu_text_color().to_srgba(),
+        Color::srgba(0.92, 0.91, 0.88, 0.98).to_srgba()
+    );
+    assert_eq!(
+        interaction_menu_button_color(false, Interaction::None).to_srgba(),
+        Color::srgba(0.14, 0.14, 0.13, 1.0).to_srgba()
+    );
+    assert_eq!(
+        interaction_menu_button_color(false, Interaction::Hovered).to_srgba(),
+        Color::srgba(0.18, 0.18, 0.17, 1.0).to_srgba()
+    );
+    assert_eq!(
+        interaction_menu_button_color(false, Interaction::Pressed).to_srgba(),
+        Color::srgba(0.10, 0.10, 0.09, 1.0).to_srgba()
     );
 }
 
@@ -276,6 +353,89 @@ fn merge_cells_into_rects_coalesces_solid_areas() {
     assert_eq!(rects[0].max_x, 1);
     assert_eq!(rects[0].min_z, 0);
     assert_eq!(rects[0].max_z, 1);
+}
+
+#[test]
+fn ground_cells_skip_generated_building_walkable_cells() {
+    let cells = collect_ground_cells_to_render(
+        &snapshot_with_generated_building(),
+        0,
+        GridBounds {
+            min_x: 0,
+            max_x: 3,
+            min_z: 0,
+            max_z: 3,
+        },
+    );
+
+    assert!(!cells.contains(&GridCoord::new(0, 0, 0)));
+    assert!(cells.contains(&GridCoord::new(1, 0, 0)));
+    assert_eq!(cells.len(), 15);
+}
+
+#[test]
+fn ground_cells_cover_full_bounds_without_generated_buildings() {
+    let cells = collect_ground_cells_to_render(
+        &snapshot_with_occluders(),
+        0,
+        GridBounds {
+            min_x: 0,
+            max_x: 1,
+            min_z: 0,
+            max_z: 1,
+        },
+    );
+
+    assert_eq!(cells.len(), 4);
+    assert!(cells.contains(&GridCoord::new(0, 0, 0)));
+    assert!(cells.contains(&GridCoord::new(1, 0, 1)));
+}
+
+#[test]
+fn ground_cells_merge_into_sections_around_building_floor_holes() {
+    let cells = collect_ground_cells_to_render(
+        &snapshot_with_generated_building(),
+        0,
+        GridBounds {
+            min_x: 0,
+            max_x: 3,
+            min_z: 0,
+            max_z: 3,
+        },
+    );
+    let rects = merge_cells_into_rects(&cells);
+
+    assert_eq!(rects.len(), 2);
+    assert!(rects.iter().all(|rect| {
+        !(rect.min_x <= 0 && rect.max_x >= 0 && rect.min_z <= 0 && rect.max_z >= 0)
+    }));
+}
+
+#[test]
+fn ground_cells_exclude_walkable_cells_from_multiple_generated_buildings() {
+    let mut snapshot = snapshot_with_generated_building();
+    let mut second_building = snapshot.generated_buildings[0].clone();
+    second_building.object_id = "generated_house_b".into();
+    second_building.anchor = GridCoord::new(2, 0, 2);
+    second_building.stories[0].walkable_cells = vec![GridCoord::new(3, 0, 3)];
+    second_building.stories[0].wall_cells = vec![GridCoord::new(3, 0, 3)];
+    snapshot.generated_buildings.push(second_building);
+
+    let cells = collect_ground_cells_to_render(
+        &snapshot,
+        0,
+        GridBounds {
+            min_x: 0,
+            max_x: 3,
+            min_z: 0,
+            max_z: 3,
+        },
+    );
+
+    assert!(!cells.contains(&GridCoord::new(0, 0, 0)));
+    assert!(!cells.contains(&GridCoord::new(3, 0, 3)));
+    assert!(cells.contains(&GridCoord::new(2, 0, 2)));
+    assert_eq!(cells.len(), 14);
 }
 
 #[test]
@@ -562,6 +722,167 @@ fn occluder_does_not_fade_without_focus_points() {
 }
 
 #[test]
+fn projected_shadow_cells_extend_forward_for_tall_occluder() {
+    let cells = project_shadowed_visible_cells(
+        &[GridCoord::new(0, 0, 0)],
+        0.0,
+        1.2,
+        1.0,
+        ViewerRenderConfig::default(),
+    );
+
+    assert!(cells.contains(&GridCoord::new(0, 0, 1)));
+    assert!(cells.contains(&GridCoord::new(0, 0, 2)));
+    assert!(!cells.contains(&GridCoord::new(0, 0, 0)));
+}
+
+#[test]
+fn projected_shadow_cells_for_short_occluder_do_not_skip_extra_row() {
+    let cells = project_shadowed_visible_cells(
+        &[GridCoord::new(0, 0, 0)],
+        0.0,
+        0.2,
+        1.0,
+        ViewerRenderConfig::default(),
+    );
+
+    assert!(cells.contains(&GridCoord::new(0, 0, 1)));
+    assert!(!cells.contains(&GridCoord::new(0, 0, 2)));
+}
+
+#[test]
+fn projected_shadow_cells_preserve_multi_cell_footprint() {
+    let cells = project_shadowed_visible_cells(
+        &[GridCoord::new(0, 0, 0), GridCoord::new(1, 0, 0)],
+        0.0,
+        0.4,
+        1.0,
+        ViewerRenderConfig::default(),
+    );
+
+    assert!(cells.contains(&GridCoord::new(0, 0, 1)));
+    assert!(cells.contains(&GridCoord::new(1, 0, 1)));
+}
+
+#[test]
+fn occluder_detects_visible_cells_only_from_projected_shadow() {
+    let occluder = sample_occluder(
+        vec![GridCoord::new(0, 0, 1), GridCoord::new(0, 0, 2)],
+        Vec3::new(2.0, 0.5, 2.0),
+    );
+    let visible = HashSet::from([GridCoord::new(0, 0, 2)]);
+
+    assert!(occluder_blocks_visible_cells(&occluder, &visible));
+}
+
+#[test]
+fn occluder_does_not_treat_base_cells_as_projected_shadow() {
+    let shadowed_visible_cells = project_shadowed_visible_cells(
+        &[GridCoord::new(0, 0, 0)],
+        0.0,
+        0.35,
+        1.0,
+        ViewerRenderConfig::default(),
+    );
+    let occluder = sample_occluder(shadowed_visible_cells, Vec3::new(4.0, 0.5, 4.0));
+    let visible = HashSet::from([GridCoord::new(0, 0, 0)]);
+
+    assert!(!occluder_blocks_visible_cells(&occluder, &visible));
+}
+
+#[test]
+fn occluder_can_fade_from_ray_or_projected_visible_cells() {
+    let ray_only = sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0));
+    let vision_only = sample_occluder(vec![GridCoord::new(5, 0, 5)], Vec3::new(20.0, 1.0, -5.0));
+
+    assert!(should_fade_occluder(
+        Vec3::new(0.0, 2.0, -10.0),
+        &[Vec3::new(0.0, 0.2, 0.0)],
+        &ray_only,
+        &HashSet::new(),
+    ));
+    assert!(should_fade_occluder(
+        Vec3::new(0.0, 2.0, -10.0),
+        &[],
+        &vision_only,
+        &HashSet::from([GridCoord::new(5, 0, 5)]),
+    ));
+}
+
+#[test]
+fn closed_doors_only_contribute_occluders() {
+    let closed_shadow = vec![GridCoord::new(2, 0, 3)];
+    let mut door_visual_state = GeneratedDoorVisualState::default();
+    door_visual_state.by_door.insert(
+        "closed".into(),
+        sample_door_visual(false, closed_shadow.clone()),
+    );
+    door_visual_state.by_door.insert(
+        "open".into(),
+        sample_door_visual(true, vec![GridCoord::new(9, 0, 9)]),
+    );
+
+    let occluders = collect_closed_door_occluders(&door_visual_state);
+
+    assert_eq!(occluders.len(), 1);
+    assert_eq!(occluders[0].shadowed_visible_cells, closed_shadow);
+    assert_eq!(occluders[0].hover_map_object_id.as_deref(), Some("door_object"));
+}
+
+#[test]
+fn generated_door_render_polygon_clamps_horizontal_thickness_to_thirty_centimeters() {
+    let door = sample_generated_door_debug_state(game_core::GeometryAxis::Horizontal);
+
+    let polygon = generated_door_render_polygon(&door, 1.0);
+    let z_values = polygon.outer.iter().map(|point| point.z).collect::<Vec<_>>();
+    let min_z = z_values.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_z = z_values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+    assert!((max_z - min_z - 0.3).abs() < 1e-6);
+}
+
+#[test]
+fn generated_door_render_polygon_clamps_vertical_thickness_to_thirty_centimeters() {
+    let door = sample_generated_door_debug_state(game_core::GeometryAxis::Vertical);
+
+    let polygon = generated_door_render_polygon(&door, 1.0);
+    let x_values = polygon.outer.iter().map(|point| point.x).collect::<Vec<_>>();
+    let min_x = x_values.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_x = x_values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+    assert!((max_x - min_x - 0.3).abs() < 1e-6);
+}
+
+#[test]
+fn occluder_keys_change_when_camera_projection_changes() {
+    let base_world_key = StaticWorldVisualKey {
+        map_id: None,
+        current_level: 0,
+        topology_version: 7,
+        hide_building_roofs: false,
+        camera_yaw_degrees: 0,
+        camera_pitch_degrees: 36,
+    };
+    let changed_world_key = StaticWorldVisualKey {
+        camera_yaw_degrees: 15,
+        ..base_world_key.clone()
+    };
+    let base_door_key = GeneratedDoorVisualKey {
+        map_id: None,
+        current_level: 0,
+        camera_yaw_degrees: 0,
+        camera_pitch_degrees: 36,
+    };
+    let changed_door_key = GeneratedDoorVisualKey {
+        camera_pitch_degrees: 45,
+        ..base_door_key.clone()
+    };
+
+    assert_ne!(base_world_key, changed_world_key);
+    assert_ne!(base_door_key, changed_door_key);
+}
+
+#[test]
 fn generated_building_specs_render_walls_as_tiles() {
     let palette = ViewerPalette::default();
     let box_specs = collect_static_world_box_specs(
@@ -589,8 +910,17 @@ fn generated_building_specs_render_walls_as_tiles() {
     let wall_specs = mesh_specs
         .iter()
         .filter(|spec| {
-            spec.color.to_srgba() == darken_color(palette.building_base, 0.2).to_srgba()
+            spec.color.to_srgba() == building_wall_grid_face_color().to_srgba()
                 && spec.material_style == MaterialStyle::BuildingWallGrid
+                && spec.occluder_kind
+                    == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
+        })
+        .count();
+    let wall_cap_specs = mesh_specs
+        .iter()
+        .filter(|spec| {
+            spec.color.to_srgba() == building_wall_grid_face_color().to_srgba()
+                && spec.material_style == MaterialStyle::BuildingWallCapGrid
                 && spec.occluder_kind
                     == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
         })
@@ -612,6 +942,7 @@ fn generated_building_specs_render_walls_as_tiles() {
         .count();
 
     assert_eq!(wall_specs, 4);
+    assert_eq!(wall_cap_specs, 4);
     assert!(walkable_specs >= 1);
     assert_eq!(roof_specs, 0);
     assert!(stair_specs >= 1);
@@ -658,10 +989,22 @@ fn generated_building_wall_tiles_keep_per_cell_occluders() {
         .iter()
         .filter(|spec| {
             spec.occluder_kind == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
+                && spec.material_style == MaterialStyle::BuildingWallGrid
+        })
+        .collect::<Vec<_>>();
+    let wall_cap_specs = mesh_specs
+        .iter()
+        .filter(|spec| {
+            spec.occluder_kind == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
+                && spec.material_style == MaterialStyle::BuildingWallCapGrid
         })
         .collect::<Vec<_>>();
 
     assert_eq!(wall_specs.len(), 4);
+    assert_eq!(wall_cap_specs.len(), 4);
+    assert!(wall_specs
+        .iter()
+        .all(|spec| spec.occluder_cells.len() == 1 && spec.occluder_cells[0].y == 0));
     assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.x > 0.0));
     assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.y > 0.0));
     assert!(wall_specs.iter().all(|spec| spec.aabb_half_extents.z > 0.0));
@@ -676,6 +1019,31 @@ fn generated_building_wall_tiles_keep_per_cell_occluders() {
                 )
         })
     }));
+    assert!(wall_cap_specs.iter().all(|spec| spec.pick_binding.is_none()));
+    assert!(wall_cap_specs.iter().all(|spec| spec.outline_target.is_none()));
+    for cap_spec in &wall_cap_specs {
+        let positions = cap_spec
+            .mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .expect("wall cap mesh should expose positions");
+        let VertexAttributeValues::Float32x3(positions) = positions else {
+            panic!("wall cap positions should use Float32x3");
+        };
+        let min_y = positions.iter().map(|position| position[1]).fold(f32::INFINITY, f32::min);
+        let max_y = positions
+            .iter()
+            .map(|position| position[1])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!((max_y - min_y - 0.10).abs() < 1e-5);
+    }
+    for wall_spec in &wall_specs {
+        let matching_cap = wall_cap_specs
+            .iter()
+            .find(|cap| cap.occluder_cells == wall_spec.occluder_cells)
+            .expect("each wall spec should have matching cap spec");
+        assert_eq!(matching_cap.aabb_center, wall_spec.aabb_center);
+        assert_eq!(matching_cap.aabb_half_extents, wall_spec.aabb_half_extents);
+    }
 }
 
 #[test]
@@ -814,6 +1182,317 @@ fn hovered_pickup_uses_neutral_outline_color() {
 }
 
 #[test]
+fn hover_outline_system_marks_all_actor_mesh_members_and_skips_shadow() {
+    let (runtime, handles) = create_demo_runtime();
+    let mut app = App::new();
+    app.insert_resource(ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    });
+    app.insert_resource(ViewerPalette::default());
+    app.insert_resource(ViewerState {
+        controlled_player_actor: Some(handles.player),
+        ..ViewerState::default()
+    });
+    app.insert_resource(crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(10),
+            semantic: ViewerPickTarget::Actor(handles.player),
+            interaction: Some(InteractionTargetId::Actor(handles.player)),
+            priority: crate::picking::ViewerPickPriority::Actor,
+            depth: 0.0,
+            position: None,
+        }),
+        ..default()
+    });
+    app.add_systems(Update, sync_hover_mesh_outlines);
+
+    let body = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::Actor(handles.player)))
+        .id();
+    let head = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::Actor(handles.player)))
+        .id();
+    let shadow = app.world_mut().spawn_empty().id();
+
+    app.update();
+
+    let world = app.world();
+    assert_eq!(
+        world.get::<MeshOutline>(body).expect("body should get outline").width,
+        HOVER_MESH_OUTLINE_WIDTH_PX
+    );
+    assert!(world.get::<MeshOutline>(head).is_some());
+    assert!(world.get::<MeshOutline>(shadow).is_none());
+}
+
+#[test]
+fn hover_outline_system_marks_all_visible_mesh_members_for_same_map_object() {
+    let (runtime, handles) = create_demo_runtime();
+    let mut app = App::new();
+    app.insert_resource(ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    });
+    app.insert_resource(ViewerPalette::default());
+    app.insert_resource(ViewerState {
+        controlled_player_actor: Some(handles.player),
+        ..ViewerState::default()
+    });
+    app.insert_resource(crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(20),
+            semantic: ViewerPickTarget::MapObject("terminal".into()),
+            interaction: Some(InteractionTargetId::MapObject("terminal".into())),
+            priority: crate::picking::ViewerPickPriority::MapObject,
+            depth: 0.0,
+            position: None,
+        }),
+        ..default()
+    });
+    app.add_systems(Update, sync_hover_mesh_outlines);
+
+    let base = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::MapObject("terminal".into())))
+        .id();
+    let top = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::MapObject("terminal".into())))
+        .id();
+    let other = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::MapObject("other".into())))
+        .id();
+
+    app.update();
+
+    let world = app.world();
+    assert!(world.get::<MeshOutline>(base).is_none());
+    assert!(world.get::<MeshOutline>(top).is_none());
+    assert!(world.get::<MeshOutline>(other).is_none());
+}
+
+#[test]
+fn hover_outline_system_keeps_building_part_outline_scoped_to_single_cell() {
+    let (runtime, handles) = create_demo_runtime();
+    let target = ViewerPickTarget::BuildingPart(crate::picking::BuildingPartPickTarget {
+        building_object_id: "house_01".into(),
+        story_level: 0,
+        kind: BuildingPartKind::WallCell,
+        anchor_cell: GridCoord::new(4, 0, 9),
+    });
+    let other = ViewerPickTarget::BuildingPart(crate::picking::BuildingPartPickTarget {
+        building_object_id: "house_01".into(),
+        story_level: 0,
+        kind: BuildingPartKind::WallCell,
+        anchor_cell: GridCoord::new(5, 0, 9),
+    });
+    let mut app = App::new();
+    app.insert_resource(ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    });
+    app.insert_resource(ViewerPalette::default());
+    app.insert_resource(ViewerState {
+        controlled_player_actor: Some(handles.player),
+        ..ViewerState::default()
+    });
+    app.insert_resource(crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(30),
+            semantic: target.clone(),
+            interaction: Some(InteractionTargetId::MapObject("house_01".into())),
+            priority: crate::picking::ViewerPickPriority::BuildingPart,
+            depth: 0.0,
+            position: None,
+        }),
+        ..default()
+    });
+    app.add_systems(Update, sync_hover_mesh_outlines);
+
+    let highlighted = app.world_mut().spawn(HoverOutlineMember::new(target)).id();
+    let untouched = app.world_mut().spawn(HoverOutlineMember::new(other)).id();
+
+    app.update();
+
+    let world = app.world();
+    assert!(world.get::<MeshOutline>(highlighted).is_none());
+    assert!(world.get::<MeshOutline>(untouched).is_none());
+}
+
+#[test]
+fn hover_outline_system_skips_targets_without_real_interaction_prompt() {
+    let (runtime, handles) = create_demo_runtime();
+    let mut app = App::new();
+    app.insert_resource(ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    });
+    app.insert_resource(ViewerPalette::default());
+    app.insert_resource(ViewerState {
+        controlled_player_actor: Some(handles.player),
+        ..ViewerState::default()
+    });
+    app.insert_resource(crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(40),
+            semantic: ViewerPickTarget::MapObject("non_interactive_wall_proxy".into()),
+            interaction: Some(InteractionTargetId::MapObject("non_interactive_wall_proxy".into())),
+            priority: crate::picking::ViewerPickPriority::BuildingPart,
+            depth: 0.0,
+            position: None,
+        }),
+        ..default()
+    });
+    app.add_systems(Update, sync_hover_mesh_outlines);
+
+    let member = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::MapObject(
+            "non_interactive_wall_proxy".into(),
+        )))
+        .id();
+
+    app.update();
+
+    assert!(app.world().get::<MeshOutline>(member).is_none());
+}
+
+#[test]
+fn active_interaction_hover_uses_target_grid_instead_of_ground_pick_grid() {
+    let (runtime, handles) = create_demo_runtime();
+    let snapshot = runtime.snapshot();
+    let runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let viewer_state = ViewerState {
+        controlled_player_actor: Some(handles.player),
+        hovered_grid: Some(GridCoord::new(4, 0, 1)),
+        current_level: 0,
+        ..ViewerState::default()
+    };
+    let picking_state = crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(41),
+            semantic: ViewerPickTarget::Actor(handles.hostile),
+            interaction: Some(InteractionTargetId::Actor(handles.hostile)),
+            priority: crate::picking::ViewerPickPriority::Actor,
+            depth: 0.0,
+            position: None,
+        }),
+        cursor_position: Some(Vec2::new(100.0, 100.0)),
+        ..default()
+    };
+
+    let active =
+        resolve_active_interaction_hover(&runtime_state, &snapshot, &viewer_state, &picking_state)
+            .expect("hovered hostile actor should resolve to active interaction hover");
+
+    assert_eq!(active.semantic, ViewerPickTarget::Actor(handles.hostile));
+    assert_eq!(active.display_grid, GridCoord::new(4, 0, 0));
+    assert_eq!(active.outline_kind, HoveredGridOutlineKind::Hostile);
+}
+
+#[test]
+fn hover_outline_system_falls_back_to_interactable_target_in_hovered_grid() {
+    let (runtime, handles) = create_demo_runtime();
+    let mut app = App::new();
+    app.insert_resource(ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    });
+    app.insert_resource(ViewerPalette::default());
+    app.insert_resource(ViewerState {
+        controlled_player_actor: Some(handles.player),
+        hovered_grid: Some(GridCoord::new(4, 0, 0)),
+        current_level: 0,
+        ..ViewerState::default()
+    });
+    app.insert_resource(crate::picking::ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(42),
+            semantic: ViewerPickTarget::MapObject("non_interactive_wall_proxy".into()),
+            interaction: Some(InteractionTargetId::MapObject("non_interactive_wall_proxy".into())),
+            priority: crate::picking::ViewerPickPriority::BuildingPart,
+            depth: 0.0,
+            position: None,
+        }),
+        cursor_position: Some(Vec2::new(120.0, 100.0)),
+        ..default()
+    });
+    app.add_systems(Update, sync_hover_mesh_outlines);
+
+    let hostile = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::Actor(handles.hostile)))
+        .id();
+    let wall = app
+        .world_mut()
+        .spawn(HoverOutlineMember::new(ViewerPickTarget::MapObject(
+            "non_interactive_wall_proxy".into(),
+        )))
+        .id();
+
+    app.update();
+
+    let world = app.world();
+    assert!(world.get::<MeshOutline>(hostile).is_some());
+    assert!(world.get::<MeshOutline>(wall).is_none());
+}
+
+#[test]
+fn scene_transition_trigger_outline_targets_visible_decal_not_pick_proxy() {
+    let snapshot = snapshot_with_trigger_strip();
+    let box_specs = collect_static_world_box_specs(
+        &snapshot,
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 3,
+            min_z: 0,
+            max_z: 1,
+        },
+        world_from_grid,
+    );
+    let decal_specs = collect_static_world_decal_specs(
+        &snapshot,
+        0,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+    );
+
+    let proxy_specs = box_specs
+        .iter()
+        .filter(|spec| spec.material_style == MaterialStyle::InvisiblePickProxy)
+        .collect::<Vec<_>>();
+    assert!(!proxy_specs.is_empty());
+    assert!(proxy_specs
+        .iter()
+        .all(|spec| spec.outline_target.is_none()));
+    assert!(!decal_specs.is_empty());
+    assert!(decal_specs
+        .iter()
+        .all(|spec| matches!(
+            spec.outline_target.as_ref(),
+            Some(ViewerPickTarget::BuildingPart(part))
+                if part.kind == BuildingPartKind::TriggerCell
+        )));
+}
+
+#[test]
 fn walkable_tile_overlay_marks_selected_actor_cell_walkable() {
     let (runtime, handles) = create_demo_runtime();
     let snapshot = runtime.snapshot();
@@ -906,6 +1585,28 @@ fn wall_tile_mesh_uses_requested_visual_thickness() {
 
     assert!((half_extents.x - 0.5).abs() < 1e-5);
     assert!((half_extents.z - 0.25).abs() < 1e-5);
+}
+
+#[test]
+fn wall_tile_mesh_does_not_keep_internal_center_box_faces() {
+    let (mesh, _, _) = build_wall_tile_mesh(
+        GridCoord::new(0, 0, 0),
+        WallTileKind::StraightHorizontal,
+        0.0,
+        2.0,
+        0.5,
+        1.0,
+    )
+    .expect("wall tile mesh should build");
+
+    let positions = mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .expect("wall tile mesh should expose positions");
+    let VertexAttributeValues::Float32x3(positions) = positions else {
+        panic!("wall tile positions should use Float32x3");
+    };
+
+    assert_eq!(positions.len(), 56);
 }
 
 fn sample_prompt(option_count: usize) -> InteractionPrompt {
@@ -1064,6 +1765,284 @@ fn world_from_grid(grid: GridCoord) -> WorldCoord {
         grid.y as f32 + 0.5,
         grid.z as f32 + 0.5,
     )
+}
+
+fn sample_occluder(
+    shadowed_visible_cells: Vec<GridCoord>,
+    aabb_center: Vec3,
+) -> StaticWorldOccluderVisual {
+    StaticWorldOccluderVisual {
+        material: StaticWorldMaterialHandle::Standard(Handle::default()),
+        base_color: Color::WHITE,
+        base_alpha: 1.0,
+        base_alpha_mode: AlphaMode::Opaque,
+        aabb_center,
+        aabb_half_extents: Vec3::splat(0.5),
+        shadowed_visible_cells,
+        hover_map_object_id: None,
+        currently_faded: false,
+    }
+}
+
+#[test]
+fn building_wall_grid_material_defaults_to_visible_grid_lines() {
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let material = make_static_world_material(
+        &mut materials,
+        &mut building_wall_materials,
+        building_wall_grid_face_color(),
+        MaterialStyle::BuildingWallGrid,
+    );
+    let StaticWorldMaterialHandle::BuildingWallGrid(handle) = material else {
+        panic!("building wall grid style should create wall grid material");
+    };
+    let material = building_wall_materials
+        .get(&handle)
+        .expect("wall grid material should exist");
+
+    assert_eq!(material.extension.grid_line_visibility, 1.0);
+    assert_eq!(material.extension.top_face_grid_visibility, 0.0);
+}
+
+#[test]
+fn building_wall_cap_grid_material_uses_denser_grid_parameters() {
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let material = make_static_world_material(
+        &mut materials,
+        &mut building_wall_materials,
+        building_wall_grid_face_color(),
+        MaterialStyle::BuildingWallCapGrid,
+    );
+    let StaticWorldMaterialHandle::BuildingWallGrid(handle) = material else {
+        panic!("building wall cap style should create wall grid material");
+    };
+    let material = building_wall_materials
+        .get(&handle)
+        .expect("wall cap material should exist");
+
+    assert_eq!(
+        material.base.base_color.to_srgba(),
+        building_wall_cap_face_color().to_srgba()
+    );
+    assert_eq!(material.extension.major_grid_size, 1.0);
+    assert_eq!(material.extension.minor_grid_size, 0.5);
+    assert_eq!(material.extension.major_line_width, 0.016);
+    assert_eq!(material.extension.minor_line_width, 0.0073333335);
+    assert_eq!(
+        material.extension.major_line_color.to_srgba(),
+        building_wall_grid_major_line_color().to_srgba()
+    );
+    assert_eq!(
+        material.extension.minor_line_color.to_srgba(),
+        building_wall_grid_minor_line_color().to_srgba()
+    );
+    assert_eq!(material.extension.top_face_grid_visibility, 1.0);
+}
+
+#[test]
+fn building_door_material_uses_standard_path_with_door_color() {
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let material = make_static_world_material(
+        &mut materials,
+        &mut building_wall_materials,
+        building_door_color(),
+        MaterialStyle::BuildingDoor,
+    );
+
+    let StaticWorldMaterialHandle::Standard(handle) = material else {
+        panic!("building door style should create standard material");
+    };
+    let material = materials
+        .get(&handle)
+        .expect("building door material should exist");
+
+    assert_eq!(
+        material.base_color.to_srgba(),
+        building_door_color().to_srgba()
+    );
+}
+
+#[test]
+fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let material = make_static_world_material(
+        &mut materials,
+        &mut building_wall_materials,
+        building_wall_grid_face_color(),
+        MaterialStyle::BuildingWallGrid,
+    );
+    let StaticWorldMaterialHandle::BuildingWallGrid(handle) = material.clone() else {
+        panic!("building wall grid style should create wall grid material");
+    };
+    let mut occluder = StaticWorldOccluderVisual {
+        material,
+        base_color: building_wall_grid_face_color(),
+        base_alpha: 1.0,
+        base_alpha_mode: AlphaMode::Opaque,
+        aabb_center: Vec3::ZERO,
+        aabb_half_extents: Vec3::splat(0.5),
+        shadowed_visible_cells: Vec::new(),
+        hover_map_object_id: None,
+        currently_faded: false,
+    };
+
+    set_occluder_faded(
+        &mut occluder,
+        true,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+    let faded = building_wall_materials
+        .get(&handle)
+        .expect("wall grid material should exist after fade");
+    assert_eq!(faded.extension.grid_line_visibility, 0.0);
+    assert_eq!(faded.base.base_color.to_srgba().alpha, 0.28);
+
+    set_occluder_faded(
+        &mut occluder,
+        false,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+    let restored = building_wall_materials
+        .get(&handle)
+        .expect("wall grid material should exist after restore");
+    assert_eq!(restored.extension.grid_line_visibility, 1.0);
+    assert_eq!(restored.base.base_color.to_srgba().alpha, 1.0);
+}
+
+#[test]
+fn hovered_closed_door_stays_opaque_even_when_occlusion_would_fade_it() {
+    let mut door_occluders = vec![sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0))];
+    door_occluders[0].hover_map_object_id = Some("door_object".into());
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+
+    update_occluder_list_fade(
+        &mut door_occluders,
+        Vec3::new(0.0, 2.0, -10.0),
+        &[Vec3::new(0.0, 0.2, 0.0)],
+        &HashSet::new(),
+        Some("door_object"),
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    assert!(!door_occluders[0].currently_faded);
+}
+
+#[test]
+fn door_fade_returns_after_hover_leaves() {
+    let mut door_occluders = vec![sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0))];
+    door_occluders[0].hover_map_object_id = Some("door_object".into());
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+
+    update_occluder_list_fade(
+        &mut door_occluders,
+        Vec3::new(0.0, 2.0, -10.0),
+        &[Vec3::new(0.0, 0.2, 0.0)],
+        &HashSet::new(),
+        Some("door_object"),
+        &mut materials,
+        &mut building_wall_materials,
+    );
+    update_occluder_list_fade(
+        &mut door_occluders,
+        Vec3::new(0.0, 2.0, -10.0),
+        &[Vec3::new(0.0, 0.2, 0.0)],
+        &HashSet::new(),
+        None,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    assert!(door_occluders[0].currently_faded);
+}
+
+#[test]
+fn hovered_door_override_does_not_change_static_world_occluders() {
+    let mut static_occluders = vec![sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0))];
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+
+    update_occluder_list_fade(
+        &mut static_occluders,
+        Vec3::new(0.0, 2.0, -10.0),
+        &[Vec3::new(0.0, 0.2, 0.0)],
+        &HashSet::new(),
+        Some("door_object"),
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    assert!(static_occluders[0].currently_faded);
+}
+
+fn sample_door_visual(
+    is_open: bool,
+    shadowed_visible_cells: Vec<GridCoord>,
+) -> GeneratedDoorVisual {
+    GeneratedDoorVisual {
+        pivot_entity: Entity::from_bits(1),
+        leaf_entity: Entity::from_bits(2),
+        map_object_id: "door_object".into(),
+        material: StaticWorldMaterialHandle::Standard(Handle::default()),
+        base_color: Color::WHITE,
+        base_alpha: 1.0,
+        base_alpha_mode: AlphaMode::Opaque,
+        pivot_translation: Vec3::ZERO,
+        current_yaw: 0.0,
+        target_yaw: 0.0,
+        open_yaw: std::f32::consts::FRAC_PI_2,
+        closed_aabb_center: Vec3::ZERO,
+        closed_aabb_half_extents: Vec3::splat(0.5),
+        shadowed_visible_cells,
+        is_open,
+    }
+}
+
+fn sample_generated_door_debug_state(axis: game_core::GeometryAxis) -> game_core::GeneratedDoorDebugState {
+    let polygon = match axis {
+        game_core::GeometryAxis::Horizontal => game_core::GeometryPolygon2 {
+            outer: vec![
+                game_core::GeometryPoint2::new(0.1, 0.2),
+                game_core::GeometryPoint2::new(0.9, 0.2),
+                game_core::GeometryPoint2::new(0.9, 0.8),
+                game_core::GeometryPoint2::new(0.1, 0.8),
+            ],
+            holes: Vec::new(),
+        },
+        game_core::GeometryAxis::Vertical => game_core::GeometryPolygon2 {
+            outer: vec![
+                game_core::GeometryPoint2::new(0.2, 0.1),
+                game_core::GeometryPoint2::new(0.8, 0.1),
+                game_core::GeometryPoint2::new(0.8, 0.9),
+                game_core::GeometryPoint2::new(0.2, 0.9),
+            ],
+            holes: Vec::new(),
+        },
+    };
+
+    game_core::GeneratedDoorDebugState {
+        door_id: "door".into(),
+        map_object_id: "door_object".into(),
+        building_object_id: "building".into(),
+        building_anchor: GridCoord::new(0, 0, 0),
+        level: 0,
+        opening_id: 0,
+        anchor_grid: GridCoord::new(0, 0, 0),
+        axis,
+        kind: game_core::DoorOpeningKind::Exterior,
+        polygon,
+        wall_height: 2.35,
+        is_open: false,
+        is_locked: false,
+    }
 }
 
 fn snapshot_with_focus_actor() -> SimulationSnapshot {

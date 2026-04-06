@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { EditorShell } from "./components/EditorShell";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DataEditorShell } from "./components/DataEditorShell";
 import { detectCurrentSurface } from "./lib/editorSurface";
-import { openOrFocusSettingsWindow } from "./lib/editorWindows";
+import {
+  getConfiguredStartupSurface,
+  openOrFocusEditorWindow,
+  openOrFocusModuleEditor,
+  openOrFocusSettingsWindow,
+} from "./lib/editorWindows";
+import { isModuleEditorSurface } from "./lib/editorSurfaces";
 import { invokeCommand, isTauriRuntime } from "./lib/tauri";
 import { useRegisterEditorMenuCommands } from "./menu/editorCommandRegistry";
 import { useEditorMenuBridge } from "./menu/menuBridge";
@@ -10,18 +17,12 @@ import { DialogueWorkspace } from "./modules/dialogues/DialogueWorkspace";
 import { fallbackDialogueWorkspace } from "./modules/dialogues/fallback";
 import { fallbackWorkspace } from "./modules/items/fallback";
 import { ItemWorkspace } from "./modules/items/ItemWorkspace";
-import { MapEditorWindow } from "./modules/maps/MapEditorWindow";
-import { fallbackMapWorkspace } from "./modules/maps/fallback";
-import { fallbackOverworldWorkspace } from "./modules/maps/overworldFallback";
-import { SpatialLibraryWorkspace } from "./modules/maps/SpatialLibraryWorkspace";
 import { fallbackQuestWorkspace } from "./modules/quests/fallback";
 import { QuestWorkspace } from "./modules/quests/QuestWorkspace";
 import { SettingsWindow } from "./modules/settings/SettingsWindow";
 import type {
   DialogueWorkspacePayload,
   ItemWorkspacePayload,
-  MapWorkspacePayload,
-  OverworldWorkspacePayload,
   QuestWorkspacePayload,
 } from "./types";
 
@@ -32,62 +33,97 @@ function App() {
     fallbackDialogueWorkspace,
   );
   const [questWorkspace, setQuestWorkspace] = useState<QuestWorkspacePayload>(fallbackQuestWorkspace);
-  const [mapWorkspace, setMapWorkspace] = useState<MapWorkspacePayload>(fallbackMapWorkspace);
-  const [overworldWorkspace, setOverworldWorkspace] =
-    useState<OverworldWorkspacePayload>(fallbackOverworldWorkspace);
-  const [status, setStatus] = useState("Loading editor workspaces...");
-  const [activeModule, setActiveModule] = useState("items");
+  const [status, setStatus] = useState("Loading editor workspace...");
   const [canPersist, setCanPersist] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
+  const bootstrapStartedRef = useRef(false);
 
-  async function loadMainWorkspaces() {
+  async function loadItemWorkspace() {
     try {
-      const [itemPayload, dialoguePayload, questPayload, mapPayload, overworldPayload] =
-        await Promise.all([
-        invokeCommand<ItemWorkspacePayload>("load_item_workspace"),
-        invokeCommand<DialogueWorkspacePayload>("load_dialogue_workspace"),
-        invokeCommand<QuestWorkspacePayload>("load_quest_workspace"),
-        invokeCommand<MapWorkspacePayload>("load_map_workspace"),
-        invokeCommand<OverworldWorkspacePayload>("load_overworld_workspace"),
-      ]);
-      setItemWorkspace(itemPayload);
-      setDialogueWorkspace(dialoguePayload);
-      setQuestWorkspace(questPayload);
-      setMapWorkspace(mapPayload);
-      setOverworldWorkspace(overworldPayload);
+      const payload = await invokeCommand<ItemWorkspacePayload>("load_item_workspace");
+      setItemWorkspace(payload);
       setCanPersist(true);
-      setStatus(
-        `Loaded ${itemPayload.itemCount} items, ${dialoguePayload.dialogCount} dialogues, ${questPayload.questCount} quests, ${mapPayload.mapCount} maps, and ${overworldPayload.overworldCount} overworld files from project data.`,
-      );
+      setStatus(`Loaded ${payload.itemCount} items from project data.`);
     } catch (error) {
       setItemWorkspace(fallbackWorkspace);
-      setDialogueWorkspace(fallbackDialogueWorkspace);
-      setQuestWorkspace(fallbackQuestWorkspace);
-      setMapWorkspace(fallbackMapWorkspace);
-      setOverworldWorkspace(fallbackOverworldWorkspace);
       setCanPersist(false);
-      setStatus(
-        `Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`,
-      );
+      setStatus(`Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`);
+    }
+  }
+
+  async function loadDialogueWorkspace() {
+    try {
+      const payload = await invokeCommand<DialogueWorkspacePayload>("load_dialogue_workspace");
+      setDialogueWorkspace(payload);
+      setCanPersist(true);
+      setStatus(`Loaded ${payload.dialogCount} dialogues from project data.`);
+    } catch (error) {
+      setDialogueWorkspace(fallbackDialogueWorkspace);
+      setCanPersist(false);
+      setStatus(`Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`);
+    }
+  }
+
+  async function loadQuestWorkspace() {
+    try {
+      const payload = await invokeCommand<QuestWorkspacePayload>("load_quest_workspace");
+      setQuestWorkspace(payload);
+      setCanPersist(true);
+      setStatus(`Loaded ${payload.questCount} quests from project data.`);
+    } catch (error) {
+      setQuestWorkspace(fallbackQuestWorkspace);
+      setCanPersist(false);
+      setStatus(`Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`);
     }
   }
 
   useEffect(() => {
-    if (surface === "map-editor") {
-      return;
-    }
     if (surface === "settings") {
       setStatus("Settings ready.");
       return;
     }
-    void loadMainWorkspaces();
+
+    if (surface === "main") {
+      if (bootstrapStartedRef.current) {
+        return;
+      }
+      bootstrapStartedRef.current = true;
+      const startupSurface = getConfiguredStartupSurface(
+        import.meta.env.VITE_EDITOR_START_SURFACE as string | undefined,
+      );
+      setStatus(`Opening ${startupSurface} editor...`);
+      void openOrFocusEditorWindow(startupSurface)
+        .then(async () => {
+          if (isTauriRuntime()) {
+            await getCurrentWindow().close();
+          }
+        })
+        .catch((error) => {
+          setStatus(`Failed to open ${startupSurface} editor: ${String(error)}`);
+        });
+      return;
+    }
+
+    switch (surface) {
+      case "items":
+        void loadItemWorkspace();
+        break;
+      case "dialogues":
+        void loadDialogueWorkspace();
+        break;
+      case "quests":
+        void loadQuestWorkspace();
+        break;
+      default:
+        break;
+    }
   }, [surface]);
 
-  useEditorMenuBridge(setStatus, surface !== "map-editor");
+  useEditorMenuBridge(setStatus, isModuleEditorSurface(surface));
 
   const shellMenuCommands = useMemo(() => {
-    if (surface === "map-editor") {
+    if (!isModuleEditorSurface(surface)) {
       return {};
     }
 
@@ -104,26 +140,20 @@ function App() {
       },
       [EDITOR_MENU_COMMANDS.MODULE_ITEMS]: {
         execute: async () => {
-          setActiveModule("items");
-          setStatus("Switched to Items.");
+          await openOrFocusModuleEditor(EDITOR_MENU_COMMANDS.MODULE_ITEMS);
+          setStatus("Opened Items editor.");
         },
       },
       [EDITOR_MENU_COMMANDS.MODULE_DIALOGUES]: {
         execute: async () => {
-          setActiveModule("dialogues");
-          setStatus("Switched to Dialogues.");
+          await openOrFocusModuleEditor(EDITOR_MENU_COMMANDS.MODULE_DIALOGUES);
+          setStatus("Opened Dialogues editor.");
         },
       },
       [EDITOR_MENU_COMMANDS.MODULE_QUESTS]: {
         execute: async () => {
-          setActiveModule("quests");
-          setStatus("Switched to Quests.");
-        },
-      },
-      [EDITOR_MENU_COMMANDS.MODULE_MAPS]: {
-        execute: async () => {
-          setActiveModule("maps");
-          setStatus("Switched to Maps.");
+          await openOrFocusModuleEditor(EDITOR_MENU_COMMANDS.MODULE_QUESTS);
+          setStatus("Opened Quests editor.");
         },
       },
       [EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS]: {
@@ -143,69 +173,80 @@ function App() {
 
   useRegisterEditorMenuCommands(shellMenuCommands);
 
-  if (surface === "map-editor") {
-    return <MapEditorWindow />;
+  if (surface === "main") {
+    return null;
   }
 
   if (surface === "settings") {
     return <SettingsWindow status={status} onStatusChange={setStatus} />;
   }
 
-  const modules = [
-    { id: "items", label: "Items", state: "active" as const },
-    { id: "dialogues", label: "Dialogues", state: "active" as const },
-    { id: "quests", label: "Quests", state: "active" as const },
-    { id: "maps", label: "Maps", state: "active" as const },
-  ];
+  const runtimeLabel = isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode";
 
-  return (
-    <EditorShell
-      title={itemWorkspace.bootstrap.appName}
-      subtitle="Standalone content editor for the Bevy + Godot + Tauri migration path."
-      bootstrap={itemWorkspace.bootstrap}
-      modules={modules}
-      activeModule={activeModule}
-      onModuleChange={setActiveModule}
-      status={status}
-      runtimeLabel={isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode"}
-      showSidebar={sidebarVisible}
-      showStatusBar={statusBarVisible}
-    >
-      {activeModule === "items" ? (
+  if (surface === "items") {
+    return (
+      <DataEditorShell
+        title="Items"
+        subtitle="Item definitions and validation."
+        bootstrap={itemWorkspace.bootstrap}
+        status={status}
+        runtimeLabel={runtimeLabel}
+        showStatusBar={statusBarVisible}
+      >
         <ItemWorkspace
           workspace={itemWorkspace}
           canPersist={canPersist}
           onStatusChange={setStatus}
-          onReload={loadMainWorkspaces}
+          onReload={loadItemWorkspace}
+          indexVisible={sidebarVisible}
         />
-      ) : null}
-      {activeModule === "dialogues" ? (
+      </DataEditorShell>
+    );
+  }
+
+  if (surface === "dialogues") {
+    return (
+      <DataEditorShell
+        title="Dialogues"
+        subtitle="Dialogue graphs, node editing, and validation."
+        bootstrap={dialogueWorkspace.bootstrap}
+        status={status}
+        runtimeLabel={runtimeLabel}
+        showStatusBar={statusBarVisible}
+      >
         <DialogueWorkspace
           workspace={dialogueWorkspace}
           canPersist={canPersist}
           onStatusChange={setStatus}
-          onReload={loadMainWorkspaces}
+          onReload={loadDialogueWorkspace}
+          indexVisible={sidebarVisible}
         />
-      ) : null}
-      {activeModule === "quests" ? (
+      </DataEditorShell>
+    );
+  }
+
+  if (surface === "quests") {
+    return (
+      <DataEditorShell
+        title="Quests"
+        subtitle="Quest relationships, flow editing, and rewards."
+        bootstrap={questWorkspace.bootstrap}
+        status={status}
+        runtimeLabel={runtimeLabel}
+        showStatusBar={statusBarVisible}
+      >
         <QuestWorkspace
           workspace={questWorkspace}
           canPersist={canPersist}
           onStatusChange={setStatus}
-          onReload={loadMainWorkspaces}
+          onReload={loadQuestWorkspace}
+          indexVisible={sidebarVisible}
         />
-      ) : null}
-      {activeModule === "maps" ? (
-        <SpatialLibraryWorkspace
-          mapWorkspace={mapWorkspace}
-          overworldWorkspace={overworldWorkspace}
-          canPersist={canPersist}
-          onStatusChange={setStatus}
-          onReload={loadMainWorkspaces}
-        />
-      ) : null}
-    </EditorShell>
-  );
+      </DataEditorShell>
+    );
+  }
+
+  return null;
 }
 
 export default App;

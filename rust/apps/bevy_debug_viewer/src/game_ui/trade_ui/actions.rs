@@ -43,36 +43,108 @@ pub(super) fn handle_trade_button_action(
 ) -> bool {
     match action {
         GameUiButtonAction::CloseTrade => {
+            ui.modal_state.item_quantity = None;
             ui.modal_state.trade = None;
             ui.viewer_state.pending_open_trade_target = None;
+            ui.drag_state.clear();
             true
         }
         GameUiButtonAction::BuyTradeItem { shop_id, item_id } => {
             if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                ui.menu_state.status_text = ui
-                    .runtime_state
-                    .runtime
-                    .buy_item_from_shop(actor_id, shop_id, *item_id, 1, &content.items.0)
-                    .map(|_| {
-                        save_runtime_snapshot(save_path, &ui.runtime_state.runtime);
-                        "买入成功".to_string()
-                    })
-                    .unwrap_or_else(|error| error.to_string());
+                match plan_trade_buy(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    shop_id,
+                    *item_id,
+                    &content.items,
+                ) {
+                    TradeQuantityPlan::Immediate { count } => {
+                        let status = execute_trade_buy(
+                            &mut ui.runtime_state,
+                            &mut ui.menu_state,
+                            save_path,
+                            &content.items,
+                            actor_id,
+                            shop_id,
+                            *item_id,
+                            count,
+                        );
+                        ui.viewer_state.status_line = status.clone();
+                        ui.menu_state.status_text = status;
+                    }
+                    TradeQuantityPlan::OpenModal(modal) => {
+                        ui.modal_state.item_quantity = Some(modal);
+                        ui.menu_state.status_text = "选择要买入的数量".to_string();
+                    }
+                    TradeQuantityPlan::Blocked { status } => {
+                        ui.viewer_state.status_line = status.clone();
+                        ui.menu_state.status_text = status;
+                    }
+                }
             }
+            ui.drag_state.clear();
             true
         }
         GameUiButtonAction::SellTradeItem { shop_id, item_id } => {
             if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                ui.menu_state.status_text = ui
+                match plan_trade_sell(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    shop_id,
+                    *item_id,
+                    &content.items,
+                ) {
+                    TradeQuantityPlan::Immediate { count } => {
+                        let status = execute_trade_sell(
+                            &mut ui.runtime_state,
+                            &mut ui.menu_state,
+                            save_path,
+                            &content.items,
+                            actor_id,
+                            shop_id,
+                            *item_id,
+                            count,
+                        );
+                        ui.viewer_state.status_line = status.clone();
+                        ui.menu_state.status_text = status;
+                    }
+                    TradeQuantityPlan::OpenModal(modal) => {
+                        ui.modal_state.item_quantity = Some(modal);
+                        ui.menu_state.status_text = "选择要卖出的数量".to_string();
+                    }
+                    TradeQuantityPlan::Blocked { status } => {
+                        ui.viewer_state.status_line = status.clone();
+                        ui.menu_state.status_text = status;
+                    }
+                }
+            }
+            ui.drag_state.clear();
+            true
+        }
+        GameUiButtonAction::SellEquippedTradeItem { shop_id, slot_id } => {
+            if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
+                let status = ui
                     .runtime_state
                     .runtime
-                    .sell_item_to_shop(actor_id, shop_id, *item_id, 1, &content.items.0)
-                    .map(|_| {
+                    .sell_equipped_item_to_shop(actor_id, shop_id, slot_id, &content.items.0)
+                    .map(|outcome| {
                         save_runtime_snapshot(save_path, &ui.runtime_state.runtime);
-                        "卖出成功".to_string()
+                        let item_name = content
+                            .items
+                            .0
+                            .get(outcome.item_id)
+                            .map(|item| item.name.as_str())
+                            .unwrap_or("未知物品");
+                        format!("已卖出装备 {item_name} x1")
                     })
                     .unwrap_or_else(|error| error.to_string());
+                ui.menu_state.status_text = status.clone();
+                ui.viewer_state.status_line = status;
+                if ui.menu_state.selected_equipment_slot.as_deref() == Some(slot_id.as_str()) {
+                    ui.menu_state.selected_equipment_slot = None;
+                }
             }
+            ui.drag_state.clear();
             true
         }
         _ => false,

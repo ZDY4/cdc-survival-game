@@ -1,6 +1,7 @@
 //! 屏幕叠加层模块：负责角色标签、伤害数字、交互菜单和对话面板等 2D 叠加内容。
 
 use super::*;
+use bevy::text::{Justify, LineBreak, TextLayout};
 
 pub(crate) fn clear_actor_labels(
     mut commands: Commands,
@@ -269,10 +270,11 @@ pub(crate) fn update_interaction_menu(
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
+    console_state: Res<crate::console::ViewerConsoleState>,
     mut visual_cache: Local<InteractionMenuVisualCache>,
 ) {
     let (entity, mut node, mut visibility, children) = menu_root.into_inner();
-    if scene_kind.is_main_menu() {
+    if scene_kind.is_main_menu() || console_state.is_open {
         clear_ui_children(&mut commands, children);
         visual_cache.key = None;
         visual_cache.visible = false;
@@ -313,33 +315,42 @@ pub(crate) fn update_interaction_menu(
     *visibility = Visibility::Visible;
     let visual_key = interaction_menu_visual_key(prompt);
     if visual_cache.key.as_ref() != Some(&visual_key) {
+        let menu_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
         clear_ui_children(&mut commands, children);
         commands.entity(entity).with_children(|parent| {
             for (index, option) in prompt.options.iter().enumerate() {
                 let is_primary = prompt.primary_option_id.as_ref() == Some(&option.id);
-                parent.spawn((
-                    Button,
-                    Node {
-                        width: Val::Percent(100.0),
-                        min_height: px(INTERACTION_MENU_BUTTON_HEIGHT_PX),
-                        padding: UiRect::axes(px(12), px(8)),
-                        margin: UiRect::bottom(px(INTERACTION_MENU_BUTTON_GAP_PX)),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(interaction_menu_button_color(is_primary, Interaction::None)),
-                    Text::new(format_interaction_button_label(
-                        index,
-                        option.display_name.as_str(),
-                    )),
-                    TextFont::from_font_size(13.2).with_font(viewer_font.0.clone()),
-                    TextColor(Color::srgba(0.96, 0.97, 0.99, 0.98)),
-                    InteractionMenuButton {
-                        target_id: prompt.target_id.clone(),
-                        option_id: option.id.clone(),
-                        is_primary,
-                    },
-                ));
+                parent
+                    .spawn((
+                        Button,
+                        context_menu_button_node(menu_style),
+                        BackgroundColor(context_menu_button_color(
+                            menu_style,
+                            is_primary,
+                            false,
+                            Interaction::None,
+                        )),
+                        InteractionMenuButton {
+                            target_id: prompt.target_id.clone(),
+                            option_id: option.id.clone(),
+                            is_primary,
+                        },
+                    ))
+                    .with_children(|button| {
+                        button.spawn((
+                            context_menu_button_label_node(),
+                            Text::new(format_interaction_button_label(
+                                index,
+                                option.display_name.as_str(),
+                            )),
+                            TextFont::from_font_size(interaction_menu_button_font_size_for_label(
+                                option.display_name.as_str(),
+                            ))
+                            .with_font(viewer_font.0.clone()),
+                            TextColor(context_menu_text_color()),
+                            TextLayout::new(Justify::Left, LineBreak::NoWrap),
+                        ));
+                    });
             }
         });
         visual_cache.key = Some(visual_key);
@@ -357,11 +368,12 @@ pub(crate) fn update_dialogue_panel(
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
+    console_state: Res<crate::console::ViewerConsoleState>,
 ) {
     let (entity, mut node, mut visibility, children) = dialogue_root.into_inner();
     clear_ui_children(&mut commands, children);
 
-    if scene_kind.is_main_menu() {
+    if scene_kind.is_main_menu() || console_state.is_open {
         *visibility = Visibility::Hidden;
         return;
     }
@@ -381,7 +393,7 @@ pub(crate) fn update_dialogue_panel(
         parent.spawn((
             Text::new(format!("对话 · {}", dialogue.target_name)),
             TextFont::from_font_size(17.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.96, 0.97, 0.99, 0.98)),
+            TextColor(Color::srgba(0.94, 0.93, 0.90, 0.98)),
             Node {
                 margin: UiRect::bottom(px(6)),
                 ..default()
@@ -390,7 +402,7 @@ pub(crate) fn update_dialogue_panel(
         parent.spawn((
             Text::new(speaker),
             TextFont::from_font_size(12.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.63, 0.83, 0.99, 0.98)),
+            TextColor(Color::srgba(0.82, 0.80, 0.74, 0.98)),
             Node {
                 margin: UiRect::bottom(px(10)),
                 ..default()
@@ -399,7 +411,7 @@ pub(crate) fn update_dialogue_panel(
         parent.spawn((
             Text::new(body_text),
             TextFont::from_font_size(15.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.97, 0.97, 0.98, 0.98)),
+            TextColor(Color::srgba(0.96, 0.95, 0.93, 0.98)),
             Node {
                 margin: UiRect::bottom(px(12)),
                 ..default()
@@ -407,20 +419,20 @@ pub(crate) fn update_dialogue_panel(
         ));
         if !choice_labels.is_empty() {
             for (choice_index, label) in choice_labels.iter().enumerate() {
+                let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
                 parent.spawn((
                     Button,
-                    Node {
-                        width: Val::Percent(100.0),
-                        min_height: px(INTERACTION_MENU_BUTTON_HEIGHT_PX),
-                        padding: UiRect::axes(px(12), px(8)),
-                        margin: UiRect::bottom(px(INTERACTION_MENU_BUTTON_GAP_PX)),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(interaction_menu_button_color(false, Interaction::None)),
+                    dialogue_choice_button_node(),
+                    BackgroundColor(context_menu_button_color(
+                        button_style,
+                        false,
+                        false,
+                        Interaction::None,
+                    )),
                     Text::new(label.clone()),
-                    TextFont::from_font_size(13.2).with_font(viewer_font.0.clone()),
-                    TextColor(Color::srgba(0.96, 0.97, 0.99, 0.98)),
+                    TextFont::from_font_size(DIALOGUE_CHOICE_BUTTON_FONT_SIZE_PX)
+                        .with_font(viewer_font.0.clone()),
+                    TextColor(context_menu_text_color()),
                     DialogueChoiceButton { choice_index },
                 ));
             }
@@ -428,7 +440,7 @@ pub(crate) fn update_dialogue_panel(
         parent.spawn((
             Text::new(hint_text),
             TextFont::from_font_size(11.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.78, 0.81, 0.87, 0.94)),
+            TextColor(Color::srgba(0.72, 0.71, 0.68, 0.94)),
         ));
     });
 }
@@ -483,6 +495,77 @@ pub(super) fn format_interaction_button_label(index: usize, display_name: &str) 
     display_name.to_string()
 }
 
+pub(super) fn interaction_menu_panel_color() -> Color {
+    context_menu_panel_color()
+}
+
+pub(super) fn interaction_menu_border_color() -> Color {
+    context_menu_border_color()
+}
+
+pub(super) fn interaction_menu_text_color() -> Color {
+    context_menu_text_color()
+}
+
+pub(super) fn interaction_menu_button_node() -> Node {
+    context_menu_button_node(ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction))
+}
+
+pub(super) fn interaction_menu_button_label_node() -> Node {
+    context_menu_button_label_node()
+}
+
+pub(super) fn interaction_menu_button_font_size_for_label(display_name: &str) -> f32 {
+    let style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
+    let available_width =
+        (style.width - style.padding * 2.0 - style.item_padding_x * 2.0).max(1.0);
+    let estimated_width =
+        interaction_menu_estimated_label_width(display_name, style.item_font_size);
+    if estimated_width <= available_width {
+        return style.item_font_size;
+    }
+
+    let scaled_size = style.item_font_size * (available_width / estimated_width);
+    scaled_size.clamp(
+        INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX,
+        style.item_font_size,
+    )
+}
+
+fn interaction_menu_estimated_label_width(display_name: &str, font_size: f32) -> f32 {
+    let units = display_name
+        .chars()
+        .map(interaction_menu_label_char_width_units)
+        .sum::<f32>();
+    units * font_size
+}
+
+fn interaction_menu_label_char_width_units(ch: char) -> f32 {
+    if ch.is_ascii_whitespace() {
+        0.34
+    } else if ch.is_ascii_punctuation() || ch.is_ascii_digit() {
+        0.52
+    } else if ch.is_ascii_alphabetic() {
+        0.58
+    } else {
+        1.0
+    }
+}
+
+pub(super) fn dialogue_choice_button_node() -> Node {
+    Node {
+        width: Val::Percent(100.0),
+        min_height: px(DIALOGUE_CHOICE_BUTTON_HEIGHT_PX),
+        padding: UiRect::axes(
+            px(DIALOGUE_CHOICE_BUTTON_PADDING_X_PX),
+            px(DIALOGUE_CHOICE_BUTTON_PADDING_Y_PX),
+        ),
+        margin: UiRect::bottom(px(DIALOGUE_CHOICE_BUTTON_GAP_PX)),
+        align_items: AlignItems::Center,
+        ..default()
+    }
+}
+
 pub(super) fn dialogue_panel_content(
     dialogue: &crate::state::ActiveDialogueState,
 ) -> (String, String, Vec<String>, String) {
@@ -521,9 +604,10 @@ pub(super) fn dialogue_panel_content(
 }
 
 pub(crate) fn interaction_menu_button_color(_is_primary: bool, interaction: Interaction) -> Color {
-    match interaction {
-        Interaction::Pressed => Color::srgba(0.23, 0.27, 0.33, 0.98),
-        Interaction::Hovered => Color::srgba(0.17, 0.2, 0.26, 0.96),
-        Interaction::None => Color::srgba(0.11, 0.13, 0.17, 0.94),
-    }
+    context_menu_button_color(
+        ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction),
+        false,
+        false,
+        interaction,
+    )
 }

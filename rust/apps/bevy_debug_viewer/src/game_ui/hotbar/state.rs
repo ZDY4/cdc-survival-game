@@ -7,6 +7,12 @@ use game_bevy::{
 use crate::game_ui::state_sync::{find_skill_tree_id, skills_snapshot_for_player};
 use crate::state::ViewerRuntimeState;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AutoHotbarSlotTarget {
+    AlreadyBound(usize),
+    Slot(usize),
+}
+
 pub(crate) fn sync_skill_selection_state(
     menu_state: &mut UiMenuState,
     runtime_state: &ViewerRuntimeState,
@@ -120,4 +126,29 @@ pub(crate) fn assign_skill_to_hotbar_slot(
         slot.saturating_add(1)
     );
     true
+}
+
+pub(crate) fn resolve_auto_hotbar_slot_target(
+    hotbar_state: &UiHotbarState,
+    group: usize,
+    skill_id: &str,
+) -> Result<AutoHotbarSlotTarget, String> {
+    let Some(group_slots) = hotbar_state.groups.get(group) else {
+        return Err(format!("快捷栏第 {} 组不存在", group.saturating_add(1)));
+    };
+
+    if let Some(slot) = group_slots
+        .iter()
+        .position(|slot| slot.skill_id.as_deref() == Some(skill_id))
+    {
+        return Ok(AutoHotbarSlotTarget::AlreadyBound(slot));
+    }
+
+    if let Some(slot) = group_slots.iter().position(|slot| slot.skill_id.is_none()) {
+        return Ok(AutoHotbarSlotTarget::Slot(slot));
+    }
+
+    Ok(AutoHotbarSlotTarget::Slot(
+        group_slots.len().saturating_sub(1),
+    ))
 }

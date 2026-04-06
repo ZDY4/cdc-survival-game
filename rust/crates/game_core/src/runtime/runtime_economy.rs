@@ -153,6 +153,31 @@ impl SimulationRuntime {
         )
     }
 
+    pub fn sell_equipped_item_to_shop(
+        &mut self,
+        actor_id: ActorId,
+        shop_id: &str,
+        slot_id: &str,
+        items: &ItemLibrary,
+    ) -> Result<TradeOutcome, EconomyRuntimeError> {
+        let shop_id = shop_id.to_string();
+        let slot_id = slot_id.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            economy_action_error,
+            move |simulation| {
+                simulation.economy_mut().sell_equipped_item_to_shop(
+                    actor_id,
+                    &shop_id,
+                    &slot_id,
+                    items,
+                )
+            },
+        )
+    }
+
     pub fn drop_item_to_ground(
         &mut self,
         actor_id: ActorId,
@@ -166,6 +191,22 @@ impl SimulationRuntime {
             None,
             string_action_error,
             move |simulation| simulation.drop_item_to_ground(actor_id, item_id, count),
+        )
+    }
+
+    pub fn drop_equipped_item_to_ground(
+        &mut self,
+        actor_id: ActorId,
+        slot: &str,
+        _items: &ItemLibrary,
+    ) -> Result<DropItemOutcome, String> {
+        let slot = slot.to_string();
+        self.run_ap_action(
+            actor_id,
+            ActionType::Item,
+            None,
+            string_action_error,
+            move |simulation| simulation.drop_equipped_item_to_ground(actor_id, &slot),
         )
     }
 
@@ -199,6 +240,17 @@ impl SimulationRuntime {
             economy_action_error,
             move |simulation| simulation.economy_mut().clear_actor_loadout(actor_id),
         )
+    }
+
+    pub fn move_inventory_item_before(
+        &mut self,
+        actor_id: ActorId,
+        item_id: u32,
+        before_item_id: Option<u32>,
+    ) -> Result<(), EconomyRuntimeError> {
+        self.simulation
+            .economy_mut()
+            .move_inventory_item_before(actor_id, item_id, before_item_id)
     }
 
     pub fn allocate_attribute_point(

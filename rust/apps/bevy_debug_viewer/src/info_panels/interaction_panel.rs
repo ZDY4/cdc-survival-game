@@ -1,3 +1,5 @@
+//! 交互信息面板格式化模块：负责把当前目标、prompt 和对话状态整理成文本。
+
 use game_core::SimulationSnapshot;
 use game_data::InteractionPrompt;
 

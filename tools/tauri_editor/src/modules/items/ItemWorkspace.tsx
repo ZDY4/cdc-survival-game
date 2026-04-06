@@ -47,6 +47,7 @@ type ItemWorkspaceProps = {
   canPersist: boolean;
   onStatusChange: (status: string) => void;
   onReload: () => Promise<void>;
+  indexVisible?: boolean;
 };
 
 type ItemTag = "weapon" | "armor" | "accessory" | "usable" | "material_or_misc";
@@ -1061,6 +1062,7 @@ export function ItemWorkspace({
   canPersist,
   onStatusChange,
   onReload,
+  indexVisible = true,
 }: ItemWorkspaceProps) {
   const [documents, setDocuments] = useState<EditableItemDocument[]>(
     hydrateDocuments(workspace.documents),
@@ -2258,7 +2260,7 @@ export function ItemWorkspace({
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace workspace-items">
       <Toolbar actions={actions}>
         <div className="toolbar-summary">
           <Badge tone="accent">{workspace.itemCount} files</Badge>
@@ -2272,8 +2274,11 @@ export function ItemWorkspace({
         </div>
       </Toolbar>
 
-      <div className="workspace-grid">
-        <aside className="column">
+      <div
+        className={`workspace-grid workspace-grid-items ${indexVisible ? "" : "workspace-grid-left-hidden"}`.trim()}
+      >
+        {indexVisible ? (
+        <aside className="column workspace-index-column">
           <PanelSection label="Item index" title="Project items">
             <div className="filter-stack">
               <TextField
@@ -2336,6 +2341,7 @@ export function ItemWorkspace({
             </div>
           </PanelSection>
         </aside>
+        ) : null}
 
         <main className="column column-main">
           {selectedDocument ? (
@@ -2575,7 +2581,7 @@ export function ItemWorkspace({
           )}
         </main>
 
-        <aside className="column">
+        <aside className="column workspace-inspector-column">
           <PanelSection
             label="Inspector"
             title={

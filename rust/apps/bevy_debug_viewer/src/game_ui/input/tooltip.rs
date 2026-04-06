@@ -11,7 +11,8 @@ pub(crate) fn update_hover_tooltip_state(
     scene_kind: Res<ViewerSceneKind>,
     menu_state: Res<UiMenuState>,
     modal_state: Res<UiModalState>,
-    inventory_context_menu: Res<UiInventoryContextMenuState>,
+    inventory_context_menu: Res<UiContextMenuState>,
+    drag_state: Res<UiInventoryDragState>,
     runtime_state: Res<ViewerRuntimeState>,
     viewer_state: Res<ViewerState>,
     overworld: Res<OverworldDefinitions>,
@@ -45,9 +46,10 @@ pub(crate) fn update_hover_tooltip_state(
     tooltip_state.cursor_position = cursor_position;
 
     if scene_kind.is_main_menu()
-        || modal_state.discard_quantity.is_some()
+        || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
         || inventory_context_menu.visible
+        || drag_state.is_active()
     {
         tooltip_state.clear();
         return;

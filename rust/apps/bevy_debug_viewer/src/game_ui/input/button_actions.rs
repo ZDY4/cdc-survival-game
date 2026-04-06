@@ -3,14 +3,26 @@
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum InventoryDropPlan {
+pub(super) enum InventoryDropPlan {
     Immediate { count: i32 },
-    OpenModal(game_bevy::UiDiscardQuantityModalState),
+    OpenModal(game_bevy::UiItemQuantityModalState),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TradeQuantityPlan {
+    Immediate { count: i32 },
+    OpenModal(game_bevy::UiItemQuantityModalState),
+    Blocked { status: String },
 }
 
 pub(crate) fn handle_game_ui_buttons(
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor, &GameUiButtonAction),
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &GameUiButtonAction,
+            Option<&crate::ui_context_menu::ContextMenuItemDisabled>,
+        ),
         (Changed<Interaction>, With<Button>),
     >,
     mut ui: GameUiCommandState,
@@ -18,8 +30,22 @@ pub(crate) fn handle_game_ui_buttons(
     content: GameContentRefs,
     mut exit: MessageWriter<AppExit>,
 ) {
-    for (interaction, mut background, action) in &mut buttons {
-        *background = BackgroundColor(interaction_menu_button_color(false, *interaction));
+    if ui.drag_state.dragging || ui.drag_state.suppress_button_press_once {
+        ui.drag_state.suppress_button_press_once = false;
+        return;
+    }
+
+    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
+    for (interaction, mut background, action, disabled) in &mut buttons {
+        *background = BackgroundColor(context_menu_button_color(
+            button_style,
+            false,
+            disabled.is_some(),
+            *interaction,
+        ));
+        if disabled.is_some() {
+            continue;
+        }
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -104,8 +130,9 @@ pub(crate) fn handle_game_ui_buttons(
             }
             GameUiButtonAction::ClosePanels => {
                 ui.menu_state.active_panel = None;
-                ui.modal_state.discard_quantity = None;
+                ui.modal_state.item_quantity = None;
                 ui.modal_state.trade = None;
+                ui.drag_state.clear();
             }
             GameUiButtonAction::InventoryFilter(filter) => ui.filter_state.filter = filter,
             GameUiButtonAction::UseInventoryItem => {
@@ -157,34 +184,34 @@ pub(crate) fn handle_game_ui_buttons(
                                     count,
                                 ),
                                 InventoryDropPlan::OpenModal(modal) => {
-                                    ui.modal_state.discard_quantity = Some(modal);
+                                    ui.modal_state.item_quantity = Some(modal);
                                 }
                             }
                         }
                     }
                 }
             }
-            GameUiButtonAction::DecreaseDiscardQuantity => {
-                if let Some(modal) = ui.modal_state.discard_quantity.as_mut() {
+            GameUiButtonAction::DecreaseItemQuantity => {
+                if let Some(modal) = ui.modal_state.item_quantity.as_mut() {
                     modal.selected_count =
-                        adjust_discard_quantity(modal.selected_count, modal.available_count, -1);
+                        adjust_item_quantity(modal.selected_count, modal.available_count, -1);
                 }
             }
-            GameUiButtonAction::IncreaseDiscardQuantity => {
-                if let Some(modal) = ui.modal_state.discard_quantity.as_mut() {
+            GameUiButtonAction::IncreaseItemQuantity => {
+                if let Some(modal) = ui.modal_state.item_quantity.as_mut() {
                     modal.selected_count =
-                        adjust_discard_quantity(modal.selected_count, modal.available_count, 1);
+                        adjust_item_quantity(modal.selected_count, modal.available_count, 1);
                 }
             }
-            GameUiButtonAction::SetDiscardQuantityToMax => {
-                if let Some(modal) = ui.modal_state.discard_quantity.as_mut() {
+            GameUiButtonAction::SetItemQuantityToMax => {
+                if let Some(modal) = ui.modal_state.item_quantity.as_mut() {
                     modal.selected_count = modal.available_count.max(1);
                 }
             }
-            GameUiButtonAction::ConfirmDiscardQuantity => {
+            GameUiButtonAction::ConfirmItemQuantity => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                    if let Some(modal) = ui.modal_state.discard_quantity.clone() {
-                        execute_inventory_drop(
+                    if let Some(modal) = ui.modal_state.item_quantity.clone() {
+                        execute_item_quantity_modal(
                             &mut ui.runtime_state,
                             &mut ui.viewer_state,
                             &mut ui.menu_state,
@@ -192,14 +219,14 @@ pub(crate) fn handle_game_ui_buttons(
                             &save_path,
                             &content.items,
                             actor_id,
-                            modal.item_id,
-                            modal.selected_count,
+                            modal,
                         );
                     }
                 }
             }
-            GameUiButtonAction::CancelDiscardQuantity => {
-                ui.modal_state.discard_quantity = None;
+            GameUiButtonAction::CancelItemQuantity => {
+                ui.modal_state.item_quantity = None;
+                ui.drag_state.clear();
             }
             GameUiButtonAction::UnequipSlot(slot_id) => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
@@ -277,33 +304,25 @@ pub(crate) fn handle_game_ui_buttons(
                     continue;
                 }
                 let group_index = ui.hotbar_state.active_group;
-                if let Some(slot) = ui.hotbar_state.groups.get(group_index).and_then(|group| {
-                    group
-                        .iter()
-                        .position(|slot| slot.skill_id.as_deref() == Some(skill_id.as_str()))
-                }) {
-                    ui.menu_state.status_text =
-                        format!("{} 已在当前组第 {} 槽", skill_id, slot.saturating_add(1));
-                    continue;
-                }
-                let first_empty_slot = ui
-                    .hotbar_state
-                    .groups
-                    .get(group_index)
-                    .and_then(|group| group.iter().position(|slot| slot.skill_id.is_none()));
-                if let Some(slot) = first_empty_slot {
-                    if assign_skill_to_hotbar_slot(
-                        &mut ui.hotbar_state,
-                        &mut ui.menu_state,
-                        skill_id,
-                        group_index,
-                        slot,
-                    ) {
-                        ui.menu_state.selected_skill_id = None;
+                match resolve_auto_hotbar_slot_target(&ui.hotbar_state, group_index, &skill_id) {
+                    Ok(AutoHotbarSlotTarget::AlreadyBound(slot)) => {
+                        ui.menu_state.status_text =
+                            format!("{} 已在当前组第 {} 槽", skill_id, slot.saturating_add(1));
                     }
-                } else {
-                    ui.menu_state.status_text =
-                        format!("快捷栏第 {} 组已满", group_index.saturating_add(1));
+                    Ok(AutoHotbarSlotTarget::Slot(slot)) => {
+                        if assign_skill_to_hotbar_slot(
+                            &mut ui.hotbar_state,
+                            &mut ui.menu_state,
+                            skill_id,
+                            group_index,
+                            slot,
+                        ) {
+                            ui.menu_state.selected_skill_id = None;
+                        }
+                    }
+                    Err(error) => {
+                        ui.menu_state.status_text = error;
+                    }
                 }
             }
             GameUiButtonAction::AssignSkillToHotbar {
@@ -370,6 +389,22 @@ pub(crate) fn handle_game_ui_buttons(
                     }
                 }
             }
+            GameUiButtonAction::ToggleObPlayback => {
+                if ui.viewer_state.is_free_observe() {
+                    ui.viewer_state.toggle_observe_playback();
+                    let status = ui.viewer_state.observe_playback_status();
+                    ui.viewer_state.status_line = status.clone();
+                    ui.menu_state.status_text = status;
+                }
+            }
+            GameUiButtonAction::SetObPlaybackSpeed(speed) => {
+                if ui.viewer_state.is_free_observe() {
+                    ui.viewer_state.set_observe_speed(speed);
+                    let status = format!("ob speed: {}", speed.label());
+                    ui.viewer_state.status_line = status.clone();
+                    ui.menu_state.status_text = status;
+                }
+            }
             GameUiButtonAction::CraftRecipe(recipe_id) => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
                     ui.menu_state.status_text = ui
@@ -430,12 +465,13 @@ pub(crate) fn handle_game_ui_buttons(
             }
             GameUiButtonAction::CloseTrade
             | GameUiButtonAction::BuyTradeItem { .. }
-            | GameUiButtonAction::SellTradeItem { .. } => unreachable!(),
+            | GameUiButtonAction::SellTradeItem { .. }
+            | GameUiButtonAction::SellEquippedTradeItem { .. } => unreachable!(),
         }
     }
 }
 
-fn plan_inventory_drop(
+pub(super) fn plan_inventory_drop(
     runtime: &game_core::SimulationRuntime,
     actor_id: ActorId,
     item_id: u32,
@@ -451,19 +487,251 @@ fn plan_inventory_drop(
         return Some(InventoryDropPlan::Immediate { count: 1 });
     }
     Some(InventoryDropPlan::OpenModal(
-        game_bevy::UiDiscardQuantityModalState {
+        game_bevy::UiItemQuantityModalState {
             item_id,
+            source_count: available_count,
             available_count,
             selected_count: 1,
+            intent: game_bevy::UiItemQuantityIntent::Discard,
         },
     ))
 }
 
-fn adjust_discard_quantity(current: i32, available_count: i32, delta: i32) -> i32 {
+pub(crate) fn adjust_item_quantity(current: i32, available_count: i32, delta: i32) -> i32 {
     (current + delta).clamp(1, available_count.max(1))
 }
 
-fn execute_inventory_drop(
+pub(crate) fn plan_trade_buy(
+    runtime: &game_core::SimulationRuntime,
+    actor_id: ActorId,
+    shop_id: &str,
+    item_id: u32,
+    items: &ItemDefinitions,
+) -> TradeQuantityPlan {
+    let raw_available_count = runtime
+        .economy()
+        .shop(shop_id)
+        .and_then(|shop| shop.inventory.get(&item_id).map(|entry| entry.count))
+        .unwrap_or(0);
+    let Some(unit_price) = trade_buy_unit_price(runtime, shop_id, item_id, items) else {
+        return TradeQuantityPlan::Blocked {
+            status: format!("unknown_item:{item_id}"),
+        };
+    };
+    let buyer_money = runtime.economy().actor_money(actor_id).unwrap_or(0);
+    let max_tradeable_count = resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
+    plan_trade_quantity(
+        raw_available_count,
+        max_tradeable_count,
+        item_id,
+        game_bevy::UiItemQuantityIntent::TradeBuy {
+            shop_id: shop_id.to_string(),
+            unit_price,
+        },
+        "资金不足",
+    )
+}
+
+pub(crate) fn plan_trade_sell(
+    runtime: &game_core::SimulationRuntime,
+    actor_id: ActorId,
+    shop_id: &str,
+    item_id: u32,
+    items: &ItemDefinitions,
+) -> TradeQuantityPlan {
+    let raw_available_count = runtime
+        .economy()
+        .inventory_count(actor_id, item_id)
+        .unwrap_or(0);
+    let Some(unit_price) = trade_sell_unit_price(runtime, shop_id, item_id, items) else {
+        return TradeQuantityPlan::Blocked {
+            status: format!("unknown_item:{item_id}"),
+        };
+    };
+    let buyer_money = runtime
+        .economy()
+        .shop(shop_id)
+        .map(|shop| shop.money)
+        .unwrap_or(0);
+    let max_tradeable_count = resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
+    plan_trade_quantity(
+        raw_available_count,
+        max_tradeable_count,
+        item_id,
+        game_bevy::UiItemQuantityIntent::TradeSell {
+            shop_id: shop_id.to_string(),
+            unit_price,
+        },
+        "商店资金不足",
+    )
+}
+
+fn resolve_max_tradeable_count(raw_available_count: i32, buyer_money: i32, unit_price: i32) -> i32 {
+    if raw_available_count <= 0 || unit_price <= 0 {
+        return 0;
+    }
+    let max_affordable_count = buyer_money.max(0) / unit_price;
+    raw_available_count.min(max_affordable_count)
+}
+
+fn plan_trade_quantity(
+    raw_available_count: i32,
+    max_tradeable_count: i32,
+    item_id: u32,
+    intent: game_bevy::UiItemQuantityIntent,
+    insufficient_status: &str,
+) -> TradeQuantityPlan {
+    if max_tradeable_count <= 0 {
+        return TradeQuantityPlan::Blocked {
+            status: insufficient_status.to_string(),
+        };
+    }
+    if max_tradeable_count == 1 {
+        return TradeQuantityPlan::Immediate { count: 1 };
+    }
+    TradeQuantityPlan::OpenModal(game_bevy::UiItemQuantityModalState {
+        item_id,
+        source_count: raw_available_count,
+        available_count: max_tradeable_count,
+        selected_count: 1,
+        intent,
+    })
+}
+
+fn adjusted_trade_unit_price(base_value: i32, modifier: f32) -> i32 {
+    ((base_value.max(0) as f32) * modifier.max(0.0))
+        .round()
+        .max(1.0) as i32
+}
+
+fn trade_buy_unit_price(
+    runtime: &game_core::SimulationRuntime,
+    shop_id: &str,
+    item_id: u32,
+    items: &ItemDefinitions,
+) -> Option<i32> {
+    let base_value = items.0.get(item_id)?.value;
+    let modifier = runtime.economy().shop(shop_id)?.buy_price_modifier;
+    Some(adjusted_trade_unit_price(base_value, modifier))
+}
+
+fn trade_sell_unit_price(
+    runtime: &game_core::SimulationRuntime,
+    shop_id: &str,
+    item_id: u32,
+    items: &ItemDefinitions,
+) -> Option<i32> {
+    let base_value = items.0.get(item_id)?.value;
+    let modifier = runtime.economy().shop(shop_id)?.sell_price_modifier;
+    Some(adjusted_trade_unit_price(base_value, modifier))
+}
+
+pub(crate) fn execute_item_quantity_modal(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    menu_state: &mut UiMenuState,
+    modal_state: &mut UiModalState,
+    save_path: &ViewerRuntimeSavePath,
+    items: &ItemDefinitions,
+    actor_id: ActorId,
+    modal: game_bevy::UiItemQuantityModalState,
+) {
+    let game_bevy::UiItemQuantityModalState {
+        item_id,
+        selected_count,
+        intent,
+        ..
+    } = modal;
+    match intent {
+        game_bevy::UiItemQuantityIntent::Discard => {
+            execute_inventory_drop(
+                runtime_state,
+                viewer_state,
+                menu_state,
+                modal_state,
+                save_path,
+                items,
+                actor_id,
+                item_id,
+                selected_count,
+            );
+        }
+        game_bevy::UiItemQuantityIntent::TradeBuy { shop_id, .. } => {
+            let status = execute_trade_buy(
+                runtime_state,
+                menu_state,
+                save_path,
+                items,
+                actor_id,
+                &shop_id,
+                item_id,
+                selected_count,
+            );
+            modal_state.item_quantity = None;
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+        }
+        game_bevy::UiItemQuantityIntent::TradeSell { shop_id, .. } => {
+            let status = execute_trade_sell(
+                runtime_state,
+                menu_state,
+                save_path,
+                items,
+                actor_id,
+                &shop_id,
+                item_id,
+                selected_count,
+            );
+            modal_state.item_quantity = None;
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+        }
+    }
+}
+
+pub(crate) fn execute_trade_buy(
+    runtime_state: &mut ViewerRuntimeState,
+    _menu_state: &mut UiMenuState,
+    save_path: &ViewerRuntimeSavePath,
+    items: &ItemDefinitions,
+    actor_id: ActorId,
+    shop_id: &str,
+    item_id: u32,
+    count: i32,
+) -> String {
+    let item_name = item_preview_label(&items.0, item_id);
+    runtime_state
+        .runtime
+        .buy_item_from_shop(actor_id, shop_id, item_id, count, &items.0)
+        .map(|_| {
+            save_runtime_snapshot(save_path, &runtime_state.runtime);
+            format!("已买入 {item_name} x{count}")
+        })
+        .unwrap_or_else(|error| error.to_string())
+}
+
+pub(crate) fn execute_trade_sell(
+    runtime_state: &mut ViewerRuntimeState,
+    _menu_state: &mut UiMenuState,
+    save_path: &ViewerRuntimeSavePath,
+    items: &ItemDefinitions,
+    actor_id: ActorId,
+    shop_id: &str,
+    item_id: u32,
+    count: i32,
+) -> String {
+    let item_name = item_preview_label(&items.0, item_id);
+    runtime_state
+        .runtime
+        .sell_item_to_shop(actor_id, shop_id, item_id, count, &items.0)
+        .map(|_| {
+            save_runtime_snapshot(save_path, &runtime_state.runtime);
+            format!("已卖出 {item_name} x{count}")
+        })
+        .unwrap_or_else(|error| error.to_string())
+}
+
+pub(super) fn execute_inventory_drop(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
     menu_state: &mut UiMenuState,
@@ -490,9 +758,16 @@ fn execute_inventory_drop(
             )
         })
         .unwrap_or_else(|error| error);
-    modal_state.discard_quantity = None;
+    modal_state.item_quantity = None;
     viewer_state.status_line = status.clone();
     menu_state.status_text = status;
+}
+
+fn item_preview_label(items: &game_data::ItemLibrary, item_id: u32) -> String {
+    items
+        .get(item_id)
+        .map(|item| item.name.clone())
+        .unwrap_or_else(|| format!("item:{item_id}"))
 }
 
 pub(super) fn cycle_binding(settings: &mut ViewerUiSettings, action_name: &str) {
@@ -526,7 +801,8 @@ pub(super) fn cycle_binding(settings: &mut ViewerUiSettings, action_name: &str) 
 #[cfg(test)]
 mod tests {
     use super::{
-        adjust_discard_quantity, execute_inventory_drop, plan_inventory_drop, InventoryDropPlan,
+        adjust_item_quantity, execute_inventory_drop, plan_inventory_drop,
+        resolve_max_tradeable_count, InventoryDropPlan,
     };
     use crate::state::{ViewerRuntimeSavePath, ViewerRuntimeState, ViewerState};
     use game_bevy::{ItemDefinitions, UiMenuState, UiModalState};
@@ -571,10 +847,12 @@ mod tests {
         assert_eq!(
             plan,
             Some(InventoryDropPlan::OpenModal(
-                game_bevy::UiDiscardQuantityModalState {
+                game_bevy::UiItemQuantityModalState {
                     item_id: 1006,
+                    source_count: 4,
                     available_count: 4,
                     selected_count: 1,
+                    intent: game_bevy::UiItemQuantityIntent::Discard,
                 }
             ))
         );
@@ -582,10 +860,17 @@ mod tests {
 
     #[test]
     fn discard_quantity_adjustment_clamps_to_valid_range() {
-        assert_eq!(adjust_discard_quantity(1, 4, -1), 1);
-        assert_eq!(adjust_discard_quantity(1, 4, 1), 2);
-        assert_eq!(adjust_discard_quantity(4, 4, 1), 4);
-        assert_eq!(adjust_discard_quantity(2, 1, 3), 1);
+        assert_eq!(adjust_item_quantity(1, 4, -1), 1);
+        assert_eq!(adjust_item_quantity(1, 4, 1), 2);
+        assert_eq!(adjust_item_quantity(4, 4, 1), 4);
+        assert_eq!(adjust_item_quantity(2, 1, 3), 1);
+    }
+
+    #[test]
+    fn trade_max_count_is_limited_by_buyer_money() {
+        assert_eq!(resolve_max_tradeable_count(7, 25, 6), 4);
+        assert_eq!(resolve_max_tradeable_count(7, 5, 6), 0);
+        assert_eq!(resolve_max_tradeable_count(1, 100, 6), 1);
     }
 
     #[test]
@@ -608,10 +893,12 @@ mod tests {
         let mut viewer_state = ViewerState::default();
         let mut menu_state = UiMenuState::default();
         let mut modal_state = UiModalState {
-            discard_quantity: Some(game_bevy::UiDiscardQuantityModalState {
+            item_quantity: Some(game_bevy::UiItemQuantityModalState {
                 item_id: 1006,
+                source_count: 3,
                 available_count: 3,
                 selected_count: 2,
+                intent: game_bevy::UiItemQuantityIntent::Discard,
             }),
             ..UiModalState::default()
         };
@@ -629,7 +916,7 @@ mod tests {
             2,
         );
 
-        assert!(modal_state.discard_quantity.is_none());
+        assert!(modal_state.item_quantity.is_none());
         assert!(viewer_state.status_line.contains("已丢弃 绷带 x2 到"));
         assert_eq!(menu_state.status_text, viewer_state.status_line);
         assert_eq!(

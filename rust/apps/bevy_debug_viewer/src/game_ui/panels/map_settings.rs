@@ -96,8 +96,8 @@ pub(super) fn render_settings_panel(
                 border: UiRect::all(px(1)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.04, 0.045, 0.06, 0.985)),
-            BorderColor::all(Color::srgba(0.28, 0.31, 0.40, 1.0)),
+            BackgroundColor(ui_panel_background()),
+            BorderColor::all(ui_border_strong_color()),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             UiMouseBlocker,
@@ -108,7 +108,7 @@ pub(super) fn render_settings_panel(
                 font,
                 "按 Esc 关闭菜单并返回游戏",
                 10.4,
-                Color::srgba(0.80, 0.84, 0.91, 1.0),
+                ui_text_secondary_color(),
             ));
             body.spawn(action_button(
                 font,

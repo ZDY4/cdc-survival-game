@@ -6,7 +6,6 @@ use bevy::prelude::*;
 use bevy::ui::{ComputedNode, RelativeCursorPosition, UiGlobalTransform};
 
 use crate::game_ui::{GameContentRefs, GameUiViewState};
-use crate::picking::ViewerPickingState;
 use crate::state::{
     ActorLabelEntities, GameUiRoot, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
     ViewerHudPage, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState,
@@ -219,6 +218,7 @@ pub(crate) fn profiled_update_occluding_world_visuals(
     scene_kind: Res<ViewerSceneKind>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    stable_hover: Res<crate::render::StableInteractionHoverState>,
     info_panel_state: Res<ViewerInfoPanelState>,
     console_state: Res<crate::console::ViewerConsoleState>,
     render_config: Res<ViewerRenderConfig>,
@@ -240,6 +240,7 @@ pub(crate) fn profiled_update_occluding_world_visuals(
         runtime_state,
         motion_state,
         viewer_state,
+        stable_hover,
         scene_kind,
         console_state,
         render_config,
@@ -260,6 +261,7 @@ pub(crate) fn profiled_sync_actor_labels(
     commands: Commands,
     runtime_state: Res<ViewerRuntimeState>,
     scene_kind: Res<ViewerSceneKind>,
+    console_state: Res<crate::console::ViewerConsoleState>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
     info_panel_state: Res<ViewerInfoPanelState>,
@@ -279,7 +281,7 @@ pub(crate) fn profiled_sync_actor_labels(
     )>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
-    if scene_kind.is_main_menu() {
+    if scene_kind.is_main_menu() || console_state.is_open {
         crate::render::clear_actor_labels(commands, label_entities);
         return;
     }
@@ -341,7 +343,7 @@ pub(crate) fn profiled_draw_world(
     scene_kind: Res<ViewerSceneKind>,
     settlements: Option<Res<game_bevy::SettlementDefinitions>>,
     motion_state: Res<ViewerActorMotionState>,
-    picking_state: Res<ViewerPickingState>,
+    stable_hover: Res<crate::render::StableInteractionHoverState>,
     viewer_state: Res<ViewerState>,
     info_panel_state: Res<ViewerInfoPanelState>,
     render_config: Res<ViewerRenderConfig>,
@@ -370,7 +372,7 @@ pub(crate) fn profiled_draw_world(
         runtime_state,
         settlements,
         motion_state,
-        picking_state,
+        stable_hover,
         viewer_state,
         render_config,
         window,
@@ -385,6 +387,7 @@ pub(crate) fn profiled_sync_damage_numbers(
     commands: Commands,
     time: Res<Time>,
     scene_kind: Res<ViewerSceneKind>,
+    console_state: Res<crate::console::ViewerConsoleState>,
     _viewer_state: Res<ViewerState>,
     info_panel_state: Res<ViewerInfoPanelState>,
     viewer_font: Res<ViewerUiFont>,
@@ -402,7 +405,7 @@ pub(crate) fn profiled_sync_damage_numbers(
     )>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
 ) {
-    if scene_kind.is_main_menu() {
+    if scene_kind.is_main_menu() || console_state.is_open {
         crate::render::clear_damage_numbers(commands, damage_numbers, visual_state);
         return;
     }

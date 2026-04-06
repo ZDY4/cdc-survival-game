@@ -4,6 +4,7 @@ use super::*;
 use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::picking::prelude::MeshPickingCamera;
+use bevy_mesh_outline::OutlineCamera;
 
 pub(crate) fn setup_viewer(
     mut commands: Commands,
@@ -47,6 +48,7 @@ pub(crate) fn setup_viewer(
         Transform::from_xyz(0.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Z),
         ViewerCamera,
         MeshPickingCamera,
+        OutlineCamera,
         FogOfWarOverlay,
         FogOfWarPostProcessSettings::default(),
         FogOfWarPostProcessTextures {
@@ -85,17 +87,11 @@ pub(crate) fn setup_viewer(
         FillLight,
     ));
     spawn_info_panel_ui(&mut commands, ui_font.clone(), &palette);
+    let interaction_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
     commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(0),
-            top: px(0),
-            width: px(INTERACTION_MENU_WIDTH_PX),
-            padding: UiRect::all(px(INTERACTION_MENU_PADDING_PX)),
-            flex_direction: FlexDirection::Column,
-            ..default()
-        },
-        BackgroundColor(palette.menu_background),
+        context_menu_root_node(interaction_style, Vec2::ZERO),
+        BackgroundColor(context_menu_panel_color()),
+        BorderColor::all(context_menu_border_color()),
         Visibility::Hidden,
         FocusPolicy::Block,
         RelativeCursorPosition::default(),

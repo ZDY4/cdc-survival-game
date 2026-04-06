@@ -30,31 +30,31 @@ pub(in crate::game_ui) fn build_inventory_detail_display(
     content.push(
         format!("重量 {:.1}kg", detail.weight),
         10.1,
-        Color::srgba(0.78, 0.84, 0.92, 1.0),
+        ui_text_secondary_color(),
     );
     if !detail.description.trim().is_empty() {
         content.push(
             detail.description.clone(),
             10.1,
-            Color::srgba(0.86, 0.89, 0.95, 1.0),
+            ui_text_secondary_color(),
         );
     }
     if detail.attribute_bonuses.is_empty() {
-        content.push("属性加成: 无", 10.0, Color::srgba(0.72, 0.76, 0.82, 1.0));
+        content.push("属性加成: 无", 10.0, ui_text_muted_color());
     } else {
-        content.push("属性加成", 10.0, Color::srgba(0.74, 0.79, 0.88, 1.0));
+        content.push("属性加成", 10.0, ui_text_muted_color());
         for (attribute, bonus) in &detail.attribute_bonuses {
             content.push(
                 format!("{attribute} {bonus:+.1}"),
                 10.0,
-                Color::srgba(0.84, 0.88, 0.95, 1.0),
+                ui_text_secondary_color(),
             );
         }
     }
     content.push(
         format!("操作: {}", inventory_capability_label(can_use, can_equip)),
         10.0,
-        Color::srgba(0.74, 0.79, 0.88, 1.0),
+        ui_text_muted_color(),
     );
 
     InventoryDetailDisplay {

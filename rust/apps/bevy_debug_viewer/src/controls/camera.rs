@@ -23,7 +23,7 @@ pub(crate) fn handle_mouse_wheel_zoom(
 
     if scene_kind.is_main_menu()
         || menu_state.active_panel.is_some()
-        || modal_state.discard_quantity.is_some()
+        || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {
         for _ in mouse_wheel_events.read() {}
@@ -84,7 +84,7 @@ pub(crate) fn handle_camera_pan(
 
     if scene_kind.is_main_menu()
         || menu_state.active_panel.is_some()
-        || modal_state.discard_quantity.is_some()
+        || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {
         viewer_state.camera_drag_cursor = None;

@@ -224,7 +224,7 @@ pub(crate) fn sync_dialogue_from_event(
             target_id,
             dialogue_id,
         } => {
-            if !should_follow_dialogue_event(viewer_state, *actor_id) {
+            if !should_follow_dialogue_event(runtime_state, viewer_state, *actor_id) {
                 return;
             }
 
@@ -252,7 +252,7 @@ pub(crate) fn sync_dialogue_from_event(
             dialogue_id,
             node_id,
         } => {
-            if !should_follow_dialogue_event(viewer_state, *actor_id) {
+            if !should_follow_dialogue_event(runtime_state, viewer_state, *actor_id) {
                 return;
             }
 
@@ -291,13 +291,19 @@ pub(crate) fn sync_dialogue_from_event(
     }
 }
 
-fn should_follow_dialogue_event(viewer_state: &ViewerState, actor_id: ActorId) -> bool {
-    viewer_state.selected_actor == Some(actor_id)
-        || viewer_state
-            .active_dialogue
-            .as_ref()
-            .map(|dialogue| dialogue.actor_id)
-            == Some(actor_id)
+fn should_follow_dialogue_event(
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &ViewerState,
+    actor_id: ActorId,
+) -> bool {
+    let snapshot = runtime_state.runtime.snapshot();
+    viewer_state
+        .active_dialogue
+        .as_ref()
+        .map(|dialogue| dialogue.actor_id)
+        == Some(actor_id)
+        || viewer_state.command_actor_id(&snapshot) == Some(actor_id)
+        || viewer_state.focus_actor_id(&snapshot) == Some(actor_id)
 }
 
 fn open_dialogue(
@@ -751,7 +757,7 @@ mod tests {
 
     use super::{
         advance_dialogue, apply_interaction_result, current_dialogue_has_options,
-        resolve_dialogue_content_from_context, DialogueAssetDirs,
+        resolve_dialogue_content_from_context, sync_dialogue_from_event, DialogueAssetDirs,
     };
     use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
     use game_data::{
@@ -828,6 +834,103 @@ mod tests {
             viewer_state.status_line,
             "dialogue: click an option or press 1-9"
         );
+    }
+
+    #[test]
+    fn dialogue_started_event_follows_controlled_player_after_approach() {
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(DialogueLibrary::from(std::collections::BTreeMap::from([
+            (
+                "test".to_string(),
+                DialogueData {
+                    dialog_id: "test".to_string(),
+                    nodes: vec![DialogueNode {
+                        id: "start".to_string(),
+                        node_type: "dialog".to_string(),
+                        text: "Hello".to_string(),
+                        is_start: true,
+                        ..DialogueNode::default()
+                    }],
+                    ..DialogueData::default()
+                },
+            ),
+        ])));
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: game_data::GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("test".into())),
+            display_name: "NPC".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: game_data::GridCoord::new(2, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_ap(player, 1.0);
+
+        let mut runtime_state = ViewerRuntimeState {
+            runtime: SimulationRuntime::from_simulation(simulation),
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(player, ActorSide::Player);
+        viewer_state.focused_target = Some(InteractionTargetId::Actor(npc));
+
+        let result = runtime_state.runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+        apply_interaction_result(&runtime_state, &mut viewer_state, result.clone());
+
+        assert!(result.approach_required);
+        assert_eq!(viewer_state.selected_actor, None);
+        assert_eq!(viewer_state.controlled_player_actor, Some(player));
+        assert!(viewer_state.active_dialogue.is_none());
+
+        for event in runtime_state.runtime.drain_events() {
+            sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
+        }
+        assert!(viewer_state.active_dialogue.is_none());
+
+        let world_cycle = runtime_state.runtime.advance_pending_progression();
+        assert_eq!(
+            world_cycle.applied_step,
+            Some(game_core::PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        for event in runtime_state.runtime.drain_events() {
+            sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
+        }
+        assert!(viewer_state.active_dialogue.is_none());
+
+        let next_turn = runtime_state.runtime.advance_pending_progression();
+        assert_eq!(
+            next_turn.applied_step,
+            Some(game_core::PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+        for event in runtime_state.runtime.drain_events() {
+            sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
+        }
+
+        let active_dialogue = viewer_state
+            .active_dialogue
+            .as_ref()
+            .expect("dialogue should open after pending interaction resumes");
+        assert_eq!(active_dialogue.actor_id, player);
+        assert_eq!(active_dialogue.target_id, Some(InteractionTargetId::Actor(npc)));
+        assert_eq!(active_dialogue.current_node_id, "start");
     }
 
     #[test]

@@ -42,9 +42,9 @@ pub(crate) fn handle_keyboard_input(
             viewer_state.interaction_menu = None;
             viewer_state.status_line = "interaction menu: closed".to_string();
             return;
-        } else if modal_state.discard_quantity.is_some() {
-            modal_state.discard_quantity = None;
-            viewer_state.status_line = "discard: closed".to_string();
+        } else if modal_state.item_quantity.is_some() {
+            modal_state.item_quantity = None;
+            viewer_state.status_line = "item quantity: closed".to_string();
             return;
         } else if modal_state.trade.is_some() {
             modal_state.trade = None;
@@ -93,7 +93,7 @@ pub(crate) fn handle_keyboard_input(
         return;
     }
 
-    if modal_state.discard_quantity.is_some() {
+    if modal_state.item_quantity.is_some() {
         return;
     }
 
@@ -123,7 +123,7 @@ pub(crate) fn handle_keyboard_input(
 
     if scene_kind.is_main_menu()
         || menu_state.active_panel.is_some()
-        || modal_state.discard_quantity.is_some()
+        || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {
         return;
@@ -179,8 +179,13 @@ pub(crate) fn handle_keyboard_input(
         .unwrap_or(false);
 
     if keys.just_pressed(KeyCode::KeyA) {
-        viewer_state.auto_tick = !viewer_state.auto_tick;
-        viewer_state.status_line = format!("auto tick: {}", viewer_state.auto_tick);
+        if viewer_state.is_free_observe() {
+            viewer_state.toggle_observe_playback();
+            viewer_state.status_line = viewer_state.observe_playback_status();
+        } else {
+            viewer_state.auto_tick = !viewer_state.auto_tick;
+            viewer_state.status_line = format!("auto tick: {}", viewer_state.auto_tick);
+        }
     }
 
     if keys.just_pressed(KeyCode::Equal) {
@@ -274,7 +279,8 @@ pub(crate) fn handle_keyboard_input(
         viewer_state.end_turn_hold_sec = 0.0;
         viewer_state.end_turn_repeat_elapsed_sec = 0.0;
         if viewer_state.is_free_observe() {
-            viewer_state.status_line = "free observe: player commands disabled".to_string();
+            viewer_state.toggle_observe_playback();
+            viewer_state.status_line = viewer_state.observe_playback_status();
             return;
         }
         let in_combat = runtime_state.runtime.snapshot().combat.in_combat;

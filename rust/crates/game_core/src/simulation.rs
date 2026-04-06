@@ -39,7 +39,8 @@ use crate::vision::VisionRuntimeSnapshot;
 
 mod combat;
 mod dialogue;
-mod interaction;
+mod interaction_flow;
+pub(crate) mod interaction_behaviors;
 mod level_transition;
 mod overworld;
 mod progression;
@@ -1537,32 +1538,32 @@ impl Simulation {
             .map_err(|error| error.to_string())?;
 
         let drop_grid = self.find_ground_drop_grid(actor_grid);
-        let object_id = self.next_drop_pickup_object_id(actor_id, item_id);
-        self.grid_world.upsert_map_object(MapObjectDefinition {
-            object_id: object_id.clone(),
-            kind: MapObjectKind::Pickup,
-            anchor: drop_grid,
-            footprint: MapObjectFootprint::default(),
-            rotation: MapRotation::North,
-            blocks_movement: false,
-            blocks_sight: false,
-            props: MapObjectProps {
-                pickup: Some(MapPickupProps {
-                    item_id: item_id.to_string(),
-                    min_count: count,
-                    max_count: count,
-                    extra: BTreeMap::new(),
-                }),
-                ..MapObjectProps::default()
-            },
-        });
+        Ok(self.spawn_drop_pickup(actor_id, item_id, count, drop_grid))
+    }
 
-        Ok(DropItemOutcome {
-            object_id,
-            item_id,
-            count,
-            grid: drop_grid,
-        })
+    pub fn drop_equipped_item_to_ground(
+        &mut self,
+        actor_id: ActorId,
+        slot: &str,
+    ) -> Result<DropItemOutcome, String> {
+        let actor_grid = self
+            .actor_grid_position(actor_id)
+            .ok_or_else(|| format!("unknown_actor:{}", actor_id.0))?;
+        let item_id = self
+            .economy
+            .equipped_item(actor_id, slot)
+            .map(|equipped| equipped.item_id)
+            .ok_or_else(|| format!("empty_equipment_slot:{}", slot.trim()))?;
+
+        self.economy
+            .unequip_item(actor_id, slot)
+            .map_err(|error| error.to_string())?;
+        self.economy
+            .remove_item(actor_id, item_id, 1)
+            .map_err(|error| error.to_string())?;
+
+        let drop_grid = self.find_ground_drop_grid(actor_grid);
+        Ok(self.spawn_drop_pickup(actor_id, item_id, 1, drop_grid))
     }
 
     pub fn grid_runtime_blocked_cells(&self) -> Vec<GridCoord> {
@@ -1686,7 +1687,10 @@ impl Simulation {
                                     "trigger_kind".to_string(),
                                     primary.id.as_str().to_string(),
                                 );
-                                let target_id = self.resolve_scene_target_id(primary);
+                                let target_id =
+                                    interaction_behaviors::scene_transition::resolve_scene_target_id(
+                                        primary,
+                                    );
                                 if !target_id.trim().is_empty() {
                                     payload_summary.insert("target_id".to_string(), target_id);
                                 }
@@ -2044,6 +2048,16 @@ impl Simulation {
 
         // Keep movement state observable per cell so later step hooks can interrupt cleanly.
         for (step_index, next) in path.iter().copied().skip(1).enumerate() {
+            if let Some(door) = self.grid_world.auto_open_generated_door_at(next) {
+                info!(
+                    "core.movement.auto_open_generated_door actor={:?} door_id={} grid=({}, {}, {})",
+                    actor_id,
+                    door.door_id,
+                    next.x,
+                    next.y,
+                    next.z
+                );
+            }
             self.update_actor_grid_position(actor_id, next);
             self.events.push(SimulationEvent::ActorMoved {
                 actor_id,
@@ -2716,8 +2730,15 @@ impl Simulation {
 
     fn find_ground_drop_grid(&self, actor_grid: GridCoord) -> GridCoord {
         for radius in 1..=DROP_ITEM_SEARCH_RADIUS {
-            for candidate in interaction::collect_interaction_ring_cells(actor_grid, radius) {
-                if self.grid_world.is_in_bounds(candidate) && self.grid_world.is_walkable(candidate)
+            for candidate in interaction_flow::collect_interaction_ring_cells(actor_grid, radius)
+            {
+                let occupied_by_actor = self
+                    .actors
+                    .values()
+                    .any(|actor| actor.grid_position == candidate);
+                if self.grid_world.is_in_bounds(candidate)
+                    && self.grid_world.is_walkable(candidate)
+                    && !occupied_by_actor
                 {
                     return candidate;
                 }
@@ -2725,6 +2746,41 @@ impl Simulation {
         }
 
         actor_grid
+    }
+
+    fn spawn_drop_pickup(
+        &mut self,
+        actor_id: ActorId,
+        item_id: u32,
+        count: i32,
+        drop_grid: GridCoord,
+    ) -> DropItemOutcome {
+        let object_id = self.next_drop_pickup_object_id(actor_id, item_id);
+        self.grid_world.upsert_map_object(MapObjectDefinition {
+            object_id: object_id.clone(),
+            kind: MapObjectKind::Pickup,
+            anchor: drop_grid,
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                pickup: Some(MapPickupProps {
+                    item_id: item_id.to_string(),
+                    min_count: count,
+                    max_count: count,
+                    extra: BTreeMap::new(),
+                }),
+                ..MapObjectProps::default()
+            },
+        });
+
+        DropItemOutcome {
+            object_id,
+            item_id,
+            count,
+            grid: drop_grid,
+        }
     }
 
     fn next_drop_pickup_object_id(&self, actor_id: ActorId, item_id: u32) -> String {
@@ -3334,9 +3390,10 @@ mod tests {
         QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell, StairKind, WorldCoord, WorldMode,
     };
 
-    use crate::actor::InteractOnceAiController;
+    use crate::actor::{FollowGridGoalAiController, InteractOnceAiController};
     use crate::grid::GridPathfindingError;
     use crate::movement::PendingProgressionStep;
+    use crate::AiController;
 
     use super::{
         RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
@@ -5178,6 +5235,99 @@ mod tests {
     }
 
     #[test]
+    fn unlocked_generated_door_is_pathfindable_and_auto_opens_during_movement() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_generated_building_map_definition());
+        let door = simulation
+            .grid_world()
+            .generated_doors()
+            .first()
+            .cloned()
+            .expect("generated building should produce at least one door");
+        let (start, goal) = generated_door_passage_cells(simulation.grid_world(), &door);
+
+        let path = simulation
+            .find_path_grid(None, start, goal)
+            .expect("closed unlocked door should remain pathfindable");
+        assert_eq!(path.first().copied(), Some(start));
+        assert_eq!(path.last().copied(), Some(goal));
+        assert!(
+            path.contains(&door.anchor_grid),
+            "path should cross the closed unlocked door cell"
+        );
+
+        let actor_id = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: start,
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.config.turn_ap_max = 4.0;
+        simulation.set_actor_ap(actor_id, 4.0);
+
+        let outcome = simulation
+            .move_actor_to_reachable(actor_id, goal)
+            .expect("movement through unlocked generated door should plan");
+        assert!(outcome.result.success);
+        assert_eq!(simulation.actor_grid_position(actor_id), Some(goal));
+
+        let opened_door = simulation
+            .grid_world()
+            .generated_door_by_object_id(&door.map_object_id)
+            .expect("generated door should remain registered");
+        assert!(opened_door.is_open);
+        assert!(!opened_door.is_locked);
+    }
+
+    #[test]
+    fn follow_goal_ai_auto_opens_unlocked_generated_door() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_generated_building_map_definition());
+        let door = simulation
+            .grid_world()
+            .generated_doors()
+            .first()
+            .cloned()
+            .expect("generated building should produce at least one door");
+        let (start, goal) = generated_door_passage_cells(simulation.grid_world(), &door);
+
+        let actor_id = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Guard".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: start,
+            interaction: None,
+            attack_range: 1.0,
+            ai_controller: None,
+        });
+        simulation.config.turn_ap_max = 4.0;
+        simulation.set_actor_ap(actor_id, 4.0);
+        simulation.set_actor_autonomous_movement_goal(actor_id, goal);
+
+        let mut controller = FollowGridGoalAiController;
+        let result = controller.execute_turn_step(actor_id, &mut simulation);
+
+        assert!(result.performed);
+        assert_eq!(simulation.actor_grid_position(actor_id), Some(goal));
+        assert!(simulation
+            .grid_world()
+            .generated_door_by_object_id(&door.map_object_id)
+            .expect("generated door should remain registered")
+            .is_open);
+    }
+
+    #[test]
     fn non_blocking_pickup_does_not_block_pathfinding() {
         let mut world = crate::grid::GridWorld::default();
         world.load_map(&sample_map_definition());
@@ -5411,6 +5561,27 @@ mod tests {
                 },
             }],
         }
+    }
+
+    fn generated_door_passage_cells(
+        world: &crate::grid::GridWorld,
+        door: &crate::GeneratedDoorDebugState,
+    ) -> (GridCoord, GridCoord) {
+        let candidates = match door.axis {
+            crate::GeometryAxis::Vertical => [
+                GridCoord::new(door.anchor_grid.x - 1, door.anchor_grid.y, door.anchor_grid.z),
+                GridCoord::new(door.anchor_grid.x + 1, door.anchor_grid.y, door.anchor_grid.z),
+            ],
+            crate::GeometryAxis::Horizontal => [
+                GridCoord::new(door.anchor_grid.x, door.anchor_grid.y, door.anchor_grid.z - 1),
+                GridCoord::new(door.anchor_grid.x, door.anchor_grid.y, door.anchor_grid.z + 1),
+            ],
+        };
+        assert!(
+            world.is_walkable(candidates[0]) && world.is_walkable(candidates[1]),
+            "generated door should connect two walkable adjacent cells"
+        );
+        (candidates[0], candidates[1])
     }
 
     fn sample_interaction_map_definition() -> MapDefinition {

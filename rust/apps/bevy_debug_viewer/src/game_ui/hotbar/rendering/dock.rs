@@ -53,8 +53,8 @@ pub(super) fn render_hotbar(
                 border: UiRect::all(px(1)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.03, 0.035, 0.05, 0.93)),
-            BorderColor::all(Color::srgba(0.24, 0.28, 0.37, 1.0)),
+            BackgroundColor(ui_panel_background()),
+            BorderColor::all(ui_border_strong_color()),
         ))
         .with_children(|row| {
             row.spawn((
@@ -121,7 +121,7 @@ pub(super) fn render_hotbar(
                                 if attack_enabled {
                                     Color::WHITE
                                 } else {
-                                    Color::srgba(0.52, 0.54, 0.58, 1.0)
+                                    ui_text_dim_color()
                                 },
                             ));
                         });

@@ -65,9 +65,11 @@ pub use dialogue_runtime::{
     DialogueRuntimeState, DialogueSessionState,
 };
 pub use interaction::{
-    default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,
-    CharacterInteractionProfile, InteractionContextSnapshot, InteractionExecutionRequest,
-    InteractionExecutionResult, InteractionOptionDefinition, InteractionOptionId,
+    all_interaction_kind_specs, default_display_name_for_kind, default_option_id_for_kind,
+    default_priority_for_kind, interaction_kind_spec, is_scene_transition_kind,
+    parse_legacy_interaction_kind, CharacterInteractionProfile, InteractionContextSnapshot,
+    InteractionExecutionRequest, InteractionExecutionResult, InteractionKindSpec,
+    InteractionKindValidation, InteractionOptionDefinition, InteractionOptionId,
     InteractionOptionKind, InteractionPrompt, InteractionTargetId, ResolvedInteractionOption,
     WorldMode,
 };

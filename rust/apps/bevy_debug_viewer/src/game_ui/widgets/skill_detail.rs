@@ -24,13 +24,13 @@ pub(in crate::game_ui) fn build_skill_detail_display(
         content.push(
             tree.tree_name.clone(),
             12.0,
-            Color::srgba(0.82, 0.88, 0.96, 1.0),
+            ui_text_secondary_color(),
         );
         if !tree.tree_description.trim().is_empty() {
             content.push(
                 tree.tree_description.clone(),
                 10.0,
-                Color::srgba(0.70, 0.75, 0.82, 1.0),
+                ui_text_muted_color(),
             );
         }
     }
@@ -45,7 +45,7 @@ pub(in crate::game_ui) fn build_skill_detail_display(
             entry.cooldown_seconds
         ),
         10.8,
-        Color::srgba(0.80, 0.86, 0.96, 1.0),
+        ui_text_secondary_color(),
     );
     if !entry.description.trim().is_empty() {
         content.push(entry.description.clone(), 10.5, Color::WHITE);
@@ -53,12 +53,12 @@ pub(in crate::game_ui) fn build_skill_detail_display(
     content.push(
         format!("前置需求: {}", format_skill_prerequisites(entry)),
         10.0,
-        Color::srgba(0.84, 0.88, 0.94, 1.0),
+        ui_text_secondary_color(),
     );
     content.push(
         format!("属性需求: {}", format_skill_attribute_requirements(entry)),
         10.0,
-        Color::srgba(0.84, 0.88, 0.94, 1.0),
+        ui_text_secondary_color(),
     );
     content.push(
         format!(
@@ -67,7 +67,7 @@ pub(in crate::game_ui) fn build_skill_detail_display(
             current_group_fill
         ),
         10.0,
-        Color::srgba(0.72, 0.78, 0.86, 1.0),
+        ui_text_muted_color(),
     );
     if let Some(slot_index) = current_group_skill_slot(hotbar_state, &entry.skill_id) {
         content.push(
@@ -78,14 +78,14 @@ pub(in crate::game_ui) fn build_skill_detail_display(
     }
     content.push(
         if entry.hotbar_eligible {
-            "快捷栏: 可加入当前组空槽"
+            "快捷栏: 可加入当前组，满时替换最后槽"
         } else if entry.learned_level > 0 {
             "快捷栏: 该技能当前不进入快捷栏"
         } else {
             "快捷栏: 尚未学习，暂时不能加入快捷栏"
         },
         10.0,
-        Color::srgba(0.72, 0.76, 0.82, 1.0),
+        ui_text_muted_color(),
     );
 
     SkillDetailDisplay {
@@ -106,7 +106,7 @@ pub(in crate::game_ui) fn render_skill_detail_content(
     if show_actions && display.hotbar_eligible {
         parent.spawn(action_button(
             font,
-            "加入当前组空槽",
+            "加入当前组",
             GameUiButtonAction::AssignSkillToFirstEmptyHotbarSlot(entry.skill_id.clone()),
         ));
     }

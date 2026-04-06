@@ -1,6 +1,7 @@
 //! 回合推进模块：负责时间推进、回合流转和运行时 progression 与 viewer 状态同步。
 
 use super::*;
+use crate::dialogue::apply_interaction_result;
 
 pub(crate) fn cancel_pending_movement(
     runtime_state: &mut ViewerRuntimeState,
@@ -85,6 +86,10 @@ pub(crate) fn advance_runtime_progression(
         return;
     }
 
+    if viewer_state.is_free_observe() && !viewer_state.auto_tick {
+        return;
+    }
+
     viewer_state.progression_elapsed_sec += time.delta_secs();
     if viewer_state.progression_elapsed_sec < viewer_state.min_progression_interval_sec {
         return;
@@ -94,6 +99,9 @@ pub(crate) fn advance_runtime_progression(
     let result = runtime_state.runtime.advance_pending_progression();
     if result.applied_step.is_some() {
         viewer_state.status_line = event_feedback::progression_result_status(&result);
+    }
+    if let Some(interaction_result) = result.interaction_outcome.clone() {
+        apply_interaction_result(&runtime_state, &mut viewer_state, interaction_result);
     }
     maybe_auto_end_turn_after_stop(&mut runtime_state, &mut viewer_state);
 }

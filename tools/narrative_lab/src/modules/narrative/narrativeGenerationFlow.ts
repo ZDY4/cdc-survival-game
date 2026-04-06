@@ -5,6 +5,7 @@ import type {
   AiChatMessage,
   DocumentAgentSession,
   NarrativeGenerateRequest,
+  ResolveNarrativeActionIntentInput,
   NarrativeGenerateResponse,
   NarrativeTurnKind,
 } from "../../types";
@@ -74,27 +75,64 @@ export function buildStrategyInstruction(session: DocumentAgentSession) {
 
 type BuildGenerationUserMessageInput = {
   submittedPrompt: string;
-  session: DocumentAgentSession;
+  action: "create" | "revise_document" | null;
 };
 
 export function buildGenerationUserMessage({
   submittedPrompt,
-  session,
+  action,
 }: BuildGenerationUserMessageInput): AiChatMessage {
-  const action = session.mode;
   return {
     id: `user-${Date.now()}`,
     role: "user",
     label: "你",
     content: submittedPrompt,
     meta: [
-      session.status === "waiting_user"
-        ? "补充上一轮信息"
+      action === null
+        ? "待确认动作"
         : action === "create"
-          ? "生成新文档"
-          : "修改当前文档",
+          ? "将创建新文档"
+          : "将修改当前文档",
     ],
     tone: "accent",
+  };
+}
+
+type BuildActionIntentRequestInput = {
+  submittedPrompt: string;
+  activeDocument: EditableNarrativeDocument;
+  session: DocumentAgentSession;
+  selectedContextDocuments: EditableNarrativeDocument[];
+};
+
+export function buildActionIntentRequest({
+  submittedPrompt,
+  activeDocument,
+  session,
+  selectedContextDocuments,
+}: BuildActionIntentRequestInput): ResolveNarrativeActionIntentInput {
+  return {
+    submittedPrompt,
+    docType: activeDocument.meta.docType,
+    targetSlug: activeDocument.meta.slug,
+    userPrompt: buildNarrativeChatPrompt(
+      submittedPrompt,
+      session.chatMessages,
+      activeDocument,
+      buildPendingTurnContext(session),
+    ),
+    editorInstruction: [
+      `Agent strategy: ${buildStrategyInstruction(session)}`,
+      selectedContextDocuments.length
+        ? `Selected context docs: ${selectedContextDocuments
+            .map((document) => document.meta.slug)
+            .join(", ")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    currentMarkdown: activeDocument.markdown,
+    relatedDocSlugs: mergeRelatedDocSlugs(activeDocument, selectedContextDocuments),
   };
 }
 
@@ -104,6 +142,7 @@ type BuildGenerationRequestInput = {
   activeDocument: EditableNarrativeDocument;
   session: DocumentAgentSession;
   selectedContextDocuments: EditableNarrativeDocument[];
+  action: "create" | "revise_document";
 };
 
 export function buildGenerationRequest({
@@ -112,8 +151,8 @@ export function buildGenerationRequest({
   activeDocument,
   session,
   selectedContextDocuments,
+  action,
 }: BuildGenerationRequestInput): NarrativeGenerateRequest {
-  const action = session.mode;
   return {
     requestId,
     docType: activeDocument.meta.docType,

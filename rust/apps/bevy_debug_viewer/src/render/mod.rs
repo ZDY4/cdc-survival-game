@@ -29,20 +29,28 @@ use crate::geometry::{
     resolve_occlusion_focus_points, selected_actor, should_rebuild_static_world,
     viewer_grid_is_walkable, GridBounds, HoveredGridOutlineKind, OcclusionFocusPoint,
 };
-pub(super) use crate::picking::{pickable_target, BuildingPartKind, ViewerPickBindingSpec};
+pub(super) use crate::picking::{
+    pickable_target, BuildingPartKind, ViewerPickBindingSpec, ViewerPickTarget,
+};
 use crate::state::{
-    ActorLabel, ActorLabelEntities, DialogueChoiceButton, DialoguePanelRoot,
-    InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot, InteractionMenuState,
-    UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
-    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode,
-    ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
-    ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH, viewer_ui_passthrough_bundle,
+    viewer_ui_passthrough_bundle, ActorLabel, ActorLabelEntities, DialogueChoiceButton,
+    DialoguePanelRoot, InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot,
+    InteractionMenuState, UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState,
+    ViewerCamera, ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState,
+    ViewerOverlayMode, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState, ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
+};
+use crate::ui_context_menu::{
+    context_menu_border_color, context_menu_button_color, context_menu_button_label_node,
+    context_menu_button_node, context_menu_panel_color, context_menu_root_node,
+    context_menu_text_color, ContextMenuStyle, ContextMenuVariant,
 };
 
 mod camera;
 mod constants;
 mod debug_draw;
 mod fog_of_war;
+mod hover_outline;
 mod materials;
 mod mesh_builders;
 mod occlusion;
@@ -57,6 +65,7 @@ pub(super) use camera::*;
 pub(super) use constants::*;
 pub(super) use debug_draw::*;
 pub(super) use fog_of_war::*;
+pub(super) use hover_outline::*;
 use materials::*;
 use mesh_builders::*;
 use occlusion::*;

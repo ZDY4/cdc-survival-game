@@ -65,7 +65,7 @@ pub fn find_path_grid(
     start: GridCoord,
     goal: GridCoord,
 ) -> Result<Vec<GridCoord>, GridPathfindingError> {
-    match world.classify_walkability_for_actor(goal, actor_id) {
+    match world.classify_pathfinding_walkability_for_actor(goal, actor_id) {
         GridWalkability::Walkable => {}
         GridWalkability::OutOfBounds => return Err(GridPathfindingError::TargetOutOfBounds),
         GridWalkability::InvalidLevel => return Err(GridPathfindingError::TargetInvalidLevel),
@@ -178,7 +178,8 @@ fn can_traverse_planar(
     from: GridCoord,
     to: GridCoord,
 ) -> bool {
-    if world.classify_walkability_for_actor(to, actor_id) != GridWalkability::Walkable {
+    if world.classify_pathfinding_walkability_for_actor(to, actor_id) != GridWalkability::Walkable
+    {
         return false;
     }
 
@@ -187,10 +188,14 @@ fn can_traverse_planar(
     if dx.abs() == 1 && dz.abs() == 1 {
         let horizontal = GridCoord::new(from.x + dx, from.y, from.z);
         let vertical = GridCoord::new(from.x, from.y, from.z + dz);
-        if world.classify_walkability_for_actor(horizontal, actor_id) != GridWalkability::Walkable {
+        if world.classify_pathfinding_walkability_for_actor(horizontal, actor_id)
+            != GridWalkability::Walkable
+        {
             return false;
         }
-        if world.classify_walkability_for_actor(vertical, actor_id) != GridWalkability::Walkable {
+        if world.classify_pathfinding_walkability_for_actor(vertical, actor_id)
+            != GridWalkability::Walkable
+        {
             return false;
         }
     }
@@ -199,7 +204,7 @@ fn can_traverse_planar(
 }
 
 fn can_traverse_stair(world: &GridWorld, actor_id: Option<ActorId>, to: GridCoord) -> bool {
-    world.classify_walkability_for_actor(to, actor_id) == GridWalkability::Walkable
+    world.classify_pathfinding_walkability_for_actor(to, actor_id) == GridWalkability::Walkable
 }
 
 fn reconstruct_path(

@@ -7,6 +7,10 @@ use serde_json::Value;
 use crate::dialogue_runtime::DialogueRuntimeState;
 use crate::models::{ActionResult, ActorId, GridCoord};
 
+mod specs;
+
+pub use specs::{all_interaction_kind_specs, interaction_kind_spec, parse_legacy_interaction_kind};
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct InteractionOptionId(pub String);
@@ -44,6 +48,30 @@ impl Default for InteractionOptionKind {
     fn default() -> Self {
         Self::Talk
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InteractionKindValidation {
+    pub requires_item_id: bool,
+    pub requires_target_id: bool,
+}
+
+impl InteractionKindValidation {
+    pub const NONE: Self = Self {
+        requires_item_id: false,
+        requires_target_id: false,
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InteractionKindSpec {
+    pub kind: InteractionOptionKind,
+    pub default_option_id: &'static str,
+    pub default_display_name: &'static str,
+    pub default_priority: i32,
+    pub legacy_names: &'static [&'static str],
+    pub is_scene_transition: bool,
+    pub validation: InteractionKindValidation,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -255,55 +283,19 @@ pub struct InteractionExecutionResult {
 }
 
 pub fn default_option_id_for_kind(kind: InteractionOptionKind) -> String {
-    match kind {
-        InteractionOptionKind::Wait => "wait",
-        InteractionOptionKind::Talk => "talk",
-        InteractionOptionKind::Attack => "attack",
-        InteractionOptionKind::Pickup => "pickup",
-        InteractionOptionKind::OpenDoor => "open_door",
-        InteractionOptionKind::CloseDoor => "close_door",
-        InteractionOptionKind::UnlockDoor => "unlock_door",
-        InteractionOptionKind::PickLockDoor => "pick_lock_door",
-        InteractionOptionKind::EnterSubscene => "enter_subscene",
-        InteractionOptionKind::EnterOverworld => "enter_overworld",
-        InteractionOptionKind::ExitToOutdoor => "exit_to_outdoor",
-        InteractionOptionKind::EnterOutdoorLocation => "enter_outdoor_location",
-    }
-    .to_string()
+    interaction_kind_spec(kind).default_option_id.to_string()
 }
 
 pub fn default_display_name_for_kind(kind: InteractionOptionKind) -> &'static str {
-    match kind {
-        InteractionOptionKind::Wait => "等待",
-        InteractionOptionKind::Talk => "Talk",
-        InteractionOptionKind::Attack => "Attack",
-        InteractionOptionKind::Pickup => "Pickup",
-        InteractionOptionKind::OpenDoor => "Open Door",
-        InteractionOptionKind::CloseDoor => "Close Door",
-        InteractionOptionKind::UnlockDoor => "Unlock Door",
-        InteractionOptionKind::PickLockDoor => "Pick Lock Door",
-        InteractionOptionKind::EnterSubscene => "Enter Subscene",
-        InteractionOptionKind::EnterOverworld => "Enter Overworld",
-        InteractionOptionKind::ExitToOutdoor => "Exit To Outdoor",
-        InteractionOptionKind::EnterOutdoorLocation => "Enter Outdoor Location",
-    }
+    interaction_kind_spec(kind).default_display_name
 }
 
 pub fn default_priority_for_kind(kind: InteractionOptionKind) -> i32 {
-    match kind {
-        InteractionOptionKind::Wait => 950,
-        InteractionOptionKind::Pickup => 900,
-        InteractionOptionKind::OpenDoor => 880,
-        InteractionOptionKind::CloseDoor => 880,
-        InteractionOptionKind::EnterSubscene => 860,
-        InteractionOptionKind::EnterOverworld => 850,
-        InteractionOptionKind::ExitToOutdoor => 850,
-        InteractionOptionKind::EnterOutdoorLocation => 840,
-        InteractionOptionKind::Talk => 800,
-        InteractionOptionKind::UnlockDoor => 790,
-        InteractionOptionKind::PickLockDoor => 780,
-        InteractionOptionKind::Attack => 700,
-    }
+    interaction_kind_spec(kind).default_priority
+}
+
+pub fn is_scene_transition_kind(kind: InteractionOptionKind) -> bool {
+    interaction_kind_spec(kind).is_scene_transition
 }
 
 fn default_true() -> bool {
@@ -316,4 +308,110 @@ fn default_interaction_distance() -> f32 {
 
 fn default_item_count() -> i32 {
     1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        all_interaction_kind_specs, default_display_name_for_kind, interaction_kind_spec,
+        parse_legacy_interaction_kind, InteractionOptionKind,
+    };
+
+    #[test]
+    fn default_display_names_use_compact_chinese_labels() {
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::Wait),
+            "等待"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::Talk),
+            "对话"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::Attack),
+            "攻击"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::Pickup),
+            "拾取"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::OpenDoor),
+            "开门"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::CloseDoor),
+            "关门"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::UnlockDoor),
+            "解锁"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::PickLockDoor),
+            "撬锁"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::EnterSubscene),
+            "进入场景"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::EnterOverworld),
+            "返回大地图"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::ExitToOutdoor),
+            "离开"
+        );
+        assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::EnterOutdoorLocation),
+            "进入地点"
+        );
+    }
+
+    #[test]
+    fn every_interaction_kind_has_a_registered_spec() {
+        let kinds = [
+            InteractionOptionKind::Wait,
+            InteractionOptionKind::Talk,
+            InteractionOptionKind::Attack,
+            InteractionOptionKind::Pickup,
+            InteractionOptionKind::OpenDoor,
+            InteractionOptionKind::CloseDoor,
+            InteractionOptionKind::UnlockDoor,
+            InteractionOptionKind::PickLockDoor,
+            InteractionOptionKind::EnterSubscene,
+            InteractionOptionKind::EnterOverworld,
+            InteractionOptionKind::ExitToOutdoor,
+            InteractionOptionKind::EnterOutdoorLocation,
+        ];
+
+        assert_eq!(all_interaction_kind_specs().len(), kinds.len());
+        for kind in kinds {
+            assert_eq!(interaction_kind_spec(kind).kind, kind);
+        }
+    }
+
+    #[test]
+    fn legacy_interaction_kind_names_resolve_through_specs() {
+        for spec in all_interaction_kind_specs() {
+            for legacy_name in spec.legacy_names {
+                assert_eq!(parse_legacy_interaction_kind(legacy_name), Some(spec.kind));
+            }
+        }
+    }
+
+    #[test]
+    fn interaction_specs_expose_expected_defaults_and_validation_flags() {
+        let pickup = interaction_kind_spec(InteractionOptionKind::Pickup);
+        assert_eq!(pickup.default_option_id, "pickup");
+        assert_eq!(pickup.default_priority, 900);
+        assert!(pickup.validation.requires_item_id);
+        assert!(!pickup.validation.requires_target_id);
+
+        let enter_subscene = interaction_kind_spec(InteractionOptionKind::EnterSubscene);
+        assert!(enter_subscene.is_scene_transition);
+        assert!(!enter_subscene.validation.requires_item_id);
+        assert!(enter_subscene.validation.requires_target_id);
+    }
 }

@@ -83,6 +83,7 @@ pub(super) fn sync_actor_visuals(
         let shadow_width = body_width * 1.55;
         let shadow_depth = body_depth * 1.7;
         let pick_binding = ViewerPickBindingSpec::actor(actor.actor_id);
+        let outline_member = HoverOutlineMember::new(ViewerPickTarget::Actor(actor.actor_id));
 
         let actor_transform =
             Transform::from_translation(translation).with_scale(Vec3::splat(grid_size));
@@ -114,12 +115,14 @@ pub(super) fn sync_actor_visuals(
                     MeshMaterial3d(body_material.clone()),
                     Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
                     pickable_target(pick_binding.clone().into()),
+                    outline_member.clone(),
                 ));
                 parent.spawn((
                     Mesh3d(meshes.add(Sphere::new(head_radius))),
                     MeshMaterial3d(head_material),
                     Transform::from_xyz(0.0, body_height * 0.5, 0.0),
                     pickable_target(pick_binding.clone().into()),
+                    outline_member.clone(),
                 ));
             })
             .id();

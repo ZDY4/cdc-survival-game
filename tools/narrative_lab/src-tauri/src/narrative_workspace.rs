@@ -258,14 +258,14 @@ pub fn delete_narrative_document(
 ) -> Result<DeleteNarrativeDocumentResult, String> {
     let workspace_root_path = resolve_workspace_root(&workspace_root)?;
     if let Some(document) = find_document_by_slug(&workspace_root_path, &slug)? {
-        let path = narrative_file_path(
-            &workspace_root_path,
-            &document.meta.doc_type,
-            &document.meta.slug,
-        )?;
+        let path = workspace_root_path.join(
+            document
+                .relative_path
+                .replace('/', std::path::MAIN_SEPARATOR_STR),
+        );
         if path.exists() {
-            fs::remove_file(&path)
-                .map_err(|error| format!("failed to delete {}: {error}", path.display()))?;
+            trash::delete(&path)
+                .map_err(|error| format!("failed to move {} to recycle bin: {error}", path.display()))?;
         }
     }
     Ok(DeleteNarrativeDocumentResult { deleted_slug: slug })

@@ -27,7 +27,7 @@ vi.mock("@tauri-apps/api/webviewWindow", () => {
 
     static getCurrent() {
       return {
-        label: "main",
+        label: "maps",
         emitTo: emitToMock,
       };
     }
@@ -97,6 +97,30 @@ describe("mapWindowing", () => {
       options: expect.objectContaining({
         title: "CDC Map Editor",
       }),
+    });
+  });
+
+  it("routes map-editor state updates back to the maps window", async () => {
+    const { MAP_EDITOR_STATE_CHANGED_EVENT, emitMapEditorStateChanged } = await import("./mapWindowing");
+
+    await emitMapEditorStateChanged({
+      documentKey: "survivor_outpost_01_grid",
+      mapId: "survivor_outpost_01_grid",
+      dirty: true,
+      errorCount: 1,
+      warningCount: 2,
+      objectCount: 4,
+      level: 0,
+    });
+
+    expect(emitToMock).toHaveBeenCalledWith("maps", MAP_EDITOR_STATE_CHANGED_EVENT, {
+      documentKey: "survivor_outpost_01_grid",
+      mapId: "survivor_outpost_01_grid",
+      dirty: true,
+      errorCount: 1,
+      warningCount: 2,
+      objectCount: 4,
+      level: 0,
     });
   });
 });

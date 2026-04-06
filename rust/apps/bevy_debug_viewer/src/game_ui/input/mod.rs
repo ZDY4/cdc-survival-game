@@ -7,5 +7,8 @@ mod pointer_input;
 mod tooltip;
 
 pub(crate) use button_actions::handle_game_ui_buttons;
+pub(super) use button_actions::{
+    execute_trade_buy, execute_trade_sell, plan_trade_buy, plan_trade_sell, TradeQuantityPlan,
+};
 pub(crate) use pointer_input::handle_inventory_panel_pointer_input;
 pub(crate) use tooltip::update_hover_tooltip_state;

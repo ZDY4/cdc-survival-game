@@ -11,7 +11,6 @@ import type {
   CloudWorkspaceMeta,
   EditorSettingsSection,
   NarrativeAppSettings,
-  NarrativeSessionRestoreMode,
   NarrativeSyncSettings,
 } from "../../types";
 import {
@@ -80,32 +79,19 @@ const defaultNarrativeAppSettings: NarrativeAppSettings = {
   lastWorkspace: null,
   connectedProjectRoot: null,
   recentProjectRoots: [],
-  sessionRestoreMode: "ask",
+  sessionRestoreMode: "always",
   workspaceLayouts: {},
   workspaceAgentSessions: {},
 };
 
-const SESSION_RESTORE_OPTIONS: Array<{
-  id: NarrativeSessionRestoreMode;
-  label: string;
-  description: string;
-}> = [
-  {
-    id: "ask",
-    label: "每次询问",
-    description: "启动工作区时提示恢复上次 agent 会话或只恢复文档。",
-  },
-  {
-    id: "always",
-    label: "自动恢复",
-    description: "进入工作区后直接恢复最近保存的 Narrative Lab 会话。",
-  },
-  {
-    id: "documents_only",
-    label: "仅恢复文档",
-    description: "保留工作区文档状态，但默认不恢复 agent 上下文。",
-  },
-];
+function normalizeNarrativeAppSettings(
+  settings: NarrativeAppSettings,
+): NarrativeAppSettings {
+  return {
+    ...settings,
+    sessionRestoreMode: "always",
+  };
+}
 
 function compactPathLabel(path: string): string {
   const normalized = path.replace(/\\/g, "/");
@@ -172,7 +158,9 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
     void Promise.all([
       invokeCommand<AiSettings>("load_ai_settings").then(setAiSettings),
       invokeCommand<NarrativeSyncSettings>("load_narrative_sync_settings").then(setSyncSettings),
-      invokeCommand<NarrativeAppSettings>("load_narrative_app_settings").then(setAppSettings),
+      invokeCommand<NarrativeAppSettings>("load_narrative_app_settings").then((settings) =>
+        setAppSettings(normalizeNarrativeAppSettings(settings)),
+      ),
     ]).then(
       () => {
         onStatusChange("Settings loaded.");
@@ -388,12 +376,12 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
     try {
       const saved = await invokeCommand<NarrativeAppSettings>("save_narrative_app_settings", {
         settings: {
-          ...appSettings,
+          ...normalizeNarrativeAppSettings(appSettings),
           lastWorkspace: appSettings.lastWorkspace?.trim() || null,
           connectedProjectRoot: appSettings.connectedProjectRoot?.trim() || null,
         },
       });
-      setAppSettings(saved);
+      setAppSettings(normalizeNarrativeAppSettings(saved));
       setWorkspaceStatus("Workspace settings saved.");
       onStatusChange("Saved workspace and project settings.");
       await emitSettingsChanged("workspace");
@@ -595,37 +583,6 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
                   placeholder="D:/Projects/.../cdc-survival-game"
                 />
               </div>
-              <label className="field">
-                <span className="field-label">Session restore</span>
-                <div className="segmented-control" style={{ flexWrap: "wrap" }}>
-                  {SESSION_RESTORE_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className={`segmented-control-item ${
-                        (appSettings.sessionRestoreMode ?? "ask") === option.id
-                          ? "segmented-control-item-active"
-                          : ""
-                      }`.trim()}
-                      onClick={() =>
-                        setAppSettings((current) => ({
-                          ...current,
-                          sessionRestoreMode: option.id,
-                        }))
-                      }
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <span className="field-hint">
-                  {
-                    SESSION_RESTORE_OPTIONS.find(
-                      (option) => option.id === (appSettings.sessionRestoreMode ?? "ask"),
-                    )?.description
-                  }
-                </span>
-              </label>
               <div className="toolbar-actions">
                 <button
                   type="button"
@@ -647,7 +604,6 @@ export function SettingsWindow({ status, onStatusChange }: SettingsWindowProps) 
               {workspaceStatus ? <p className="field-hint">{workspaceStatus}</p> : null}
               <div className="toolbar-summary">
                 <Badge tone="muted">{`已保存会话 ${persistedSessionCount}`}</Badge>
-                <Badge tone="muted">{appSettings.sessionRestoreMode ?? "ask"}</Badge>
               </div>
               <CompactSelectList
                 label="Recent workspaces"

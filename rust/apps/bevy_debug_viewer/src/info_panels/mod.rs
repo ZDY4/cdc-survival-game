@@ -3,18 +3,19 @@ use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 use game_core::SimulationSnapshot;
 
+use crate::console::ViewerConsoleState;
 use crate::state::{
-    FpsOverlayText, FreeObserveIndicatorRoot, InfoPanelFooterText, InfoPanelTabBarRoot,
-    InfoPanelTabButton, InfoPanelText, UiMouseBlocker, ViewerHudPage, ViewerInfoPanelState,
-    ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
-    viewer_ui_passthrough_bundle,
+    viewer_ui_passthrough_bundle, FpsOverlayText, FreeObserveIndicatorRoot, InfoPanelFooterText,
+    InfoPanelTabBarRoot, InfoPanelTabButton, InfoPanelText, UiMouseBlocker, ViewerHudPage,
+    ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState,
 };
 use game_bevy::{UiMenuPanel, UiMenuState};
 
 mod actor;
 mod ai;
 mod events;
-mod interaction;
+mod interaction_panel;
 mod overview;
 mod performance;
 mod selection;
@@ -24,7 +25,7 @@ mod world;
 use actor::format_actor_panel;
 use ai::format_ai_panel;
 use events::format_events_panel;
-use interaction::format_interaction_panel;
+use interaction_panel::format_interaction_panel;
 use overview::format_overview_panel;
 use performance::{current_fps_label, format_performance_panel};
 use selection::format_selection_panel;
@@ -119,7 +120,7 @@ pub(crate) fn spawn_info_panel_ui(
             padding: UiRect::axes(px(10), px(6)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.055, 0.065, 0.08, 0.88)),
+        BackgroundColor(Color::srgba(0.055, 0.055, 0.052, 0.88)),
         Visibility::Hidden,
         FocusPolicy::Block,
         RelativeCursorPosition::default(),
@@ -159,9 +160,11 @@ pub(crate) fn update_free_observe_indicator(
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     menu_state: Res<UiMenuState>,
+    console_state: Res<ViewerConsoleState>,
 ) {
     let mut indicator_visibility = indicator_visibility.into_inner();
     *indicator_visibility = if scene_kind.is_gameplay()
+        && !console_state.is_open
         && viewer_state.is_free_observe()
         && menu_state.active_panel != Some(UiMenuPanel::Settings)
     {
@@ -277,9 +280,9 @@ pub(crate) fn update_info_panel_tab_bar(
         *background = BackgroundColor(tab_button_color(is_selected, *interaction));
         *border = BorderColor::all(tab_button_border_color(is_selected));
         *text_color = TextColor(if is_selected {
-            Color::srgba(0.98, 0.99, 1.0, 1.0)
+            Color::srgba(0.94, 0.93, 0.90, 1.0)
         } else {
-            Color::srgba(0.85, 0.88, 0.93, 0.98)
+            Color::srgba(0.80, 0.79, 0.76, 0.98)
         });
     }
 }

@@ -29,9 +29,9 @@ pub(super) fn render_skills_panel(
     parent.commands().entity(body).with_children(|body| {
         body.spawn(text_bundle(
             font,
-            "左侧切技能树，中列浏览当前树，右侧查看详情；选中技能后可加入当前组空槽，或直接点击底栏槽位精确绑定。",
+            "左侧切技能树，中列浏览当前树，右侧查看详情；选中技能后可加入当前组，右键技能可直接加到快捷栏，或直接点击底栏槽位精确绑定。",
             10.5,
-            Color::srgba(0.78, 0.84, 0.92, 1.0),
+            ui_text_secondary_color(),
         ));
         body.spawn(Node {
             width: Val::Percent(100.0),
@@ -52,22 +52,22 @@ pub(super) fn render_skills_panel(
                         border: UiRect::all(px(1)),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.05, 0.07, 0.10, 0.96)),
-                    BorderColor::all(Color::srgba(0.18, 0.25, 0.33, 1.0)),
+                    BackgroundColor(ui_panel_background()),
+                    BorderColor::all(ui_border_color()),
                 ))
                 .with_children(|tree_column| {
                     tree_column.spawn(text_bundle(
                         font,
                         "技能树",
                         11.5,
-                        Color::srgba(0.92, 0.95, 1.0, 1.0),
+                        ui_text_heading_color(),
                     ));
                     if snapshot.trees.is_empty() {
                         tree_column.spawn(text_bundle(
                             font,
                             "当前没有可显示的技能树",
                             10.5,
-                            Color::srgba(0.72, 0.76, 0.82, 1.0),
+                            ui_text_muted_color(),
                         ));
                     }
                     for tree in &snapshot.trees {
@@ -88,14 +88,14 @@ pub(super) fn render_skills_panel(
                                     ..default()
                                 },
                                 BackgroundColor(if is_selected {
-                                    Color::srgba(0.16, 0.22, 0.31, 0.98).into()
+                                    ui_panel_background_selected().into()
                                 } else {
-                                    Color::srgba(0.08, 0.10, 0.15, 0.94).into()
+                                    ui_panel_background_alt().into()
                                 }),
                                 BorderColor::all(if is_selected {
-                                    Color::srgba(0.56, 0.72, 0.92, 1.0)
+                                    ui_border_selected_color()
                                 } else {
-                                    Color::srgba(0.18, 0.25, 0.33, 1.0)
+                                    ui_border_color()
                                 }),
                                 GameUiButtonAction::SelectSkillTree(tree.tree_id.clone()),
                             ))
@@ -107,14 +107,14 @@ pub(super) fn render_skills_panel(
                                     if is_selected {
                                         Color::WHITE
                                     } else {
-                                        Color::srgba(0.86, 0.90, 0.96, 1.0)
+                                        ui_text_secondary_color()
                                     },
                                 ));
                                 button.spawn(text_bundle(
                                     font,
                                     &format!("{learned_count}/{total_count} 已学习"),
                                     9.2,
-                                    Color::srgba(0.67, 0.73, 0.80, 1.0),
+                                    ui_text_muted_color(),
                                 ));
                             });
                     }
@@ -131,8 +131,8 @@ pub(super) fn render_skills_panel(
                         border: UiRect::all(px(1)),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.05, 0.07, 0.10, 0.96)),
-                    BorderColor::all(Color::srgba(0.18, 0.25, 0.33, 1.0)),
+                    BackgroundColor(ui_panel_background()),
+                    BorderColor::all(ui_border_color()),
                 ))
                 .with_children(|list_column| {
                     let title = selected_tree
@@ -142,7 +142,7 @@ pub(super) fn render_skills_panel(
                         font,
                         &title,
                         11.5,
-                        Color::srgba(0.92, 0.95, 1.0, 1.0),
+                        ui_text_heading_color(),
                     ));
                     if let Some(tree) = selected_tree {
                         if tree.entries.is_empty() {
@@ -150,7 +150,7 @@ pub(super) fn render_skills_panel(
                                 font,
                                 "该技能树暂无技能条目",
                                 10.5,
-                                Color::srgba(0.72, 0.76, 0.82, 1.0),
+                                ui_text_muted_color(),
                             ));
                         }
                         for entry in &tree.entries {
@@ -184,14 +184,14 @@ pub(super) fn render_skills_panel(
                                         ..default()
                                     },
                                     BackgroundColor(if is_selected {
-                                        Color::srgba(0.16, 0.22, 0.31, 0.98).into()
+                                        ui_panel_background_selected().into()
                                     } else {
-                                        Color::srgba(0.08, 0.10, 0.15, 0.94).into()
+                                        ui_panel_background_alt().into()
                                     }),
                                     BorderColor::all(if is_selected {
-                                        Color::srgba(0.64, 0.76, 0.94, 1.0)
+                                        ui_border_selected_color()
                                     } else {
-                                        Color::srgba(0.18, 0.25, 0.33, 1.0)
+                                        ui_border_color()
                                     }),
                                     GameUiButtonAction::SelectSkill(entry.skill_id.clone()),
                                     SkillHoverTarget {
@@ -211,7 +211,7 @@ pub(super) fn render_skills_panel(
                                         if entry.learned_level > 0 {
                                             Color::WHITE
                                         } else {
-                                            Color::srgba(0.78, 0.82, 0.88, 1.0)
+                                            ui_text_secondary_color()
                                         },
                                     ));
                                     button.spawn(text_bundle(
@@ -231,7 +231,7 @@ pub(super) fn render_skills_panel(
                             font,
                             "没有可供选择的技能",
                             10.5,
-                            Color::srgba(0.72, 0.76, 0.82, 1.0),
+                            ui_text_muted_color(),
                         ));
                     }
                 });
@@ -247,8 +247,8 @@ pub(super) fn render_skills_panel(
                         border: UiRect::all(px(1)),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.05, 0.07, 0.10, 0.96)),
-                    BorderColor::all(Color::srgba(0.18, 0.25, 0.33, 1.0)),
+                    BackgroundColor(ui_panel_background()),
+                    BorderColor::all(ui_border_color()),
                 ))
                 .with_children(|detail_column| {
                     if let Some(entry) = selected_entry {
@@ -261,14 +261,14 @@ pub(super) fn render_skills_panel(
                                 font,
                                 &tree.tree_name,
                                 12.0,
-                                Color::srgba(0.82, 0.88, 0.96, 1.0),
+                                ui_text_secondary_color(),
                             ));
                             if !tree.tree_description.trim().is_empty() {
                                 detail_column.spawn(text_bundle(
                                     font,
                                     &tree.tree_description,
                                     10.0,
-                                    Color::srgba(0.70, 0.75, 0.82, 1.0),
+                                    ui_text_muted_color(),
                                 ));
                             }
                         }
@@ -276,7 +276,7 @@ pub(super) fn render_skills_panel(
                             font,
                             "选择一个技能后，这里会显示完整描述、前置要求和快捷栏操作。",
                             10.5,
-                            Color::srgba(0.72, 0.76, 0.82, 1.0),
+                            ui_text_muted_color(),
                         ));
                     }
                 });

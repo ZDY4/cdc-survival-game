@@ -7,6 +7,7 @@ use tauri::{
 };
 
 pub const EDITOR_MENU_COMMAND_EVENT: &str = "editor-menu:command";
+const MENULESS_WINDOW_LABELS: &[&str] = &["main", "settings"];
 
 fn log_menu(message: impl AsRef<str>) {
     eprintln!("[editor-menu] {}", message.as_ref());
@@ -33,7 +34,6 @@ pub mod ids {
     pub const MODULE_ITEMS: &str = "module.items";
     pub const MODULE_DIALOGUES: &str = "module.dialogues";
     pub const MODULE_QUESTS: &str = "module.quests";
-    pub const MODULE_MAPS: &str = "module.maps";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -165,7 +165,6 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
     let module_dialogues =
         MenuItem::with_id(app, ids::MODULE_DIALOGUES, "Dialogues", true, Some("Alt+2"))?;
     let module_quests = MenuItem::with_id(app, ids::MODULE_QUESTS, "Quests", true, Some("Alt+3"))?;
-    let module_maps = MenuItem::with_id(app, ids::MODULE_MAPS, "Maps", true, Some("Alt+4"))?;
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&file_new_current)
         .separator()
@@ -212,7 +211,6 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
         .item(&module_items)
         .item(&module_dialogues)
         .item(&module_quests)
-        .item(&module_maps)
         .build()?;
 
     let help_menu = SubmenuBuilder::new(app, "Help").about(None).build()?;
@@ -239,7 +237,7 @@ pub fn apply_window_menu<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> 
         return Ok(());
     };
 
-    if window_label == "settings" {
+    if MENULESS_WINDOW_LABELS.contains(&window_label) {
         let _ = window.remove_menu()?;
         log_menu(format!("removed native menu for window={window_label}"));
         return Ok(());
@@ -259,7 +257,7 @@ pub fn attach_window_menu_listener<R: Runtime>(window: WebviewWindow<R>) {
     let label = window.label().to_string();
     let app = window.app_handle().clone();
 
-    if label == "settings" {
+    if MENULESS_WINDOW_LABELS.contains(&label.as_str()) {
         log_menu(format!("skip attaching menu listener for window={label}"));
         return;
     }
@@ -337,5 +335,8 @@ pub fn remember_focused_editor_window<R: Runtime>(
 }
 
 fn is_editor_window_label(label: &str) -> bool {
-    matches!(label, "main" | "map-editor" | "settings")
+    matches!(
+        label,
+        "items" | "dialogues" | "quests" | "settings"
+    )
 }

@@ -6,6 +6,7 @@ members = [
     "crates/game_protocol",
     "apps/bevy_server",
     "apps/bevy_debug_viewer",
+    "apps/bevy_map_editor",
     "apps/narrative_sync_server",
 ]
 resolver = "2"

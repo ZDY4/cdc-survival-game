@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use game_data::{
     building_layout_story_levels, expand_object_footprint, object_effectively_blocks_movement,
-    ActorId, GridCoord, InteractionOptionDefinition, InteractionOptionKind, MapCellDefinition,
-    MapDefinition, MapId, MapInteractiveProps, MapObjectDefinition, MapObjectFootprint,
-    MapObjectKind, MapObjectProps, MapRotation, MapSize, WorldCoord,
+    ActorId, GridCoord, InteractionOptionDefinition, MapCellDefinition, MapDefinition, MapId,
+    MapInteractiveProps, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+    MapRotation, MapSize, WorldCoord,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -14,6 +14,7 @@ use super::math::{grid_to_world, world_to_grid, DEFAULT_GRID_SIZE};
 use crate::building::{
     generate_building_layout, GeneratedBuildingDebugState, GeneratedDoorDebugState,
 };
+use crate::simulation::interaction_behaviors::door::generated_door_interaction_options as build_generated_door_interaction_options;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GridWalkability {
@@ -430,6 +431,42 @@ impl GridWorld {
         self.classify_walkability_for_actor(grid, actor_id) == GridWalkability::Walkable
     }
 
+    pub fn classify_pathfinding_walkability_for_actor(
+        &self,
+        grid: GridCoord,
+        actor_id: Option<ActorId>,
+    ) -> GridWalkability {
+        let walkability = self.classify_walkability_for_actor(grid, actor_id);
+        if walkability != GridWalkability::StaticBlocked {
+            return walkability;
+        }
+
+        if self.is_auto_open_generated_door_cell(grid) {
+            GridWalkability::Walkable
+        } else {
+            walkability
+        }
+    }
+
+    pub fn auto_open_generated_door_at(
+        &mut self,
+        grid: GridCoord,
+    ) -> Option<GeneratedDoorDebugState> {
+        let door = self
+            .generated_doors
+            .iter()
+            .find(|door| door.anchor_grid == grid && !door.is_open && !door.is_locked)
+            .cloned()?;
+        if !self.is_auto_open_generated_door_cell(grid) {
+            return None;
+        }
+        if self.set_generated_door_state(&door.door_id, true, false) {
+            Some(door)
+        } else {
+            None
+        }
+    }
+
     pub fn classify_walkability_for_actor(
         &self,
         grid: GridCoord,
@@ -791,6 +828,38 @@ impl GridWorld {
             .sort_by(|a, b| a.door_id.cmp(&b.door_id));
     }
 
+    fn is_auto_open_generated_door_cell(&self, grid: GridCoord) -> bool {
+        if self.manual_static_obstacle_ref_counts.contains_key(&grid) {
+            return false;
+        }
+
+        if self
+            .map_cells
+            .get(&grid)
+            .map(|cell| cell.blocks_movement)
+            .unwrap_or(false)
+        {
+            return false;
+        }
+
+        let mut has_auto_open_door = false;
+        for object in self.map_objects_at(grid) {
+            if !object_effectively_blocks_movement(object) {
+                continue;
+            }
+
+            let Some(door) = self.generated_door_by_object_id(&object.object_id) else {
+                return false;
+            };
+            if door.is_open || door.is_locked {
+                return false;
+            }
+            has_auto_open_door = true;
+        }
+
+        has_auto_open_door
+    }
+
     fn apply_generated_building(&mut self, building: &GeneratedBuildingDebugState) {
         for story in &building.stories {
             for wall in &story.wall_cells {
@@ -932,23 +1001,5 @@ fn generated_door_map_object(door: &GeneratedDoorDebugState) -> MapObjectDefinit
 fn generated_door_interaction_options(
     door: &GeneratedDoorDebugState,
 ) -> Vec<InteractionOptionDefinition> {
-    let kinds = if door.is_locked {
-        [
-            InteractionOptionKind::UnlockDoor,
-            InteractionOptionKind::PickLockDoor,
-        ]
-        .to_vec()
-    } else if door.is_open {
-        [InteractionOptionKind::CloseDoor].to_vec()
-    } else {
-        [InteractionOptionKind::OpenDoor].to_vec()
-    };
-
-    kinds
-        .into_iter()
-        .map(|kind| InteractionOptionDefinition {
-            kind,
-            ..InteractionOptionDefinition::default()
-        })
-        .collect()
+    build_generated_door_interaction_options(door)
 }

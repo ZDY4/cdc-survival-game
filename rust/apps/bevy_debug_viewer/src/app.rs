@@ -4,6 +4,7 @@ use bevy::log::error;
 use bevy::log::LogPlugin;
 use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
+use bevy_mesh_outline::MeshOutlinePlugin;
 use bevy::window::WindowPlugin;
 use game_bevy::{
     apply_gameplay_libraries, init_runtime_logging, spawn_characters_from_definition,
@@ -36,8 +37,9 @@ use crate::profiling::{
 };
 use crate::render::{
     setup_viewer, sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals,
-    tick_fog_of_war_transition, update_camera, update_dialogue_panel, update_interaction_menu,
-    BuildingWallGridMaterial, FogOfWarPostProcessPlugin, GridGroundMaterial,
+    sync_hover_mesh_outlines, sync_stable_interaction_hover, tick_fog_of_war_transition,
+    update_camera, update_dialogue_panel, update_interaction_menu, BuildingWallGridMaterial,
+    FogOfWarPostProcessPlugin, GridGroundMaterial, StableInteractionHoverState,
 };
 use crate::simulation::{
     advance_actor_feedback, advance_actor_motion, advance_map_ai_spawns,
@@ -45,11 +47,12 @@ use crate::simulation::{
     refresh_viewer_vision, sync_npc_runtime_presence, ViewerVisionTrackerState,
 };
 use crate::state::{
-    ActorLabelEntities, UiHoverTooltipState, UiInventoryContextMenuState, ViewerActorFeedbackState,
+    sync_viewer_ui_pick_passthrough, ActorLabelEntities, UiContextMenuState,
+    UiHoverTooltipState, UiInventoryDragState, ViewerActorFeedbackState,
     ViewerActorMotionState, ViewerCameraFollowState, ViewerCameraShakeState,
     ViewerDamageNumberState, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig,
     ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
-    ViewerUiSettings, ViewerUiSettingsPath, sync_viewer_ui_pick_passthrough,
+    ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 pub(crate) fn run() {
@@ -95,12 +98,14 @@ pub(crate) fn run() {
         .insert_resource(ViewerRenderConfig::default())
         .insert_resource(ViewerSceneKind::default())
         .insert_resource(ViewerPickingState::default())
+        .insert_resource(StableInteractionHoverState::default())
         .insert_resource(ViewerState::default())
         .insert_resource(ViewerUiSettings::default())
         .insert_resource(ViewerUiSettingsPath::default())
         .insert_resource(ViewerRuntimeSavePath::default())
         .insert_resource(UiHoverTooltipState::default())
-        .insert_resource(UiInventoryContextMenuState::default())
+        .insert_resource(UiContextMenuState::default())
+        .insert_resource(UiInventoryDragState::default())
         .insert_resource(ViewerInfoPanelState::default())
         .insert_resource(ViewerConsoleState::default())
         .insert_resource(ViewerSystemProfilerState::default())
@@ -150,6 +155,7 @@ impl Plugin for ViewerAppPlugin {
                 }),
         )
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
+        .add_plugins(MeshOutlinePlugin)
         .add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
         .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
         .add_plugins(FogOfWarPostProcessPlugin)
@@ -218,6 +224,12 @@ impl Plugin for ViewerAppPlugin {
                 handle_keyboard_input,
                 handle_mouse_wheel_zoom,
                 handle_camera_pan,
+            )
+                .in_set(ViewerUpdateSet::RuntimeMutations),
+        )
+        .add_systems(
+            Update,
+            (
                 handle_mouse_input,
                 crate::info_panels::handle_info_panel_tab_buttons,
                 handle_interaction_menu_buttons,
@@ -252,10 +264,23 @@ impl Plugin for ViewerAppPlugin {
                 sync_fog_of_war_visuals,
                 tick_fog_of_war_transition,
                 sync_fog_of_war_post_process_camera,
-                profiled_update_occluding_world_visuals,
+                sync_stable_interaction_hover,
                 profiled_sync_actor_labels,
                 profiled_sync_damage_numbers,
             )
+                .in_set(ViewerUpdateSet::Visuals),
+        );
+        app.add_systems(
+            Update,
+            profiled_update_occluding_world_visuals
+                .after(sync_stable_interaction_hover)
+                .in_set(ViewerUpdateSet::Visuals),
+        );
+        app.add_systems(
+            Update,
+            sync_hover_mesh_outlines
+                .after(sync_stable_interaction_hover)
+                .after(profiled_sync_world_visuals)
                 .in_set(ViewerUpdateSet::Visuals),
         );
         app.add_systems(

@@ -22,7 +22,7 @@ pub(crate) fn draw_world(
     runtime_state: Res<ViewerRuntimeState>,
     settlements: Option<Res<SettlementDefinitions>>,
     motion_state: Res<ViewerActorMotionState>,
-    picking_state: Res<ViewerPickingState>,
+    stable_hover: Res<StableInteractionHoverState>,
     viewer_state: Res<ViewerState>,
     render_config: Res<ViewerRenderConfig>,
     window: Single<&Window>,
@@ -197,12 +197,18 @@ pub(crate) fn draw_world(
             }
         }
     } else if !world_hover_blocked {
-        if let Some((grid, kind)) = viewer_state.hovered_grid.and_then(|grid| {
-            hovered_grid_outline_kind(&runtime_state.runtime, &snapshot, &viewer_state, grid)
-                .map(|kind| (grid, kind))
+        if let Some((grid, kind)) = stable_hover
+            .active
+            .as_ref()
+            .map(|hovered| (hovered.display_grid, hovered.outline_kind))
+            .or_else(|| {
+            viewer_state.hovered_grid.and_then(|grid| {
+                hovered_grid_outline_kind(&runtime_state.runtime, &snapshot, &viewer_state, grid)
+                    .map(|kind| (grid, kind))
+            })
         }) {
             let color = match kind {
-                HoveredGridOutlineKind::Reachable => palette.hover_walkable,
+                HoveredGridOutlineKind::Neutral => palette.hover_walkable,
                 HoveredGridOutlineKind::Hostile => palette.hover_hostile,
             };
             draw_grid_outline(
@@ -219,17 +225,6 @@ pub(crate) fn draw_world(
             );
         }
 
-        draw_hovered_pick_outline(
-            &mut gizmos,
-            &snapshot,
-            &runtime_state,
-            &motion_state,
-            &picking_state,
-            &palette,
-            *render_config,
-            pulse,
-            viewer_state.current_level,
-        );
     }
 
     if let Some(focused_actor_id) = viewer_state.focus_actor_id(&snapshot) {
@@ -341,6 +336,7 @@ fn draw_grid_tile_overlay(
     draw_grid_outline(gizmos, grid, grid_size, y_offset, 0.94, color);
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn hovered_pick_outline_box(
     snapshot: &game_core::SimulationSnapshot,
     picking_state: &ViewerPickingState,
@@ -396,6 +392,7 @@ pub(super) fn hovered_pick_outline_box(
     }
 }
 
+#[allow(dead_code)]
 fn draw_hovered_pick_outline(
     gizmos: &mut Gizmos,
     snapshot: &game_core::SimulationSnapshot,

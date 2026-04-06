@@ -10,6 +10,17 @@ use game_data::{
     SkillTreeLibrary, WorldMode,
 };
 
+const DEFAULT_EQUIPMENT_SLOT_ORDER: &[&str] = &[
+    "main_hand",
+    "off_hand",
+    "head",
+    "body",
+    "legs",
+    "feet",
+    "accessory_1",
+    "accessory_2",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UiMenuPanel {
     #[default]
@@ -110,17 +121,27 @@ pub struct UiTradeSessionState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct UiDiscardQuantityModalState {
+pub enum UiItemQuantityIntent {
+    #[default]
+    Discard,
+    TradeBuy { shop_id: String, unit_price: i32 },
+    TradeSell { shop_id: String, unit_price: i32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UiItemQuantityModalState {
     pub item_id: u32,
+    pub source_count: i32,
     pub available_count: i32,
     pub selected_count: i32,
+    pub intent: UiItemQuantityIntent,
 }
 
 #[derive(Resource, Debug, Clone, Default)]
 pub struct UiModalState {
     pub message: Option<String>,
     pub trade: Option<UiTradeSessionState>,
-    pub discard_quantity: Option<UiDiscardQuantityModalState>,
+    pub item_quantity: Option<UiItemQuantityModalState>,
 }
 
 #[derive(Resource, Debug, Clone, Default)]
@@ -303,6 +324,7 @@ pub struct UiWorldStatusSnapshot {
 #[derive(Debug, Clone, Default)]
 pub struct UiInventoryEntryView {
     pub item_id: u32,
+    pub display_index: usize,
     pub name: String,
     pub count: i32,
     pub item_type: UiItemType,
@@ -495,21 +517,29 @@ pub fn inventory_snapshot(
     };
 
     let ammo_ids = ammo_item_ids(items);
-    let entries = actor
-        .inventory
-        .iter()
-        .filter_map(|(item_id, count)| {
-            let definition = items.get(*item_id)?;
+    let entries = runtime
+        .economy()
+        .inventory_display_order(actor_id)
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(display_index, item_id)| {
+            let count = actor.inventory.get(&item_id).copied().unwrap_or(0);
+            if count <= 0 {
+                return None;
+            }
+            let definition = items.get(item_id)?;
             let item_type = classify_item(definition, &ammo_ids);
             if !filter.matches_type(item_type) {
                 return None;
             }
             Some(UiInventoryEntryView {
-                item_id: *item_id,
+                item_id,
+                display_index,
                 name: definition.name.clone(),
-                count: *count,
+                count,
                 item_type,
-                total_weight: definition.weight * (*count as f32),
+                total_weight: definition.weight * (count as f32),
                 can_use: item_usable(definition),
                 can_equip: item_equippable(definition),
             })
@@ -530,14 +560,27 @@ pub fn inventory_snapshot(
         })
     });
 
-    let equipment = actor
-        .equipped_slots
+    let mut equipment_slot_ids = DEFAULT_EQUIPMENT_SLOT_ORDER
         .iter()
-        .map(|(slot_id, equipped)| UiEquipmentSlotView {
-            slot_id: slot_id.clone(),
-            slot_label: slot_id.clone(),
-            item_id: Some(equipped.item_id),
-            item_name: items.get(equipped.item_id).map(|item| item.name.clone()),
+        .map(|slot| (*slot).to_string())
+        .collect::<Vec<_>>();
+    for slot_id in actor.equipped_slots.keys() {
+        if !equipment_slot_ids.iter().any(|existing| existing == slot_id) {
+            equipment_slot_ids.push(slot_id.clone());
+        }
+    }
+    let equipment = equipment_slot_ids
+        .into_iter()
+        .map(|slot_id| {
+            let equipped = actor.equipped_slots.get(&slot_id);
+            UiEquipmentSlotView {
+                slot_id: slot_id.clone(),
+                slot_label: equipment_slot_label(&slot_id),
+                item_id: equipped.map(|equipped| equipped.item_id),
+                item_name: equipped.and_then(|equipped| {
+                    items.get(equipped.item_id).map(|item| item.name.clone())
+                }),
+            }
         })
         .collect::<Vec<_>>();
 
@@ -558,6 +601,21 @@ pub fn inventory_snapshot(
         total_weight,
         max_weight,
         filter,
+    }
+}
+
+fn equipment_slot_label(slot_id: &str) -> String {
+    match slot_id {
+        "main_hand" => "主手".to_string(),
+        "off_hand" => "副手".to_string(),
+        "head" => "头部".to_string(),
+        "body" => "身体".to_string(),
+        "legs" => "腿部".to_string(),
+        "feet" => "脚部".to_string(),
+        "accessory" => "饰品".to_string(),
+        "accessory_1" => "饰品 1".to_string(),
+        "accessory_2" => "饰品 2".to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -845,29 +903,35 @@ pub fn trade_snapshot(
 ) -> UiTradeSnapshot {
     let player_items = runtime
         .economy()
-        .actor(actor_id)
-        .map(|actor| {
-            actor
-                .inventory
-                .iter()
-                .filter_map(|(item_id, count)| {
-                    let definition = items.get(*item_id)?;
+        .inventory_display_order(actor_id)
+        .map(|order| {
+            order
+                .into_iter()
+                .filter_map(|item_id| {
+                    let count = runtime
+                        .economy()
+                        .inventory_count(actor_id, item_id)
+                        .unwrap_or(0);
+                    if count <= 0 {
+                        return None;
+                    }
+                    let definition = items.get(item_id)?;
                     let unit_price = runtime
                         .economy()
                         .shop(shop_id)
                         .and_then(|shop| {
                             shop.inventory
-                                .get(item_id)
+                                .get(&item_id)
                                 .map(|entry| entry.price)
                                 .or(Some(definition.value))
                         })
                         .unwrap_or(definition.value);
                     Some(UiTradeEntryView {
-                        item_id: *item_id,
+                        item_id,
                         name: definition.name.clone(),
-                        count: *count,
+                        count,
                         unit_price,
-                        total_weight: definition.weight * (*count as f32),
+                        total_weight: definition.weight * (count as f32),
                     })
                 })
                 .collect::<Vec<_>>()

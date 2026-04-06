@@ -96,10 +96,12 @@ fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
         ..UiMenuState::default()
     };
     let mut modal_state = UiModalState {
-        discard_quantity: Some(game_bevy::UiDiscardQuantityModalState {
+        item_quantity: Some(game_bevy::UiItemQuantityModalState {
             item_id: 1006,
+            source_count: 3,
             available_count: 3,
             selected_count: 2,
+            intent: game_bevy::UiItemQuantityIntent::Discard,
         }),
         trade: Some(Default::default()),
         ..UiModalState::default()
@@ -134,7 +136,7 @@ fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
     assert!(menu_state.selected_inventory_item.is_none());
     assert!(menu_state.selected_skill_tree_id.is_none());
     assert_eq!(menu_state.status_text, "开始新游戏");
-    assert!(modal_state.discard_quantity.is_none());
+    assert!(modal_state.item_quantity.is_none());
     assert!(modal_state.trade.is_none());
 }
 

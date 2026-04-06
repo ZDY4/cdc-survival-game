@@ -7,12 +7,16 @@ import {
 } from "./editorSurface";
 
 describe("editorSurface", () => {
-  it("prefers the dedicated map-editor surface from query string", () => {
-    expect(resolveEditorSurface({ search: "?surface=map-editor" })).toBe("map-editor");
+  it("prefers module surfaces from the query string", () => {
+    expect(resolveEditorSurface({ search: "?surface=items" })).toBe("items");
+    expect(resolveEditorSurface({ search: "?surface=dialogues" })).toBe("dialogues");
+    expect(resolveEditorSurface({ search: "?surface=quests" })).toBe("quests");
   });
 
-  it("falls back to map-editor surface when the current label is map-editor", () => {
-    expect(resolveEditorSurface({ label: "map-editor" })).toBe("map-editor");
+  it("falls back to module surfaces when the current label matches a dedicated editor window", () => {
+    expect(resolveEditorSurface({ label: "items" })).toBe("items");
+    expect(resolveEditorSurface({ label: "dialogues" })).toBe("dialogues");
+    expect(resolveEditorSurface({ label: "quests" })).toBe("quests");
   });
 
   it("prefers the dedicated settings surface from query string", () => {
@@ -23,17 +27,18 @@ describe("editorSurface", () => {
     expect(resolveEditorSurface({ label: "settings" })).toBe("settings");
   });
 
-  it("defaults to the main surface otherwise", () => {
+  it("defaults to the bootstrap surface otherwise", () => {
     expect(resolveEditorSurface({ search: "?surface=main" })).toBe("main");
+    expect(resolveEditorSurface({ label: "main" })).toBe("main");
   });
 
-  it("reads the requested document key from the query string", () => {
+  it("still reads the requested document key from the query string", () => {
     expect(getRequestedDocumentKey("?surface=map-editor&documentKey=survivor_outpost_01_grid")).toBe(
       "survivor_outpost_01_grid",
     );
   });
 
-  it("reads the requested document type from the query string", () => {
+  it("still reads the requested document type from the query string", () => {
     expect(getRequestedDocumentType("?surface=map-editor&documentType=overworld")).toBe(
       "overworld",
     );

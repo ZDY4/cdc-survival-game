@@ -20,16 +20,21 @@ use game_core::RuntimeSnapshot;
 use game_data::{ActorId, InteractionTargetId};
 
 use crate::bootstrap::load_viewer_gameplay_bootstrap;
+use crate::console::ViewerConsoleState;
 use crate::controls::{cancel_targeting, enter_attack_targeting};
-use crate::render::interaction_menu_button_color;
+use crate::ui_context_menu::{
+    context_menu_button_color, ContextMenuStyle, ContextMenuVariant,
+};
 use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
 use crate::state::{
-    EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, InventoryContextMenuRoot,
-    InventoryItemClickTarget, InventoryItemHoverTarget, SkillHoverTarget, UiHoverTooltipContent,
-    UiHoverTooltipState, UiInventoryContextMenuState, UiInventoryContextMenuTarget,
-    UiMouseBlocker, ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings,
-    ViewerUiSettingsPath, viewer_ui_passthrough_bundle,
+    viewer_ui_passthrough_bundle, EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot,
+    InventoryItemClickTarget, InventoryItemHoverTarget,
+    InventoryListDropZone, InventoryPanelBounds, SkillHoverTarget, TradeInventoryItemClickTarget,
+    TradeInventoryListDropZone, TradeInventoryPanelBounds, TradeSellZone, UiContextMenuRoot,
+    UiContextMenuState, UiContextMenuTarget, UiHoverTooltipContent, UiHoverTooltipState,
+    UiInventoryDragHoverTarget, UiInventoryDragSource, UiInventoryDragState, UiMouseBlocker,
+    ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState,
+    ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 const UI_PANEL_WIDTH: f32 = 448.0;
@@ -54,7 +59,6 @@ struct PlayerHudStats {
     max_hp: f32,
     ap: f32,
     available_steps: i32,
-    in_combat: bool,
 }
 
 #[derive(SystemParam)]
@@ -69,7 +73,9 @@ pub(crate) struct GameUiViewState<'w, 's> {
     hotbar_state: Res<'w, UiHotbarState>,
     settings: Res<'w, ViewerUiSettings>,
     hover_tooltip: Res<'w, UiHoverTooltipState>,
-    inventory_context_menu: Res<'w, UiInventoryContextMenuState>,
+    inventory_context_menu: Res<'w, UiContextMenuState>,
+    drag_state: Res<'w, UiInventoryDragState>,
+    console_state: Res<'w, ViewerConsoleState>,
     marker: PhantomData<&'s ()>,
 }
 
@@ -83,7 +89,8 @@ pub(crate) struct GameUiCommandState<'w, 's> {
     filter_state: ResMut<'w, UiInventoryFilterState>,
     hotbar_state: ResMut<'w, UiHotbarState>,
     settings: ResMut<'w, ViewerUiSettings>,
-    inventory_context_menu: ResMut<'w, UiInventoryContextMenuState>,
+    inventory_context_menu: ResMut<'w, UiContextMenuState>,
+    drag_state: ResMut<'w, UiInventoryDragState>,
     marker: PhantomData<&'s ()>,
 }
 

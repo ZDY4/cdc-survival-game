@@ -17,7 +17,7 @@ pub(crate) struct GridBounds {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HoveredGridOutlineKind {
-    Reachable,
+    Neutral,
     Hostile,
 }
 

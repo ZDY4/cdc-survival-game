@@ -52,6 +52,7 @@ type DialogueWorkspaceProps = {
   canPersist: boolean;
   onStatusChange: (status: string) => void;
   onReload: () => Promise<void>;
+  indexVisible?: boolean;
 };
 
 type DialogueInspectorMode = "node" | "validation";
@@ -133,6 +134,7 @@ export function DialogueWorkspace({
   canPersist,
   onStatusChange,
   onReload,
+  indexVisible = true,
 }: DialogueWorkspaceProps) {
   const [documents, setDocuments] = useState<EditableDialogueDocument[]>(
     hydrateDocuments(workspace.documents),
@@ -612,7 +614,7 @@ export function DialogueWorkspace({
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace workspace-dialogues">
       <Toolbar actions={actions}>
         {selectedDocument && GraphToolbarActionsComponent ? (
           <GraphToolbarActionsComponent
@@ -628,8 +630,11 @@ export function DialogueWorkspace({
         ) : null}
       </Toolbar>
 
-      <div className="workspace-grid">
-        <aside className="column">
+      <div
+        className={`workspace-grid workspace-grid-dialogues ${indexVisible ? "" : "workspace-grid-left-hidden"}`.trim()}
+      >
+        {indexVisible ? (
+        <aside className="column workspace-index-column">
           <PanelSection label="Dialogue index" title="Project dialogues">
             <TextField
               label="Search"
@@ -670,6 +675,7 @@ export function DialogueWorkspace({
             </div>
           </PanelSection>
         </aside>
+        ) : null}
 
         <main className="column column-main">
           {selectedDocument ? (
@@ -719,7 +725,7 @@ export function DialogueWorkspace({
           )}
         </main>
 
-        <aside className="column">
+        <aside className="column workspace-inspector-column">
           <PanelSection
             label="Inspector"
             title={inspectorMode === "node" ? "Node" : "Validation"}

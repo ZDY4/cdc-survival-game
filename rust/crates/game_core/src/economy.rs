@@ -12,6 +12,8 @@ pub struct ActorEconomyState {
     pub money: i32,
     pub level: i32,
     pub inventory: BTreeMap<u32, i32>,
+    #[serde(default)]
+    pub inventory_order: Vec<u32>,
     pub skill_points: i32,
     pub learned_skills: BTreeMap<String, i32>,
     pub unlocked_recipes: BTreeSet<String>,
@@ -256,6 +258,40 @@ pub(crate) struct HeadlessEconomyRuntimeSnapshot {
 }
 
 impl HeadlessEconomyRuntime {
+    fn normalize_actor_inventory_order(actor: &mut ActorEconomyState) {
+        let mut normalized = Vec::with_capacity(actor.inventory.len());
+        let mut seen = BTreeSet::new();
+
+        for item_id in actor.inventory_order.iter().copied() {
+            if actor.inventory.get(&item_id).copied().unwrap_or(0) <= 0 || !seen.insert(item_id) {
+                continue;
+            }
+            normalized.push(item_id);
+        }
+
+        for (&item_id, &count) in &actor.inventory {
+            if count > 0 && seen.insert(item_id) {
+                normalized.push(item_id);
+            }
+        }
+
+        actor.inventory_order = normalized;
+    }
+
+    fn append_inventory_order(actor: &mut ActorEconomyState, item_id: u32) {
+        if actor.inventory.get(&item_id).copied().unwrap_or(0) > 0
+            && !actor.inventory_order.contains(&item_id)
+        {
+            actor.inventory_order.push(item_id);
+        }
+    }
+
+    fn remove_inventory_order(actor: &mut ActorEconomyState, item_id: u32) {
+        actor
+            .inventory_order
+            .retain(|existing| *existing != item_id);
+    }
+
     pub fn from_shop_library(shops: &ShopLibrary) -> Self {
         let mut runtime = Self::default();
         runtime.seed_shops_from_library(shops);
@@ -273,7 +309,9 @@ impl HeadlessEconomyRuntime {
     }
 
     pub fn ensure_actor(&mut self, actor_id: ActorId) -> &mut ActorEconomyState {
-        self.actors.entry(actor_id).or_default()
+        let actor = self.actors.entry(actor_id).or_default();
+        Self::normalize_actor_inventory_order(actor);
+        actor
     }
 
     pub fn actor(&self, actor_id: ActorId) -> Option<&ActorEconomyState> {
@@ -307,7 +345,11 @@ impl HeadlessEconomyRuntime {
                 .iter()
                 .map(|(actor_id, state)| HeadlessEconomyActorSnapshot {
                     actor_id: *actor_id,
-                    state: state.clone(),
+                    state: {
+                        let mut state = state.clone();
+                        Self::normalize_actor_inventory_order(&mut state);
+                        state
+                    },
                 })
                 .collect(),
             shops: self.shops.values().cloned().collect(),
@@ -318,7 +360,11 @@ impl HeadlessEconomyRuntime {
         self.actors = snapshot
             .actors
             .into_iter()
-            .map(|entry| (entry.actor_id, entry.state))
+            .map(|entry| {
+                let mut state = entry.state;
+                Self::normalize_actor_inventory_order(&mut state);
+                (entry.actor_id, state)
+            })
             .collect();
         self.shops = snapshot
             .shops
@@ -421,6 +467,13 @@ impl HeadlessEconomyRuntime {
             .map(|actor| actor.inventory.get(&item_id).copied().unwrap_or(0))
     }
 
+    pub fn inventory_display_order(&self, actor_id: ActorId) -> Option<Vec<u32>> {
+        let actor = self.actor(actor_id)?;
+        let mut normalized = actor.clone();
+        Self::normalize_actor_inventory_order(&mut normalized);
+        Some(normalized.inventory_order)
+    }
+
     pub fn inventory_weight(
         &self,
         actor_id: ActorId,
@@ -473,9 +526,13 @@ impl HeadlessEconomyRuntime {
         }
         ensure_item_exists(items, item_id)?;
         let actor = self.ensure_actor(actor_id);
-        let entry = actor.inventory.entry(item_id).or_insert(0);
-        *entry += count;
-        Ok(*entry)
+        let next = {
+            let entry = actor.inventory.entry(item_id).or_insert(0);
+            *entry += count;
+            *entry
+        };
+        Self::append_inventory_order(actor, item_id);
+        Ok(next)
     }
 
     pub fn add_item_unchecked(
@@ -488,9 +545,13 @@ impl HeadlessEconomyRuntime {
             return Err(EconomyRuntimeError::InvalidCount { count });
         }
         let actor = self.ensure_actor(actor_id);
-        let entry = actor.inventory.entry(item_id).or_insert(0);
-        *entry += count;
-        Ok(*entry)
+        let next = {
+            let entry = actor.inventory.entry(item_id).or_insert(0);
+            *entry += count;
+            *entry
+        };
+        Self::append_inventory_order(actor, item_id);
+        Ok(next)
     }
 
     pub fn remove_item(
@@ -518,6 +579,7 @@ impl HeadlessEconomyRuntime {
         let next = current - count;
         if next == 0 {
             actor.inventory.remove(&item_id);
+            Self::remove_inventory_order(actor, item_id);
         } else {
             actor.inventory.insert(item_id, next);
         }
@@ -606,6 +668,7 @@ impl HeadlessEconomyRuntime {
             }
         })?;
         *actor.inventory.entry(equipped.item_id).or_insert(0) += 1;
+        Self::append_inventory_order(actor, equipped.item_id);
         Ok(equipped.item_id)
     }
 
@@ -684,12 +747,69 @@ impl HeadlessEconomyRuntime {
         Ok(())
     }
 
+    pub fn move_inventory_item_before(
+        &mut self,
+        actor_id: ActorId,
+        item_id: u32,
+        before_item_id: Option<u32>,
+    ) -> Result<(), EconomyRuntimeError> {
+        let actor = self
+            .actors
+            .get_mut(&actor_id)
+            .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
+        Self::normalize_actor_inventory_order(actor);
+
+        if actor.inventory.get(&item_id).copied().unwrap_or(0) <= 0 {
+            return Err(EconomyRuntimeError::NotEnoughItems {
+                item_id,
+                required: 1,
+                current: 0,
+            });
+        }
+
+        if before_item_id == Some(item_id) {
+            return Ok(());
+        }
+
+        if let Some(before_item_id) = before_item_id {
+            let current = actor.inventory.get(&before_item_id).copied().unwrap_or(0);
+            if current <= 0 {
+                return Err(EconomyRuntimeError::NotEnoughItems {
+                    item_id: before_item_id,
+                    required: 1,
+                    current,
+                });
+            }
+        }
+
+        actor
+            .inventory_order
+            .retain(|existing| *existing != item_id);
+        match before_item_id {
+            Some(before_item_id) => {
+                if let Some(index) = actor
+                    .inventory_order
+                    .iter()
+                    .position(|existing| *existing == before_item_id)
+                {
+                    actor.inventory_order.insert(index, item_id);
+                } else {
+                    actor.inventory_order.push(item_id);
+                }
+            }
+            None => actor.inventory_order.push(item_id),
+        }
+
+        Ok(())
+    }
+
     pub fn clear_actor_loadout(&mut self, actor_id: ActorId) -> Result<(), EconomyRuntimeError> {
         let actor = self
             .actors
             .get_mut(&actor_id)
             .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
         actor.inventory.clear();
+        actor.inventory_order.clear();
         actor.equipped_slots.clear();
         actor.ammo_reserves.clear();
         Ok(())
@@ -951,6 +1071,7 @@ impl HeadlessEconomyRuntime {
         if broken {
             actor.equipped_slots.remove(&slot_name);
             *actor.inventory.entry(broken_item_id).or_insert(0) += 1;
+            Self::append_inventory_order(actor, broken_item_id);
         }
         Ok(broken)
     }
@@ -1229,8 +1350,8 @@ impl HeadlessEconomyRuntime {
         {
             let actor = self.ensure_actor(actor_id);
             actor.money -= total_price;
-            *actor.inventory.entry(item_id).or_insert(0) += count;
         }
+        self.add_item_unchecked(actor_id, item_id, count)?;
 
         let shop = self
             .shops
@@ -1308,6 +1429,76 @@ impl HeadlessEconomyRuntime {
             shop_id: shop_id.to_string(),
             item_id,
             count,
+            total_price,
+        })
+    }
+
+    pub fn sell_equipped_item_to_shop(
+        &mut self,
+        actor_id: ActorId,
+        shop_id: &str,
+        slot_id: &str,
+        items: &ItemLibrary,
+    ) -> Result<TradeOutcome, EconomyRuntimeError> {
+        let slot_id = slot_id.trim().to_string();
+        let item_id = self
+            .actor(actor_id)
+            .and_then(|actor| actor.equipped_slots.get(&slot_id))
+            .map(|equipped| equipped.item_id)
+            .ok_or_else(|| EconomyRuntimeError::EmptyEquipmentSlot {
+                actor_id,
+                slot: slot_id.clone(),
+            })?;
+        let base_price = item_base_value(items, item_id)?;
+        let sell_price_modifier = self
+            .shops
+            .get(shop_id)
+            .ok_or_else(|| EconomyRuntimeError::UnknownShop {
+                shop_id: shop_id.to_string(),
+            })?
+            .sell_price_modifier;
+        let total_price = adjusted_price(base_price, sell_price_modifier);
+        let shop_money = self.shops.get(shop_id).map(|shop| shop.money).unwrap_or(0);
+        if shop_money < total_price {
+            return Err(EconomyRuntimeError::ShopOutOfMoney {
+                shop_id: shop_id.to_string(),
+                required: total_price,
+                current: shop_money,
+            });
+        }
+
+        let actor = self
+            .actors
+            .get_mut(&actor_id)
+            .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
+        actor
+            .equipped_slots
+            .remove(&slot_id)
+            .ok_or_else(|| EconomyRuntimeError::EmptyEquipmentSlot {
+                actor_id,
+                slot: slot_id.clone(),
+            })?;
+        actor.money += total_price;
+
+        let shop = self
+            .shops
+            .get_mut(shop_id)
+            .ok_or_else(|| EconomyRuntimeError::UnknownShop {
+                shop_id: shop_id.to_string(),
+            })?;
+        shop.money -= total_price;
+        let entry = shop.inventory.entry(item_id).or_insert(ShopRuntimeEntry {
+            item_id,
+            count: 0,
+            price: total_price,
+        });
+        entry.count += 1;
+        entry.price = total_price;
+
+        Ok(TradeOutcome {
+            shop_id: shop_id.to_string(),
+            item_id,
+            count: 1,
             total_price,
         })
     }

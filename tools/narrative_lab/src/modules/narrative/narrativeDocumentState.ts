@@ -87,6 +87,32 @@ export function applySavedDocumentResult(
   return nextDocument;
 }
 
+export function mergeSavedDocumentIntoCurrent(
+  currentDocument: EditableNarrativeDocument,
+  savedDocument: EditableNarrativeDocument,
+  savedRequestSnapshot: string,
+): EditableNarrativeDocument {
+  if (snapshotNarrativeDocument(currentDocument) === savedRequestSnapshot) {
+    return savedDocument;
+  }
+
+  return markDocumentDirtyState(
+    {
+      ...currentDocument,
+      documentKey: savedDocument.documentKey,
+      originalSlug: savedDocument.originalSlug,
+      fileName: savedDocument.fileName,
+      relativePath: savedDocument.relativePath,
+      meta: {
+        ...currentDocument.meta,
+        slug: savedDocument.meta.slug,
+      },
+      isDraft: false,
+    },
+    savedDocument.savedSnapshot,
+  );
+}
+
 export function revertDocumentToSnapshot(
   document: EditableNarrativeDocument,
   snapshot: string,

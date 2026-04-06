@@ -576,6 +576,7 @@ mod tests {
             attack_range: 1.2,
             ai_controller: None,
         });
+        simulation.set_actor_ap(player, 2.0);
 
         let mut runtime = SimulationRuntime::from_simulation(simulation);
 
@@ -585,11 +586,144 @@ mod tests {
             InteractionOptionId("talk".into()),
         );
 
-        assert!(!result.approach_required);
+        assert!(result.success);
         assert_eq!(
             runtime.get_actor_grid_position(player),
             Some(GridCoord::new(1, 0, 1))
         );
+    }
+
+    #[test]
+    fn pending_interaction_retries_after_next_turn_when_approach_used_last_ap() {
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(sample_runtime_dialogue_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(2, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_ap(player, 1.0);
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        let result = runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+
+        assert!(result.success);
+        assert!(result.approach_required);
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(1, 0, 1))
+        );
+        assert!(runtime.pending_movement().is_none());
+        assert!(runtime.pending_interaction().is_some());
+        assert!(runtime.active_dialogue_state(player).is_none());
+
+        let world_cycle = runtime.advance_pending_progression();
+        assert_eq!(
+            world_cycle.applied_step,
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert!(runtime.pending_interaction().is_some());
+        assert!(runtime.active_dialogue_state(player).is_none());
+
+        let next_turn = runtime.advance_pending_progression();
+        assert_eq!(
+            next_turn.applied_step,
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+        assert!(runtime.pending_interaction().is_none());
+        assert_eq!(
+            runtime
+                .active_dialogue_state(player)
+                .and_then(|state| state.current_node)
+                .map(|node| node.id),
+            Some("start".to_string())
+        );
+    }
+
+    #[test]
+    fn pending_interaction_progression_returns_dialogue_result_for_viewer_fallback() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(2, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_ap(player, 1.0);
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+
+        let result = runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+
+        assert!(result.success);
+        assert!(result.approach_required);
+        assert!(runtime.pending_interaction().is_some());
+
+        let world_cycle = runtime.advance_pending_progression();
+        assert_eq!(
+            world_cycle.applied_step,
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert!(world_cycle.interaction_outcome.is_none());
+
+        let next_turn = runtime.advance_pending_progression();
+        assert_eq!(
+            next_turn.applied_step,
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+        assert_eq!(
+            next_turn
+                .interaction_outcome
+                .as_ref()
+                .and_then(|result| result.dialogue_id.as_deref()),
+            Some("trader_lao_wang")
+        );
+        assert!(next_turn
+            .interaction_outcome
+            .as_ref()
+            .is_some_and(|result| result.dialogue_state.is_none()));
         assert!(runtime.pending_interaction().is_none());
     }
 

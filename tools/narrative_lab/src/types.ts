@@ -655,6 +655,23 @@ export type NarrativeGenerateRequest = {
   derivedTargetDocType?: NarrativeDocType | null;
 };
 
+export type ResolveNarrativeActionIntentInput = {
+  submittedPrompt: string;
+  docType: NarrativeDocType;
+  targetSlug: string;
+  userPrompt: string;
+  editorInstruction: string;
+  currentMarkdown: string;
+  relatedDocSlugs: string[];
+};
+
+export type ResolveNarrativeActionIntentResult = {
+  action?: "create" | "revise_document" | null;
+  assistantMessage: string;
+  questions: AgentQuestion[];
+  options: AgentOption[];
+};
+
 export type NarrativeAgentRun = {
   agentId: string;
   label: string;

@@ -23,6 +23,7 @@ type SpatialLibraryWorkspaceProps = {
   canPersist: boolean;
   onStatusChange: (status: string) => void;
   onReload: () => Promise<void>;
+  indexVisible?: boolean;
 };
 
 export function SpatialLibraryWorkspace({
@@ -31,6 +32,7 @@ export function SpatialLibraryWorkspace({
   canPersist,
   onStatusChange,
   onReload,
+  indexVisible = true,
 }: SpatialLibraryWorkspaceProps) {
   const [activeKind, setActiveKind] = useState<SpatialDocumentType>("map");
   const [searchText, setSearchText] = useState("");
@@ -209,7 +211,7 @@ export function SpatialLibraryWorkspace({
   ];
 
   return (
-    <div className="workspace">
+    <div className="workspace workspace-maps">
       <Toolbar actions={actions}>
         <div className="toolbar-summary">
           <button
@@ -234,8 +236,16 @@ export function SpatialLibraryWorkspace({
         </div>
       </Toolbar>
 
-      <div className="workspace-grid map-library-grid">
-        <aside className="column">
+      <div
+        className={[
+          "workspace-grid",
+          "map-library-grid",
+          "workspace-grid-maps",
+          indexVisible ? "" : "workspace-grid-left-hidden",
+        ].filter(Boolean).join(" ")}
+      >
+        {indexVisible ? (
+        <aside className="column workspace-index-column">
           <PanelSection
             label={activeKind === "map" ? "Tactical Maps" : "Overworlds"}
             title={activeKind === "map" ? "Project maps" : "Project overworlds"}
@@ -313,6 +323,7 @@ export function SpatialLibraryWorkspace({
             </div>
           </PanelSection>
         </aside>
+        ) : null}
 
         <main className="column column-main">
           {activeKind === "map" && selectedMap ? (

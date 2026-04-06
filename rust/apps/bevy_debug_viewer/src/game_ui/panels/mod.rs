@@ -6,13 +6,16 @@ mod map_settings;
 mod progression;
 mod skills;
 
+pub(super) use inventory::{InventoryPanelMode, render_inventory_panel_contents};
+
 pub(super) fn render_inventory_panel(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiInventoryPanelSnapshot,
     menu_state: &UiMenuState,
+    drag_state: &UiInventoryDragState,
 ) {
-    inventory::render_inventory_panel(parent, font, snapshot, menu_state)
+    inventory::render_inventory_panel(parent, font, snapshot, menu_state, drag_state)
 }
 
 pub(super) fn render_character_panel(

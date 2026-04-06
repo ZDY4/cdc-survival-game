@@ -13,20 +13,18 @@ use crate::state::ViewerState;
 pub(crate) fn hovered_grid_outline_kind(
     runtime: &SimulationRuntime,
     snapshot: &SimulationSnapshot,
-    viewer_state: &ViewerState,
+    _viewer_state: &ViewerState,
     grid: GridCoord,
 ) -> Option<HoveredGridOutlineKind> {
     if actor_at_grid(snapshot, grid).is_some_and(|actor| actor.side == ActorSide::Hostile) {
         return Some(HoveredGridOutlineKind::Hostile);
     }
 
-    let actor_id = viewer_state.command_actor_id(snapshot)?;
     if !runtime.is_grid_in_bounds(grid) {
         return None;
     }
 
-    let plan = runtime.plan_actor_movement(actor_id, grid).ok()?;
-    (plan.requested_steps() > 0).then_some(HoveredGridOutlineKind::Reachable)
+    Some(HoveredGridOutlineKind::Neutral)
 }
 
 #[cfg_attr(not(test), allow(dead_code))]

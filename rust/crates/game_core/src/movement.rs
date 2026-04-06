@@ -1,7 +1,9 @@
 use std::error::Error;
 use std::fmt;
 
-use game_data::{ActionResult, ActorId, GridCoord, InteractionTargetId, WorldCoord};
+use game_data::{
+    ActionResult, ActorId, GridCoord, InteractionExecutionResult, InteractionTargetId, WorldCoord,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::grid::{GridPathfindingError, GridWorld};
@@ -151,6 +153,7 @@ pub struct ProgressionAdvanceResult {
     pub interrupted: bool,
     pub interrupt_reason: Option<AutoMoveInterruptReason>,
     pub movement_outcome: Option<MovementCommandOutcome>,
+    pub interaction_outcome: Option<InteractionExecutionResult>,
 }
 
 impl ProgressionAdvanceResult {
@@ -162,6 +165,7 @@ impl ProgressionAdvanceResult {
             interrupted: false,
             interrupt_reason: None,
             movement_outcome: None,
+            interaction_outcome: None,
         }
     }
 
@@ -173,6 +177,7 @@ impl ProgressionAdvanceResult {
             interrupted: false,
             interrupt_reason: None,
             movement_outcome: None,
+            interaction_outcome: None,
         }
     }
 }

@@ -2,10 +2,10 @@
 
 use super::*;
 
-pub(super) fn render_discard_quantity_modal(
+pub(super) fn render_item_quantity_modal(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
-    modal: &game_bevy::UiDiscardQuantityModalState,
+    modal: &game_bevy::UiItemQuantityModalState,
     items: &ItemDefinitions,
 ) {
     let item_name = items
@@ -13,6 +13,29 @@ pub(super) fn render_discard_quantity_modal(
         .get(modal.item_id)
         .map(|item| item.name.as_str())
         .unwrap_or("未知物品");
+    let (title, available_label, selected_label, confirm_label, max_label) = match &modal.intent {
+        game_bevy::UiItemQuantityIntent::Discard => (
+            "丢弃物品",
+            format!("当前持有 x{}", modal.source_count),
+            format!("待丢弃 x{}", modal.selected_count),
+            "确认丢弃",
+            None,
+        ),
+        game_bevy::UiItemQuantityIntent::TradeBuy { .. } => (
+            "买入物品",
+            format!("商店库存 x{}", modal.source_count),
+            format!("待买入 x{}", modal.selected_count),
+            "确认买入",
+            Some(format!("当前最多可买 x{}", modal.available_count)),
+        ),
+        game_bevy::UiItemQuantityIntent::TradeSell { .. } => (
+            "卖出物品",
+            format!("当前持有 x{}", modal.source_count),
+            format!("待卖出 x{}", modal.selected_count),
+            "确认卖出",
+            Some(format!("当前最多可卖 x{}", modal.available_count)),
+        ),
+    };
     parent
         .spawn((
             Node {
@@ -25,7 +48,7 @@ pub(super) fn render_discard_quantity_modal(
                 justify_content: JustifyContent::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.01, 0.02, 0.03, 0.66)),
+            BackgroundColor(Color::srgba(0.01, 0.01, 0.01, 0.66)),
             UiMouseBlocker,
         ))
         .with_children(|overlay| {
@@ -39,30 +62,33 @@ pub(super) fn render_discard_quantity_modal(
                         border: UiRect::all(px(1.0)),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.05, 0.058, 0.076, 0.98)),
-                    BorderColor::all(Color::srgba(0.34, 0.42, 0.54, 1.0)),
+                    BackgroundColor(ui_panel_background()),
+                    BorderColor::all(ui_border_strong_color()),
                     UiMouseBlocker,
                 ))
                 .with_children(|panel| {
-                    panel.spawn(text_bundle(font, "丢弃物品", 15.0, Color::WHITE));
+                    panel.spawn(text_bundle(font, title, 15.0, Color::WHITE));
                     panel.spawn(text_bundle(
                         font,
                         item_name,
                         12.0,
-                        Color::srgba(0.9, 0.94, 1.0, 1.0),
+                        ui_text_heading_color(),
                     ));
                     panel.spawn(text_bundle(
                         font,
-                        &format!("当前持有 x{}", modal.available_count),
+                        &available_label,
                         10.5,
-                        Color::srgba(0.74, 0.79, 0.88, 1.0),
+                        ui_text_muted_color(),
                     ));
                     panel.spawn(text_bundle(
                         font,
-                        &format!("待丢弃 x{}", modal.selected_count),
+                        &selected_label,
                         11.2,
                         Color::srgba(0.95, 0.85, 0.58, 1.0),
                     ));
+                    if let Some(max_label) = max_label.as_ref() {
+                        panel.spawn(text_bundle(font, max_label, 10.2, ui_text_muted_color()));
+                    }
                     panel
                         .spawn(Node {
                             width: Val::Percent(100.0),
@@ -74,28 +100,28 @@ pub(super) fn render_discard_quantity_modal(
                             actions.spawn(action_button(
                                 font,
                                 "-1",
-                                GameUiButtonAction::DecreaseDiscardQuantity,
+                                GameUiButtonAction::DecreaseItemQuantity,
                             ));
                             actions.spawn(action_button(
                                 font,
                                 "+1",
-                                GameUiButtonAction::IncreaseDiscardQuantity,
+                                GameUiButtonAction::IncreaseItemQuantity,
                             ));
                             actions.spawn(action_button(
                                 font,
                                 "全部",
-                                GameUiButtonAction::SetDiscardQuantityToMax,
+                                GameUiButtonAction::SetItemQuantityToMax,
                             ));
                         });
                     panel.spawn(action_button(
                         font,
-                        "确认丢弃",
-                        GameUiButtonAction::ConfirmDiscardQuantity,
+                        confirm_label,
+                        GameUiButtonAction::ConfirmItemQuantity,
                     ));
                     panel.spawn(action_button(
                         font,
                         "取消",
-                        GameUiButtonAction::CancelDiscardQuantity,
+                        GameUiButtonAction::CancelItemQuantity,
                     ));
                 });
         });

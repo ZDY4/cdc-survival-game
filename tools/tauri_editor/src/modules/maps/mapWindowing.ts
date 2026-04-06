@@ -9,6 +9,7 @@ import type {
 import { formatError, isTauriRuntime } from "../../lib/tauri";
 
 export const MAP_EDITOR_WINDOW_LABEL = "map-editor";
+export const MAP_LIBRARY_WINDOW_LABEL = "maps";
 export const NEW_MAP_DOCUMENT_KEY = "__new_map__";
 
 export const MAP_EDITOR_OPEN_DOCUMENT_EVENT = "map-editor:open-document";
@@ -28,6 +29,10 @@ export function buildMapEditorWindowUrl(
     params.set("documentKey", documentKey.trim());
   }
   return `/?${params.toString()}`;
+}
+
+export function buildMapLibraryWindowUrl(): string {
+  return "/?surface=maps";
 }
 
 async function emitToWindow<T>(label: string, event: string, payload: T) {
@@ -83,19 +88,19 @@ export async function emitMapEditorStateChanged(payload: MapEditorStateChangedPa
   if (!isTauriRuntime()) {
     return;
   }
-  await emitToWindow("main", MAP_EDITOR_STATE_CHANGED_EVENT, payload);
+  await emitToWindow(MAP_LIBRARY_WINDOW_LABEL, MAP_EDITOR_STATE_CHANGED_EVENT, payload);
 }
 
 export async function emitMapEditorSaveComplete(payload: MapEditorSaveCompletePayload) {
   if (!isTauriRuntime()) {
     return;
   }
-  await emitToWindow("main", MAP_EDITOR_SAVE_COMPLETE_EVENT, payload);
+  await emitToWindow(MAP_LIBRARY_WINDOW_LABEL, MAP_EDITOR_SAVE_COMPLETE_EVENT, payload);
 }
 
 export async function emitMapEditorSessionEnded(payload: MapEditorSessionEndedPayload) {
   if (!isTauriRuntime()) {
     return;
   }
-  await emitToWindow("main", MAP_EDITOR_SESSION_ENDED_EVENT, payload);
+  await emitToWindow(MAP_LIBRARY_WINDOW_LABEL, MAP_EDITOR_SESSION_ENDED_EVENT, payload);
 }

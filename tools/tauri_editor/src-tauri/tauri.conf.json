@@ -13,12 +13,15 @@
     "windows": [
       {
         "label": "main",
-        "title": "CDC Content Editor",
-        "width": 1440,
-        "height": 920,
-        "minWidth": 1100,
-        "minHeight": 700,
-        "resizable": true
+        "title": "CDC Editor Bootstrap",
+        "width": 640,
+        "height": 480,
+        "minWidth": 320,
+        "minHeight": 240,
+        "resizable": false,
+        "visible": false,
+        "decorations": false,
+        "skipTaskbar": true
       }
     ],
     "security": {

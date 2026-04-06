@@ -29,13 +29,13 @@ pub(crate) fn update_game_ui(
     );
 }
 
-pub(super) fn render_discard_quantity_modal(
+pub(super) fn render_item_quantity_modal(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
-    modal: &game_bevy::UiDiscardQuantityModalState,
+    modal: &game_bevy::UiItemQuantityModalState,
     items: &ItemDefinitions,
 ) {
-    modal_prompt::render_discard_quantity_modal(parent, font, modal, items);
+    modal_prompt::render_item_quantity_modal(parent, font, modal, items);
 }
 
 pub(super) fn render_overworld_location_prompt(

@@ -1,9 +1,9 @@
-//! 快捷栏渲染门面：统一暴露底栏槽位、当前 dock 布局和遗留样式入口。
+//! 快捷栏渲染门面：统一暴露底栏槽位和当前 dock / 观察模式布局。
 
 use super::*;
 
 mod dock;
-mod legacy;
+mod observe;
 mod slots;
 
 pub(crate) fn render_hotbar(
@@ -16,41 +16,20 @@ pub(crate) fn render_hotbar(
     show_clear_controls: bool,
     selected_skill_id: Option<&str>,
 ) {
-    dock::render_hotbar(
-        parent,
-        font,
-        viewer_state,
-        hotbar_state,
-        skills,
-        menu_state,
-        show_clear_controls,
-        selected_skill_id,
-    );
-}
-
-#[allow(dead_code)]
-pub(crate) fn render_hotbar_legacy(
-    parent: &mut ChildSpawnerCommands,
-    font: &ViewerUiFont,
-    viewer_state: &ViewerState,
-    hotbar_state: &UiHotbarState,
-    skills: &game_data::SkillLibrary,
-    menu_state: &UiMenuState,
-    player_stats: Option<&PlayerHudStats>,
-    show_clear_controls: bool,
-    selected_skill_id: Option<&str>,
-) {
-    legacy::render_hotbar_legacy(
-        parent,
-        font,
-        viewer_state,
-        hotbar_state,
-        skills,
-        menu_state,
-        player_stats,
-        show_clear_controls,
-        selected_skill_id,
-    );
+    if viewer_state.is_free_observe() {
+        observe::render_observe_hotbar(parent, font, viewer_state);
+    } else {
+        dock::render_hotbar(
+            parent,
+            font,
+            viewer_state,
+            hotbar_state,
+            skills,
+            menu_state,
+            show_clear_controls,
+            selected_skill_id,
+        );
+    }
 }
 
 fn render_hotbar_slots(

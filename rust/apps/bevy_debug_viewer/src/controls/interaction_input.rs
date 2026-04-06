@@ -1,4 +1,4 @@
-//! 交互执行子模块：负责主目标交互、菜单按钮响应和对话按钮响应。
+//! 交互输入处理模块：负责点击目标、菜单按钮和对话选项的输入响应。
 
 use super::*;
 
@@ -187,7 +187,12 @@ pub(super) fn interaction_menu_contains_cursor(
 
 pub(crate) fn handle_interaction_menu_buttons(
     mut buttons: Query<
-        (&Interaction, &mut BackgroundColor, &InteractionMenuButton),
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &InteractionMenuButton,
+            Option<&crate::ui_context_menu::ContextMenuItemDisabled>,
+        ),
         (Changed<Interaction>, With<Button>),
     >,
     mut runtime_state: ResMut<ViewerRuntimeState>,
@@ -198,11 +203,17 @@ pub(crate) fn handle_interaction_menu_buttons(
         return;
     }
 
-    for (interaction, mut background, menu_button) in &mut buttons {
-        *background = BackgroundColor(interaction_menu_button_color(
+    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
+    for (interaction, mut background, menu_button, disabled) in &mut buttons {
+        *background = BackgroundColor(context_menu_button_color(
+            button_style,
             menu_button.is_primary,
+            disabled.is_some(),
             *interaction,
         ));
+        if disabled.is_some() {
+            continue;
+        }
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -238,8 +249,14 @@ pub(crate) fn handle_dialogue_choice_buttons(
         return;
     }
 
+    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
     for (interaction, mut background, choice_button) in &mut buttons {
-        *background = BackgroundColor(interaction_menu_button_color(false, *interaction));
+        *background = BackgroundColor(context_menu_button_color(
+            button_style,
+            false,
+            false,
+            *interaction,
+        ));
         if *interaction != Interaction::Pressed {
             continue;
         }

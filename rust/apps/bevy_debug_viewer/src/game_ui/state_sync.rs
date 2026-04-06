@@ -27,7 +27,7 @@ pub(crate) fn sync_game_ui_state(
     mut modal_state: ResMut<UiModalState>,
     mut banner_state: ResMut<UiStatusBannerState>,
     mut input_block_state: ResMut<UiInputBlockState>,
-    mut inventory_context_menu: ResMut<UiInventoryContextMenuState>,
+    mut inventory_context_menu: ResMut<UiContextMenuState>,
     shops: Res<ShopDefinitions>,
 ) {
     let context = runtime_state.runtime.current_interaction_context();
@@ -64,13 +64,13 @@ pub(crate) fn sync_game_ui_state(
     let in_main_menu_scene = should_render_main_menu(*scene_kind);
     input_block_state.blocked = in_main_menu_scene
         || menu_state.active_panel.is_some()
-        || modal_state.discard_quantity.is_some()
+        || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
         || viewer_state.active_dialogue.is_some()
         || viewer_state.interaction_menu.is_some();
     if (in_main_menu_scene
         || menu_state.active_panel.is_some()
-        || modal_state.discard_quantity.is_some()
+        || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
         || viewer_state.active_dialogue.is_some())
         && viewer_state.interaction_menu.is_some()
@@ -79,8 +79,8 @@ pub(crate) fn sync_game_ui_state(
     }
     input_block_state.reason = if in_main_menu_scene {
         "main_menu_scene".to_string()
-    } else if modal_state.discard_quantity.is_some() {
-        "discard_quantity".to_string()
+    } else if modal_state.item_quantity.is_some() {
+        "item_quantity".to_string()
     } else if modal_state.trade.is_some() {
         "trade".to_string()
     } else if viewer_state.active_dialogue.is_some() {
@@ -97,11 +97,10 @@ pub(crate) fn sync_game_ui_state(
         cancel_targeting(&mut viewer_state, "targeting: 已取消");
     }
 
-    if in_main_menu_scene
-        || modal_state.discard_quantity.is_some()
-        || modal_state.trade.is_some()
-        || menu_state.active_panel != Some(UiMenuPanel::Inventory)
-    {
+    let allow_ui_context_menu = modal_state.trade.is_some()
+        || menu_state.active_panel == Some(UiMenuPanel::Inventory)
+        || menu_state.active_panel == Some(UiMenuPanel::Skills);
+    if in_main_menu_scene || modal_state.item_quantity.is_some() || !allow_ui_context_menu {
         inventory_context_menu.clear();
     }
 }
@@ -152,7 +151,7 @@ pub(super) fn transition_to_gameplay_scene(
     menu_state.selected_recipe_id = None;
     menu_state.selected_map_location_id = None;
     menu_state.status_text = status_text.to_string();
-    modal_state.discard_quantity = None;
+    modal_state.item_quantity = None;
     modal_state.trade = None;
 }
 

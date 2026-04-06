@@ -10,7 +10,7 @@ import { createDocumentAgentSession } from "./narrativeSessions";
 
 function buildSession(overrides: Partial<DocumentAgentSession> = {}): DocumentAgentSession {
   return {
-    ...createDocumentAgentSession("revise_document"),
+    ...createDocumentAgentSession({ mode: "revise_document" }),
     strategy: defaultNarrativeAgentStrategy(),
     ...overrides,
   };

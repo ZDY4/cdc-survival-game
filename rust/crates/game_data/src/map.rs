@@ -9,7 +9,8 @@ use thiserror::Error;
 
 use crate::interaction::{
     default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,
-    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind,
+    interaction_kind_spec, is_scene_transition_kind, parse_legacy_interaction_kind,
+    InteractionOptionDefinition, InteractionOptionId,
 };
 use crate::GridCoord;
 
@@ -1265,40 +1266,13 @@ fn resolved_option_id(option: &InteractionOptionDefinition) -> String {
     }
 }
 
-fn is_scene_transition_kind(kind: InteractionOptionKind) -> bool {
-    matches!(
-        kind,
-        InteractionOptionKind::EnterSubscene
-            | InteractionOptionKind::EnterOverworld
-            | InteractionOptionKind::ExitToOutdoor
-            | InteractionOptionKind::EnterOutdoorLocation
-    )
-}
-
-fn parse_legacy_interaction_kind(value: &str) -> Option<InteractionOptionKind> {
-    match value.trim() {
-        "wait" => Some(InteractionOptionKind::Wait),
-        "talk" => Some(InteractionOptionKind::Talk),
-        "attack" => Some(InteractionOptionKind::Attack),
-        "pickup" => Some(InteractionOptionKind::Pickup),
-        "open_door" => Some(InteractionOptionKind::OpenDoor),
-        "close_door" => Some(InteractionOptionKind::CloseDoor),
-        "unlock_door" => Some(InteractionOptionKind::UnlockDoor),
-        "pick_lock_door" => Some(InteractionOptionKind::PickLockDoor),
-        "enter_subscene" => Some(InteractionOptionKind::EnterSubscene),
-        "enter_overworld" => Some(InteractionOptionKind::EnterOverworld),
-        "exit_to_outdoor" => Some(InteractionOptionKind::ExitToOutdoor),
-        "enter_outdoor_location" => Some(InteractionOptionKind::EnterOutdoorLocation),
-        _ => None,
-    }
-}
-
 fn validate_interaction_option(
     object_id: &str,
     object_kind: &'static str,
     option: &InteractionOptionDefinition,
 ) -> Result<(), MapDefinitionValidationError> {
     let option_id = resolved_option_id(option);
+    let spec = interaction_kind_spec(option.kind);
 
     if option.interaction_distance < 0.0 {
         return Err(MapDefinitionValidationError::InvalidInteractionDistance {
@@ -1309,37 +1283,25 @@ fn validate_interaction_option(
         });
     }
 
-    match option.kind {
-        InteractionOptionKind::Pickup => {
-            if option.item_id.trim().is_empty() {
-                return Err(
-                    MapDefinitionValidationError::MissingInteractionPickupItemId {
-                        object_id: object_id.to_string(),
-                        object_kind,
-                        option_id,
-                    },
-                );
-            }
-        }
-        InteractionOptionKind::EnterSubscene
-        | InteractionOptionKind::EnterOverworld
-        | InteractionOptionKind::ExitToOutdoor
-        | InteractionOptionKind::EnterOutdoorLocation => {
-            if option.target_id.trim().is_empty() && option.target_map_id.trim().is_empty() {
-                return Err(MapDefinitionValidationError::MissingInteractionTargetId {
-                    object_id: object_id.to_string(),
-                    object_kind,
-                    option_id,
-                });
-            }
-        }
-        InteractionOptionKind::Wait
-        | InteractionOptionKind::Talk
-        | InteractionOptionKind::Attack
-        | InteractionOptionKind::OpenDoor
-        | InteractionOptionKind::CloseDoor
-        | InteractionOptionKind::UnlockDoor
-        | InteractionOptionKind::PickLockDoor => {}
+    if spec.validation.requires_item_id && option.item_id.trim().is_empty() {
+        return Err(
+            MapDefinitionValidationError::MissingInteractionPickupItemId {
+                object_id: object_id.to_string(),
+                object_kind,
+                option_id,
+            },
+        );
+    }
+
+    if spec.validation.requires_target_id
+        && option.target_id.trim().is_empty()
+        && option.target_map_id.trim().is_empty()
+    {
+        return Err(MapDefinitionValidationError::MissingInteractionTargetId {
+            object_id: object_id.to_string(),
+            object_kind,
+            option_id,
+        });
     }
 
     Ok(())

@@ -42,14 +42,15 @@ pub use ui::{
     inventory_snapshot, item_attribute_bonuses, item_equippable, item_usable, journal_snapshot,
     map_snapshot, overworld_location_prompt_snapshot, player_actor_id, skills_snapshot,
     trade_snapshot, world_status_snapshot, GameUiPlugin, UiCharacterCommand, UiCharacterSnapshot,
-    UiCraftingSnapshot, UiDialogueCommand, UiDiscardQuantityModalState, UiEquipmentSlotView,
-    UiHotbarSlotState, UiHotbarState, UiInputBlockState, UiInventoryCommand, UiInventoryDetailView,
+    UiCraftingSnapshot, UiDialogueCommand, UiEquipmentSlotView, UiHotbarSlotState,
+    UiHotbarState, UiInputBlockState, UiInventoryCommand, UiInventoryDetailView,
     UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot,
-    UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView,
-    UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
-    UiOverworldLocationPromptSnapshot, UiSettingsCommand, UiSkillCommand, UiSkillEntryView,
-    UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCommand, UiTradeEntryView,
-    UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
+    UiItemQuantityIntent, UiItemQuantityModalState, UiItemType, UiJournalSnapshot,
+    UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView, UiMapSnapshot, UiMenuCommand,
+    UiMenuPanel, UiMenuState, UiModalState, UiOverworldLocationPromptSnapshot,
+    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot,
+    UiStatusBannerState, UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot,
+    UiWorldStatusSnapshot,
 };
 
 #[derive(Message, Debug, Clone, PartialEq, Eq)]
