@@ -1287,7 +1287,7 @@ fn read_agent_options(object: &Map<String, Value>) -> Vec<AgentOption> {
 }
 
 fn read_agent_plan_steps(object: &Map<String, Value>) -> Vec<AgentPlanStep> {
-    object
+    let explicit_steps = object
         .get("plan_steps")
         .or_else(|| object.get("planSteps"))
         .and_then(Value::as_array)
@@ -1295,32 +1295,112 @@ fn read_agent_plan_steps(object: &Map<String, Value>) -> Vec<AgentPlanStep> {
             values
                 .iter()
                 .enumerate()
-                .filter_map(|(index, value)| {
-                    let object = value.as_object()?;
-                    let label = object
-                        .get("label")
-                        .and_then(Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())?
-                        .to_string();
-                    let id = object
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .map(ToString::to_string)
-                        .unwrap_or_else(|| format!("step-{}", index + 1));
-                    let status = normalize_plan_step_status(
-                        object
-                            .get("status")
-                            .and_then(Value::as_str)
-                            .unwrap_or(if index == 0 { "active" } else { "pending" }),
-                    );
-                    Some(AgentPlanStep { id, label, status })
-                })
+                .filter_map(|(index, value)| parse_agent_plan_step(value, index))
                 .collect::<Vec<_>>()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    if !explicit_steps.is_empty() {
+        return explicit_steps;
+    }
+
+    infer_plan_steps_from_text(
+        object
+            .get("assistant_message")
+            .or_else(|| object.get("assistantMessage"))
+            .and_then(Value::as_str)
+            .or_else(|| object.get("summary").and_then(Value::as_str))
+            .unwrap_or_default(),
+    )
+}
+
+fn parse_agent_plan_step(value: &Value, index: usize) -> Option<AgentPlanStep> {
+    let default_status = if index == 0 { "active" } else { "pending" };
+
+    if let Some(label) = value.as_str().map(str::trim).filter(|value| !value.is_empty()) {
+        return Some(AgentPlanStep {
+            id: format!("step-{}", index + 1),
+            label: strip_plan_step_prefix(label),
+            status: normalize_plan_step_status(default_status),
+        });
+    }
+
+    let object = value.as_object()?;
+    let label = object
+        .get("label")
+        .or_else(|| object.get("title"))
+        .or_else(|| object.get("text"))
+        .or_else(|| object.get("step"))
+        .or_else(|| object.get("description"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let id = object
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| format!("step-{}", index + 1));
+    let status = normalize_plan_step_status(
+        object
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or(default_status),
+    );
+    Some(AgentPlanStep {
+        id,
+        label: strip_plan_step_prefix(&label),
+        status,
+    })
+}
+
+fn infer_plan_steps_from_text(text: &str) -> Vec<AgentPlanStep> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter_map(parse_plan_step_line)
+        .take(8)
+        .enumerate()
+        .map(|(index, label)| AgentPlanStep {
+            id: format!("step-{}", index + 1),
+            label,
+            status: normalize_plan_step_status(if index == 0 { "active" } else { "pending" }),
+        })
+        .collect()
+}
+
+fn parse_plan_step_line(line: &str) -> Option<String> {
+    let trimmed = strip_plan_step_prefix(line);
+    if trimmed.is_empty() || trimmed == line {
+        return None;
+    }
+    Some(trimmed)
+}
+
+fn strip_plan_step_prefix(line: &str) -> String {
+    let trimmed = line.trim();
+    let bullet_trimmed = trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))
+        .or_else(|| trimmed.strip_prefix("• "))
+        .map(str::trim);
+    if let Some(value) = bullet_trimmed.filter(|value| !value.is_empty()) {
+        return value.to_string();
+    }
+
+    let numbered = trimmed.trim_start_matches(|ch: char| ch.is_ascii_digit());
+    if numbered.len() != trimmed.len() {
+        let numbered = numbered
+            .trim_start_matches(['.', '、', ')', '）', ':', '：'])
+            .trim();
+        if !numbered.is_empty() {
+            return numbered.to_string();
+        }
+    }
+
+    trimmed.to_string()
 }
 
 fn normalize_plan_step_status(value: &str) -> String {
@@ -2021,6 +2101,38 @@ mod tests {
         });
         assert_eq!(read_agent_options(too_many.as_object().unwrap()).len(), 4);
     }
+
+    #[test]
+    fn read_agent_plan_steps_accepts_string_entries_and_title_fields() {
+        let payload = json!({
+            "plan_steps": [
+                "1. 先整理角色名单",
+                { "title": "2. 为每个角色补全背景" },
+                { "step": "3. 检查格式一致性", "status": "completed" }
+            ]
+        });
+        let steps = read_agent_plan_steps(payload.as_object().unwrap());
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0].label, "先整理角色名单");
+        assert_eq!(steps[0].status, "active");
+        assert_eq!(steps[1].label, "为每个角色补全背景");
+        assert_eq!(steps[1].status, "pending");
+        assert_eq!(steps[2].label, "检查格式一致性");
+        assert_eq!(steps[2].status, "completed");
+    }
+
+    #[test]
+    fn read_agent_plan_steps_falls_back_to_assistant_message_lines() {
+        let payload = json!({
+            "turn_kind": "plan",
+            "assistant_message": "建议按这个计划推进：\n1. 先抽取角色清单\n2. 为每个角色补全背景\n3. 最后统一文档格式"
+        });
+        let steps = read_agent_plan_steps(payload.as_object().unwrap());
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0].label, "先抽取角色清单");
+        assert_eq!(steps[1].label, "为每个角色补全背景");
+        assert_eq!(steps[2].label, "最后统一文档格式");
+    }
 }
 
 fn risk_score(value: &str) -> i32 {
@@ -2415,15 +2527,20 @@ async fn send_chat_completion_request(
 }
 
 fn should_retry_without_stream(failure: &ProviderFailure) -> bool {
-    if failure.status_code != 400 {
-        return false;
-    }
-
     let combined = format!("{} {}", failure.error, failure.raw_text).to_lowercase();
-    combined.contains("stream")
+    if failure.status_code == 400
+        && combined.contains("stream")
         && (combined.contains("not supported")
             || combined.contains("unsupported")
             || combined.contains("not valid"))
+    {
+        return true;
+    }
+
+    failure.status_code == 200
+        && (combined.contains("error decoding response body")
+            || combined.contains("读取流式响应失败")
+            || combined.contains("流式响应片段不是合法 json"))
 }
 
 fn should_retry_with_more_tokens(failure: &ProviderFailure) -> bool {

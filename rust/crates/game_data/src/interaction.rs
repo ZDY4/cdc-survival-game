@@ -33,6 +33,7 @@ pub enum InteractionOptionKind {
     Wait,
     Talk,
     Attack,
+    OpenContainer,
     Pickup,
     OpenDoor,
     CloseDoor,
@@ -332,6 +333,10 @@ mod tests {
             "攻击"
         );
         assert_eq!(
+            default_display_name_for_kind(InteractionOptionKind::OpenContainer),
+            "打开容器"
+        );
+        assert_eq!(
             default_display_name_for_kind(InteractionOptionKind::Pickup),
             "拾取"
         );
@@ -375,6 +380,7 @@ mod tests {
             InteractionOptionKind::Wait,
             InteractionOptionKind::Talk,
             InteractionOptionKind::Attack,
+            InteractionOptionKind::OpenContainer,
             InteractionOptionKind::Pickup,
             InteractionOptionKind::OpenDoor,
             InteractionOptionKind::CloseDoor,
@@ -408,6 +414,12 @@ mod tests {
         assert_eq!(pickup.default_priority, 900);
         assert!(pickup.validation.requires_item_id);
         assert!(!pickup.validation.requires_target_id);
+
+        let open_container = interaction_kind_spec(InteractionOptionKind::OpenContainer);
+        assert_eq!(open_container.default_option_id, "open_container");
+        assert_eq!(open_container.default_priority, 850);
+        assert!(!open_container.validation.requires_item_id);
+        assert!(!open_container.validation.requires_target_id);
 
         let enter_subscene = interaction_kind_spec(InteractionOptionKind::EnterSubscene);
         assert!(enter_subscene.is_scene_transition);

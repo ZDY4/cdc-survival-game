@@ -5,15 +5,16 @@ use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::picking::prelude::MeshPickingCamera;
 use bevy_mesh_outline::OutlineCamera;
+use game_bevy::load_game_ui_font;
 
 pub(crate) fn setup_viewer(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    mut font_assets: ResMut<Assets<Font>>,
     mut images: ResMut<Assets<Image>>,
     palette: Res<ViewerPalette>,
     style: Res<ViewerStyleProfile>,
 ) {
-    let ui_font = asset_server.load(VIEWER_FONT_PATH);
+    let ui_font = load_game_ui_font(&mut font_assets);
     let trigger_arrow_texture = images.add(build_trigger_arrow_texture());
     let current_fow_mask = images.add(build_fog_of_war_mask_image(UVec2::ONE, &[255]));
     let previous_fow_mask = images.add(build_fog_of_war_mask_image(UVec2::ONE, &[255]));
@@ -99,6 +100,7 @@ pub(crate) fn setup_viewer(
             viewer_ui_passthrough_bundle(),
             InteractionMenuRoot,
             UiMouseBlocker,
+            UiMouseBlockerName("交互菜单".to_string()),
         ))
         .with_children(|menu| {
             menu.spawn((
@@ -129,6 +131,7 @@ pub(crate) fn setup_viewer(
             viewer_ui_passthrough_bundle(),
             DialoguePanelRoot,
             UiMouseBlocker,
+            UiMouseBlockerName("对话面板".to_string()),
         ))
         .with_children(|panel| {
             panel.spawn((

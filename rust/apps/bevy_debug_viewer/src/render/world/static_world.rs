@@ -4,9 +4,11 @@
 use super::*;
 use game_bevy::static_world as shared_static_world;
 use game_bevy::static_world::{
-    build_static_world_from_simulation_snapshot, default_color_for_role, StaticWorldBuildConfig,
-    StaticWorldMaterialRole as SharedRole, StaticWorldSceneSpec as SharedSceneSpec,
-    StaticWorldSemantic as SharedSemantic,
+    default_color_for_role, StaticWorldMaterialRole as SharedRole,
+    StaticWorldSceneSpec as SharedSceneSpec, StaticWorldSemantic as SharedSemantic,
+};
+use game_bevy::world_render::{
+    build_world_render_scene_from_simulation_snapshot, WorldRenderConfig as SharedWorldRenderConfig,
 };
 
 pub(super) fn rebuild_static_world(
@@ -323,21 +325,25 @@ fn shared_scene(
     render_config: ViewerRenderConfig,
     bounds: GridBounds,
 ) -> SharedSceneSpec {
-    build_static_world_from_simulation_snapshot(
+    build_world_render_scene_from_simulation_snapshot(
         snapshot,
         current_level,
-        StaticWorldBuildConfig {
+        SharedWorldRenderConfig {
+            camera_yaw_degrees: render_config.camera_yaw_degrees,
+            camera_pitch_degrees: render_config.camera_pitch_degrees,
+            camera_fov_degrees: render_config.camera_fov_degrees,
             floor_thickness_world: render_config.floor_thickness_world,
+            ground_variation_strength: render_config.ground_variation_strength,
             object_style_seed: render_config.object_style_seed,
-            include_generated_doors: false,
-            bounds_override: Some(game_bevy::static_world::StaticWorldGridBounds {
-                min_x: bounds.min_x,
-                max_x: bounds.max_x,
-                min_z: bounds.min_z,
-                max_z: bounds.max_z,
-            }),
         },
+        Some(game_bevy::static_world::StaticWorldGridBounds {
+            min_x: bounds.min_x,
+            max_x: bounds.max_x,
+            min_z: bounds.min_z,
+            max_z: bounds.max_z,
+        }),
     )
+    .static_scene
 }
 
 fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {

@@ -128,7 +128,7 @@ pub(in crate::game_ui) fn render_top_center_badges(
     scene_kind: ViewerSceneKind,
     viewer_state: &ViewerState,
     player_stats: Option<&PlayerHudStats>,
-    menu_state: &UiMenuState,
+    _menu_state: &UiMenuState,
 ) {
     if scene_kind.is_main_menu() {
         return;
@@ -145,11 +145,6 @@ pub(in crate::game_ui) fn render_top_center_badges(
             "AP --".to_string()
         },
         format!("楼层 {}", viewer_state.current_level),
-        format!("模式 {}", viewer_state.control_mode.label()),
-        menu_state
-            .active_panel
-            .map(|panel| format!("面板 {}", panel_title(panel)))
-            .unwrap_or_else(|| "探索".to_string()),
     ];
     parent
         .spawn((
@@ -168,6 +163,7 @@ pub(in crate::game_ui) fn render_top_center_badges(
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             UiMouseBlocker,
+            UiMouseBlockerName("顶部状态条".to_string()),
             ui_hierarchy_bundle(),
         ))
         .with_children(|wrap| {

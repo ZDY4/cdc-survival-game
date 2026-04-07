@@ -67,15 +67,18 @@ pub(super) fn render_panel_shell(
     panel: UiMenuPanel,
 ) {
     let width = panel_width(panel);
+    let anchor = panel_anchor(panel, width);
     parent
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
                 top: px(RIGHT_PANEL_TOP),
-                right: px(SCREEN_EDGE_PADDING),
+                left: anchor.left,
+                right: anchor.right,
+                margin: anchor.margin,
                 width: px(width),
                 height: px(RIGHT_PANEL_HEADER_HEIGHT),
-                padding: UiRect::axes(px(16), px(12)),
+                padding: UiRect::axes(px(12), px(8)),
                 justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Center,
                 flex_direction: FlexDirection::Row,
@@ -88,26 +91,33 @@ pub(super) fn render_panel_shell(
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName(format!("{}标题栏", panel_title(panel))),
         ))
         .with_children(|header| {
-            header.spawn(text_bundle(font, panel_title(panel), 15.0, Color::WHITE));
-            header.spawn(text_bundle(
-                font,
-                panel_tab_label(panel),
-                10.0,
-                ui_text_muted_color(),
-            ));
+            header.spawn(text_bundle(font, panel_title(panel), 13.5, Color::WHITE));
+            if panel != UiMenuPanel::Inventory {
+                header.spawn(text_bundle(
+                    font,
+                    panel_tab_label(panel),
+                    9.5,
+                    ui_text_muted_color(),
+                ));
+            }
         });
 }
 
 pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) -> Entity {
+    let width = panel_width(panel);
+    let anchor = panel_anchor(panel, width);
     parent
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
                 top: px(RIGHT_PANEL_TOP + RIGHT_PANEL_HEADER_HEIGHT - 1.0),
-                right: px(SCREEN_EDGE_PADDING),
-                width: px(panel_width(panel)),
+                left: anchor.left,
+                right: anchor.right,
+                margin: anchor.margin,
+                width: px(width),
                 bottom: px(RIGHT_PANEL_BOTTOM),
                 padding: UiRect::all(px(14)),
                 flex_direction: FlexDirection::Column,
@@ -122,6 +132,42 @@ pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) 
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName(format!("{}面板", panel_title(panel))),
         ))
         .id()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PanelAnchor {
+    left: Val,
+    right: Val,
+    margin: UiRect,
+}
+
+fn panel_anchor(panel: UiMenuPanel, width: f32) -> PanelAnchor {
+    match panel {
+        UiMenuPanel::Character | UiMenuPanel::Journal | UiMenuPanel::Skills => PanelAnchor {
+            left: px(LEFT_STAGE_PANEL_X),
+            right: Val::Auto,
+            margin: default(),
+        },
+        UiMenuPanel::Map => PanelAnchor {
+            left: Val::Percent(50.0),
+            right: Val::Auto,
+            margin: UiRect {
+                left: px(-(width / 2.0)),
+                ..default()
+            },
+        },
+        UiMenuPanel::Inventory | UiMenuPanel::Crafting => PanelAnchor {
+            left: Val::Auto,
+            right: px(SCREEN_EDGE_PADDING),
+            margin: default(),
+        },
+        UiMenuPanel::Settings => PanelAnchor {
+            left: Val::Auto,
+            right: px(SCREEN_EDGE_PADDING),
+            margin: default(),
+        },
+    }
 }

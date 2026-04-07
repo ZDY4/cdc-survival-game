@@ -86,7 +86,6 @@ fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
         ..ViewerState::default()
     };
     let mut menu_state = UiMenuState {
-        active_panel: Some(UiMenuPanel::Inventory),
         selected_inventory_item: Some(42),
         selected_equipment_slot: Some("body".into()),
         selected_skill_tree_id: Some("tree_a".into()),
@@ -95,6 +94,7 @@ fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
         selected_map_location_id: Some("street_a".into()),
         ..UiMenuState::default()
     };
+    menu_state.open_panel(UiMenuPanel::Inventory);
     let mut modal_state = UiModalState {
         item_quantity: Some(game_bevy::UiItemQuantityModalState {
             item_id: 1006,
@@ -132,7 +132,7 @@ fn transition_to_gameplay_scene_resets_viewer_and_ui_state() {
             .default_level
             .unwrap_or(0)
     );
-    assert!(menu_state.active_panel.is_none());
+    assert!(!menu_state.any_panel_open());
     assert!(menu_state.selected_inventory_item.is_none());
     assert!(menu_state.selected_skill_tree_id.is_none());
     assert_eq!(menu_state.status_text, "开始新游戏");

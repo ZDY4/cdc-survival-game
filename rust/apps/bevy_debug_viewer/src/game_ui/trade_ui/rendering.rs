@@ -25,6 +25,7 @@ pub(super) fn render_trade_page(
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName("交易界面".to_string()),
         ))
         .with_children(|overlay| {
             overlay
@@ -54,6 +55,7 @@ pub(super) fn render_trade_page(
                     RelativeCursorPosition::default(),
                     viewer_ui_passthrough_bundle(),
                     UiMouseBlocker,
+                    UiMouseBlockerName("交易标题栏".to_string()),
                 ))
                 .with_children(|header| {
                     header
@@ -150,6 +152,7 @@ fn render_trade_inventory_column(
             TradeInventoryPanelBounds,
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName("交易背包栏".to_string()),
         ))
         .with_children(|body| {
             render_inventory_panel_contents(
@@ -188,6 +191,7 @@ fn render_trade_shop_column(
             TradeSellZone,
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName("交易商品栏".to_string()),
         ))
         .with_children(|body| {
             body.spawn(text_bundle(font, "商品界面", 11.4, ui_text_heading_color()));

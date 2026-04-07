@@ -10,7 +10,8 @@ use super::{
     generated_door_render_polygon, interaction_menu_button_font_size_for_label,
     interaction_menu_layout, lighten_color, occluder_blocks_visible_cells, occluder_should_fade,
     occupied_cells_box, project_shadowed_visible_cells, resolve_active_interaction_hover,
-    should_fade_occluder, should_hide_building_roofs, sync_hover_mesh_outlines,
+    should_draw_actor_selection_ring, should_fade_occluder, should_hide_building_roofs,
+    should_show_actor_label, sync_hover_mesh_outlines,
     update_camera_follow_focus, GridBounds, HoverOutlineMember, MaterialStyle,
     StaticWorldOccluderKind, WalkableTileOverlayKind, HOVER_MESH_OUTLINE_WIDTH_PX,
     INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
@@ -191,6 +192,51 @@ fn camera_follow_focus_resets_when_follow_is_disabled_or_main_menu() {
         true,
     );
     assert_eq!(menu_focus, Vec3::new(9.0, 0.5, 9.0));
+}
+
+#[test]
+fn gameplay_overlay_hides_player_label_until_hovered() {
+    let snapshot = snapshot_with_focus_actor();
+    let player = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.side == game_data::ActorSide::Player)
+        .expect("player actor should exist");
+    let mut viewer_state = ViewerState::default();
+    viewer_state.controlled_player_actor = Some(player.actor_id);
+
+    assert!(!should_show_actor_label(
+        ViewerRenderConfig::default(),
+        &viewer_state,
+        player,
+        false,
+        None,
+    ));
+    assert!(should_show_actor_label(
+        ViewerRenderConfig::default(),
+        &viewer_state,
+        player,
+        false,
+        Some(player.actor_id),
+    ));
+}
+
+#[test]
+fn selection_ring_skips_player_actor() {
+    let snapshot = snapshot_with_focus_actor();
+    let player = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.side == game_data::ActorSide::Player)
+        .expect("player actor should exist");
+    let observer = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.side == game_data::ActorSide::Friendly)
+        .expect("friendly actor should exist");
+
+    assert!(!should_draw_actor_selection_ring(player));
+    assert!(should_draw_actor_selection_ring(observer));
 }
 
 #[test]

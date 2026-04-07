@@ -15,6 +15,13 @@ pub(crate) enum TradeQuantityPlan {
     Blocked { status: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ContainerQuantityPlan {
+    Immediate { count: i32 },
+    OpenModal(game_bevy::UiItemQuantityModalState),
+    Blocked { status: String },
+}
+
 pub(crate) fn handle_game_ui_buttons(
     mut buttons: Query<
         (
@@ -51,6 +58,9 @@ pub(crate) fn handle_game_ui_buttons(
         }
         ui.inventory_context_menu.clear();
         if handle_trade_button_action(action, &mut ui, &save_path, &content) {
+            continue;
+        }
+        if handle_container_button_action(action, &mut ui, &save_path, &content) {
             continue;
         }
         match action.clone() {
@@ -114,12 +124,8 @@ pub(crate) fn handle_game_ui_buttons(
                 exit.write(AppExit::Success);
             }
             GameUiButtonAction::TogglePanel(panel) => {
-                ui.menu_state.active_panel = if ui.menu_state.active_panel == Some(panel) {
-                    None
-                } else {
-                    Some(panel)
-                };
-                if ui.menu_state.active_panel == Some(UiMenuPanel::Skills) {
+                ui.menu_state.toggle_panel(panel);
+                if ui.menu_state.is_panel_open(UiMenuPanel::Skills) {
                     sync_skill_selection_state(
                         &mut ui.menu_state,
                         &ui.runtime_state,
@@ -127,12 +133,6 @@ pub(crate) fn handle_game_ui_buttons(
                         &content.skill_trees,
                     );
                 }
-            }
-            GameUiButtonAction::ClosePanels => {
-                ui.menu_state.active_panel = None;
-                ui.modal_state.item_quantity = None;
-                ui.modal_state.trade = None;
-                ui.drag_state.clear();
             }
             GameUiButtonAction::InventoryFilter(filter) => ui.filter_state.filter = filter,
             GameUiButtonAction::UseInventoryItem => {
@@ -464,7 +464,10 @@ pub(crate) fn handle_game_ui_buttons(
                 cycle_binding(&mut ui.settings, &action_name);
             }
             GameUiButtonAction::CloseTrade
+            | GameUiButtonAction::CloseContainer
             | GameUiButtonAction::BuyTradeItem { .. }
+            | GameUiButtonAction::StoreContainerItem { .. }
+            | GameUiButtonAction::TakeContainerItem { .. }
             | GameUiButtonAction::SellTradeItem { .. }
             | GameUiButtonAction::SellEquippedTradeItem { .. } => unreachable!(),
         }
@@ -568,6 +571,77 @@ pub(crate) fn plan_trade_sell(
     )
 }
 
+pub(crate) fn plan_container_store(
+    runtime: &game_core::SimulationRuntime,
+    actor_id: ActorId,
+    container_id: &str,
+    item_id: u32,
+) -> ContainerQuantityPlan {
+    let _ = container_id;
+    let available_count = runtime
+        .economy()
+        .inventory_count(actor_id, item_id)
+        .unwrap_or(0);
+    plan_container_quantity(
+        available_count,
+        available_count,
+        item_id,
+        game_bevy::UiItemQuantityIntent::ContainerStore {
+            container_id: container_id.to_string(),
+        },
+        "库存不足",
+    )
+}
+
+pub(crate) fn plan_container_take(
+    runtime: &game_core::SimulationRuntime,
+    actor_id: ActorId,
+    container_id: &str,
+    item_id: u32,
+    items: &ItemDefinitions,
+) -> ContainerQuantityPlan {
+    let raw_available_count = runtime
+        .economy()
+        .container_inventory_count(container_id, item_id)
+        .unwrap_or(0);
+    let Some(item) = items.0.get(item_id) else {
+        return ContainerQuantityPlan::Blocked {
+            status: format!("unknown_item:{item_id}"),
+        };
+    };
+    let current_weight = match runtime.economy().inventory_weight(actor_id, &items.0) {
+        Ok(weight) => weight,
+        Err(error) => {
+            return ContainerQuantityPlan::Blocked {
+                status: error.to_string(),
+            };
+        }
+    };
+    let max_weight = match runtime.economy().equipment_carry_bonus(actor_id, &items.0) {
+        Ok(bonus) => 50.0 + bonus,
+        Err(error) => {
+            return ContainerQuantityPlan::Blocked {
+                status: error.to_string(),
+            };
+        }
+    };
+    let remaining_capacity = (max_weight - current_weight).max(0.0);
+    let max_transferable_count = if item.weight <= f32::EPSILON {
+        raw_available_count
+    } else {
+        ((remaining_capacity / item.weight).floor() as i32).min(raw_available_count)
+    };
+    plan_container_quantity(
+        raw_available_count,
+        max_transferable_count,
+        item_id,
+        game_bevy::UiItemQuantityIntent::ContainerTake {
+            container_id: container_id.to_string(),
+        },
+        "超出负重上限",
+    )
+}
+
 fn resolve_max_tradeable_count(raw_available_count: i32, buyer_money: i32, unit_price: i32) -> i32 {
     if raw_available_count <= 0 || unit_price <= 0 {
         return 0;
@@ -595,6 +669,30 @@ fn plan_trade_quantity(
         item_id,
         source_count: raw_available_count,
         available_count: max_tradeable_count,
+        selected_count: 1,
+        intent,
+    })
+}
+
+fn plan_container_quantity(
+    raw_available_count: i32,
+    max_transferable_count: i32,
+    item_id: u32,
+    intent: game_bevy::UiItemQuantityIntent,
+    blocked_status: &str,
+) -> ContainerQuantityPlan {
+    if max_transferable_count <= 0 {
+        return ContainerQuantityPlan::Blocked {
+            status: blocked_status.to_string(),
+        };
+    }
+    if max_transferable_count == 1 {
+        return ContainerQuantityPlan::Immediate { count: 1 };
+    }
+    ContainerQuantityPlan::OpenModal(game_bevy::UiItemQuantityModalState {
+        item_id,
+        source_count: raw_available_count,
+        available_count: max_transferable_count,
         selected_count: 1,
         intent,
     })
@@ -688,6 +786,36 @@ pub(crate) fn execute_item_quantity_modal(
             viewer_state.status_line = status.clone();
             menu_state.status_text = status;
         }
+        game_bevy::UiItemQuantityIntent::ContainerStore { container_id } => {
+            let status = execute_container_store(
+                runtime_state,
+                menu_state,
+                save_path,
+                items,
+                actor_id,
+                &container_id,
+                item_id,
+                selected_count,
+            );
+            modal_state.item_quantity = None;
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+        }
+        game_bevy::UiItemQuantityIntent::ContainerTake { container_id } => {
+            let status = execute_container_take(
+                runtime_state,
+                menu_state,
+                save_path,
+                items,
+                actor_id,
+                &container_id,
+                item_id,
+                selected_count,
+            );
+            modal_state.item_quantity = None;
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+        }
     }
 }
 
@@ -733,6 +861,48 @@ pub(crate) fn execute_trade_sell(
         .unwrap_or_else(|error| error.to_string())
 }
 
+pub(crate) fn execute_container_store(
+    runtime_state: &mut ViewerRuntimeState,
+    _menu_state: &mut UiMenuState,
+    save_path: &ViewerRuntimeSavePath,
+    items: &ItemDefinitions,
+    actor_id: ActorId,
+    container_id: &str,
+    item_id: u32,
+    count: i32,
+) -> String {
+    let item_name = item_preview_label(&items.0, item_id);
+    runtime_state
+        .runtime
+        .transfer_actor_item_to_container(actor_id, container_id, item_id, count, None, &items.0)
+        .map(|_| {
+            save_runtime_snapshot(save_path, &runtime_state.runtime);
+            format!("已存入 {item_name} x{count}")
+        })
+        .unwrap_or_else(|error| error.to_string())
+}
+
+pub(crate) fn execute_container_take(
+    runtime_state: &mut ViewerRuntimeState,
+    _menu_state: &mut UiMenuState,
+    save_path: &ViewerRuntimeSavePath,
+    items: &ItemDefinitions,
+    actor_id: ActorId,
+    container_id: &str,
+    item_id: u32,
+    count: i32,
+) -> String {
+    let item_name = item_preview_label(&items.0, item_id);
+    runtime_state
+        .runtime
+        .transfer_container_item_to_actor(container_id, actor_id, item_id, count, None, &items.0)
+        .map(|_| {
+            save_runtime_snapshot(save_path, &runtime_state.runtime);
+            format!("已取出 {item_name} x{count}")
+        })
+        .unwrap_or_else(|error| error.to_string())
+}
+
 pub(super) fn execute_inventory_drop(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
@@ -770,6 +940,99 @@ fn item_preview_label(items: &game_data::ItemLibrary, item_id: u32) -> String {
         .get(item_id)
         .map(|item| item.name.clone())
         .unwrap_or_else(|| format!("item:{item_id}"))
+}
+
+fn handle_container_button_action(
+    action: &GameUiButtonAction,
+    ui: &mut GameUiCommandState,
+    save_path: &ViewerRuntimeSavePath,
+    content: &GameContentRefs,
+) -> bool {
+    match action {
+        GameUiButtonAction::CloseContainer => {
+            ui.modal_state.container = None;
+            ui.modal_state.item_quantity = None;
+            ui.viewer_state.pending_open_container_id = None;
+            ui.drag_state.clear();
+            ui.inventory_context_menu.clear();
+            true
+        }
+        GameUiButtonAction::StoreContainerItem {
+            container_id,
+            item_id,
+        } => {
+            let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) else {
+                return true;
+            };
+            match plan_container_store(&ui.runtime_state.runtime, actor_id, container_id, *item_id) {
+                ContainerQuantityPlan::Immediate { count } => {
+                    let status = execute_container_store(
+                        &mut ui.runtime_state,
+                        &mut ui.menu_state,
+                        save_path,
+                        &content.items,
+                        actor_id,
+                        container_id,
+                        *item_id,
+                        count,
+                    );
+                    ui.viewer_state.status_line = status.clone();
+                    ui.menu_state.status_text = status;
+                }
+                ContainerQuantityPlan::OpenModal(modal) => {
+                    ui.modal_state.item_quantity = Some(modal);
+                    ui.viewer_state.status_line = "选择要存入的数量".to_string();
+                    ui.menu_state.status_text = ui.viewer_state.status_line.clone();
+                }
+                ContainerQuantityPlan::Blocked { status } => {
+                    ui.viewer_state.status_line = status.clone();
+                    ui.menu_state.status_text = status;
+                }
+            }
+            true
+        }
+        GameUiButtonAction::TakeContainerItem {
+            container_id,
+            item_id,
+        } => {
+            let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) else {
+                return true;
+            };
+            match plan_container_take(
+                &ui.runtime_state.runtime,
+                actor_id,
+                container_id,
+                *item_id,
+                &content.items,
+            ) {
+                ContainerQuantityPlan::Immediate { count } => {
+                    let status = execute_container_take(
+                        &mut ui.runtime_state,
+                        &mut ui.menu_state,
+                        save_path,
+                        &content.items,
+                        actor_id,
+                        container_id,
+                        *item_id,
+                        count,
+                    );
+                    ui.viewer_state.status_line = status.clone();
+                    ui.menu_state.status_text = status;
+                }
+                ContainerQuantityPlan::OpenModal(modal) => {
+                    ui.modal_state.item_quantity = Some(modal);
+                    ui.viewer_state.status_line = "选择要取出的数量".to_string();
+                    ui.menu_state.status_text = ui.viewer_state.status_line.clone();
+                }
+                ContainerQuantityPlan::Blocked { status } => {
+                    ui.viewer_state.status_line = status.clone();
+                    ui.menu_state.status_text = status;
+                }
+            }
+            true
+        }
+        _ => false,
+    }
 }
 
 pub(super) fn cycle_binding(settings: &mut ViewerUiSettings, action_name: &str) {

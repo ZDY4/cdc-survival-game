@@ -1,4 +1,5 @@
 mod attack;
+mod container;
 mod door;
 mod pickup;
 mod scene_transition;
@@ -7,10 +8,11 @@ mod wait;
 
 use super::{InteractionKindSpec, InteractionOptionKind};
 
-static SPECS: [InteractionKindSpec; 12] = [
+static SPECS: [InteractionKindSpec; 13] = [
     wait::SPEC,
     talk::SPEC,
     attack::SPEC,
+    container::SPEC,
     pickup::SPEC,
     door::OPEN_SPEC,
     door::CLOSE_SPEC,

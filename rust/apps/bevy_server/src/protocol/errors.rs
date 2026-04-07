@@ -76,11 +76,16 @@ pub(super) fn economy_protocol_error(operation: &str, error: EconomyRuntimeError
         EconomyRuntimeError::UnknownSkill { .. } => "unknown_skill",
         EconomyRuntimeError::UnknownRecipe { .. } => "unknown_recipe",
         EconomyRuntimeError::UnknownShop { .. } => "unknown_shop",
+        EconomyRuntimeError::UnknownContainer { .. } => "unknown_container",
         EconomyRuntimeError::InvalidCount { .. } => "invalid_count",
         EconomyRuntimeError::NotEnoughItems { .. } => "not_enough_items",
         EconomyRuntimeError::NotEnoughMoney { .. } => "not_enough_money",
         EconomyRuntimeError::ShopInventoryInsufficient { .. } => "shop_inventory_insufficient",
         EconomyRuntimeError::ShopOutOfMoney { .. } => "shop_out_of_money",
+        EconomyRuntimeError::ContainerInventoryInsufficient { .. } => {
+            "container_inventory_insufficient"
+        }
+        EconomyRuntimeError::InventoryOverCapacity { .. } => "inventory_over_capacity",
         EconomyRuntimeError::SkillPrerequisiteMissing { .. } => "skill_prerequisite_missing",
         EconomyRuntimeError::SkillAttributeRequirementMissing { .. } => {
             "skill_attribute_requirement_missing"

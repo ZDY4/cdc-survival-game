@@ -32,6 +32,8 @@ pub(crate) fn draw_world(
             &UiGlobalTransform,
             Option<&RelativeCursorPosition>,
             Option<&Visibility>,
+            &InheritedVisibility,
+            Option<&UiMouseBlockerName>,
         ),
         With<UiMouseBlocker>,
     >,
@@ -42,7 +44,7 @@ pub(crate) fn draw_world(
     let overlay_mode = render_config.overlay_mode;
     let cursor_position = window.cursor_position();
     let world_hover_blocked = cursor_blocks_world_hover(&window, &viewer_state)
-        || cursor_over_blocking_ui(cursor_position, &ui_blockers)
+        || cursor_over_visible_ui_blocker(cursor_position, &ui_blockers)
         || cursor_over_hotbar_dock(&window, cursor_position);
     let pulse = 1.0
         + (time.elapsed_secs() * style.selection_pulse_speed).sin() * style.selection_pulse_amount;
@@ -239,15 +241,17 @@ pub(crate) fn draw_world(
             .find(|actor| actor.actor_id == focused_actor_id)
         {
             let actor_world = actor_visual_world_position(&runtime_state, &motion_state, actor);
-            draw_actor_selection_ring(
-                &mut gizmos,
-                actor_world,
-                actor.grid_position.y,
-                snapshot.grid.grid_size,
-                *render_config,
-                actor_selection_ring_color(actor.side, &palette),
-                1.0 + pulse * 0.08,
-            );
+            if should_draw_actor_selection_ring(actor) {
+                draw_actor_selection_ring(
+                    &mut gizmos,
+                    actor_world,
+                    actor.grid_position.y,
+                    snapshot.grid.grid_size,
+                    *render_config,
+                    actor_selection_ring_color(actor.side, &palette),
+                    1.0 + pulse * 0.08,
+                );
+            }
             if overlay_mode == ViewerOverlayMode::AiDebug {
                 if let Some(entry) = selected_ai_debug_entry(actor, &runtime_state) {
                     draw_selected_ai_overlay(

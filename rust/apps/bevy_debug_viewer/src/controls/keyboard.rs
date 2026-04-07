@@ -51,12 +51,16 @@ pub(crate) fn handle_keyboard_input(
             viewer_state.pending_open_trade_target = None;
             viewer_state.status_line = "trade: closed".to_string();
             return;
-        } else if menu_state.active_panel.is_some() {
-            menu_state.active_panel = None;
+        } else if menu_state.any_stage_panel_open() {
+            menu_state.close_stage_panels();
+            viewer_state.status_line = "menu: closed".to_string();
+            return;
+        } else if menu_state.is_settings_open() {
+            menu_state.close_panel(UiMenuPanel::Settings);
             viewer_state.status_line = "menu: closed".to_string();
             return;
         } else if scene_kind.is_gameplay() {
-            menu_state.active_panel = Some(UiMenuPanel::Settings);
+            menu_state.open_panel(UiMenuPanel::Settings);
             viewer_state.status_line = "menu: settings".to_string();
             return;
         }
@@ -109,20 +113,20 @@ pub(crate) fn handle_keyboard_input(
             if viewer_state.targeting_state.is_some() {
                 cancel_targeting(&mut viewer_state, "targeting: 已取消");
             }
-            menu_state.active_panel = if menu_state.active_panel == Some(panel) {
-                None
-            } else {
-                Some(panel)
-            };
+            menu_state.toggle_panel(panel);
             modal_state.trade = None;
             viewer_state.interaction_menu = None;
-            viewer_state.status_line = format!("menu: {}", menu_panel_label(panel));
+            viewer_state.status_line = if menu_state.is_panel_open(panel) {
+                format!("menu: {}", menu_panel_label(panel))
+            } else {
+                "menu: closed".to_string()
+            };
             return;
         }
     }
 
     if scene_kind.is_main_menu()
-        || menu_state.active_panel.is_some()
+        || menu_state.any_panel_open()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {

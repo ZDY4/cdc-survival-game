@@ -94,11 +94,11 @@ pub use map::{
     object_effectively_blocks_sight, rotated_footprint_size, validate_map_definition,
     BuildingGeneratorKind, MapAiSpawnProps, MapBuildingDiagonalEdge,
     MapBuildingFootprintPolygonSpec, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec,
-    MapBuildingStorySpec, MapBuildingVisualOutline, MapCellDefinition, MapDefinition,
-    MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapInteractiveProps,
-    MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition, MapObjectFootprint,
-    MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize, MapTriggerProps,
-    MapValidationCatalog, RelativeGridCell, RelativeGridVertex, StairKind,
+    MapBuildingStorySpec, MapBuildingVisualOutline, MapCellDefinition, MapContainerItemEntry,
+    MapContainerProps, MapDefinition, MapDefinitionValidationError, MapEntryPointDefinition, MapId,
+    MapInteractiveProps, MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition,
+    MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
+    MapTriggerProps, MapValidationCatalog, RelativeGridCell, RelativeGridVertex, StairKind,
 };
 pub use map_edit::{
     normalize_map_definition, MapEditCommand, MapEditDiagnostic, MapEditDiagnosticSeverity,

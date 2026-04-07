@@ -4,7 +4,7 @@ use super::*;
 
 pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMenuState>) {
     menu_state.main_menu_open = false;
-    menu_state.active_panel = None;
+    menu_state.close_all_panels();
     let overlay_layer = || {
         (
             Node {
@@ -38,6 +38,7 @@ pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMen
     let hotbar = commands.spawn((overlay_layer(), HotbarRoot)).id();
     let active_panel = commands.spawn((overlay_layer(), ActivePanelRoot)).id();
     let trade = commands.spawn((overlay_layer(), TradeRoot)).id();
+    let container = commands.spawn((overlay_layer(), ContainerRoot)).id();
     let tooltip = commands.spawn((overlay_layer(), TooltipRoot)).id();
     let context_menu = commands
         .spawn((overlay_layer(), InventoryContextMenuLayerRoot))
@@ -52,6 +53,7 @@ pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMen
         hotbar,
         active_panel,
         trade,
+        container,
         tooltip,
         context_menu,
         drag_preview,
@@ -65,6 +67,7 @@ pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMen
         hotbar,
         active_panel,
         trade,
+        container,
         tooltip,
         context_menu,
         drag_preview,
@@ -111,21 +114,33 @@ pub(crate) fn sync_game_ui_state(
             modal_state.trade = resolve_trade_session_for_target(&runtime_state, target, &shops.0);
         }
         if modal_state.trade.is_some() {
-            menu_state.active_panel = None;
+            menu_state.close_all_panels();
+        }
+    }
+    if let Some(container_id) = viewer_state.pending_open_container_id.take() {
+        if modal_state.container.is_none() {
+            modal_state.container = Some(game_bevy::UiContainerSessionState {
+                container_id,
+            });
+        }
+        if modal_state.container.is_some() {
+            menu_state.close_all_panels();
         }
     }
 
     let in_main_menu_scene = should_render_main_menu(*scene_kind);
     input_block_state.blocked = in_main_menu_scene
-        || menu_state.active_panel.is_some()
+        || menu_state.any_panel_open()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
+        || modal_state.container.is_some()
         || viewer_state.active_dialogue.is_some()
         || viewer_state.interaction_menu.is_some();
     if (in_main_menu_scene
-        || menu_state.active_panel.is_some()
+        || menu_state.any_panel_open()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
+        || modal_state.container.is_some()
         || viewer_state.active_dialogue.is_some())
         && viewer_state.interaction_menu.is_some()
     {
@@ -137,9 +152,11 @@ pub(crate) fn sync_game_ui_state(
         "item_quantity".to_string()
     } else if modal_state.trade.is_some() {
         "trade".to_string()
+    } else if modal_state.container.is_some() {
+        "container".to_string()
     } else if viewer_state.active_dialogue.is_some() {
         "dialogue".to_string()
-    } else if menu_state.active_panel.is_some() {
+    } else if menu_state.any_panel_open() {
         "menu_panel".to_string()
     } else if viewer_state.interaction_menu.is_some() {
         "interaction_menu".to_string()
@@ -152,8 +169,8 @@ pub(crate) fn sync_game_ui_state(
     }
 
     let allow_ui_context_menu = modal_state.trade.is_some()
-        || menu_state.active_panel == Some(UiMenuPanel::Inventory)
-        || menu_state.active_panel == Some(UiMenuPanel::Skills);
+        || menu_state.is_panel_open(UiMenuPanel::Inventory)
+        || menu_state.is_panel_open(UiMenuPanel::Skills);
     if in_main_menu_scene || modal_state.item_quantity.is_some() || !allow_ui_context_menu {
         inventory_context_menu.clear();
     }
@@ -197,7 +214,7 @@ pub(super) fn transition_to_gameplay_scene(
     sync_viewer_runtime_basics(runtime_state, viewer_state);
     viewer_state.status_line = status_text.to_string();
     menu_state.main_menu_open = false;
-    menu_state.active_panel = None;
+    menu_state.close_all_panels();
     menu_state.selected_inventory_item = None;
     menu_state.selected_equipment_slot = None;
     menu_state.selected_skill_tree_id = None;
@@ -207,6 +224,7 @@ pub(super) fn transition_to_gameplay_scene(
     menu_state.status_text = status_text.to_string();
     modal_state.item_quantity = None;
     modal_state.trade = None;
+    modal_state.container = None;
 }
 
 pub(super) fn should_render_main_menu(scene_kind: ViewerSceneKind) -> bool {

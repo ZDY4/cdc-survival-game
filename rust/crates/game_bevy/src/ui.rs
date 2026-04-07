@@ -33,6 +33,14 @@ pub enum UiMenuPanel {
     Settings,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiMenuRegion {
+    Left,
+    Center,
+    Right,
+    Overlay,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UiInventoryFilter {
     #[default]
@@ -104,7 +112,10 @@ impl UiItemType {
 #[derive(Resource, Debug, Clone, Default)]
 pub struct UiMenuState {
     pub main_menu_open: bool,
-    pub active_panel: Option<UiMenuPanel>,
+    pub left_panel: Option<UiMenuPanel>,
+    pub center_panel: Option<UiMenuPanel>,
+    pub right_panel: Option<UiMenuPanel>,
+    pub overlay_panel: Option<UiMenuPanel>,
     pub selected_inventory_item: Option<u32>,
     pub selected_equipment_slot: Option<String>,
     pub selected_skill_tree_id: Option<String>,
@@ -114,10 +125,103 @@ pub struct UiMenuState {
     pub status_text: String,
 }
 
+impl UiMenuState {
+    pub fn panel_region(panel: UiMenuPanel) -> UiMenuRegion {
+        match panel {
+            UiMenuPanel::Character | UiMenuPanel::Journal | UiMenuPanel::Skills => {
+                UiMenuRegion::Left
+            }
+            UiMenuPanel::Map => UiMenuRegion::Center,
+            UiMenuPanel::Inventory | UiMenuPanel::Crafting => UiMenuRegion::Right,
+            UiMenuPanel::Settings => UiMenuRegion::Overlay,
+        }
+    }
+
+    pub fn region_panel(&self, region: UiMenuRegion) -> Option<UiMenuPanel> {
+        match region {
+            UiMenuRegion::Left => self.left_panel,
+            UiMenuRegion::Center => self.center_panel,
+            UiMenuRegion::Right => self.right_panel,
+            UiMenuRegion::Overlay => self.overlay_panel,
+        }
+    }
+
+    pub fn is_panel_open(&self, panel: UiMenuPanel) -> bool {
+        self.region_panel(Self::panel_region(panel)) == Some(panel)
+    }
+
+    pub fn any_stage_panel_open(&self) -> bool {
+        self.left_panel.is_some() || self.center_panel.is_some() || self.right_panel.is_some()
+    }
+
+    pub fn any_panel_open(&self) -> bool {
+        self.any_stage_panel_open() || self.overlay_panel.is_some()
+    }
+
+    pub fn is_settings_open(&self) -> bool {
+        self.overlay_panel == Some(UiMenuPanel::Settings)
+    }
+
+    pub fn open_panel(&mut self, panel: UiMenuPanel) {
+        match Self::panel_region(panel) {
+            UiMenuRegion::Left => {
+                self.left_panel = Some(panel);
+                self.overlay_panel = None;
+            }
+            UiMenuRegion::Center => {
+                self.center_panel = Some(panel);
+                self.overlay_panel = None;
+            }
+            UiMenuRegion::Right => {
+                self.right_panel = Some(panel);
+                self.overlay_panel = None;
+            }
+            UiMenuRegion::Overlay => {
+                self.close_stage_panels();
+                self.overlay_panel = Some(panel);
+            }
+        }
+    }
+
+    pub fn close_panel(&mut self, panel: UiMenuPanel) {
+        match Self::panel_region(panel) {
+            UiMenuRegion::Left if self.left_panel == Some(panel) => self.left_panel = None,
+            UiMenuRegion::Center if self.center_panel == Some(panel) => self.center_panel = None,
+            UiMenuRegion::Right if self.right_panel == Some(panel) => self.right_panel = None,
+            UiMenuRegion::Overlay if self.overlay_panel == Some(panel) => self.overlay_panel = None,
+            _ => {}
+        }
+    }
+
+    pub fn toggle_panel(&mut self, panel: UiMenuPanel) {
+        if self.is_panel_open(panel) {
+            self.close_panel(panel);
+        } else {
+            self.open_panel(panel);
+        }
+    }
+
+    pub fn close_stage_panels(&mut self) {
+        self.left_panel = None;
+        self.center_panel = None;
+        self.right_panel = None;
+    }
+
+    pub fn close_all_panels(&mut self) {
+        self.close_stage_panels();
+        self.overlay_panel = None;
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct UiTradeSessionState {
     pub shop_id: String,
     pub target_actor_id: Option<ActorId>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UiContainerSessionState {
+    pub container_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -131,6 +235,12 @@ pub enum UiItemQuantityIntent {
     TradeSell {
         shop_id: String,
         unit_price: i32,
+    },
+    ContainerStore {
+        container_id: String,
+    },
+    ContainerTake {
+        container_id: String,
     },
 }
 
@@ -147,6 +257,7 @@ pub struct UiItemQuantityModalState {
 pub struct UiModalState {
     pub message: Option<String>,
     pub trade: Option<UiTradeSessionState>,
+    pub container: Option<UiContainerSessionState>,
     pub item_quantity: Option<UiItemQuantityModalState>,
 }
 
@@ -445,6 +556,14 @@ pub struct UiTradeEntryView {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct UiContainerEntryView {
+    pub item_id: u32,
+    pub name: String,
+    pub count: i32,
+    pub total_weight: f32,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct UiTradeSnapshot {
     pub shop_id: String,
     pub relation_score: i32,
@@ -452,6 +571,14 @@ pub struct UiTradeSnapshot {
     pub shop_money: i32,
     pub player_items: Vec<UiTradeEntryView>,
     pub shop_items: Vec<UiTradeEntryView>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UiContainerSnapshot {
+    pub container_id: String,
+    pub display_name: String,
+    pub item_kind_count: usize,
+    pub entries: Vec<UiContainerEntryView>,
 }
 
 pub fn player_actor_id(runtime: &SimulationRuntime) -> Option<ActorId> {
@@ -983,6 +1110,46 @@ pub fn trade_snapshot(
         shop_money,
         player_items,
         shop_items,
+    }
+}
+
+pub fn container_snapshot(
+    runtime: &SimulationRuntime,
+    container_id: &str,
+    items: &ItemLibrary,
+) -> UiContainerSnapshot {
+    let Some(container) = runtime.economy().container(container_id) else {
+        return UiContainerSnapshot::default();
+    };
+
+    let entries = runtime
+        .economy()
+        .container_inventory_display_order(container_id)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item_id| {
+            let count = runtime
+                .economy()
+                .container_inventory_count(container_id, item_id)
+                .unwrap_or(0);
+            if count <= 0 {
+                return None;
+            }
+            let definition = items.get(item_id)?;
+            Some(UiContainerEntryView {
+                item_id,
+                name: definition.name.clone(),
+                count,
+                total_weight: definition.weight * (count as f32),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    UiContainerSnapshot {
+        container_id: container.id.clone(),
+        display_name: container.display_name.clone(),
+        item_kind_count: entries.len(),
+        entries,
     }
 }
 

@@ -51,6 +51,9 @@ pub(crate) fn collect_events(
         if let SimulationEvent::PickupGranted { target_id, .. } = &event {
             clear_interaction_ui_for_consumed_target(&mut viewer_state, target_id);
         }
+        if let SimulationEvent::ContainerOpened { container_id, .. } = &event {
+            viewer_state.pending_open_container_id = Some(container_id.clone());
+        }
         sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
         runtime_state
             .recent_events
@@ -79,6 +82,7 @@ fn clear_interaction_ui_for_scene_transition(viewer_state: &mut ViewerState) {
     viewer_state.active_dialogue = None;
     viewer_state.targeting_state = None;
     viewer_state.pending_open_trade_target = None;
+    viewer_state.pending_open_container_id = None;
     viewer_state.resume_camera_follow();
 }
 

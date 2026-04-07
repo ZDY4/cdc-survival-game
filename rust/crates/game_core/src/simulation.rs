@@ -265,6 +265,11 @@ pub enum SimulationEvent {
         target_id: InteractionTargetId,
         option_id: InteractionOptionId,
     },
+    ContainerOpened {
+        actor_id: ActorId,
+        target_id: InteractionTargetId,
+        container_id: String,
+    },
     InteractionFailed {
         actor_id: ActorId,
         target_id: InteractionTargetId,
@@ -781,6 +786,40 @@ impl Simulation {
 
     pub fn set_map_library(&mut self, maps: MapLibrary) {
         self.map_library = Some(maps);
+    }
+
+    pub(crate) fn ensure_container_for_map_object(
+        &mut self,
+        object: &MapObjectDefinition,
+    ) -> Option<String> {
+        let container = object.props.container.as_ref()?;
+        let map_id = self.grid_world.map_id()?.as_str().to_string();
+        let container_id = format!("{}::{}", map_id, object.object_id);
+        let display_name =
+            crate::simulation::interaction_behaviors::interactive_object_display_name(object);
+        let initial_inventory = container.initial_inventory.iter().filter_map(|entry| {
+            entry
+                .item_id
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .map(|item_id| (item_id, entry.count))
+        });
+        self.economy.ensure_container(
+            container_id.clone(),
+            map_id,
+            object.object_id.clone(),
+            display_name,
+            initial_inventory,
+        );
+        Some(container_id)
+    }
+
+    pub(crate) fn ensure_current_map_containers(&mut self) {
+        let objects = self.grid_world.map_object_entries();
+        for object in &objects {
+            let _ = self.ensure_container_for_map_object(object);
+        }
     }
 
     pub fn set_overworld_library(&mut self, overworld: OverworldLibrary) {
@@ -2027,6 +2066,7 @@ impl Simulation {
         self.active_overworld_id = snapshot.active_overworld_id;
         self.ai_controllers.clear();
         self.grid_world.load_snapshot(snapshot.grid_world);
+        self.ensure_current_map_containers();
         self.pending_progression = snapshot.pending_progression.into();
         self.next_actor_id = snapshot.next_actor_id.max(1);
         self.next_registration_index = snapshot.next_registration_index;

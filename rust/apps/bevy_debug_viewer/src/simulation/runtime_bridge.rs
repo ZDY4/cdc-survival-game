@@ -100,6 +100,7 @@ pub(crate) fn classify_event(event: &SimulationEvent) -> HudEventCategory {
         | SimulationEvent::InteractionApproachPlanned { .. }
         | SimulationEvent::InteractionStarted { .. }
         | SimulationEvent::InteractionSucceeded { .. }
+        | SimulationEvent::ContainerOpened { .. }
         | SimulationEvent::InteractionFailed { .. }
         | SimulationEvent::DialogueStarted { .. }
         | SimulationEvent::DialogueAdvanced { .. }
@@ -291,6 +292,14 @@ fn format_event_text(event: SimulationEvent) -> String {
         } => format!(
             "interaction ok actor={:?} target={:?} option={}",
             actor_id, target_id, option_id
+        ),
+        SimulationEvent::ContainerOpened {
+            actor_id,
+            target_id,
+            container_id,
+        } => format!(
+            "container opened actor={:?} target={:?} container={}",
+            actor_id, target_id, container_id
         ),
         SimulationEvent::InteractionFailed {
             actor_id,

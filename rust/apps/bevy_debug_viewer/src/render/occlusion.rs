@@ -113,32 +113,6 @@ pub(super) fn cursor_blocks_world_hover(window: &Window, viewer_state: &ViewerSt
     interaction_menu_layout(window, menu_state, prompt).contains(cursor_position)
 }
 
-pub(super) fn cursor_over_blocking_ui(
-    cursor_position: Option<Vec2>,
-    ui_blockers: &Query<
-        (
-            &ComputedNode,
-            &UiGlobalTransform,
-            Option<&RelativeCursorPosition>,
-            Option<&Visibility>,
-        ),
-        With<UiMouseBlocker>,
-    >,
-) -> bool {
-    let Some(cursor_position) = cursor_position else {
-        return false;
-    };
-    ui_blockers
-        .iter()
-        .any(|(computed_node, transform, cursor, visibility)| {
-            if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden) {
-                return false;
-            }
-            cursor.is_some_and(RelativeCursorPosition::cursor_over)
-                || computed_node.contains_point(*transform, cursor_position)
-        })
-}
-
 pub(super) fn cursor_over_hotbar_dock(window: &Window, cursor_position: Option<Vec2>) -> bool {
     let Some(cursor_position) = cursor_position else {
         return false;

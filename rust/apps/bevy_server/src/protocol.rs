@@ -549,6 +549,18 @@ fn runtime_event_envelope(sequence: u64, event: SimulationEvent) -> RuntimeEvent
             payload: json!({ "optionId": option_id }),
             ..RuntimeEventEnvelope::default()
         },
+        SimulationEvent::ContainerOpened {
+            actor_id,
+            target_id,
+            container_id,
+        } => RuntimeEventEnvelope {
+            sequence,
+            event_type: "container_opened".into(),
+            actor_id: Some(actor_id),
+            target_id: Some(target_id),
+            payload: json!({ "containerId": container_id }),
+            ..RuntimeEventEnvelope::default()
+        },
         SimulationEvent::InteractionFailed {
             actor_id,
             target_id,

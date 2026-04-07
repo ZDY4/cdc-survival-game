@@ -13,10 +13,13 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy_egui::input::EguiWantsInput;
 use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
-use game_bevy::static_world::{
-    build_static_world_from_map_definition, build_static_world_from_overworld_definition,
-    spawn_static_world_visuals, StaticWorldBuildConfig,
+use game_bevy::world_render::{
+    apply_world_render_camera_projection, build_world_render_scene_from_map_definition,
+    build_world_render_scene_from_overworld_definition, spawn_world_render_light_rig,
+    spawn_world_render_scene, BuildingWallGridMaterial, GridGroundMaterial, WorldRenderConfig,
+    WorldRenderPalette, WorldRenderPlugin, WorldRenderStyleProfile,
 };
+use game_bevy::{game_ui_font_bytes, GAME_UI_FONT_NAME};
 use game_data::{
     load_map_library, load_overworld_library, GridCoord, MapCellDefinition, MapDefinition,
     MapEditDiagnostic, MapEditDiagnosticSeverity, MapEditError, MapEditorService,
@@ -27,9 +30,6 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const VIEWER_CAMERA_YAW_DEGREES: f32 = 0.0;
-const VIEWER_CAMERA_PITCH_DEGREES: f32 = 36.0;
-const VIEWER_CAMERA_FOV_DEGREES: f32 = 30.0;
 const TEMP_CAMERA_YAW_OFFSET_DEGREES: f32 = 45.0;
 const PERSPECTIVE_DISTANCE_DEFAULT: f32 = 28.0;
 const TOP_DOWN_DISTANCE_DEFAULT: f32 = 40.0;
@@ -44,8 +44,15 @@ const MODELS_PATH: &str = "/models";
 const DEFAULT_CAMERA_PAN_SPEED_MULTIPLIER: f32 = 1.0;
 const CAMERA_PAN_SPEED_MULTIPLIER_MIN: f32 = 0.25;
 const CAMERA_PAN_SPEED_MULTIPLIER_MAX: f32 = 4.0;
+const HOVERED_GRID_OUTLINE_COLOR: Color = Color::srgba(0.96, 0.97, 0.99, 0.98);
+const HOVERED_GRID_OUTLINE_Y_OFFSET: f32 = 0.14;
+const HOVERED_GRID_OUTLINE_EXTENT_SCALE: f32 = 0.94;
+const EDITOR_GRID_WORLD_SIZE: f32 = 1.0;
 
 fn main() {
+    let render_palette = WorldRenderPalette::default();
+    let render_style = WorldRenderStyleProfile::default();
+    let render_config = WorldRenderConfig::default();
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -55,17 +62,25 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(WorldRenderPlugin)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(EguiPlugin::default())
-        .insert_resource(ClearColor(Color::srgb(0.055, 0.06, 0.075)))
+        .insert_resource(ClearColor(render_palette.clear_color))
+        .insert_resource(render_palette)
+        .insert_resource(render_style)
+        .insert_resource(render_config)
         .insert_resource(load_editor_state())
         .insert_resource(load_ai_state())
         .insert_resource(EditorUiState::default())
+        .insert_resource(EditorEguiFontState::default())
         .insert_resource(OrbitCameraState::default())
         .insert_resource(MiddleClickState::default())
         .insert_resource(AiWorkerState::default())
         .add_systems(Startup, setup_editor)
-        .add_systems(EguiPrimaryContextPass, editor_ui_system)
+        .add_systems(
+            EguiPrimaryContextPass,
+            (configure_editor_egui_fonts_system, editor_ui_system).chain(),
+        )
         .add_systems(
             Update,
             (
@@ -73,6 +88,7 @@ fn main() {
                 camera_input_system,
                 apply_camera_transform_system,
                 update_hover_info_system,
+                draw_hovered_grid_outline_system,
             )
                 .chain(),
         )
@@ -99,9 +115,10 @@ struct OrbitCameraState {
 
 impl Default for OrbitCameraState {
     fn default() -> Self {
+        let render_config = WorldRenderConfig::default();
         Self {
-            base_yaw: VIEWER_CAMERA_YAW_DEGREES.to_radians(),
-            base_pitch: VIEWER_CAMERA_PITCH_DEGREES.to_radians(),
+            base_yaw: render_config.camera_yaw_radians(),
+            base_pitch: render_config.camera_pitch_radians(),
             yaw_offset: 0.0,
             is_top_down: false,
             perspective_distance: PERSPECTIVE_DISTANCE_DEFAULT,
@@ -143,6 +160,7 @@ struct MiddleClickState {
 
 #[derive(Debug, Clone, Default)]
 struct HoveredCellInfo {
+    grid: GridCoord,
     title: String,
     lines: Vec<String>,
 }
@@ -153,6 +171,7 @@ struct EditorUiState {
     show_settings_window: bool,
     camera_pan_speed_multiplier: f32,
     hovered_cell: Option<HoveredCellInfo>,
+    hovered_grid: Option<GridCoord>,
 }
 
 impl Default for EditorUiState {
@@ -162,8 +181,14 @@ impl Default for EditorUiState {
             show_settings_window: false,
             camera_pan_speed_multiplier: DEFAULT_CAMERA_PAN_SPEED_MULTIPLIER,
             hovered_cell: None,
+            hovered_grid: None,
         }
     }
+}
+
+#[derive(Resource, Debug, Clone, Default)]
+struct EditorEguiFontState {
+    initialized: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -427,7 +452,12 @@ fn normalized_map_label_key(value: &str) -> String {
         .collect()
 }
 
+fn map_display_name(map_id: &str) -> &str {
+    map_id.strip_suffix("_grid").unwrap_or(map_id)
+}
+
 fn map_library_item_label(map_id: &str, name: &str, dirty: bool, has_diagnostics: bool) -> String {
+    let display_map_id = map_display_name(map_id);
     let suffix = match (dirty, has_diagnostics) {
         (true, true) => " [dirty, diag]",
         (true, false) => " [dirty]",
@@ -436,13 +466,13 @@ fn map_library_item_label(map_id: &str, name: &str, dirty: bool, has_diagnostics
     };
     let trimmed_name = name.trim();
     if trimmed_name.is_empty() {
-        return format!("{map_id}{suffix}");
+        return format!("{display_map_id}{suffix}");
     }
-    if normalized_map_label_key(trimmed_name) == normalized_map_label_key(map_id) {
+    if normalized_map_label_key(trimmed_name) == normalized_map_label_key(display_map_id) {
         return format!("{trimmed_name}{suffix}");
     }
 
-    format!("{trimmed_name} · {map_id}{suffix}")
+    format!("{trimmed_name} · {display_map_id}{suffix}")
 }
 
 fn load_ai_state() -> AiState {
@@ -499,32 +529,50 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-fn setup_editor(mut commands: Commands) {
-    commands.insert_resource(GlobalAmbientLight {
-        color: Color::WHITE,
-        brightness: 350.0,
-        affects_lightmapped_meshes: true,
-    });
+fn setup_editor(
+    mut commands: Commands,
+    render_palette: Res<WorldRenderPalette>,
+    render_style: Res<WorldRenderStyleProfile>,
+    render_config: Res<WorldRenderConfig>,
+) {
+    spawn_world_render_light_rig(&mut commands, &render_palette, &render_style);
+    let mut perspective = PerspectiveProjection::default();
+    apply_world_render_camera_projection(&mut perspective, *render_config);
     commands.spawn((
         Camera3d::default(),
         Msaa::Sample4,
-        Projection::from(PerspectiveProjection {
-            fov: VIEWER_CAMERA_FOV_DEGREES.to_radians(),
-            near: 0.1,
-            far: 2000.0,
-            ..PerspectiveProjection::default()
-        }),
+        Projection::from(perspective),
         Transform::from_xyz(18.0, 18.0, 18.0).looking_at(Vec3::ZERO, Vec3::Y),
         EditorCamera,
     ));
-    commands.spawn((
-        DirectionalLight {
-            shadows_enabled: true,
-            illuminance: 32_000.0,
-            ..default()
-        },
-        Transform::from_xyz(14.0, 22.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
+}
+
+fn configure_editor_egui_fonts_system(
+    mut contexts: EguiContexts,
+    mut font_state: ResMut<EditorEguiFontState>,
+) {
+    if font_state.initialized {
+        return;
+    }
+
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
+
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        GAME_UI_FONT_NAME.to_string(),
+        egui::FontData::from_owned(game_ui_font_bytes().to_vec()).into(),
+    );
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts
+            .families
+            .entry(family)
+            .or_default()
+            .insert(0, GAME_UI_FONT_NAME.to_string());
+    }
+    ctx.set_fonts(fonts);
+    font_state.initialized = true;
 }
 
 fn editor_ui_system(
@@ -735,7 +783,10 @@ fn editor_ui_system(
                         if let Some(selected_map_id) = editor.selected_map_id.clone() {
                             if let Some(doc) = editor.maps.get(&selected_map_id).cloned() {
                                 ui.heading("Map");
-                                ui.label(format!("Id: {}", doc.definition.id.as_str()));
+                                ui.label(format!(
+                                    "Id: {}",
+                                    map_display_name(doc.definition.id.as_str())
+                                ));
                                 ui.label(format!(
                                     "Size: {} x {} · levels: {} · objects: {}",
                                     doc.definition.size.width,
@@ -908,6 +959,7 @@ fn editor_ui_system(
                 .order(egui::Order::Tooltip)
                 .show(ctx, |ui| {
                     egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                         ui.strong(&hovered_cell.title);
                         for line in &hovered_cell.lines {
                             ui.label(line);
@@ -1031,7 +1083,7 @@ fn save_current_map(editor: &mut EditorState) -> Result<String, String> {
     editor.maps.insert(next_map_id.clone(), next_document);
     editor.selected_map_id = Some(next_map_id.clone());
     editor.scene_dirty = true;
-    Ok(format!("Saved map {}.", next_map_id))
+    Ok(format!("Saved map {}.", map_display_name(&next_map_id)))
 }
 
 fn ai_settings_path() -> PathBuf {
@@ -1473,7 +1525,7 @@ fn apply_prepared_proposal(
     ai.pending_status.clear();
     Ok(format!(
         "Applied proposal to preview map {}. Save to write JSON.",
-        target_map_id
+        map_display_name(&target_map_id)
     ))
 }
 
@@ -1587,6 +1639,7 @@ fn camera_input_system(
 
 fn apply_camera_transform_system(
     orbit_camera: Res<OrbitCameraState>,
+    render_config: Res<WorldRenderConfig>,
     mut cameras: Query<(&mut Projection, &mut Transform), With<EditorCamera>>,
 ) {
     let Ok((mut projection, mut transform)) = cameras.single_mut() else {
@@ -1594,9 +1647,7 @@ fn apply_camera_transform_system(
     };
 
     if let Projection::Perspective(perspective) = &mut *projection {
-        perspective.fov = VIEWER_CAMERA_FOV_DEGREES.to_radians();
-        perspective.near = 0.1;
-        perspective.far = 2000.0;
+        apply_world_render_camera_projection(perspective, *render_config);
     }
 
     let pitch = if orbit_camera.is_top_down {
@@ -1637,9 +1688,13 @@ fn rebuild_scene_system(
     mut commands: Commands,
     mut editor: ResMut<EditorState>,
     mut orbit_camera: ResMut<OrbitCameraState>,
+    render_config: Res<WorldRenderConfig>,
+    render_palette: Res<WorldRenderPalette>,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
+    mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     scene_entities: Query<Entity, With<SceneEntity>>,
 ) {
     if !editor.scene_dirty {
@@ -1663,23 +1718,27 @@ fn rebuild_scene_system(
                 return;
             };
             orbit_camera.target = map_focus_target(&document.definition);
-            let scene = build_static_world_from_map_definition(
+            let scene = build_world_render_scene_from_map_definition(
                 &document.definition,
                 editor.current_map_level,
-                StaticWorldBuildConfig::default(),
+                *render_config,
             );
-            for entity in spawn_static_world_visuals(
+            for entity in spawn_world_render_scene(
                 &mut commands,
                 &mut meshes,
                 &mut materials,
+                &mut ground_materials,
+                &mut building_wall_materials,
                 &mut images,
                 &scene,
+                *render_config,
+                &render_palette,
             ) {
                 commands.entity(entity).insert(SceneEntity);
             }
             editor.status = format!(
                 "Rendering map {} at level {} in native Bevy 3D.",
-                document.definition.id.as_str(),
+                map_display_name(document.definition.id.as_str()),
                 editor.current_map_level
             );
         }
@@ -1699,13 +1758,17 @@ fn rebuild_scene_system(
                 return;
             };
             orbit_camera.target = overworld_focus_target(&definition);
-            let scene = build_static_world_from_overworld_definition(&definition);
-            for entity in spawn_static_world_visuals(
+            let scene = build_world_render_scene_from_overworld_definition(&definition);
+            for entity in spawn_world_render_scene(
                 &mut commands,
                 &mut meshes,
                 &mut materials,
+                &mut ground_materials,
+                &mut building_wall_materials,
                 &mut images,
                 &scene,
+                *render_config,
+                &render_palette,
             ) {
                 commands.entity(entity).insert(SceneEntity);
             }
@@ -1795,11 +1858,13 @@ fn update_hover_info_system(
 ) {
     if egui_wants_input.wants_any_pointer_input() {
         ui_state.hovered_cell = None;
+        ui_state.hovered_grid = None;
         return;
     }
 
     let Some(cursor_position) = window.cursor_position() else {
         ui_state.hovered_cell = None;
+        ui_state.hovered_grid = None;
         return;
     };
 
@@ -1807,17 +1872,66 @@ fn update_hover_info_system(
     let camera_transform = GlobalTransform::from(*camera_transform);
     let Ok(ray) = camera.viewport_to_world(&camera_transform, cursor_position) else {
         ui_state.hovered_cell = None;
+        ui_state.hovered_grid = None;
         return;
     };
     let Some(point) = ray_point_on_horizontal_plane(ray, 0.0) else {
         ui_state.hovered_cell = None;
+        ui_state.hovered_grid = None;
         return;
     };
 
-    ui_state.hovered_cell = match editor.selected_view {
+    let hovered = match editor.selected_view {
         LibraryView::Maps => build_map_hover_info(&editor, point),
         LibraryView::Overworlds => build_overworld_hover_info(&editor, point),
     };
+    ui_state.hovered_grid = hovered.as_ref().map(|hovered| hovered.grid);
+    ui_state.hovered_cell = hovered;
+}
+
+fn draw_hovered_grid_outline_system(
+    mut gizmos: Gizmos,
+    ui_state: Res<EditorUiState>,
+    render_config: Res<WorldRenderConfig>,
+) {
+    let Some(grid) = ui_state.hovered_grid else {
+        return;
+    };
+
+    draw_grid_outline(
+        &mut gizmos,
+        grid,
+        EDITOR_GRID_WORLD_SIZE,
+        render_config.floor_thickness_world.max(HOVERED_GRID_OUTLINE_Y_OFFSET),
+        HOVERED_GRID_OUTLINE_EXTENT_SCALE,
+        HOVERED_GRID_OUTLINE_COLOR,
+    );
+}
+
+fn draw_grid_outline(
+    gizmos: &mut Gizmos,
+    grid: GridCoord,
+    grid_size: f32,
+    y_offset: f32,
+    extent_scale: f32,
+    color: Color,
+) {
+    let inset = (1.0 - extent_scale).max(0.0) * 0.5 * grid_size;
+    let x0 = grid.x as f32 * grid_size + inset;
+    let x1 = (grid.x + 1) as f32 * grid_size - inset;
+    let z0 = grid.z as f32 * grid_size + inset;
+    let z1 = (grid.z + 1) as f32 * grid_size - inset;
+    let y = grid.y as f32 * grid_size + y_offset;
+
+    let a = Vec3::new(x0, y, z0);
+    let b = Vec3::new(x1, y, z0);
+    let c = Vec3::new(x1, y, z1);
+    let d = Vec3::new(x0, y, z1);
+
+    gizmos.line(a, b, color);
+    gizmos.line(b, c, color);
+    gizmos.line(c, d, color);
+    gizmos.line(d, a, color);
 }
 
 fn build_map_hover_info(editor: &EditorState, point: Vec3) -> Option<HoveredCellInfo> {
@@ -1855,7 +1969,7 @@ fn build_map_hover_info(editor: &EditorState, point: Vec3) -> Option<HoveredCell
         .filter(|object| object_covers_grid(object, grid))
         .collect::<Vec<_>>();
 
-    let mut lines = vec![format!("Map: {}", document.definition.id.as_str())];
+    let mut lines = Vec::new();
     if let Some(cell) = cell {
         lines.push(format!(
             "Cell: terrain={} move_block={} sight_block={}",
@@ -1877,6 +1991,7 @@ fn build_map_hover_info(editor: &EditorState, point: Vec3) -> Option<HoveredCell
     }
 
     Some(HoveredCellInfo {
+        grid,
         title: format!("Grid ({}, {}, {})", grid.x, grid.y, grid.z),
         lines,
     })
@@ -1917,13 +2032,17 @@ fn build_overworld_hover_info(editor: &EditorState, point: Vec3) -> Option<Hover
             "Kind: {}",
             overworld_location_kind_label(location.kind)
         ));
-        lines.push(format!("Map: {}", location.map_id.as_str()));
+        lines.push(format!(
+            "Map: {}",
+            map_display_name(location.map_id.as_str())
+        ));
         if !location.entry_point_id.trim().is_empty() {
             lines.push(format!("Entry: {}", location.entry_point_id));
         }
     }
 
     Some(HoveredCellInfo {
+        grid,
         title: format!("Grid ({}, {}, {})", grid.x, grid.y, grid.z),
         lines,
     })
@@ -2080,7 +2199,10 @@ fn start_ai_generation(editor: &EditorState, ai: &mut AiState, worker: &mut AiWo
     let conversation = ai.conversation.clone();
     push_ai_chat_message(ai, AiChatRole::User, prompt.clone());
     ai.prompt_input.clear();
-    ai.pending_status = format!("Generating proposal for {}...", selected_map.id.as_str());
+    ai.pending_status = format!(
+        "Generating proposal for {}...",
+        map_display_name(selected_map.id.as_str())
+    );
     ai.provider_status.clear();
     ai.proposal = None;
 

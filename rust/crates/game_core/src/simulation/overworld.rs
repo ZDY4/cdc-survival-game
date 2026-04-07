@@ -44,6 +44,7 @@ impl Simulation {
 
         self.reset_runtime_actor_occupancy();
         self.grid_world.load_map(&map);
+        self.ensure_current_map_containers();
         self.update_actor_grid_position(actor_id, entry_point.grid);
         self.current_entry_point_id = Some(entry_point.id.clone());
         Ok(entry_point)

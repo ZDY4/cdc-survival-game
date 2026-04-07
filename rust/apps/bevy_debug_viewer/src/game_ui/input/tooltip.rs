@@ -55,19 +55,21 @@ pub(crate) fn update_hover_tooltip_state(
         return;
     }
 
-    let hovered = match menu_state.active_panel {
-        Some(UiMenuPanel::Inventory) => {
-            find_inventory_hover_target(cursor_position, &inventory_targets)
-                .map(|item_id| UiHoverTooltipContent::InventoryItem { item_id })
-        }
-        Some(UiMenuPanel::Skills) => find_skill_hover_target(cursor_position, &skill_targets)
-            .map(|(tree_id, skill_id)| UiHoverTooltipContent::Skill { tree_id, skill_id }),
-        _ => resolve_scene_transition_tooltip_content(
-            &runtime_state.runtime.snapshot(),
-            viewer_state.hovered_grid,
-            &overworld,
-        ),
-    };
+    let hovered = find_inventory_hover_target(cursor_position, &inventory_targets)
+        .filter(|_| menu_state.is_panel_open(UiMenuPanel::Inventory))
+        .map(|item_id| UiHoverTooltipContent::InventoryItem { item_id })
+        .or_else(|| {
+            find_skill_hover_target(cursor_position, &skill_targets)
+                .filter(|_| menu_state.is_panel_open(UiMenuPanel::Skills))
+                .map(|(tree_id, skill_id)| UiHoverTooltipContent::Skill { tree_id, skill_id })
+        })
+        .or_else(|| {
+            resolve_scene_transition_tooltip_content(
+                &runtime_state.runtime.snapshot(),
+                viewer_state.hovered_grid,
+                &overworld,
+            )
+        });
 
     match hovered {
         Some(content) => {

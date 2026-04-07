@@ -283,13 +283,7 @@ impl Simulation {
                 .props
                 .interactive
                 .as_ref()
-                .map(|interactive| {
-                    if interactive.display_name.trim().is_empty() {
-                        object.object_id.clone()
-                    } else {
-                        interactive.display_name.clone()
-                    }
-                })
+                .map(|_| interaction_behaviors::interactive_object_display_name(object))
                 .unwrap_or_else(|| object.object_id.clone()),
             MapObjectKind::Trigger => object
                 .props

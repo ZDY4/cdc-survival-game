@@ -149,6 +149,7 @@ pub(crate) struct ViewerState {
     pub camera_drag_cursor: Option<Vec2>,
     pub camera_drag_anchor_world: Option<Vec2>,
     pub pending_open_trade_target: Option<InteractionTargetId>,
+    pub pending_open_container_id: Option<String>,
     pub status_line: String,
 }
 
@@ -183,6 +184,7 @@ impl Default for ViewerState {
             camera_drag_cursor: None,
             camera_drag_anchor_world: None,
             pending_open_trade_target: None,
+            pending_open_container_id: None,
             status_line: String::new(),
         }
     }

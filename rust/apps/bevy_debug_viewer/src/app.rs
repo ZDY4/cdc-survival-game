@@ -23,9 +23,10 @@ use crate::controls::{
     handle_keyboard_input, handle_mouse_input, handle_mouse_wheel_zoom,
 };
 use crate::game_ui::{
-    apply_ui_settings_system, handle_game_ui_buttons, handle_inventory_panel_pointer_input,
-    load_ui_settings_on_startup, save_ui_settings_system, setup_game_ui, sync_game_ui_state,
-    tick_hotbar_cooldowns, update_hover_tooltip_state,
+    apply_ui_settings_system, handle_game_ui_buttons, handle_inventory_list_mouse_wheel,
+    handle_inventory_panel_pointer_input, load_ui_settings_on_startup, save_ui_settings_system,
+    setup_game_ui, sync_game_ui_state, sync_inventory_list_scrollbar, tick_hotbar_cooldowns,
+    update_hover_tooltip_state,
 };
 use crate::info_panels::update_free_observe_indicator;
 use crate::picking::{sync_viewer_picking_state, ViewerPickingPlugin, ViewerPickingState};
@@ -48,10 +49,11 @@ use crate::simulation::{
 };
 use crate::state::{
     ActorLabelEntities, UiContextMenuState, UiHoverTooltipState, UiInventoryDragState,
-    ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraFollowState,
-    ViewerCameraShakeState, ViewerDamageNumberState, ViewerInfoPanelState, ViewerPalette,
-    ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState,
-    ViewerStyleProfile, ViewerUiSettings, ViewerUiSettingsPath,
+    UiInventoryScrollbarDragState, ViewerActorFeedbackState, ViewerActorMotionState,
+    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState,
+    ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiSettings,
+    ViewerUiSettingsPath,
 };
 
 pub(crate) fn run() {
@@ -105,6 +107,7 @@ pub(crate) fn run() {
         .insert_resource(UiHoverTooltipState::default())
         .insert_resource(UiContextMenuState::default())
         .insert_resource(UiInventoryDragState::default())
+        .insert_resource(UiInventoryScrollbarDragState::default())
         .insert_resource(ViewerInfoPanelState::default())
         .insert_resource(ViewerConsoleState::default())
         .insert_resource(ViewerSystemProfilerState::default())
@@ -222,6 +225,7 @@ impl Plugin for ViewerAppPlugin {
                 handle_console_input,
                 handle_keyboard_input,
                 handle_mouse_wheel_zoom,
+                handle_inventory_list_mouse_wheel,
                 handle_camera_pan,
             )
                 .in_set(ViewerUpdateSet::RuntimeMutations),
@@ -292,6 +296,7 @@ impl Plugin for ViewerAppPlugin {
                 update_console_panel,
                 update_hover_tooltip_state,
                 profiled_update_game_ui,
+                sync_inventory_list_scrollbar,
                 update_interaction_menu,
                 update_dialogue_panel,
                 profiled_draw_world,

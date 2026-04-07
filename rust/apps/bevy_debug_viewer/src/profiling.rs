@@ -360,6 +360,8 @@ pub(crate) fn profiled_draw_world(
             &UiGlobalTransform,
             Option<&RelativeCursorPosition>,
             Option<&Visibility>,
+            &InheritedVisibility,
+            Option<&crate::state::UiMouseBlockerName>,
         ),
         With<crate::state::UiMouseBlocker>,
     >,

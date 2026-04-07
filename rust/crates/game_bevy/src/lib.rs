@@ -15,12 +15,14 @@ use spawn::register_actor_from_definition;
 mod ai_spawn;
 pub mod bootstrap;
 mod content;
+pub mod fonts;
 mod logging;
 pub mod npc_life;
 pub mod reservations;
 mod spawn;
 pub mod static_world;
 pub mod ui;
+pub mod world_render;
 
 pub use ai_spawn::advance_map_ai_spawn_runtime;
 pub use bootstrap::{
@@ -28,6 +30,7 @@ pub use bootstrap::{
     RuntimeBootstrapBundle, RuntimeBootstrapError,
 };
 pub use content::*;
+pub use fonts::*;
 pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
 pub use npc_life::{
     BackgroundLifeState, CurrentAction, CurrentGoal, CurrentPlan,
@@ -40,18 +43,20 @@ pub use reservations::SmartObjectReservations;
 pub use spawn::{register_runtime_actor_from_definition, spawn_characters_from_definition};
 pub use static_world::*;
 pub use ui::{
-    ammo_item_ids, character_snapshot, classify_item, crafting_snapshot, interaction_prompt_text,
-    inventory_snapshot, item_attribute_bonuses, item_equippable, item_usable, journal_snapshot,
-    map_snapshot, overworld_location_prompt_snapshot, player_actor_id, skills_snapshot,
-    trade_snapshot, world_status_snapshot, GameUiPlugin, UiCharacterCommand, UiCharacterSnapshot,
-    UiCraftingSnapshot, UiDialogueCommand, UiEquipmentSlotView, UiHotbarSlotState, UiHotbarState,
-    UiInputBlockState, UiInventoryCommand, UiInventoryDetailView, UiInventoryEntryView,
-    UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot, UiItemQuantityIntent,
-    UiItemQuantityModalState, UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot,
-    UiMapLocationView, UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
-    UiOverworldLocationPromptSnapshot, UiSettingsCommand, UiSkillCommand, UiSkillEntryView,
-    UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCommand, UiTradeEntryView,
-    UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
+    ammo_item_ids, character_snapshot, classify_item, container_snapshot, crafting_snapshot,
+    interaction_prompt_text, inventory_snapshot, item_attribute_bonuses, item_equippable,
+    item_usable, journal_snapshot, map_snapshot, overworld_location_prompt_snapshot,
+    player_actor_id, skills_snapshot, trade_snapshot, world_status_snapshot, GameUiPlugin,
+    UiCharacterCommand, UiCharacterSnapshot, UiContainerEntryView, UiContainerSessionState,
+    UiContainerSnapshot, UiCraftingSnapshot, UiDialogueCommand, UiEquipmentSlotView,
+    UiHotbarSlotState, UiHotbarState, UiInputBlockState, UiInventoryCommand,
+    UiInventoryDetailView, UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState,
+    UiInventoryPanelSnapshot, UiItemQuantityIntent, UiItemQuantityModalState, UiItemType,
+    UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView, UiMapSnapshot,
+    UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState, UiOverworldLocationPromptSnapshot,
+    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot,
+    UiStatusBannerState, UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot,
+    UiWorldStatusSnapshot,
 };
 
 #[derive(Message, Debug, Clone, PartialEq, Eq)]

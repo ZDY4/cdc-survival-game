@@ -13,9 +13,10 @@ use game_bevy::{
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::simulation::viewer_event_entry;
 use crate::state::{
-    viewer_ui_passthrough_bundle, UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState,
-    ViewerCameraShakeState, ViewerDamageNumberState, ViewerHudPage, ViewerInfoPanelState,
-    ViewerPalette, ViewerRuntimeState, ViewerState, ViewerUiFont,
+    viewer_ui_passthrough_bundle, UiMouseBlocker, UiMouseBlockerName,
+    ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
+    ViewerDamageNumberState, ViewerHudPage, ViewerInfoPanelState, ViewerPalette,
+    ViewerRuntimeState, ViewerState, ViewerUiFont,
 };
 
 const CONSOLE_PANEL_BOTTOM_PX: f32 = 18.0;
@@ -251,6 +252,7 @@ pub(crate) fn spawn_console_panel(
             viewer_ui_passthrough_bundle(),
             ConsolePanelRoot,
             UiMouseBlocker,
+            UiMouseBlockerName("控制台".to_string()),
         ))
         .with_children(|parent| {
             parent.spawn((

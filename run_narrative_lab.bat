@@ -9,6 +9,7 @@ set "VSDEVCMD="
 set "VSWHERE="
 set "SELF_TEST_SCENARIO="
 set "PORT_1421_PID="
+set "PWSH_EXE=pwsh"
 
 if /I "%~1"=="--self-test" (
     set "SELF_TEST_SCENARIO=narrative-menu"
@@ -74,9 +75,10 @@ if errorlevel 1 (
 
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:"127\.0\.0\.1:1421 .*LISTENING" /C:"0\.0\.0\.0:1421 .*LISTENING" /C:"\[::1\]:1421 .*LISTENING" /C:"\[::\]:1421 .*LISTENING"') do (
     set "PORT_1421_PID=%%P"
-    goto :port_1421_in_use
+    goto :port_1421_detected
 )
 
+:prepare_to_launch
 pushd "%EDITOR_DIR%"
 call "%VSDEVCMD%" -arch=x64 -host_arch=x64 >nul
 if errorlevel 1 (
@@ -116,6 +118,34 @@ set "EXIT_CODE=%ERRORLEVEL%"
 popd
 
 exit /b %EXIT_CODE%
+
+:port_1421_detected
+call :cleanup_existing_narrative_lab_dev_server
+if not defined PORT_1421_PID goto :prepare_to_launch
+goto :port_1421_in_use
+
+:cleanup_existing_narrative_lab_dev_server
+set "PORT_1421_COMMAND_LINE="
+for /f "usebackq delims=" %%C in (`%PWSH_EXE% -NoLogo -NoProfile -Command "$process = Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -eq %PORT_1421_PID% }; if ($null -ne $process) { $process.CommandLine }"`) do (
+    set "PORT_1421_COMMAND_LINE=%%C"
+)
+
+if not defined PORT_1421_COMMAND_LINE exit /b 0
+
+echo %PORT_1421_COMMAND_LINE% | findstr /I /C:"G:\Projects\cdc_survival_game\tools\narrative_lab" >nul
+if errorlevel 1 exit /b 0
+
+echo Detected an existing Narrative Lab dev server on port 1421. Stopping stale dev processes...
+%PWSH_EXE% -NoLogo -NoProfile -Command "$projectPath = 'G:\Projects\cdc_survival_game\tools\narrative_lab'; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like ('*' + $projectPath + '*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+timeout /t 2 >nul
+
+set "PORT_1421_PID="
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:"127\.0\.0\.1:1421 .*LISTENING" /C:"0\.0\.0\.0:1421 .*LISTENING" /C:"\[::1\]:1421 .*LISTENING" /C:"\[::\]:1421 .*LISTENING"') do (
+    set "PORT_1421_PID=%%P"
+    exit /b 0
+)
+
+exit /b 0
 
 :port_1421_in_use
 echo [ERROR] Port 1421 is already in use, so Narrative Lab cannot start its Vite dev server.

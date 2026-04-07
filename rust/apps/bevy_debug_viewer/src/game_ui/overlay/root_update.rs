@@ -9,6 +9,7 @@ pub(crate) struct GameUiRetainedCache {
     hotbar: Option<String>,
     active_panel: Option<String>,
     trade: Option<String>,
+    container: Option<String>,
     tooltip: Option<String>,
     context_menu: Option<String>,
     drag_preview: Option<String>,
@@ -40,10 +41,15 @@ pub(crate) fn update_game_ui(
     let player_actor = player_actor_id(&ui.runtime_state.runtime);
     let player_stats =
         player_actor.and_then(|actor_id| player_hud_stats(&ui.runtime_state, actor_id));
-    let esc_menu_open = ui.menu_state.active_panel == Some(UiMenuPanel::Settings);
+    let esc_menu_open = ui.menu_state.is_settings_open();
     let in_main_menu_scene = should_render_main_menu(*ui.scene_kind);
     let trade_state = if !esc_menu_open {
         ui.modal_state.trade.as_ref()
+    } else {
+        None
+    };
+    let container_state = if !esc_menu_open {
+        ui.modal_state.container.as_ref()
     } else {
         None
     };
@@ -64,14 +70,15 @@ pub(crate) fn update_game_ui(
         },
     );
 
-    let show_badges = !show_main_menu && !esc_menu_open && trade_state.is_none();
+    let show_badges =
+        !show_main_menu && !esc_menu_open && trade_state.is_none() && container_state.is_none();
     let badge_key = show_badges.then(|| {
         format!(
             "{:?}|{:?}|{:?}|{:?}",
             ui.scene_kind.as_ref(),
             player_stats,
             ui.viewer_state.current_level,
-            ui.menu_state.active_panel
+            ui.menu_state
         )
     });
     refresh_section(
@@ -104,7 +111,7 @@ pub(crate) fn update_game_ui(
             ui.viewer_state.observe_speed,
             ui.viewer_state.auto_tick,
             ui.hotbar_state,
-            ui.menu_state.active_panel,
+            ui.menu_state,
             ui.menu_state.selected_skill_id
         )
     });
@@ -125,7 +132,7 @@ pub(crate) fn update_game_ui(
                     &ui.hotbar_state,
                     &content.skills.0,
                     &ui.menu_state,
-                    ui.menu_state.active_panel == Some(UiMenuPanel::Skills),
+                    ui.menu_state.is_panel_open(UiMenuPanel::Skills),
                     ui.menu_state.selected_skill_id.as_deref(),
                 );
             });
@@ -133,7 +140,7 @@ pub(crate) fn update_game_ui(
     );
 
     if let Some(actor_id) = player_actor {
-        let panel_key = active_panel_key(actor_id, &ui, &content);
+        let panel_key = open_panels_key(actor_id, &ui, &content);
         let show_active_panel = panel_key.is_some();
         refresh_section(
             &mut commands,
@@ -145,7 +152,7 @@ pub(crate) fn update_game_ui(
             panel_key,
             |commands, entity| {
                 commands.entity(entity).with_children(|parent| {
-                    render_active_panel(parent, &font, actor_id, &ui, &content);
+                    render_open_panels(parent, &font, actor_id, &ui, &content);
                 });
             },
         );
@@ -168,7 +175,8 @@ pub(crate) fn update_game_ui(
             );
             format!(
                 "{trade_snapshot:?}|{inventory:?}|{:?}|{:?}",
-                ui.menu_state, ui.drag_state
+                ui.menu_state,
+                drag_visual_key(&ui.drag_state)
             )
         });
         refresh_section(
@@ -211,9 +219,66 @@ pub(crate) fn update_game_ui(
             },
         );
 
+        let container_key = container_state.map(|container| {
+            let container_snapshot = container_snapshot(
+                &ui.runtime_state.runtime,
+                &container.container_id,
+                &content.items.0,
+            );
+            let inventory = inventory_snapshot(
+                &ui.runtime_state.runtime,
+                actor_id,
+                &content.items.0,
+                ui.filter_state.filter,
+                ui.menu_state.selected_inventory_item,
+            );
+            format!(
+                "{container_snapshot:?}|{inventory:?}|{:?}|{:?}",
+                ui.menu_state,
+                drag_visual_key(&ui.drag_state)
+            )
+        });
+        refresh_section(
+            &mut commands,
+            &ui_children,
+            &mut visibilities,
+            scaffold.container,
+            container_key.is_some(),
+            &mut cache.container,
+            container_key,
+            |commands, entity| {
+                let Some(container) = container_state else {
+                    return;
+                };
+                let container_snapshot = container_snapshot(
+                    &ui.runtime_state.runtime,
+                    &container.container_id,
+                    &content.items.0,
+                );
+                let inventory = inventory_snapshot(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    &content.items.0,
+                    ui.filter_state.filter,
+                    ui.menu_state.selected_inventory_item,
+                );
+                commands.entity(entity).with_children(|parent| {
+                    render_container_page(
+                        parent,
+                        &font,
+                        &container_snapshot,
+                        &inventory,
+                        &ui.menu_state,
+                        &ui.drag_state,
+                    );
+                });
+            },
+        );
+
         let prompt_blocked = ui.input_block_state.blocked
             || ui.inventory_context_menu.visible
-            || trade_state.is_some();
+            || trade_state.is_some()
+            || container_state.is_some();
         let prompt_key = if prompt_blocked {
             None
         } else {
@@ -264,6 +329,7 @@ pub(crate) fn update_game_ui(
     } else {
         hide_section(&mut visibilities, scaffold.active_panel);
         hide_section(&mut visibilities, scaffold.trade);
+        hide_section(&mut visibilities, scaffold.container);
         hide_section(&mut visibilities, scaffold.overworld_prompt);
     }
 
@@ -382,6 +448,7 @@ fn hide_game_ui_sections(visibilities: &mut Query<&mut Visibility>, scaffold: &G
         scaffold.hotbar,
         scaffold.active_panel,
         scaffold.trade,
+        scaffold.container,
         scaffold.tooltip,
         scaffold.context_menu,
         scaffold.drag_preview,
@@ -398,17 +465,35 @@ fn hide_section(visibilities: &mut Query<&mut Visibility>, entity: Entity) {
     }
 }
 
-fn active_panel_key(
+fn open_panels_key(
     actor_id: ActorId,
     ui: &GameUiViewState<'_, '_>,
     content: &GameContentRefs<'_, '_>,
 ) -> Option<String> {
-    let panel = ui.menu_state.active_panel?;
-    if panel == UiMenuPanel::Settings || ui.modal_state.trade.is_some() {
+    if ui.modal_state.trade.is_some() || ui.modal_state.container.is_some() {
         return None;
     }
 
-    Some(match panel {
+    if ui.menu_state.is_settings_open() {
+        return Some(format!("Settings|{:?}", ui.settings.as_ref()));
+    }
+
+    let keys = [ui.menu_state.left_panel, ui.menu_state.center_panel, ui.menu_state.right_panel]
+        .into_iter()
+        .flatten()
+        .map(|panel| panel_render_key(panel, actor_id, ui, content))
+        .collect::<Vec<_>>();
+
+    (!keys.is_empty()).then(|| keys.join("||"))
+}
+
+fn panel_render_key(
+    panel: UiMenuPanel,
+    actor_id: ActorId,
+    ui: &GameUiViewState<'_, '_>,
+    content: &GameContentRefs<'_, '_>,
+) -> String {
+    match panel {
         UiMenuPanel::Inventory => format!(
             "{panel:?}|{:?}|{:?}|{:?}",
             inventory_snapshot(
@@ -419,7 +504,7 @@ fn active_panel_key(
                 ui.menu_state.selected_inventory_item,
             ),
             ui.menu_state,
-            ui.drag_state
+            drag_visual_key(&ui.drag_state)
         ),
         UiMenuPanel::Character => format!(
             "{panel:?}|{:?}",
@@ -451,20 +536,49 @@ fn active_panel_key(
             content.overworld.0
         ),
         UiMenuPanel::Settings => format!("{panel:?}|{:?}", ui.settings.as_ref()),
+    }
+}
+
+fn drag_visual_key(drag_state: &UiInventoryDragState) -> Option<String> {
+    drag_state.is_active().then(|| {
+        format!(
+            "{:?}|{:?}|{:?}|{:?}",
+            drag_state.active_source,
+            drag_state.hover_target,
+            drag_state.dragging,
+            drag_state.allowed_equipment_slots
+        )
     })
 }
 
-fn render_active_panel(
+fn render_open_panels(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
     actor_id: ActorId,
     ui: &GameUiViewState<'_, '_>,
     content: &GameContentRefs<'_, '_>,
 ) {
-    let Some(panel) = ui.menu_state.active_panel else {
+    if ui.menu_state.is_settings_open() {
+        render_settings_panel(parent, font, &ui.settings);
         return;
-    };
+    }
 
+    for panel in [ui.menu_state.left_panel, ui.menu_state.center_panel, ui.menu_state.right_panel]
+        .into_iter()
+        .flatten()
+    {
+        render_single_panel(parent, font, actor_id, ui, content, panel);
+    }
+}
+
+fn render_single_panel(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    actor_id: ActorId,
+    ui: &GameUiViewState<'_, '_>,
+    content: &GameContentRefs<'_, '_>,
+    panel: UiMenuPanel,
+) {
     match panel {
         UiMenuPanel::Inventory => {
             render_panel_shell(parent, font, panel);

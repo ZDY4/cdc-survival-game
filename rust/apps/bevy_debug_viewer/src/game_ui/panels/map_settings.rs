@@ -76,6 +76,7 @@ pub(super) fn render_settings_panel(
         RelativeCursorPosition::default(),
         viewer_ui_passthrough_bundle(),
         UiMouseBlocker,
+        UiMouseBlockerName("游戏菜单遮罩".to_string()),
     ));
 
     parent
@@ -103,6 +104,7 @@ pub(super) fn render_settings_panel(
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName("游戏菜单".to_string()),
         ))
         .with_children(|body| {
             body.spawn(text_bundle(font, "游戏菜单", 18.0, Color::WHITE));

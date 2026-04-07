@@ -276,7 +276,7 @@ fn main_menu_scene_ignores_escape_shortcut() {
     let app = keyboard_input_app(ViewerSceneKind::MainMenu, KeyCode::Escape);
 
     let menu_state = app.world().resource::<UiMenuState>();
-    assert!(menu_state.active_panel.is_none());
+    assert!(!menu_state.any_panel_open());
 }
 
 #[test]
@@ -284,7 +284,7 @@ fn main_menu_scene_ignores_gameplay_menu_hotkeys() {
     let app = keyboard_input_app(ViewerSceneKind::MainMenu, KeyCode::KeyI);
 
     let menu_state = app.world().resource::<UiMenuState>();
-    assert!(menu_state.active_panel.is_none());
+    assert!(!menu_state.any_panel_open());
 }
 
 #[test]
@@ -293,14 +293,16 @@ fn gameplay_escape_opens_settings_panel() {
 
     let menu_state = app.world().resource::<UiMenuState>();
     let viewer_state = app.world().resource::<ViewerState>();
-    assert_eq!(menu_state.active_panel, Some(UiMenuPanel::Settings));
+    assert!(menu_state.is_settings_open());
     assert_eq!(viewer_state.status_line, "menu: settings");
 }
 
 #[test]
 fn gameplay_escape_closes_trade_before_opening_settings() {
     let mut app = keyboard_input_app(ViewerSceneKind::Gameplay, KeyCode::Escape);
-    app.world_mut().resource_mut::<UiMenuState>().active_panel = None;
+    app.world_mut()
+        .resource_mut::<UiMenuState>()
+        .close_all_panels();
     app.world_mut().resource_mut::<UiModalState>().trade = Some(Default::default());
     app.world_mut()
         .resource_mut::<ViewerState>()
@@ -314,7 +316,7 @@ fn gameplay_escape_closes_trade_before_opening_settings() {
     let menu_state = app.world().resource::<UiMenuState>();
     let modal_state = app.world().resource::<UiModalState>();
     let viewer_state = app.world().resource::<ViewerState>();
-    assert!(menu_state.active_panel.is_none());
+    assert!(!menu_state.any_panel_open());
     assert!(modal_state.trade.is_none());
     assert!(viewer_state.pending_open_trade_target.is_none());
     assert_eq!(viewer_state.status_line, "trade: closed");
@@ -323,7 +325,9 @@ fn gameplay_escape_closes_trade_before_opening_settings() {
 #[test]
 fn gameplay_escape_closes_discard_modal_before_trade() {
     let mut app = keyboard_input_app(ViewerSceneKind::Gameplay, KeyCode::Escape);
-    app.world_mut().resource_mut::<UiMenuState>().active_panel = None;
+    app.world_mut()
+        .resource_mut::<UiMenuState>()
+        .close_all_panels();
     {
         let mut modal_state = app.world_mut().resource_mut::<UiModalState>();
         modal_state.item_quantity = Some(game_bevy::UiItemQuantityModalState {

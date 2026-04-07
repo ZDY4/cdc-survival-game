@@ -175,6 +175,44 @@ impl SimulationRuntime {
         )
     }
 
+    pub fn transfer_actor_item_to_container(
+        &mut self,
+        actor_id: ActorId,
+        container_id: &str,
+        item_id: u32,
+        count: i32,
+        before_item_id: Option<u32>,
+        items: &ItemLibrary,
+    ) -> Result<(), EconomyRuntimeError> {
+        self.simulation.economy_mut().transfer_actor_item_to_container(
+            actor_id,
+            container_id,
+            item_id,
+            count,
+            before_item_id,
+            items,
+        )
+    }
+
+    pub fn transfer_container_item_to_actor(
+        &mut self,
+        container_id: &str,
+        actor_id: ActorId,
+        item_id: u32,
+        count: i32,
+        before_item_id: Option<u32>,
+        items: &ItemLibrary,
+    ) -> Result<(), EconomyRuntimeError> {
+        self.simulation.economy_mut().transfer_container_item_to_actor(
+            container_id,
+            actor_id,
+            item_id,
+            count,
+            before_item_id,
+            items,
+        )
+    }
+
     pub fn drop_item_to_ground(
         &mut self,
         actor_id: ActorId,

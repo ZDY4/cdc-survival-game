@@ -9,7 +9,7 @@ use game_protocol::{
     NarrativeSyncRequest, NarrativeSyncResponse, NarrativeSyncSettings, PendingSyncOperation,
     ProjectContextSnapshot, SyncConflictPayload,
 };
-use reqwest::blocking::{Client, RequestBuilder};
+use reqwest::{Client, RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::{AppHandle, Manager};
@@ -102,18 +102,19 @@ pub fn save_narrative_sync_settings(
 }
 
 #[tauri::command]
-pub fn list_cloud_workspaces(app: AppHandle) -> Result<Vec<CloudWorkspaceMeta>, String> {
+pub async fn list_cloud_workspaces(app: AppHandle) -> Result<Vec<CloudWorkspaceMeta>, String> {
     let settings = read_narrative_sync_settings(&app)?;
     let client = sync_client()?;
     let url = build_server_url(&settings.server_url, "/workspaces")?;
     let response = authorized_request(client.get(url), &settings)
         .send()
+        .await
         .map_err(|error| format!("failed to list cloud workspaces: {error}"))?;
-    parse_json_response(response)
+    parse_json_response(response).await
 }
 
 #[tauri::command]
-pub fn create_cloud_workspace(
+pub async fn create_cloud_workspace(
     app: AppHandle,
     input: CreateCloudWorkspaceInput,
 ) -> Result<CloudWorkspaceMeta, String> {
@@ -126,12 +127,13 @@ pub fn create_cloud_workspace(
     let response = authorized_request(client.post(url), &settings)
         .json(&json!({ "name": input.name.trim() }))
         .send()
+        .await
         .map_err(|error| format!("failed to create cloud workspace: {error}"))?;
-    parse_json_response(response)
+    parse_json_response(response).await
 }
 
 #[tauri::command]
-pub fn sync_narrative_workspace(
+pub async fn sync_narrative_workspace(
     app: AppHandle,
     workspace_root: String,
 ) -> Result<NarrativeWorkspaceSyncResult, String> {
@@ -194,8 +196,9 @@ pub fn sync_narrative_workspace(
     let response = authorized_request(client.post(url), &settings)
         .json(&request)
         .send()
+        .await
         .map_err(|error| format!("failed to sync workspace: {error}"))?;
-    let sync_response: NarrativeSyncResponse = parse_json_response(response)?;
+    let sync_response: NarrativeSyncResponse = parse_json_response(response).await?;
 
     let workspace_root_string = to_forward_slashes(&workspace_root_path);
     for remote_document in &sync_response.documents {
@@ -263,7 +266,7 @@ pub fn export_project_context_snapshot(
 }
 
 #[tauri::command]
-pub fn upload_project_context_snapshot(
+pub async fn upload_project_context_snapshot(
     app: AppHandle,
     workspace_root: String,
     project_root: String,
@@ -294,8 +297,9 @@ pub fn upload_project_context_snapshot(
     let response = authorized_request(client.post(url), &settings)
         .json(&export.snapshot)
         .send()
+        .await
         .map_err(|error| format!("failed to upload project context snapshot: {error}"))?;
-    let uploaded: ProjectContextSnapshot = parse_json_response(response)?;
+    let uploaded: ProjectContextSnapshot = parse_json_response(response).await?;
 
     let mut next_settings = settings;
     next_settings.last_sync_status = format!("Uploaded project snapshot {}", uploaded.snapshot_id);
@@ -621,12 +625,13 @@ fn authorized_request(builder: RequestBuilder, settings: &NarrativeSyncSettings)
     }
 }
 
-fn parse_json_response<T: for<'de> Deserialize<'de>>(
-    response: reqwest::blocking::Response,
+async fn parse_json_response<T: for<'de> Deserialize<'de>>(
+    response: Response,
 ) -> Result<T, String> {
     let status = response.status();
     let raw = response
         .text()
+        .await
         .map_err(|error| format!("failed to read response body: {error}"))?;
     if !status.is_success() {
         return Err(format!("server returned {status}: {raw}"));

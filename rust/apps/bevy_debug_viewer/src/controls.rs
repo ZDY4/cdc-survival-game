@@ -22,10 +22,11 @@ use crate::geometry::{
 use crate::render::interaction_menu_layout;
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
-    DialogueChoiceButton, InteractionMenuButton, InteractionMenuState, UiMouseBlocker,
-    ViewerActorMotionState, ViewerCamera, ViewerInfoPanelState, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
-    ViewerTargetingState, ViewerUiSettings,
+    cursor_over_visible_ui_blocker, DialogueChoiceButton, InteractionMenuButton,
+    InteractionMenuState, UiMouseBlocker, UiMouseBlockerName, ViewerActorMotionState,
+    ViewerCamera, ViewerInfoPanelState, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState, ViewerTargetingAction, ViewerTargetingSource, ViewerTargetingState,
+    ViewerUiSettings,
 };
 use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
 
@@ -181,29 +182,6 @@ fn issue_move_to_grid(
             game_core::runtime::action_result_status(&outcome.result)
         )
     };
-}
-
-fn cursor_over_blocking_ui(
-    cursor_position: Vec2,
-    ui_blockers: &Query<
-        (
-            &ComputedNode,
-            &UiGlobalTransform,
-            Option<&RelativeCursorPosition>,
-            Option<&Visibility>,
-        ),
-        With<UiMouseBlocker>,
-    >,
-) -> bool {
-    ui_blockers
-        .iter()
-        .any(|(computed_node, transform, cursor, visibility)| {
-            if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden) {
-                return false;
-            }
-            cursor.is_some_and(RelativeCursorPosition::cursor_over)
-                || computed_node.contains_point(*transform, cursor_position)
-        })
 }
 
 fn clear_world_hover_state(runtime_state: &ViewerRuntimeState, viewer_state: &mut ViewerState) {

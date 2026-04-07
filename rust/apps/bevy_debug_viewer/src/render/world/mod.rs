@@ -390,6 +390,10 @@ pub(super) fn actor_selection_ring_color(side: ActorSide, palette: &ViewerPalett
     actors::actor_selection_ring_color(side, palette)
 }
 
+pub(super) fn should_draw_actor_selection_ring(actor: &game_core::ActorDebugState) -> bool {
+    actors::should_draw_actor_selection_ring(actor)
+}
+
 pub(super) fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
     helpers::occupied_cells_box(cells, grid_size)
 }

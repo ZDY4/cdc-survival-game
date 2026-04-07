@@ -388,6 +388,7 @@ export function NarrativeWorkspace({
   const flushingBeforeCloseRef = useRef(false);
   const isResizingSidebarRef = useRef(false);
   const isResizingPanelsRef = useRef(false);
+  const appSettingsRef = useRef(appSettings);
   const documentsRef = useRef<EditableNarrativeDocument[]>(documents);
   const documentAgentsRef = useRef<Record<string, DocumentAgentSession>>(documentAgents);
   const tabStateRef = useRef<NarrativeTabState>(tabState);
@@ -396,6 +397,10 @@ export function NarrativeWorkspace({
   const workspaceRootRef = useRef("");
   const layoutSnapshotRef = useRef("");
   const agentSnapshotRef = useRef("");
+
+  useEffect(() => {
+    appSettingsRef.current = appSettings;
+  }, [appSettings]);
 
   useEffect(() => {
     documentsRef.current = documents;
@@ -696,7 +701,7 @@ export function NarrativeWorkspace({
         try {
           await flushWorkspacePersistence();
           unlisten?.();
-          await currentWindow.destroy();
+          await currentWindow.close();
         } catch (error) {
           onStatusChange(`关闭前保存 Narrative Lab 状态失败：${String(error)}`);
           flushingBeforeCloseRef.current = false;
@@ -930,13 +935,14 @@ export function NarrativeWorkspace({
       return;
     }
 
-    await onSaveAppSettings({
-      ...appSettings,
+    const savedSettings = await onSaveAppSettings({
+      ...appSettingsRef.current,
       workspaceLayouts: {
-        ...(appSettings.workspaceLayouts ?? {}),
+        ...(appSettingsRef.current.workspaceLayouts ?? {}),
         [workspace.workspaceRoot]: persistedLayout,
       },
     });
+    appSettingsRef.current = savedSettings;
     layoutSnapshotRef.current = serialized;
   }
 
@@ -952,13 +958,14 @@ export function NarrativeWorkspace({
       return;
     }
 
-    await onSaveAppSettings({
-      ...appSettings,
+    const savedSettings = await onSaveAppSettings({
+      ...appSettingsRef.current,
       workspaceAgentSessions: {
-        ...(appSettings.workspaceAgentSessions ?? {}),
+        ...(appSettingsRef.current.workspaceAgentSessions ?? {}),
         [workspace.workspaceRoot]: persistedAgentState,
       },
     });
+    appSettingsRef.current = savedSettings;
     agentSnapshotRef.current = serialized;
   }
 
@@ -2643,7 +2650,43 @@ export function NarrativeWorkspace({
             <>
               <div className="narrative-chat-sticky-topbar">
                 <div className="narrative-chat-topbar-row">
-                  <div />
+                  <div
+                    className="narrative-chat-context-strip narrative-chat-context-strip-compact"
+                    title={buildUsedContextSummary(activeSession.lastResponse?.usedContextRefs ?? [])}
+                  >
+                    <span className="narrative-chat-context-strip-label">上下文</span>
+                    <div className="narrative-chat-context-strip-scroller">
+                      {selectedContextDocuments.length ? (
+                        selectedContextDocuments.map((document) => (
+                          <span
+                            key={`context-chip-${document.documentKey}`}
+                            className="narrative-context-chip"
+                            title={document.relativePath}
+                          >
+                            <span>{document.meta.title || document.meta.slug}</span>
+                            <button
+                              type="button"
+                              className="narrative-context-chip-remove"
+                              aria-label={`移除 ${document.meta.title || document.meta.slug}`}
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                removeContextDocument(document.documentKey);
+                              }}
+                            >
+                              x
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="narrative-chat-context-empty">仅主文稿</span>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="narrative-chat-topbar-actions">
                     {activeSubmission ? (
@@ -2664,44 +2707,6 @@ export function NarrativeWorkspace({
                     </button>
                   </div>
                 </div>
-
-                <div className="narrative-chat-context-strip narrative-chat-context-strip-compact">
-                  <span className="narrative-chat-context-strip-label">上下文</span>
-                  <div className="narrative-chat-context-strip-scroller">
-                    {selectedContextDocuments.length ? (
-                      selectedContextDocuments.map((document) => (
-                        <span
-                          key={`context-chip-${document.documentKey}`}
-                          className="narrative-context-chip"
-                          title={document.relativePath}
-                        >
-                          <span>{document.meta.title || document.meta.slug}</span>
-                          <button
-                            type="button"
-                            className="narrative-context-chip-remove"
-                            aria-label={`移除 ${document.meta.title || document.meta.slug}`}
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                            }}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              removeContextDocument(document.documentKey);
-                            }}
-                          >
-                            x
-                          </button>
-                        </span>
-                      ))
-                    ) : (
-                      <span className="narrative-chat-context-empty">仅主文稿</span>
-                    )}
-                  </div>
-                </div>
-                <p className="field-hint narrative-chat-context-used">
-                  {buildUsedContextSummary(activeSession.lastResponse?.usedContextRefs ?? [])}
-                </p>
               </div>
 
               <div className="narrative-chat-log">
@@ -2711,10 +2716,12 @@ export function NarrativeWorkspace({
                       key={message.id}
                       className={`narrative-chat-message narrative-chat-message-${message.role}`.trim()}
                     >
-                      <div className="narrative-chat-message-header">
-                        <strong>{message.label}</strong>
-                        {message.tone ? <Badge tone={message.tone}>{message.role}</Badge> : null}
-                      </div>
+                      {message.role === "context" ? (
+                        <div className="narrative-chat-message-header">
+                          <strong>{message.label}</strong>
+                          {message.tone ? <Badge tone={message.tone}>{message.role}</Badge> : null}
+                        </div>
+                      ) : null}
                       <ChatMessageContent message={message} />
                       {message.meta?.length ? (
                         <div className="toolbar-summary">

@@ -1,16 +1,16 @@
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
-use bevy::ui::{FocusPolicy, RelativeCursorPosition};
+use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
 use game_core::SimulationSnapshot;
 
 use crate::console::ViewerConsoleState;
 use crate::state::{
-    viewer_ui_passthrough_bundle, FpsOverlayText, FreeObserveIndicatorRoot, InfoPanelFooterText,
-    InfoPanelTabBarRoot, InfoPanelTabButton, InfoPanelText, UiMouseBlocker, ViewerHudPage,
-    ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
-    ViewerState,
+    hovered_visible_ui_blocker_name, viewer_ui_passthrough_bundle, FpsOverlayText,
+    FreeObserveIndicatorRoot, InfoPanelFooterText, InfoPanelTabBarRoot, InfoPanelTabButton,
+    InfoPanelText, UiMouseBlocker, UiMouseBlockerName, ViewerHudPage, ViewerInfoPanelState,
+    ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
-use game_bevy::{UiMenuPanel, UiMenuState};
+use game_bevy::UiMenuState;
 
 mod actor;
 mod ai;
@@ -127,6 +127,7 @@ pub(crate) fn spawn_info_panel_ui(
         viewer_ui_passthrough_bundle(),
         FpsOverlayText,
         UiMouseBlocker,
+        UiMouseBlockerName("FPS 叠层".to_string()),
     ));
 
     commands
@@ -145,6 +146,7 @@ pub(crate) fn spawn_info_panel_ui(
             viewer_ui_passthrough_bundle(),
             FreeObserveIndicatorRoot,
             UiMouseBlocker,
+            UiMouseBlockerName("自由观察提示".to_string()),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -166,7 +168,7 @@ pub(crate) fn update_free_observe_indicator(
     *indicator_visibility = if scene_kind.is_gameplay()
         && !console_state.is_open
         && viewer_state.is_free_observe()
-        && menu_state.active_panel != Some(UiMenuPanel::Settings)
+        && !menu_state.is_settings_open()
     {
         Visibility::Visible
     } else {
@@ -175,8 +177,22 @@ pub(crate) fn update_free_observe_indicator(
 }
 
 pub(crate) fn update_info_panel(
-    panel: Single<(&mut Text, &mut Visibility, &mut Node), With<InfoPanelText>>,
+    mut panel_and_blockers: ParamSet<(
+        Single<(&mut Text, &mut Visibility, &mut Node), With<InfoPanelText>>,
+        Query<
+            (
+                &ComputedNode,
+                &UiGlobalTransform,
+                Option<&RelativeCursorPosition>,
+                Option<&Visibility>,
+                &InheritedVisibility,
+                Option<&UiMouseBlockerName>,
+            ),
+            With<UiMouseBlocker>,
+        >,
+    )>,
     mut footer: Single<&mut TextSpan, With<InfoPanelFooterText>>,
+    window: Single<&Window>,
     profiler: Res<crate::profiling::ViewerSystemProfilerState>,
     runtime_state: Res<ViewerRuntimeState>,
     render_config: Res<ViewerRenderConfig>,
@@ -185,10 +201,12 @@ pub(crate) fn update_info_panel(
     info_panel_state: Res<ViewerInfoPanelState>,
     menu_state: Res<UiMenuState>,
 ) {
-    let (mut panel_text, mut visibility, mut node) = panel.into_inner();
+    let blocking_ui_name =
+        hovered_visible_ui_blocker_name(window.cursor_position(), &panel_and_blockers.p1());
+    let (mut panel_text, mut visibility, mut node) = panel_and_blockers.p0().into_inner();
     let hidden = scene_kind.is_main_menu()
         || info_panel_state.is_empty()
-        || menu_state.active_panel == Some(UiMenuPanel::Settings);
+        || menu_state.is_settings_open();
     if hidden {
         *visibility = Visibility::Hidden;
         *panel_text = Text::new("");
@@ -214,7 +232,12 @@ pub(crate) fn update_info_panel(
     let page_body = match active_page {
         ViewerHudPage::Overview => format_overview_panel(&snapshot, &runtime_state, &viewer_state),
         ViewerHudPage::Selection => {
-            format_selection_panel(&snapshot, &runtime_state, &viewer_state)
+            format_selection_panel(
+                &snapshot,
+                &runtime_state,
+                &viewer_state,
+                blocking_ui_name.as_deref(),
+            )
         }
         ViewerHudPage::SelectedActor => {
             format_actor_panel(&snapshot, &runtime_state, &viewer_state)
@@ -254,7 +277,7 @@ pub(crate) fn update_info_panel_tab_bar(
     info_panel_state: Res<ViewerInfoPanelState>,
 ) {
     let show_tabs = !scene_kind.is_main_menu()
-        && menu_state.active_panel != Some(UiMenuPanel::Settings)
+        && !menu_state.is_settings_open()
         && info_panel_state.enabled_pages().len() > 1;
     let active_page = info_panel_state.active_page();
     let mut tab_bar_visibility = tab_bar_visibility.into_inner();
@@ -297,7 +320,7 @@ pub(crate) fn handle_info_panel_tab_buttons(
     scene_kind: Res<ViewerSceneKind>,
     menu_state: Res<UiMenuState>,
 ) {
-    if scene_kind.is_main_menu() || menu_state.active_panel == Some(UiMenuPanel::Settings) {
+    if scene_kind.is_main_menu() || menu_state.is_settings_open() {
         return;
     }
 

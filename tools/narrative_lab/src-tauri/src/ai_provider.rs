@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use reqwest::blocking::Client;
+use reqwest::Client;
 use tauri::AppHandle;
 
 use crate::ai_settings::{read_ai_settings, AiConnectionTestResult, AiSettings};
@@ -8,7 +8,7 @@ use crate::ai_settings::{read_ai_settings, AiConnectionTestResult, AiSettings};
 const MODELS_PATH: &str = "/models";
 
 #[tauri::command]
-pub fn test_ai_provider(
+pub async fn test_ai_provider(
     app: AppHandle,
     settings: Option<AiSettings>,
 ) -> Result<AiConnectionTestResult, String> {
@@ -34,7 +34,8 @@ pub fn test_ai_provider(
         .get(format!("{base_url}{MODELS_PATH}"))
         .bearer_auth(api_key)
         .header("Accept", "application/json")
-        .send();
+        .send()
+        .await;
 
     match response {
         Ok(response) if response.status().is_success() => Ok(AiConnectionTestResult {
@@ -43,7 +44,7 @@ pub fn test_ai_provider(
         }),
         Ok(response) => {
             let status = response.status().as_u16();
-            let body = response.text().unwrap_or_default();
+            let body = response.text().await.unwrap_or_default();
             Ok(AiConnectionTestResult {
                 ok: false,
                 error: map_http_error(status, &body),

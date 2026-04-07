@@ -53,6 +53,7 @@ pub(crate) fn reset_viewer_runtime_transients(viewer_state: &mut ViewerState) {
     viewer_state.hovered_grid = None;
     viewer_state.targeting_state = None;
     viewer_state.pending_open_trade_target = None;
+    viewer_state.pending_open_container_id = None;
     viewer_state.auto_end_turn_after_stop = false;
     viewer_state.end_turn_hold_sec = 0.0;
     viewer_state.end_turn_repeat_elapsed_sec = 0.0;

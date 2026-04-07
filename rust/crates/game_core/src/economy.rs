@@ -57,6 +57,17 @@ pub struct ShopRuntimeEntry {
     pub price: i32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ContainerRuntimeState {
+    pub id: String,
+    pub map_id: String,
+    pub object_id: String,
+    pub display_name: String,
+    pub inventory: BTreeMap<u32, i32>,
+    #[serde(default)]
+    pub inventory_order: Vec<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShopRuntimeState {
     pub id: String,
@@ -140,7 +151,7 @@ impl RecipeCraftCheck {
     }
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, PartialEq)]
 pub enum EconomyRuntimeError {
     #[error("unknown actor {actor_id:?}")]
     UnknownActor { actor_id: ActorId },
@@ -154,6 +165,8 @@ pub enum EconomyRuntimeError {
     UnknownRecipe { recipe_id: String },
     #[error("unknown shop {shop_id}")]
     UnknownShop { shop_id: String },
+    #[error("unknown container {container_id}")]
+    UnknownContainer { container_id: String },
     #[error("count must be positive, got {count}")]
     InvalidCount { count: i32 },
     #[error("not enough item {item_id}: required {required}, current {current}")]
@@ -178,6 +191,24 @@ pub enum EconomyRuntimeError {
         shop_id: String,
         required: i32,
         current: i32,
+    },
+    #[error(
+        "container {container_id} does not have enough item {item_id}: required {required}, current {current}"
+    )]
+    ContainerInventoryInsufficient {
+        container_id: String,
+        item_id: u32,
+        required: i32,
+        current: i32,
+    },
+    #[error(
+        "actor {actor_id:?} would exceed carry limit: current {current_weight:.1}, max {max_weight:.1}, added {added_weight:.1}"
+    )]
+    InventoryOverCapacity {
+        actor_id: ActorId,
+        current_weight: f32,
+        max_weight: f32,
+        added_weight: f32,
     },
     #[error("skill {skill_id} has missing prerequisite {prerequisite_id}")]
     SkillPrerequisiteMissing {
@@ -243,6 +274,7 @@ pub enum EconomyRuntimeError {
 pub struct HeadlessEconomyRuntime {
     actors: BTreeMap<ActorId, ActorEconomyState>,
     shops: BTreeMap<String, ShopRuntimeState>,
+    containers: BTreeMap<String, ContainerRuntimeState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -255,41 +287,88 @@ pub(crate) struct HeadlessEconomyActorSnapshot {
 pub(crate) struct HeadlessEconomyRuntimeSnapshot {
     pub actors: Vec<HeadlessEconomyActorSnapshot>,
     pub shops: Vec<ShopRuntimeState>,
+    #[serde(default)]
+    pub containers: Vec<ContainerRuntimeState>,
 }
 
 impl HeadlessEconomyRuntime {
-    fn normalize_actor_inventory_order(actor: &mut ActorEconomyState) {
-        let mut normalized = Vec::with_capacity(actor.inventory.len());
+    fn normalize_inventory_order(inventory: &BTreeMap<u32, i32>, order: &mut Vec<u32>) {
+        let mut normalized = Vec::with_capacity(inventory.len());
         let mut seen = BTreeSet::new();
 
-        for item_id in actor.inventory_order.iter().copied() {
-            if actor.inventory.get(&item_id).copied().unwrap_or(0) <= 0 || !seen.insert(item_id) {
+        for item_id in order.iter().copied() {
+            if inventory.get(&item_id).copied().unwrap_or(0) <= 0 || !seen.insert(item_id) {
                 continue;
             }
             normalized.push(item_id);
         }
 
-        for (&item_id, &count) in &actor.inventory {
+        for (&item_id, &count) in inventory {
             if count > 0 && seen.insert(item_id) {
                 normalized.push(item_id);
             }
         }
 
-        actor.inventory_order = normalized;
+        *order = normalized;
     }
 
-    fn append_inventory_order(actor: &mut ActorEconomyState, item_id: u32) {
-        if actor.inventory.get(&item_id).copied().unwrap_or(0) > 0
-            && !actor.inventory_order.contains(&item_id)
+    fn append_inventory_order(
+        inventory: &BTreeMap<u32, i32>,
+        order: &mut Vec<u32>,
+        item_id: u32,
+    ) {
+        if inventory.get(&item_id).copied().unwrap_or(0) > 0 && !order.contains(&item_id)
         {
-            actor.inventory_order.push(item_id);
+            order.push(item_id);
         }
     }
 
-    fn remove_inventory_order(actor: &mut ActorEconomyState, item_id: u32) {
-        actor
-            .inventory_order
-            .retain(|existing| *existing != item_id);
+    fn remove_inventory_order(order: &mut Vec<u32>, item_id: u32) {
+        order.retain(|existing| *existing != item_id);
+    }
+
+    fn normalize_actor_inventory_order(actor: &mut ActorEconomyState) {
+        Self::normalize_inventory_order(&actor.inventory, &mut actor.inventory_order);
+    }
+
+    fn move_inventory_order_before(
+        inventory: &BTreeMap<u32, i32>,
+        order: &mut Vec<u32>,
+        item_id: u32,
+        before_item_id: Option<u32>,
+        missing_error: impl Fn(u32, i32) -> EconomyRuntimeError,
+    ) -> Result<(), EconomyRuntimeError> {
+        Self::normalize_inventory_order(inventory, order);
+
+        if inventory.get(&item_id).copied().unwrap_or(0) <= 0 {
+            return Err(missing_error(item_id, 0));
+        }
+
+        if before_item_id == Some(item_id) {
+            return Ok(());
+        }
+
+        if let Some(before_item_id) = before_item_id {
+            let current = inventory.get(&before_item_id).copied().unwrap_or(0);
+            if current <= 0 {
+                return Err(missing_error(before_item_id, current));
+            }
+        }
+
+        order.retain(|existing| *existing != item_id);
+        match before_item_id {
+            Some(before_item_id) => {
+                if let Some(index) = order.iter().position(|existing| *existing == before_item_id)
+                {
+                    order.insert(index, item_id);
+                } else {
+                    order.push(item_id);
+                }
+            }
+            None => order.push(item_id),
+        }
+
+        Ok(())
     }
 
     pub fn from_shop_library(shops: &ShopLibrary) -> Self {
@@ -310,8 +389,50 @@ impl HeadlessEconomyRuntime {
 
     pub fn ensure_actor(&mut self, actor_id: ActorId) -> &mut ActorEconomyState {
         let actor = self.actors.entry(actor_id).or_default();
-        Self::normalize_actor_inventory_order(actor);
+        Self::normalize_inventory_order(&actor.inventory, &mut actor.inventory_order);
         actor
+    }
+
+    pub fn ensure_container(
+        &mut self,
+        container_id: impl Into<String>,
+        map_id: impl Into<String>,
+        object_id: impl Into<String>,
+        display_name: impl Into<String>,
+        initial_inventory: impl IntoIterator<Item = (u32, i32)>,
+    ) -> &mut ContainerRuntimeState {
+        let container_id = container_id.into();
+        let map_id = map_id.into();
+        let object_id = object_id.into();
+        let display_name = display_name.into();
+        let initial_inventory = initial_inventory.into_iter().collect::<Vec<_>>();
+        let container = self
+            .containers
+            .entry(container_id.clone())
+            .or_insert_with(|| ContainerRuntimeState {
+                id: container_id.clone(),
+                map_id: map_id.clone(),
+                object_id: object_id.clone(),
+                display_name: display_name.clone(),
+                inventory: BTreeMap::new(),
+                inventory_order: Vec::new(),
+            });
+
+        container.map_id = map_id;
+        container.object_id = object_id;
+        container.display_name = display_name;
+
+        if container.inventory.is_empty() {
+            for (item_id, count) in initial_inventory {
+                if count <= 0 {
+                    continue;
+                }
+                *container.inventory.entry(item_id).or_insert(0) += count;
+            }
+        }
+
+        Self::normalize_inventory_order(&container.inventory, &mut container.inventory_order);
+        container
     }
 
     pub fn actor(&self, actor_id: ActorId) -> Option<&ActorEconomyState> {
@@ -330,12 +451,20 @@ impl HeadlessEconomyRuntime {
         self.shops.get(shop_id)
     }
 
+    pub fn container(&self, container_id: &str) -> Option<&ContainerRuntimeState> {
+        self.containers.get(container_id)
+    }
+
     pub fn actor_count(&self) -> usize {
         self.actors.len()
     }
 
     pub fn shop_count(&self) -> usize {
         self.shops.len()
+    }
+
+    pub fn container_count(&self) -> usize {
+        self.containers.len()
     }
 
     pub(crate) fn save_snapshot(&self) -> HeadlessEconomyRuntimeSnapshot {
@@ -353,6 +482,18 @@ impl HeadlessEconomyRuntime {
                 })
                 .collect(),
             shops: self.shops.values().cloned().collect(),
+            containers: self
+                .containers
+                .values()
+                .cloned()
+                .map(|mut container| {
+                    Self::normalize_inventory_order(
+                        &container.inventory,
+                        &mut container.inventory_order,
+                    );
+                    container
+                })
+                .collect(),
         }
     }
 
@@ -370,6 +511,14 @@ impl HeadlessEconomyRuntime {
             .shops
             .into_iter()
             .map(|shop| (shop.id.clone(), shop))
+            .collect();
+        self.containers = snapshot
+            .containers
+            .into_iter()
+            .map(|mut container| {
+                Self::normalize_inventory_order(&container.inventory, &mut container.inventory_order);
+                (container.id.clone(), container)
+            })
             .collect();
     }
 
@@ -470,7 +619,19 @@ impl HeadlessEconomyRuntime {
     pub fn inventory_display_order(&self, actor_id: ActorId) -> Option<Vec<u32>> {
         let actor = self.actor(actor_id)?;
         let mut normalized = actor.clone();
-        Self::normalize_actor_inventory_order(&mut normalized);
+        Self::normalize_inventory_order(&normalized.inventory, &mut normalized.inventory_order);
+        Some(normalized.inventory_order)
+    }
+
+    pub fn container_inventory_count(&self, container_id: &str, item_id: u32) -> Option<i32> {
+        self.container(container_id)
+            .map(|container| container.inventory.get(&item_id).copied().unwrap_or(0))
+    }
+
+    pub fn container_inventory_display_order(&self, container_id: &str) -> Option<Vec<u32>> {
+        let container = self.container(container_id)?;
+        let mut normalized = container.clone();
+        Self::normalize_inventory_order(&normalized.inventory, &mut normalized.inventory_order);
         Some(normalized.inventory_order)
     }
 
@@ -531,7 +692,7 @@ impl HeadlessEconomyRuntime {
             *entry += count;
             *entry
         };
-        Self::append_inventory_order(actor, item_id);
+        Self::append_inventory_order(&actor.inventory, &mut actor.inventory_order, item_id);
         Ok(next)
     }
 
@@ -550,7 +711,7 @@ impl HeadlessEconomyRuntime {
             *entry += count;
             *entry
         };
-        Self::append_inventory_order(actor, item_id);
+        Self::append_inventory_order(&actor.inventory, &mut actor.inventory_order, item_id);
         Ok(next)
     }
 
@@ -579,7 +740,7 @@ impl HeadlessEconomyRuntime {
         let next = current - count;
         if next == 0 {
             actor.inventory.remove(&item_id);
-            Self::remove_inventory_order(actor, item_id);
+            Self::remove_inventory_order(&mut actor.inventory_order, item_id);
         } else {
             actor.inventory.insert(item_id, next);
         }
@@ -668,7 +829,11 @@ impl HeadlessEconomyRuntime {
             }
         })?;
         *actor.inventory.entry(equipped.item_id).or_insert(0) += 1;
-        Self::append_inventory_order(actor, equipped.item_id);
+        Self::append_inventory_order(
+            &actor.inventory,
+            &mut actor.inventory_order,
+            equipped.item_id,
+        );
         Ok(equipped.item_id)
     }
 
@@ -757,50 +922,17 @@ impl HeadlessEconomyRuntime {
             .actors
             .get_mut(&actor_id)
             .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
-        Self::normalize_actor_inventory_order(actor);
-
-        if actor.inventory.get(&item_id).copied().unwrap_or(0) <= 0 {
-            return Err(EconomyRuntimeError::NotEnoughItems {
-                item_id,
+        Self::move_inventory_order_before(
+            &actor.inventory,
+            &mut actor.inventory_order,
+            item_id,
+            before_item_id,
+            |missing_item_id, current| EconomyRuntimeError::NotEnoughItems {
+                item_id: missing_item_id,
                 required: 1,
-                current: 0,
-            });
-        }
-
-        if before_item_id == Some(item_id) {
-            return Ok(());
-        }
-
-        if let Some(before_item_id) = before_item_id {
-            let current = actor.inventory.get(&before_item_id).copied().unwrap_or(0);
-            if current <= 0 {
-                return Err(EconomyRuntimeError::NotEnoughItems {
-                    item_id: before_item_id,
-                    required: 1,
-                    current,
-                });
-            }
-        }
-
-        actor
-            .inventory_order
-            .retain(|existing| *existing != item_id);
-        match before_item_id {
-            Some(before_item_id) => {
-                if let Some(index) = actor
-                    .inventory_order
-                    .iter()
-                    .position(|existing| *existing == before_item_id)
-                {
-                    actor.inventory_order.insert(index, item_id);
-                } else {
-                    actor.inventory_order.push(item_id);
-                }
-            }
-            None => actor.inventory_order.push(item_id),
-        }
-
-        Ok(())
+                current,
+            },
+        )
     }
 
     pub fn clear_actor_loadout(&mut self, actor_id: ActorId) -> Result<(), EconomyRuntimeError> {
@@ -812,6 +944,137 @@ impl HeadlessEconomyRuntime {
         actor.inventory_order.clear();
         actor.equipped_slots.clear();
         actor.ammo_reserves.clear();
+        Ok(())
+    }
+
+    pub fn transfer_actor_item_to_container(
+        &mut self,
+        actor_id: ActorId,
+        container_id: &str,
+        item_id: u32,
+        count: i32,
+        before_item_id: Option<u32>,
+        items: &ItemLibrary,
+    ) -> Result<(), EconomyRuntimeError> {
+        if count <= 0 {
+            return Err(EconomyRuntimeError::InvalidCount { count });
+        }
+        ensure_item_exists(items, item_id)?;
+        let current = self
+            .inventory_count(actor_id, item_id)
+            .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
+        if current < count {
+            return Err(EconomyRuntimeError::NotEnoughItems {
+                item_id,
+                required: count,
+                current,
+            });
+        }
+        let _ = self
+            .container(container_id)
+            .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
+                container_id: container_id.to_string(),
+            })?;
+
+        self.remove_item(actor_id, item_id, count)?;
+        let container = self
+            .containers
+            .get_mut(container_id)
+            .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
+                container_id: container_id.to_string(),
+            })?;
+        *container.inventory.entry(item_id).or_insert(0) += count;
+        Self::append_inventory_order(&container.inventory, &mut container.inventory_order, item_id);
+        Self::move_inventory_order_before(
+            &container.inventory,
+            &mut container.inventory_order,
+            item_id,
+            before_item_id,
+            |missing_item_id, current| EconomyRuntimeError::ContainerInventoryInsufficient {
+                container_id: container_id.to_string(),
+                item_id: missing_item_id,
+                required: 1,
+                current,
+            },
+        )?;
+        Ok(())
+    }
+
+    pub fn transfer_container_item_to_actor(
+        &mut self,
+        container_id: &str,
+        actor_id: ActorId,
+        item_id: u32,
+        count: i32,
+        before_item_id: Option<u32>,
+        items: &ItemLibrary,
+    ) -> Result<(), EconomyRuntimeError> {
+        if count <= 0 {
+            return Err(EconomyRuntimeError::InvalidCount { count });
+        }
+        let definition = ensure_item_exists(items, item_id)?;
+        let current = self
+            .container_inventory_count(container_id, item_id)
+            .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
+                container_id: container_id.to_string(),
+            })?;
+        if current < count {
+            return Err(EconomyRuntimeError::ContainerInventoryInsufficient {
+                container_id: container_id.to_string(),
+                item_id,
+                required: count,
+                current,
+            });
+        }
+        let current_weight = self.inventory_weight(actor_id, items)?;
+        let max_weight = 50.0 + self.equipment_carry_bonus(actor_id, items)?;
+        let added_weight = definition.weight * (count as f32);
+        if current_weight + added_weight > max_weight {
+            return Err(EconomyRuntimeError::InventoryOverCapacity {
+                actor_id,
+                current_weight,
+                max_weight,
+                added_weight,
+            });
+        }
+
+        let container = self
+            .containers
+            .get_mut(container_id)
+            .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
+                container_id: container_id.to_string(),
+            })?;
+        let container_current = container.inventory.get(&item_id).copied().unwrap_or(0);
+        if container_current < count {
+            return Err(EconomyRuntimeError::ContainerInventoryInsufficient {
+                container_id: container_id.to_string(),
+                item_id,
+                required: count,
+                current: container_current,
+            });
+        }
+        let next = container_current - count;
+        if next == 0 {
+            container.inventory.remove(&item_id);
+            Self::remove_inventory_order(&mut container.inventory_order, item_id);
+        } else {
+            container.inventory.insert(item_id, next);
+        }
+
+        let actor = self.ensure_actor(actor_id);
+        *actor.inventory.entry(item_id).or_insert(0) += count;
+        Self::append_inventory_order(&actor.inventory, &mut actor.inventory_order, item_id);
+        Self::move_inventory_order_before(
+            &actor.inventory,
+            &mut actor.inventory_order,
+            item_id,
+            before_item_id,
+            |missing_item_id, current| EconomyRuntimeError::NotEnoughItems {
+                item_id: missing_item_id,
+                required: 1,
+                current,
+            },
+        )?;
         Ok(())
     }
 
@@ -1071,7 +1334,11 @@ impl HeadlessEconomyRuntime {
         if broken {
             actor.equipped_slots.remove(&slot_name);
             *actor.inventory.entry(broken_item_id).or_insert(0) += 1;
-            Self::append_inventory_order(actor, broken_item_id);
+            Self::append_inventory_order(
+                &actor.inventory,
+                &mut actor.inventory_order,
+                broken_item_id,
+            );
         }
         Ok(broken)
     }
@@ -1757,6 +2024,110 @@ mod tests {
                 .map(|entry| entry.count),
             Some(2)
         );
+    }
+
+    #[test]
+    fn container_transfers_preserve_counts_and_insert_order() {
+        let items = sample_item_library();
+        let mut runtime = HeadlessEconomyRuntime::default();
+        let actor_id = ActorId(15);
+        runtime
+            .add_item(actor_id, 1002, 1, &items)
+            .expect("knife should be added");
+        runtime
+            .add_item(actor_id, 1003, 1, &items)
+            .expect("bandage should be added");
+        runtime.ensure_container(
+            "test_map::crate_a",
+            "test_map",
+            "crate_a",
+            "Storage Crate",
+            [(1001, 1)],
+        );
+
+        runtime
+            .transfer_actor_item_to_container(
+                actor_id,
+                "test_map::crate_a",
+                1002,
+                1,
+                Some(1001),
+                &items,
+            )
+            .expect("storing knife should succeed");
+        assert_eq!(runtime.inventory_count(actor_id, 1002), Some(0));
+        assert_eq!(
+            runtime.container_inventory_display_order("test_map::crate_a"),
+            Some(vec![1002, 1001])
+        );
+
+        runtime
+            .transfer_container_item_to_actor(
+                "test_map::crate_a",
+                actor_id,
+                1001,
+                1,
+                Some(1003),
+                &items,
+            )
+            .expect("taking cloth should succeed");
+        assert_eq!(runtime.container_inventory_count("test_map::crate_a", 1001), Some(0));
+        assert_eq!(runtime.inventory_display_order(actor_id), Some(vec![1001, 1003]));
+    }
+
+    #[test]
+    fn taking_container_item_respects_carry_limit() {
+        let items = sample_item_library();
+        let mut runtime = HeadlessEconomyRuntime::default();
+        let actor_id = ActorId(16);
+        runtime
+            .add_item(actor_id, 1004, 41, &items)
+            .expect("pistols should be added");
+        runtime.ensure_container(
+            "test_map::locker_a",
+            "test_map",
+            "locker_a",
+            "Heavy Locker",
+            [(1004, 1)],
+        );
+
+        let error = runtime
+            .transfer_container_item_to_actor("test_map::locker_a", actor_id, 1004, 1, None, &items)
+            .expect_err("transfer should fail when overweight");
+
+        assert!(matches!(
+            error,
+            EconomyRuntimeError::InventoryOverCapacity { .. }
+        ));
+        assert_eq!(runtime.container_inventory_count("test_map::locker_a", 1004), Some(1));
+    }
+
+    #[test]
+    fn container_snapshots_round_trip() {
+        let items = sample_item_library();
+        let mut runtime = HeadlessEconomyRuntime::default();
+        let actor_id = ActorId(17);
+        runtime
+            .add_item(actor_id, 1003, 2, &items)
+            .expect("bandages should be added");
+        runtime.ensure_container(
+            "test_map::cache_a",
+            "test_map",
+            "cache_a",
+            "Wall Cache",
+            [(1001, 2)],
+        );
+        runtime
+            .transfer_actor_item_to_container(actor_id, "test_map::cache_a", 1003, 1, None, &items)
+            .expect("storing bandage should succeed");
+
+        let snapshot = runtime.save_snapshot();
+        let mut restored = HeadlessEconomyRuntime::default();
+        restored.load_snapshot(snapshot);
+
+        assert_eq!(restored.container_count(), 1);
+        assert_eq!(restored.container_inventory_count("test_map::cache_a", 1001), Some(2));
+        assert_eq!(restored.container_inventory_count("test_map::cache_a", 1003), Some(1));
     }
 
     #[test]

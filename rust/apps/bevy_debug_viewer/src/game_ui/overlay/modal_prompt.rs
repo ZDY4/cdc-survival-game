@@ -35,6 +35,20 @@ pub(super) fn render_item_quantity_modal(
             "确认卖出",
             Some(format!("当前最多可卖 x{}", modal.available_count)),
         ),
+        game_bevy::UiItemQuantityIntent::ContainerStore { .. } => (
+            "存入容器",
+            format!("当前持有 x{}", modal.source_count),
+            format!("待存入 x{}", modal.selected_count),
+            "确认存入",
+            Some(format!("当前最多可存 x{}", modal.available_count)),
+        ),
+        game_bevy::UiItemQuantityIntent::ContainerTake { .. } => (
+            "取出物品",
+            format!("容器库存 x{}", modal.source_count),
+            format!("待取出 x{}", modal.selected_count),
+            "确认取出",
+            Some(format!("当前最多可取 x{}", modal.available_count)),
+        ),
     };
     parent
         .spawn((
@@ -51,6 +65,7 @@ pub(super) fn render_item_quantity_modal(
             BackgroundColor(Color::srgba(0.01, 0.01, 0.01, 0.66)),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName("数量选择弹窗".to_string()),
         ))
         .with_children(|overlay| {
             overlay
@@ -67,6 +82,7 @@ pub(super) fn render_item_quantity_modal(
                     BorderColor::all(ui_border_strong_color()),
                     viewer_ui_passthrough_bundle(),
                     UiMouseBlocker,
+                    UiMouseBlockerName("数量选择弹窗".to_string()),
                 ))
                 .with_children(|panel| {
                     panel.spawn(text_bundle(font, title, 15.0, Color::WHITE));
@@ -164,6 +180,7 @@ pub(super) fn render_overworld_location_prompt(
             BorderColor::all(Color::srgba(0.34, 0.42, 0.54, 1.0)),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName("地点进入提示".to_string()),
         ))
         .with_children(|bubble| {
             bubble.spawn(text_bundle(font, &prompt.location_name, 13.0, Color::WHITE));

@@ -13,9 +13,14 @@ pub(crate) fn format_selection_panel(
     snapshot: &SimulationSnapshot,
     runtime_state: &ViewerRuntimeState,
     viewer_state: &ViewerState,
+    blocking_ui_name: Option<&str>,
 ) -> String {
     let Some(grid) = viewer_state.hovered_grid else {
-        return section("Selection", vec!["none".to_string()]);
+        let mut lines = vec!["none".to_string()];
+        if let Some(blocking_ui_name) = blocking_ui_name {
+            lines.push(kv("Mouse Blocked By UI", blocking_ui_name));
+        }
+        return section("Selection", lines);
     };
 
     let actor_names = snapshot
@@ -199,7 +204,7 @@ mod tests {
             ..ViewerState::default()
         };
 
-        let panel = format_selection_panel(&snapshot, &runtime_state, &viewer_state);
+        let panel = format_selection_panel(&snapshot, &runtime_state, &viewer_state, None);
 
         assert!(panel.contains("Terrain:"));
         assert!(panel.contains("Walkable: yes"));
@@ -222,11 +227,32 @@ mod tests {
             ..ViewerState::default()
         };
 
-        let panel = format_selection_panel(&snapshot, &runtime_state, &viewer_state);
+        let panel = format_selection_panel(&snapshot, &runtime_state, &viewer_state, None);
 
         assert!(panel.contains("Terrain:"));
         assert!(panel.contains("Walkable: no"));
         assert!(panel.contains("Walkability Detail:"));
         assert!(!panel.contains("Walkability Detail: clear"));
+    }
+
+    #[test]
+    fn selection_panel_reports_blocking_ui_name_when_no_hovered_grid() {
+        let (runtime, _handles) = create_demo_runtime();
+        let snapshot = runtime.snapshot();
+        let runtime_state = ViewerRuntimeState {
+            runtime,
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let viewer_state = ViewerState::default();
+
+        let panel = format_selection_panel(
+            &snapshot,
+            &runtime_state,
+            &viewer_state,
+            Some("背包面板"),
+        );
+
+        assert!(panel.contains("Mouse Blocked By UI: 背包面板"));
     }
 }

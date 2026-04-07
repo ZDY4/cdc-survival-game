@@ -4,7 +4,7 @@ use super::*;
 
 pub(in crate::game_ui) fn panel_title(panel: UiMenuPanel) -> &'static str {
     match panel {
-        UiMenuPanel::Inventory => "行囊",
+        UiMenuPanel::Inventory => "背包",
         UiMenuPanel::Character => "角色",
         UiMenuPanel::Map => "地图",
         UiMenuPanel::Journal => "任务",
@@ -28,6 +28,7 @@ pub(in crate::game_ui) fn panel_tab_label(panel: UiMenuPanel) -> &'static str {
 
 pub(in crate::game_ui) fn panel_width(panel: UiMenuPanel) -> f32 {
     match panel {
+        UiMenuPanel::Inventory => INVENTORY_PANEL_WIDTH,
         UiMenuPanel::Skills => SKILLS_PANEL_WIDTH,
         _ => UI_PANEL_WIDTH,
     }

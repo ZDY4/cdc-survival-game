@@ -22,7 +22,7 @@ pub(crate) fn handle_mouse_wheel_zoom(
     }
 
     if scene_kind.is_main_menu()
-        || menu_state.active_panel.is_some()
+        || menu_state.any_panel_open()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {
@@ -58,6 +58,8 @@ pub(crate) fn handle_camera_pan(
             &UiGlobalTransform,
             Option<&RelativeCursorPosition>,
             Option<&Visibility>,
+            &InheritedVisibility,
+            Option<&UiMouseBlockerName>,
         ),
         With<UiMouseBlocker>,
     >,
@@ -83,7 +85,7 @@ pub(crate) fn handle_camera_pan(
     }
 
     if scene_kind.is_main_menu()
-        || menu_state.active_panel.is_some()
+        || menu_state.any_panel_open()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {
@@ -103,7 +105,7 @@ pub(crate) fn handle_camera_pan(
         viewer_state.camera_drag_anchor_world = None;
         return;
     };
-    if cursor_over_blocking_ui(cursor_position, &ui_blockers)
+    if cursor_over_visible_ui_blocker(Some(cursor_position), &ui_blockers)
         || cursor_over_hotbar_dock(&window, cursor_position)
     {
         viewer_state.camera_drag_cursor = None;

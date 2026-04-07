@@ -199,20 +199,24 @@ pub(crate) fn should_show_actor_label(
     } else {
         viewer_state.controlled_player_actor
     };
+    let is_hovered = Some(actor.actor_id) == hovered_actor_id;
+    let is_focused = Some(actor.actor_id) == focused_actor_id;
+    if actor.side == ActorSide::Player && render_config.overlay_mode != ViewerOverlayMode::AiDebug {
+        return is_hovered || interaction_locked;
+    }
     match render_config.overlay_mode {
         ViewerOverlayMode::Minimal => {
-            Some(actor.actor_id) == focused_actor_id
-                || Some(actor.actor_id) == hovered_actor_id
-                || interaction_locked
+            is_focused || is_hovered || interaction_locked
         }
         ViewerOverlayMode::Gameplay => {
-            Some(actor.actor_id) == focused_actor_id
-                || Some(actor.actor_id) == hovered_actor_id
-                || actor.side == ActorSide::Player
-                || interaction_locked
+            is_focused || is_hovered || interaction_locked
         }
         ViewerOverlayMode::AiDebug => true,
     }
+}
+
+pub(crate) fn should_draw_actor_selection_ring(actor: &game_core::ActorDebugState) -> bool {
+    actor.side != ActorSide::Player
 }
 
 pub(crate) fn actor_color(side: ActorSide, palette: &ViewerPalette) -> Color {

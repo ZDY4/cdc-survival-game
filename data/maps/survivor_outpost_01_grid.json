@@ -349,6 +349,126 @@
         "interactive": null,
         "ai_spawn": null
       }
+    },
+    {
+      "object_id": "survivor_outpost_01_clinic_supply_cabinet",
+      "kind": "interactive",
+      "anchor": { "x": 32, "y": 0, "z": 10 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "container": {
+          "display_name": "诊所补给柜",
+          "initial_inventory": [
+            { "item_id": "1005", "count": 2 },
+            { "item_id": "1006", "count": 4 },
+            { "item_id": "1031", "count": 1 }
+          ]
+        },
+        "interactive": {
+          "display_name": "诊所补给柜",
+          "interaction_distance": 1.4,
+          "interaction_kind": "",
+          "target_id": null,
+          "options": []
+        },
+        "trigger": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_canteen_food_crate",
+      "kind": "interactive",
+      "anchor": { "x": 14, "y": 0, "z": 23 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "container": {
+          "display_name": "食堂食品箱",
+          "initial_inventory": [
+            { "item_id": "1007", "count": 5 },
+            { "item_id": "1008", "count": 2 },
+            { "item_id": "1006", "count": 2 }
+          ]
+        },
+        "interactive": {
+          "display_name": "食堂食品箱",
+          "interaction_distance": 1.4,
+          "interaction_kind": "",
+          "target_id": null,
+          "options": []
+        },
+        "trigger": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_storage_lockbox",
+      "kind": "interactive",
+      "anchor": { "x": 36, "y": 0, "z": 20 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "container": {
+          "display_name": "仓库锁箱",
+          "initial_inventory": [
+            { "item_id": "1010", "count": 8 },
+            { "item_id": "1002", "count": 1 },
+            { "item_id": "1031", "count": 2 }
+          ]
+        },
+        "interactive": {
+          "display_name": "仓库锁箱",
+          "interaction_distance": 1.4,
+          "interaction_kind": "",
+          "target_id": null,
+          "options": []
+        },
+        "trigger": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_workshop_tool_locker",
+      "kind": "interactive",
+      "anchor": { "x": 34, "y": 0, "z": 31 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "container": {
+          "display_name": "工坊工具柜",
+          "initial_inventory": [
+            { "item_id": "1010", "count": 4 },
+            { "item_id": "1002", "count": 1 },
+            { "item_id": "1006", "count": 3 }
+          ]
+        },
+        "interactive": {
+          "display_name": "工坊工具柜",
+          "interaction_distance": 1.4,
+          "interaction_kind": "",
+          "target_id": null,
+          "options": []
+        },
+        "trigger": null,
+        "ai_spawn": null
+      }
     }
   ]
 }

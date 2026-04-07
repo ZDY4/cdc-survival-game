@@ -9,9 +9,9 @@ use bevy::prelude::*;
 use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
 use bevy::window::{PresentMode, VideoModeSelection, WindowMode};
 use game_bevy::{
-    apply_gameplay_libraries, character_snapshot, interaction_prompt_text, inventory_snapshot,
-    journal_snapshot, overworld_location_prompt_snapshot, player_actor_id, skills_snapshot,
-    trade_snapshot, world_status_snapshot, EffectDefinitions, ItemDefinitions,
+    apply_gameplay_libraries, character_snapshot, container_snapshot, interaction_prompt_text,
+    inventory_snapshot, journal_snapshot, overworld_location_prompt_snapshot, player_actor_id,
+    skills_snapshot, trade_snapshot, world_status_snapshot, EffectDefinitions, ItemDefinitions,
     OverworldDefinitions, QuestDefinitions, RecipeDefinitions, ShopDefinitions, SkillDefinitions,
     SkillTreeDefinitions, UiHotbarState, UiInputBlockState, UiInventoryFilter,
     UiInventoryFilterState, UiMenuPanel, UiMenuState, UiModalState, UiStatusBannerState,
@@ -24,27 +24,32 @@ use crate::console::ViewerConsoleState;
 use crate::controls::{cancel_targeting, enter_attack_targeting};
 use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
 use crate::state::{
-    viewer_ui_passthrough_bundle, ActivePanelRoot, DiscardModalRoot, DragPreviewRoot,
-    EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, GameUiScaffold, HotbarRoot,
-    InventoryContextMenuLayerRoot, InventoryItemClickTarget, InventoryItemHoverTarget,
-    InventoryListDropZone, InventoryPanelBounds, MainMenuRoot, OverworldPromptRoot,
-    SkillHoverTarget, TooltipRoot, TopBadgeRoot, TradeInventoryItemClickTarget,
-    TradeInventoryListDropZone, TradeInventoryPanelBounds, TradeRoot, TradeSellZone,
-    UiContextMenuRoot, UiContextMenuState, UiContextMenuTarget, UiHoverTooltipContent,
-    UiHoverTooltipState, UiInventoryDragHoverTarget, UiInventoryDragSource, UiInventoryDragState,
-    UiMouseBlocker, ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings,
-    ViewerUiSettingsPath,
+    viewer_ui_passthrough_bundle, ActivePanelRoot, ContainerInventoryItemClickTarget,
+    ContainerInventoryListDropZone, ContainerInventoryPanelBounds, ContainerRoot,
+    DiscardModalRoot, DragPreviewRoot, EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot,
+    GameUiScaffold, HotbarRoot, InventoryEntryScrollArea, InventoryEntryScrollbarThumb,
+    InventoryEntryScrollbarTrack, InventoryContextMenuLayerRoot, InventoryItemClickTarget,
+    InventoryItemHoverTarget, InventoryListDropZone, InventoryPanelBounds, MainMenuRoot,
+    OverworldPromptRoot, SkillHoverTarget, TooltipRoot, TopBadgeRoot,
+    TradeInventoryItemClickTarget, TradeInventoryListDropZone, TradeInventoryPanelBounds,
+    TradeRoot, TradeSellZone, UiContextMenuRoot, UiContextMenuState, UiContextMenuTarget,
+    UiHoverTooltipContent, UiHoverTooltipState, UiInventoryDragHoverTarget,
+    UiInventoryDragSource, UiInventoryDragState, UiInventoryScrollbarDragState, UiMouseBlocker,
+    UiMouseBlockerName, ViewerCamera, ViewerPalette, ViewerRenderConfig,
+    ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont,
+    ViewerUiSettings, ViewerUiSettingsPath,
 };
 use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
 
 const UI_PANEL_WIDTH: f32 = 448.0;
+const INVENTORY_PANEL_WIDTH: f32 = 392.0;
 const SKILLS_PANEL_WIDTH: f32 = 940.0;
 const SCREEN_EDGE_PADDING: f32 = 18.0;
+const LEFT_STAGE_PANEL_X: f32 = SCREEN_EDGE_PADDING;
 const TOP_BADGE_WIDTH: f32 = 348.0;
 const RIGHT_PANEL_TOP: f32 = 74.0;
 const RIGHT_PANEL_BOTTOM: f32 = 174.0;
-const RIGHT_PANEL_HEADER_HEIGHT: f32 = 58.0;
+const RIGHT_PANEL_HEADER_HEIGHT: f32 = 44.0;
 pub(crate) const HOTBAR_DOCK_WIDTH: f32 = 1088.0;
 pub(crate) const HOTBAR_DOCK_HEIGHT: f32 = 76.0;
 const HOTBAR_SLOT_SIZE: f32 = 45.0;
@@ -108,6 +113,7 @@ pub(crate) struct GameContentRefs<'w, 's> {
     marker: PhantomData<&'s ()>,
 }
 
+mod container_ui;
 mod hotbar;
 mod input;
 mod overlay;
@@ -119,6 +125,7 @@ mod tests;
 mod trade_ui;
 mod widgets;
 
+use container_ui::*;
 pub(super) use hotbar::*;
 pub(super) use input::*;
 pub(crate) use overlay::GameUiRetainedCache;

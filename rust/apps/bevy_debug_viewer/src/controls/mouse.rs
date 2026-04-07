@@ -13,6 +13,8 @@ pub(crate) fn handle_mouse_input(
             &UiGlobalTransform,
             Option<&RelativeCursorPosition>,
             Option<&Visibility>,
+            &InheritedVisibility,
+            Option<&UiMouseBlockerName>,
         ),
         With<UiMouseBlocker>,
     >,
@@ -37,7 +39,7 @@ pub(crate) fn handle_mouse_input(
     };
     if scene_kind.is_main_menu()
         || modal_state.item_quantity.is_some()
-        || cursor_over_blocking_ui(cursor_position, &ui_blockers)
+        || cursor_over_visible_ui_blocker(Some(cursor_position), &ui_blockers)
         || cursor_over_hotbar_dock(&window, cursor_position)
     {
         clear_world_hover_state(&runtime_state, &mut viewer_state);
@@ -104,7 +106,7 @@ pub(crate) fn handle_mouse_input(
     }
 
     if scene_kind.is_main_menu()
-        || menu_state.active_panel.is_some()
+        || menu_state.any_panel_open()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {

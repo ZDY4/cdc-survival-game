@@ -142,7 +142,7 @@ pub(super) fn render_hotbar(
                             tabs.spawn(dock_tab_button(
                                 font,
                                 panel_tab_label(panel),
-                                menu_state.active_panel == Some(panel),
+                                menu_state.is_panel_open(panel),
                                 GameUiButtonAction::TogglePanel(panel),
                             ));
                         }
@@ -186,16 +186,10 @@ pub(super) fn render_hotbar(
                     tabs.spawn(dock_tab_button(
                         font,
                         panel_tab_label(panel),
-                        menu_state.active_panel == Some(panel),
+                        menu_state.is_panel_open(panel),
                         GameUiButtonAction::TogglePanel(panel),
                     ));
                 }
-                tabs.spawn(dock_tab_button(
-                    font,
-                    "关闭",
-                    menu_state.active_panel.is_none(),
-                    GameUiButtonAction::ClosePanels,
-                ));
             });
         });
 }

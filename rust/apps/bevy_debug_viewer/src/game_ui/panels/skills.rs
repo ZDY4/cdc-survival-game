@@ -12,7 +12,8 @@ pub(super) fn render_skills_panel(
     parent.commands().entity(body).insert(Node {
         position_type: PositionType::Absolute,
         top: px(RIGHT_PANEL_TOP + RIGHT_PANEL_HEADER_HEIGHT - 1.0),
-        right: px(SCREEN_EDGE_PADDING),
+        left: px(LEFT_STAGE_PANEL_X),
+        right: Val::Auto,
         width: px(SKILLS_PANEL_WIDTH),
         bottom: px(RIGHT_PANEL_BOTTOM),
         padding: UiRect::all(px(14)),

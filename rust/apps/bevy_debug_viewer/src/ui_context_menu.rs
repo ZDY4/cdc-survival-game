@@ -2,7 +2,9 @@ use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, TextLayout};
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
-use crate::state::{viewer_ui_passthrough_bundle, UiMouseBlocker, ViewerUiFont};
+use crate::state::{
+    viewer_ui_passthrough_bundle, UiMouseBlocker, UiMouseBlockerName, ViewerUiFont,
+};
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) struct ContextMenuItemDisabled;
@@ -185,6 +187,7 @@ pub(crate) fn spawn_context_menu_shell(
     parent: &mut ChildSpawnerCommands,
     style: ContextMenuStyle,
     position: Vec2,
+    blocker_name: &str,
     root_marker: impl Bundle,
     content: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
@@ -197,6 +200,7 @@ pub(crate) fn spawn_context_menu_shell(
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName(blocker_name.to_string()),
             root_marker,
         ))
         .with_children(content);

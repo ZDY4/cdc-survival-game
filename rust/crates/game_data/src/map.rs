@@ -10,7 +10,7 @@ use thiserror::Error;
 use crate::interaction::{
     default_display_name_for_kind, default_option_id_for_kind, default_priority_for_kind,
     interaction_kind_spec, is_scene_transition_kind, parse_legacy_interaction_kind,
-    InteractionOptionDefinition, InteractionOptionId,
+    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind,
 };
 use crate::GridCoord;
 
@@ -274,6 +274,24 @@ pub struct MapPickupProps {
     pub extra: BTreeMap<String, Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct MapContainerItemEntry {
+    #[serde(default)]
+    pub item_id: String,
+    #[serde(default = "default_pickup_count")]
+    pub count: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapContainerProps {
+    #[serde(default)]
+    pub display_name: String,
+    #[serde(default)]
+    pub initial_inventory: Vec<MapContainerItemEntry>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MapInteractiveProps {
     #[serde(default)]
@@ -368,6 +386,8 @@ pub struct MapObjectProps {
     pub building: Option<MapBuildingProps>,
     #[serde(default)]
     pub pickup: Option<MapPickupProps>,
+    #[serde(default)]
+    pub container: Option<MapContainerProps>,
     #[serde(default)]
     pub interactive: Option<MapInteractiveProps>,
     #[serde(default)]
@@ -595,6 +615,16 @@ pub enum MapDefinitionValidationError {
     },
     #[error("interactive object {object_id} must define props.interactive.interaction_kind")]
     MissingInteractiveKind { object_id: String },
+    #[error("container object {object_id} item_id must not be empty")]
+    MissingContainerItemId { object_id: String },
+    #[error("container object {object_id} item_id {item_id} was not found in the item catalog")]
+    UnknownContainerItemId { object_id: String, item_id: String },
+    #[error("container object {object_id} item {item_id} has invalid count {count}")]
+    InvalidContainerItemCount {
+        object_id: String,
+        item_id: String,
+        count: i32,
+    },
     #[error("trigger object {object_id} must define props.trigger.interaction_kind")]
     MissingTriggerKind { object_id: String },
     #[error(
@@ -1122,7 +1152,8 @@ fn validate_object_payload(
                     object_id: object.object_id.clone(),
                 });
             };
-            let options = interactive.resolved_options();
+            validate_container_payload(object, catalog)?;
+            let options = resolve_interactive_object_options(object, interactive);
             if options.is_empty() {
                 return Err(MapDefinitionValidationError::MissingInteractiveKind {
                     object_id: object.object_id.clone(),
@@ -1222,6 +1253,46 @@ fn default_interaction_distance() -> f32 {
     1.4
 }
 
+fn resolve_interactive_object_display_name(
+    object: &MapObjectDefinition,
+    interactive: &MapInteractiveProps,
+) -> String {
+    if !interactive.display_name.trim().is_empty() {
+        return interactive.display_name.clone();
+    }
+    if let Some(container) = object.props.container.as_ref() {
+        if !container.display_name.trim().is_empty() {
+            return container.display_name.clone();
+        }
+    }
+    object.object_id.clone()
+}
+
+fn resolve_interactive_object_options(
+    object: &MapObjectDefinition,
+    interactive: &MapInteractiveProps,
+) -> Vec<InteractionOptionDefinition> {
+    let options = interactive.resolved_options();
+    if !options.is_empty() {
+        return options;
+    }
+    let Some(_container) = object.props.container.as_ref() else {
+        return Vec::new();
+    };
+
+    let mut option = InteractionOptionDefinition {
+        kind: InteractionOptionKind::OpenContainer,
+        display_name: resolve_interactive_object_display_name(object, interactive),
+        interaction_distance: interactive
+            .interaction_distance
+            .max(default_interaction_distance()),
+        priority: default_priority_for_kind(InteractionOptionKind::OpenContainer),
+        ..InteractionOptionDefinition::default()
+    };
+    option.ensure_defaults();
+    vec![option]
+}
+
 fn resolve_map_object_options(
     display_name: &str,
     interaction_distance: f32,
@@ -1307,14 +1378,49 @@ fn validate_interaction_option(
     Ok(())
 }
 
+fn validate_container_payload(
+    object: &MapObjectDefinition,
+    catalog: Option<&MapValidationCatalog>,
+) -> Result<(), MapDefinitionValidationError> {
+    let Some(container) = object.props.container.as_ref() else {
+        return Ok(());
+    };
+
+    for entry in &container.initial_inventory {
+        if entry.item_id.trim().is_empty() {
+            return Err(MapDefinitionValidationError::MissingContainerItemId {
+                object_id: object.object_id.clone(),
+            });
+        }
+        if entry.count < 1 {
+            return Err(MapDefinitionValidationError::InvalidContainerItemCount {
+                object_id: object.object_id.clone(),
+                item_id: entry.item_id.clone(),
+                count: entry.count,
+            });
+        }
+        if let Some(catalog) = catalog {
+            if !catalog.item_ids.contains(entry.item_id.trim()) {
+                return Err(MapDefinitionValidationError::UnknownContainerItemId {
+                    object_id: object.object_id.clone(),
+                    item_id: entry.item_id.clone(),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         expand_object_footprint, load_map_library, validate_map_definition, BuildingGeneratorKind,
         MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingFootprintPolygonSpec,
         MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec, MapBuildingVisualOutline,
-        MapCellDefinition, MapDefinition, MapDefinitionValidationError, MapEntryPointDefinition,
-        MapId, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
+        MapCellDefinition, MapContainerItemEntry, MapContainerProps, MapDefinition,
+        MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapInteractiveProps,
+        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
         MapObjectProps, MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
         RelativeGridCell, RelativeGridVertex,
     };
@@ -1386,6 +1492,28 @@ mod tests {
             error,
             MapDefinitionValidationError::UnknownPickupItemId { .. }
                 | MapDefinitionValidationError::UnknownAiSpawnCharacterId { .. }
+        ));
+    }
+
+    #[test]
+    fn container_interactive_object_without_explicit_options_is_valid() {
+        let map = sample_map(vec![sample_container("crate", GridCoord::new(1, 0, 1), "1005", 2)]);
+
+        validate_map_definition(&map, Some(&sample_catalog()))
+            .expect("container object should derive a default open_container option");
+    }
+
+    #[test]
+    fn container_items_require_known_positive_entries() {
+        let map = sample_map(vec![sample_container("crate", GridCoord::new(1, 0, 1), "9999", 0)]);
+
+        let error = validate_map_definition(&map, Some(&sample_catalog()))
+            .expect_err("container validation should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::UnknownContainerItemId { .. }
+                | MapDefinitionValidationError::InvalidContainerItemCount { .. }
         ));
     }
 
@@ -1713,6 +1841,42 @@ mod tests {
                     respawn_enabled: false,
                     respawn_delay: 10.0,
                     spawn_radius: 0.0,
+                    extra: BTreeMap::new(),
+                }),
+                ..MapObjectProps::default()
+            },
+        }
+    }
+
+    fn sample_container(
+        object_id: &str,
+        anchor: GridCoord,
+        item_id: &str,
+        count: i32,
+    ) -> MapObjectDefinition {
+        MapObjectDefinition {
+            object_id: object_id.into(),
+            kind: MapObjectKind::Interactive,
+            anchor,
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                container: Some(MapContainerProps {
+                    display_name: "储物箱".into(),
+                    initial_inventory: vec![MapContainerItemEntry {
+                        item_id: item_id.into(),
+                        count,
+                    }],
+                    extra: BTreeMap::new(),
+                }),
+                interactive: Some(MapInteractiveProps {
+                    display_name: "旧箱子".into(),
+                    interaction_distance: 1.5,
+                    interaction_kind: String::new(),
+                    target_id: None,
+                    options: Vec::new(),
                     extra: BTreeMap::new(),
                 }),
                 ..MapObjectProps::default()

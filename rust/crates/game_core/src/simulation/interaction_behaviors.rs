@@ -4,6 +4,7 @@ use super::*;
 
 pub(crate) mod attack;
 pub(crate) mod door;
+pub(crate) mod open_container;
 pub(crate) mod pickup;
 pub(crate) mod scene_transition;
 pub(crate) mod talk;
@@ -78,10 +79,11 @@ fn default_allows_primary(
     true
 }
 
-static BEHAVIORS: [InteractionBehavior; 6] = [
+static BEHAVIORS: [InteractionBehavior; 7] = [
     wait::BEHAVIOR,
     talk::BEHAVIOR,
     attack::BEHAVIOR,
+    open_container::BEHAVIOR,
     pickup::BEHAVIOR,
     door::BEHAVIOR,
     scene_transition::BEHAVIOR,
@@ -123,15 +125,49 @@ pub(crate) fn resolve_map_object_options(
 ) -> Vec<InteractionOptionDefinition> {
     match object.kind {
         MapObjectKind::Pickup => pickup::map_object_options(object),
-        MapObjectKind::Interactive => object
-            .props
-            .interactive
-            .as_ref()
-            .map(|interactive| interactive.resolved_options())
-            .unwrap_or_default(),
+        MapObjectKind::Interactive => resolve_interactive_object_options(object),
         MapObjectKind::Trigger => resolve_map_trigger_options(object),
         MapObjectKind::Building | MapObjectKind::AiSpawn => Vec::new(),
     }
+}
+
+pub(crate) fn interactive_object_display_name(object: &MapObjectDefinition) -> String {
+    if let Some(interactive) = object.props.interactive.as_ref() {
+        if !interactive.display_name.trim().is_empty() {
+            return interactive.display_name.clone();
+        }
+    }
+    if let Some(container) = object.props.container.as_ref() {
+        if !container.display_name.trim().is_empty() {
+            return container.display_name.clone();
+        }
+    }
+    object.object_id.clone()
+}
+
+pub(crate) fn resolve_interactive_object_options(
+    object: &MapObjectDefinition,
+) -> Vec<InteractionOptionDefinition> {
+    let Some(interactive) = object.props.interactive.as_ref() else {
+        return Vec::new();
+    };
+    let options = interactive.resolved_options();
+    if !options.is_empty() {
+        return options;
+    }
+    let Some(_container) = object.props.container.as_ref() else {
+        return Vec::new();
+    };
+
+    let mut option = InteractionOptionDefinition {
+        kind: InteractionOptionKind::OpenContainer,
+        display_name: interactive_object_display_name(object),
+        interaction_distance: interactive.interaction_distance.max(1.4),
+        priority: 850,
+        ..InteractionOptionDefinition::default()
+    };
+    option.ensure_defaults();
+    vec![option]
 }
 
 pub(crate) fn resolve_map_trigger_options(

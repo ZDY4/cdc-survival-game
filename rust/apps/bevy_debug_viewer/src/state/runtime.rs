@@ -7,8 +7,6 @@ use game_bevy::SettlementDebugSnapshot;
 use game_core::SimulationRuntime;
 use serde::{Deserialize, Serialize};
 
-pub(crate) const VIEWER_FONT_PATH: &str = "fonts/NotoSansCJKsc-Regular.otf";
-
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum ViewerSceneKind {
     #[default]
