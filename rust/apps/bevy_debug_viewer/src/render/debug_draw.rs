@@ -202,11 +202,17 @@ pub(crate) fn draw_world(
             .as_ref()
             .map(|hovered| (hovered.display_grid, hovered.outline_kind))
             .or_else(|| {
-            viewer_state.hovered_grid.and_then(|grid| {
-                hovered_grid_outline_kind(&runtime_state.runtime, &snapshot, &viewer_state, grid)
+                viewer_state.hovered_grid.and_then(|grid| {
+                    hovered_grid_outline_kind(
+                        &runtime_state.runtime,
+                        &snapshot,
+                        &viewer_state,
+                        grid,
+                    )
                     .map(|kind| (grid, kind))
+                })
             })
-        }) {
+        {
             let color = match kind {
                 HoveredGridOutlineKind::Neutral => palette.hover_walkable,
                 HoveredGridOutlineKind::Hostile => palette.hover_hostile,
@@ -224,7 +230,6 @@ pub(crate) fn draw_world(
                 with_alpha(color, 0.98),
             );
         }
-
     }
 
     if let Some(focused_actor_id) = viewer_state.focus_actor_id(&snapshot) {

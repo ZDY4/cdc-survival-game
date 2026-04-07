@@ -122,9 +122,9 @@ fn resolve_location_start_for_map(
 mod tests {
     use super::build_default_startup_seed;
     use game_data::{
-        GridCoord, MapId, MapLibrary, OverworldDefinition, OverworldId, OverworldLibrary,
-        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTravelRuleSet,
+        GridCoord, MapId, MapLibrary, MapSize, OverworldCellDefinition, OverworldDefinition,
+        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
+        OverworldLocationKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
 
@@ -253,6 +253,10 @@ mod tests {
             OverworldId("main_overworld".into()),
             OverworldDefinition {
                 id: OverworldId("main_overworld".into()),
+                size: MapSize {
+                    width: 1,
+                    height: 1,
+                },
                 locations: vec![
                     sample_location("survivor_outpost_01", "survivor_outpost_01_grid"),
                     sample_location(
@@ -265,7 +269,12 @@ mod tests {
                         "survivor_outpost_01",
                     ),
                 ],
-                walkable_cells: Vec::new(),
+                cells: vec![OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 0),
+                    terrain: "road".into(),
+                    blocked: false,
+                    extra: BTreeMap::new(),
+                }],
                 travel_rules: OverworldTravelRuleSet::default(),
             },
         )]))

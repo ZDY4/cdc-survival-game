@@ -25,6 +25,7 @@ pub(super) fn render_main_menu(
                 ..default()
             },
             BackgroundColor(ui_panel_background()),
+            viewer_ui_passthrough_bundle(),
         ))
         .with_children(|menu| {
             menu.spawn(text_bundle(font, "CDC Survival Game", 20.0, Color::WHITE));
@@ -85,6 +86,7 @@ pub(super) fn render_panel_shell(
             BorderColor::all(ui_border_strong_color()),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .with_children(|header| {
@@ -118,6 +120,7 @@ pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) 
             BorderColor::all(ui_border_color()),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .id()

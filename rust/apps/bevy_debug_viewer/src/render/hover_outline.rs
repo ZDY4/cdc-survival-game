@@ -1,9 +1,9 @@
 //! Hover mesh outline：负责把当前 hovered 语义目标映射到可见 mesh 描边成员。
 
 use super::*;
-use bevy_mesh_outline::MeshOutline;
 use crate::geometry::actor_at_grid;
 use crate::picking::{BuildingPartKind, BuildingPartPickTarget, ViewerPickTarget};
+use bevy_mesh_outline::MeshOutline;
 use game_data::InteractionTargetId;
 
 const STABLE_INTERACTION_HOVER_HOLD_SEC: f32 = 0.18;
@@ -55,7 +55,8 @@ pub(crate) fn sync_stable_interaction_hover(
 
     let cursor_unchanged = cursor_position.is_some()
         && stable_hover.last_cursor_position.is_some_and(|previous| {
-            previous.distance(cursor_position.expect("cursor should exist")) <= STABLE_INTERACTION_HOVER_CURSOR_EPSILON_PX
+            previous.distance(cursor_position.expect("cursor should exist"))
+                <= STABLE_INTERACTION_HOVER_CURSOR_EPSILON_PX
         });
     stable_hover.last_cursor_position = cursor_position;
 
@@ -135,7 +136,13 @@ pub(super) fn resolve_active_interaction_hover(
     }
 
     let hovered_grid = viewer_state.hovered_grid?;
-    resolve_hover_candidate_from_grid(runtime_state, snapshot, viewer_state, actor_id, hovered_grid)
+    resolve_hover_candidate_from_grid(
+        runtime_state,
+        snapshot,
+        viewer_state,
+        actor_id,
+        hovered_grid,
+    )
 }
 
 fn hover_mesh_outline(color: Color) -> MeshOutline {
@@ -166,7 +173,8 @@ fn resolve_hover_candidate(
         return None;
     }
 
-    let display_grid = semantic_display_grid(snapshot, viewer_state.current_level, semantic, hovered_grid)?;
+    let display_grid =
+        semantic_display_grid(snapshot, viewer_state.current_level, semantic, hovered_grid)?;
     Some(ActiveInteractionHover {
         semantic: semantic.clone(),
         display_grid,

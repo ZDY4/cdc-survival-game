@@ -19,7 +19,7 @@ function buildSession(overrides: Partial<DocumentAgentSession> = {}): DocumentAg
 describe("narrativeAgentState", () => {
   it("trims large persisted session fields while keeping restore-critical data", () => {
     const session = buildSession({
-      status: "thinking",
+      status: "generating",
       chatMessages: Array.from({ length: 50 }, (_, index) => ({
         id: `message-${index}`,
         role: index % 2 === 0 ? "user" : "assistant",
@@ -140,6 +140,8 @@ describe("narrativeAgentState", () => {
 
     expect(restored.busy).toBe(false);
     expect(restored.inflightRequestId).toBeNull();
+    expect(restored.activeSubmission).toBeNull();
+    expect(restored.queuedSubmissions).toEqual([]);
     expect(restored.reviewQueue).toEqual(buildReviewQueue(restored));
   });
 });

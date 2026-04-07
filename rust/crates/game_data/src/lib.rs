@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod ai_content;
+pub mod ai_preview;
 pub mod character;
 pub mod content;
 pub mod content_registry;
@@ -21,22 +22,36 @@ use bevy_app::prelude::*;
 
 pub use ai::{
     load_ai_module_library, resolve_ai_behavior_profile, validate_ai_module_library,
-    AiActionDefinition, AiActionId, AiAnchorBinding, AiBehaviorDefinition, AiBehaviorProfile,
-    AiBehaviorProfileRef, AiComparisonOperator, AiConditionDefinition, AiConditionId,
-    AiConditionModuleDefinition, AiConditionalPlannerRequirements, AiExecutorBindingDefinition,
-    AiExecutorBindingId, AiFactId, AiFactModuleDefinition, AiGoalDefinition, AiGoalId,
-    AiModuleLibrary, AiModuleLoadError, AiModulePack, AiModuleValidationError,
-    AiNeedEffectDefinition, AiPlannerDatumAssignment, AiReservationBinding, AiScoreRuleDefinition,
-    AiScoreRuleId, AiWorldStateEffectDefinition, BuiltinAiExecutorKind,
+    AiActionDefinition, AiActionGroupDefinition, AiActionGroupId, AiActionId, AiAnchorBinding,
+    AiBehaviorDefinition, AiBehaviorProfile, AiBehaviorProfileRef, AiComparisonOperator,
+    AiConditionDefinition, AiConditionId, AiConditionModuleDefinition,
+    AiConditionalPlannerRequirements, AiExecutorBindingDefinition, AiExecutorBindingId,
+    AiFactGroupDefinition, AiFactGroupId, AiFactId, AiFactModuleDefinition, AiGoalDefinition,
+    AiGoalGroupDefinition, AiGoalGroupId, AiGoalId, AiMetadata, AiModuleLibrary, AiModuleLoadError,
+    AiModulePack, AiModuleValidationError, AiNeedEffectDefinition, AiPlannerDatumAssignment,
+    AiProfilePack, AiReservationBinding, AiScoreRuleDefinition, AiScoreRuleId,
+    AiWorldStateEffectDefinition, BuiltinAiExecutorKind, NeedProfileDefinition,
+    PersonalityProfileDefinition, ScheduleTemplateDefinition, SmartObjectAccessProfileDefinition,
+    SmartObjectAccessRuleDefinition,
 };
 pub use ai_content::{validate_ai_content, AiContentIssue, AiContentIssueSeverity};
+pub use ai_preview::{
+    build_behavior_preview, build_character_ai_preview, build_character_ai_preview_at_time,
+    build_schedule_preview, resolve_character_life_profile, AiActionAvailabilityPreview,
+    AiAvailabilityContext, AiBehaviorPreview, AiGoalScorePreview, AiPreviewModuleRef,
+    CharacterAiPreview, CharacterAiPreviewContext, CharacterAiPreviewError,
+    CharacterLifeBindingPreview, NeedProfilePreview, PersonalityProfilePreview,
+    ResolvedCharacterLifeProfile, SmartObjectAccessProfilePreview, SmartObjectAccessRulePreview,
+    WeeklyScheduleEntryPreview, WeeklySchedulePreview,
+};
 pub use character::{
     load_character_library, validate_character_definition, CharacterAiProfile, CharacterArchetype,
     CharacterAttributeTemplate, CharacterCombatProfile, CharacterDefinition,
     CharacterDefinitionValidationError, CharacterDisposition, CharacterFaction, CharacterId,
     CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterLoadError,
     CharacterLootEntry, CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
-    CharacterResourcePool, NeedProfile, NpcRole, ScheduleBlock, ScheduleDay,
+    CharacterResourcePool, NeedProfile, NpcRole, PersonalityProfileOverride, ScheduleBlock,
+    ScheduleDay,
 };
 pub use content::{
     load_effect_library, load_item_library, migrate_legacy_item_value, validate_effect_definition,

@@ -725,6 +725,10 @@ mod tests {
             OverworldId("main".into()),
             OverworldDefinition {
                 id: OverworldId("main".into()),
+                size: MapSize {
+                    width: 2,
+                    height: 1,
+                },
                 locations: vec![
                     OverworldLocationDefinition {
                         id: OverworldLocationId("source".into()),
@@ -759,15 +763,17 @@ mod tests {
                         extra: BTreeMap::new(),
                     },
                 ],
-                walkable_cells: vec![
+                cells: vec![
                     OverworldCellDefinition {
                         grid: GridCoord::new(0, 0, 0),
                         terrain: String::new(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
                         terrain: String::new(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                 ],
@@ -791,6 +797,16 @@ mod tests {
         trigger_rotation: MapRotation,
         target_entry: GridCoord,
     ) -> SampleLibraries {
+        let source_cell = GridCoord::new(2 - target_delta.x.min(0), 0, 2 - target_delta.z.min(0));
+        let target_cell = GridCoord::new(
+            source_cell.x + target_delta.x,
+            0,
+            source_cell.z + target_delta.z,
+        );
+        let size = MapSize {
+            width: (source_cell.x.max(target_cell.x) + 3) as u32,
+            height: (source_cell.z.max(target_cell.z) + 3) as u32,
+        };
         let source_map = sample_map(
             "source_map",
             vec![MapEntryPointDefinition {
@@ -851,7 +867,7 @@ mod tests {
                         return_entry_point_id: None,
                         default_unlocked: true,
                         visible: true,
-                        overworld_cell: GridCoord::new(0, 0, 0),
+                        overworld_cell: source_cell,
                         danger_level: 0,
                         icon: String::new(),
                         extra: BTreeMap::new(),
@@ -867,24 +883,14 @@ mod tests {
                         return_entry_point_id: None,
                         default_unlocked: true,
                         visible: true,
-                        overworld_cell: target_delta,
+                        overworld_cell: target_cell,
                         danger_level: 0,
                         icon: String::new(),
                         extra: BTreeMap::new(),
                     },
                 ],
-                walkable_cells: vec![
-                    OverworldCellDefinition {
-                        grid: GridCoord::new(0, 0, 0),
-                        terrain: String::new(),
-                        extra: BTreeMap::new(),
-                    },
-                    OverworldCellDefinition {
-                        grid: target_delta,
-                        terrain: String::new(),
-                        extra: BTreeMap::new(),
-                    },
-                ],
+                size,
+                cells: sample_overworld_cells(size),
                 travel_rules: OverworldTravelRuleSet::default(),
             },
         )]));
@@ -912,5 +918,20 @@ mod tests {
             entry_points,
             objects,
         }
+    }
+
+    fn sample_overworld_cells(size: MapSize) -> Vec<OverworldCellDefinition> {
+        let mut cells = Vec::new();
+        for z in 0..size.height as i32 {
+            for x in 0..size.width as i32 {
+                cells.push(OverworldCellDefinition {
+                    grid: GridCoord::new(x, 0, z),
+                    terrain: String::new(),
+                    blocked: false,
+                    extra: BTreeMap::new(),
+                });
+            }
+        }
+        cells
     }
 }

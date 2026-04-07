@@ -73,18 +73,17 @@ mod tests {
         SpawnCharacterRequest,
     };
     use game_core::{
-        create_demo_runtime, PendingProgressionStep, RegisterActor, Simulation,
-        SimulationCommand, SimulationEvent, SimulationRuntime,
+        create_demo_runtime, PendingProgressionStep, RegisterActor, Simulation, SimulationCommand,
+        SimulationEvent, SimulationRuntime,
     };
     use game_data::{
         ActorId, ActorKind, ActorSide, GridCoord, InteractionOptionId, InteractionTargetId,
         MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec, MapBuildingStorySpec,
         MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectDefinition,
-        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation,
-        MapSize, MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
-        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet, RelativeGridCell, StairKind, WorldCoord,
-        WorldMode,
+        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
+        MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
+        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTravelRuleSet, RelativeGridCell, StairKind, WorldCoord, WorldMode,
     };
 
     fn seed_life_debug_spawns(app: &mut App) {
@@ -267,8 +266,7 @@ mod tests {
             ACTOR_MOTION_MAX_DURATION_SEC
         );
         assert!(
-            (event_feedback::actor_motion_duration_sec(0.1)
-                - (0.1 * ACTOR_MOTION_DURATION_SCALE))
+            (event_feedback::actor_motion_duration_sec(0.1) - (0.1 * ACTOR_MOTION_DURATION_SCALE))
                 .abs()
                 <= 0.0001
         );
@@ -554,7 +552,10 @@ mod tests {
         let runtime_state = app.world().resource::<ViewerRuntimeState>();
         let viewer_state = app.world().resource::<ViewerState>();
 
-        assert_eq!(runtime_state.runtime.peek_pending_progression().copied(), before);
+        assert_eq!(
+            runtime_state.runtime.peek_pending_progression().copied(),
+            before
+        );
         assert_eq!(viewer_state.progression_elapsed_sec, 0.0);
     }
 
@@ -584,28 +585,27 @@ mod tests {
                     .chain(),
             );
 
-        app.world_mut().resource_scope(
-            |world, mut runtime_state: Mut<ViewerRuntimeState>| {
+        app.world_mut()
+            .resource_scope(|world, mut runtime_state: Mut<ViewerRuntimeState>| {
                 let mut viewer_state = world.resource_mut::<ViewerState>();
-            viewer_state.select_actor(player, ActorSide::Player);
-            viewer_state.min_progression_interval_sec = 0.0;
-            viewer_state.focused_target = Some(pickup_target.clone());
-            viewer_state.current_prompt = runtime_state
-                .runtime
-                .query_interaction_prompt(player, pickup_target.clone());
+                viewer_state.select_actor(player, ActorSide::Player);
+                viewer_state.min_progression_interval_sec = 0.0;
+                viewer_state.focused_target = Some(pickup_target.clone());
+                viewer_state.current_prompt = runtime_state
+                    .runtime
+                    .query_interaction_prompt(player, pickup_target.clone());
 
-            let result = runtime_state.runtime.issue_interaction(
-                player,
-                pickup_target.clone(),
-                InteractionOptionId("pickup".into()),
-            );
-            apply_interaction_result(&runtime_state, &mut viewer_state, result.clone());
+                let result = runtime_state.runtime.issue_interaction(
+                    player,
+                    pickup_target.clone(),
+                    InteractionOptionId("pickup".into()),
+                );
+                apply_interaction_result(&runtime_state, &mut viewer_state, result.clone());
 
-            assert!(result.approach_required);
-            assert!(viewer_state.focused_target.is_some());
-            assert!(viewer_state.current_prompt.is_some());
-            },
-        );
+                assert!(result.approach_required);
+                assert!(viewer_state.focused_target.is_some());
+                assert!(viewer_state.current_prompt.is_some());
+            });
 
         app.update();
 
@@ -624,7 +624,12 @@ mod tests {
         let runtime_state = app.world().resource::<ViewerRuntimeState>();
         let viewer_state = app.world().resource::<ViewerState>();
         assert!(runtime_state.runtime.pending_interaction().is_none());
-        assert_eq!(runtime_state.runtime.get_actor_inventory_count(player, "1005"), 1);
+        assert_eq!(
+            runtime_state
+                .runtime
+                .get_actor_inventory_count(player, "1005"),
+            1
+        );
         assert!(viewer_state.focused_target.is_none());
         assert!(viewer_state.current_prompt.is_none());
     }
@@ -654,8 +659,8 @@ mod tests {
                     .chain(),
             );
 
-        app.world_mut().resource_scope(
-            |world, mut runtime_state: Mut<ViewerRuntimeState>| {
+        app.world_mut()
+            .resource_scope(|world, mut runtime_state: Mut<ViewerRuntimeState>| {
                 let mut viewer_state = world.resource_mut::<ViewerState>();
                 let snapshot = runtime_state.runtime.snapshot();
                 viewer_state.select_actor(player, ActorSide::Player);
@@ -679,8 +684,7 @@ mod tests {
                     .generated_doors
                     .iter()
                     .any(|door| door.map_object_id == door_object_id));
-            },
-        );
+            });
 
         update_until(&mut app, 12, |app| {
             app.world()
@@ -716,9 +720,8 @@ mod tests {
         );
     }
 
-
     #[test]
-    fn stepping_onto_scene_trigger_enters_location_and_clears_interaction_ui() {
+    fn stepping_onto_scene_trigger_keeps_prompt_until_player_interacts() {
         let mut app = App::new();
         let (runtime, player) = viewer_trigger_runtime();
         let trigger_target = InteractionTargetId::MapObject("exit_trigger".into());
@@ -743,12 +746,15 @@ mod tests {
                     .chain(),
             );
 
-        app.world_mut().resource_scope(
-            |world, mut runtime_state: Mut<ViewerRuntimeState>| {
+        app.world_mut()
+            .resource_scope(|world, mut runtime_state: Mut<ViewerRuntimeState>| {
                 let mut viewer_state = world.resource_mut::<ViewerState>();
                 viewer_state.select_actor(player, ActorSide::Player);
                 viewer_state.min_progression_interval_sec = 0.0;
                 viewer_state.focused_target = Some(trigger_target.clone());
+                viewer_state.current_prompt = runtime_state
+                    .runtime
+                    .query_interaction_prompt(player, trigger_target.clone());
 
                 let move_outcome = runtime_state
                     .runtime
@@ -756,26 +762,78 @@ mod tests {
                     .expect("trigger tile should be reachable");
                 assert!(move_outcome.result.success);
                 assert!(viewer_state.focused_target.is_some());
-            },
-        );
+            });
 
-        update_until(&mut app, 12, |app| {
+        update_until(&mut app, 40, |app| {
             let runtime_state = app.world().resource::<ViewerRuntimeState>();
-            runtime_state.runtime.snapshot().interaction_context.world_mode == WorldMode::Outdoor
-                && runtime_state
-                    .runtime
-                    .snapshot()
-                    .interaction_context
-                    .current_map_id
-                    .as_deref()
-                    == Some("survivor_outpost_01_grid")
+            let viewer_state = app.world().resource::<ViewerState>();
+            runtime_state.runtime.get_actor_grid_position(player) == Some(GridCoord::new(3, 0, 7))
+                && runtime_state.runtime.actor_turn_open(player)
+                && viewer_state.current_prompt.is_some()
         });
+
+        {
+            let runtime_state = app.world().resource::<ViewerRuntimeState>();
+            let viewer_state = app.world().resource::<ViewerState>();
+            let context = &runtime_state.runtime.snapshot().interaction_context;
+            assert_eq!(context.world_mode, WorldMode::Unknown);
+            assert_eq!(context.current_map_id.as_deref(), Some("trigger_map"));
+            assert_eq!(
+                runtime_state.runtime.get_actor_grid_position(player),
+                Some(GridCoord::new(3, 0, 7))
+            );
+            assert_eq!(viewer_state.focused_target, Some(trigger_target.clone()));
+            assert_eq!(
+                viewer_state
+                    .current_prompt
+                    .as_ref()
+                    .and_then(|prompt| prompt.primary_option_id.clone())
+                    .map(|id| id.0),
+                Some("enter_outdoor_location".to_string())
+            );
+        }
+
+        app.world_mut()
+            .resource_scope(|world, mut runtime_state: Mut<ViewerRuntimeState>| {
+                let mut viewer_state = world.resource_mut::<ViewerState>();
+                let set_ap = runtime_state
+                    .runtime
+                    .submit_command(SimulationCommand::SetActorAp {
+                        actor_id: player,
+                        ap: 10.0,
+                    });
+                assert!(matches!(set_ap, game_core::SimulationCommandResult::None));
+                let result = runtime_state.runtime.issue_interaction(
+                    player,
+                    trigger_target.clone(),
+                    InteractionOptionId("enter_outdoor_location".into()),
+                );
+                assert!(result.success, "interaction failed: {:?}", result.reason);
+                assert!(!result.approach_required);
+                apply_interaction_result(&runtime_state, &mut viewer_state, result);
+
+                let context = &runtime_state.runtime.snapshot().interaction_context;
+                assert_eq!(context.world_mode, WorldMode::Outdoor);
+                assert_eq!(
+                    context.current_map_id.as_deref(),
+                    Some("survivor_outpost_01_grid")
+                );
+                assert_eq!(
+                    context.active_outdoor_location_id.as_deref(),
+                    Some("survivor_outpost_01")
+                );
+            });
+
+        app.update();
 
         let runtime_state = app.world().resource::<ViewerRuntimeState>();
         let viewer_state = app.world().resource::<ViewerState>();
         let context = &runtime_state.runtime.snapshot().interaction_context;
         assert_eq!(context.world_mode, WorldMode::Outdoor);
-        assert_eq!(context.current_map_id.as_deref(), Some("survivor_outpost_01_grid"));
+        assert_eq!(
+            context.current_map_id.as_deref(),
+            Some("survivor_outpost_01_grid")
+        );
         assert_eq!(
             context.active_outdoor_location_id.as_deref(),
             Some("survivor_outpost_01")
@@ -785,9 +843,75 @@ mod tests {
         assert!(viewer_state.interaction_menu.is_none());
     }
 
+    #[test]
+    fn scene_trigger_interaction_approaches_trigger_tile_before_transition() {
+        let mut app = App::new();
+        let (runtime, player) = viewer_trigger_runtime();
+        let trigger_target = InteractionTargetId::MapObject("exit_trigger".into());
+        app.insert_resource(Time::<()>::default())
+            .insert_resource(ViewerRuntimeState {
+                runtime,
+                recent_events: Vec::new(),
+                ai_snapshot: SettlementDebugSnapshot::default(),
+            })
+            .insert_resource(ViewerActorFeedbackState::default())
+            .insert_resource(ViewerCameraShakeState::default())
+            .insert_resource(ViewerDamageNumberState::default())
+            .insert_resource(ViewerActorMotionState::default())
+            .insert_resource(ViewerState::default())
+            .add_systems(
+                Update,
+                (
+                    advance_runtime_progression,
+                    collect_events,
+                    refresh_interaction_prompt,
+                )
+                    .chain(),
+            );
+
+        app.world_mut()
+            .resource_scope(|world, mut runtime_state: Mut<ViewerRuntimeState>| {
+                let mut viewer_state = world.resource_mut::<ViewerState>();
+                viewer_state.select_actor(player, ActorSide::Player);
+                viewer_state.min_progression_interval_sec = 0.0;
+                viewer_state.focused_target = Some(trigger_target.clone());
+                viewer_state.current_prompt = runtime_state
+                    .runtime
+                    .query_interaction_prompt(player, trigger_target.clone());
+
+                let result = runtime_state.runtime.issue_interaction(
+                    player,
+                    trigger_target.clone(),
+                    InteractionOptionId("enter_outdoor_location".into()),
+                );
+                apply_interaction_result(&runtime_state, &mut viewer_state, result.clone());
+
+                assert!(result.success, "interaction failed: {:?}", result.reason);
+                assert!(result.approach_required);
+                assert_eq!(
+                    runtime_state
+                        .runtime
+                        .pending_interaction()
+                        .map(|intent| intent.approach_goal),
+                    Some(GridCoord::new(3, 0, 7))
+                );
+                assert_eq!(
+                    runtime_state
+                        .runtime
+                        .snapshot()
+                        .interaction_context
+                        .current_map_id
+                        .as_deref(),
+                    Some("trigger_map")
+                );
+            });
+    }
+
     fn viewer_pickup_runtime(player: ActorId) -> SimulationRuntime {
         let mut simulation = Simulation::new();
-        simulation.grid_world_mut().load_map(&viewer_pickup_map_definition());
+        simulation
+            .grid_world_mut()
+            .load_map(&viewer_pickup_map_definition());
         simulation.register_actor(RegisterActor {
             definition_id: None,
             display_name: "Player".into(),
@@ -878,7 +1002,9 @@ mod tests {
         let mut simulation = Simulation::new();
         simulation.set_map_library(viewer_scene_transition_map_library());
         simulation.set_overworld_library(viewer_scene_transition_overworld_library());
-        simulation.grid_world_mut().load_map(&viewer_trigger_map_definition());
+        simulation
+            .grid_world_mut()
+            .load_map(&viewer_trigger_map_definition());
         let player = simulation.register_actor(RegisterActor {
             definition_id: None,
             display_name: "Player".into(),
@@ -890,7 +1016,7 @@ mod tests {
             attack_range: 1.2,
             ai_controller: None,
         });
-        simulation.set_actor_ap(player, 1.0);
+        simulation.set_actor_ap(player, 10.0);
         (SimulationRuntime::from_simulation(simulation), player)
     }
 
@@ -1048,6 +1174,10 @@ mod tests {
             OverworldId("viewer_world".into()),
             OverworldDefinition {
                 id: OverworldId("viewer_world".into()),
+                size: MapSize {
+                    width: 1,
+                    height: 1,
+                },
                 locations: vec![OverworldLocationDefinition {
                     id: OverworldLocationId("survivor_outpost_01".into()),
                     name: "Outpost".into(),
@@ -1064,9 +1194,10 @@ mod tests {
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 }],
-                walkable_cells: vec![OverworldCellDefinition {
+                cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),
@@ -1081,7 +1212,10 @@ mod tests {
             }
             app.update();
         }
-        assert!(predicate(app), "condition was not met within {max_updates} updates");
+        assert!(
+            predicate(app),
+            "condition was not met within {max_updates} updates"
+        );
     }
 
     fn offset_start_grid_for_target(simulation: &Simulation, anchor: GridCoord) -> GridCoord {

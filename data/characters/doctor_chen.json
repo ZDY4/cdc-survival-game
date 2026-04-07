@@ -63,27 +63,14 @@
     "settlement_id": "survivor_outpost_01_settlement",
     "role": "doctor",
     "ai_behavior_profile_id": "doctor_settlement",
+    "schedule_profile_id": "doctor_clinic_rounds_weekday",
+    "personality_profile_id": "doctor_compassionate",
+    "need_profile_id": "doctor_standard",
+    "smart_object_access_profile_id": "doctor_settlement_access",
     "home_anchor": "doctor_home_01",
     "duty_route_id": "doctor_clinic_rounds",
-    "schedule": [
-      {
-        "day": "monday",
-        "start_minute": 540,
-        "end_minute": 1020,
-        "label": "诊所轮值",
-        "tags": ["shift", "doctor"]
-      }
-    ],
-    "smart_object_access": [
-      "bed",
-      "medical_station",
-      "recreation_spot"
-    ],
-    "need_profile": {
-      "hunger_decay_per_hour": 3.2,
-      "energy_decay_per_hour": 2.4,
-      "morale_decay_per_hour": 1.1,
-      "safety_bias": 0.6
-    }
+    "schedule": [],
+    "need_profile_override": null,
+    "personality_override": {}
   }
 }

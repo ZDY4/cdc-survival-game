@@ -14,6 +14,7 @@ import type {
   AgentActionResult,
   AiChatMessage,
   DocumentAgentSession,
+  NarrativeCancelRequestResult,
   EditorMenuSelfTestScenario,
   NarrativeAppSettings,
   NarrativeDocType,
@@ -23,6 +24,8 @@ import type {
   NarrativeGenerateRequest,
   NarrativeGenerationProgressEvent,
   NarrativeGenerateResponse,
+  NarrativeQueuedSubmission,
+  NarrativeSubmissionSource,
   ResolveNarrativeActionIntentResult,
   NarrativeDocumentSummary,
   NarrativeSessionExportInput,
@@ -38,12 +41,17 @@ import {
   splitNarrativeMarkdownBlocks,
 } from "./narrativePatches";
 import {
+  clearActiveNarrativeSubmission,
   addSelectedContextDocument,
   closeNarrativeTab,
+  createNarrativeQueuedSubmission,
   createDocumentAgentSession,
   ensureDocumentAgentSession,
   openNarrativeTab,
+  promoteNextNarrativeSubmission,
+  enqueueNarrativeSubmission,
   removeSelectedContextDocument,
+  updateActiveSubmissionStage,
   updateDocumentAgentSession,
   updateDocumentAgentSessionWithReviewQueue,
   type NarrativeTabState,
@@ -383,6 +391,8 @@ export function NarrativeWorkspace({
   const documentsRef = useRef<EditableNarrativeDocument[]>(documents);
   const documentAgentsRef = useRef<Record<string, DocumentAgentSession>>(documentAgents);
   const tabStateRef = useRef<NarrativeTabState>(tabState);
+  const submissionGateRef = useRef<Record<string, boolean>>({});
+  const runningSubmissionRef = useRef<Record<string, string>>({});
   const workspaceRootRef = useRef("");
   const layoutSnapshotRef = useRef("");
   const agentSnapshotRef = useRef("");
@@ -423,6 +433,8 @@ export function NarrativeWorkspace({
         {
           ...session,
           reviewQueue: buildReviewQueue(session),
+          activeSubmission: null,
+          queuedSubmissions: [],
           busy: false,
           inflightRequestId: null,
         },
@@ -767,6 +779,8 @@ export function NarrativeWorkspace({
   const activeReviewQueue = activeSession?.reviewQueue ?? [];
   const latestPlan = activeSession?.lastPlan ?? [];
   const latestTurnKind = activeSession?.lastResponse?.turnKind ?? null;
+  const activeSubmission = activeSession?.activeSubmission ?? null;
+  const queuedSubmissions = activeSession?.queuedSubmissions ?? [];
   const selectedContextDocuments = useMemo(() => {
     if (!activeSession) {
       return [];
@@ -853,6 +867,39 @@ export function NarrativeWorkspace({
 
   function getDocument(documentKey: string) {
     return documentsRef.current.find((document) => document.documentKey === documentKey) ?? null;
+  }
+
+  function getSession(documentKey: string) {
+    return documentAgentsRef.current[documentKey] ?? null;
+  }
+
+  function getSelectedContextDocumentsForSession(
+    documentKey: string,
+    session: DocumentAgentSession,
+  ) {
+    const documentMap = new Map(
+      documentsRef.current.map((document) => [document.documentKey, document] as const),
+    );
+
+    return session.selectedContextDocKeys
+      .filter((contextDocumentKey) => contextDocumentKey !== documentKey)
+      .map((contextDocumentKey) => documentMap.get(contextDocumentKey) ?? null)
+      .filter(Boolean) as EditableNarrativeDocument[];
+  }
+
+  function queueSourceLabel(source: NarrativeSubmissionSource) {
+    return source === "option" ? "方向按钮" : "普通输入";
+  }
+
+  function submissionStageLabel(stage: NonNullable<DocumentAgentSession["activeSubmission"]>["stage"]) {
+    switch (stage) {
+      case "resolving_intent":
+        return "解析意图";
+      case "cancelling":
+        return "正在停止";
+      default:
+        return "生成中";
+    }
   }
 
   function commitDocuments(
@@ -1120,7 +1167,7 @@ export function NarrativeWorkspace({
       onStatusChange("当前没有可重试的上一轮用户输入。");
       return;
     }
-    await runGeneration(lastUserMessage.content);
+    await submitNarrativePrompt(lastUserMessage.content, "composer");
   }
 
   async function retryCurrentStep() {
@@ -1640,7 +1687,15 @@ export function NarrativeWorkspace({
     await deleteDocumentByKey(activeDocument.documentKey);
   }
 
-  async function runGeneration(promptOverride?: string) {
+  function isNarrativeCancellationError(error: unknown) {
+    const normalized = String(error).toLowerCase();
+    return normalized.includes("narrative request cancelled") || normalized.includes("request cancelled");
+  }
+
+  async function submitNarrativePrompt(
+    promptOverride?: string,
+    source: NarrativeSubmissionSource = promptOverride ? "option" : "composer",
+  ) {
     if (!activeDocument || !tabState.activeTabKey || !activeSession) {
       onStatusChange("请先打开一个文档标签，再和 AI 协作。");
       return;
@@ -1653,13 +1708,116 @@ export function NarrativeWorkspace({
     }
 
     const activeDocumentKey = activeDocument.documentKey;
-    let assistantMessageId = `assistant-failed-${Date.now()}`;
+    if (submissionGateRef.current[activeDocumentKey]) {
+      return;
+    }
+
+    submissionGateRef.current[activeDocumentKey] = true;
+    let enqueueOutcome: "started" | "queued" | "duplicate_active" | "duplicate_tail" | null =
+      null;
+    let queuedCount = 0;
+
+    try {
+      const submission = createNarrativeQueuedSubmission(submittedPrompt, source);
+      setDocumentAgents((current) =>
+        updateDocumentAgentSession(current, activeDocumentKey, (session) => {
+          const result = enqueueNarrativeSubmission(session, submission, {
+            clearComposerText: promptOverride === undefined,
+          });
+          enqueueOutcome = result.outcome;
+          queuedCount = result.session.queuedSubmissions.length;
+          return result.session;
+        }),
+      );
+    } finally {
+      submissionGateRef.current[activeDocumentKey] = false;
+    }
+
+    if (enqueueOutcome === "duplicate_active") {
+      onStatusChange("相同内容已在处理中。");
+      return;
+    }
+    if (enqueueOutcome === "duplicate_tail") {
+      onStatusChange("相同内容已在待发送队列末尾。");
+      return;
+    }
+    if (enqueueOutcome === "queued") {
+      onStatusChange(`已加入待发送队列，当前待发送 ${queuedCount} 条。`);
+      return;
+    }
+
+    onStatusChange("已提交给 AI，正在处理。");
+  }
+
+  async function cancelActiveSubmission() {
+    if (!activeDocument || !activeSession?.activeSubmission) {
+      return;
+    }
+
+    const submission = activeSession.activeSubmission;
+    if (submission.stage === "cancelling") {
+      return;
+    }
+
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, activeDocument.documentKey, (session) =>
+        session.activeSubmission?.submissionId === submission.submissionId
+          ? updateActiveSubmissionStage(session, "cancelling")
+          : session,
+      ),
+    );
+    onStatusChange("正在停止当前发送...");
+
+    try {
+      const result = await invokeCommand<NarrativeCancelRequestResult>(
+        "cancel_narrative_request",
+        {
+          requestId: submission.requestId,
+        },
+      );
+      if (result.status === "already_finished") {
+        onStatusChange("当前发送已结束，正在等待界面同步结果。");
+      }
+    } catch (error) {
+      setDocumentAgents((current) =>
+        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+          if (session.activeSubmission?.submissionId !== submission.submissionId) {
+            return session;
+          }
+          return updateActiveSubmissionStage(session, submission.stage);
+        }),
+      );
+      onStatusChange(`停止当前发送失败：${String(error)}`);
+    }
+  }
+
+  async function executeActiveSubmission(
+    documentKey: string,
+    submission: NarrativeQueuedSubmission,
+  ) {
+    const activeDocumentSnapshot = getDocument(documentKey);
+    const sessionSnapshot = getSession(documentKey);
+
+    if (
+      !activeDocumentSnapshot ||
+      !sessionSnapshot ||
+      sessionSnapshot.activeSubmission?.submissionId !== submission.submissionId
+    ) {
+      return;
+    }
+
+    const selectedContextDocumentSnapshot = getSelectedContextDocumentsForSession(
+      documentKey,
+      sessionSnapshot,
+    );
+
     try {
       const actionIntentRequest = buildActionIntentRequest({
-        submittedPrompt,
-        activeDocument,
-        session: activeSession,
-        selectedContextDocuments,
+        requestId: submission.requestId,
+        submittedPrompt: submission.prompt,
+        activeDocument: activeDocumentSnapshot,
+        session: sessionSnapshot,
+        selectedContextDocuments: selectedContextDocumentSnapshot,
       });
       const actionIntent = await invokeCommand<ResolveNarrativeActionIntentResult>(
         "resolve_narrative_action_intent",
@@ -1669,67 +1827,86 @@ export function NarrativeWorkspace({
           input: actionIntentRequest,
         },
       );
+
       if (!actionIntent.action) {
         const userMessage = buildGenerationUserMessage({
-          submittedPrompt,
+          submittedPrompt: submission.prompt,
           action: null,
         });
 
         setDocumentAgents((current) =>
-          updateDocumentAgentSessionWithReviewQueue(current, activeDocumentKey, (session) => ({
-            ...session,
-            updatedAt: nowIso(),
-            status: "waiting_user",
-            busy: false,
-            inflightRequestId: null,
-            pendingQuestions: actionIntent.questions,
-            pendingOptions: actionIntent.options,
-            pendingTurnKind: "clarification",
-            chatMessages: [
-              ...session.chatMessages,
-              userMessage,
-              {
-                id: `assistant-action-intent-${Date.now()}`,
-                role: "assistant",
-                label: "AI",
-                content:
-                  actionIntent.assistantMessage ||
-                  "我还不能稳定判断这轮应该修改当前文档，还是基于它创建一份新文档。请先确认一次。",
-                meta: ["等待补充"],
-                tone: "warning",
-              },
-            ],
-          })),
+          updateDocumentAgentSessionWithReviewQueue(current, documentKey, (session) =>
+            promoteNextNarrativeSubmission(
+              clearActiveNarrativeSubmission({
+                ...session,
+                updatedAt: nowIso(),
+                status: "waiting_user",
+                pendingQuestions: actionIntent.questions,
+                pendingOptions: actionIntent.options,
+                pendingTurnKind: "clarification",
+                chatMessages: [
+                  ...session.chatMessages,
+                  userMessage,
+                  {
+                    id: `assistant-action-intent-${Date.now()}`,
+                    role: "assistant",
+                    label: "AI",
+                    content:
+                      actionIntent.assistantMessage ||
+                      "我还不能稳定判断这轮应该修改当前文档，还是基于它创建一份新文档。请先确认一次。",
+                    meta: ["等待补充"],
+                    tone: "warning",
+                  },
+                ],
+              }),
+            ),
+          ),
         );
         onStatusChange("需要先确认本轮是修改当前文档，还是创建新文档。");
         return;
       }
 
+      const latestDocument = getDocument(documentKey);
+      const latestSession = getSession(documentKey);
+      if (
+        !latestDocument ||
+        !latestSession ||
+        latestSession.activeSubmission?.submissionId !== submission.submissionId
+      ) {
+        return;
+      }
+
       const action = actionIntent.action;
-      const requestId = `generation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      assistantMessageId = assistantMessageIdForRequest(requestId);
+      const assistantMessageId = assistantMessageIdForRequest(submission.requestId);
       const userMessage = buildGenerationUserMessage({
-        submittedPrompt,
+        submittedPrompt: submission.prompt,
         action,
       });
+      const selectedContextDocumentsForGeneration = getSelectedContextDocumentsForSession(
+        documentKey,
+        latestSession,
+      );
       const request = buildGenerationRequest({
-        requestId,
-        submittedPrompt,
-        activeDocument,
-        session: activeSession,
-        selectedContextDocuments,
+        requestId: submission.requestId,
+        submittedPrompt: submission.prompt,
+        activeDocument: latestDocument,
+        session: latestSession,
+        selectedContextDocuments: selectedContextDocumentsForGeneration,
         action,
       });
 
       setDocumentAgents((current) =>
-        updateDocumentAgentSession(current, activeDocumentKey, (session) =>
+        updateDocumentAgentSession(current, documentKey, (session) =>
           beginGenerationSession(
+            updateActiveSubmissionStage(
+              {
+                ...session,
+                mode: action,
+              },
+              "generating",
+            ),
             {
-              ...session,
-              mode: action,
-            },
-            {
-              requestId,
+              requestId: submission.requestId,
               userMessage,
               assistantMessageId,
             },
@@ -1762,10 +1939,10 @@ export function NarrativeWorkspace({
       ) {
         const newTitle = extractTitleFromMarkdown(
           narrativeResponse.draftMarkdown,
-          `${activeDocument.meta.title} AI 草稿`,
+          `${latestDocument.meta.title} AI 草稿`,
         );
         const draftDocument = buildEditableDraftDocument(
-          activeDocument.meta.docType,
+          latestDocument.meta.docType,
           newTitle,
           narrativeResponse.draftMarkdown,
         );
@@ -1778,32 +1955,33 @@ export function NarrativeWorkspace({
             response: narrativeResponse,
             userMessage,
             assistantMessage,
-            sourceDocumentKey: activeDocument.documentKey,
-            sourceDocumentTitle: activeDocument.meta.title || activeDocument.meta.slug,
+            sourceDocumentKey: latestDocument.documentKey,
+            sourceDocumentTitle: latestDocument.meta.title || latestDocument.meta.slug,
           });
           const next = updateDocumentAgentSessionWithReviewQueue(
             current,
-            activeDocumentKey,
+            documentKey,
             (session) =>
-              appendContextMessage(
-                applyGenerationResponseToSession({
-                  session,
-                  request,
-                  response: narrativeResponse,
-                  assistantMessageId,
-                  assistantMessage,
-                }),
-                `context-${Date.now()}`,
-                `已为当前会话生成新文档《${newTitle}》。`,
-                "success",
+              promoteNextNarrativeSubmission(
+                clearActiveNarrativeSubmission(
+                  appendContextMessage(
+                    applyGenerationResponseToSession({
+                      session,
+                      request,
+                      response: narrativeResponse,
+                      assistantMessageId,
+                      assistantMessage,
+                    }),
+                    `context-${Date.now()}`,
+                    `已为当前会话生成新文档《${newTitle}》。`,
+                    "success",
+                  ),
+                ),
               ),
           );
           next[draftDocument.documentKey] = {
             ...derivedSession,
-          };
-          next[draftDocument.documentKey] = {
-            ...next[draftDocument.documentKey],
-            reviewQueue: buildReviewQueue(next[draftDocument.documentKey]),
+            reviewQueue: buildReviewQueue(derivedSession),
           };
           return next;
         });
@@ -1814,24 +1992,28 @@ export function NarrativeWorkspace({
       const hasChanges =
         narrativeResponse.turnKind === "final_answer" &&
         !narrativeResponse.providerError.trim() &&
-        normalizeNarrativeMarkdown(activeDocument.markdown) !==
+        normalizeNarrativeMarkdown(latestDocument.markdown) !==
           normalizeNarrativeMarkdown(narrativeResponse.draftMarkdown);
       const patchSet = hasChanges
-        ? buildNarrativePatchSet(activeDocument.markdown, narrativeResponse.draftMarkdown)
+        ? buildNarrativePatchSet(latestDocument.markdown, narrativeResponse.draftMarkdown)
         : null;
 
       setDocumentAgents((current) =>
-        updateDocumentAgentSessionWithReviewQueue(current, activeDocumentKey, (session) =>
-          applyGenerationResponseToSession({
-            session,
-            request,
-            response: narrativeResponse,
-            assistantMessageId,
-            assistantMessage,
-            candidatePatchSet: patchSet,
-            documentViewMode: "preview",
-            versionBeforeMarkdown: activeDocument.markdown,
-          }),
+        updateDocumentAgentSessionWithReviewQueue(current, documentKey, (session) =>
+          promoteNextNarrativeSubmission(
+            clearActiveNarrativeSubmission(
+              applyGenerationResponseToSession({
+                session,
+                request,
+                response: narrativeResponse,
+                assistantMessageId,
+                assistantMessage,
+                candidatePatchSet: patchSet,
+                documentViewMode: "preview",
+                versionBeforeMarkdown: latestDocument.markdown,
+              }),
+            ),
+          ),
         ),
       );
       onStatusChange(
@@ -1841,14 +2023,62 @@ export function NarrativeWorkspace({
           "AI 已生成文档修改建议。",
       );
     } catch (error) {
+      if (isNarrativeCancellationError(error)) {
+        setDocumentAgents((current) =>
+          updateDocumentAgentSessionWithReviewQueue(current, documentKey, (session) =>
+            promoteNextNarrativeSubmission(
+              clearActiveNarrativeSubmission(
+                appendContextMessage(
+                  {
+                    ...session,
+                    updatedAt: nowIso(),
+                    status: "idle",
+                  },
+                  `context-cancel-${submission.requestId}`,
+                  "已取消当前发送。",
+                  "warning",
+                ),
+              ),
+            ),
+          ),
+        );
+        onStatusChange("已停止当前发送。");
+        return;
+      }
+
+      const assistantMessageId = assistantMessageIdForRequest(submission.requestId);
       setDocumentAgents((current) =>
-        updateDocumentAgentSessionWithReviewQueue(current, activeDocumentKey, (session) =>
-          applyGenerationErrorToSession(session, assistantMessageId, error),
+        updateDocumentAgentSessionWithReviewQueue(current, documentKey, (session) =>
+          promoteNextNarrativeSubmission(
+            clearActiveNarrativeSubmission(
+              applyGenerationErrorToSession(session, assistantMessageId, error),
+            ),
+          ),
         ),
       );
       onStatusChange(`AI 执行失败：${String(error)}`);
     }
   }
+
+  useEffect(() => {
+    for (const [documentKey, session] of Object.entries(documentAgents)) {
+      const activeSubmission = session.activeSubmission;
+      if (!activeSubmission) {
+        continue;
+      }
+
+      if (runningSubmissionRef.current[documentKey] === activeSubmission.submissionId) {
+        continue;
+      }
+
+      runningSubmissionRef.current[documentKey] = activeSubmission.submissionId;
+      void executeActiveSubmission(documentKey, activeSubmission).finally(() => {
+        if (runningSubmissionRef.current[documentKey] === activeSubmission.submissionId) {
+          delete runningSubmissionRef.current[documentKey];
+        }
+      });
+    }
+  }, [documentAgents]);
 
   function applyPatch(patchId: string) {
     if (!activeDocument || !activeSession?.candidatePatchSet || !activeSession.lastResponse) {
@@ -2213,11 +2443,10 @@ export function NarrativeWorkspace({
       },
       [EDITOR_MENU_COMMANDS.AI_GENERATE]: {
         execute: async () => {
-          await runGeneration();
+          await submitNarrativePrompt();
         },
         isEnabled: () =>
           Boolean(activeDocument) &&
-          !activeSession?.busy &&
           !(activeSession?.pendingActionRequests.length ?? 0),
       },
       [EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS]: {
@@ -2253,7 +2482,6 @@ export function NarrativeWorkspace({
     }),
     [
       activeDocument,
-      activeSession?.busy,
       activeSession?.documentViewMode,
       activeSession?.pendingActionRequests.length,
       dirtyCount,
@@ -2418,7 +2646,14 @@ export function NarrativeWorkspace({
                   <div />
 
                   <div className="narrative-chat-topbar-actions">
-                    {activeSession.busy ? <Badge tone="warning">生成中</Badge> : null}
+                    {activeSubmission ? (
+                      <Badge tone={activeSubmission.stage === "cancelling" ? "warning" : "accent"}>
+                        {submissionStageLabel(activeSubmission.stage)}
+                      </Badge>
+                    ) : null}
+                    {queuedSubmissions.length ? (
+                      <Badge tone="muted">排队 {queuedSubmissions.length}</Badge>
+                    ) : null}
                     {activeSession.status === "waiting_user" ? <Badge tone="warning">等待补充</Badge> : null}
                     <button
                       type="button"
@@ -2511,8 +2746,7 @@ export function NarrativeWorkspace({
                           key={option.id}
                           type="button"
                           className="narrative-option-card"
-                          disabled={activeSession.busy}
-                          onClick={() => void runGeneration(option.followupPrompt)}
+                          onClick={() => void submitNarrativePrompt(option.followupPrompt, "option")}
                           title={option.followupPrompt || option.description}
                         >
                           <strong>{option.label}</strong>
@@ -2554,8 +2788,7 @@ export function NarrativeWorkspace({
                           key={option.id}
                           type="button"
                           className="narrative-option-card"
-                          disabled={activeSession.busy}
-                          onClick={() => void runGeneration(option.followupPrompt)}
+                          onClick={() => void submitNarrativePrompt(option.followupPrompt, "option")}
                           title={option.followupPrompt || option.description}
                         >
                           <strong>{option.label}</strong>
@@ -2660,13 +2893,47 @@ export function NarrativeWorkspace({
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                       event.preventDefault();
-                      if (!activeSession.busy) {
-                        void runGeneration();
-                      }
+                      void submitNarrativePrompt();
                     }
                   }}
                   placeholder={composerPlaceholder}
                 />
+                {(activeSubmission || queuedSubmissions.length) ? (
+                  <div className="narrative-submission-queue">
+                    {activeSubmission ? (
+                      <div className="narrative-submission-queue-item narrative-submission-queue-item-active">
+                        <div className="narrative-submission-queue-item-header">
+                          <strong>正在处理</strong>
+                          <div className="toolbar-summary">
+                            <Badge tone={activeSubmission.stage === "cancelling" ? "warning" : "accent"}>
+                              {submissionStageLabel(activeSubmission.stage)}
+                            </Badge>
+                            <Badge tone="muted">{queueSourceLabel(activeSubmission.source)}</Badge>
+                          </div>
+                        </div>
+                        <p>{activeSubmission.prompt}</p>
+                      </div>
+                    ) : null}
+                    {queuedSubmissions.length ? (
+                      <div className="narrative-submission-queue-list">
+                        {queuedSubmissions.map((submission, index) => (
+                          <div
+                            key={submission.submissionId}
+                            className="narrative-submission-queue-item"
+                          >
+                            <div className="narrative-submission-queue-item-header">
+                              <strong>待发送 {index + 1}</strong>
+                              <div className="toolbar-summary">
+                                <Badge tone="muted">{queueSourceLabel(submission.source)}</Badge>
+                              </div>
+                            </div>
+                            <p>{submission.prompt}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="narrative-chat-composer-footer">
                   <div className="toolbar-summary">
                     <Badge tone="muted">{activeDocument.meta.slug}</Badge>
@@ -2675,13 +2942,22 @@ export function NarrativeWorkspace({
                     ) : null}
                   </div>
                   <div className="toolbar-actions">
+                    {activeSubmission ? (
+                      <button
+                        type="button"
+                        className="toolbar-button"
+                        onClick={() => void cancelActiveSubmission()}
+                        disabled={activeSubmission.stage === "cancelling"}
+                      >
+                        {activeSubmission.stage === "cancelling" ? "正在停止..." : "停止"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="toolbar-button toolbar-accent narrative-chat-send-button"
-                      onClick={() => void runGeneration()}
-                      disabled={activeSession.busy}
+                      onClick={() => void submitNarrativePrompt()}
                     >
-                      发送给 AI
+                      {activeSubmission ? "加入队列" : "发送给 AI"}
                     </button>
                   </div>
                 </div>

@@ -39,8 +39,8 @@ use crate::vision::VisionRuntimeSnapshot;
 
 mod combat;
 mod dialogue;
-mod interaction_flow;
 pub(crate) mod interaction_behaviors;
+mod interaction_flow;
 mod level_transition;
 mod overworld;
 mod progression;
@@ -2066,9 +2066,6 @@ impl Simulation {
                 step_index: step_index + 1,
                 total_steps,
             });
-            if self.try_activate_map_trigger(actor_id, next) {
-                break;
-            }
             previous = next;
         }
     }
@@ -2730,8 +2727,7 @@ impl Simulation {
 
     fn find_ground_drop_grid(&self, actor_grid: GridCoord) -> GridCoord {
         for radius in 1..=DROP_ITEM_SEARCH_RADIUS {
-            for candidate in interaction_flow::collect_interaction_ring_cells(actor_grid, radius)
-            {
+            for candidate in interaction_flow::collect_interaction_ring_cells(actor_grid, radius) {
                 let occupied_by_actor = self
                     .actors
                     .values()
@@ -4760,7 +4756,7 @@ mod tests {
     }
 
     #[test]
-    fn stepping_onto_trigger_enters_target_location_map() {
+    fn stepping_onto_trigger_exposes_interaction_without_auto_transition() {
         let mut simulation = Simulation::new();
         simulation.set_map_library(sample_scene_transition_map_library());
         simulation.set_overworld_library(sample_scene_transition_overworld_library());
@@ -4787,31 +4783,30 @@ mod tests {
 
         assert!(result.success);
         let context = simulation.current_interaction_context();
-        assert_eq!(
-            context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_grid")
-        );
-        assert_eq!(
-            context.active_outdoor_location_id.as_deref(),
-            Some("survivor_outpost_01")
-        );
-        assert_eq!(context.entry_point_id.as_deref(), Some("default_entry"));
+        assert_eq!(context.current_map_id.as_deref(), Some("trigger_map"));
+        assert_eq!(context.active_outdoor_location_id, None);
+        assert_eq!(context.entry_point_id, None);
         assert_eq!(
             simulation.actor_grid_position(player),
-            Some(GridCoord::new(0, 0, 0))
+            Some(GridCoord::new(5, 0, 7))
+        );
+
+        let prompt = simulation
+            .query_interaction_options(
+                player,
+                &InteractionTargetId::MapObject("exit_trigger".into()),
+            )
+            .expect("trigger should expose an interaction prompt");
+        assert_eq!(prompt.target_name, "进入幸存者据点");
+        assert_eq!(
+            prompt.primary_option_id.as_ref().map(|id| id.as_str()),
+            Some("enter_outdoor_location")
         );
 
         let events = simulation.drain_events();
-        assert!(events.iter().any(|event| matches!(
-            event,
-            SimulationEvent::InteractionSucceeded {
-                actor_id,
-                target_id: InteractionTargetId::MapObject(object_id),
-                option_id,
-            } if *actor_id == player
-                && object_id == "exit_trigger"
-                && option_id.as_str() == "enter_outdoor_location"
-        )));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, SimulationEvent::InteractionSucceeded { .. })));
     }
 
     #[test]
@@ -4846,8 +4841,18 @@ mod tests {
                 .current_interaction_context()
                 .current_map_id
                 .as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("trigger_map")
         );
+        assert_eq!(
+            simulation.actor_grid_position(player),
+            Some(GridCoord::new(5, 0, 7))
+        );
+        assert!(simulation
+            .query_interaction_options(
+                player,
+                &InteractionTargetId::MapObject("exit_trigger".into())
+            )
+            .is_some());
         assert!(simulation.get_actor_ap(player) < simulation.config.affordable_threshold);
         assert_eq!(
             simulation
@@ -4863,7 +4868,93 @@ mod tests {
     }
 
     #[test]
-    fn multi_cell_trigger_fires_from_any_covered_cell() {
+    fn scene_trigger_interaction_approach_targets_trigger_cell() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_trigger_map_definition(
+                GridCoord::new(5, 0, 7),
+                MapObjectFootprint::default(),
+                MapRotation::East,
+            ));
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(3, 0, 7),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject("exit_trigger".into()),
+            option_id: InteractionOptionId("enter_outdoor_location".into()),
+        });
+
+        assert!(result.success);
+        assert!(result.approach_required);
+        assert_eq!(result.approach_goal, Some(GridCoord::new(5, 0, 7)));
+        assert!(result.context_snapshot.is_none());
+        assert_eq!(
+            simulation.actor_grid_position(player),
+            Some(GridCoord::new(3, 0, 7))
+        );
+        assert_eq!(
+            simulation
+                .current_interaction_context()
+                .current_map_id
+                .as_deref(),
+            Some("trigger_map")
+        );
+    }
+
+    #[test]
+    fn multi_cell_scene_trigger_interaction_approach_targets_covered_cell() {
+        let mut simulation = Simulation::new();
+        simulation.set_map_library(sample_scene_transition_map_library());
+        simulation.set_overworld_library(sample_scene_transition_overworld_library());
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_trigger_map_definition(
+                GridCoord::new(5, 0, 7),
+                MapObjectFootprint {
+                    width: 3,
+                    height: 1,
+                },
+                MapRotation::North,
+            ));
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(8, 0, 7),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.execute_interaction(InteractionExecutionRequest {
+            actor_id: player,
+            target_id: InteractionTargetId::MapObject("exit_trigger".into()),
+            option_id: InteractionOptionId("enter_outdoor_location".into()),
+        });
+
+        assert!(result.success);
+        assert!(result.approach_required);
+        assert_eq!(result.approach_goal, Some(GridCoord::new(7, 0, 7)));
+        assert!(result.context_snapshot.is_none());
+    }
+
+    #[test]
+    fn multi_cell_trigger_exposes_prompt_from_any_covered_cell() {
         let mut simulation = Simulation::new();
         simulation.set_map_library(sample_scene_transition_map_library());
         simulation.set_overworld_library(sample_scene_transition_overworld_library());
@@ -4897,12 +4988,18 @@ mod tests {
                 .current_interaction_context()
                 .current_map_id
                 .as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("trigger_map")
         );
         assert_eq!(
             simulation.actor_grid_position(player),
-            Some(GridCoord::new(0, 0, 0))
+            Some(GridCoord::new(7, 0, 7))
         );
+        assert!(simulation
+            .query_interaction_options(
+                player,
+                &InteractionTargetId::MapObject("exit_trigger".into())
+            )
+            .is_some());
     }
 
     #[test]
@@ -5320,11 +5417,13 @@ mod tests {
 
         assert!(result.performed);
         assert_eq!(simulation.actor_grid_position(actor_id), Some(goal));
-        assert!(simulation
-            .grid_world()
-            .generated_door_by_object_id(&door.map_object_id)
-            .expect("generated door should remain registered")
-            .is_open);
+        assert!(
+            simulation
+                .grid_world()
+                .generated_door_by_object_id(&door.map_object_id)
+                .expect("generated door should remain registered")
+                .is_open
+        );
     }
 
     #[test]
@@ -5569,12 +5668,28 @@ mod tests {
     ) -> (GridCoord, GridCoord) {
         let candidates = match door.axis {
             crate::GeometryAxis::Vertical => [
-                GridCoord::new(door.anchor_grid.x - 1, door.anchor_grid.y, door.anchor_grid.z),
-                GridCoord::new(door.anchor_grid.x + 1, door.anchor_grid.y, door.anchor_grid.z),
+                GridCoord::new(
+                    door.anchor_grid.x - 1,
+                    door.anchor_grid.y,
+                    door.anchor_grid.z,
+                ),
+                GridCoord::new(
+                    door.anchor_grid.x + 1,
+                    door.anchor_grid.y,
+                    door.anchor_grid.z,
+                ),
             ],
             crate::GeometryAxis::Horizontal => [
-                GridCoord::new(door.anchor_grid.x, door.anchor_grid.y, door.anchor_grid.z - 1),
-                GridCoord::new(door.anchor_grid.x, door.anchor_grid.y, door.anchor_grid.z + 1),
+                GridCoord::new(
+                    door.anchor_grid.x,
+                    door.anchor_grid.y,
+                    door.anchor_grid.z - 1,
+                ),
+                GridCoord::new(
+                    door.anchor_grid.x,
+                    door.anchor_grid.y,
+                    door.anchor_grid.z + 1,
+                ),
             ],
         };
         assert!(
@@ -5799,6 +5914,10 @@ mod tests {
             OverworldId("scene_transition_test".into()),
             OverworldDefinition {
                 id: OverworldId("scene_transition_test".into()),
+                size: MapSize {
+                    width: 1,
+                    height: 1,
+                },
                 locations: vec![
                     OverworldLocationDefinition {
                         id: OverworldLocationId("survivor_outpost_01".into()),
@@ -5835,9 +5954,10 @@ mod tests {
                         extra: BTreeMap::new(),
                     },
                 ],
-                walkable_cells: vec![OverworldCellDefinition {
+                cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),

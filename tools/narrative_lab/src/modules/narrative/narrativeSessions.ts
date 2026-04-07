@@ -1,8 +1,10 @@
 import type {
   DocumentAgentSession,
+  NarrativeActiveSubmission,
   NarrativeDocumentViewMode,
   NarrativeGenerateRequest,
   NarrativeGenerateResponse,
+  NarrativeQueuedSubmission,
 } from "../../types";
 import {
   buildReviewQueue,
@@ -47,10 +49,166 @@ export function createDocumentAgentSession(
     versionHistory: [],
     pendingDerivedDocuments: [],
     savedBranches: [],
+    activeSubmission: null,
+    queuedSubmissions: [],
     busy: false,
     inflightRequestId: null,
     documentViewMode: "preview",
     ...overrides,
+  };
+}
+
+function buildActiveSubmission(
+  submission: NarrativeQueuedSubmission,
+  stage: NarrativeActiveSubmission["stage"] = "resolving_intent",
+): NarrativeActiveSubmission {
+  return {
+    ...submission,
+    stage,
+  };
+}
+
+export function createNarrativeQueuedSubmission(
+  prompt: string,
+  source: NarrativeQueuedSubmission["source"],
+): NarrativeQueuedSubmission {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).slice(2, 8);
+  const requestId = `generation-${timestamp}-${random}`;
+  return {
+    submissionId: `submission-${timestamp}-${random}`,
+    requestId,
+    prompt,
+    source,
+    createdAt: nowIso(),
+  };
+}
+
+export function enqueueNarrativeSubmission(
+  session: DocumentAgentSession,
+  submission: NarrativeQueuedSubmission,
+  options: { clearComposerText?: boolean } = {},
+): {
+  session: DocumentAgentSession;
+  outcome: "started" | "queued" | "duplicate_active" | "duplicate_tail";
+} {
+  const clearComposerText = options.clearComposerText ?? false;
+  if (session.activeSubmission?.prompt === submission.prompt) {
+    return {
+      session,
+      outcome: "duplicate_active",
+    };
+  }
+
+  const queueTail =
+    session.queuedSubmissions.length > 0
+      ? session.queuedSubmissions[session.queuedSubmissions.length - 1]
+      : undefined;
+  if (queueTail?.prompt === submission.prompt) {
+    return {
+      session,
+      outcome: "duplicate_tail",
+    };
+  }
+
+  const baseSession = clearComposerText
+    ? {
+        ...session,
+        composerText: "",
+      }
+    : session;
+
+  if (!baseSession.activeSubmission) {
+    return {
+      session: {
+        ...baseSession,
+        updatedAt: nowIso(),
+        status: "resolving_intent",
+        activeSubmission: buildActiveSubmission(submission),
+        pendingQuestions: [],
+        pendingOptions: [],
+        pendingTurnKind: null,
+        busy: true,
+        inflightRequestId: submission.requestId,
+      },
+      outcome: "started",
+    };
+  }
+
+  return {
+    session: {
+      ...baseSession,
+      updatedAt: nowIso(),
+      queuedSubmissions: [...baseSession.queuedSubmissions, submission],
+      busy: true,
+    },
+    outcome: "queued",
+  };
+}
+
+export function updateActiveSubmissionStage(
+  session: DocumentAgentSession,
+  stage: NarrativeActiveSubmission["stage"],
+): DocumentAgentSession {
+  if (!session.activeSubmission) {
+    return session;
+  }
+
+  return {
+    ...session,
+    updatedAt: nowIso(),
+    status: stage,
+    activeSubmission: {
+      ...session.activeSubmission,
+      stage,
+    },
+    pendingQuestions: [],
+    pendingOptions: [],
+    pendingTurnKind: null,
+    busy: true,
+    inflightRequestId: session.activeSubmission.requestId,
+  };
+}
+
+export function clearActiveNarrativeSubmission(
+  session: DocumentAgentSession,
+): DocumentAgentSession {
+  if (!session.activeSubmission) {
+    return {
+      ...session,
+      busy: false,
+      inflightRequestId: null,
+    };
+  }
+
+  return {
+    ...session,
+    updatedAt: nowIso(),
+    activeSubmission: null,
+    busy: false,
+    inflightRequestId: null,
+  };
+}
+
+export function promoteNextNarrativeSubmission(
+  session: DocumentAgentSession,
+): DocumentAgentSession {
+  const [nextSubmission, ...remainingQueue] = session.queuedSubmissions;
+  if (!nextSubmission) {
+    return session;
+  }
+
+  return {
+    ...session,
+    updatedAt: nowIso(),
+    status: "resolving_intent",
+    activeSubmission: buildActiveSubmission(nextSubmission),
+    queuedSubmissions: remainingQueue,
+    pendingQuestions: [],
+    pendingOptions: [],
+    pendingTurnKind: null,
+    busy: true,
+    inflightRequestId: nextSubmission.requestId,
   };
 }
 
@@ -160,6 +318,8 @@ export function restoreDocumentAgentSessions(
         documentKey,
         withComputedReviewQueue({
           ...session,
+          activeSubmission: null,
+          queuedSubmissions: [],
           busy: false,
           inflightRequestId: null,
         }),

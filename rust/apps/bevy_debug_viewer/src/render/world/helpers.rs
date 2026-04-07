@@ -2,17 +2,6 @@
 
 use super::*;
 
-pub(crate) fn object_has_viewer_function(object: &game_core::MapObjectDebugState) -> bool {
-    !object.payload_summary.is_empty()
-}
-
-pub(crate) fn is_generated_door_object(object: &game_core::MapObjectDebugState) -> bool {
-    object
-        .payload_summary
-        .get("generated_door")
-        .is_some_and(|value| value == "true")
-}
-
 pub(crate) fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
     let mut min_x = i32::MAX;
     let mut max_x = i32::MIN;
@@ -31,136 +20,6 @@ pub(crate) fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f
     let width = (max_x - min_x + 1) as f32 * grid_size;
     let depth = (max_z - min_z + 1) as f32 * grid_size;
     (center_x, center_z, width, depth)
-}
-
-pub(crate) fn push_trigger_cell_specs(
-    specs: &mut Vec<StaticWorldBoxSpec>,
-    cell: GridCoord,
-    rotation: game_data::MapRotation,
-    floor_top: f32,
-    grid_size: f32,
-    base_color: Color,
-    pick_binding: ViewerPickBindingSpec,
-) {
-    let center_x = (cell.x as f32 + 0.5) * grid_size;
-    let center_z = (cell.z as f32 + 0.5) * grid_size;
-    let tile_height = grid_size * 0.045;
-    let shaft_height = grid_size * 0.055;
-    let head_height = grid_size * 0.06;
-    let outline_target = pick_binding.semantic.clone();
-
-    push_box_spec(
-        specs,
-        Vec3::new(grid_size * 0.9, tile_height, grid_size * 0.9),
-        Vec3::new(center_x, floor_top + tile_height * 0.5, center_z),
-        darken_color(base_color, 0.08),
-        MaterialStyle::UtilityAccent,
-        None,
-        Some(pick_binding.clone()),
-        Some(outline_target.clone()),
-    );
-
-    let (shaft_size, shaft_offset, head_size, head_offset) = match rotation {
-        game_data::MapRotation::North => (
-            Vec3::new(grid_size * 0.18, shaft_height, grid_size * 0.42),
-            Vec3::new(0.0, tile_height + shaft_height * 0.5, -grid_size * 0.04),
-            Vec3::new(grid_size * 0.5, head_height, grid_size * 0.16),
-            Vec3::new(
-                0.0,
-                tile_height + shaft_height + head_height * 0.5,
-                -grid_size * 0.24,
-            ),
-        ),
-        game_data::MapRotation::East => (
-            Vec3::new(grid_size * 0.42, shaft_height, grid_size * 0.18),
-            Vec3::new(grid_size * 0.04, tile_height + shaft_height * 0.5, 0.0),
-            Vec3::new(grid_size * 0.16, head_height, grid_size * 0.5),
-            Vec3::new(
-                grid_size * 0.24,
-                tile_height + shaft_height + head_height * 0.5,
-                0.0,
-            ),
-        ),
-        game_data::MapRotation::South => (
-            Vec3::new(grid_size * 0.18, shaft_height, grid_size * 0.42),
-            Vec3::new(0.0, tile_height + shaft_height * 0.5, grid_size * 0.04),
-            Vec3::new(grid_size * 0.5, head_height, grid_size * 0.16),
-            Vec3::new(
-                0.0,
-                tile_height + shaft_height + head_height * 0.5,
-                grid_size * 0.24,
-            ),
-        ),
-        game_data::MapRotation::West => (
-            Vec3::new(grid_size * 0.42, shaft_height, grid_size * 0.18),
-            Vec3::new(-grid_size * 0.04, tile_height + shaft_height * 0.5, 0.0),
-            Vec3::new(grid_size * 0.16, head_height, grid_size * 0.5),
-            Vec3::new(
-                -grid_size * 0.24,
-                tile_height + shaft_height + head_height * 0.5,
-                0.0,
-            ),
-        ),
-    };
-
-    push_box_spec(
-        specs,
-        shaft_size,
-        Vec3::new(
-            center_x + shaft_offset.x,
-            floor_top + shaft_offset.y,
-            center_z + shaft_offset.z,
-        ),
-        base_color,
-        MaterialStyle::Utility,
-        None,
-        Some(pick_binding.clone()),
-        Some(outline_target.clone()),
-    );
-    push_box_spec(
-        specs,
-        head_size,
-        Vec3::new(
-            center_x + head_offset.x,
-            floor_top + head_offset.y,
-            center_z + head_offset.z,
-        ),
-        lighten_color(base_color, 0.08),
-        MaterialStyle::UtilityAccent,
-        None,
-        Some(pick_binding),
-        Some(outline_target),
-    );
-}
-
-pub(crate) fn push_trigger_decal_spec(
-    specs: &mut Vec<StaticWorldDecalSpec>,
-    cell: GridCoord,
-    rotation: game_data::MapRotation,
-    floor_top: f32,
-    grid_size: f32,
-    base_color: Color,
-    outline_target: Option<ViewerPickTarget>,
-) {
-    let center_x = (cell.x as f32 + 0.5) * grid_size;
-    let center_z = (cell.z as f32 + 0.5) * grid_size;
-    specs.push(StaticWorldDecalSpec {
-        size: Vec2::splat(grid_size * 0.9),
-        translation: Vec3::new(center_x, floor_top + TRIGGER_DECAL_ELEVATION, center_z),
-        rotation: trigger_decal_rotation(rotation),
-        color: base_color,
-        outline_target,
-    });
-}
-
-pub(super) fn trigger_decal_rotation(rotation: game_data::MapRotation) -> Quat {
-    let yaw = match rotation {
-        game_data::MapRotation::North => std::f32::consts::PI,
-        game_data::MapRotation::East => -std::f32::consts::FRAC_PI_2,
-        game_data::MapRotation::South => 0.0,
-        game_data::MapRotation::West => std::f32::consts::FRAC_PI_2,
-    };
-    Quat::from_rotation_y(yaw)
 }
 
 pub(crate) fn is_scene_transition_trigger(object: &game_core::MapObjectDebugState) -> bool {
@@ -276,55 +135,6 @@ pub(crate) fn spawn_box(
     }
 }
 
-pub(crate) fn spawn_mesh_spec(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
-    spec: StaticWorldMeshSpec,
-) -> SpawnedMeshVisual {
-    let outline_target = spec.outline_target.clone();
-    let material = make_static_world_material(
-        materials,
-        building_wall_materials,
-        spec.color,
-        spec.material_style,
-    );
-    let mesh = meshes.add(spec.mesh);
-    let entity = match (&material, spec.pick_binding.clone()) {
-        (&StaticWorldMaterialHandle::Standard(ref material), binding) => {
-            let mut entity =
-                commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
-            if let Some(binding) = binding {
-                entity.insert(pickable_target(binding.into()));
-            }
-            if let Some(outline_target) = outline_target.clone() {
-                entity.insert(HoverOutlineMember::new(outline_target));
-            }
-            entity.id()
-        }
-        (&StaticWorldMaterialHandle::BuildingWallGrid(ref material), binding) => {
-            let mut entity =
-                commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
-            if let Some(binding) = binding {
-                entity.insert(pickable_target(binding.into()));
-            }
-            if let Some(outline_target) = outline_target {
-                entity.insert(HoverOutlineMember::new(outline_target));
-            }
-            entity.id()
-        }
-    };
-
-    SpawnedMeshVisual {
-        entity,
-        material,
-        color: spec.color,
-        aabb_center: spec.aabb_center,
-        aabb_half_extents: spec.aabb_half_extents,
-    }
-}
-
 pub(crate) fn spawn_decal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -352,14 +162,4 @@ pub(crate) fn spawn_decal(
         entity.insert(HoverOutlineMember::new(outline_target));
     }
     entity.id()
-}
-
-pub(crate) fn map_object_color(kind: game_data::MapObjectKind, palette: &ViewerPalette) -> Color {
-    match kind {
-        game_data::MapObjectKind::Building => palette.building_base,
-        game_data::MapObjectKind::Pickup => palette.pickup,
-        game_data::MapObjectKind::Interactive => palette.interactive,
-        game_data::MapObjectKind::Trigger => palette.trigger,
-        game_data::MapObjectKind::AiSpawn => palette.ai_spawn,
-    }
 }

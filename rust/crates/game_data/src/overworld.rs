@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::{GridCoord, MapId};
+use crate::{GridCoord, MapId, MapSize};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
@@ -85,6 +85,8 @@ pub struct OverworldCellDefinition {
     pub grid: GridCoord,
     #[serde(default)]
     pub terrain: String,
+    #[serde(default)]
+    pub blocked: bool,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -112,10 +114,11 @@ impl Default for OverworldTravelRuleSet {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OverworldDefinition {
     pub id: OverworldId,
+    pub size: MapSize,
     #[serde(default)]
     pub locations: Vec<OverworldLocationDefinition>,
     #[serde(default)]
-    pub walkable_cells: Vec<OverworldCellDefinition>,
+    pub cells: Vec<OverworldCellDefinition>,
     #[serde(default)]
     pub travel_rules: OverworldTravelRuleSet,
 }
@@ -206,6 +209,8 @@ pub enum OverworldLoadError {
 pub enum OverworldValidationError {
     #[error("overworld id must not be empty")]
     MissingId,
+    #[error("overworld size must be positive, got {width}x{height}")]
+    InvalidSize { width: u32, height: u32 },
     #[error("duplicate location id {location_id}")]
     DuplicateLocationId { location_id: String },
     #[error("location id must not be empty")]
@@ -233,10 +238,33 @@ pub enum OverworldValidationError {
     InvalidParentOutdoorLocation { location_id: String },
     #[error("location {location_id} return_entry_point_id must not be empty when present")]
     EmptyReturnEntryPointId { location_id: String },
-    #[error("walkable cell list contains duplicate cell ({x}, {y}, {z})")]
-    DuplicateWalkableCell { x: i32, y: i32, z: i32 },
-    #[error("location {location_id} overworld cell ({x}, {y}, {z}) is not walkable")]
-    NonWalkableLocationCell {
+    #[error("overworld cells contain duplicate cell ({x}, {y}, {z})")]
+    DuplicateCell { x: i32, y: i32, z: i32 },
+    #[error("overworld cell ({x}, {y}, {z}) is outside size bounds {width}x{height} at y=0")]
+    CellOutOfBounds {
+        x: i32,
+        y: i32,
+        z: i32,
+        width: u32,
+        height: u32,
+    },
+    #[error("overworld cell ({x}, {y}, {z}) must use y=0")]
+    InvalidCellLevel { x: i32, y: i32, z: i32 },
+    #[error("overworld cells are missing required grid ({x}, 0, {z})")]
+    MissingCell { x: i32, z: i32 },
+    #[error(
+        "location {location_id} overworld cell ({x}, {y}, {z}) is outside size bounds {width}x{height}"
+    )]
+    LocationOutOfBounds {
+        location_id: String,
+        x: i32,
+        y: i32,
+        z: i32,
+        width: u32,
+        height: u32,
+    },
+    #[error("outdoor location {location_id} overworld cell ({x}, {y}, {z}) is blocked")]
+    BlockedOutdoorLocationCell {
         location_id: String,
         x: i32,
         y: i32,
@@ -314,6 +342,12 @@ pub fn validate_overworld_definition(
 ) -> Result<(), OverworldValidationError> {
     if definition.id.as_str().trim().is_empty() {
         return Err(OverworldValidationError::MissingId);
+    }
+    if definition.size.width == 0 || definition.size.height == 0 {
+        return Err(OverworldValidationError::InvalidSize {
+            width: definition.size.width,
+            height: definition.size.height,
+        });
     }
 
     let mut location_ids = BTreeSet::new();
@@ -398,19 +432,65 @@ pub fn validate_overworld_definition(
         }
     }
 
-    let mut walkable_cells = HashSet::new();
-    for cell in &definition.walkable_cells {
-        if !walkable_cells.insert(cell.grid) {
-            return Err(OverworldValidationError::DuplicateWalkableCell {
+    let mut cells_by_grid = HashMap::<GridCoord, &OverworldCellDefinition>::new();
+    for cell in &definition.cells {
+        if cell.grid.y != 0 {
+            return Err(OverworldValidationError::InvalidCellLevel {
+                x: cell.grid.x,
+                y: cell.grid.y,
+                z: cell.grid.z,
+            });
+        }
+        if cell.grid.x < 0
+            || cell.grid.z < 0
+            || cell.grid.x >= definition.size.width as i32
+            || cell.grid.z >= definition.size.height as i32
+        {
+            return Err(OverworldValidationError::CellOutOfBounds {
+                x: cell.grid.x,
+                y: cell.grid.y,
+                z: cell.grid.z,
+                width: definition.size.width,
+                height: definition.size.height,
+            });
+        }
+        if cells_by_grid.insert(cell.grid, cell).is_some() {
+            return Err(OverworldValidationError::DuplicateCell {
                 x: cell.grid.x,
                 y: cell.grid.y,
                 z: cell.grid.z,
             });
         }
     }
+    for z in 0..definition.size.height as i32 {
+        for x in 0..definition.size.width as i32 {
+            if !cells_by_grid.contains_key(&GridCoord::new(x, 0, z)) {
+                return Err(OverworldValidationError::MissingCell { x, z });
+            }
+        }
+    }
     for location in &definition.locations {
-        if !walkable_cells.contains(&location.overworld_cell) {
-            return Err(OverworldValidationError::NonWalkableLocationCell {
+        if location.overworld_cell.y != 0
+            || location.overworld_cell.x < 0
+            || location.overworld_cell.z < 0
+            || location.overworld_cell.x >= definition.size.width as i32
+            || location.overworld_cell.z >= definition.size.height as i32
+        {
+            return Err(OverworldValidationError::LocationOutOfBounds {
+                location_id: location.id.as_str().to_string(),
+                x: location.overworld_cell.x,
+                y: location.overworld_cell.y,
+                z: location.overworld_cell.z,
+                width: definition.size.width,
+                height: definition.size.height,
+            });
+        }
+        if location.kind == OverworldLocationKind::Outdoor
+            && cells_by_grid
+                .get(&location.overworld_cell)
+                .is_some_and(|cell| cell.blocked)
+        {
+            return Err(OverworldValidationError::BlockedOutdoorLocationCell {
                 location_id: location.id.as_str().to_string(),
                 x: location.overworld_cell.x,
                 y: location.overworld_cell.y,
@@ -451,7 +531,7 @@ mod tests {
         OverworldValidationCatalog, OverworldValidationError,
     };
     use crate::map::MapId;
-    use crate::GridCoord;
+    use crate::{GridCoord, MapSize};
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
 
@@ -500,11 +580,8 @@ mod tests {
             icon: String::new(),
             extra: BTreeMap::new(),
         });
-        definition.walkable_cells.push(OverworldCellDefinition {
-            grid: GridCoord::new(5, 0, 0),
-            terrain: String::new(),
-            extra: BTreeMap::new(),
-        });
+        definition.size.width = 6;
+        definition.cells = full_cells(6, 1, &[(0, 0, "road", false), (1, 0, "road", true)]);
         let mut catalog = sample_catalog();
         catalog.map_ids.insert("forest_grid".into());
         catalog.map_entry_points_by_map.insert(
@@ -563,6 +640,10 @@ mod tests {
     fn sample_overworld() -> OverworldDefinition {
         OverworldDefinition {
             id: OverworldId("main_overworld".into()),
+            size: MapSize {
+                width: 2,
+                height: 1,
+            },
             locations: vec![
                 OverworldLocationDefinition {
                     id: OverworldLocationId("survivor_outpost_01".into()),
@@ -615,20 +696,36 @@ mod tests {
                     extra: BTreeMap::new(),
                 },
             ],
-            walkable_cells: vec![
-                OverworldCellDefinition {
-                    grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
-                    extra: BTreeMap::new(),
-                },
-                OverworldCellDefinition {
-                    grid: GridCoord::new(1, 0, 0),
-                    terrain: "road".into(),
-                    extra: BTreeMap::new(),
-                },
-            ],
+            cells: full_cells(2, 1, &[(0, 0, "road", false), (1, 0, "road", false)]),
             travel_rules: OverworldTravelRuleSet::default(),
         }
+    }
+
+    fn full_cells(
+        width: u32,
+        height: u32,
+        overrides: &[(i32, i32, &str, bool)],
+    ) -> Vec<OverworldCellDefinition> {
+        let override_map = overrides
+            .iter()
+            .map(|(x, z, terrain, blocked)| ((*x, *z), (*terrain, *blocked)))
+            .collect::<BTreeMap<_, _>>();
+        let mut cells = Vec::new();
+        for z in 0..height as i32 {
+            for x in 0..width as i32 {
+                let (terrain, blocked) = override_map
+                    .get(&(x, z))
+                    .copied()
+                    .unwrap_or(("plains", false));
+                cells.push(OverworldCellDefinition {
+                    grid: GridCoord::new(x, 0, z),
+                    terrain: terrain.to_string(),
+                    blocked,
+                    extra: BTreeMap::new(),
+                });
+            }
+        }
+        cells
     }
 
     #[test]

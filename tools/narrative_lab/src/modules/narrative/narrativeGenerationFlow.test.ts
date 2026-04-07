@@ -41,12 +41,14 @@ describe("narrativeGenerationFlow", () => {
     });
 
     const request = buildActionIntentRequest({
+      requestId: "intent-1",
       submittedPrompt: "把这个拆成单独文档",
       activeDocument,
       session,
       selectedContextDocuments: [contextDocument],
     });
 
+    expect(request.requestId).toBe("intent-1");
     expect(request.submittedPrompt).toBe("把这个拆成单独文档");
     expect(request.docType).toBe(activeDocument.meta.docType);
     expect(request.targetSlug).toBe(activeDocument.meta.slug);
@@ -101,7 +103,7 @@ describe("narrativeGenerationFlow", () => {
       assistantMessageId: "assistant-request-1",
     });
 
-    expect(session.status).toBe("thinking");
+    expect(session.status).toBe("generating");
     expect(session.busy).toBe(true);
     expect(session.inflightRequestId).toBe("request-1");
     expect(session.chatMessages.at(-1)?.id).toBe("assistant-request-1");

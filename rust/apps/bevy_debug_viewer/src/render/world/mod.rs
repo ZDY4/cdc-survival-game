@@ -154,10 +154,14 @@ pub(crate) fn update_occluding_world_visuals(
         &mut hover_occlusion_buffer,
     );
     let camera_position = camera_query.translation;
-    let hovered_door_object_id = stable_hover.active.as_ref().and_then(|hovered| match &hovered.semantic {
-        ViewerPickTarget::MapObject(object_id) => Some(object_id.as_str()),
-        _ => None,
-    });
+    let hovered_door_object_id =
+        stable_hover
+            .active
+            .as_ref()
+            .and_then(|hovered| match &hovered.semantic {
+                ViewerPickTarget::MapObject(object_id) => Some(object_id.as_str()),
+                _ => None,
+            });
     update_occluder_list_fade(
         &mut static_world_state.occluders,
         camera_position,
@@ -318,23 +322,6 @@ pub(super) fn collect_ground_cells_to_render(
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-pub(super) fn collect_static_world_mesh_specs(
-    snapshot: &game_core::SimulationSnapshot,
-    current_level: i32,
-    hide_building_roofs: bool,
-    render_config: ViewerRenderConfig,
-    palette: &ViewerPalette,
-) -> Vec<StaticWorldMeshSpec> {
-    static_world::collect_static_world_mesh_specs(
-        snapshot,
-        current_level,
-        hide_building_roofs,
-        render_config,
-        palette,
-    )
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn collect_static_world_decal_specs(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
@@ -403,56 +390,8 @@ pub(super) fn actor_selection_ring_color(side: ActorSide, palette: &ViewerPalett
     actors::actor_selection_ring_color(side, palette)
 }
 
-pub(super) fn object_has_viewer_function(object: &game_core::MapObjectDebugState) -> bool {
-    helpers::object_has_viewer_function(object)
-}
-
-pub(super) fn is_generated_door_object(object: &game_core::MapObjectDebugState) -> bool {
-    helpers::is_generated_door_object(object)
-}
-
 pub(super) fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
     helpers::occupied_cells_box(cells, grid_size)
-}
-
-pub(super) fn push_trigger_cell_specs(
-    specs: &mut Vec<StaticWorldBoxSpec>,
-    cell: GridCoord,
-    rotation: game_data::MapRotation,
-    floor_top: f32,
-    grid_size: f32,
-    base_color: Color,
-    pick_binding: ViewerPickBindingSpec,
-) {
-    helpers::push_trigger_cell_specs(
-        specs,
-        cell,
-        rotation,
-        floor_top,
-        grid_size,
-        base_color,
-        pick_binding,
-    )
-}
-
-pub(super) fn push_trigger_decal_spec(
-    specs: &mut Vec<StaticWorldDecalSpec>,
-    cell: GridCoord,
-    rotation: game_data::MapRotation,
-    floor_top: f32,
-    grid_size: f32,
-    base_color: Color,
-    outline_target: Option<ViewerPickTarget>,
-) {
-    helpers::push_trigger_decal_spec(
-        specs,
-        cell,
-        rotation,
-        floor_top,
-        grid_size,
-        base_color,
-        outline_target,
-    )
 }
 
 pub(super) fn is_scene_transition_trigger(object: &game_core::MapObjectDebugState) -> bool {
@@ -473,16 +412,6 @@ pub(super) fn spawn_box(
     helpers::spawn_box(commands, meshes, materials, building_wall_materials, spec)
 }
 
-pub(super) fn spawn_mesh_spec(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
-    spec: StaticWorldMeshSpec,
-) -> SpawnedMeshVisual {
-    helpers::spawn_mesh_spec(commands, meshes, materials, building_wall_materials, spec)
-}
-
 pub(super) fn spawn_decal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -491,30 +420,4 @@ pub(super) fn spawn_decal(
     spec: StaticWorldDecalSpec,
 ) -> Entity {
     helpers::spawn_decal(commands, meshes, materials, texture, spec)
-}
-
-pub(super) fn push_box_spec(
-    specs: &mut Vec<StaticWorldBoxSpec>,
-    size: Vec3,
-    translation: Vec3,
-    color: Color,
-    material_style: MaterialStyle,
-    occluder_kind: Option<StaticWorldOccluderKind>,
-    pick_binding: Option<ViewerPickBindingSpec>,
-    outline_target: Option<ViewerPickTarget>,
-) {
-    static_world::push_box_spec(
-        specs,
-        size,
-        translation,
-        color,
-        material_style,
-        occluder_kind,
-        pick_binding,
-        outline_target,
-    )
-}
-
-pub(super) fn map_object_color(kind: game_data::MapObjectKind, palette: &ViewerPalette) -> Color {
-    helpers::map_object_color(kind, palette)
 }

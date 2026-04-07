@@ -6,7 +6,7 @@ mod map_settings;
 mod progression;
 mod skills;
 
-pub(super) use inventory::{InventoryPanelMode, render_inventory_panel_contents};
+pub(super) use inventory::{render_inventory_panel_contents, InventoryPanelMode};
 
 pub(super) fn render_inventory_panel(
     parent: &mut ChildSpawnerCommands,

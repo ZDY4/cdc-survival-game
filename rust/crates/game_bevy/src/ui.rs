@@ -124,8 +124,14 @@ pub struct UiTradeSessionState {
 pub enum UiItemQuantityIntent {
     #[default]
     Discard,
-    TradeBuy { shop_id: String, unit_price: i32 },
-    TradeSell { shop_id: String, unit_price: i32 },
+    TradeBuy {
+        shop_id: String,
+        unit_price: i32,
+    },
+    TradeSell {
+        shop_id: String,
+        unit_price: i32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -565,7 +571,10 @@ pub fn inventory_snapshot(
         .map(|slot| (*slot).to_string())
         .collect::<Vec<_>>();
     for slot_id in actor.equipped_slots.keys() {
-        if !equipment_slot_ids.iter().any(|existing| existing == slot_id) {
+        if !equipment_slot_ids
+            .iter()
+            .any(|existing| existing == slot_id)
+        {
             equipment_slot_ids.push(slot_id.clone());
         }
     }
@@ -577,9 +586,8 @@ pub fn inventory_snapshot(
                 slot_id: slot_id.clone(),
                 slot_label: equipment_slot_label(&slot_id),
                 item_id: equipped.map(|equipped| equipped.item_id),
-                item_name: equipped.and_then(|equipped| {
-                    items.get(equipped.item_id).map(|item| item.name.clone())
-                }),
+                item_name: equipped
+                    .and_then(|equipped| items.get(equipped.item_id).map(|item| item.name.clone())),
             }
         })
         .collect::<Vec<_>>();
@@ -1206,6 +1214,10 @@ mod tests {
             OverworldId("prompt_world".into()),
             OverworldDefinition {
                 id: OverworldId("prompt_world".into()),
+                size: MapSize {
+                    width: 3,
+                    height: 1,
+                },
                 locations: vec![OverworldLocationDefinition {
                     id: OverworldLocationId("prompt_outpost".into()),
                     name: "Prompt Outpost".into(),
@@ -1222,20 +1234,23 @@ mod tests {
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 }],
-                walkable_cells: vec![
+                cells: vec![
                     OverworldCellDefinition {
                         grid: GridCoord::new(0, 0, 0),
                         terrain: "road".into(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
                         terrain: "road".into(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(2, 0, 0),
                         terrain: "road".into(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                 ],

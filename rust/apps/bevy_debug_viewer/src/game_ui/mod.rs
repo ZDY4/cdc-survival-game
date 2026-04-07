@@ -22,20 +22,21 @@ use game_data::{ActorId, InteractionTargetId};
 use crate::bootstrap::load_viewer_gameplay_bootstrap;
 use crate::console::ViewerConsoleState;
 use crate::controls::{cancel_targeting, enter_attack_targeting};
-use crate::ui_context_menu::{
-    context_menu_button_color, ContextMenuStyle, ContextMenuVariant,
-};
 use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
 use crate::state::{
-    viewer_ui_passthrough_bundle, EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot,
-    InventoryItemClickTarget, InventoryItemHoverTarget,
-    InventoryListDropZone, InventoryPanelBounds, SkillHoverTarget, TradeInventoryItemClickTarget,
-    TradeInventoryListDropZone, TradeInventoryPanelBounds, TradeSellZone, UiContextMenuRoot,
-    UiContextMenuState, UiContextMenuTarget, UiHoverTooltipContent, UiHoverTooltipState,
-    UiInventoryDragHoverTarget, UiInventoryDragSource, UiInventoryDragState, UiMouseBlocker,
-    ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState,
-    ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
+    viewer_ui_passthrough_bundle, ActivePanelRoot, DiscardModalRoot, DragPreviewRoot,
+    EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, GameUiScaffold, HotbarRoot,
+    InventoryContextMenuLayerRoot, InventoryItemClickTarget, InventoryItemHoverTarget,
+    InventoryListDropZone, InventoryPanelBounds, MainMenuRoot, OverworldPromptRoot,
+    SkillHoverTarget, TooltipRoot, TopBadgeRoot, TradeInventoryItemClickTarget,
+    TradeInventoryListDropZone, TradeInventoryPanelBounds, TradeRoot, TradeSellZone,
+    UiContextMenuRoot, UiContextMenuState, UiContextMenuTarget, UiHoverTooltipContent,
+    UiHoverTooltipState, UiInventoryDragHoverTarget, UiInventoryDragSource, UiInventoryDragState,
+    UiMouseBlocker, ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings,
+    ViewerUiSettingsPath,
 };
+use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
 
 const UI_PANEL_WIDTH: f32 = 448.0;
 const SKILLS_PANEL_WIDTH: f32 = 940.0;
@@ -120,6 +121,7 @@ mod widgets;
 
 pub(super) use hotbar::*;
 pub(super) use input::*;
+pub(crate) use overlay::GameUiRetainedCache;
 pub(super) use overlay::*;
 use panels::*;
 pub(super) use settings::*;

@@ -168,12 +168,9 @@ impl SimulationRuntime {
             None,
             economy_action_error,
             move |simulation| {
-                simulation.economy_mut().sell_equipped_item_to_shop(
-                    actor_id,
-                    &shop_id,
-                    &slot_id,
-                    items,
-                )
+                simulation
+                    .economy_mut()
+                    .sell_equipped_item_to_shop(actor_id, &shop_id, &slot_id, items)
             },
         )
     }

@@ -51,14 +51,14 @@ impl Simulation {
 
     pub(super) fn load_overworld_topology(&mut self) -> Result<(), String> {
         let definition = self.current_overworld_definition()?.clone();
-        let default_level = definition.walkable_cells.first().map(|cell| cell.grid.y);
-        let cells = definition.walkable_cells.iter().map(|cell| {
+        let default_level = Some(0);
+        let cells = definition.cells.iter().map(|cell| {
             (
                 cell.grid,
                 MapCellDefinition {
-                    x: cell.grid.x.max(0) as u32,
-                    z: cell.grid.z.max(0) as u32,
-                    blocks_movement: false,
+                    x: cell.grid.x as u32,
+                    z: cell.grid.z as u32,
+                    blocks_movement: cell.blocked,
                     blocks_sight: false,
                     terrain: cell.terrain.clone(),
                     extra: cell.extra.clone(),

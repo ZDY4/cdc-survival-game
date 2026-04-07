@@ -49,6 +49,7 @@ pub(super) fn render_item_quantity_modal(
                 ..default()
             },
             BackgroundColor(Color::srgba(0.01, 0.01, 0.01, 0.66)),
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .with_children(|overlay| {
@@ -64,16 +65,12 @@ pub(super) fn render_item_quantity_modal(
                     },
                     BackgroundColor(ui_panel_background()),
                     BorderColor::all(ui_border_strong_color()),
+                    viewer_ui_passthrough_bundle(),
                     UiMouseBlocker,
                 ))
                 .with_children(|panel| {
                     panel.spawn(text_bundle(font, title, 15.0, Color::WHITE));
-                    panel.spawn(text_bundle(
-                        font,
-                        item_name,
-                        12.0,
-                        ui_text_heading_color(),
-                    ));
+                    panel.spawn(text_bundle(font, item_name, 12.0, ui_text_heading_color()));
                     panel.spawn(text_bundle(
                         font,
                         &available_label,
@@ -90,12 +87,15 @@ pub(super) fn render_item_quantity_modal(
                         panel.spawn(text_bundle(font, max_label, 10.2, ui_text_muted_color()));
                     }
                     panel
-                        .spawn(Node {
-                            width: Val::Percent(100.0),
-                            flex_direction: FlexDirection::Row,
-                            column_gap: px(8.0),
-                            ..default()
-                        })
+                        .spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                flex_direction: FlexDirection::Row,
+                                column_gap: px(8.0),
+                                ..default()
+                            },
+                            viewer_ui_passthrough_bundle(),
+                        ))
                         .with_children(|actions| {
                             actions.spawn(action_button(
                                 font,
@@ -162,6 +162,7 @@ pub(super) fn render_overworld_location_prompt(
             },
             BackgroundColor(Color::srgba(0.05, 0.058, 0.076, 0.96)),
             BorderColor::all(Color::srgba(0.34, 0.42, 0.54, 1.0)),
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .with_children(|bubble| {

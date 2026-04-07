@@ -4,8 +4,8 @@ use bevy::log::error;
 use bevy::log::LogPlugin;
 use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
-use bevy_mesh_outline::MeshOutlinePlugin;
 use bevy::window::WindowPlugin;
+use bevy_mesh_outline::MeshOutlinePlugin;
 use game_bevy::{
     apply_gameplay_libraries, init_runtime_logging, spawn_characters_from_definition,
     CharacterSpawnRejected, GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin, NpcLifeUpdateSet,
@@ -47,12 +47,11 @@ use crate::simulation::{
     refresh_viewer_vision, sync_npc_runtime_presence, ViewerVisionTrackerState,
 };
 use crate::state::{
-    sync_viewer_ui_pick_passthrough, ActorLabelEntities, UiContextMenuState,
-    UiHoverTooltipState, UiInventoryDragState, ViewerActorFeedbackState,
-    ViewerActorMotionState, ViewerCameraFollowState, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig,
-    ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
-    ViewerUiSettings, ViewerUiSettingsPath,
+    ActorLabelEntities, UiContextMenuState, UiHoverTooltipState, UiInventoryDragState,
+    ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraFollowState,
+    ViewerCameraShakeState, ViewerDamageNumberState, ViewerInfoPanelState, ViewerPalette,
+    ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    ViewerStyleProfile, ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 pub(crate) fn run() {
@@ -295,7 +294,6 @@ impl Plugin for ViewerAppPlugin {
                 profiled_update_game_ui,
                 update_interaction_menu,
                 update_dialogue_panel,
-                sync_viewer_ui_pick_passthrough,
                 profiled_draw_world,
             )
                 .in_set(ViewerUpdateSet::Hud),

@@ -59,51 +59,14 @@
     "settlement_id": "survivor_outpost_01_settlement",
     "role": "guard",
     "ai_behavior_profile_id": "guard_settlement",
+    "schedule_profile_id": "guard_day_shift_weekday",
+    "personality_profile_id": "guard_diligent",
+    "need_profile_id": "guard_standard",
+    "smart_object_access_profile_id": "guard_settlement_access",
     "home_anchor": "guard_bed_01",
     "duty_route_id": "guard_patrol_main",
-    "schedule": [
-      {
-        "day": "monday",
-        "start_minute": 480,
-        "end_minute": 960,
-        "label": "白班执勤",
-        "tags": ["shift", "guard"]
-      },
-      {
-        "day": "tuesday",
-        "start_minute": 480,
-        "end_minute": 960,
-        "label": "白班执勤",
-        "tags": ["shift", "guard"]
-      },
-      {
-        "day": "wednesday",
-        "start_minute": 480,
-        "end_minute": 960,
-        "label": "白班执勤",
-        "tags": ["shift", "guard"]
-      },
-      {
-        "day": "thursday",
-        "start_minute": 480,
-        "end_minute": 960,
-        "label": "白班执勤",
-        "tags": ["shift", "guard"]
-      },
-      {
-        "day": "friday",
-        "start_minute": 480,
-        "end_minute": 960,
-        "label": "白班执勤",
-        "tags": ["shift", "guard"]
-      }
-    ],
-    "smart_object_access": ["guard_post", "bed", "canteen_seat", "recreation_spot", "alarm_point"],
-    "need_profile": {
-      "hunger_decay_per_hour": 4.5,
-      "energy_decay_per_hour": 3.0,
-      "morale_decay_per_hour": 1.2,
-      "safety_bias": 0.8
-    }
+    "schedule": [],
+    "need_profile_override": null,
+    "personality_override": {}
   }
 }

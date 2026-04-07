@@ -1471,13 +1471,12 @@ impl HeadlessEconomyRuntime {
             .actors
             .get_mut(&actor_id)
             .ok_or(EconomyRuntimeError::UnknownActor { actor_id })?;
-        actor
-            .equipped_slots
-            .remove(&slot_id)
-            .ok_or_else(|| EconomyRuntimeError::EmptyEquipmentSlot {
+        actor.equipped_slots.remove(&slot_id).ok_or_else(|| {
+            EconomyRuntimeError::EmptyEquipmentSlot {
                 actor_id,
                 slot: slot_id.clone(),
-            })?;
+            }
+        })?;
         actor.money += total_price;
 
         let shop = self

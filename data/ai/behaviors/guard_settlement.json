@@ -1,47 +1,14 @@
 {
   "id": "guard_settlement",
-  "fact_ids": [
-    "hungry",
-    "very_hungry",
-    "sleepy",
-    "exhausted",
-    "need_morale",
-    "on_shift",
-    "shift_starting_soon",
-    "threat_detected",
-    "meal_window_open",
-    "at_home",
-    "at_duty_area",
-    "has_reserved_bed",
-    "has_reserved_meal_seat",
-    "guard_coverage_insufficient"
-  ],
-  "goal_ids": [
-    "respond_threat",
-    "preserve_life",
-    "satisfy_shift",
-    "eat_meal",
-    "sleep",
-    "recover_morale",
-    "return_home",
-    "idle_safely"
-  ],
-  "action_ids": [
-    "travel_to_duty_area",
-    "reserve_guard_post",
-    "stand_guard",
-    "patrol_route",
-    "travel_to_canteen",
-    "eat_meal",
-    "travel_to_leisure",
-    "relax",
-    "travel_home",
-    "reserve_bed",
-    "sleep",
-    "raise_alarm",
-    "respond_alarm",
-    "idle_safely"
-  ],
+  "meta": {
+    "display_name": "卫兵据点行为",
+    "description": "卫兵的据点生活、值班和警报响应行为。",
+    "category": "behavior",
+    "tags": ["guard", "settlement"],
+    "sort_order": 10
+  },
+  "included_behavior_ids": ["settlement_base"],
+  "action_group_ids": ["duty_travel_actions", "guard_actions"],
   "default_goal_id": "idle_safely",
   "alert_goal_id": "respond_threat"
 }

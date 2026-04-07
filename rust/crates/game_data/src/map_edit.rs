@@ -96,6 +96,14 @@ pub enum MapEditCommand {
         target: MapEditTarget,
         object_id: String,
     },
+    AddLevel {
+        target: MapEditTarget,
+        level: i32,
+    },
+    RemoveLevel {
+        target: MapEditTarget,
+        level: i32,
+    },
     PaintCells {
         target: MapEditTarget,
         level: i32,
@@ -193,6 +201,7 @@ pub enum MapEditError {
     MapAlreadyExists { map_id: MapId, path: PathBuf },
 }
 
+#[derive(Debug, Clone)]
 pub struct MapEditorService {
     maps_dir: PathBuf,
     data_root: Option<PathBuf>,
@@ -246,6 +255,8 @@ impl MapEditorService {
             MapEditCommand::RemoveObject { target, object_id } => {
                 self.remove_object(target, &object_id)
             }
+            MapEditCommand::AddLevel { target, level } => self.add_level(target, level),
+            MapEditCommand::RemoveLevel { target, level } => self.remove_level(target, level),
             MapEditCommand::PaintCells {
                 target,
                 level,
@@ -870,6 +881,52 @@ impl MapEditorService {
                 path: Some(path),
                 changed,
                 details: vec![format!("cleared cells on level {level}")],
+            },
+        })
+    }
+
+    fn add_level(&self, target: MapEditTarget, level: i32) -> Result<MapEditResult, MapEditError> {
+        let (definition, path) = self.load_map(&target)?;
+        let next = self.add_level_definition(&definition, level)?;
+        let changed = next != definition;
+        if changed {
+            self.write_map(&next, &path)?;
+        }
+
+        Ok(MapEditResult {
+            changed,
+            diagnostics: Vec::new(),
+            summary: MapEditOperationSummary {
+                operation: "add_level".to_string(),
+                map_id: Some(next.id),
+                path: Some(path),
+                changed,
+                details: vec![format!("ensured level {level} exists")],
+            },
+        })
+    }
+
+    fn remove_level(
+        &self,
+        target: MapEditTarget,
+        level: i32,
+    ) -> Result<MapEditResult, MapEditError> {
+        let (definition, path) = self.load_map(&target)?;
+        let next = self.remove_level_definition(&definition, level)?;
+        let changed = next != definition;
+        if changed {
+            self.write_map(&next, &path)?;
+        }
+
+        Ok(MapEditResult {
+            changed,
+            diagnostics: Vec::new(),
+            summary: MapEditOperationSummary {
+                operation: "remove_level".to_string(),
+                map_id: Some(next.id),
+                path: Some(path),
+                changed,
+                details: vec![format!("removed level {level}")],
             },
         })
     }

@@ -88,35 +88,99 @@ pub(crate) fn setup_viewer(
     ));
     spawn_info_panel_ui(&mut commands, ui_font.clone(), &palette);
     let interaction_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
-    commands.spawn((
-        context_menu_root_node(interaction_style, Vec2::ZERO),
-        BackgroundColor(context_menu_panel_color()),
-        BorderColor::all(context_menu_border_color()),
-        Visibility::Hidden,
-        FocusPolicy::Block,
-        RelativeCursorPosition::default(),
-        viewer_ui_passthrough_bundle(),
-        InteractionMenuRoot,
-        UiMouseBlocker,
-    ));
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(24),
-            bottom: px(DIALOGUE_PANEL_BOTTOM_PX),
-            width: px(720),
-            padding: UiRect::all(px(16)),
-            flex_direction: FlexDirection::Column,
-            ..default()
-        },
-        BackgroundColor(palette.dialogue_background),
-        Visibility::Hidden,
-        FocusPolicy::Block,
-        RelativeCursorPosition::default(),
-        viewer_ui_passthrough_bundle(),
-        DialoguePanelRoot,
-        UiMouseBlocker,
-    ));
+    commands
+        .spawn((
+            context_menu_root_node(interaction_style, Vec2::ZERO),
+            BackgroundColor(context_menu_panel_color()),
+            BorderColor::all(context_menu_border_color()),
+            Visibility::Hidden,
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
+            InteractionMenuRoot,
+            UiMouseBlocker,
+        ))
+        .with_children(|menu| {
+            menu.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+                InteractionMenuOptionsRoot,
+            ));
+        });
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(24),
+                bottom: px(DIALOGUE_PANEL_BOTTOM_PX),
+                width: px(720),
+                padding: UiRect::all(px(16)),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(palette.dialogue_background),
+            Visibility::Hidden,
+            FocusPolicy::Block,
+            RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
+            DialoguePanelRoot,
+            UiMouseBlocker,
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                Text::new(""),
+                TextFont::from_font_size(17.0).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.94, 0.93, 0.90, 0.98)),
+                Node {
+                    margin: UiRect::bottom(px(6)),
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+                DialoguePanelTitleLabel,
+            ));
+            panel.spawn((
+                Text::new(""),
+                TextFont::from_font_size(12.0).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.82, 0.80, 0.74, 0.98)),
+                Node {
+                    margin: UiRect::bottom(px(10)),
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+                DialoguePanelSpeakerLabel,
+            ));
+            panel.spawn((
+                Text::new(""),
+                TextFont::from_font_size(15.0).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.96, 0.95, 0.93, 0.98)),
+                Node {
+                    margin: UiRect::bottom(px(12)),
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+                DialoguePanelBodyLabel,
+            ));
+            panel.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+                DialoguePanelChoicesRoot,
+            ));
+            panel.spawn((
+                Text::new(""),
+                TextFont::from_font_size(11.0).with_font(ui_font.clone()),
+                TextColor(Color::srgba(0.72, 0.71, 0.68, 0.94)),
+                viewer_ui_passthrough_bundle(),
+                DialoguePanelHintLabel,
+            ));
+        });
     spawn_console_panel(&mut commands, ui_font, &palette);
 }
 

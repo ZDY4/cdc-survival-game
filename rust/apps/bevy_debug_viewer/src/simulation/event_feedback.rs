@@ -79,6 +79,7 @@ fn clear_interaction_ui_for_scene_transition(viewer_state: &mut ViewerState) {
     viewer_state.active_dialogue = None;
     viewer_state.targeting_state = None;
     viewer_state.pending_open_trade_target = None;
+    viewer_state.resume_camera_follow();
 }
 
 fn clear_interaction_ui_for_consumed_target(
@@ -224,5 +225,36 @@ fn format_interrupt_reason(reason: Option<AutoMoveInterruptReason>) -> &'static 
         Some(AutoMoveInterruptReason::CancelledByNewCommand) => "cancelled_by_new_command",
         Some(AutoMoveInterruptReason::UnknownActor) => "unknown_actor",
         None => "unknown",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clear_interaction_ui_for_scene_transition;
+    use crate::state::{ViewerCameraMode, ViewerState};
+    use bevy::prelude::Vec2;
+    use game_data::InteractionTargetId;
+
+    #[test]
+    fn scene_transition_restores_camera_follow_mode() {
+        let mut viewer_state = ViewerState {
+            focused_target: Some(InteractionTargetId::MapObject("exit_trigger".into())),
+            camera_mode: ViewerCameraMode::ManualPan,
+            camera_pan_offset: Vec2::new(6.0, -4.0),
+            camera_drag_cursor: Some(Vec2::new(10.0, 12.0)),
+            camera_drag_anchor_world: Some(Vec2::new(2.0, 3.0)),
+            ..ViewerState::default()
+        };
+
+        clear_interaction_ui_for_scene_transition(&mut viewer_state);
+
+        assert!(viewer_state.focused_target.is_none());
+        assert_eq!(
+            viewer_state.camera_mode,
+            ViewerCameraMode::FollowSelectedActor
+        );
+        assert_eq!(viewer_state.camera_pan_offset, Vec2::ZERO);
+        assert!(viewer_state.camera_drag_cursor.is_none());
+        assert!(viewer_state.camera_drag_anchor_world.is_none());
     }
 }

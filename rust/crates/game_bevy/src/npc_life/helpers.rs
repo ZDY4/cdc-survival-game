@@ -5,13 +5,13 @@ use game_core::{
     AiBlackboard, NpcFact, NpcGoalKey, NpcGoalScore, NpcPlanRequest, NpcPlanningContext,
 };
 use game_data::{
-    GridCoord, NpcRole, ScheduleBlock, ScheduleDay, SettlementDefinition, SmartObjectDefinition,
-    SmartObjectKind,
+    GridCoord, NpcRole, ScheduleBlock, ScheduleDay, SettlementDefinition,
+    SmartObjectAccessProfileDefinition, SmartObjectDefinition, SmartObjectKind,
 };
 
 use crate::reservations::SmartObjectReservations;
 
-use super::{NeedState, NpcLifeState, ReservationState, ScheduleState};
+use super::{NeedState, NpcLifeState, PersonalityState, ReservationState, ScheduleState};
 
 pub(super) fn route_duty_anchor(
     settlement: &SettlementDefinition,
@@ -70,12 +70,25 @@ pub(super) fn first_object_for_kind_for_role(
     settlement: &SettlementDefinition,
     kind: SmartObjectKind,
     role: NpcRole,
+    access_profile: &SmartObjectAccessProfileDefinition,
 ) -> Option<String> {
     let role_tag = role_tag(role);
+    let preferred_tags = preferred_tags_for_kind(access_profile, kind);
     settlement
         .smart_objects
         .iter()
-        .find(|object| object.kind == kind && object.tags.iter().any(|tag| tag == role_tag))
+        .find(|object| {
+            object.kind == kind
+                && preferred_tags
+                    .iter()
+                    .any(|tag| object.tags.iter().any(|object_tag| object_tag == tag))
+        })
+        .or_else(|| {
+            settlement
+                .smart_objects
+                .iter()
+                .find(|object| object.kind == kind && object.tags.iter().any(|tag| tag == role_tag))
+        })
         .or_else(|| {
             settlement
                 .smart_objects
@@ -89,17 +102,31 @@ pub(super) fn select_object_for_kind_for_role<'a>(
     settlement: &'a SettlementDefinition,
     kind: SmartObjectKind,
     role: NpcRole,
+    access_profile: &SmartObjectAccessProfileDefinition,
     reservations: &SmartObjectReservations,
     owner: Entity,
 ) -> Option<&'a SmartObjectDefinition> {
     let role_tag = role_tag(role);
+    let preferred_tags = preferred_tags_for_kind(access_profile, kind);
     select_available_object(
         settlement.smart_objects.iter().filter(move |object| {
-            object.kind == kind && object.tags.iter().any(|tag| tag == role_tag)
+            object.kind == kind
+                && preferred_tags
+                    .iter()
+                    .any(|tag| object.tags.iter().any(|object_tag| object_tag == tag))
         }),
         reservations,
         owner,
     )
+    .or_else(|| {
+        select_available_object(
+            settlement.smart_objects.iter().filter(move |object| {
+                object.kind == kind && object.tags.iter().any(|tag| tag == role_tag)
+            }),
+            reservations,
+            owner,
+        )
+    })
     .or_else(|| {
         select_available_object(
             settlement
@@ -155,7 +182,8 @@ pub(super) fn active_schedule_block(
     minute_of_day: u16,
 ) -> Option<&ScheduleBlock> {
     schedule.iter().find(|block| {
-        block.day == day && minute_in_window(minute_of_day, block.start_minute, block.end_minute)
+        block.includes_day(day)
+            && minute_in_window(minute_of_day, block.start_minute, block.end_minute)
     })
 }
 
@@ -178,6 +206,7 @@ pub(super) fn quantize_need(value: f32) -> u8 {
 pub(super) fn build_ai_blackboard(
     life: &NpcLifeState,
     need: &NeedState,
+    personality: &PersonalityState,
     schedule: &ScheduleState,
     reservations: &ReservationState,
     world_alert_active: bool,
@@ -192,6 +221,11 @@ pub(super) fn build_ai_blackboard(
     blackboard.set_number("need.hunger", need.hunger);
     blackboard.set_number("need.energy", need.energy);
     blackboard.set_number("need.morale", need.morale);
+    blackboard.set_number("personality.safety_bias", personality.safety_bias);
+    blackboard.set_number("personality.social_bias", personality.social_bias);
+    blackboard.set_number("personality.duty_bias", personality.duty_bias);
+    blackboard.set_number("personality.comfort_bias", personality.comfort_bias);
+    blackboard.set_number("personality.alertness_bias", personality.alertness_bias);
     blackboard.set_number("settlement.active_guards", active_guards as f32);
     blackboard.set_number("settlement.min_guard_on_duty", min_guard_on_duty as f32);
     blackboard.set_bool("schedule.on_shift", schedule.on_shift);
@@ -229,6 +263,18 @@ pub(super) fn build_ai_blackboard(
     blackboard.set_optional_text("anchor.leisure", life.leisure_anchor.clone());
     blackboard.set_optional_text("anchor.alarm", life.alarm_anchor.clone());
     blackboard
+}
+
+fn preferred_tags_for_kind<'a>(
+    access_profile: &'a SmartObjectAccessProfileDefinition,
+    kind: SmartObjectKind,
+) -> &'a [String] {
+    access_profile
+        .rules
+        .iter()
+        .find(|rule| rule.kind == kind)
+        .map(|rule| rule.preferred_tags.as_slice())
+        .unwrap_or(&[])
 }
 
 pub(super) fn build_decision_summary(

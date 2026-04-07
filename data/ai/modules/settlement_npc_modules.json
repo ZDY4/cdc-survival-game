@@ -126,7 +126,8 @@
         "kind": "fact_true",
         "fact_id": "threat_detected"
       },
-      "score_delta": 1000
+      "score_delta": 1000,
+      "score_multiplier_key": "personality.alertness_bias"
     },
     {
       "id": "preserve_life_if_urgent_need",
@@ -160,7 +161,8 @@
           }
         ]
       },
-      "score_delta": 800
+      "score_delta": 800,
+      "score_multiplier_key": "personality.duty_bias"
     },
     {
       "id": "eat_meal_if_window_open",
@@ -185,7 +187,8 @@
         "kind": "fact_true",
         "fact_id": "sleepy"
       },
-      "score_delta": 600
+      "score_delta": 600,
+      "score_multiplier_key": "personality.comfort_bias"
     },
     {
       "id": "recover_morale_if_needed",
@@ -193,7 +196,8 @@
         "kind": "fact_true",
         "fact_id": "need_morale"
       },
-      "score_delta": 500
+      "score_delta": 500,
+      "score_multiplier_key": "personality.social_bias"
     },
     {
       "id": "return_home_if_not_home",

@@ -655,7 +655,27 @@ export type NarrativeGenerateRequest = {
   derivedTargetDocType?: NarrativeDocType | null;
 };
 
+export type NarrativeSubmissionStage =
+  | "resolving_intent"
+  | "generating"
+  | "cancelling";
+
+export type NarrativeSubmissionSource = "composer" | "option";
+
+export type NarrativeQueuedSubmission = {
+  submissionId: string;
+  requestId: string;
+  prompt: string;
+  source: NarrativeSubmissionSource;
+  createdAt: string;
+};
+
+export type NarrativeActiveSubmission = NarrativeQueuedSubmission & {
+  stage: NarrativeSubmissionStage;
+};
+
 export type ResolveNarrativeActionIntentInput = {
+  requestId: string;
   submittedPrompt: string;
   docType: NarrativeDocType;
   targetSlug: string;
@@ -760,6 +780,9 @@ export type PersistedDocumentAgentSessionState = {
   status:
     | "idle"
     | "thinking"
+    | "resolving_intent"
+    | "generating"
+    | "cancelling"
     | "waiting_user"
     | "executing_step"
     | "reviewing_result"
@@ -916,6 +939,9 @@ export type DocumentAgentSession = {
   status:
     | "idle"
     | "thinking"
+    | "resolving_intent"
+    | "generating"
+    | "cancelling"
     | "waiting_user"
     | "executing_step"
     | "reviewing_result"
@@ -935,9 +961,15 @@ export type DocumentAgentSession = {
   versionHistory: NarrativeVersionSnapshot[];
   pendingDerivedDocuments: NarrativeDocumentSummary[];
   savedBranches: SavedDocumentAgentBranch[];
+  activeSubmission: NarrativeActiveSubmission | null;
+  queuedSubmissions: NarrativeQueuedSubmission[];
   busy: boolean;
   inflightRequestId?: string | null;
   documentViewMode: NarrativeDocumentViewMode;
+};
+
+export type NarrativeCancelRequestResult = {
+  status: "cancelled" | "already_finished";
 };
 
 export type NarrativeGenerationProgressEvent = {

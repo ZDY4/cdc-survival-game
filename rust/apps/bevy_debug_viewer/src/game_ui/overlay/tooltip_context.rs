@@ -188,8 +188,10 @@ pub(super) fn render_inventory_context_menu(
                 .find(|slot| slot.slot_id == *slot_id)
                 .and_then(|slot| slot.item_name.clone())
                 .unwrap_or_else(|| item_id.to_string());
-            let actions =
-                equipment_context_menu_actions(trade_state.map(|trade| trade.shop_id.as_str()), slot_id);
+            let actions = equipment_context_menu_actions(
+                trade_state.map(|trade| trade.shop_id.as_str()),
+                slot_id,
+            );
             render_ui_context_menu_container(
                 parent,
                 font,
@@ -230,7 +232,11 @@ pub(super) fn render_inventory_context_menu(
             let Some(tree) = snapshot.trees.iter().find(|tree| tree.tree_id == *tree_id) else {
                 return;
             };
-            let Some(entry) = tree.entries.iter().find(|entry| entry.skill_id == *skill_id) else {
+            let Some(entry) = tree
+                .entries
+                .iter()
+                .find(|entry| entry.skill_id == *skill_id)
+            else {
                 return;
             };
             let can_bind =
@@ -284,7 +290,12 @@ fn spawn_ui_context_menu_header(
         style.title_font_size,
         ui_text_secondary_color(),
     ));
-    parent.spawn(context_menu_header_text_bundle(font, title, 11.5, Color::WHITE));
+    parent.spawn(context_menu_header_text_bundle(
+        font,
+        title,
+        11.5,
+        Color::WHITE,
+    ));
     parent.spawn(context_menu_header_text_bundle(
         font,
         subtitle,
@@ -412,6 +423,7 @@ pub(super) fn render_tooltip_container(
             BackgroundColor(ui_panel_background()),
             BorderColor::all(ui_border_color()),
             FocusPolicy::Pass,
+            viewer_ui_passthrough_bundle(),
         ))
         .with_children(content);
 }
@@ -445,7 +457,9 @@ pub(super) fn floating_panel_position(
 
 #[cfg(test)]
 mod tests {
-    use super::{equipment_context_menu_actions, inventory_context_menu_actions, skill_context_menu_actions};
+    use super::{
+        equipment_context_menu_actions, inventory_context_menu_actions, skill_context_menu_actions,
+    };
 
     #[test]
     fn inventory_context_menu_shows_drop_even_without_use_or_equip() {

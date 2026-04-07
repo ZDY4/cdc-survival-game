@@ -7,7 +7,9 @@ use game_core::{
     NpcGoalScore, NpcPlanStep, OfflineActionState,
 };
 use game_data::{
-    ActorId, AiBehaviorProfile, CharacterLifeProfile, GridCoord, NeedProfile, NpcRole, ScheduleDay,
+    ActorId, AiBehaviorProfile, CharacterLifeProfile, GridCoord, NeedProfile, NpcRole,
+    PersonalityProfileDefinition, ResolvedCharacterLifeProfile, ScheduleDay,
+    SmartObjectAccessProfileDefinition,
 };
 
 mod helpers;
@@ -20,6 +22,9 @@ pub enum NpcLifeUpdateSet {
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct LifeProfileComponent(pub CharacterLifeProfile);
+
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct ResolvedLifeProfileComponent(pub ResolvedCharacterLifeProfile);
 
 #[derive(Component, Debug, Clone, PartialEq, Default)]
 pub struct AiBehaviorProfileComponent(pub AiBehaviorProfile);
@@ -48,7 +53,6 @@ pub struct NeedState {
     pub hunger: f32,
     pub energy: f32,
     pub morale: f32,
-    pub safety_bias: f32,
     pub hunger_decay_per_hour: f32,
     pub energy_decay_per_hour: f32,
     pub morale_decay_per_hour: f32,
@@ -60,13 +64,36 @@ impl NeedState {
             hunger: 60.0,
             energy: 85.0,
             morale: 50.0,
-            safety_bias: profile.safety_bias,
             hunger_decay_per_hour: profile.hunger_decay_per_hour,
             energy_decay_per_hour: profile.energy_decay_per_hour,
             morale_decay_per_hour: profile.morale_decay_per_hour,
         }
     }
 }
+
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct PersonalityState {
+    pub safety_bias: f32,
+    pub social_bias: f32,
+    pub duty_bias: f32,
+    pub comfort_bias: f32,
+    pub alertness_bias: f32,
+}
+
+impl From<&PersonalityProfileDefinition> for PersonalityState {
+    fn from(profile: &PersonalityProfileDefinition) -> Self {
+        Self {
+            safety_bias: profile.safety_bias,
+            social_bias: profile.social_bias,
+            duty_bias: profile.duty_bias,
+            comfort_bias: profile.comfort_bias,
+            alertness_bias: profile.alertness_bias,
+        }
+    }
+}
+
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct SmartObjectAccessProfileComponent(pub SmartObjectAccessProfileDefinition);
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
 pub struct ScheduleState {
@@ -234,9 +261,9 @@ mod tests {
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterPlaceholderColors,
         CharacterPresentation, CharacterProgression, CharacterResourcePool, MapId, NeedProfile,
-        NpcRole, ScheduleBlock, ScheduleDay, ServiceRules, SettlementAnchorDefinition,
-        SettlementDefinition, SettlementId, SettlementLibrary, SettlementRouteDefinition,
-        SmartObjectDefinition, SmartObjectKind, TimeWindow,
+        NpcRole, ServiceRules, SettlementAnchorDefinition, SettlementDefinition, SettlementId,
+        SettlementLibrary, SettlementRouteDefinition, SmartObjectDefinition, SmartObjectKind,
+        TimeWindow,
     };
 
     use super::{
@@ -508,28 +535,20 @@ mod tests {
             settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Guard,
             ai_behavior_profile_id: "guard_settlement".into(),
+            schedule_profile_id: "guard_day_shift_weekday".into(),
+            personality_profile_id: "guard_diligent".into(),
+            need_profile_id: "guard_standard".into(),
+            smart_object_access_profile_id: "guard_settlement_access".into(),
             home_anchor: "guard_home_01".into(),
             duty_route_id: "guard_patrol_north".into(),
-            schedule: vec![ScheduleBlock {
-                day: ScheduleDay::Monday,
-                start_minute: 8 * 60,
-                end_minute: 16 * 60,
-                label: "白班执勤".into(),
-                tags: vec!["shift".into(), "guard".into()],
-            }],
-            smart_object_access: vec![
-                "guard_post".into(),
-                "bed".into(),
-                "canteen_seat".into(),
-                "recreation_spot".into(),
-                "alarm_point".into(),
-            ],
-            need_profile: NeedProfile {
+            schedule: Vec::new(),
+            need_profile_override: Some(NeedProfile {
                 hunger_decay_per_hour: 8.0,
                 energy_decay_per_hour: 4.0,
                 morale_decay_per_hour: 4.0,
                 safety_bias: 0.8,
-            },
+            }),
+            personality_override: Default::default(),
         }
     }
 
@@ -538,26 +557,20 @@ mod tests {
             settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Cook,
             ai_behavior_profile_id: "cook_settlement".into(),
+            schedule_profile_id: "cook_morning_shift_weekday".into(),
+            personality_profile_id: "cook_caretaker".into(),
+            need_profile_id: "cook_standard".into(),
+            smart_object_access_profile_id: "cook_settlement_access".into(),
             home_anchor: "cook_home_01".into(),
             duty_route_id: "cook_service_loop".into(),
-            schedule: vec![ScheduleBlock {
-                day: ScheduleDay::Monday,
-                start_minute: 6 * 60,
-                end_minute: 14 * 60,
-                label: "厨房轮值".into(),
-                tags: vec!["shift".into(), "cook".into()],
-            }],
-            smart_object_access: vec![
-                "bed".into(),
-                "canteen_seat".into(),
-                "recreation_spot".into(),
-            ],
-            need_profile: NeedProfile {
+            schedule: Vec::new(),
+            need_profile_override: Some(NeedProfile {
                 hunger_decay_per_hour: 4.0,
                 energy_decay_per_hour: 2.8,
                 morale_decay_per_hour: 1.3,
                 safety_bias: 0.4,
-            },
+            }),
+            personality_override: Default::default(),
         }
     }
 
@@ -566,26 +579,20 @@ mod tests {
             settlement_id: "survivor_outpost_01_settlement".into(),
             role: NpcRole::Doctor,
             ai_behavior_profile_id: "doctor_settlement".into(),
+            schedule_profile_id: "doctor_clinic_rounds_weekday".into(),
+            personality_profile_id: "doctor_compassionate".into(),
+            need_profile_id: "doctor_standard".into(),
+            smart_object_access_profile_id: "doctor_settlement_access".into(),
             home_anchor: "doctor_home_01".into(),
             duty_route_id: "doctor_clinic_rounds".into(),
-            schedule: vec![ScheduleBlock {
-                day: ScheduleDay::Monday,
-                start_minute: 9 * 60,
-                end_minute: 17 * 60,
-                label: "诊所轮值".into(),
-                tags: vec!["shift".into(), "doctor".into()],
-            }],
-            smart_object_access: vec![
-                "bed".into(),
-                "medical_station".into(),
-                "recreation_spot".into(),
-            ],
-            need_profile: NeedProfile {
+            schedule: Vec::new(),
+            need_profile_override: Some(NeedProfile {
                 hunger_decay_per_hour: 3.2,
                 energy_decay_per_hour: 2.4,
                 morale_decay_per_hour: 1.1,
                 safety_bias: 0.6,
-            },
+            }),
+            personality_override: Default::default(),
         }
     }
 

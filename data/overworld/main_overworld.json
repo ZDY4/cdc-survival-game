@@ -1,5 +1,9 @@
 {
   "id": "main_overworld",
+  "size": {
+    "width": 8,
+    "height": 8
+  },
   "locations": [
     {
       "id": "factory",
@@ -13,9 +17,9 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": -1,
+        "x": 2,
         "y": 0,
-        "z": 3
+        "z": 5
       },
       "danger_level": 4,
       "icon": "res://assets/icons/location_factory.png"
@@ -32,9 +36,9 @@
       "default_unlocked": false,
       "visible": true,
       "overworld_cell": {
-        "x": 0,
+        "x": 3,
         "y": 0,
-        "z": 5
+        "z": 6
       },
       "danger_level": 2,
       "icon": "res://assets/icons/location_forest.png"
@@ -51,9 +55,9 @@
       "default_unlocked": false,
       "visible": true,
       "overworld_cell": {
-        "x": -3,
+        "x": 0,
         "y": 0,
-        "z": 2
+        "z": 4
       },
       "danger_level": 4,
       "icon": "res://assets/icons/location_hospital.png"
@@ -72,7 +76,7 @@
       "overworld_cell": {
         "x": 7,
         "y": 0,
-        "z": 2
+        "z": 4
       },
       "danger_level": 5,
       "icon": "res://assets/icons/location_ruins.png"
@@ -89,9 +93,9 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": 0,
+        "x": 2,
         "y": 0,
-        "z": 0
+        "z": 2
       },
       "danger_level": 0,
       "icon": "res://assets/icons/location_safehouse.png"
@@ -108,9 +112,9 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": 1,
+        "x": 3,
         "y": 0,
-        "z": 0
+        "z": 2
       },
       "danger_level": 2,
       "icon": "res://assets/icons/location_street.png"
@@ -127,9 +131,9 @@
       "default_unlocked": true,
       "visible": false,
       "overworld_cell": {
-        "x": 0,
+        "x": 2,
         "y": 0,
-        "z": 0
+        "z": 2
       },
       "danger_level": 0,
       "icon": "res://assets/icons/location_safehouse.png"
@@ -146,9 +150,9 @@
       "default_unlocked": false,
       "visible": true,
       "overworld_cell": {
-        "x": 4,
+        "x": 5,
         "y": 0,
-        "z": -1
+        "z": 1
       },
       "danger_level": 3,
       "icon": "res://assets/icons/location_school.png"
@@ -165,9 +169,9 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": -2,
+        "x": 1,
         "y": 0,
-        "z": 0
+        "z": 2
       },
       "danger_level": 2,
       "icon": "res://assets/icons/location_street.png"
@@ -184,9 +188,9 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": 2,
+        "x": 4,
         "y": 0,
-        "z": 0
+        "z": 2
       },
       "danger_level": 3,
       "icon": "res://assets/icons/location_street.png"
@@ -203,9 +207,9 @@
       "default_unlocked": false,
       "visible": true,
       "overworld_cell": {
-        "x": 5,
+        "x": 6,
         "y": 0,
-        "z": 1
+        "z": 3
       },
       "danger_level": 5,
       "icon": "res://assets/icons/location_subway.png"
@@ -222,207 +226,86 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": -4,
+        "x": 0,
         "y": 0,
-        "z": 0
+        "z": 2
       },
       "danger_level": 2,
       "icon": "res://assets/icons/location_supermarket.png"
     }
   ],
-  "walkable_cells": [
-    {
-      "grid": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -1,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -2,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 1,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 2,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -3,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -4,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -2,
-        "y": 0,
-        "z": 1
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -3,
-        "y": 0,
-        "z": 1
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -3,
-        "y": 0,
-        "z": 2
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -1,
-        "y": 0,
-        "z": 1
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -1,
-        "y": 0,
-        "z": 2
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": -1,
-        "y": 0,
-        "z": 3
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 0,
-        "y": 0,
-        "z": 3
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 0,
-        "y": 0,
-        "z": 4
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 0,
-        "y": 0,
-        "z": 5
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 3,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 4,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 4,
-        "y": 0,
-        "z": -1
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 5,
-        "y": 0,
-        "z": 0
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 5,
-        "y": 0,
-        "z": 1
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 6,
-        "y": 0,
-        "z": 1
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 7,
-        "y": 0,
-        "z": 1
-      },
-      "terrain": "road"
-    },
-    {
-      "grid": {
-        "x": 7,
-        "y": 0,
-        "z": 2
-      },
-      "terrain": "road"
-    }
+  "cells": [
+    { "grid": { "x": 0, "y": 0, "z": 0 }, "terrain": "wasteland" },
+    { "grid": { "x": 1, "y": 0, "z": 0 }, "terrain": "wasteland" },
+    { "grid": { "x": 2, "y": 0, "z": 0 }, "terrain": "wasteland" },
+    { "grid": { "x": 3, "y": 0, "z": 0 }, "terrain": "wasteland" },
+    { "grid": { "x": 4, "y": 0, "z": 0 }, "terrain": "wasteland" },
+    { "grid": { "x": 5, "y": 0, "z": 0 }, "terrain": "wasteland" },
+    { "grid": { "x": 6, "y": 0, "z": 0 }, "terrain": "wasteland" },
+    { "grid": { "x": 7, "y": 0, "z": 0 }, "terrain": "wasteland" },
+
+    { "grid": { "x": 0, "y": 0, "z": 1 }, "terrain": "wasteland" },
+    { "grid": { "x": 1, "y": 0, "z": 1 }, "terrain": "wasteland" },
+    { "grid": { "x": 2, "y": 0, "z": 1 }, "terrain": "wasteland" },
+    { "grid": { "x": 3, "y": 0, "z": 1 }, "terrain": "wasteland" },
+    { "grid": { "x": 4, "y": 0, "z": 1 }, "terrain": "wasteland" },
+    { "grid": { "x": 5, "y": 0, "z": 1 }, "terrain": "road" },
+    { "grid": { "x": 6, "y": 0, "z": 1 }, "terrain": "wasteland" },
+    { "grid": { "x": 7, "y": 0, "z": 1 }, "terrain": "wasteland" },
+
+    { "grid": { "x": 0, "y": 0, "z": 2 }, "terrain": "road" },
+    { "grid": { "x": 1, "y": 0, "z": 2 }, "terrain": "road" },
+    { "grid": { "x": 2, "y": 0, "z": 2 }, "terrain": "road" },
+    { "grid": { "x": 3, "y": 0, "z": 2 }, "terrain": "road" },
+    { "grid": { "x": 4, "y": 0, "z": 2 }, "terrain": "road" },
+    { "grid": { "x": 5, "y": 0, "z": 2 }, "terrain": "road" },
+    { "grid": { "x": 6, "y": 0, "z": 2 }, "terrain": "wasteland" },
+    { "grid": { "x": 7, "y": 0, "z": 2 }, "terrain": "wasteland" },
+
+    { "grid": { "x": 0, "y": 0, "z": 3 }, "terrain": "road" },
+    { "grid": { "x": 1, "y": 0, "z": 3 }, "terrain": "wasteland" },
+    { "grid": { "x": 2, "y": 0, "z": 3 }, "terrain": "wasteland" },
+    { "grid": { "x": 3, "y": 0, "z": 3 }, "terrain": "wasteland" },
+    { "grid": { "x": 4, "y": 0, "z": 3 }, "terrain": "wasteland" },
+    { "grid": { "x": 5, "y": 0, "z": 3 }, "terrain": "wasteland" },
+    { "grid": { "x": 6, "y": 0, "z": 3 }, "terrain": "road" },
+    { "grid": { "x": 7, "y": 0, "z": 3 }, "terrain": "wasteland" },
+
+    { "grid": { "x": 0, "y": 0, "z": 4 }, "terrain": "road" },
+    { "grid": { "x": 1, "y": 0, "z": 4 }, "terrain": "road" },
+    { "grid": { "x": 2, "y": 0, "z": 4 }, "terrain": "wasteland" },
+    { "grid": { "x": 3, "y": 0, "z": 4 }, "terrain": "wasteland" },
+    { "grid": { "x": 4, "y": 0, "z": 4 }, "terrain": "wasteland" },
+    { "grid": { "x": 5, "y": 0, "z": 4 }, "terrain": "wasteland" },
+    { "grid": { "x": 6, "y": 0, "z": 4 }, "terrain": "road" },
+    { "grid": { "x": 7, "y": 0, "z": 4 }, "terrain": "road" },
+
+    { "grid": { "x": 0, "y": 0, "z": 5 }, "terrain": "wasteland" },
+    { "grid": { "x": 1, "y": 0, "z": 5 }, "terrain": "road" },
+    { "grid": { "x": 2, "y": 0, "z": 5 }, "terrain": "road" },
+    { "grid": { "x": 3, "y": 0, "z": 5 }, "terrain": "road" },
+    { "grid": { "x": 4, "y": 0, "z": 5 }, "terrain": "wasteland" },
+    { "grid": { "x": 5, "y": 0, "z": 5 }, "terrain": "wasteland" },
+    { "grid": { "x": 6, "y": 0, "z": 5 }, "terrain": "wasteland" },
+    { "grid": { "x": 7, "y": 0, "z": 5 }, "terrain": "wasteland" },
+
+    { "grid": { "x": 0, "y": 0, "z": 6 }, "terrain": "wasteland" },
+    { "grid": { "x": 1, "y": 0, "z": 6 }, "terrain": "wasteland" },
+    { "grid": { "x": 2, "y": 0, "z": 6 }, "terrain": "forest" },
+    { "grid": { "x": 3, "y": 0, "z": 6 }, "terrain": "forest" },
+    { "grid": { "x": 4, "y": 0, "z": 6 }, "terrain": "forest" },
+    { "grid": { "x": 5, "y": 0, "z": 6 }, "terrain": "wasteland" },
+    { "grid": { "x": 6, "y": 0, "z": 6 }, "terrain": "wasteland" },
+    { "grid": { "x": 7, "y": 0, "z": 6 }, "terrain": "wasteland" },
+
+    { "grid": { "x": 0, "y": 0, "z": 7 }, "terrain": "wasteland" },
+    { "grid": { "x": 1, "y": 0, "z": 7 }, "terrain": "wasteland" },
+    { "grid": { "x": 2, "y": 0, "z": 7 }, "terrain": "wasteland" },
+    { "grid": { "x": 3, "y": 0, "z": 7 }, "terrain": "wasteland" },
+    { "grid": { "x": 4, "y": 0, "z": 7 }, "terrain": "wasteland" },
+    { "grid": { "x": 5, "y": 0, "z": 7 }, "terrain": "wasteland" },
+    { "grid": { "x": 6, "y": 0, "z": 7 }, "terrain": "wasteland" },
+    { "grid": { "x": 7, "y": 0, "z": 7 }, "terrain": "wasteland" }
   ],
   "travel_rules": {
     "food_item_id": "1007",

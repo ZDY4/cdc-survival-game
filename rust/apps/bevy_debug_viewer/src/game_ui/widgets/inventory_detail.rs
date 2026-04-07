@@ -33,11 +33,7 @@ pub(in crate::game_ui) fn build_inventory_detail_display(
         ui_text_secondary_color(),
     );
     if !detail.description.trim().is_empty() {
-        content.push(
-            detail.description.clone(),
-            10.1,
-            ui_text_secondary_color(),
-        );
+        content.push(detail.description.clone(), 10.1, ui_text_secondary_color());
     }
     if detail.attribute_bonuses.is_empty() {
         content.push("属性加成: 无", 10.0, ui_text_muted_color());

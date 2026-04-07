@@ -179,34 +179,6 @@ pub(super) fn occluder_visual_from_spawned_box(
     }
 }
 
-pub(super) fn occluder_visual_from_spawned_mesh(
-    spawned: SpawnedMeshVisual,
-    base_cells: Vec<GridCoord>,
-    floor_top: f32,
-    grid_size: f32,
-    render_config: ViewerRenderConfig,
-) -> StaticWorldOccluderVisual {
-    let base_alpha = spawned.color.to_srgba().alpha;
-    let top_y = spawned.aabb_center.y + spawned.aabb_half_extents.y;
-    StaticWorldOccluderVisual {
-        material: spawned.material,
-        base_color: spawned.color,
-        base_alpha,
-        base_alpha_mode: AlphaMode::Opaque,
-        aabb_center: spawned.aabb_center,
-        aabb_half_extents: spawned.aabb_half_extents,
-        shadowed_visible_cells: project_shadowed_visible_cells(
-            &base_cells,
-            floor_top,
-            top_y,
-            grid_size,
-            render_config,
-        ),
-        hover_map_object_id: None,
-        currently_faded: false,
-    }
-}
-
 pub(super) fn project_shadowed_visible_cells(
     base_cells: &[GridCoord],
     floor_top: f32,

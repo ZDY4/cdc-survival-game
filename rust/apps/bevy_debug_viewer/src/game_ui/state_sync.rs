@@ -5,18 +5,72 @@ use super::*;
 pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMenuState>) {
     menu_state.main_menu_open = false;
     menu_state.active_panel = None;
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(0),
-            top: px(0),
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            ..default()
-        },
-        viewer_ui_passthrough_bundle(),
-        GameUiRoot,
-    ));
+    let overlay_layer = || {
+        (
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                top: px(0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            Visibility::Hidden,
+            viewer_ui_passthrough_bundle(),
+        )
+    };
+    let root = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                top: px(0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            viewer_ui_passthrough_bundle(),
+            GameUiRoot,
+        ))
+        .id();
+    let main_menu = commands.spawn((overlay_layer(), MainMenuRoot)).id();
+    let top_badges = commands.spawn((overlay_layer(), TopBadgeRoot)).id();
+    let hotbar = commands.spawn((overlay_layer(), HotbarRoot)).id();
+    let active_panel = commands.spawn((overlay_layer(), ActivePanelRoot)).id();
+    let trade = commands.spawn((overlay_layer(), TradeRoot)).id();
+    let tooltip = commands.spawn((overlay_layer(), TooltipRoot)).id();
+    let context_menu = commands
+        .spawn((overlay_layer(), InventoryContextMenuLayerRoot))
+        .id();
+    let drag_preview = commands.spawn((overlay_layer(), DragPreviewRoot)).id();
+    let discard_modal = commands.spawn((overlay_layer(), DiscardModalRoot)).id();
+    let overworld_prompt = commands.spawn((overlay_layer(), OverworldPromptRoot)).id();
+
+    commands.entity(root).add_children(&[
+        main_menu,
+        top_badges,
+        hotbar,
+        active_panel,
+        trade,
+        tooltip,
+        context_menu,
+        drag_preview,
+        discard_modal,
+        overworld_prompt,
+    ]);
+    commands.insert_resource(GameUiScaffold {
+        root,
+        main_menu,
+        top_badges,
+        hotbar,
+        active_panel,
+        trade,
+        tooltip,
+        context_menu,
+        drag_preview,
+        discard_modal,
+        overworld_prompt,
+    });
 }
 
 pub(crate) fn sync_game_ui_state(

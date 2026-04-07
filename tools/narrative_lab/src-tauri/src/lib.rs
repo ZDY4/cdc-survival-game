@@ -22,7 +22,8 @@ use crate::narrative_agent_actions::execute_narrative_agent_action;
 use crate::narrative_app_settings::{load_narrative_app_settings, save_narrative_app_settings};
 use crate::narrative_exports::export_narrative_session_summary;
 use crate::narrative_provider::{
-    generate_narrative_draft, resolve_narrative_action_intent, revise_narrative_draft,
+    cancel_narrative_request, generate_narrative_draft, resolve_narrative_action_intent,
+    revise_narrative_draft, NarrativeRequestRegistry,
 };
 use crate::narrative_sync::{
     create_cloud_workspace, export_project_context_snapshot, list_cloud_workspaces,
@@ -174,6 +175,7 @@ pub fn run() {
         .setup(|app| {
             eprintln!("[editor-menu] setup start");
             app.manage(editor_menu::EditorMenuState::default());
+            app.manage(NarrativeRequestRegistry::default());
             editor_menu::apply_window_menu(&app.handle(), "main")?;
             if let Some(window) = app.get_webview_window("main") {
                 editor_menu::attach_window_menu_listener(window);
@@ -257,6 +259,7 @@ pub fn run() {
             test_ai_provider,
             execute_narrative_agent_action,
             resolve_narrative_action_intent,
+            cancel_narrative_request,
             generate_narrative_draft,
             revise_narrative_draft
         ])

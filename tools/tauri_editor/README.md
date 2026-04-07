@@ -27,7 +27,7 @@ Planned migration path:
 1. Keep `addons/cdc_game_editor` usable during the transition.
 2. Build the standalone editor shell here.
 3. Move data loading, validation, and protocol-aware editing into shared Rust crates.
-4. Migrate item, dialogue, quest, and map editing flows incrementally.
+4. Migrate item, dialogue, and quest editing flows incrementally.
 
 ## Layout
 
@@ -46,5 +46,4 @@ tools/tauri_editor/
 - Move more validation into shared runtime crates instead of Tauri-local helpers
 - Reuse the same `GraphKit` base for quest flow editing
 - Keep quest relationship graph as a separate follow-up surface
-- Add layered map editors on top of the same shell
 - Add IPC/TCP preview connection to `bevy_server`

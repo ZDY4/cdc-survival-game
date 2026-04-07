@@ -23,6 +23,7 @@ pub(super) fn render_trade_page(
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.34)),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .with_children(|overlay| {
@@ -51,6 +52,7 @@ pub(super) fn render_trade_page(
                     BorderColor::all(ui_border_strong_color()),
                     FocusPolicy::Block,
                     RelativeCursorPosition::default(),
+                    viewer_ui_passthrough_bundle(),
                     UiMouseBlocker,
                 ))
                 .with_children(|header| {
@@ -87,23 +89,26 @@ pub(super) fn render_trade_page(
                 });
 
             overlay
-                .spawn(Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(50.0),
-                    top: px(TRADE_PAGE_TOP + 74.0),
-                    bottom: px(TRADE_PAGE_BOTTOM),
-                    margin: UiRect {
-                        left: px(-((TRADE_PAGE_LEFT_WIDTH
-                            + TRADE_PAGE_RIGHT_WIDTH
-                            + TRADE_PAGE_GAP)
-                            / 2.0)),
+                .spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: px(TRADE_PAGE_TOP + 74.0),
+                        bottom: px(TRADE_PAGE_BOTTOM),
+                        margin: UiRect {
+                            left: px(-((TRADE_PAGE_LEFT_WIDTH
+                                + TRADE_PAGE_RIGHT_WIDTH
+                                + TRADE_PAGE_GAP)
+                                / 2.0)),
+                            ..default()
+                        },
+                        width: px(TRADE_PAGE_LEFT_WIDTH + TRADE_PAGE_RIGHT_WIDTH + TRADE_PAGE_GAP),
+                        flex_direction: FlexDirection::Row,
+                        column_gap: px(TRADE_PAGE_GAP),
                         ..default()
                     },
-                    width: px(TRADE_PAGE_LEFT_WIDTH + TRADE_PAGE_RIGHT_WIDTH + TRADE_PAGE_GAP),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: px(TRADE_PAGE_GAP),
-                    ..default()
-                })
+                    viewer_ui_passthrough_bundle(),
+                ))
                 .with_children(|columns| {
                     render_trade_shop_column(columns, font, trade_snapshot, drag_state);
                     render_trade_inventory_column(
@@ -143,6 +148,7 @@ fn render_trade_inventory_column(
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             TradeInventoryPanelBounds,
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .with_children(|body| {
@@ -180,15 +186,11 @@ fn render_trade_shop_column(
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             TradeSellZone,
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .with_children(|body| {
-            body.spawn(text_bundle(
-                font,
-                "商品界面",
-                11.4,
-                ui_text_heading_color(),
-            ));
+            body.spawn(text_bundle(font, "商品界面", 11.4, ui_text_heading_color()));
             body.spawn(text_bundle(
                 font,
                 &format!(
@@ -220,6 +222,7 @@ fn render_trade_shop_column(
                 },
                 BackgroundColor(ui_panel_background()),
                 BorderColor::all(ui_border_color()),
+                viewer_ui_passthrough_bundle(),
             ))
             .with_children(|items| {
                 if snapshot.shop_items.is_empty() {
@@ -243,6 +246,7 @@ fn render_trade_shop_column(
                             },
                             BackgroundColor(ui_panel_background_alt()),
                             BorderColor::all(ui_border_color()),
+                            viewer_ui_passthrough_bundle(),
                         ))
                         .with_children(|entry| {
                             entry.spawn(text_bundle(font, &item.name, 10.8, Color::WHITE));
@@ -269,3 +273,24 @@ fn render_trade_shop_column(
         });
 }
 
+pub(super) fn trade_sell_button_label(
+    snapshot: &game_bevy::UiTradeSnapshot,
+    selected_item_id: Option<u32>,
+) -> String {
+    let Some(item_id) = selected_item_id else {
+        return "选择一个物品后，可在这里卖出 x1".to_string();
+    };
+
+    let Some(entry) = snapshot
+        .player_items
+        .iter()
+        .find(|entry| entry.item_id == item_id)
+    else {
+        return "该物品当前不可交易，请重新选择一个可售物品".to_string();
+    };
+
+    format!(
+        "已选中 {} · 库存 x{} · 预计卖出 {} 货币",
+        entry.name, entry.count, entry.unit_price
+    )
+}

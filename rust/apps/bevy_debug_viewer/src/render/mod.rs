@@ -29,21 +29,22 @@ use crate::geometry::{
     resolve_occlusion_focus_points, selected_actor, should_rebuild_static_world,
     viewer_grid_is_walkable, GridBounds, HoveredGridOutlineKind, OcclusionFocusPoint,
 };
-pub(super) use crate::picking::{
-    pickable_target, BuildingPartKind, ViewerPickBindingSpec, ViewerPickTarget,
-};
+pub(super) use crate::picking::{pickable_target, ViewerPickBindingSpec, ViewerPickTarget};
 use crate::state::{
     viewer_ui_passthrough_bundle, ActorLabel, ActorLabelEntities, DialogueChoiceButton,
-    DialoguePanelRoot, InteractionLockedActorTag, InteractionMenuButton, InteractionMenuRoot,
-    InteractionMenuState, UiMouseBlocker, ViewerActorFeedbackState, ViewerActorMotionState,
-    ViewerCamera, ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState,
-    ViewerOverlayMode, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
-    ViewerState, ViewerStyleProfile, ViewerUiFont, VIEWER_FONT_PATH,
+    DialogueChoiceRow, DialoguePanelBodyLabel, DialoguePanelChoicesRoot, DialoguePanelHintLabel,
+    DialoguePanelRoot, DialoguePanelSpeakerLabel, DialoguePanelTitleLabel,
+    InteractionLockedActorTag, InteractionMenuButton, InteractionMenuOptionRow,
+    InteractionMenuOptionsRoot, InteractionMenuRoot, InteractionMenuState, UiMouseBlocker,
+    ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera, ViewerCameraFollowState,
+    ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode, ViewerPalette,
+    ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
+    ViewerUiFont, VIEWER_FONT_PATH,
 };
 use crate::ui_context_menu::{
-    context_menu_border_color, context_menu_button_color, context_menu_button_label_node,
-    context_menu_button_node, context_menu_panel_color, context_menu_root_node,
-    context_menu_text_color, ContextMenuStyle, ContextMenuVariant,
+    context_menu_border_color, context_menu_button_color, context_menu_button_node,
+    context_menu_panel_color, context_menu_root_node, context_menu_text_color, ContextMenuStyle,
+    ContextMenuVariant,
 };
 
 mod camera;

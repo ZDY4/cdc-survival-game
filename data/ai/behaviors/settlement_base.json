@@ -1,0 +1,15 @@
+{
+  "id": "settlement_base",
+  "meta": {
+    "display_name": "据点 NPC 基础行为",
+    "description": "据点生活 AI 的共用基础行为包。",
+    "category": "behavior",
+    "tags": ["settlement", "base"],
+    "sort_order": 1
+  },
+  "fact_group_ids": ["settlement_common_facts"],
+  "goal_group_ids": ["settlement_common_goals"],
+  "action_group_ids": ["settlement_common_actions"],
+  "default_goal_id": "idle_safely",
+  "alert_goal_id": "respond_threat"
+}

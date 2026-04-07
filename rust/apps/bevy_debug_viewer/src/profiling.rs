@@ -7,9 +7,9 @@ use bevy::ui::{ComputedNode, RelativeCursorPosition, UiGlobalTransform};
 
 use crate::game_ui::{GameContentRefs, GameUiViewState};
 use crate::state::{
-    ActorLabelEntities, GameUiRoot, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
-    ViewerHudPage, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState,
-    ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiFont,
+    ActorLabelEntities, GameUiScaffold, ViewerActorFeedbackState, ViewerActorMotionState,
+    ViewerCamera, ViewerHudPage, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiFont,
 };
 
 const SYSTEM_TIMING_SMOOTHING_ALPHA: f64 = 0.18;
@@ -306,13 +306,16 @@ pub(crate) fn profiled_sync_actor_labels(
 
 pub(crate) fn profiled_update_game_ui(
     commands: Commands,
-    root: Single<(Entity, Option<&Children>), With<GameUiRoot>>,
+    scaffold: Res<GameUiScaffold>,
+    ui_children: Query<Option<&Children>>,
+    visibilities: Query<&mut Visibility>,
     window: Single<&Window>,
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     palette: Res<ViewerPalette>,
     font: Res<ViewerUiFont>,
     ui: GameUiViewState,
     content: GameContentRefs,
+    cache: Local<crate::game_ui::GameUiRetainedCache>,
     _viewer_state: Res<ViewerState>,
     info_panel_state: Res<ViewerInfoPanelState>,
     mut profiler: ResMut<ViewerSystemProfilerState>,
@@ -321,13 +324,16 @@ pub(crate) fn profiled_update_game_ui(
     let start = should_record.then(Instant::now);
     crate::game_ui::update_game_ui(
         commands,
-        root,
+        scaffold,
+        ui_children,
+        visibilities,
         window,
         camera_query,
         palette,
         font,
         ui,
         content,
+        cache,
     );
     if let Some(start) = start {
         profiler.record_sample("update_game_ui", elapsed_ms(start));

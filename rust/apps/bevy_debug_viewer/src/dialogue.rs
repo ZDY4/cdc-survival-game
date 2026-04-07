@@ -929,7 +929,10 @@ mod tests {
             .as_ref()
             .expect("dialogue should open after pending interaction resumes");
         assert_eq!(active_dialogue.actor_id, player);
-        assert_eq!(active_dialogue.target_id, Some(InteractionTargetId::Actor(npc)));
+        assert_eq!(
+            active_dialogue.target_id,
+            Some(InteractionTargetId::Actor(npc))
+        );
         assert_eq!(active_dialogue.current_node_id, "start");
     }
 

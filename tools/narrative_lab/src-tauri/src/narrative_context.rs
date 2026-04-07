@@ -55,7 +55,11 @@ pub fn build_narrative_context(
 
     let related_doc_records = selected_context_slugs
         .iter()
-        .filter_map(|slug| narrative_documents.iter().find(|document| document.meta.slug == *slug))
+        .filter_map(|slug| {
+            narrative_documents
+                .iter()
+                .find(|document| document.meta.slug == *slug)
+        })
         .map(|document| {
             workspace_context_refs.push(format!("narrative:{}", document.meta.slug));
             narrative_context_record(document, true)
@@ -66,7 +70,11 @@ pub fn build_narrative_context(
         .iter()
         .filter(|document| document.meta.doc_type == request.doc_type)
         .filter(|document| document.meta.slug != request.target_slug)
-        .filter(|document| !selected_context_slugs.iter().any(|slug| slug == &document.meta.slug))
+        .filter(|document| {
+            !selected_context_slugs
+                .iter()
+                .any(|slug| slug == &document.meta.slug)
+        })
         .take(max_context_records.clamp(3, 10))
         .map(|document| {
             workspace_context_refs.push(format!("narrative:{}", document.meta.slug));

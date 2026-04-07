@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 
 use super::{apply_new_game_defaults, should_render_main_menu, transition_to_gameplay_scene};
 use crate::state::{
-    ActiveDialogueState, GameUiRoot, InteractionMenuState, ViewerRuntimeState, ViewerSceneKind,
-    ViewerState,
+    ActiveDialogueState, GameUiRoot, GameUiScaffold, InteractionMenuState, MainMenuRoot,
+    ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
 use bevy::picking::prelude::Pickable;
 use bevy::prelude::App;
@@ -224,11 +224,45 @@ fn setup_game_ui_spawns_non_pickable_root() {
 
     app.update();
 
-    let mut roots = app
-        .world_mut()
-        .query_filtered::<&Pickable, With<GameUiRoot>>();
-    let pickable = roots
-        .single(app.world())
-        .expect("game ui root should be spawned with pickable override");
-    assert_eq!(*pickable, Pickable::IGNORE);
+    let scaffold = *app.world().resource::<GameUiScaffold>();
+    for entity in [
+        scaffold.root,
+        scaffold.main_menu,
+        scaffold.top_badges,
+        scaffold.hotbar,
+        scaffold.active_panel,
+        scaffold.trade,
+        scaffold.tooltip,
+        scaffold.context_menu,
+        scaffold.drag_preview,
+        scaffold.discard_modal,
+        scaffold.overworld_prompt,
+    ] {
+        assert_eq!(
+            app.world().entity(entity).get::<Pickable>(),
+            Some(&Pickable::IGNORE),
+            "entity {entity:?} should opt out of world picking at spawn time"
+        );
+    }
+}
+
+#[test]
+fn setup_game_ui_keeps_retained_roots_stable_across_updates() {
+    let mut app = App::new();
+    app.init_resource::<UiMenuState>();
+    app.add_systems(Startup, setup_game_ui);
+
+    app.update();
+    let first = *app.world().resource::<GameUiScaffold>();
+    app.update();
+    let second = *app.world().resource::<GameUiScaffold>();
+
+    assert_eq!(first.root, second.root);
+    assert_eq!(first.main_menu, second.main_menu);
+    assert_eq!(first.active_panel, second.active_panel);
+    assert!(app.world().entity(first.root).contains::<GameUiRoot>());
+    assert!(app
+        .world()
+        .entity(first.main_menu)
+        .contains::<MainMenuRoot>());
 }

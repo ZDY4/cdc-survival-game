@@ -21,17 +21,9 @@ pub(in crate::game_ui) fn build_skill_detail_display(
     let mut content = DetailTextContent::default();
 
     if let Some(tree) = tree {
-        content.push(
-            tree.tree_name.clone(),
-            12.0,
-            ui_text_secondary_color(),
-        );
+        content.push(tree.tree_name.clone(), 12.0, ui_text_secondary_color());
         if !tree.tree_description.trim().is_empty() {
-            content.push(
-                tree.tree_description.clone(),
-                10.0,
-                ui_text_muted_color(),
-            );
+            content.push(tree.tree_description.clone(), 10.0, ui_text_muted_color());
         }
     }
 

@@ -8,9 +8,7 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{AsBindGroup, AsBindGroupShaderType, ShaderType};
 use bevy::shader::ShaderRef;
-use game_data::{
-    ActorId, GridCoord, InteractionOptionId, InteractionTargetId, MapId, MapObjectKind,
-};
+use game_data::{ActorId, GridCoord, MapId, MapObjectKind};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InteractionMenuLayout {
@@ -27,20 +25,6 @@ impl InteractionMenuLayout {
             && cursor_position.y >= self.top
             && cursor_position.y <= self.top + self.height
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct InteractionMenuVisualKey {
-    pub target_id: InteractionTargetId,
-    pub target_name: String,
-    pub primary_option_id: Option<InteractionOptionId>,
-    pub options: Vec<(InteractionOptionId, String)>,
-}
-
-#[derive(Default)]
-pub(crate) struct InteractionMenuVisualCache {
-    pub key: Option<InteractionMenuVisualKey>,
-    pub visible: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,19 +68,6 @@ pub(crate) struct StaticWorldBoxSpec {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct StaticWorldMeshSpec {
-    pub mesh: Mesh,
-    pub color: Color,
-    pub material_style: MaterialStyle,
-    pub occluder_kind: Option<StaticWorldOccluderKind>,
-    pub occluder_cells: Vec<GridCoord>,
-    pub aabb_center: Vec3,
-    pub aabb_half_extents: Vec3,
-    pub pick_binding: Option<ViewerPickBindingSpec>,
-    pub outline_target: Option<ViewerPickTarget>,
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct StaticWorldDecalSpec {
     pub size: Vec2,
     pub translation: Vec3,
@@ -105,29 +76,12 @@ pub(crate) struct StaticWorldDecalSpec {
     pub outline_target: Option<ViewerPickTarget>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct MergedGridRect {
-    pub level: i32,
-    pub min_x: i32,
-    pub max_x: i32,
-    pub min_z: i32,
-    pub max_z: i32,
-}
-
 pub(crate) struct SpawnedBoxVisual {
     pub entity: Entity,
     pub material: StaticWorldMaterialHandle,
     pub size: Vec3,
     pub translation: Vec3,
     pub color: Color,
-}
-
-pub(crate) struct SpawnedMeshVisual {
-    pub entity: Entity,
-    pub material: StaticWorldMaterialHandle,
-    pub color: Color,
-    pub aabb_center: Vec3,
-    pub aabb_half_extents: Vec3,
 }
 
 #[derive(Default)]
@@ -171,30 +125,9 @@ pub(crate) struct GeneratedDoorVisual {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WallTileKind {
-    Isolated,
-    EndNorth,
-    EndEast,
-    EndSouth,
-    EndWest,
-    StraightHorizontal,
-    StraightVertical,
-    CornerNorthEast,
-    CornerEastSouth,
-    CornerSouthWest,
-    CornerWestNorth,
-    TJunctionMissingNorth,
-    TJunctionMissingEast,
-    TJunctionMissingSouth,
-    TJunctionMissingWest,
-    Cross,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MaterialStyle {
     StructureAccent,
     BuildingWallGrid,
-    BuildingWallCapGrid,
     BuildingDoor,
     Utility,
     UtilityAccent,

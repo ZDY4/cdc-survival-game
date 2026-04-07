@@ -88,7 +88,12 @@ pub(in crate::game_ui) fn action_button(
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(context_menu_button_color(style, false, false, Interaction::None)),
+        BackgroundColor(context_menu_button_color(
+            style,
+            false,
+            false,
+            Interaction::None,
+        )),
         BorderColor::all(ui_border_color()),
         action,
         Text::new(label.to_string()),
@@ -190,12 +195,7 @@ pub(in crate::game_ui) fn render_top_center_badges(
                         ui_hierarchy_bundle(),
                     ))
                     .with_children(|badge_node| {
-                        badge_node.spawn(text_bundle(
-                            font,
-                            &badge,
-                            9.6,
-                            ui_text_heading_color(),
-                        ));
+                        badge_node.spawn(text_bundle(font, &badge, 9.6, ui_text_heading_color()));
                     });
                 }
             });
@@ -237,6 +237,7 @@ pub(in crate::game_ui) fn dock_tab_button(
             ui_text_secondary_color()
         }),
         TextLayout::new(Justify::Center, LineBreak::NoWrap),
+        viewer_ui_passthrough_bundle(),
     )
 }
 

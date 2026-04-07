@@ -150,7 +150,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
     let trade_active = ui.modal_state.trade.is_some();
     let item_modal_open = ui.modal_state.item_quantity.is_some();
     let inventory_panel_active = ui.menu_state.active_panel == Some(UiMenuPanel::Inventory);
-    let skills_panel_active = !trade_active && ui.menu_state.active_panel == Some(UiMenuPanel::Skills);
+    let skills_panel_active =
+        !trade_active && ui.menu_state.active_panel == Some(UiMenuPanel::Skills);
     if ui.scene_kind.is_main_menu() {
         ui.context_menu.clear();
         ui.drag_state.clear();
@@ -191,20 +192,12 @@ pub(crate) fn handle_inventory_panel_pointer_input(
     let trade_inventory_hit =
         find_trade_inventory_click_target(cursor_position, &targets.trade_inventory_targets);
     let effective_inventory_hit = inventory_hit.or(trade_inventory_hit);
-    let equipment_hit =
-        targets
-            .equipment_targets
-            .iter()
-            .find_map(|(target, computed, transform, cursor, visibility)| {
-                hover_target_contains_cursor(
-                    cursor_position,
-                    computed,
-                    transform,
-                    cursor,
-                    visibility,
-                )
+    let equipment_hit = targets.equipment_targets.iter().find_map(
+        |(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
                 .then_some(target.clone())
-            });
+        },
+    );
     let clicked_context_menu =
         targets
             .context_menu_roots
@@ -227,7 +220,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 ui.menu_state.selected_skill_id = Some(skill_id.clone());
                 ui.context_menu.visible = true;
                 ui.context_menu.cursor_position = cursor_position;
-                ui.context_menu.target = Some(UiContextMenuTarget::SkillEntry { tree_id, skill_id });
+                ui.context_menu.target =
+                    Some(UiContextMenuTarget::SkillEntry { tree_id, skill_id });
             } else if !clicked_context_menu {
                 ui.context_menu.clear();
             }
@@ -251,19 +245,11 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                     visibility,
                 )
             });
-    let cursor_in_inventory_list =
-        targets
-            .inventory_list_drop_zones
-            .iter()
-            .any(|(computed, transform, cursor, visibility)| {
-                hover_target_contains_cursor(
-                    cursor_position,
-                    computed,
-                    transform,
-                    cursor,
-                    visibility,
-                )
-            });
+    let cursor_in_inventory_list = targets.inventory_list_drop_zones.iter().any(
+        |(computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+        },
+    );
     let cursor_in_trade_panel =
         targets
             .trade_panel_bounds
@@ -394,7 +380,10 @@ pub(crate) fn handle_inventory_panel_pointer_input(
 
     if ui.drag_state.is_active() && left_pressed {
         if !ui.drag_state.dragging
-            && ui.drag_state.press_cursor_position.distance(cursor_position)
+            && ui
+                .drag_state
+                .press_cursor_position
+                .distance(cursor_position)
                 >= INVENTORY_DRAG_THRESHOLD
         {
             ui.drag_state.dragging = true;
@@ -471,7 +460,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 {
                     match hover_target {
                         Some(UiInventoryDragHoverTarget::InventoryItem { item_id: before })
-                            if before != item_id => {
+                            if before != item_id =>
+                        {
                             applied_drop = apply_inventory_reorder(
                                 &mut ui.runtime_state,
                                 &mut ui.menu_state,
@@ -573,7 +563,9 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             ref slot_id,
             item_id,
         } => match hover_target {
-            Some(UiInventoryDragHoverTarget::EquipmentSlot { slot_id: target_slot }) => {
+            Some(UiInventoryDragHoverTarget::EquipmentSlot {
+                slot_id: target_slot,
+            }) => {
                 applied_drop = apply_equipment_move(
                     &mut ui.runtime_state,
                     &mut ui.menu_state,
@@ -584,7 +576,9 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                     &ui.items,
                 );
             }
-            Some(UiInventoryDragHoverTarget::InventoryItem { item_id: before_item_id }) => {
+            Some(UiInventoryDragHoverTarget::InventoryItem {
+                item_id: before_item_id,
+            }) => {
                 applied_drop = apply_equipment_unequip_and_reorder(
                     &mut ui.runtime_state,
                     &mut ui.menu_state,
@@ -931,10 +925,11 @@ fn apply_equipment_unequip_and_reorder(
     before_item_id: Option<u32>,
 ) -> bool {
     match runtime_state.runtime.unequip_item(actor_id, slot_id) {
-        Ok(_) => match runtime_state
-            .runtime
-            .move_inventory_item_before(actor_id, item_id, before_item_id)
-        {
+        Ok(_) => match runtime_state.runtime.move_inventory_item_before(
+            actor_id,
+            item_id,
+            before_item_id,
+        ) {
             Ok(()) => {
                 save_runtime_snapshot(save_path, &runtime_state.runtime);
                 menu_state.status_text = format!("已卸下 {slot_id}");

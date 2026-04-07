@@ -1,13 +1,10 @@
 //! 状态模块测试：覆盖控制模式、插值轨迹和战斗反馈等基础行为。
 
 use super::{
-    sync_viewer_ui_pick_passthrough, ActorMotionTrack, AttackLungeTrack, HitReactionTrack,
-    ViewerActorFeedbackState, ViewerCameraMode, ViewerCameraShakeState, ViewerControlMode,
-    ViewerDamageNumberState, ViewerState,
+    ActorMotionTrack, AttackLungeTrack, HitReactionTrack, ViewerActorFeedbackState,
+    ViewerCameraMode, ViewerCameraShakeState, ViewerControlMode, ViewerDamageNumberState,
+    ViewerState,
 };
-use bevy::picking::prelude::Pickable;
-use bevy::prelude::{App, Commands, Entity, IntoScheduleConfigs, Node, Resource, Text, Update};
-use bevy::text::TextSpan;
 use game_core::{
     ActorDebugState, CombatDebugState, GridDebugState, OverworldStateSnapshot, SimulationSnapshot,
 };
@@ -184,52 +181,6 @@ fn camera_shake_state_returns_to_rest_offset() {
 
     shake_state.advance(0.4);
     assert_eq!(shake_state.current_offset(), bevy::prelude::Vec3::ZERO);
-}
-
-#[test]
-fn sync_viewer_ui_pick_passthrough_marks_ui_entities_ignored() {
-    let mut app = App::new();
-    app.add_systems(Update, sync_viewer_ui_pick_passthrough);
-    let node = app.world_mut().spawn(Node::default()).id();
-    let text = app.world_mut().spawn(Text::new("label")).id();
-    let span = app.world_mut().spawn(TextSpan::new("span")).id();
-
-    app.update();
-
-    for entity in [node, text, span] {
-        assert_eq!(
-            app.world().entity(entity).get::<Pickable>(),
-            Some(&Pickable::IGNORE)
-        );
-    }
-}
-
-#[derive(Resource, Default)]
-struct UiDespawnTarget(Option<Entity>);
-
-fn despawn_marked_ui_once(
-    mut commands: Commands,
-    mut target: bevy::prelude::ResMut<UiDespawnTarget>,
-) {
-    if let Some(entity) = target.0.take() {
-        commands.entity(entity).despawn();
-    }
-}
-
-#[test]
-fn sync_viewer_ui_pick_passthrough_ignores_entities_despawned_in_same_frame() {
-    let mut app = App::new();
-    app.insert_resource(UiDespawnTarget::default());
-    app.add_systems(
-        Update,
-        (despawn_marked_ui_once, sync_viewer_ui_pick_passthrough).chain(),
-    );
-    let node = app.world_mut().spawn(Node::default()).id();
-    app.world_mut().resource_mut::<UiDespawnTarget>().0 = Some(node);
-
-    app.update();
-
-    assert!(!app.world().entities().contains(node));
 }
 
 fn actor(actor_id: ActorId, side: ActorSide, definition_id: &str) -> ActorDebugState {

@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   addSelectedContextDocument,
+  clearActiveNarrativeSubmission,
   closeNarrativeTab,
+  createNarrativeQueuedSubmission,
   createDocumentAgentSession,
+  enqueueNarrativeSubmission,
   ensureDocumentAgentSession,
   openNarrativeTab,
+  promoteNextNarrativeSubmission,
   removeSelectedContextDocument,
   restoreDocumentAgentSessions,
+  updateActiveSubmissionStage,
   updateDocumentAgentSession,
   updateDocumentAgentSessionWithReviewQueue,
 } from "./narrativeSessions";
@@ -104,6 +109,48 @@ describe("narrativeSessions", () => {
     expect(deduped.selectedContextDocKeys).toEqual(["doc-b", "doc-c"]);
     expect(removed.selectedContextDocKeys).toEqual(["doc-c"]);
   });
+
+  it("starts the first submission immediately and dedupes active or queue-tail prompts", () => {
+    const first = createNarrativeQueuedSubmission("扩写这里", "composer");
+    const second = createNarrativeQueuedSubmission("继续推进", "option");
+    const duplicateActive = createNarrativeQueuedSubmission("扩写这里", "composer");
+    const duplicateTail = createNarrativeQueuedSubmission("继续推进", "composer");
+
+    const started = enqueueNarrativeSubmission(createDocumentAgentSession(), first, {
+      clearComposerText: true,
+    });
+    const dedupedActive = enqueueNarrativeSubmission(started.session, duplicateActive);
+    const queued = enqueueNarrativeSubmission(started.session, second);
+    const dedupedTail = enqueueNarrativeSubmission(queued.session, duplicateTail);
+
+    expect(started.outcome).toBe("started");
+    expect(started.session.activeSubmission?.prompt).toBe("扩写这里");
+    expect(started.session.status).toBe("resolving_intent");
+    expect(started.session.composerText).toBe("");
+    expect(dedupedActive.outcome).toBe("duplicate_active");
+    expect(queued.outcome).toBe("queued");
+    expect(queued.session.queuedSubmissions).toHaveLength(1);
+    expect(dedupedTail.outcome).toBe("duplicate_tail");
+  });
+
+  it("promotes the next queued submission after clearing the active one", () => {
+    const first = createNarrativeQueuedSubmission("先执行", "composer");
+    const second = createNarrativeQueuedSubmission("后执行", "option");
+    const queued = enqueueNarrativeSubmission(
+      enqueueNarrativeSubmission(createDocumentAgentSession(), first).session,
+      second,
+    ).session;
+
+    const cancelling = updateActiveSubmissionStage(queued, "cancelling");
+    const promoted = promoteNextNarrativeSubmission(clearActiveNarrativeSubmission(cancelling));
+
+    expect(cancelling.activeSubmission?.stage).toBe("cancelling");
+    expect(promoted.activeSubmission?.prompt).toBe("后执行");
+    expect(promoted.activeSubmission?.stage).toBe("resolving_intent");
+    expect(promoted.queuedSubmissions).toHaveLength(0);
+    expect(promoted.inflightRequestId).toBe(second.requestId);
+  });
+
   it("marks waiting_user status and stores pending questions from clarification", () => {
     const baseSession = createDocumentAgentSession();
     const request: NarrativeGenerateRequest = {

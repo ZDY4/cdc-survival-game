@@ -389,8 +389,12 @@ fn hovered_grid_outline_hides_out_of_bounds_cell() {
         ..ViewerState::default()
     };
 
-    let outline =
-        hovered_grid_outline_kind(&runtime, &snapshot, &viewer_state, GridCoord::new(99, 0, 99));
+    let outline = hovered_grid_outline_kind(
+        &runtime,
+        &snapshot,
+        &viewer_state,
+        GridCoord::new(99, 0, 99),
+    );
 
     assert_eq!(outline, None);
 }

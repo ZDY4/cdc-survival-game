@@ -15,6 +15,8 @@ import { useEditorMenuBridge } from "./menu/menuBridge";
 import { EDITOR_MENU_COMMANDS } from "./menu/menuCommands";
 import { DialogueWorkspace } from "./modules/dialogues/DialogueWorkspace";
 import { fallbackDialogueWorkspace } from "./modules/dialogues/fallback";
+import { CharacterWorkspace } from "./modules/characters/CharacterWorkspace";
+import { fallbackCharacterWorkspace } from "./modules/characters/fallback";
 import { fallbackWorkspace } from "./modules/items/fallback";
 import { ItemWorkspace } from "./modules/items/ItemWorkspace";
 import { fallbackQuestWorkspace } from "./modules/quests/fallback";
@@ -22,6 +24,7 @@ import { QuestWorkspace } from "./modules/quests/QuestWorkspace";
 import { SettingsWindow } from "./modules/settings/SettingsWindow";
 import type {
   DialogueWorkspacePayload,
+  CharacterWorkspacePayload,
   ItemWorkspacePayload,
   QuestWorkspacePayload,
 } from "./types";
@@ -29,6 +32,8 @@ import type {
 function App() {
   const surface = detectCurrentSurface();
   const [itemWorkspace, setItemWorkspace] = useState<ItemWorkspacePayload>(fallbackWorkspace);
+  const [characterWorkspace, setCharacterWorkspace] =
+    useState<CharacterWorkspacePayload>(fallbackCharacterWorkspace);
   const [dialogueWorkspace, setDialogueWorkspace] = useState<DialogueWorkspacePayload>(
     fallbackDialogueWorkspace,
   );
@@ -60,6 +65,19 @@ function App() {
       setStatus(`Loaded ${payload.dialogCount} dialogues from project data.`);
     } catch (error) {
       setDialogueWorkspace(fallbackDialogueWorkspace);
+      setCanPersist(false);
+      setStatus(`Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`);
+    }
+  }
+
+  async function loadCharacterWorkspace() {
+    try {
+      const payload = await invokeCommand<CharacterWorkspacePayload>("load_character_workspace");
+      setCharacterWorkspace(payload);
+      setCanPersist(true);
+      setStatus(`Loaded ${payload.characterCount} characters from project data.`);
+    } catch (error) {
+      setCharacterWorkspace(fallbackCharacterWorkspace);
       setCanPersist(false);
       setStatus(`Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`);
     }
@@ -109,6 +127,9 @@ function App() {
       case "items":
         void loadItemWorkspace();
         break;
+      case "characters":
+        void loadCharacterWorkspace();
+        break;
       case "dialogues":
         void loadDialogueWorkspace();
         break;
@@ -142,6 +163,12 @@ function App() {
         execute: async () => {
           await openOrFocusModuleEditor(EDITOR_MENU_COMMANDS.MODULE_ITEMS);
           setStatus("Opened Items editor.");
+        },
+      },
+      [EDITOR_MENU_COMMANDS.MODULE_CHARACTERS]: {
+        execute: async () => {
+          await openOrFocusModuleEditor(EDITOR_MENU_COMMANDS.MODULE_CHARACTERS);
+          setStatus("Opened Character editor.");
         },
       },
       [EDITOR_MENU_COMMANDS.MODULE_DIALOGUES]: {
@@ -198,6 +225,28 @@ function App() {
           canPersist={canPersist}
           onStatusChange={setStatus}
           onReload={loadItemWorkspace}
+          indexVisible={sidebarVisible}
+        />
+      </DataEditorShell>
+    );
+  }
+
+  if (surface === "characters") {
+    return (
+      <DataEditorShell
+        title="Characters"
+        subtitle="Character definitions, life bindings, and AI preview."
+        bootstrap={characterWorkspace.bootstrap}
+        status={status}
+        runtimeLabel={runtimeLabel}
+        shellClassName="data-editor-shell-characters"
+        showHeader={false}
+        showStatusBar={statusBarVisible}
+      >
+        <CharacterWorkspace
+          workspace={characterWorkspace}
+          canPersist={canPersist}
+          onStatusChange={setStatus}
           indexVisible={sidebarVisible}
         />
       </DataEditorShell>

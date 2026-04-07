@@ -19,6 +19,7 @@ mod logging;
 pub mod npc_life;
 pub mod reservations;
 mod spawn;
+pub mod static_world;
 pub mod ui;
 
 pub use ai_spawn::advance_map_ai_spawn_runtime;
@@ -37,20 +38,20 @@ pub use npc_life::{
 };
 pub use reservations::SmartObjectReservations;
 pub use spawn::{register_runtime_actor_from_definition, spawn_characters_from_definition};
+pub use static_world::*;
 pub use ui::{
     ammo_item_ids, character_snapshot, classify_item, crafting_snapshot, interaction_prompt_text,
     inventory_snapshot, item_attribute_bonuses, item_equippable, item_usable, journal_snapshot,
     map_snapshot, overworld_location_prompt_snapshot, player_actor_id, skills_snapshot,
     trade_snapshot, world_status_snapshot, GameUiPlugin, UiCharacterCommand, UiCharacterSnapshot,
-    UiCraftingSnapshot, UiDialogueCommand, UiEquipmentSlotView, UiHotbarSlotState,
-    UiHotbarState, UiInputBlockState, UiInventoryCommand, UiInventoryDetailView,
-    UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot,
-    UiItemQuantityIntent, UiItemQuantityModalState, UiItemType, UiJournalSnapshot,
-    UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView, UiMapSnapshot, UiMenuCommand,
-    UiMenuPanel, UiMenuState, UiModalState, UiOverworldLocationPromptSnapshot,
-    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot,
-    UiStatusBannerState, UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot,
-    UiWorldStatusSnapshot,
+    UiCraftingSnapshot, UiDialogueCommand, UiEquipmentSlotView, UiHotbarSlotState, UiHotbarState,
+    UiInputBlockState, UiInventoryCommand, UiInventoryDetailView, UiInventoryEntryView,
+    UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot, UiItemQuantityIntent,
+    UiItemQuantityModalState, UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot,
+    UiMapLocationView, UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
+    UiOverworldLocationPromptSnapshot, UiSettingsCommand, UiSkillCommand, UiSkillEntryView,
+    UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCommand, UiTradeEntryView,
+    UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
 };
 
 #[derive(Message, Debug, Clone, PartialEq, Eq)]
@@ -1167,6 +1168,10 @@ startup_map =
     fn sample_overworld_library() -> OverworldLibrary {
         let definition = OverworldDefinition {
             id: OverworldId("main_overworld".into()),
+            size: MapSize {
+                width: 2,
+                height: 1,
+            },
             locations: vec![
                 OverworldLocationDefinition {
                     id: OverworldLocationId("survivor_outpost_01".into()),
@@ -1195,21 +1200,23 @@ startup_map =
                     return_entry_point_id: None,
                     default_unlocked: true,
                     visible: true,
-                    overworld_cell: GridCoord::new(-1, 0, 0),
+                    overworld_cell: GridCoord::new(1, 0, 0),
                     danger_level: 0,
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 },
             ],
-            walkable_cells: vec![
+            cells: vec![
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
-                    grid: GridCoord::new(-1, 0, 0),
+                    grid: GridCoord::new(1, 0, 0),
                     terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 },
             ],

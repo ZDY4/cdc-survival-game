@@ -33,13 +33,16 @@ pub(super) fn render_skills_panel(
             10.5,
             ui_text_secondary_color(),
         ));
-        body.spawn(Node {
-            width: Val::Percent(100.0),
-            column_gap: px(12),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Stretch,
-            ..default()
-        })
+        body.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                column_gap: px(12),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Stretch,
+                ..default()
+            },
+            viewer_ui_passthrough_bundle(),
+        ))
         .with_children(|columns| {
             columns
                 .spawn((
@@ -54,6 +57,7 @@ pub(super) fn render_skills_panel(
                     },
                     BackgroundColor(ui_panel_background()),
                     BorderColor::all(ui_border_color()),
+                    viewer_ui_passthrough_bundle(),
                 ))
                 .with_children(|tree_column| {
                     tree_column.spawn(text_bundle(
@@ -98,6 +102,7 @@ pub(super) fn render_skills_panel(
                                     ui_border_color()
                                 }),
                                 GameUiButtonAction::SelectSkillTree(tree.tree_id.clone()),
+                                viewer_ui_passthrough_bundle(),
                             ))
                             .with_children(|button| {
                                 button.spawn(text_bundle(
@@ -133,6 +138,7 @@ pub(super) fn render_skills_panel(
                     },
                     BackgroundColor(ui_panel_background()),
                     BorderColor::all(ui_border_color()),
+                    viewer_ui_passthrough_bundle(),
                 ))
                 .with_children(|list_column| {
                     let title = selected_tree
@@ -199,6 +205,7 @@ pub(super) fn render_skills_panel(
                                         skill_id: entry.skill_id.clone(),
                                     },
                                     RelativeCursorPosition::default(),
+                                    viewer_ui_passthrough_bundle(),
                                 ))
                                 .with_children(|button| {
                                     button.spawn(text_bundle(
@@ -249,6 +256,7 @@ pub(super) fn render_skills_panel(
                     },
                     BackgroundColor(ui_panel_background()),
                     BorderColor::all(ui_border_color()),
+                    viewer_ui_passthrough_bundle(),
                 ))
                 .with_children(|detail_column| {
                     if let Some(entry) = selected_entry {

@@ -2168,6 +2168,10 @@ mod tests {
             OverworldId("main_overworld".into()),
             OverworldDefinition {
                 id: OverworldId("main_overworld".into()),
+                size: MapSize {
+                    width: 1,
+                    height: 1,
+                },
                 locations: vec![
                     OverworldLocationDefinition {
                         id: OverworldLocationId("survivor_outpost_01".into()),
@@ -2204,9 +2208,10 @@ mod tests {
                         extra: BTreeMap::new(),
                     },
                 ],
-                walkable_cells: vec![OverworldCellDefinition {
+                cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),
@@ -2713,6 +2718,10 @@ mod tests {
             OverworldId("scene_context_world".into()),
             OverworldDefinition {
                 id: OverworldId("scene_context_world".into()),
+                size: MapSize {
+                    width: 1,
+                    height: 1,
+                },
                 locations: vec![
                     OverworldLocationDefinition {
                         id: OverworldLocationId("survivor_outpost_01".into()),
@@ -2749,9 +2758,10 @@ mod tests {
                         extra: BTreeMap::new(),
                     },
                 ],
-                walkable_cells: vec![OverworldCellDefinition {
+                cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),
@@ -2764,6 +2774,10 @@ mod tests {
             OverworldId("prompt_world".into()),
             OverworldDefinition {
                 id: OverworldId("prompt_world".into()),
+                size: MapSize {
+                    width: 3,
+                    height: 1,
+                },
                 locations: vec![OverworldLocationDefinition {
                     id: OverworldLocationId("prompt_outpost".into()),
                     name: "Prompt Outpost".into(),
@@ -2780,20 +2794,23 @@ mod tests {
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 }],
-                walkable_cells: vec![
+                cells: vec![
                     OverworldCellDefinition {
                         grid: GridCoord::new(0, 0, 0),
                         terrain: "road".into(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
                         terrain: "road".into(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(2, 0, 0),
                         terrain: "road".into(),
+                        blocked: false,
                         extra: BTreeMap::new(),
                     },
                 ],

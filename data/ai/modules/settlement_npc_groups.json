@@ -1,0 +1,43 @@
+{
+  "fact_groups": [
+    {
+      "id": "settlement_common_facts",
+      "meta": { "display_name": "据点 NPC 通用事实", "description": "据点生活 AI 的通用事实集合。", "category": "fact_group", "tags": ["settlement"], "sort_order": 1 },
+      "fact_ids": ["hungry", "very_hungry", "sleepy", "exhausted", "need_morale", "on_shift", "shift_starting_soon", "threat_detected", "meal_window_open", "at_home", "at_duty_area", "has_reserved_bed", "has_reserved_meal_seat", "guard_coverage_insufficient"]
+    }
+  ],
+  "goal_groups": [
+    {
+      "id": "settlement_common_goals",
+      "meta": { "display_name": "据点 NPC 通用目标", "description": "据点生活 AI 的通用目标集合。", "category": "goal_group", "tags": ["settlement"], "sort_order": 1 },
+      "goal_ids": ["respond_threat", "preserve_life", "satisfy_shift", "eat_meal", "sleep", "recover_morale", "return_home", "idle_safely"]
+    }
+  ],
+  "action_groups": [
+    {
+      "id": "settlement_common_actions",
+      "meta": { "display_name": "据点通用动作", "description": "所有据点 NPC 共用的生活动作。", "category": "action_group", "tags": ["settlement"], "sort_order": 1 },
+      "action_ids": ["travel_to_canteen", "eat_meal", "travel_to_leisure", "relax", "travel_home", "reserve_bed", "sleep", "raise_alarm", "respond_alarm", "idle_safely"]
+    },
+    {
+      "id": "duty_travel_actions",
+      "meta": { "display_name": "岗位移动动作", "description": "所有 duty 角色共用的上岗移动动作。", "category": "action_group", "tags": ["duty"], "sort_order": 2 },
+      "action_ids": ["travel_to_duty_area"]
+    },
+    {
+      "id": "guard_actions",
+      "meta": { "display_name": "卫兵动作", "description": "卫兵专属的站岗和巡逻动作。", "category": "action_group", "tags": ["guard"], "sort_order": 3 },
+      "action_ids": ["reserve_guard_post", "stand_guard", "patrol_route"]
+    },
+    {
+      "id": "cook_actions",
+      "meta": { "display_name": "厨师动作", "description": "厨师专属的供餐轮值动作。", "category": "action_group", "tags": ["cook"], "sort_order": 4 },
+      "action_ids": ["restock_meal_service"]
+    },
+    {
+      "id": "doctor_actions",
+      "meta": { "display_name": "医生动作", "description": "医生专属的诊疗轮值动作。", "category": "action_group", "tags": ["doctor"], "sort_order": 5 },
+      "action_ids": ["treat_patients"]
+    }
+  ]
+}

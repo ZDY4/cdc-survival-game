@@ -7,25 +7,33 @@ mod root_update;
 mod shell;
 mod tooltip_context;
 
+pub(crate) use root_update::GameUiRetainedCache;
+
 pub(crate) fn update_game_ui(
     commands: Commands,
-    root: Single<(Entity, Option<&Children>), With<GameUiRoot>>,
+    scaffold: Res<GameUiScaffold>,
+    ui_children: Query<Option<&Children>>,
+    visibilities: Query<&mut Visibility>,
     window: Single<&Window>,
     camera_query: Single<(&Camera, &Transform), With<ViewerCamera>>,
     palette: Res<ViewerPalette>,
     font: Res<ViewerUiFont>,
     ui: GameUiViewState,
     content: GameContentRefs,
+    cache: Local<root_update::GameUiRetainedCache>,
 ) {
     root_update::update_game_ui(
         commands,
-        root,
+        scaffold,
+        ui_children,
+        visibilities,
         window,
         camera_query,
         palette,
         font,
         ui,
         content,
+        cache,
     );
 }
 

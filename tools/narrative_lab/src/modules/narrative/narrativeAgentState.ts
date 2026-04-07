@@ -155,7 +155,13 @@ function trimVersionHistory(versionHistory: NarrativeVersionSnapshot[]): Narrati
 }
 
 function normalizeSessionStatus(session: DocumentAgentSession): PersistedDocumentAgentSessionState["status"] {
-  if (session.status === "thinking" || session.status === "executing_step") {
+  if (
+    session.status === "thinking" ||
+    session.status === "resolving_intent" ||
+    session.status === "generating" ||
+    session.status === "cancelling" ||
+    session.status === "executing_step"
+  ) {
     return session.pendingQuestions.length ||
       session.pendingOptions.length ||
       (session.pendingTurnKind === "plan" && session.lastPlan?.length)
@@ -288,6 +294,8 @@ export function fromPersistedSessionState(
     selectedContextDocKeys: persisted.selectedContextDocKeys ?? [],
     strategy: persisted.strategy ?? defaultNarrativeAgentStrategy(),
     savedBranches: branches,
+    activeSubmission: null,
+    queuedSubmissions: [],
     busy: false,
     inflightRequestId: null,
   };

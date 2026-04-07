@@ -264,8 +264,9 @@ pub fn delete_narrative_document(
                 .replace('/', std::path::MAIN_SEPARATOR_STR),
         );
         if path.exists() {
-            trash::delete(&path)
-                .map_err(|error| format!("failed to move {} to recycle bin: {error}", path.display()))?;
+            trash::delete(&path).map_err(|error| {
+                format!("failed to move {} to recycle bin: {error}", path.display())
+            })?;
         }
     }
     Ok(DeleteNarrativeDocumentResult { deleted_slug: slug })

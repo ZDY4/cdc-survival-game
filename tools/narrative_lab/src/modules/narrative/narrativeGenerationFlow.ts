@@ -99,6 +99,7 @@ export function buildGenerationUserMessage({
 }
 
 type BuildActionIntentRequestInput = {
+  requestId: string;
   submittedPrompt: string;
   activeDocument: EditableNarrativeDocument;
   session: DocumentAgentSession;
@@ -106,12 +107,14 @@ type BuildActionIntentRequestInput = {
 };
 
 export function buildActionIntentRequest({
+  requestId,
   submittedPrompt,
   activeDocument,
   session,
   selectedContextDocuments,
 }: BuildActionIntentRequestInput): ResolveNarrativeActionIntentInput {
   return {
+    requestId,
     submittedPrompt,
     docType: activeDocument.meta.docType,
     targetSlug: activeDocument.meta.slug,
@@ -196,12 +199,14 @@ export function beginGenerationSession(
   return {
     ...session,
     updatedAt: nowIso(),
-    status: "thinking",
+    status: "generating",
     executionSteps: [],
     currentStepId: null,
     busy: true,
     inflightRequestId: requestId,
-    composerText: "",
+    pendingQuestions: [],
+    pendingOptions: [],
+    pendingTurnKind: null,
     chatMessages: [
       ...session.chatMessages,
       userMessage,

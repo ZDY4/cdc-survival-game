@@ -34,7 +34,12 @@ pub fn score_goals_for_context(context: &NpcUtilityContext) -> Vec<NpcGoalScore>
                     })
                     .unwrap_or(true);
                 if matched {
-                    score += score_rule.score_delta;
+                    let multiplier = score_rule
+                        .score_multiplier_key
+                        .as_deref()
+                        .and_then(|key| context.blackboard.number(key))
+                        .unwrap_or(1.0);
+                    score += ((score_rule.score_delta as f32) * multiplier).round() as i32;
                     matched_rule_ids.push(score_rule.id.as_str().to_string());
                 }
             }

@@ -263,49 +263,53 @@ pub(crate) fn sync_damage_numbers(
 pub(crate) fn update_interaction_menu(
     mut commands: Commands,
     window: Single<&Window>,
-    menu_root: Single<
-        (Entity, &mut Node, &mut Visibility, Option<&Children>),
-        With<InteractionMenuRoot>,
+    menu_root: Single<(&mut Node, &mut Visibility), (With<InteractionMenuRoot>, Without<Button>)>,
+    options_root: Single<(Entity, &Children), With<InteractionMenuOptionsRoot>>,
+    mut rows: Query<
+        (
+            &InteractionMenuOptionRow,
+            &mut Visibility,
+            &mut BackgroundColor,
+            &mut Text,
+            &mut TextFont,
+            &mut TextColor,
+            &mut InteractionMenuButton,
+        ),
+        With<Button>,
     >,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
     console_state: Res<crate::console::ViewerConsoleState>,
-    mut visual_cache: Local<InteractionMenuVisualCache>,
 ) {
-    let (entity, mut node, mut visibility, children) = menu_root.into_inner();
+    let (mut node, mut visibility) = menu_root.into_inner();
+    let (options_entity, _) = options_root.into_inner();
     if scene_kind.is_main_menu() || console_state.is_open {
-        clear_ui_children(&mut commands, children);
-        visual_cache.key = None;
-        visual_cache.visible = false;
         *visibility = Visibility::Hidden;
+        for (_, mut row_visibility, ..) in &mut rows {
+            *row_visibility = Visibility::Hidden;
+        }
         return;
     }
     let Some(menu_state) = viewer_state.interaction_menu.as_ref() else {
-        if visual_cache.visible {
-            clear_ui_children(&mut commands, children);
-            visual_cache.key = None;
-            visual_cache.visible = false;
-        }
         *visibility = Visibility::Hidden;
+        for (_, mut row_visibility, ..) in &mut rows {
+            *row_visibility = Visibility::Hidden;
+        }
         return;
     };
     let Some(prompt) = viewer_state.current_prompt.as_ref() else {
-        if visual_cache.visible {
-            clear_ui_children(&mut commands, children);
-            visual_cache.key = None;
-            visual_cache.visible = false;
-        }
         *visibility = Visibility::Hidden;
+        for (_, mut row_visibility, ..) in &mut rows {
+            *row_visibility = Visibility::Hidden;
+        }
         return;
     };
     if prompt.target_id != menu_state.target_id || prompt.options.is_empty() {
-        if visual_cache.visible {
-            clear_ui_children(&mut commands, children);
-            visual_cache.key = None;
-            visual_cache.visible = false;
-        }
         *visibility = Visibility::Hidden;
+        for (_, mut row_visibility, ..) in &mut rows {
+            *row_visibility = Visibility::Hidden;
+        }
         return;
     }
 
@@ -313,73 +317,127 @@ pub(crate) fn update_interaction_menu(
     node.left = px(layout.left);
     node.top = px(layout.top);
     *visibility = Visibility::Visible;
-    let visual_key = interaction_menu_visual_key(prompt);
-    if visual_cache.key.as_ref() != Some(&visual_key) {
-        let menu_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
-        clear_ui_children(&mut commands, children);
-        commands.entity(entity).with_children(|parent| {
-            for (index, option) in prompt.options.iter().enumerate() {
-                let is_primary = prompt.primary_option_id.as_ref() == Some(&option.id);
-                parent
-                    .spawn((
-                        Button,
-                        context_menu_button_node(menu_style),
-                        BackgroundColor(context_menu_button_color(
-                            menu_style,
-                            is_primary,
-                            false,
-                            Interaction::None,
-                        )),
-                        InteractionMenuButton {
-                            target_id: prompt.target_id.clone(),
-                            option_id: option.id.clone(),
-                            is_primary,
-                        },
-                    ))
-                    .with_children(|button| {
-                        button.spawn((
-                            context_menu_button_label_node(),
-                            Text::new(format_interaction_button_label(
-                                index,
-                                option.display_name.as_str(),
-                            )),
-                            TextFont::from_font_size(interaction_menu_button_font_size_for_label(
-                                option.display_name.as_str(),
-                            ))
-                            .with_font(viewer_font.0.clone()),
-                            TextColor(context_menu_text_color()),
-                            TextLayout::new(Justify::Left, LineBreak::NoWrap),
-                        ));
-                    });
+    let menu_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
+    let existing_rows = rows.iter().count();
+    if existing_rows < prompt.options.len() {
+        commands.entity(options_entity).with_children(|parent| {
+            for index in existing_rows..prompt.options.len() {
+                parent.spawn((
+                    Button,
+                    context_menu_button_node(menu_style),
+                    BackgroundColor(context_menu_button_color(
+                        menu_style,
+                        false,
+                        false,
+                        Interaction::None,
+                    )),
+                    Text::new(""),
+                    TextFont::from_font_size(menu_style.item_font_size)
+                        .with_font(viewer_font.0.clone()),
+                    TextColor(context_menu_text_color()),
+                    TextLayout::new(Justify::Left, LineBreak::NoWrap),
+                    Visibility::Hidden,
+                    viewer_ui_passthrough_bundle(),
+                    InteractionMenuOptionRow { index },
+                    InteractionMenuButton {
+                        target_id: prompt.target_id.clone(),
+                        option_id: game_data::InteractionOptionId(String::new()),
+                        is_primary: false,
+                    },
+                ));
             }
         });
-        visual_cache.key = Some(visual_key);
     }
-    visual_cache.visible = true;
+
+    for (
+        row,
+        mut row_visibility,
+        mut background,
+        mut text,
+        mut text_font,
+        mut text_color,
+        mut button,
+    ) in &mut rows
+    {
+        let Some(option) = prompt.options.get(row.index) else {
+            *row_visibility = Visibility::Hidden;
+            continue;
+        };
+        let is_primary = prompt.primary_option_id.as_ref() == Some(&option.id);
+        *row_visibility = Visibility::Visible;
+        *background = BackgroundColor(context_menu_button_color(
+            menu_style,
+            is_primary,
+            false,
+            Interaction::None,
+        ));
+        *text = Text::new(format_interaction_button_label(
+            row.index,
+            option.display_name.as_str(),
+        ));
+        text_font.font_size =
+            interaction_menu_button_font_size_for_label(option.display_name.as_str());
+        *text_color = TextColor(context_menu_text_color());
+        button.target_id = prompt.target_id.clone();
+        button.option_id = option.id.clone();
+        button.is_primary = is_primary;
+    }
 }
 
 pub(crate) fn update_dialogue_panel(
     mut commands: Commands,
     window: Single<&Window>,
-    dialogue_root: Single<
-        (Entity, &mut Node, &mut Visibility, Option<&Children>),
-        With<DialoguePanelRoot>,
+    dialogue_root: Single<(&mut Node, &mut Visibility), (With<DialoguePanelRoot>, Without<Button>)>,
+    choices_root: Single<(Entity, &Children), With<DialoguePanelChoicesRoot>>,
+    mut labels: Query<
+        (
+            &mut Text,
+            Option<&DialoguePanelTitleLabel>,
+            Option<&DialoguePanelSpeakerLabel>,
+            Option<&DialoguePanelBodyLabel>,
+            Option<&DialoguePanelHintLabel>,
+        ),
+        (
+            Or<(
+                With<DialoguePanelTitleLabel>,
+                With<DialoguePanelSpeakerLabel>,
+                With<DialoguePanelBodyLabel>,
+                With<DialoguePanelHintLabel>,
+            )>,
+            Without<Button>,
+        ),
+    >,
+    mut choices: Query<
+        (
+            &DialogueChoiceRow,
+            &mut Visibility,
+            &mut BackgroundColor,
+            &mut Text,
+            &mut DialogueChoiceButton,
+        ),
+        With<Button>,
     >,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
     console_state: Res<crate::console::ViewerConsoleState>,
 ) {
-    let (entity, mut node, mut visibility, children) = dialogue_root.into_inner();
-    clear_ui_children(&mut commands, children);
+    let (mut node, mut visibility) = dialogue_root.into_inner();
+    let (choices_entity, _) = choices_root.into_inner();
 
     if scene_kind.is_main_menu() || console_state.is_open {
         *visibility = Visibility::Hidden;
+        for (_, mut choice_visibility, ..) in &mut choices {
+            *choice_visibility = Visibility::Hidden;
+        }
         return;
     }
 
     let Some(dialogue) = viewer_state.active_dialogue.as_ref() else {
         *visibility = Visibility::Hidden;
+        for (_, mut choice_visibility, ..) in &mut choices {
+            *choice_visibility = Visibility::Hidden;
+        }
         return;
     };
     let width =
@@ -388,38 +446,24 @@ pub(crate) fn update_dialogue_panel(
     node.bottom = px(DIALOGUE_PANEL_BOTTOM_PX);
     *visibility = Visibility::Visible;
 
-    let (speaker, body_text, choice_labels, hint_text) = dialogue_panel_content(dialogue);
-    commands.entity(entity).with_children(|parent| {
-        parent.spawn((
-            Text::new(format!("对话 · {}", dialogue.target_name)),
-            TextFont::from_font_size(17.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.94, 0.93, 0.90, 0.98)),
-            Node {
-                margin: UiRect::bottom(px(6)),
-                ..default()
-            },
-        ));
-        parent.spawn((
-            Text::new(speaker),
-            TextFont::from_font_size(12.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.82, 0.80, 0.74, 0.98)),
-            Node {
-                margin: UiRect::bottom(px(10)),
-                ..default()
-            },
-        ));
-        parent.spawn((
-            Text::new(body_text),
-            TextFont::from_font_size(15.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.96, 0.95, 0.93, 0.98)),
-            Node {
-                margin: UiRect::bottom(px(12)),
-                ..default()
-            },
-        ));
-        if !choice_labels.is_empty() {
-            for (choice_index, label) in choice_labels.iter().enumerate() {
-                let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
+    let (speaker_text, body_text, choice_labels, hint_text) = dialogue_panel_content(dialogue);
+    for (mut text, title, speaker, body, hint) in &mut labels {
+        if title.is_some() {
+            *text = Text::new(format!("对话 · {}", dialogue.target_name));
+        } else if speaker.is_some() {
+            *text = Text::new(speaker_text.clone());
+        } else if body.is_some() {
+            *text = Text::new(body_text.clone());
+        } else if hint.is_some() {
+            *text = Text::new(hint_text.clone());
+        }
+    }
+
+    let existing_rows = choices.iter().count();
+    if existing_rows < choice_labels.len() {
+        let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
+        commands.entity(choices_entity).with_children(|parent| {
+            for index in existing_rows..choice_labels.len() {
                 parent.spawn((
                     Button,
                     dialogue_choice_button_node(),
@@ -429,20 +473,37 @@ pub(crate) fn update_dialogue_panel(
                         false,
                         Interaction::None,
                     )),
-                    Text::new(label.clone()),
+                    Text::new(""),
                     TextFont::from_font_size(DIALOGUE_CHOICE_BUTTON_FONT_SIZE_PX)
                         .with_font(viewer_font.0.clone()),
                     TextColor(context_menu_text_color()),
-                    DialogueChoiceButton { choice_index },
+                    Visibility::Hidden,
+                    viewer_ui_passthrough_bundle(),
+                    DialogueChoiceRow { index },
+                    DialogueChoiceButton {
+                        choice_index: index,
+                    },
                 ));
             }
-        }
-        parent.spawn((
-            Text::new(hint_text),
-            TextFont::from_font_size(11.0).with_font(viewer_font.0.clone()),
-            TextColor(Color::srgba(0.72, 0.71, 0.68, 0.94)),
+        });
+    }
+
+    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
+    for (row, mut row_visibility, mut background, mut text, mut button) in &mut choices {
+        let Some(label) = choice_labels.get(row.index) else {
+            *row_visibility = Visibility::Hidden;
+            continue;
+        };
+        *row_visibility = Visibility::Visible;
+        *background = BackgroundColor(context_menu_button_color(
+            button_style,
+            false,
+            false,
+            Interaction::None,
         ));
-    });
+        *text = Text::new(label.clone());
+        button.choice_index = row.index;
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -466,59 +527,14 @@ pub(super) fn sync_interaction_lock_tag(
     }
 }
 
-pub(super) fn clear_ui_children(commands: &mut Commands, children: Option<&Children>) {
-    let Some(children) = children else {
-        return;
-    };
-    for child in children.iter() {
-        commands.entity(child).despawn();
-    }
-}
-
-pub(super) fn interaction_menu_visual_key(
-    prompt: &game_data::InteractionPrompt,
-) -> InteractionMenuVisualKey {
-    InteractionMenuVisualKey {
-        target_id: prompt.target_id.clone(),
-        target_name: prompt.target_name.clone(),
-        primary_option_id: prompt.primary_option_id.clone(),
-        options: prompt
-            .options
-            .iter()
-            .map(|option| (option.id.clone(), option.display_name.clone()))
-            .collect(),
-    }
-}
-
 pub(super) fn format_interaction_button_label(index: usize, display_name: &str) -> String {
     let _ = index;
     display_name.to_string()
 }
 
-pub(super) fn interaction_menu_panel_color() -> Color {
-    context_menu_panel_color()
-}
-
-pub(super) fn interaction_menu_border_color() -> Color {
-    context_menu_border_color()
-}
-
-pub(super) fn interaction_menu_text_color() -> Color {
-    context_menu_text_color()
-}
-
-pub(super) fn interaction_menu_button_node() -> Node {
-    context_menu_button_node(ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction))
-}
-
-pub(super) fn interaction_menu_button_label_node() -> Node {
-    context_menu_button_label_node()
-}
-
 pub(super) fn interaction_menu_button_font_size_for_label(display_name: &str) -> f32 {
     let style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
-    let available_width =
-        (style.width - style.padding * 2.0 - style.item_padding_x * 2.0).max(1.0);
+    let available_width = (style.width - style.padding * 2.0 - style.item_padding_x * 2.0).max(1.0);
     let estimated_width =
         interaction_menu_estimated_label_width(display_name, style.item_font_size);
     if estimated_width <= available_width {
@@ -526,10 +542,7 @@ pub(super) fn interaction_menu_button_font_size_for_label(display_name: &str) ->
     }
 
     let scaled_size = style.item_font_size * (available_width / estimated_width);
-    scaled_size.clamp(
-        INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX,
-        style.item_font_size,
-    )
+    scaled_size.clamp(INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX, style.item_font_size)
 }
 
 fn interaction_menu_estimated_label_width(display_name: &str, font_size: f32) -> f32 {
@@ -601,13 +614,4 @@ pub(super) fn dialogue_panel_content(
     };
 
     (speaker, node.text.clone(), choice_labels, hint)
-}
-
-pub(crate) fn interaction_menu_button_color(_is_primary: bool, interaction: Interaction) -> Color {
-    context_menu_button_color(
-        ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction),
-        false,
-        false,
-        interaction,
-    )
 }

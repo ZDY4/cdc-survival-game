@@ -124,14 +124,18 @@ fn main() -> Result<(), String> {
         .map(|value| OverworldCellDefinition {
             grid: parse_cell(value),
             terrain: "road".to_string(),
+            blocked: false,
             extra: BTreeMap::new(),
         })
         .collect::<Vec<_>>();
+    let size = inferred_overworld_size(&walkable_cells, &location_definitions);
+    let cells = full_overworld_cells(size, &walkable_cells);
 
     let overworld = OverworldDefinition {
         id: OverworldId("main_overworld".into()),
+        size,
         locations: location_definitions.clone(),
-        walkable_cells,
+        cells,
         travel_rules: OverworldTravelRuleSet::default(),
     };
 
@@ -215,6 +219,57 @@ fn parse_cell(value: &Value) -> GridCoord {
     let x = values.first().and_then(Value::as_i64).unwrap_or(0) as i32;
     let z = values.get(1).and_then(Value::as_i64).unwrap_or(0) as i32;
     GridCoord::new(x, 0, z)
+}
+
+fn inferred_overworld_size(
+    walkable_cells: &[OverworldCellDefinition],
+    locations: &[OverworldLocationDefinition],
+) -> MapSize {
+    let max_x = walkable_cells
+        .iter()
+        .map(|cell| cell.grid.x)
+        .chain(locations.iter().map(|location| location.overworld_cell.x))
+        .max()
+        .unwrap_or(0)
+        .max(0) as u32;
+    let max_z = walkable_cells
+        .iter()
+        .map(|cell| cell.grid.z)
+        .chain(locations.iter().map(|location| location.overworld_cell.z))
+        .max()
+        .unwrap_or(0)
+        .max(0) as u32;
+
+    MapSize {
+        width: max_x + 1,
+        height: max_z + 1,
+    }
+}
+
+fn full_overworld_cells(
+    size: MapSize,
+    walkable_cells: &[OverworldCellDefinition],
+) -> Vec<OverworldCellDefinition> {
+    let walkable = walkable_cells
+        .iter()
+        .map(|cell| (cell.grid.x, cell.grid.z))
+        .collect::<BTreeSet<_>>();
+    let mut cells = Vec::new();
+    for z in 0..size.height as i32 {
+        for x in 0..size.width as i32 {
+            cells.push(OverworldCellDefinition {
+                grid: GridCoord::new(x, 0, z),
+                terrain: if walkable.contains(&(x, z)) {
+                    "road".to_string()
+                } else {
+                    "wilderness".to_string()
+                },
+                blocked: !walkable.contains(&(x, z)),
+                extra: BTreeMap::new(),
+            });
+        }
+    }
+    cells
 }
 
 fn read_json(path: &Path) -> Result<Value, String> {

@@ -207,6 +207,10 @@ mod tests {
             OverworldId("main".into()),
             OverworldDefinition {
                 id: OverworldId("main".into()),
+                size: game_data::MapSize {
+                    width: 2,
+                    height: 1,
+                },
                 locations: vec![OverworldLocationDefinition {
                     id: OverworldLocationId("survivor_outpost_01_perimeter".into()),
                     name: "据点外警戒区".into(),
@@ -223,11 +227,20 @@ mod tests {
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 }],
-                walkable_cells: vec![game_data::OverworldCellDefinition {
-                    grid: GridCoord::new(1, 0, 0),
-                    terrain: String::new(),
-                    extra: BTreeMap::new(),
-                }],
+                cells: vec![
+                    game_data::OverworldCellDefinition {
+                        grid: GridCoord::new(0, 0, 0),
+                        terrain: String::new(),
+                        blocked: false,
+                        extra: BTreeMap::new(),
+                    },
+                    game_data::OverworldCellDefinition {
+                        grid: GridCoord::new(1, 0, 0),
+                        terrain: String::new(),
+                        blocked: false,
+                        extra: BTreeMap::new(),
+                    },
+                ],
                 travel_rules: OverworldTravelRuleSet::default(),
             },
         )]))

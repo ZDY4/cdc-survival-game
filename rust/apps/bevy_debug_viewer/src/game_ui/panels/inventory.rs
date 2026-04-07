@@ -57,9 +57,12 @@ pub(in crate::game_ui) fn render_inventory_panel_contents(
             },
             InventoryPanelBounds,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
         ))
         .with_children(|layout| {
-            render_inventory_equipment_section(layout, font, snapshot, menu_state, drag_state, mode);
+            render_inventory_equipment_section(
+                layout, font, snapshot, menu_state, drag_state, mode,
+            );
             render_inventory_filter_row(layout, font, snapshot.filter);
             render_inventory_entry_section(layout, font, snapshot, menu_state, drag_state, mode);
         });
@@ -85,14 +88,10 @@ fn render_inventory_equipment_section(
             },
             BackgroundColor(ui_panel_background_alt()),
             BorderColor::all(ui_border_color()),
+            viewer_ui_passthrough_bundle(),
         ))
         .with_children(|equipment| {
-            equipment.spawn(text_bundle(
-                font,
-                "装备区",
-                11.4,
-                ui_text_heading_color(),
-            ));
+            equipment.spawn(text_bundle(font, "装备区", 11.4, ui_text_heading_color()));
             equipment.spawn(text_bundle(
                 font,
                 match mode {
@@ -120,8 +119,8 @@ fn render_inventory_equipment_section(
                 })
                 .with_children(|slots| {
                     for slot in &snapshot.equipment {
-                        let is_selected =
-                            menu_state.selected_equipment_slot.as_deref() == Some(slot.slot_id.as_str());
+                        let is_selected = menu_state.selected_equipment_slot.as_deref()
+                            == Some(slot.slot_id.as_str());
                         let is_drag_hover = matches!(
                             drag_state.hover_target.as_ref(),
                             Some(UiInventoryDragHoverTarget::EquipmentSlot { slot_id })
@@ -157,6 +156,7 @@ fn render_inventory_equipment_section(
                                 item_id: slot.item_id,
                             },
                             RelativeCursorPosition::default(),
+                            viewer_ui_passthrough_bundle(),
                         ));
                         if let Some(item_id) = slot.item_id {
                             slot_entity.insert(InventoryItemHoverTarget { item_id });
@@ -186,13 +186,16 @@ fn render_inventory_filter_row(
     active_filter: UiInventoryFilter,
 ) {
     parent
-        .spawn(Node {
-            width: Val::Percent(100.0),
-            flex_wrap: FlexWrap::Wrap,
-            column_gap: px(6),
-            row_gap: px(6),
-            ..default()
-        })
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: px(6),
+                row_gap: px(6),
+                ..default()
+            },
+            viewer_ui_passthrough_bundle(),
+        ))
         .with_children(|filters| {
             for filter in [
                 UiInventoryFilter::All,
@@ -235,40 +238,43 @@ fn render_inventory_entry_section(
                 ..default()
             },
             BackgroundColor(ui_panel_background()),
-            BorderColor::all(if matches!(
-                drag_state.hover_target,
-                Some(UiInventoryDragHoverTarget::InventoryListEnd)
-            ) {
-                Color::srgba(0.92, 0.80, 0.48, 1.0)
-            } else {
-                ui_border_color()
-            }),
+            BorderColor::all(
+                if matches!(
+                    drag_state.hover_target,
+                    Some(UiInventoryDragHoverTarget::InventoryListEnd)
+                ) {
+                    Color::srgba(0.92, 0.80, 0.48, 1.0)
+                } else {
+                    ui_border_color()
+                },
+            ),
             InventoryListDropZone,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
         ))
         .with_children(|entries| {
-            entries.spawn(text_bundle(
-                font,
-                "物品列表",
-                11.2,
-                ui_text_heading_color(),
-            ));
+            entries.spawn(text_bundle(font, "物品列表", 11.2, ui_text_heading_color()));
             entries.spawn(text_bundle(
                 font,
                 match mode {
                     InventoryPanelMode::Normal => "左键选中物品，右键打开可执行操作。",
-                    InventoryPanelMode::Trade => "左键可重排/拖拽，右键可装备或卖出，拖到左侧商品区可直接卖出。",
+                    InventoryPanelMode::Trade => {
+                        "左键可重排/拖拽，右键可装备或卖出，拖到左侧商品区可直接卖出。"
+                    }
                 },
                 9.8,
                 ui_text_muted_color(),
             ));
             entries
-                .spawn(Node {
-                    width: Val::Percent(100.0),
-                    flex_grow: 1.0,
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                })
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        flex_grow: 1.0,
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    viewer_ui_passthrough_bundle(),
+                ))
                 .with_children(|list| {
                     if snapshot.entries.is_empty() {
                         list.spawn((
@@ -347,6 +353,7 @@ fn render_inventory_entry_section(
                                 item_id: entry.item_id,
                             },
                             RelativeCursorPosition::default(),
+                            viewer_ui_passthrough_bundle(),
                         ));
                     }
                 });

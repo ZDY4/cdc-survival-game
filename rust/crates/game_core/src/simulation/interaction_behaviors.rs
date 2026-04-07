@@ -129,7 +129,8 @@ pub(crate) fn resolve_map_object_options(
             .as_ref()
             .map(|interactive| interactive.resolved_options())
             .unwrap_or_default(),
-        MapObjectKind::Building | MapObjectKind::Trigger | MapObjectKind::AiSpawn => Vec::new(),
+        MapObjectKind::Trigger => resolve_map_trigger_options(object),
+        MapObjectKind::Building | MapObjectKind::AiSpawn => Vec::new(),
     }
 }
 

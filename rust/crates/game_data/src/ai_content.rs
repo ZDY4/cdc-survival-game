@@ -1,9 +1,10 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::{
-    resolve_ai_behavior_profile, AiModuleLibrary, CharacterDefinition, CharacterId,
-    CharacterLibrary, NpcRole, ScheduleDay, SettlementDefinition, SettlementId, SettlementLibrary,
-    SmartObjectKind,
+    resolve_ai_behavior_profile, resolve_character_life_profile, AiMetadata, AiModuleLibrary,
+    CharacterDefinition, CharacterId, CharacterLibrary, NpcRole, ScheduleBlock, ScheduleDay,
+    SettlementDefinition, SettlementId, SettlementLibrary, SmartObjectKind,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +70,7 @@ pub fn validate_ai_content(
 ) -> Vec<AiContentIssue> {
     let mut issues = Vec::new();
 
+    validate_ai_metadata(ai_library, &mut issues);
     for (settlement_id, settlement) in settlements.iter() {
         validate_settlement_routes(settlement_id, settlement, &mut issues);
     }
@@ -83,6 +85,8 @@ pub fn validate_ai_content(
         );
     }
 
+    validate_unused_ai_modules(ai_library, &mut issues);
+    validate_behavior_reachability(ai_library, &mut issues);
     validate_guard_coverage(characters, settlements, &mut issues);
     issues
 }
@@ -138,6 +142,23 @@ fn validate_character_life_profile(
         return;
     };
 
+    let Ok(resolved_life) = resolve_character_life_profile(life, ai_library) else {
+        issues.push(AiContentIssue::error(
+            "invalid_life_profile_reference",
+            Some(settlement.id.as_str().to_string()),
+            Some(character_id.as_str().to_string()),
+            format!(
+                "character {} references invalid life profile ids: schedule={}, personality={}, need={}, access={}",
+                character_id,
+                life.schedule_profile_id,
+                life.personality_profile_id,
+                life.need_profile_id,
+                life.smart_object_access_profile_id
+            ),
+        ));
+        return;
+    };
+
     if !settlement
         .anchors
         .iter()
@@ -171,7 +192,7 @@ fn validate_character_life_profile(
         ));
     }
 
-    if life.schedule.is_empty() && life.role != NpcRole::Resident {
+    if resolved_life.schedule_blocks.is_empty() && life.role != NpcRole::Resident {
         issues.push(AiContentIssue::warning(
             "empty_schedule",
             Some(settlement.id.as_str().to_string()),
@@ -182,6 +203,13 @@ fn validate_character_life_profile(
             ),
         ));
     }
+
+    validate_schedule_blocks(
+        character_id,
+        settlement.id.as_str(),
+        &resolved_life.schedule_blocks,
+        issues,
+    );
 
     for required_kind in required_smart_object_kinds(life.role) {
         if !settlement
@@ -196,6 +224,27 @@ fn validate_character_life_profile(
                 format!(
                     "character {} role {:?} has no {:?} available in settlement {}",
                     character_id, life.role, required_kind, settlement.id
+                ),
+            ));
+        }
+    }
+
+    for rule in &resolved_life.smart_object_access_profile.rules {
+        if !settlement
+            .smart_objects
+            .iter()
+            .any(|object| object.kind == rule.kind)
+        {
+            issues.push(AiContentIssue::warning(
+                "missing_access_profile_object",
+                Some(settlement.id.as_str().to_string()),
+                Some(character_id.as_str().to_string()),
+                format!(
+                    "character {} access profile {} expects {:?} but settlement {} has none",
+                    character_id,
+                    resolved_life.smart_object_access_profile.id,
+                    rule.kind,
+                    settlement.id
                 ),
             ));
         }
@@ -240,21 +289,69 @@ fn required_smart_object_kinds(role: NpcRole) -> &'static [SmartObjectKind] {
     }
 }
 
+fn validate_schedule_blocks(
+    character_id: &CharacterId,
+    settlement_id: &str,
+    blocks: &[ScheduleBlock],
+    issues: &mut Vec<AiContentIssue>,
+) {
+    for day in all_schedule_days() {
+        let mut day_blocks = blocks
+            .iter()
+            .filter(|block| block.includes_day(day))
+            .collect::<Vec<_>>();
+        day_blocks.sort_by_key(|block| (block.start_minute, block.end_minute));
+
+        for pair in day_blocks.windows(2) {
+            let current = pair[0];
+            let next = pair[1];
+            if current.end_minute > next.start_minute {
+                issues.push(AiContentIssue::warning(
+                    "schedule_overlap",
+                    Some(settlement_id.to_string()),
+                    Some(character_id.as_str().to_string()),
+                    format!(
+                        "character {} has overlapping schedule blocks on {:?}: {} and {}",
+                        character_id, day, current.label, next.label
+                    ),
+                ));
+            } else if current.end_minute == next.start_minute
+                && current.label == next.label
+                && current.tags == next.tags
+            {
+                issues.push(AiContentIssue::warning(
+                    "schedule_redundant_split",
+                    Some(settlement_id.to_string()),
+                    Some(character_id.as_str().to_string()),
+                    format!(
+                        "character {} splits identical adjacent schedule blocks on {:?}: {}",
+                        character_id, day, current.label
+                    ),
+                ));
+            }
+        }
+    }
+}
+
+fn all_schedule_days() -> [ScheduleDay; 7] {
+    [
+        ScheduleDay::Monday,
+        ScheduleDay::Tuesday,
+        ScheduleDay::Wednesday,
+        ScheduleDay::Thursday,
+        ScheduleDay::Friday,
+        ScheduleDay::Saturday,
+        ScheduleDay::Sunday,
+    ]
+}
+
 fn validate_guard_coverage(
     characters: &CharacterLibrary,
     settlements: &SettlementLibrary,
     issues: &mut Vec<AiContentIssue>,
 ) {
     for (settlement_id, settlement) in settlements.iter() {
-        for day in [
-            ScheduleDay::Monday,
-            ScheduleDay::Tuesday,
-            ScheduleDay::Wednesday,
-            ScheduleDay::Thursday,
-            ScheduleDay::Friday,
-            ScheduleDay::Saturday,
-            ScheduleDay::Sunday,
-        ] {
+        for day in all_schedule_days() {
             for minute in (0..24 * 60).step_by(60) {
                 let scheduled_guards = characters
                     .iter()
@@ -263,7 +360,7 @@ fn validate_guard_coverage(
                         life.settlement_id == settlement_id.as_str()
                             && life.role == NpcRole::Guard
                             && life.schedule.iter().any(|block| {
-                                block.day == day
+                                block.includes_day(day)
                                     && block.tags.iter().any(|tag| tag == "shift")
                                     && minute_in_window(
                                         minute as u16,
@@ -296,6 +393,184 @@ fn validate_guard_coverage(
     }
 }
 
+fn validate_ai_metadata(ai_library: &AiModuleLibrary, issues: &mut Vec<AiContentIssue>) {
+    for behavior in ai_library.behaviors.values() {
+        validate_metadata_presence("behavior", behavior.id.as_str(), &behavior.meta, issues);
+    }
+}
+
+fn validate_metadata_presence(
+    domain: &'static str,
+    id: &str,
+    meta: &AiMetadata,
+    issues: &mut Vec<AiContentIssue>,
+) {
+    if meta.display_name.trim().is_empty() {
+        issues.push(AiContentIssue::warning(
+            "missing_metadata_display_name",
+            None,
+            None,
+            format!("{domain} {id} is missing meta.display_name"),
+        ));
+    }
+    if meta.category.trim().is_empty() {
+        issues.push(AiContentIssue::warning(
+            "missing_metadata_category",
+            None,
+            None,
+            format!("{domain} {id} is missing meta.category"),
+        ));
+    }
+}
+
+fn validate_unused_ai_modules(ai_library: &AiModuleLibrary, issues: &mut Vec<AiContentIssue>) {
+    let mut used_facts = BTreeSet::new();
+    let mut used_goals = BTreeSet::new();
+    let mut used_actions = BTreeSet::new();
+    let mut used_score_rules = BTreeSet::new();
+    let mut used_executors = BTreeSet::new();
+
+    for behavior in ai_library.behaviors.values() {
+        if let Ok(profile) = resolve_ai_behavior_profile(ai_library, &behavior.id) {
+            for fact in &profile.facts {
+                used_facts.insert(fact.id.as_str().to_string());
+            }
+            for goal in &profile.goals {
+                used_goals.insert(goal.id.as_str().to_string());
+                for rule_id in &goal.score_rule_ids {
+                    used_score_rules.insert(rule_id.as_str().to_string());
+                }
+            }
+            for action in &profile.actions {
+                used_actions.insert(action.id.as_str().to_string());
+                used_executors.insert(action.executor_binding_id.as_str().to_string());
+            }
+        }
+    }
+
+    for fact_id in ai_library.facts.keys() {
+        if !used_facts.contains(fact_id.as_str()) {
+            issues.push(AiContentIssue::warning(
+                "unused_fact",
+                None,
+                None,
+                format!(
+                    "fact {} is not referenced by any resolved behavior",
+                    fact_id
+                ),
+            ));
+        }
+    }
+    for goal_id in ai_library.goals.keys() {
+        if !used_goals.contains(goal_id.as_str()) {
+            issues.push(AiContentIssue::warning(
+                "unused_goal",
+                None,
+                None,
+                format!(
+                    "goal {} is not referenced by any resolved behavior",
+                    goal_id
+                ),
+            ));
+        }
+    }
+    for action_id in ai_library.actions.keys() {
+        if !used_actions.contains(action_id.as_str()) {
+            issues.push(AiContentIssue::warning(
+                "unused_action",
+                None,
+                None,
+                format!(
+                    "action {} is not referenced by any resolved behavior",
+                    action_id
+                ),
+            ));
+        }
+    }
+    for rule_id in ai_library.score_rules.keys() {
+        if !used_score_rules.contains(rule_id.as_str()) {
+            issues.push(AiContentIssue::warning(
+                "unused_score_rule",
+                None,
+                None,
+                format!(
+                    "score rule {} is not referenced by any resolved behavior",
+                    rule_id
+                ),
+            ));
+        }
+    }
+    for executor_id in ai_library.executors.keys() {
+        if !used_executors.contains(executor_id.as_str()) {
+            issues.push(AiContentIssue::warning(
+                "unused_executor",
+                None,
+                None,
+                format!(
+                    "executor binding {} is not referenced by any resolved behavior",
+                    executor_id
+                ),
+            ));
+        }
+    }
+}
+
+fn validate_behavior_reachability(ai_library: &AiModuleLibrary, issues: &mut Vec<AiContentIssue>) {
+    for behavior in ai_library.behaviors.values() {
+        let Ok(profile) = resolve_ai_behavior_profile(ai_library, &behavior.id) else {
+            continue;
+        };
+        let produced = profile
+            .actions
+            .iter()
+            .flat_map(|action| action.effects.iter())
+            .map(|effect| (effect.key.clone(), effect.value))
+            .collect::<BTreeSet<_>>();
+
+        for goal in &profile.goals {
+            let requirements = goal
+                .planner_requirements
+                .iter()
+                .map(|requirement| (requirement.key.clone(), requirement.value))
+                .collect::<BTreeSet<_>>();
+            if !requirements.is_empty() && requirements.intersection(&produced).next().is_none() {
+                issues.push(AiContentIssue::warning(
+                    "goal_unreachable",
+                    None,
+                    None,
+                    format!(
+                        "behavior {} goal {} has planner requirements that are not produced by any action",
+                        behavior.id, goal.id
+                    ),
+                ));
+            }
+        }
+
+        let initially_known = profile
+            .facts
+            .iter()
+            .map(|fact| fact.id.as_str().to_string())
+            .collect::<BTreeSet<_>>();
+        for action in &profile.actions {
+            let impossible = action.preconditions.iter().all(|requirement| {
+                !initially_known.contains(&requirement.key)
+                    && !produced.contains(&(requirement.key.clone(), requirement.value))
+            });
+            if impossible && !action.preconditions.is_empty() {
+                issues.push(AiContentIssue::warning(
+                    "action_unreachable",
+                    None,
+                    None,
+                    format!(
+                        "behavior {} action {} has preconditions that are never seeded or produced",
+                        behavior.id, action.id
+                    ),
+                ));
+            }
+        }
+    }
+}
+
 fn minute_in_window(minute: u16, start_minute: u16, end_minute: u16) -> bool {
     minute >= start_minute && minute < end_minute
 }
@@ -305,14 +580,15 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        validate_ai_content, AiBehaviorDefinition, AiBehaviorProfileRef, AiModuleLibrary,
-        CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
-        CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
-        CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterPlaceholderColors,
-        CharacterPresentation, CharacterProgression, CharacterResourcePool, NeedProfile, NpcRole,
-        ScheduleBlock, ScheduleDay, ServiceRules, SettlementAnchorDefinition, SettlementDefinition,
-        SettlementId, SettlementLibrary, SettlementRouteDefinition, SmartObjectDefinition,
-        SmartObjectKind,
+        validate_ai_content, AiBehaviorDefinition, AiBehaviorProfileRef, AiMetadata,
+        AiModuleLibrary, CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate,
+        CharacterCombatProfile, CharacterDefinition, CharacterDisposition, CharacterFaction,
+        CharacterId, CharacterIdentity, CharacterLibrary, CharacterLifeProfile,
+        CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
+        CharacterResourcePool, NeedProfile, NpcRole, PersonalityProfileOverride, ScheduleBlock,
+        ScheduleDay, ScheduleTemplateDefinition, ServiceRules, SettlementAnchorDefinition,
+        SettlementDefinition, SettlementId, SettlementLibrary, SettlementRouteDefinition,
+        SmartObjectAccessProfileDefinition, SmartObjectDefinition, SmartObjectKind,
     };
 
     #[test]
@@ -325,17 +601,22 @@ mod tests {
                     settlement_id: "survivor_outpost_01_settlement".into(),
                     role: NpcRole::Doctor,
                     ai_behavior_profile_id: "doctor_settlement".into(),
+                    schedule_profile_id: "doctor_schedule".into(),
+                    personality_profile_id: "doctor_personality".into(),
+                    need_profile_id: "doctor_need".into(),
+                    smart_object_access_profile_id: "doctor_access".into(),
                     home_anchor: "home".into(),
                     duty_route_id: "missing_route".into(),
                     schedule: vec![ScheduleBlock {
-                        day: ScheduleDay::Monday,
+                        day: Some(ScheduleDay::Monday),
+                        days: Vec::new(),
                         start_minute: 8 * 60,
                         end_minute: 16 * 60,
                         label: "clinic".into(),
                         tags: vec!["shift".into()],
                     }],
-                    smart_object_access: vec![],
-                    need_profile: NeedProfile::default(),
+                    need_profile_override: None,
+                    personality_override: PersonalityProfileOverride::default(),
                 }),
             ),
         )]));
@@ -386,17 +667,22 @@ mod tests {
                     settlement_id: "survivor_outpost_01_settlement".into(),
                     role: NpcRole::Guard,
                     ai_behavior_profile_id: "guard_settlement".into(),
+                    schedule_profile_id: "guard_schedule".into(),
+                    personality_profile_id: "guard_personality".into(),
+                    need_profile_id: "guard_need".into(),
+                    smart_object_access_profile_id: "guard_access".into(),
                     home_anchor: "guard_home".into(),
                     duty_route_id: "guard_patrol".into(),
                     schedule: vec![ScheduleBlock {
-                        day: ScheduleDay::Monday,
+                        day: Some(ScheduleDay::Monday),
+                        days: Vec::new(),
                         start_minute: 8 * 60,
                         end_minute: 10 * 60,
                         label: "guard".into(),
                         tags: vec!["shift".into()],
                     }],
-                    smart_object_access: vec![],
-                    need_profile: NeedProfile::default(),
+                    need_profile_override: None,
+                    personality_override: PersonalityProfileOverride::default(),
                 }),
             ),
         )]));
@@ -461,8 +747,13 @@ mod tests {
             AiBehaviorProfileRef::from("doctor_settlement"),
             AiBehaviorDefinition {
                 id: AiBehaviorProfileRef::from("doctor_settlement"),
+                meta: AiMetadata::default(),
+                included_behavior_ids: Vec::new(),
+                fact_group_ids: Vec::new(),
                 fact_ids: Vec::new(),
+                goal_group_ids: Vec::new(),
                 goal_ids: Vec::new(),
+                action_group_ids: Vec::new(),
                 action_ids: Vec::new(),
                 default_goal_id: None,
                 alert_goal_id: None,
@@ -472,11 +763,88 @@ mod tests {
             AiBehaviorProfileRef::from("guard_settlement"),
             AiBehaviorDefinition {
                 id: AiBehaviorProfileRef::from("guard_settlement"),
+                meta: AiMetadata::default(),
+                included_behavior_ids: Vec::new(),
+                fact_group_ids: Vec::new(),
                 fact_ids: Vec::new(),
+                goal_group_ids: Vec::new(),
                 goal_ids: Vec::new(),
+                action_group_ids: Vec::new(),
                 action_ids: Vec::new(),
                 default_goal_id: None,
                 alert_goal_id: None,
+            },
+        );
+        library.schedule_templates.insert(
+            "doctor_schedule".into(),
+            ScheduleTemplateDefinition {
+                id: "doctor_schedule".into(),
+                meta: AiMetadata::default(),
+                blocks: Vec::new(),
+            },
+        );
+        library.schedule_templates.insert(
+            "guard_schedule".into(),
+            ScheduleTemplateDefinition {
+                id: "guard_schedule".into(),
+                meta: AiMetadata::default(),
+                blocks: Vec::new(),
+            },
+        );
+        library.need_profiles.insert(
+            "doctor_need".into(),
+            crate::NeedProfileDefinition {
+                id: "doctor_need".into(),
+                meta: AiMetadata::default(),
+                profile: NeedProfile::default(),
+            },
+        );
+        library.need_profiles.insert(
+            "guard_need".into(),
+            crate::NeedProfileDefinition {
+                id: "guard_need".into(),
+                meta: AiMetadata::default(),
+                profile: NeedProfile::default(),
+            },
+        );
+        library.personality_profiles.insert(
+            "doctor_personality".into(),
+            crate::PersonalityProfileDefinition {
+                id: "doctor_personality".into(),
+                meta: AiMetadata::default(),
+                ..Default::default()
+            },
+        );
+        library.personality_profiles.insert(
+            "guard_personality".into(),
+            crate::PersonalityProfileDefinition {
+                id: "guard_personality".into(),
+                meta: AiMetadata::default(),
+                ..Default::default()
+            },
+        );
+        library.smart_object_access_profiles.insert(
+            "doctor_access".into(),
+            SmartObjectAccessProfileDefinition {
+                id: "doctor_access".into(),
+                meta: AiMetadata::default(),
+                rules: vec![crate::SmartObjectAccessRuleDefinition {
+                    kind: SmartObjectKind::MedicalStation,
+                    preferred_tags: vec!["doctor".into()],
+                    fallback_to_any: true,
+                }],
+            },
+        );
+        library.smart_object_access_profiles.insert(
+            "guard_access".into(),
+            SmartObjectAccessProfileDefinition {
+                id: "guard_access".into(),
+                meta: AiMetadata::default(),
+                rules: vec![crate::SmartObjectAccessRuleDefinition {
+                    kind: SmartObjectKind::GuardPost,
+                    preferred_tags: vec!["guard".into()],
+                    fallback_to_any: true,
+                }],
             },
         );
         library

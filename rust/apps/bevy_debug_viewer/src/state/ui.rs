@@ -2,13 +2,57 @@
 
 use bevy::picking::prelude::Pickable;
 use bevy::prelude::*;
-use bevy::text::TextSpan;
 use game_bevy::{UiInventoryFilter, UiMenuPanel};
 
 use super::ViewerObserveSpeed;
 
 #[derive(Component)]
 pub(crate) struct GameUiRoot;
+
+#[derive(Component)]
+pub(crate) struct MainMenuRoot;
+
+#[derive(Component)]
+pub(crate) struct TopBadgeRoot;
+
+#[derive(Component)]
+pub(crate) struct HotbarRoot;
+
+#[derive(Component)]
+pub(crate) struct ActivePanelRoot;
+
+#[derive(Component)]
+pub(crate) struct TradeRoot;
+
+#[derive(Component)]
+pub(crate) struct TooltipRoot;
+
+#[derive(Component)]
+pub(crate) struct InventoryContextMenuLayerRoot;
+
+#[derive(Component)]
+pub(crate) struct DragPreviewRoot;
+
+#[derive(Component)]
+pub(crate) struct DiscardModalRoot;
+
+#[derive(Component)]
+pub(crate) struct OverworldPromptRoot;
+
+#[derive(Resource, Debug, Clone, Copy)]
+pub(crate) struct GameUiScaffold {
+    pub root: Entity,
+    pub main_menu: Entity,
+    pub top_badges: Entity,
+    pub hotbar: Entity,
+    pub active_panel: Entity,
+    pub trade: Entity,
+    pub tooltip: Entity,
+    pub context_menu: Entity,
+    pub drag_preview: Entity,
+    pub discard_modal: Entity,
+    pub overworld_prompt: Entity,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UiHoverTooltipContent {
@@ -132,21 +176,6 @@ pub(crate) struct UiMouseBlocker;
 
 pub(crate) fn viewer_ui_passthrough_bundle() -> impl Bundle {
     (Pickable::IGNORE,)
-}
-
-pub(crate) fn sync_viewer_ui_pick_passthrough(
-    mut commands: Commands,
-    ui_entities: Query<
-        Entity,
-        (
-            Or<(With<Node>, With<Text>, With<TextSpan>)>,
-            Without<Pickable>,
-        ),
-    >,
-) {
-    for entity in &ui_entities {
-        commands.entity(entity).try_insert(Pickable::IGNORE);
-    }
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]

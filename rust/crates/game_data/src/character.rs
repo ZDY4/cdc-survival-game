@@ -80,13 +80,32 @@ impl ScheduleDay {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleBlock {
-    pub day: ScheduleDay,
+    #[serde(default)]
+    pub day: Option<ScheduleDay>,
+    #[serde(default)]
+    pub days: Vec<ScheduleDay>,
     pub start_minute: u16,
     pub end_minute: u16,
     #[serde(default)]
     pub label: String,
     #[serde(default)]
     pub tags: Vec<String>,
+}
+
+impl ScheduleBlock {
+    pub fn resolved_days(&self) -> Vec<ScheduleDay> {
+        if !self.days.is_empty() {
+            self.days.clone()
+        } else {
+            self.day.into_iter().collect()
+        }
+    }
+
+    pub fn includes_day(&self, day: ScheduleDay) -> bool {
+        self.resolved_days()
+            .into_iter()
+            .any(|candidate| candidate == day)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -112,20 +131,38 @@ impl Default for NeedProfile {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PersonalityProfileOverride {
+    #[serde(default)]
+    pub safety_bias: Option<f32>,
+    #[serde(default)]
+    pub social_bias: Option<f32>,
+    #[serde(default)]
+    pub duty_bias: Option<f32>,
+    #[serde(default)]
+    pub comfort_bias: Option<f32>,
+    #[serde(default)]
+    pub alertness_bias: Option<f32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CharacterLifeProfile {
     pub settlement_id: String,
     pub role: NpcRole,
     pub ai_behavior_profile_id: String,
+    pub schedule_profile_id: String,
+    pub personality_profile_id: String,
+    pub need_profile_id: String,
+    pub smart_object_access_profile_id: String,
     pub home_anchor: String,
     #[serde(default)]
     pub duty_route_id: String,
     #[serde(default)]
     pub schedule: Vec<ScheduleBlock>,
     #[serde(default)]
-    pub smart_object_access: Vec<String>,
+    pub need_profile_override: Option<NeedProfile>,
     #[serde(default)]
-    pub need_profile: NeedProfile,
+    pub personality_override: PersonalityProfileOverride,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -305,8 +342,18 @@ pub enum CharacterDefinitionValidationError {
     MissingLifeSettlementId,
     #[error("life ai_behavior_profile_id must not be empty")]
     MissingLifeAiBehaviorProfileId,
+    #[error("life schedule_profile_id must not be empty")]
+    MissingLifeScheduleProfileId,
+    #[error("life personality_profile_id must not be empty")]
+    MissingLifePersonalityProfileId,
+    #[error("life need_profile_id must not be empty")]
+    MissingLifeNeedProfileId,
+    #[error("life smart_object_access_profile_id must not be empty")]
+    MissingLifeSmartObjectAccessProfileId,
     #[error("life home_anchor must not be empty")]
     MissingLifeHomeAnchor,
+    #[error("life schedule block {index} must define day or days")]
+    MissingScheduleDays { index: usize },
     #[error("life schedule block {index} has invalid window {start_minute}..{end_minute}")]
     InvalidScheduleWindow {
         index: usize,
@@ -368,24 +415,52 @@ pub fn validate_character_definition(
         if life.ai_behavior_profile_id.trim().is_empty() {
             return Err(CharacterDefinitionValidationError::MissingLifeAiBehaviorProfileId);
         }
+        if life.schedule_profile_id.trim().is_empty() {
+            return Err(CharacterDefinitionValidationError::MissingLifeScheduleProfileId);
+        }
+        if life.personality_profile_id.trim().is_empty() {
+            return Err(CharacterDefinitionValidationError::MissingLifePersonalityProfileId);
+        }
+        if life.need_profile_id.trim().is_empty() {
+            return Err(CharacterDefinitionValidationError::MissingLifeNeedProfileId);
+        }
+        if life.smart_object_access_profile_id.trim().is_empty() {
+            return Err(CharacterDefinitionValidationError::MissingLifeSmartObjectAccessProfileId);
+        }
         if life.home_anchor.trim().is_empty() {
             return Err(CharacterDefinitionValidationError::MissingLifeHomeAnchor);
         }
-        validate_non_negative_need(
-            "hunger_decay_per_hour",
-            life.need_profile.hunger_decay_per_hour,
+        if let Some(need_profile) = &life.need_profile_override {
+            validate_non_negative_need(
+                "hunger_decay_per_hour",
+                need_profile.hunger_decay_per_hour,
+            )?;
+            validate_non_negative_need(
+                "energy_decay_per_hour",
+                need_profile.energy_decay_per_hour,
+            )?;
+            validate_non_negative_need(
+                "morale_decay_per_hour",
+                need_profile.morale_decay_per_hour,
+            )?;
+            validate_non_negative_need("safety_bias", need_profile.safety_bias)?;
+        }
+        validate_optional_non_negative_need("safety_bias", life.personality_override.safety_bias)?;
+        validate_optional_non_negative_need("social_bias", life.personality_override.social_bias)?;
+        validate_optional_non_negative_need("duty_bias", life.personality_override.duty_bias)?;
+        validate_optional_non_negative_need(
+            "comfort_bias",
+            life.personality_override.comfort_bias,
         )?;
-        validate_non_negative_need(
-            "energy_decay_per_hour",
-            life.need_profile.energy_decay_per_hour,
+        validate_optional_non_negative_need(
+            "alertness_bias",
+            life.personality_override.alertness_bias,
         )?;
-        validate_non_negative_need(
-            "morale_decay_per_hour",
-            life.need_profile.morale_decay_per_hour,
-        )?;
-        validate_non_negative_need("safety_bias", life.need_profile.safety_bias)?;
 
         for (index, block) in life.schedule.iter().enumerate() {
+            if block.day.is_none() && block.days.is_empty() {
+                return Err(CharacterDefinitionValidationError::MissingScheduleDays { index });
+            }
             if block.start_minute >= block.end_minute || block.end_minute > 24 * 60 {
                 return Err(CharacterDefinitionValidationError::InvalidScheduleWindow {
                     index,
@@ -476,6 +551,16 @@ fn validate_non_negative_need(
     } else {
         Ok(())
     }
+}
+
+fn validate_optional_non_negative_need(
+    field: &'static str,
+    value: Option<f32>,
+) -> Result<(), CharacterDefinitionValidationError> {
+    if let Some(value) = value {
+        validate_non_negative_need(field, value)?;
+    }
+    Ok(())
 }
 
 const fn default_hunger_decay_per_hour() -> f32 {

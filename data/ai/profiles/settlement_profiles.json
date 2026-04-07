@@ -1,0 +1,160 @@
+{
+  "schedule_templates": [
+    {
+      "id": "guard_day_shift_weekday",
+      "meta": { "display_name": "卫兵日班", "description": "工作日 08:00-16:00 的卫兵轮值。", "category": "schedule_template", "tags": ["guard", "weekday"], "sort_order": 10 },
+      "blocks": [
+        {
+          "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          "start_minute": 480,
+          "end_minute": 960,
+          "label": "白班执勤",
+          "tags": ["shift", "guard"]
+        }
+      ]
+    },
+    {
+      "id": "cook_morning_shift_weekday",
+      "meta": { "display_name": "厨房早班", "description": "工作日 06:00-14:00 的厨房轮值。", "category": "schedule_template", "tags": ["cook", "weekday"], "sort_order": 11 },
+      "blocks": [
+        {
+          "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          "start_minute": 360,
+          "end_minute": 840,
+          "label": "厨房早班",
+          "tags": ["shift", "cook"]
+        }
+      ]
+    },
+    {
+      "id": "doctor_clinic_rounds_weekday",
+      "meta": { "display_name": "诊所轮值", "description": "工作日 09:00-17:00 的医疗轮值。", "category": "schedule_template", "tags": ["doctor", "weekday"], "sort_order": 12 },
+      "blocks": [
+        {
+          "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          "start_minute": 540,
+          "end_minute": 1020,
+          "label": "诊所轮值",
+          "tags": ["shift", "doctor"]
+        }
+      ]
+    },
+    {
+      "id": "resident_idle_week",
+      "meta": { "display_name": "居民默认作息", "description": "无固定轮值，仅保留生活型默认行为。", "category": "schedule_template", "tags": ["resident"], "sort_order": 13 },
+      "blocks": []
+    }
+  ],
+  "need_profiles": [
+    {
+      "id": "guard_standard",
+      "meta": { "display_name": "卫兵需求模板", "description": "卫兵通用需求衰减。", "category": "need_profile", "tags": ["guard"], "sort_order": 20 },
+      "hunger_decay_per_hour": 4.5,
+      "energy_decay_per_hour": 3.0,
+      "morale_decay_per_hour": 1.2,
+      "safety_bias": 0.8
+    },
+    {
+      "id": "cook_standard",
+      "meta": { "display_name": "厨师需求模板", "description": "厨师通用需求衰减。", "category": "need_profile", "tags": ["cook"], "sort_order": 21 },
+      "hunger_decay_per_hour": 4.0,
+      "energy_decay_per_hour": 2.8,
+      "morale_decay_per_hour": 1.3,
+      "safety_bias": 0.4
+    },
+    {
+      "id": "doctor_standard",
+      "meta": { "display_name": "医生需求模板", "description": "医生通用需求衰减。", "category": "need_profile", "tags": ["doctor"], "sort_order": 22 },
+      "hunger_decay_per_hour": 3.2,
+      "energy_decay_per_hour": 2.4,
+      "morale_decay_per_hour": 1.1,
+      "safety_bias": 0.6
+    },
+    {
+      "id": "resident_standard",
+      "meta": { "display_name": "居民需求模板", "description": "居民默认需求衰减。", "category": "need_profile", "tags": ["resident"], "sort_order": 23 },
+      "hunger_decay_per_hour": 4.0,
+      "energy_decay_per_hour": 3.0,
+      "morale_decay_per_hour": 1.5,
+      "safety_bias": 0.5
+    }
+  ],
+  "personality_profiles": [
+    {
+      "id": "guard_diligent",
+      "meta": { "display_name": "卫兵·尽责", "description": "责任感和警觉性高，社交性偏低。", "category": "personality_profile", "tags": ["guard"], "sort_order": 30 },
+      "safety_bias": 0.8,
+      "social_bias": 0.4,
+      "duty_bias": 1.2,
+      "comfort_bias": 0.7,
+      "alertness_bias": 1.2
+    },
+    {
+      "id": "cook_caretaker",
+      "meta": { "display_name": "厨师·照料者", "description": "更重视供餐秩序，也更愿意做情绪恢复。", "category": "personality_profile", "tags": ["cook"], "sort_order": 31 },
+      "safety_bias": 0.4,
+      "social_bias": 0.8,
+      "duty_bias": 1.1,
+      "comfort_bias": 0.8,
+      "alertness_bias": 0.9
+    },
+    {
+      "id": "doctor_compassionate",
+      "meta": { "display_name": "医生·仁心", "description": "重视职责，也更愿意做士气和照料行为。", "category": "personality_profile", "tags": ["doctor"], "sort_order": 32 },
+      "safety_bias": 0.6,
+      "social_bias": 0.9,
+      "duty_bias": 1.15,
+      "comfort_bias": 0.75,
+      "alertness_bias": 1.0
+    },
+    {
+      "id": "resident_curious",
+      "meta": { "display_name": "居民·好奇", "description": "基础居民人格模板。", "category": "personality_profile", "tags": ["resident"], "sort_order": 33 },
+      "safety_bias": 0.5,
+      "social_bias": 0.7,
+      "duty_bias": 0.7,
+      "comfort_bias": 0.9,
+      "alertness_bias": 0.8
+    }
+  ],
+  "smart_object_access_profiles": [
+    {
+      "id": "guard_settlement_access",
+      "meta": { "display_name": "卫兵据点访问模板", "description": "优先使用 guard 标签的岗位和床位。", "category": "access_profile", "tags": ["guard"], "sort_order": 40 },
+      "rules": [
+        { "kind": "guard_post", "preferred_tags": ["guard"], "fallback_to_any": true },
+        { "kind": "bed", "preferred_tags": ["guard"], "fallback_to_any": true },
+        { "kind": "canteen_seat", "preferred_tags": ["meal"], "fallback_to_any": true },
+        { "kind": "recreation_spot", "preferred_tags": ["morale"], "fallback_to_any": true }
+      ]
+    },
+    {
+      "id": "cook_settlement_access",
+      "meta": { "display_name": "厨师据点访问模板", "description": "优先使用 cook 标签的床位和餐位。", "category": "access_profile", "tags": ["cook"], "sort_order": 41 },
+      "rules": [
+        { "kind": "bed", "preferred_tags": ["cook"], "fallback_to_any": true },
+        { "kind": "canteen_seat", "preferred_tags": ["cook"], "fallback_to_any": true },
+        { "kind": "recreation_spot", "preferred_tags": ["morale"], "fallback_to_any": true }
+      ]
+    },
+    {
+      "id": "doctor_settlement_access",
+      "meta": { "display_name": "医生据点访问模板", "description": "优先使用 doctor 标签的床位和医疗站。", "category": "access_profile", "tags": ["doctor"], "sort_order": 42 },
+      "rules": [
+        { "kind": "bed", "preferred_tags": ["doctor"], "fallback_to_any": true },
+        { "kind": "medical_station", "preferred_tags": ["doctor", "clinic"], "fallback_to_any": true },
+        { "kind": "canteen_seat", "preferred_tags": ["meal"], "fallback_to_any": true },
+        { "kind": "recreation_spot", "preferred_tags": ["morale"], "fallback_to_any": true }
+      ]
+    },
+    {
+      "id": "resident_settlement_access",
+      "meta": { "display_name": "居民据点访问模板", "description": "居民默认访问模板。", "category": "access_profile", "tags": ["resident"], "sort_order": 43 },
+      "rules": [
+        { "kind": "bed", "preferred_tags": ["resident"], "fallback_to_any": true },
+        { "kind": "canteen_seat", "preferred_tags": ["meal"], "fallback_to_any": true },
+        { "kind": "recreation_spot", "preferred_tags": ["morale"], "fallback_to_any": true }
+      ]
+    }
+  ]
+}

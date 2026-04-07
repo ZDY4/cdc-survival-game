@@ -684,16 +684,20 @@ mod tests {
     fn sample_overworld_library() -> OverworldLibrary {
         let definition = OverworldDefinition {
             id: OverworldId("main_overworld".into()),
+            size: MapSize {
+                width: 3,
+                height: 2,
+            },
             locations: vec![
-                sample_overworld_location("survivor_outpost_01", "survivor_outpost_01_grid", 0, 0),
+                sample_overworld_location("survivor_outpost_01", "survivor_outpost_01_grid", 1, 0),
                 sample_overworld_location(
                     "survivor_outpost_01_perimeter",
                     "survivor_outpost_01_grid",
-                    0,
+                    1,
                     1,
                 ),
-                sample_overworld_location("street_a", "survivor_outpost_01_grid", -1, 0),
-                sample_overworld_location("street_b", "survivor_outpost_01_grid", 1, 0),
+                sample_overworld_location("street_a", "survivor_outpost_01_grid", 0, 0),
+                sample_overworld_location("street_b", "survivor_outpost_01_grid", 2, 0),
                 OverworldLocationDefinition {
                     id: OverworldLocationId("survivor_outpost_01_interior".into()),
                     name: "Survivor Outpost 01 Interior".into(),
@@ -707,31 +711,47 @@ mod tests {
                     return_entry_point_id: Some("default_entry".into()),
                     default_unlocked: true,
                     visible: false,
-                    overworld_cell: GridCoord::new(0, 0, 0),
+                    overworld_cell: GridCoord::new(1, 0, 0),
                     danger_level: 0,
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 },
             ],
-            walkable_cells: vec![
+            cells: vec![
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: "road".into(),
-                    extra: BTreeMap::new(),
-                },
-                OverworldCellDefinition {
-                    grid: GridCoord::new(-1, 0, 0),
-                    terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(1, 0, 0),
                     terrain: "road".into(),
+                    blocked: false,
+                    extra: BTreeMap::new(),
+                },
+                OverworldCellDefinition {
+                    grid: GridCoord::new(2, 0, 0),
+                    terrain: "road".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 1),
                     terrain: "road".into(),
+                    blocked: false,
+                    extra: BTreeMap::new(),
+                },
+                OverworldCellDefinition {
+                    grid: GridCoord::new(1, 0, 1),
+                    terrain: "wilderness".into(),
+                    blocked: false,
+                    extra: BTreeMap::new(),
+                },
+                OverworldCellDefinition {
+                    grid: GridCoord::new(2, 0, 1),
+                    terrain: "wilderness".into(),
+                    blocked: false,
                     extra: BTreeMap::new(),
                 },
             ],
@@ -760,7 +780,7 @@ mod tests {
             return_entry_point_id: None,
             default_unlocked: true,
             visible: true,
-            overworld_cell: GridCoord::new(x, 0, z),
+            overworld_cell: GridCoord::new(x + 1, 0, z),
             danger_level: 0,
             icon: String::new(),
             extra: BTreeMap::new(),

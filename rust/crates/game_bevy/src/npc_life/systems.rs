@@ -7,7 +7,10 @@ use game_core::{
     select_goal, tick_offline_action, ActionExecutionPhase, NpcBackgroundState, NpcGoalKey,
     NpcPlanRequest, NpcRuntimeActionState, OfflineActionState,
 };
-use game_data::{resolve_ai_behavior_profile, NpcRole, SettlementId, SmartObjectKind};
+use game_data::{
+    resolve_ai_behavior_profile, resolve_character_life_profile, NpcRole, SettlementId,
+    SmartObjectKind,
+};
 
 use crate::{
     reservations::ReservationConflict, AiDefinitions, CharacterDefinitionId, SettlementDefinitions,
@@ -18,8 +21,10 @@ use super::helpers::*;
 use super::{
     AiBehaviorProfileComponent, BackgroundLifeState, CurrentAction, CurrentGoal, CurrentPlan,
     DecisionTrace, LifeProfileComponent, NeedState, NpcLifeState, NpcLifeUpdateSet,
-    PlannedActionDebug, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
-    SettlementContext, SettlementDebugEntry, SettlementDebugSnapshot, SimClock, WorldAlertState,
+    PersonalityState, PlannedActionDebug, ReservationState, ResolvedLifeProfileComponent,
+    RuntimeActorLink, RuntimeExecutionState, ScheduleState, SettlementContext,
+    SettlementDebugEntry, SettlementDebugSnapshot, SimClock, SmartObjectAccessProfileComponent,
+    WorldAlertState,
 };
 
 pub(super) fn configure(app: &mut App) {
@@ -64,6 +69,9 @@ pub(super) fn initialize_npc_life_entities(
 
     for (entity, profile_component) in &query {
         let profile = &profile_component.0;
+        let Ok(resolved_life) = resolve_character_life_profile(profile, &ai_definitions.0) else {
+            continue;
+        };
         let settlement = match settlements
             .0
             .get(&SettlementId(profile.settlement_id.clone()))
@@ -71,14 +79,22 @@ pub(super) fn initialize_npc_life_entities(
             Some(settlement) => settlement,
             None => continue,
         };
-        let duty_anchor =
-            route_duty_anchor(settlement, &profile.home_anchor, &profile.duty_route_id)
-                .or_else(|| default_duty_anchor_for_role(settlement, profile.role));
+        let duty_anchor = route_duty_anchor(
+            settlement,
+            &resolved_life.home_anchor,
+            &resolved_life.duty_route_id,
+        )
+        .or_else(|| default_duty_anchor_for_role(settlement, profile.role));
         let canteen_anchor = first_anchor_for_kind(settlement, SmartObjectKind::CanteenSeat);
         let leisure_anchor = first_anchor_for_kind(settlement, SmartObjectKind::RecreationSpot);
         let alarm_anchor = first_anchor_for_kind(settlement, SmartObjectKind::AlarmPoint);
         let guard_post_id = if profile.role == NpcRole::Guard {
-            first_object_for_kind_for_role(settlement, SmartObjectKind::GuardPost, profile.role)
+            first_object_for_kind_for_role(
+                settlement,
+                SmartObjectKind::GuardPost,
+                profile.role,
+                &resolved_life.smart_object_access_profile,
+            )
         } else {
             None
         };
@@ -91,12 +107,15 @@ pub(super) fn initialize_npc_life_entities(
 
         commands.entity(entity).insert((
             AiBehaviorProfileComponent(ai_behavior_profile),
+            ResolvedLifeProfileComponent(resolved_life.clone()),
+            PersonalityState::from(&resolved_life.personality_profile),
+            SmartObjectAccessProfileComponent(resolved_life.smart_object_access_profile.clone()),
             NpcLifeState {
                 settlement_id: profile.settlement_id.clone(),
                 role: profile.role,
-                home_anchor: profile.home_anchor.clone(),
+                home_anchor: resolved_life.home_anchor.clone(),
                 duty_anchor,
-                duty_route_id: non_empty(profile.duty_route_id.clone()),
+                duty_route_id: non_empty(resolved_life.duty_route_id.clone()),
                 canteen_anchor,
                 leisure_anchor,
                 alarm_anchor,
@@ -105,22 +124,25 @@ pub(super) fn initialize_npc_life_entities(
                     settlement,
                     SmartObjectKind::Bed,
                     profile.role,
+                    &resolved_life.smart_object_access_profile,
                 ),
                 meal_object_id: first_object_for_kind_for_role(
                     settlement,
                     SmartObjectKind::CanteenSeat,
                     profile.role,
+                    &resolved_life.smart_object_access_profile,
                 ),
                 leisure_object_id: first_object_for_kind_for_role(
                     settlement,
                     SmartObjectKind::RecreationSpot,
                     profile.role,
+                    &resolved_life.smart_object_access_profile,
                 ),
-                current_anchor: Some(profile.home_anchor.clone()),
+                current_anchor: Some(resolved_life.home_anchor.clone()),
                 replan_required: true,
                 online: false,
             },
-            NeedState::from_profile(&profile.need_profile),
+            NeedState::from_profile(&resolved_life.need_profile),
             ScheduleState::default(),
             CurrentGoal::default(),
             CurrentPlan::default(),
@@ -136,7 +158,11 @@ pub(super) fn initialize_npc_life_entities(
 pub(super) fn update_schedule_state_system(
     clock: Res<SimClock>,
     settlements: Option<Res<SettlementDefinitions>>,
-    mut query: Query<(&NpcLifeState, &LifeProfileComponent, &mut ScheduleState)>,
+    mut query: Query<(
+        &NpcLifeState,
+        &ResolvedLifeProfileComponent,
+        &mut ScheduleState,
+    )>,
 ) {
     let Some(settlements) = settlements else {
         return;
@@ -148,15 +174,15 @@ pub(super) fn update_schedule_state_system(
             None => continue,
         };
         let active_block =
-            active_schedule_block(&profile.0.schedule, clock.day, clock.minute_of_day);
+            active_schedule_block(&profile.0.schedule_blocks, clock.day, clock.minute_of_day);
         schedule.active_label = active_block
             .map(|block| block.label.clone())
             .unwrap_or_else(|| "off_shift".to_string());
         schedule.on_shift = active_block
             .map(|block| block.tags.iter().any(|tag| tag == "shift"))
             .unwrap_or(false);
-        schedule.shift_starting_soon = profile.0.schedule.iter().any(|block| {
-            block.day == clock.day
+        schedule.shift_starting_soon = profile.0.schedule_blocks.iter().any(|block| {
+            block.includes_day(clock.day)
                 && block.start_minute >= clock.minute_of_day
                 && block.start_minute.saturating_sub(clock.minute_of_day) <= 30
         });
@@ -192,6 +218,8 @@ pub(super) fn plan_npc_life_system(
         Query<(
             Entity,
             &AiBehaviorProfileComponent,
+            &PersonalityState,
+            &SmartObjectAccessProfileComponent,
             &mut NpcLifeState,
             &NeedState,
             &ScheduleState,
@@ -228,6 +256,8 @@ pub(super) fn plan_npc_life_system(
     for (
         entity,
         behavior_profile,
+        personality,
+        access_profile,
         mut life,
         need,
         schedule,
@@ -264,6 +294,7 @@ pub(super) fn plan_npc_life_system(
                 settlement,
                 SmartObjectKind::GuardPost,
                 life.role,
+                &access_profile.0,
                 &reservation_service,
                 entity,
             )
@@ -275,6 +306,7 @@ pub(super) fn plan_npc_life_system(
             settlement,
             SmartObjectKind::CanteenSeat,
             life.role,
+            &access_profile.0,
             &reservation_service,
             entity,
         )
@@ -283,6 +315,7 @@ pub(super) fn plan_npc_life_system(
             settlement,
             SmartObjectKind::RecreationSpot,
             life.role,
+            &access_profile.0,
             &reservation_service,
             entity,
         )
@@ -292,6 +325,7 @@ pub(super) fn plan_npc_life_system(
                 settlement,
                 SmartObjectKind::MedicalStation,
                 life.role,
+                &access_profile.0,
                 &reservation_service,
                 entity,
             )
@@ -328,6 +362,7 @@ pub(super) fn plan_npc_life_system(
         let blackboard = build_ai_blackboard(
             &life,
             need,
+            personality,
             schedule,
             reservations,
             world_alert.active,

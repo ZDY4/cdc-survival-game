@@ -219,6 +219,7 @@ pub(crate) fn spawn_context_menu_button(
             Interaction::None,
         )),
         action_bundle,
+        viewer_ui_passthrough_bundle(),
     ));
     if item.is_disabled {
         button.insert(ContextMenuItemDisabled);

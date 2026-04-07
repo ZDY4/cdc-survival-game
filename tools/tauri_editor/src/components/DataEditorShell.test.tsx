@@ -31,4 +31,24 @@ describe("DataEditorShell", () => {
     expect(markup).not.toContain("Modules");
     expect(markup).not.toContain("module-nav");
   });
+
+  it("can hide the shell header for dense module layouts", () => {
+    const markup = renderToStaticMarkup(
+      <DataEditorShell
+        title="Characters"
+        subtitle="Character definitions, life bindings, and AI preview."
+        bootstrap={bootstrap}
+        runtimeLabel="Tauri host connected"
+        status="Ready."
+        showHeader={false}
+      >
+        <div>Workspace content</div>
+      </DataEditorShell>,
+    );
+
+    expect(markup).toContain("Workspace content");
+    expect(markup).not.toContain("Characters");
+    expect(markup).not.toContain("Tauri host connected");
+    expect(markup).not.toContain("data-editor-header");
+  });
 });

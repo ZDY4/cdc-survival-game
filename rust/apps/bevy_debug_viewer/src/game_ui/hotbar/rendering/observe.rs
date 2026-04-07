@@ -48,7 +48,11 @@ pub(super) fn render_observe_hotbar(
             .with_children(|controls| {
                 controls.spawn(ob_button(
                     font,
-                    if viewer_state.auto_tick { "暂停" } else { "播放" },
+                    if viewer_state.auto_tick {
+                        "暂停"
+                    } else {
+                        "播放"
+                    },
                     true,
                     GameUiButtonAction::ToggleObPlayback,
                 ));

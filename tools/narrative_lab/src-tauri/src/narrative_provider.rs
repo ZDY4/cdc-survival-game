@@ -1,13 +1,16 @@
 use std::{
-    io::{BufRead, BufReader},
-    thread,
+    collections::HashMap,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
-use reqwest::blocking::Client;
+use futures_util::StreamExt;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
+use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
 use crate::ai_settings::{read_ai_settings, AiSettings};
 use crate::narrative_context::build_narrative_context;
@@ -18,6 +21,75 @@ use crate::narrative_templates::{default_markdown, doc_type_label, is_known_doc_
 use crate::narrative_workspace::{resolve_connected_project_root, resolve_workspace_root};
 
 const NARRATIVE_GENERATION_PROGRESS_EVENT: &str = "narrative:generation-progress";
+const NARRATIVE_REQUEST_CANCELLED_CODE: &str = "narrative_request_cancelled";
+const NARRATIVE_REQUEST_CANCELLED_MESSAGE: &str = "[narrative_request_cancelled] 当前请求已取消";
+
+#[derive(Clone, Default)]
+pub struct NarrativeRequestRegistry {
+    inner: Arc<Mutex<HashMap<String, NarrativeRequestEntry>>>,
+}
+
+#[derive(Clone)]
+struct NarrativeRequestEntry {
+    stage: String,
+    cancellation: CancellationToken,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NarrativeCancelRequestResult {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+}
+
+impl NarrativeRequestRegistry {
+    fn register(&self, request_id: String, stage: &str) -> Result<CancellationToken, String> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| "请求状态注册失败：状态锁不可用".to_string())?;
+        let cancellation = CancellationToken::new();
+        guard.insert(
+            request_id,
+            NarrativeRequestEntry {
+                stage: stage.to_string(),
+                cancellation: cancellation.clone(),
+            },
+        );
+        Ok(cancellation)
+    }
+
+    fn remove(&self, request_id: &str) {
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.remove(request_id);
+        }
+    }
+
+    fn cancel(&self, request_id: &str) -> Result<NarrativeCancelRequestResult, String> {
+        let maybe_entry = {
+            let guard = self
+                .inner
+                .lock()
+                .map_err(|_| "取消失败：状态锁不可用".to_string())?;
+            guard.get(request_id).cloned()
+        };
+
+        match maybe_entry {
+            Some(entry) => {
+                entry.cancellation.cancel();
+                Ok(NarrativeCancelRequestResult {
+                    status: "cancelled".to_string(),
+                    stage: Some(entry.stage),
+                })
+            }
+            None => Ok(NarrativeCancelRequestResult {
+                status: "already_finished".to_string(),
+                stage: None,
+            }),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +115,8 @@ pub struct NarrativeGenerateRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolveNarrativeActionIntentInput {
+    #[serde(default)]
+    pub request_id: Option<String>,
     pub submitted_prompt: String,
     pub doc_type: String,
     pub target_slug: String,
@@ -182,13 +256,8 @@ const SUPPORTED_AGENT_ACTION_TYPES: &[&str] = &[
     "split_plan_into_documents",
     "archive_document",
 ];
-const SUPPORTED_DOCUMENT_STATUSES: &[&str] = &[
-    "draft",
-    "review",
-    "active",
-    "completed",
-    "archived",
-];
+const SUPPORTED_DOCUMENT_STATUSES: &[&str] =
+    &["draft", "review", "active", "completed", "archived"];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -328,56 +397,138 @@ struct ProviderFailure {
 #[tauri::command]
 pub async fn generate_narrative_draft(
     app: AppHandle,
+    request_registry: State<'_, NarrativeRequestRegistry>,
     workspace_root: String,
     project_root: Option<String>,
     request: NarrativeGenerateRequest,
 ) -> Result<NarrativeGenerateResponse, String> {
-    run_narrative_generation_in_background(app, workspace_root, project_root, request).await
+    let registry = request_registry.inner().clone();
+    let request_id = normalize_optional_request_id(request.request_id.as_deref());
+    run_with_registered_request(
+        registry,
+        request_id,
+        "generating",
+        move |cancellation| async move {
+            run_narrative_generation(
+                &app,
+                &workspace_root,
+                project_root.as_deref(),
+                request,
+                cancellation.as_ref(),
+            )
+            .await
+        },
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn revise_narrative_draft(
     app: AppHandle,
+    request_registry: State<'_, NarrativeRequestRegistry>,
     workspace_root: String,
     project_root: Option<String>,
     request: NarrativeGenerateRequest,
 ) -> Result<NarrativeGenerateResponse, String> {
-    run_narrative_generation_in_background(app, workspace_root, project_root, request).await
+    let registry = request_registry.inner().clone();
+    let request_id = normalize_optional_request_id(request.request_id.as_deref());
+    run_with_registered_request(
+        registry,
+        request_id,
+        "generating",
+        move |cancellation| async move {
+            run_narrative_generation(
+                &app,
+                &workspace_root,
+                project_root.as_deref(),
+                request,
+                cancellation.as_ref(),
+            )
+            .await
+        },
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn resolve_narrative_action_intent(
     app: AppHandle,
+    request_registry: State<'_, NarrativeRequestRegistry>,
     workspace_root: String,
     project_root: Option<String>,
     input: ResolveNarrativeActionIntentInput,
 ) -> Result<ResolveNarrativeActionIntentResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        run_narrative_action_intent_resolution(&app, &workspace_root, project_root.as_deref(), input)
-    })
+    let registry = request_registry.inner().clone();
+    let request_id = normalize_optional_request_id(input.request_id.as_deref());
+    run_with_registered_request(
+        registry,
+        request_id,
+        "resolving_intent",
+        move |cancellation| async move {
+            run_narrative_action_intent_resolution(
+                &app,
+                &workspace_root,
+                project_root.as_deref(),
+                input,
+                cancellation.as_ref(),
+            )
+            .await
+        },
+    )
     .await
-    .map_err(|error| format!("narrative action intent task failed: {error}"))?
 }
 
-async fn run_narrative_generation_in_background(
-    app: AppHandle,
-    workspace_root: String,
-    project_root: Option<String>,
-    request: NarrativeGenerateRequest,
-) -> Result<NarrativeGenerateResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        run_narrative_generation(&app, &workspace_root, project_root.as_deref(), request)
-    })
-    .await
-    .map_err(|error| format!("narrative generation task failed: {error}"))?
+#[tauri::command]
+pub fn cancel_narrative_request(
+    request_id: String,
+    request_registry: State<'_, NarrativeRequestRegistry>,
+) -> Result<NarrativeCancelRequestResult, String> {
+    let normalized = request_id.trim();
+    if normalized.is_empty() {
+        return Err("requestId 不能为空".to_string());
+    }
+    request_registry.inner().cancel(normalized)
 }
 
-fn run_narrative_action_intent_resolution(
+fn normalize_optional_request_id(request_id: Option<&str>) -> Option<String> {
+    request_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+async fn run_with_registered_request<T, F, Fut>(
+    registry: NarrativeRequestRegistry,
+    request_id: Option<String>,
+    stage: &str,
+    run: F,
+) -> Result<T, String>
+where
+    F: FnOnce(Option<CancellationToken>) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    let cancellation = if let Some(id) = request_id.as_ref() {
+        Some(registry.register(id.clone(), stage)?)
+    } else {
+        None
+    };
+
+    let result = run(cancellation).await;
+    if let Some(id) = request_id.as_ref() {
+        registry.remove(id);
+    }
+    result
+}
+
+async fn run_narrative_action_intent_resolution(
     app: &AppHandle,
     workspace_root: &str,
     project_root: Option<&str>,
     mut input: ResolveNarrativeActionIntentInput,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<ResolveNarrativeActionIntentResult, String> {
+    ensure_not_cancelled(cancellation)?;
+    input.request_id = normalize_optional_request_id(input.request_id.as_deref());
     input.submitted_prompt = input.submitted_prompt.trim().to_string();
     input.doc_type = input.doc_type.trim().to_lowercase();
     input.target_slug = input.target_slug.trim().to_string();
@@ -398,11 +549,12 @@ fn run_narrative_action_intent_resolution(
         return Err("请至少填写本轮需求".to_string());
     }
 
+    ensure_not_cancelled(cancellation)?;
     let settings = read_ai_settings(app)?.normalized();
     let workspace_root_path = resolve_workspace_root(workspace_root)?;
     let project_root_path = resolve_connected_project_root(project_root)?;
     let context_request = NarrativeGenerateRequest {
-        request_id: None,
+        request_id: input.request_id.clone(),
         doc_type: input.doc_type.clone(),
         target_slug: input.target_slug.clone(),
         action: "revise_document".to_string(),
@@ -420,25 +572,29 @@ fn run_narrative_action_intent_resolution(
         &context_request,
         settings.max_context_records,
     )?;
+    ensure_not_cancelled(cancellation)?;
     let payload = build_action_intent_resolution_payload(&input, &context.context, &settings);
-    let success = perform_chat_completion(&settings, &payload, None)
-        .map_err(|failure| normalize_provider_error(&failure))?;
+    let success = perform_chat_completion(&settings, &payload, None, cancellation)
+        .await
+        .map_err(map_provider_failure_to_result_error)?;
     Ok(parse_action_intent_resolution_payload(
         &success.payload,
         &input.submitted_prompt,
     ))
 }
 
-fn run_narrative_generation(
+async fn run_narrative_generation(
     app: &AppHandle,
     workspace_root: &str,
     project_root: Option<&str>,
     mut request: NarrativeGenerateRequest,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<NarrativeGenerateResponse, String> {
     let progress = NarrativeGenerationProgressEmitter::from_request(app, &request);
     if let Some(progress) = &progress {
         progress.status_step("prepare-request", "准备请求", "正在准备 AI 请求...");
     }
+    ensure_not_cancelled_with_progress(cancellation, progress.as_ref())?;
     normalize_request(&mut request)?;
     if let Some(progress) = &progress {
         progress.completed_step(
@@ -449,6 +605,7 @@ fn run_narrative_generation(
         );
         progress.status_step("validate-input", "校验输入", "正在校验当前文档与选区...");
     }
+    ensure_not_cancelled_with_progress(cancellation, progress.as_ref())?;
     let selection = validate_selection(
         &request.current_markdown,
         request.selected_range.as_ref(),
@@ -464,6 +621,7 @@ fn run_narrative_generation(
         );
         progress.status_step("load-settings", "读取设置", "正在读取 AI 设置...");
     }
+    ensure_not_cancelled_with_progress(cancellation, progress.as_ref())?;
     let settings = read_ai_settings(app)?.normalized();
     let workspace_root_path = resolve_workspace_root(workspace_root)?;
     let project_root_path = resolve_connected_project_root(project_root)?;
@@ -476,12 +634,14 @@ fn run_narrative_generation(
         );
         progress.status_step("build-context", "整理上下文", "正在整理工作区上下文...");
     }
+    ensure_not_cancelled(cancellation)?;
     let context = build_narrative_context(
         &workspace_root_path,
         project_root_path.as_deref(),
         &request,
         settings.max_context_records,
     )?;
+    ensure_not_cancelled(cancellation)?;
     let payload = build_single_agent_payload(&request, &context.context, &settings);
     if let Some(progress) = &progress {
         progress.completed_step(
@@ -493,7 +653,7 @@ fn run_narrative_generation(
         progress.status_step("request-model", "请求模型", "正在连接 AI 提供方...");
     }
 
-    match perform_chat_completion(&settings, &payload, progress.as_ref()) {
+    match perform_chat_completion(&settings, &payload, progress.as_ref(), cancellation).await {
         Ok(success) => {
             if let Some(progress) = &progress {
                 progress.completed_step(
@@ -529,6 +689,18 @@ fn run_narrative_generation(
             Ok(response)
         }
         Err(error) => {
+            if is_cancelled_provider_failure(&error) {
+                if let Some(progress) = &progress {
+                    progress.error_step(
+                        "request-model",
+                        "请求模型",
+                        "当前请求已取消",
+                        "当前请求已取消",
+                    );
+                    progress.completed("当前请求已取消", "当前请求已取消");
+                }
+                return Err(cancelled_request_error());
+            }
             let provider_error = normalize_provider_error(&error);
             if let Some(progress) = &progress {
                 progress.error_step(
@@ -914,7 +1086,10 @@ fn parse_action_intent_resolution_payload(
                 id: "action-intent-create".to_string(),
                 label: "创建新文档".to_string(),
                 description: "基于当前文稿内容另起一份新的文档草稿。".to_string(),
-                followup_prompt: format!("请基于当前文档创建一份新文档：{}", submitted_prompt.trim()),
+                followup_prompt: format!(
+                    "请基于当前文档创建一份新文档：{}",
+                    submitted_prompt.trim()
+                ),
             },
         ];
     }
@@ -927,7 +1102,9 @@ fn parse_action_intent_resolution_payload(
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .unwrap_or("我还不能稳定判断这轮应该修改当前文档，还是基于它创建一份新文档。请先确认一次。")
+            .unwrap_or(
+                "我还不能稳定判断这轮应该修改当前文档，还是基于它创建一份新文档。请先确认一次。",
+            )
             .to_string(),
         questions,
         options,
@@ -1319,15 +1496,11 @@ fn validate_action_payload(action_type: &str, payload: Value) -> Option<Value> {
     let map = payload.as_object().cloned().unwrap_or_default();
     match action_type {
         "apply_candidate_patch" => {
-            let patch_id = read_trimmed_string(
-                map.get("patchId").or_else(|| map.get("patch_id")),
-            )?;
+            let patch_id = read_trimmed_string(map.get("patchId").or_else(|| map.get("patch_id")))?;
             Some(json!({ "patchId": patch_id }))
         }
         "create_derived_document" => {
-            let doc_type = read_trimmed_string(
-                map.get("docType").or_else(|| map.get("doc_type")),
-            )?;
+            let doc_type = read_trimmed_string(map.get("docType").or_else(|| map.get("doc_type")))?;
             if !is_known_doc_type(&doc_type) {
                 return None;
             }
@@ -1858,19 +2031,99 @@ fn risk_score(value: &str) -> i32 {
     }
 }
 
-fn perform_chat_completion(
+fn ensure_not_cancelled(cancellation: Option<&CancellationToken>) -> Result<(), String> {
+    if cancellation.is_some_and(CancellationToken::is_cancelled) {
+        return Err(cancelled_request_error());
+    }
+    Ok(())
+}
+
+fn ensure_not_cancelled_with_progress(
+    cancellation: Option<&CancellationToken>,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+) -> Result<(), String> {
+    if cancellation.is_some_and(CancellationToken::is_cancelled) {
+        if let Some(progress) = progress {
+            progress.error_step(
+                "request-model",
+                "请求模型",
+                "当前请求已取消",
+                "当前请求已取消",
+            );
+            progress.completed("当前请求已取消", "当前请求已取消");
+        }
+        return Err(cancelled_request_error());
+    }
+    Ok(())
+}
+
+fn cancelled_request_error() -> String {
+    NARRATIVE_REQUEST_CANCELLED_MESSAGE.to_string()
+}
+
+fn map_provider_failure_to_result_error(failure: ProviderFailure) -> String {
+    if is_cancelled_provider_failure(&failure) {
+        return cancelled_request_error();
+    }
+    normalize_provider_error(&failure)
+}
+
+fn cancelled_provider_failure(raw_text: String) -> ProviderFailure {
+    ProviderFailure {
+        status_code: 499,
+        error: cancelled_request_error(),
+        raw_text,
+    }
+}
+
+fn is_cancelled_provider_failure(failure: &ProviderFailure) -> bool {
+    failure.error.contains(NARRATIVE_REQUEST_CANCELLED_CODE)
+        || failure.error.contains("当前请求已取消")
+}
+
+async fn sleep_with_cancel(
+    duration: Duration,
+    cancellation: Option<&CancellationToken>,
+    raw_text: &str,
+) -> Result<(), ProviderFailure> {
+    if let Some(token) = cancellation {
+        tokio::select! {
+            _ = token.cancelled() => Err(cancelled_provider_failure(raw_text.to_string())),
+            _ = sleep(duration) => Ok(()),
+        }
+    } else {
+        sleep(duration).await;
+        Ok(())
+    }
+}
+
+async fn perform_chat_completion(
     settings: &AiSettings,
     payload: &Value,
     progress: Option<&NarrativeGenerationProgressEmitter>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
-    perform_chat_completion_owned(settings.clone(), payload.clone(), progress.cloned())
+    perform_chat_completion_owned(
+        settings.clone(),
+        payload.clone(),
+        progress.cloned(),
+        cancellation.cloned(),
+    )
+    .await
 }
 
-fn perform_chat_completion_owned(
+async fn perform_chat_completion_owned(
     settings: AiSettings,
     payload: Value,
     progress: Option<NarrativeGenerationProgressEmitter>,
+    cancellation: Option<CancellationToken>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
+    if cancellation
+        .as_ref()
+        .is_some_and(CancellationToken::is_cancelled)
+    {
+        return Err(cancelled_provider_failure(String::new()));
+    }
     let provider_config = payload
         .get("provider_config")
         .and_then(Value::as_object)
@@ -1933,7 +2186,10 @@ fn perform_chat_completion_owned(
         &payload,
         base_max_tokens,
         progress.as_ref(),
-    ) {
+        cancellation.as_ref(),
+    )
+    .await
+    {
         Ok(success) => Ok(success),
         Err(failure) if should_retry_with_more_tokens(&failure) => {
             let expanded_max_tokens = expanded_max_tokens(base_max_tokens);
@@ -1957,13 +2213,15 @@ fn perform_chat_completion_owned(
                 &payload,
                 expanded_max_tokens,
                 progress.as_ref(),
+                cancellation.as_ref(),
             )
+            .await
         }
         Err(failure) => Err(failure),
     }
 }
 
-fn perform_chat_completion_with_fallbacks(
+async fn perform_chat_completion_with_fallbacks(
     client: &Client,
     base_url: &str,
     api_key: &str,
@@ -1971,10 +2229,20 @@ fn perform_chat_completion_with_fallbacks(
     payload: &Value,
     max_tokens: u64,
     progress: Option<&NarrativeGenerationProgressEmitter>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
     let request_body = build_chat_completion_request(model, payload, max_tokens, true);
 
-    match send_chat_completion_request(client, base_url, api_key, &request_body, progress) {
+    match send_chat_completion_request(
+        client,
+        base_url,
+        api_key,
+        &request_body,
+        progress,
+        cancellation,
+    )
+    .await
+    {
         Ok(success) => Ok(success),
         Err(failure) if should_retry_without_stream(&failure) => {
             if let Some(progress) = progress {
@@ -1991,7 +2259,10 @@ fn perform_chat_completion_with_fallbacks(
                 api_key,
                 &fallback_request,
                 progress,
-            ) {
+                cancellation,
+            )
+            .await
+            {
                 Ok(success) => Ok(success),
                 Err(second_failure) => Err(second_failure),
             }
@@ -2034,36 +2305,53 @@ fn build_chat_completion_request(
     Value::Object(request)
 }
 
-fn send_chat_completion_request(
+async fn send_chat_completion_request(
     client: &Client,
     base_url: &str,
     api_key: &str,
     request_body: &Value,
     progress: Option<&NarrativeGenerationProgressEmitter>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
     let mut last_failure: Option<ProviderFailure> = None;
 
     for attempt in 0..=1 {
-        let response = client
+        let request = client
             .post(format!("{base_url}/chat/completions"))
             .bearer_auth(api_key)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .json(request_body)
-            .send();
+            .json(request_body);
+
+        let response = if let Some(token) = cancellation {
+            tokio::select! {
+                _ = token.cancelled() => return Err(cancelled_provider_failure(String::new())),
+                result = request.send() => result,
+            }
+        } else {
+            request.send().await
+        };
 
         match response {
             Ok(response) => {
                 let status = response.status().as_u16();
                 if !(200..300).contains(&status) {
-                    let raw_body = response.text().unwrap_or_default();
+                    let raw_body = if let Some(token) = cancellation {
+                        tokio::select! {
+                            _ = token.cancelled() => return Err(cancelled_provider_failure(String::new())),
+                            text = response.text() => text.unwrap_or_default(),
+                        }
+                    } else {
+                        response.text().await.unwrap_or_default()
+                    };
                     let failure = ProviderFailure {
                         status_code: status,
                         error: map_http_error(status, &raw_body),
                         raw_text: raw_body,
                     };
                     if attempt == 0 && (status == 429 || status >= 500) {
-                        thread::sleep(Duration::from_secs(1));
+                        sleep_with_cancel(Duration::from_secs(1), cancellation, &failure.raw_text)
+                            .await?;
                         last_failure = Some(failure);
                         continue;
                     }
@@ -2081,13 +2369,26 @@ fn send_chat_completion_request(
                     if let Some(progress) = progress {
                         progress.status_step("request-model", "请求模型", "正在接收模型输出...");
                     }
-                    return read_streaming_chat_completion(response, status, progress);
+                    return read_streaming_chat_completion(
+                        response,
+                        status,
+                        progress,
+                        cancellation,
+                    )
+                    .await;
                 }
 
                 if let Some(progress) = progress {
                     progress.status_step("request-model", "请求模型", "正在整理模型返回内容...");
                 }
-                let raw_body = response.text().unwrap_or_default();
+                let raw_body = if let Some(token) = cancellation {
+                    tokio::select! {
+                        _ = token.cancelled() => return Err(cancelled_provider_failure(String::new())),
+                        text = response.text() => text.unwrap_or_default(),
+                    }
+                } else {
+                    response.text().await.unwrap_or_default()
+                };
                 return parse_non_stream_response(raw_body, status, progress);
             }
             Err(error) => {
@@ -2097,7 +2398,7 @@ fn send_chat_completion_request(
                     raw_text: String::new(),
                 };
                 if attempt == 0 {
-                    thread::sleep(Duration::from_secs(1));
+                    sleep_with_cancel(Duration::from_secs(1), cancellation, "").await?;
                     last_failure = Some(failure);
                     continue;
                 }
@@ -2184,49 +2485,56 @@ fn parse_non_stream_response(
     })
 }
 
-fn read_streaming_chat_completion(
-    response: reqwest::blocking::Response,
+async fn read_streaming_chat_completion(
+    response: reqwest::Response,
     status: u16,
     progress: Option<&NarrativeGenerationProgressEmitter>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<ProviderSuccess, ProviderFailure> {
     let mut raw_content = String::new();
-    let reader = BufReader::new(response);
+    let mut stream = response.bytes_stream();
+    let mut buffer = String::new();
+    let mut stream_done = false;
 
-    for line_result in reader.lines() {
-        let line = line_result.map_err(|error| ProviderFailure {
+    while let Some(chunk_result) = if let Some(token) = cancellation {
+        tokio::select! {
+            _ = token.cancelled() => return Err(cancelled_provider_failure(raw_content.clone())),
+            next = stream.next() => next,
+        }
+    } else {
+        stream.next().await
+    } {
+        let chunk = chunk_result.map_err(|error| ProviderFailure {
             status_code: status,
             error: format!("读取流式响应失败: {error}"),
             raw_text: raw_content.clone(),
         })?;
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(':') {
-            continue;
-        }
-        let Some(data) = trimmed.strip_prefix("data:") else {
-            continue;
-        };
-        let data = data.trim();
-        if data == "[DONE]" {
-            break;
-        }
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-        let event: Value = serde_json::from_str(data).map_err(|error| ProviderFailure {
-            status_code: status,
-            error: format!("流式响应片段不是合法 JSON: {error}"),
-            raw_text: raw_content.clone(),
-        })?;
-        let delta = extract_stream_delta_content(&event);
-        if !delta.is_empty() {
-            raw_content.push_str(&delta);
-            if let Some(progress) = progress {
-                progress.delta_step(
-                    "request-model",
-                    "请求模型",
-                    "AI 正在输出内容...",
-                    raw_content.clone(),
-                );
+        while let Some(newline_index) = buffer.find('\n') {
+            let mut line = buffer[..newline_index].to_string();
+            if line.ends_with('\r') {
+                line.pop();
+            }
+            buffer.drain(..=newline_index);
+            if process_stream_line(&line, status, progress, &mut raw_content)? {
+                stream_done = true;
+                break;
             }
         }
+
+        if stream_done {
+            break;
+        }
+    }
+
+    if !stream_done && !buffer.trim().is_empty() {
+        let _ = process_stream_line(
+            buffer.trim_end_matches('\r'),
+            status,
+            progress,
+            &mut raw_content,
+        )?;
     }
 
     let payload = extract_narrative_payload(&raw_content).map_err(|error| ProviderFailure {
@@ -2238,6 +2546,44 @@ fn read_streaming_chat_completion(
         raw_text: raw_content,
         payload,
     })
+}
+
+fn process_stream_line(
+    line: &str,
+    status: u16,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+    raw_content: &mut String,
+) -> Result<bool, ProviderFailure> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with(':') {
+        return Ok(false);
+    }
+    let Some(data) = trimmed.strip_prefix("data:") else {
+        return Ok(false);
+    };
+    let data = data.trim();
+    if data == "[DONE]" {
+        return Ok(true);
+    }
+
+    let event: Value = serde_json::from_str(data).map_err(|error| ProviderFailure {
+        status_code: status,
+        error: format!("流式响应片段不是合法 JSON: {error}"),
+        raw_text: raw_content.clone(),
+    })?;
+    let delta = extract_stream_delta_content(&event);
+    if !delta.is_empty() {
+        raw_content.push_str(&delta);
+        if let Some(progress) = progress {
+            progress.delta_step(
+                "request-model",
+                "请求模型",
+                "AI 正在输出内容...",
+                raw_content.clone(),
+            );
+        }
+    }
+    Ok(false)
 }
 
 fn extract_stream_delta_content(event: &Value) -> String {

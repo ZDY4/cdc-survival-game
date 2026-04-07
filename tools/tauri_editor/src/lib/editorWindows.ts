@@ -23,7 +23,7 @@ type WindowDescriptor = {
   buildUrl: () => string;
 };
 
-const WINDOW_DESCRIPTORS: Record<Exclude<OpenableEditorSurface, "map-editor" | "settings">, WindowDescriptor> = {
+const WINDOW_DESCRIPTORS: Record<Exclude<OpenableEditorSurface, "settings">, WindowDescriptor> = {
   items: {
     label: "items",
     title: "CDC Item Editor",
@@ -33,6 +33,16 @@ const WINDOW_DESCRIPTORS: Record<Exclude<OpenableEditorSurface, "map-editor" | "
     minHeight: 700,
     resizable: true,
     buildUrl: () => "/?surface=items",
+  },
+  characters: {
+    label: "characters",
+    title: "CDC Character Editor",
+    width: 1520,
+    height: 940,
+    minWidth: 1180,
+    minHeight: 760,
+    resizable: true,
+    buildUrl: () => "/?surface=characters",
   },
   dialogues: {
     label: "dialogues",
@@ -56,7 +66,7 @@ const WINDOW_DESCRIPTORS: Record<Exclude<OpenableEditorSurface, "map-editor" | "
   },
 };
 
-function getWindowDescriptor(surface: Exclude<OpenableEditorSurface, "map-editor" | "settings">): WindowDescriptor {
+function getWindowDescriptor(surface: Exclude<OpenableEditorSurface, "settings">): WindowDescriptor {
   return WINDOW_DESCRIPTORS[surface];
 }
 
@@ -104,7 +114,7 @@ async function createOrFocusWindow(
   });
 }
 
-export function buildEditorWindowUrl(surface: Exclude<OpenableEditorSurface, "map-editor" | "settings">): string {
+export function buildEditorWindowUrl(surface: Exclude<OpenableEditorSurface, "settings">): string {
   return getWindowDescriptor(surface).buildUrl();
 }
 
@@ -114,6 +124,8 @@ export function getSurfaceForModuleCommand(
   switch (commandId) {
     case EDITOR_MENU_COMMANDS.MODULE_ITEMS:
       return "items";
+    case EDITOR_MENU_COMMANDS.MODULE_CHARACTERS:
+      return "characters";
     case EDITOR_MENU_COMMANDS.MODULE_DIALOGUES:
       return "dialogues";
     case EDITOR_MENU_COMMANDS.MODULE_QUESTS:

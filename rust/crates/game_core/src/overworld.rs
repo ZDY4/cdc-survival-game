@@ -67,8 +67,9 @@ pub fn compute_cell_path(
     }
 
     let walkable: HashSet<GridCoord> = definition
-        .walkable_cells
+        .cells
         .iter()
+        .filter(|cell| !cell.blocked)
         .map(|cell| cell.grid)
         .collect();
     if !walkable.contains(&start) || !walkable.contains(&goal) {
@@ -132,7 +133,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
-    fn cell_path_uses_walkable_cells_only() {
+    fn cell_path_uses_only_unblocked_cells() {
         let definition = sample_overworld();
         let path = compute_cell_path(
             &definition,
@@ -148,6 +149,17 @@ mod tests {
                 GridCoord::new(2, 0, 0)
             ]
         );
+    }
+
+    #[test]
+    fn cell_path_rejects_blocked_goal() {
+        let definition = sample_overworld();
+        let path = compute_cell_path(
+            &definition,
+            GridCoord::new(0, 0, 0),
+            GridCoord::new(1, 0, 1),
+        );
+        assert!(path.is_none());
     }
 
     #[test]
@@ -179,29 +191,33 @@ mod tests {
     fn sample_overworld() -> OverworldDefinition {
         OverworldDefinition {
             id: OverworldId("main".into()),
+            size: MapSize {
+                width: 3,
+                height: 2,
+            },
             locations: vec![
                 sample_location("a", 0, 0),
                 sample_location("b", 1, 0),
                 sample_location("c", 2, 0),
             ],
-            walkable_cells: vec![
-                OverworldCellDefinition {
-                    grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
-                    extra: BTreeMap::new(),
-                },
-                OverworldCellDefinition {
-                    grid: GridCoord::new(1, 0, 0),
-                    terrain: "road".into(),
-                    extra: BTreeMap::new(),
-                },
-                OverworldCellDefinition {
-                    grid: GridCoord::new(2, 0, 0),
-                    terrain: "road".into(),
-                    extra: BTreeMap::new(),
-                },
+            cells: vec![
+                sample_cell(0, 0, false),
+                sample_cell(1, 0, false),
+                sample_cell(2, 0, false),
+                sample_cell(0, 1, false),
+                sample_cell(1, 1, true),
+                sample_cell(2, 1, false),
             ],
             travel_rules: OverworldTravelRuleSet::default(),
+        }
+    }
+
+    fn sample_cell(x: i32, z: i32, blocked: bool) -> OverworldCellDefinition {
+        OverworldCellDefinition {
+            grid: GridCoord::new(x, 0, z),
+            terrain: if blocked { "water" } else { "road" }.into(),
+            blocked,
+            extra: BTreeMap::new(),
         }
     }
 

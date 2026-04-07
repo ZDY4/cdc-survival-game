@@ -5,7 +5,7 @@ import {
   isOpenableEditorSurface,
 } from "./editorSurfaces";
 import { isEditorSettingsSection } from "../modules/settings/settingsWindowing";
-import type { EditorSettingsSection, SpatialDocumentType } from "../types";
+import type { EditorSettingsSection } from "../types";
 import { isTauriRuntime } from "./tauri";
 
 type ResolveEditorSurfaceOptions = {
@@ -29,17 +29,6 @@ export function resolveEditorSurface({
     return "main";
   }
   return "main";
-}
-
-export function getRequestedDocumentKey(search = ""): string | null {
-  const params = new URLSearchParams(search);
-  const documentKey = params.get("documentKey")?.trim();
-  return documentKey ? documentKey : null;
-}
-
-export function getRequestedDocumentType(search = ""): SpatialDocumentType {
-  const params = new URLSearchParams(search);
-  return params.get("documentType") === "overworld" ? "overworld" : "map";
 }
 
 export function getRequestedSettingsSection(search = ""): EditorSettingsSection {

@@ -519,7 +519,8 @@ pub(crate) fn plan_trade_buy(
         };
     };
     let buyer_money = runtime.economy().actor_money(actor_id).unwrap_or(0);
-    let max_tradeable_count = resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
+    let max_tradeable_count =
+        resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
     plan_trade_quantity(
         raw_available_count,
         max_tradeable_count,
@@ -553,7 +554,8 @@ pub(crate) fn plan_trade_sell(
         .shop(shop_id)
         .map(|shop| shop.money)
         .unwrap_or(0);
-    let max_tradeable_count = resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
+    let max_tradeable_count =
+        resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
     plan_trade_quantity(
         raw_available_count,
         max_tradeable_count,

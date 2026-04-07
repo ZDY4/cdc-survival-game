@@ -301,7 +301,12 @@ fn geometry_local_bounds(polygon: &game_core::GeometryPolygon2) -> (f32, f32, f3
     (min_x, max_x, min_z, max_z)
 }
 
-fn rectangle_polygon_local(min_x: f32, max_x: f32, min_z: f32, max_z: f32) -> game_core::GeometryPolygon2 {
+fn rectangle_polygon_local(
+    min_x: f32,
+    max_x: f32,
+    min_z: f32,
+    max_z: f32,
+) -> game_core::GeometryPolygon2 {
     game_core::GeometryPolygon2 {
         outer: vec![
             game_core::GeometryPoint2::new(min_x as f64, min_z as f64),

@@ -31,6 +31,352 @@ export type ValidationIssue = {
   path?: string;
 };
 
+export type CharacterArchetype = "player" | "npc" | "enemy";
+export type CharacterDisposition = "player" | "friendly" | "hostile" | "neutral";
+export type NpcRole = "resident" | "guard" | "cook" | "doctor";
+export type ScheduleDay =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export type ScheduleBlock = {
+  day?: ScheduleDay | null;
+  days: ScheduleDay[];
+  start_minute: number;
+  end_minute: number;
+  label: string;
+  tags: string[];
+};
+
+export type NeedProfile = {
+  hunger_decay_per_hour: number;
+  energy_decay_per_hour: number;
+  morale_decay_per_hour: number;
+  safety_bias: number;
+};
+
+export type PersonalityProfileOverride = {
+  safety_bias?: number | null;
+  social_bias?: number | null;
+  duty_bias?: number | null;
+  comfort_bias?: number | null;
+  alertness_bias?: number | null;
+};
+
+export type CharacterLifeProfile = {
+  settlement_id: string;
+  role: NpcRole;
+  ai_behavior_profile_id: string;
+  schedule_profile_id: string;
+  personality_profile_id: string;
+  need_profile_id: string;
+  smart_object_access_profile_id: string;
+  home_anchor: string;
+  duty_route_id: string;
+  schedule: ScheduleBlock[];
+  need_profile_override?: NeedProfile | null;
+  personality_override: PersonalityProfileOverride;
+};
+
+export type CharacterIdentity = {
+  display_name: string;
+  description: string;
+};
+
+export type CharacterFaction = {
+  camp_id: string;
+  disposition: CharacterDisposition;
+};
+
+export type CharacterPlaceholderColors = {
+  head: string;
+  body: string;
+  legs: string;
+};
+
+export type CharacterPresentation = {
+  portrait_path: string;
+  avatar_path: string;
+  model_path: string;
+  placeholder_colors: CharacterPlaceholderColors;
+};
+
+export type CharacterProgression = {
+  level: number;
+};
+
+export type CharacterLootEntry = {
+  item_id: number;
+  chance: number;
+  min: number;
+  max: number;
+};
+
+export type CharacterCombatProfile = {
+  behavior: string;
+  xp_reward: number;
+  loot: CharacterLootEntry[];
+};
+
+export type CharacterAiProfile = {
+  aggro_range: number;
+  attack_range: number;
+  wander_radius: number;
+  leash_distance: number;
+  decision_interval: number;
+  attack_cooldown: number;
+};
+
+export type CharacterResourcePool = {
+  current: number;
+};
+
+export type CharacterAttributeTemplate = {
+  sets: Record<string, Record<string, number>>;
+  resources: Record<string, CharacterResourcePool>;
+};
+
+export type CharacterDefinition = {
+  id: string;
+  archetype: CharacterArchetype;
+  identity: CharacterIdentity;
+  faction: CharacterFaction;
+  presentation: CharacterPresentation;
+  progression: CharacterProgression;
+  combat: CharacterCombatProfile;
+  ai: CharacterAiProfile;
+  attributes: CharacterAttributeTemplate;
+  interaction?: Record<string, unknown> | null;
+  life?: CharacterLifeProfile | null;
+};
+
+export type SmartObjectKind =
+  | "guard_post"
+  | "bed"
+  | "canteen_seat"
+  | "recreation_spot"
+  | "medical_station"
+  | "alarm_point";
+
+export type WeeklyScheduleEntryPreview = {
+  label: string;
+  tags: string[];
+  days: ScheduleDay[];
+  start_minute: number;
+  end_minute: number;
+};
+
+export type WeeklySchedulePreview = {
+  profile_id: string;
+  entries: WeeklyScheduleEntryPreview[];
+};
+
+export type AiPreviewModuleRef = {
+  id: string;
+  display_name: string;
+  category: string;
+  description: string;
+};
+
+export type AiBehaviorPreview = {
+  id: string;
+  display_name: string;
+  description: string;
+  default_goal_id?: string | null;
+  alert_goal_id?: string | null;
+  facts: AiPreviewModuleRef[];
+  goals: AiPreviewModuleRef[];
+  actions: AiPreviewModuleRef[];
+  executors: AiPreviewModuleRef[];
+};
+
+export type PersonalityProfilePreview = {
+  id: string;
+  display_name: string;
+  description: string;
+  safety_bias: number;
+  social_bias: number;
+  duty_bias: number;
+  comfort_bias: number;
+  alertness_bias: number;
+};
+
+export type NeedProfilePreview = {
+  id: string;
+  display_name: string;
+  description: string;
+  hunger_decay_per_hour: number;
+  energy_decay_per_hour: number;
+  morale_decay_per_hour: number;
+  safety_bias: number;
+};
+
+export type SmartObjectAccessRulePreview = {
+  kind: SmartObjectKind;
+  preferred_tags: string[];
+  fallback_to_any: boolean;
+};
+
+export type SmartObjectAccessProfilePreview = {
+  id: string;
+  display_name: string;
+  description: string;
+  rules: SmartObjectAccessRulePreview[];
+};
+
+export type CharacterLifeBindingPreview = {
+  settlement_id: string;
+  role: NpcRole;
+  home_anchor: string;
+  duty_route_id: string;
+  current_schedule_entry?: WeeklyScheduleEntryPreview | null;
+};
+
+export type AiAvailabilityContext = {
+  guard_post_available: boolean;
+  meal_object_available: boolean;
+  leisure_object_available: boolean;
+  medical_station_available: boolean;
+  patrol_route_available: boolean;
+  bed_available: boolean;
+};
+
+export type CharacterAiPreviewContext = {
+  day: ScheduleDay;
+  minute_of_day: number;
+  hunger: number;
+  energy: number;
+  morale: number;
+  world_alert_active: boolean;
+  current_anchor?: string | null;
+  active_guards: number;
+  min_guard_on_duty: number;
+  availability: AiAvailabilityContext;
+};
+
+export type AiGoalScorePreview = {
+  goal_id: string;
+  display_name: string;
+  score: number;
+  matched_rule_ids: string[];
+};
+
+export type AiActionAvailabilityPreview = {
+  action_id: string;
+  display_name: string;
+  available: boolean;
+  blocked_by: string[];
+};
+
+export type CharacterAiPreview = {
+  character_id: string;
+  display_name: string;
+  ai_behavior_profile_id: string;
+  schedule_profile_id: string;
+  personality_profile_id: string;
+  need_profile_id: string;
+  smart_object_access_profile_id: string;
+  life: CharacterLifeBindingPreview;
+  personality: PersonalityProfilePreview;
+  need_profile: NeedProfilePreview;
+  smart_object_access: SmartObjectAccessProfilePreview;
+  behavior: AiBehaviorPreview;
+  schedule: WeeklySchedulePreview;
+  context: CharacterAiPreviewContext;
+  fact_ids: string[];
+  goal_scores: AiGoalScorePreview[];
+  available_actions: AiActionAvailabilityPreview[];
+};
+
+export type CharacterDocumentSummary = {
+  documentKey: string;
+  characterId: string;
+  displayName: string;
+  fileName: string;
+  relativePath: string;
+  settlementId: string;
+  role: string;
+  behaviorProfileId: string;
+  character?: CharacterDefinition | null;
+  validation: ValidationIssue[];
+  previewContext?: CharacterAiPreviewContext | null;
+};
+
+export type CharacterWorkspaceCatalogs = {
+  settlementIds: string[];
+  roles: string[];
+  behaviorProfileIds: string[];
+  personalityProfileIds: string[];
+  scheduleProfileIds: string[];
+  needProfileIds: string[];
+  smartObjectAccessProfileIds: string[];
+};
+
+export type SettlementReferenceSummary = {
+  id: string;
+  mapId: string;
+  anchorIds: string[];
+  routeIds: string[];
+  smartObjects: string[];
+  minGuardOnDuty: number;
+};
+
+export type ScheduleProfileReferenceSummary = {
+  id: string;
+  displayName: string;
+  description: string;
+  entries: WeeklyScheduleEntryPreview[];
+};
+
+export type PersonalityProfileReferenceSummary = {
+  id: string;
+  displayName: string;
+  description: string;
+  safetyBias: number;
+  socialBias: number;
+  dutyBias: number;
+  comfortBias: number;
+  alertnessBias: number;
+};
+
+export type NeedProfileReferenceSummary = {
+  id: string;
+  displayName: string;
+  description: string;
+  hungerDecayPerHour: number;
+  energyDecayPerHour: number;
+  moraleDecayPerHour: number;
+  safetyBias: number;
+};
+
+export type CharacterWorkspaceReferences = {
+  settlements: SettlementReferenceSummary[];
+  behaviors: AiBehaviorPreview[];
+  schedules: ScheduleProfileReferenceSummary[];
+  personalities: PersonalityProfileReferenceSummary[];
+  needs: NeedProfileReferenceSummary[];
+  smartObjectAccess: SmartObjectAccessProfilePreview[];
+};
+
+export type CharacterWorkspacePayload = {
+  bootstrap: EditorBootstrap;
+  dataDirectory: string;
+  characterCount: number;
+  catalogs: CharacterWorkspaceCatalogs;
+  references: CharacterWorkspaceReferences;
+  documents: CharacterDocumentSummary[];
+  warnings: string[];
+};
+
+export type CharacterAiPreviewRequest = {
+  character_id: string;
+  context: CharacterAiPreviewContext;
+};
+
 export type CatalogEntry = {
   value: string;
   label: string;
@@ -662,237 +1008,3 @@ export type StructuringBundlePayload = {
   exportPath?: string | null;
 };
 
-export type MapId = string;
-
-export type MapSize = {
-  width: number;
-  height: number;
-};
-
-export type MapCellDefinition = {
-  x: number;
-  z: number;
-  blocks_movement: boolean;
-  blocks_sight: boolean;
-  terrain: string;
-  [key: string]: unknown;
-};
-
-export type MapLevelDefinition = {
-  y: number;
-  cells: MapCellDefinition[];
-};
-
-export type MapEntryPointDefinition = {
-  id: string;
-  grid: {
-    x: number;
-    y: number;
-    z: number;
-  };
-  facing?: string | null;
-  [key: string]: unknown;
-};
-
-export type MapObjectKind = "building" | "pickup" | "interactive" | "ai_spawn";
-
-export type MapRotation = "north" | "east" | "south" | "west";
-
-export type MapObjectFootprint = {
-  width: number;
-  height: number;
-};
-
-export type MapBuildingProps = {
-  prefab_id: string;
-  [key: string]: unknown;
-};
-
-export type MapPickupProps = {
-  item_id: string;
-  min_count: number;
-  max_count: number;
-  [key: string]: unknown;
-};
-
-export type MapInteractiveProps = {
-  interaction_kind: string;
-  target_id?: string | null;
-  [key: string]: unknown;
-};
-
-export type MapAiSpawnProps = {
-  spawn_id: string;
-  character_id: string;
-  auto_spawn: boolean;
-  respawn_enabled: boolean;
-  respawn_delay: number;
-  spawn_radius: number;
-  [key: string]: unknown;
-};
-
-export type MapObjectProps = {
-  building?: MapBuildingProps | null;
-  pickup?: MapPickupProps | null;
-  interactive?: MapInteractiveProps | null;
-  ai_spawn?: MapAiSpawnProps | null;
-  [key: string]: unknown;
-};
-
-export type MapObjectDefinition = {
-  object_id: string;
-  kind: MapObjectKind;
-  anchor: {
-    x: number;
-    y: number;
-    z: number;
-  };
-  footprint: MapObjectFootprint;
-  rotation: MapRotation;
-  blocks_movement: boolean;
-  blocks_sight: boolean;
-  props: MapObjectProps;
-};
-
-export type MapDefinition = {
-  id: MapId;
-  name: string;
-  size: MapSize;
-  default_level: number;
-  levels: MapLevelDefinition[];
-  entry_points: MapEntryPointDefinition[];
-  objects: MapObjectDefinition[];
-};
-
-export type MapCatalogs = {
-  itemIds: string[];
-  characterIds: string[];
-  buildingPrefabs: string[];
-  interactiveKinds: string[];
-};
-
-export type MapDocumentPayload = {
-  documentKey: string;
-  originalId: string;
-  fileName: string;
-  relativePath: string;
-  map: MapDefinition;
-  validation: ValidationIssue[];
-};
-
-export type MapWorkspacePayload = {
-  bootstrap: EditorBootstrap;
-  dataDirectory: string;
-  mapCount: number;
-  catalogs: MapCatalogs;
-  documents: MapDocumentPayload[];
-};
-
-export type SaveMapsResult = {
-  savedIds: string[];
-  deletedIds: string[];
-};
-
-export type OverworldId = string;
-
-export type OverworldLocationKind = "outdoor" | "interior" | "dungeon";
-
-export type OverworldLocationDefinition = {
-  id: string;
-  name: string;
-  description: string;
-  kind: OverworldLocationKind;
-  map_id: string;
-  entry_point_id: string;
-  parent_outdoor_location_id?: string | null;
-  return_entry_point_id?: string | null;
-  default_unlocked: boolean;
-  visible: boolean;
-  overworld_cell: {
-    x: number;
-    y: number;
-    z: number;
-  };
-  danger_level: number;
-  icon: string;
-  [key: string]: unknown;
-};
-
-export type OverworldCellDefinition = {
-  grid: {
-    x: number;
-    y: number;
-    z: number;
-  };
-  terrain: string;
-  [key: string]: unknown;
-};
-
-export type OverworldTravelRuleSet = {
-  food_item_id: string;
-  night_minutes_multiplier: number;
-  risk_multiplier: number;
-  [key: string]: unknown;
-};
-
-export type OverworldDefinition = {
-  id: OverworldId;
-  locations: OverworldLocationDefinition[];
-  walkable_cells: OverworldCellDefinition[];
-  travel_rules: OverworldTravelRuleSet;
-};
-
-export type OverworldCatalogs = {
-  mapIds: string[];
-  locationKinds: string[];
-  terrainKinds: string[];
-  mapEntryPointsByMap: Record<string, string[]>;
-};
-
-export type OverworldDocumentPayload = {
-  documentKey: string;
-  originalId: string;
-  fileName: string;
-  relativePath: string;
-  overworld: OverworldDefinition;
-  validation: ValidationIssue[];
-};
-
-export type OverworldWorkspacePayload = {
-  bootstrap: EditorBootstrap;
-  dataDirectory: string;
-  overworldCount: number;
-  catalogs: OverworldCatalogs;
-  documents: OverworldDocumentPayload[];
-};
-
-export type SaveOverworldsResult = {
-  savedIds: string[];
-  deletedIds: string[];
-};
-
-export type SpatialDocumentType = "map" | "overworld";
-
-export type MapEditorOpenDocumentPayload = {
-  documentType: SpatialDocumentType;
-  documentKey: string;
-};
-
-export type MapEditorStateChangedPayload = {
-  documentKey: string;
-  mapId: string;
-  dirty: boolean;
-  errorCount: number;
-  warningCount: number;
-  objectCount: number;
-  level: number;
-};
-
-export type MapEditorSaveCompletePayload = {
-  savedIds: string[];
-  deletedIds: string[];
-};
-
-export type MapEditorSessionEndedPayload = {
-  documentKey?: string;
-};

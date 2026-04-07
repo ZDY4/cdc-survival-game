@@ -62,11 +62,7 @@ impl Simulation {
             .iter()
             .find(|(definition, option)| {
                 interaction_behaviors::allows_primary_option(
-                    self,
-                    actor_id,
-                    target_id,
-                    option,
-                    definition,
+                    self, actor_id, target_id, option, definition,
                 )
             })
             .map(|(_, option)| option.id.clone());
@@ -248,14 +244,21 @@ impl Simulation {
                 Some(TargetInteractionData {
                     target_name: actor.display_name.clone(),
                     anchor_grid: actor.grid_position,
+                    interaction_grids: vec![actor.grid_position],
                     options,
                 })
             }
             InteractionTargetId::MapObject(object_id) => {
                 let object = self.grid_world.map_object(object_id)?;
+                let interaction_grids = self.grid_world.map_object_footprint_cells(object_id);
                 Some(TargetInteractionData {
                     target_name: self.map_object_display_name(object),
                     anchor_grid: object.anchor,
+                    interaction_grids: if interaction_grids.is_empty() {
+                        vec![object.anchor]
+                    } else {
+                        interaction_grids
+                    },
                     options: interaction_behaviors::resolve_map_object_options(object),
                 })
             }
@@ -304,36 +307,6 @@ impl Simulation {
         }
     }
 
-    pub(super) fn try_activate_map_trigger(&mut self, actor_id: ActorId, grid: GridCoord) -> bool {
-        if self
-            .actors
-            .get(actor_id)
-            .map(|actor| actor.kind != ActorKind::Player)
-            .unwrap_or(true)
-        {
-            return false;
-        }
-
-        let triggered = self
-            .grid_world
-            .map_objects_at(grid)
-            .into_iter()
-            .find_map(|object| {
-                let options = interaction_behaviors::resolve_map_trigger_options(object);
-                options
-                    .into_iter()
-                    .find(|option| game_data::is_scene_transition_kind(option.kind))
-                    .map(|option| (object.object_id.clone(), option))
-            });
-        let Some((object_id, option)) = triggered else {
-            return false;
-        };
-
-        interaction_behaviors::scene_transition::execute_trigger_transition(
-            self, actor_id, object_id, option,
-        )
-    }
-
     fn resolve_option_definition(
         &self,
         actor_id: ActorId,
@@ -364,7 +337,9 @@ impl Simulation {
             return Err("interaction_target_unavailable".to_string());
         };
 
-        if self.is_interaction_in_range(actor_grid, target.anchor_grid, interaction_distance) {
+        if target.interaction_grids.iter().copied().any(|target_grid| {
+            self.is_interaction_in_range(actor_grid, target_grid, interaction_distance)
+        }) {
             return Ok(None);
         }
 
@@ -373,32 +348,43 @@ impl Simulation {
         let mut best_goal = None;
         let mut best_path_len = usize::MAX;
 
-        for radius in 1..=max_radius {
-            for candidate in collect_interaction_ring_cells(target.anchor_grid, radius) {
-                if candidate == actor_grid {
-                    continue;
+        let start_radius = if interaction_distance <= 0.05 { 0 } else { 1 };
+        for radius in start_radius..=max_radius {
+            for target_grid in &target.interaction_grids {
+                for candidate in collect_interaction_ring_cells(*target_grid, radius) {
+                    if candidate == actor_grid {
+                        continue;
+                    }
+                    if !self
+                        .grid_world
+                        .is_walkable_for_actor(candidate, Some(actor_id))
+                    {
+                        continue;
+                    }
+                    if !target
+                        .interaction_grids
+                        .iter()
+                        .copied()
+                        .any(|interaction_grid| {
+                            self.is_interaction_in_range(
+                                candidate,
+                                interaction_grid,
+                                interaction_distance,
+                            )
+                        })
+                    {
+                        continue;
+                    }
+                    let Ok(path) = self.find_path_grid(Some(actor_id), actor_grid, candidate)
+                    else {
+                        continue;
+                    };
+                    if path.len() <= 1 || path.len() >= best_path_len {
+                        continue;
+                    }
+                    best_goal = Some(candidate);
+                    best_path_len = path.len();
                 }
-                if !self
-                    .grid_world
-                    .is_walkable_for_actor(candidate, Some(actor_id))
-                {
-                    continue;
-                }
-                if !self.is_interaction_in_range(
-                    candidate,
-                    target.anchor_grid,
-                    interaction_distance,
-                ) {
-                    continue;
-                }
-                let Ok(path) = self.find_path_grid(Some(actor_id), actor_grid, candidate) else {
-                    continue;
-                };
-                if path.len() <= 1 || path.len() >= best_path_len {
-                    continue;
-                }
-                best_goal = Some(candidate);
-                best_path_len = path.len();
             }
             if best_goal.is_some() {
                 break;
@@ -495,6 +481,7 @@ impl Simulation {
 struct TargetInteractionData {
     target_name: String,
     anchor_grid: GridCoord,
+    interaction_grids: Vec<GridCoord>,
     options: Vec<InteractionOptionDefinition>,
 }
 

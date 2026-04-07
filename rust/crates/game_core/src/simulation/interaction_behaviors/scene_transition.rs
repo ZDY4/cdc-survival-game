@@ -7,56 +7,26 @@ const KINDS: &[InteractionOptionKind] = &[
     InteractionOptionKind::EnterOutdoorLocation,
 ];
 
-pub(crate) const BEHAVIOR: InteractionBehavior =
-    build_default_behavior(KINDS, execute_scene_transition_interaction);
+pub(crate) const BEHAVIOR: InteractionBehavior = InteractionBehavior {
+    kinds: KINDS,
+    resolve_view: resolve_scene_transition_option_view,
+    execute: execute_scene_transition_interaction,
+    allows_primary: default_allows_primary,
+};
 
-pub(crate) fn execute_trigger_transition(
-    simulation: &mut Simulation,
-    actor_id: ActorId,
-    object_id: String,
-    option: InteractionOptionDefinition,
-) -> bool {
-    if simulation.interaction_context.world_mode == WorldMode::Overworld
-        && option.kind == InteractionOptionKind::EnterOutdoorLocation
-    {
-        return false;
+fn resolve_scene_transition_option_view(
+    simulation: &Simulation,
+    _actor_id: ActorId,
+    target_id: &InteractionTargetId,
+    option: &mut InteractionOptionDefinition,
+) {
+    if !is_scene_transition_trigger_target(simulation, target_id) {
+        return;
     }
 
-    match execute_transition(simulation, actor_id, &option) {
-        Ok(context_snapshot) => {
-            simulation
-                .events
-                .push(SimulationEvent::InteractionSucceeded {
-                    actor_id,
-                    target_id: InteractionTargetId::MapObject(object_id.clone()),
-                    option_id: option.id.clone(),
-                });
-            info!(
-                "core.interaction.trigger_scene_transition actor={:?} target={} option_id={} mode={:?}",
-                actor_id,
-                object_id,
-                option.id.as_str(),
-                context_snapshot.world_mode
-            );
-            true
-        }
-        Err(reason) => {
-            simulation.events.push(SimulationEvent::InteractionFailed {
-                actor_id,
-                target_id: InteractionTargetId::MapObject(object_id.clone()),
-                option_id: option.id.clone(),
-                reason: reason.clone(),
-            });
-            warn!(
-                "core.interaction.trigger_scene_transition_failed actor={:?} target={} option_id={} reason={}",
-                actor_id,
-                object_id,
-                option.id.as_str(),
-                reason
-            );
-            false
-        }
-    }
+    // Scene-transition triggers should only fire after the actor actually steps
+    // onto one of the trigger's covered cells, not from an adjacent tile.
+    option.interaction_distance = 0.0;
 }
 
 fn execute_scene_transition_interaction(
@@ -139,4 +109,17 @@ pub(crate) fn resolve_scene_target_id(option: &InteractionOptionDefinition) -> S
     } else {
         option.target_map_id.clone()
     }
+}
+
+fn is_scene_transition_trigger_target(
+    simulation: &Simulation,
+    target_id: &InteractionTargetId,
+) -> bool {
+    let InteractionTargetId::MapObject(object_id) = target_id else {
+        return false;
+    };
+    simulation
+        .grid_world()
+        .map_object(object_id)
+        .is_some_and(|object| object.kind == MapObjectKind::Trigger)
 }

@@ -74,6 +74,7 @@ pub(super) fn render_settings_panel(
         BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.58)),
         FocusPolicy::Block,
         RelativeCursorPosition::default(),
+        viewer_ui_passthrough_bundle(),
         UiMouseBlocker,
     ));
 
@@ -100,6 +101,7 @@ pub(super) fn render_settings_panel(
             BorderColor::all(ui_border_strong_color()),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
+            viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
         ))
         .with_children(|body| {

@@ -49,6 +49,7 @@ fn run() -> Result<(), String> {
         "create" => run_create(&service, args, json_output),
         "entry-point" => run_entry_point(&service, args, json_output),
         "object" => run_object(&service, args, json_output),
+        "level" => run_level(&service, args, json_output),
         "cells" => run_cells(&service, args, json_output),
         "help" | "--help" | "-h" => Err(usage()),
         other => Err(format!("unknown command `{other}`\n\n{}", usage())),
@@ -212,6 +213,34 @@ fn run_object(
         }
         other => Err(format!("unknown object action `{other}`")),
     }
+}
+
+fn run_level(
+    service: &MapEditorService,
+    mut args: Vec<String>,
+    json_output: bool,
+) -> Result<(), String> {
+    let Some(action) = args.first().cloned() else {
+        return Err("missing level action".to_string());
+    };
+    args.remove(0);
+
+    let target = parse_target(&mut args)?;
+    let level = required_option(&mut args, "--level")?
+        .parse::<i32>()
+        .map_err(|error| format!("invalid --level: {error}"))?;
+    ensure_no_args(&args)?;
+
+    let command = match action.as_str() {
+        "add" => MapEditCommand::AddLevel { target, level },
+        "remove" => MapEditCommand::RemoveLevel { target, level },
+        other => return Err(format!("unknown level action `{other}`")),
+    };
+
+    let result = service
+        .execute(command)
+        .map_err(|error| error.to_string())?;
+    print_results(&[result], json_output)
 }
 
 fn run_cells(
@@ -388,6 +417,8 @@ fn usage() -> String {
         "  map_tool [--maps-dir <dir>] [--json] entry-point remove (--map-id <id> | --path <file>) --entry-point-id <id>",
         "  map_tool [--maps-dir <dir>] [--json] object upsert (--map-id <id> | --path <file>) --json-file <file>",
         "  map_tool [--maps-dir <dir>] [--json] object remove (--map-id <id> | --path <file>) --object-id <id>",
+        "  map_tool [--maps-dir <dir>] [--json] level add (--map-id <id> | --path <file>) --level <y>",
+        "  map_tool [--maps-dir <dir>] [--json] level remove (--map-id <id> | --path <file>) --level <y>",
         "  map_tool [--maps-dir <dir>] [--json] cells paint (--map-id <id> | --path <file>) --level <y> --json-file <file>",
         "  map_tool [--maps-dir <dir>] [--json] cells clear (--map-id <id> | --path <file>) --level <y> --json-file <file>",
     ]

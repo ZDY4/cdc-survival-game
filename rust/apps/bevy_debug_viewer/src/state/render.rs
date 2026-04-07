@@ -684,6 +684,34 @@ pub(crate) struct InteractionMenuRoot;
 #[derive(Component)]
 pub(crate) struct DialoguePanelRoot;
 
+#[derive(Component)]
+pub(crate) struct InteractionMenuOptionsRoot;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct InteractionMenuOptionRow {
+    pub index: usize,
+}
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelTitleLabel;
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelSpeakerLabel;
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelBodyLabel;
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelChoicesRoot;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DialogueChoiceRow {
+    pub index: usize,
+}
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelHintLabel;
+
 #[derive(Component, Debug, Clone)]
 pub(crate) struct InteractionMenuButton {
     pub target_id: InteractionTargetId,

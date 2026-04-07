@@ -178,8 +178,7 @@ fn can_traverse_planar(
     from: GridCoord,
     to: GridCoord,
 ) -> bool {
-    if world.classify_pathfinding_walkability_for_actor(to, actor_id) != GridWalkability::Walkable
-    {
+    if world.classify_pathfinding_walkability_for_actor(to, actor_id) != GridWalkability::Walkable {
         return false;
     }
 

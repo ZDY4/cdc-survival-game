@@ -2,6 +2,7 @@ mod ai_context;
 mod ai_provider;
 mod ai_review;
 mod ai_settings;
+mod character_workspace;
 mod editor_menu;
 mod quest_workspace;
 
@@ -13,18 +14,15 @@ use std::{
 
 use game_data::{
     load_character_library, load_effect_library, load_shared_content_registry,
-    validate_item_definition, validate_overworld_definition, DialogueConnection, DialogueData,
-    GridCoord, ItemDefinition, ItemDefinitionValidationError, ItemFragment, ItemValidationCatalog,
-    MapCellDefinition, MapDefinition, MapEditDiagnostic, MapEditDiagnosticSeverity, MapEditResult,
-    MapEditorService, MapEntryPointDefinition, MapId, MapObjectDefinition, MapSize,
-    MapValidationCatalog, OverworldDefinition, OverworldLocationKind, OverworldValidationCatalog,
-    SharedContentRegistry,
+    validate_item_definition, DialogueConnection, DialogueData, ItemDefinition,
+    ItemDefinitionValidationError, ItemFragment, ItemValidationCatalog, SharedContentRegistry,
 };
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 use crate::ai_provider::{generate_dialogue_draft, generate_quest_draft, test_ai_provider};
 use crate::ai_settings::{load_ai_settings, save_ai_settings};
+use crate::character_workspace::{build_character_ai_preview, load_character_workspace};
 use crate::quest_workspace::{
     delete_quest_document, load_quest_workspace, save_quest_documents, validate_quest_document,
 };
@@ -59,22 +57,6 @@ const DEFAULT_KNOWN_SUBTYPES: &[&str] = &[
     "metal", "wood", "fabric", "medical", "chemical", "key", "device", "misc",
 ];
 const DEFAULT_DIALOG_NODE_TYPES: &[&str] = &["dialog", "choice", "condition", "action", "end"];
-const DEFAULT_BUILDING_PREFABS: &[&str] = &[
-    "survivor_outpost_01_dormitory",
-    "survivor_outpost_01_gatehouse",
-    "street_block",
-    "warehouse_shell",
-];
-const DEFAULT_INTERACTION_KINDS: &[&str] = &[
-    "enter_outdoor_location",
-    "enter_subscene",
-    "pickup",
-    "dialogue",
-    "trade",
-];
-const DEFAULT_OVERWORLD_LOCATION_KINDS: &[&str] = &["outdoor", "interior", "dungeon"];
-const DEFAULT_OVERWORLD_TERRAINS: &[&str] = &["road", "street", "path", "bridge", "ruins"];
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct MigrationStage {
@@ -259,106 +241,6 @@ struct SaveDialoguesResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DeleteDialogueResult {
-    deleted_id: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct MapCatalogs {
-    item_ids: Vec<String>,
-    character_ids: Vec<String>,
-    building_prefabs: Vec<String>,
-    interactive_kinds: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct MapDocumentPayload {
-    document_key: String,
-    original_id: String,
-    file_name: String,
-    relative_path: String,
-    map: MapDefinition,
-    validation: Vec<ValidationIssue>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct MapWorkspacePayload {
-    bootstrap: EditorBootstrap,
-    data_directory: String,
-    map_count: usize,
-    catalogs: MapCatalogs,
-    documents: Vec<MapDocumentPayload>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct OverworldCatalogs {
-    map_ids: Vec<String>,
-    location_kinds: Vec<String>,
-    terrain_kinds: Vec<String>,
-    map_entry_points_by_map: BTreeMap<String, Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct OverworldDocumentPayload {
-    document_key: String,
-    original_id: String,
-    file_name: String,
-    relative_path: String,
-    overworld: OverworldDefinition,
-    validation: Vec<ValidationIssue>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct OverworldWorkspacePayload {
-    bootstrap: EditorBootstrap,
-    data_directory: String,
-    overworld_count: usize,
-    catalogs: OverworldCatalogs,
-    documents: Vec<OverworldDocumentPayload>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SaveOverworldDocumentInput {
-    original_id: Option<String>,
-    overworld: OverworldDefinition,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SaveOverworldsResult {
-    saved_ids: Vec<String>,
-    deleted_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DeleteOverworldResult {
-    deleted_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SaveMapDocumentInput {
-    original_id: Option<String>,
-    map: MapDefinition,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SaveMapsResult {
-    saved_ids: Vec<String>,
-    deleted_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DeleteMapResult {
     deleted_id: String,
 }
 
@@ -672,325 +554,6 @@ fn delete_dialogue_document(dialog_id: String) -> Result<DeleteDialogueResult, S
     })
 }
 
-#[tauri::command]
-fn load_map_workspace() -> Result<MapWorkspacePayload, String> {
-    let item_documents = load_item_documents()?;
-    let character_ids = load_character_ids()?;
-    let validation_catalog = map_validation_catalog(&item_documents, &character_ids);
-    let map_editor = map_editor_service()?;
-    let documents = load_map_documents(&map_editor)?;
-    let bootstrap = editor_bootstrap()?;
-    let data_directory = to_forward_slashes(&map_data_dir()?);
-    let map_count = documents.len();
-    let catalogs = collect_map_catalogs(&documents, &validation_catalog);
-
-    Ok(MapWorkspacePayload {
-        bootstrap,
-        data_directory,
-        map_count,
-        catalogs,
-        documents,
-    })
-}
-
-#[tauri::command]
-fn validate_map_document(map: MapDefinition) -> Result<Vec<ValidationIssue>, String> {
-    let map_editor = map_editor_service()?;
-    validate_map_with_editor(&map_editor, &map)
-}
-
-#[tauri::command]
-fn create_map_draft(map_id: String) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .create_map_definition(
-            MapId(map_id),
-            Some("New map".to_string()),
-            MapSize {
-                width: 12,
-                height: 12,
-            },
-            0,
-        )
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn upsert_map_entry_point(
-    map: MapDefinition,
-    entry_point: MapEntryPointDefinition,
-) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .upsert_entry_point_definition(&map, entry_point)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn remove_map_entry_point(
-    map: MapDefinition,
-    entry_point_id: String,
-) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .remove_entry_point_definition(&map, &entry_point_id)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn upsert_map_object(
-    map: MapDefinition,
-    object: MapObjectDefinition,
-) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .upsert_object_definition(&map, object)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn remove_map_object(map: MapDefinition, object_id: String) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .remove_object_definition(&map, &object_id)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn paint_map_cells(
-    map: MapDefinition,
-    level: i32,
-    cells: Vec<MapCellDefinition>,
-) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .paint_cells_definition(&map, level, cells)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn clear_map_cells(
-    map: MapDefinition,
-    level: i32,
-    cells: Vec<GridCoord>,
-) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .clear_cells_definition(&map, level, cells)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn add_map_level(map: MapDefinition, level: i32) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .add_level_definition(&map, level)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn remove_map_level(map: MapDefinition, level: i32) -> Result<MapDefinition, String> {
-    let map_editor = map_editor_service()?;
-    map_editor
-        .remove_level_definition(&map, level)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn save_map_documents(documents: Vec<SaveMapDocumentInput>) -> Result<SaveMapsResult, String> {
-    if documents.is_empty() {
-        return Ok(SaveMapsResult {
-            saved_ids: Vec::new(),
-            deleted_ids: Vec::new(),
-        });
-    }
-
-    let map_editor = map_editor_service()?;
-    let mut seen_ids = HashSet::new();
-
-    for document in &documents {
-        let map_id = document.map.id.as_str().trim();
-        if map_id.is_empty() {
-            return Err("map id cannot be empty".to_string());
-        }
-        if !seen_ids.insert(map_id.to_string()) {
-            return Err(format!("duplicate map id in save batch: {map_id}"));
-        }
-
-        let issues = validate_map_with_editor(&map_editor, &document.map)?;
-        if issues.iter().any(|issue| issue.severity == "error") {
-            return Err(format!(
-                "map {} has validation errors and cannot be saved",
-                map_id
-            ));
-        }
-    }
-
-    let mut saved_ids = Vec::new();
-    let mut deleted_ids = Vec::new();
-
-    for document in documents {
-        let map = document.map;
-        let original_id = document.original_id.map(game_data::MapId);
-        if let Some(original_id) = &original_id {
-            if original_id != &map.id {
-                let old_path = map_file_path(original_id.as_str())?;
-                if old_path.exists() {
-                    deleted_ids.push(original_id.as_str().to_string());
-                }
-            }
-        }
-
-        map_editor
-            .save_map_definition(original_id.as_ref(), &map)
-            .map_err(|error| error.to_string())?;
-        saved_ids.push(map.id.0);
-    }
-
-    Ok(SaveMapsResult {
-        saved_ids,
-        deleted_ids,
-    })
-}
-
-#[tauri::command]
-fn delete_map_document(map_id: String) -> Result<DeleteMapResult, String> {
-    let path = map_file_path(&map_id)?;
-    if path.exists() {
-        fs::remove_file(&path)
-            .map_err(|error| format!("failed to delete {}: {error}", path.display()))?;
-    }
-
-    Ok(DeleteMapResult { deleted_id: map_id })
-}
-
-#[tauri::command]
-fn load_overworld_workspace() -> Result<OverworldWorkspacePayload, String> {
-    let item_documents = load_item_documents()?;
-    let character_ids = load_character_ids()?;
-    let _validation_catalog = map_validation_catalog(&item_documents, &character_ids);
-    let map_editor = map_editor_service()?;
-    let map_documents = load_map_documents(&map_editor)?;
-    let validation_catalog = overworld_validation_catalog_from_map_documents(&map_documents);
-    let documents = load_overworld_documents(&validation_catalog)?;
-    let bootstrap = editor_bootstrap()?;
-    let data_directory = to_forward_slashes(&overworld_data_dir()?);
-    let overworld_count = documents.len();
-    let catalogs = collect_overworld_catalogs(&documents, &validation_catalog);
-
-    Ok(OverworldWorkspacePayload {
-        bootstrap,
-        data_directory,
-        overworld_count,
-        catalogs,
-        documents,
-    })
-}
-
-#[tauri::command]
-fn validate_overworld_document(
-    overworld: OverworldDefinition,
-) -> Result<Vec<ValidationIssue>, String> {
-    let item_documents = load_item_documents()?;
-    let character_ids = load_character_ids()?;
-    let _validation_catalog = map_validation_catalog(&item_documents, &character_ids);
-    let map_editor = map_editor_service()?;
-    let map_documents = load_map_documents(&map_editor)?;
-    let validation_catalog = overworld_validation_catalog_from_map_documents(&map_documents);
-    Ok(validate_overworld(&overworld, &validation_catalog))
-}
-
-#[tauri::command]
-fn save_overworld_documents(
-    documents: Vec<SaveOverworldDocumentInput>,
-) -> Result<SaveOverworldsResult, String> {
-    if documents.is_empty() {
-        return Ok(SaveOverworldsResult {
-            saved_ids: Vec::new(),
-            deleted_ids: Vec::new(),
-        });
-    }
-
-    let item_documents = load_item_documents()?;
-    let character_ids = load_character_ids()?;
-    let _validation_catalog = map_validation_catalog(&item_documents, &character_ids);
-    let map_editor = map_editor_service()?;
-    let map_documents = load_map_documents(&map_editor)?;
-    let validation_catalog = overworld_validation_catalog_from_map_documents(&map_documents);
-    let mut seen_ids = HashSet::new();
-
-    for document in &documents {
-        let overworld_id = document.overworld.id.as_str().trim();
-        if overworld_id.is_empty() {
-            return Err("overworld id cannot be empty".to_string());
-        }
-        if !seen_ids.insert(overworld_id.to_string()) {
-            return Err(format!(
-                "duplicate overworld id in save batch: {overworld_id}"
-            ));
-        }
-
-        let issues = validate_overworld(&document.overworld, &validation_catalog);
-        if issues.iter().any(|issue| issue.severity == "error") {
-            return Err(format!(
-                "overworld {} has validation errors and cannot be saved",
-                overworld_id
-            ));
-        }
-    }
-
-    let data_dir = overworld_data_dir()?;
-    fs::create_dir_all(&data_dir)
-        .map_err(|error| format!("failed to create overworld directory: {error}"))?;
-
-    let mut saved_ids = Vec::new();
-    let mut deleted_ids = Vec::new();
-
-    for document in documents {
-        let overworld = document.overworld;
-        let target_path = overworld_file_path(overworld.id.as_str())?;
-        let json = serde_json::to_string_pretty(&overworld)
-            .map_err(|error| format!("failed to serialize overworld {}: {error}", overworld.id))?;
-        fs::write(&target_path, json)
-            .map_err(|error| format!("failed to write {}: {error}", target_path.display()))?;
-
-        if let Some(original_id) = document.original_id {
-            if original_id != overworld.id.as_str() {
-                let old_path = overworld_file_path(&original_id)?;
-                if old_path.exists() {
-                    fs::remove_file(&old_path).map_err(|error| {
-                        format!(
-                            "failed to remove renamed overworld {}: {error}",
-                            original_id
-                        )
-                    })?;
-                    deleted_ids.push(original_id);
-                }
-            }
-        }
-
-        saved_ids.push(overworld.id.0);
-    }
-
-    Ok(SaveOverworldsResult {
-        saved_ids,
-        deleted_ids,
-    })
-}
-
-#[tauri::command]
-fn delete_overworld_document(overworld_id: String) -> Result<DeleteOverworldResult, String> {
-    let path = overworld_file_path(&overworld_id)?;
-    if path.exists() {
-        fs::remove_file(&path)
-            .map_err(|error| format!("failed to delete {}: {error}", path.display()))?;
-    }
-
-    Ok(DeleteOverworldResult {
-        deleted_id: overworld_id,
-    })
-}
-
 pub(crate) fn editor_bootstrap() -> Result<EditorBootstrap, String> {
     let workspace_root = repo_root()?;
     let shared_rust_path = workspace_root.join("rust");
@@ -1166,108 +729,6 @@ fn load_dialogue_documents() -> Result<Vec<DialogueDocumentPayload>, String> {
     Ok(documents)
 }
 
-fn load_map_documents(map_editor: &MapEditorService) -> Result<Vec<MapDocumentPayload>, String> {
-    let data_dir = map_data_dir()?;
-    if !data_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut entries = fs::read_dir(&data_dir)
-        .map_err(|error| format!("failed to read {}: {error}", data_dir.display()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("failed to enumerate map directory: {error}"))?;
-
-    entries.sort_by_key(|entry| entry.file_name());
-
-    let mut documents = Vec::new();
-    for entry in entries {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
-            continue;
-        }
-
-        let (map, _) = map_editor
-            .load_map(&game_data::MapEditTarget::Path(path.clone()))
-            .map_err(|error| error.to_string())?;
-        let validation = validate_map_with_editor(map_editor, &map)?;
-        let file_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_string();
-        let relative_path = relative_to_repo(&path)?;
-        let document_key = if map.id.as_str().trim().is_empty() {
-            file_name.clone()
-        } else {
-            map.id.as_str().to_string()
-        };
-
-        documents.push(MapDocumentPayload {
-            document_key,
-            original_id: map.id.as_str().to_string(),
-            file_name,
-            relative_path,
-            map,
-            validation,
-        });
-    }
-
-    documents.sort_by(|left, right| left.document_key.cmp(&right.document_key));
-    Ok(documents)
-}
-
-fn load_overworld_documents(
-    validation_catalog: &OverworldValidationCatalog,
-) -> Result<Vec<OverworldDocumentPayload>, String> {
-    let data_dir = overworld_data_dir()?;
-    if !data_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut entries = fs::read_dir(&data_dir)
-        .map_err(|error| format!("failed to read {}: {error}", data_dir.display()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("failed to enumerate overworld directory: {error}"))?;
-
-    entries.sort_by_key(|entry| entry.file_name());
-
-    let mut documents = Vec::new();
-    for entry in entries {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
-            continue;
-        }
-
-        let raw = fs::read_to_string(&path)
-            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-        let overworld: OverworldDefinition = serde_json::from_str(&raw)
-            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-        let validation = validate_overworld(&overworld, validation_catalog);
-        let file_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_string();
-        let relative_path = relative_to_repo(&path)?;
-        let document_key = if overworld.id.as_str().trim().is_empty() {
-            file_name.clone()
-        } else {
-            overworld.id.as_str().to_string()
-        };
-
-        documents.push(OverworldDocumentPayload {
-            document_key,
-            original_id: overworld.id.as_str().to_string(),
-            file_name,
-            relative_path,
-            overworld,
-            validation,
-        });
-    }
-
-    documents.sort_by(|left, right| left.document_key.cmp(&right.document_key));
-    Ok(documents)
-}
 
 fn collect_catalogs(
     documents: &[ItemDocumentPayload],
@@ -1730,75 +1191,6 @@ fn collect_dialogue_catalogs(documents: &[DialogueDocumentPayload]) -> DialogueC
     }
 }
 
-fn collect_map_catalogs(
-    documents: &[MapDocumentPayload],
-    validation_catalog: &MapValidationCatalog,
-) -> MapCatalogs {
-    let mut building_prefabs = seeded_set(DEFAULT_BUILDING_PREFABS);
-    let mut interactive_kinds = seeded_set(DEFAULT_INTERACTION_KINDS);
-
-    for document in documents {
-        for object in &document.map.objects {
-            if let Some(building) = object.props.building.as_ref() {
-                if !building.prefab_id.trim().is_empty() {
-                    building_prefabs.insert(building.prefab_id.clone());
-                }
-            }
-            if let Some(interactive) = object.props.interactive.as_ref() {
-                if !interactive.interaction_kind.trim().is_empty() {
-                    interactive_kinds.insert(interactive.interaction_kind.clone());
-                }
-            }
-        }
-    }
-
-    MapCatalogs {
-        item_ids: validation_catalog.item_ids.iter().cloned().collect(),
-        character_ids: validation_catalog.character_ids.iter().cloned().collect(),
-        building_prefabs: building_prefabs.into_iter().collect(),
-        interactive_kinds: interactive_kinds.into_iter().collect(),
-    }
-}
-
-fn collect_overworld_catalogs(
-    documents: &[OverworldDocumentPayload],
-    validation_catalog: &OverworldValidationCatalog,
-) -> OverworldCatalogs {
-    let mut location_kinds = seeded_set(DEFAULT_OVERWORLD_LOCATION_KINDS);
-    let mut terrain_kinds = seeded_set(DEFAULT_OVERWORLD_TERRAINS);
-
-    for document in documents {
-        for location in &document.overworld.locations {
-            location_kinds.insert(match location.kind {
-                OverworldLocationKind::Outdoor => "outdoor".to_string(),
-                OverworldLocationKind::Interior => "interior".to_string(),
-                OverworldLocationKind::Dungeon => "dungeon".to_string(),
-            });
-        }
-        for cell in &document.overworld.walkable_cells {
-            if !cell.terrain.trim().is_empty() {
-                terrain_kinds.insert(cell.terrain.clone());
-            }
-        }
-    }
-
-    OverworldCatalogs {
-        map_ids: validation_catalog.map_ids.iter().cloned().collect(),
-        location_kinds: location_kinds.into_iter().collect(),
-        terrain_kinds: terrain_kinds.into_iter().collect(),
-        map_entry_points_by_map: validation_catalog
-            .map_entry_points_by_map
-            .iter()
-            .map(|(map_id, entry_points)| {
-                (
-                    map_id.clone(),
-                    entry_points.iter().cloned().collect::<Vec<_>>(),
-                )
-            })
-            .collect(),
-    }
-}
-
 fn item_validation_catalog_from_documents(
     documents: &[ParsedItemDocument],
     effect_ids: &BTreeSet<String>,
@@ -2254,53 +1646,6 @@ pub(crate) fn validate_dialogue(dialog: &DialogueData) -> Vec<ValidationIssue> {
     issues
 }
 
-fn validate_map_with_editor(
-    map_editor: &MapEditorService,
-    map: &MapDefinition,
-) -> Result<Vec<ValidationIssue>, String> {
-    let result = map_editor
-        .validate_definition_result(map)
-        .map_err(|error| error.to_string())?;
-    Ok(map_edit_result_to_validation_issues(&result))
-}
-
-fn validate_overworld(
-    overworld: &OverworldDefinition,
-    validation_catalog: &OverworldValidationCatalog,
-) -> Vec<ValidationIssue> {
-    match validate_overworld_definition(overworld, Some(validation_catalog)) {
-        Ok(()) => Vec::new(),
-        Err(error) => vec![document_error("overworld", error.to_string())],
-    }
-}
-
-fn map_edit_result_to_validation_issues(result: &MapEditResult) -> Vec<ValidationIssue> {
-    result
-        .diagnostics
-        .iter()
-        .map(|diagnostic| map_edit_diagnostic_to_validation_issue("map", diagnostic))
-        .collect()
-}
-
-fn map_edit_diagnostic_to_validation_issue(
-    field: impl Into<String>,
-    diagnostic: &MapEditDiagnostic,
-) -> ValidationIssue {
-    ValidationIssue {
-        severity: match diagnostic.severity {
-            MapEditDiagnosticSeverity::Error => "error".to_string(),
-            MapEditDiagnosticSeverity::Warning => "warning".to_string(),
-            MapEditDiagnosticSeverity::Info => "warning".to_string(),
-        },
-        field: field.into(),
-        message: diagnostic.message.clone(),
-        scope: Some("document".to_string()),
-        node_id: None,
-        edge_key: None,
-        path: None,
-    }
-}
-
 fn item_error(
     field: impl Into<String>,
     message: impl Into<String>,
@@ -2495,7 +1840,7 @@ fn seeded_set(values: &[&str]) -> BTreeSet<String> {
     values.iter().map(|value| (*value).to_string()).collect()
 }
 
-fn repo_root() -> Result<PathBuf, String> {
+pub(crate) fn repo_root() -> Result<PathBuf, String> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
@@ -2512,40 +1857,12 @@ fn effect_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("json").join("effects"))
 }
 
-fn character_data_dir() -> Result<PathBuf, String> {
+pub(crate) fn character_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("characters"))
 }
 
 fn dialogue_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("dialogues"))
-}
-
-fn map_data_dir() -> Result<PathBuf, String> {
-    Ok(repo_root()?.join("data").join("maps"))
-}
-
-fn map_editor_service() -> Result<MapEditorService, String> {
-    Ok(MapEditorService::new(map_data_dir()?))
-}
-
-fn overworld_data_dir() -> Result<PathBuf, String> {
-    Ok(repo_root()?.join("data").join("overworld"))
-}
-
-fn item_file_path(item_id: u32) -> Result<PathBuf, String> {
-    Ok(item_data_dir()?.join(format!("{item_id}.json")))
-}
-
-fn dialogue_file_path(dialog_id: &str) -> Result<PathBuf, String> {
-    Ok(dialogue_data_dir()?.join(format!("{dialog_id}.json")))
-}
-
-fn map_file_path(map_id: &str) -> Result<PathBuf, String> {
-    Ok(map_data_dir()?.join(format!("{map_id}.json")))
-}
-
-fn overworld_file_path(overworld_id: &str) -> Result<PathBuf, String> {
-    Ok(overworld_data_dir()?.join(format!("{overworld_id}.json")))
 }
 
 fn load_effect_catalog() -> Result<game_data::EffectLibrary, String> {
@@ -2567,42 +1884,12 @@ fn load_character_ids() -> Result<BTreeSet<String>, String> {
         .collect())
 }
 
-fn map_validation_catalog(
-    item_documents: &[ItemDocumentPayload],
-    character_ids: &BTreeSet<String>,
-) -> MapValidationCatalog {
-    MapValidationCatalog {
-        item_ids: item_documents
-            .iter()
-            .map(|document| document.item.id.to_string())
-            .collect(),
-        character_ids: character_ids.clone(),
-    }
+fn item_file_path(item_id: u32) -> Result<PathBuf, String> {
+    Ok(item_data_dir()?.join(format!("{item_id}.json")))
 }
 
-fn overworld_validation_catalog_from_map_documents(
-    map_documents: &[MapDocumentPayload],
-) -> OverworldValidationCatalog {
-    OverworldValidationCatalog {
-        map_ids: map_documents
-            .iter()
-            .map(|document| document.map.id.as_str().to_string())
-            .collect(),
-        map_entry_points_by_map: map_documents
-            .iter()
-            .map(|document| {
-                (
-                    document.map.id.as_str().to_string(),
-                    document
-                        .map
-                        .entry_points
-                        .iter()
-                        .map(|entry| entry.id.clone())
-                        .collect(),
-                )
-            })
-            .collect(),
-    }
+fn dialogue_file_path(dialog_id: &str) -> Result<PathBuf, String> {
+    Ok(dialogue_data_dir()?.join(format!("{dialog_id}.json")))
 }
 
 pub(crate) fn relative_to_repo(path: &Path) -> Result<String, String> {
@@ -2669,6 +1956,8 @@ pub fn run() {
             log_editor_frontend_debug,
             load_shared_registry,
             load_item_workspace,
+            load_character_workspace,
+            build_character_ai_preview,
             validate_item_document,
             save_item_documents,
             delete_item_document,
@@ -2680,23 +1969,6 @@ pub fn run() {
             validate_quest_document,
             save_quest_documents,
             delete_quest_document,
-            load_map_workspace,
-            validate_map_document,
-            create_map_draft,
-            upsert_map_entry_point,
-            remove_map_entry_point,
-            upsert_map_object,
-            remove_map_object,
-            paint_map_cells,
-            clear_map_cells,
-            add_map_level,
-            remove_map_level,
-            save_map_documents,
-            delete_map_document,
-            load_overworld_workspace,
-            validate_overworld_document,
-            save_overworld_documents,
-            delete_overworld_document,
             load_ai_settings,
             save_ai_settings,
             test_ai_provider,
