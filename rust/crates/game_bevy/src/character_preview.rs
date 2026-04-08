@@ -4,6 +4,8 @@ use game_data::{
     ResolvedCharacterAppearancePreview, ResolvedEquipmentPreviewEntry,
 };
 
+pub use crate::preview_3d::{apply_preview_orbit_camera, PreviewOrbitCamera};
+
 pub struct CharacterPreviewPlugin;
 
 impl Plugin for CharacterPreviewPlugin {
@@ -16,50 +18,8 @@ pub struct CharacterPreviewRoot;
 #[derive(Component)]
 pub struct CharacterPreviewPart;
 
-#[derive(Component, Debug, Clone, Copy)]
-pub struct PreviewOrbitCamera {
-    pub focus: Vec3,
-    pub yaw_radians: f32,
-    pub pitch_radians: f32,
-    pub radius: f32,
-}
-
-impl Default for PreviewOrbitCamera {
-    fn default() -> Self {
-        Self {
-            focus: Vec3::new(0.0, 0.95, 0.0),
-            yaw_radians: -0.55,
-            pitch_radians: -0.2,
-            radius: 3.6,
-        }
-    }
-}
-
 pub fn spawn_character_preview_light_rig(commands: &mut Commands) {
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 12000.0,
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(3.0, 6.0, 4.0).looking_at(Vec3::new(0.0, 0.9, 0.0), Vec3::Y),
-    ));
-    commands.spawn((
-        PointLight {
-            intensity: 90000.0,
-            range: 12.0,
-            shadows_enabled: false,
-            ..default()
-        },
-        Transform::from_xyz(-2.0, 2.8, 2.0),
-    ));
-}
-
-pub fn apply_preview_orbit_camera(transform: &mut Transform, orbit: PreviewOrbitCamera) {
-    let yaw = Quat::from_rotation_y(orbit.yaw_radians);
-    let pitch = Quat::from_rotation_x(orbit.pitch_radians);
-    let offset = yaw * pitch * Vec3::new(0.0, 0.0, orbit.radius.max(0.5));
-    *transform = Transform::from_translation(orbit.focus + offset).looking_at(orbit.focus, Vec3::Y);
+    crate::preview_3d::spawn_preview_light_rig(commands);
 }
 
 pub fn spawn_character_preview_scene(

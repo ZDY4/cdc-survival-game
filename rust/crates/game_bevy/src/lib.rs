@@ -15,10 +15,12 @@ use spawn::register_actor_from_definition;
 mod ai_spawn;
 pub mod bootstrap;
 pub mod character_preview;
+pub mod container_visuals;
 mod content;
 pub mod fonts;
 mod logging;
 pub mod npc_life;
+pub mod preview_3d;
 pub mod reservations;
 mod spawn;
 pub mod static_world;
@@ -31,10 +33,10 @@ pub use bootstrap::{
     RuntimeBootstrapBundle, RuntimeBootstrapError,
 };
 pub use character_preview::{
-    apply_preview_orbit_camera, parse_preview_color, spawn_character_preview_light_rig,
-    spawn_character_preview_scene, CharacterPreviewPart, CharacterPreviewPlugin,
-    CharacterPreviewRoot, PreviewOrbitCamera,
+    parse_preview_color, spawn_character_preview_light_rig, spawn_character_preview_scene,
+    CharacterPreviewPart, CharacterPreviewPlugin, CharacterPreviewRoot,
 };
+pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;
 pub use fonts::*;
 pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
@@ -44,6 +46,11 @@ pub use npc_life::{
     NpcLifeUpdateSet, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
     SettlementContext, SettlementDebugEntry, SettlementDebugSnapshot, SettlementSimulationPlugin,
     SimClock, WorldAlertState,
+};
+pub use preview_3d::{
+    apply_preview_orbit_camera, replace_preview_scene, spawn_preview_floor,
+    spawn_preview_light_rig, spawn_preview_origin_axes, spawn_preview_scene_host, PreviewFloor,
+    PreviewOrbitCamera, PreviewOriginAxes, PreviewSceneHost, PreviewSceneInstance,
 };
 pub use reservations::SmartObjectReservations;
 pub use spawn::{register_runtime_actor_from_definition, spawn_characters_from_definition};
@@ -810,9 +817,8 @@ mod tests {
 
     #[test]
     fn perimeter_debug_seed_adds_hostile_actor_only_for_perimeter_map() {
-        let characters = debug_seed_characters_for_map(Some(&MapId(
-            "survivor_outpost_01_perimeter".into(),
-        )));
+        let characters =
+            debug_seed_characters_for_map(Some(&MapId("survivor_outpost_01_perimeter".into())));
         let ids: Vec<&str> = characters
             .iter()
             .map(|entry| entry.definition_id.as_str())
@@ -1049,8 +1055,7 @@ startup_map =
     fn startup_map_resolution_prefers_configured_map() {
         let maps = sample_map_library();
 
-        let resolved =
-            resolve_startup_map_id(&maps, Some(MapId("survivor_outpost_01".into())));
+        let resolved = resolve_startup_map_id(&maps, Some(MapId("survivor_outpost_01".into())));
 
         assert_eq!(resolved, Some(MapId("survivor_outpost_01".into())));
     }

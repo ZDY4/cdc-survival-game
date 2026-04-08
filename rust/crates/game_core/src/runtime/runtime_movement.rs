@@ -1,5 +1,6 @@
 use super::*;
 use crate::overworld::{is_outdoor_location_cell, resolve_overworld_goal};
+use game_data::OverworldLocationKind;
 use game_data::WorldMode;
 
 impl SimulationRuntime {
@@ -9,8 +10,8 @@ impl SimulationRuntime {
         goal: GridCoord,
     ) -> Result<MovementPlan, MovementPlanError> {
         self.ensure_player_input_actor(actor_id)?;
-        let goal = self.resolve_overworld_movement_goal(actor_id, goal)?;
-        self.simulation.plan_actor_movement(actor_id, goal)
+        let resolved = self.resolve_overworld_movement_target(actor_id, goal)?;
+        self.simulation.plan_actor_movement(actor_id, resolved.goal)
     }
 
     pub fn move_actor_to_reachable(
@@ -19,8 +20,10 @@ impl SimulationRuntime {
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
         self.ensure_player_input_actor(actor_id)?;
-        let goal = self.resolve_overworld_movement_goal(actor_id, goal)?;
-        let outcome = self.simulation.move_actor_to_reachable(actor_id, goal)?;
+        let resolved = self.resolve_overworld_movement_target(actor_id, goal)?;
+        let outcome = self
+            .simulation
+            .move_actor_to_reachable(actor_id, resolved.goal)?;
         self.path_preview = outcome.plan.requested_path.clone();
         Ok(outcome)
     }
@@ -30,7 +33,8 @@ impl SimulationRuntime {
         actor_id: ActorId,
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
-        let goal = self.resolve_overworld_movement_goal(actor_id, goal)?;
+        let resolved = self.resolve_overworld_movement_target(actor_id, goal)?;
+        let goal = resolved.goal;
         let plan = self.plan_actor_movement(actor_id, goal)?;
         self.clear_recent_overworld_arrival();
         self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
@@ -47,6 +51,7 @@ impl SimulationRuntime {
         self.pending_movement = Some(PendingMovementIntent {
             actor_id,
             requested_goal: goal,
+            target_outdoor_location_id: resolved.target_outdoor_location_id.clone(),
         });
 
         let outcome = self.move_actor_to_reachable(actor_id, goal)?;
@@ -63,6 +68,7 @@ impl SimulationRuntime {
             self.record_recent_overworld_arrival(
                 actor_id,
                 goal,
+                resolved.target_outdoor_location_id,
                 self.simulation.actor_grid_position(actor_id),
                 true,
             );
@@ -71,29 +77,52 @@ impl SimulationRuntime {
         Ok(outcome)
     }
 
-    fn resolve_overworld_movement_goal(
+    fn resolve_overworld_movement_target(
         &self,
         actor_id: ActorId,
         goal: GridCoord,
-    ) -> Result<GridCoord, MovementPlanError> {
+    ) -> Result<ResolvedOverworldGoal, MovementPlanError> {
         if self.current_interaction_context().world_mode != WorldMode::Overworld {
-            return Ok(goal);
+            return Ok(ResolvedOverworldGoal {
+                goal,
+                target_outdoor_location_id: None,
+            });
         }
         let Some(start) = self.simulation.actor_grid_position(actor_id) else {
             return Err(MovementPlanError::UnknownActor { actor_id });
         };
         let Ok(definition) = self.simulation.current_overworld_definition() else {
-            return Ok(goal);
+            return Ok(ResolvedOverworldGoal {
+                goal,
+                target_outdoor_location_id: None,
+            });
         };
         if !is_outdoor_location_cell(definition, goal) {
-            return Ok(goal);
+            return Ok(ResolvedOverworldGoal {
+                goal,
+                target_outdoor_location_id: None,
+            });
         }
-        resolve_overworld_goal(definition, start, goal).ok_or(MovementPlanError::NoPath)
+        let Some(location) = definition.locations.iter().find(|location| {
+            location.kind == OverworldLocationKind::Outdoor && location.overworld_cell == goal
+        }) else {
+            return Ok(ResolvedOverworldGoal {
+                goal,
+                target_outdoor_location_id: None,
+            });
+        };
+        let resolved_goal =
+            resolve_overworld_goal(definition, start, goal).ok_or(MovementPlanError::NoPath)?;
+        Ok(ResolvedOverworldGoal {
+            goal: resolved_goal,
+            target_outdoor_location_id: Some(location.id.as_str().to_string()),
+        })
     }
 
     pub fn clear_pending_movement(&mut self, actor_id: ActorId) {
         if self
             .pending_movement
+            .as_ref()
             .map(|intent| intent.actor_id == actor_id)
             .unwrap_or(false)
         {
@@ -107,6 +136,7 @@ impl SimulationRuntime {
     pub fn request_pending_movement_stop(&mut self, actor_id: ActorId) -> bool {
         if !self
             .pending_movement
+            .as_ref()
             .map(|intent| intent.actor_id == actor_id)
             .unwrap_or(false)
         {
@@ -179,6 +209,7 @@ impl SimulationRuntime {
 
     fn pending_movement_position(&self) -> Option<GridCoord> {
         self.pending_movement
+            .as_ref()
             .and_then(|intent| self.simulation.actor_grid_position(intent.actor_id))
     }
 
@@ -215,6 +246,7 @@ impl SimulationRuntime {
         &mut self,
         actor_id: ActorId,
         requested_goal: GridCoord,
+        target_outdoor_location_id: Option<String>,
         final_position: Option<GridCoord>,
         arrived_exactly: bool,
     ) {
@@ -233,6 +265,7 @@ impl SimulationRuntime {
             requested_goal,
             final_position,
             arrived_exactly: arrived_exactly && final_position == requested_goal,
+            target_outdoor_location_id,
         });
     }
 
@@ -257,7 +290,7 @@ impl SimulationRuntime {
     }
 
     fn advance_pending_movement(&mut self) -> ProgressionAdvanceResult {
-        let Some(intent) = self.pending_movement else {
+        let Some(intent) = self.pending_movement.clone() else {
             return ProgressionAdvanceResult::applied(
                 PendingProgressionStep::ContinuePendingMovement,
                 None,
@@ -297,6 +330,7 @@ impl SimulationRuntime {
                     self.record_recent_overworld_arrival(
                         intent.actor_id,
                         intent.requested_goal,
+                        intent.target_outdoor_location_id.clone(),
                         final_position,
                         true,
                     );
@@ -370,6 +404,7 @@ impl SimulationRuntime {
             self.record_recent_overworld_arrival(
                 intent.actor_id,
                 requested_goal,
+                intent.target_outdoor_location_id.clone(),
                 final_position,
                 true,
             );
@@ -453,6 +488,7 @@ impl SimulationRuntime {
             self.record_recent_overworld_arrival(
                 intent.actor_id,
                 requested_goal,
+                intent.target_outdoor_location_id.clone(),
                 final_position,
                 false,
             );
@@ -479,6 +515,7 @@ impl SimulationRuntime {
         self.record_recent_overworld_arrival(
             intent.actor_id,
             requested_goal,
+            intent.target_outdoor_location_id.clone(),
             final_position,
             reached_goal,
         );
@@ -492,4 +529,10 @@ impl SimulationRuntime {
             interaction_outcome: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedOverworldGoal {
+    goal: GridCoord,
+    target_outdoor_location_id: Option<String>,
 }

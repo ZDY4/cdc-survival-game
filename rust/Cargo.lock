@@ -1013,6 +1013,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_gltf_viewer"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_egui",
+ "game_bevy",
+]
+
+[[package]]
 name = "bevy_image"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1187,10 +1196,9 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_egui",
- "dirs",
  "game_bevy",
  "game_data",
- "reqwest",
+ "game_editor",
  "serde",
  "serde_json",
 ]
@@ -2988,6 +2996,18 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "game_editor"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_egui",
+ "dirs",
+ "reqwest",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -288,6 +288,43 @@ function restorePersistedDocumentSessions(
   ) as Record<string, DocumentAgentSession>;
 }
 
+function finalizeRestoredDocumentSessions(
+  persistedSessions: Record<string, DocumentAgentSession>,
+): {
+  restoredSessions: Record<string, DocumentAgentSession>;
+  restoredKeys: string[];
+  restoreTargetKey: string | null;
+} {
+  const restoredEntries = Object.entries(persistedSessions);
+  const restoreTargetKey =
+    restoredEntries
+      .slice()
+      .sort((left, right) => {
+        const leftTime = Date.parse(left[1].updatedAt || "");
+        const rightTime = Date.parse(right[1].updatedAt || "");
+        return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
+      })[0]?.[0] ?? null;
+  const restoredSessions = Object.fromEntries(
+    restoredEntries.map(([documentKey, session]) => [
+      documentKey,
+      {
+        ...session,
+        reviewQueue: buildReviewQueue(session),
+        activeSubmission: null,
+        queuedSubmissions: [],
+        busy: false,
+        inflightRequestId: null,
+      },
+    ]),
+  ) as Record<string, DocumentAgentSession>;
+
+  return {
+    restoredSessions,
+    restoredKeys: Object.keys(restoredSessions),
+    restoreTargetKey,
+  };
+}
+
 function clampChatPanelWidth(width: number, containerWidth: number) {
   const maxWidth = Math.min(
     MAX_CHAT_PANEL_WIDTH,
@@ -418,34 +455,10 @@ export function NarrativeWorkspace({
     const nextDocuments = hydrateEditableDocuments(workspace.documents);
     const initial = resolveInitialTabs(workspace, appSettings, nextDocuments);
     const validDocumentKeys = new Set(nextDocuments.map((document) => document.documentKey));
-    const persistedSessions = restorePersistedDocumentSessions(
-      appSettings,
-      workspace,
-      validDocumentKeys,
-    );
-    const restoredEntries = Object.entries(persistedSessions);
-    const restoreTargetKey =
-      restoredEntries
-        .slice()
-        .sort((left, right) => {
-          const leftTime = Date.parse(left[1].updatedAt || "");
-          const rightTime = Date.parse(right[1].updatedAt || "");
-          return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
-        })[0]?.[0] ?? null;
-    const restoredSessions = Object.fromEntries(
-      restoredEntries.map(([documentKey, session]) => [
-        documentKey,
-        {
-          ...session,
-          reviewQueue: buildReviewQueue(session),
-          activeSubmission: null,
-          queuedSubmissions: [],
-          busy: false,
-          inflightRequestId: null,
-        },
-      ]),
-    ) as Record<string, DocumentAgentSession>;
-    const restoredKeys = Object.keys(restoredSessions);
+    const { restoredSessions, restoredKeys, restoreTargetKey } =
+      finalizeRestoredDocumentSessions(
+        restorePersistedDocumentSessions(appSettings, workspace, validDocumentKeys),
+      );
     const restoredTabState =
       workspaceRootRef.current === workspace.workspaceRoot || !restoredKeys.length
         ? initial.tabState
@@ -473,6 +486,45 @@ export function NarrativeWorkspace({
     });
     workspaceRootRef.current = workspace.workspaceRoot;
   }, [workspace]);
+
+  useEffect(() => {
+    if (!startupReady || !workspace.workspaceRoot.trim()) {
+      return;
+    }
+
+    if (workspaceRootRef.current !== workspace.workspaceRoot) {
+      return;
+    }
+
+    if (Object.keys(documentAgentsRef.current).length > 0) {
+      return;
+    }
+
+    const validDocumentKeys = new Set(documentsRef.current.map((document) => document.documentKey));
+    if (!validDocumentKeys.size) {
+      return;
+    }
+
+    const { restoredSessions, restoredKeys, restoreTargetKey } =
+      finalizeRestoredDocumentSessions(
+        restorePersistedDocumentSessions(appSettings, workspace, validDocumentKeys),
+      );
+    if (!restoredKeys.length) {
+      return;
+    }
+
+    agentSnapshotRef.current = JSON.stringify(buildWorkspaceAgentState(restoredSessions));
+    setDocumentAgents(restoredSessions);
+    setTabState((current) => ({
+      openTabs: restoredKeys.reduce((openTabs, documentKey) => {
+        if (openTabs.includes(documentKey)) {
+          return openTabs;
+        }
+        return [...openTabs, documentKey];
+      }, current.openTabs),
+      activeTabKey: current.activeTabKey ?? restoreTargetKey ?? restoredKeys[0] ?? null,
+    }));
+  }, [appSettings, startupReady, workspace]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -890,10 +942,6 @@ export function NarrativeWorkspace({
       .filter((contextDocumentKey) => contextDocumentKey !== documentKey)
       .map((contextDocumentKey) => documentMap.get(contextDocumentKey) ?? null)
       .filter(Boolean) as EditableNarrativeDocument[];
-  }
-
-  function queueSourceLabel(source: NarrativeSubmissionSource) {
-    return source === "option" ? "方向按钮" : "普通输入";
   }
 
   function submissionStageLabel(stage: NonNullable<DocumentAgentSession["activeSubmission"]>["stage"]) {
@@ -1726,6 +1774,12 @@ export function NarrativeWorkspace({
 
     try {
       const submission = createNarrativeQueuedSubmission(submittedPrompt, source);
+      const userMessage = buildGenerationUserMessage({
+        submittedPrompt: submission.prompt,
+        action: null,
+        messageId: `user-${submission.requestId}`,
+      });
+      const assistantMessageId = assistantMessageIdForRequest(submission.requestId);
       setDocumentAgents((current) =>
         updateDocumentAgentSession(current, activeDocumentKey, (session) => {
           const result = enqueueNarrativeSubmission(session, submission, {
@@ -1733,7 +1787,25 @@ export function NarrativeWorkspace({
           });
           enqueueOutcome = result.outcome;
           queuedCount = result.session.queuedSubmissions.length;
-          return result.session;
+          if (result.outcome !== "started") {
+            return result.session;
+          }
+
+          return {
+            ...result.session,
+            chatMessages: replaceChatMessage(
+              [...result.session.chatMessages, userMessage],
+              assistantMessageId,
+              {
+                id: assistantMessageId,
+                role: "assistant",
+                label: "AI",
+                content: "正在解析意图...",
+                meta: ["解析意图"],
+                tone: "muted",
+              },
+            ),
+          };
         }),
       );
     } finally {
@@ -1802,7 +1874,6 @@ export function NarrativeWorkspace({
     documentKey: string,
     submission: NarrativeQueuedSubmission,
   ) {
-    console.log("[NarrativeLab] executeActiveSubmission start:", { documentKey, submissionId: submission.submissionId, prompt: submission.prompt.slice(0, 100) });
     const activeDocumentSnapshot = getDocument(documentKey);
     const sessionSnapshot = getSession(documentKey);
 
@@ -1822,23 +1893,9 @@ export function NarrativeWorkspace({
     const userMessage = buildGenerationUserMessage({
       submittedPrompt: submission.prompt,
       action: null,
+      messageId: `user-${submission.requestId}`,
     });
-    const placeholderAssistantId = `assistant-${submission.requestId}`;
-    const placeholderAssistantMessage: AiChatMessage = {
-      id: placeholderAssistantId,
-      role: "assistant",
-      label: "AI",
-      content: "正在分析需求...",
-      meta: ["解析意图"],
-      tone: "muted",
-    };
-
-    setDocumentAgents((current) =>
-      updateDocumentAgentSession(current, documentKey, (session) => ({
-        ...session,
-        chatMessages: [...session.chatMessages, userMessage, placeholderAssistantMessage],
-      })),
-    );
+    const placeholderAssistantId = assistantMessageIdForRequest(submission.requestId);
 
     try {
       const actionIntentRequest = buildActionIntentRequest({
@@ -1857,16 +1914,7 @@ export function NarrativeWorkspace({
         },
       );
 
-      console.log("[NarrativeLab] actionIntent result:", {
-        action: actionIntent.action,
-        assistantMessage: actionIntent.assistantMessage?.slice(0, 100),
-        optionsCount: actionIntent.options?.length ?? 0,
-        questionsCount: actionIntent.questions?.length ?? 0,
-      });
-
       if (!actionIntent.action) {
-        console.log("[NarrativeLab] actionIntent.action is null, entering clarification mode");
-
         setDocumentAgents((current) =>
           updateDocumentAgentSessionWithReviewQueue(current, documentKey, (session) =>
             promoteNextNarrativeSubmission(
@@ -1912,23 +1960,6 @@ export function NarrativeWorkspace({
       const action = actionIntent.action;
       const assistantMessageId = placeholderAssistantId;
 
-      setDocumentAgents((current) =>
-        updateDocumentAgentSession(current, documentKey, (session) => ({
-          ...session,
-          chatMessages: session.chatMessages.map((message) =>
-            message.id === placeholderAssistantId
-              ? {
-                  ...message,
-                  content: "正在生成内容...",
-                  meta: ["生成中"],
-                }
-              : message.id === userMessage.id
-                ? { ...message, meta: [action === "create" ? "将创建新文档" : "将修改当前文档"] }
-                : message,
-          ),
-        })),
-      );
-
       const selectedContextDocumentsForGeneration = getSelectedContextDocumentsForSession(
         documentKey,
         latestSession,
@@ -1943,15 +1974,25 @@ export function NarrativeWorkspace({
       });
 
       setDocumentAgents((current) =>
-        updateDocumentAgentSession(current, documentKey, (session) => ({
-          ...session,
-          status: "generating",
-          busy: true,
-          inflightRequestId: submission.requestId,
-          activeSubmission: session.activeSubmission
-            ? { ...session.activeSubmission, stage: "generating" }
-            : null,
-        })),
+        updateDocumentAgentSession(current, documentKey, (session) =>
+          beginGenerationSession(
+            updateActiveSubmissionStage(
+              {
+                ...session,
+                mode: action,
+              },
+              "generating",
+            ),
+            {
+              requestId: submission.requestId,
+              userMessage: {
+                ...userMessage,
+                meta: [action === "create" ? "将创建新文档" : "将修改当前文档"],
+              },
+              assistantMessageId,
+            },
+          ),
+        ),
       );
 
       const command =
@@ -1960,16 +2001,6 @@ export function NarrativeWorkspace({
         workspaceRoot: workspace.workspaceRoot,
         projectRoot: workspace.connectedProjectRoot ?? null,
         request,
-      });
-
-      console.log("[NarrativeLab] Response:", {
-        turnKind: narrativeResponse.turnKind,
-        optionsCount: narrativeResponse.options?.length ?? 0,
-        questionsCount: narrativeResponse.questions?.length ?? 0,
-        planStepsCount: narrativeResponse.planSteps?.length ?? 0,
-        summary: narrativeResponse.summary?.slice(0, 100),
-        draftMarkdownLength: narrativeResponse.draftMarkdown?.length ?? 0,
-        promptDebug: narrativeResponse.promptDebug,
       });
 
       const assistantMessage: AiChatMessage = {
@@ -2929,6 +2960,22 @@ export function NarrativeWorkspace({
               </div>
 
               <div className="narrative-chat-composer">
+                {queuedSubmissions.length ? (
+                  <div className="narrative-submission-status">
+                    <div className="narrative-submission-status-main">
+                      <strong>待发送</strong>
+                      <span
+                        className="narrative-submission-status-text"
+                        title={queuedSubmissions[0]?.prompt ?? ""}
+                      >
+                        {queuedSubmissions[0]?.prompt ?? ""}
+                      </span>
+                      <span className="narrative-submission-status-meta">
+                        后续 {queuedSubmissions.length} 条
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
                 <textarea
                   className="field-input field-textarea narrative-chat-textarea"
                   value={activeSession.composerText}
@@ -2961,44 +3008,6 @@ export function NarrativeWorkspace({
                   }}
                   placeholder={composerPlaceholder}
                 />
-                {(activeSubmission || queuedSubmissions.length) ? (
-                  <div className="narrative-submission-queue">
-                    {activeSubmission ? (
-                      <div className="narrative-submission-queue-item narrative-submission-queue-item-active">
-                        <div className="narrative-submission-queue-item-header">
-                          <strong>正在处理</strong>
-                          <div className="toolbar-summary">
-                            <Badge tone={activeSubmission.stage === "cancelling" ? "warning" : "accent"}>
-                              {submissionStageLabel(activeSubmission.stage)}
-                            </Badge>
-                            <Badge tone="muted">{queueSourceLabel(activeSubmission.source)}</Badge>
-                          </div>
-                        </div>
-                        {activeSubmission.stage === "resolving_intent" ? (
-                          <p>{activeSubmission.prompt}</p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {queuedSubmissions.length ? (
-                      <div className="narrative-submission-queue-list">
-                        {queuedSubmissions.map((submission, index) => (
-                          <div
-                            key={submission.submissionId}
-                            className="narrative-submission-queue-item"
-                          >
-                            <div className="narrative-submission-queue-item-header">
-                              <strong>待发送 {index + 1}</strong>
-                              <div className="toolbar-summary">
-                                <Badge tone="muted">{queueSourceLabel(submission.source)}</Badge>
-                              </div>
-                            </div>
-                            <p>{submission.prompt}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
                 <div className="narrative-chat-composer-footer">
                   <div className="toolbar-summary">
                     <Badge tone="muted">{activeDocument.meta.slug}</Badge>
@@ -3007,16 +3016,6 @@ export function NarrativeWorkspace({
                     ) : null}
                   </div>
                   <div className="toolbar-actions">
-                    {activeSubmission ? (
-                      <button
-                        type="button"
-                        className="toolbar-button"
-                        onClick={() => void cancelActiveSubmission()}
-                        disabled={activeSubmission.stage === "cancelling"}
-                      >
-                        {activeSubmission.stage === "cancelling" ? "正在停止..." : "停止"}
-                      </button>
-                    ) : null}
                     <button
                       type="button"
                       className="toolbar-button toolbar-accent narrative-chat-send-button"

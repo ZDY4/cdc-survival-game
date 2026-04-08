@@ -8,8 +8,8 @@ use game_core::{
 };
 use game_data::{
     expand_object_footprint, GridCoord, MapBuildingWallVisualKind, MapDefinition,
-    MapObjectDefinition, MapObjectKind, MapRotation, OverworldDefinition,
-    OverworldTerrainKind, WorldMode,
+    MapObjectDefinition, MapObjectKind, MapRotation, OverworldDefinition, OverworldTerrainKind,
+    WorldMode,
 };
 
 const TRIGGER_DECAL_ELEVATION: f32 = 0.002;
@@ -322,18 +322,14 @@ fn build_static_world_from_overworld_snapshot(
     };
 
     for cell in &snapshot.grid.map_cells {
-        let terrain =
-            OverworldTerrainKind::from_str(cell.terrain.as_str()).unwrap_or(OverworldTerrainKind::Plain);
+        let terrain = OverworldTerrainKind::from_str(cell.terrain.as_str())
+            .unwrap_or(OverworldTerrainKind::Plain);
         if cell.blocks_movement && terrain.is_passable() && !location_cells.contains(&cell.grid) {
             let blocked_height = floor_thickness_world.max(0.08);
             let center = grid_cell_center(cell.grid, grid_size);
             scene.boxes.push(StaticWorldBoxSpec {
                 size: Vec3::new(0.82 * grid_size, blocked_height, 0.82 * grid_size),
-                translation: Vec3::new(
-                    center.x,
-                    floor_top + blocked_height * 0.5,
-                    center.z,
-                ),
+                translation: Vec3::new(center.x, floor_top + blocked_height * 0.5, center.z),
                 material_role: StaticWorldMaterialRole::OverworldBlockedCell,
                 occluder_kind: None,
                 occluder_cells: Vec::new(),
@@ -397,11 +393,7 @@ pub fn build_static_world_from_overworld_definition(
             let center = grid_cell_center(cell.grid, 1.0);
             scene.boxes.push(StaticWorldBoxSpec {
                 size: Vec3::new(0.82, blocked_height, 0.82),
-                translation: Vec3::new(
-                    center.x,
-                    floor_top + blocked_height * 0.5,
-                    center.z,
-                ),
+                translation: Vec3::new(center.x, floor_top + blocked_height * 0.5, center.z),
                 material_role: StaticWorldMaterialRole::OverworldBlockedCell,
                 occluder_kind: None,
                 occluder_cells: Vec::new(),
@@ -437,7 +429,10 @@ fn collect_overworld_ground_specs(
     floor_thickness_world: f32,
 ) -> Vec<StaticWorldGroundSpec> {
     collect_overworld_ground_specs_from_cells(
-        definition.cells.iter().map(|cell| (cell.grid, cell.terrain)),
+        definition
+            .cells
+            .iter()
+            .map(|cell| (cell.grid, cell.terrain)),
         1.0,
         floor_y,
         floor_thickness_world,
@@ -452,7 +447,10 @@ fn collect_overworld_ground_specs_from_cells(
 ) -> Vec<StaticWorldGroundSpec> {
     let mut by_role = HashMap::<StaticWorldMaterialRole, Vec<GridCoord>>::new();
     for (grid, terrain) in cells {
-        by_role.entry(overworld_ground_role(terrain)).or_default().push(grid);
+        by_role
+            .entry(overworld_ground_role(terrain))
+            .or_default()
+            .push(grid);
     }
 
     let mut specs = Vec::new();
@@ -501,7 +499,8 @@ fn overworld_location_marker_archetype(
         haystack.push_str(&icon.to_ascii_lowercase());
     }
 
-    if haystack.contains("hospital") || haystack.contains("医院") || haystack.contains("medical") {
+    if haystack.contains("hospital") || haystack.contains("医院") || haystack.contains("medical")
+    {
         OverworldLocationMarkerArchetype::Hospital
     } else if haystack.contains("school") || haystack.contains("学校") {
         OverworldLocationMarkerArchetype::School
@@ -539,16 +538,32 @@ fn overworld_location_material_role(
     archetype: OverworldLocationMarkerArchetype,
 ) -> StaticWorldMaterialRole {
     match archetype {
-        OverworldLocationMarkerArchetype::Hospital => StaticWorldMaterialRole::OverworldLocationHospital,
-        OverworldLocationMarkerArchetype::School => StaticWorldMaterialRole::OverworldLocationSchool,
+        OverworldLocationMarkerArchetype::Hospital => {
+            StaticWorldMaterialRole::OverworldLocationHospital
+        }
+        OverworldLocationMarkerArchetype::School => {
+            StaticWorldMaterialRole::OverworldLocationSchool
+        }
         OverworldLocationMarkerArchetype::Store => StaticWorldMaterialRole::OverworldLocationStore,
-        OverworldLocationMarkerArchetype::Street => StaticWorldMaterialRole::OverworldLocationStreet,
-        OverworldLocationMarkerArchetype::Outpost => StaticWorldMaterialRole::OverworldLocationOutpost,
-        OverworldLocationMarkerArchetype::Factory => StaticWorldMaterialRole::OverworldLocationFactory,
-        OverworldLocationMarkerArchetype::Forest => StaticWorldMaterialRole::OverworldLocationForest,
+        OverworldLocationMarkerArchetype::Street => {
+            StaticWorldMaterialRole::OverworldLocationStreet
+        }
+        OverworldLocationMarkerArchetype::Outpost => {
+            StaticWorldMaterialRole::OverworldLocationOutpost
+        }
+        OverworldLocationMarkerArchetype::Factory => {
+            StaticWorldMaterialRole::OverworldLocationFactory
+        }
+        OverworldLocationMarkerArchetype::Forest => {
+            StaticWorldMaterialRole::OverworldLocationForest
+        }
         OverworldLocationMarkerArchetype::Ruins => StaticWorldMaterialRole::OverworldLocationRuins,
-        OverworldLocationMarkerArchetype::Subway => StaticWorldMaterialRole::OverworldLocationSubway,
-        OverworldLocationMarkerArchetype::Generic => StaticWorldMaterialRole::OverworldLocationGeneric,
+        OverworldLocationMarkerArchetype::Subway => {
+            StaticWorldMaterialRole::OverworldLocationSubway
+        }
+        OverworldLocationMarkerArchetype::Generic => {
+            StaticWorldMaterialRole::OverworldLocationGeneric
+        }
     }
 }
 
@@ -1626,9 +1641,8 @@ mod tests {
     use super::{
         build_static_world_from_map_definition, build_static_world_from_overworld_definition,
         build_static_world_from_topology, is_overworld_location_material_role,
-        push_overworld_location_marker_boxes,
-        OverworldLocationMarkerArchetype, StaticMapTopology, StaticWorldBuildConfig,
-        StaticWorldGridBounds, StaticWorldMaterialRole,
+        push_overworld_location_marker_boxes, OverworldLocationMarkerArchetype, StaticMapTopology,
+        StaticWorldBuildConfig, StaticWorldGridBounds, StaticWorldMaterialRole,
     };
     use bevy::prelude::Vec3;
     use game_core::{
@@ -1640,8 +1654,8 @@ mod tests {
         MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectDefinition,
         MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation, MapSize,
         OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind,
-        OverworldTravelRuleSet, RelativeGridCell,
+        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet,
+        RelativeGridCell,
     };
     use std::collections::BTreeMap;
 
@@ -1703,7 +1717,9 @@ mod tests {
                 && spec.translation.z >= 0.05
                 && spec.translation.z <= 0.95
         }));
-        assert!(location_markers.iter().any(|spec| spec.translation.y <= 0.78));
+        assert!(location_markers
+            .iter()
+            .any(|spec| spec.translation.y <= 0.78));
         assert_eq!(scene.labels[0].text, "据 Outpost");
     }
 

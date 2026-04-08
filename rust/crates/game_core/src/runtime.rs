@@ -334,6 +334,7 @@ mod tests {
             Some(&crate::movement::PendingMovementIntent {
                 actor_id: handles.player,
                 requested_goal: GridCoord::new(0, 0, 2),
+                target_outdoor_location_id: None,
             })
         );
         assert_eq!(
@@ -2485,16 +2486,13 @@ mod tests {
         );
         assert_eq!(runtime.current_interaction_context().current_map_id, None);
         assert_eq!(
-            runtime.overworld_outdoor_location_id_at(GridCoord::new(1, 0, 0)),
-            Some("prompt_outpost".to_string())
-        );
-        assert_eq!(
             runtime.recent_overworld_arrival(),
             Some(&crate::RecentOverworldArrival {
                 actor_id: player,
                 requested_goal: GridCoord::new(1, 0, 0),
                 final_position: GridCoord::new(1, 0, 0),
                 arrived_exactly: true,
+                target_outdoor_location_id: Some("prompt_outpost".to_string()),
             })
         );
     }
@@ -2519,11 +2517,8 @@ mod tests {
                 requested_goal: GridCoord::new(3, 0, 0),
                 final_position: GridCoord::new(3, 0, 0),
                 arrived_exactly: true,
+                target_outdoor_location_id: None,
             })
-        );
-        assert_eq!(
-            runtime.overworld_outdoor_location_id_at(GridCoord::new(3, 0, 0)),
-            None
         );
     }
 

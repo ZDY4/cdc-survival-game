@@ -1,5 +1,4 @@
 use super::*;
-use crate::overworld::outdoor_location_id_for_interaction_cell;
 
 impl SimulationRuntime {
     pub fn world_to_grid(&self, world: WorldCoord) -> GridCoord {
@@ -48,13 +47,6 @@ impl SimulationRuntime {
 
     pub fn get_actor_level(&self, actor_id: ActorId) -> i32 {
         self.simulation.actor_level(actor_id)
-    }
-
-    pub fn overworld_outdoor_location_id_at(&self, grid: GridCoord) -> Option<String> {
-        outdoor_location_id_for_interaction_cell(
-            self.simulation.current_overworld_definition().ok()?,
-            grid,
-        )
     }
 
     pub fn get_actor_current_xp(&self, actor_id: ActorId) -> i32 {

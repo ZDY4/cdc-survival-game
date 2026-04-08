@@ -3,11 +3,13 @@ members = [
     "crates/game_core",
     "crates/game_data",
     "crates/game_bevy",
+    "crates/game_editor",
     "crates/game_protocol",
     "apps/bevy_server",
     "apps/bevy_debug_viewer",
     "apps/bevy_map_editor",
     "apps/bevy_character_editor",
+    "apps/bevy_gltf_viewer",
     "apps/narrative_sync_server",
 ]
 resolver = "2"

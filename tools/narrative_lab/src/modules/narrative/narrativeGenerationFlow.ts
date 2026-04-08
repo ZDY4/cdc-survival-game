@@ -15,6 +15,7 @@ import {
   type EditableNarrativeDocument,
 } from "./narrativeSessionHelpers";
 import { nowIso } from "./narrativeAgentState";
+import { replaceChatMessage } from "./narrativeSessionFlow";
 
 // AI 发起前的组装层：
 // 负责请求构建、会话预热、聊天摘要文案，以及从生成结果里提取标题/上下文说明。
@@ -25,8 +26,23 @@ export function buildNarrativeChatPrompt(
   pendingTurnContext?: string,
 ) {
   const sections: string[] = [];
+  const normalizedInput = input.trim();
   const turns = history
-    .filter((message) => message.role === "user" || message.role === "assistant")
+    .filter(
+      (message) =>
+        (message.role === "user" || message.role === "assistant") &&
+        !isTransientAssistantPlaceholder(message),
+    )
+    .filter(
+      (message, index, messages) =>
+        !(
+          message.role === "user" &&
+          message.content.trim() === normalizedInput &&
+          messages
+            .slice(index + 1)
+            .every((nextMessage) => isTransientAssistantPlaceholder(nextMessage))
+        ),
+    )
     .slice(-6);
 
   if (selectedDocument) {
@@ -46,9 +62,27 @@ export function buildNarrativeChatPrompt(
     sections.push(pendingTurnContext.trim());
   }
 
-  sections.push(`本轮需求：${input.trim()}`);
+  sections.push(`本轮需求：${normalizedInput}`);
 
   return sections.filter(Boolean).join("\n\n");
+}
+
+function isTransientAssistantPlaceholder(message: AiChatMessage) {
+  if (message.role !== "assistant" || message.tone !== "muted") {
+    return false;
+  }
+
+  const normalizedContent = message.content.trim();
+  const meta = message.meta ?? [];
+  return (
+    meta.includes("解析意图") ||
+    meta.includes("生成中") ||
+    meta.includes("正在准备请求") ||
+    normalizedContent === "正在分析需求..." ||
+    normalizedContent === "正在处理中..." ||
+    normalizedContent === "正在解析意图..." ||
+    normalizedContent === "正在生成内容..."
+  );
 }
 
 export function buildStrategyInstruction(session: DocumentAgentSession) {
@@ -76,14 +110,16 @@ export function buildStrategyInstruction(session: DocumentAgentSession) {
 type BuildGenerationUserMessageInput = {
   submittedPrompt: string;
   action: "create" | "revise_document" | null;
+  messageId?: string;
 };
 
 export function buildGenerationUserMessage({
   submittedPrompt,
   action,
+  messageId,
 }: BuildGenerationUserMessageInput): AiChatMessage {
   return {
-    id: `user-${Date.now()}`,
+    id: messageId ?? `user-${Date.now()}`,
     role: "user",
     label: "你",
     content: submittedPrompt,
@@ -196,6 +232,18 @@ export function beginGenerationSession(
   session: DocumentAgentSession,
   { requestId, userMessage, assistantMessageId }: BeginGenerationSessionInput,
 ): DocumentAgentSession {
+  const nextUserMessage = {
+    ...userMessage,
+    meta: userMessage.meta?.length ? userMessage.meta : ["待确认动作"],
+  };
+  const chatMessagesWithUser = session.chatMessages.some(
+    (message) => message.id === nextUserMessage.id,
+  )
+    ? session.chatMessages.map((message) =>
+        message.id === nextUserMessage.id ? nextUserMessage : message,
+      )
+    : [...session.chatMessages, nextUserMessage];
+
   return {
     ...session,
     updatedAt: nowIso(),
@@ -207,18 +255,14 @@ export function beginGenerationSession(
     pendingQuestions: [],
     pendingOptions: [],
     pendingTurnKind: null,
-    chatMessages: [
-      ...session.chatMessages,
-      userMessage,
-      {
-        id: assistantMessageId,
-        role: "assistant",
-        label: "AI",
-        content: "正在准备生成内容...",
-        meta: ["正在准备请求"],
-        tone: "muted",
-      },
-    ],
+    chatMessages: replaceChatMessage(chatMessagesWithUser, assistantMessageId, {
+      id: assistantMessageId,
+      role: "assistant",
+      label: "AI",
+      content: "正在生成内容...",
+      meta: ["生成中"],
+      tone: "muted",
+    }),
   };
 }
 

@@ -31,6 +31,13 @@ export const NARRATIVE_REGRESSION_CASES: NarrativeRegressionCase[] = [
     prompt: "在保持设定一致的前提下润色当前文稿，并直接给我可保存版本。",
     expectedTurnKinds: ["final_answer"],
   },
+  {
+    id: "split-out-derived-doc",
+    label: "拆出独立文档时仍保留当前文档编辑",
+    prompt:
+      "把当前文稿里“商人老王”的角色设定从这篇文档中移出去，并单独创建一份商人老王角色设定文档。",
+    expectedTurnKinds: ["final_answer"],
+  },
 ];
 
 export type NarrativeRegressionRunner = (

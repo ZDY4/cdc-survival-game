@@ -483,8 +483,7 @@ mod tests {
         MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation, MapSize, MapTriggerProps,
         OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
         OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTerrainKind,
-        OverworldTravelRuleSet,
+        OverworldTerrainKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
 

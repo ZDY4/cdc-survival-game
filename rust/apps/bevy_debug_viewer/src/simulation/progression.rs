@@ -7,7 +7,7 @@ pub(crate) fn cancel_pending_movement(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
 ) -> bool {
-    let Some(intent) = runtime_state.runtime.pending_movement().copied() else {
+    let Some(intent) = runtime_state.runtime.pending_movement().cloned() else {
         return false;
     };
     if runtime_state.runtime.get_actor_side(intent.actor_id) != Some(ActorSide::Player) {

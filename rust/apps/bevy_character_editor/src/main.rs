@@ -1,16 +1,20 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use bevy::camera::Viewport;
+use bevy::camera::{visibility::RenderLayers, CameraOutputMode, ClearColorConfig, Viewport};
 use bevy::ecs::message::MessageReader;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
+use bevy::render::render_resource::BlendState;
+use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::input::EguiWantsInput;
-use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
+use bevy_egui::{
+    egui, EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext,
+};
 use game_bevy::{
     apply_preview_orbit_camera, game_ui_font_bytes, spawn_character_preview_light_rig,
-    spawn_character_preview_scene, CharacterPreviewPart, CharacterPreviewPlugin,
-    PreviewOrbitCamera, GAME_UI_FONT_NAME,
+    spawn_character_preview_scene, spawn_preview_floor, CharacterPreviewPart,
+    CharacterPreviewPlugin, PreviewOrbitCamera, GAME_UI_FONT_NAME,
 };
 use game_data::{
     build_character_ai_preview, build_character_ai_preview_at_time,
@@ -27,6 +31,13 @@ const DETAIL_PANEL_WIDTH: f32 = 430.0;
 const CAMERA_RADIUS_MIN: f32 = 1.2;
 const CAMERA_RADIUS_MAX: f32 = 8.0;
 const PREVIEW_BG: Color = Color::srgb(0.095, 0.105, 0.125);
+
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+enum AppState {
+    #[default]
+    Loading,
+    Ready,
+}
 
 fn main() {
     App::new()
@@ -47,26 +58,73 @@ fn main() {
         )
         .add_plugins(EguiPlugin::default())
         .add_plugins(CharacterPreviewPlugin)
+        .init_state::<AppState>()
         .insert_resource(ClearColor(PREVIEW_BG))
-        .insert_resource(load_editor_data())
         .insert_resource(EditorUiState::default())
         .insert_resource(PreviewState::default())
         .insert_resource(EditorEguiFontState::default())
-        .add_systems(Startup, setup_editor)
+        .add_systems(Startup, (setup_editor, load_editor_data_async))
         .add_systems(
             EguiPrimaryContextPass,
-            (configure_egui_fonts_system, editor_ui_system).chain(),
+            (
+                configure_egui_fonts_system,
+                loading_ui_system.run_if(in_state(AppState::Loading)),
+                editor_ui_system.run_if(in_state(AppState::Ready)),
+            )
+                .chain(),
         )
         .add_systems(
             Update,
             (
-                sync_preview_scene_system,
-                preview_camera_input_system,
-                update_preview_camera_system,
-            )
-                .chain(),
+                handle_loading_task.run_if(in_state(AppState::Loading)),
+                (
+                    sync_preview_scene_system,
+                    preview_camera_input_system,
+                    update_preview_camera_system,
+                )
+                    .chain()
+                    .run_if(in_state(AppState::Ready)),
+            ),
         )
         .run();
+}
+
+fn load_editor_data_async(mut commands: Commands) {
+    let task = AsyncComputeTaskPool::get().spawn(async move { load_editor_data() });
+
+    commands.spawn((LoadingTask(task),));
+}
+
+#[derive(Component)]
+struct LoadingTask(Task<EditorData>);
+
+fn handle_loading_task(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut LoadingTask)>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    for (entity, mut task) in &mut query {
+        if let Some(data) = block_on(poll_once(&mut task.0)) {
+            commands.insert_resource(data);
+            commands.entity(entity).despawn();
+            next_state.set(AppState::Ready);
+        }
+    }
+}
+
+fn loading_ui_system(mut contexts: EguiContexts) {
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
+
+    egui::CentralPanel::default().show(ctx, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.add_space(ui.available_height() / 2.0 - 40.0);
+            ui.heading("正在加载编辑器数据…");
+            ui.add_space(16.0);
+            ui.spinner();
+        });
+    });
 }
 
 fn character_editor_asset_dir() -> PathBuf {
@@ -173,19 +231,20 @@ struct PreviewState {
 #[derive(Component)]
 struct PreviewCamera;
 
-#[derive(Component)]
-struct PreviewFloor;
-
 fn setup_editor(
     mut commands: Commands,
+    mut egui_global_settings: ResMut<EguiGlobalSettings>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    egui_global_settings.auto_create_primary_context = false;
+
     spawn_character_preview_light_rig(&mut commands);
     commands.spawn((
         Camera3d::default(),
         Camera {
             order: 0,
+            clear_color: ClearColorConfig::Custom(PREVIEW_BG),
             ..default()
         },
         Projection::Perspective(PerspectiveProjection {
@@ -198,16 +257,26 @@ fn setup_editor(
         PreviewCamera,
     ));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(5.0, 0.06, 5.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.22, 0.235, 0.26),
-            perceptual_roughness: 0.94,
-            metallic: 0.02,
+        PrimaryEguiContext,
+        Camera2d,
+        RenderLayers::none(),
+        Camera {
+            order: 1,
+            output_mode: CameraOutputMode::Write {
+                blend_state: Some(BlendState::ALPHA_BLENDING),
+                clear_color: ClearColorConfig::None,
+            },
+            clear_color: ClearColorConfig::Custom(Color::NONE),
             ..default()
-        })),
-        Transform::from_xyz(0.0, -0.03, 0.0),
-        PreviewFloor,
+        },
     ));
+    spawn_preview_floor(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        Vec2::new(5.0, 5.0),
+        Color::srgb(0.22, 0.235, 0.26),
+    );
 }
 
 fn configure_egui_fonts_system(
@@ -827,17 +896,20 @@ fn update_preview_camera_system(
 ) {
     let (camera, transform) = &mut *camera_query;
     if let Some(rect) = ui_state.viewport_rect {
+        let scale_factor = window.scale_factor() as f32;
+        let min_x = rect.min_x * scale_factor;
+        let min_y = rect.min_y * scale_factor;
+        let width = rect.width * scale_factor;
+        let height = rect.height * scale_factor;
         let max_width = window.physical_width() as f32;
         let max_height = window.physical_height() as f32;
         let physical_position = UVec2::new(
-            rect.min_x.clamp(0.0, (max_width - 1.0).max(0.0)) as u32,
-            rect.min_y.clamp(0.0, (max_height - 1.0).max(0.0)) as u32,
+            min_x.clamp(0.0, (max_width - 1.0).max(0.0)) as u32,
+            min_y.clamp(0.0, (max_height - 1.0).max(0.0)) as u32,
         );
         let physical_size = UVec2::new(
-            rect.width
-                .clamp(1.0, (max_width - physical_position.x as f32).max(1.0)) as u32,
-            rect.height
-                .clamp(1.0, (max_height - physical_position.y as f32).max(1.0)) as u32,
+            width.clamp(1.0, (max_width - physical_position.x as f32).max(1.0)) as u32,
+            height.clamp(1.0, (max_height - physical_position.y as f32).max(1.0)) as u32,
         );
         camera.viewport = Some(Viewport {
             physical_position,

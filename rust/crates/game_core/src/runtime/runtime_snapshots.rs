@@ -15,7 +15,7 @@ impl SimulationRuntime {
             schema_version: RUNTIME_SNAPSHOT_SCHEMA_VERSION,
             simulation: self.simulation.save_snapshot(),
             vision: self.vision.snapshot(),
-            pending_movement: self.pending_movement,
+            pending_movement: self.pending_movement.clone(),
             pending_interaction: self.pending_interaction.clone(),
             pending_movement_stop_requested: self.pending_movement_stop_requested,
             path_preview: self.path_preview.clone(),

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DocumentAgentSession } from "../../types";
 import {
+  buildNarrativeChatPrompt,
   buildActionIntentRequest,
   beginGenerationSession,
   buildGenerationRequest,
@@ -107,7 +108,80 @@ describe("narrativeGenerationFlow", () => {
     expect(session.busy).toBe(true);
     expect(session.inflightRequestId).toBe("request-1");
     expect(session.chatMessages.at(-1)?.id).toBe("assistant-request-1");
-    expect(session.chatMessages.at(-1)?.content).toContain("正在准备生成内容");
+    expect(session.chatMessages.at(-1)?.content).toContain("正在生成内容");
+  });
+
+  it("updates existing user and assistant placeholder messages without duplicating them", () => {
+    const userMessage = {
+      id: "user-request-1",
+      role: "user" as const,
+      label: "你",
+      content: "hello",
+      meta: ["待确认动作"],
+      tone: "accent" as const,
+    };
+    const session = beginGenerationSession(
+      buildSession({
+        chatMessages: [
+          userMessage,
+          {
+            id: "assistant-request-1",
+            role: "assistant",
+            label: "AI",
+            content: "正在解析意图...",
+            meta: ["解析意图"],
+            tone: "muted",
+          },
+        ],
+      }),
+      {
+        requestId: "request-1",
+        userMessage,
+        assistantMessageId: "assistant-request-1",
+      },
+    );
+
+    expect(session.chatMessages).toHaveLength(2);
+    expect(session.chatMessages[0]?.id).toBe("user-request-1");
+    expect(session.chatMessages[1]?.id).toBe("assistant-request-1");
+    expect(session.chatMessages[1]?.content).toContain("正在生成内容");
+  });
+
+  it("omits transient assistant placeholders and current user echo from prompt history", () => {
+    const prompt = buildNarrativeChatPrompt(
+      "继续扩写",
+      [
+        {
+          id: "assistant-old",
+          role: "assistant",
+          label: "AI",
+          content: "上一次的正式回复",
+          tone: "success",
+        },
+        {
+          id: "user-request-1",
+          role: "user",
+          label: "你",
+          content: "继续扩写",
+          meta: ["待确认动作"],
+          tone: "accent",
+        },
+        {
+          id: "assistant-request-1",
+          role: "assistant",
+          label: "AI",
+          content: "正在解析意图...",
+          meta: ["解析意图"],
+          tone: "muted",
+        },
+      ],
+      null,
+    );
+
+    expect(prompt).not.toContain("用户：继续扩写");
+    expect(prompt).not.toContain("正在解析意图");
+    expect(prompt).toContain("AI：上一次的正式回复");
+    expect(prompt).toContain("本轮需求：继续扩写");
   });
 
   it("summarizes clarification responses with question list", () => {

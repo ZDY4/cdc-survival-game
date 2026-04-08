@@ -368,16 +368,6 @@ pub enum OverworldValidationError {
         y: i32,
         z: i32,
     },
-    #[error(
-        "outdoor interaction ring cell ({x}, {y}, {z}) overlaps between {first_location_id} and {second_location_id}"
-    )]
-    OverlappingOutdoorInteractionRing {
-        first_location_id: String,
-        second_location_id: String,
-        x: i32,
-        y: i32,
-        z: i32,
-    },
 }
 
 pub fn overworld_cardinal_neighbors(grid: GridCoord) -> [GridCoord; 4] {
@@ -642,7 +632,6 @@ pub fn validate_overworld_definition(
         }
     }
 
-    let mut interaction_ring_owner = HashMap::<GridCoord, &OverworldLocationDefinition>::new();
     for location in definition
         .locations
         .iter()
@@ -672,18 +661,6 @@ pub fn validate_overworld_definition(
                 y: location.overworld_cell.y,
                 z: location.overworld_cell.z,
             });
-        }
-
-        for ring_cell in interaction_ring {
-            if let Some(previous) = interaction_ring_owner.insert(ring_cell, location) {
-                return Err(OverworldValidationError::OverlappingOutdoorInteractionRing {
-                    first_location_id: previous.id.as_str().to_string(),
-                    second_location_id: location.id.as_str().to_string(),
-                    x: ring_cell.x,
-                    y: ring_cell.y,
-                    z: ring_cell.z,
-                });
-            }
         }
     }
 
@@ -715,8 +692,7 @@ mod tests {
     use super::{
         load_overworld_library, validate_overworld_definition, OverworldCellDefinition,
         OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind,
-        OverworldTravelRuleSet,
+        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet,
         OverworldValidationCatalog, OverworldValidationError,
     };
     use crate::map::MapId;
@@ -764,10 +740,9 @@ mod tests {
         };
         let mut catalog = sample_catalog();
         catalog.map_ids.insert("forest".into());
-        catalog.map_entry_points_by_map.insert(
-            "forest".into(),
-            BTreeSet::from(["default_entry".into()]),
-        );
+        catalog
+            .map_entry_points_by_map
+            .insert("forest".into(), BTreeSet::from(["default_entry".into()]));
         let error = validate_overworld_definition(&definition, Some(&catalog))
             .expect_err("outdoor location without ring should fail");
         assert!(matches!(
@@ -799,7 +774,7 @@ mod tests {
     }
 
     #[test]
-    fn overlapping_outdoor_interaction_rings_are_rejected() {
+    fn overlapping_outdoor_interaction_rings_are_allowed() {
         let definition = OverworldDefinition {
             id: OverworldId("ring_overlap".into()),
             size: MapSize {
@@ -816,18 +791,13 @@ mod tests {
         let mut catalog = sample_catalog();
         for map_id in ["left", "right"] {
             catalog.map_ids.insert(map_id.into());
-            catalog.map_entry_points_by_map.insert(
-                map_id.into(),
-                BTreeSet::from(["default_entry".into()]),
-            );
+            catalog
+                .map_entry_points_by_map
+                .insert(map_id.into(), BTreeSet::from(["default_entry".into()]));
         }
 
-        let error = validate_overworld_definition(&definition, Some(&catalog))
-            .expect_err("overlapping rings should fail");
-        assert!(matches!(
-            error,
-            OverworldValidationError::OverlappingOutdoorInteractionRing { .. }
-        ));
+        validate_overworld_definition(&definition, Some(&catalog))
+            .expect("overlapping rings should stay valid");
     }
 
     #[test]
@@ -863,10 +833,7 @@ mod tests {
                     "survivor_outpost_01".into(),
                     BTreeSet::from(["default_entry".into(), "outdoor_return".into()]),
                 ),
-                (
-                    "street_a".into(),
-                    BTreeSet::from(["default_entry".into()]),
-                ),
+                ("street_a".into(), BTreeSet::from(["default_entry".into()])),
                 (
                     "survivor_outpost_01_interior".into(),
                     BTreeSet::from(["default_entry".into(), "outdoor_return".into()]),
@@ -975,12 +942,7 @@ mod tests {
         cells
     }
 
-    fn sample_location(
-        id: &str,
-        map_id: &str,
-        x: i32,
-        z: i32,
-    ) -> OverworldLocationDefinition {
+    fn sample_location(id: &str, map_id: &str, x: i32, z: i32) -> OverworldLocationDefinition {
         OverworldLocationDefinition {
             id: OverworldLocationId(id.into()),
             name: id.into(),

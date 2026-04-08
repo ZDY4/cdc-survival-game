@@ -165,6 +165,9 @@ pub(crate) fn profiled_advance_runtime_progression(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn profiled_sync_world_visuals(
     params: WorldVisualSyncParams,
+    asset_server: Res<AssetServer>,
+    container_visual_registry: Res<game_bevy::ContainerVisualRegistry>,
+    viewer_asset_root: Res<crate::render::ViewerAssetRoot>,
     time: Res<Time>,
     palette: Res<ViewerPalette>,
     trigger_decal_assets: Res<crate::render::TriggerDecalAssets>,
@@ -194,6 +197,9 @@ pub(crate) fn profiled_sync_world_visuals(
         params.materials,
         params.ground_materials,
         params.building_wall_materials,
+        asset_server,
+        container_visual_registry,
+        viewer_asset_root,
         time,
         palette,
         trigger_decal_assets,

@@ -973,7 +973,7 @@ pub fn overworld_location_prompt_snapshot(
         return hidden;
     }
 
-    let Some(location_id) = runtime.overworld_outdoor_location_id_at(actor_grid) else {
+    let Some(location_id) = arrival.target_outdoor_location_id.clone() else {
         return hidden;
     };
     let Some(definition) = active_overworld_definition(runtime, overworld) else {
@@ -1320,6 +1320,24 @@ mod tests {
         let snapshot = overworld_location_prompt_snapshot(&runtime, player, &overworld);
 
         assert!(!snapshot.visible);
+    }
+
+    #[test]
+    fn overworld_prompt_snapshot_stays_hidden_after_plain_ring_cell_move() {
+        let (mut runtime, player, overworld) = sample_overworld_prompt_runtime();
+        runtime
+            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .expect("move should succeed");
+
+        let snapshot = overworld_location_prompt_snapshot(&runtime, player, &overworld);
+
+        assert_eq!(
+            snapshot,
+            UiOverworldLocationPromptSnapshot {
+                enter_label: "进入".to_string(),
+                ..UiOverworldLocationPromptSnapshot::default()
+            }
+        );
     }
 
     fn sample_overworld_prompt_runtime() -> (SimulationRuntime, ActorId, OverworldLibrary) {

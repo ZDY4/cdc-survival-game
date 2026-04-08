@@ -370,6 +370,7 @@
         "pickup": null,
         "container": {
           "display_name": "诊所补给柜",
+          "visual_id": "cabinet_medical",
           "initial_inventory": [
             { "item_id": "1005", "count": 2 },
             { "item_id": "1006", "count": 4 },
@@ -400,6 +401,7 @@
         "pickup": null,
         "container": {
           "display_name": "食堂食品箱",
+          "visual_id": "crate_wood",
           "initial_inventory": [
             { "item_id": "1007", "count": 5 },
             { "item_id": "1008", "count": 2 },
@@ -430,6 +432,7 @@
         "pickup": null,
         "container": {
           "display_name": "仓库锁箱",
+          "visual_id": "locker_metal",
           "initial_inventory": [
             { "item_id": "1010", "count": 8 },
             { "item_id": "1002", "count": 1 },
@@ -460,6 +463,7 @@
         "pickup": null,
         "container": {
           "display_name": "工坊工具柜",
+          "visual_id": "locker_metal",
           "initial_inventory": [
             { "item_id": "1010", "count": 4 },
             { "item_id": "1002", "count": 1 },

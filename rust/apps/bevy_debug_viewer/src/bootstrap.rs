@@ -45,7 +45,7 @@ fn configure_viewer_runtime(runtime: &mut SimulationRuntime) -> Result<(), Runti
 }
 
 fn viewer_asset_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 
 #[cfg(test)]

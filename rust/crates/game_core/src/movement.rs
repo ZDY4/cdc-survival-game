@@ -98,18 +98,21 @@ pub struct MovementCommandOutcome {
     pub result: ActionResult,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingMovementIntent {
     pub actor_id: ActorId,
     pub requested_goal: GridCoord,
+    #[serde(default)]
+    pub target_outdoor_location_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecentOverworldArrival {
     pub actor_id: ActorId,
     pub requested_goal: GridCoord,
     pub final_position: GridCoord,
     pub arrived_exactly: bool,
+    pub target_outdoor_location_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

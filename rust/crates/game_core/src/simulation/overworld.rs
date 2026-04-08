@@ -6,8 +6,8 @@ use game_data::{
     OverworldLocationKind, WorldMode,
 };
 
-use crate::overworld::{location_by_id, LocationTransitionContext, OverworldStateSnapshot};
 use crate::overworld::{default_outdoor_spawn_cell, is_outdoor_location_cell};
+use crate::overworld::{location_by_id, LocationTransitionContext, OverworldStateSnapshot};
 
 use super::{
     level_transition::{AppliedLevelTransition, LevelTransitionTarget},

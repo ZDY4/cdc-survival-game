@@ -90,7 +90,9 @@ pub fn compute_cell_path(
     if start == goal {
         return Some(vec![start]);
     }
-    if !is_overworld_walkable(definition, start, true) || !is_overworld_walkable(definition, goal, false) {
+    if !is_overworld_walkable(definition, start, true)
+        || !is_overworld_walkable(definition, goal, false)
+    {
         return None;
     }
 
@@ -132,7 +134,10 @@ pub fn compute_cell_path(
     None
 }
 
-pub fn overworld_cell(definition: &OverworldDefinition, grid: GridCoord) -> Option<&OverworldCellDefinition> {
+pub fn overworld_cell(
+    definition: &OverworldDefinition,
+    grid: GridCoord,
+) -> Option<&OverworldCellDefinition> {
     definition.cells.iter().find(|cell| cell.grid == grid)
 }
 
@@ -179,20 +184,6 @@ pub fn outdoor_interaction_ring(
     ring
 }
 
-pub fn outdoor_location_id_for_interaction_cell(
-    definition: &OverworldDefinition,
-    grid: GridCoord,
-) -> Option<String> {
-    let mut matches = definition
-        .locations
-        .iter()
-        .filter(|location| location.kind == OverworldLocationKind::Outdoor)
-        .filter(|location| outdoor_interaction_ring(definition, location).contains(&grid))
-        .map(|location| location.id.as_str().to_string());
-    let first = matches.next()?;
-    matches.next().is_none().then_some(first)
-}
-
 pub fn resolve_overworld_goal(
     definition: &OverworldDefinition,
     start: GridCoord,
@@ -200,7 +191,8 @@ pub fn resolve_overworld_goal(
 ) -> Option<GridCoord> {
     if is_outdoor_location_cell(definition, requested_goal) {
         let location = definition.locations.iter().find(|location| {
-            location.kind == OverworldLocationKind::Outdoor && location.overworld_cell == requested_goal
+            location.kind == OverworldLocationKind::Outdoor
+                && location.overworld_cell == requested_goal
         })?;
         return nearest_reachable_interaction_cell(definition, start, location);
     }
@@ -263,17 +255,15 @@ fn heuristic_cost(a: GridCoord, b: GridCoord) -> u32 {
 }
 
 fn path_cost(definition: &OverworldDefinition, path: &[GridCoord]) -> Option<u32> {
-    path.iter()
-        .copied()
-        .skip(1)
-        .try_fold(0_u32, |sum, grid| Some(sum.saturating_add(movement_cost(definition, grid)?)))
+    path.iter().copied().skip(1).try_fold(0_u32, |sum, grid| {
+        Some(sum.saturating_add(movement_cost(definition, grid)?))
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_cell_path, default_outdoor_spawn_cell, find_entry_point,
-        outdoor_location_id_for_interaction_cell, resolve_overworld_goal,
+        compute_cell_path, default_outdoor_spawn_cell, find_entry_point, resolve_overworld_goal,
     };
     use game_data::{
         GridCoord, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
@@ -326,19 +316,6 @@ mod tests {
         )
         .expect("location click should redirect");
         assert_eq!(goal, GridCoord::new(1, 0, 2));
-    }
-
-    #[test]
-    fn interaction_ring_cell_resolves_to_unique_location() {
-        let definition = sample_overworld();
-        assert_eq!(
-            outdoor_location_id_for_interaction_cell(&definition, GridCoord::new(2, 0, 1)),
-            Some("outpost".to_string())
-        );
-        assert_eq!(
-            outdoor_location_id_for_interaction_cell(&definition, GridCoord::new(0, 0, 0)),
-            None
-        );
     }
 
     #[test]

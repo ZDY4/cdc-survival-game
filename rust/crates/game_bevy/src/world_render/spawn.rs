@@ -13,9 +13,9 @@ use crate::static_world::{
 use super::doors::build_generated_door_mesh_spec;
 use super::materials::{
     building_door_color, darken_color, lighten_color, make_building_wall_material,
-    make_world_render_material, world_render_color_for_role,
-    world_render_material_style_for_role, BuildingWallGridMaterial, GridGroundMaterial,
-    GridGroundMaterialExt, WorldRenderMaterialHandle, WorldRenderMaterialStyle,
+    make_world_render_material, world_render_color_for_role, world_render_material_style_for_role,
+    BuildingWallGridMaterial, GridGroundMaterial, GridGroundMaterialExt, WorldRenderMaterialHandle,
+    WorldRenderMaterialStyle,
 };
 use super::mesh_builders::{
     build_building_wall_tile_mesh, build_trigger_arrow_texture, level_base_height,
@@ -128,7 +128,8 @@ pub fn orient_world_render_billboard_labels(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut labels: Query<&mut Transform, With<WorldRenderBillboardLabel>>,
 ) {
-    let Some((_, camera_transform)) = camera_query.iter().find(|(camera, _)| camera.is_active) else {
+    let Some((_, camera_transform)) = camera_query.iter().find(|(camera, _)| camera.is_active)
+    else {
         return;
     };
     let (_, rotation, _) = camera_transform.to_scale_rotation_translation();
@@ -261,7 +262,11 @@ fn ground_colors_for_role(
     palette: &WorldRenderPalette,
 ) -> (Color, Color, Color) {
     if role == StaticWorldMaterialRole::Ground {
-        return (palette.ground_dark, palette.ground_light, palette.ground_edge);
+        return (
+            palette.ground_dark,
+            palette.ground_light,
+            palette.ground_edge,
+        );
     }
 
     let base = world_render_color_for_role(role, palette);

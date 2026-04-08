@@ -309,6 +309,8 @@ pub struct MapContainerProps {
     #[serde(default)]
     pub display_name: String,
     #[serde(default)]
+    pub visual_id: Option<String>,
+    #[serde(default)]
     pub initial_inventory: Vec<MapContainerItemEntry>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -649,6 +651,8 @@ pub enum MapDefinitionValidationError {
         item_id: String,
         count: i32,
     },
+    #[error("container object {object_id} visual_id must not be blank")]
+    InvalidContainerVisualId { object_id: String },
     #[error("trigger object {object_id} must define props.trigger.interaction_kind")]
     MissingTriggerKind { object_id: String },
     #[error(
@@ -1417,6 +1421,16 @@ fn validate_container_payload(
         return Ok(());
     };
 
+    if container
+        .visual_id
+        .as_deref()
+        .is_some_and(|visual_id| visual_id.trim().is_empty())
+    {
+        return Err(MapDefinitionValidationError::InvalidContainerVisualId {
+            object_id: object.object_id.clone(),
+        });
+    }
+
     for entry in &container.initial_inventory {
         if entry.item_id.trim().is_empty() {
             return Err(MapDefinitionValidationError::MissingContainerItemId {
@@ -1562,6 +1576,25 @@ mod tests {
     }
 
     #[test]
+    fn container_visual_id_must_not_be_blank() {
+        let mut container = sample_container("crate", GridCoord::new(1, 0, 1), "1005", 2);
+        container
+            .props
+            .container
+            .as_mut()
+            .expect("container props")
+            .visual_id = Some("   ".into());
+
+        let error = validate_map_definition(&sample_map(vec![container]), Some(&sample_catalog()))
+            .expect_err("blank container visual_id should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::InvalidContainerVisualId { .. }
+        ));
+    }
+
+    #[test]
     fn migrated_sample_map_library_loads_successfully() {
         let data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../..")
@@ -1569,9 +1602,7 @@ mod tests {
         let library = load_map_library(&data_dir).expect("sample maps should load");
 
         assert!(!library.is_empty());
-        assert!(library
-            .get(&MapId("survivor_outpost_01".into()))
-            .is_some());
+        assert!(library.get(&MapId("survivor_outpost_01".into())).is_some());
     }
 
     #[test]
@@ -1931,6 +1962,7 @@ mod tests {
             props: MapObjectProps {
                 container: Some(MapContainerProps {
                     display_name: "储物箱".into(),
+                    visual_id: None,
                     initial_inventory: vec![MapContainerItemEntry {
                         item_id: item_id.into(),
                         count,

@@ -1719,6 +1719,19 @@ impl Simulation {
                                 }
                             }
                         }
+                        if let Some(container) = object.props.container.as_ref() {
+                            if let Some(visual_id) = container
+                                .visual_id
+                                .as_deref()
+                                .map(str::trim)
+                                .filter(|visual_id| !visual_id.is_empty())
+                            {
+                                payload_summary.insert(
+                                    "container_visual_id".to_string(),
+                                    visual_id.to_string(),
+                                );
+                            }
+                        }
                     }
                     MapObjectKind::Trigger => {
                         if let Some(trigger) = object.props.trigger.as_ref() {
@@ -2139,24 +2152,23 @@ impl Simulation {
             return Err(MovementPlanError::UnknownActor { actor_id });
         };
 
-        let (requested_goal, requested_path) = if self.interaction_context.world_mode
-            == WorldMode::Overworld
-        {
-            let definition = self
-                .current_overworld_definition()
-                .map_err(|_| MovementPlanError::NoPath)?;
-            let resolved_goal = resolve_overworld_goal(definition, start, goal)
-                .ok_or(MovementPlanError::NoPath)?;
-            let path =
-                compute_cell_path(definition, start, resolved_goal).ok_or(MovementPlanError::NoPath)?;
-            (resolved_goal, path)
-        } else {
-            (
-                goal,
-                self.find_path_grid(Some(actor_id), start, goal)
-                    .map_err(MovementPlanError::from)?,
-            )
-        };
+        let (requested_goal, requested_path) =
+            if self.interaction_context.world_mode == WorldMode::Overworld {
+                let definition = self
+                    .current_overworld_definition()
+                    .map_err(|_| MovementPlanError::NoPath)?;
+                let resolved_goal = resolve_overworld_goal(definition, start, goal)
+                    .ok_or(MovementPlanError::NoPath)?;
+                let path = compute_cell_path(definition, start, resolved_goal)
+                    .ok_or(MovementPlanError::NoPath)?;
+                (resolved_goal, path)
+            } else {
+                (
+                    goal,
+                    self.find_path_grid(Some(actor_id), start, goal)
+                        .map_err(MovementPlanError::from)?,
+                )
+            };
         let available_steps = self.get_actor_available_steps(actor_id).max(0) as usize;
         let resolved_step_count = requested_path.len().saturating_sub(1).min(available_steps);
         let resolved_path = requested_path
@@ -3529,9 +3541,9 @@ mod tests {
         MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
         MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
         OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTerrainKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition,
-        QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell,
-        StairKind, WorldCoord, WorldMode,
+        OverworldTerrainKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow,
+        QuestLibrary, QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell, StairKind,
+        WorldCoord, WorldMode,
     };
 
     use crate::actor::{FollowGridGoalAiController, InteractOnceAiController};

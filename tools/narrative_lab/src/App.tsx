@@ -63,6 +63,7 @@ function App() {
     defaultNarrativeAppSettings,
   );
   const narrativeAppSettingsRef = useRef<NarrativeAppSettings>(defaultNarrativeAppSettings);
+  const narrativeSettingsSaveQueueRef = useRef(Promise.resolve());
   const [editorRuntimeFlags, setEditorRuntimeFlags] =
     useState<EditorRuntimeFlags>(defaultEditorRuntimeFlags);
   const [status, setStatus] = useState("正在加载叙事实验室...");
@@ -130,16 +131,26 @@ function App() {
   }
 
   async function saveNarrativeSettings(nextSettings: NarrativeAppSettings) {
-    const merged = normalizeNarrativeAppSettings(
-      mergeNarrativeAppSettings(narrativeAppSettingsRef.current, nextSettings),
+    const queuedSave = narrativeSettingsSaveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const merged = normalizeNarrativeAppSettings(
+          mergeNarrativeAppSettings(narrativeAppSettingsRef.current, nextSettings),
+        );
+        const saved = await invokeCommand<NarrativeAppSettings>("save_narrative_app_settings", {
+          settings: merged,
+        });
+        const normalized = normalizeNarrativeAppSettings(saved);
+        narrativeAppSettingsRef.current = normalized;
+        setNarrativeAppSettings(normalized);
+        return normalized;
+      });
+
+    narrativeSettingsSaveQueueRef.current = queuedSave.then(
+      () => undefined,
+      () => undefined,
     );
-    const saved = await invokeCommand<NarrativeAppSettings>("save_narrative_app_settings", {
-      settings: merged,
-    });
-    const normalized = normalizeNarrativeAppSettings(saved);
-    narrativeAppSettingsRef.current = normalized;
-    setNarrativeAppSettings(normalized);
-    return normalized;
+    return queuedSave;
   }
 
   async function openNarrativeWorkspace(workspaceRoot: string) {

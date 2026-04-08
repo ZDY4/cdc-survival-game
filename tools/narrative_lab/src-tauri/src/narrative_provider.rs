@@ -935,6 +935,8 @@ fn build_single_agent_payload(
     context: &Value,
     settings: &AiSettings,
 ) -> Value {
+    let supported_doc_types =
+        "world_bible, task_setup, location_note, character_card, monster_note, item_note";
     let contract = [
         "始终只返回一个 JSON 对象，不要输出 Markdown 正文，不要加代码块围栏，不要附加解释文字。",
         "JSON 允许字段：turn_kind, assistant_message, draft_markdown, summary, review_notes, synthesis_notes, risk_level, questions, options, plan_steps, requested_actions。",
@@ -947,7 +949,10 @@ fn build_single_agent_payload(
         "如果你希望用户批准某个 Narrative Lab 动作，使用 requested_actions；动作不会自动执行。",
         "requested_actions 中 action_type 只能是 read_active_document, read_related_documents, create_derived_document, apply_candidate_patch, apply_all_patches, save_active_document, open_document, list_workspace_documents, update_related_documents, rename_active_document, set_document_status, split_plan_into_documents, archive_document。",
         "requested_actions 可选字段：preview_only, affected_document_keys, risk_level；risk_level 只能是 low, medium, high。",
-        "create_derived_document 的 payload 必须包含 docType（如 character），可选 title、slug、markdown 字段；docType 只能是 character, faction, location, event, item, quest, lore。",
+        &format!(
+            "create_derived_document 的 payload 必须包含 docType（例如 character_card），可选 title、slug、markdown 字段；docType 只能是 {}。",
+            supported_doc_types
+        ),
         "只有 final_answer 允许返回非空 draft_markdown。不要包含 YAML frontmatter。",
     ]
     .join("\n");
@@ -996,6 +1001,7 @@ fn build_action_intent_resolution_payload(
         "action 只能是 create, revise_document, unclear 之一。",
         "如果用户明显是在当前文档上继续修改、润色、补全、扩写、调整，返回 revise_document。",
         "如果用户明显是在基于当前文档拆分、派生、抽取、另起一份独立文档，返回 create。",
+        "如果用户要求把当前文档中的一部分移出去、抽出去、拆出去，并且当前文档也要同步去掉这部分内容，优先返回 revise_document。",
         "如果仅凭当前信息仍无法稳定判断，返回 unclear，并提供 1 个 questions 和 2 个 options。",
         "当 action 为 create 或 revise_document 时，questions 和 options 必须为空数组。",
         "当 action 为 unclear 时，assistant_message 要简短说明歧义点。",
@@ -1132,11 +1138,13 @@ fn build_action_rules(request: &NarrativeGenerateRequest) -> Vec<String> {
             "根据模板生成完整可读文稿。".to_string(),
             "文稿应包含清晰标题层级和结构化落地提示。".to_string(),
             "如果用户明确要求生成多个独立文档，必须使用 requested_actions 为每个目标创建独立的 create_derived_document 动作，不要把多个独立内容合并到一个 draft_markdown 里。".to_string(),
-            "当需要在当前会话中创建多个派生文档时，每个 requested_actions 项的 action_type 设为 create_derived_document，并为每份文档设置清晰的 title、target_doc_type 和 content 字段。".to_string(),
+            "当需要在当前会话中创建派生文档时，每个 requested_actions 项的 action_type 设为 create_derived_document，并在 payload 中使用 docType、title、slug、markdown 字段。".to_string(),
         ],
         "revise_document" => vec![
             "在保留文稿主方向的前提下整体改写。".to_string(),
             "不要无故删除重要章节。".to_string(),
+            "如果用户要求把当前文档中的某部分拆成独立文档，draft_markdown 应给出移除该部分后的当前文档版本。".to_string(),
+            "遇到“从当前文档移出去并单独创建文档”的需求时，同时用 requested_actions.create_derived_document 提供派生文档；payload 必须使用 docType、title、slug、markdown 字段。".to_string(),
         ],
         "rewrite_selection" => vec![
             "只输出选中区域的替换片段，不要重写未选中区域。".to_string(),
@@ -2106,6 +2114,30 @@ mod tests {
             }
         });
         assert!(parse_agent_action_request(&action, 0).is_none());
+    }
+
+    #[test]
+    fn build_action_rules_for_revise_document_support_split_out_requests() {
+        let request = NarrativeGenerateRequest {
+            request_id: Some("req-1".to_string()),
+            doc_type: "world_bible".to_string(),
+            target_slug: "doc-1".to_string(),
+            action: "revise_document".to_string(),
+            user_prompt: "把商人老王移出去单独成稿".to_string(),
+            editor_instruction: String::new(),
+            current_markdown: "# 示例".to_string(),
+            selected_range: None,
+            selected_text: String::new(),
+            related_doc_slugs: Vec::new(),
+            derived_target_doc_type: None,
+        };
+
+        let joined = build_action_rules(&request).join("\n");
+        assert!(joined.contains("移除该部分后的当前文档版本"));
+        assert!(joined.contains("create_derived_document"));
+        assert!(joined.contains("docType、title、slug、markdown"));
+        assert!(!joined.contains("target_doc_type"));
+        assert!(!joined.contains("content 字段"));
     }
 
     #[test]

@@ -2,6 +2,7 @@
 //! 映射到 debug viewer 的材质、拾取与 occlusion 语义。
 
 use super::*;
+use bevy::gltf::GltfAssetLabel;
 use game_bevy::static_world as shared_static_world;
 use game_bevy::static_world::{
     StaticWorldMaterialRole as SharedRole, StaticWorldSceneSpec as SharedSceneSpec,
@@ -11,6 +12,7 @@ use game_bevy::world_render::{
     build_building_wall_tile_mesh, build_world_render_scene_from_simulation_snapshot,
     WorldRenderConfig as SharedWorldRenderConfig,
 };
+use game_bevy::{ContainerVisualDefinition, ContainerVisualRegistry};
 
 pub(super) fn rebuild_static_world(
     commands: &mut Commands,
@@ -18,6 +20,9 @@ pub(super) fn rebuild_static_world(
     materials: &mut Assets<StandardMaterial>,
     ground_materials: &mut Assets<GridGroundMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    asset_server: &AssetServer,
+    container_visual_registry: &ContainerVisualRegistry,
+    viewer_asset_root: &ViewerAssetRoot,
     palette: &ViewerPalette,
     trigger_decal_assets: &TriggerDecalAssets,
     _runtime_state: &ViewerRuntimeState,
@@ -44,6 +49,18 @@ pub(super) fn rebuild_static_world(
             bounds_override: Some(shared_bounds(bounds)),
         },
     );
+    let container_visual_overrides = collect_container_visual_overrides(
+        snapshot,
+        current_level,
+        grid_size,
+        floor_top,
+        container_visual_registry,
+        viewer_asset_root,
+    );
+    let overridden_object_ids = container_visual_overrides
+        .keys()
+        .cloned()
+        .collect::<HashSet<_>>();
     let shared_grid_size = shared_scene.grid_size;
 
     static_world_state
@@ -60,6 +77,7 @@ pub(super) fn rebuild_static_world(
     for spec in shared_scene
         .boxes
         .into_iter()
+        .filter(|spec| !shared_box_is_replaced_by_container_visual(spec, &overridden_object_ids))
         .map(shared_box_spec_to_viewer_box_spec)
     {
         let occluder_cells = spec.occluder_cells.clone();
@@ -125,6 +143,154 @@ pub(super) fn rebuild_static_world(
         );
         static_world_state.entities.push(entity);
     }
+
+    for visual in container_visual_overrides.into_values() {
+        let scene_entity = spawn_container_visual_scene(commands, asset_server, &visual);
+        static_world_state.entities.push(scene_entity);
+
+        let proxy = spawn_box(
+            commands,
+            meshes,
+            materials,
+            building_wall_materials,
+            visual.pick_proxy,
+        );
+        static_world_state.entities.push(proxy.entity);
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ContainerVisualOverride {
+    scene_path: String,
+    scene_transform: Transform,
+    pick_proxy: StaticWorldBoxSpec,
+}
+
+fn collect_container_visual_overrides(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    grid_size: f32,
+    floor_top: f32,
+    registry: &ContainerVisualRegistry,
+    asset_root: &ViewerAssetRoot,
+) -> HashMap<String, ContainerVisualOverride> {
+    snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| object.kind == game_data::MapObjectKind::Interactive)
+        .filter(|object| object.anchor.y == current_level)
+        .filter_map(|object| {
+            let visual_id = object
+                .payload_summary
+                .get("container_visual_id")
+                .map(String::as_str)
+                .map(str::trim)
+                .filter(|visual_id| !visual_id.is_empty())?;
+            let definition = registry.get(visual_id)?;
+            if !asset_root.0.join(definition.scene_path.as_str()).is_file() {
+                return None;
+            }
+            Some((
+                object.object_id.clone(),
+                container_visual_override(object, visual_id, definition, grid_size, floor_top),
+            ))
+        })
+        .collect()
+}
+
+fn container_visual_override(
+    object: &game_core::MapObjectDebugState,
+    visual_id: &str,
+    definition: &ContainerVisualDefinition,
+    grid_size: f32,
+    floor_top: f32,
+) -> ContainerVisualOverride {
+    let (center_x, center_z, footprint_width, footprint_depth) =
+        occupied_cells_box(&object.occupied_cells, grid_size);
+    let base_translation = Vec3::new(center_x, floor_top, center_z);
+    let object_rotation = map_object_rotation(object.rotation);
+    let proxy_size =
+        container_pick_proxy_size(visual_id, footprint_width, footprint_depth, grid_size);
+    let pick_binding = ViewerPickBindingSpec::map_object(object.object_id.clone());
+    let outline_target = Some(pick_binding.semantic.clone());
+
+    ContainerVisualOverride {
+        scene_path: definition.scene_path.clone(),
+        scene_transform: Transform {
+            translation: base_translation + object_rotation * definition.translation_offset,
+            rotation: object_rotation * definition.rotation_offset,
+            scale: definition.scale,
+        },
+        pick_proxy: StaticWorldBoxSpec {
+            size: proxy_size,
+            translation: Vec3::new(center_x, floor_top + proxy_size.y * 0.5, center_z),
+            color: shared_static_world::default_color_for_role(SharedRole::InvisiblePickProxy),
+            material_style: MaterialStyle::InvisiblePickProxy,
+            occluder_kind: None,
+            occluder_cells: Vec::new(),
+            pick_binding: Some(pick_binding),
+            outline_target,
+        },
+    }
+}
+
+fn container_pick_proxy_size(
+    visual_id: &str,
+    footprint_width: f32,
+    footprint_depth: f32,
+    grid_size: f32,
+) -> Vec3 {
+    let footprint_span = footprint_width.max(footprint_depth).max(grid_size * 0.58);
+    let (span_scale, height_scale) = match visual_id {
+        "crate_wood" => (0.88, 0.64),
+        "cabinet_medical" => (0.82, 1.0),
+        "locker_metal" => (0.76, 1.14),
+        _ => (0.84, 0.9),
+    };
+    Vec3::new(
+        footprint_span
+            .min(grid_size * span_scale)
+            .max(grid_size * 0.46),
+        grid_size * height_scale,
+        footprint_span
+            .min(grid_size * span_scale)
+            .max(grid_size * 0.46),
+    )
+}
+
+fn map_object_rotation(rotation: game_data::MapRotation) -> Quat {
+    let yaw = match rotation {
+        game_data::MapRotation::North => std::f32::consts::PI,
+        game_data::MapRotation::East => -std::f32::consts::FRAC_PI_2,
+        game_data::MapRotation::South => 0.0,
+        game_data::MapRotation::West => std::f32::consts::FRAC_PI_2,
+    };
+    Quat::from_rotation_y(yaw)
+}
+
+fn shared_box_is_replaced_by_container_visual(
+    spec: &shared_static_world::StaticWorldBoxSpec,
+    overridden_object_ids: &HashSet<String>,
+) -> bool {
+    match spec.semantic.as_ref() {
+        Some(shared_static_world::StaticWorldSemantic::MapObject(object_id)) => {
+            overridden_object_ids.contains(object_id)
+        }
+        _ => false,
+    }
+}
+
+fn spawn_container_visual_scene(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    visual: &ContainerVisualOverride,
+) -> Entity {
+    let scene: Handle<Scene> =
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset(visual.scene_path.clone()));
+    commands
+        .spawn((SceneRoot(scene), visual.scene_transform))
+        .id()
 }
 
 fn shared_bounds(bounds: GridBounds) -> shared_static_world::StaticWorldGridBounds {
@@ -166,7 +332,9 @@ fn shared_material_role_to_viewer_material_style(
         | shared_static_world::StaticWorldMaterialRole::OverworldLocationFactory
         | shared_static_world::StaticWorldMaterialRole::OverworldLocationForest
         | shared_static_world::StaticWorldMaterialRole::OverworldLocationRuins
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationSubway => MaterialStyle::Utility,
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationSubway => {
+            MaterialStyle::Utility
+        }
         shared_static_world::StaticWorldMaterialRole::StairAccent
         | shared_static_world::StaticWorldMaterialRole::PickupAccent
         | shared_static_world::StaticWorldMaterialRole::InteractiveAccent
@@ -460,12 +628,13 @@ fn shared_role_material_style(role: SharedRole) -> MaterialStyle {
     }
 }
 
-fn shared_ground_colors(
-    role: SharedRole,
-    palette: &ViewerPalette,
-) -> (Color, Color, Color) {
+fn shared_ground_colors(role: SharedRole, palette: &ViewerPalette) -> (Color, Color, Color) {
     if role == SharedRole::Ground {
-        return (palette.ground_dark, palette.ground_light, palette.ground_edge);
+        return (
+            palette.ground_dark,
+            palette.ground_light,
+            palette.ground_edge,
+        );
     }
 
     let base = shared_role_color(role, palette);
