@@ -23,10 +23,9 @@ use crate::render::interaction_menu_layout;
 use crate::simulation::{cancel_pending_movement, submit_end_turn};
 use crate::state::{
     cursor_over_visible_ui_blocker, DialogueChoiceButton, InteractionMenuButton,
-    InteractionMenuState, UiMouseBlocker, UiMouseBlockerName, ViewerActorMotionState,
-    ViewerCamera, ViewerInfoPanelState, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind,
-    ViewerState, ViewerTargetingAction, ViewerTargetingSource, ViewerTargetingState,
-    ViewerUiSettings,
+    InteractionMenuState, UiMouseBlocker, UiMouseBlockerName, ViewerActorMotionState, ViewerCamera,
+    ViewerInfoPanelState, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    ViewerTargetingAction, ViewerTargetingSource, ViewerTargetingState, ViewerUiSettings,
 };
 use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
 

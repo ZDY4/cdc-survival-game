@@ -119,9 +119,7 @@ pub(crate) fn sync_game_ui_state(
     }
     if let Some(container_id) = viewer_state.pending_open_container_id.take() {
         if modal_state.container.is_none() {
-            modal_state.container = Some(game_bevy::UiContainerSessionState {
-                container_id,
-            });
+            modal_state.container = Some(game_bevy::UiContainerSessionState { container_id });
         }
         if modal_state.container.is_some() {
             menu_state.close_all_panels();

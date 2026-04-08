@@ -61,7 +61,6 @@ describe("editorWindows", () => {
   it("builds module editor URLs", async () => {
     const { buildEditorWindowUrl } = await import("./editorWindows");
     expect(buildEditorWindowUrl("items")).toBe("/?surface=items");
-    expect(buildEditorWindowUrl("characters")).toBe("/?surface=characters");
     expect(buildEditorWindowUrl("dialogues")).toBe("/?surface=dialogues");
     expect(buildEditorWindowUrl("quests")).toBe("/?surface=quests");
   });
@@ -69,7 +68,6 @@ describe("editorWindows", () => {
   it("maps supported module menu commands to dedicated editor surfaces", async () => {
     const { getSurfaceForModuleCommand } = await import("./editorWindows");
     expect(getSurfaceForModuleCommand(EDITOR_MENU_COMMANDS.MODULE_ITEMS)).toBe("items");
-    expect(getSurfaceForModuleCommand(EDITOR_MENU_COMMANDS.MODULE_CHARACTERS)).toBe("characters");
     expect(getSurfaceForModuleCommand(EDITOR_MENU_COMMANDS.MODULE_DIALOGUES)).toBe("dialogues");
     expect(getSurfaceForModuleCommand(EDITOR_MENU_COMMANDS.MODULE_QUESTS)).toBe("quests");
   });

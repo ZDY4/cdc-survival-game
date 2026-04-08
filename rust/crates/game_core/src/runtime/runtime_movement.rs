@@ -1,4 +1,5 @@
 use super::*;
+use crate::overworld::{is_outdoor_location_cell, resolve_overworld_goal};
 use game_data::WorldMode;
 
 impl SimulationRuntime {
@@ -8,6 +9,7 @@ impl SimulationRuntime {
         goal: GridCoord,
     ) -> Result<MovementPlan, MovementPlanError> {
         self.ensure_player_input_actor(actor_id)?;
+        let goal = self.resolve_overworld_movement_goal(actor_id, goal)?;
         self.simulation.plan_actor_movement(actor_id, goal)
     }
 
@@ -17,6 +19,7 @@ impl SimulationRuntime {
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
         self.ensure_player_input_actor(actor_id)?;
+        let goal = self.resolve_overworld_movement_goal(actor_id, goal)?;
         let outcome = self.simulation.move_actor_to_reachable(actor_id, goal)?;
         self.path_preview = outcome.plan.requested_path.clone();
         Ok(outcome)
@@ -27,6 +30,7 @@ impl SimulationRuntime {
         actor_id: ActorId,
         goal: GridCoord,
     ) -> Result<MovementCommandOutcome, MovementPlanError> {
+        let goal = self.resolve_overworld_movement_goal(actor_id, goal)?;
         let plan = self.plan_actor_movement(actor_id, goal)?;
         self.clear_recent_overworld_arrival();
         self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
@@ -65,6 +69,26 @@ impl SimulationRuntime {
         }
 
         Ok(outcome)
+    }
+
+    fn resolve_overworld_movement_goal(
+        &self,
+        actor_id: ActorId,
+        goal: GridCoord,
+    ) -> Result<GridCoord, MovementPlanError> {
+        if self.current_interaction_context().world_mode != WorldMode::Overworld {
+            return Ok(goal);
+        }
+        let Some(start) = self.simulation.actor_grid_position(actor_id) else {
+            return Err(MovementPlanError::UnknownActor { actor_id });
+        };
+        let Ok(definition) = self.simulation.current_overworld_definition() else {
+            return Ok(goal);
+        };
+        if !is_outdoor_location_cell(definition, goal) {
+            return Ok(goal);
+        }
+        resolve_overworld_goal(definition, start, goal).ok_or(MovementPlanError::NoPath)
     }
 
     pub fn clear_pending_movement(&mut self, actor_id: ActorId) {

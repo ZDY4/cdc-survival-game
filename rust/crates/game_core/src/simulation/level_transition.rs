@@ -1,6 +1,9 @@
 use game_data::{ActorId, GridCoord, MapId, WorldMode};
 
-use crate::overworld::{location_by_id, world_mode_for_location_kind, LocationTransitionContext};
+use crate::overworld::{
+    default_outdoor_spawn_cell, location_by_id, world_mode_for_location_kind,
+    LocationTransitionContext,
+};
 
 use super::Simulation;
 
@@ -135,7 +138,13 @@ impl Simulation {
         };
 
         self.active_location_id = Some(location.id.as_str().to_string());
-        self.overworld_pawn_cell = Some(location.overworld_cell);
+        self.overworld_pawn_cell = match location.kind {
+            game_data::OverworldLocationKind::Outdoor => self
+                .actor_grid_position(actor_id)
+                .or_else(|| default_outdoor_spawn_cell(&definition, &location)),
+            game_data::OverworldLocationKind::Interior
+            | game_data::OverworldLocationKind::Dungeon => Some(location.overworld_cell),
+        };
         self.return_outdoor_location_id = match location.kind {
             game_data::OverworldLocationKind::Outdoor => Some(location.id.as_str().to_string()),
             game_data::OverworldLocationKind::Interior
@@ -243,7 +252,15 @@ impl Simulation {
         };
 
         Ok((
-            Some(overworld_cell.unwrap_or(location.overworld_cell)),
+            Some(match location.kind {
+                game_data::OverworldLocationKind::Outdoor => overworld_cell
+                    .or_else(|| default_outdoor_spawn_cell(definition, location))
+                    .unwrap_or(location.overworld_cell),
+                game_data::OverworldLocationKind::Interior
+                | game_data::OverworldLocationKind::Dungeon => {
+                    overworld_cell.unwrap_or(location.overworld_cell)
+                }
+            }),
             return_outdoor_location_id,
         ))
     }

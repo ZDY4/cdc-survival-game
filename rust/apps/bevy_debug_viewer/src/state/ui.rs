@@ -316,8 +316,8 @@ pub(crate) fn hovered_visible_ui_blocker_name(
                     inherited_visibility,
                 )
                 .then(|| {
-                    let area = (computed_node.size.x.max(0.0) * computed_node.size.y.max(0.0))
-                        .max(0.0);
+                    let area =
+                        (computed_node.size.x.max(0.0) * computed_node.size.y.max(0.0)).max(0.0);
                     let label = name
                         .map(|name| name.0.clone())
                         .unwrap_or_else(|| "未命名界面".to_string());
@@ -461,6 +461,10 @@ pub(crate) enum GameUiButtonAction {
     SettingsSetMusic(f32),
     SettingsSetSfx(f32),
     SettingsSetWindowMode(String),
+    SettingsSetResolution {
+        width: u32,
+        height: u32,
+    },
     SettingsSetVsync(bool),
     SettingsSetUiScale(f32),
     SettingsCycleBinding(String),

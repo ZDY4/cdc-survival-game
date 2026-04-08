@@ -172,6 +172,8 @@ pub struct CharacterDefinition {
     pub identity: CharacterIdentity,
     pub faction: CharacterFaction,
     pub presentation: CharacterPresentation,
+    #[serde(default)]
+    pub appearance_profile_id: String,
     pub progression: CharacterProgression,
     pub combat: CharacterCombatProfile,
     pub ai: CharacterAiProfile,
@@ -749,6 +751,7 @@ mod tests {
                     legs: "#999999".to_string(),
                 },
             },
+            appearance_profile_id: String::new(),
             progression: CharacterProgression { level: 1 },
             combat: CharacterCombatProfile {
                 behavior: "neutral".to_string(),

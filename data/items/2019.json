@@ -25,6 +25,18 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "back",
+        "visual_asset": "builtin:item:back",
+        "attach_target": "back",
+        "presentation_mode": "attach",
+        "hide_base_regions": [],
+        "preview_transform": {},
+        "tint": "#6d5a44"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 50,
       "max_durability": 50,

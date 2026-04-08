@@ -584,6 +584,7 @@ fn collect_item_references(
             }
             ItemFragment::Economy { .. }
             | ItemFragment::Stacking { .. }
+            | ItemFragment::Appearance { .. }
             | ItemFragment::AttributeModifiers { .. } => {}
         }
     }

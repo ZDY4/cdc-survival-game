@@ -19,7 +19,7 @@ use game_bevy::world_render::{
     spawn_world_render_scene, BuildingWallGridMaterial, GridGroundMaterial, WorldRenderConfig,
     WorldRenderPalette, WorldRenderPlugin, WorldRenderStyleProfile,
 };
-use game_bevy::{game_ui_font_bytes, GAME_UI_FONT_NAME};
+use game_bevy::{game_ui_font_bytes, load_game_ui_font, GAME_UI_FONT_NAME};
 use game_data::{
     load_map_library, load_overworld_library, GridCoord, MapCellDefinition, MapDefinition,
     MapEditDiagnostic, MapEditDiagnosticSeverity, MapEditError, MapEditorService,
@@ -101,6 +101,9 @@ struct EditorCamera;
 
 #[derive(Component)]
 struct SceneEntity;
+
+#[derive(Resource, Clone)]
+struct EditorWorldLabelFont(Handle<Font>);
 
 #[derive(Resource, Debug, Clone)]
 struct OrbitCameraState {
@@ -453,7 +456,7 @@ fn normalized_map_label_key(value: &str) -> String {
 }
 
 fn map_display_name(map_id: &str) -> &str {
-    map_id.strip_suffix("_grid").unwrap_or(map_id)
+    map_id
 }
 
 fn map_library_item_label(map_id: &str, name: &str, dirty: bool, has_diagnostics: bool) -> String {
@@ -531,10 +534,13 @@ fn repo_root() -> PathBuf {
 
 fn setup_editor(
     mut commands: Commands,
+    mut font_assets: ResMut<Assets<Font>>,
     render_palette: Res<WorldRenderPalette>,
     render_style: Res<WorldRenderStyleProfile>,
     render_config: Res<WorldRenderConfig>,
 ) {
+    let world_label_font = load_game_ui_font(&mut font_assets);
+    commands.insert_resource(EditorWorldLabelFont(world_label_font));
     spawn_world_render_light_rig(&mut commands, &render_palette, &render_style);
     let mut perspective = PerspectiveProjection::default();
     apply_world_render_camera_projection(&mut perspective, *render_config);
@@ -1695,6 +1701,7 @@ fn rebuild_scene_system(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
     mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
+    world_label_font: Res<EditorWorldLabelFont>,
     scene_entities: Query<Entity, With<SceneEntity>>,
 ) {
     if !editor.scene_dirty {
@@ -1730,6 +1737,7 @@ fn rebuild_scene_system(
                 &mut ground_materials,
                 &mut building_wall_materials,
                 &mut images,
+                Some(world_label_font.0.clone()),
                 &scene,
                 *render_config,
                 &render_palette,
@@ -1766,6 +1774,7 @@ fn rebuild_scene_system(
                 &mut ground_materials,
                 &mut building_wall_materials,
                 &mut images,
+                Some(world_label_font.0.clone()),
                 &scene,
                 *render_config,
                 &render_palette,
@@ -1902,7 +1911,9 @@ fn draw_hovered_grid_outline_system(
         &mut gizmos,
         grid,
         EDITOR_GRID_WORLD_SIZE,
-        render_config.floor_thickness_world.max(HOVERED_GRID_OUTLINE_Y_OFFSET),
+        render_config
+            .floor_thickness_world
+            .max(HOVERED_GRID_OUTLINE_Y_OFFSET),
         HOVERED_GRID_OUTLINE_EXTENT_SCALE,
         HOVERED_GRID_OUTLINE_COLOR,
     );
@@ -2013,6 +2024,11 @@ fn build_overworld_hover_info(editor: &EditorState, point: Vec3) -> Option<Hover
     let location = definition.locations.iter().find(|location| {
         location.overworld_cell.x == grid.x && location.overworld_cell.z == grid.z
     });
+    let ring_location = definition.locations.iter().find(|location| {
+        location.kind == game_data::OverworldLocationKind::Outdoor
+            && (location.overworld_cell.x - grid.x).abs() + (location.overworld_cell.z - grid.z).abs()
+                == 1
+    });
     let cell = definition
         .cells
         .iter()
@@ -2021,8 +2037,14 @@ fn build_overworld_hover_info(editor: &EditorState, point: Vec3) -> Option<Hover
     let mut lines = vec![format!("Overworld: {}", definition.id.as_str())];
     if let Some(cell) = cell {
         lines.push(format!("Terrain: {}", cell.terrain));
+        lines.push(format!("Move cost: {}", cell.terrain.move_cost().map(|cost| cost.to_string()).unwrap_or_else(|| "impassable".to_string())));
         lines.push(format!("Blocked: {}", yes_no(cell.blocked)));
+        lines.push(format!(
+            "Passable: {}",
+            yes_no(!cell.blocked && cell.terrain.is_passable())
+        ));
     }
+    lines.push(format!("Location cell: {}", yes_no(location.is_some())));
     if let Some(location) = location {
         lines.push(format!("Location: {}", location.id.as_str()));
         if !location.name.trim().is_empty() {
@@ -2038,6 +2060,11 @@ fn build_overworld_hover_info(editor: &EditorState, point: Vec3) -> Option<Hover
         ));
         if !location.entry_point_id.trim().is_empty() {
             lines.push(format!("Entry: {}", location.entry_point_id));
+        }
+    } else if let Some(location) = ring_location {
+        lines.push(format!("Interaction ring: {}", location.id.as_str()));
+        if !location.name.trim().is_empty() {
+            lines.push(format!("Enters: {}", location.name));
         }
     }
 

@@ -205,12 +205,8 @@ pub(crate) fn should_show_actor_label(
         return is_hovered || interaction_locked;
     }
     match render_config.overlay_mode {
-        ViewerOverlayMode::Minimal => {
-            is_focused || is_hovered || interaction_locked
-        }
-        ViewerOverlayMode::Gameplay => {
-            is_focused || is_hovered || interaction_locked
-        }
+        ViewerOverlayMode::Minimal => is_focused || is_hovered || interaction_locked,
+        ViewerOverlayMode::Gameplay => is_focused || is_hovered || interaction_locked,
         ViewerOverlayMode::AiDebug => true,
     }
 }

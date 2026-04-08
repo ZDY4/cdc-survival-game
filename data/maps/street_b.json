@@ -1,6 +1,6 @@
 {
-  "id": "supermarket_grid",
-  "name": "supermarket grid",
+  "id": "street_b",
+  "name": "street b",
   "size": {
     "width": 12,
     "height": 12
@@ -18,7 +18,7 @@
       "grid": {
         "x": 1,
         "y": 0,
-        "z": 1
+        "z": 10
       },
       "facing": null
     }

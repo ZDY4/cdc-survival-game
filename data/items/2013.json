@@ -25,6 +25,20 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "legs",
+        "visual_asset": "builtin:item:legs",
+        "attach_target": "legs",
+        "presentation_mode": "replace_region",
+        "hide_base_regions": [
+          "legs"
+        ],
+        "preview_transform": {},
+        "tint": "#496188"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 20,
       "max_durability": 20,

@@ -288,7 +288,7 @@ pub(super) fn generated_door_render_polygon(
     door: &game_core::GeneratedDoorDebugState,
     grid_size: f32,
 ) -> game_core::GeometryPolygon2 {
-    doors::generated_door_render_polygon(door, grid_size)
+    game_bevy::world_render::generated_door_render_polygon(door, grid_size)
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -309,6 +309,21 @@ pub(super) fn collect_static_world_box_specs(
         palette,
         bounds,
         grid_to_world,
+    )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn collect_static_world_building_wall_tile_specs(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+    bounds: GridBounds,
+) -> Vec<game_bevy::static_world::StaticWorldBuildingWallTileSpec> {
+    static_world::collect_static_world_building_wall_tile_specs(
+        snapshot,
+        current_level,
+        render_config,
+        bounds,
     )
 }
 
@@ -414,6 +429,30 @@ pub(super) fn spawn_box(
     spec: StaticWorldBoxSpec,
 ) -> SpawnedBoxVisual {
     helpers::spawn_box(commands, meshes, materials, building_wall_materials, spec)
+}
+
+pub(super) fn spawn_building_wall_tile(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    mesh: Mesh,
+    translation: Vec3,
+    visual_kind: game_data::MapBuildingWallVisualKind,
+    pick_binding: Option<ViewerPickBindingSpec>,
+    outline_target: Option<ViewerPickTarget>,
+    aabb_half_extents: Vec3,
+) -> SpawnedMeshVisual {
+    helpers::spawn_building_wall_tile(
+        commands,
+        meshes,
+        building_wall_materials,
+        mesh,
+        translation,
+        visual_kind,
+        pick_binding,
+        outline_target,
+        aabb_half_extents,
+    )
 }
 
 pub(super) fn spawn_decal(

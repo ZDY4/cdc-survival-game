@@ -1,6 +1,6 @@
 {
-  "id": "survivor_outpost_01_perimeter_grid",
-  "name": "survivor outpost 01 perimeter grid",
+  "id": "survivor_outpost_01_perimeter",
+  "name": "survivor outpost 01 perimeter",
   "size": {
     "width": 20,
     "height": 20
@@ -45,6 +45,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_perimeter_barricade",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 2101,
             "target_room_count": 1,
@@ -69,6 +70,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_bus_wreck",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 2102,
             "target_room_count": 1,

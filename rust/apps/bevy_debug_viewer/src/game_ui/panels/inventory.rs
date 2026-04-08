@@ -58,7 +58,10 @@ pub(in crate::game_ui) fn render_inventory_panel_contents(
         });
     parent.spawn(text_bundle(
         font,
-        &format!("负重 {:.1}/{:.1}", snapshot.total_weight, snapshot.max_weight),
+        &format!(
+            "负重 {:.1}/{:.1}",
+            snapshot.total_weight, snapshot.max_weight
+        ),
         10.4,
         ui_text_secondary_color(),
     ));
@@ -164,7 +167,11 @@ fn render_inventory_equipment_section(
                             if is_drag_hover || is_compatible_target {
                                 slot_button.spawn(text_bundle(
                                     font,
-                                    if is_drag_hover { "松开放入" } else { "可放入" },
+                                    if is_drag_hover {
+                                        "松开放入"
+                                    } else {
+                                        "可放入"
+                                    },
                                     8.8,
                                     if is_drag_hover {
                                         Color::srgba(0.97, 0.90, 0.66, 1.0)

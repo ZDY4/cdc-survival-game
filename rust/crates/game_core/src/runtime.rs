@@ -183,11 +183,12 @@ mod tests {
         MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
         MapPickupProps, MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition,
         OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow,
-        QuestLibrary, QuestNode, QuestRewards, RecipeDefinition, RecipeLibrary, RecipeMaterial,
-        RecipeOutput, ShopDefinition, ShopInventoryEntry, ShopLibrary, SkillActivationDefinition,
-        SkillActivationEffect, SkillDefinition, SkillLibrary, SkillModifierDefinition,
-        SkillTargetRequest, SkillTargetingDefinition, WorldMode,
+        OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet, QuestConnection,
+        QuestDefinition, QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeDefinition,
+        RecipeLibrary, RecipeMaterial, RecipeOutput, ShopDefinition, ShopInventoryEntry,
+        ShopLibrary, SkillActivationDefinition, SkillActivationEffect, SkillDefinition,
+        SkillLibrary, SkillModifierDefinition, SkillTargetRequest, SkillTargetingDefinition,
+        WorldMode,
     };
 
     use super::SimulationRuntime;
@@ -594,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn pending_interaction_retries_after_next_turn_when_approach_used_last_ap() {
+    fn pending_interaction_opens_dialogue_immediately_when_approach_used_last_ap() {
         let mut simulation = Simulation::new();
         simulation.set_dialogue_library(sample_runtime_dialogue_library());
         let player = simulation.register_actor(RegisterActor {
@@ -630,29 +631,43 @@ mod tests {
         );
 
         assert!(result.success);
-        assert!(result.approach_required);
+        assert!(!result.approach_required);
+        assert_eq!(
+            result.action_result.as_ref().map(|action| action.consumed),
+            Some(0.0)
+        );
         assert_eq!(
             runtime.get_actor_grid_position(player),
             Some(GridCoord::new(1, 0, 1))
         );
         assert!(runtime.pending_movement().is_none());
-        assert!(runtime.pending_interaction().is_some());
-        assert!(runtime.active_dialogue_state(player).is_none());
+        assert!(runtime.pending_interaction().is_none());
+        assert_eq!(
+            runtime
+                .active_dialogue_state(player)
+                .and_then(|state| state.current_node)
+                .map(|node| node.id),
+            Some("start".to_string())
+        );
+        assert_eq!(
+            runtime.peek_pending_progression(),
+            Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
 
         let world_cycle = runtime.advance_pending_progression();
         assert_eq!(
             world_cycle.applied_step,
             Some(PendingProgressionStep::RunNonCombatWorldCycle)
         );
-        assert!(runtime.pending_interaction().is_some());
-        assert!(runtime.active_dialogue_state(player).is_none());
+        assert!(runtime.pending_interaction().is_none());
+        assert!(world_cycle.interaction_outcome.is_none());
 
         let next_turn = runtime.advance_pending_progression();
         assert_eq!(
             next_turn.applied_step,
             Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
         );
-        assert!(runtime.pending_interaction().is_none());
+        assert!(next_turn.interaction_outcome.is_none());
         assert_eq!(
             runtime
                 .active_dialogue_state(player)
@@ -663,7 +678,7 @@ mod tests {
     }
 
     #[test]
-    fn pending_interaction_progression_returns_dialogue_result_for_viewer_fallback() {
+    fn immediate_talk_result_supports_viewer_fallback_when_runtime_session_is_missing() {
         let mut simulation = Simulation::new();
         let player = simulation.register_actor(RegisterActor {
             definition_id: Some(CharacterId("player".into())),
@@ -698,33 +713,13 @@ mod tests {
         );
 
         assert!(result.success);
-        assert!(result.approach_required);
-        assert!(runtime.pending_interaction().is_some());
-
-        let world_cycle = runtime.advance_pending_progression();
-        assert_eq!(
-            world_cycle.applied_step,
-            Some(PendingProgressionStep::RunNonCombatWorldCycle)
-        );
-        assert!(world_cycle.interaction_outcome.is_none());
-
-        let next_turn = runtime.advance_pending_progression();
-        assert_eq!(
-            next_turn.applied_step,
-            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
-        );
-        assert_eq!(
-            next_turn
-                .interaction_outcome
-                .as_ref()
-                .and_then(|result| result.dialogue_id.as_deref()),
-            Some("trader_lao_wang")
-        );
-        assert!(next_turn
-            .interaction_outcome
-            .as_ref()
-            .is_some_and(|result| result.dialogue_state.is_none()));
+        assert_eq!(result.dialogue_id.as_deref(), Some("trader_lao_wang"));
+        assert!(result.dialogue_state.is_none());
         assert!(runtime.pending_interaction().is_none());
+        assert_eq!(
+            runtime.peek_pending_progression(),
+            Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
     }
 
     #[test]
@@ -1299,14 +1294,14 @@ mod tests {
         let context = runtime
             .travel_to_map(
                 player,
-                "survivor_outpost_01_interior_grid",
+                "survivor_outpost_01_interior",
                 Some("clinic_entry"),
                 WorldMode::Interior,
             )
             .expect("travel to map should succeed");
         assert_eq!(
             context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_interior_grid")
+            Some("survivor_outpost_01_interior")
         );
         assert_eq!(context.entry_point_id.as_deref(), Some("clinic_entry"));
         assert_eq!(
@@ -1421,7 +1416,7 @@ mod tests {
             SimulationCommandResult::InteractionExecution(result) => assert!(result.success),
             other => panic!("unexpected talk result: {other:?}"),
         }
-        assert_eq!(runtime.get_actor_ap(player), 1.0);
+        assert_eq!(runtime.get_actor_ap(player), 2.0);
 
         let dialogue = runtime
             .advance_dialogue(
@@ -1437,7 +1432,7 @@ mod tests {
             dialogue.current_node.as_ref().map(|node| node.id.as_str()),
             Some("choice_1")
         );
-        assert_eq!(runtime.get_actor_ap(player), 1.0);
+        assert_eq!(runtime.get_actor_ap(player), 2.0);
     }
 
     #[test]
@@ -1582,6 +1577,8 @@ mod tests {
             dialogue.current_node.as_ref().map(|node| node.id.as_str()),
             Some("choice_1")
         );
+        runtime.advance_pending_progression();
+        runtime.advance_pending_progression();
 
         runtime.economy_mut().set_actor_level(player, 8);
         runtime
@@ -1630,14 +1627,14 @@ mod tests {
         let map_context = runtime
             .travel_to_map(
                 player,
-                "survivor_outpost_01_interior_grid",
+                "survivor_outpost_01_interior",
                 Some("clinic_entry"),
                 WorldMode::Interior,
             )
             .expect("travel to map should succeed");
         assert_eq!(
             map_context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_interior_grid")
+            Some("survivor_outpost_01_interior")
         );
         assert_eq!(map_context.world_mode, WorldMode::Interior);
 
@@ -2084,9 +2081,9 @@ mod tests {
     fn sample_runtime_map_library() -> MapLibrary {
         MapLibrary::from(BTreeMap::from([
             (
-                MapId("survivor_outpost_01_grid".into()),
+                MapId("survivor_outpost_01".into()),
                 MapDefinition {
-                    id: MapId("survivor_outpost_01_grid".into()),
+                    id: MapId("survivor_outpost_01".into()),
                     name: "Survivor Outpost".into(),
                     size: MapSize {
                         width: 12,
@@ -2107,9 +2104,9 @@ mod tests {
                 },
             ),
             (
-                MapId("survivor_outpost_01_interior_grid".into()),
+                MapId("survivor_outpost_01_interior".into()),
                 MapDefinition {
-                    id: MapId("survivor_outpost_01_interior_grid".into()),
+                    id: MapId("survivor_outpost_01_interior".into()),
                     name: "Outpost Interior".into(),
                     size: MapSize {
                         width: 8,
@@ -2178,7 +2175,7 @@ mod tests {
                         name: "Survivor Outpost".into(),
                         description: String::new(),
                         kind: OverworldLocationKind::Outdoor,
-                        map_id: MapId("survivor_outpost_01_grid".into()),
+                        map_id: MapId("survivor_outpost_01".into()),
                         entry_point_id: "default_entry".into(),
                         parent_outdoor_location_id: None,
                         return_entry_point_id: None,
@@ -2194,7 +2191,7 @@ mod tests {
                         name: "Outpost Interior".into(),
                         description: String::new(),
                         kind: OverworldLocationKind::Interior,
-                        map_id: MapId("survivor_outpost_01_interior_grid".into()),
+                        map_id: MapId("survivor_outpost_01_interior".into()),
                         entry_point_id: "default_entry".into(),
                         parent_outdoor_location_id: Some(OverworldLocationId(
                             "survivor_outpost_01".into(),
@@ -2210,7 +2207,7 @@ mod tests {
                 ],
                 cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
+                    terrain: OverworldTerrainKind::Road,
                     blocked: false,
                     extra: BTreeMap::new(),
                 }],
@@ -2473,7 +2470,7 @@ mod tests {
         set_runtime_actor_ap(&mut runtime, player, 2.0);
 
         let outcome = runtime
-            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
             .expect("move should succeed");
 
         assert!(outcome.result.success);
@@ -2508,24 +2505,24 @@ mod tests {
         set_runtime_actor_ap(&mut runtime, player, 3.0);
 
         runtime
-            .issue_actor_move(player, GridCoord::new(2, 0, 0))
+            .issue_actor_move(player, GridCoord::new(3, 0, 0))
             .expect("move should succeed");
 
         assert_eq!(
             runtime.get_actor_grid_position(player),
-            Some(GridCoord::new(2, 0, 0))
+            Some(GridCoord::new(3, 0, 0))
         );
         assert_eq!(
             runtime.recent_overworld_arrival(),
             Some(&crate::RecentOverworldArrival {
                 actor_id: player,
-                requested_goal: GridCoord::new(2, 0, 0),
-                final_position: GridCoord::new(2, 0, 0),
+                requested_goal: GridCoord::new(3, 0, 0),
+                final_position: GridCoord::new(3, 0, 0),
                 arrived_exactly: true,
             })
         );
         assert_eq!(
-            runtime.overworld_outdoor_location_id_at(GridCoord::new(2, 0, 0)),
+            runtime.overworld_outdoor_location_id_at(GridCoord::new(3, 0, 0)),
             None
         );
     }
@@ -2536,19 +2533,19 @@ mod tests {
         set_runtime_actor_ap(&mut runtime, player, 3.0);
 
         runtime
-            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
             .expect("first move should succeed");
         assert!(runtime.recent_overworld_arrival().is_some());
 
         runtime
-            .issue_actor_move(player, GridCoord::new(2, 0, 0))
+            .issue_actor_move(player, GridCoord::new(3, 0, 0))
             .expect("second move should succeed");
         assert_eq!(
             runtime
                 .recent_overworld_arrival()
                 .expect("second move should refresh arrival")
                 .requested_goal,
-            GridCoord::new(2, 0, 0)
+            GridCoord::new(3, 0, 0)
         );
 
         let saved = runtime.save_snapshot();
@@ -2561,7 +2558,7 @@ mod tests {
         assert!(restored.recent_overworld_arrival().is_none());
 
         restored
-            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
             .expect("move after restore should succeed");
         assert!(restored.recent_overworld_arrival().is_some());
         set_runtime_actor_ap(&mut restored, player, 1.0);
@@ -2719,8 +2716,8 @@ mod tests {
             OverworldDefinition {
                 id: OverworldId("scene_context_world".into()),
                 size: MapSize {
-                    width: 1,
-                    height: 1,
+                    width: 3,
+                    height: 3,
                 },
                 locations: vec![
                     OverworldLocationDefinition {
@@ -2734,7 +2731,7 @@ mod tests {
                         return_entry_point_id: Some("outdoor_return".into()),
                         default_unlocked: true,
                         visible: true,
-                        overworld_cell: GridCoord::new(0, 0, 0),
+                        overworld_cell: GridCoord::new(1, 0, 1),
                         danger_level: 0,
                         icon: String::new(),
                         extra: BTreeMap::new(),
@@ -2752,18 +2749,26 @@ mod tests {
                         return_entry_point_id: Some("outdoor_return".into()),
                         default_unlocked: true,
                         visible: false,
-                        overworld_cell: GridCoord::new(0, 0, 0),
+                        overworld_cell: GridCoord::new(1, 0, 1),
                         danger_level: 0,
                         icon: String::new(),
                         extra: BTreeMap::new(),
                     },
                 ],
-                cells: vec![OverworldCellDefinition {
-                    grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
-                    blocked: false,
-                    extra: BTreeMap::new(),
-                }],
+                cells: (0..3)
+                    .flat_map(|z| {
+                        (0..3).map(move |x| OverworldCellDefinition {
+                            grid: GridCoord::new(x, 0, z),
+                            terrain: if x == 1 && z == 1 {
+                                OverworldTerrainKind::Urban
+                            } else {
+                                OverworldTerrainKind::Road
+                            },
+                            blocked: false,
+                            extra: BTreeMap::new(),
+                        })
+                    })
+                    .collect(),
                 travel_rules: OverworldTravelRuleSet::default(),
             },
         )]))
@@ -2775,7 +2780,7 @@ mod tests {
             OverworldDefinition {
                 id: OverworldId("prompt_world".into()),
                 size: MapSize {
-                    width: 3,
+                    width: 4,
                     height: 1,
                 },
                 locations: vec![OverworldLocationDefinition {
@@ -2789,7 +2794,7 @@ mod tests {
                     return_entry_point_id: None,
                     default_unlocked: true,
                     visible: true,
-                    overworld_cell: GridCoord::new(1, 0, 0),
+                    overworld_cell: GridCoord::new(2, 0, 0),
                     danger_level: 0,
                     icon: String::new(),
                     extra: BTreeMap::new(),
@@ -2797,19 +2802,25 @@ mod tests {
                 cells: vec![
                     OverworldCellDefinition {
                         grid: GridCoord::new(0, 0, 0),
-                        terrain: "road".into(),
+                        terrain: OverworldTerrainKind::Road,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
-                        terrain: "road".into(),
+                        terrain: OverworldTerrainKind::Road,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(2, 0, 0),
-                        terrain: "road".into(),
+                        terrain: OverworldTerrainKind::Urban,
+                        blocked: false,
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(3, 0, 0),
+                        terrain: OverworldTerrainKind::Road,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },

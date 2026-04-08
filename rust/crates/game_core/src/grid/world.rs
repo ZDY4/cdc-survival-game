@@ -226,6 +226,10 @@ impl GridWorld {
         self.map_size
     }
 
+    pub fn uses_explicit_cells_as_bounds(&self) -> bool {
+        self.uses_explicit_cells_as_bounds
+    }
+
     pub fn default_level(&self) -> Option<i32> {
         self.default_level
     }
@@ -762,6 +766,10 @@ impl GridWorld {
                         let debug_state = GeneratedBuildingDebugState {
                             object_id: object.object_id.clone(),
                             prefab_id: building.prefab_id.clone(),
+                            wall_visual: building
+                                .wall_visual
+                                .clone()
+                                .expect("validated building objects must define wall_visual"),
                             anchor: object.anchor,
                             rotation: object.rotation,
                             stories: layout.stories,

@@ -100,6 +100,7 @@ impl AiController for InteractOnceAiController {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
 
@@ -113,6 +114,7 @@ impl AiController for InteractOnceAiController {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
 

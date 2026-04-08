@@ -27,6 +27,18 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "accessory",
+        "visual_asset": "builtin:item:accessory",
+        "attach_target": "accessory",
+        "presentation_mode": "attach",
+        "hide_base_regions": [],
+        "preview_transform": {},
+        "tint": "#c2b36d"
+      }
+    },
+    {
       "kind": "attribute_modifiers",
       "attributes": {
         "crit_chance": 0.05

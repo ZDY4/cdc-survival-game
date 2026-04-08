@@ -14,6 +14,7 @@ use spawn::register_actor_from_definition;
 
 mod ai_spawn;
 pub mod bootstrap;
+pub mod character_preview;
 mod content;
 pub mod fonts;
 mod logging;
@@ -28,6 +29,11 @@ pub use ai_spawn::advance_map_ai_spawn_runtime;
 pub use bootstrap::{
     build_default_startup_seed, build_runtime_from_default_startup_seed, load_runtime_bootstrap,
     RuntimeBootstrapBundle, RuntimeBootstrapError,
+};
+pub use character_preview::{
+    apply_preview_orbit_camera, parse_preview_color, spawn_character_preview_light_rig,
+    spawn_character_preview_scene, CharacterPreviewPart, CharacterPreviewPlugin,
+    CharacterPreviewRoot, PreviewOrbitCamera,
 };
 pub use content::*;
 pub use fonts::*;
@@ -49,14 +55,13 @@ pub use ui::{
     player_actor_id, skills_snapshot, trade_snapshot, world_status_snapshot, GameUiPlugin,
     UiCharacterCommand, UiCharacterSnapshot, UiContainerEntryView, UiContainerSessionState,
     UiContainerSnapshot, UiCraftingSnapshot, UiDialogueCommand, UiEquipmentSlotView,
-    UiHotbarSlotState, UiHotbarState, UiInputBlockState, UiInventoryCommand,
-    UiInventoryDetailView, UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState,
-    UiInventoryPanelSnapshot, UiItemQuantityIntent, UiItemQuantityModalState, UiItemType,
-    UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView, UiMapSnapshot,
-    UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState, UiOverworldLocationPromptSnapshot,
-    UiSettingsCommand, UiSkillCommand, UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot,
-    UiStatusBannerState, UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot,
-    UiWorldStatusSnapshot,
+    UiHotbarSlotState, UiHotbarState, UiInputBlockState, UiInventoryCommand, UiInventoryDetailView,
+    UiInventoryEntryView, UiInventoryFilter, UiInventoryFilterState, UiInventoryPanelSnapshot,
+    UiItemQuantityIntent, UiItemQuantityModalState, UiItemType, UiJournalSnapshot,
+    UiMainMenuCommand, UiMainMenuSnapshot, UiMapLocationView, UiMapSnapshot, UiMenuCommand,
+    UiMenuPanel, UiMenuState, UiModalState, UiOverworldLocationPromptSnapshot, UiSettingsCommand,
+    UiSkillCommand, UiSkillEntryView, UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState,
+    UiTradeCommand, UiTradeEntryView, UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
 };
 
 #[derive(Message, Debug, Clone, PartialEq, Eq)]
@@ -355,7 +360,7 @@ pub fn build_runtime_from_seed(
 }
 
 pub fn default_debug_seed() -> RuntimeScenarioSeed {
-    let map_id = MapId("survivor_outpost_01_grid".to_string());
+    let map_id = MapId("survivor_outpost_01".to_string());
 
     RuntimeScenarioSeed {
         map_id: Some(map_id.clone()),
@@ -377,11 +382,11 @@ pub fn default_debug_seed() -> RuntimeScenarioSeed {
 
 pub(crate) fn debug_seed_characters_for_map(map_id: Option<&MapId>) -> Vec<RuntimeSpawnEntry> {
     match map_id.map(MapId::as_str) {
-        Some("survivor_outpost_01_perimeter_grid") => vec![RuntimeSpawnEntry {
+        Some("survivor_outpost_01_perimeter") => vec![RuntimeSpawnEntry {
             definition_id: CharacterId("player".to_string()),
             grid_position: GridCoord::new(2, 0, 10),
         }],
-        Some("survivor_outpost_01_interior_grid") => vec![
+        Some("survivor_outpost_01_interior") => vec![
             RuntimeSpawnEntry {
                 definition_id: CharacterId("player".to_string()),
                 grid_position: GridCoord::new(2, 0, 2),
@@ -471,7 +476,7 @@ mod tests {
         let library = sample_library();
         let maps = sample_map_library();
         let seed = RuntimeScenarioSeed {
-            map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01".into())),
             static_obstacles: vec![GridCoord::new(2, 0, 1)],
             characters: vec![
                 RuntimeSpawnEntry {
@@ -527,7 +532,7 @@ mod tests {
         assert_eq!(enemy.group_id, "infected");
         assert_eq!(
             snapshot.grid.map_id.as_ref().map(MapId::as_str),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(snapshot.grid.map_width, Some(12));
         assert_eq!(snapshot.grid.levels, vec![0, 1]);
@@ -587,8 +592,8 @@ mod tests {
         let library = sample_library();
         let maps = sample_map_library();
         let seed = RuntimeScenarioSeed {
-            map_id: Some(MapId("survivor_outpost_01_grid".into())),
-            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01".into())),
+            start_map_id: Some(MapId("survivor_outpost_01".into())),
             start_world_mode: Some(WorldMode::Outdoor),
             start_entry_point_id: Some("default_entry".into()),
             characters: vec![RuntimeSpawnEntry {
@@ -604,7 +609,7 @@ mod tests {
 
         assert_eq!(
             context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert!(context.active_location_id.is_none());
         assert_eq!(context.entry_point_id.as_deref(), Some("default_entry"));
@@ -616,8 +621,8 @@ mod tests {
         let library = sample_library();
         let maps = sample_map_library();
         let seed = RuntimeScenarioSeed {
-            map_id: Some(MapId("survivor_outpost_01_grid".into())),
-            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01".into())),
+            start_map_id: Some(MapId("survivor_outpost_01".into())),
             start_location_id: Some("survivor_outpost_01".into()),
             start_world_mode: Some(WorldMode::Outdoor),
             start_entry_point_id: Some("default_entry".into()),
@@ -634,7 +639,7 @@ mod tests {
 
         assert_eq!(
             context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(
             context.active_location_id.as_deref(),
@@ -649,8 +654,8 @@ mod tests {
         let library = sample_library();
         let maps = sample_map_library();
         let seed = RuntimeScenarioSeed {
-            map_id: Some(MapId("survivor_outpost_01_grid".into())),
-            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01".into())),
+            start_map_id: Some(MapId("survivor_outpost_01".into())),
             start_location_id: Some("survivor_outpost_01".into()),
             start_world_mode: Some(WorldMode::Overworld),
             start_entry_point_id: Some("default_entry".into()),
@@ -683,8 +688,8 @@ mod tests {
         let library = sample_library();
         let maps = sample_map_library();
         let seed = RuntimeScenarioSeed {
-            map_id: Some(MapId("survivor_outpost_01_grid".into())),
-            start_map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01".into())),
+            start_map_id: Some(MapId("survivor_outpost_01".into())),
             start_location_id: Some("survivor_outpost_01".into()),
             start_world_mode: Some(WorldMode::Traveling),
             start_entry_point_id: Some("default_entry".into()),
@@ -795,7 +800,7 @@ mod tests {
         );
         assert_eq!(
             default_debug_seed().map_id.as_ref().map(MapId::as_str),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(
             default_debug_seed().start_location_id.as_deref(),
@@ -806,7 +811,7 @@ mod tests {
     #[test]
     fn perimeter_debug_seed_adds_hostile_actor_only_for_perimeter_map() {
         let characters = debug_seed_characters_for_map(Some(&MapId(
-            "survivor_outpost_01_perimeter_grid".into(),
+            "survivor_outpost_01_perimeter".into(),
         )));
         let ids: Vec<&str> = characters
             .iter()
@@ -819,9 +824,9 @@ mod tests {
     #[test]
     fn auto_spawn_characters_for_map_reads_auto_spawn_ai_points() {
         let maps = MapLibrary::from(BTreeMap::from([(
-            MapId("survivor_outpost_01_perimeter_grid".into()),
+            MapId("survivor_outpost_01_perimeter".into()),
             MapDefinition {
-                id: MapId("survivor_outpost_01_perimeter_grid".into()),
+                id: MapId("survivor_outpost_01_perimeter".into()),
                 name: "Perimeter".into(),
                 size: MapSize {
                     width: 20,
@@ -887,7 +892,7 @@ mod tests {
 
         let characters = auto_spawn_characters_for_map(
             &maps,
-            Some(&MapId("survivor_outpost_01_perimeter_grid".into())),
+            Some(&MapId("survivor_outpost_01_perimeter".into())),
         );
 
         assert_eq!(
@@ -903,9 +908,9 @@ mod tests {
     fn map_ai_spawn_runtime_spawns_and_respawns_auto_spawn_entries() {
         let library = sample_library();
         let maps = MapLibrary::from(BTreeMap::from([(
-            MapId("survivor_outpost_01_perimeter_grid".into()),
+            MapId("survivor_outpost_01_perimeter".into()),
             MapDefinition {
-                id: MapId("survivor_outpost_01_perimeter_grid".into()),
+                id: MapId("survivor_outpost_01_perimeter".into()),
                 name: "Perimeter".into(),
                 size: MapSize {
                     width: 20,
@@ -946,7 +951,7 @@ mod tests {
             },
         )]));
         let seed = RuntimeScenarioSeed {
-            map_id: Some(MapId("survivor_outpost_01_perimeter_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01_perimeter".into())),
             characters: vec![RuntimeSpawnEntry {
                 definition_id: CharacterId("player".into()),
                 grid_position: GridCoord::new(2, 0, 10),
@@ -1014,7 +1019,7 @@ mod tests {
         let config = parse_runtime_startup_config(
             r#"
 [Startup]
-startup_map = "survivor_outpost_01_grid"
+startup_map = "survivor_outpost_01"
 "#,
         )
         .expect("runtime startup config should parse");
@@ -1022,7 +1027,7 @@ startup_map = "survivor_outpost_01_grid"
         assert_eq!(
             config,
             RuntimeStartupConfig {
-                startup_map: Some(MapId("survivor_outpost_01_grid".into())),
+                startup_map: Some(MapId("survivor_outpost_01".into())),
             }
         );
     }
@@ -1045,9 +1050,9 @@ startup_map =
         let maps = sample_map_library();
 
         let resolved =
-            resolve_startup_map_id(&maps, Some(MapId("survivor_outpost_01_grid".into())));
+            resolve_startup_map_id(&maps, Some(MapId("survivor_outpost_01".into())));
 
-        assert_eq!(resolved, Some(MapId("survivor_outpost_01_grid".into())));
+        assert_eq!(resolved, Some(MapId("survivor_outpost_01".into())));
     }
 
     #[test]
@@ -1056,7 +1061,7 @@ startup_map =
 
         let resolved = resolve_startup_map_id(&maps, None);
 
-        assert_eq!(resolved, Some(MapId("survivor_outpost_01_grid".into())));
+        assert_eq!(resolved, Some(MapId("survivor_outpost_01".into())));
     }
 
     #[test]
@@ -1113,7 +1118,7 @@ startup_map =
 
     fn sample_map_library() -> MapLibrary {
         let definition = MapDefinition {
-            id: MapId("survivor_outpost_01_grid".into()),
+            id: MapId("survivor_outpost_01".into()),
             name: "Survivor Outpost 01".into(),
             size: MapSize {
                 width: 12,
@@ -1157,6 +1162,9 @@ startup_map =
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
                         prefab_id: "survivor_outpost_01_dormitory".into(),
+                        wall_visual: Some(game_data::MapBuildingWallVisualSpec {
+                            kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                        }),
                         layout: None,
                         extra: BTreeMap::new(),
                     }),
@@ -1183,7 +1191,7 @@ startup_map =
                     name: "Survivor Outpost 01".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("survivor_outpost_01_grid".into()),
+                    map_id: MapId("survivor_outpost_01".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,
@@ -1199,7 +1207,7 @@ startup_map =
                     name: "Street A".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("survivor_outpost_01_grid".into()),
+                    map_id: MapId("survivor_outpost_01".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,
@@ -1214,13 +1222,13 @@ startup_map =
             cells: vec![
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
+                    terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(1, 0, 0),
-                    terrain: "road".into(),
+                    terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
                     extra: BTreeMap::new(),
                 },
@@ -1261,6 +1269,7 @@ startup_map =
                     legs: "#3c5c90".to_string(),
                 },
             },
+            appearance_profile_id: "default_humanoid".to_string(),
             progression: CharacterProgression { level: 5 },
             combat: CharacterCombatProfile {
                 behavior: "neutral".to_string(),

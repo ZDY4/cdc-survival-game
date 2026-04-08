@@ -28,6 +28,20 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "body",
+        "visual_asset": "builtin:item:body",
+        "attach_target": "body",
+        "presentation_mode": "replace_region",
+        "hide_base_regions": [
+          "body"
+        ],
+        "preview_transform": {},
+        "tint": "#73895b"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 50,
       "max_durability": 50,

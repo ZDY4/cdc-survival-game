@@ -32,7 +32,6 @@ pub mod ids {
     pub const AI_TEST_PROVIDER_CONNECTION: &str = "ai.test-provider-connection";
     pub const AI_OPEN_PROVIDER_SETTINGS: &str = "ai.open-provider-settings";
     pub const MODULE_ITEMS: &str = "module.items";
-    pub const MODULE_CHARACTERS: &str = "module.characters";
     pub const MODULE_DIALOGUES: &str = "module.dialogues";
     pub const MODULE_QUESTS: &str = "module.quests";
 }
@@ -163,11 +162,9 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
     )?;
 
     let module_items = MenuItem::with_id(app, ids::MODULE_ITEMS, "Items", true, Some("Alt+1"))?;
-    let module_characters =
-        MenuItem::with_id(app, ids::MODULE_CHARACTERS, "Characters", true, Some("Alt+2"))?;
     let module_dialogues =
-        MenuItem::with_id(app, ids::MODULE_DIALOGUES, "Dialogues", true, Some("Alt+3"))?;
-    let module_quests = MenuItem::with_id(app, ids::MODULE_QUESTS, "Quests", true, Some("Alt+4"))?;
+        MenuItem::with_id(app, ids::MODULE_DIALOGUES, "Dialogues", true, Some("Alt+2"))?;
+    let module_quests = MenuItem::with_id(app, ids::MODULE_QUESTS, "Quests", true, Some("Alt+3"))?;
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&file_new_current)
         .separator()
@@ -212,7 +209,6 @@ pub fn build_main_editor_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<M
 
     let module_menu = SubmenuBuilder::new(app, "Module")
         .item(&module_items)
-        .item(&module_characters)
         .item(&module_dialogues)
         .item(&module_quests)
         .build()?;
@@ -339,8 +335,5 @@ pub fn remember_focused_editor_window<R: Runtime>(
 }
 
 fn is_editor_window_label(label: &str) -> bool {
-    matches!(
-        label,
-        "items" | "characters" | "dialogues" | "quests" | "settings"
-    )
+    matches!(label, "items" | "dialogues" | "quests" | "settings")
 }

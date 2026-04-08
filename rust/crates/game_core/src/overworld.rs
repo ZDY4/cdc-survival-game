@@ -1,8 +1,10 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 
+use game_data::overworld::{overworld_cardinal_neighbors, overworld_cell_is_traversable};
 use game_data::{
-    GridCoord, MapDefinition, OverworldDefinition, OverworldLocationDefinition,
-    OverworldLocationKind, WorldMode,
+    GridCoord, MapDefinition, OverworldCellDefinition, OverworldDefinition,
+    OverworldLocationDefinition, OverworldLocationKind, WorldMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +30,29 @@ pub struct OverworldStateSnapshot {
     pub current_overworld_cell: Option<GridCoord>,
     pub unlocked_locations: Vec<String>,
     pub world_mode: WorldMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OpenNode {
+    grid: GridCoord,
+    priority: u32,
+}
+
+impl Ord for OpenNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .priority
+            .cmp(&self.priority)
+            .then_with(|| other.grid.z.cmp(&self.grid.z))
+            .then_with(|| other.grid.x.cmp(&self.grid.x))
+            .then_with(|| other.grid.y.cmp(&self.grid.y))
+    }
+}
+
+impl PartialOrd for OpenNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 pub fn location_by_id<'a>(
@@ -65,38 +90,156 @@ pub fn compute_cell_path(
     if start == goal {
         return Some(vec![start]);
     }
-
-    let walkable: HashSet<GridCoord> = definition
-        .cells
-        .iter()
-        .filter(|cell| !cell.blocked)
-        .map(|cell| cell.grid)
-        .collect();
-    if !walkable.contains(&start) || !walkable.contains(&goal) {
+    if !is_overworld_walkable(definition, start, true) || !is_overworld_walkable(definition, goal, false) {
         return None;
     }
 
-    let mut queue = VecDeque::from([start]);
+    let mut open = BinaryHeap::new();
     let mut previous = HashMap::<GridCoord, GridCoord>::new();
-    let mut visited = HashSet::from([start]);
-    while let Some(current) = queue.pop_front() {
-        for neighbor in neighbors(current) {
-            if !walkable.contains(&neighbor) || !visited.insert(neighbor) {
+    let mut best_cost = HashMap::<GridCoord, u32>::from([(start, 0)]);
+
+    open.push(OpenNode {
+        grid: start,
+        priority: heuristic_cost(start, goal),
+    });
+
+    while let Some(OpenNode { grid: current, .. }) = open.pop() {
+        if current == goal {
+            return Some(reconstruct_cell_path(&previous, start, goal));
+        }
+
+        let current_cost = *best_cost.get(&current)?;
+        for neighbor in overworld_cardinal_neighbors(current) {
+            if !is_overworld_walkable(definition, neighbor, false) {
                 continue;
             }
-            previous.insert(neighbor, current);
-            if neighbor == goal {
-                return Some(reconstruct_cell_path(previous, start, goal));
+            let Some(step_cost) = movement_cost(definition, neighbor) else {
+                continue;
+            };
+            let next_cost = current_cost.saturating_add(step_cost);
+            if next_cost >= *best_cost.get(&neighbor).unwrap_or(&u32::MAX) {
+                continue;
             }
-            queue.push_back(neighbor);
+            best_cost.insert(neighbor, next_cost);
+            previous.insert(neighbor, current);
+            open.push(OpenNode {
+                grid: neighbor,
+                priority: next_cost.saturating_add(heuristic_cost(neighbor, goal)),
+            });
         }
     }
 
     None
 }
 
+pub fn overworld_cell(definition: &OverworldDefinition, grid: GridCoord) -> Option<&OverworldCellDefinition> {
+    definition.cells.iter().find(|cell| cell.grid == grid)
+}
+
+pub fn is_overworld_walkable(
+    definition: &OverworldDefinition,
+    grid: GridCoord,
+    allow_outdoor_location_cell: bool,
+) -> bool {
+    let Some(cell) = overworld_cell(definition, grid) else {
+        return false;
+    };
+    if !overworld_cell_is_traversable(cell) {
+        return false;
+    }
+    allow_outdoor_location_cell || !is_outdoor_location_cell(definition, grid)
+}
+
+pub fn movement_cost(definition: &OverworldDefinition, grid: GridCoord) -> Option<u32> {
+    overworld_cell(definition, grid)?.terrain.move_cost()
+}
+
+pub fn is_outdoor_location_cell(definition: &OverworldDefinition, grid: GridCoord) -> bool {
+    definition.locations.iter().any(|location| {
+        location.kind == OverworldLocationKind::Outdoor && location.overworld_cell == grid
+    })
+}
+
+pub fn outdoor_interaction_ring(
+    definition: &OverworldDefinition,
+    location: &OverworldLocationDefinition,
+) -> Vec<GridCoord> {
+    let occupied = definition
+        .locations
+        .iter()
+        .filter(|candidate| candidate.kind == OverworldLocationKind::Outdoor)
+        .map(|candidate| candidate.overworld_cell)
+        .collect::<HashSet<_>>();
+    let mut ring = overworld_cardinal_neighbors(location.overworld_cell)
+        .into_iter()
+        .filter(|grid| !occupied.contains(grid))
+        .filter(|grid| is_overworld_walkable(definition, *grid, false))
+        .collect::<Vec<_>>();
+    ring.sort_by_key(|grid| (grid.z, grid.x));
+    ring
+}
+
+pub fn outdoor_location_id_for_interaction_cell(
+    definition: &OverworldDefinition,
+    grid: GridCoord,
+) -> Option<String> {
+    let mut matches = definition
+        .locations
+        .iter()
+        .filter(|location| location.kind == OverworldLocationKind::Outdoor)
+        .filter(|location| outdoor_interaction_ring(definition, location).contains(&grid))
+        .map(|location| location.id.as_str().to_string());
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+pub fn resolve_overworld_goal(
+    definition: &OverworldDefinition,
+    start: GridCoord,
+    requested_goal: GridCoord,
+) -> Option<GridCoord> {
+    if is_outdoor_location_cell(definition, requested_goal) {
+        let location = definition.locations.iter().find(|location| {
+            location.kind == OverworldLocationKind::Outdoor && location.overworld_cell == requested_goal
+        })?;
+        return nearest_reachable_interaction_cell(definition, start, location);
+    }
+    is_overworld_walkable(definition, requested_goal, false).then_some(requested_goal)
+}
+
+pub fn nearest_reachable_interaction_cell(
+    definition: &OverworldDefinition,
+    start: GridCoord,
+    location: &OverworldLocationDefinition,
+) -> Option<GridCoord> {
+    let mut best: Option<(u32, usize, GridCoord)> = None;
+    for candidate in outdoor_interaction_ring(definition, location) {
+        let Some(path) = compute_cell_path(definition, start, candidate) else {
+            continue;
+        };
+        let cost = path_cost(definition, &path)?;
+        let score = (cost, path.len(), candidate);
+        if best.is_none_or(|current| score < current) {
+            best = Some(score);
+        }
+    }
+    best.map(|(_, _, grid)| grid)
+}
+
+pub fn default_outdoor_spawn_cell(
+    definition: &OverworldDefinition,
+    location: &OverworldLocationDefinition,
+) -> Option<GridCoord> {
+    outdoor_interaction_ring(definition, location)
+        .into_iter()
+        .min_by_key(|grid| {
+            let cost = movement_cost(definition, *grid).unwrap_or(u32::MAX);
+            (cost, grid.z, grid.x)
+        })
+}
+
 fn reconstruct_cell_path(
-    previous: HashMap<GridCoord, GridCoord>,
+    previous: &HashMap<GridCoord, GridCoord>,
     start: GridCoord,
     goal: GridCoord,
 ) -> Vec<GridCoord> {
@@ -113,53 +256,103 @@ fn reconstruct_cell_path(
     path
 }
 
-fn neighbors(current: GridCoord) -> [GridCoord; 4] {
-    [
-        GridCoord::new(current.x + 1, current.y, current.z),
-        GridCoord::new(current.x - 1, current.y, current.z),
-        GridCoord::new(current.x, current.y, current.z + 1),
-        GridCoord::new(current.x, current.y, current.z - 1),
-    ]
+fn heuristic_cost(a: GridCoord, b: GridCoord) -> u32 {
+    let dx = (a.x - b.x).unsigned_abs();
+    let dz = (a.z - b.z).unsigned_abs();
+    (dx + dz).saturating_mul(1)
+}
+
+fn path_cost(definition: &OverworldDefinition, path: &[GridCoord]) -> Option<u32> {
+    path.iter()
+        .copied()
+        .skip(1)
+        .try_fold(0_u32, |sum, grid| Some(sum.saturating_add(movement_cost(definition, grid)?)))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_cell_path, find_entry_point};
+    use super::{
+        compute_cell_path, default_outdoor_spawn_cell, find_entry_point,
+        outdoor_location_id_for_interaction_cell, resolve_overworld_goal,
+    };
     use game_data::{
         GridCoord, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
         OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
+        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
 
     #[test]
-    fn cell_path_uses_only_unblocked_cells() {
+    fn cell_path_prefers_roads_over_forest_detour() {
         let definition = sample_overworld();
         let path = compute_cell_path(
             &definition,
-            GridCoord::new(0, 0, 0),
-            GridCoord::new(2, 0, 0),
+            GridCoord::new(0, 0, 2),
+            GridCoord::new(4, 0, 2),
         )
         .expect("cell path should resolve");
         assert_eq!(
             path,
             vec![
-                GridCoord::new(0, 0, 0),
-                GridCoord::new(1, 0, 0),
-                GridCoord::new(2, 0, 0)
+                GridCoord::new(0, 0, 2),
+                GridCoord::new(0, 0, 1),
+                GridCoord::new(1, 0, 1),
+                GridCoord::new(2, 0, 1),
+                GridCoord::new(3, 0, 1),
+                GridCoord::new(4, 0, 1),
+                GridCoord::new(4, 0, 2),
             ]
         );
     }
 
     #[test]
-    fn cell_path_rejects_blocked_goal() {
+    fn cell_path_rejects_outdoor_location_goal() {
         let definition = sample_overworld();
         let path = compute_cell_path(
             &definition,
-            GridCoord::new(0, 0, 0),
-            GridCoord::new(1, 0, 1),
+            GridCoord::new(0, 0, 2),
+            GridCoord::new(2, 0, 2),
         );
         assert!(path.is_none());
+    }
+
+    #[test]
+    fn clicking_outdoor_location_redirects_to_nearest_ring_cell() {
+        let definition = sample_overworld();
+        let goal = resolve_overworld_goal(
+            &definition,
+            GridCoord::new(0, 0, 2),
+            GridCoord::new(2, 0, 2),
+        )
+        .expect("location click should redirect");
+        assert_eq!(goal, GridCoord::new(1, 0, 2));
+    }
+
+    #[test]
+    fn interaction_ring_cell_resolves_to_unique_location() {
+        let definition = sample_overworld();
+        assert_eq!(
+            outdoor_location_id_for_interaction_cell(&definition, GridCoord::new(2, 0, 1)),
+            Some("outpost".to_string())
+        );
+        assert_eq!(
+            outdoor_location_id_for_interaction_cell(&definition, GridCoord::new(0, 0, 0)),
+            None
+        );
+    }
+
+    #[test]
+    fn default_spawn_cell_uses_lowest_cost_ring_cell() {
+        let definition = sample_overworld();
+        let location = definition
+            .locations
+            .iter()
+            .find(|location| location.id.as_str() == "outpost")
+            .expect("outpost exists");
+        assert_eq!(
+            default_outdoor_spawn_cell(&definition, location),
+            Some(GridCoord::new(2, 0, 1))
+        );
     }
 
     #[test]
@@ -192,30 +385,50 @@ mod tests {
         OverworldDefinition {
             id: OverworldId("main".into()),
             size: MapSize {
-                width: 3,
-                height: 2,
+                width: 5,
+                height: 5,
             },
-            locations: vec![
-                sample_location("a", 0, 0),
-                sample_location("b", 1, 0),
-                sample_location("c", 2, 0),
-            ],
+            locations: vec![sample_location("outpost", 2, 2)],
             cells: vec![
-                sample_cell(0, 0, false),
-                sample_cell(1, 0, false),
-                sample_cell(2, 0, false),
-                sample_cell(0, 1, false),
-                sample_cell(1, 1, true),
-                sample_cell(2, 1, false),
+                sample_cell(0, 0, OverworldTerrainKind::Plain, false),
+                sample_cell(1, 0, OverworldTerrainKind::Plain, false),
+                sample_cell(2, 0, OverworldTerrainKind::Plain, false),
+                sample_cell(3, 0, OverworldTerrainKind::Plain, false),
+                sample_cell(4, 0, OverworldTerrainKind::Plain, false),
+                sample_cell(0, 1, OverworldTerrainKind::Road, false),
+                sample_cell(1, 1, OverworldTerrainKind::Road, false),
+                sample_cell(2, 1, OverworldTerrainKind::Road, false),
+                sample_cell(3, 1, OverworldTerrainKind::Road, false),
+                sample_cell(4, 1, OverworldTerrainKind::Road, false),
+                sample_cell(0, 2, OverworldTerrainKind::Plain, false),
+                sample_cell(1, 2, OverworldTerrainKind::Forest, false),
+                sample_cell(2, 2, OverworldTerrainKind::Urban, false),
+                sample_cell(3, 2, OverworldTerrainKind::Forest, false),
+                sample_cell(4, 2, OverworldTerrainKind::Plain, false),
+                sample_cell(0, 3, OverworldTerrainKind::Plain, false),
+                sample_cell(1, 3, OverworldTerrainKind::Plain, false),
+                sample_cell(2, 3, OverworldTerrainKind::Mountain, false),
+                sample_cell(3, 3, OverworldTerrainKind::Plain, false),
+                sample_cell(4, 3, OverworldTerrainKind::Plain, false),
+                sample_cell(0, 4, OverworldTerrainKind::Plain, false),
+                sample_cell(1, 4, OverworldTerrainKind::Plain, false),
+                sample_cell(2, 4, OverworldTerrainKind::Plain, false),
+                sample_cell(3, 4, OverworldTerrainKind::Plain, false),
+                sample_cell(4, 4, OverworldTerrainKind::Plain, false),
             ],
             travel_rules: OverworldTravelRuleSet::default(),
         }
     }
 
-    fn sample_cell(x: i32, z: i32, blocked: bool) -> OverworldCellDefinition {
+    fn sample_cell(
+        x: i32,
+        z: i32,
+        terrain: OverworldTerrainKind,
+        blocked: bool,
+    ) -> OverworldCellDefinition {
         OverworldCellDefinition {
             grid: GridCoord::new(x, 0, z),
-            terrain: if blocked { "water" } else { "road" }.into(),
+            terrain,
             blocked,
             extra: BTreeMap::new(),
         }
@@ -227,7 +440,7 @@ mod tests {
             name: id.into(),
             description: String::new(),
             kind: OverworldLocationKind::Outdoor,
-            map_id: MapId(format!("{id}_grid")),
+            map_id: MapId(id.to_string()),
             entry_point_id: "default_entry".into(),
             parent_outdoor_location_id: None,
             return_entry_point_id: None,

@@ -33,10 +33,9 @@ pub use building_geometry::{
 };
 pub use demo::{create_demo_runtime, seed_demo_scenario, DemoScenarioHandles};
 pub use economy::{
-    ActorEconomyState, ContainerRuntimeState, CraftOutcome, EconomyRuntimeError,
-    EquippedItemState, EquippedWeaponProfile, HeadlessEconomyRuntime, MissingMaterial,
-    MissingSkill, RecipeCraftCheck, ShopRuntimeEntry, ShopRuntimeState as EconomyShopRuntimeState,
-    TradeOutcome,
+    ActorEconomyState, ContainerRuntimeState, CraftOutcome, EconomyRuntimeError, EquippedItemState,
+    EquippedWeaponProfile, HeadlessEconomyRuntime, MissingMaterial, MissingSkill, RecipeCraftCheck,
+    ShopRuntimeEntry, ShopRuntimeState as EconomyShopRuntimeState, TradeOutcome,
 };
 pub use game_data::{
     InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,

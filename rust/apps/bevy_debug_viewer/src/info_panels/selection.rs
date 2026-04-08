@@ -246,12 +246,8 @@ mod tests {
         };
         let viewer_state = ViewerState::default();
 
-        let panel = format_selection_panel(
-            &snapshot,
-            &runtime_state,
-            &viewer_state,
-            Some("背包面板"),
-        );
+        let panel =
+            format_selection_panel(&snapshot, &runtime_state, &viewer_state, Some("背包面板"));
 
         assert!(panel.contains("Mouse Blocked By UI: 背包面板"));
     }

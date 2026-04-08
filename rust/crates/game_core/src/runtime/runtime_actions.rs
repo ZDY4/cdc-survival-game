@@ -115,6 +115,7 @@ impl SimulationRuntime {
             phase: ActionPhase::Start,
             steps: None,
             target_actor,
+            cost_override: None,
             success: true,
         });
         if result.success {
@@ -136,6 +137,7 @@ impl SimulationRuntime {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor,
+            cost_override: None,
             success: true,
         })
     }

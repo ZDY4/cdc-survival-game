@@ -104,9 +104,7 @@ pub(super) fn render_inventory_context_menu(
     let trade_state = ui.modal_state.trade.as_ref();
     let trade_active = trade_state.is_some();
     let skills_panel_active = ui.menu_state.is_panel_open(UiMenuPanel::Skills);
-    if !trade_active
-        && !ui.menu_state.is_panel_open(UiMenuPanel::Inventory)
-        && !skills_panel_active
+    if !trade_active && !ui.menu_state.is_panel_open(UiMenuPanel::Inventory) && !skills_panel_active
     {
         return;
     }
@@ -380,7 +378,14 @@ pub(super) fn render_ui_context_menu_container(
 ) {
     let style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
     let position = floating_panel_position(window, cursor_position, style.width, estimated_height);
-    spawn_context_menu_shell(parent, style, position, "UI 右键菜单", UiContextMenuRoot, content);
+    spawn_context_menu_shell(
+        parent,
+        style,
+        position,
+        "UI 右键菜单",
+        UiContextMenuRoot,
+        content,
+    );
 }
 
 pub(super) fn context_menu_estimated_height(action_count: usize, has_header: bool) -> f32 {

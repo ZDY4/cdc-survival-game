@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use game_data::{
     GridCoord, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
     OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLocationDefinition,
-    OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
+    OverworldLocationId, OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet,
 };
 use serde_json::Value;
 
@@ -57,7 +57,7 @@ fn main() -> Result<(), String> {
             "dungeon" => OverworldLocationKind::Dungeon,
             _ => OverworldLocationKind::Outdoor,
         };
-        let map_id = MapId(format!("{location_id}_grid"));
+        let map_id = MapId(location_id.to_string());
         let entry_point_id = "default_entry".to_string();
         let return_entry_point_id = if kind == OverworldLocationKind::Outdoor {
             None
@@ -123,7 +123,7 @@ fn main() -> Result<(), String> {
         .iter()
         .map(|value| OverworldCellDefinition {
             grid: parse_cell(value),
-            terrain: "road".to_string(),
+            terrain: OverworldTerrainKind::Road,
             blocked: false,
             extra: BTreeMap::new(),
         })
@@ -260,9 +260,9 @@ fn full_overworld_cells(
             cells.push(OverworldCellDefinition {
                 grid: GridCoord::new(x, 0, z),
                 terrain: if walkable.contains(&(x, z)) {
-                    "road".to_string()
+                    OverworldTerrainKind::Road
                 } else {
-                    "wilderness".to_string()
+                    OverworldTerrainKind::Plain
                 },
                 blocked: !walkable.contains(&(x, z)),
                 extra: BTreeMap::new(),

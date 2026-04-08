@@ -489,7 +489,7 @@ mod tests {
         let mut app = App::new();
         insert_startup_resources(&mut app, CharacterDefinitions(sample_character_library()));
         app.insert_resource(RuntimeStartupConfig {
-            startup_map: Some(MapId("survivor_outpost_01_grid".into())),
+            startup_map: Some(MapId("survivor_outpost_01".into())),
         });
         app.add_message::<SpawnCharacterRequest>();
         app.add_systems(Startup, startup_demo);
@@ -501,7 +501,7 @@ mod tests {
 
         assert_eq!(
             snapshot.grid.map_id.as_ref().map(MapId::as_str),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(snapshot.grid.map_width, Some(12));
         assert_eq!(snapshot.grid.map_height, Some(12));
@@ -624,7 +624,7 @@ mod tests {
 
     fn sample_map_library() -> MapLibrary {
         let definition = MapDefinition {
-            id: MapId("survivor_outpost_01_grid".into()),
+            id: MapId("survivor_outpost_01".into()),
             name: "Survivor Outpost 01".into(),
             size: MapSize {
                 width: 12,
@@ -668,6 +668,9 @@ mod tests {
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
                         prefab_id: "survivor_outpost_01_dormitory".into(),
+                        wall_visual: Some(game_data::MapBuildingWallVisualSpec {
+                            kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                        }),
                         layout: None,
                         extra: BTreeMap::new(),
                     }),
@@ -689,21 +692,21 @@ mod tests {
                 height: 2,
             },
             locations: vec![
-                sample_overworld_location("survivor_outpost_01", "survivor_outpost_01_grid", 1, 0),
+                sample_overworld_location("survivor_outpost_01", "survivor_outpost_01", 1, 0),
                 sample_overworld_location(
                     "survivor_outpost_01_perimeter",
-                    "survivor_outpost_01_grid",
+                    "survivor_outpost_01",
                     1,
                     1,
                 ),
-                sample_overworld_location("street_a", "survivor_outpost_01_grid", 0, 0),
-                sample_overworld_location("street_b", "survivor_outpost_01_grid", 2, 0),
+                sample_overworld_location("street_a", "survivor_outpost_01", 0, 0),
+                sample_overworld_location("street_b", "survivor_outpost_01", 2, 0),
                 OverworldLocationDefinition {
                     id: OverworldLocationId("survivor_outpost_01_interior".into()),
                     name: "Survivor Outpost 01 Interior".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Interior,
-                    map_id: MapId("survivor_outpost_01_interior_grid".into()),
+                    map_id: MapId("survivor_outpost_01_interior".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: Some(OverworldLocationId(
                         "survivor_outpost_01".into(),

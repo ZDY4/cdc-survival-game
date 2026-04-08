@@ -218,7 +218,7 @@ mod tests {
                     name: "据点外警戒区".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: game_data::MapId("survivor_outpost_01_perimeter_grid".into()),
+                    map_id: game_data::MapId("survivor_outpost_01_perimeter".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,

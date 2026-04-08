@@ -1,14 +1,14 @@
-//! 渲染共享类型：定义交互菜单布局、静态世界规格、材质句柄和相关组件类型。
+//! 渲染共享类型：定义交互菜单布局、静态世界规格和 viewer 专属组件类型。
 
-use super::constants::{BUILDING_WALL_GRID_SHADER_PATH, GRID_GROUND_SHADER_PATH};
 use crate::picking::{ViewerPickBindingSpec, ViewerPickTarget};
-use bevy::asset::Asset;
-use bevy::pbr::{ExtendedMaterial, MaterialExtension, StandardMaterial};
+use bevy::pbr::StandardMaterial;
 use bevy::prelude::*;
-use bevy::reflect::TypePath;
-use bevy::render::render_resource::{AsBindGroup, AsBindGroupShaderType, ShaderType};
-use bevy::shader::ShaderRef;
 use game_data::{ActorId, GridCoord, MapId, MapObjectKind};
+
+pub(crate) use game_bevy::world_render::{
+    BuildingWallGridMaterial, BuildingWallGridMaterialExt, GridGroundMaterial,
+    GridGroundMaterialExt, WorldRenderMaterialHandle as StaticWorldMaterialHandle,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InteractionMenuLayout {
@@ -84,17 +84,19 @@ pub(crate) struct SpawnedBoxVisual {
     pub color: Color,
 }
 
+pub(crate) struct SpawnedMeshVisual {
+    pub entity: Entity,
+    pub material: StaticWorldMaterialHandle,
+    pub aabb_center: Vec3,
+    pub aabb_half_extents: Vec3,
+    pub color: Color,
+}
+
 #[derive(Default)]
 pub(crate) struct HoverOcclusionBuffer {
     pub current: Option<GridCoord>,
     pub previous: Option<GridCoord>,
     pub previous_frames_remaining: u8,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum StaticWorldMaterialHandle {
-    Standard(Handle<StandardMaterial>),
-    BuildingWallGrid(Handle<BuildingWallGridMaterial>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,7 +129,6 @@ pub(crate) struct GeneratedDoorVisual {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MaterialStyle {
     StructureAccent,
-    BuildingWallGrid,
     BuildingDoor,
     Utility,
     UtilityAccent,
@@ -136,122 +137,6 @@ pub(crate) enum MaterialStyle {
     CharacterHead,
     CharacterAccent,
     Shadow,
-}
-
-pub(crate) type GridGroundMaterial = ExtendedMaterial<StandardMaterial, GridGroundMaterialExt>;
-pub(crate) type BuildingWallGridMaterial =
-    ExtendedMaterial<StandardMaterial, BuildingWallGridMaterialExt>;
-
-#[derive(Asset, AsBindGroup, TypePath, Clone, Debug)]
-#[uniform(100, GridGroundMaterialUniform)]
-pub(crate) struct GridGroundMaterialExt {
-    pub world_origin: Vec2,
-    pub grid_size: f32,
-    pub line_width: f32,
-    pub variation_strength: f32,
-    pub seed: u32,
-    pub dark_color: Color,
-    pub light_color: Color,
-    pub edge_color: Color,
-}
-
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub(crate) struct GridGroundMaterialUniform {
-    pub world_origin: Vec2,
-    pub grid_size: f32,
-    pub line_width: f32,
-    pub variation_strength: f32,
-    pub seed: f32,
-    pub _padding: Vec2,
-    pub dark_color: Vec4,
-    pub light_color: Vec4,
-    pub edge_color: Vec4,
-}
-
-impl AsBindGroupShaderType<GridGroundMaterialUniform> for GridGroundMaterialExt {
-    fn as_bind_group_shader_type(
-        &self,
-        _images: &bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>,
-    ) -> GridGroundMaterialUniform {
-        GridGroundMaterialUniform {
-            world_origin: self.world_origin,
-            grid_size: self.grid_size.max(0.001),
-            line_width: self.line_width,
-            variation_strength: self.variation_strength,
-            seed: self.seed as f32,
-            _padding: Vec2::ZERO,
-            dark_color: self.dark_color.to_linear().to_vec4(),
-            light_color: self.light_color.to_linear().to_vec4(),
-            edge_color: self.edge_color.to_linear().to_vec4(),
-        }
-    }
-}
-
-impl MaterialExtension for GridGroundMaterialExt {
-    fn fragment_shader() -> ShaderRef {
-        GRID_GROUND_SHADER_PATH.into()
-    }
-}
-
-#[derive(Asset, AsBindGroup, TypePath, Clone, Debug)]
-#[uniform(100, BuildingWallGridMaterialUniform)]
-pub(crate) struct BuildingWallGridMaterialExt {
-    pub major_grid_size: f32,
-    pub minor_grid_size: f32,
-    pub major_line_width: f32,
-    pub minor_line_width: f32,
-    pub face_tint_strength: f32,
-    pub grid_line_visibility: f32,
-    pub top_face_grid_visibility: f32,
-    pub _padding: f32,
-    pub base_color: Color,
-    pub major_line_color: Color,
-    pub minor_line_color: Color,
-    pub cap_color: Color,
-}
-
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub(crate) struct BuildingWallGridMaterialUniform {
-    pub major_grid_size: f32,
-    pub minor_grid_size: f32,
-    pub major_line_width: f32,
-    pub minor_line_width: f32,
-    pub face_tint_strength: f32,
-    pub grid_line_visibility: f32,
-    pub top_face_grid_visibility: f32,
-    pub _padding: f32,
-    pub base_color: Vec4,
-    pub major_line_color: Vec4,
-    pub minor_line_color: Vec4,
-    pub cap_color: Vec4,
-}
-
-impl AsBindGroupShaderType<BuildingWallGridMaterialUniform> for BuildingWallGridMaterialExt {
-    fn as_bind_group_shader_type(
-        &self,
-        _images: &bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>,
-    ) -> BuildingWallGridMaterialUniform {
-        BuildingWallGridMaterialUniform {
-            major_grid_size: self.major_grid_size.max(0.001),
-            minor_grid_size: self.minor_grid_size.max(0.001),
-            major_line_width: self.major_line_width.max(0.0005),
-            minor_line_width: self.minor_line_width.max(0.0005),
-            face_tint_strength: self.face_tint_strength.clamp(0.0, 1.0),
-            grid_line_visibility: self.grid_line_visibility.clamp(0.0, 1.0),
-            top_face_grid_visibility: self.top_face_grid_visibility.clamp(0.0, 1.0),
-            _padding: 0.0,
-            base_color: self.base_color.to_linear().to_vec4(),
-            major_line_color: self.major_line_color.to_linear().to_vec4(),
-            minor_line_color: self.minor_line_color.to_linear().to_vec4(),
-            cap_color: self.cap_color.to_linear().to_vec4(),
-        }
-    }
-}
-
-impl MaterialExtension for BuildingWallGridMaterialExt {
-    fn fragment_shader() -> ShaderRef {
-        BUILDING_WALL_GRID_SHADER_PATH.into()
-    }
 }
 
 #[derive(Component)]

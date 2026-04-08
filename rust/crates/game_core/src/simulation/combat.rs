@@ -15,6 +15,7 @@ impl Simulation {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: Some(target_actor),
+            cost_override: None,
             success: true,
         });
         if !start_result.success {
@@ -27,6 +28,7 @@ impl Simulation {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: Some(target_actor),
+            cost_override: None,
             success: true,
         });
         if result.success {
@@ -308,11 +310,7 @@ impl Simulation {
         }
 
         if self.turn.combat_active && self.turn.current_actor_id == Some(actor_id) {
-            if self.pending_progression.back()
-                != Some(&PendingProgressionStep::EndCurrentCombatTurn)
-            {
-                self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
-            }
+            self.queue_pending_progression_once(PendingProgressionStep::EndCurrentCombatTurn);
         }
     }
 

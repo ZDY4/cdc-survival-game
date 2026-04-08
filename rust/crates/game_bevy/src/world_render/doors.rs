@@ -8,6 +8,14 @@ use super::mesh_builders::{
 
 const GENERATED_DOOR_THICKNESS_WORLD: f32 = 0.30;
 
+pub struct GeneratedDoorMeshSpec {
+    pub pivot_translation: Vec3,
+    pub open_yaw: f32,
+    pub mesh: Mesh,
+    pub local_aabb_center: Vec3,
+    pub local_aabb_half_extents: Vec3,
+}
+
 pub fn generated_door_open_yaw(axis: game_core::GeometryAxis) -> f32 {
     match axis {
         game_core::GeometryAxis::Horizontal => std::f32::consts::FRAC_PI_2,
@@ -60,6 +68,31 @@ pub fn generated_door_render_polygon(
             )
         }
     }
+}
+
+pub fn build_generated_door_mesh_spec(
+    door: &GeneratedDoorDebugState,
+    floor_top: f32,
+    grid_size: f32,
+) -> Option<GeneratedDoorMeshSpec> {
+    let pivot_translation = generated_door_pivot_translation(door, floor_top, grid_size);
+    let door_height = floor_top + door.wall_height * grid_size;
+    let render_polygon = generated_door_render_polygon(door, grid_size);
+    let (mesh, local_aabb_center, local_aabb_half_extents) = build_polygon_prism_mesh(
+        &render_polygon,
+        door.building_anchor,
+        grid_size,
+        floor_top,
+        door_height,
+        pivot_translation,
+    )?;
+    Some(GeneratedDoorMeshSpec {
+        pivot_translation,
+        open_yaw: generated_door_open_yaw(door.axis),
+        mesh,
+        local_aabb_center,
+        local_aabb_half_extents,
+    })
 }
 
 pub fn build_polygon_prism_mesh(
@@ -175,5 +208,64 @@ pub fn rectangle_polygon_local(
             },
         ],
         holes: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_generated_door(axis: game_core::GeometryAxis) -> GeneratedDoorDebugState {
+        GeneratedDoorDebugState {
+            door_id: "door".into(),
+            map_object_id: "door_object".into(),
+            building_object_id: "building_object".into(),
+            level: 0,
+            opening_id: 0,
+            building_anchor: GridCoord::new(4, 0, 7),
+            anchor_grid: GridCoord::new(4, 0, 7),
+            kind: game_core::DoorOpeningKind::Exterior,
+            polygon: game_core::GeometryPolygon2 {
+                outer: vec![
+                    game_core::GeometryPoint2 { x: 0.0, z: 0.0 },
+                    game_core::GeometryPoint2 { x: 1.0, z: 0.0 },
+                    game_core::GeometryPoint2 { x: 1.0, z: 1.0 },
+                    game_core::GeometryPoint2 { x: 0.0, z: 1.0 },
+                ],
+                holes: Vec::new(),
+            },
+            axis,
+            is_open: false,
+            wall_height: 2.4,
+            is_locked: false,
+        }
+    }
+
+    #[test]
+    fn generated_door_mesh_spec_builds_horizontal_geometry() {
+        let door = sample_generated_door(game_core::GeometryAxis::Horizontal);
+
+        let spec = build_generated_door_mesh_spec(&door, 0.11, 1.0)
+            .expect("horizontal door mesh should build");
+
+        assert_eq!(spec.pivot_translation, Vec3::new(4.0, 0.11, 7.5));
+        assert_eq!(spec.open_yaw, std::f32::consts::FRAC_PI_2);
+        assert!(spec.local_aabb_half_extents.x > 0.0);
+        assert!(spec.local_aabb_half_extents.y > 0.0);
+        assert!(spec.local_aabb_half_extents.z > 0.0);
+    }
+
+    #[test]
+    fn generated_door_mesh_spec_builds_vertical_geometry() {
+        let door = sample_generated_door(game_core::GeometryAxis::Vertical);
+
+        let spec = build_generated_door_mesh_spec(&door, 0.11, 1.0)
+            .expect("vertical door mesh should build");
+
+        assert_eq!(spec.pivot_translation, Vec3::new(4.5, 0.11, 7.0));
+        assert_eq!(spec.open_yaw, -std::f32::consts::FRAC_PI_2);
+        assert!(spec.local_aabb_half_extents.x > 0.0);
+        assert!(spec.local_aabb_half_extents.y > 0.0);
+        assert!(spec.local_aabb_half_extents.z > 0.0);
     }
 }

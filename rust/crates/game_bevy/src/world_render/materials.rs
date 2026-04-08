@@ -4,8 +4,9 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{AsBindGroup, AsBindGroupShaderType, ShaderType};
 use bevy::shader::ShaderRef;
+use game_data::MapBuildingWallVisualKind;
 
-use crate::static_world::{default_color_for_role, StaticWorldMaterialRole};
+use crate::static_world::StaticWorldMaterialRole;
 
 use super::WorldRenderPalette;
 
@@ -17,7 +18,6 @@ pub const BUILDING_WALL_GRID_SHADER_HANDLE: Handle<Shader> =
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorldRenderMaterialStyle {
     StructureAccent,
-    BuildingWallGrid,
     BuildingDoor,
     Utility,
     UtilityAccent,
@@ -28,6 +28,23 @@ pub enum WorldRenderMaterialStyle {
 pub enum WorldRenderMaterialHandle {
     Standard(Handle<StandardMaterial>),
     BuildingWallGrid(Handle<BuildingWallGridMaterial>),
+}
+
+#[derive(Debug, Clone)]
+pub struct BuildingWallVisualProfile {
+    pub face_color: Color,
+    pub major_line_color: Color,
+    pub minor_line_color: Color,
+    pub cap_color: Color,
+    pub major_grid_size: f32,
+    pub minor_grid_size: f32,
+    pub major_line_width: f32,
+    pub minor_line_width: f32,
+    pub face_tint_strength: f32,
+    pub grid_line_visibility: f32,
+    pub top_face_grid_visibility: f32,
+    pub cap_height_world: f32,
+    pub body_inset_world: f32,
 }
 
 pub type GridGroundMaterial = ExtendedMaterial<StandardMaterial, GridGroundMaterialExt>;
@@ -152,10 +169,16 @@ pub fn world_render_color_for_role(
 ) -> Color {
     match role {
         StaticWorldMaterialRole::Ground => palette.ground_light,
+        StaticWorldMaterialRole::OverworldGroundRoad => Color::srgb(0.42, 0.40, 0.34),
+        StaticWorldMaterialRole::OverworldGroundPlain => Color::srgb(0.48, 0.56, 0.30),
+        StaticWorldMaterialRole::OverworldGroundForest => Color::srgb(0.20, 0.38, 0.19),
+        StaticWorldMaterialRole::OverworldGroundRiver => Color::srgb(0.17, 0.43, 0.67),
+        StaticWorldMaterialRole::OverworldGroundLake => Color::srgb(0.13, 0.34, 0.58),
+        StaticWorldMaterialRole::OverworldGroundMountain => Color::srgb(0.39, 0.39, 0.41),
+        StaticWorldMaterialRole::OverworldGroundUrban => Color::srgb(0.46, 0.45, 0.44),
         StaticWorldMaterialRole::BuildingFloor => {
             lerp_color(palette.building_top, palette.building_base, 0.38)
         }
-        StaticWorldMaterialRole::BuildingWall => default_color_for_role(role),
         StaticWorldMaterialRole::BuildingDoor => building_door_color(),
         StaticWorldMaterialRole::StairBase => darken_color(palette.interactive, 0.18),
         StaticWorldMaterialRole::StairAccent => lighten_color(palette.current_turn, 0.12),
@@ -175,7 +198,16 @@ pub fn world_render_color_for_role(
         StaticWorldMaterialRole::Warning => Color::srgb(0.95, 0.18, 0.18),
         StaticWorldMaterialRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
         StaticWorldMaterialRole::OverworldBlockedCell => Color::srgb(0.52, 0.19, 0.14),
-        StaticWorldMaterialRole::OverworldLocation => Color::srgb(0.22, 0.58, 0.86),
+        StaticWorldMaterialRole::OverworldLocationGeneric => Color::srgb(0.22, 0.58, 0.86),
+        StaticWorldMaterialRole::OverworldLocationHospital => Color::srgb(0.86, 0.34, 0.34),
+        StaticWorldMaterialRole::OverworldLocationSchool => Color::srgb(0.91, 0.73, 0.28),
+        StaticWorldMaterialRole::OverworldLocationStore => Color::srgb(0.89, 0.54, 0.22),
+        StaticWorldMaterialRole::OverworldLocationStreet => Color::srgb(0.66, 0.68, 0.72),
+        StaticWorldMaterialRole::OverworldLocationOutpost => Color::srgb(0.22, 0.72, 0.86),
+        StaticWorldMaterialRole::OverworldLocationFactory => Color::srgb(0.63, 0.39, 0.24),
+        StaticWorldMaterialRole::OverworldLocationForest => Color::srgb(0.27, 0.63, 0.31),
+        StaticWorldMaterialRole::OverworldLocationRuins => Color::srgb(0.63, 0.55, 0.43),
+        StaticWorldMaterialRole::OverworldLocationSubway => Color::srgb(0.26, 0.78, 0.74),
     }
 }
 
@@ -183,7 +215,6 @@ pub fn world_render_material_style_for_role(
     role: StaticWorldMaterialRole,
 ) -> WorldRenderMaterialStyle {
     match role {
-        StaticWorldMaterialRole::BuildingWall => WorldRenderMaterialStyle::BuildingWallGrid,
         StaticWorldMaterialRole::BuildingDoor => WorldRenderMaterialStyle::BuildingDoor,
         StaticWorldMaterialRole::PickupAccent
         | StaticWorldMaterialRole::InteractiveAccent
@@ -197,46 +228,45 @@ pub fn world_render_material_style_for_role(
 
 pub fn make_world_render_material(
     materials: &mut Assets<StandardMaterial>,
-    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    _building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     color: Color,
     style: WorldRenderMaterialStyle,
 ) -> WorldRenderMaterialHandle {
-    match style {
-        WorldRenderMaterialStyle::BuildingWallGrid => {
-            let wall_color = building_wall_grid_face_color();
-            let major_line_color = building_wall_grid_major_line_color();
-            let minor_line_color = building_wall_grid_minor_line_color();
-            WorldRenderMaterialHandle::BuildingWallGrid(building_wall_materials.add(
-                BuildingWallGridMaterial {
-                    base: StandardMaterial {
-                        base_color: wall_color,
-                        perceptual_roughness: 0.92,
-                        reflectance: 0.035,
-                        metallic: 0.0,
-                        alpha_mode: AlphaMode::Opaque,
-                        cull_mode: None,
-                        opaque_render_method: OpaqueRendererMethod::Forward,
-                        ..default()
-                    },
-                    extension: BuildingWallGridMaterialExt {
-                        major_grid_size: 1.0,
-                        minor_grid_size: 0.5,
-                        major_line_width: 0.016,
-                        minor_line_width: 0.0073333335,
-                        face_tint_strength: 0.0,
-                        grid_line_visibility: 1.0,
-                        top_face_grid_visibility: 0.0,
-                        _padding: 0.0,
-                        base_color: wall_color,
-                        major_line_color,
-                        minor_line_color,
-                        cap_color: wall_color,
-                    },
-                },
-            ))
-        }
-        _ => WorldRenderMaterialHandle::Standard(make_standard_material(materials, color, style)),
-    }
+    WorldRenderMaterialHandle::Standard(make_standard_material(materials, color, style))
+}
+
+pub fn make_building_wall_material(
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    profile: BuildingWallVisualProfile,
+) -> WorldRenderMaterialHandle {
+    WorldRenderMaterialHandle::BuildingWallGrid(building_wall_materials.add(
+        BuildingWallGridMaterial {
+            base: StandardMaterial {
+                base_color: profile.face_color,
+                perceptual_roughness: 0.92,
+                reflectance: 0.035,
+                metallic: 0.0,
+                alpha_mode: AlphaMode::Opaque,
+                cull_mode: None,
+                opaque_render_method: OpaqueRendererMethod::Forward,
+                ..default()
+            },
+            extension: BuildingWallGridMaterialExt {
+                major_grid_size: profile.major_grid_size,
+                minor_grid_size: profile.minor_grid_size,
+                major_line_width: profile.major_line_width,
+                minor_line_width: profile.minor_line_width,
+                face_tint_strength: profile.face_tint_strength,
+                grid_line_visibility: profile.grid_line_visibility,
+                top_face_grid_visibility: profile.top_face_grid_visibility,
+                _padding: 0.0,
+                base_color: profile.face_color,
+                major_line_color: profile.major_line_color,
+                minor_line_color: profile.minor_line_color,
+                cap_color: profile.cap_color,
+            },
+        },
+    ))
 }
 
 fn make_standard_material(
@@ -250,7 +280,6 @@ fn make_standard_material(
         WorldRenderMaterialStyle::Utility => (0.66, 0.16, 0.0, AlphaMode::Opaque, 0.04),
         WorldRenderMaterialStyle::UtilityAccent => (0.58, 0.2, 0.0, AlphaMode::Opaque, 0.09),
         WorldRenderMaterialStyle::InvisiblePickProxy => (1.0, 0.0, 0.0, AlphaMode::Blend, 0.0),
-        WorldRenderMaterialStyle::BuildingWallGrid => (0.92, 0.035, 0.0, AlphaMode::Opaque, 0.0),
     };
     let emissive = color.with_alpha(1.0).to_linear() * emissive_strength;
 
@@ -281,11 +310,11 @@ fn lerp_color(a: Color, b: Color, t: f32) -> Color {
     )
 }
 
-fn lighten_color(color: Color, amount: f32) -> Color {
+pub(crate) fn lighten_color(color: Color, amount: f32) -> Color {
     lerp_color(color, Color::srgb(1.0, 1.0, 1.0), amount)
 }
 
-fn darken_color(color: Color, amount: f32) -> Color {
+pub(crate) fn darken_color(color: Color, amount: f32) -> Color {
     lerp_color(color, Color::srgb(0.0, 0.0, 0.0), amount)
 }
 
@@ -303,4 +332,24 @@ fn building_wall_grid_minor_line_color() -> Color {
 
 pub fn building_door_color() -> Color {
     Color::srgb(0.48, 0.48, 0.48)
+}
+
+pub fn building_wall_visual_profile(kind: MapBuildingWallVisualKind) -> BuildingWallVisualProfile {
+    match kind {
+        MapBuildingWallVisualKind::LegacyGrid => BuildingWallVisualProfile {
+            face_color: building_wall_grid_face_color(),
+            major_line_color: building_wall_grid_major_line_color(),
+            minor_line_color: building_wall_grid_minor_line_color(),
+            cap_color: Color::srgb(0.49, 0.49, 0.49),
+            major_grid_size: 1.0,
+            minor_grid_size: 0.5,
+            major_line_width: 0.016,
+            minor_line_width: 0.0073333335,
+            face_tint_strength: 0.0,
+            grid_line_visibility: 1.0,
+            top_face_grid_visibility: 1.0,
+            cap_height_world: 0.10,
+            body_inset_world: 0.04,
+        },
+    }
 }

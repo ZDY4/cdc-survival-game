@@ -40,11 +40,9 @@ pub(super) fn render_container_page(
                                 / 2.0)),
                             ..default()
                         },
-                        width: px(
-                            CONTAINER_PAGE_LEFT_WIDTH
-                                + CONTAINER_PAGE_RIGHT_WIDTH
-                                + CONTAINER_PAGE_GAP,
-                        ),
+                        width: px(CONTAINER_PAGE_LEFT_WIDTH
+                            + CONTAINER_PAGE_RIGHT_WIDTH
+                            + CONTAINER_PAGE_GAP),
                         padding: UiRect::axes(px(18), px(14)),
                         flex_direction: FlexDirection::Row,
                         justify_content: JustifyContent::SpaceBetween,
@@ -105,11 +103,9 @@ pub(super) fn render_container_page(
                                 / 2.0)),
                             ..default()
                         },
-                        width: px(
-                            CONTAINER_PAGE_LEFT_WIDTH
-                                + CONTAINER_PAGE_RIGHT_WIDTH
-                                + CONTAINER_PAGE_GAP,
-                        ),
+                        width: px(CONTAINER_PAGE_LEFT_WIDTH
+                            + CONTAINER_PAGE_RIGHT_WIDTH
+                            + CONTAINER_PAGE_GAP),
                         flex_direction: FlexDirection::Row,
                         column_gap: px(CONTAINER_PAGE_GAP),
                         ..default()

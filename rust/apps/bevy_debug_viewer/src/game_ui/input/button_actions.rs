@@ -458,6 +458,9 @@ pub(crate) fn handle_game_ui_buttons(
             GameUiButtonAction::SettingsSetMusic(value) => ui.settings.music_volume = value,
             GameUiButtonAction::SettingsSetSfx(value) => ui.settings.sfx_volume = value,
             GameUiButtonAction::SettingsSetWindowMode(value) => ui.settings.window_mode = value,
+            GameUiButtonAction::SettingsSetResolution { width, height } => {
+                ui.settings.window_resolution = ViewerWindowResolution::new(width, height);
+            }
             GameUiButtonAction::SettingsSetVsync(value) => ui.settings.vsync = value,
             GameUiButtonAction::SettingsSetUiScale(value) => ui.settings.ui_scale = value,
             GameUiButtonAction::SettingsCycleBinding(action_name) => {
@@ -964,7 +967,8 @@ fn handle_container_button_action(
             let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) else {
                 return true;
             };
-            match plan_container_store(&ui.runtime_state.runtime, actor_id, container_id, *item_id) {
+            match plan_container_store(&ui.runtime_state.runtime, actor_id, container_id, *item_id)
+            {
                 ContainerQuantityPlan::Immediate { count } => {
                     let status = execute_container_store(
                         &mut ui.runtime_state,

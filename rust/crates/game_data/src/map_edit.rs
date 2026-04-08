@@ -1172,7 +1172,7 @@ mod tests {
 
         let result = service
             .execute(MapEditCommand::CreateMap {
-                map_id: MapId("alpha_grid".into()),
+                map_id: MapId("alpha".into()),
                 name: None,
                 size: MapSize {
                     width: 12,
@@ -1185,11 +1185,11 @@ mod tests {
 
         assert!(result.changed);
         let (map, path) = service
-            .load_map(&MapEditTarget::MapId(MapId("alpha_grid".into())))
+            .load_map(&MapEditTarget::MapId(MapId("alpha".into())))
             .expect("map should be readable");
         assert_eq!(
             path.file_name().and_then(|name| name.to_str()),
-            Some("alpha_grid.json")
+            Some("alpha.json")
         );
         assert_eq!(map.default_level, 0);
         assert_eq!(map.entry_points.len(), 1);
@@ -1201,10 +1201,10 @@ mod tests {
         let fixture = TestFixture::new();
         let service = fixture.service();
         fixture.write_map_json(
-            "beta_grid",
+            "beta",
             json!({
-                "id": "beta_grid",
-                "name": "beta grid",
+                "id": "beta",
+                "name": "beta",
                 "size": {"width": 8, "height": 8},
                 "default_level": 0,
                 "levels": [
@@ -1239,13 +1239,13 @@ mod tests {
 
         let result = service
             .execute(MapEditCommand::FormatMap {
-                target: MapEditTarget::MapId(MapId("beta_grid".into())),
+                target: MapEditTarget::MapId(MapId("beta".into())),
             })
             .expect("format_map should succeed");
 
         assert!(result.changed);
         let (map, _) = service
-            .load_map(&MapEditTarget::MapId(MapId("beta_grid".into())))
+            .load_map(&MapEditTarget::MapId(MapId("beta".into())))
             .expect("map should reload");
         assert_eq!(map.entry_points[0].id, "alpha");
         assert_eq!(map.objects[0].object_id, "a_obj");
@@ -1257,9 +1257,9 @@ mod tests {
         let fixture = TestFixture::new();
         let service = fixture.service();
         fixture.write_map_json(
-            "invalid_grid",
+            "invalid",
             json!({
-                "id": "invalid_grid",
+                "id": "invalid",
                 "name": "invalid",
                 "size": {"width": 4, "height": 4},
                 "default_level": 99,
@@ -1271,7 +1271,7 @@ mod tests {
 
         let result = service
             .execute(MapEditCommand::ValidateMap {
-                target: MapEditTarget::MapId(MapId("invalid_grid".into())),
+                target: MapEditTarget::MapId(MapId("invalid".into())),
             })
             .expect("validate_map should return diagnostics");
 
@@ -1287,11 +1287,11 @@ mod tests {
     fn upsert_and_remove_entry_point_round_trip() {
         let fixture = TestFixture::new();
         let service = fixture.service();
-        fixture.write_minimal_map("gamma_grid");
+        fixture.write_minimal_map("gamma");
 
         service
             .execute(MapEditCommand::UpsertEntryPoint {
-                target: MapEditTarget::MapId(MapId("gamma_grid".into())),
+                target: MapEditTarget::MapId(MapId("gamma".into())),
                 entry_point: MapEntryPointDefinition {
                     id: "north_gate".into(),
                     grid: GridCoord::new(4, 0, 4),
@@ -1302,13 +1302,13 @@ mod tests {
             .expect("entry point upsert should succeed");
         service
             .execute(MapEditCommand::RemoveEntryPoint {
-                target: MapEditTarget::MapId(MapId("gamma_grid".into())),
+                target: MapEditTarget::MapId(MapId("gamma".into())),
                 entry_point_id: "north_gate".into(),
             })
             .expect("entry point remove should succeed");
 
         let (map, _) = service
-            .load_map(&MapEditTarget::MapId(MapId("gamma_grid".into())))
+            .load_map(&MapEditTarget::MapId(MapId("gamma".into())))
             .expect("map should reload");
         assert!(map
             .entry_points
@@ -1320,7 +1320,7 @@ mod tests {
     fn moving_default_entry_updates_default_level() {
         let fixture = TestFixture::new();
         let service = fixture.service();
-        let map = fixture.minimal_map("epsilon_grid");
+        let map = fixture.minimal_map("epsilon");
         let map = service
             .add_level_definition(&map, 2)
             .expect("add level should succeed");
@@ -1344,11 +1344,11 @@ mod tests {
     fn upsert_object_and_paint_cells_modify_map() {
         let fixture = TestFixture::new();
         let service = fixture.service();
-        fixture.write_minimal_map("delta_grid");
+        fixture.write_minimal_map("delta");
 
         service
             .execute(MapEditCommand::UpsertObject {
-                target: MapEditTarget::MapId(MapId("delta_grid".into())),
+                target: MapEditTarget::MapId(MapId("delta".into())),
                 object: MapObjectDefinition {
                     object_id: "crate_01".into(),
                     kind: MapObjectKind::Pickup,
@@ -1371,7 +1371,7 @@ mod tests {
             .expect("object upsert should succeed");
         service
             .execute(MapEditCommand::PaintCells {
-                target: MapEditTarget::MapId(MapId("delta_grid".into())),
+                target: MapEditTarget::MapId(MapId("delta".into())),
                 level: 0,
                 cells: vec![MapCellDefinition {
                     x: 1,
@@ -1385,7 +1385,7 @@ mod tests {
             .expect("paint_cells should succeed");
 
         let (map, _) = service
-            .load_map(&MapEditTarget::MapId(MapId("delta_grid".into())))
+            .load_map(&MapEditTarget::MapId(MapId("delta".into())))
             .expect("map should reload");
         assert!(map
             .objects
@@ -1401,7 +1401,7 @@ mod tests {
     fn remove_level_definition_removes_level_objects_and_entry_points() {
         let fixture = TestFixture::new();
         let service = fixture.service();
-        let mut map = fixture.minimal_map("zeta_grid");
+        let mut map = fixture.minimal_map("zeta");
         map.levels.push(MapLevelDefinition {
             y: 1,
             cells: Vec::new(),

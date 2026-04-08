@@ -27,6 +27,18 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "accessory",
+        "visual_asset": "builtin:item:accessory",
+        "attach_target": "accessory",
+        "presentation_mode": "attach",
+        "hide_base_regions": [],
+        "preview_transform": {},
+        "tint": "#9b6c5e"
+      }
+    },
+    {
       "kind": "attribute_modifiers",
       "attributes": {
         "max_hp": 20.0

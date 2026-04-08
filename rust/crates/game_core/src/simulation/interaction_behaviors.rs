@@ -196,6 +196,7 @@ pub(crate) fn resolve_interaction_option_view(
         id: option.id,
         display_name: option.display_name,
         description: option.description,
+        ap_cost_override: option.ap_cost_override,
         priority: option.priority,
         dangerous: option.dangerous,
         requires_proximity: option.requires_proximity,

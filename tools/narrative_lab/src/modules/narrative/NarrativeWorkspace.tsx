@@ -1802,6 +1802,7 @@ export function NarrativeWorkspace({
     documentKey: string,
     submission: NarrativeQueuedSubmission,
   ) {
+    console.log("[NarrativeLab] executeActiveSubmission start:", { documentKey, submissionId: submission.submissionId, prompt: submission.prompt.slice(0, 100) });
     const activeDocumentSnapshot = getDocument(documentKey);
     const sessionSnapshot = getSession(documentKey);
 
@@ -1816,6 +1817,27 @@ export function NarrativeWorkspace({
     const selectedContextDocumentSnapshot = getSelectedContextDocumentsForSession(
       documentKey,
       sessionSnapshot,
+    );
+
+    const userMessage = buildGenerationUserMessage({
+      submittedPrompt: submission.prompt,
+      action: null,
+    });
+    const placeholderAssistantId = `assistant-${submission.requestId}`;
+    const placeholderAssistantMessage: AiChatMessage = {
+      id: placeholderAssistantId,
+      role: "assistant",
+      label: "AI",
+      content: "正在分析需求...",
+      meta: ["解析意图"],
+      tone: "muted",
+    };
+
+    setDocumentAgents((current) =>
+      updateDocumentAgentSession(current, documentKey, (session) => ({
+        ...session,
+        chatMessages: [...session.chatMessages, userMessage, placeholderAssistantMessage],
+      })),
     );
 
     try {
@@ -1835,11 +1857,15 @@ export function NarrativeWorkspace({
         },
       );
 
+      console.log("[NarrativeLab] actionIntent result:", {
+        action: actionIntent.action,
+        assistantMessage: actionIntent.assistantMessage?.slice(0, 100),
+        optionsCount: actionIntent.options?.length ?? 0,
+        questionsCount: actionIntent.questions?.length ?? 0,
+      });
+
       if (!actionIntent.action) {
-        const userMessage = buildGenerationUserMessage({
-          submittedPrompt: submission.prompt,
-          action: null,
-        });
+        console.log("[NarrativeLab] actionIntent.action is null, entering clarification mode");
 
         setDocumentAgents((current) =>
           updateDocumentAgentSessionWithReviewQueue(current, documentKey, (session) =>
@@ -1851,20 +1877,20 @@ export function NarrativeWorkspace({
                 pendingQuestions: actionIntent.questions,
                 pendingOptions: actionIntent.options,
                 pendingTurnKind: "clarification",
-                chatMessages: [
-                  ...session.chatMessages,
-                  userMessage,
-                  {
-                    id: `assistant-action-intent-${Date.now()}`,
-                    role: "assistant",
-                    label: "AI",
-                    content:
-                      actionIntent.assistantMessage ||
-                      "我还不能稳定判断这轮应该修改当前文档，还是基于它创建一份新文档。请先确认一次。",
-                    meta: ["等待补充"],
-                    tone: "warning",
-                  },
-                ],
+                chatMessages: session.chatMessages.map((message) =>
+                  message.id === placeholderAssistantId
+                    ? {
+                        id: placeholderAssistantId,
+                        role: "assistant",
+                        label: "AI",
+                        content:
+                          actionIntent.assistantMessage ||
+                          "我还不能稳定判断这轮应该修改当前文档，还是基于它创建一份新文档。请先确认一次。",
+                        meta: ["等待补充"],
+                        tone: "warning",
+                      }
+                    : message,
+                ),
               }),
             ),
           ),
@@ -1884,11 +1910,25 @@ export function NarrativeWorkspace({
       }
 
       const action = actionIntent.action;
-      const assistantMessageId = assistantMessageIdForRequest(submission.requestId);
-      const userMessage = buildGenerationUserMessage({
-        submittedPrompt: submission.prompt,
-        action,
-      });
+      const assistantMessageId = placeholderAssistantId;
+
+      setDocumentAgents((current) =>
+        updateDocumentAgentSession(current, documentKey, (session) => ({
+          ...session,
+          chatMessages: session.chatMessages.map((message) =>
+            message.id === placeholderAssistantId
+              ? {
+                  ...message,
+                  content: "正在生成内容...",
+                  meta: ["生成中"],
+                }
+              : message.id === userMessage.id
+                ? { ...message, meta: [action === "create" ? "将创建新文档" : "将修改当前文档"] }
+                : message,
+          ),
+        })),
+      );
+
       const selectedContextDocumentsForGeneration = getSelectedContextDocumentsForSession(
         documentKey,
         latestSession,
@@ -1903,22 +1943,15 @@ export function NarrativeWorkspace({
       });
 
       setDocumentAgents((current) =>
-        updateDocumentAgentSession(current, documentKey, (session) =>
-          beginGenerationSession(
-            updateActiveSubmissionStage(
-              {
-                ...session,
-                mode: action,
-              },
-              "generating",
-            ),
-            {
-              requestId: submission.requestId,
-              userMessage,
-              assistantMessageId,
-            },
-          ),
-        ),
+        updateDocumentAgentSession(current, documentKey, (session) => ({
+          ...session,
+          status: "generating",
+          busy: true,
+          inflightRequestId: submission.requestId,
+          activeSubmission: session.activeSubmission
+            ? { ...session.activeSubmission, stage: "generating" }
+            : null,
+        })),
       );
 
       const command =
@@ -1927,6 +1960,16 @@ export function NarrativeWorkspace({
         workspaceRoot: workspace.workspaceRoot,
         projectRoot: workspace.connectedProjectRoot ?? null,
         request,
+      });
+
+      console.log("[NarrativeLab] Response:", {
+        turnKind: narrativeResponse.turnKind,
+        optionsCount: narrativeResponse.options?.length ?? 0,
+        questionsCount: narrativeResponse.questions?.length ?? 0,
+        planStepsCount: narrativeResponse.planSteps?.length ?? 0,
+        summary: narrativeResponse.summary?.slice(0, 100),
+        draftMarkdownLength: narrativeResponse.draftMarkdown?.length ?? 0,
+        promptDebug: narrativeResponse.promptDebug,
       });
 
       const assistantMessage: AiChatMessage = {
@@ -2903,6 +2946,19 @@ export function NarrativeWorkspace({
                       void submitNarrativePrompt();
                     }
                   }}
+                  onPaste={(event) => {
+                    const items = event.clipboardData?.items;
+                    if (!items) {
+                      return;
+                    }
+                    for (const item of items) {
+                      if (item.type.startsWith("image/")) {
+                        event.preventDefault();
+                        onStatusChange("当前 AI 模型不支持图片输入，请仅粘贴文本内容。");
+                        return;
+                      }
+                    }
+                  }}
                   placeholder={composerPlaceholder}
                 />
                 {(activeSubmission || queuedSubmissions.length) ? (
@@ -2918,7 +2974,9 @@ export function NarrativeWorkspace({
                             <Badge tone="muted">{queueSourceLabel(activeSubmission.source)}</Badge>
                           </div>
                         </div>
-                        <p>{activeSubmission.prompt}</p>
+                        {activeSubmission.stage === "resolving_intent" ? (
+                          <p>{activeSubmission.prompt}</p>
+                        ) : null}
                       </div>
                     ) : null}
                     {queuedSubmissions.length ? (

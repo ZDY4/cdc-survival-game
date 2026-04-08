@@ -1,19 +1,25 @@
 use bevy::light::GlobalAmbientLight;
 use bevy::pbr::OpaqueRendererMethod;
 use bevy::prelude::*;
+use bevy::sprite::{Anchor, Text2d, Text2dShadow};
+use bevy::text::{Justify, TextBackgroundColor, TextColor, TextFont, TextLayout};
+use std::collections::HashMap;
 
-use crate::static_world::{StaticWorldBoxSpec, StaticWorldDecalSpec, StaticWorldGroundSpec};
-
-use super::doors::{
-    build_polygon_prism_mesh, generated_door_open_yaw, generated_door_pivot_translation,
-    generated_door_render_polygon,
+use crate::static_world::{
+    StaticWorldBillboardLabelSpec, StaticWorldBoxSpec, StaticWorldDecalSpec, StaticWorldGroundSpec,
+    StaticWorldMaterialRole,
 };
+
+use super::doors::build_generated_door_mesh_spec;
 use super::materials::{
-    building_door_color, make_world_render_material, world_render_color_for_role,
+    building_door_color, darken_color, lighten_color, make_building_wall_material,
+    make_world_render_material, world_render_color_for_role,
     world_render_material_style_for_role, BuildingWallGridMaterial, GridGroundMaterial,
     GridGroundMaterialExt, WorldRenderMaterialHandle, WorldRenderMaterialStyle,
 };
-use super::mesh_builders::{build_trigger_arrow_texture, level_base_height};
+use super::mesh_builders::{
+    build_building_wall_tile_mesh, build_trigger_arrow_texture, level_base_height,
+};
 use super::{WorldRenderConfig, WorldRenderPalette, WorldRenderScene, WorldRenderStyleProfile};
 
 const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
@@ -34,6 +40,9 @@ struct WorldRenderDecalVisualSpec {
     color: Color,
 }
 
+#[derive(Component)]
+pub struct WorldRenderBillboardLabel;
+
 pub fn spawn_world_render_scene(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -41,6 +50,7 @@ pub fn spawn_world_render_scene(
     ground_materials: &mut Assets<GridGroundMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     images: &mut Assets<Image>,
+    label_font: Option<Handle<Font>>,
     scene: &WorldRenderScene,
     config: WorldRenderConfig,
     palette: &WorldRenderPalette,
@@ -81,6 +91,23 @@ pub fn spawn_world_render_scene(
             entities.push(spawn_decal(commands, meshes, materials, texture, spec));
         }
     }
+    if let Some(font) = label_font.as_ref() {
+        for spec in scene.static_scene.labels.iter().cloned() {
+            entities.push(spawn_billboard_label(commands, font.clone(), palette, spec));
+        }
+    }
+    for spec in &scene.static_scene.building_wall_tiles {
+        if let Some(entity) = spawn_building_wall_tile(
+            commands,
+            meshes,
+            materials,
+            building_wall_materials,
+            spec,
+            scene.static_scene.grid_size,
+        ) {
+            entities.push(entity);
+        }
+    }
     let floor_top = level_base_height(scene.current_level, scene.static_scene.grid_size)
         + config.floor_thickness_world;
     for door in &scene.generated_doors {
@@ -95,6 +122,19 @@ pub fn spawn_world_render_scene(
         ));
     }
     entities
+}
+
+pub fn orient_world_render_billboard_labels(
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    mut labels: Query<&mut Transform, With<WorldRenderBillboardLabel>>,
+) {
+    let Some((_, camera_transform)) = camera_query.iter().find(|(camera, _)| camera.is_active) else {
+        return;
+    };
+    let (_, rotation, _) = camera_transform.to_scale_rotation_translation();
+    for mut transform in &mut labels {
+        transform.rotation = rotation;
+    }
 }
 
 pub fn apply_world_render_camera_projection(
@@ -168,31 +208,39 @@ fn spawn_ground_sections(
     palette: &WorldRenderPalette,
     ground_specs: &[StaticWorldGroundSpec],
 ) -> Vec<Entity> {
-    let material = ground_materials.add(GridGroundMaterial {
-        base: StandardMaterial {
-            base_color: Color::WHITE,
-            perceptual_roughness: 0.97,
-            reflectance: 0.03,
-            metallic: 0.0,
-            opaque_render_method: OpaqueRendererMethod::Forward,
-            ..default()
-        },
-        extension: GridGroundMaterialExt {
-            world_origin: Vec2::ZERO,
-            grid_size: 1.0,
-            line_width: 0.035,
-            variation_strength: config.ground_variation_strength,
-            seed: config.object_style_seed,
-            _padding: Vec2::ZERO,
-            dark_color: palette.ground_dark,
-            light_color: palette.ground_light,
-            edge_color: palette.ground_edge,
-        },
-    });
+    let mut material_cache = HashMap::<StaticWorldMaterialRole, Handle<GridGroundMaterial>>::new();
 
     ground_specs
         .iter()
         .map(|ground| {
+            let material = material_cache
+                .entry(ground.material_role)
+                .or_insert_with(|| {
+                    let (dark_color, light_color, edge_color) =
+                        ground_colors_for_role(ground.material_role, palette);
+                    ground_materials.add(GridGroundMaterial {
+                        base: StandardMaterial {
+                            base_color: Color::WHITE,
+                            perceptual_roughness: 0.97,
+                            reflectance: 0.03,
+                            metallic: 0.0,
+                            opaque_render_method: OpaqueRendererMethod::Forward,
+                            ..default()
+                        },
+                        extension: GridGroundMaterialExt {
+                            world_origin: Vec2::ZERO,
+                            grid_size: 1.0,
+                            line_width: 0.035,
+                            variation_strength: config.ground_variation_strength,
+                            seed: config.object_style_seed,
+                            _padding: Vec2::ZERO,
+                            dark_color,
+                            light_color,
+                            edge_color,
+                        },
+                    })
+                })
+                .clone();
             commands
                 .spawn((
                     Mesh3d(meshes.add(Cuboid::new(
@@ -208,6 +256,22 @@ fn spawn_ground_sections(
         .collect()
 }
 
+fn ground_colors_for_role(
+    role: StaticWorldMaterialRole,
+    palette: &WorldRenderPalette,
+) -> (Color, Color, Color) {
+    if role == StaticWorldMaterialRole::Ground {
+        return (palette.ground_dark, palette.ground_light, palette.ground_edge);
+    }
+
+    let base = world_render_color_for_role(role, palette);
+    (
+        darken_color(base, 0.18),
+        lighten_color(base, 0.12),
+        darken_color(base, 0.34),
+    )
+}
+
 fn spawn_box(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -216,27 +280,22 @@ fn spawn_box(
     spec: WorldRenderBoxVisualSpec,
 ) -> Entity {
     let mesh = meshes.add(Cuboid::new(spec.size.x, spec.size.y, spec.size.z));
-    match make_world_render_material(
+    let material = make_world_render_material(
         materials,
         building_wall_materials,
         spec.color,
         spec.material_style,
-    ) {
-        WorldRenderMaterialHandle::Standard(material) => commands
-            .spawn((
-                Mesh3d(mesh),
-                MeshMaterial3d(material),
-                Transform::from_translation(spec.translation),
-            ))
-            .id(),
-        WorldRenderMaterialHandle::BuildingWallGrid(material) => commands
-            .spawn((
-                Mesh3d(mesh),
-                MeshMaterial3d(material),
-                Transform::from_translation(spec.translation),
-            ))
-            .id(),
-    }
+    );
+    let WorldRenderMaterialHandle::Standard(material) = material else {
+        unreachable!("static world boxes should not use building wall grid materials");
+    };
+    commands
+        .spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(spec.translation),
+        ))
+        .id()
 }
 
 fn spawn_decal(
@@ -264,6 +323,62 @@ fn spawn_decal(
         .id()
 }
 
+fn spawn_billboard_label(
+    commands: &mut Commands,
+    font: Handle<Font>,
+    palette: &WorldRenderPalette,
+    spec: StaticWorldBillboardLabelSpec,
+) -> Entity {
+    commands
+        .spawn((
+            Text2d::new(spec.text),
+            TextFont::from_font_size(spec.font_size).with_font(font),
+            TextColor(world_render_color_for_role(spec.material_role, palette)),
+            TextLayout::new_with_justify(Justify::Center),
+            TextBackgroundColor(Color::srgba(0.04, 0.05, 0.06, 0.62)),
+            Text2dShadow {
+                offset: Vec2::new(2.0, -2.0),
+                color: Color::srgba(0.0, 0.0, 0.0, 0.72),
+            },
+            Anchor::BOTTOM_CENTER,
+            Transform::from_translation(spec.translation),
+            WorldRenderBillboardLabel,
+        ))
+        .id()
+}
+
+fn spawn_building_wall_tile(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    _materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    spec: &crate::static_world::StaticWorldBuildingWallTileSpec,
+    grid_size: f32,
+) -> Option<Entity> {
+    let (mesh, _, _) = build_building_wall_tile_mesh(spec, grid_size)?;
+    let mesh = meshes.add(mesh);
+    let material = make_building_wall_material(
+        building_wall_materials,
+        super::materials::building_wall_visual_profile(spec.visual_kind),
+    );
+    Some(match material {
+        WorldRenderMaterialHandle::Standard(handle) => commands
+            .spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(handle),
+                Transform::from_translation(spec.translation),
+            ))
+            .id(),
+        WorldRenderMaterialHandle::BuildingWallGrid(handle) => commands
+            .spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(handle),
+                Transform::from_translation(spec.translation),
+            ))
+            .id(),
+    })
+}
+
 fn spawn_generated_door_visual(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -273,17 +388,7 @@ fn spawn_generated_door_visual(
     floor_top: f32,
     grid_size: f32,
 ) -> Vec<Entity> {
-    let pivot_translation = generated_door_pivot_translation(door, floor_top, grid_size);
-    let door_height = floor_top + door.wall_height * grid_size;
-    let render_polygon = generated_door_render_polygon(door, grid_size);
-    let Some((mesh, _, _)) = build_polygon_prism_mesh(
-        &render_polygon,
-        door.building_anchor,
-        grid_size,
-        floor_top,
-        door_height,
-        pivot_translation,
-    ) else {
+    let Some(mesh_spec) = build_generated_door_mesh_spec(door, floor_top, grid_size) else {
         return Vec::new();
     };
     let material = make_world_render_material(
@@ -292,10 +397,10 @@ fn spawn_generated_door_visual(
         building_door_color(),
         WorldRenderMaterialStyle::BuildingDoor,
     );
-    let mesh_handle = meshes.add(mesh);
-    let pivot_transform = Transform::from_translation(pivot_translation).with_rotation(
+    let mesh_handle = meshes.add(mesh_spec.mesh);
+    let pivot_transform = Transform::from_translation(mesh_spec.pivot_translation).with_rotation(
         Quat::from_rotation_y(if door.is_open {
-            generated_door_open_yaw(door.axis)
+            mesh_spec.open_yaw
         } else {
             0.0
         }),

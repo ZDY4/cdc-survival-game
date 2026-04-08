@@ -28,7 +28,8 @@ use crate::movement::{
     MovementCommandOutcome, MovementPlan, MovementPlanError, PendingProgressionStep,
 };
 use crate::overworld::{
-    location_by_id, LocationTransitionContext, OverworldStateSnapshot, UnlockedLocationSet,
+    compute_cell_path, location_by_id, resolve_overworld_goal, LocationTransitionContext,
+    OverworldStateSnapshot, UnlockedLocationSet,
 };
 use crate::runtime::DropItemOutcome;
 use crate::turn::{
@@ -1457,6 +1458,7 @@ impl Simulation {
             phase: ActionPhase::Start,
             steps,
             target_actor: None,
+            cost_override: None,
             success: true,
         };
         self.get_actor_ap(actor_id) >= self.resolve_action_cost(action_type, &payload)
@@ -2137,9 +2139,24 @@ impl Simulation {
             return Err(MovementPlanError::UnknownActor { actor_id });
         };
 
-        let requested_path = self
-            .find_path_grid(Some(actor_id), start, goal)
-            .map_err(MovementPlanError::from)?;
+        let (requested_goal, requested_path) = if self.interaction_context.world_mode
+            == WorldMode::Overworld
+        {
+            let definition = self
+                .current_overworld_definition()
+                .map_err(|_| MovementPlanError::NoPath)?;
+            let resolved_goal = resolve_overworld_goal(definition, start, goal)
+                .ok_or(MovementPlanError::NoPath)?;
+            let path =
+                compute_cell_path(definition, start, resolved_goal).ok_or(MovementPlanError::NoPath)?;
+            (resolved_goal, path)
+        } else {
+            (
+                goal,
+                self.find_path_grid(Some(actor_id), start, goal)
+                    .map_err(MovementPlanError::from)?,
+            )
+        };
         let available_steps = self.get_actor_available_steps(actor_id).max(0) as usize;
         let resolved_step_count = requested_path.len().saturating_sub(1).min(available_steps);
         let resolved_path = requested_path
@@ -2152,7 +2169,7 @@ impl Simulation {
         Ok(MovementPlan {
             actor_id,
             start,
-            requested_goal: goal,
+            requested_goal,
             requested_path,
             resolved_goal,
             resolved_path,
@@ -2172,11 +2189,63 @@ impl Simulation {
         } else if plan.resolved_steps() == 0 {
             let ap = self.get_actor_ap(actor_id);
             ActionResult::rejected("insufficient_ap", ap, ap, self.turn.combat_active)
+        } else if self.interaction_context.world_mode == WorldMode::Overworld {
+            self.move_actor_along_path(actor_id, &plan.resolved_path)
         } else {
             self.move_actor_to(actor_id, plan.resolved_goal)
         };
 
         Ok(MovementCommandOutcome { plan, result })
+    }
+
+    fn move_actor_along_path(&mut self, actor_id: ActorId, path: &[GridCoord]) -> ActionResult {
+        if path.len() <= 1 {
+            let ap = self.get_actor_ap(actor_id);
+            return ActionResult::accepted(ap, ap, 0.0, self.turn.combat_active);
+        }
+
+        self.events.push(SimulationEvent::PathComputed {
+            actor_id: Some(actor_id),
+            path_length: path.len(),
+        });
+
+        let steps = (path.len() - 1) as u32;
+        let start_result = self.request_action(ActionRequest {
+            actor_id,
+            action_type: ActionType::Move,
+            phase: ActionPhase::Start,
+            steps: Some(steps),
+            target_actor: None,
+            cost_override: None,
+            success: true,
+        });
+        if !start_result.success {
+            return start_result;
+        }
+
+        let step_result = self.request_action(ActionRequest {
+            actor_id,
+            action_type: ActionType::Move,
+            phase: ActionPhase::Step,
+            steps: Some(steps),
+            target_actor: None,
+            cost_override: None,
+            success: true,
+        });
+        if !step_result.success {
+            return step_result;
+        }
+
+        self.apply_actor_movement_path(actor_id, path);
+        self.request_action(ActionRequest {
+            actor_id,
+            action_type: ActionType::Move,
+            phase: ActionPhase::Complete,
+            steps: Some(steps),
+            target_actor: None,
+            cost_override: None,
+            success: true,
+        })
     }
 
     pub fn request_action(&mut self, request: ActionRequest) -> ActionResult {
@@ -2213,10 +2282,23 @@ impl Simulation {
             return ActionResult::rejected("unknown_actor", 0.0, 0.0, self.turn.combat_active);
         };
 
-        let path = match self.find_path_grid(Some(actor_id), start, goal) {
-            Ok(path) => path,
-            Err(error) => {
-                return self.reject_action(pathfinding_error_reason(&error), actor_id);
+        let path = if self.interaction_context.world_mode == WorldMode::Overworld {
+            let Ok(definition) = self.current_overworld_definition() else {
+                return self.reject_action("no_path", actor_id);
+            };
+            let Some(resolved_goal) = resolve_overworld_goal(definition, start, goal) else {
+                return self.reject_action("no_path", actor_id);
+            };
+            let Some(path) = compute_cell_path(definition, start, resolved_goal) else {
+                return self.reject_action("no_path", actor_id);
+            };
+            path
+        } else {
+            match self.find_path_grid(Some(actor_id), start, goal) {
+                Ok(path) => path,
+                Err(error) => {
+                    return self.reject_action(pathfinding_error_reason(&error), actor_id);
+                }
             }
         };
 
@@ -2237,6 +2319,7 @@ impl Simulation {
             phase: ActionPhase::Start,
             steps: Some(steps),
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         if !start_result.success {
@@ -2249,6 +2332,7 @@ impl Simulation {
             phase: ActionPhase::Step,
             steps: Some(steps),
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         if !step_result.success {
@@ -2262,6 +2346,7 @@ impl Simulation {
             phase: ActionPhase::Complete,
             steps: Some(steps),
             target_actor: None,
+            cost_override: None,
             success: true,
         })
     }
@@ -2385,6 +2470,7 @@ impl Simulation {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: resolved_target.primary_actor_target(),
+            cost_override: None,
             success: true,
         });
         if !start_result.success {
@@ -2413,6 +2499,7 @@ impl Simulation {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: resolved_target.primary_actor_target(),
+            cost_override: None,
             success: true,
         });
         if !complete_result.success {
@@ -2702,17 +2789,30 @@ impl Simulation {
     fn queue_turn_end_for_actor(&mut self, actor_id: ActorId) {
         if self.turn.combat_active {
             if self.turn.current_actor_id == Some(actor_id) {
-                self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
+                self.queue_pending_progression_once(PendingProgressionStep::EndCurrentCombatTurn);
             }
         } else if self.get_actor_side(actor_id) == Some(ActorSide::Player) {
             if self.actor_turn_open(actor_id) {
                 self.end_actor_turn(actor_id);
             }
-            self.queue_pending_progression(PendingProgressionStep::RunNonCombatWorldCycle);
-            self.queue_pending_progression(PendingProgressionStep::StartNextNonCombatPlayerTurn);
+            self.queue_pending_progression_once(PendingProgressionStep::RunNonCombatWorldCycle);
+            self.queue_pending_progression_once(
+                PendingProgressionStep::StartNextNonCombatPlayerTurn,
+            );
         } else if self.actor_turn_open(actor_id) {
             self.end_actor_turn(actor_id);
         }
+    }
+
+    fn queue_pending_progression_once(&mut self, step: PendingProgressionStep) {
+        if self
+            .pending_progression
+            .iter()
+            .any(|queued| *queued == step)
+        {
+            return;
+        }
+        self.queue_pending_progression(step);
     }
 
     fn request_action_start(
@@ -2905,12 +3005,16 @@ impl Simulation {
             let ap_after = self.get_actor_ap(actor_id);
             if ap_after < self.config.affordable_threshold {
                 if self.turn.combat_active && self.turn.current_actor_id == Some(actor_id) {
-                    self.queue_pending_progression(PendingProgressionStep::EndCurrentCombatTurn);
+                    self.queue_pending_progression_once(
+                        PendingProgressionStep::EndCurrentCombatTurn,
+                    );
                 } else if !self.turn.combat_active
                     && self.get_actor_side(actor_id) == Some(ActorSide::Player)
                 {
-                    self.queue_pending_progression(PendingProgressionStep::RunNonCombatWorldCycle);
-                    self.queue_pending_progression(
+                    self.queue_pending_progression_once(
+                        PendingProgressionStep::RunNonCombatWorldCycle,
+                    );
+                    self.queue_pending_progression_once(
                         PendingProgressionStep::StartNextNonCombatPlayerTurn,
                     );
                 }
@@ -2943,7 +3047,7 @@ impl Simulation {
         snapshot
     }
 
-    fn current_overworld_definition(&self) -> Result<&OverworldDefinition, String> {
+    pub(crate) fn current_overworld_definition(&self) -> Result<&OverworldDefinition, String> {
         let Some(library) = self.overworld_library.as_ref() else {
             return Err("overworld_library_missing".to_string());
         };
@@ -3174,6 +3278,9 @@ impl Simulation {
     }
 
     fn resolve_action_cost(&self, action_type: ActionType, request: &ActionRequest) -> f32 {
+        if let Some(cost_override) = request.cost_override {
+            return cost_override.max(0.0);
+        }
         if action_type == ActionType::Move {
             request.steps.unwrap_or(1) as f32 * self.config.action_cost
         } else {
@@ -3422,8 +3529,9 @@ mod tests {
         MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
         MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
         OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow, QuestLibrary,
-        QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell, StairKind, WorldCoord, WorldMode,
+        OverworldTerrainKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition,
+        QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell,
+        StairKind, WorldCoord, WorldMode,
     };
 
     use crate::actor::{FollowGridGoalAiController, InteractOnceAiController};
@@ -3513,6 +3621,7 @@ mod tests {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         assert!(start.success);
@@ -3523,6 +3632,7 @@ mod tests {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         assert!(complete.success);
@@ -3561,6 +3671,7 @@ mod tests {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         assert!(start.success);
@@ -3571,6 +3682,7 @@ mod tests {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         assert!(complete.success);
@@ -3610,6 +3722,7 @@ mod tests {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         simulation.request_action(ActionRequest {
@@ -3618,6 +3731,7 @@ mod tests {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         advance_all_progression(&mut simulation);
@@ -3668,6 +3782,7 @@ mod tests {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: None,
+            cost_override: None,
             success: true,
         });
         assert!(!wrong_turn.success);
@@ -3678,6 +3793,7 @@ mod tests {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: Some(hostile_one),
+            cost_override: None,
             success: true,
         });
         assert!(attack.success);
@@ -3687,6 +3803,7 @@ mod tests {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: Some(player),
+            cost_override: None,
             success: true,
         });
         assert!(!attack_slot_taken.success);
@@ -3696,6 +3813,7 @@ mod tests {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: Some(hostile_one),
+            cost_override: None,
             success: true,
         });
         assert_eq!(
@@ -3748,6 +3866,7 @@ mod tests {
             phase: ActionPhase::Start,
             steps: None,
             target_actor: Some(hostile),
+            cost_override: None,
             success: true,
         });
         assert!(start.success);
@@ -3758,6 +3877,7 @@ mod tests {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: Some(hostile),
+            cost_override: None,
             success: true,
         });
         assert!(complete.success);
@@ -4296,6 +4416,13 @@ mod tests {
         });
 
         assert!(result.success);
+        let action = result
+            .action_result
+            .as_ref()
+            .expect("talk should yield an action result");
+        assert_eq!(action.ap_before, 1.0);
+        assert_eq!(action.ap_after, 1.0);
+        assert_eq!(action.consumed, 0.0);
         assert_eq!(result.dialogue_id.as_deref(), Some("trader_lao_wang"));
         assert_eq!(
             result
@@ -4311,6 +4438,15 @@ mod tests {
                 .and_then(|state| state.current_node)
                 .map(|node| node.id),
             Some("start".to_string())
+        );
+        assert!(!simulation.actor_turn_open(player));
+        assert_eq!(
+            advance_next_progression(&mut simulation),
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert_eq!(
+            advance_next_progression(&mut simulation),
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
         );
     }
 
@@ -4635,7 +4771,7 @@ mod tests {
             .expect("scene transition should publish context");
         assert_eq!(
             context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(
             context.active_outdoor_location_id.as_deref(),
@@ -4691,7 +4827,7 @@ mod tests {
             .expect("scene transition should publish context");
         assert_eq!(
             context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(
             context.active_location_id.as_deref(),
@@ -4736,11 +4872,11 @@ mod tests {
         let context = simulation.current_interaction_context();
         assert_eq!(
             simulation.grid_world().map_id().map(MapId::as_str),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(
             context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(
             context.active_location_id.as_deref(),
@@ -5605,6 +5741,9 @@ mod tests {
                     props: MapObjectProps {
                         building: Some(MapBuildingProps {
                             prefab_id: "survivor_outpost_01_dormitory".into(),
+                            wall_visual: Some(game_data::MapBuildingWallVisualSpec {
+                                kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                            }),
                             layout: None,
                             extra: std::collections::BTreeMap::new(),
                         }),
@@ -5664,6 +5803,9 @@ mod tests {
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
                         prefab_id: "generated_house".into(),
+                        wall_visual: Some(game_data::MapBuildingWallVisualSpec {
+                            kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                        }),
                         layout: Some(MapBuildingLayoutSpec {
                             seed: 7,
                             target_room_count: 3,
@@ -5850,11 +5992,11 @@ mod tests {
     fn sample_scene_transition_map_library() -> MapLibrary {
         MapLibrary::from(BTreeMap::from([
             (
-                MapId("survivor_outpost_01_grid".into()),
+                MapId("survivor_outpost_01".into()),
                 sample_scene_transition_outdoor_map_definition(),
             ),
             (
-                MapId("survivor_outpost_01_interior_grid".into()),
+                MapId("survivor_outpost_01_interior".into()),
                 sample_scene_transition_interior_map_definition(),
             ),
         ]))
@@ -5862,7 +6004,7 @@ mod tests {
 
     fn sample_scene_transition_outdoor_map_definition() -> MapDefinition {
         MapDefinition {
-            id: MapId("survivor_outpost_01_grid".into()),
+            id: MapId("survivor_outpost_01".into()),
             name: "Outpost Outdoor".into(),
             size: MapSize {
                 width: 12,
@@ -5893,7 +6035,7 @@ mod tests {
 
     fn sample_scene_transition_interior_map_definition() -> MapDefinition {
         MapDefinition {
-            id: MapId("survivor_outpost_01_interior_grid".into()),
+            id: MapId("survivor_outpost_01_interior".into()),
             name: "Outpost Interior".into(),
             size: MapSize {
                 width: 8,
@@ -5964,7 +6106,7 @@ mod tests {
                         name: "Outpost".into(),
                         description: String::new(),
                         kind: OverworldLocationKind::Outdoor,
-                        map_id: MapId("survivor_outpost_01_grid".into()),
+                        map_id: MapId("survivor_outpost_01".into()),
                         entry_point_id: "default_entry".into(),
                         parent_outdoor_location_id: None,
                         return_entry_point_id: None,
@@ -5980,7 +6122,7 @@ mod tests {
                         name: "Outpost Interior".into(),
                         description: String::new(),
                         kind: OverworldLocationKind::Interior,
-                        map_id: MapId("survivor_outpost_01_interior_grid".into()),
+                        map_id: MapId("survivor_outpost_01_interior".into()),
                         entry_point_id: "default_entry".into(),
                         parent_outdoor_location_id: Some(OverworldLocationId(
                             "survivor_outpost_01".into(),
@@ -5996,7 +6138,7 @@ mod tests {
                 ],
                 cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
+                    terrain: OverworldTerrainKind::Road,
                     blocked: false,
                     extra: BTreeMap::new(),
                 }],

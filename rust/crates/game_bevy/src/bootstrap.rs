@@ -132,16 +132,16 @@ mod tests {
     fn startup_seed_aligns_location_and_characters_with_perimeter_map() {
         let maps = MapLibrary::from(BTreeMap::from([
             (
-                MapId("survivor_outpost_01_grid".into()),
-                sample_map("survivor_outpost_01_grid"),
+                MapId("survivor_outpost_01".into()),
+                sample_map("survivor_outpost_01"),
             ),
             (
-                MapId("survivor_outpost_01_perimeter_grid".into()),
-                sample_map("survivor_outpost_01_perimeter_grid"),
+                MapId("survivor_outpost_01_perimeter".into()),
+                sample_map("survivor_outpost_01_perimeter"),
             ),
             (
-                MapId("survivor_outpost_01_interior_grid".into()),
-                sample_map("survivor_outpost_01_interior_grid"),
+                MapId("survivor_outpost_01_interior".into()),
+                sample_map("survivor_outpost_01_interior"),
             ),
         ]));
         let overworld = sample_overworld_library();
@@ -149,7 +149,7 @@ mod tests {
         let seed = build_default_startup_seed(
             &maps,
             &overworld,
-            Some(MapId("survivor_outpost_01_perimeter_grid".into())),
+            Some(MapId("survivor_outpost_01_perimeter".into())),
         );
 
         assert_eq!(
@@ -169,16 +169,16 @@ mod tests {
     fn startup_seed_aligns_location_and_characters_with_interior_map() {
         let maps = MapLibrary::from(BTreeMap::from([
             (
-                MapId("survivor_outpost_01_grid".into()),
-                sample_map("survivor_outpost_01_grid"),
+                MapId("survivor_outpost_01".into()),
+                sample_map("survivor_outpost_01"),
             ),
             (
-                MapId("survivor_outpost_01_perimeter_grid".into()),
-                sample_map("survivor_outpost_01_perimeter_grid"),
+                MapId("survivor_outpost_01_perimeter".into()),
+                sample_map("survivor_outpost_01_perimeter"),
             ),
             (
-                MapId("survivor_outpost_01_interior_grid".into()),
-                sample_map("survivor_outpost_01_interior_grid"),
+                MapId("survivor_outpost_01_interior".into()),
+                sample_map("survivor_outpost_01_interior"),
             ),
         ]));
         let overworld = sample_overworld_library();
@@ -186,7 +186,7 @@ mod tests {
         let seed = build_default_startup_seed(
             &maps,
             &overworld,
-            Some(MapId("survivor_outpost_01_interior_grid".into())),
+            Some(MapId("survivor_outpost_01_interior".into())),
         );
 
         assert_eq!(
@@ -220,7 +220,7 @@ mod tests {
                 facing: None,
                 extra: BTreeMap::new(),
             }],
-            objects: if id == "survivor_outpost_01_perimeter_grid" {
+            objects: if id == "survivor_outpost_01_perimeter" {
                 vec![game_data::MapObjectDefinition {
                     object_id: "spawn_walker".into(),
                     kind: game_data::MapObjectKind::AiSpawn,
@@ -258,20 +258,20 @@ mod tests {
                     height: 1,
                 },
                 locations: vec![
-                    sample_location("survivor_outpost_01", "survivor_outpost_01_grid"),
+                    sample_location("survivor_outpost_01", "survivor_outpost_01"),
                     sample_location(
                         "survivor_outpost_01_perimeter",
-                        "survivor_outpost_01_perimeter_grid",
+                        "survivor_outpost_01_perimeter",
                     ),
                     sample_interior_location(
                         "survivor_outpost_01_interior",
-                        "survivor_outpost_01_interior_grid",
+                        "survivor_outpost_01_interior",
                         "survivor_outpost_01",
                     ),
                 ],
                 cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
+                    terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
                     extra: BTreeMap::new(),
                 }],

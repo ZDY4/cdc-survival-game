@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod ai_content;
 pub mod ai_preview;
+pub mod appearance;
 pub mod character;
 pub mod content;
 pub mod content_registry;
@@ -44,6 +45,18 @@ pub use ai_preview::{
     ResolvedCharacterLifeProfile, SmartObjectAccessProfilePreview, SmartObjectAccessRulePreview,
     WeeklyScheduleEntryPreview, WeeklySchedulePreview,
 };
+pub use appearance::{
+    build_character_appearance_preview, build_character_appearance_preview_for_definition,
+    load_character_appearance_library, resolve_preview_loadout,
+    validate_character_appearance_content, validate_character_appearance_profile,
+    CharacterAppearanceIssue, CharacterAppearanceIssueSeverity, CharacterAppearanceLibrary,
+    CharacterAppearanceLoadError, CharacterAppearancePreviewError,
+    CharacterAppearanceProfileDefinition, CharacterAppearanceProfileValidationError,
+    CharacterAttachTarget, CharacterPreviewBounds, ItemAppearanceDefinition,
+    ItemAppearancePresentationMode, PreviewTransform, PreviewVec3,
+    ResolvedCharacterAppearancePreview, ResolvedCharacterBaseRegion, ResolvedEquipmentPreviewEntry,
+    ResolvedEquipmentPreviewLoadout,
+};
 pub use character::{
     load_character_library, validate_character_definition, CharacterAiProfile, CharacterArchetype,
     CharacterAttributeTemplate, CharacterCombatProfile, CharacterDefinition,
@@ -85,8 +98,8 @@ pub use interaction::{
     parse_legacy_interaction_kind, CharacterInteractionProfile, InteractionContextSnapshot,
     InteractionExecutionRequest, InteractionExecutionResult, InteractionKindSpec,
     InteractionKindValidation, InteractionOptionDefinition, InteractionOptionId,
-    InteractionOptionKind, InteractionPrompt, InteractionTargetId, ResolvedInteractionOption,
-    WorldMode,
+    InteractionOptionKind, InteractionPrompt, InteractionSuccessTurnPolicy, InteractionTargetId,
+    ResolvedInteractionOption, WorldMode,
 };
 pub use map::{
     building_layout_story_levels, expand_object_footprint, load_map_library,
@@ -94,8 +107,9 @@ pub use map::{
     object_effectively_blocks_sight, rotated_footprint_size, validate_map_definition,
     BuildingGeneratorKind, MapAiSpawnProps, MapBuildingDiagonalEdge,
     MapBuildingFootprintPolygonSpec, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec,
-    MapBuildingStorySpec, MapBuildingVisualOutline, MapCellDefinition, MapContainerItemEntry,
-    MapContainerProps, MapDefinition, MapDefinitionValidationError, MapEntryPointDefinition, MapId,
+    MapBuildingStorySpec, MapBuildingVisualOutline, MapBuildingWallVisualKind,
+    MapBuildingWallVisualSpec, MapCellDefinition, MapContainerItemEntry, MapContainerProps,
+    MapDefinition, MapDefinitionValidationError, MapEntryPointDefinition, MapId,
     MapInteractiveProps, MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition,
     MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
     MapTriggerProps, MapValidationCatalog, RelativeGridCell, RelativeGridVertex, StairKind,
@@ -115,7 +129,8 @@ pub use overworld::{
     load_overworld_library, load_overworld_library_with_catalog, validate_overworld_definition,
     OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
     OverworldLoadError, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-    OverworldTravelRuleSet, OverworldValidationCatalog, OverworldValidationError,
+    OverworldTerrainKind, OverworldTravelRuleSet, OverworldValidationCatalog,
+    OverworldValidationError,
 };
 pub use quest::{
     load_quest_library, validate_quest_definition, QuestChoiceOption, QuestConnection,

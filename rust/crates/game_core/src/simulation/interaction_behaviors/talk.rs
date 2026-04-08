@@ -1,4 +1,5 @@
 use super::*;
+use game_data::InteractionSuccessTurnPolicy;
 
 const KINDS: &[InteractionOptionKind] = &[InteractionOptionKind::Talk];
 
@@ -20,7 +21,9 @@ pub(crate) fn default_actor_option(
     let mut talk = InteractionOptionDefinition {
         kind: InteractionOptionKind::Talk,
         dialogue_id,
+        ap_cost_override: Some(0.0),
         priority: 800,
+        success_turn_policy: InteractionSuccessTurnPolicy::EndTurn,
         ..InteractionOptionDefinition::default()
     };
     talk.ensure_defaults();
@@ -31,7 +34,8 @@ fn execute_talk_interaction(
     simulation: &mut Simulation,
     context: InteractionExecutionContext,
 ) -> InteractionExecutionResult {
-    let action = simulation.perform_interact(context.actor_id);
+    let action = simulation
+        .perform_interact_with_cost(context.actor_id, context.option_definition.ap_cost_override);
     if !action.success {
         return simulation.failed_interaction_action(
             context.actor_id,
@@ -52,6 +56,12 @@ fn execute_talk_interaction(
             dialogue_id,
         )
     });
+    if dialogue_id.is_some()
+        && context.option_definition.success_turn_policy == InteractionSuccessTurnPolicy::EndTurn
+        && simulation.actor_turn_open(context.actor_id)
+    {
+        simulation.end_turn(context.actor_id);
+    }
     simulation
         .events
         .push(SimulationEvent::InteractionSucceeded {

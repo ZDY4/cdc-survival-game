@@ -150,6 +150,32 @@ pub(super) fn render_settings_panel(
                     _ => "windowed".to_string(),
                 }),
             ));
+            if settings.window_mode == "windowed" {
+                body.spawn(action_button(
+                    font,
+                    &format!(
+                        "分辨率 {}x{}",
+                        settings.window_resolution.width, settings.window_resolution.height
+                    ),
+                    {
+                        let next_resolution = next_resolution_preset(settings.window_resolution);
+                        GameUiButtonAction::SettingsSetResolution {
+                            width: next_resolution.width,
+                            height: next_resolution.height,
+                        }
+                    },
+                ));
+            } else {
+                body.spawn(text_bundle(
+                    font,
+                    &format!(
+                        "分辨率 {}x{}（仅窗口模式可改）",
+                        settings.window_resolution.width, settings.window_resolution.height
+                    ),
+                    10.5,
+                    ui_text_secondary_color(),
+                ));
+            }
             body.spawn(action_button(
                 font,
                 &format!("VSync {}", if settings.vsync { "On" } else { "Off" }),

@@ -483,6 +483,7 @@ mod tests {
         MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation, MapSize, MapTriggerProps,
         OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
         OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTerrainKind,
         OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
@@ -766,13 +767,13 @@ mod tests {
                 cells: vec![
                     OverworldCellDefinition {
                         grid: GridCoord::new(0, 0, 0),
-                        terrain: String::new(),
+                        terrain: OverworldTerrainKind::Plain,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
-                        terrain: String::new(),
+                        terrain: OverworldTerrainKind::Plain,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },
@@ -926,7 +927,7 @@ mod tests {
             for x in 0..size.width as i32 {
                 cells.push(OverworldCellDefinition {
                     grid: GridCoord::new(x, 0, z),
-                    terrain: String::new(),
+                    terrain: OverworldTerrainKind::Plain,
                     blocked: false,
                     extra: BTreeMap::new(),
                 });

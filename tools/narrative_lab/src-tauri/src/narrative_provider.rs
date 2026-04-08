@@ -822,6 +822,16 @@ fn finalize_generation(
     let review_queue_items =
         build_review_queue_items(&turn_kind, &plan_steps, &requested_actions, &draft_markdown);
 
+    if turn_kind == "options" || turn_kind == "clarification" || turn_kind == "plan" {
+        eprintln!(
+            "[NarrativeLab] AI response: turn_kind={}, options.len()={}, questions.len()={}, plan_steps.len()={}",
+            turn_kind,
+            options.len(),
+            questions.len(),
+            plan_steps.len()
+        );
+    }
+
     Ok(NarrativeGenerateResponse {
         engine_mode: engine_mode.to_string(),
         turn_kind: turn_kind.clone(),
@@ -851,6 +861,10 @@ fn finalize_generation(
                 "context": context.context.clone(),
                 "engineMode": engine_mode,
                 "agentRuns": &agent_runs,
+                "turnKind": turn_kind,
+                "options": options,
+                "questions": questions,
+                "planSteps": plan_steps,
             }),
         ),
         raw_output,
@@ -933,6 +947,7 @@ fn build_single_agent_payload(
         "如果你希望用户批准某个 Narrative Lab 动作，使用 requested_actions；动作不会自动执行。",
         "requested_actions 中 action_type 只能是 read_active_document, read_related_documents, create_derived_document, apply_candidate_patch, apply_all_patches, save_active_document, open_document, list_workspace_documents, update_related_documents, rename_active_document, set_document_status, split_plan_into_documents, archive_document。",
         "requested_actions 可选字段：preview_only, affected_document_keys, risk_level；risk_level 只能是 low, medium, high。",
+        "create_derived_document 的 payload 必须包含 docType（如 character），可选 title、slug、markdown 字段；docType 只能是 character, faction, location, event, item, quest, lore。",
         "只有 final_answer 允许返回非空 draft_markdown。不要包含 YAML frontmatter。",
     ]
     .join("\n");
@@ -1116,6 +1131,8 @@ fn build_action_rules(request: &NarrativeGenerateRequest) -> Vec<String> {
         "create" => vec![
             "根据模板生成完整可读文稿。".to_string(),
             "文稿应包含清晰标题层级和结构化落地提示。".to_string(),
+            "如果用户明确要求生成多个独立文档，必须使用 requested_actions 为每个目标创建独立的 create_derived_document 动作，不要把多个独立内容合并到一个 draft_markdown 里。".to_string(),
+            "当需要在当前会话中创建多个派生文档时，每个 requested_actions 项的 action_type 设为 create_derived_document，并为每份文档设置清晰的 title、target_doc_type 和 content 字段。".to_string(),
         ],
         "revise_document" => vec![
             "在保留文稿主方向的前提下整体改写。".to_string(),
@@ -1425,14 +1442,49 @@ fn resolve_turn_kind(
         .map(str::trim)
         .unwrap_or_default();
 
-    match explicit {
+    let resolved = match explicit {
+        "clarification" if questions.is_empty() => {
+            if !draft_markdown.trim().is_empty() {
+                "final_answer".to_string()
+            } else {
+                "blocked".to_string()
+            }
+        }
+        "options" if options.is_empty() => {
+            if !draft_markdown.trim().is_empty() {
+                "final_answer".to_string()
+            } else {
+                "blocked".to_string()
+            }
+        }
+        "plan" if plan_steps.is_empty() => {
+            if !draft_markdown.trim().is_empty() {
+                "final_answer".to_string()
+            } else {
+                "blocked".to_string()
+            }
+        }
         "final_answer" | "clarification" | "options" | "plan" | "blocked" => explicit.to_string(),
         _ if !questions.is_empty() => "clarification".to_string(),
         _ if !options.is_empty() => "options".to_string(),
         _ if !plan_steps.is_empty() && draft_markdown.trim().is_empty() => "plan".to_string(),
         _ if !draft_markdown.trim().is_empty() => "final_answer".to_string(),
         _ => "blocked".to_string(),
+    };
+
+    if explicit != resolved {
+        eprintln!(
+            "[NarrativeLab] turn_kind corrected: {} -> {} (questions={}, options={}, plan={}, draft={})",
+            explicit,
+            resolved,
+            questions.len(),
+            options.len(),
+            plan_steps.len(),
+            if draft_markdown.trim().is_empty() { "empty" } else { "present" }
+        );
     }
+
+    resolved
 }
 
 fn read_assistant_message(

@@ -27,6 +27,20 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "feet",
+        "visual_asset": "builtin:item:feet",
+        "attach_target": "feet",
+        "presentation_mode": "replace_region",
+        "hide_base_regions": [
+          "feet"
+        ],
+        "preview_transform": {},
+        "tint": "#6e593d"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 50,
       "max_durability": 50,

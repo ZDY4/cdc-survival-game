@@ -4,11 +4,12 @@
 use super::*;
 use game_bevy::static_world as shared_static_world;
 use game_bevy::static_world::{
-    default_color_for_role, StaticWorldMaterialRole as SharedRole,
-    StaticWorldSceneSpec as SharedSceneSpec, StaticWorldSemantic as SharedSemantic,
+    StaticWorldMaterialRole as SharedRole, StaticWorldSceneSpec as SharedSceneSpec,
+    StaticWorldSemantic as SharedSemantic,
 };
 use game_bevy::world_render::{
-    build_world_render_scene_from_simulation_snapshot, WorldRenderConfig as SharedWorldRenderConfig,
+    build_building_wall_tile_mesh, build_world_render_scene_from_simulation_snapshot,
+    WorldRenderConfig as SharedWorldRenderConfig,
 };
 
 pub(super) fn rebuild_static_world(
@@ -43,6 +44,7 @@ pub(super) fn rebuild_static_world(
             bounds_override: Some(shared_bounds(bounds)),
         },
     );
+    let shared_grid_size = shared_scene.grid_size;
 
     static_world_state
         .entities
@@ -77,6 +79,38 @@ pub(super) fn rebuild_static_world(
         }
     }
 
+    for spec in shared_scene.building_wall_tiles.into_iter() {
+        let (mesh, _, aabb_half_extents) =
+            match build_building_wall_tile_mesh(&spec, shared_grid_size) {
+                Some(result) => result,
+                None => continue,
+            };
+        let occluder_cells = spec.occluder_cells.clone();
+        let semantic = spec.semantic.as_ref().map(shared_semantic_to_binding);
+        let outline_target = semantic.as_ref().map(|binding| binding.semantic.clone());
+        let spawned = spawn_building_wall_tile(
+            commands,
+            meshes,
+            building_wall_materials,
+            mesh,
+            spec.translation,
+            spec.visual_kind,
+            semantic,
+            outline_target,
+            aabb_half_extents,
+        );
+        static_world_state.entities.push(spawned.entity);
+        static_world_state
+            .occluders
+            .push(occluder_visual_from_spawned_mesh(
+                spawned,
+                occluder_cells,
+                floor_top,
+                grid_size,
+                render_config,
+            ));
+    }
+
     for spec in shared_scene
         .decals
         .into_iter()
@@ -107,11 +141,15 @@ fn shared_material_role_to_viewer_material_style(
 ) -> MaterialStyle {
     match role {
         shared_static_world::StaticWorldMaterialRole::Ground
+        | shared_static_world::StaticWorldMaterialRole::OverworldGroundRoad
+        | shared_static_world::StaticWorldMaterialRole::OverworldGroundPlain
+        | shared_static_world::StaticWorldMaterialRole::OverworldGroundForest
+        | shared_static_world::StaticWorldMaterialRole::OverworldGroundRiver
+        | shared_static_world::StaticWorldMaterialRole::OverworldGroundLake
+        | shared_static_world::StaticWorldMaterialRole::OverworldGroundMountain
+        | shared_static_world::StaticWorldMaterialRole::OverworldGroundUrban
         | shared_static_world::StaticWorldMaterialRole::BuildingFloor => {
             MaterialStyle::StructureAccent
-        }
-        shared_static_world::StaticWorldMaterialRole::BuildingWall => {
-            MaterialStyle::BuildingWallGrid
         }
         shared_static_world::StaticWorldMaterialRole::BuildingDoor => MaterialStyle::BuildingDoor,
         shared_static_world::StaticWorldMaterialRole::StairBase
@@ -119,7 +157,16 @@ fn shared_material_role_to_viewer_material_style(
         | shared_static_world::StaticWorldMaterialRole::InteractiveBase
         | shared_static_world::StaticWorldMaterialRole::AiSpawnBase
         | shared_static_world::StaticWorldMaterialRole::OverworldCell
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocation => MaterialStyle::Utility,
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationGeneric
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationHospital
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationSchool
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationStore
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationStreet
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationOutpost
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationFactory
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationForest
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationRuins
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationSubway => MaterialStyle::Utility,
         shared_static_world::StaticWorldMaterialRole::StairAccent
         | shared_static_world::StaticWorldMaterialRole::PickupAccent
         | shared_static_world::StaticWorldMaterialRole::InteractiveAccent
@@ -197,30 +244,40 @@ fn spawn_shared_ground_sections(
     palette: &ViewerPalette,
     ground_specs: &[shared_static_world::StaticWorldGroundSpec],
 ) -> Vec<Entity> {
-    let material = ground_materials.add(GridGroundMaterial {
-        base: StandardMaterial {
-            base_color: Color::WHITE,
-            perceptual_roughness: 0.97,
-            reflectance: 0.03,
-            metallic: 0.0,
-            opaque_render_method: OpaqueRendererMethod::Forward,
-            ..default()
-        },
-        extension: GridGroundMaterialExt {
-            world_origin: Vec2::ZERO,
-            grid_size: 1.0,
-            line_width: 0.035,
-            variation_strength: render_config.ground_variation_strength,
-            seed: render_config.object_style_seed,
-            dark_color: palette.ground_dark,
-            light_color: palette.ground_light,
-            edge_color: palette.ground_edge,
-        },
-    });
+    let mut material_cache =
+        std::collections::HashMap::<SharedRole, Handle<GridGroundMaterial>>::new();
 
     ground_specs
         .iter()
         .map(|ground| {
+            let material = material_cache
+                .entry(ground.material_role)
+                .or_insert_with(|| {
+                    let (dark_color, light_color, edge_color) =
+                        shared_ground_colors(ground.material_role, palette);
+                    ground_materials.add(GridGroundMaterial {
+                        base: StandardMaterial {
+                            base_color: Color::WHITE,
+                            perceptual_roughness: 0.97,
+                            reflectance: 0.03,
+                            metallic: 0.0,
+                            opaque_render_method: OpaqueRendererMethod::Forward,
+                            ..default()
+                        },
+                        extension: GridGroundMaterialExt {
+                            world_origin: Vec2::ZERO,
+                            grid_size: 1.0,
+                            line_width: 0.035,
+                            variation_strength: render_config.ground_variation_strength,
+                            seed: render_config.object_style_seed,
+                            _padding: Vec2::ZERO,
+                            dark_color,
+                            light_color,
+                            edge_color,
+                        },
+                    })
+                })
+                .clone();
             commands
                 .spawn((
                     Mesh3d(meshes.add(Cuboid::new(
@@ -262,6 +319,15 @@ pub(crate) fn collect_static_world_box_specs(
             outline_target: shared_semantic_outline_target(spec.semantic),
         })
         .collect()
+}
+
+pub(crate) fn collect_static_world_building_wall_tile_specs(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+    render_config: ViewerRenderConfig,
+    bounds: GridBounds,
+) -> Vec<shared_static_world::StaticWorldBuildingWallTileSpec> {
+    shared_scene(snapshot, current_level, render_config, bounds).building_wall_tiles
 }
 
 pub(crate) fn collect_static_world_decal_specs(
@@ -349,8 +415,14 @@ fn shared_scene(
 fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {
     match role {
         SharedRole::Ground => palette.ground_light,
+        SharedRole::OverworldGroundRoad => Color::srgb(0.42, 0.40, 0.34),
+        SharedRole::OverworldGroundPlain => Color::srgb(0.48, 0.56, 0.30),
+        SharedRole::OverworldGroundForest => Color::srgb(0.20, 0.38, 0.19),
+        SharedRole::OverworldGroundRiver => Color::srgb(0.17, 0.43, 0.67),
+        SharedRole::OverworldGroundLake => Color::srgb(0.13, 0.34, 0.58),
+        SharedRole::OverworldGroundMountain => Color::srgb(0.39, 0.39, 0.41),
+        SharedRole::OverworldGroundUrban => Color::srgb(0.46, 0.45, 0.44),
         SharedRole::BuildingFloor => lerp_color(palette.building_top, palette.building_base, 0.38),
-        SharedRole::BuildingWall => default_color_for_role(role),
         SharedRole::BuildingDoor => building_door_color(),
         SharedRole::StairBase => darken_color(palette.interactive, 0.18),
         SharedRole::StairAccent => lighten_color(palette.current_turn, 0.12),
@@ -362,13 +434,21 @@ fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {
         SharedRole::Warning => Color::srgb(0.95, 0.18, 0.18),
         SharedRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
         SharedRole::OverworldBlockedCell => Color::srgb(0.52, 0.19, 0.14),
-        SharedRole::OverworldLocation => Color::srgb(0.22, 0.58, 0.86),
+        SharedRole::OverworldLocationGeneric => Color::srgb(0.22, 0.58, 0.86),
+        SharedRole::OverworldLocationHospital => Color::srgb(0.86, 0.34, 0.34),
+        SharedRole::OverworldLocationSchool => Color::srgb(0.91, 0.73, 0.28),
+        SharedRole::OverworldLocationStore => Color::srgb(0.89, 0.54, 0.22),
+        SharedRole::OverworldLocationStreet => Color::srgb(0.66, 0.68, 0.72),
+        SharedRole::OverworldLocationOutpost => Color::srgb(0.22, 0.72, 0.86),
+        SharedRole::OverworldLocationFactory => Color::srgb(0.63, 0.39, 0.24),
+        SharedRole::OverworldLocationForest => Color::srgb(0.27, 0.63, 0.31),
+        SharedRole::OverworldLocationRuins => Color::srgb(0.63, 0.55, 0.43),
+        SharedRole::OverworldLocationSubway => Color::srgb(0.26, 0.78, 0.74),
     }
 }
 
 fn shared_role_material_style(role: SharedRole) -> MaterialStyle {
     match role {
-        SharedRole::BuildingWall => MaterialStyle::BuildingWallGrid,
         SharedRole::BuildingDoor => MaterialStyle::BuildingDoor,
         SharedRole::PickupAccent
         | SharedRole::InteractiveAccent
@@ -378,6 +458,22 @@ fn shared_role_material_style(role: SharedRole) -> MaterialStyle {
         SharedRole::InvisiblePickProxy => MaterialStyle::InvisiblePickProxy,
         _ => MaterialStyle::UtilityAccent,
     }
+}
+
+fn shared_ground_colors(
+    role: SharedRole,
+    palette: &ViewerPalette,
+) -> (Color, Color, Color) {
+    if role == SharedRole::Ground {
+        return (palette.ground_dark, palette.ground_light, palette.ground_edge);
+    }
+
+    let base = shared_role_color(role, palette);
+    (
+        darken_color(base, 0.18),
+        lighten_color(base, 0.12),
+        darken_color(base, 0.34),
+    )
 }
 
 fn shared_semantic_pick_binding(semantic: Option<SharedSemantic>) -> Option<ViewerPickBindingSpec> {

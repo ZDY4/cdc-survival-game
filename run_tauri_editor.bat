@@ -13,9 +13,9 @@ set "SURFACE=%~1"
 
 if "%SURFACE%"=="" set "SURFACE=items"
 
-if /I not "%SURFACE%"=="items" if /I not "%SURFACE%"=="characters" if /I not "%SURFACE%"=="dialogues" if /I not "%SURFACE%"=="quests" (
+if /I not "%SURFACE%"=="items" if /I not "%SURFACE%"=="dialogues" if /I not "%SURFACE%"=="quests" (
     echo [ERROR] Unknown editor surface: "%SURFACE%"
-    echo [ERROR] Supported surfaces: items, characters, dialogues, quests
+    echo [ERROR] Supported surfaces: items, dialogues, quests
     exit /b 1
 )
 

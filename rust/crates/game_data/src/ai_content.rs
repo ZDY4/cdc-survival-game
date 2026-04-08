@@ -624,7 +624,7 @@ mod tests {
             SettlementId("survivor_outpost_01_settlement".into()),
             SettlementDefinition {
                 id: SettlementId("survivor_outpost_01_settlement".into()),
-                map_id: crate::MapId("survivor_outpost_01_grid".into()),
+                map_id: crate::MapId("survivor_outpost_01".into()),
                 anchors: vec![SettlementAnchorDefinition {
                     id: "home".into(),
                     grid: crate::GridCoord::new(1, 0, 1),
@@ -690,7 +690,7 @@ mod tests {
             SettlementId("survivor_outpost_01_settlement".into()),
             SettlementDefinition {
                 id: SettlementId("survivor_outpost_01_settlement".into()),
-                map_id: crate::MapId("survivor_outpost_01_grid".into()),
+                map_id: crate::MapId("survivor_outpost_01".into()),
                 anchors: vec![
                     SettlementAnchorDefinition {
                         id: "guard_home".into(),
@@ -872,6 +872,7 @@ mod tests {
                     legs: "#999999".to_string(),
                 },
             },
+            appearance_profile_id: String::new(),
             progression: CharacterProgression { level: 1 },
             combat: CharacterCombatProfile {
                 behavior: "neutral".to_string(),

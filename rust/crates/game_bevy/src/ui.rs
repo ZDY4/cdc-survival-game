@@ -1253,7 +1253,7 @@ mod tests {
         ActorId, ActorSide, CharacterId, GridCoord, MapDefinition, MapEntryPointDefinition, MapId,
         MapLevelDefinition, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
         OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTravelRuleSet, WorldMode,
+        OverworldTerrainKind, OverworldTravelRuleSet, WorldMode,
     };
     use std::collections::BTreeMap;
 
@@ -1261,7 +1261,7 @@ mod tests {
     fn overworld_prompt_snapshot_is_visible_after_exact_trigger_arrival() {
         let (mut runtime, player, overworld) = sample_overworld_prompt_runtime();
         runtime
-            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
             .expect("move should succeed");
 
         let snapshot = overworld_location_prompt_snapshot(&runtime, player, &overworld);
@@ -1286,7 +1286,7 @@ mod tests {
             ap: 1.0,
         });
         runtime
-            .issue_actor_move(player, GridCoord::new(2, 0, 0))
+            .issue_actor_move(player, GridCoord::new(3, 0, 0))
             .expect("move should start");
 
         assert_eq!(
@@ -1307,7 +1307,7 @@ mod tests {
     fn overworld_prompt_snapshot_hides_after_entering_location() {
         let (mut runtime, player, overworld) = sample_overworld_prompt_runtime();
         runtime
-            .issue_actor_move(player, GridCoord::new(1, 0, 0))
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
             .expect("move should succeed");
         runtime.submit_command(game_core::SimulationCommand::SetActorAp {
             actor_id: player,
@@ -1382,7 +1382,7 @@ mod tests {
             OverworldDefinition {
                 id: OverworldId("prompt_world".into()),
                 size: MapSize {
-                    width: 3,
+                    width: 4,
                     height: 1,
                 },
                 locations: vec![OverworldLocationDefinition {
@@ -1396,7 +1396,7 @@ mod tests {
                     return_entry_point_id: None,
                     default_unlocked: true,
                     visible: true,
-                    overworld_cell: GridCoord::new(1, 0, 0),
+                    overworld_cell: GridCoord::new(2, 0, 0),
                     danger_level: 0,
                     icon: String::new(),
                     extra: BTreeMap::new(),
@@ -1404,19 +1404,25 @@ mod tests {
                 cells: vec![
                     OverworldCellDefinition {
                         grid: GridCoord::new(0, 0, 0),
-                        terrain: "road".into(),
+                        terrain: OverworldTerrainKind::Road,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
-                        terrain: "road".into(),
+                        terrain: OverworldTerrainKind::Road,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(2, 0, 0),
-                        terrain: "road".into(),
+                        terrain: OverworldTerrainKind::Urban,
+                        blocked: false,
+                        extra: BTreeMap::new(),
+                    },
+                    OverworldCellDefinition {
+                        grid: GridCoord::new(3, 0, 0),
+                        terrain: OverworldTerrainKind::Road,
                         blocked: false,
                         extra: BTreeMap::new(),
                     },

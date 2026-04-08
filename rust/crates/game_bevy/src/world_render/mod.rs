@@ -15,14 +15,22 @@ mod materials;
 mod mesh_builders;
 mod spawn;
 
-pub use materials::{
-    world_render_color_for_role, world_render_material_style_for_role, BuildingWallGridMaterial,
-    BuildingWallGridMaterialExt, BuildingWallGridMaterialUniform, GridGroundMaterial,
-    GridGroundMaterialExt, GridGroundMaterialUniform, WorldRenderMaterialHandle,
-    WorldRenderMaterialStyle, BUILDING_WALL_GRID_SHADER_HANDLE, GRID_GROUND_SHADER_HANDLE,
+pub use doors::{
+    build_generated_door_mesh_spec, generated_door_open_yaw, generated_door_pivot_translation,
+    generated_door_render_polygon, GeneratedDoorMeshSpec,
 };
+pub use materials::{
+    building_door_color, building_wall_visual_profile, make_building_wall_material,
+    world_render_color_for_role, world_render_material_style_for_role, BuildingWallGridMaterial,
+    BuildingWallGridMaterialExt, BuildingWallGridMaterialUniform, BuildingWallVisualProfile,
+    GridGroundMaterial, GridGroundMaterialExt, GridGroundMaterialUniform,
+    WorldRenderMaterialHandle, WorldRenderMaterialStyle, BUILDING_WALL_GRID_SHADER_HANDLE,
+    GRID_GROUND_SHADER_HANDLE,
+};
+pub use mesh_builders::build_building_wall_tile_mesh;
 pub use spawn::{
     apply_world_render_camera_projection, spawn_world_render_light_rig, spawn_world_render_scene,
+    WorldRenderBillboardLabel,
 };
 
 pub const GRID_GROUND_SHADER_PATH: &str = "grid_ground.wgsl";
@@ -45,7 +53,8 @@ impl Plugin for WorldRenderPlugin {
             Shader::from_wgsl
         );
         app.add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
-            .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default());
+            .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
+            .add_systems(Update, spawn::orient_world_render_billboard_labels);
     }
 }
 

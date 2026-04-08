@@ -3,18 +3,17 @@
 use super::*;
 
 use super::{
-    actor_visual_translation, actor_visual_world_position, building_door_color,
-    building_wall_grid_face_color, camera_follow_requires_reset, collect_closed_door_occluders,
-    collect_ground_cells_to_render, collect_static_world_box_specs,
-    collect_static_world_decal_specs, collect_walkable_tile_overlay_cells, darken_color,
-    generated_door_render_polygon, interaction_menu_button_font_size_for_label,
-    interaction_menu_layout, lighten_color, occluder_blocks_visible_cells, occluder_should_fade,
-    occupied_cells_box, project_shadowed_visible_cells, resolve_active_interaction_hover,
+    actor_visual_translation, actor_visual_world_position, camera_follow_requires_reset,
+    collect_closed_door_occluders, collect_ground_cells_to_render, collect_static_world_box_specs,
+    collect_static_world_building_wall_tile_specs, collect_static_world_decal_specs,
+    collect_walkable_tile_overlay_cells, darken_color, generated_door_render_polygon,
+    interaction_menu_button_font_size_for_label, interaction_menu_layout, lighten_color,
+    occluder_blocks_visible_cells, occluder_should_fade, occupied_cells_box,
+    project_shadowed_visible_cells, resolve_active_interaction_hover,
     should_draw_actor_selection_ring, should_fade_occluder, should_hide_building_roofs,
-    should_show_actor_label, sync_hover_mesh_outlines,
-    update_camera_follow_focus, GridBounds, HoverOutlineMember, MaterialStyle,
-    StaticWorldOccluderKind, WalkableTileOverlayKind, HOVER_MESH_OUTLINE_WIDTH_PX,
-    INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
+    should_show_actor_label, sync_hover_mesh_outlines, update_camera_follow_focus, GridBounds,
+    HoverOutlineMember, MaterialStyle, StaticWorldOccluderKind, WalkableTileOverlayKind,
+    HOVER_MESH_OUTLINE_WIDTH_PX, INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
     INTERACTION_MENU_ITEM_HEIGHT_PX, INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX,
     INTERACTION_MENU_PADDING_PX, INTERACTION_MENU_WIDTH_PX,
 };
@@ -25,6 +24,9 @@ use crate::state::{
     ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
 use bevy_mesh_outline::MeshOutline;
+use game_bevy::world_render::{
+    building_door_color, building_wall_visual_profile, make_building_wall_material,
+};
 use game_bevy::SettlementDebugSnapshot;
 use game_core::{
     create_demo_runtime, CombatDebugState, GeneratedBuildingDebugState, GeneratedBuildingStory,
@@ -33,8 +35,8 @@ use game_core::{
 };
 use game_data::{
     ActorId, GridCoord, InteractionContextSnapshot, InteractionOptionId, InteractionPrompt,
-    InteractionTargetId, MapObjectFootprint, MapObjectKind, MapRotation, ResolvedInteractionOption,
-    TurnState, WorldCoord,
+    InteractionTargetId, MapBuildingWallVisualKind, MapObjectFootprint, MapObjectKind, MapRotation,
+    ResolvedInteractionOption, TurnState, WorldCoord,
 };
 #[test]
 fn actor_visual_world_position_prefers_motion_track() {
@@ -606,6 +608,41 @@ fn static_world_specs_do_not_emit_fallback_building_roofs() {
 
     assert_eq!(roof_with, 0);
     assert_eq!(roof_without, 0);
+}
+
+#[test]
+fn static_world_building_wall_tiles_render_per_wall_cell() {
+    let tile_specs = collect_static_world_building_wall_tile_specs(
+        &snapshot_with_generated_building(),
+        0,
+        ViewerRenderConfig::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 2,
+            min_z: 0,
+            max_z: 2,
+        },
+    );
+    let box_specs = collect_static_world_box_specs(
+        &snapshot_with_generated_building(),
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 2,
+            min_z: 0,
+            max_z: 2,
+        },
+        world_from_grid,
+    );
+
+    assert_eq!(tile_specs.len(), 4);
+    assert!(tile_specs.iter().all(|spec| spec.occluder_cells.len() == 1));
+    assert!(box_specs
+        .iter()
+        .all(|spec| spec.material_style == MaterialStyle::StructureAccent));
 }
 
 #[test]
@@ -1530,23 +1567,22 @@ fn sample_occluder(
 
 #[test]
 fn building_wall_grid_material_defaults_to_visible_grid_lines() {
-    let mut materials = Assets::<StandardMaterial>::default();
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
-    let material = make_static_world_material(
-        &mut materials,
-        &mut building_wall_materials,
-        building_wall_grid_face_color(),
-        MaterialStyle::BuildingWallGrid,
-    );
+    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::LegacyGrid);
+    let material = make_building_wall_material(&mut building_wall_materials, wall_profile);
     let StaticWorldMaterialHandle::BuildingWallGrid(handle) = material else {
-        panic!("building wall grid style should create wall grid material");
+        panic!("building wall tile path should create wall grid material");
     };
     let material = building_wall_materials
         .get(&handle)
         .expect("wall grid material should exist");
 
     assert_eq!(material.extension.grid_line_visibility, 1.0);
-    assert_eq!(material.extension.top_face_grid_visibility, 0.0);
+    assert_eq!(material.extension.top_face_grid_visibility, 1.0);
+    assert_ne!(
+        material.extension.cap_color.to_srgba(),
+        material.extension.base_color.to_srgba()
+    );
 }
 
 #[test]
@@ -1577,18 +1613,14 @@ fn building_door_material_uses_standard_path_with_door_color() {
 fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
     let mut materials = Assets::<StandardMaterial>::default();
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
-    let material = make_static_world_material(
-        &mut materials,
-        &mut building_wall_materials,
-        building_wall_grid_face_color(),
-        MaterialStyle::BuildingWallGrid,
-    );
+    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::LegacyGrid);
+    let material = make_building_wall_material(&mut building_wall_materials, wall_profile.clone());
     let StaticWorldMaterialHandle::BuildingWallGrid(handle) = material.clone() else {
-        panic!("building wall grid style should create wall grid material");
+        panic!("building wall tile path should create wall grid material");
     };
     let mut occluder = StaticWorldOccluderVisual {
         material,
-        base_color: building_wall_grid_face_color(),
+        base_color: wall_profile.face_color,
         base_alpha: 1.0,
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: Vec3::ZERO,
@@ -1869,6 +1901,9 @@ fn snapshot_with_generated_building() -> SimulationSnapshot {
         generated_buildings: vec![GeneratedBuildingDebugState {
             object_id: "generated_house".into(),
             prefab_id: "generated_house".into(),
+            wall_visual: game_data::MapBuildingWallVisualSpec {
+                kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+            },
             anchor: GridCoord::new(0, 0, 0),
             rotation: MapRotation::North,
             stories: vec![GeneratedBuildingStory {

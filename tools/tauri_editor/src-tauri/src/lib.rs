@@ -2,7 +2,6 @@ mod ai_context;
 mod ai_provider;
 mod ai_review;
 mod ai_settings;
-mod character_workspace;
 mod editor_menu;
 mod quest_workspace;
 
@@ -13,16 +12,15 @@ use std::{
 };
 
 use game_data::{
-    load_character_library, load_effect_library, load_shared_content_registry,
-    validate_item_definition, DialogueConnection, DialogueData, ItemDefinition,
-    ItemDefinitionValidationError, ItemFragment, ItemValidationCatalog, SharedContentRegistry,
+    load_effect_library, load_shared_content_registry, validate_item_definition,
+    DialogueConnection, DialogueData, ItemDefinition, ItemDefinitionValidationError, ItemFragment,
+    ItemValidationCatalog, SharedContentRegistry,
 };
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 use crate::ai_provider::{generate_dialogue_draft, generate_quest_draft, test_ai_provider};
 use crate::ai_settings::{load_ai_settings, save_ai_settings};
-use crate::character_workspace::{build_character_ai_preview, load_character_workspace};
 use crate::quest_workspace::{
     delete_quest_document, load_quest_workspace, save_quest_documents, validate_quest_document,
 };
@@ -729,7 +727,6 @@ fn load_dialogue_documents() -> Result<Vec<DialogueDocumentPayload>, String> {
     Ok(documents)
 }
 
-
 fn collect_catalogs(
     documents: &[ItemDocumentPayload],
     effect_library: &game_data::EffectLibrary,
@@ -760,7 +757,8 @@ fn collect_catalogs(
                 | ItemFragment::Durability { .. }
                 | ItemFragment::AttributeModifiers { .. }
                 | ItemFragment::Crafting { .. }
-                | ItemFragment::PassiveEffects { .. } => {}
+                | ItemFragment::PassiveEffects { .. }
+                | ItemFragment::Appearance { .. } => {}
             }
         }
     }
@@ -960,6 +958,10 @@ fn summarize_item_fragments(item: &ItemDefinition) -> Vec<String> {
             ItemFragment::PassiveEffects { effect_ids } => {
                 format!("passive_effects: {} effects", effect_ids.len())
             }
+            ItemFragment::Appearance { definition } => format!(
+                "appearance: {} -> {}",
+                definition.equip_slot, definition.visual_asset
+            ),
         };
         summaries.push(summary);
     }
@@ -1147,7 +1149,8 @@ fn build_reference_indexes(
                 }
                 ItemFragment::Economy { .. }
                 | ItemFragment::Stacking { .. }
-                | ItemFragment::AttributeModifiers { .. } => {}
+                | ItemFragment::AttributeModifiers { .. }
+                | ItemFragment::Appearance { .. } => {}
             }
         }
     }
@@ -1856,11 +1859,6 @@ fn item_data_dir() -> Result<PathBuf, String> {
 fn effect_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("json").join("effects"))
 }
-
-pub(crate) fn character_data_dir() -> Result<PathBuf, String> {
-    Ok(repo_root()?.join("data").join("characters"))
-}
-
 fn dialogue_data_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("data").join("dialogues"))
 }
@@ -1873,15 +1871,6 @@ fn load_effect_catalog() -> Result<game_data::EffectLibrary, String> {
 
     load_effect_library(&data_dir)
         .map_err(|error| format!("failed to load effect catalog: {error}"))
-}
-
-fn load_character_ids() -> Result<BTreeSet<String>, String> {
-    let library = load_character_library(character_data_dir()?)
-        .map_err(|error| format!("failed to load character catalog: {error}"))?;
-    Ok(library
-        .iter()
-        .map(|(id, _)| id.as_str().to_string())
-        .collect())
 }
 
 fn item_file_path(item_id: u32) -> Result<PathBuf, String> {
@@ -1956,8 +1945,6 @@ pub fn run() {
             log_editor_frontend_debug,
             load_shared_registry,
             load_item_workspace,
-            load_character_workspace,
-            build_character_ai_preview,
             validate_item_document,
             save_item_documents,
             delete_item_document,

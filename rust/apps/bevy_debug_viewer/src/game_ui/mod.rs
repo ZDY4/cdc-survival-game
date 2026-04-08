@@ -25,19 +25,19 @@ use crate::controls::{cancel_targeting, enter_attack_targeting};
 use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
 use crate::state::{
     viewer_ui_passthrough_bundle, ActivePanelRoot, ContainerInventoryItemClickTarget,
-    ContainerInventoryListDropZone, ContainerInventoryPanelBounds, ContainerRoot,
-    DiscardModalRoot, DragPreviewRoot, EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot,
-    GameUiScaffold, HotbarRoot, InventoryEntryScrollArea, InventoryEntryScrollbarThumb,
-    InventoryEntryScrollbarTrack, InventoryContextMenuLayerRoot, InventoryItemClickTarget,
+    ContainerInventoryListDropZone, ContainerInventoryPanelBounds, ContainerRoot, DiscardModalRoot,
+    DragPreviewRoot, EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, GameUiScaffold,
+    HotbarRoot, InventoryContextMenuLayerRoot, InventoryEntryScrollArea,
+    InventoryEntryScrollbarThumb, InventoryEntryScrollbarTrack, InventoryItemClickTarget,
     InventoryItemHoverTarget, InventoryListDropZone, InventoryPanelBounds, MainMenuRoot,
     OverworldPromptRoot, SkillHoverTarget, TooltipRoot, TopBadgeRoot,
     TradeInventoryItemClickTarget, TradeInventoryListDropZone, TradeInventoryPanelBounds,
     TradeRoot, TradeSellZone, UiContextMenuRoot, UiContextMenuState, UiContextMenuTarget,
-    UiHoverTooltipContent, UiHoverTooltipState, UiInventoryDragHoverTarget,
-    UiInventoryDragSource, UiInventoryDragState, UiInventoryScrollbarDragState, UiMouseBlocker,
-    UiMouseBlockerName, ViewerCamera, ViewerPalette, ViewerRenderConfig,
-    ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont,
-    ViewerUiSettings, ViewerUiSettingsPath,
+    UiHoverTooltipContent, UiHoverTooltipState, UiInventoryDragHoverTarget, UiInventoryDragSource,
+    UiInventoryDragState, UiInventoryScrollbarDragState, UiMouseBlocker, UiMouseBlockerName,
+    ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState,
+    ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
+    ViewerWindowResolution,
 };
 use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
 

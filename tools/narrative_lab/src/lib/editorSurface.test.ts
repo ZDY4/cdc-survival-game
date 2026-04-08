@@ -19,8 +19,8 @@ describe("editorSurface", () => {
   });
 
   it("reads the requested document key from the query string", () => {
-    expect(getRequestedDocumentKey("?surface=map-editor&documentKey=survivor_outpost_01_grid")).toBe(
-      "survivor_outpost_01_grid",
+    expect(getRequestedDocumentKey("?surface=map-editor&documentKey=survivor_outpost_01")).toBe(
+      "survivor_outpost_01",
     );
   });
 

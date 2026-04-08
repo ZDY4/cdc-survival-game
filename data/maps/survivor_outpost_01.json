@@ -1,6 +1,6 @@
 {
-  "id": "survivor_outpost_01_grid",
-  "name": "survivor outpost 01 grid",
+  "id": "survivor_outpost_01",
+  "name": "survivor outpost 01",
   "size": {
     "width": 48,
     "height": 42
@@ -90,6 +90,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_gatehouse",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 1101,
             "target_room_count": 1,
@@ -114,6 +115,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_dormitory",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 1102,
             "target_room_count": 1,
@@ -138,6 +140,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_canteen",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 1103,
             "target_room_count": 1,
@@ -162,6 +165,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_clinic",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 1104,
             "target_room_count": 1,
@@ -186,6 +190,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_storage",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 1105,
             "target_room_count": 1,
@@ -210,6 +215,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_workshop",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 1106,
             "target_room_count": 1,
@@ -234,6 +240,7 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_watchtower",
+          "wall_visual": { "kind": "legacy_grid" },
           "layout": {
             "seed": 1107,
             "target_room_count": 1,

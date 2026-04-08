@@ -7,6 +7,7 @@ use game_data::{
 };
 
 use crate::overworld::{location_by_id, LocationTransitionContext, OverworldStateSnapshot};
+use crate::overworld::{default_outdoor_spawn_cell, is_outdoor_location_cell};
 
 use super::{
     level_transition::{AppliedLevelTransition, LevelTransitionTarget},
@@ -59,9 +60,11 @@ impl Simulation {
                 MapCellDefinition {
                     x: cell.grid.x as u32,
                     z: cell.grid.z as u32,
-                    blocks_movement: cell.blocked,
+                    blocks_movement: cell.blocked
+                        || !cell.terrain.is_passable()
+                        || is_outdoor_location_cell(&definition, cell.grid),
                     blocks_sight: false,
-                    terrain: cell.terrain.clone(),
+                    terrain: cell.terrain.as_str().to_string(),
                     extra: cell.extra.clone(),
                 },
             )
@@ -126,8 +129,13 @@ impl Simulation {
                     self.current_overworld_definition()
                         .ok()
                         .and_then(|definition| {
-                            location_by_id(definition, location_id)
-                                .map(|location| location.overworld_cell)
+                            location_by_id(definition, location_id).and_then(|location| {
+                                if location.kind == game_data::OverworldLocationKind::Outdoor {
+                                    default_outdoor_spawn_cell(definition, location)
+                                } else {
+                                    Some(location.overworld_cell)
+                                }
+                            })
                         })
                 })
             })
@@ -257,10 +265,12 @@ impl Simulation {
             .flatten()
             .or_else(|| self.return_outdoor_location_id.clone());
 
-        let overworld_cell = outdoor_location_id
-            .as_deref()
-            .and_then(|location_id| location_by_id(&definition, location_id))
-            .map(|location| location.overworld_cell);
+        let overworld_cell = self.overworld_pawn_cell.or_else(|| {
+            outdoor_location_id
+                .as_deref()
+                .and_then(|location_id| location_by_id(&definition, location_id))
+                .and_then(|location| default_outdoor_spawn_cell(&definition, location))
+        });
         let AppliedLevelTransition::Overworld {
             active_outdoor_location_id,
             ..

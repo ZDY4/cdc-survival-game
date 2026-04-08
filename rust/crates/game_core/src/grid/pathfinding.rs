@@ -1,7 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
+use std::str::FromStr;
 
-use game_data::{ActorId, GridCoord, WorldCoord};
+use game_data::{ActorId, GridCoord, OverworldTerrainKind, WorldCoord};
 
 use super::world::{GridWalkability, GridWorld};
 
@@ -93,12 +94,12 @@ pub fn find_path_grid(
         }
 
         let current_g = *g_score.get(&current).unwrap_or(&i32::MAX);
-        for neighbor in planar_neighbors(current) {
+        for neighbor in planar_neighbors(world, current) {
             if !can_traverse_planar(world, actor_id, current, neighbor) {
                 continue;
             }
 
-            let tentative_g = current_g + movement_cost(current, neighbor);
+            let tentative_g = current_g + movement_cost(world, current, neighbor);
             if tentative_g >= *g_score.get(&neighbor).unwrap_or(&i32::MAX) {
                 continue;
             }
@@ -116,7 +117,7 @@ pub fn find_path_grid(
                 continue;
             }
 
-            let tentative_g = current_g + movement_cost(current, *neighbor);
+            let tentative_g = current_g + movement_cost(world, current, *neighbor);
             if tentative_g >= *g_score.get(neighbor).unwrap_or(&i32::MAX) {
                 continue;
             }
@@ -133,8 +134,16 @@ pub fn find_path_grid(
     Err(GridPathfindingError::NoPath)
 }
 
-fn planar_neighbors(grid: GridCoord) -> [GridCoord; 8] {
-    [
+fn planar_neighbors(world: &GridWorld, grid: GridCoord) -> Vec<GridCoord> {
+    if world.uses_explicit_cells_as_bounds() {
+        return vec![
+            GridCoord::new(grid.x + 1, grid.y, grid.z),
+            GridCoord::new(grid.x - 1, grid.y, grid.z),
+            GridCoord::new(grid.x, grid.y, grid.z + 1),
+            GridCoord::new(grid.x, grid.y, grid.z - 1),
+        ];
+    }
+    vec![
         GridCoord::new(grid.x + 1, grid.y, grid.z),
         GridCoord::new(grid.x - 1, grid.y, grid.z),
         GridCoord::new(grid.x, grid.y, grid.z + 1),
@@ -155,7 +164,12 @@ fn heuristic(a: GridCoord, b: GridCoord) -> i32 {
     straight_steps * ORTHOGONAL_COST + diagonal_steps * DIAGONAL_COST + dy * LEVEL_CHANGE_COST
 }
 
-fn movement_cost(from: GridCoord, to: GridCoord) -> i32 {
+fn movement_cost(world: &GridWorld, from: GridCoord, to: GridCoord) -> i32 {
+    if world.uses_explicit_cells_as_bounds() && from.y == to.y {
+        return overworld_cell_cost(world, to)
+            .unwrap_or(1)
+            .saturating_mul(ORTHOGONAL_COST);
+    }
     if from.y != to.y {
         let planar_dx = (to.x - from.x).abs();
         let planar_dz = (to.z - from.z).abs();
@@ -172,6 +186,14 @@ fn movement_cost(from: GridCoord, to: GridCoord) -> i32 {
     }
 }
 
+fn overworld_cell_cost(world: &GridWorld, grid: GridCoord) -> Option<i32> {
+    let cell = world.map_cell(grid)?;
+    OverworldTerrainKind::from_str(&cell.terrain)
+        .ok()
+        .and_then(|terrain| terrain.move_cost())
+        .map(|cost| cost as i32)
+}
+
 fn can_traverse_planar(
     world: &GridWorld,
     actor_id: Option<ActorId>,
@@ -180,6 +202,10 @@ fn can_traverse_planar(
 ) -> bool {
     if world.classify_pathfinding_walkability_for_actor(to, actor_id) != GridWalkability::Walkable {
         return false;
+    }
+
+    if world.uses_explicit_cells_as_bounds() {
+        return true;
     }
 
     let dx = to.x - from.x;

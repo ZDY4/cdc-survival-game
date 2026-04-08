@@ -7,6 +7,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::appearance::ItemAppearanceDefinition;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DialogueOption {
     #[serde(default)]
@@ -238,6 +240,10 @@ pub enum ItemFragment {
         #[serde(default)]
         unequip_effect_ids: Vec<String>,
     },
+    Appearance {
+        #[serde(default)]
+        definition: ItemAppearanceDefinition,
+    },
     Durability {
         #[serde(default = "default_unbreakable")]
         durability: i32,
@@ -308,6 +314,7 @@ impl ItemFragment {
             Self::Economy { .. } => "economy",
             Self::Stacking { .. } => "stacking",
             Self::Equip { .. } => "equip",
+            Self::Appearance { .. } => "appearance",
             Self::Durability { .. } => "durability",
             Self::AttributeModifiers { .. } => "attribute_modifiers",
             Self::Weapon { .. } => "weapon",
@@ -381,6 +388,25 @@ impl ItemLibrary {
 
     pub fn ids(&self) -> BTreeSet<u32> {
         self.definitions.keys().copied().collect()
+    }
+}
+
+impl ItemDefinition {
+    pub fn equip_slots(&self) -> Vec<String> {
+        self.fragments
+            .iter()
+            .find_map(|fragment| match fragment {
+                ItemFragment::Equip { slots, .. } => Some(slots.clone()),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn appearance_fragment(&self) -> Option<&ItemAppearanceDefinition> {
+        self.fragments.iter().find_map(|fragment| match fragment {
+            ItemFragment::Appearance { definition } => Some(definition),
+            _ => None,
+        })
     }
 }
 
@@ -810,6 +836,17 @@ pub fn validate_item_definition(
                     unequip_effect_ids,
                     &catalog.effect_ids,
                 )?;
+            }
+            ItemFragment::Appearance {
+                definition: appearance,
+            } => {
+                if !appearance.equip_slot.trim().is_empty()
+                    && appearance.equip_slot.trim() != appearance.equip_slot
+                {
+                    return Err(ItemDefinitionValidationError::EmptyEquipSlot {
+                        item_id: definition.id,
+                    });
+                }
             }
             ItemFragment::Durability {
                 durability,

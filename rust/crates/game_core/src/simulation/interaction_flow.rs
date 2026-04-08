@@ -4,12 +4,21 @@ use super::{interaction_behaviors, *};
 
 impl Simulation {
     pub fn perform_interact(&mut self, actor_id: ActorId) -> ActionResult {
+        self.perform_interact_with_cost(actor_id, None)
+    }
+
+    pub fn perform_interact_with_cost(
+        &mut self,
+        actor_id: ActorId,
+        cost_override: Option<f32>,
+    ) -> ActionResult {
         let start_result = self.request_action(ActionRequest {
             actor_id,
             action_type: ActionType::Interact,
             phase: ActionPhase::Start,
             steps: None,
             target_actor: None,
+            cost_override,
             success: true,
         });
         if !start_result.success {
@@ -22,6 +31,7 @@ impl Simulation {
             phase: ActionPhase::Complete,
             steps: None,
             target_actor: None,
+            cost_override,
             success: true,
         })
     }

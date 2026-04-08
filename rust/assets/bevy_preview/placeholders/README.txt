@@ -1,0 +1,1 @@
+Placeholder meshes for the Bevy Character Editor preview.\nGenerated as simple glTF primitives for rapid visual iteration.\n

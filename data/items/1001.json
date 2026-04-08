@@ -25,6 +25,18 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "main_hand",
+        "visual_asset": "builtin:weapon:unarmed",
+        "attach_target": "main_hand",
+        "presentation_mode": "attach",
+        "hide_base_regions": [],
+        "preview_transform": {},
+        "tint": "#9b8f84"
+      }
+    },
+    {
       "kind": "weapon",
       "subtype": "unarmed",
       "damage": 5,

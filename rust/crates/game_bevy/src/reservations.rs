@@ -122,7 +122,7 @@ mod tests {
             SettlementId("survivor_outpost_01_settlement".into()),
             SettlementDefinition {
                 id: SettlementId("survivor_outpost_01_settlement".into()),
-                map_id: MapId("survivor_outpost_01_grid".into()),
+                map_id: MapId("survivor_outpost_01".into()),
                 anchors: vec![SettlementAnchorDefinition {
                     id: "north_gate".into(),
                     grid: GridCoord::new(1, 0, 1),

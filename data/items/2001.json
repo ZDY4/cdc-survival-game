@@ -25,6 +25,20 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "head",
+        "visual_asset": "builtin:item:head",
+        "attach_target": "head",
+        "presentation_mode": "replace_region",
+        "hide_base_regions": [
+          "head"
+        ],
+        "preview_transform": {},
+        "tint": "#7b8270"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 30,
       "max_durability": 30,

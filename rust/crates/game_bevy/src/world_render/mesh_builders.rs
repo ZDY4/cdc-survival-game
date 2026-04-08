@@ -6,6 +6,10 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, PrimitiveTopology, TextureDimension, TextureFormat};
 use game_data::GridCoord;
 
+use crate::static_world::{BuildingWallNeighborMask, StaticWorldBuildingWallTileSpec};
+
+use super::materials::building_wall_visual_profile;
+
 #[derive(Default)]
 pub struct MeshBuilder {
     positions: Vec<[f32; 3]>,
@@ -246,4 +250,90 @@ pub fn build_trigger_arrow_texture(size_px: u32) -> Image {
 
 pub fn level_base_height(level: i32, grid_size: f32) -> f32 {
     level as f32 * grid_size
+}
+
+pub fn build_building_wall_tile_mesh(
+    spec: &StaticWorldBuildingWallTileSpec,
+    grid_size: f32,
+) -> Option<(Mesh, Vec3, Vec3)> {
+    let profile = building_wall_visual_profile(spec.visual_kind);
+    let cap_height = profile
+        .cap_height_world
+        .clamp(0.02, spec.height.max(0.02) * 0.45);
+    let body_height = (spec.height - cap_height).max(0.02);
+    let body_inset = profile
+        .body_inset_world
+        .min((grid_size - spec.thickness).max(0.0) * 0.35);
+    let body_half = (grid_size * 0.5 - body_inset).clamp(0.08, grid_size * 0.5);
+    let cap_half = grid_size * 0.5;
+    let bottom = -spec.height * 0.5;
+    let body_top = bottom + body_height;
+    let cap_top = spec.height * 0.5;
+
+    let mut builder = MeshBuilder::default();
+    push_exposed_prism_sides(&mut builder, body_half, bottom, body_top, &spec.neighbors);
+    push_exposed_prism_sides(&mut builder, cap_half, body_top, cap_top, &spec.neighbors);
+    builder.push_quad(
+        Vec3::new(-cap_half, cap_top, -cap_half),
+        Vec3::new(cap_half, cap_top, -cap_half),
+        Vec3::new(cap_half, cap_top, cap_half),
+        Vec3::new(-cap_half, cap_top, cap_half),
+        Vec3::Y,
+        Vec2::ZERO,
+        Vec2::splat(grid_size),
+    );
+    builder.build()
+}
+
+fn push_exposed_prism_sides(
+    builder: &mut MeshBuilder,
+    half_extent: f32,
+    bottom_y: f32,
+    top_y: f32,
+    neighbors: &BuildingWallNeighborMask,
+) {
+    if !neighbors.north {
+        builder.push_quad(
+            Vec3::new(-half_extent, bottom_y, -half_extent),
+            Vec3::new(half_extent, bottom_y, -half_extent),
+            Vec3::new(half_extent, top_y, -half_extent),
+            Vec3::new(-half_extent, top_y, -half_extent),
+            -Vec3::Z,
+            Vec2::ZERO,
+            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+        );
+    }
+    if !neighbors.east {
+        builder.push_quad(
+            Vec3::new(half_extent, bottom_y, -half_extent),
+            Vec3::new(half_extent, bottom_y, half_extent),
+            Vec3::new(half_extent, top_y, half_extent),
+            Vec3::new(half_extent, top_y, -half_extent),
+            Vec3::X,
+            Vec2::ZERO,
+            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+        );
+    }
+    if !neighbors.south {
+        builder.push_quad(
+            Vec3::new(half_extent, bottom_y, half_extent),
+            Vec3::new(-half_extent, bottom_y, half_extent),
+            Vec3::new(-half_extent, top_y, half_extent),
+            Vec3::new(half_extent, top_y, half_extent),
+            Vec3::Z,
+            Vec2::ZERO,
+            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+        );
+    }
+    if !neighbors.west {
+        builder.push_quad(
+            Vec3::new(-half_extent, bottom_y, half_extent),
+            Vec3::new(-half_extent, bottom_y, -half_extent),
+            Vec3::new(-half_extent, top_y, -half_extent),
+            Vec3::new(-half_extent, top_y, half_extent),
+            -Vec3::X,
+            Vec2::ZERO,
+            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+        );
+    }
 }

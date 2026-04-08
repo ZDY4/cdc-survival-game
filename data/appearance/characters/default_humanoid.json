@@ -1,0 +1,13 @@
+{
+  "id": "default_humanoid",
+  "base_model_asset": "builtin:humanoid_mannequin",
+  "preview_camera_preset_id": "character_standard",
+  "equip_anchor_profile_id": "humanoid_basic",
+  "idle_animation": "idle",
+  "material_variant": "",
+  "preview_bounds": {
+    "focus_y": 0.95,
+    "height": 1.9,
+    "radius": 1.15
+  }
+}

@@ -7,11 +7,10 @@ pub(super) use bevy::asset::RenderAssetUsages;
 pub(super) use bevy::light::{
     CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight,
 };
-pub(super) use bevy::mesh::Indices;
 pub(super) use bevy::pbr::{OpaqueRendererMethod, StandardMaterial};
 use bevy::prelude::*;
 pub(super) use bevy::render::render_resource::{
-    Extent3d, PrimitiveTopology, ShaderType, TextureDimension, TextureFormat,
+    Extent3d, ShaderType, TextureDimension, TextureFormat,
 };
 use bevy::ui::{ComputedNode, FocusPolicy, RelativeCursorPosition, UiGlobalTransform};
 use game_bevy::{SettlementDebugEntry, SettlementDefinitions};
@@ -33,13 +32,13 @@ pub(super) use crate::picking::{pickable_target, ViewerPickBindingSpec, ViewerPi
 use crate::state::{
     cursor_over_visible_ui_blocker, viewer_ui_passthrough_bundle, ActorLabel, ActorLabelEntities,
     DialogueChoiceButton, DialogueChoiceRow, DialoguePanelBodyLabel, DialoguePanelChoicesRoot,
-    DialoguePanelHintLabel, DialoguePanelRoot, DialoguePanelSpeakerLabel,
-    DialoguePanelTitleLabel, InteractionLockedActorTag, InteractionMenuButton,
-    InteractionMenuOptionRow, InteractionMenuOptionsRoot, InteractionMenuRoot,
-    InteractionMenuState, UiMouseBlocker, UiMouseBlockerName, ViewerActorFeedbackState,
-    ViewerActorMotionState, ViewerCamera, ViewerCameraFollowState, ViewerCameraShakeState,
-    ViewerDamageNumberState, ViewerOverlayMode, ViewerPalette, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiFont,
+    DialoguePanelHintLabel, DialoguePanelRoot, DialoguePanelSpeakerLabel, DialoguePanelTitleLabel,
+    InteractionLockedActorTag, InteractionMenuButton, InteractionMenuOptionRow,
+    InteractionMenuOptionsRoot, InteractionMenuRoot, InteractionMenuState, UiMouseBlocker,
+    UiMouseBlockerName, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
+    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode,
+    ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    ViewerStyleProfile, ViewerUiFont,
 };
 use crate::ui_context_menu::{
     context_menu_border_color, context_menu_button_color, context_menu_button_node,

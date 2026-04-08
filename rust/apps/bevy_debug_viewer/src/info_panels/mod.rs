@@ -204,9 +204,8 @@ pub(crate) fn update_info_panel(
     let blocking_ui_name =
         hovered_visible_ui_blocker_name(window.cursor_position(), &panel_and_blockers.p1());
     let (mut panel_text, mut visibility, mut node) = panel_and_blockers.p0().into_inner();
-    let hidden = scene_kind.is_main_menu()
-        || info_panel_state.is_empty()
-        || menu_state.is_settings_open();
+    let hidden =
+        scene_kind.is_main_menu() || info_panel_state.is_empty() || menu_state.is_settings_open();
     if hidden {
         *visibility = Visibility::Hidden;
         *panel_text = Text::new("");
@@ -231,14 +230,12 @@ pub(crate) fn update_info_panel(
     let summary = format_status_summary(&viewer_state, *render_config);
     let page_body = match active_page {
         ViewerHudPage::Overview => format_overview_panel(&snapshot, &runtime_state, &viewer_state),
-        ViewerHudPage::Selection => {
-            format_selection_panel(
-                &snapshot,
-                &runtime_state,
-                &viewer_state,
-                blocking_ui_name.as_deref(),
-            )
-        }
+        ViewerHudPage::Selection => format_selection_panel(
+            &snapshot,
+            &runtime_state,
+            &viewer_state,
+            blocking_ui_name.as_deref(),
+        ),
         ViewerHudPage::SelectedActor => {
             format_actor_panel(&snapshot, &runtime_state, &viewer_state)
         }

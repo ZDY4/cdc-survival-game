@@ -81,12 +81,32 @@ pub(crate) struct ViewerRuntimeState {
     pub ai_snapshot: SettlementDebugSnapshot,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ViewerWindowResolution {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl ViewerWindowResolution {
+    pub(crate) const fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
+    }
+}
+
+impl Default for ViewerWindowResolution {
+    fn default() -> Self {
+        Self::new(1440, 900)
+    }
+}
+
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub(crate) struct ViewerUiSettings {
     pub master_volume: f32,
     pub music_volume: f32,
     pub sfx_volume: f32,
     pub window_mode: String,
+    pub window_resolution: ViewerWindowResolution,
     pub vsync: bool,
     pub ui_scale: f32,
     pub action_bindings: BTreeMap<String, String>,
@@ -99,6 +119,7 @@ impl Default for ViewerUiSettings {
             music_volume: 1.0,
             sfx_volume: 1.0,
             window_mode: "windowed".to_string(),
+            window_resolution: ViewerWindowResolution::default(),
             vsync: true,
             ui_scale: 1.0,
             action_bindings: BTreeMap::from([

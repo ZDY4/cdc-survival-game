@@ -59,8 +59,8 @@ mod tests {
     };
     use crate::dialogue::apply_interaction_result;
     use crate::state::{
-        ViewerActorFeedbackState, ViewerActorMotionState, ViewerCameraShakeState,
-        ViewerDamageNumberState, ViewerRuntimeState, ViewerState,
+        ActiveDialogueState, ViewerActorFeedbackState, ViewerActorMotionState,
+        ViewerCameraShakeState, ViewerDamageNumberState, ViewerRuntimeState, ViewerState,
     };
     use bevy::ecs::message::Messages;
     use bevy::prelude::*;
@@ -77,13 +77,14 @@ mod tests {
         SimulationEvent, SimulationRuntime,
     };
     use game_data::{
-        ActorId, ActorKind, ActorSide, GridCoord, InteractionOptionId, InteractionTargetId,
-        MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec, MapBuildingStorySpec,
-        MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectDefinition,
-        MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
-        MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
-        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTravelRuleSet, RelativeGridCell, StairKind, WorldCoord, WorldMode,
+        ActorId, ActorKind, ActorSide, DialogueData, DialogueNode, GridCoord, InteractionOptionId,
+        InteractionTargetId, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec,
+        MapBuildingStorySpec, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
+        MapRotation, MapSize, MapTriggerProps, OverworldCellDefinition, OverworldDefinition,
+        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
+        OverworldLocationKind, OverworldTravelRuleSet, RelativeGridCell, StairKind, WorldCoord,
+        WorldMode,
     };
 
     fn seed_life_debug_spawns(app: &mut App) {
@@ -420,7 +421,7 @@ mod tests {
         runtime.push_event(SimulationEvent::LocationEntered {
             actor_id: handles.player,
             location_id: "survivor_outpost_01".into(),
-            map_id: "survivor_outpost_01_grid".into(),
+            map_id: "survivor_outpost_01".into(),
             entry_point_id: "default_entry".into(),
             world_mode: game_core::WorldMode::Outdoor,
         });
@@ -540,6 +541,64 @@ mod tests {
             viewer_state.control_mode = crate::state::ViewerControlMode::FreeObserve;
             viewer_state.auto_tick = false;
             viewer_state.min_progression_interval_sec = 0.0;
+        }
+
+        let before = app
+            .world()
+            .resource::<ViewerRuntimeState>()
+            .runtime
+            .peek_pending_progression()
+            .copied();
+        app.update();
+        let runtime_state = app.world().resource::<ViewerRuntimeState>();
+        let viewer_state = app.world().resource::<ViewerState>();
+
+        assert_eq!(
+            runtime_state.runtime.peek_pending_progression().copied(),
+            before
+        );
+        assert_eq!(viewer_state.progression_elapsed_sec, 0.0);
+    }
+
+    #[test]
+    fn active_dialogue_pauses_pending_progression_consumption() {
+        let (mut runtime, handles) = create_demo_runtime();
+        runtime
+            .issue_actor_move(handles.player, GridCoord::new(0, 0, 2))
+            .expect("path should be planned");
+
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default())
+            .insert_resource(ViewerRuntimeState {
+                runtime,
+                recent_events: Vec::new(),
+                ai_snapshot: SettlementDebugSnapshot::default(),
+            })
+            .insert_resource(ViewerState::default())
+            .add_systems(Update, advance_runtime_progression);
+
+        {
+            let mut viewer_state = app.world_mut().resource_mut::<ViewerState>();
+            viewer_state.min_progression_interval_sec = 0.0;
+            viewer_state.active_dialogue = Some(ActiveDialogueState {
+                actor_id: handles.player,
+                target_id: Some(InteractionTargetId::Actor(handles.friendly)),
+                dialogue_key: "test".into(),
+                dialog_id: "test".into(),
+                data: DialogueData {
+                    dialog_id: "test".into(),
+                    nodes: vec![DialogueNode {
+                        id: "start".into(),
+                        node_type: "dialog".into(),
+                        text: "Hello".into(),
+                        is_start: true,
+                        ..DialogueNode::default()
+                    }],
+                    ..DialogueData::default()
+                },
+                current_node_id: "start".into(),
+                target_name: "Friendly".into(),
+            });
         }
 
         let before = app
@@ -816,7 +875,7 @@ mod tests {
                 assert_eq!(context.world_mode, WorldMode::Outdoor);
                 assert_eq!(
                     context.current_map_id.as_deref(),
-                    Some("survivor_outpost_01_grid")
+                    Some("survivor_outpost_01")
                 );
                 assert_eq!(
                     context.active_outdoor_location_id.as_deref(),
@@ -832,7 +891,7 @@ mod tests {
         assert_eq!(context.world_mode, WorldMode::Outdoor);
         assert_eq!(
             context.current_map_id.as_deref(),
-            Some("survivor_outpost_01_grid")
+            Some("survivor_outpost_01")
         );
         assert_eq!(
             context.active_outdoor_location_id.as_deref(),
@@ -1059,6 +1118,9 @@ mod tests {
                 props: MapObjectProps {
                     building: Some(MapBuildingProps {
                         prefab_id: "generated_house".into(),
+                        wall_visual: Some(game_data::MapBuildingWallVisualSpec {
+                            kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                        }),
                         layout: Some(MapBuildingLayoutSpec {
                             seed: 7,
                             target_room_count: 3,
@@ -1141,14 +1203,14 @@ mod tests {
 
     fn viewer_scene_transition_map_library() -> game_data::MapLibrary {
         game_data::MapLibrary::from(BTreeMap::from([(
-            MapId("survivor_outpost_01_grid".into()),
+            MapId("survivor_outpost_01".into()),
             viewer_scene_transition_outdoor_map_definition(),
         )]))
     }
 
     fn viewer_scene_transition_outdoor_map_definition() -> MapDefinition {
         MapDefinition {
-            id: MapId("survivor_outpost_01_grid".into()),
+            id: MapId("survivor_outpost_01".into()),
             name: "Outpost Outdoor".into(),
             size: MapSize {
                 width: 12,
@@ -1183,7 +1245,7 @@ mod tests {
                     name: "Outpost".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("survivor_outpost_01_grid".into()),
+                    map_id: MapId("survivor_outpost_01".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,

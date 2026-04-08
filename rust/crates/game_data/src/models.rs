@@ -72,6 +72,7 @@ pub struct ActionRequest {
     pub phase: ActionPhase,
     pub steps: Option<u32>,
     pub target_actor: Option<ActorId>,
+    pub cost_override: Option<f32>,
     pub success: bool,
 }
 

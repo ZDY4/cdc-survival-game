@@ -312,13 +312,8 @@ impl HeadlessEconomyRuntime {
         *order = normalized;
     }
 
-    fn append_inventory_order(
-        inventory: &BTreeMap<u32, i32>,
-        order: &mut Vec<u32>,
-        item_id: u32,
-    ) {
-        if inventory.get(&item_id).copied().unwrap_or(0) > 0 && !order.contains(&item_id)
-        {
+    fn append_inventory_order(inventory: &BTreeMap<u32, i32>, order: &mut Vec<u32>, item_id: u32) {
+        if inventory.get(&item_id).copied().unwrap_or(0) > 0 && !order.contains(&item_id) {
             order.push(item_id);
         }
     }
@@ -358,7 +353,9 @@ impl HeadlessEconomyRuntime {
         order.retain(|existing| *existing != item_id);
         match before_item_id {
             Some(before_item_id) => {
-                if let Some(index) = order.iter().position(|existing| *existing == before_item_id)
+                if let Some(index) = order
+                    .iter()
+                    .position(|existing| *existing == before_item_id)
                 {
                     order.insert(index, item_id);
                 } else {
@@ -516,7 +513,10 @@ impl HeadlessEconomyRuntime {
             .containers
             .into_iter()
             .map(|mut container| {
-                Self::normalize_inventory_order(&container.inventory, &mut container.inventory_order);
+                Self::normalize_inventory_order(
+                    &container.inventory,
+                    &mut container.inventory_order,
+                );
                 (container.id.clone(), container)
             })
             .collect();
@@ -970,21 +970,24 @@ impl HeadlessEconomyRuntime {
                 current,
             });
         }
-        let _ = self
-            .container(container_id)
-            .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
-                container_id: container_id.to_string(),
-            })?;
+        let _ =
+            self.container(container_id)
+                .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
+                    container_id: container_id.to_string(),
+                })?;
 
         self.remove_item(actor_id, item_id, count)?;
-        let container = self
-            .containers
-            .get_mut(container_id)
-            .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
+        let container = self.containers.get_mut(container_id).ok_or_else(|| {
+            EconomyRuntimeError::UnknownContainer {
                 container_id: container_id.to_string(),
-            })?;
+            }
+        })?;
         *container.inventory.entry(item_id).or_insert(0) += count;
-        Self::append_inventory_order(&container.inventory, &mut container.inventory_order, item_id);
+        Self::append_inventory_order(
+            &container.inventory,
+            &mut container.inventory_order,
+            item_id,
+        );
         Self::move_inventory_order_before(
             &container.inventory,
             &mut container.inventory_order,
@@ -1038,12 +1041,11 @@ impl HeadlessEconomyRuntime {
             });
         }
 
-        let container = self
-            .containers
-            .get_mut(container_id)
-            .ok_or_else(|| EconomyRuntimeError::UnknownContainer {
+        let container = self.containers.get_mut(container_id).ok_or_else(|| {
+            EconomyRuntimeError::UnknownContainer {
                 container_id: container_id.to_string(),
-            })?;
+            }
+        })?;
         let container_current = container.inventory.get(&item_id).copied().unwrap_or(0);
         if container_current < count {
             return Err(EconomyRuntimeError::ContainerInventoryInsufficient {
@@ -2071,8 +2073,14 @@ mod tests {
                 &items,
             )
             .expect("taking cloth should succeed");
-        assert_eq!(runtime.container_inventory_count("test_map::crate_a", 1001), Some(0));
-        assert_eq!(runtime.inventory_display_order(actor_id), Some(vec![1001, 1003]));
+        assert_eq!(
+            runtime.container_inventory_count("test_map::crate_a", 1001),
+            Some(0)
+        );
+        assert_eq!(
+            runtime.inventory_display_order(actor_id),
+            Some(vec![1001, 1003])
+        );
     }
 
     #[test]
@@ -2099,7 +2107,10 @@ mod tests {
             error,
             EconomyRuntimeError::InventoryOverCapacity { .. }
         ));
-        assert_eq!(runtime.container_inventory_count("test_map::locker_a", 1004), Some(1));
+        assert_eq!(
+            runtime.container_inventory_count("test_map::locker_a", 1004),
+            Some(1)
+        );
     }
 
     #[test]
@@ -2126,8 +2137,14 @@ mod tests {
         restored.load_snapshot(snapshot);
 
         assert_eq!(restored.container_count(), 1);
-        assert_eq!(restored.container_inventory_count("test_map::cache_a", 1001), Some(2));
-        assert_eq!(restored.container_inventory_count("test_map::cache_a", 1003), Some(1));
+        assert_eq!(
+            restored.container_inventory_count("test_map::cache_a", 1001),
+            Some(2)
+        );
+        assert_eq!(
+            restored.container_inventory_count("test_map::cache_a", 1003),
+            Some(1)
+        );
     }
 
     #[test]

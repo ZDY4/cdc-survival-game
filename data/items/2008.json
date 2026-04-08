@@ -27,6 +27,20 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "body",
+        "visual_asset": "builtin:item:body",
+        "attach_target": "body",
+        "presentation_mode": "replace_region",
+        "hide_base_regions": [
+          "body"
+        ],
+        "preview_transform": {},
+        "tint": "#5d6268"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 100,
       "max_durability": 100,

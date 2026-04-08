@@ -19,6 +19,7 @@
       "legs": "#3c5c90"
     }
   },
+  "appearance_profile_id": "default_humanoid",
   "progression": {
     "level": 5
   },

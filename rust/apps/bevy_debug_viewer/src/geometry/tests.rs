@@ -124,7 +124,7 @@ fn grid_bounds_use_map_size_when_available() {
         actors: Vec::new(),
         grid: GridDebugState {
             grid_size: 1.0,
-            map_id: Some(MapId("survivor_outpost_01_grid".into())),
+            map_id: Some(MapId("survivor_outpost_01".into())),
             map_width: Some(12),
             map_height: Some(8),
             default_level: Some(0),
@@ -551,9 +551,9 @@ fn visible_world_footprint_expands_with_camera_distance() {
 
 #[test]
 fn static_world_rebuild_helper_only_triggers_on_key_change() {
-    let current = Some((Some("survivor_outpost_01_grid"), 0, 3_u64));
-    let next_same = (Some("survivor_outpost_01_grid"), 0, 3_u64);
-    let next_level = (Some("survivor_outpost_01_grid"), 1, 3_u64);
+    let current = Some((Some("survivor_outpost_01"), 0, 3_u64));
+    let next_same = (Some("survivor_outpost_01"), 0, 3_u64);
+    let next_level = (Some("survivor_outpost_01"), 1, 3_u64);
 
     assert!(!should_rebuild_static_world(&current, &next_same));
     assert!(should_rebuild_static_world(&current, &next_level));

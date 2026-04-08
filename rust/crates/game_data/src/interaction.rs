@@ -84,6 +84,8 @@ pub struct InteractionOptionDefinition {
     #[serde(default)]
     pub description: String,
     #[serde(default)]
+    pub ap_cost_override: Option<f32>,
+    #[serde(default)]
     pub priority: i32,
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -107,6 +109,8 @@ pub struct InteractionOptionDefinition {
     pub return_spawn_id: String,
     #[serde(default)]
     pub item_id: String,
+    #[serde(default)]
+    pub success_turn_policy: InteractionSuccessTurnPolicy,
     #[serde(default = "default_item_count")]
     pub min_count: i32,
     #[serde(default = "default_item_count")]
@@ -121,6 +125,7 @@ impl Default for InteractionOptionDefinition {
             id: InteractionOptionId::default(),
             display_name: String::new(),
             description: String::new(),
+            ap_cost_override: None,
             priority: 100,
             enabled: true,
             visible: true,
@@ -133,6 +138,7 @@ impl Default for InteractionOptionDefinition {
             target_map_id: String::new(),
             return_spawn_id: String::new(),
             item_id: String::new(),
+            success_turn_policy: InteractionSuccessTurnPolicy::KeepTurn,
             min_count: default_item_count(),
             max_count: default_item_count(),
             extra: BTreeMap::new(),
@@ -169,6 +175,14 @@ pub struct CharacterInteractionProfile {
     pub display_name: String,
     #[serde(default)]
     pub options: Vec<InteractionOptionDefinition>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractionSuccessTurnPolicy {
+    #[default]
+    KeepTurn,
+    EndTurn,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -225,6 +239,8 @@ pub struct ResolvedInteractionOption {
     pub display_name: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub ap_cost_override: Option<f32>,
     #[serde(default)]
     pub priority: i32,
     #[serde(default)]

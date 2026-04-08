@@ -649,6 +649,7 @@ mod tests {
                     legs: "#999999".into(),
                 },
             },
+            appearance_profile_id: "default_humanoid".into(),
             progression: CharacterProgression { level: 2 },
             combat: CharacterCombatProfile {
                 behavior: "neutral".into(),
@@ -675,7 +676,7 @@ mod tests {
     fn sample_settlements() -> SettlementLibrary {
         let settlement = SettlementDefinition {
             id: SettlementId("survivor_outpost_01_settlement".into()),
-            map_id: MapId("survivor_outpost_01_grid".into()),
+            map_id: MapId("survivor_outpost_01".into()),
             anchors: vec![
                 SettlementAnchorDefinition {
                     id: "guard_home_01".into(),

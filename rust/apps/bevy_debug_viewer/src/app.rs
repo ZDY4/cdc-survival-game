@@ -2,10 +2,10 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::log::error;
 use bevy::log::LogPlugin;
-use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 use bevy::window::WindowPlugin;
 use bevy_mesh_outline::MeshOutlinePlugin;
+use game_bevy::world_render::WorldRenderPlugin;
 use game_bevy::{
     apply_gameplay_libraries, init_runtime_logging, spawn_characters_from_definition,
     CharacterSpawnRejected, GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin, NpcLifeUpdateSet,
@@ -39,8 +39,8 @@ use crate::profiling::{
 use crate::render::{
     setup_viewer, sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals,
     sync_hover_mesh_outlines, sync_stable_interaction_hover, tick_fog_of_war_transition,
-    update_camera, update_dialogue_panel, update_interaction_menu, BuildingWallGridMaterial,
-    FogOfWarPostProcessPlugin, GridGroundMaterial, StableInteractionHoverState,
+    update_camera, update_dialogue_panel, update_interaction_menu, FogOfWarPostProcessPlugin,
+    StableInteractionHoverState,
 };
 use crate::simulation::{
     advance_actor_feedback, advance_actor_motion, advance_map_ai_spawns,
@@ -50,10 +50,9 @@ use crate::simulation::{
 use crate::state::{
     ActorLabelEntities, UiContextMenuState, UiHoverTooltipState, UiInventoryDragState,
     UiInventoryScrollbarDragState, ViewerActorFeedbackState, ViewerActorMotionState,
-    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState,
-    ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiSettings,
-    ViewerUiSettingsPath,
+    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerInfoPanelState,
+    ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind,
+    ViewerState, ViewerStyleProfile, ViewerUiSettings, ViewerUiSettingsPath,
 };
 
 pub(crate) fn run() {
@@ -158,8 +157,7 @@ impl Plugin for ViewerAppPlugin {
         )
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(MeshOutlinePlugin)
-        .add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
-        .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
+        .add_plugins(WorldRenderPlugin)
         .add_plugins(FogOfWarPostProcessPlugin)
         .add_plugins(ViewerPickingPlugin)
         .insert_resource(MapAiSpawnRuntimeState::default())

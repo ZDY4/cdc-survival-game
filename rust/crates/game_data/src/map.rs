@@ -196,6 +196,26 @@ pub struct MapBuildingVisualOutline {
     pub diagonal_edges: Vec<MapBuildingDiagonalEdge>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MapBuildingWallVisualKind {
+    #[default]
+    LegacyGrid,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MapBuildingWallVisualSpec {
+    pub kind: MapBuildingWallVisualKind,
+}
+
+impl Default for MapBuildingWallVisualSpec {
+    fn default() -> Self {
+        Self {
+            kind: MapBuildingWallVisualKind::LegacyGrid,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MapBuildingLayoutSpec {
     #[serde(default)]
@@ -256,6 +276,8 @@ impl Default for MapBuildingLayoutSpec {
 pub struct MapBuildingProps {
     #[serde(default)]
     pub prefab_id: String,
+    #[serde(default)]
+    pub wall_visual: Option<MapBuildingWallVisualSpec>,
     #[serde(default)]
     pub layout: Option<MapBuildingLayoutSpec>,
     #[serde(flatten)]
@@ -565,6 +587,8 @@ pub enum MapDefinitionValidationError {
     },
     #[error("building object {object_id} must define props.building.prefab_id")]
     MissingBuildingPrefabId { object_id: String },
+    #[error("building object {object_id} must define props.building.wall_visual.kind")]
+    MissingBuildingWallVisualKind { object_id: String },
     #[error("building object {object_id} layout target_room_count must be > 0")]
     InvalidBuildingTargetRoomCount { object_id: String },
     #[error(
@@ -1115,6 +1139,13 @@ fn validate_object_payload(
                     object_id: object.object_id.clone(),
                 });
             }
+            if building.wall_visual.is_none() {
+                return Err(
+                    MapDefinitionValidationError::MissingBuildingWallVisualKind {
+                        object_id: object.object_id.clone(),
+                    },
+                );
+            }
             if let Some(layout) = building.layout.as_ref() {
                 validate_building_layout(object, layout)?;
             }
@@ -1418,11 +1449,11 @@ mod tests {
         expand_object_footprint, load_map_library, validate_map_definition, BuildingGeneratorKind,
         MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingFootprintPolygonSpec,
         MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec, MapBuildingVisualOutline,
-        MapCellDefinition, MapContainerItemEntry, MapContainerProps, MapDefinition,
-        MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapInteractiveProps,
-        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-        MapObjectProps, MapPickupProps, MapRotation, MapSize, MapValidationCatalog,
-        RelativeGridCell, RelativeGridVertex,
+        MapBuildingWallVisualKind, MapBuildingWallVisualSpec, MapCellDefinition,
+        MapContainerItemEntry, MapContainerProps, MapDefinition, MapDefinitionValidationError,
+        MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
+        MapRotation, MapSize, MapValidationCatalog, RelativeGridCell, RelativeGridVertex,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;
@@ -1446,6 +1477,9 @@ mod tests {
             props: MapObjectProps {
                 building: Some(MapBuildingProps {
                     prefab_id: "survivor_outpost_01_dormitory".into(),
+                    wall_visual: Some(MapBuildingWallVisualSpec {
+                        kind: MapBuildingWallVisualKind::LegacyGrid,
+                    }),
                     layout: None,
                     extra: BTreeMap::new(),
                 }),
@@ -1497,7 +1531,12 @@ mod tests {
 
     #[test]
     fn container_interactive_object_without_explicit_options_is_valid() {
-        let map = sample_map(vec![sample_container("crate", GridCoord::new(1, 0, 1), "1005", 2)]);
+        let map = sample_map(vec![sample_container(
+            "crate",
+            GridCoord::new(1, 0, 1),
+            "1005",
+            2,
+        )]);
 
         validate_map_definition(&map, Some(&sample_catalog()))
             .expect("container object should derive a default open_container option");
@@ -1505,7 +1544,12 @@ mod tests {
 
     #[test]
     fn container_items_require_known_positive_entries() {
-        let map = sample_map(vec![sample_container("crate", GridCoord::new(1, 0, 1), "9999", 0)]);
+        let map = sample_map(vec![sample_container(
+            "crate",
+            GridCoord::new(1, 0, 1),
+            "9999",
+            0,
+        )]);
 
         let error = validate_map_definition(&map, Some(&sample_catalog()))
             .expect_err("container validation should fail");
@@ -1526,7 +1570,7 @@ mod tests {
 
         assert!(!library.is_empty());
         assert!(library
-            .get(&MapId("survivor_outpost_01_grid".into()))
+            .get(&MapId("survivor_outpost_01".into()))
             .is_some());
     }
 
@@ -1579,6 +1623,25 @@ mod tests {
         assert!(matches!(
             error,
             MapDefinitionValidationError::InvalidBuildingTargetRoomCount { .. }
+        ));
+    }
+
+    #[test]
+    fn building_requires_explicit_wall_visual_kind() {
+        let mut building = sample_building("layout_house", GridCoord::new(1, 0, 1), 4, 4);
+        building
+            .props
+            .building
+            .as_mut()
+            .expect("building props")
+            .wall_visual = None;
+
+        let error = validate_map_definition(&sample_map(vec![building]), Some(&sample_catalog()))
+            .expect_err("missing wall visual should fail");
+
+        assert!(matches!(
+            error,
+            MapDefinitionValidationError::MissingBuildingWallVisualKind { .. }
         ));
     }
 
@@ -1791,6 +1854,9 @@ mod tests {
             props: MapObjectProps {
                 building: Some(MapBuildingProps {
                     prefab_id: "survivor_outpost_01_dormitory".into(),
+                    wall_visual: Some(MapBuildingWallVisualSpec {
+                        kind: MapBuildingWallVisualKind::LegacyGrid,
+                    }),
                     layout: None,
                     extra: BTreeMap::new(),
                 }),

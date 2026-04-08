@@ -1,6 +1,6 @@
 {
   "id": "survivor_outpost_01_settlement",
-  "map_id": "survivor_outpost_01_grid",
+  "map_id": "survivor_outpost_01",
   "anchors": [
     { "id": "guard_bed_01", "grid": { "x": 9, "y": 0, "z": 8 } },
     { "id": "guard_bed_02", "grid": { "x": 10, "y": 0, "z": 8 } },

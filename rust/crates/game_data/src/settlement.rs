@@ -466,7 +466,7 @@ mod tests {
     fn sample_settlement() -> SettlementDefinition {
         SettlementDefinition {
             id: SettlementId("sample_settlement".into()),
-            map_id: MapId("survivor_outpost_01_grid".into()),
+            map_id: MapId("survivor_outpost_01".into()),
             anchors: vec![
                 SettlementAnchorDefinition {
                     id: "home_guard".into(),
@@ -509,7 +509,7 @@ mod tests {
         format!(
             r#"{{
                 "id": "{id}",
-                "map_id": "survivor_outpost_01_grid",
+                "map_id": "survivor_outpost_01",
                 "anchors": [
                     {{ "id": "home_guard", "grid": {{ "x": 1, "y": 0, "z": 1 }} }},
                     {{ "id": "duty_north", "grid": {{ "x": 5, "y": 0, "z": 1 }} }}

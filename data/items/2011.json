@@ -27,6 +27,18 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "hands",
+        "visual_asset": "builtin:item:hands",
+        "attach_target": "hands",
+        "presentation_mode": "attach",
+        "hide_base_regions": [],
+        "preview_transform": {},
+        "tint": "#50636b"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 40,
       "max_durability": 40,

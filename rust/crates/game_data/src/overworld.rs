@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -50,6 +51,74 @@ pub enum OverworldLocationKind {
     Dungeon,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverworldTerrainKind {
+    Road,
+    Plain,
+    Forest,
+    River,
+    Lake,
+    Mountain,
+    Urban,
+}
+
+impl Default for OverworldTerrainKind {
+    fn default() -> Self {
+        Self::Plain
+    }
+}
+
+impl OverworldTerrainKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Road => "road",
+            Self::Plain => "plain",
+            Self::Forest => "forest",
+            Self::River => "river",
+            Self::Lake => "lake",
+            Self::Mountain => "mountain",
+            Self::Urban => "urban",
+        }
+    }
+
+    pub const fn is_passable(self) -> bool {
+        !matches!(self, Self::River | Self::Lake | Self::Mountain)
+    }
+
+    pub const fn move_cost(self) -> Option<u32> {
+        match self {
+            Self::Road | Self::Urban => Some(1),
+            Self::Plain => Some(2),
+            Self::Forest => Some(3),
+            Self::River | Self::Lake | Self::Mountain => None,
+        }
+    }
+}
+
+impl fmt::Display for OverworldTerrainKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for OverworldTerrainKind {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim() {
+            "road" => Ok(Self::Road),
+            "plain" => Ok(Self::Plain),
+            "forest" => Ok(Self::Forest),
+            "river" => Ok(Self::River),
+            "lake" => Ok(Self::Lake),
+            "mountain" => Ok(Self::Mountain),
+            "urban" => Ok(Self::Urban),
+            _ => Err("unknown_overworld_terrain"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OverworldLocationDefinition {
     pub id: OverworldLocationId,
@@ -84,7 +153,7 @@ pub struct OverworldLocationDefinition {
 pub struct OverworldCellDefinition {
     pub grid: GridCoord,
     #[serde(default)]
-    pub terrain: String,
+    pub terrain: OverworldTerrainKind,
     #[serde(default)]
     pub blocked: bool,
     #[serde(flatten)]
@@ -270,6 +339,58 @@ pub enum OverworldValidationError {
         y: i32,
         z: i32,
     },
+    #[error(
+        "outdoor location {location_id} overworld cell ({x}, {y}, {z}) uses impassable terrain {terrain}"
+    )]
+    ImpassableOutdoorLocationCell {
+        location_id: String,
+        x: i32,
+        y: i32,
+        z: i32,
+        terrain: OverworldTerrainKind,
+    },
+    #[error(
+        "outdoor locations {first_location_id} and {second_location_id} cannot share cell ({x}, {y}, {z})"
+    )]
+    DuplicateOutdoorLocationCell {
+        first_location_id: String,
+        second_location_id: String,
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    #[error(
+        "outdoor location {location_id} has no valid external interaction ring cell around ({x}, {y}, {z})"
+    )]
+    MissingOutdoorInteractionRing {
+        location_id: String,
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    #[error(
+        "outdoor interaction ring cell ({x}, {y}, {z}) overlaps between {first_location_id} and {second_location_id}"
+    )]
+    OverlappingOutdoorInteractionRing {
+        first_location_id: String,
+        second_location_id: String,
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+}
+
+pub fn overworld_cardinal_neighbors(grid: GridCoord) -> [GridCoord; 4] {
+    [
+        GridCoord::new(grid.x + 1, grid.y, grid.z),
+        GridCoord::new(grid.x - 1, grid.y, grid.z),
+        GridCoord::new(grid.x, grid.y, grid.z + 1),
+        GridCoord::new(grid.x, grid.y, grid.z - 1),
+    ]
+}
+
+pub fn overworld_cell_is_traversable(cell: &OverworldCellDefinition) -> bool {
+    !cell.blocked && cell.terrain.is_passable()
 }
 
 pub fn load_overworld_library(
@@ -469,6 +590,7 @@ pub fn validate_overworld_definition(
             }
         }
     }
+    let mut outdoor_locations_by_cell = HashMap::<GridCoord, &OverworldLocationDefinition>::new();
     for location in &definition.locations {
         if location.overworld_cell.y != 0
             || location.overworld_cell.x < 0
@@ -485,17 +607,83 @@ pub fn validate_overworld_definition(
                 height: definition.size.height,
             });
         }
-        if location.kind == OverworldLocationKind::Outdoor
-            && cells_by_grid
+        if location.kind == OverworldLocationKind::Outdoor {
+            if let Some(previous) =
+                outdoor_locations_by_cell.insert(location.overworld_cell, location)
+            {
+                return Err(OverworldValidationError::DuplicateOutdoorLocationCell {
+                    first_location_id: previous.id.as_str().to_string(),
+                    second_location_id: location.id.as_str().to_string(),
+                    x: location.overworld_cell.x,
+                    y: location.overworld_cell.y,
+                    z: location.overworld_cell.z,
+                });
+            }
+            let cell = cells_by_grid
                 .get(&location.overworld_cell)
-                .is_some_and(|cell| cell.blocked)
-        {
-            return Err(OverworldValidationError::BlockedOutdoorLocationCell {
+                .expect("validated outdoor cell exists");
+            if cell.blocked {
+                return Err(OverworldValidationError::BlockedOutdoorLocationCell {
+                    location_id: location.id.as_str().to_string(),
+                    x: location.overworld_cell.x,
+                    y: location.overworld_cell.y,
+                    z: location.overworld_cell.z,
+                });
+            }
+            if !cell.terrain.is_passable() {
+                return Err(OverworldValidationError::ImpassableOutdoorLocationCell {
+                    location_id: location.id.as_str().to_string(),
+                    x: location.overworld_cell.x,
+                    y: location.overworld_cell.y,
+                    z: location.overworld_cell.z,
+                    terrain: cell.terrain,
+                });
+            }
+        }
+    }
+
+    let mut interaction_ring_owner = HashMap::<GridCoord, &OverworldLocationDefinition>::new();
+    for location in definition
+        .locations
+        .iter()
+        .filter(|location| location.kind == OverworldLocationKind::Outdoor)
+    {
+        let interaction_ring = overworld_cardinal_neighbors(location.overworld_cell)
+            .into_iter()
+            .filter(|grid| {
+                grid.y == 0
+                    && grid.x >= 0
+                    && grid.z >= 0
+                    && grid.x < definition.size.width as i32
+                    && grid.z < definition.size.height as i32
+            })
+            .filter(|grid| !outdoor_locations_by_cell.contains_key(grid))
+            .filter(|grid| {
+                cells_by_grid
+                    .get(grid)
+                    .is_some_and(|cell| overworld_cell_is_traversable(cell))
+            })
+            .collect::<Vec<_>>();
+
+        if interaction_ring.is_empty() {
+            return Err(OverworldValidationError::MissingOutdoorInteractionRing {
                 location_id: location.id.as_str().to_string(),
                 x: location.overworld_cell.x,
                 y: location.overworld_cell.y,
                 z: location.overworld_cell.z,
             });
+        }
+
+        for ring_cell in interaction_ring {
+            if let Some(previous) = interaction_ring_owner.insert(ring_cell, location) {
+                return Err(OverworldValidationError::OverlappingOutdoorInteractionRing {
+                    first_location_id: previous.id.as_str().to_string(),
+                    second_location_id: location.id.as_str().to_string(),
+                    x: ring_cell.x,
+                    y: ring_cell.y,
+                    z: ring_cell.z,
+                });
+            }
         }
     }
 
@@ -527,7 +715,8 @@ mod tests {
     use super::{
         load_overworld_library, validate_overworld_definition, OverworldCellDefinition,
         OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
+        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind,
+        OverworldTravelRuleSet,
         OverworldValidationCatalog, OverworldValidationError,
     };
     use crate::map::MapId;
@@ -562,34 +751,83 @@ mod tests {
     }
 
     #[test]
-    fn disconnected_visible_outdoor_location_is_allowed_for_grid_navigation() {
-        let mut definition = sample_overworld();
-        definition.locations.push(OverworldLocationDefinition {
-            id: OverworldLocationId("forest".into()),
-            name: "Forest".into(),
-            description: String::new(),
-            kind: OverworldLocationKind::Outdoor,
-            map_id: MapId("forest_grid".into()),
-            entry_point_id: "default_entry".into(),
-            parent_outdoor_location_id: None,
-            return_entry_point_id: None,
-            default_unlocked: false,
-            visible: true,
-            overworld_cell: GridCoord::new(5, 0, 0),
-            danger_level: 2,
-            icon: String::new(),
-            extra: BTreeMap::new(),
-        });
-        definition.size.width = 6;
-        definition.cells = full_cells(6, 1, &[(0, 0, "road", false), (1, 0, "road", true)]);
+    fn disconnected_visible_outdoor_location_without_ring_is_rejected() {
+        let definition = OverworldDefinition {
+            id: OverworldId("ring_missing".into()),
+            size: MapSize {
+                width: 1,
+                height: 1,
+            },
+            locations: vec![sample_location("forest", "forest", 0, 0)],
+            cells: full_cells(1, 1, &[(0, 0, OverworldTerrainKind::Urban, false)]),
+            travel_rules: OverworldTravelRuleSet::default(),
+        };
         let mut catalog = sample_catalog();
-        catalog.map_ids.insert("forest_grid".into());
+        catalog.map_ids.insert("forest".into());
         catalog.map_entry_points_by_map.insert(
-            "forest_grid".into(),
+            "forest".into(),
             BTreeSet::from(["default_entry".into()]),
         );
-        validate_overworld_definition(&definition, Some(&catalog))
-            .expect("grid-based overworld should not require edge connectivity");
+        let error = validate_overworld_definition(&definition, Some(&catalog))
+            .expect_err("outdoor location without ring should fail");
+        assert!(matches!(
+            error,
+            OverworldValidationError::MissingOutdoorInteractionRing { .. }
+        ));
+    }
+
+    #[test]
+    fn impassable_outdoor_location_cell_is_rejected() {
+        let mut definition = sample_overworld();
+        definition.cells = full_cells(
+            5,
+            3,
+            &[
+                (1, 1, OverworldTerrainKind::Mountain, false),
+                (2, 1, OverworldTerrainKind::Road, false),
+                (3, 1, OverworldTerrainKind::Road, false),
+                (4, 1, OverworldTerrainKind::Urban, false),
+            ],
+        );
+
+        let error = validate_overworld_definition(&definition, Some(&sample_catalog()))
+            .expect_err("mountain outdoor cell should fail");
+        assert!(matches!(
+            error,
+            OverworldValidationError::ImpassableOutdoorLocationCell { .. }
+        ));
+    }
+
+    #[test]
+    fn overlapping_outdoor_interaction_rings_are_rejected() {
+        let definition = OverworldDefinition {
+            id: OverworldId("ring_overlap".into()),
+            size: MapSize {
+                width: 3,
+                height: 3,
+            },
+            locations: vec![
+                sample_location("left", "left", 0, 0),
+                sample_location("right", "right", 2, 0),
+            ],
+            cells: full_cells(3, 3, &[]),
+            travel_rules: OverworldTravelRuleSet::default(),
+        };
+        let mut catalog = sample_catalog();
+        for map_id in ["left", "right"] {
+            catalog.map_ids.insert(map_id.into());
+            catalog.map_entry_points_by_map.insert(
+                map_id.into(),
+                BTreeSet::from(["default_entry".into()]),
+            );
+        }
+
+        let error = validate_overworld_definition(&definition, Some(&catalog))
+            .expect_err("overlapping rings should fail");
+        assert!(matches!(
+            error,
+            OverworldValidationError::OverlappingOutdoorInteractionRing { .. }
+        ));
     }
 
     #[test]
@@ -616,21 +854,21 @@ mod tests {
     fn sample_catalog() -> OverworldValidationCatalog {
         OverworldValidationCatalog {
             map_ids: BTreeSet::from([
-                "survivor_outpost_01_grid".into(),
-                "street_a_grid".into(),
-                "survivor_outpost_01_interior_grid".into(),
+                "survivor_outpost_01".into(),
+                "street_a".into(),
+                "survivor_outpost_01_interior".into(),
             ]),
             map_entry_points_by_map: BTreeMap::from([
                 (
-                    "survivor_outpost_01_grid".into(),
+                    "survivor_outpost_01".into(),
                     BTreeSet::from(["default_entry".into(), "outdoor_return".into()]),
                 ),
                 (
-                    "street_a_grid".into(),
+                    "street_a".into(),
                     BTreeSet::from(["default_entry".into()]),
                 ),
                 (
-                    "survivor_outpost_01_interior_grid".into(),
+                    "survivor_outpost_01_interior".into(),
                     BTreeSet::from(["default_entry".into(), "outdoor_return".into()]),
                 ),
             ]),
@@ -641,8 +879,8 @@ mod tests {
         OverworldDefinition {
             id: OverworldId("main_overworld".into()),
             size: MapSize {
-                width: 2,
-                height: 1,
+                width: 5,
+                height: 3,
             },
             locations: vec![
                 OverworldLocationDefinition {
@@ -650,13 +888,13 @@ mod tests {
                     name: "Survivor Outpost 01".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("survivor_outpost_01_grid".into()),
+                    map_id: MapId("survivor_outpost_01".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,
                     default_unlocked: true,
                     visible: true,
-                    overworld_cell: GridCoord::new(0, 0, 0),
+                    overworld_cell: GridCoord::new(1, 0, 1),
                     danger_level: 0,
                     icon: String::new(),
                     extra: BTreeMap::new(),
@@ -666,13 +904,13 @@ mod tests {
                     name: "Street A".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Outdoor,
-                    map_id: MapId("street_a_grid".into()),
+                    map_id: MapId("street_a".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: None,
                     return_entry_point_id: None,
                     default_unlocked: true,
                     visible: true,
-                    overworld_cell: GridCoord::new(1, 0, 0),
+                    overworld_cell: GridCoord::new(4, 0, 1),
                     danger_level: 2,
                     icon: String::new(),
                     extra: BTreeMap::new(),
@@ -682,7 +920,7 @@ mod tests {
                     name: "Survivor Outpost 01 Interior".into(),
                     description: String::new(),
                     kind: OverworldLocationKind::Interior,
-                    map_id: MapId("survivor_outpost_01_interior_grid".into()),
+                    map_id: MapId("survivor_outpost_01_interior".into()),
                     entry_point_id: "default_entry".into(),
                     parent_outdoor_location_id: Some(OverworldLocationId(
                         "survivor_outpost_01".into(),
@@ -690,13 +928,22 @@ mod tests {
                     return_entry_point_id: Some("outdoor_return".into()),
                     default_unlocked: true,
                     visible: false,
-                    overworld_cell: GridCoord::new(0, 0, 0),
+                    overworld_cell: GridCoord::new(1, 0, 1),
                     danger_level: 0,
                     icon: String::new(),
                     extra: BTreeMap::new(),
                 },
             ],
-            cells: full_cells(2, 1, &[(0, 0, "road", false), (1, 0, "road", false)]),
+            cells: full_cells(
+                5,
+                3,
+                &[
+                    (1, 1, OverworldTerrainKind::Urban, false),
+                    (2, 1, OverworldTerrainKind::Road, false),
+                    (3, 1, OverworldTerrainKind::Road, false),
+                    (4, 1, OverworldTerrainKind::Urban, false),
+                ],
+            ),
             travel_rules: OverworldTravelRuleSet::default(),
         }
     }
@@ -704,7 +951,7 @@ mod tests {
     fn full_cells(
         width: u32,
         height: u32,
-        overrides: &[(i32, i32, &str, bool)],
+        overrides: &[(i32, i32, OverworldTerrainKind, bool)],
     ) -> Vec<OverworldCellDefinition> {
         let override_map = overrides
             .iter()
@@ -716,16 +963,40 @@ mod tests {
                 let (terrain, blocked) = override_map
                     .get(&(x, z))
                     .copied()
-                    .unwrap_or(("plains", false));
+                    .unwrap_or((OverworldTerrainKind::Plain, false));
                 cells.push(OverworldCellDefinition {
                     grid: GridCoord::new(x, 0, z),
-                    terrain: terrain.to_string(),
+                    terrain,
                     blocked,
                     extra: BTreeMap::new(),
                 });
             }
         }
         cells
+    }
+
+    fn sample_location(
+        id: &str,
+        map_id: &str,
+        x: i32,
+        z: i32,
+    ) -> OverworldLocationDefinition {
+        OverworldLocationDefinition {
+            id: OverworldLocationId(id.into()),
+            name: id.into(),
+            description: String::new(),
+            kind: OverworldLocationKind::Outdoor,
+            map_id: MapId(map_id.into()),
+            entry_point_id: "default_entry".into(),
+            parent_outdoor_location_id: None,
+            return_entry_point_id: None,
+            default_unlocked: true,
+            visible: true,
+            overworld_cell: GridCoord::new(x, 0, z),
+            danger_level: 0,
+            icon: String::new(),
+            extra: BTreeMap::new(),
+        }
     }
 
     #[test]

@@ -34,16 +34,6 @@ const WINDOW_DESCRIPTORS: Record<Exclude<OpenableEditorSurface, "settings">, Win
     resizable: true,
     buildUrl: () => "/?surface=items",
   },
-  characters: {
-    label: "characters",
-    title: "CDC Character Editor",
-    width: 1520,
-    height: 940,
-    minWidth: 1180,
-    minHeight: 760,
-    resizable: true,
-    buildUrl: () => "/?surface=characters",
-  },
   dialogues: {
     label: "dialogues",
     title: "CDC Dialogue Editor",
@@ -124,8 +114,6 @@ export function getSurfaceForModuleCommand(
   switch (commandId) {
     case EDITOR_MENU_COMMANDS.MODULE_ITEMS:
       return "items";
-    case EDITOR_MENU_COMMANDS.MODULE_CHARACTERS:
-      return "characters";
     case EDITOR_MENU_COMMANDS.MODULE_DIALOGUES:
       return "dialogues";
     case EDITOR_MENU_COMMANDS.MODULE_QUESTS:

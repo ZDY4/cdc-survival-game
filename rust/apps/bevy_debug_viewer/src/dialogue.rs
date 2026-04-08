@@ -895,15 +895,24 @@ mod tests {
         );
         apply_interaction_result(&runtime_state, &mut viewer_state, result.clone());
 
-        assert!(result.approach_required);
+        assert!(!result.approach_required);
         assert_eq!(viewer_state.selected_actor, None);
         assert_eq!(viewer_state.controlled_player_actor, Some(player));
-        assert!(viewer_state.active_dialogue.is_none());
+        let active_dialogue = viewer_state
+            .active_dialogue
+            .as_ref()
+            .expect("dialogue should open immediately after synchronous approach");
+        assert_eq!(active_dialogue.actor_id, player);
+        assert_eq!(
+            active_dialogue.target_id,
+            Some(InteractionTargetId::Actor(npc))
+        );
+        assert_eq!(active_dialogue.current_node_id, "start");
 
         for event in runtime_state.runtime.drain_events() {
             sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
         }
-        assert!(viewer_state.active_dialogue.is_none());
+        assert!(viewer_state.active_dialogue.is_some());
 
         let world_cycle = runtime_state.runtime.advance_pending_progression();
         assert_eq!(
@@ -913,7 +922,7 @@ mod tests {
         for event in runtime_state.runtime.drain_events() {
             sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
         }
-        assert!(viewer_state.active_dialogue.is_none());
+        assert!(viewer_state.active_dialogue.is_some());
 
         let next_turn = runtime_state.runtime.advance_pending_progression();
         assert_eq!(
@@ -927,7 +936,7 @@ mod tests {
         let active_dialogue = viewer_state
             .active_dialogue
             .as_ref()
-            .expect("dialogue should open after pending interaction resumes");
+            .expect("dialogue should remain open while progression advances");
         assert_eq!(active_dialogue.actor_id, player);
         assert_eq!(
             active_dialogue.target_id,

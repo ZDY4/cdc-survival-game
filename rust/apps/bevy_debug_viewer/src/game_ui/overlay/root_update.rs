@@ -478,11 +478,15 @@ fn open_panels_key(
         return Some(format!("Settings|{:?}", ui.settings.as_ref()));
     }
 
-    let keys = [ui.menu_state.left_panel, ui.menu_state.center_panel, ui.menu_state.right_panel]
-        .into_iter()
-        .flatten()
-        .map(|panel| panel_render_key(panel, actor_id, ui, content))
-        .collect::<Vec<_>>();
+    let keys = [
+        ui.menu_state.left_panel,
+        ui.menu_state.center_panel,
+        ui.menu_state.right_panel,
+    ]
+    .into_iter()
+    .flatten()
+    .map(|panel| panel_render_key(panel, actor_id, ui, content))
+    .collect::<Vec<_>>();
 
     (!keys.is_empty()).then(|| keys.join("||"))
 }
@@ -563,9 +567,13 @@ fn render_open_panels(
         return;
     }
 
-    for panel in [ui.menu_state.left_panel, ui.menu_state.center_panel, ui.menu_state.right_panel]
-        .into_iter()
-        .flatten()
+    for panel in [
+        ui.menu_state.left_panel,
+        ui.menu_state.center_panel,
+        ui.menu_state.right_panel,
+    ]
+    .into_iter()
+    .flatten()
     {
         render_single_panel(parent, font, actor_id, ui, content, panel);
     }

@@ -25,6 +25,18 @@
       "unequip_effect_ids": []
     },
     {
+      "kind": "appearance",
+      "definition": {
+        "equip_slot": "main_hand",
+        "visual_asset": "builtin:weapon:light",
+        "attach_target": "main_hand",
+        "presentation_mode": "attach",
+        "hide_base_regions": [],
+        "preview_transform": {},
+        "tint": "#8b6d43"
+      }
+    },
+    {
       "kind": "durability",
       "durability": 30,
       "max_durability": 30,

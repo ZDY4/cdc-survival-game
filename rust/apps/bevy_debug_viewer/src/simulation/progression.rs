@@ -90,6 +90,10 @@ pub(crate) fn advance_runtime_progression(
         return;
     }
 
+    if viewer_state.active_dialogue.is_some() {
+        return;
+    }
+
     viewer_state.progression_elapsed_sec += time.delta_secs();
     if viewer_state.progression_elapsed_sec < viewer_state.min_progression_interval_sec {
         return;

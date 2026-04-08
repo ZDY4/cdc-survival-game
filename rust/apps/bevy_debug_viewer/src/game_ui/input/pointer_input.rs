@@ -195,7 +195,10 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
             Option<&'static RelativeCursorPosition>,
             Option<&'static Visibility>,
         ),
-        (With<InventoryEntryScrollbarTrack>, Without<InventoryEntryScrollbarThumb>),
+        (
+            With<InventoryEntryScrollbarTrack>,
+            Without<InventoryEntryScrollbarThumb>,
+        ),
     >,
     inventory_scrollbar_thumbs: Query<
         'w,
@@ -206,7 +209,10 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
             Option<&'static RelativeCursorPosition>,
             Option<&'static Visibility>,
         ),
-        (With<InventoryEntryScrollbarThumb>, Without<InventoryEntryScrollbarTrack>),
+        (
+            With<InventoryEntryScrollbarThumb>,
+            Without<InventoryEntryScrollbarTrack>,
+        ),
     >,
 }
 
@@ -221,9 +227,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
     let container_active = ui.modal_state.container.is_some();
     let item_modal_open = ui.modal_state.item_quantity.is_some();
     let inventory_panel_active = ui.menu_state.is_panel_open(UiMenuPanel::Inventory);
-    let skills_panel_active = !trade_active
-        && !container_active
-        && ui.menu_state.is_panel_open(UiMenuPanel::Skills);
+    let skills_panel_active =
+        !trade_active && !container_active && ui.menu_state.is_panel_open(UiMenuPanel::Skills);
     if ui.scene_kind.is_main_menu() {
         ui.context_menu.clear();
         ui.drag_state.clear();
@@ -394,19 +399,11 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                     visibility,
                 )
             });
-    let cursor_in_container_list =
-        targets
-            .container_list_drop_zones
-            .iter()
-            .any(|(computed, transform, cursor, visibility)| {
-                hover_target_contains_cursor(
-                    cursor_position,
-                    computed,
-                    transform,
-                    cursor,
-                    visibility,
-                )
-            });
+    let cursor_in_container_list = targets.container_list_drop_zones.iter().any(
+        |(computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+        },
+    );
 
     if right_just_pressed {
         if ui.drag_state.is_active() {
@@ -1204,22 +1201,18 @@ pub(crate) fn handle_inventory_list_mouse_wheel(
         return;
     };
 
-    let Some((computed, _transform, _cursor, _visibility, mut scroll_position)) =
-        scroll_areas.iter_mut().find(|(computed, transform, cursor, visibility, _)| {
-            hover_target_contains_cursor(
-                cursor_position,
-                computed,
-                transform,
-                *cursor,
-                *visibility,
-            )
+    let Some((computed, _transform, _cursor, _visibility, mut scroll_position)) = scroll_areas
+        .iter_mut()
+        .find(|(computed, transform, cursor, visibility, _)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, *cursor, *visibility)
         })
     else {
         for _ in mouse_wheel_events.read() {}
         return;
     };
 
-    let max_scroll = (computed.content_size.y - computed.size.y + computed.scrollbar_size.y).max(0.0);
+    let max_scroll =
+        (computed.content_size.y - computed.size.y + computed.scrollbar_size.y).max(0.0);
     if max_scroll <= f32::EPSILON {
         for _ in mouse_wheel_events.read() {}
         return;
@@ -1259,7 +1252,8 @@ fn handle_inventory_scrollbar_pointer_input(
         return consumed;
     }
 
-    let Ok((scroll_area, _, _, _, mut scroll_position)) = targets.inventory_scroll_areas.single_mut()
+    let Ok((scroll_area, _, _, _, mut scroll_position)) =
+        targets.inventory_scroll_areas.single_mut()
     else {
         scrollbar_drag_state.clear();
         return false;
@@ -1357,8 +1351,7 @@ fn inventory_scrollbar_metrics(
     let viewport_height = scroll_area.size.y.max(0.0);
     let content_height = scroll_area.content_size.y.max(0.0);
     let track_height = track.size.y.max(0.0);
-    let max_scroll =
-        (content_height - viewport_height + scroll_area.scrollbar_size.y).max(0.0);
+    let max_scroll = (content_height - viewport_height + scroll_area.scrollbar_size.y).max(0.0);
     let can_scroll = max_scroll > 0.5 && track_height > 0.0 && content_height > f32::EPSILON;
     if !can_scroll {
         return None;
@@ -1409,11 +1402,17 @@ fn set_inventory_scroll_position_from_track_cursor(
 pub(crate) fn sync_inventory_list_scrollbar(
     mut tracks: Query<
         (&ComputedNode, &mut Visibility),
-        (With<InventoryEntryScrollbarTrack>, Without<InventoryEntryScrollbarThumb>),
+        (
+            With<InventoryEntryScrollbarTrack>,
+            Without<InventoryEntryScrollbarThumb>,
+        ),
     >,
     mut thumbs: Query<
         (&mut Node, &mut Visibility),
-        (With<InventoryEntryScrollbarThumb>, Without<InventoryEntryScrollbarTrack>),
+        (
+            With<InventoryEntryScrollbarThumb>,
+            Without<InventoryEntryScrollbarTrack>,
+        ),
     >,
     scroll_areas: Query<&ComputedNode, With<InventoryEntryScrollArea>>,
 ) {
@@ -1749,7 +1748,13 @@ fn apply_container_take(
     item_id: u32,
     before_item_id: Option<u32>,
 ) -> bool {
-    match plan_container_take(&runtime_state.runtime, actor_id, container_id, item_id, items) {
+    match plan_container_take(
+        &runtime_state.runtime,
+        actor_id,
+        container_id,
+        item_id,
+        items,
+    ) {
         ContainerQuantityPlan::Immediate { count } => {
             let item_name = item_preview_label(&items.0, item_id);
             let status = runtime_state

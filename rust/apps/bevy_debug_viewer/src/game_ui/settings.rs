@@ -2,6 +2,22 @@
 
 use super::*;
 
+pub(crate) const VIEWER_RESOLUTION_PRESETS: [ViewerWindowResolution; 5] = [
+    ViewerWindowResolution::new(1280, 720),
+    ViewerWindowResolution::new(1440, 900),
+    ViewerWindowResolution::new(1600, 900),
+    ViewerWindowResolution::new(1920, 1080),
+    ViewerWindowResolution::new(2560, 1440),
+];
+
+pub(crate) fn next_resolution_preset(current: ViewerWindowResolution) -> ViewerWindowResolution {
+    let current_index = VIEWER_RESOLUTION_PRESETS
+        .iter()
+        .position(|preset| *preset == current)
+        .unwrap_or_default();
+    VIEWER_RESOLUTION_PRESETS[(current_index + 1) % VIEWER_RESOLUTION_PRESETS.len()]
+}
+
 pub(crate) fn load_ui_settings_on_startup(
     path: Res<ViewerUiSettingsPath>,
     mut settings: ResMut<ViewerUiSettings>,
@@ -52,7 +68,13 @@ pub(super) fn apply_ui_settings(
             WindowMode::Fullscreen(MonitorSelection::Primary, VideoModeSelection::Current)
         }
         "borderless_fullscreen" => WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
-        _ => WindowMode::Windowed,
+        _ => {
+            window.resolution.set(
+                _settings.window_resolution.width as f32,
+                _settings.window_resolution.height as f32,
+            );
+            WindowMode::Windowed
+        }
     };
     window.present_mode = if _settings.vsync {
         PresentMode::AutoVsync
