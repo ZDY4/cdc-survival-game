@@ -86,6 +86,14 @@ pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) 
     shell::panel_body(parent, panel)
 }
 
+pub(super) fn panel_body_with_bottom(
+    parent: &mut ChildSpawnerCommands,
+    panel: UiMenuPanel,
+    bottom: f32,
+) -> Entity {
+    shell::panel_body_with_bottom(parent, panel, bottom)
+}
+
 pub(super) fn render_hover_tooltip(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,

@@ -14,8 +14,16 @@ pub(super) fn render_inventory_panel(
     snapshot: &game_bevy::UiInventoryPanelSnapshot,
     menu_state: &UiMenuState,
     drag_state: &UiInventoryDragState,
+    window_height: f32,
 ) {
-    inventory::render_inventory_panel(parent, font, snapshot, menu_state, drag_state)
+    inventory::render_inventory_panel(
+        parent,
+        font,
+        snapshot,
+        menu_state,
+        drag_state,
+        window_height,
+    )
 }
 
 pub(super) fn render_character_panel(
@@ -47,9 +55,8 @@ pub(super) fn render_skills_panel(
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiSkillsSnapshot,
     menu_state: &UiMenuState,
-    hotbar_state: &UiHotbarState,
 ) {
-    skills::render_skills_panel(parent, font, snapshot, menu_state, hotbar_state)
+    skills::render_skills_panel(parent, font, snapshot, menu_state)
 }
 
 pub(super) fn render_map_panel(

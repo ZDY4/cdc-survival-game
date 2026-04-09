@@ -1,0 +1,48 @@
+{
+  "prototypes": [
+    {
+      "id": "props/crate_wood",
+      "source": {
+        "kind": "gltf_scene",
+        "path": "container_placeholders/crate_wood.gltf",
+        "scene_index": 0
+      },
+      "bounds": {
+        "center": { "x": 0.0, "y": 0.5, "z": 0.0 },
+        "size": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "cast_shadows": true,
+      "receive_shadows": true
+    },
+    {
+      "id": "props/locker_metal",
+      "source": {
+        "kind": "gltf_scene",
+        "path": "container_placeholders/locker_metal.gltf",
+        "scene_index": 0
+      },
+      "bounds": {
+        "center": { "x": 0.0, "y": 0.5, "z": 0.0 },
+        "size": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "cast_shadows": true,
+      "receive_shadows": true
+    },
+    {
+      "id": "props/cabinet_medical",
+      "source": {
+        "kind": "gltf_scene",
+        "path": "container_placeholders/cabinet_medical.gltf",
+        "scene_index": 0
+      },
+      "bounds": {
+        "center": { "x": 0.0, "y": 0.5, "z": 0.0 },
+        "size": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "cast_shadows": true,
+      "receive_shadows": true
+    }
+  ],
+  "wall_sets": [],
+  "surface_sets": []
+}

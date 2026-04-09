@@ -1668,6 +1668,25 @@ impl Simulation {
             .into_iter()
             .map(|object: MapObjectDefinition| {
                 let mut payload_summary = BTreeMap::new();
+                if let Some(visual) = object.props.visual.as_ref() {
+                    payload_summary.insert(
+                        "prototype_id".to_string(),
+                        visual.prototype_id.as_str().to_string(),
+                    );
+                    payload_summary.insert(
+                        "visual_offset_world".to_string(),
+                        format!(
+                            "{},{},{}",
+                            visual.local_offset_world.x,
+                            visual.local_offset_world.y,
+                            visual.local_offset_world.z
+                        ),
+                    );
+                    payload_summary.insert(
+                        "visual_scale".to_string(),
+                        format!("{},{},{}", visual.scale.x, visual.scale.y, visual.scale.z),
+                    );
+                }
                 match object.kind {
                     MapObjectKind::Building => {
                         if let Some(building) = object.props.building.as_ref() {

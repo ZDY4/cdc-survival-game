@@ -14,8 +14,13 @@ pub(super) fn render_inventory_panel(
     snapshot: &game_bevy::UiInventoryPanelSnapshot,
     menu_state: &UiMenuState,
     drag_state: &UiInventoryDragState,
+    window_height: f32,
 ) {
-    let body = panel_body(parent, UiMenuPanel::Inventory);
+    let body = panel_body_with_bottom(
+        parent,
+        UiMenuPanel::Inventory,
+        inventory_panel_bottom_inset(window_height),
+    );
     parent.commands().entity(body).with_children(|body| {
         render_inventory_panel_contents(
             body,
@@ -41,6 +46,7 @@ pub(in crate::game_ui) fn render_inventory_panel_contents(
             Node {
                 width: Val::Percent(100.0),
                 flex_grow: 1.0,
+                min_height: px(0),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(8),
                 ..default()
@@ -272,6 +278,7 @@ fn render_inventory_entry_section(
             Node {
                 width: Val::Percent(100.0),
                 flex_grow: 1.0,
+                min_height: px(0),
                 padding: UiRect::all(px(8)),
                 flex_direction: FlexDirection::Row,
                 column_gap: px(8),
@@ -300,6 +307,7 @@ fn render_inventory_entry_section(
                         flex_grow: 1.0,
                         flex_basis: px(0),
                         min_width: px(0),
+                        min_height: px(0),
                         height: Val::Percent(100.0),
                         padding: UiRect::right(px(4)),
                         flex_direction: FlexDirection::Column,
@@ -460,4 +468,12 @@ fn render_inventory_entry_section(
                     ));
                 });
         });
+}
+
+fn inventory_panel_bottom_inset(window_height: f32) -> f32 {
+    if window_height <= 720.0 {
+        120.0
+    } else {
+        RIGHT_PANEL_BOTTOM
+    }
 }

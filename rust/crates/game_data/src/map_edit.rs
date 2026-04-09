@@ -991,6 +991,9 @@ impl MapEditorService {
         Ok(Some(MapValidationCatalog {
             item_ids,
             character_ids,
+            prototype_ids: Default::default(),
+            wall_set_ids: Default::default(),
+            surface_set_ids: Default::default(),
         }))
     }
 
@@ -1379,6 +1382,7 @@ mod tests {
                     blocks_movement: true,
                     blocks_sight: false,
                     terrain: "wall".into(),
+                    visual: None,
                     extra: BTreeMap::new(),
                 }],
             })

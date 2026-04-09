@@ -65,6 +65,7 @@ impl Simulation {
                         || is_outdoor_location_cell(&definition, cell.grid),
                     blocks_sight: false,
                     terrain: cell.terrain.as_str().to_string(),
+                    visual: None,
                     extra: cell.extra.clone(),
                 },
             )

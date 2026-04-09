@@ -770,6 +770,10 @@ impl GridWorld {
                                 .wall_visual
                                 .clone()
                                 .expect("validated building objects must define wall_visual"),
+                            tile_set: building
+                                .tile_set
+                                .clone()
+                                .expect("validated building objects must define tile_set"),
                             anchor: object.anchor,
                             rotation: object.rotation,
                             stories: layout.stories,
@@ -798,6 +802,7 @@ impl GridWorld {
                                         blocks_movement: false,
                                         blocks_sight: false,
                                         terrain: "generated_building_fallback".into(),
+                                        visual: None,
                                         extra: Default::default(),
                                     });
                             entry.blocks_movement = true;
@@ -881,6 +886,7 @@ impl GridWorld {
                         blocks_movement: false,
                         blocks_sight: false,
                         terrain: "generated_wall".into(),
+                        visual: None,
                         extra: Default::default(),
                     });
                 entry.blocks_movement = true;

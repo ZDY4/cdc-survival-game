@@ -26,8 +26,7 @@ pub(crate) fn sync_world_visuals(
     mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
     mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     asset_server: Res<AssetServer>,
-    container_visual_registry: Res<game_bevy::ContainerVisualRegistry>,
-    viewer_asset_root: Res<ViewerAssetRoot>,
+    world_tiles: Res<game_bevy::WorldTileDefinitions>,
     time: Res<Time>,
     palette: Res<ViewerPalette>,
     trigger_decal_assets: Res<TriggerDecalAssets>,
@@ -69,8 +68,7 @@ pub(crate) fn sync_world_visuals(
             &mut ground_materials,
             &mut building_wall_materials,
             &asset_server,
-            &container_visual_registry,
-            &viewer_asset_root,
+            &world_tiles,
             &palette,
             &trigger_decal_assets,
             &runtime_state,
@@ -437,26 +435,26 @@ pub(super) fn spawn_box(
     helpers::spawn_box(commands, meshes, materials, building_wall_materials, spec)
 }
 
-pub(super) fn spawn_building_wall_tile(
+pub(super) fn spawn_loaded_mesh(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
-    mesh: Mesh,
-    translation: Vec3,
-    visual_kind: game_data::MapBuildingWallVisualKind,
+    material: StaticWorldMaterialHandle,
+    mesh: Handle<Mesh>,
+    transform: Transform,
+    color: Color,
     pick_binding: Option<ViewerPickBindingSpec>,
     outline_target: Option<ViewerPickTarget>,
+    aabb_center: Vec3,
     aabb_half_extents: Vec3,
 ) -> SpawnedMeshVisual {
-    helpers::spawn_building_wall_tile(
+    helpers::spawn_loaded_mesh(
         commands,
-        meshes,
-        building_wall_materials,
+        material,
         mesh,
-        translation,
-        visual_kind,
+        transform,
+        color,
         pick_binding,
         outline_target,
+        aabb_center,
         aabb_half_extents,
     )
 }

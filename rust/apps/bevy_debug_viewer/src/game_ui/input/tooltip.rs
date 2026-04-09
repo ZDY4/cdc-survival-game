@@ -148,7 +148,8 @@ mod tests {
     use super::*;
     use game_data::{
         OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTravelRuleSet,
+        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind,
+        OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
 
@@ -232,14 +233,16 @@ mod tests {
                 cells: vec![
                     game_data::OverworldCellDefinition {
                         grid: GridCoord::new(0, 0, 0),
-                        terrain: String::new(),
+                        terrain: OverworldTerrainKind::Plain,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     game_data::OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
-                        terrain: String::new(),
+                        terrain: OverworldTerrainKind::Plain,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                 ],

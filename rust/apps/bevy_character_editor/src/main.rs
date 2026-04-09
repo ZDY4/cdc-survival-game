@@ -1,20 +1,18 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use bevy::camera::{visibility::RenderLayers, CameraOutputMode, ClearColorConfig, Viewport};
-use bevy::ecs::message::MessageReader;
-use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::camera::{visibility::RenderLayers, CameraOutputMode, ClearColorConfig};
 use bevy::prelude::*;
 use bevy::render::render_resource::BlendState;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
-use bevy_egui::input::EguiWantsInput;
 use bevy_egui::{
     egui, EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext,
 };
-use game_bevy::{
-    apply_preview_orbit_camera, game_ui_font_bytes, spawn_character_preview_light_rig,
-    spawn_character_preview_scene, spawn_preview_floor, CharacterPreviewPart,
-    CharacterPreviewPlugin, PreviewOrbitCamera, GAME_UI_FONT_NAME,
+use game_editor::{
+    install_game_ui_fonts, preview_camera_input_system as shared_preview_camera_input_system,
+    preview_camera_sync_system as shared_preview_camera_sync_system, spawn_character_preview_scene,
+    spawn_preview_floor, spawn_preview_light_rig, CharacterPreviewPart, PreviewCameraController,
+    PreviewOrbitCamera, PreviewViewportRect,
 };
 use game_data::{
     build_character_ai_preview, build_character_ai_preview_at_time,
@@ -57,7 +55,6 @@ fn main() {
                 }),
         )
         .add_plugins(EguiPlugin::default())
-        .add_plugins(CharacterPreviewPlugin)
         .init_state::<AppState>()
         .insert_resource(ClearColor(PREVIEW_BG))
         .insert_resource(EditorUiState::default())
@@ -79,8 +76,8 @@ fn main() {
                 handle_loading_task.run_if(in_state(AppState::Loading)),
                 (
                     sync_preview_scene_system,
-                    preview_camera_input_system,
-                    update_preview_camera_system,
+                    shared_preview_camera_input_system,
+                    shared_preview_camera_sync_system,
                 )
                     .chain()
                     .run_if(in_state(AppState::Ready)),
@@ -172,23 +169,6 @@ enum CharacterTab {
     Appearance,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-struct ViewportRect {
-    min_x: f32,
-    min_y: f32,
-    width: f32,
-    height: f32,
-}
-
-impl ViewportRect {
-    fn contains(&self, cursor: Vec2) -> bool {
-        cursor.x >= self.min_x
-            && cursor.x <= self.min_x + self.width
-            && cursor.y >= self.min_y
-            && cursor.y <= self.min_y + self.height
-    }
-}
-
 #[derive(Resource)]
 struct EditorUiState {
     search_text: String,
@@ -197,8 +177,6 @@ struct EditorUiState {
     selected_slot: String,
     try_on: BTreeMap<String, u32>,
     preview_context: CharacterAiPreviewContext,
-    viewport_rect: Option<ViewportRect>,
-    orbit_camera: PreviewOrbitCamera,
     status: String,
 }
 
@@ -211,8 +189,6 @@ impl Default for EditorUiState {
             selected_slot: "main_hand".to_string(),
             try_on: BTreeMap::new(),
             preview_context: default_preview_context(),
-            viewport_rect: None,
-            orbit_camera: PreviewOrbitCamera::default(),
             status: "加载角色数据中…".to_string(),
         }
     }
@@ -239,7 +215,7 @@ fn setup_editor(
 ) {
     egui_global_settings.auto_create_primary_context = false;
 
-    spawn_character_preview_light_rig(&mut commands);
+    spawn_preview_light_rig(&mut commands);
     commands.spawn((
         Camera3d::default(),
         Camera {
@@ -254,6 +230,20 @@ fn setup_editor(
             ..default()
         }),
         Transform::from_xyz(2.2, 1.6, 3.0).looking_at(Vec3::new(0.0, 0.95, 0.0), Vec3::Y),
+        PreviewCameraController {
+            orbit: PreviewOrbitCamera::default(),
+            focus_anchor: PreviewOrbitCamera::default().focus,
+            viewport_rect: None,
+            pitch_min: -1.1,
+            pitch_max: 0.65,
+            radius_min: CAMERA_RADIUS_MIN,
+            radius_max: CAMERA_RADIUS_MAX,
+            rotate_speed_x: 0.012,
+            rotate_speed_y: 0.008,
+            zoom_speed: 0.16,
+            pan_speed: 1.0,
+            pan_max_focus_offset: 1.35,
+        },
         PreviewCamera,
     ));
     commands.spawn((
@@ -290,19 +280,7 @@ fn configure_egui_fonts_system(
         return;
     };
 
-    let mut fonts = egui::FontDefinitions::default();
-    fonts.font_data.insert(
-        GAME_UI_FONT_NAME.to_string(),
-        egui::FontData::from_owned(game_ui_font_bytes().to_vec()).into(),
-    );
-    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-        fonts
-            .families
-            .entry(family)
-            .or_default()
-            .insert(0, GAME_UI_FONT_NAME.to_string());
-    }
-    ctx.set_fonts(fonts);
+    install_game_ui_fonts(ctx);
 
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(6.0, 4.0);
@@ -336,12 +314,18 @@ fn editor_ui_system(
     data: Res<EditorData>,
     mut ui_state: ResMut<EditorUiState>,
     mut preview_state: ResMut<PreviewState>,
+    mut preview_camera: Single<&mut PreviewCameraController, With<PreviewCamera>>,
 ) {
     let ctx = contexts
         .ctx_mut()
         .expect("primary egui context should exist for the character editor");
 
-    ensure_selected_character(&data, &mut ui_state, &mut preview_state);
+    ensure_selected_character(
+        &data,
+        &mut ui_state,
+        &mut preview_state,
+        &mut preview_camera,
+    );
 
     egui::TopBottomPanel::top("character_editor_topbar").show(ctx, |ui| {
         ui.horizontal(|ui| {
@@ -367,27 +351,44 @@ fn editor_ui_system(
         .default_width(LIST_PANEL_WIDTH)
         .resizable(true)
         .show(ctx, |ui| {
-            render_character_list_panel(ui, &data, &mut ui_state, &mut preview_state);
+            render_character_list_panel(
+                ui,
+                &data,
+                &mut ui_state,
+                &mut preview_state,
+                &mut preview_camera,
+            );
         });
 
     egui::SidePanel::left("character_details")
         .default_width(DETAIL_PANEL_WIDTH)
         .resizable(true)
         .show(ctx, |ui| {
-            render_detail_panel(ui, &data, &mut ui_state, &mut preview_state);
+            render_detail_panel(
+                ui,
+                &data,
+                &mut ui_state,
+                &mut preview_state,
+                &mut preview_camera,
+            );
         });
 
     egui::CentralPanel::default().show(ctx, |ui| {
         let rect = ui.max_rect();
-        ui_state.viewport_rect = Some(ViewportRect {
+        preview_camera.viewport_rect = Some(PreviewViewportRect {
             min_x: rect.left(),
             min_y: rect.top(),
             width: rect.width(),
             height: rect.height(),
         });
         ui.allocate_rect(rect, egui::Sense::hover());
-        ui.painter()
-            .rect_filled(rect, 0.0, egui::Color32::from_rgb(18, 21, 28));
+        let info_rect =
+            egui::Rect::from_min_size(rect.left_top() + egui::vec2(10.0, 10.0), egui::vec2(380.0, 56.0));
+        ui.painter().rect_filled(
+            info_rect,
+            6.0,
+            egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176),
+        );
         ui.painter().text(
             rect.left_top() + egui::vec2(14.0, 12.0),
             egui::Align2::LEFT_TOP,
@@ -410,6 +411,7 @@ fn render_character_list_panel(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    preview_camera: &mut PreviewCameraController,
 ) {
     ui.horizontal(|ui| {
         ui.label("搜索");
@@ -435,18 +437,28 @@ fn render_character_list_panel(
 
                 let selected =
                     ui_state.selected_character_id.as_deref() == Some(summary.id.as_str());
-                let response = ui.selectable_label(
-                    selected,
-                    format!("{}  [{}]", summary.display_name, summary.id),
+                let label = format!("{}  [{}]", summary.display_name, summary.id);
+                let response = ui.add_sized(
+                    [ui.available_width(), 0.0],
+                    egui::Button::new(label.as_str())
+                        .selected(selected)
+                        .truncate(),
                 );
                 let response = response.on_hover_text(format!(
-                    "据点: {}\n角色职责: {}\n行为包: {}",
+                    "{}\n\n据点: {}\n角色职责: {}\n行为包: {}",
+                    label,
                     non_empty(&summary.settlement_id),
                     non_empty(&summary.role),
                     non_empty(&summary.behavior_profile_id)
                 ));
                 if response.clicked() {
-                    select_character(summary.id.clone(), data, ui_state, preview_state);
+                    select_character(
+                        summary.id.clone(),
+                        data,
+                        ui_state,
+                        preview_state,
+                        preview_camera,
+                    );
                 }
             }
         });
@@ -457,6 +469,7 @@ fn render_detail_panel(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    preview_camera: &mut PreviewCameraController,
 ) {
     let Some(character) = selected_character(data, ui_state) else {
         ui.label("没有可用角色数据。");
@@ -474,7 +487,7 @@ fn render_detail_panel(
             .on_hover_text("将预览相机重置到标准角色视角。")
             .clicked()
         {
-            reset_orbit_from_current_preview(ui_state, preview_state);
+            reset_orbit_from_current_preview(preview_state, preview_camera);
         }
         if ui
             .small_button("清空试装")
@@ -482,7 +495,7 @@ fn render_detail_panel(
             .clicked()
         {
             ui_state.try_on.clear();
-            refresh_preview_state(data, ui_state, preview_state);
+            refresh_preview_state(data, ui_state, preview_state, preview_camera);
         }
     });
     ui.small(format!(
@@ -506,9 +519,11 @@ fn render_detail_panel(
         .show(ui, |ui| match ui_state.selected_tab {
             CharacterTab::Summary => render_summary_tab(ui, character),
             CharacterTab::Life => render_life_tab(ui, character, data),
-            CharacterTab::AiPreview => render_ai_tab(ui, character, data, ui_state, preview_state),
+            CharacterTab::AiPreview => {
+                render_ai_tab(ui, character, data, ui_state, preview_state, preview_camera)
+            }
             CharacterTab::Appearance => {
-                render_appearance_tab(ui, character, data, ui_state, preview_state)
+                render_appearance_tab(ui, character, data, ui_state, preview_state, preview_camera)
             }
         });
 }
@@ -575,6 +590,7 @@ fn render_ai_tab(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    preview_camera: &mut PreviewCameraController,
 ) {
     let mut changed = false;
     ui.horizontal(|ui| {
@@ -635,7 +651,7 @@ fn render_ai_tab(
             .changed();
     });
     if changed {
-        refresh_preview_state(data, ui_state, preview_state);
+        refresh_preview_state(data, ui_state, preview_state, preview_camera);
     }
 
     ui.separator();
@@ -742,6 +758,7 @@ fn render_appearance_tab(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    preview_camera: &mut PreviewCameraController,
 ) {
     key_value(ui, "外观配置", non_empty(&character.appearance_profile_id));
     if let Some(preview) = preview_state.resolved_preview.as_ref() {
@@ -781,27 +798,35 @@ fn render_appearance_tab(
             .selected_text(selected_text)
             .show_ui(ui, |ui| {
                 if ui
-                    .selectable_label(
-                        !ui_state.try_on.contains_key(&ui_state.selected_slot),
-                        "未装备",
+                    .add_sized(
+                        [ui.available_width(), 0.0],
+                        egui::Button::new("未装备")
+                            .selected(!ui_state.try_on.contains_key(&ui_state.selected_slot))
+                            .truncate(),
                     )
                     .clicked()
                 {
                     ui_state.try_on.remove(&ui_state.selected_slot);
-                    refresh_preview_state(data, ui_state, preview_state);
+                    refresh_preview_state(data, ui_state, preview_state, preview_camera);
                 }
                 for item in items {
+                    let label = format!("{} [{}]", item.name, item.id);
                     if ui
-                        .selectable_label(
-                            ui_state.try_on.get(&ui_state.selected_slot) == Some(&item.id),
-                            format!("{} [{}]", item.name, item.id),
+                        .add_sized(
+                            [ui.available_width(), 0.0],
+                            egui::Button::new(label.as_str())
+                                .selected(
+                                    ui_state.try_on.get(&ui_state.selected_slot) == Some(&item.id),
+                                )
+                                .truncate(),
                         )
+                        .on_hover_text(label)
                         .clicked()
                     {
                         ui_state
                             .try_on
                             .insert(ui_state.selected_slot.clone(), item.id);
-                        refresh_preview_state(data, ui_state, preview_state);
+                        refresh_preview_state(data, ui_state, preview_state, preview_camera);
                     }
                 }
             });
@@ -848,76 +873,6 @@ fn sync_preview_scene_system(
         );
     }
     preview_state.applied_revision = preview_state.revision;
-}
-
-fn preview_camera_input_system(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    egui_wants_input: Res<EguiWantsInput>,
-    mut mouse_motion: MessageReader<MouseMotion>,
-    mut mouse_wheel: MessageReader<MouseWheel>,
-    window: Single<&Window>,
-    mut ui_state: ResMut<EditorUiState>,
-) {
-    let Some(viewport) = ui_state.viewport_rect else {
-        return;
-    };
-    let Some(cursor) = window.cursor_position() else {
-        return;
-    };
-    if !viewport.contains(cursor) {
-        mouse_motion.clear();
-        mouse_wheel.clear();
-        return;
-    }
-    if egui_wants_input.wants_any_pointer_input() {
-        return;
-    }
-
-    if mouse_buttons.pressed(MouseButton::Left) {
-        for event in mouse_motion.read() {
-            ui_state.orbit_camera.yaw_radians -= event.delta.x * 0.012;
-            ui_state.orbit_camera.pitch_radians =
-                (ui_state.orbit_camera.pitch_radians - event.delta.y * 0.008).clamp(-1.1, 0.65);
-        }
-    } else {
-        mouse_motion.clear();
-    }
-
-    for event in mouse_wheel.read() {
-        ui_state.orbit_camera.radius = (ui_state.orbit_camera.radius - event.y * 0.16)
-            .clamp(CAMERA_RADIUS_MIN, CAMERA_RADIUS_MAX);
-    }
-}
-
-fn update_preview_camera_system(
-    window: Single<&Window>,
-    ui_state: Res<EditorUiState>,
-    mut camera_query: Single<(&mut Camera, &mut Transform), With<PreviewCamera>>,
-) {
-    let (camera, transform) = &mut *camera_query;
-    if let Some(rect) = ui_state.viewport_rect {
-        let scale_factor = window.scale_factor() as f32;
-        let min_x = rect.min_x * scale_factor;
-        let min_y = rect.min_y * scale_factor;
-        let width = rect.width * scale_factor;
-        let height = rect.height * scale_factor;
-        let max_width = window.physical_width() as f32;
-        let max_height = window.physical_height() as f32;
-        let physical_position = UVec2::new(
-            min_x.clamp(0.0, (max_width - 1.0).max(0.0)) as u32,
-            min_y.clamp(0.0, (max_height - 1.0).max(0.0)) as u32,
-        );
-        let physical_size = UVec2::new(
-            width.clamp(1.0, (max_width - physical_position.x as f32).max(1.0)) as u32,
-            height.clamp(1.0, (max_height - physical_position.y as f32).max(1.0)) as u32,
-        );
-        camera.viewport = Some(Viewport {
-            physical_position,
-            physical_size,
-            depth: 0.0..1.0,
-        });
-    }
-    apply_preview_orbit_camera(transform, ui_state.orbit_camera);
 }
 
 fn load_editor_data() -> EditorData {
@@ -1037,10 +992,17 @@ fn ensure_selected_character(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    preview_camera: &mut PreviewCameraController,
 ) {
     if ui_state.selected_character_id.is_none() {
         if let Some(summary) = data.character_summaries.first() {
-            select_character(summary.id.clone(), data, ui_state, preview_state);
+            select_character(
+                summary.id.clone(),
+                data,
+                ui_state,
+                preview_state,
+                preview_camera,
+            );
         }
     }
 }
@@ -1050,6 +1012,7 @@ fn select_character(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    preview_camera: &mut PreviewCameraController,
 ) {
     ui_state.selected_character_id = Some(character_id);
     ui_state.try_on.clear();
@@ -1062,13 +1025,14 @@ fn select_character(
     ui_state.preview_context = selected_character(data, ui_state)
         .and_then(|character| default_context_for_character(character, data))
         .unwrap_or_else(default_preview_context);
-    refresh_preview_state(data, ui_state, preview_state);
+    refresh_preview_state(data, ui_state, preview_state, preview_camera);
 }
 
 fn refresh_preview_state(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    preview_camera: &mut PreviewCameraController,
 ) {
     preview_state.ai_preview = None;
     preview_state.ai_error = None;
@@ -1077,6 +1041,7 @@ fn refresh_preview_state(
 
     let Some(character) = selected_character(data, ui_state) else {
         ui_state.status = "未选择角色。".to_string();
+        preview_camera.set_orbit(PreviewOrbitCamera::default());
         preview_state.revision += 1;
         return;
     };
@@ -1089,7 +1054,7 @@ fn refresh_preview_state(
         &ui_state.try_on,
     ) {
         Ok(preview) => {
-            ui_state.orbit_camera = orbit_for_preview(&preview);
+            preview_camera.set_orbit(orbit_for_preview(&preview));
             preview_state.resolved_preview = Some(preview);
         }
         Err(error) => {
@@ -1162,11 +1127,14 @@ fn default_preview_context() -> CharacterAiPreviewContext {
     }
 }
 
-fn reset_orbit_from_current_preview(ui_state: &mut EditorUiState, preview_state: &PreviewState) {
+fn reset_orbit_from_current_preview(
+    preview_state: &PreviewState,
+    preview_camera: &mut PreviewCameraController,
+) {
     if let Some(preview) = preview_state.resolved_preview.as_ref() {
-        ui_state.orbit_camera = orbit_for_preview(preview);
+        preview_camera.set_orbit(orbit_for_preview(preview));
     } else {
-        ui_state.orbit_camera = PreviewOrbitCamera::default();
+        preview_camera.set_orbit(PreviewOrbitCamera::default());
     }
 }
 

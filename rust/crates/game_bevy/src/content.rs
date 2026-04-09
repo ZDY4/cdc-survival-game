@@ -10,14 +10,14 @@ use game_data::{
     load_ai_module_library, load_character_library, load_dialogue_library,
     load_dialogue_rule_library, load_effect_library, load_item_library, load_map_library,
     load_overworld_library, load_quest_library, load_recipe_library, load_settlement_library,
-    load_shop_library, load_skill_library, load_skill_tree_library,
+    load_shop_library, load_skill_library, load_skill_tree_library, load_world_tile_library,
     validate_outdoor_transition_trigger_layout, AiModuleLibrary, AiModuleLoadError,
     CharacterLibrary, CharacterLoadError, DialogueLibrary, DialogueLoadError, DialogueRuleLibrary,
     DialogueRuleLoadError, EffectLibrary, EffectLoadError, ItemLibrary, ItemLoadError, MapId,
     MapLibrary, MapLoadError, OutdoorTransitionTriggerLayoutValidationError, OverworldLibrary,
     OverworldLoadError, QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError,
     SettlementLibrary, SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary,
-    SkillLoadError, SkillTreeLibrary, SkillTreeLoadError,
+    SkillLoadError, SkillTreeLibrary, SkillTreeLoadError, WorldTileLibrary, WorldTileLoadError,
 };
 use thiserror::Error;
 
@@ -56,6 +56,18 @@ impl Default for OverworldDefinitionPath {
 
 #[derive(Resource, Debug, Clone)]
 pub struct OverworldDefinitions(pub OverworldLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct WorldTileDefinitionPath(pub PathBuf);
+
+impl Default for WorldTileDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/world_tiles"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct WorldTileDefinitions(pub WorldTileLibrary);
 
 #[derive(Resource, Debug, Clone)]
 pub struct SettlementDefinitionPath(pub PathBuf);
@@ -274,6 +286,7 @@ impl Plugin for RuntimeContentPlugin {
         app.init_resource::<CharacterDefinitionPath>()
             .init_resource::<MapDefinitionPath>()
             .init_resource::<OverworldDefinitionPath>()
+            .init_resource::<WorldTileDefinitionPath>()
             .init_resource::<SettlementDefinitionPath>()
             .init_resource::<AiDefinitionPath>()
             .init_resource::<EffectDefinitionPath>()
@@ -304,6 +317,7 @@ impl Plugin for RuntimeContentPlugin {
                     load_item_definitions_on_startup,
                     load_map_definitions_on_startup,
                     load_overworld_definitions_on_startup,
+                    load_world_tile_definitions_on_startup,
                     load_settlement_definitions_on_startup,
                     load_skill_definitions_on_startup,
                     load_skill_tree_definitions_on_startup,
@@ -360,6 +374,12 @@ pub fn load_overworld_definitions(
     path: impl AsRef<Path>,
 ) -> Result<OverworldDefinitions, OverworldLoadError> {
     Ok(OverworldDefinitions(load_overworld_library(path)?))
+}
+
+pub fn load_world_tile_definitions(
+    path: impl AsRef<Path>,
+) -> Result<WorldTileDefinitions, WorldTileLoadError> {
+    Ok(WorldTileDefinitions(load_world_tile_library(path)?))
 }
 
 pub fn load_settlement_definitions(
@@ -532,6 +552,20 @@ pub fn load_overworld_definitions_on_startup(
         &mut state,
         "overworld_definitions",
         load_overworld_definitions(&path.0),
+        &path.0,
+    );
+}
+
+pub fn load_world_tile_definitions_on_startup(
+    mut commands: Commands,
+    path: Res<WorldTileDefinitionPath>,
+    mut state: ResMut<RuntimeContentLoadState>,
+) {
+    insert_loaded_resource(
+        &mut commands,
+        &mut state,
+        "world_tile_definitions",
+        load_world_tile_definitions(&path.0),
         &path.0,
     );
 }

@@ -273,6 +273,7 @@ mod tests {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),

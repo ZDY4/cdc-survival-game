@@ -107,6 +107,14 @@ pub(super) fn render_panel_shell(
 }
 
 pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) -> Entity {
+    panel_body_with_bottom(parent, panel, RIGHT_PANEL_BOTTOM)
+}
+
+pub(super) fn panel_body_with_bottom(
+    parent: &mut ChildSpawnerCommands,
+    panel: UiMenuPanel,
+    bottom: f32,
+) -> Entity {
     let width = panel_width(panel);
     let anchor = panel_anchor(panel, width);
     parent
@@ -118,8 +126,9 @@ pub(super) fn panel_body(parent: &mut ChildSpawnerCommands, panel: UiMenuPanel) 
                 right: anchor.right,
                 margin: anchor.margin,
                 width: px(width),
-                bottom: px(RIGHT_PANEL_BOTTOM),
+                bottom: px(bottom),
                 padding: UiRect::all(px(14)),
+                min_height: px(0),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(8),
                 overflow: Overflow::clip_y(),

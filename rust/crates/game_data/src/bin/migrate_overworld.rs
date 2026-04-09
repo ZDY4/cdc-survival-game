@@ -125,6 +125,7 @@ fn main() -> Result<(), String> {
             grid: parse_cell(value),
             terrain: OverworldTerrainKind::Road,
             blocked: false,
+            visual: None,
             extra: BTreeMap::new(),
         })
         .collect::<Vec<_>>();
@@ -265,6 +266,7 @@ fn full_overworld_cells(
                     OverworldTerrainKind::Plain
                 },
                 blocked: !walkable.contains(&(x, z)),
+                visual: None,
                 extra: BTreeMap::new(),
             });
         }

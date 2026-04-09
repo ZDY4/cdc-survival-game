@@ -1,3 +1,4 @@
+use bevy::gltf::GltfAssetLabel;
 use bevy::light::GlobalAmbientLight;
 use bevy::pbr::OpaqueRendererMethod;
 use bevy::prelude::*;
@@ -9,6 +10,10 @@ use crate::static_world::{
     StaticWorldBillboardLabelSpec, StaticWorldBoxSpec, StaticWorldDecalSpec, StaticWorldGroundSpec,
     StaticWorldMaterialRole,
 };
+use crate::tile_world::{
+    resolve_building_wall_tile_placements, TilePlacementSpec, TileRenderClass,
+};
+use game_data::{WorldTileLibrary, WorldTilePrototypeSource};
 
 use super::doors::build_generated_door_mesh_spec;
 use super::materials::{
@@ -17,9 +22,7 @@ use super::materials::{
     BuildingWallGridMaterial, GridGroundMaterial, GridGroundMaterialExt, WorldRenderMaterialHandle,
     WorldRenderMaterialStyle,
 };
-use super::mesh_builders::{
-    build_building_wall_tile_mesh, build_trigger_arrow_texture, level_base_height,
-};
+use super::mesh_builders::{build_trigger_arrow_texture, level_base_height};
 use super::{WorldRenderConfig, WorldRenderPalette, WorldRenderScene, WorldRenderStyleProfile};
 
 const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
@@ -45,12 +48,14 @@ pub struct WorldRenderBillboardLabel;
 
 pub fn spawn_world_render_scene(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     ground_materials: &mut Assets<GridGroundMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     images: &mut Assets<Image>,
     label_font: Option<Handle<Font>>,
+    world_tiles: &WorldTileLibrary,
     scene: &WorldRenderScene,
     config: WorldRenderConfig,
     palette: &WorldRenderPalette,
@@ -96,14 +101,29 @@ pub fn spawn_world_render_scene(
             entities.push(spawn_billboard_label(commands, font.clone(), palette, spec));
         }
     }
-    for spec in &scene.static_scene.building_wall_tiles {
-        if let Some(entity) = spawn_building_wall_tile(
+    for placement in resolve_building_wall_tile_placements(
+        &scene.static_scene.building_wall_tiles,
+        world_tiles,
+    ) {
+        if let Some(entity) = spawn_tile_placement(
             commands,
-            meshes,
+            asset_server,
             materials,
             building_wall_materials,
-            spec,
-            scene.static_scene.grid_size,
+            world_tiles,
+            &placement,
+        ) {
+            entities.push(entity);
+        }
+    }
+    for placement in &scene.prop_tiles {
+        if let Some(entity) = spawn_tile_placement(
+            commands,
+            asset_server,
+            materials,
+            building_wall_materials,
+            world_tiles,
+            placement,
         ) {
             entities.push(entity);
         }
@@ -352,35 +372,57 @@ fn spawn_billboard_label(
         .id()
 }
 
-fn spawn_building_wall_tile(
+fn spawn_tile_placement(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
+    asset_server: &AssetServer,
     _materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
-    spec: &crate::static_world::StaticWorldBuildingWallTileSpec,
-    grid_size: f32,
+    world_tiles: &WorldTileLibrary,
+    placement: &TilePlacementSpec,
 ) -> Option<Entity> {
-    let (mesh, _, _) = build_building_wall_tile_mesh(spec, grid_size)?;
-    let mesh = meshes.add(mesh);
-    let material = make_building_wall_material(
-        building_wall_materials,
-        super::materials::building_wall_visual_profile(spec.visual_kind),
-    );
-    Some(match material {
-        WorldRenderMaterialHandle::Standard(handle) => commands
-            .spawn((
-                Mesh3d(mesh),
-                MeshMaterial3d(handle),
-                Transform::from_translation(spec.translation),
-            ))
-            .id(),
-        WorldRenderMaterialHandle::BuildingWallGrid(handle) => commands
-            .spawn((
-                Mesh3d(mesh),
-                MeshMaterial3d(handle),
-                Transform::from_translation(spec.translation),
-            ))
-            .id(),
+    let prototype = world_tiles.prototype(&placement.prototype_id)?;
+    let mesh = match &prototype.source {
+        WorldTilePrototypeSource::GltfScene { path, .. } => asset_server.load(
+            GltfAssetLabel::Primitive {
+                mesh: 0,
+                primitive: 0,
+            }
+            .from_asset(path.clone()),
+        ),
+    };
+    let transform = Transform::from_translation(placement.translation)
+        .with_rotation(placement.rotation)
+        .with_scale(placement.scale);
+    Some(match placement.render_class {
+        TileRenderClass::BuildingWallGrid(visual_kind) => {
+            let material = make_building_wall_material(
+                building_wall_materials,
+                super::materials::building_wall_visual_profile(visual_kind),
+            );
+            match material {
+                WorldRenderMaterialHandle::Standard(handle) => commands
+                    .spawn((Mesh3d(mesh), MeshMaterial3d(handle), transform))
+                    .id(),
+                WorldRenderMaterialHandle::BuildingWallGrid(handle) => commands
+                    .spawn((Mesh3d(mesh), MeshMaterial3d(handle), transform))
+                    .id(),
+            }
+        }
+        TileRenderClass::Standard => {
+            let material: Handle<StandardMaterial> = match &prototype.source {
+                WorldTilePrototypeSource::GltfScene { path, .. } => asset_server
+                    .load(
+                        GltfAssetLabel::Material {
+                            index: 0,
+                            is_scale_inverted: false,
+                        }
+                        .from_asset(path.clone()),
+                    ),
+            };
+            commands
+                .spawn((Mesh3d(mesh), MeshMaterial3d(material), transform))
+                .id()
+        }
     })
 }
 

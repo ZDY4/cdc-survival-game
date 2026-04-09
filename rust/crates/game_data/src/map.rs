@@ -12,6 +12,7 @@ use crate::interaction::{
     interaction_kind_spec, is_scene_transition_kind, parse_legacy_interaction_kind,
     InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind,
 };
+use crate::world_tiles::{WorldSurfaceTileSetId, WorldTilePrototypeId, WorldTileVec3, WorldWallTileSetId};
 use crate::GridCoord;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
@@ -68,8 +69,31 @@ pub struct MapCellDefinition {
     pub blocks_sight: bool,
     #[serde(default)]
     pub terrain: String,
+    #[serde(default)]
+    pub visual: Option<MapCellVisualSpec>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TileSlopeKind {
+    #[default]
+    Flat,
+    RampNorth,
+    RampEast,
+    RampSouth,
+    RampWest,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapCellVisualSpec {
+    #[serde(default)]
+    pub surface_set_id: Option<WorldSurfaceTileSetId>,
+    #[serde(default)]
+    pub elevation_steps: i32,
+    #[serde(default)]
+    pub slope: TileSlopeKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -216,6 +240,15 @@ impl Default for MapBuildingWallVisualSpec {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MapBuildingTileSetSpec {
+    pub wall_set_id: WorldWallTileSetId,
+    #[serde(default)]
+    pub floor_surface_set_id: Option<WorldSurfaceTileSetId>,
+    #[serde(default)]
+    pub door_prototype_id: Option<WorldTilePrototypeId>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MapBuildingLayoutSpec {
     #[serde(default)]
@@ -279,6 +312,8 @@ pub struct MapBuildingProps {
     #[serde(default)]
     pub wall_visual: Option<MapBuildingWallVisualSpec>,
     #[serde(default)]
+    pub tile_set: Option<MapBuildingTileSetSpec>,
+    #[serde(default)]
     pub layout: Option<MapBuildingLayoutSpec>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -314,6 +349,25 @@ pub struct MapContainerProps {
     pub initial_inventory: Vec<MapContainerItemEntry>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MapObjectVisualSpec {
+    pub prototype_id: WorldTilePrototypeId,
+    #[serde(default)]
+    pub local_offset_world: WorldTileVec3,
+    #[serde(default = "default_world_tile_scale")]
+    pub scale: WorldTileVec3,
+}
+
+impl Default for MapObjectVisualSpec {
+    fn default() -> Self {
+        Self {
+            prototype_id: WorldTilePrototypeId::default(),
+            local_offset_world: WorldTileVec3::default(),
+            scale: default_world_tile_scale(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -418,6 +472,8 @@ pub struct MapObjectProps {
     pub trigger: Option<MapTriggerProps>,
     #[serde(default)]
     pub ai_spawn: Option<MapAiSpawnProps>,
+    #[serde(default)]
+    pub visual: Option<MapObjectVisualSpec>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -443,6 +499,9 @@ pub struct MapObjectDefinition {
 pub struct MapValidationCatalog {
     pub item_ids: BTreeSet<String>,
     pub character_ids: BTreeSet<String>,
+    pub prototype_ids: BTreeSet<String>,
+    pub wall_set_ids: BTreeSet<String>,
+    pub surface_set_ids: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -591,6 +650,23 @@ pub enum MapDefinitionValidationError {
     MissingBuildingPrefabId { object_id: String },
     #[error("building object {object_id} must define props.building.wall_visual.kind")]
     MissingBuildingWallVisualKind { object_id: String },
+    #[error("building object {object_id} must define props.building.tile_set.wall_set_id")]
+    MissingBuildingWallTileSetId { object_id: String },
+    #[error("building object {object_id} wall_set_id {wall_set_id} was not found in the world tile catalog")]
+    UnknownBuildingWallTileSetId {
+        object_id: String,
+        wall_set_id: String,
+    },
+    #[error("building object {object_id} floor_surface_set_id {surface_set_id} was not found in the world tile catalog")]
+    UnknownBuildingFloorSurfaceSetId {
+        object_id: String,
+        surface_set_id: String,
+    },
+    #[error("building object {object_id} door_prototype_id {prototype_id} was not found in the world tile catalog")]
+    UnknownBuildingDoorPrototypeId {
+        object_id: String,
+        prototype_id: String,
+    },
     #[error("building object {object_id} layout target_room_count must be > 0")]
     InvalidBuildingTargetRoomCount { object_id: String },
     #[error(
@@ -653,6 +729,20 @@ pub enum MapDefinitionValidationError {
     },
     #[error("container object {object_id} visual_id must not be blank")]
     InvalidContainerVisualId { object_id: String },
+    #[error("object {object_id} visual.prototype_id must not be blank")]
+    MissingObjectVisualPrototypeId { object_id: String },
+    #[error("object {object_id} visual.prototype_id {prototype_id} was not found in the world tile catalog")]
+    UnknownObjectVisualPrototypeId {
+        object_id: String,
+        prototype_id: String,
+    },
+    #[error("cell ({x}, {y}, {z}) surface_set_id {surface_set_id} was not found in the world tile catalog")]
+    UnknownCellSurfaceSetId {
+        x: u32,
+        y: i32,
+        z: u32,
+        surface_set_id: String,
+    },
     #[error("trigger object {object_id} must define props.trigger.interaction_kind")]
     MissingTriggerKind { object_id: String },
     #[error(
@@ -814,6 +904,7 @@ pub fn validate_map_definition(
                     z: cell.z,
                 });
             }
+            validate_cell_visual_spec(cell, level.y, catalog)?;
         }
     }
 
@@ -1150,6 +1241,48 @@ fn validate_object_payload(
                     },
                 );
             }
+            let Some(tile_set) = building.tile_set.as_ref() else {
+                return Err(MapDefinitionValidationError::MissingBuildingWallTileSetId {
+                    object_id: object.object_id.clone(),
+                });
+            };
+            if tile_set.wall_set_id.as_str().trim().is_empty() {
+                return Err(MapDefinitionValidationError::MissingBuildingWallTileSetId {
+                    object_id: object.object_id.clone(),
+                });
+            }
+            if let Some(catalog) = catalog {
+                if !catalog.wall_set_ids.is_empty()
+                    && !catalog.wall_set_ids.contains(tile_set.wall_set_id.as_str())
+                {
+                    return Err(MapDefinitionValidationError::UnknownBuildingWallTileSetId {
+                        object_id: object.object_id.clone(),
+                        wall_set_id: tile_set.wall_set_id.as_str().to_string(),
+                    });
+                }
+                if let Some(surface_set_id) = tile_set.floor_surface_set_id.as_ref() {
+                    if !catalog.surface_set_ids.is_empty()
+                        && !catalog.surface_set_ids.contains(surface_set_id.as_str())
+                    {
+                        return Err(
+                            MapDefinitionValidationError::UnknownBuildingFloorSurfaceSetId {
+                                object_id: object.object_id.clone(),
+                                surface_set_id: surface_set_id.as_str().to_string(),
+                            },
+                        );
+                    }
+                }
+                if let Some(prototype_id) = tile_set.door_prototype_id.as_ref() {
+                    if !catalog.prototype_ids.is_empty()
+                        && !catalog.prototype_ids.contains(prototype_id.as_str())
+                    {
+                        return Err(MapDefinitionValidationError::UnknownBuildingDoorPrototypeId {
+                            object_id: object.object_id.clone(),
+                            prototype_id: prototype_id.as_str().to_string(),
+                        });
+                    }
+                }
+            }
             if let Some(layout) = building.layout.as_ref() {
                 validate_building_layout(object, layout)?;
             }
@@ -1265,6 +1398,67 @@ fn validate_object_payload(
         }
     }
 
+    validate_object_visual_spec(object, catalog)?;
+
+    Ok(())
+}
+
+fn validate_cell_visual_spec(
+    cell: &MapCellDefinition,
+    level_y: i32,
+    catalog: Option<&MapValidationCatalog>,
+) -> Result<(), MapDefinitionValidationError> {
+    let Some(visual) = cell.visual.as_ref() else {
+        return Ok(());
+    };
+    let Some(surface_set_id) = visual.surface_set_id.as_ref() else {
+        return Ok(());
+    };
+    if surface_set_id.as_str().trim().is_empty() {
+        return Err(MapDefinitionValidationError::UnknownCellSurfaceSetId {
+            x: cell.x,
+            y: level_y,
+            z: cell.z,
+            surface_set_id: String::new(),
+        });
+    }
+    if let Some(catalog) = catalog {
+        if !catalog.surface_set_ids.is_empty()
+            && !catalog.surface_set_ids.contains(surface_set_id.as_str())
+        {
+            return Err(MapDefinitionValidationError::UnknownCellSurfaceSetId {
+                x: cell.x,
+                y: level_y,
+                z: cell.z,
+                surface_set_id: surface_set_id.as_str().to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_object_visual_spec(
+    object: &MapObjectDefinition,
+    catalog: Option<&MapValidationCatalog>,
+) -> Result<(), MapDefinitionValidationError> {
+    let Some(visual) = object.props.visual.as_ref() else {
+        return Ok(());
+    };
+    if visual.prototype_id.as_str().trim().is_empty() {
+        return Err(MapDefinitionValidationError::MissingObjectVisualPrototypeId {
+            object_id: object.object_id.clone(),
+        });
+    }
+    if let Some(catalog) = catalog {
+        if !catalog.prototype_ids.is_empty()
+            && !catalog.prototype_ids.contains(visual.prototype_id.as_str())
+        {
+            return Err(MapDefinitionValidationError::UnknownObjectVisualPrototypeId {
+                object_id: object.object_id.clone(),
+                prototype_id: visual.prototype_id.as_str().to_string(),
+            });
+        }
+    }
     Ok(())
 }
 
@@ -1286,6 +1480,14 @@ fn default_pickup_count() -> i32 {
 
 fn default_interaction_distance() -> f32 {
     1.4
+}
+
+fn default_world_tile_scale() -> WorldTileVec3 {
+    WorldTileVec3 {
+        x: 1.0,
+        y: 1.0,
+        z: 1.0,
+    }
 }
 
 fn resolve_interactive_object_display_name(
@@ -1462,12 +1664,14 @@ mod tests {
     use super::{
         expand_object_footprint, load_map_library, validate_map_definition, BuildingGeneratorKind,
         MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingFootprintPolygonSpec,
-        MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec, MapBuildingVisualOutline,
-        MapBuildingWallVisualKind, MapBuildingWallVisualSpec, MapCellDefinition,
+        MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec, MapBuildingTileSetSpec,
+        MapBuildingVisualOutline, MapBuildingWallVisualKind, MapBuildingWallVisualSpec,
+        MapCellDefinition,
         MapContainerItemEntry, MapContainerProps, MapDefinition, MapDefinitionValidationError,
         MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition,
         MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
         MapRotation, MapSize, MapValidationCatalog, RelativeGridCell, RelativeGridVertex,
+        WorldWallTileSetId,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;
@@ -1494,6 +1698,7 @@ mod tests {
                     wall_visual: Some(MapBuildingWallVisualSpec {
                         kind: MapBuildingWallVisualKind::LegacyGrid,
                     }),
+                    tile_set: Some(sample_building_tile_set()),
                     layout: None,
                     extra: BTreeMap::new(),
                 }),
@@ -1614,6 +1819,7 @@ mod tests {
             blocks_movement: true,
             blocks_sight: false,
             terrain: "wall".into(),
+            visual: None,
             extra: BTreeMap::new(),
         });
 
@@ -1850,6 +2056,7 @@ mod tests {
                         blocks_movement: true,
                         blocks_sight: true,
                         terrain: "pillar".into(),
+                        visual: None,
                         extra: BTreeMap::new(),
                     }],
                 },
@@ -1888,6 +2095,7 @@ mod tests {
                     wall_visual: Some(MapBuildingWallVisualSpec {
                         kind: MapBuildingWallVisualKind::LegacyGrid,
                     }),
+                    tile_set: Some(sample_building_tile_set()),
                     layout: None,
                     extra: BTreeMap::new(),
                 }),
@@ -1986,6 +2194,17 @@ mod tests {
         MapValidationCatalog {
             item_ids: ["1005".to_string()].into_iter().collect(),
             character_ids: ["zombie_walker".to_string()].into_iter().collect(),
+            prototype_ids: Default::default(),
+            wall_set_ids: Default::default(),
+            surface_set_ids: Default::default(),
+        }
+    }
+
+    fn sample_building_tile_set() -> MapBuildingTileSetSpec {
+        MapBuildingTileSetSpec {
+            wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+            floor_surface_set_id: None,
+            door_prototype_id: None,
         }
     }
 

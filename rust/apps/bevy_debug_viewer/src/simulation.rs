@@ -79,12 +79,13 @@ mod tests {
     use game_data::{
         ActorId, ActorKind, ActorSide, DialogueData, DialogueNode, GridCoord, InteractionOptionId,
         InteractionTargetId, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec,
-        MapBuildingStorySpec, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
-        MapRotation, MapSize, MapTriggerProps, OverworldCellDefinition, OverworldDefinition,
-        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet, RelativeGridCell, StairKind, WorldCoord,
-        WorldMode,
+        MapBuildingStorySpec, MapBuildingTileSetSpec, MapDefinition, MapEntryPointDefinition,
+        MapId, MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
+        MapObjectProps, MapPickupProps, MapRotation, MapSize, MapTriggerProps,
+        OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
+        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTerrainKind, OverworldTravelRuleSet, RelativeGridCell, StairKind, WorldCoord,
+        WorldMode, WorldWallTileSetId,
     };
 
     fn seed_life_debug_spawns(app: &mut App) {
@@ -1121,6 +1122,7 @@ mod tests {
                         wall_visual: Some(game_data::MapBuildingWallVisualSpec {
                             kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
                         }),
+                        tile_set: Some(sample_building_tile_set()),
                         layout: Some(MapBuildingLayoutSpec {
                             seed: 7,
                             target_room_count: 3,
@@ -1258,8 +1260,9 @@ mod tests {
                 }],
                 cells: vec![OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
+                    terrain: OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),
@@ -1305,6 +1308,14 @@ mod tests {
             .into_iter()
             .find(|grid| simulation.grid_world().is_walkable(*grid) && *grid != anchor)
             .expect("target should have a walkable start cell one step beyond approach")
+        }
+    }
+
+    fn sample_building_tile_set() -> MapBuildingTileSetSpec {
+        MapBuildingTileSetSpec {
+            wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+            floor_surface_set_id: None,
+            door_prototype_id: None,
         }
     }
 }

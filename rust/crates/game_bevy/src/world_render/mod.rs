@@ -9,6 +9,10 @@ use crate::static_world::{
     build_static_world_from_simulation_snapshot, StaticWorldBuildConfig, StaticWorldGridBounds,
     StaticWorldSceneSpec,
 };
+use crate::tile_world::{
+    default_floor_top, resolve_map_object_visual_placements, resolve_snapshot_object_visual_placements,
+    TilePlacementSpec,
+};
 
 mod doors;
 mod materials;
@@ -156,6 +160,7 @@ pub struct WorldRenderScene {
     pub current_level: i32,
     pub static_scene: StaticWorldSceneSpec,
     pub generated_doors: Vec<GeneratedDoorDebugState>,
+    pub prop_tiles: Vec<TilePlacementSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,6 +189,8 @@ pub fn build_world_render_scene_from_map_definition(
             bounds_override: None,
         },
     );
+    let grid_size = static_scene.grid_size;
+    let floor_top = default_floor_top(current_level, grid_size, config.floor_thickness_world);
     WorldRenderScene {
         current_level,
         static_scene,
@@ -193,6 +200,12 @@ pub fn build_world_render_scene_from_map_definition(
             .filter(|door| door.level == current_level)
             .cloned()
             .collect(),
+        prop_tiles: resolve_map_object_visual_placements(
+            definition,
+            current_level,
+            floor_top,
+            grid_size,
+        ),
     }
 }
 
@@ -212,6 +225,8 @@ pub fn build_world_render_scene_from_simulation_snapshot(
             bounds_override,
         },
     );
+    let grid_size = static_scene.grid_size;
+    let floor_top = default_floor_top(current_level, grid_size, config.floor_thickness_world);
     WorldRenderScene {
         current_level,
         static_scene,
@@ -221,6 +236,12 @@ pub fn build_world_render_scene_from_simulation_snapshot(
             .filter(|door| door.level == current_level)
             .cloned()
             .collect(),
+        prop_tiles: resolve_snapshot_object_visual_placements(
+            snapshot,
+            current_level,
+            floor_top,
+            grid_size,
+        ),
     }
 }
 
@@ -231,5 +252,6 @@ pub fn build_world_render_scene_from_overworld_definition(
         current_level: 0,
         static_scene: build_static_world_from_overworld_definition(definition),
         generated_doors: Vec::new(),
+        prop_tiles: Vec::new(),
     }
 }

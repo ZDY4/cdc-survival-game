@@ -112,7 +112,7 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": 10,
+        "x": 9,
         "y": 0,
         "z": 4
       },
@@ -169,9 +169,9 @@
       "default_unlocked": true,
       "visible": true,
       "overworld_cell": {
-        "x": 7,
+        "x": 8,
         "y": 0,
-        "z": 7
+        "z": 4
       },
       "danger_level": 2,
       "icon": "res://assets/icons/location_street.png"

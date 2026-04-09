@@ -1,7 +1,6 @@
 //! 世界可视化通用 helper：负责 trigger/map object 判定、primitive spawn 与贴花纹理构建。
 
 use super::*;
-use game_bevy::world_render::{building_wall_visual_profile, make_building_wall_material};
 
 pub(crate) fn occupied_cells_box(cells: &[GridCoord], grid_size: f32) -> (f32, f32, f32, f32) {
     let mut min_x = i32::MAX;
@@ -123,24 +122,23 @@ pub(crate) fn spawn_box(
     }
 }
 
-pub(crate) fn spawn_mesh(
+pub(crate) fn spawn_loaded_mesh(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
     material: StaticWorldMaterialHandle,
-    mesh: Mesh,
-    translation: Vec3,
+    mesh: Handle<Mesh>,
+    transform: Transform,
     color: Color,
     pick_binding: Option<ViewerPickBindingSpec>,
     outline_target: Option<ViewerPickTarget>,
+    aabb_center: Vec3,
     aabb_half_extents: Vec3,
 ) -> SpawnedMeshVisual {
-    let mesh = meshes.add(mesh);
     let entity = match (&material, pick_binding) {
         (StaticWorldMaterialHandle::Standard(material), binding) => {
             let mut entity = commands.spawn((
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material.clone()),
-                Transform::from_translation(translation),
+                transform,
             ));
             if let Some(binding) = binding {
                 entity.insert(pickable_target(binding.into()));
@@ -154,7 +152,7 @@ pub(crate) fn spawn_mesh(
             let mut entity = commands.spawn((
                 Mesh3d(mesh),
                 MeshMaterial3d(material.clone()),
-                Transform::from_translation(translation),
+                transform,
             ));
             if let Some(binding) = binding {
                 entity.insert(pickable_target(binding.into()));
@@ -169,37 +167,10 @@ pub(crate) fn spawn_mesh(
     SpawnedMeshVisual {
         entity,
         material,
-        aabb_center: translation,
+        aabb_center,
         aabb_half_extents,
         color,
     }
-}
-
-pub(crate) fn spawn_building_wall_tile(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
-    mesh: Mesh,
-    translation: Vec3,
-    visual_kind: game_data::MapBuildingWallVisualKind,
-    pick_binding: Option<ViewerPickBindingSpec>,
-    outline_target: Option<ViewerPickTarget>,
-    aabb_half_extents: Vec3,
-) -> SpawnedMeshVisual {
-    let profile = building_wall_visual_profile(visual_kind);
-    let color = profile.face_color;
-    let material = make_building_wall_material(building_wall_materials, profile);
-    spawn_mesh(
-        commands,
-        meshes,
-        material,
-        mesh,
-        translation,
-        color,
-        pick_binding,
-        outline_target,
-        aabb_half_extents,
-    )
 }
 
 pub(crate) fn spawn_decal(

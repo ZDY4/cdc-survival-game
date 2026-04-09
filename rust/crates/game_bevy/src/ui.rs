@@ -1279,26 +1279,25 @@ mod tests {
     }
 
     #[test]
-    fn overworld_prompt_snapshot_stays_hidden_while_pending_movement_crosses_trigger() {
+    fn overworld_prompt_snapshot_shows_when_move_command_reaches_prompt_ring_cell() {
         let (mut runtime, player, overworld) = sample_overworld_prompt_runtime();
-        runtime.submit_command(game_core::SimulationCommand::SetActorAp {
-            actor_id: player,
-            ap: 1.0,
-        });
         runtime
-            .issue_actor_move(player, GridCoord::new(3, 0, 0))
+            .issue_actor_move(player, GridCoord::new(2, 0, 0))
             .expect("move should start");
 
         assert_eq!(
             runtime.get_actor_grid_position(player),
             Some(GridCoord::new(1, 0, 0))
         );
-        assert!(runtime.pending_movement().is_some());
+        assert!(runtime.pending_movement().is_none());
         assert_eq!(
             overworld_location_prompt_snapshot(&runtime, player, &overworld),
             UiOverworldLocationPromptSnapshot {
+                visible: true,
+                location_id: "prompt_outpost".to_string(),
+                location_name: "Prompt Outpost".to_string(),
+                grid: GridCoord::new(1, 0, 0),
                 enter_label: "进入".to_string(),
-                ..UiOverworldLocationPromptSnapshot::default()
             }
         );
     }
@@ -1424,24 +1423,28 @@ mod tests {
                         grid: GridCoord::new(0, 0, 0),
                         terrain: OverworldTerrainKind::Road,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
                         terrain: OverworldTerrainKind::Road,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(2, 0, 0),
                         terrain: OverworldTerrainKind::Urban,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(3, 0, 0),
                         terrain: OverworldTerrainKind::Road,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                 ],

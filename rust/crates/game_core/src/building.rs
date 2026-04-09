@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use game_data::{
     rotated_footprint_size, BuildingGeneratorKind, GridCoord, MapBuildingLayoutSpec,
-    MapBuildingVisualOutline, MapBuildingWallVisualSpec, MapObjectFootprint, MapRotation, MapSize,
-    RelativeGridCell, RelativeGridVertex, StairKind,
+    MapBuildingTileSetSpec, MapBuildingVisualOutline, MapBuildingWallVisualSpec,
+    MapObjectFootprint, MapRotation, MapSize, RelativeGridCell, RelativeGridVertex, StairKind,
 };
 use geo::{BooleanOps, Contains, LineString, MultiPolygon, Polygon};
 use serde::{Deserialize, Serialize};
@@ -74,6 +74,7 @@ pub struct GeneratedBuildingDebugState {
     pub object_id: String,
     pub prefab_id: String,
     pub wall_visual: MapBuildingWallVisualSpec,
+    pub tile_set: MapBuildingTileSetSpec,
     pub anchor: GridCoord,
     pub rotation: MapRotation,
     pub stories: Vec<GeneratedBuildingStory>,

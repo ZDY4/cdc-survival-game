@@ -6,7 +6,6 @@ pub(super) fn render_skills_panel(
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiSkillsSnapshot,
     menu_state: &UiMenuState,
-    hotbar_state: &UiHotbarState,
 ) {
     let body = panel_body(parent, UiMenuPanel::Skills);
     parent.commands().entity(body).insert(Node {
@@ -24,13 +23,11 @@ pub(super) fn render_skills_panel(
         ..default()
     });
     let selected_tree = selected_skill_tree(snapshot, menu_state);
-    let selected_entry = selected_tree
-        .and_then(|tree| selected_skill_entry(tree, menu_state.selected_skill_id.as_deref()));
 
     parent.commands().entity(body).with_children(|body| {
         body.spawn(text_bundle(
             font,
-            "左侧切技能树，中列浏览当前树，右侧查看详情；选中技能后可加入当前组，右键技能可直接加到快捷栏，或直接点击底栏槽位精确绑定。",
+            "左侧切技能树，右侧浏览当前树；技能说明统一通过鼠标悬浮查看，右键技能可直接加到快捷栏，或直接点击底栏槽位精确绑定。",
             10.5,
             ui_text_secondary_color(),
         ));
@@ -129,7 +126,7 @@ pub(super) fn render_skills_panel(
             columns
                 .spawn((
                     Node {
-                        width: px(300),
+                        flex_grow: 1.0,
                         padding: UiRect::all(px(10)),
                         flex_direction: FlexDirection::Column,
                         row_gap: px(6),
@@ -161,8 +158,10 @@ pub(super) fn render_skills_panel(
                             ));
                         }
                         for entry in &tree.entries {
-                            let is_selected = selected_entry
-                                .map(|selected| selected.skill_id == entry.skill_id)
+                            let is_selected = menu_state
+                                .selected_skill_id
+                                .as_deref()
+                                .map(|selected| selected == entry.skill_id)
                                 .unwrap_or(false);
                             let state_label = if entry.learned_level > 0 {
                                 if entry.hotbar_eligible {
@@ -238,52 +237,6 @@ pub(super) fn render_skills_panel(
                         list_column.spawn(text_bundle(
                             font,
                             "没有可供选择的技能",
-                            10.5,
-                            ui_text_muted_color(),
-                        ));
-                    }
-                });
-
-            columns
-                .spawn((
-                    Node {
-                        flex_grow: 1.0,
-                        padding: UiRect::all(px(12)),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(6),
-                        overflow: Overflow::clip_y(),
-                        border: UiRect::all(px(1)),
-                        ..default()
-                    },
-                    BackgroundColor(ui_panel_background()),
-                    BorderColor::all(ui_border_color()),
-                    viewer_ui_passthrough_bundle(),
-                ))
-                .with_children(|detail_column| {
-                    if let Some(entry) = selected_entry {
-                        let display =
-                            build_skill_detail_display(selected_tree, entry, hotbar_state);
-                        render_skill_detail_content(detail_column, font, &display, entry, true);
-                    } else {
-                        if let Some(tree) = selected_tree {
-                            detail_column.spawn(text_bundle(
-                                font,
-                                &tree.tree_name,
-                                12.0,
-                                ui_text_secondary_color(),
-                            ));
-                            if !tree.tree_description.trim().is_empty() {
-                                detail_column.spawn(text_bundle(
-                                    font,
-                                    &tree.tree_description,
-                                    10.0,
-                                    ui_text_muted_color(),
-                                ));
-                            }
-                        }
-                        detail_column.spawn(text_bundle(
-                            font,
-                            "选择一个技能后，这里会显示完整描述、前置要求和快捷栏操作。",
                             10.5,
                             ui_text_muted_color(),
                         ));

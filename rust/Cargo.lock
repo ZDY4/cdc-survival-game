@@ -655,8 +655,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_egui",
- "game_bevy",
  "game_data",
+ "game_editor",
 ]
 
 [[package]]
@@ -714,6 +714,7 @@ dependencies = [
  "game_bevy",
  "game_core",
  "game_data",
+ "game_editor",
  "serde",
  "serde_json",
  "time",
@@ -1018,7 +1019,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_egui",
- "game_bevy",
+ "game_editor",
 ]
 
 [[package]]
@@ -2967,6 +2968,7 @@ dependencies = [
  "bevy_log",
  "game_core",
  "game_data",
+ "serde_json",
  "thiserror 1.0.69",
  "tracing",
  "tracing-appender",
@@ -3005,6 +3007,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "dirs",
+ "game_data",
  "reqwest",
  "serde",
  "serde_json",

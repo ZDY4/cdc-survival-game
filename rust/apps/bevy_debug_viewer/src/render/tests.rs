@@ -36,8 +36,32 @@ use game_core::{
 use game_data::{
     ActorId, GridCoord, InteractionContextSnapshot, InteractionOptionId, InteractionPrompt,
     InteractionTargetId, MapBuildingWallVisualKind, MapObjectFootprint, MapObjectKind, MapRotation,
-    ResolvedInteractionOption, TurnState, WorldCoord,
+    MapBuildingTileSetSpec, ResolvedInteractionOption, TurnState, WorldCoord,
+    WorldWallTileSetId,
 };
+
+fn sample_building_tile_set() -> MapBuildingTileSetSpec {
+    MapBuildingTileSetSpec {
+        wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+        floor_surface_set_id: None,
+        door_prototype_id: None,
+    }
+}
+
+fn seed_stable_hover(app: &mut App) {
+    let active = {
+        let world = app.world();
+        let runtime_state = world.resource::<ViewerRuntimeState>();
+        let snapshot = runtime_state.runtime.snapshot();
+        let viewer_state = world.resource::<ViewerState>();
+        let picking_state = world.resource::<crate::picking::ViewerPickingState>();
+        resolve_active_interaction_hover(runtime_state, &snapshot, viewer_state, picking_state)
+    };
+    let mut stable_hover = StableInteractionHoverState::default();
+    stable_hover.active = active;
+    app.insert_resource(stable_hover);
+}
+
 #[test]
 fn actor_visual_world_position_prefers_motion_track() {
     let (runtime, handles) = create_demo_runtime();
@@ -475,7 +499,7 @@ fn static_world_specs_add_wireframe_boxes_for_unrendered_blocked_map_cells() {
         })
         .count();
 
-    assert_eq!(wireframe_spec_count, 12);
+    assert_eq!(wireframe_spec_count, 1);
 }
 
 #[test]
@@ -642,7 +666,10 @@ fn static_world_building_wall_tiles_render_per_wall_cell() {
     assert!(tile_specs.iter().all(|spec| spec.occluder_cells.len() == 1));
     assert!(box_specs
         .iter()
-        .all(|spec| spec.material_style == MaterialStyle::StructureAccent));
+        .all(|spec| spec.material_style != MaterialStyle::StructureAccent));
+    assert!(box_specs
+        .iter()
+        .any(|spec| spec.material_style == MaterialStyle::UtilityAccent));
 }
 
 #[test]
@@ -1010,6 +1037,7 @@ fn hover_outline_system_marks_all_actor_mesh_members_and_skips_shadow() {
         }),
         ..default()
     });
+    seed_stable_hover(&mut app);
     app.add_systems(Update, sync_hover_mesh_outlines);
 
     let body = app
@@ -1065,6 +1093,7 @@ fn hover_outline_system_marks_all_visible_mesh_members_for_same_map_object() {
         }),
         ..default()
     });
+    seed_stable_hover(&mut app);
     app.add_systems(Update, sync_hover_mesh_outlines);
 
     let base = app
@@ -1131,6 +1160,7 @@ fn hover_outline_system_keeps_building_part_outline_scoped_to_single_cell() {
         }),
         ..default()
     });
+    seed_stable_hover(&mut app);
     app.add_systems(Update, sync_hover_mesh_outlines);
 
     let highlighted = app.world_mut().spawn(HoverOutlineMember::new(target)).id();
@@ -1170,6 +1200,7 @@ fn hover_outline_system_skips_targets_without_real_interaction_prompt() {
         }),
         ..default()
     });
+    seed_stable_hover(&mut app);
     app.add_systems(Update, sync_hover_mesh_outlines);
 
     let member = app
@@ -1251,6 +1282,7 @@ fn hover_outline_system_falls_back_to_interactable_target_in_hovered_grid() {
         cursor_position: Some(Vec2::new(120.0, 100.0)),
         ..default()
     });
+    seed_stable_hover(&mut app);
     app.add_systems(Update, sync_hover_mesh_outlines);
 
     let hostile = app
@@ -1904,6 +1936,7 @@ fn snapshot_with_generated_building() -> SimulationSnapshot {
             wall_visual: game_data::MapBuildingWallVisualSpec {
                 kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
             },
+            tile_set: sample_building_tile_set(),
             anchor: GridCoord::new(0, 0, 0),
             rotation: MapRotation::North,
             stories: vec![GeneratedBuildingStory {

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::{GridCoord, MapId, MapSize};
+use crate::{GridCoord, MapId, MapSize, TileSlopeKind, WorldSurfaceTileSetId};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
@@ -156,8 +156,20 @@ pub struct OverworldCellDefinition {
     pub terrain: OverworldTerrainKind,
     #[serde(default)]
     pub blocked: bool,
+    #[serde(default)]
+    pub visual: Option<OverworldCellVisualSpec>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct OverworldCellVisualSpec {
+    #[serde(default)]
+    pub surface_set_id: Option<WorldSurfaceTileSetId>,
+    #[serde(default)]
+    pub elevation_steps: i32,
+    #[serde(default)]
+    pub slope: TileSlopeKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -236,6 +248,7 @@ impl OverworldLibrary {
 pub struct OverworldValidationCatalog {
     pub map_ids: BTreeSet<String>,
     pub map_entry_points_by_map: BTreeMap<String, BTreeSet<String>>,
+    pub surface_set_ids: BTreeSet<String>,
 }
 
 #[derive(Debug, Error)]
@@ -319,6 +332,13 @@ pub enum OverworldValidationError {
     },
     #[error("overworld cell ({x}, {y}, {z}) must use y=0")]
     InvalidCellLevel { x: i32, y: i32, z: i32 },
+    #[error("overworld cell ({x}, {y}, {z}) surface_set_id {surface_set_id} was not found in the world tile catalog")]
+    UnknownCellSurfaceSetId {
+        x: i32,
+        y: i32,
+        z: i32,
+        surface_set_id: String,
+    },
     #[error("overworld cells are missing required grid ({x}, 0, {z})")]
     MissingCell { x: i32, z: i32 },
     #[error(
@@ -572,6 +592,7 @@ pub fn validate_overworld_definition(
                 z: cell.grid.z,
             });
         }
+        validate_overworld_cell_visual(cell, catalog)?;
     }
     for z in 0..definition.size.height as i32 {
         for x in 0..definition.size.width as i32 {
@@ -664,6 +685,31 @@ pub fn validate_overworld_definition(
         }
     }
 
+    Ok(())
+}
+
+fn validate_overworld_cell_visual(
+    cell: &OverworldCellDefinition,
+    catalog: Option<&OverworldValidationCatalog>,
+) -> Result<(), OverworldValidationError> {
+    let Some(visual) = cell.visual.as_ref() else {
+        return Ok(());
+    };
+    let Some(surface_set_id) = visual.surface_set_id.as_ref() else {
+        return Ok(());
+    };
+    if let Some(catalog) = catalog {
+        if !catalog.surface_set_ids.is_empty()
+            && !catalog.surface_set_ids.contains(surface_set_id.as_str())
+        {
+            return Err(OverworldValidationError::UnknownCellSurfaceSetId {
+                x: cell.grid.x,
+                y: cell.grid.y,
+                z: cell.grid.z,
+                surface_set_id: surface_set_id.as_str().to_string(),
+            });
+        }
+    }
     Ok(())
 }
 
@@ -839,6 +885,7 @@ mod tests {
                     BTreeSet::from(["default_entry".into(), "outdoor_return".into()]),
                 ),
             ]),
+            surface_set_ids: Default::default(),
         }
     }
 
@@ -935,6 +982,7 @@ mod tests {
                     grid: GridCoord::new(x, 0, z),
                     terrain,
                     blocked,
+                    visual: None,
                     extra: BTreeMap::new(),
                 });
             }

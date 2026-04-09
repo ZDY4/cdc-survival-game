@@ -768,12 +768,14 @@ mod tests {
                         grid: GridCoord::new(0, 0, 0),
                         terrain: OverworldTerrainKind::Plain,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
                         terrain: OverworldTerrainKind::Plain,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                 ],
@@ -928,6 +930,7 @@ mod tests {
                     grid: GridCoord::new(x, 0, z),
                     terrain: OverworldTerrainKind::Plain,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 });
             }

@@ -46,6 +46,7 @@
         "building": {
           "prefab_id": "survivor_outpost_01_perimeter_barricade",
           "wall_visual": { "kind": "legacy_grid" },
+          "tile_set": { "wall_set_id": "building_wall_legacy" },
           "layout": {
             "seed": 2101,
             "target_room_count": 1,
@@ -71,6 +72,7 @@
         "building": {
           "prefab_id": "survivor_outpost_01_bus_wreck",
           "wall_visual": { "kind": "legacy_grid" },
+          "tile_set": { "wall_set_id": "building_wall_legacy" },
           "layout": {
             "seed": 2102,
             "target_room_count": 1,
@@ -235,3 +237,5 @@
     }
   ]
 }
+
+

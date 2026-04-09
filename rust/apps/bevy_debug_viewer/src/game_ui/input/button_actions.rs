@@ -1,6 +1,7 @@
 //! 按钮动作子模块：负责主菜单、背包、技能、地图与设置按钮触发的运行时写操作。
 
 use super::*;
+use bevy::log::error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum InventoryDropPlan {
@@ -85,13 +86,19 @@ pub(crate) fn handle_game_ui_buttons(
                         );
                         save_runtime_snapshot(&save_path, &ui.runtime_state.runtime);
                     }
-                    Err(error) => ui.menu_state.status_text = error,
+                    Err(error) => {
+                        error!("failed to start new game from main menu: {error}");
+                        ui.menu_state.status_text = error;
+                    }
                 }
             }
             GameUiButtonAction::MainMenuContinue => match load_runtime_snapshot(&save_path) {
-                Ok(Some(snapshot)) => {
-                    if let Ok(mut bootstrap) = load_viewer_gameplay_bootstrap() {
-                        if bootstrap.runtime.load_snapshot(snapshot).is_ok() {
+                Ok(Some(snapshot)) => match load_viewer_gameplay_bootstrap() {
+                    Ok(mut bootstrap) => {
+                        if let Err(error) = bootstrap.runtime.load_snapshot(snapshot) {
+                            error!("failed to restore runtime snapshot from main menu: {error}");
+                            ui.menu_state.status_text = "存档恢复失败".to_string();
+                        } else {
                             configure_runtime_after_restore(
                                 &mut bootstrap.runtime,
                                 &content.items,
@@ -110,15 +117,20 @@ pub(crate) fn handle_game_ui_buttons(
                                 &mut ui.modal_state,
                                 "已继续最近存档",
                             );
-                        } else {
-                            ui.menu_state.status_text = "存档恢复失败".to_string();
                         }
-                    } else {
+                    }
+                    Err(error) => {
+                        error!(
+                            "failed to bootstrap gameplay runtime from main menu continue: {error}"
+                        );
                         ui.menu_state.status_text = "加载 gameplay runtime 失败".to_string();
                     }
-                }
+                },
                 Ok(None) => ui.menu_state.status_text = "没有可继续的存档".to_string(),
-                Err(error) => ui.menu_state.status_text = error,
+                Err(error) => {
+                    error!("failed to load runtime snapshot from disk: {error}");
+                    ui.menu_state.status_text = error;
+                }
             },
             GameUiButtonAction::MainMenuExit => {
                 exit.write(AppExit::Success);

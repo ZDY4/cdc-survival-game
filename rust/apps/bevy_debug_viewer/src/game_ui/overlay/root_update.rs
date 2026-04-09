@@ -152,7 +152,7 @@ pub(crate) fn update_game_ui(
             panel_key,
             |commands, entity| {
                 commands.entity(entity).with_children(|parent| {
-                    render_open_panels(parent, &font, actor_id, &ui, &content);
+                    render_open_panels(parent, &font, &window, actor_id, &ui, &content);
                 });
             },
         );
@@ -558,6 +558,7 @@ fn drag_visual_key(drag_state: &UiInventoryDragState) -> Option<String> {
 fn render_open_panels(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
+    window: &Window,
     actor_id: ActorId,
     ui: &GameUiViewState<'_, '_>,
     content: &GameContentRefs<'_, '_>,
@@ -575,13 +576,14 @@ fn render_open_panels(
     .into_iter()
     .flatten()
     {
-        render_single_panel(parent, font, actor_id, ui, content, panel);
+        render_single_panel(parent, font, window, actor_id, ui, content, panel);
     }
 }
 
 fn render_single_panel(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
+    window: &Window,
     actor_id: ActorId,
     ui: &GameUiViewState<'_, '_>,
     content: &GameContentRefs<'_, '_>,
@@ -597,7 +599,14 @@ fn render_single_panel(
                 ui.filter_state.filter,
                 ui.menu_state.selected_inventory_item,
             );
-            render_inventory_panel(parent, font, &snapshot, &ui.menu_state, &ui.drag_state);
+            render_inventory_panel(
+                parent,
+                font,
+                &snapshot,
+                &ui.menu_state,
+                &ui.drag_state,
+                window.height(),
+            );
         }
         UiMenuPanel::Character => {
             render_panel_shell(parent, font, panel);
@@ -617,7 +626,7 @@ fn render_single_panel(
                 &content.skills.0,
                 &content.skill_trees.0,
             );
-            render_skills_panel(parent, font, &snapshot, &ui.menu_state, &ui.hotbar_state);
+            render_skills_panel(parent, font, &snapshot, &ui.menu_state);
         }
         UiMenuPanel::Crafting => {
             render_panel_shell(parent, font, panel);

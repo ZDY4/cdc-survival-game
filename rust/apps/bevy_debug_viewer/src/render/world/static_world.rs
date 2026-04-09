@@ -8,11 +8,14 @@ use game_bevy::static_world::{
     StaticWorldMaterialRole as SharedRole, StaticWorldSceneSpec as SharedSceneSpec,
     StaticWorldSemantic as SharedSemantic,
 };
+use game_bevy::tile_world::{
+    default_floor_top, resolve_building_wall_tile_placements, resolve_snapshot_object_visual_placements,
+    TileRenderClass,
+};
 use game_bevy::world_render::{
-    build_building_wall_tile_mesh, build_world_render_scene_from_simulation_snapshot,
+    build_world_render_scene_from_simulation_snapshot, make_building_wall_material,
     WorldRenderConfig as SharedWorldRenderConfig,
 };
-use game_bevy::{ContainerVisualDefinition, ContainerVisualRegistry};
 
 pub(super) fn rebuild_static_world(
     commands: &mut Commands,
@@ -21,8 +24,7 @@ pub(super) fn rebuild_static_world(
     ground_materials: &mut Assets<GridGroundMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
     asset_server: &AssetServer,
-    container_visual_registry: &ContainerVisualRegistry,
-    viewer_asset_root: &ViewerAssetRoot,
+    world_tiles: &game_bevy::WorldTileDefinitions,
     palette: &ViewerPalette,
     trigger_decal_assets: &TriggerDecalAssets,
     _runtime_state: &ViewerRuntimeState,
@@ -49,19 +51,14 @@ pub(super) fn rebuild_static_world(
             bounds_override: Some(shared_bounds(bounds)),
         },
     );
-    let container_visual_overrides = collect_container_visual_overrides(
+    let wall_placements =
+        resolve_building_wall_tile_placements(&shared_scene.building_wall_tiles, &world_tiles.0);
+    let prop_placements = resolve_snapshot_object_visual_placements(
         snapshot,
         current_level,
+        default_floor_top(current_level, grid_size, render_config.floor_thickness_world),
         grid_size,
-        floor_top,
-        container_visual_registry,
-        viewer_asset_root,
     );
-    let overridden_object_ids = container_visual_overrides
-        .keys()
-        .cloned()
-        .collect::<HashSet<_>>();
-    let shared_grid_size = shared_scene.grid_size;
 
     static_world_state
         .entities
@@ -77,7 +74,6 @@ pub(super) fn rebuild_static_world(
     for spec in shared_scene
         .boxes
         .into_iter()
-        .filter(|spec| !shared_box_is_replaced_by_container_visual(spec, &overridden_object_ids))
         .map(shared_box_spec_to_viewer_box_spec)
     {
         let occluder_cells = spec.occluder_cells.clone();
@@ -97,36 +93,31 @@ pub(super) fn rebuild_static_world(
         }
     }
 
-    for spec in shared_scene.building_wall_tiles.into_iter() {
-        let (mesh, _, aabb_half_extents) =
-            match build_building_wall_tile_mesh(&spec, shared_grid_size) {
-                Some(result) => result,
-                None => continue,
-            };
-        let occluder_cells = spec.occluder_cells.clone();
-        let semantic = spec.semantic.as_ref().map(shared_semantic_to_binding);
-        let outline_target = semantic.as_ref().map(|binding| binding.semantic.clone());
-        let spawned = spawn_building_wall_tile(
+    for placement in wall_placements.into_iter().chain(prop_placements.into_iter()) {
+        let Some((spawned, extra_entities, occluder_cells, occluder_kind)) = spawn_tile_placement(
             commands,
             meshes,
+            materials,
             building_wall_materials,
-            mesh,
-            spec.translation,
-            spec.visual_kind,
-            semantic,
-            outline_target,
-            aabb_half_extents,
-        );
+            asset_server,
+            world_tiles,
+            placement,
+        ) else {
+            continue;
+        };
         static_world_state.entities.push(spawned.entity);
-        static_world_state
-            .occluders
-            .push(occluder_visual_from_spawned_mesh(
-                spawned,
-                occluder_cells,
-                floor_top,
-                grid_size,
-                render_config,
-            ));
+        static_world_state.entities.extend(extra_entities);
+        if occluder_kind.is_some() {
+            static_world_state
+                .occluders
+                .push(occluder_visual_from_spawned_mesh(
+                    spawned,
+                    occluder_cells,
+                    floor_top,
+                    grid_size,
+                    render_config,
+                ));
+        }
     }
 
     for spec in shared_scene
@@ -143,154 +134,126 @@ pub(super) fn rebuild_static_world(
         );
         static_world_state.entities.push(entity);
     }
+}
 
-    for visual in container_visual_overrides.into_values() {
-        let scene_entity = spawn_container_visual_scene(commands, asset_server, &visual);
-        static_world_state.entities.push(scene_entity);
+fn spawn_tile_placement(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    asset_server: &AssetServer,
+    world_tiles: &game_bevy::WorldTileDefinitions,
+    placement: game_bevy::tile_world::TilePlacementSpec,
+) -> Option<(
+    SpawnedMeshVisual,
+    Vec<Entity>,
+    Vec<GridCoord>,
+    Option<StaticWorldOccluderKind>,
+)> {
+    let prototype = world_tiles.0.prototype(&placement.prototype_id)?;
+    let mesh: Handle<Mesh> = match &prototype.source {
+        game_data::WorldTilePrototypeSource::GltfScene { path, .. } => asset_server.load(
+            GltfAssetLabel::Primitive {
+                mesh: 0,
+                primitive: 0,
+            }
+            .from_asset(path.clone()),
+        ),
+    };
+    let local_center = Vec3::new(
+        prototype.bounds.center.x,
+        prototype.bounds.center.y,
+        prototype.bounds.center.z,
+    );
+    let local_half_extents = Vec3::new(
+        prototype.bounds.size.x * 0.5 * placement.scale.x.abs().max(0.001),
+        prototype.bounds.size.y * 0.5 * placement.scale.y.abs().max(0.001),
+        prototype.bounds.size.z * 0.5 * placement.scale.z.abs().max(0.001),
+    );
+    let semantic = placement.semantic.clone();
+    let pick_binding = semantic.as_ref().map(shared_semantic_to_binding);
+    let outline_target = pick_binding.as_ref().map(|binding| binding.semantic.clone());
+    let world_center = placement.translation + placement.rotation * local_center;
+    let transform = Transform::from_translation(placement.translation)
+        .with_rotation(placement.rotation)
+        .with_scale(placement.scale);
 
+    let spawned = match placement.render_class {
+        TileRenderClass::BuildingWallGrid(visual_kind) => {
+            let profile = game_bevy::world_render::building_wall_visual_profile(visual_kind);
+            let color = profile.face_color;
+            let material = make_building_wall_material(building_wall_materials, profile);
+            spawn_loaded_mesh(
+                commands,
+                material,
+                mesh,
+                transform,
+                color,
+                pick_binding,
+                outline_target,
+                world_center,
+                local_half_extents,
+            )
+        }
+        TileRenderClass::Standard => {
+            let material: Handle<StandardMaterial> = match &prototype.source {
+                game_data::WorldTilePrototypeSource::GltfScene { path, .. } => asset_server.load(
+                    GltfAssetLabel::Material {
+                        index: 0,
+                        is_scale_inverted: false,
+                    }
+                    .from_asset(path.clone()),
+                ),
+            };
+            spawn_loaded_mesh(
+                commands,
+                StaticWorldMaterialHandle::Standard(material),
+                mesh,
+                transform,
+                Color::WHITE,
+                pick_binding,
+                outline_target,
+                world_center,
+                local_half_extents,
+            )
+        }
+    };
+
+    let mut extra_entities = Vec::new();
+    if let Some(proxy) = placement.pick_proxy {
         let proxy = spawn_box(
             commands,
             meshes,
             materials,
             building_wall_materials,
-            visual.pick_proxy,
+            StaticWorldBoxSpec {
+                size: proxy.size,
+                translation: proxy.translation,
+                color: shared_static_world::default_color_for_role(SharedRole::InvisiblePickProxy),
+                material_style: MaterialStyle::InvisiblePickProxy,
+                occluder_kind: None,
+                occluder_cells: Vec::new(),
+                pick_binding: proxy.semantic.as_ref().map(shared_semantic_to_binding),
+                outline_target: proxy
+                    .semantic
+                    .as_ref()
+                    .map(shared_semantic_to_binding)
+                    .map(|binding| binding.semantic),
+            },
         );
-        static_world_state.entities.push(proxy.entity);
+        extra_entities.push(proxy.entity);
     }
-}
 
-#[derive(Debug, Clone)]
-struct ContainerVisualOverride {
-    scene_path: String,
-    scene_transform: Transform,
-    pick_proxy: StaticWorldBoxSpec,
-}
-
-fn collect_container_visual_overrides(
-    snapshot: &game_core::SimulationSnapshot,
-    current_level: i32,
-    grid_size: f32,
-    floor_top: f32,
-    registry: &ContainerVisualRegistry,
-    asset_root: &ViewerAssetRoot,
-) -> HashMap<String, ContainerVisualOverride> {
-    snapshot
-        .grid
-        .map_objects
-        .iter()
-        .filter(|object| object.kind == game_data::MapObjectKind::Interactive)
-        .filter(|object| object.anchor.y == current_level)
-        .filter_map(|object| {
-            let visual_id = object
-                .payload_summary
-                .get("container_visual_id")
-                .map(String::as_str)
-                .map(str::trim)
-                .filter(|visual_id| !visual_id.is_empty())?;
-            let definition = registry.get(visual_id)?;
-            if !asset_root.0.join(definition.scene_path.as_str()).is_file() {
-                return None;
+    Some((
+        spawned,
+        extra_entities,
+        placement.occluder_cells,
+        placement.occluder_kind.map(|kind| match kind {
+            shared_static_world::StaticWorldOccluderKind::MapObject(kind) => {
+                StaticWorldOccluderKind::MapObject(kind)
             }
-            Some((
-                object.object_id.clone(),
-                container_visual_override(object, visual_id, definition, grid_size, floor_top),
-            ))
-        })
-        .collect()
-}
-
-fn container_visual_override(
-    object: &game_core::MapObjectDebugState,
-    visual_id: &str,
-    definition: &ContainerVisualDefinition,
-    grid_size: f32,
-    floor_top: f32,
-) -> ContainerVisualOverride {
-    let (center_x, center_z, footprint_width, footprint_depth) =
-        occupied_cells_box(&object.occupied_cells, grid_size);
-    let base_translation = Vec3::new(center_x, floor_top, center_z);
-    let object_rotation = map_object_rotation(object.rotation);
-    let proxy_size =
-        container_pick_proxy_size(visual_id, footprint_width, footprint_depth, grid_size);
-    let pick_binding = ViewerPickBindingSpec::map_object(object.object_id.clone());
-    let outline_target = Some(pick_binding.semantic.clone());
-
-    ContainerVisualOverride {
-        scene_path: definition.scene_path.clone(),
-        scene_transform: Transform {
-            translation: base_translation + object_rotation * definition.translation_offset,
-            rotation: object_rotation * definition.rotation_offset,
-            scale: definition.scale,
-        },
-        pick_proxy: StaticWorldBoxSpec {
-            size: proxy_size,
-            translation: Vec3::new(center_x, floor_top + proxy_size.y * 0.5, center_z),
-            color: shared_static_world::default_color_for_role(SharedRole::InvisiblePickProxy),
-            material_style: MaterialStyle::InvisiblePickProxy,
-            occluder_kind: None,
-            occluder_cells: Vec::new(),
-            pick_binding: Some(pick_binding),
-            outline_target,
-        },
-    }
-}
-
-fn container_pick_proxy_size(
-    visual_id: &str,
-    footprint_width: f32,
-    footprint_depth: f32,
-    grid_size: f32,
-) -> Vec3 {
-    let footprint_span = footprint_width.max(footprint_depth).max(grid_size * 0.58);
-    let (span_scale, height_scale) = match visual_id {
-        "crate_wood" => (0.88, 0.64),
-        "cabinet_medical" => (0.82, 1.0),
-        "locker_metal" => (0.76, 1.14),
-        _ => (0.84, 0.9),
-    };
-    Vec3::new(
-        footprint_span
-            .min(grid_size * span_scale)
-            .max(grid_size * 0.46),
-        grid_size * height_scale,
-        footprint_span
-            .min(grid_size * span_scale)
-            .max(grid_size * 0.46),
-    )
-}
-
-fn map_object_rotation(rotation: game_data::MapRotation) -> Quat {
-    let yaw = match rotation {
-        game_data::MapRotation::North => std::f32::consts::PI,
-        game_data::MapRotation::East => -std::f32::consts::FRAC_PI_2,
-        game_data::MapRotation::South => 0.0,
-        game_data::MapRotation::West => std::f32::consts::FRAC_PI_2,
-    };
-    Quat::from_rotation_y(yaw)
-}
-
-fn shared_box_is_replaced_by_container_visual(
-    spec: &shared_static_world::StaticWorldBoxSpec,
-    overridden_object_ids: &HashSet<String>,
-) -> bool {
-    match spec.semantic.as_ref() {
-        Some(shared_static_world::StaticWorldSemantic::MapObject(object_id)) => {
-            overridden_object_ids.contains(object_id)
-        }
-        _ => false,
-    }
-}
-
-fn spawn_container_visual_scene(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    visual: &ContainerVisualOverride,
-) -> Entity {
-    let scene: Handle<Scene> =
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset(visual.scene_path.clone()));
-    commands
-        .spawn((SceneRoot(scene), visual.scene_transform))
-        .id()
+        }),
+    ))
 }
 
 fn shared_bounds(bounds: GridBounds) -> shared_static_world::StaticWorldGridBounds {
@@ -484,7 +447,10 @@ pub(crate) fn collect_static_world_box_specs(
             }),
             occluder_cells: spec.occluder_cells,
             pick_binding: shared_semantic_pick_binding(spec.semantic.clone()),
-            outline_target: shared_semantic_outline_target(spec.semantic),
+            outline_target: (spec.material_role
+                != game_bevy::static_world::StaticWorldMaterialRole::InvisiblePickProxy)
+                .then(|| shared_semantic_outline_target(spec.semantic))
+                .flatten(),
         })
         .collect()
 }

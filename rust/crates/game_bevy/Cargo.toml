@@ -12,6 +12,7 @@ bevy_ecs.workspace = true
 bevy_log.workspace = true
 game_core = { path = "../game_core" }
 game_data = { path = "../game_data" }
+serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true

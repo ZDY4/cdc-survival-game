@@ -12,16 +12,16 @@ use game_bevy::world_render::{
     spawn_world_render_scene, BuildingWallGridMaterial, GridGroundMaterial, WorldRenderConfig,
     WorldRenderPalette, WorldRenderPlugin, WorldRenderStyleProfile,
 };
-use game_bevy::{game_ui_font_bytes, load_game_ui_font, GAME_UI_FONT_NAME};
 use game_data::{
-    load_map_library, load_overworld_library, GridCoord, MapDefinition, MapEditDiagnostic,
-    MapEditDiagnosticSeverity, MapEditorService, MapId, MapObjectDefinition, MapObjectKind,
-    OverworldDefinition, OverworldId, OverworldLibrary,
+    load_map_library, load_overworld_library, load_world_tile_library, GridCoord, MapDefinition,
+    MapEditDiagnostic, MapEditDiagnosticSeverity, MapEditorService, MapId, MapObjectDefinition,
+    MapObjectKind, OverworldDefinition, OverworldId, OverworldLibrary, WorldTileLibrary,
 };
 use game_editor::ai_chat::{
     persist_ai_chat_settings, poll_generation_job, render_ai_chat_panel, render_ai_settings_window,
     start_connection_test, AiChatState, AiChatUiAction, AiChatWorkerState,
 };
+use game_editor::{game_ui_font_bytes, load_game_ui_font, GAME_UI_FONT_NAME};
 
 mod map_ai;
 
@@ -67,6 +67,7 @@ fn main() {
         .insert_resource(render_style)
         .insert_resource(render_config)
         .insert_resource(load_editor_state())
+        .insert_resource(load_editor_world_tiles())
         .insert_resource(MapAiState::load("bevy_map_editor"))
         .insert_resource(EditorUiState::default())
         .insert_resource(EditorEguiFontState::default())
@@ -204,6 +205,9 @@ struct WorkingMapDocument {
     last_save_message: Option<String>,
 }
 
+#[derive(Resource, Clone)]
+struct EditorWorldTileDefinitions(WorldTileLibrary);
+
 #[derive(Resource)]
 struct EditorState {
     map_service: MapEditorService,
@@ -263,6 +267,11 @@ fn load_editor_state() -> EditorState {
         scene_dirty: true,
         scene_revision: 0,
     }
+}
+
+fn load_editor_world_tiles() -> EditorWorldTileDefinitions {
+    let world_tiles_dir = project_data_dir("world_tiles");
+    EditorWorldTileDefinitions(load_world_tile_library(&world_tiles_dir).unwrap_or_default())
 }
 
 fn normalized_map_label_key(value: &str) -> String {
@@ -529,10 +538,15 @@ fn editor_ui_system(
                         }
                         let label = map_library_item_label(&map_id, &name, dirty, has_diagnostics);
                         if ui
-                            .selectable_label(
-                                editor.selected_map_id.as_deref() == Some(map_id.as_str()),
-                                label,
+                            .add_sized(
+                                [ui.available_width(), 0.0],
+                                egui::Button::new(label.as_str())
+                                    .selected(
+                                        editor.selected_map_id.as_deref() == Some(map_id.as_str()),
+                                    )
+                                    .truncate(),
                             )
+                            .on_hover_text(label)
                             .clicked()
                         {
                             let already_selected =
@@ -560,12 +574,18 @@ fn editor_ui_system(
                         if !query.is_empty() && !overworld_id.to_lowercase().contains(&query) {
                             continue;
                         }
+                        let label = format!("{overworld_id} · {locations} locations");
                         if ui
-                            .selectable_label(
-                                editor.selected_overworld_id.as_deref()
-                                    == Some(overworld_id.as_str()),
-                                format!("{overworld_id} · {locations} locations"),
+                            .add_sized(
+                                [ui.available_width(), 0.0],
+                                egui::Button::new(label.as_str())
+                                    .selected(
+                                        editor.selected_overworld_id.as_deref()
+                                            == Some(overworld_id.as_str()),
+                                    )
+                                    .truncate(),
                             )
+                            .on_hover_text(label)
                             .clicked()
                         {
                             editor.selected_overworld_id = Some(overworld_id.clone());
@@ -996,6 +1016,8 @@ fn rebuild_scene_system(
     mut orbit_camera: ResMut<OrbitCameraState>,
     render_config: Res<WorldRenderConfig>,
     render_palette: Res<WorldRenderPalette>,
+    asset_server: Res<AssetServer>,
+    world_tiles: Res<EditorWorldTileDefinitions>,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -1032,12 +1054,14 @@ fn rebuild_scene_system(
             );
             for entity in spawn_world_render_scene(
                 &mut commands,
+                &asset_server,
                 &mut meshes,
                 &mut materials,
                 &mut ground_materials,
                 &mut building_wall_materials,
                 &mut images,
                 Some(world_label_font.0.clone()),
+                &world_tiles.0,
                 &scene,
                 *render_config,
                 &render_palette,
@@ -1069,12 +1093,14 @@ fn rebuild_scene_system(
             let scene = build_world_render_scene_from_overworld_definition(&definition);
             for entity in spawn_world_render_scene(
                 &mut commands,
+                &asset_server,
                 &mut meshes,
                 &mut materials,
                 &mut ground_materials,
                 &mut building_wall_materials,
                 &mut images,
                 Some(world_label_font.0.clone()),
+                &world_tiles.0,
                 &scene,
                 *render_config,
                 &render_palette,

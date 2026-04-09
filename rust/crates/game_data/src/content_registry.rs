@@ -179,6 +179,7 @@ pub fn load_shared_content_registry(
                     )
                 })
                 .collect(),
+            surface_set_ids: Default::default(),
         }),
     )
     .map_err(|error| ContentRegistryLoadError::DomainLoad {

@@ -5,7 +5,7 @@ use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::picking::prelude::MeshPickingCamera;
 use bevy_mesh_outline::OutlineCamera;
-use game_bevy::load_game_ui_font;
+use game_editor::load_game_ui_font;
 
 pub(crate) fn setup_viewer(
     mut commands: Commands,

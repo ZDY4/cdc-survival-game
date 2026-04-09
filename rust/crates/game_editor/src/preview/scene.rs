@@ -15,32 +15,6 @@ pub struct PreviewOriginAxes;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PreviewLightRig;
 
-#[derive(Component, Debug, Clone, Copy)]
-pub struct PreviewOrbitCamera {
-    pub focus: Vec3,
-    pub yaw_radians: f32,
-    pub pitch_radians: f32,
-    pub radius: f32,
-}
-
-impl Default for PreviewOrbitCamera {
-    fn default() -> Self {
-        Self {
-            focus: Vec3::new(0.0, 0.95, 0.0),
-            yaw_radians: -0.55,
-            pitch_radians: -0.2,
-            radius: 3.6,
-        }
-    }
-}
-
-pub fn apply_preview_orbit_camera(transform: &mut Transform, orbit: PreviewOrbitCamera) {
-    let yaw = Quat::from_rotation_y(orbit.yaw_radians);
-    let pitch = Quat::from_rotation_x(orbit.pitch_radians);
-    let offset = yaw * pitch * Vec3::new(0.0, 0.0, orbit.radius.max(0.5));
-    *transform = Transform::from_translation(orbit.focus + offset).looking_at(orbit.focus, Vec3::Y);
-}
-
 pub fn spawn_preview_light_rig(commands: &mut Commands) -> [Entity; 2] {
     let key = commands
         .spawn((
@@ -69,9 +43,7 @@ pub fn spawn_preview_light_rig(commands: &mut Commands) -> [Entity; 2] {
 }
 
 pub fn spawn_preview_scene_host(commands: &mut Commands) -> Entity {
-    commands
-        .spawn((Transform::default(), PreviewSceneHost))
-        .id()
+    commands.spawn((Transform::default(), PreviewSceneHost)).id()
 }
 
 pub fn replace_preview_scene(

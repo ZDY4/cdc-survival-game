@@ -33,14 +33,43 @@ pub(super) fn render_hover_tooltip(
             let Some(detail) = snapshot.detail.as_ref() else {
                 return;
             };
-            let Some(entry) = snapshot
+            let inventory_entry = snapshot
                 .entries
                 .iter()
-                .find(|entry| entry.item_id == *item_id)
-            else {
-                return;
+                .find(|entry| entry.item_id == *item_id);
+            let (fallback_detail, fallback_entry) = if inventory_entry.is_some() {
+                (None, None)
+            } else {
+                let Some(definition) = content.items.0.get(*item_id) else {
+                    return;
+                };
+                let ammo_ids = game_bevy::ammo_item_ids(&content.items.0);
+                let item_type = game_bevy::classify_item(definition, &ammo_ids);
+                (
+                    Some(game_bevy::UiInventoryDetailView {
+                        item_id: *item_id,
+                        name: definition.name.clone(),
+                        description: definition.description.clone(),
+                        count: 1,
+                        item_type,
+                        weight: definition.weight,
+                        attribute_bonuses: game_bevy::item_attribute_bonuses(definition),
+                    }),
+                    Some(game_bevy::UiInventoryEntryView {
+                        item_id: *item_id,
+                        display_index: 0,
+                        name: definition.name.clone(),
+                        count: 1,
+                        item_type,
+                        total_weight: definition.weight,
+                        can_use: game_bevy::item_usable(definition),
+                        can_equip: game_bevy::item_equippable(definition),
+                    }),
+                )
             };
-            let display = build_inventory_detail_display(detail, Some(entry));
+            let detail = fallback_detail.as_ref().unwrap_or(detail);
+            let entry = inventory_entry.or(fallback_entry.as_ref());
+            let display = build_inventory_detail_display(detail, entry);
             render_tooltip_container(
                 parent,
                 window,
@@ -444,8 +473,8 @@ pub(super) fn floating_panel_position(
     let max_top = (window.height() - estimated_height - HOVER_TOOLTIP_VIEWPORT_MARGIN)
         .max(HOVER_TOOLTIP_VIEWPORT_MARGIN);
 
-    let mut left = cursor_position.x + HOVER_TOOLTIP_CURSOR_OFFSET_X;
-    let mut top = cursor_position.y + HOVER_TOOLTIP_CURSOR_OFFSET_Y;
+    let mut left = cursor_position.x;
+    let mut top = cursor_position.y;
 
     if left + width > window.width() - HOVER_TOOLTIP_VIEWPORT_MARGIN {
         left = cursor_position.x - width - HOVER_TOOLTIP_CURSOR_OFFSET_X;
@@ -463,8 +492,12 @@ pub(super) fn floating_panel_position(
 #[cfg(test)]
 mod tests {
     use super::{
-        equipment_context_menu_actions, inventory_context_menu_actions, skill_context_menu_actions,
+        equipment_context_menu_actions, floating_panel_position, inventory_context_menu_actions,
+        skill_context_menu_actions,
     };
+    use bevy::prelude::Vec2;
+    use bevy::window::{Window, WindowResolution};
+    use crate::game_ui::HOVER_TOOLTIP_CURSOR_OFFSET_X;
 
     #[test]
     fn inventory_context_menu_shows_drop_even_without_use_or_equip() {
@@ -504,5 +537,36 @@ mod tests {
             .collect();
 
         assert_eq!(labels, vec!["添加到快捷栏"]);
+    }
+
+    #[test]
+    fn tooltip_sticks_to_cursor_when_space_is_available() {
+        let position = floating_panel_position(
+            &window_with_size(1280.0, 720.0),
+            Vec2::new(320.0, 180.0),
+            240.0,
+            120.0,
+        );
+
+        assert_eq!(position, Vec2::new(320.0, 180.0));
+    }
+
+    #[test]
+    fn tooltip_flips_left_when_right_side_lacks_space() {
+        let position = floating_panel_position(
+            &window_with_size(1280.0, 720.0),
+            Vec2::new(1200.0, 180.0),
+            240.0,
+            120.0,
+        );
+
+        assert_eq!(position.x, 1200.0 - 240.0 - HOVER_TOOLTIP_CURSOR_OFFSET_X);
+    }
+
+    fn window_with_size(width: f32, height: f32) -> Window {
+        Window {
+            resolution: WindowResolution::new(width as u32, height as u32),
+            ..Default::default()
+        }
     }
 }

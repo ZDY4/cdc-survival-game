@@ -9,7 +9,7 @@ use game_core::{
 use game_data::{
     expand_object_footprint, GridCoord, MapBuildingWallVisualKind, MapDefinition,
     MapObjectDefinition, MapObjectKind, MapRotation, OverworldDefinition, OverworldTerrainKind,
-    WorldMode,
+    WorldMode, WorldWallTileSetId,
 };
 
 const TRIGGER_DECAL_ELEVATION: f32 = 0.002;
@@ -134,6 +134,7 @@ pub struct StaticWorldBuildingWallTileSpec {
     pub building_object_id: String,
     pub story_level: i32,
     pub grid: GridCoord,
+    pub wall_set_id: WorldWallTileSetId,
     pub translation: Vec3,
     pub height: f32,
     pub thickness: f32,
@@ -1074,6 +1075,7 @@ fn push_generated_building_specs(
             building_object_id: building.object_id.clone(),
             story_level: current_level,
             grid: *cell,
+            wall_set_id: building.tile_set.wall_set_id.clone(),
             translation: Vec3::new(
                 (cell.x as f32 + 0.5) * grid_size,
                 floor_top + wall_height * 0.5,
@@ -1650,12 +1652,12 @@ mod tests {
     };
     use game_data::{
         GridCoord, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec,
-        MapBuildingWallVisualKind, MapBuildingWallVisualSpec, MapCellDefinition, MapDefinition,
-        MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectDefinition,
-        MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation, MapSize,
-        OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet,
-        RelativeGridCell,
+        MapBuildingTileSetSpec, MapBuildingWallVisualKind, MapBuildingWallVisualSpec,
+        MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
+        MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
+        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTerrainKind, OverworldTravelRuleSet, RelativeGridCell, WorldWallTileSetId,
     };
     use std::collections::BTreeMap;
 
@@ -1837,6 +1839,7 @@ mod tests {
                         grid: GridCoord::new(x, 0, z),
                         terrain: OverworldTerrainKind::Plain,
                         blocked: block_center && x == 1 && z == 1,
+                        visual: None,
                         extra: BTreeMap::new(),
                     })
                 })
@@ -1862,6 +1865,7 @@ mod tests {
                     blocks_movement: false,
                     blocks_sight: false,
                     terrain: "ground".into(),
+                    visual: None,
                     extra: BTreeMap::new(),
                 }],
             }],
@@ -1888,6 +1892,7 @@ mod tests {
                         wall_visual: Some(MapBuildingWallVisualSpec {
                             kind: MapBuildingWallVisualKind::LegacyGrid,
                         }),
+                        tile_set: Some(sample_building_tile_set()),
                         layout: Some(MapBuildingLayoutSpec {
                             generator: game_data::BuildingGeneratorKind::SolidShell,
                             exterior_door_count: 0,
@@ -1927,6 +1932,7 @@ mod tests {
                 wall_visual: MapBuildingWallVisualSpec {
                     kind: MapBuildingWallVisualKind::LegacyGrid,
                 },
+                tile_set: sample_building_tile_set(),
                 anchor: GridCoord::new(0, 0, 0),
                 rotation: MapRotation::North,
                 stories: vec![GeneratedBuildingStory {
@@ -1967,6 +1973,14 @@ mod tests {
                 visual_outline: Vec::new(),
             }],
             generated_doors: Vec::new(),
+        }
+    }
+
+    fn sample_building_tile_set() -> MapBuildingTileSetSpec {
+        MapBuildingTileSetSpec {
+            wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+            floor_surface_set_id: None,
+            door_prototype_id: None,
         }
     }
 }

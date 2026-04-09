@@ -18,6 +18,7 @@ pub mod recipe;
 pub mod settlement;
 pub mod shop;
 pub mod skill;
+pub mod world_tiles;
 
 use bevy_app::prelude::*;
 
@@ -106,13 +107,15 @@ pub use map::{
     load_map_library_with_catalog, object_effectively_blocks_movement,
     object_effectively_blocks_sight, rotated_footprint_size, validate_map_definition,
     BuildingGeneratorKind, MapAiSpawnProps, MapBuildingDiagonalEdge,
-    MapBuildingFootprintPolygonSpec, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStairSpec,
-    MapBuildingStorySpec, MapBuildingVisualOutline, MapBuildingWallVisualKind,
-    MapBuildingWallVisualSpec, MapCellDefinition, MapContainerItemEntry, MapContainerProps,
+    MapBuildingFootprintPolygonSpec, MapBuildingLayoutSpec, MapBuildingProps,
+    MapBuildingStairSpec, MapBuildingStorySpec, MapBuildingTileSetSpec,
+    MapBuildingVisualOutline, MapBuildingWallVisualKind, MapBuildingWallVisualSpec,
+    MapCellDefinition, MapCellVisualSpec, MapContainerItemEntry, MapContainerProps,
     MapDefinition, MapDefinitionValidationError, MapEntryPointDefinition, MapId,
     MapInteractiveProps, MapLevelDefinition, MapLibrary, MapLoadError, MapObjectDefinition,
-    MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps, MapRotation, MapSize,
-    MapTriggerProps, MapValidationCatalog, RelativeGridCell, RelativeGridVertex, StairKind,
+    MapObjectFootprint, MapObjectKind, MapObjectProps, MapObjectVisualSpec, MapPickupProps,
+    MapRotation, MapSize, MapTriggerProps, MapValidationCatalog, RelativeGridCell,
+    RelativeGridVertex, StairKind, TileSlopeKind,
 };
 pub use map_edit::{
     normalize_map_definition, MapEditCommand, MapEditDiagnostic, MapEditDiagnosticSeverity,
@@ -127,10 +130,10 @@ pub use outdoor_transition::{
 };
 pub use overworld::{
     load_overworld_library, load_overworld_library_with_catalog, validate_overworld_definition,
-    OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
-    OverworldLoadError, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-    OverworldTerrainKind, OverworldTravelRuleSet, OverworldValidationCatalog,
-    OverworldValidationError,
+    OverworldCellDefinition, OverworldCellVisualSpec, OverworldDefinition, OverworldId,
+    OverworldLibrary, OverworldLoadError, OverworldLocationDefinition, OverworldLocationId,
+    OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet,
+    OverworldValidationCatalog, OverworldValidationError,
 };
 pub use quest::{
     load_quest_library, validate_quest_definition, QuestChoiceOption, QuestConnection,
@@ -160,6 +163,12 @@ pub use skill::{
     SkillLoadError, SkillModifierDefinition, SkillTargetingDefinition, SkillTreeDefinition,
     SkillTreeDefinitionValidationError, SkillTreeLibrary, SkillTreeLink, SkillTreeLoadError,
     SkillTreePosition, SkillTreeValidationCatalog, SkillValidationCatalog,
+};
+pub use world_tiles::{
+    load_world_tile_library, WorldDoorBehaviorSpec, WorldSurfaceRampPrototypeSet,
+    WorldSurfaceTileSetDefinition, WorldSurfaceTileSetId, WorldTileBounds, WorldTileCatalogFile,
+    WorldTileLibrary, WorldTileLoadError, WorldTilePrototypeDefinition, WorldTilePrototypeId,
+    WorldTilePrototypeSource, WorldTileVec3, WorldWallTileSetDefinition, WorldWallTileSetId,
 };
 
 pub struct GameDataPlugin;

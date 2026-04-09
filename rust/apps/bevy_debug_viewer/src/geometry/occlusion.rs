@@ -13,9 +13,13 @@ use crate::state::ViewerState;
 pub(crate) fn hovered_grid_outline_kind(
     runtime: &SimulationRuntime,
     snapshot: &SimulationSnapshot,
-    _viewer_state: &ViewerState,
+    viewer_state: &ViewerState,
     grid: GridCoord,
 ) -> Option<HoveredGridOutlineKind> {
+    if grid.y != viewer_state.current_level {
+        return None;
+    }
+
     if actor_at_grid(snapshot, grid).is_some_and(|actor| actor.side == ActorSide::Hostile) {
         return Some(HoveredGridOutlineKind::Hostile);
     }

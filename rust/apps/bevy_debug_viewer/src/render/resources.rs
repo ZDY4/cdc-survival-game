@@ -1,7 +1,6 @@
 //! Render 资源：静态世界、生成门、角色、迷雾遮挡和伤害数之类的 ECS 资源快照。
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use super::types::{
     GeneratedDoorVisual, GeneratedDoorVisualKey, StaticWorldOccluderVisual, StaticWorldVisualKey,
@@ -88,6 +87,3 @@ pub(crate) struct DamageNumberVisualState {
 pub(crate) struct TriggerDecalAssets {
     pub arrow_texture: Handle<Image>,
 }
-
-#[derive(Resource, Debug, Clone)]
-pub(crate) struct ViewerAssetRoot(pub PathBuf);

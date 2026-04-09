@@ -14,16 +14,14 @@ use spawn::register_actor_from_definition;
 
 mod ai_spawn;
 pub mod bootstrap;
-pub mod character_preview;
 pub mod container_visuals;
 mod content;
-pub mod fonts;
 mod logging;
 pub mod npc_life;
-pub mod preview_3d;
 pub mod reservations;
 mod spawn;
 pub mod static_world;
+pub mod tile_world;
 pub mod ui;
 pub mod world_render;
 
@@ -32,13 +30,8 @@ pub use bootstrap::{
     build_default_startup_seed, build_runtime_from_default_startup_seed, load_runtime_bootstrap,
     RuntimeBootstrapBundle, RuntimeBootstrapError,
 };
-pub use character_preview::{
-    parse_preview_color, spawn_character_preview_light_rig, spawn_character_preview_scene,
-    CharacterPreviewPart, CharacterPreviewPlugin, CharacterPreviewRoot,
-};
 pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;
-pub use fonts::*;
 pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
 pub use npc_life::{
     BackgroundLifeState, CurrentAction, CurrentGoal, CurrentPlan,
@@ -46,11 +39,6 @@ pub use npc_life::{
     NpcLifeUpdateSet, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
     SettlementContext, SettlementDebugEntry, SettlementDebugSnapshot, SettlementSimulationPlugin,
     SimClock, WorldAlertState,
-};
-pub use preview_3d::{
-    apply_preview_orbit_camera, replace_preview_scene, spawn_preview_floor,
-    spawn_preview_light_rig, spawn_preview_origin_axes, spawn_preview_scene_host, PreviewFloor,
-    PreviewOrbitCamera, PreviewOriginAxes, PreviewSceneHost, PreviewSceneInstance,
 };
 pub use reservations::SmartObjectReservations;
 pub use spawn::{register_runtime_actor_from_definition, spawn_characters_from_definition};
@@ -183,7 +171,9 @@ pub fn resolve_startup_map_id(
     configured_map_id: Option<MapId>,
 ) -> Option<MapId> {
     if let Some(map_id) = configured_map_id {
-        return Some(map_id);
+        if maps.get(&map_id).is_some() {
+            return Some(map_id);
+        }
     }
 
     maps.iter().next().map(|(map_id, _)| map_id.clone())
@@ -466,11 +456,12 @@ mod tests {
         CharacterDefinition, CharacterDisposition, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLibrary, CharacterLootEntry, CharacterPlaceholderColors,
         CharacterPresentation, CharacterProgression, CharacterResourcePool, GridCoord,
-        MapBuildingProps, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
-        MapLevelDefinition, MapLibrary, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-        MapObjectProps, MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition,
-        OverworldId, OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet, WorldMode,
+        MapBuildingProps, MapBuildingTileSetSpec, MapCellDefinition, MapDefinition,
+        MapEntryPointDefinition, MapId, MapLevelDefinition, MapLibrary, MapObjectDefinition,
+        MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation, MapSize,
+        OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
+        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTravelRuleSet, WorldMode, WorldWallTileSetId,
     };
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1070,6 +1061,16 @@ startup_map =
     }
 
     #[test]
+    fn startup_map_resolution_falls_back_when_configured_map_is_missing() {
+        let maps = sample_map_library();
+
+        let resolved =
+            resolve_startup_map_id(&maps, Some(MapId("survivor_outpost_01_grid".into())));
+
+        assert_eq!(resolved, Some(MapId("survivor_outpost_01".into())));
+    }
+
+    #[test]
     fn loading_missing_startup_config_returns_default() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1139,6 +1140,7 @@ startup_map =
                         blocks_movement: true,
                         blocks_sight: true,
                         terrain: "pillar".into(),
+                        visual: None,
                         extra: BTreeMap::new(),
                     }],
                 },
@@ -1170,6 +1172,7 @@ startup_map =
                         wall_visual: Some(game_data::MapBuildingWallVisualSpec {
                             kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
                         }),
+                        tile_set: Some(sample_building_tile_set()),
                         layout: None,
                         extra: BTreeMap::new(),
                     }),
@@ -1229,12 +1232,14 @@ startup_map =
                     grid: GridCoord::new(0, 0, 0),
                     terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(1, 0, 0),
                     terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
             ],
@@ -1244,6 +1249,14 @@ startup_map =
         let mut definitions = BTreeMap::new();
         definitions.insert(definition.id.clone(), definition);
         OverworldLibrary::from(definitions)
+    }
+
+    fn sample_building_tile_set() -> MapBuildingTileSetSpec {
+        MapBuildingTileSetSpec {
+            wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+            floor_surface_set_id: None,
+            door_prototype_id: None,
+        }
     }
 
     fn sample_definition(

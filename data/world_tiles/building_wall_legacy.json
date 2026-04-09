@@ -1,0 +1,148 @@
+{
+  "prototypes": [
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 2.4,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": true,
+      "id": "building_wall_legacy/isolated",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/building_wall_legacy/isolated.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 2.4,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": true,
+      "id": "building_wall_legacy/end",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/building_wall_legacy/end.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 2.4,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": true,
+      "id": "building_wall_legacy/straight",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/building_wall_legacy/straight.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 2.4,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": true,
+      "id": "building_wall_legacy/corner",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/building_wall_legacy/corner.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 2.4,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": true,
+      "id": "building_wall_legacy/t_junction",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/building_wall_legacy/t_junction.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 2.4,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": true,
+      "id": "building_wall_legacy/cross",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/building_wall_legacy/cross.gltf",
+        "scene_index": 0
+      }
+    }
+  ],
+  "surface_sets": [],
+  "wall_sets": [
+    {
+      "corner_prototype_id": "building_wall_legacy/corner",
+      "cross_prototype_id": "building_wall_legacy/cross",
+      "end_prototype_id": "building_wall_legacy/end",
+      "id": "building_wall_legacy",
+      "isolated_prototype_id": "building_wall_legacy/isolated",
+      "straight_prototype_id": "building_wall_legacy/straight",
+      "t_junction_prototype_id": "building_wall_legacy/t_junction"
+    }
+  ]
+}

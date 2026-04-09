@@ -4,23 +4,11 @@ use game_data::{
     ResolvedCharacterAppearancePreview, ResolvedEquipmentPreviewEntry,
 };
 
-pub use crate::preview_3d::{apply_preview_orbit_camera, PreviewOrbitCamera};
-
-pub struct CharacterPreviewPlugin;
-
-impl Plugin for CharacterPreviewPlugin {
-    fn build(&self, _app: &mut App) {}
-}
-
 #[derive(Component)]
 pub struct CharacterPreviewRoot;
 
 #[derive(Component)]
 pub struct CharacterPreviewPart;
-
-pub fn spawn_character_preview_light_rig(commands: &mut Commands) {
-    crate::preview_3d::spawn_preview_light_rig(commands);
-}
 
 pub fn spawn_character_preview_scene(
     commands: &mut Commands,
