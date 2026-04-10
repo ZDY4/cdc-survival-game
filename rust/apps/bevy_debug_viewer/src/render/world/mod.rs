@@ -1,12 +1,21 @@
 //! 世界可视化主模块：负责静态世界、角色、门、迷雾同步以及各类 3D 调试表现生成。
 
 use super::*;
+use bevy::ecs::system::SystemParam;
 
 mod actors;
 mod doors;
 mod helpers;
 mod interaction_layout;
 mod static_world;
+
+#[derive(SystemParam)]
+pub(crate) struct OcclusionRenderParams<'w, 's> {
+    pub tile_instance_visual_states:
+        Query<'w, 's, &'static mut game_bevy::world_render::WorldRenderTileInstanceVisualState>,
+    pub materials: ResMut<'w, Assets<StandardMaterial>>,
+    pub building_wall_materials: ResMut<'w, Assets<BuildingWallGridMaterial>>,
+}
 
 pub(crate) fn clear_world_visuals(
     mut commands: Commands,
@@ -122,8 +131,7 @@ pub(crate) fn update_occluding_world_visuals(
     render_config: Res<ViewerRenderConfig>,
     window: Single<&Window>,
     camera_query: Single<&Transform, With<ViewerCamera>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
+    mut render_params: OcclusionRenderParams,
     mut static_world_state: ResMut<StaticWorldVisualState>,
     mut door_visual_state: ResMut<GeneratedDoorVisualState>,
     mut hover_occlusion_buffer: Local<HoverOcclusionBuffer>,
@@ -166,23 +174,39 @@ pub(crate) fn update_occluding_world_visuals(
                 ViewerPickTarget::MapObject(object_id) => Some(object_id.as_str()),
                 _ => None,
             });
-    update_occluder_list_fade(
-        &mut static_world_state.occluders,
-        camera_position,
-        &focus_points,
-        &visible_cells,
-        None,
-        &mut materials,
-        &mut building_wall_materials,
-    );
+    {
+        let state = &mut *static_world_state;
+        let (occluders, tile_instances) = (&mut state.occluders, &mut state.tile_instances);
+        update_occluder_list_fade(
+            occluders,
+            camera_position,
+            &focus_points,
+            &visible_cells,
+            None,
+            Some(&mut *tile_instances),
+            &mut render_params.materials,
+            &mut render_params.building_wall_materials,
+        );
+        apply_tile_instance_fade_updates(
+            tile_instances,
+            |entity, visual_state| {
+                if let Ok(mut state) = render_params.tile_instance_visual_states.get_mut(entity) {
+                    *state = visual_state;
+                }
+            },
+            &mut render_params.materials,
+            &mut render_params.building_wall_materials,
+        );
+    }
     update_occluder_list_fade(
         &mut door_visual_state.occluders,
         camera_position,
         &focus_points,
         &visible_cells,
         hovered_door_object_id,
-        &mut materials,
-        &mut building_wall_materials,
+        None,
+        &mut render_params.materials,
+        &mut render_params.building_wall_materials,
     );
 }
 
@@ -248,6 +272,8 @@ fn clear_static_world_entities(
         commands.entity(entity).despawn();
     }
     static_world_state.occluders.clear();
+    static_world_state.occluder_by_tile_instance.clear();
+    static_world_state.tile_instances.clear();
     static_world_state.key = None;
 }
 
@@ -433,30 +459,6 @@ pub(super) fn spawn_box(
     spec: StaticWorldBoxSpec,
 ) -> SpawnedBoxVisual {
     helpers::spawn_box(commands, meshes, materials, building_wall_materials, spec)
-}
-
-pub(super) fn spawn_loaded_mesh(
-    commands: &mut Commands,
-    material: StaticWorldMaterialHandle,
-    mesh: Handle<Mesh>,
-    transform: Transform,
-    color: Color,
-    pick_binding: Option<ViewerPickBindingSpec>,
-    outline_target: Option<ViewerPickTarget>,
-    aabb_center: Vec3,
-    aabb_half_extents: Vec3,
-) -> SpawnedMeshVisual {
-    helpers::spawn_loaded_mesh(
-        commands,
-        material,
-        mesh,
-        transform,
-        color,
-        pick_binding,
-        outline_target,
-        aabb_center,
-        aabb_half_extents,
-    )
 }
 
 pub(super) fn spawn_decal(

@@ -86,19 +86,7 @@ impl Simulation {
         actor_id: ActorId,
         target_actor: ActorId,
     ) -> Result<(), &'static str> {
-        let Some(actor_grid) = self.actor_grid_position(actor_id) else {
-            return Err("unknown_actor");
-        };
-        let Some(target_grid) = self.actor_grid_position(target_actor) else {
-            return Err("unknown_target");
-        };
-        if !self.is_interaction_in_range(
-            actor_grid,
-            target_grid,
-            self.attack_interaction_distance(actor_id),
-        ) {
-            return Err("target_out_of_range");
-        }
+        self.validate_attack_target_spatial(actor_id, target_actor)?;
 
         let Some(items) = self.item_library.as_ref() else {
             return Ok(());

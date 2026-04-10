@@ -495,9 +495,9 @@ mod tests {
         equipment_context_menu_actions, floating_panel_position, inventory_context_menu_actions,
         skill_context_menu_actions,
     };
+    use crate::game_ui::HOVER_TOOLTIP_CURSOR_OFFSET_X;
     use bevy::prelude::Vec2;
     use bevy::window::{Window, WindowResolution};
-    use crate::game_ui::HOVER_TOOLTIP_CURSOR_OFFSET_X;
 
     #[test]
     fn inventory_context_menu_shows_drop_even_without_use_or_equip() {

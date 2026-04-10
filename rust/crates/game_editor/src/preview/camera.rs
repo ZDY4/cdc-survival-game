@@ -126,7 +126,9 @@ pub fn preview_camera_input_system(
     let radius_min = controller.radius_min.min(controller.radius_max);
     let radius_max = controller.radius_min.max(controller.radius_max);
 
-    let total_mouse_delta = mouse_motion.read().fold(Vec2::ZERO, |acc, event| acc + event.delta);
+    let total_mouse_delta = mouse_motion
+        .read()
+        .fold(Vec2::ZERO, |acc, event| acc + event.delta);
 
     if mouse_buttons.pressed(MouseButton::Left) {
         controller.orbit.yaw_radians -= total_mouse_delta.x * controller.rotate_speed_x;

@@ -10,6 +10,8 @@ bevy.workspace = true
 bevy_app.workspace = true
 bevy_ecs.workspace = true
 bevy_log.workspace = true
+bytemuck = { version = "1", features = ["derive"] }
+gltf = "1"
 game_core = { path = "../game_core" }
 game_data = { path = "../game_data" }
 serde_json.workspace = true

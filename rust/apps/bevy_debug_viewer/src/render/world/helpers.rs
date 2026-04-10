@@ -122,57 +122,6 @@ pub(crate) fn spawn_box(
     }
 }
 
-pub(crate) fn spawn_loaded_mesh(
-    commands: &mut Commands,
-    material: StaticWorldMaterialHandle,
-    mesh: Handle<Mesh>,
-    transform: Transform,
-    color: Color,
-    pick_binding: Option<ViewerPickBindingSpec>,
-    outline_target: Option<ViewerPickTarget>,
-    aabb_center: Vec3,
-    aabb_half_extents: Vec3,
-) -> SpawnedMeshVisual {
-    let entity = match (&material, pick_binding) {
-        (StaticWorldMaterialHandle::Standard(material), binding) => {
-            let mut entity = commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                transform,
-            ));
-            if let Some(binding) = binding {
-                entity.insert(pickable_target(binding.into()));
-            }
-            if let Some(outline_target) = outline_target.clone() {
-                entity.insert(HoverOutlineMember::new(outline_target));
-            }
-            entity.id()
-        }
-        (StaticWorldMaterialHandle::BuildingWallGrid(material), binding) => {
-            let mut entity = commands.spawn((
-                Mesh3d(mesh),
-                MeshMaterial3d(material.clone()),
-                transform,
-            ));
-            if let Some(binding) = binding {
-                entity.insert(pickable_target(binding.into()));
-            }
-            if let Some(outline_target) = outline_target {
-                entity.insert(HoverOutlineMember::new(outline_target));
-            }
-            entity.id()
-        }
-    };
-
-    SpawnedMeshVisual {
-        entity,
-        material,
-        aabb_center,
-        aabb_half_extents,
-        color,
-    }
-}
-
 pub(crate) fn spawn_decal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,

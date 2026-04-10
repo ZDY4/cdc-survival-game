@@ -36,7 +36,7 @@ use crate::turn::{
     ActiveActionState, ActiveActions, ActiveActionsSnapshot, GroupOrderRegistry,
     GroupOrderRegistrySnapshot, TurnConfig, TurnRuntime,
 };
-use crate::vision::VisionRuntimeSnapshot;
+use crate::vision::{has_grid_line_of_sight, VisionRuntimeSnapshot};
 
 mod combat;
 mod dialogue;
@@ -423,6 +423,7 @@ impl SkillActivationResult {
 
 #[derive(Debug, Clone)]
 struct ResolvedSkillTargetContext {
+    hit_grids: Vec<GridCoord>,
     hit_actor_ids: Vec<ActorId>,
     target: SkillTargetRequest,
 }
@@ -444,6 +445,30 @@ struct SkillHandlerPreview {
 #[derive(Debug, Clone)]
 struct AppliedSkillHandler {
     hit_actor_ids: Vec<ActorId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttackTargetingQueryResult {
+    pub valid_grids: Vec<GridCoord>,
+    pub valid_actor_ids: Vec<ActorId>,
+    pub invalid_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillTargetingQueryResult {
+    pub shape: String,
+    pub radius: i32,
+    pub valid_grids: Vec<GridCoord>,
+    pub valid_actor_ids: Vec<ActorId>,
+    pub invalid_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillSpatialPreviewResult {
+    pub resolved_target: Option<SkillTargetRequest>,
+    pub preview_hit_grids: Vec<GridCoord>,
+    pub preview_hit_actor_ids: Vec<ActorId>,
+    pub invalid_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -866,6 +891,177 @@ impl Simulation {
 
     pub fn attack_range(&self, actor_id: ActorId) -> f32 {
         self.attack_interaction_distance(actor_id)
+    }
+
+    pub fn query_attack_targeting(&self, actor_id: ActorId) -> AttackTargetingQueryResult {
+        if !self.actors.contains(actor_id) {
+            return AttackTargetingQueryResult {
+                valid_grids: Vec::new(),
+                valid_actor_ids: Vec::new(),
+                invalid_reason: Some("unknown_actor".to_string()),
+            };
+        }
+
+        let mut valid_grids = self
+            .actors
+            .values()
+            .filter(|actor| actor.actor_id != actor_id && actor.side == ActorSide::Hostile)
+            .filter_map(|actor| {
+                self.validate_attack_target_spatial(actor_id, actor.actor_id)
+                    .ok()
+                    .map(|_| actor)
+            })
+            .map(|actor| actor.grid_position)
+            .collect::<Vec<_>>();
+        valid_grids.sort_by_key(|grid| (grid.y, grid.z, grid.x));
+        valid_grids.dedup();
+
+        let mut valid_actor_ids = self
+            .actors
+            .values()
+            .filter(|actor| actor.actor_id != actor_id && actor.side == ActorSide::Hostile)
+            .filter_map(|actor| {
+                self.validate_attack_target_spatial(actor_id, actor.actor_id)
+                    .ok()
+                    .map(|_| actor.actor_id)
+            })
+            .collect::<Vec<_>>();
+        valid_actor_ids.sort_by_key(|candidate| candidate.0);
+
+        let invalid_reason = valid_actor_ids
+            .is_empty()
+            .then_some("no_attack_targets".to_string());
+
+        AttackTargetingQueryResult {
+            valid_grids,
+            valid_actor_ids,
+            invalid_reason,
+        }
+    }
+
+    pub fn query_skill_targeting(
+        &self,
+        actor_id: ActorId,
+        skill_id: &str,
+    ) -> SkillTargetingQueryResult {
+        let Some(skill) = self
+            .skill_library
+            .as_ref()
+            .and_then(|skills| skills.get(skill_id))
+        else {
+            return SkillTargetingQueryResult {
+                shape: "single".to_string(),
+                radius: 0,
+                valid_grids: Vec::new(),
+                valid_actor_ids: Vec::new(),
+                invalid_reason: Some("unknown_skill".to_string()),
+            };
+        };
+        let Some(targeting) = skill
+            .activation
+            .as_ref()
+            .and_then(|activation| activation.targeting.as_ref())
+            .filter(|targeting| targeting.enabled)
+        else {
+            return SkillTargetingQueryResult {
+                shape: "single".to_string(),
+                radius: 0,
+                valid_grids: Vec::new(),
+                valid_actor_ids: Vec::new(),
+                invalid_reason: Some("skill_targeting_disabled".to_string()),
+            };
+        };
+
+        let Some(actor_grid) = self.actor_grid_position(actor_id) else {
+            return SkillTargetingQueryResult {
+                shape: targeting.shape.trim().to_string(),
+                radius: targeting.radius.max(0),
+                valid_grids: Vec::new(),
+                valid_actor_ids: Vec::new(),
+                invalid_reason: Some("unknown_actor".to_string()),
+            };
+        };
+
+        let valid_grids = self
+            .iter_level_grids(actor_grid.y)
+            .into_iter()
+            .filter(|grid| grid.y == actor_grid.y)
+            .filter(|grid| {
+                self.validate_target_center_spatial(actor_grid, *grid, targeting.range_cells.max(0))
+                    .is_ok()
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        let mut valid_actor_ids = self
+            .actors
+            .values()
+            .filter(|actor| valid_grids.contains(&actor.grid_position))
+            .map(|actor| actor.actor_id)
+            .collect::<Vec<_>>();
+        valid_actor_ids.sort_by_key(|candidate| candidate.0);
+        valid_actor_ids.dedup();
+
+        let invalid_reason = valid_grids
+            .is_empty()
+            .then_some("no_skill_targets".to_string());
+
+        SkillTargetingQueryResult {
+            shape: targeting.shape.trim().to_string(),
+            radius: targeting.radius.max(0),
+            valid_grids,
+            valid_actor_ids,
+            invalid_reason,
+        }
+    }
+
+    pub fn preview_skill_target(
+        &self,
+        actor_id: ActorId,
+        skill_id: &str,
+        target: SkillTargetRequest,
+    ) -> SkillSpatialPreviewResult {
+        let Some(skill) = self
+            .skill_library
+            .as_ref()
+            .and_then(|skills| skills.get(skill_id))
+        else {
+            return SkillSpatialPreviewResult {
+                resolved_target: None,
+                preview_hit_grids: Vec::new(),
+                preview_hit_actor_ids: Vec::new(),
+                invalid_reason: Some("unknown_skill".to_string()),
+            };
+        };
+        let Some(targeting) = skill
+            .activation
+            .as_ref()
+            .and_then(|activation| activation.targeting.as_ref())
+            .filter(|targeting| targeting.enabled)
+        else {
+            return SkillSpatialPreviewResult {
+                resolved_target: None,
+                preview_hit_grids: Vec::new(),
+                preview_hit_actor_ids: Vec::new(),
+                invalid_reason: Some("skill_targeting_disabled".to_string()),
+            };
+        };
+
+        match self.resolve_skill_target_context(actor_id, Some(targeting), &target) {
+            Ok(context) => SkillSpatialPreviewResult {
+                resolved_target: Some(context.target),
+                preview_hit_grids: context.hit_grids,
+                preview_hit_actor_ids: context.hit_actor_ids,
+                invalid_reason: None,
+            },
+            Err(reason) => SkillSpatialPreviewResult {
+                resolved_target: None,
+                preview_hit_grids: Vec::new(),
+                preview_hit_actor_ids: Vec::new(),
+                invalid_reason: Some(reason.to_string()),
+            },
+        }
     }
 
     pub fn skill_state(&self, actor_id: ActorId, skill_id: &str) -> SkillRuntimeState {
@@ -2593,43 +2789,43 @@ impl Simulation {
                 .ok_or("unknown_target")?,
             SkillTargetRequest::Grid(grid) => *grid,
         };
-        if !self.grid_world.is_in_bounds(center_grid) {
-            return Err("target_out_of_bounds");
-        }
+        let (shape, radius, resolved_target) = if let Some(targeting) = targeting {
+            (
+                targeting.shape.trim(),
+                targeting.radius.max(0) as i32,
+                match targeting.shape.trim() {
+                    "single" => self
+                        .actors
+                        .values()
+                        .find(|actor| actor.grid_position == center_grid)
+                        .map(|actor| SkillTargetRequest::Actor(actor.actor_id))
+                        .unwrap_or(SkillTargetRequest::Grid(center_grid)),
+                    _ => SkillTargetRequest::Grid(center_grid),
+                },
+            )
+        } else {
+            ("single", 0, *target)
+        };
 
-        if let Some(targeting) = targeting {
-            let shape = targeting.shape.trim();
-            if matches!(shape, "diamond" | "square")
-                && matches!(target, SkillTargetRequest::Actor(_))
-            {
-                return Err("skill_target_type_mismatch");
-            }
-            if manhattan_grid_distance(actor_grid, center_grid) > targeting.range_cells.max(0) {
-                return Err("target_out_of_range");
-            }
-            let hit_grids =
-                self.skill_affected_grids(center_grid, shape, targeting.radius.max(0) as i32);
-            let hit_actor_ids = self
-                .actors
-                .values()
-                .filter(|actor| hit_grids.contains(&actor.grid_position))
-                .map(|actor| actor.actor_id)
-                .collect::<Vec<_>>();
-            return Ok(ResolvedSkillTargetContext {
-                hit_actor_ids,
-                target: *target,
-            });
-        }
+        let range_cells = targeting
+            .map(|targeting| targeting.range_cells.max(0))
+            .unwrap_or(0);
+        self.validate_target_center_spatial(actor_grid, center_grid, range_cells)?;
 
-        let hit_actor_ids = self
+        let hit_grids = self.skill_affected_grids(center_grid, shape, radius);
+        let mut hit_actor_ids = self
             .actors
             .values()
-            .filter(|actor| actor.grid_position == center_grid)
+            .filter(|actor| hit_grids.contains(&actor.grid_position))
             .map(|actor| actor.actor_id)
             .collect::<Vec<_>>();
+        hit_actor_ids.sort_by_key(|candidate| candidate.0);
+        hit_actor_ids.dedup();
+
         Ok(ResolvedSkillTargetContext {
+            hit_grids,
             hit_actor_ids,
-            target: *target,
+            target: resolved_target,
         })
     }
 
@@ -3343,6 +3539,66 @@ impl Simulation {
         }
     }
 
+    fn attack_range_cells(&self, actor_id: ActorId) -> i32 {
+        self.attack_interaction_distance(actor_id).floor().max(1.0) as i32
+    }
+
+    fn validate_attack_target_spatial(
+        &self,
+        actor_id: ActorId,
+        target_actor: ActorId,
+    ) -> Result<(), &'static str> {
+        let Some(actor_grid) = self.actor_grid_position(actor_id) else {
+            return Err("unknown_actor");
+        };
+        let Some(target_grid) = self.actor_grid_position(target_actor) else {
+            return Err("unknown_target");
+        };
+        self.validate_target_center_spatial(
+            actor_grid,
+            target_grid,
+            self.attack_range_cells(actor_id),
+        )
+    }
+
+    fn validate_target_center_spatial(
+        &self,
+        actor_grid: GridCoord,
+        target_grid: GridCoord,
+        range_cells: i32,
+    ) -> Result<(), &'static str> {
+        if !self.grid_world.is_in_bounds(target_grid) {
+            return Err("target_out_of_bounds");
+        }
+        if actor_grid.y != target_grid.y {
+            return Err("target_invalid_level");
+        }
+        if manhattan_grid_distance(actor_grid, target_grid) > range_cells.max(0) {
+            return Err("target_out_of_range");
+        }
+        if !has_grid_line_of_sight(&self.grid_world, actor_grid, target_grid) {
+            return Err("target_blocked_by_los");
+        }
+
+        Ok(())
+    }
+
+    fn iter_level_grids(&self, level: i32) -> Vec<GridCoord> {
+        if let Some(size) = self.grid_world.map_size() {
+            return (0..size.width as i32)
+                .flat_map(|x| (0..size.height as i32).map(move |z| GridCoord::new(x, level, z)))
+                .collect();
+        }
+
+        self.actors
+            .values()
+            .filter(|actor| actor.grid_position.y == level)
+            .map(|actor| actor.grid_position)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
     fn actor_combat_attribute_value(&self, actor_id: ActorId, attribute: &str) -> f32 {
         self.actor_combat_attributes
             .get(&actor_id)
@@ -3561,7 +3817,9 @@ mod tests {
         MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
         OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
         OverworldTerrainKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow,
-        QuestLibrary, QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell, StairKind,
+        QuestLibrary, QuestNode, QuestRewards, RecipeLibrary, RelativeGridCell,
+        SkillActivationDefinition, SkillActivationEffect, SkillDefinition, SkillLibrary,
+        SkillModifierDefinition, SkillTargetRequest, SkillTargetingDefinition, StairKind,
         WorldCoord, WorldMode,
     };
 
@@ -4277,6 +4535,360 @@ mod tests {
         assert!(simulation.is_in_combat());
         simulation.unregister_actor(hostile);
         assert!(!simulation.is_in_combat());
+    }
+
+    #[test]
+    fn attack_rejects_target_blocked_by_line_of_sight() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_combat_los_map_definition());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 3.0,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(2, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let query = simulation.query_attack_targeting(player);
+        assert!(!query.valid_actor_ids.contains(&hostile));
+
+        let result = simulation.perform_attack(player, hostile);
+        assert!(!result.success);
+        assert_eq!(result.reason.as_deref(), Some("target_blocked_by_los"));
+    }
+
+    #[test]
+    fn attack_rejects_out_of_range_target_on_same_level() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(2, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.perform_attack(player, hostile);
+        assert!(!result.success);
+        assert_eq!(result.reason.as_deref(), Some("target_out_of_range"));
+    }
+
+    #[test]
+    fn attack_rejects_target_on_different_level() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_two_level_combat_map_definition());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 3.0,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(0, 1, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let result = simulation.perform_attack(player, hostile);
+        assert!(!result.success);
+        assert_eq!(result.reason.as_deref(), Some("target_invalid_level"));
+    }
+
+    #[test]
+    fn single_skill_target_requires_line_of_sight_to_center_grid() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_combat_los_map_definition());
+        simulation.set_skill_library(sample_spatial_skill_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(2, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation
+            .economy
+            .actor_mut(player)
+            .expect("player should exist")
+            .learned_skills
+            .insert("fire_bolt".to_string(), 1);
+        simulation.set_actor_ap(player, 2.0);
+
+        let preview = simulation.preview_skill_target(
+            player,
+            "fire_bolt",
+            SkillTargetRequest::Actor(hostile),
+        );
+        assert_eq!(
+            preview.invalid_reason.as_deref(),
+            Some("target_blocked_by_los")
+        );
+
+        let result =
+            simulation.activate_skill(player, "fire_bolt", SkillTargetRequest::Actor(hostile));
+        assert!(!result.action_result.success);
+        assert_eq!(
+            result.failure_reason.as_deref(),
+            Some("target_blocked_by_los")
+        );
+    }
+
+    #[test]
+    fn aoe_skill_expands_hit_grids_when_center_has_line_of_sight() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_two_level_combat_map_definition());
+        simulation.set_skill_library(sample_spatial_skill_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(2, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let flank = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Flank".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(2, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation
+            .economy
+            .actor_mut(player)
+            .expect("player should exist")
+            .learned_skills
+            .insert("shockwave".to_string(), 1);
+        simulation.set_actor_ap(player, 2.0);
+
+        let preview = simulation.preview_skill_target(
+            player,
+            "shockwave",
+            SkillTargetRequest::Grid(GridCoord::new(2, 0, 0)),
+        );
+        assert!(preview.invalid_reason.is_none());
+        assert!(preview.preview_hit_grids.contains(&GridCoord::new(2, 0, 0)));
+        assert!(preview.preview_hit_grids.contains(&GridCoord::new(2, 0, 1)));
+        assert!(preview.preview_hit_actor_ids.contains(&hostile));
+        assert!(preview.preview_hit_actor_ids.contains(&flank));
+    }
+
+    #[test]
+    fn aoe_skill_fails_when_center_point_is_occluded() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_combat_los_map_definition());
+        simulation.set_skill_library(sample_spatial_skill_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation
+            .economy
+            .actor_mut(player)
+            .expect("player should exist")
+            .learned_skills
+            .insert("shockwave".to_string(), 1);
+        simulation.set_actor_ap(player, 2.0);
+
+        let preview = simulation.preview_skill_target(
+            player,
+            "shockwave",
+            SkillTargetRequest::Grid(GridCoord::new(2, 0, 0)),
+        );
+        assert_eq!(
+            preview.invalid_reason.as_deref(),
+            Some("target_blocked_by_los")
+        );
+    }
+
+    #[test]
+    fn attack_and_skill_share_same_spatial_failure_reason() {
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_combat_los_map_definition());
+        simulation.set_skill_library(sample_spatial_skill_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 3.0,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(2, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation
+            .economy
+            .actor_mut(player)
+            .expect("player should exist")
+            .learned_skills
+            .insert("fire_bolt".to_string(), 1);
+        simulation.set_actor_ap(player, 2.0);
+
+        let attack_result = simulation.perform_attack(player, hostile);
+        let skill_preview = simulation.preview_skill_target(
+            player,
+            "fire_bolt",
+            SkillTargetRequest::Actor(hostile),
+        );
+
+        assert_eq!(
+            attack_result.reason.as_deref(),
+            Some("target_blocked_by_los")
+        );
+        assert_eq!(
+            skill_preview.invalid_reason.as_deref(),
+            Some("target_blocked_by_los")
+        );
+    }
+
+    #[test]
+    fn ranged_attack_targeting_uses_cell_distance() {
+        let items = sample_combat_item_library();
+        let mut simulation = Simulation::new();
+        simulation
+            .grid_world_mut()
+            .load_map(&sample_two_level_combat_map_definition());
+        simulation.set_item_library(items.clone());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Shooter".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Target".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(4, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation
+            .economy
+            .add_item(player, 1004, 1, &items)
+            .expect("pistol should add");
+        simulation.economy.set_actor_level(player, 2);
+        simulation
+            .economy
+            .equip_item(player, 1004, Some("main_hand"), &items)
+            .expect("pistol should equip");
+
+        let query = simulation.query_attack_targeting(player);
+        assert!(query.valid_grids.contains(&GridCoord::new(4, 0, 0)));
+        assert!(query.valid_actor_ids.contains(&hostile));
     }
 
     #[test]
@@ -5743,6 +6355,7 @@ mod tests {
                         blocks_movement: true,
                         blocks_sight: true,
                         terrain: "pillar".into(),
+                        visual: None,
                         extra: std::collections::BTreeMap::new(),
                     }],
                 },
@@ -5775,6 +6388,7 @@ mod tests {
                             wall_visual: Some(game_data::MapBuildingWallVisualSpec {
                                 kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
                             }),
+                            tile_set: None,
                             layout: None,
                             extra: std::collections::BTreeMap::new(),
                         }),
@@ -5793,6 +6407,122 @@ mod tests {
                 },
             ],
         }
+    }
+
+    fn sample_two_level_combat_map_definition() -> MapDefinition {
+        MapDefinition {
+            id: MapId("combat_two_level_map".into()),
+            name: "Combat Two Level".into(),
+            size: MapSize {
+                width: 6,
+                height: 6,
+            },
+            default_level: 0,
+            levels: vec![
+                MapLevelDefinition {
+                    y: 0,
+                    cells: Vec::new(),
+                },
+                MapLevelDefinition {
+                    y: 1,
+                    cells: Vec::new(),
+                },
+            ],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: Vec::new(),
+        }
+    }
+
+    fn sample_combat_los_map_definition() -> MapDefinition {
+        let mut map = sample_two_level_combat_map_definition();
+        map.id = MapId("combat_los_map".into());
+        map.name = "Combat LoS".into();
+        map.levels[0].cells.push(MapCellDefinition {
+            x: 1,
+            z: 0,
+            blocks_movement: true,
+            blocks_sight: true,
+            terrain: "wall".into(),
+            visual: None,
+            extra: BTreeMap::new(),
+        });
+        map
+    }
+
+    fn sample_spatial_skill_library() -> SkillLibrary {
+        SkillLibrary::from(BTreeMap::from([
+            (
+                "fire_bolt".to_string(),
+                SkillDefinition {
+                    id: "fire_bolt".to_string(),
+                    name: "Fire Bolt".to_string(),
+                    activation: Some(SkillActivationDefinition {
+                        mode: "active".to_string(),
+                        cooldown: 0.0,
+                        effect: Some(SkillActivationEffect {
+                            modifiers: BTreeMap::from([(
+                                "damage".to_string(),
+                                SkillModifierDefinition {
+                                    base: 4.0,
+                                    per_level: 1.0,
+                                    max_value: 6.0,
+                                    ..SkillModifierDefinition::default()
+                                },
+                            )]),
+                            ..SkillActivationEffect::default()
+                        }),
+                        targeting: Some(SkillTargetingDefinition {
+                            enabled: true,
+                            range_cells: 5,
+                            shape: "single".to_string(),
+                            radius: 0,
+                            handler_script: "damage_single".to_string(),
+                            ..SkillTargetingDefinition::default()
+                        }),
+                        ..SkillActivationDefinition::default()
+                    }),
+                    ..SkillDefinition::default()
+                },
+            ),
+            (
+                "shockwave".to_string(),
+                SkillDefinition {
+                    id: "shockwave".to_string(),
+                    name: "Shockwave".to_string(),
+                    activation: Some(SkillActivationDefinition {
+                        mode: "active".to_string(),
+                        cooldown: 0.0,
+                        effect: Some(SkillActivationEffect {
+                            modifiers: BTreeMap::from([(
+                                "damage".to_string(),
+                                SkillModifierDefinition {
+                                    base: 2.0,
+                                    per_level: 0.5,
+                                    max_value: 3.0,
+                                    ..SkillModifierDefinition::default()
+                                },
+                            )]),
+                            ..SkillActivationEffect::default()
+                        }),
+                        targeting: Some(SkillTargetingDefinition {
+                            enabled: true,
+                            range_cells: 3,
+                            shape: "diamond".to_string(),
+                            radius: 1,
+                            handler_script: "damage_aoe".to_string(),
+                            ..SkillTargetingDefinition::default()
+                        }),
+                        ..SkillActivationDefinition::default()
+                    }),
+                    ..SkillDefinition::default()
+                },
+            ),
+        ]))
     }
 
     fn sample_generated_building_map_definition() -> MapDefinition {
@@ -5837,6 +6567,7 @@ mod tests {
                         wall_visual: Some(game_data::MapBuildingWallVisualSpec {
                             kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
                         }),
+                        tile_set: None,
                         layout: Some(MapBuildingLayoutSpec {
                             seed: 7,
                             target_room_count: 3,
@@ -6171,6 +6902,7 @@ mod tests {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),

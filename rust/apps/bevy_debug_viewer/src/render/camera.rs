@@ -4,6 +4,7 @@ use super::*;
 use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::picking::prelude::MeshPickingCamera;
+use bevy::render::view::NoIndirectDrawing;
 use bevy_mesh_outline::OutlineCamera;
 use game_editor::load_game_ui_font;
 
@@ -50,6 +51,7 @@ pub(crate) fn setup_viewer(
         ViewerCamera,
         MeshPickingCamera,
         OutlineCamera,
+        NoIndirectDrawing,
         FogOfWarOverlay,
         FogOfWarPostProcessSettings::default(),
         FogOfWarPostProcessTextures {

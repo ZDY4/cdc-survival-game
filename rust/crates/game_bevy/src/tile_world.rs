@@ -4,12 +4,13 @@ use game_data::{
     expand_object_footprint, GridCoord, MapDefinition, MapObjectDefinition, MapRotation,
     WorldTileLibrary, WorldTilePrototypeId,
 };
+use std::collections::HashMap;
 
 use crate::static_world::{
-    BuildingWallNeighborMask, StaticWorldBuildingWallTileSpec, StaticWorldBoxSpec,
-    StaticWorldOccluderKind, StaticWorldSemantic,
+    BuildingWallNeighborMask, StaticWorldBoxSpec, StaticWorldBuildingWallTileSpec,
+    StaticWorldMaterialRole, StaticWorldOccluderKind, StaticWorldSceneSpec, StaticWorldSemantic,
 };
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TileRenderClass {
     Standard,
     BuildingWallGrid(game_data::MapBuildingWallVisualKind),
@@ -37,8 +38,83 @@ pub struct TilePlacementSpec {
 
 #[derive(Debug, Clone, Default)]
 pub struct TileWorldSceneSpec {
-    pub placements: Vec<TilePlacementSpec>,
+    pub batches: Vec<TileBatchSpec>,
     pub pick_proxies: Vec<StaticWorldBoxSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TileBatchKey {
+    pub prototype_id: WorldTilePrototypeId,
+    pub render_class: TileRenderClass,
+}
+
+#[derive(Debug, Clone)]
+pub struct TileInstanceSpec {
+    pub translation: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
+    pub semantic: Option<StaticWorldSemantic>,
+    pub occluder_kind: Option<StaticWorldOccluderKind>,
+    pub occluder_cells: Vec<GridCoord>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TileBatchSpec {
+    pub key: TileBatchKey,
+    pub instances: Vec<TileInstanceSpec>,
+}
+
+pub fn resolve_tile_world_scene(
+    static_scene: &StaticWorldSceneSpec,
+    extra_placements: &[TilePlacementSpec],
+    library: &WorldTileLibrary,
+) -> TileWorldSceneSpec {
+    let mut placements =
+        resolve_building_wall_tile_placements(&static_scene.building_wall_tiles, library);
+    placements.extend(extra_placements.iter().cloned());
+    let mut batches = Vec::<TileBatchSpec>::new();
+    let mut batch_indices = HashMap::<TileBatchKey, usize>::new();
+    let mut pick_proxies = Vec::new();
+    for placement in &placements {
+        let key = TileBatchKey {
+            prototype_id: placement.prototype_id.clone(),
+            render_class: placement.render_class,
+        };
+        let instance = TileInstanceSpec {
+            translation: placement.translation,
+            rotation: placement.rotation,
+            scale: placement.scale,
+            semantic: placement.semantic.clone(),
+            occluder_kind: placement.occluder_kind.clone(),
+            occluder_cells: placement.occluder_cells.clone(),
+        };
+        let batch_index = if let Some(index) = batch_indices.get(&key) {
+            *index
+        } else {
+            let index = batches.len();
+            batches.push(TileBatchSpec {
+                key: key.clone(),
+                instances: Vec::new(),
+            });
+            batch_indices.insert(key, index);
+            index
+        };
+        batches[batch_index].instances.push(instance);
+        if let Some(proxy) = placement.pick_proxy.as_ref() {
+            pick_proxies.push(StaticWorldBoxSpec {
+                size: proxy.size,
+                translation: proxy.translation,
+                material_role: StaticWorldMaterialRole::InvisiblePickProxy,
+                occluder_kind: None,
+                occluder_cells: Vec::new(),
+                semantic: proxy.semantic.clone(),
+            });
+        }
+    }
+    TileWorldSceneSpec {
+        batches,
+        pick_proxies,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,7 +197,12 @@ pub fn default_floor_top(current_level: i32, grid_size: f32, floor_thickness_wor
 pub fn wall_topology_archetype_and_rotation(
     neighbors: &BuildingWallNeighborMask,
 ) -> (WallTopologyArchetype, Quat) {
-    let mask = [neighbors.north, neighbors.east, neighbors.south, neighbors.west];
+    let mask = [
+        neighbors.north,
+        neighbors.east,
+        neighbors.south,
+        neighbors.west,
+    ];
     let count = mask.into_iter().filter(|value| *value).count();
     let archetype = match count {
         0 => WallTopologyArchetype::Isolated,
@@ -167,7 +248,11 @@ fn map_object_visual_placement(
             .then_some(StaticWorldOccluderKind::MapObject(object.kind)),
         occluder_cells: occupied_cells.clone(),
         pick_proxy: Some(TilePickProxySpec {
-            size: Vec3::new(width.max(grid_size * 0.4), grid_size, depth.max(grid_size * 0.4)),
+            size: Vec3::new(
+                width.max(grid_size * 0.4),
+                grid_size,
+                depth.max(grid_size * 0.4),
+            ),
             translation: Vec3::new(center_x, floor_top + grid_size * 0.5, center_z),
             semantic: Some(StaticWorldSemantic::MapObject(object.object_id.clone())),
         }),
@@ -207,7 +292,11 @@ fn snapshot_object_visual_placement(
             .then_some(StaticWorldOccluderKind::MapObject(object.kind)),
         occluder_cells: object.occupied_cells.clone(),
         pick_proxy: Some(TilePickProxySpec {
-            size: Vec3::new(width.max(grid_size * 0.4), grid_size, depth.max(grid_size * 0.4)),
+            size: Vec3::new(
+                width.max(grid_size * 0.4),
+                grid_size,
+                depth.max(grid_size * 0.4),
+            ),
             translation: Vec3::new(center_x, floor_top + grid_size * 0.5, center_z),
             semantic: Some(StaticWorldSemantic::MapObject(object.object_id.clone())),
         }),
@@ -266,6 +355,7 @@ fn rotate_mask_clockwise(mask: [bool; 4], steps: usize) -> [bool; 4] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use game_data::MapBuildingWallVisualKind;
 
     #[test]
     fn wall_topology_resolves_corner_rotation() {
@@ -277,6 +367,71 @@ mod tests {
         };
         let (archetype, rotation) = wall_topology_archetype_and_rotation(&neighbors);
         assert_eq!(archetype, WallTopologyArchetype::Corner);
-        assert_eq!(rotation, Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2));
+        assert_eq!(
+            rotation,
+            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
+        );
+    }
+
+    #[test]
+    fn resolve_tile_world_scene_batches_same_prototype_and_render_class() {
+        let placements = vec![
+            TilePlacementSpec {
+                prototype_id: WorldTilePrototypeId("prop.crate".to_string()),
+                translation: Vec3::new(1.0, 0.0, 1.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+                render_class: TileRenderClass::Standard,
+                semantic: None,
+                occluder_kind: None,
+                occluder_cells: Vec::new(),
+                pick_proxy: Some(TilePickProxySpec {
+                    size: Vec3::splat(1.0),
+                    translation: Vec3::new(1.0, 0.5, 1.0),
+                    semantic: Some(StaticWorldSemantic::MapObject("crate_a".to_string())),
+                }),
+            },
+            TilePlacementSpec {
+                prototype_id: WorldTilePrototypeId("prop.crate".to_string()),
+                translation: Vec3::new(2.0, 0.0, 1.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+                render_class: TileRenderClass::Standard,
+                semantic: None,
+                occluder_kind: None,
+                occluder_cells: Vec::new(),
+                pick_proxy: None,
+            },
+            TilePlacementSpec {
+                prototype_id: WorldTilePrototypeId("wall.corner".to_string()),
+                translation: Vec3::new(3.0, 0.0, 1.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+                render_class: TileRenderClass::BuildingWallGrid(
+                    MapBuildingWallVisualKind::LegacyGrid,
+                ),
+                semantic: None,
+                occluder_kind: None,
+                occluder_cells: Vec::new(),
+                pick_proxy: None,
+            },
+        ];
+
+        let scene = resolve_tile_world_scene(
+            &StaticWorldSceneSpec::default(),
+            &placements,
+            &WorldTileLibrary::default(),
+        );
+
+        assert_eq!(scene.batches.len(), 2);
+        assert_eq!(scene.batches[0].instances.len(), 2);
+        assert_eq!(scene.batches[0].key.prototype_id.as_str(), "prop.crate");
+        assert_eq!(scene.batches[1].instances.len(), 1);
+        assert_eq!(scene.batches[1].key.prototype_id.as_str(), "wall.corner");
+        assert_eq!(scene.pick_proxies.len(), 1);
+        assert_eq!(
+            scene.pick_proxies[0].semantic,
+            Some(StaticWorldSemantic::MapObject("crate_a".to_string()))
+        );
     }
 }

@@ -2,19 +2,19 @@
 //! 映射到 debug viewer 的材质、拾取与 occlusion 语义。
 
 use super::*;
-use bevy::gltf::GltfAssetLabel;
+use bevy::camera::visibility::NoFrustumCulling;
 use game_bevy::static_world as shared_static_world;
 use game_bevy::static_world::{
     StaticWorldMaterialRole as SharedRole, StaticWorldSceneSpec as SharedSceneSpec,
     StaticWorldSemantic as SharedSemantic,
 };
-use game_bevy::tile_world::{
-    default_floor_top, resolve_building_wall_tile_placements, resolve_snapshot_object_visual_placements,
-    TileRenderClass,
-};
+use game_bevy::tile_world::TileRenderClass;
 use game_bevy::world_render::{
     build_world_render_scene_from_simulation_snapshot, make_building_wall_material,
-    WorldRenderConfig as SharedWorldRenderConfig,
+    prepare_tile_batch_scene, PreparedTileBatch, PreparedTileInstance,
+    WorldRenderBuildingWallTileBatchSource, WorldRenderConfig as SharedWorldRenderConfig,
+    WorldRenderStandardTileBatchMaterialState, WorldRenderStandardTileBatchSource,
+    WorldRenderTileBatchRoot, WorldRenderTileBatchVisualState,
 };
 
 pub(super) fn rebuild_static_world(
@@ -37,28 +37,28 @@ pub(super) fn rebuild_static_world(
 ) {
     static_world_state.entities.clear();
     static_world_state.occluders.clear();
+    static_world_state.occluder_by_tile_instance.clear();
+    static_world_state.tile_instances.clear();
     let grid_size = snapshot.grid.grid_size;
     let floor_top =
         level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
 
-    let shared_scene = shared_static_world::build_static_world_from_simulation_snapshot(
+    let world_render_scene = build_world_render_scene_from_simulation_snapshot(
         snapshot,
         current_level,
-        shared_static_world::StaticWorldBuildConfig {
+        SharedWorldRenderConfig {
+            camera_yaw_degrees: render_config.camera_yaw_degrees,
+            camera_pitch_degrees: render_config.camera_pitch_degrees,
+            camera_fov_degrees: render_config.camera_fov_degrees,
             floor_thickness_world: render_config.floor_thickness_world,
+            ground_variation_strength: render_config.ground_variation_strength,
             object_style_seed: render_config.object_style_seed,
-            include_generated_doors: false,
-            bounds_override: Some(shared_bounds(bounds)),
         },
+        Some(shared_bounds(bounds)),
     );
-    let wall_placements =
-        resolve_building_wall_tile_placements(&shared_scene.building_wall_tiles, &world_tiles.0);
-    let prop_placements = resolve_snapshot_object_visual_placements(
-        snapshot,
-        current_level,
-        default_floor_top(current_level, grid_size, render_config.floor_thickness_world),
-        grid_size,
-    );
+    let shared_scene = world_render_scene.static_scene.clone();
+    let tile_scene = world_render_scene.resolve_tile_scene(&world_tiles.0);
+    let prepared_tile_scene = prepare_tile_batch_scene(asset_server, &world_tiles.0, &tile_scene);
 
     static_world_state
         .entities
@@ -93,30 +93,133 @@ pub(super) fn rebuild_static_world(
         }
     }
 
-    for placement in wall_placements.into_iter().chain(prop_placements.into_iter()) {
-        let Some((spawned, extra_entities, occluder_cells, occluder_kind)) = spawn_tile_placement(
-            commands,
-            meshes,
-            materials,
-            building_wall_materials,
-            asset_server,
-            world_tiles,
-            placement,
-        ) else {
-            continue;
-        };
+    for spec in prepared_tile_scene
+        .pick_proxies
+        .into_iter()
+        .map(shared_box_spec_to_viewer_box_spec)
+    {
+        let spawned = spawn_box(commands, meshes, materials, building_wall_materials, spec);
         static_world_state.entities.push(spawned.entity);
-        static_world_state.entities.extend(extra_entities);
-        if occluder_kind.is_some() {
-            static_world_state
-                .occluders
-                .push(occluder_visual_from_spawned_mesh(
-                    spawned,
-                    occluder_cells,
-                    floor_top,
-                    grid_size,
-                    render_config,
-                ));
+    }
+
+    for batch in prepared_tile_scene.batches {
+        let batch_root = commands
+            .spawn((
+                Transform::IDENTITY,
+                GlobalTransform::IDENTITY,
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
+                WorldRenderTileBatchRoot { id: batch.id },
+                WorldRenderTileBatchVisualState::default(),
+            ))
+            .id();
+        let mut render_entities = Vec::new();
+        for render_primitive in &batch.render_primitives {
+            let mut render_entity = commands.spawn((
+                Mesh3d(render_primitive.mesh.clone()),
+                Transform::IDENTITY,
+                GlobalTransform::IDENTITY,
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
+                NoFrustumCulling,
+                WorldRenderTileBatchVisualState::default(),
+            ));
+            match batch.key.render_class {
+                TileRenderClass::Standard => {
+                    render_entity.insert((
+                        WorldRenderStandardTileBatchSource {
+                            logical_batch_entity: batch_root,
+                            material: render_primitive.standard_material.clone().unwrap_or_else(
+                                || {
+                                    materials.add(StandardMaterial {
+                                        base_color: Color::WHITE,
+                                        ..default()
+                                    })
+                                },
+                            ),
+                            prototype_local_transform: render_primitive.local_transform,
+                        },
+                        WorldRenderStandardTileBatchMaterialState::default(),
+                    ));
+                }
+                TileRenderClass::BuildingWallGrid(visual_kind) => {
+                    render_entity.insert(WorldRenderBuildingWallTileBatchSource {
+                        logical_batch_entity: batch_root,
+                        visual_kind,
+                        prototype_local_transform: render_primitive.local_transform,
+                    });
+                }
+            }
+            let render_entity = render_entity.id();
+            commands.entity(batch_root).add_child(render_entity);
+            static_world_state.entities.push(render_entity);
+            render_entities.push(render_entity);
+        }
+        static_world_state.entities.push(batch_root);
+        let standard_instance_material =
+            if matches!(batch.key.render_class, TileRenderClass::Standard) {
+                Some(
+                    batch
+                        .primary_render_primitive()
+                        .and_then(|primitive| primitive.standard_material.clone())
+                        .unwrap_or_else(|| {
+                            materials.add(StandardMaterial {
+                                base_color: Color::WHITE,
+                                ..default()
+                            })
+                        }),
+                )
+            } else {
+                None
+            };
+        let building_wall_instance_material = match batch.key.render_class {
+            TileRenderClass::BuildingWallGrid(visual_kind) => Some(make_building_wall_material(
+                building_wall_materials,
+                game_bevy::world_render::building_wall_visual_profile(visual_kind),
+            )),
+            TileRenderClass::Standard => None,
+        };
+        for instance in &batch.instances {
+            let Some((spawned, occluder_cells, occluder_kind)) = spawn_tile_instance(
+                commands,
+                meshes,
+                materials,
+                building_wall_materials,
+                &batch,
+                instance,
+                standard_instance_material.clone(),
+                building_wall_instance_material.clone(),
+            ) else {
+                continue;
+            };
+            commands.entity(batch_root).add_child(spawned.entity);
+            static_world_state.entities.push(spawned.entity);
+            if let Some(handle) = spawned.tile_instance_handle {
+                static_world_state.tile_instances.insert(
+                    handle,
+                    StaticWorldTileInstanceVisual {
+                        entity: spawned.entity,
+                        material: spawned.material.clone(),
+                        material_fade_enabled: false,
+                        base_color: spawned.color,
+                        base_alpha: spawned.color.to_srgba().alpha,
+                        base_alpha_mode: AlphaMode::Opaque,
+                        desired_faded: false,
+                        applied_faded: false,
+                    },
+                );
+            }
+            if occluder_kind.is_some() {
+                static_world_state
+                    .occluders
+                    .push(occluder_visual_from_spawned_mesh(
+                        spawned,
+                        occluder_cells,
+                        floor_top,
+                        grid_size,
+                        render_config,
+                    ));
+            }
         }
     }
 
@@ -134,126 +237,133 @@ pub(super) fn rebuild_static_world(
         );
         static_world_state.entities.push(entity);
     }
+
+    static_world_state.rebuild_occluder_index();
 }
 
-fn spawn_tile_placement(
+fn spawn_tile_instance(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
-    asset_server: &AssetServer,
-    world_tiles: &game_bevy::WorldTileDefinitions,
-    placement: game_bevy::tile_world::TilePlacementSpec,
+    batch: &PreparedTileBatch,
+    instance: &PreparedTileInstance,
+    standard_instance_material: Option<Handle<StandardMaterial>>,
+    building_wall_instance_material: Option<StaticWorldMaterialHandle>,
 ) -> Option<(
     SpawnedMeshVisual,
-    Vec<Entity>,
     Vec<GridCoord>,
     Option<StaticWorldOccluderKind>,
 )> {
-    let prototype = world_tiles.0.prototype(&placement.prototype_id)?;
-    let mesh: Handle<Mesh> = match &prototype.source {
-        game_data::WorldTilePrototypeSource::GltfScene { path, .. } => asset_server.load(
-            GltfAssetLabel::Primitive {
-                mesh: 0,
-                primitive: 0,
-            }
-            .from_asset(path.clone()),
-        ),
-    };
-    let local_center = Vec3::new(
-        prototype.bounds.center.x,
-        prototype.bounds.center.y,
-        prototype.bounds.center.z,
-    );
-    let local_half_extents = Vec3::new(
-        prototype.bounds.size.x * 0.5 * placement.scale.x.abs().max(0.001),
-        prototype.bounds.size.y * 0.5 * placement.scale.y.abs().max(0.001),
-        prototype.bounds.size.z * 0.5 * placement.scale.z.abs().max(0.001),
-    );
-    let semantic = placement.semantic.clone();
+    let semantic = instance.semantic.clone();
     let pick_binding = semantic.as_ref().map(shared_semantic_to_binding);
-    let outline_target = pick_binding.as_ref().map(|binding| binding.semantic.clone());
-    let world_center = placement.translation + placement.rotation * local_center;
-    let transform = Transform::from_translation(placement.translation)
-        .with_rotation(placement.rotation)
-        .with_scale(placement.scale);
+    let outline_target = pick_binding
+        .as_ref()
+        .map(|binding| binding.semantic.clone());
 
-    let spawned = match placement.render_class {
-        TileRenderClass::BuildingWallGrid(visual_kind) => {
-            let profile = game_bevy::world_render::building_wall_visual_profile(visual_kind);
-            let color = profile.face_color;
-            let material = make_building_wall_material(building_wall_materials, profile);
-            spawn_loaded_mesh(
+    let spawned = match batch.key.render_class {
+        TileRenderClass::BuildingWallGrid(_) => {
+            let wall_cell = instance
+                .occluder_cells
+                .first()
+                .copied()
+                .expect("building wall tile should keep a single wall cell");
+            let wall_pick_binding = match semantic.as_ref() {
+                Some(shared_static_world::StaticWorldSemantic::MapObject(object_id)) => {
+                    Some(ViewerPickBindingSpec::building_part(
+                        object_id.clone(),
+                        wall_cell.y,
+                        crate::picking::BuildingPartKind::WallCell,
+                        wall_cell,
+                    ))
+                }
+                _ => pick_binding,
+            };
+            let outline_target = wall_pick_binding
+                .as_ref()
+                .map(|binding| binding.semantic.clone())
+                .or(outline_target);
+            let spawned_box = spawn_box(
                 commands,
-                material,
-                mesh,
-                transform,
-                color,
-                pick_binding,
-                outline_target,
-                world_center,
-                local_half_extents,
-            )
+                meshes,
+                materials,
+                building_wall_materials,
+                StaticWorldBoxSpec {
+                    size: instance.world_aabb_half_extents * 2.0,
+                    translation: instance.world_aabb_center,
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.0),
+                    material_style: MaterialStyle::InvisiblePickProxy,
+                    occluder_kind: None,
+                    occluder_cells: Vec::new(),
+                    pick_binding: wall_pick_binding,
+                    outline_target,
+                },
+            );
+            commands.entity(spawned_box.entity).insert((
+                game_bevy::world_render::WorldRenderTileInstanceTag {
+                    handle: instance.handle,
+                },
+                game_bevy::world_render::WorldRenderTileInstanceVisualState::default(),
+            ));
+            SpawnedMeshVisual {
+                entity: spawned_box.entity,
+                material: building_wall_instance_material
+                    .expect("building wall tile metadata should carry wall material"),
+                tile_instance_handle: Some(instance.handle),
+                aabb_center: instance.world_aabb_center,
+                aabb_half_extents: instance.world_aabb_half_extents,
+                color: Color::WHITE,
+            }
         }
         TileRenderClass::Standard => {
-            let material: Handle<StandardMaterial> = match &prototype.source {
-                game_data::WorldTilePrototypeSource::GltfScene { path, .. } => asset_server.load(
-                    GltfAssetLabel::Material {
-                        index: 0,
-                        is_scale_inverted: false,
-                    }
-                    .from_asset(path.clone()),
-                ),
-            };
-            spawn_loaded_mesh(
+            let _ = pick_binding;
+            let _ = outline_target;
+            spawn_standard_tile_instance_metadata(
                 commands,
-                StaticWorldMaterialHandle::Standard(material),
-                mesh,
-                transform,
-                Color::WHITE,
-                pick_binding,
-                outline_target,
-                world_center,
-                local_half_extents,
+                instance,
+                standard_instance_material
+                    .expect("standard tile batches should provide a material handle"),
             )
         }
     };
-
-    let mut extra_entities = Vec::new();
-    if let Some(proxy) = placement.pick_proxy {
-        let proxy = spawn_box(
-            commands,
-            meshes,
-            materials,
-            building_wall_materials,
-            StaticWorldBoxSpec {
-                size: proxy.size,
-                translation: proxy.translation,
-                color: shared_static_world::default_color_for_role(SharedRole::InvisiblePickProxy),
-                material_style: MaterialStyle::InvisiblePickProxy,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                pick_binding: proxy.semantic.as_ref().map(shared_semantic_to_binding),
-                outline_target: proxy
-                    .semantic
-                    .as_ref()
-                    .map(shared_semantic_to_binding)
-                    .map(|binding| binding.semantic),
-            },
-        );
-        extra_entities.push(proxy.entity);
-    }
 
     Some((
         spawned,
-        extra_entities,
-        placement.occluder_cells,
-        placement.occluder_kind.map(|kind| match kind {
+        instance.occluder_cells.clone(),
+        instance.occluder_kind.clone().map(|kind| match kind {
             shared_static_world::StaticWorldOccluderKind::MapObject(kind) => {
                 StaticWorldOccluderKind::MapObject(kind)
             }
         }),
     ))
+}
+
+fn spawn_standard_tile_instance_metadata(
+    commands: &mut Commands,
+    instance: &PreparedTileInstance,
+    material: Handle<StandardMaterial>,
+) -> SpawnedMeshVisual {
+    let entity = commands
+        .spawn((
+            instance.transform,
+            GlobalTransform::from(instance.transform),
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+            game_bevy::world_render::WorldRenderTileInstanceTag {
+                handle: instance.handle,
+            },
+            game_bevy::world_render::WorldRenderTileInstanceVisualState::default(),
+        ))
+        .id();
+
+    SpawnedMeshVisual {
+        entity,
+        material: StaticWorldMaterialHandle::Standard(material),
+        tile_instance_handle: Some(instance.handle),
+        aabb_center: instance.world_aabb_center,
+        aabb_half_extents: instance.world_aabb_half_extents,
+        color: Color::WHITE,
+    }
 }
 
 fn shared_bounds(bounds: GridBounds) -> shared_static_world::StaticWorldGridBounds {

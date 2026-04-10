@@ -227,6 +227,19 @@ fn compute_visible_cells(world: &GridWorld, center: GridCoord, radius: i32) -> V
     visible
 }
 
+pub(crate) fn has_grid_line_of_sight(world: &GridWorld, from: GridCoord, to: GridCoord) -> bool {
+    if from.y != to.y {
+        return false;
+    }
+
+    let min_x = from.x.min(to.x);
+    let max_x = from.x.max(to.x);
+    let min_z = from.z.min(to.z);
+    let max_z = from.z.max(to.z);
+    let blockers = blocker_cells(world, from.y, min_x, max_x, min_z, max_z);
+    has_line_of_sight(from, to, &blockers)
+}
+
 fn vision_bounds(world: &GridWorld, center: GridCoord, radius: i32) -> Option<VisionBounds> {
     let size = world.map_size()?;
     Some(VisionBounds {
@@ -341,6 +354,7 @@ mod tests {
                     blocks_movement: true,
                     blocks_sight: true,
                     terrain: "wall".into(),
+                    visual: None,
                     extra: BTreeMap::new(),
                 }],
             }],

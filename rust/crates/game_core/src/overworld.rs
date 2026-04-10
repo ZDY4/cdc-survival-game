@@ -407,6 +407,7 @@ mod tests {
             grid: GridCoord::new(x, 0, z),
             terrain,
             blocked,
+            visual: None,
             extra: BTreeMap::new(),
         }
     }

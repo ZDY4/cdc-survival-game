@@ -1,4 +1,7 @@
 use super::*;
+use crate::simulation::{
+    AttackTargetingQueryResult, SkillSpatialPreviewResult, SkillTargetingQueryResult,
+};
 
 impl SimulationRuntime {
     pub fn world_to_grid(&self, world: WorldCoord) -> GridCoord {
@@ -15,6 +18,28 @@ impl SimulationRuntime {
 
     pub fn get_actor_attack_range(&self, actor_id: ActorId) -> f32 {
         self.simulation.attack_range(actor_id)
+    }
+
+    pub fn query_attack_targeting(&self, actor_id: ActorId) -> AttackTargetingQueryResult {
+        self.simulation.query_attack_targeting(actor_id)
+    }
+
+    pub fn query_skill_targeting(
+        &self,
+        actor_id: ActorId,
+        skill_id: &str,
+    ) -> SkillTargetingQueryResult {
+        self.simulation.query_skill_targeting(actor_id, skill_id)
+    }
+
+    pub fn preview_skill_target(
+        &self,
+        actor_id: ActorId,
+        skill_id: &str,
+        target: SkillTargetRequest,
+    ) -> SkillSpatialPreviewResult {
+        self.simulation
+            .preview_skill_target(actor_id, skill_id, target)
     }
 
     pub fn grid_walkable(&self, grid: GridCoord) -> bool {

@@ -108,8 +108,8 @@ fn render_inventory_equipment_section(
                 .spawn(Node {
                     width: Val::Percent(100.0),
                     flex_wrap: FlexWrap::Wrap,
-                    column_gap: px(8),
                     row_gap: px(8),
+                    justify_content: JustifyContent::SpaceBetween,
                     ..default()
                 })
                 .with_children(|slots| {
@@ -125,10 +125,11 @@ fn render_inventory_equipment_section(
                         let mut slot_entity = slots.spawn((
                             Button,
                             Node {
-                                width: px(140),
-                                min_height: px(62),
+                                width: Val::Percent(31.0),
+                                aspect_ratio: Some(1.0),
                                 padding: UiRect::all(px(8)),
                                 flex_direction: FlexDirection::Column,
+                                justify_content: JustifyContent::SpaceBetween,
                                 row_gap: px(4),
                                 border: UiRect::all(px(if is_drag_hover { 2.0 } else { 1.0 })),
                                 ..default()

@@ -43,7 +43,9 @@ pub fn spawn_preview_light_rig(commands: &mut Commands) -> [Entity; 2] {
 }
 
 pub fn spawn_preview_scene_host(commands: &mut Commands) -> Entity {
-    commands.spawn((Transform::default(), PreviewSceneHost)).id()
+    commands
+        .spawn((Transform::default(), PreviewSceneHost))
+        .id()
 }
 
 pub fn replace_preview_scene(

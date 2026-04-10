@@ -2,8 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use bevy::asset::LoadState;
-use bevy::camera::{CameraOutputMode, ClearColorConfig};
 use bevy::camera::primitives::MeshAabb;
+use bevy::camera::{CameraOutputMode, ClearColorConfig};
 use bevy::prelude::*;
 use bevy::render::render_resource::BlendState;
 use bevy_egui::{
@@ -345,13 +345,14 @@ fn viewer_ui_system(
                 for entry in filtered {
                     let selected = ui_state.selected_model_path.as_deref()
                         == Some(entry.relative_path.as_str());
-                    let response = ui.add_sized(
-                        [ui.available_width(), 0.0],
-                        egui::Button::new(entry.display_name.as_str())
-                            .selected(selected)
-                            .truncate(),
-                    )
-                    .on_hover_text(entry.relative_path.as_str());
+                    let response = ui
+                        .add_sized(
+                            [ui.available_width(), 0.0],
+                            egui::Button::new(entry.display_name.as_str())
+                                .selected(selected)
+                                .truncate(),
+                        )
+                        .on_hover_text(entry.relative_path.as_str());
                     if response.clicked() {
                         ui_state.selected_model_path = Some(entry.relative_path.clone());
                         preview_camera.set_orbit(default_viewer_orbit());
@@ -371,8 +372,10 @@ fn viewer_ui_system(
                 height: rect.height(),
             });
             ui.allocate_rect(rect, egui::Sense::hover());
-            let info_rect =
-                egui::Rect::from_min_size(rect.left_top() + egui::vec2(10.0, 10.0), egui::vec2(360.0, 56.0));
+            let info_rect = egui::Rect::from_min_size(
+                rect.left_top() + egui::vec2(10.0, 10.0),
+                egui::vec2(360.0, 56.0),
+            );
             ui.painter().rect_filled(
                 info_rect,
                 6.0,
@@ -508,7 +511,9 @@ fn frame_loaded_scene_system(
     let target_fill = DEFAULT_MODEL_VIEWPORT_FILL.clamp(0.1, 0.95);
     let radius_y = half_extents.y.max(0.35) / (vertical_half_fov.tan() * target_fill);
     let radius_z = half_extents.z.max(0.35) * 1.35;
-    let radius = radius_y.max(radius_z).clamp(CAMERA_RADIUS_MIN, CAMERA_RADIUS_MAX);
+    let radius = radius_y
+        .max(radius_z)
+        .clamp(CAMERA_RADIUS_MIN, CAMERA_RADIUS_MAX);
 
     preview_camera.set_orbit(PreviewOrbitCamera {
         focus: bounds.center(),
@@ -598,7 +603,10 @@ fn paint_axis_gizmo(ui: &mut egui::Ui, rect: egui::Rect, orbit: PreviewOrbitCame
     painter.circle_stroke(
         center,
         24.0,
-        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(210, 215, 224, 64)),
+        egui::Stroke::new(
+            1.0,
+            egui::Color32::from_rgba_unmultiplied(210, 215, 224, 64),
+        ),
     );
 
     let mut axes = [
@@ -611,7 +619,11 @@ fn paint_axis_gizmo(ui: &mut egui::Ui, rect: egui::Rect, orbit: PreviewOrbitCame
         let depth = axis.dot(forward);
         (depth, label, color, center + screen)
     });
-    axes.sort_by(|left, right| left.0.partial_cmp(&right.0).unwrap_or(std::cmp::Ordering::Equal));
+    axes.sort_by(|left, right| {
+        left.0
+            .partial_cmp(&right.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     for (_, label, color, end) in axes {
         painter.line_segment([center, end], egui::Stroke::new(2.0, color));
@@ -625,7 +637,6 @@ fn paint_axis_gizmo(ui: &mut egui::Ui, rect: egui::Rect, orbit: PreviewOrbitCame
         );
     }
 }
-
 
 fn collect_models(asset_root: &Path, current_dir: &Path, entries: &mut Vec<ModelEntry>) {
     let Ok(read_dir) = fs::read_dir(current_dir) else {

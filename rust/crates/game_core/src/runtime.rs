@@ -2210,6 +2210,7 @@ mod tests {
                     grid: GridCoord::new(0, 0, 0),
                     terrain: OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 }],
                 travel_rules: OverworldTravelRuleSet::default(),
@@ -2760,6 +2761,7 @@ mod tests {
                                 OverworldTerrainKind::Road
                             },
                             blocked: false,
+                            visual: None,
                             extra: BTreeMap::new(),
                         })
                     })
@@ -2799,24 +2801,28 @@ mod tests {
                         grid: GridCoord::new(0, 0, 0),
                         terrain: OverworldTerrainKind::Road,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(1, 0, 0),
                         terrain: OverworldTerrainKind::Road,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(2, 0, 0),
                         terrain: OverworldTerrainKind::Urban,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                     OverworldCellDefinition {
                         grid: GridCoord::new(3, 0, 0),
                         terrain: OverworldTerrainKind::Road,
                         blocked: false,
+                        visual: None,
                         extra: BTreeMap::new(),
                     },
                 ],

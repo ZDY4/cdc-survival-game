@@ -148,8 +148,7 @@ mod tests {
     use super::*;
     use game_data::{
         OverworldDefinition, OverworldId, OverworldLibrary, OverworldLocationDefinition,
-        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind,
-        OverworldTravelRuleSet,
+        OverworldLocationId, OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet,
     };
     use std::collections::BTreeMap;
 

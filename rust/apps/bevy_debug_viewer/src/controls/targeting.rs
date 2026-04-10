@@ -19,32 +19,22 @@ pub(crate) fn enter_attack_targeting(
         return Err("自由观察模式下无法攻击".to_string());
     }
 
-    let Some(actor_grid) = runtime_state.runtime.get_actor_grid_position(actor_id) else {
-        return Err("攻击者不存在".to_string());
-    };
-    let attack_range = runtime_state.runtime.get_actor_attack_range(actor_id);
-    let mut valid_grids = std::collections::BTreeSet::new();
-    let mut valid_actor_ids = std::collections::BTreeSet::new();
-    for actor in snapshot
-        .actors
-        .iter()
-        .filter(|actor| actor.side == ActorSide::Hostile)
-    {
-        if actor.grid_position.y != actor_grid.y {
-            continue;
-        }
-        if attack_target_in_range(
-            &runtime_state.runtime,
-            actor_grid,
-            actor.grid_position,
-            attack_range,
-        ) {
-            valid_grids.insert(actor.grid_position);
-            valid_actor_ids.insert(actor.actor_id);
-        }
-    }
+    let query = runtime_state.runtime.query_attack_targeting(actor_id);
+    let valid_grids = query
+        .valid_grids
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    let valid_actor_ids = query
+        .valid_actor_ids
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
     if valid_actor_ids.is_empty() {
-        return Err("范围内没有可攻击目标".to_string());
+        return Err(query
+            .invalid_reason
+            .as_deref()
+            .map(targeting_reason_text)
+            .unwrap_or("范围内没有可攻击目标")
+            .to_string());
     }
 
     viewer_state.targeting_state = Some(ViewerTargetingState {
@@ -76,36 +66,28 @@ pub(crate) fn enter_skill_targeting(
     let actor_id = viewer_state
         .command_actor_id(&snapshot)
         .ok_or_else(|| "请选择可控制角色".to_string())?;
-    let Some(actor_grid) = runtime_state.runtime.get_actor_grid_position(actor_id) else {
-        return Err("施法者不存在".to_string());
-    };
     let Some(skill) = skills.0.get(skill_id) else {
         return Err(format!("未知技能 {skill_id}"));
     };
-    let Some(targeting) = skill
-        .activation
-        .as_ref()
-        .and_then(|activation| activation.targeting.as_ref())
-        .filter(|targeting| targeting.enabled)
-    else {
-        return Err(format!("{} 不需要选择目标", skill.name));
-    };
-
-    let valid_grids = collect_valid_target_grids(
-        &runtime_state.runtime,
-        &snapshot,
-        actor_grid,
-        targeting.range_cells,
-    );
+    let query = runtime_state
+        .runtime
+        .query_skill_targeting(actor_id, skill_id);
+    let valid_grids = query
+        .valid_grids
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
     if valid_grids.is_empty() {
-        return Err(format!("{} 当前没有可选目标格", skill.name));
+        let reason = query
+            .invalid_reason
+            .as_deref()
+            .map(targeting_reason_text)
+            .unwrap_or("当前没有可选目标格");
+        return Err(format!("{} {reason}", skill.name));
     }
-    let valid_actor_ids = snapshot
-        .actors
-        .iter()
-        .filter(|actor| valid_grids.contains(&actor.grid_position))
-        .map(|actor| actor.actor_id)
-        .collect();
+    let valid_actor_ids = query
+        .valid_actor_ids
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
 
     viewer_state.targeting_state = Some(ViewerTargetingState {
         actor_id,
@@ -114,8 +96,8 @@ pub(crate) fn enter_skill_targeting(
             skill_name: skill.name.clone(),
         },
         source,
-        shape: targeting.shape.trim().to_string(),
-        radius: targeting.radius.max(0),
+        shape: query.shape,
+        radius: query.radius,
         valid_grids,
         valid_actor_ids,
         hovered_grid: None,
@@ -145,102 +127,42 @@ pub(crate) fn refresh_targeting_preview(
         return;
     };
 
-    targeting.preview_hit_grids = affected_grids_for_shape(
-        &runtime_state.runtime,
-        grid,
-        targeting.shape.as_str(),
-        targeting.radius,
-    );
-    targeting.preview_hit_actor_ids = runtime_state
-        .runtime
-        .snapshot()
-        .actors
-        .iter()
-        .filter(|actor| targeting.preview_hit_grids.contains(&actor.grid_position))
-        .map(|actor| actor.actor_id)
-        .collect();
-
-    if targeting.shape == "single" {
-        if let Some(actor) = actor_at_grid(&runtime_state.runtime.snapshot(), grid)
-            .filter(|actor| targeting.valid_actor_ids.contains(&actor.actor_id))
-        {
-            targeting.preview_target = Some(SkillTargetRequest::Actor(actor.actor_id));
-        } else {
-            targeting.preview_target = Some(SkillTargetRequest::Grid(grid));
-        }
-    } else {
-        targeting.preview_target = Some(SkillTargetRequest::Grid(grid));
-    }
-}
-
-fn collect_valid_target_grids(
-    runtime: &game_core::SimulationRuntime,
-    snapshot: &game_core::SimulationSnapshot,
-    actor_grid: GridCoord,
-    range_cells: i32,
-) -> std::collections::BTreeSet<GridCoord> {
-    let grids = snapshot
-        .grid
-        .map_cells
-        .iter()
-        .map(|cell| cell.grid)
-        .filter(|grid| grid.y == actor_grid.y)
-        .filter(|grid| runtime.is_grid_in_bounds(*grid))
-        .filter(|grid| manhattan_distance(actor_grid, *grid) <= range_cells.max(0))
-        .collect::<std::collections::BTreeSet<_>>();
-
-    if grids.is_empty() {
-        std::iter::once(actor_grid)
-            .filter(|grid| runtime.is_grid_in_bounds(*grid))
-            .collect()
-    } else {
-        grids
-    }
-}
-
-fn affected_grids_for_shape(
-    runtime: &game_core::SimulationRuntime,
-    center: GridCoord,
-    shape: &str,
-    radius: i32,
-) -> Vec<GridCoord> {
-    let radius = radius.max(0);
-    let mut grids = Vec::new();
-    for dx in -radius..=radius {
-        for dz in -radius..=radius {
-            let include = match shape {
-                "diamond" => dx.abs() + dz.abs() <= radius,
-                "square" => true,
-                _ => dx == 0 && dz == 0,
-            };
-            if !include {
-                continue;
+    match &targeting.action {
+        ViewerTargetingAction::Attack => {
+            if let Some(actor) = actor_at_grid(&runtime_state.runtime.snapshot(), grid)
+                .filter(|actor| targeting.valid_actor_ids.contains(&actor.actor_id))
+            {
+                targeting.preview_target = Some(SkillTargetRequest::Actor(actor.actor_id));
+                targeting.preview_hit_grids = vec![grid];
+                targeting.preview_hit_actor_ids = vec![actor.actor_id];
             }
-            let grid = GridCoord::new(center.x + dx, center.y, center.z + dz);
-            if runtime.is_grid_in_bounds(grid) {
-                grids.push(grid);
+        }
+        ViewerTargetingAction::Skill { skill_id, .. } => {
+            let preview = runtime_state.runtime.preview_skill_target(
+                targeting.actor_id,
+                skill_id,
+                SkillTargetRequest::Grid(grid),
+            );
+            if preview.invalid_reason.is_none() {
+                targeting.preview_target = preview.resolved_target;
+                targeting.preview_hit_grids = preview.preview_hit_grids;
+                targeting.preview_hit_actor_ids = preview.preview_hit_actor_ids;
             }
         }
     }
-    if grids.is_empty() {
-        grids.push(center);
+}
+
+fn targeting_reason_text(reason: &str) -> &'static str {
+    match reason {
+        "unknown_actor" => "施法者不存在",
+        "unknown_skill" => "技能不存在",
+        "skill_targeting_disabled" => "不需要选择目标",
+        "target_out_of_bounds" => "目标超出边界",
+        "target_invalid_level" => "目标不在同一楼层",
+        "target_out_of_range" => "目标超出范围",
+        "target_blocked_by_los" => "目标被遮挡",
+        "no_attack_targets" => "范围内没有可攻击目标",
+        "no_skill_targets" => "当前没有可选目标格",
+        _ => "当前没有可选目标",
     }
-    grids
-}
-
-fn attack_target_in_range(
-    runtime: &game_core::SimulationRuntime,
-    actor_grid: GridCoord,
-    target_grid: GridCoord,
-    attack_range: f32,
-) -> bool {
-    let actor_world = runtime.grid_to_world(actor_grid);
-    let target_world = runtime.grid_to_world(target_grid);
-    let dx = actor_world.x - target_world.x;
-    let dz = actor_world.z - target_world.z;
-    (dx * dx + dz * dz).sqrt() <= attack_range + 0.05
-}
-
-fn manhattan_distance(left: GridCoord, right: GridCoord) -> i32 {
-    (left.x - right.x).abs() + (left.z - right.z).abs()
 }

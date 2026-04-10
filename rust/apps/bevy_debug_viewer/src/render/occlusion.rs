@@ -136,6 +136,7 @@ pub(super) fn occluder_visual_from_spawned_box(
     let top_y = spawned.translation.y + spawned.size.y * 0.5;
     StaticWorldOccluderVisual {
         material: spawned.material,
+        tile_instance_handle: None,
         base_color: spawned.color,
         base_alpha,
         base_alpha_mode: AlphaMode::Opaque,
@@ -164,6 +165,7 @@ pub(super) fn occluder_visual_from_spawned_mesh(
     let top_y = spawned.aabb_center.y + spawned.aabb_half_extents.y;
     StaticWorldOccluderVisual {
         material: spawned.material,
+        tile_instance_handle: spawned.tile_instance_handle,
         base_color: spawned.color,
         base_alpha,
         base_alpha_mode: AlphaMode::Opaque,
@@ -277,11 +279,25 @@ pub(super) fn should_fade_occluder(
 pub(super) fn set_occluder_faded(
     occluder: &mut StaticWorldOccluderVisual,
     faded: bool,
+    mut tile_instances: Option<
+        &mut HashMap<WorldRenderTileInstanceHandle, StaticWorldTileInstanceVisual>,
+    >,
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
     if occluder.currently_faded == faded {
         return;
+    }
+
+    if let Some(handle) = occluder.tile_instance_handle {
+        if let Some(tile_instance) = tile_instances
+            .as_deref_mut()
+            .and_then(|instances| instances.get_mut(&handle))
+        {
+            tile_instance.desired_faded = faded;
+            occluder.currently_faded = faded;
+            return;
+        }
     }
 
     match &occluder.material {
@@ -322,13 +338,32 @@ pub(super) fn set_occluder_faded(
     occluder.currently_faded = faded;
 }
 
+pub(super) fn tile_instance_visual_state_for_fade(
+    base_color: Color,
+    faded: bool,
+) -> game_bevy::world_render::WorldRenderTileInstanceVisualState {
+    game_bevy::world_render::WorldRenderTileInstanceVisualState {
+        fade_alpha: if faded { 0.28 } else { 1.0 },
+        tint: base_color.with_alpha(1.0),
+    }
+}
+
 pub(super) fn restore_occluder_list(
     occluders: &mut [StaticWorldOccluderVisual],
+    mut tile_instances: Option<
+        &mut HashMap<WorldRenderTileInstanceHandle, StaticWorldTileInstanceVisual>,
+    >,
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
     for occluder in occluders {
-        set_occluder_faded(occluder, false, materials, building_wall_materials);
+        set_occluder_faded(
+            occluder,
+            false,
+            tile_instances.as_deref_mut(),
+            materials,
+            building_wall_materials,
+        );
     }
 }
 
@@ -338,6 +373,9 @@ pub(super) fn update_occluder_list_fade(
     focus_points: &[Vec3],
     visible_cells: &HashSet<GridCoord>,
     hovered_map_object_id: Option<&str>,
+    mut tile_instances: Option<
+        &mut HashMap<WorldRenderTileInstanceHandle, StaticWorldTileInstanceVisual>,
+    >,
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
@@ -347,6 +385,76 @@ pub(super) fn update_occluder_list_fade(
         } else {
             should_fade_occluder(camera_position, focus_points, occluder, visible_cells)
         };
-        set_occluder_faded(occluder, should_fade, materials, building_wall_materials);
+        set_occluder_faded(
+            occluder,
+            should_fade,
+            tile_instances.as_deref_mut(),
+            materials,
+            building_wall_materials,
+        );
+    }
+}
+
+pub(super) fn apply_tile_instance_fade_updates(
+    tile_instances: &mut HashMap<WorldRenderTileInstanceHandle, StaticWorldTileInstanceVisual>,
+    mut write_visual_state: impl FnMut(
+        Entity,
+        game_bevy::world_render::WorldRenderTileInstanceVisualState,
+    ),
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+) {
+    for tile_instance in tile_instances.values_mut() {
+        if tile_instance.applied_faded == tile_instance.desired_faded {
+            continue;
+        }
+
+        let visual_state = tile_instance_visual_state_for_fade(
+            tile_instance.base_color,
+            tile_instance.desired_faded,
+        );
+        write_visual_state(tile_instance.entity, visual_state);
+
+        if !tile_instance.material_fade_enabled {
+            tile_instance.applied_faded = tile_instance.desired_faded;
+            continue;
+        }
+
+        match &tile_instance.material {
+            StaticWorldMaterialHandle::Standard(handle) => {
+                let Some(material) = materials.get_mut(handle) else {
+                    tile_instance.applied_faded = tile_instance.desired_faded;
+                    continue;
+                };
+                apply_occluder_fade_to_standard_material(
+                    material,
+                    tile_instance.base_color,
+                    tile_instance.base_alpha,
+                    &tile_instance.base_alpha_mode,
+                    tile_instance.desired_faded,
+                );
+            }
+            StaticWorldMaterialHandle::BuildingWallGrid(handle) => {
+                let Some(material) = building_wall_materials.get_mut(handle) else {
+                    tile_instance.applied_faded = tile_instance.desired_faded;
+                    continue;
+                };
+                apply_occluder_fade_to_standard_material(
+                    &mut material.base,
+                    tile_instance.base_color,
+                    tile_instance.base_alpha,
+                    &tile_instance.base_alpha_mode,
+                    tile_instance.desired_faded,
+                );
+                apply_occluder_fade_to_building_wall_material_ext(
+                    &mut material.extension,
+                    tile_instance.base_color,
+                    tile_instance.base_alpha,
+                    tile_instance.desired_faded,
+                );
+            }
+        }
+
+        tile_instance.applied_faded = tile_instance.desired_faded;
     }
 }

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
+use bevy::render::view::NoIndirectDrawing;
 use bevy_egui::input::EguiWantsInput;
 use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 use game_bevy::world_render::{
@@ -352,6 +353,7 @@ fn setup_editor(
         Projection::from(perspective),
         Transform::from_xyz(18.0, 18.0, 18.0).looking_at(Vec3::ZERO, Vec3::Y),
         EditorCamera,
+        NoIndirectDrawing,
     ));
 }
 

@@ -26,6 +26,7 @@ pub(super) fn sync_generated_door_visuals(
     if should_rebuild_static_world(&door_visual_state.key, &next_key) {
         restore_occluder_list(
             &mut door_visual_state.occluders,
+            None,
             materials,
             building_wall_materials,
         );
@@ -87,6 +88,7 @@ pub(super) fn sync_generated_door_visuals(
 
     restore_occluder_list(
         &mut door_visual_state.occluders,
+        None,
         materials,
         building_wall_materials,
     );
@@ -102,6 +104,7 @@ pub(super) fn collect_closed_door_occluders(
         .filter(|visual| !visual.is_open)
         .map(|visual| StaticWorldOccluderVisual {
             material: visual.material.clone(),
+            tile_instance_handle: None,
             base_color: visual.base_color,
             base_alpha: visual.base_alpha,
             base_alpha_mode: visual.base_alpha_mode.clone(),

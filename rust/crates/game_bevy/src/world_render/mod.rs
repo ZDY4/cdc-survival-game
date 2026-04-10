@@ -1,8 +1,10 @@
 use bevy::asset::load_internal_asset;
-use bevy::pbr::MaterialPlugin;
+use bevy::pbr::{MaterialPlugin, StandardMaterial};
 use bevy::prelude::*;
+use bevy::render::extract_component::ExtractComponent;
 use game_core::{grid::GridWorld, GeneratedDoorDebugState, SimulationSnapshot};
-use game_data::{MapDefinition, MapId, OverworldDefinition};
+use game_data::{MapDefinition, MapId, OverworldDefinition, WorldTileLibrary};
+use std::collections::HashMap;
 
 use crate::static_world::{
     build_static_world_from_map_definition, build_static_world_from_overworld_definition,
@@ -10,14 +12,18 @@ use crate::static_world::{
     StaticWorldSceneSpec,
 };
 use crate::tile_world::{
-    default_floor_top, resolve_map_object_visual_placements, resolve_snapshot_object_visual_placements,
-    TilePlacementSpec,
+    default_floor_top, resolve_map_object_visual_placements,
+    resolve_snapshot_object_visual_placements, resolve_tile_world_scene, TilePlacementSpec,
+    TileWorldSceneSpec,
 };
 
 mod doors;
+mod instanced_building_wall;
+mod instanced_standard;
 mod materials;
 mod mesh_builders;
 mod spawn;
+mod tile_assets;
 
 pub use doors::{
     build_generated_door_mesh_spec, generated_door_open_yaw, generated_door_pivot_translation,
@@ -36,9 +42,15 @@ pub use spawn::{
     apply_world_render_camera_projection, spawn_world_render_light_rig, spawn_world_render_scene,
     WorldRenderBillboardLabel,
 };
+pub use tile_assets::{
+    load_tile_mesh_handle, load_tile_standard_material_handle, prepare_tile_batch_scene,
+    tile_prototype_local_bounds, PreparedTileBatch, PreparedTileBatchScene, PreparedTileInstance,
+};
 
 pub const GRID_GROUND_SHADER_PATH: &str = "grid_ground.wgsl";
 pub const BUILDING_WALL_GRID_SHADER_PATH: &str = "building_wall_grid.wgsl";
+pub const BUILDING_WALL_TILE_INSTANCING_SHADER_PATH: &str = "building_wall_tile_instancing.wgsl";
+pub const STANDARD_TILE_INSTANCING_SHADER_PATH: &str = "standard_tile_instancing.wgsl";
 
 pub struct WorldRenderPlugin;
 
@@ -56,9 +68,142 @@ impl Plugin for WorldRenderPlugin {
             "building_wall_grid.wgsl",
             Shader::from_wgsl
         );
+        load_internal_asset!(
+            app,
+            instanced_building_wall::BUILDING_WALL_TILE_INSTANCING_SHADER_HANDLE,
+            "building_wall_tile_instancing.wgsl",
+            Shader::from_wgsl
+        );
+        load_internal_asset!(
+            app,
+            instanced_standard::STANDARD_TILE_INSTANCING_SHADER_HANDLE,
+            "standard_tile_instancing.wgsl",
+            Shader::from_wgsl
+        );
         app.add_plugins(MaterialPlugin::<GridGroundMaterial>::default())
             .add_plugins(MaterialPlugin::<BuildingWallGridMaterial>::default())
-            .add_systems(Update, spawn::orient_world_render_billboard_labels);
+            .add_plugins(instanced_building_wall::WorldRenderBuildingWallTileInstancingPlugin)
+            .add_plugins(instanced_standard::WorldRenderStandardTileInstancingPlugin)
+            .add_systems(
+                Update,
+                (
+                    spawn::sync_world_render_tile_batch_visual_states,
+                    spawn::sync_world_render_building_wall_tile_render_batches,
+                    spawn::sync_world_render_standard_tile_render_batches,
+                    spawn::sync_world_render_standard_tile_batch_material_states,
+                    spawn::orient_world_render_billboard_labels,
+                ),
+            );
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WorldRenderTileBatchId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WorldRenderTileInstanceHandle {
+    pub batch_id: WorldRenderTileBatchId,
+    pub instance_index: u32,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WorldRenderTileBatchRoot {
+    pub id: WorldRenderTileBatchId,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WorldRenderTileInstanceTag {
+    pub handle: WorldRenderTileInstanceHandle,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct WorldRenderTileInstanceVisualState {
+    pub fade_alpha: f32,
+    pub tint: Color,
+}
+
+impl Default for WorldRenderTileInstanceVisualState {
+    fn default() -> Self {
+        Self {
+            fade_alpha: 1.0,
+            tint: Color::WHITE,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorldRenderTileInstanceRenderData {
+    pub handle: WorldRenderTileInstanceHandle,
+    pub transform: Transform,
+    pub fade_alpha: f32,
+    pub tint: Color,
+}
+
+#[derive(Component, Debug, Clone, Default, PartialEq, ExtractComponent)]
+pub struct WorldRenderTileBatchVisualState {
+    pub instances: Vec<WorldRenderTileInstanceRenderData>,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, ExtractComponent)]
+pub struct WorldRenderStandardTileBatchSource {
+    pub logical_batch_entity: Entity,
+    pub material: Handle<StandardMaterial>,
+    pub prototype_local_transform: Transform,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, ExtractComponent)]
+pub struct WorldRenderBuildingWallTileBatchSource {
+    pub logical_batch_entity: Entity,
+    pub visual_kind: game_data::MapBuildingWallVisualKind,
+    pub prototype_local_transform: Transform,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, ExtractComponent)]
+pub struct WorldRenderStandardTileBatchMaterialState {
+    pub base_color: Color,
+}
+
+impl Default for WorldRenderStandardTileBatchMaterialState {
+    fn default() -> Self {
+        Self {
+            base_color: Color::WHITE,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnedWorldRenderTileBatch {
+    pub root_entity: Entity,
+    pub render_entities: Vec<Entity>,
+    pub instance_entities: Vec<Entity>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpawnedWorldRenderTileInstance {
+    pub entity: Entity,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SpawnedWorldRenderScene {
+    pub entities: Vec<Entity>,
+    pub tile_batches: HashMap<WorldRenderTileBatchId, SpawnedWorldRenderTileBatch>,
+    pub tile_instances: HashMap<WorldRenderTileInstanceHandle, SpawnedWorldRenderTileInstance>,
+}
+
+impl SpawnedWorldRenderScene {
+    pub fn tile_instance_entity(&self, handle: WorldRenderTileInstanceHandle) -> Option<Entity> {
+        self.tile_instances
+            .get(&handle)
+            .map(|instance| instance.entity)
+    }
+}
+
+impl IntoIterator for SpawnedWorldRenderScene {
+    type Item = Entity;
+    type IntoIter = std::vec::IntoIter<Entity>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entities.into_iter()
     }
 }
 
@@ -160,7 +305,13 @@ pub struct WorldRenderScene {
     pub current_level: i32,
     pub static_scene: StaticWorldSceneSpec,
     pub generated_doors: Vec<GeneratedDoorDebugState>,
-    pub prop_tiles: Vec<TilePlacementSpec>,
+    pub tile_placements: Vec<TilePlacementSpec>,
+}
+
+impl WorldRenderScene {
+    pub fn resolve_tile_scene(&self, world_tiles: &WorldTileLibrary) -> TileWorldSceneSpec {
+        resolve_tile_world_scene(&self.static_scene, &self.tile_placements, world_tiles)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -200,7 +351,7 @@ pub fn build_world_render_scene_from_map_definition(
             .filter(|door| door.level == current_level)
             .cloned()
             .collect(),
-        prop_tiles: resolve_map_object_visual_placements(
+        tile_placements: resolve_map_object_visual_placements(
             definition,
             current_level,
             floor_top,
@@ -236,7 +387,7 @@ pub fn build_world_render_scene_from_simulation_snapshot(
             .filter(|door| door.level == current_level)
             .cloned()
             .collect(),
-        prop_tiles: resolve_snapshot_object_visual_placements(
+        tile_placements: resolve_snapshot_object_visual_placements(
             snapshot,
             current_level,
             floor_top,
@@ -252,6 +403,6 @@ pub fn build_world_render_scene_from_overworld_definition(
         current_level: 0,
         static_scene: build_static_world_from_overworld_definition(definition),
         generated_doors: Vec::new(),
-        prop_tiles: Vec::new(),
+        tile_placements: Vec::new(),
     }
 }

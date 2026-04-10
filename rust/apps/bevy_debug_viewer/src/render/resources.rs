@@ -3,10 +3,12 @@
 use std::collections::HashMap;
 
 use super::types::{
-    GeneratedDoorVisual, GeneratedDoorVisualKey, StaticWorldOccluderVisual, StaticWorldVisualKey,
+    GeneratedDoorVisual, GeneratedDoorVisualKey, StaticWorldOccluderVisual,
+    StaticWorldTileInstanceVisual, StaticWorldVisualKey,
 };
 use crate::geometry::GridBounds;
 use bevy::prelude::*;
+use game_bevy::world_render::WorldRenderTileInstanceHandle;
 use game_data::{ActorId, GridCoord, MapId};
 
 #[derive(Resource, Default)]
@@ -14,6 +16,19 @@ pub(crate) struct StaticWorldVisualState {
     pub key: Option<StaticWorldVisualKey>,
     pub entities: Vec<Entity>,
     pub occluders: Vec<StaticWorldOccluderVisual>,
+    pub occluder_by_tile_instance: HashMap<WorldRenderTileInstanceHandle, usize>,
+    pub tile_instances: HashMap<WorldRenderTileInstanceHandle, StaticWorldTileInstanceVisual>,
+}
+
+impl StaticWorldVisualState {
+    pub(crate) fn rebuild_occluder_index(&mut self) {
+        self.occluder_by_tile_instance.clear();
+        for (index, occluder) in self.occluders.iter().enumerate() {
+            if let Some(handle) = occluder.tile_instance_handle {
+                self.occluder_by_tile_instance.insert(handle, index);
+            }
+        }
+    }
 }
 
 #[derive(Resource, Default)]

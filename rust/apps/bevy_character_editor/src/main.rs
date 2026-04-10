@@ -8,12 +8,6 @@ use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::{
     egui, EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext,
 };
-use game_editor::{
-    install_game_ui_fonts, preview_camera_input_system as shared_preview_camera_input_system,
-    preview_camera_sync_system as shared_preview_camera_sync_system, spawn_character_preview_scene,
-    spawn_preview_floor, spawn_preview_light_rig, CharacterPreviewPart, PreviewCameraController,
-    PreviewOrbitCamera, PreviewViewportRect,
-};
 use game_data::{
     build_character_ai_preview, build_character_ai_preview_at_time,
     build_character_appearance_preview, load_ai_module_library, load_character_appearance_library,
@@ -22,6 +16,12 @@ use game_data::{
     CharacterAiPreview, CharacterAiPreviewContext, CharacterAppearanceLibrary, CharacterDefinition,
     CharacterId, CharacterLibrary, ItemLibrary, NpcRole, ResolvedCharacterAppearancePreview,
     ScheduleDay, SettlementDefinition, SettlementId, SettlementLibrary,
+};
+use game_editor::{
+    install_game_ui_fonts, preview_camera_input_system as shared_preview_camera_input_system,
+    preview_camera_sync_system as shared_preview_camera_sync_system, spawn_character_preview_scene,
+    spawn_preview_floor, spawn_preview_light_rig, CharacterPreviewPart, PreviewCameraController,
+    PreviewOrbitCamera, PreviewViewportRect,
 };
 
 const LIST_PANEL_WIDTH: f32 = 250.0;
@@ -382,8 +382,10 @@ fn editor_ui_system(
             height: rect.height(),
         });
         ui.allocate_rect(rect, egui::Sense::hover());
-        let info_rect =
-            egui::Rect::from_min_size(rect.left_top() + egui::vec2(10.0, 10.0), egui::vec2(380.0, 56.0));
+        let info_rect = egui::Rect::from_min_size(
+            rect.left_top() + egui::vec2(10.0, 10.0),
+            egui::vec2(380.0, 56.0),
+        );
         ui.painter().rect_filled(
             info_rect,
             6.0,

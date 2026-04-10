@@ -8,6 +8,7 @@ use game_data::{ActorId, GridCoord, MapId, MapObjectKind};
 pub(crate) use game_bevy::world_render::{
     BuildingWallGridMaterial, BuildingWallGridMaterialExt, GridGroundMaterial,
     GridGroundMaterialExt, WorldRenderMaterialHandle as StaticWorldMaterialHandle,
+    WorldRenderTileInstanceHandle,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +46,7 @@ pub(crate) enum StaticWorldOccluderKind {
 #[derive(Debug, Clone)]
 pub(crate) struct StaticWorldOccluderVisual {
     pub material: StaticWorldMaterialHandle,
+    pub tile_instance_handle: Option<WorldRenderTileInstanceHandle>,
     pub base_color: Color,
     pub base_alpha: f32,
     pub base_alpha_mode: AlphaMode,
@@ -53,6 +55,18 @@ pub(crate) struct StaticWorldOccluderVisual {
     pub shadowed_visible_cells: Vec<GridCoord>,
     pub hover_map_object_id: Option<String>,
     pub currently_faded: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct StaticWorldTileInstanceVisual {
+    pub entity: Entity,
+    pub material: StaticWorldMaterialHandle,
+    pub material_fade_enabled: bool,
+    pub base_color: Color,
+    pub base_alpha: f32,
+    pub base_alpha_mode: AlphaMode,
+    pub desired_faded: bool,
+    pub applied_faded: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +101,7 @@ pub(crate) struct SpawnedBoxVisual {
 pub(crate) struct SpawnedMeshVisual {
     pub entity: Entity,
     pub material: StaticWorldMaterialHandle,
+    pub tile_instance_handle: Option<WorldRenderTileInstanceHandle>,
     pub aabb_center: Vec3,
     pub aabb_half_extents: Vec3,
     pub color: Color,

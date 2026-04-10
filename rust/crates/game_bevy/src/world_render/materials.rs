@@ -15,7 +15,7 @@ pub const GRID_GROUND_SHADER_HANDLE: Handle<Shader> =
 pub const BUILDING_WALL_GRID_SHADER_HANDLE: Handle<Shader> =
     uuid_handle!("2a65efec-9652-4ae5-9ea3-daf3f98dc0ff");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WorldRenderMaterialStyle {
     StructureAccent,
     BuildingDoor,

@@ -35,8 +35,8 @@ use game_core::{
 };
 use game_data::{
     ActorId, GridCoord, InteractionContextSnapshot, InteractionOptionId, InteractionPrompt,
-    InteractionTargetId, MapBuildingWallVisualKind, MapObjectFootprint, MapObjectKind, MapRotation,
-    MapBuildingTileSetSpec, ResolvedInteractionOption, TurnState, WorldCoord,
+    InteractionTargetId, MapBuildingTileSetSpec, MapBuildingWallVisualKind, MapObjectFootprint,
+    MapObjectKind, MapRotation, ResolvedInteractionOption, TurnState, WorldCoord,
     WorldWallTileSetId,
 };
 
@@ -1586,6 +1586,7 @@ fn sample_occluder(
 ) -> StaticWorldOccluderVisual {
     StaticWorldOccluderVisual {
         material: StaticWorldMaterialHandle::Standard(Handle::default()),
+        tile_instance_handle: None,
         base_color: Color::WHITE,
         base_alpha: 1.0,
         base_alpha_mode: AlphaMode::Opaque,
@@ -1652,6 +1653,7 @@ fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
     };
     let mut occluder = StaticWorldOccluderVisual {
         material,
+        tile_instance_handle: None,
         base_color: wall_profile.face_color,
         base_alpha: 1.0,
         base_alpha_mode: AlphaMode::Opaque,
@@ -1665,6 +1667,7 @@ fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
     set_occluder_faded(
         &mut occluder,
         true,
+        None,
         &mut materials,
         &mut building_wall_materials,
     );
@@ -1677,6 +1680,7 @@ fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
     set_occluder_faded(
         &mut occluder,
         false,
+        None,
         &mut materials,
         &mut building_wall_materials,
     );
@@ -1685,6 +1689,94 @@ fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
         .expect("wall grid material should exist after restore");
     assert_eq!(restored.extension.grid_line_visibility, 1.0);
     assert_eq!(restored.base.base_color.to_srgba().alpha, 1.0);
+}
+
+#[test]
+fn tile_instance_occluder_records_desired_fade_before_material_apply() {
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::LegacyGrid);
+    let material = make_building_wall_material(&mut building_wall_materials, wall_profile.clone());
+    let handle = WorldRenderTileInstanceHandle {
+        batch_id: game_bevy::world_render::WorldRenderTileBatchId(3),
+        instance_index: 7,
+    };
+    let mut tile_instances = HashMap::from([(
+        handle,
+        StaticWorldTileInstanceVisual {
+            entity: Entity::from_bits(77),
+            material: material.clone(),
+            material_fade_enabled: true,
+            base_color: wall_profile.face_color,
+            base_alpha: 1.0,
+            base_alpha_mode: AlphaMode::Opaque,
+            desired_faded: false,
+            applied_faded: false,
+        },
+    )]);
+    let StaticWorldMaterialHandle::BuildingWallGrid(material_handle) = material.clone() else {
+        panic!("building wall tile path should create wall grid material");
+    };
+    let mut occluder = StaticWorldOccluderVisual {
+        material,
+        tile_instance_handle: Some(handle),
+        base_color: wall_profile.face_color,
+        base_alpha: 1.0,
+        base_alpha_mode: AlphaMode::Opaque,
+        aabb_center: Vec3::ZERO,
+        aabb_half_extents: Vec3::splat(0.5),
+        shadowed_visible_cells: Vec::new(),
+        hover_map_object_id: None,
+        currently_faded: false,
+    };
+
+    set_occluder_faded(
+        &mut occluder,
+        true,
+        Some(&mut tile_instances),
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    assert!(occluder.currently_faded);
+    let tile_visual = tile_instances
+        .get(&handle)
+        .expect("tile instance visual should still exist");
+    assert!(tile_visual.desired_faded);
+    assert!(!tile_visual.applied_faded);
+    let material = building_wall_materials
+        .get(&material_handle)
+        .expect("wall grid material should still exist");
+    assert_eq!(material.extension.grid_line_visibility, 1.0);
+    assert_eq!(material.base.base_color.to_srgba().alpha, 1.0);
+
+    let mut applied_visual_state = None;
+    apply_tile_instance_fade_updates(
+        &mut tile_instances,
+        |entity, visual_state| {
+            applied_visual_state = Some((entity, visual_state));
+        },
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    let tile_visual = tile_instances
+        .get(&handle)
+        .expect("tile instance visual should still exist");
+    assert!(tile_visual.applied_faded);
+    let (entity, visual_state) =
+        applied_visual_state.expect("tile instance visual state should be written");
+    assert_eq!(entity, Entity::from_bits(77));
+    assert_eq!(visual_state.fade_alpha, 0.28);
+    assert_eq!(
+        visual_state.tint.to_srgba(),
+        wall_profile.face_color.to_srgba()
+    );
+    let material = building_wall_materials
+        .get(&material_handle)
+        .expect("wall grid material should exist after apply");
+    assert_eq!(material.extension.grid_line_visibility, 0.0);
+    assert_eq!(material.base.base_color.to_srgba().alpha, 0.28);
 }
 
 #[test]
@@ -1700,6 +1792,7 @@ fn hovered_closed_door_stays_opaque_even_when_occlusion_would_fade_it() {
         &[Vec3::new(0.0, 0.2, 0.0)],
         &HashSet::new(),
         Some("door_object"),
+        None,
         &mut materials,
         &mut building_wall_materials,
     );
@@ -1720,6 +1813,7 @@ fn door_fade_returns_after_hover_leaves() {
         &[Vec3::new(0.0, 0.2, 0.0)],
         &HashSet::new(),
         Some("door_object"),
+        None,
         &mut materials,
         &mut building_wall_materials,
     );
@@ -1728,6 +1822,7 @@ fn door_fade_returns_after_hover_leaves() {
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
         &HashSet::new(),
+        None,
         None,
         &mut materials,
         &mut building_wall_materials,
@@ -1748,6 +1843,7 @@ fn hovered_door_override_does_not_change_static_world_occluders() {
         &[Vec3::new(0.0, 0.2, 0.0)],
         &HashSet::new(),
         Some("door_object"),
+        None,
         &mut materials,
         &mut building_wall_materials,
     );

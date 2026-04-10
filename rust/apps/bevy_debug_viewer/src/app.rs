@@ -8,9 +8,8 @@ use bevy_mesh_outline::MeshOutlinePlugin;
 use game_bevy::world_render::WorldRenderPlugin;
 use game_bevy::{
     apply_gameplay_libraries, init_runtime_logging, spawn_characters_from_definition,
-    CharacterSpawnRejected, GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin,
-    NpcLifeUpdateSet, RuntimeContentPlugin, RuntimeLogSettings,
-    SettlementSimulationPlugin, SpawnCharacterRequest,
+    CharacterSpawnRejected, GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin, NpcLifeUpdateSet,
+    RuntimeContentPlugin, RuntimeLogSettings, SettlementSimulationPlugin, SpawnCharacterRequest,
 };
 use time::macros::format_description;
 use time::OffsetDateTime;

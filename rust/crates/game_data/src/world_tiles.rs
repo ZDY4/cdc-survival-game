@@ -167,11 +167,15 @@ impl WorldTileLibrary {
         self.surface_sets.get(id)
     }
 
-    pub fn prototypes(&self) -> impl Iterator<Item = (&WorldTilePrototypeId, &WorldTilePrototypeDefinition)> {
+    pub fn prototypes(
+        &self,
+    ) -> impl Iterator<Item = (&WorldTilePrototypeId, &WorldTilePrototypeDefinition)> {
         self.prototypes.iter()
     }
 
-    pub fn wall_sets(&self) -> impl Iterator<Item = (&WorldWallTileSetId, &WorldWallTileSetDefinition)> {
+    pub fn wall_sets(
+        &self,
+    ) -> impl Iterator<Item = (&WorldWallTileSetId, &WorldWallTileSetDefinition)> {
         self.wall_sets.iter()
     }
 
@@ -249,7 +253,9 @@ pub enum WorldTileLoadError {
     },
 }
 
-pub fn load_world_tile_library(dir: impl AsRef<Path>) -> Result<WorldTileLibrary, WorldTileLoadError> {
+pub fn load_world_tile_library(
+    dir: impl AsRef<Path>,
+) -> Result<WorldTileLibrary, WorldTileLoadError> {
     let dir = dir.as_ref();
     let mut file_paths = Vec::new();
     let entries = fs::read_dir(dir).map_err(|source| WorldTileLoadError::ReadDir {
@@ -286,9 +292,7 @@ pub fn load_world_tile_library(dir: impl AsRef<Path>) -> Result<WorldTileLibrary
             validate_prototype(&prototype)?;
             let id = prototype.id.clone();
             if prototypes.insert(id.clone(), prototype).is_some() {
-                return Err(WorldTileLoadError::DuplicatePrototypeId {
-                    id,
-                });
+                return Err(WorldTileLoadError::DuplicatePrototypeId { id });
             }
         }
         for wall_set in file.wall_sets {
@@ -361,9 +365,7 @@ fn validate_world_tile_library(library: &WorldTileLibrary) -> Result<(), WorldTi
     Ok(())
 }
 
-fn validate_prototype(
-    prototype: &WorldTilePrototypeDefinition,
-) -> Result<(), WorldTileLoadError> {
+fn validate_prototype(prototype: &WorldTilePrototypeDefinition) -> Result<(), WorldTileLoadError> {
     if prototype.id.as_str().trim().is_empty() {
         return Err(WorldTileLoadError::MissingPrototypeId);
     }
@@ -420,8 +422,8 @@ mod tests {
             surface_sets: BTreeMap::new(),
         };
 
-        let error = validate_world_tile_library(&library)
-            .expect_err("missing wall prototype should fail");
+        let error =
+            validate_world_tile_library(&library).expect_err("missing wall prototype should fail");
         assert!(matches!(
             error,
             WorldTileLoadError::UnknownWallSetPrototype { .. }

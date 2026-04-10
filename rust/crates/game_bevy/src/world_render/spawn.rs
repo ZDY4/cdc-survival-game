@@ -1,4 +1,4 @@
-use bevy::gltf::GltfAssetLabel;
+use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::GlobalAmbientLight;
 use bevy::pbr::OpaqueRendererMethod;
 use bevy::prelude::*;
@@ -10,20 +10,25 @@ use crate::static_world::{
     StaticWorldBillboardLabelSpec, StaticWorldBoxSpec, StaticWorldDecalSpec, StaticWorldGroundSpec,
     StaticWorldMaterialRole,
 };
-use crate::tile_world::{
-    resolve_building_wall_tile_placements, TilePlacementSpec, TileRenderClass,
-};
-use game_data::{WorldTileLibrary, WorldTilePrototypeSource};
+use crate::tile_world::TileRenderClass;
+use game_data::WorldTileLibrary;
 
 use super::doors::build_generated_door_mesh_spec;
 use super::materials::{
-    building_door_color, darken_color, lighten_color, make_building_wall_material,
-    make_world_render_material, world_render_color_for_role, world_render_material_style_for_role,
-    BuildingWallGridMaterial, GridGroundMaterial, GridGroundMaterialExt, WorldRenderMaterialHandle,
-    WorldRenderMaterialStyle,
+    building_door_color, darken_color, lighten_color, make_world_render_material,
+    world_render_color_for_role, world_render_material_style_for_role, BuildingWallGridMaterial,
+    GridGroundMaterial, GridGroundMaterialExt, WorldRenderMaterialHandle, WorldRenderMaterialStyle,
 };
 use super::mesh_builders::{build_trigger_arrow_texture, level_base_height};
-use super::{WorldRenderConfig, WorldRenderPalette, WorldRenderScene, WorldRenderStyleProfile};
+use super::{
+    prepare_tile_batch_scene, PreparedTileBatch, PreparedTileInstance, SpawnedWorldRenderScene,
+    SpawnedWorldRenderTileBatch, SpawnedWorldRenderTileInstance,
+    WorldRenderBuildingWallTileBatchSource, WorldRenderConfig, WorldRenderPalette,
+    WorldRenderScene, WorldRenderStandardTileBatchMaterialState,
+    WorldRenderStandardTileBatchSource, WorldRenderStyleProfile, WorldRenderTileBatchRoot,
+    WorldRenderTileBatchVisualState, WorldRenderTileInstanceRenderData, WorldRenderTileInstanceTag,
+    WorldRenderTileInstanceVisualState,
+};
 
 const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
 
@@ -43,6 +48,27 @@ struct WorldRenderDecalVisualSpec {
     color: Color,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Vec3Key([u32; 3]);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Vec2Key([u32; 2]);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct StandardMaterialCacheKey {
+    style: WorldRenderMaterialStyle,
+    color: [u32; 4],
+}
+
+#[derive(Debug, Default)]
+struct WorldRenderSpawnCaches {
+    cuboid_meshes: HashMap<Vec3Key, Handle<Mesh>>,
+    plane_meshes: HashMap<Vec2Key, Handle<Mesh>>,
+    standard_materials: HashMap<StandardMaterialCacheKey, Handle<StandardMaterial>>,
+    #[cfg(test)]
+    building_wall_materials: HashMap<u8, Handle<BuildingWallGridMaterial>>,
+}
+
 #[derive(Component)]
 pub struct WorldRenderBillboardLabel;
 
@@ -59,17 +85,22 @@ pub fn spawn_world_render_scene(
     scene: &WorldRenderScene,
     config: WorldRenderConfig,
     palette: &WorldRenderPalette,
-) -> Vec<Entity> {
+) -> SpawnedWorldRenderScene {
+    let mut caches = WorldRenderSpawnCaches::default();
     let trigger_texture = (!scene.static_scene.decals.is_empty())
         .then(|| images.add(build_trigger_arrow_texture(TRIGGER_ARROW_TEXTURE_SIZE)));
-    let mut entities = spawn_ground_sections(
-        commands,
-        meshes,
-        ground_materials,
-        config,
-        palette,
-        &scene.static_scene.ground,
-    );
+    let mut spawned_scene = SpawnedWorldRenderScene {
+        entities: spawn_ground_sections(
+            commands,
+            meshes,
+            ground_materials,
+            &mut caches,
+            config,
+            palette,
+            &scene.static_scene.ground,
+        ),
+        ..default()
+    };
     for spec in scene
         .static_scene
         .boxes
@@ -77,11 +108,12 @@ pub fn spawn_world_render_scene(
         .cloned()
         .map(|spec| world_render_box_spec(spec, palette))
     {
-        entities.push(spawn_box(
+        spawned_scene.entities.push(spawn_box(
             commands,
             meshes,
             materials,
             building_wall_materials,
+            &mut caches,
             spec,
         ));
     }
@@ -93,55 +125,122 @@ pub fn spawn_world_render_scene(
             .cloned()
             .map(|spec| world_render_decal_spec(spec, palette))
         {
-            entities.push(spawn_decal(commands, meshes, materials, texture, spec));
+            spawned_scene.entities.push(spawn_decal(
+                commands,
+                meshes,
+                materials,
+                &mut caches,
+                texture,
+                spec,
+            ));
         }
     }
     if let Some(font) = label_font.as_ref() {
         for spec in scene.static_scene.labels.iter().cloned() {
-            entities.push(spawn_billboard_label(commands, font.clone(), palette, spec));
+            spawned_scene.entities.push(spawn_billboard_label(
+                commands,
+                font.clone(),
+                palette,
+                spec,
+            ));
         }
     }
-    for placement in resolve_building_wall_tile_placements(
-        &scene.static_scene.building_wall_tiles,
-        world_tiles,
-    ) {
-        if let Some(entity) = spawn_tile_placement(
-            commands,
-            asset_server,
-            materials,
-            building_wall_materials,
-            world_tiles,
-            &placement,
-        ) {
-            entities.push(entity);
+    let tile_scene = scene.resolve_tile_scene(world_tiles);
+    let prepared_tile_scene = prepare_tile_batch_scene(asset_server, world_tiles, &tile_scene);
+    for batch in &prepared_tile_scene.batches {
+        let batch_root = commands.spawn((
+            Transform::IDENTITY,
+            GlobalTransform::IDENTITY,
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+            WorldRenderTileBatchRoot { id: batch.id },
+            WorldRenderTileBatchVisualState::default(),
+        ));
+        let batch_root = batch_root.id();
+        spawned_scene.entities.push(batch_root);
+        let mut render_entities = Vec::new();
+        for render_primitive in &batch.render_primitives {
+            let mut render_entity = commands.spawn((
+                Mesh3d(render_primitive.mesh.clone()),
+                Transform::IDENTITY,
+                GlobalTransform::IDENTITY,
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
+                NoFrustumCulling,
+                WorldRenderTileBatchVisualState::default(),
+            ));
+            match batch.key.render_class {
+                TileRenderClass::Standard => {
+                    render_entity.insert((
+                        WorldRenderStandardTileBatchSource {
+                            logical_batch_entity: batch_root,
+                            material: render_primitive.standard_material.clone().unwrap_or_else(
+                                || {
+                                    cached_default_standard_material(
+                                        materials,
+                                        building_wall_materials,
+                                        &mut caches,
+                                    )
+                                },
+                            ),
+                            prototype_local_transform: render_primitive.local_transform,
+                        },
+                        WorldRenderStandardTileBatchMaterialState::default(),
+                    ));
+                }
+                TileRenderClass::BuildingWallGrid(visual_kind) => {
+                    render_entity.insert(WorldRenderBuildingWallTileBatchSource {
+                        logical_batch_entity: batch_root,
+                        visual_kind,
+                        prototype_local_transform: render_primitive.local_transform,
+                    });
+                }
+            }
+            let render_entity = render_entity.id();
+            commands.entity(batch_root).add_child(render_entity);
+            spawned_scene.entities.push(render_entity);
+            render_entities.push(render_entity);
         }
-    }
-    for placement in &scene.prop_tiles {
-        if let Some(entity) = spawn_tile_placement(
-            commands,
-            asset_server,
-            materials,
-            building_wall_materials,
-            world_tiles,
-            placement,
-        ) {
-            entities.push(entity);
+        let mut instance_entities = Vec::with_capacity(batch.instances.len());
+        for instance in &batch.instances {
+            let entity = spawn_tile_instance(commands, batch, instance);
+            commands.entity(entity).insert(WorldRenderTileInstanceTag {
+                handle: instance.handle,
+            });
+            commands
+                .entity(entity)
+                .insert(WorldRenderTileInstanceVisualState::default());
+            commands.entity(batch_root).add_child(entity);
+            spawned_scene.entities.push(entity);
+            instance_entities.push(entity);
+            spawned_scene
+                .tile_instances
+                .insert(instance.handle, SpawnedWorldRenderTileInstance { entity });
         }
+        spawned_scene.tile_batches.insert(
+            batch.id,
+            SpawnedWorldRenderTileBatch {
+                root_entity: batch_root,
+                render_entities,
+                instance_entities,
+            },
+        );
     }
     let floor_top = level_base_height(scene.current_level, scene.static_scene.grid_size)
         + config.floor_thickness_world;
     for door in &scene.generated_doors {
-        entities.extend(spawn_generated_door_visual(
+        spawned_scene.entities.extend(spawn_generated_door_visual(
             commands,
             meshes,
             materials,
             building_wall_materials,
+            &mut caches,
             door,
             floor_top,
             scene.static_scene.grid_size,
         ));
     }
-    entities
+    spawned_scene
 }
 
 pub fn orient_world_render_billboard_labels(
@@ -225,6 +324,7 @@ fn spawn_ground_sections(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     ground_materials: &mut Assets<GridGroundMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
     config: WorldRenderConfig,
     palette: &WorldRenderPalette,
     ground_specs: &[StaticWorldGroundSpec],
@@ -234,6 +334,11 @@ fn spawn_ground_sections(
     ground_specs
         .iter()
         .map(|ground| {
+            let size = Vec3::new(
+                ground.size.x.max(0.1),
+                ground.size.y.max(0.02),
+                ground.size.z.max(0.1),
+            );
             let material = material_cache
                 .entry(ground.material_role)
                 .or_insert_with(|| {
@@ -264,11 +369,7 @@ fn spawn_ground_sections(
                 .clone();
             commands
                 .spawn((
-                    Mesh3d(meshes.add(Cuboid::new(
-                        ground.size.x.max(0.1),
-                        ground.size.y.max(0.02),
-                        ground.size.z.max(0.1),
-                    ))),
+                    Mesh3d(cached_cuboid_mesh(meshes, caches, size)),
                     MeshMaterial3d(material.clone()),
                     Transform::from_translation(ground.translation),
                 ))
@@ -302,12 +403,14 @@ fn spawn_box(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
     spec: WorldRenderBoxVisualSpec,
 ) -> Entity {
-    let mesh = meshes.add(Cuboid::new(spec.size.x, spec.size.y, spec.size.z));
-    let material = make_world_render_material(
+    let mesh = cached_cuboid_mesh(meshes, caches, spec.size);
+    let material = cached_world_render_material(
         materials,
         building_wall_materials,
+        caches,
         spec.color,
         spec.material_style,
     );
@@ -327,12 +430,13 @@ fn spawn_decal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
     texture: &Handle<Image>,
     spec: WorldRenderDecalVisualSpec,
 ) -> Entity {
     commands
         .spawn((
-            Mesh3d(meshes.add(Plane3d::default().mesh().size(spec.size.x, spec.size.y))),
+            Mesh3d(cached_plane_mesh(meshes, caches, spec.size)),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: spec.color,
                 base_color_texture: Some(texture.clone()),
@@ -372,58 +476,106 @@ fn spawn_billboard_label(
         .id()
 }
 
-fn spawn_tile_placement(
+fn spawn_tile_instance(
     commands: &mut Commands,
-    asset_server: &AssetServer,
-    _materials: &mut Assets<StandardMaterial>,
-    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
-    world_tiles: &WorldTileLibrary,
-    placement: &TilePlacementSpec,
-) -> Option<Entity> {
-    let prototype = world_tiles.prototype(&placement.prototype_id)?;
-    let mesh = match &prototype.source {
-        WorldTilePrototypeSource::GltfScene { path, .. } => asset_server.load(
-            GltfAssetLabel::Primitive {
-                mesh: 0,
-                primitive: 0,
-            }
-            .from_asset(path.clone()),
+    _batch: &PreparedTileBatch,
+    instance: &PreparedTileInstance,
+) -> Entity {
+    commands
+        .spawn((
+            instance.transform,
+            GlobalTransform::from(instance.transform),
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+        ))
+        .id()
+}
+
+pub fn sync_world_render_standard_tile_batch_material_states(
+    materials: Res<Assets<StandardMaterial>>,
+    mut batches: Query<(
+        &WorldRenderStandardTileBatchSource,
+        &mut WorldRenderStandardTileBatchMaterialState,
+    )>,
+) {
+    for (source, mut state) in &mut batches {
+        state.base_color = materials
+            .get(&source.material)
+            .map(|material| material.base_color)
+            .unwrap_or(Color::WHITE);
+    }
+}
+
+pub fn sync_world_render_tile_batch_visual_states(
+    mut batch_roots: Query<
+        (&Children, &mut WorldRenderTileBatchVisualState),
+        With<WorldRenderTileBatchRoot>,
+    >,
+    instance_query: Query<(
+        &WorldRenderTileInstanceTag,
+        &Transform,
+        &WorldRenderTileInstanceVisualState,
+    )>,
+) {
+    for (children, mut batch_visual_state) in &mut batch_roots {
+        batch_visual_state.instances.clear();
+        batch_visual_state
+            .instances
+            .extend(children.iter().filter_map(|child| {
+                let Ok((tag, transform, visual_state)) = instance_query.get(child) else {
+                    return None;
+                };
+                Some(WorldRenderTileInstanceRenderData {
+                    handle: tag.handle,
+                    transform: *transform,
+                    fade_alpha: visual_state.fade_alpha,
+                    tint: visual_state.tint,
+                })
+            }));
+        batch_visual_state
+            .instances
+            .sort_unstable_by_key(|instance| instance.handle.instance_index);
+    }
+}
+
+pub fn sync_world_render_standard_tile_render_batches(
+    logical_batches: Query<&WorldRenderTileBatchVisualState, With<WorldRenderTileBatchRoot>>,
+    mut render_batches: Query<
+        (
+            &WorldRenderStandardTileBatchSource,
+            &mut WorldRenderTileBatchVisualState,
         ),
-    };
-    let transform = Transform::from_translation(placement.translation)
-        .with_rotation(placement.rotation)
-        .with_scale(placement.scale);
-    Some(match placement.render_class {
-        TileRenderClass::BuildingWallGrid(visual_kind) => {
-            let material = make_building_wall_material(
-                building_wall_materials,
-                super::materials::building_wall_visual_profile(visual_kind),
-            );
-            match material {
-                WorldRenderMaterialHandle::Standard(handle) => commands
-                    .spawn((Mesh3d(mesh), MeshMaterial3d(handle), transform))
-                    .id(),
-                WorldRenderMaterialHandle::BuildingWallGrid(handle) => commands
-                    .spawn((Mesh3d(mesh), MeshMaterial3d(handle), transform))
-                    .id(),
-            }
-        }
-        TileRenderClass::Standard => {
-            let material: Handle<StandardMaterial> = match &prototype.source {
-                WorldTilePrototypeSource::GltfScene { path, .. } => asset_server
-                    .load(
-                        GltfAssetLabel::Material {
-                            index: 0,
-                            is_scale_inverted: false,
-                        }
-                        .from_asset(path.clone()),
-                    ),
-            };
-            commands
-                .spawn((Mesh3d(mesh), MeshMaterial3d(material), transform))
-                .id()
-        }
-    })
+        With<Mesh3d>,
+    >,
+) {
+    for (source, mut render_batch_visual_state) in &mut render_batches {
+        let Ok(logical_batch_visual_state) = logical_batches.get(source.logical_batch_entity)
+        else {
+            render_batch_visual_state.instances.clear();
+            continue;
+        };
+        *render_batch_visual_state = logical_batch_visual_state.clone();
+    }
+}
+
+pub fn sync_world_render_building_wall_tile_render_batches(
+    logical_batches: Query<&WorldRenderTileBatchVisualState, With<WorldRenderTileBatchRoot>>,
+    mut render_batches: Query<
+        (
+            &WorldRenderBuildingWallTileBatchSource,
+            &mut WorldRenderTileBatchVisualState,
+        ),
+        With<Mesh3d>,
+    >,
+) {
+    for (source, mut render_batch_visual_state) in &mut render_batches {
+        let Ok(logical_batch_visual_state) = logical_batches.get(source.logical_batch_entity)
+        else {
+            render_batch_visual_state.instances.clear();
+            continue;
+        };
+        *render_batch_visual_state = logical_batch_visual_state.clone();
+    }
 }
 
 fn spawn_generated_door_visual(
@@ -431,6 +583,7 @@ fn spawn_generated_door_visual(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
     door: &game_core::GeneratedDoorDebugState,
     floor_top: f32,
     grid_size: f32,
@@ -438,9 +591,10 @@ fn spawn_generated_door_visual(
     let Some(mesh_spec) = build_generated_door_mesh_spec(door, floor_top, grid_size) else {
         return Vec::new();
     };
-    let material = make_world_render_material(
+    let material = cached_world_render_material(
         materials,
         building_wall_materials,
+        caches,
         building_door_color(),
         WorldRenderMaterialStyle::BuildingDoor,
     );
@@ -485,4 +639,277 @@ fn spawn_generated_door_visual(
         entities.push(leaf_entity);
     }
     entities
+}
+
+fn cached_cuboid_mesh(
+    meshes: &mut Assets<Mesh>,
+    caches: &mut WorldRenderSpawnCaches,
+    size: Vec3,
+) -> Handle<Mesh> {
+    let key = Vec3Key([size.x.to_bits(), size.y.to_bits(), size.z.to_bits()]);
+    caches
+        .cuboid_meshes
+        .entry(key)
+        .or_insert_with(|| meshes.add(Cuboid::new(size.x, size.y, size.z)))
+        .clone()
+}
+
+fn cached_plane_mesh(
+    meshes: &mut Assets<Mesh>,
+    caches: &mut WorldRenderSpawnCaches,
+    size: Vec2,
+) -> Handle<Mesh> {
+    let key = Vec2Key([size.x.to_bits(), size.y.to_bits()]);
+    caches
+        .plane_meshes
+        .entry(key)
+        .or_insert_with(|| meshes.add(Plane3d::default().mesh().size(size.x, size.y)))
+        .clone()
+}
+
+fn cached_default_standard_material(
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
+) -> Handle<StandardMaterial> {
+    let WorldRenderMaterialHandle::Standard(handle) = cached_world_render_material(
+        materials,
+        building_wall_materials,
+        caches,
+        Color::WHITE,
+        WorldRenderMaterialStyle::StructureAccent,
+    ) else {
+        unreachable!("default tile material should use standard material");
+    };
+    handle
+}
+
+fn cached_world_render_material(
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
+    color: Color,
+    style: WorldRenderMaterialStyle,
+) -> WorldRenderMaterialHandle {
+    let srgba = color.to_srgba();
+    let key = StandardMaterialCacheKey {
+        style,
+        color: [
+            srgba.red.to_bits(),
+            srgba.green.to_bits(),
+            srgba.blue.to_bits(),
+            srgba.alpha.to_bits(),
+        ],
+    };
+    let handle = caches
+        .standard_materials
+        .entry(key)
+        .or_insert_with(|| {
+            let WorldRenderMaterialHandle::Standard(handle) =
+                make_world_render_material(materials, building_wall_materials, color, style)
+            else {
+                unreachable!("cached standard material helper only supports standard materials");
+            };
+            handle
+        })
+        .clone();
+    WorldRenderMaterialHandle::Standard(handle)
+}
+
+#[cfg(test)]
+fn cached_building_wall_material(
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
+    visual_kind: game_data::MapBuildingWallVisualKind,
+) -> WorldRenderMaterialHandle {
+    let key = match visual_kind {
+        game_data::MapBuildingWallVisualKind::LegacyGrid => 0,
+    };
+    let handle = caches
+        .building_wall_materials
+        .entry(key)
+        .or_insert_with(|| {
+            let WorldRenderMaterialHandle::BuildingWallGrid(handle) = make_building_wall_material(
+                building_wall_materials,
+                super::materials::building_wall_visual_profile(visual_kind),
+            ) else {
+                unreachable!("building wall grid helper should return wall grid material");
+            };
+            handle
+        })
+        .clone();
+    WorldRenderMaterialHandle::BuildingWallGrid(handle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::schedule::Schedule;
+    use game_data::MapBuildingWallVisualKind;
+
+    #[test]
+    fn cached_standard_material_reuses_handle_for_same_style_and_color() {
+        let mut materials = Assets::<StandardMaterial>::default();
+        let mut wall_materials = Assets::<BuildingWallGridMaterial>::default();
+        let mut caches = WorldRenderSpawnCaches::default();
+
+        let first = cached_world_render_material(
+            &mut materials,
+            &mut wall_materials,
+            &mut caches,
+            Color::srgb(0.2, 0.3, 0.4),
+            WorldRenderMaterialStyle::UtilityAccent,
+        );
+        let second = cached_world_render_material(
+            &mut materials,
+            &mut wall_materials,
+            &mut caches,
+            Color::srgb(0.2, 0.3, 0.4),
+            WorldRenderMaterialStyle::UtilityAccent,
+        );
+
+        let WorldRenderMaterialHandle::Standard(first) = first else {
+            panic!("expected standard material");
+        };
+        let WorldRenderMaterialHandle::Standard(second) = second else {
+            panic!("expected standard material");
+        };
+        assert_eq!(first, second);
+        assert_eq!(materials.len(), 1);
+    }
+
+    #[test]
+    fn cached_building_wall_material_reuses_handle_for_same_visual_kind() {
+        let mut wall_materials = Assets::<BuildingWallGridMaterial>::default();
+        let mut caches = WorldRenderSpawnCaches::default();
+
+        let first = cached_building_wall_material(
+            &mut wall_materials,
+            &mut caches,
+            MapBuildingWallVisualKind::LegacyGrid,
+        );
+        let second = cached_building_wall_material(
+            &mut wall_materials,
+            &mut caches,
+            MapBuildingWallVisualKind::LegacyGrid,
+        );
+
+        let WorldRenderMaterialHandle::BuildingWallGrid(first) = first else {
+            panic!("expected wall material");
+        };
+        let WorldRenderMaterialHandle::BuildingWallGrid(second) = second else {
+            panic!("expected wall material");
+        };
+        assert_eq!(first, second);
+        assert_eq!(wall_materials.len(), 1);
+    }
+
+    #[test]
+    fn cached_cuboid_mesh_reuses_handle_for_same_size() {
+        let mut meshes = Assets::<Mesh>::default();
+        let mut caches = WorldRenderSpawnCaches::default();
+
+        let first = cached_cuboid_mesh(&mut meshes, &mut caches, Vec3::new(1.0, 2.0, 3.0));
+        let second = cached_cuboid_mesh(&mut meshes, &mut caches, Vec3::new(1.0, 2.0, 3.0));
+
+        assert_eq!(first, second);
+        assert_eq!(meshes.len(), 1);
+    }
+
+    #[test]
+    fn spawned_world_render_scene_tracks_tile_instance_entities_by_handle() {
+        let handle = super::super::WorldRenderTileInstanceHandle {
+            batch_id: super::super::WorldRenderTileBatchId(5),
+            instance_index: 2,
+        };
+        let entity = Entity::from_bits(11);
+        let mut spawned = SpawnedWorldRenderScene {
+            entities: vec![entity],
+            ..default()
+        };
+        spawned
+            .tile_instances
+            .insert(handle, SpawnedWorldRenderTileInstance { entity });
+
+        assert_eq!(spawned.tile_instance_entity(handle), Some(entity));
+        assert_eq!(spawned.into_iter().collect::<Vec<_>>(), vec![entity]);
+    }
+
+    #[test]
+    fn tile_instance_visual_state_defaults_match_unfaded_white_tint() {
+        let state = WorldRenderTileInstanceVisualState::default();
+
+        assert_eq!(state.fade_alpha, 1.0);
+        assert_eq!(state.tint.to_srgba(), Color::WHITE.to_srgba());
+    }
+
+    #[test]
+    fn sync_tile_batch_visual_states_collects_instances_in_index_order() {
+        let mut world = World::default();
+        let later = world
+            .spawn((
+                Transform::from_xyz(2.0, 0.0, 0.0),
+                WorldRenderTileInstanceTag {
+                    handle: super::super::WorldRenderTileInstanceHandle {
+                        batch_id: super::super::WorldRenderTileBatchId(1),
+                        instance_index: 2,
+                    },
+                },
+                WorldRenderTileInstanceVisualState {
+                    fade_alpha: 0.4,
+                    tint: Color::srgb(0.4, 0.5, 0.6),
+                },
+            ))
+            .id();
+        let earlier = world
+            .spawn((
+                Transform::from_xyz(1.0, 0.0, 0.0),
+                WorldRenderTileInstanceTag {
+                    handle: super::super::WorldRenderTileInstanceHandle {
+                        batch_id: super::super::WorldRenderTileBatchId(1),
+                        instance_index: 0,
+                    },
+                },
+                WorldRenderTileInstanceVisualState {
+                    fade_alpha: 1.0,
+                    tint: Color::srgb(0.9, 0.8, 0.7),
+                },
+            ))
+            .id();
+        let batch_root = world
+            .spawn((
+                WorldRenderTileBatchRoot {
+                    id: super::super::WorldRenderTileBatchId(1),
+                },
+                WorldRenderTileBatchVisualState::default(),
+            ))
+            .id();
+        world.entity_mut(batch_root).add_children(&[later, earlier]);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sync_world_render_tile_batch_visual_states);
+        schedule.run(&mut world);
+
+        let batch = world
+            .entity(batch_root)
+            .get::<WorldRenderTileBatchVisualState>()
+            .expect("batch visual state should exist");
+        assert_eq!(batch.instances.len(), 2);
+        assert_eq!(batch.instances[0].handle.instance_index, 0);
+        assert_eq!(
+            batch.instances[0].transform.translation,
+            Vec3::new(1.0, 0.0, 0.0)
+        );
+        assert_eq!(batch.instances[0].fade_alpha, 1.0);
+        assert_eq!(
+            batch.instances[0].tint.to_srgba(),
+            Color::srgb(0.9, 0.8, 0.7).to_srgba()
+        );
+        assert_eq!(batch.instances[1].handle.instance_index, 2);
+        assert_eq!(
+            batch.instances[1].transform.translation,
+            Vec3::new(2.0, 0.0, 0.0)
+        );
+        assert_eq!(batch.instances[1].fade_alpha, 0.4);
+    }
 }

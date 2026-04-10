@@ -12,7 +12,9 @@ use crate::interaction::{
     interaction_kind_spec, is_scene_transition_kind, parse_legacy_interaction_kind,
     InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind,
 };
-use crate::world_tiles::{WorldSurfaceTileSetId, WorldTilePrototypeId, WorldTileVec3, WorldWallTileSetId};
+use crate::world_tiles::{
+    WorldSurfaceTileSetId, WorldTilePrototypeId, WorldTileVec3, WorldWallTileSetId,
+};
 use crate::GridCoord;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
@@ -220,7 +222,7 @@ pub struct MapBuildingVisualOutline {
     pub diagonal_edges: Vec<MapBuildingDiagonalEdge>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MapBuildingWallVisualKind {
     #[default]
@@ -1276,10 +1278,12 @@ fn validate_object_payload(
                     if !catalog.prototype_ids.is_empty()
                         && !catalog.prototype_ids.contains(prototype_id.as_str())
                     {
-                        return Err(MapDefinitionValidationError::UnknownBuildingDoorPrototypeId {
-                            object_id: object.object_id.clone(),
-                            prototype_id: prototype_id.as_str().to_string(),
-                        });
+                        return Err(
+                            MapDefinitionValidationError::UnknownBuildingDoorPrototypeId {
+                                object_id: object.object_id.clone(),
+                                prototype_id: prototype_id.as_str().to_string(),
+                            },
+                        );
                     }
                 }
             }
@@ -1445,18 +1449,22 @@ fn validate_object_visual_spec(
         return Ok(());
     };
     if visual.prototype_id.as_str().trim().is_empty() {
-        return Err(MapDefinitionValidationError::MissingObjectVisualPrototypeId {
-            object_id: object.object_id.clone(),
-        });
+        return Err(
+            MapDefinitionValidationError::MissingObjectVisualPrototypeId {
+                object_id: object.object_id.clone(),
+            },
+        );
     }
     if let Some(catalog) = catalog {
         if !catalog.prototype_ids.is_empty()
             && !catalog.prototype_ids.contains(visual.prototype_id.as_str())
         {
-            return Err(MapDefinitionValidationError::UnknownObjectVisualPrototypeId {
-                object_id: object.object_id.clone(),
-                prototype_id: visual.prototype_id.as_str().to_string(),
-            });
+            return Err(
+                MapDefinitionValidationError::UnknownObjectVisualPrototypeId {
+                    object_id: object.object_id.clone(),
+                    prototype_id: visual.prototype_id.as_str().to_string(),
+                },
+            );
         }
     }
     Ok(())
@@ -1666,12 +1674,11 @@ mod tests {
         MapAiSpawnProps, MapBuildingDiagonalEdge, MapBuildingFootprintPolygonSpec,
         MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec, MapBuildingTileSetSpec,
         MapBuildingVisualOutline, MapBuildingWallVisualKind, MapBuildingWallVisualSpec,
-        MapCellDefinition,
-        MapContainerItemEntry, MapContainerProps, MapDefinition, MapDefinitionValidationError,
-        MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapPickupProps,
-        MapRotation, MapSize, MapValidationCatalog, RelativeGridCell, RelativeGridVertex,
-        WorldWallTileSetId,
+        MapCellDefinition, MapContainerItemEntry, MapContainerProps, MapDefinition,
+        MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapInteractiveProps,
+        MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+        MapPickupProps, MapRotation, MapSize, MapValidationCatalog, RelativeGridCell,
+        RelativeGridVertex, WorldWallTileSetId,
     };
     use crate::GridCoord;
     use std::collections::BTreeMap;
