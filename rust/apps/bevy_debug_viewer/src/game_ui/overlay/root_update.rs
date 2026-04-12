@@ -70,8 +70,7 @@ pub(crate) fn update_game_ui(
         },
     );
 
-    let show_badges =
-        !show_main_menu && !esc_menu_open && trade_state.is_none() && container_state.is_none();
+    let show_badges = !show_main_menu && !esc_menu_open && trade_state.is_none();
     let badge_key = show_badges.then(|| {
         format!(
             "{:?}|{:?}|{:?}|{:?}",
@@ -225,17 +224,13 @@ pub(crate) fn update_game_ui(
                 &container.container_id,
                 &content.items.0,
             );
-            let inventory = inventory_snapshot(
-                &ui.runtime_state.runtime,
-                actor_id,
-                &content.items.0,
-                ui.filter_state.filter,
-                ui.menu_state.selected_inventory_item,
-            );
             format!(
-                "{container_snapshot:?}|{inventory:?}|{:?}|{:?}",
+                "{container_snapshot:?}|{container:?}|{:?}|{:?}|{:?}|{:.1}|{:.1}",
                 ui.menu_state,
-                drag_visual_key(&ui.drag_state)
+                drag_visual_key(&ui.drag_state),
+                camera_transform.translation(),
+                window.width(),
+                window.height()
             )
         });
         refresh_section(
@@ -255,20 +250,16 @@ pub(crate) fn update_game_ui(
                     &container.container_id,
                     &content.items.0,
                 );
-                let inventory = inventory_snapshot(
-                    &ui.runtime_state.runtime,
-                    actor_id,
-                    &content.items.0,
-                    ui.filter_state.filter,
-                    ui.menu_state.selected_inventory_item,
-                );
                 commands.entity(entity).with_children(|parent| {
                     render_container_page(
                         parent,
                         &font,
+                        &window,
+                        camera,
+                        &camera_transform,
+                        &ui.runtime_state.runtime,
+                        container,
                         &container_snapshot,
-                        &inventory,
-                        &ui.menu_state,
                         &ui.drag_state,
                     );
                 });
@@ -470,7 +461,7 @@ fn open_panels_key(
     ui: &GameUiViewState<'_, '_>,
     content: &GameContentRefs<'_, '_>,
 ) -> Option<String> {
-    if ui.modal_state.trade.is_some() || ui.modal_state.container.is_some() {
+    if ui.modal_state.trade.is_some() {
         return None;
     }
 
@@ -499,7 +490,7 @@ fn panel_render_key(
 ) -> String {
     match panel {
         UiMenuPanel::Inventory => format!(
-            "{panel:?}|{:?}|{:?}|{:?}",
+            "{panel:?}|{:?}|{:?}|{:?}|{:?}",
             inventory_snapshot(
                 &ui.runtime_state.runtime,
                 actor_id,
@@ -507,6 +498,10 @@ fn panel_render_key(
                 ui.filter_state.filter,
                 ui.menu_state.selected_inventory_item,
             ),
+            ui.modal_state
+                .container
+                .as_ref()
+                .map(|container| container.container_id.as_str()),
             ui.menu_state,
             drag_visual_key(&ui.drag_state)
         ),
@@ -599,12 +594,21 @@ fn render_single_panel(
                 ui.filter_state.filter,
                 ui.menu_state.selected_inventory_item,
             );
+            let mode = ui
+                .modal_state
+                .container
+                .as_ref()
+                .map(|container| InventoryPanelMode::Container {
+                    container_id: container.container_id.clone(),
+                })
+                .unwrap_or(InventoryPanelMode::Normal);
             render_inventory_panel(
                 parent,
                 font,
                 &snapshot,
                 &ui.menu_state,
                 &ui.drag_state,
+                mode,
                 window.height(),
             );
         }

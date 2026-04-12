@@ -1,7 +1,15 @@
-use super::*;
+use game_data::{ActionResult, ActorId, GridCoord, OverworldLocationKind, WorldMode};
+use tracing::info;
+
+use crate::movement::{
+    AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
+    PendingMovementIntent, PendingProgressionStep, ProgressionAdvanceResult,
+    RecentOverworldArrival,
+};
 use crate::overworld::{is_outdoor_location_cell, resolve_overworld_goal};
-use game_data::OverworldLocationKind;
-use game_data::WorldMode;
+use crate::simulation::SimulationCommand;
+
+use super::{movement_plan_error_to_interrupt_reason, SimulationRuntime};
 
 impl SimulationRuntime {
     pub fn plan_actor_movement(
@@ -41,6 +49,13 @@ impl SimulationRuntime {
         self.path_preview = plan.requested_path.clone();
 
         if plan.requested_steps() == 0 {
+            self.record_recent_overworld_arrival(
+                actor_id,
+                goal,
+                resolved.target_outdoor_location_id,
+                self.simulation.actor_grid_position(actor_id),
+                true,
+            );
             let ap = self.simulation.get_actor_ap(actor_id);
             return Ok(MovementCommandOutcome {
                 plan,
@@ -476,6 +491,26 @@ impl SimulationRuntime {
                 reached_goal: false,
                 interrupted: true,
                 interrupt_reason: Some(AutoMoveInterruptReason::NoProgress),
+                movement_outcome: Some(outcome),
+                interaction_outcome: None,
+            };
+        }
+
+        if self.simulation.is_in_combat() && outcome.result.entered_combat {
+            self.clear_pending_movement_state_preserving_progression(None);
+            self.record_recent_overworld_arrival(
+                intent.actor_id,
+                requested_goal,
+                intent.target_outdoor_location_id.clone(),
+                final_position,
+                false,
+            );
+            return ProgressionAdvanceResult {
+                applied_step: Some(PendingProgressionStep::ContinuePendingMovement),
+                final_position,
+                reached_goal: false,
+                interrupted: true,
+                interrupt_reason: Some(AutoMoveInterruptReason::EnteredCombat),
                 movement_outcome: Some(outcome),
                 interaction_outcome: None,
             };

@@ -968,6 +968,7 @@ fn handle_container_button_action(
             ui.modal_state.container = None;
             ui.modal_state.item_quantity = None;
             ui.viewer_state.pending_open_container_id = None;
+            ui.viewer_state.pending_open_container_target = None;
             ui.drag_state.clear();
             ui.inventory_context_menu.clear();
             true

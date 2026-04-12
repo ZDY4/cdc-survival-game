@@ -69,6 +69,7 @@ pub(crate) enum UiHoverTooltipContent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UiContextMenuTarget {
     InventoryItem { item_id: u32 },
+    ContainerItem { item_id: u32 },
     EquipmentSlot { slot_id: String, item_id: u32 },
     SkillEntry { tree_id: String, skill_id: String },
 }

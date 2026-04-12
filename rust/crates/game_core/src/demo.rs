@@ -1,4 +1,7 @@
-use game_data::{ActorId, ActorKind, ActorSide, GridCoord};
+use game_data::{
+    ActorId, ActorKind, ActorSide, GridCoord, MapObjectDefinition, MapObjectFootprint,
+    MapObjectKind, MapObjectProps, MapRotation,
+};
 
 use crate::actor::InteractOnceAiController;
 use crate::runtime::SimulationRuntime;
@@ -15,6 +18,18 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
     simulation
         .grid_world_mut()
         .register_static_obstacle(GridCoord::new(2, 0, 1));
+    simulation
+        .grid_world_mut()
+        .upsert_map_object(MapObjectDefinition {
+            object_id: "demo_sight_blocker".into(),
+            kind: MapObjectKind::Interactive,
+            anchor: GridCoord::new(1, 0, 1),
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: true,
+            props: MapObjectProps::default(),
+        });
 
     let player = simulation.register_actor(RegisterActor {
         definition_id: None,

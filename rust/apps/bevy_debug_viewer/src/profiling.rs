@@ -132,6 +132,14 @@ pub(crate) struct WorldVisualSyncParams<'w, 's> {
     >,
 }
 
+#[derive(SystemParam)]
+pub(crate) struct ActorAppearanceContentParams<'w, 's> {
+    character_definitions: Option<Res<'w, game_bevy::CharacterDefinitions>>,
+    item_definitions: Option<Res<'w, game_bevy::ItemDefinitions>>,
+    character_appearance_definitions: Option<Res<'w, game_bevy::CharacterAppearanceDefinitions>>,
+    _marker: std::marker::PhantomData<&'s ()>,
+}
+
 pub(crate) fn profiled_tick_runtime(
     runtime_state: ResMut<ViewerRuntimeState>,
     scene_kind: Res<ViewerSceneKind>,
@@ -172,6 +180,7 @@ pub(crate) fn profiled_sync_world_visuals(
     trigger_decal_assets: Res<crate::render::TriggerDecalAssets>,
     runtime_state: Res<ViewerRuntimeState>,
     scene_kind: Res<ViewerSceneKind>,
+    appearance_content: ActorAppearanceContentParams,
     motion_state: Res<ViewerActorMotionState>,
     feedback_state: Res<ViewerActorFeedbackState>,
     viewer_state: Res<ViewerState>,
@@ -197,6 +206,9 @@ pub(crate) fn profiled_sync_world_visuals(
         params.ground_materials,
         params.building_wall_materials,
         asset_server,
+        appearance_content.character_definitions,
+        appearance_content.item_definitions,
+        appearance_content.character_appearance_definitions,
         world_tiles,
         time,
         palette,

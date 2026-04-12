@@ -1,4 +1,12 @@
-use super::*;
+use game_data::{
+    InteractionExecutionResult, InteractionOptionKind, InteractionTargetId,
+};
+use tracing::info;
+
+use crate::simulation::{
+    interaction_behaviors::{build_default_behavior, InteractionBehavior, InteractionExecutionContext},
+    Simulation, SimulationEvent,
+};
 
 const KINDS: &[InteractionOptionKind] = &[InteractionOptionKind::OpenContainer];
 

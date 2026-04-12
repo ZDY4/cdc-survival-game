@@ -14,6 +14,7 @@ pub(super) fn render_inventory_panel(
     snapshot: &game_bevy::UiInventoryPanelSnapshot,
     menu_state: &UiMenuState,
     drag_state: &UiInventoryDragState,
+    mode: InventoryPanelMode,
     window_height: f32,
 ) {
     let body = panel_body_with_bottom(
@@ -22,14 +23,7 @@ pub(super) fn render_inventory_panel(
         inventory_panel_bottom_inset(window_height),
     );
     parent.commands().entity(body).with_children(|body| {
-        render_inventory_panel_contents(
-            body,
-            font,
-            snapshot,
-            menu_state,
-            drag_state,
-            InventoryPanelMode::Normal,
-        );
+        render_inventory_panel_contents(body, font, snapshot, menu_state, drag_state, mode);
     });
 }
 
@@ -272,7 +266,7 @@ fn render_inventory_entry_section(
     snapshot: &game_bevy::UiInventoryPanelSnapshot,
     menu_state: &UiMenuState,
     drag_state: &UiInventoryDragState,
-    mode: &InventoryPanelMode,
+    _mode: &InventoryPanelMode,
 ) {
     parent
         .spawn((
@@ -424,17 +418,6 @@ fn render_inventory_entry_section(
                                     RelativeCursorPosition::default(),
                                     viewer_ui_passthrough_bundle(),
                                 ));
-
-                                if let InventoryPanelMode::Container { container_id } = mode {
-                                    row.spawn(action_button(
-                                        font,
-                                        "存入",
-                                        GameUiButtonAction::StoreContainerItem {
-                                            container_id: container_id.clone(),
-                                            item_id: entry.item_id,
-                                        },
-                                    ));
-                                }
                             });
                         }
                     });

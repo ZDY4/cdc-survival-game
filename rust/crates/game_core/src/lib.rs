@@ -38,9 +38,10 @@ pub use economy::{
     ShopRuntimeEntry, ShopRuntimeState as EconomyShopRuntimeState, TradeOutcome,
 };
 pub use game_data::{
-    InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
-    InteractionOptionDefinition, InteractionOptionId, InteractionOptionKind, InteractionPrompt,
-    InteractionTargetId, ResolvedInteractionOption, WorldMode,
+    AttackHitKind, AttackOutcome, InteractionContextSnapshot, InteractionExecutionRequest,
+    InteractionExecutionResult, InteractionOptionDefinition, InteractionOptionId,
+    InteractionOptionKind, InteractionPrompt, InteractionTargetId, ResolvedInteractionOption,
+    SkillExecutionKind, SkillTargetSideRule, WorldMode,
 };
 pub use goap::{
     advance_offline_sim, apply_npc_action_effects, build_plan, build_plan_for_context,

@@ -3015,6 +3015,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "dirs",
+ "game_bevy",
  "game_data",
  "reqwest",
  "serde",

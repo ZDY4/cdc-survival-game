@@ -132,8 +132,12 @@ pub(super) fn render_inventory_context_menu(
 ) {
     let trade_state = ui.modal_state.trade.as_ref();
     let trade_active = trade_state.is_some();
+    let container_active = ui.modal_state.container.is_some();
     let skills_panel_active = ui.menu_state.is_panel_open(UiMenuPanel::Skills);
-    if !trade_active && !ui.menu_state.is_panel_open(UiMenuPanel::Inventory) && !skills_panel_active
+    if !trade_active
+        && !container_active
+        && !ui.menu_state.is_panel_open(UiMenuPanel::Inventory)
+        && !skills_panel_active
     {
         return;
     }
@@ -166,6 +170,14 @@ pub(super) fn render_inventory_context_menu(
             let display = build_inventory_detail_display(detail, Some(entry));
             let actions = inventory_context_menu_actions(
                 trade_state.map(|trade| trade.shop_id.as_str()),
+                ui.modal_state.container.as_ref().map(|container| {
+                    let snapshot = container_snapshot(
+                        &ui.runtime_state.runtime,
+                        &container.container_id,
+                        &content.items.0,
+                    );
+                    (container.container_id.clone(), snapshot.display_name)
+                }),
                 *item_id,
                 display.can_use,
                 display.can_equip,
@@ -191,7 +203,54 @@ pub(super) fn render_inventory_context_menu(
                             font,
                             ContextMenuStyle::for_variant(ContextMenuVariant::UiContext),
                             &ContextMenuItemVisual {
-                                label: label.to_string(),
+                                label,
+                                is_primary: false,
+                                is_disabled: false,
+                            },
+                            action,
+                        );
+                    }
+                },
+            );
+        }
+        UiContextMenuTarget::ContainerItem { item_id } => {
+            let Some(container_state) = ui.modal_state.container.as_ref() else {
+                return;
+            };
+            let snapshot = container_snapshot(
+                &ui.runtime_state.runtime,
+                &container_state.container_id,
+                &content.items.0,
+            );
+            let Some(entry) = snapshot
+                .entries
+                .iter()
+                .find(|entry| entry.item_id == *item_id)
+            else {
+                return;
+            };
+            let actions = container_context_menu_actions(&container_state.container_id, *item_id);
+            render_ui_context_menu_container(
+                parent,
+                font,
+                window,
+                ui.inventory_context_menu.cursor_position,
+                context_menu_estimated_height(actions.len(), true),
+                |menu| {
+                    spawn_ui_context_menu_header(
+                        menu,
+                        font,
+                        "操作",
+                        &entry.name,
+                        &format!("容器库存 · x{}", entry.count),
+                    );
+                    for (label, action) in actions {
+                        spawn_context_menu_button(
+                            menu,
+                            font,
+                            ContextMenuStyle::for_variant(ContextMenuVariant::UiContext),
+                            &ContextMenuItemVisual {
+                                label,
                                 is_primary: false,
                                 is_disabled: false,
                             },
@@ -333,19 +392,20 @@ fn spawn_ui_context_menu_header(
 
 pub(super) fn inventory_context_menu_actions(
     trade_shop_id: Option<&str>,
+    container_target: Option<(String, String)>,
     item_id: u32,
     can_use: bool,
     can_equip: bool,
     count: i32,
-) -> Vec<(&'static str, GameUiButtonAction)> {
+) -> Vec<(String, GameUiButtonAction)> {
     let mut actions = Vec::new();
     if let Some(shop_id) = trade_shop_id {
         if can_equip {
-            actions.push(("装备", GameUiButtonAction::EquipInventoryItem));
+            actions.push(("装备".to_string(), GameUiButtonAction::EquipInventoryItem));
         }
         if count > 0 {
             actions.push((
-                "卖出",
+                "卖出".to_string(),
                 GameUiButtonAction::SellTradeItem {
                     shop_id: shop_id.to_string(),
                     item_id,
@@ -354,16 +414,38 @@ pub(super) fn inventory_context_menu_actions(
         }
         return actions;
     }
+    if let Some((container_id, display_name)) = container_target {
+        actions.push((
+            format!("移动到{}", display_name),
+            GameUiButtonAction::StoreContainerItem {
+                container_id,
+                item_id,
+            },
+        ));
+    }
     if can_use {
-        actions.push(("使用", GameUiButtonAction::UseInventoryItem));
+        actions.push(("使用".to_string(), GameUiButtonAction::UseInventoryItem));
     }
     if can_equip {
-        actions.push(("装备", GameUiButtonAction::EquipInventoryItem));
+        actions.push(("装备".to_string(), GameUiButtonAction::EquipInventoryItem));
     }
     if count > 0 {
-        actions.push(("丢弃", GameUiButtonAction::DropInventoryItem));
+        actions.push(("丢弃".to_string(), GameUiButtonAction::DropInventoryItem));
     }
     actions
+}
+
+pub(super) fn container_context_menu_actions(
+    container_id: &str,
+    item_id: u32,
+) -> Vec<(String, GameUiButtonAction)> {
+    vec![(
+        "移动到背包".to_string(),
+        GameUiButtonAction::TakeContainerItem {
+            container_id: container_id.to_string(),
+            item_id,
+        },
+    )]
 }
 
 pub(super) fn equipment_context_menu_actions(
@@ -492,8 +574,8 @@ pub(super) fn floating_panel_position(
 #[cfg(test)]
 mod tests {
     use super::{
-        equipment_context_menu_actions, floating_panel_position, inventory_context_menu_actions,
-        skill_context_menu_actions,
+        container_context_menu_actions, equipment_context_menu_actions, floating_panel_position,
+        inventory_context_menu_actions, skill_context_menu_actions,
     };
     use crate::game_ui::HOVER_TOOLTIP_CURSOR_OFFSET_X;
     use bevy::prelude::Vec2;
@@ -501,22 +583,40 @@ mod tests {
 
     #[test]
     fn inventory_context_menu_shows_drop_even_without_use_or_equip() {
-        let labels: Vec<_> = inventory_context_menu_actions(None, 1001, false, false, 3)
+        let labels: Vec<_> = inventory_context_menu_actions(None, None, 1001, false, false, 3)
             .into_iter()
             .map(|(label, _)| label)
             .collect();
 
-        assert_eq!(labels, vec!["丢弃"]);
+        assert_eq!(labels, vec!["丢弃".to_string()]);
     }
 
     #[test]
     fn trade_inventory_context_menu_hides_use_and_drop() {
-        let labels: Vec<_> = inventory_context_menu_actions(Some("npc_shop"), 1001, true, true, 3)
-            .into_iter()
-            .map(|(label, _)| label)
-            .collect();
+        let labels: Vec<_> =
+            inventory_context_menu_actions(Some("npc_shop"), None, 1001, true, true, 3)
+                .into_iter()
+                .map(|(label, _)| label)
+                .collect();
 
-        assert_eq!(labels, vec!["装备", "卖出"]);
+        assert_eq!(labels, vec!["装备".to_string(), "卖出".to_string()]);
+    }
+
+    #[test]
+    fn container_inventory_context_menu_includes_move_action() {
+        let labels: Vec<_> = inventory_context_menu_actions(
+            None,
+            Some(("stash_01".to_string(), "木箱".to_string())),
+            1001,
+            false,
+            false,
+            3,
+        )
+        .into_iter()
+        .map(|(label, _)| label)
+        .collect();
+
+        assert_eq!(labels, vec!["移动到木箱".to_string(), "丢弃".to_string()]);
     }
 
     #[test]
@@ -537,6 +637,16 @@ mod tests {
             .collect();
 
         assert_eq!(labels, vec!["添加到快捷栏"]);
+    }
+
+    #[test]
+    fn container_context_menu_shows_move_to_backpack() {
+        let labels: Vec<_> = container_context_menu_actions("stash_01", 1001)
+            .into_iter()
+            .map(|(label, _)| label)
+            .collect();
+
+        assert_eq!(labels, vec!["移动到背包".to_string()]);
     }
 
     #[test]

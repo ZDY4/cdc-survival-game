@@ -121,8 +121,8 @@ pub use map_edit::{
     MapEditError, MapEditOperationSummary, MapEditResult, MapEditTarget, MapEditorService,
 };
 pub use models::{
-    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide, GridCoord,
-    SkillTargetRequest, TurnState, WorldCoord,
+    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorKind, ActorSide,
+    AttackHitKind, AttackOutcome, GridCoord, SkillTargetRequest, TurnState, WorldCoord,
 };
 pub use outdoor_transition::{
     validate_outdoor_transition_trigger_layout, OutdoorTransitionTriggerLayoutValidationError,
@@ -158,10 +158,11 @@ pub use shop::{
 pub use skill::{
     load_skill_library, load_skill_tree_library, validate_skill_definition,
     validate_skill_tree_definition, SkillActivationDefinition, SkillActivationEffect,
-    SkillDefinition, SkillDefinitionValidationError, SkillGameplayEffect, SkillLibrary,
-    SkillLoadError, SkillModifierDefinition, SkillTargetingDefinition, SkillTreeDefinition,
-    SkillTreeDefinitionValidationError, SkillTreeLibrary, SkillTreeLink, SkillTreeLoadError,
-    SkillTreePosition, SkillTreeValidationCatalog, SkillValidationCatalog,
+    SkillDefinition, SkillDefinitionValidationError, SkillExecutionKind, SkillGameplayEffect,
+    SkillLibrary, SkillLoadError, SkillModifierDefinition, SkillTargetSideRule,
+    SkillTargetingDefinition, SkillTreeDefinition, SkillTreeDefinitionValidationError,
+    SkillTreeLibrary, SkillTreeLink, SkillTreeLoadError, SkillTreePosition,
+    SkillTreeValidationCatalog, SkillValidationCatalog,
 };
 pub use world_tiles::{
     load_world_tile_library, WorldDoorBehaviorSpec, WorldSurfaceRampPrototypeSet,

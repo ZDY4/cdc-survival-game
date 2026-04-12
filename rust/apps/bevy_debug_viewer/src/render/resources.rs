@@ -8,7 +8,7 @@ use super::types::{
 };
 use crate::geometry::GridBounds;
 use bevy::prelude::*;
-use game_bevy::world_render::WorldRenderTileInstanceHandle;
+use game_bevy::{world_render::WorldRenderTileInstanceHandle, RuntimeCharacterAppearanceKey};
 use game_data::{ActorId, GridCoord, MapId};
 
 #[derive(Resource, Default)]
@@ -40,7 +40,13 @@ pub(crate) struct GeneratedDoorVisualState {
 
 #[derive(Resource, Default)]
 pub(crate) struct ActorVisualState {
-    pub by_actor: HashMap<ActorId, Entity>,
+    pub by_actor: HashMap<ActorId, ActorVisualEntry>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ActorVisualEntry {
+    pub root_entity: Entity,
+    pub appearance_key: RuntimeCharacterAppearanceKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -5,15 +5,19 @@ use super::*;
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sync_actor_visuals(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    palette: &ViewerPalette,
+    character_definitions: Option<&game_bevy::CharacterDefinitions>,
+    item_definitions: Option<&game_bevy::ItemDefinitions>,
+    character_appearance_definitions: Option<&game_bevy::CharacterAppearanceDefinitions>,
     runtime_state: &ViewerRuntimeState,
     motion_state: &ViewerActorMotionState,
     feedback_state: &ViewerActorFeedbackState,
     snapshot: &game_core::SimulationSnapshot,
     viewer_state: &ViewerState,
     render_config: ViewerRenderConfig,
+    palette: &ViewerPalette,
     actor_visual_state: &mut ActorVisualState,
     actor_visuals: &mut Query<
         (Entity, &mut Transform, &ActorBodyVisual),
@@ -37,96 +41,47 @@ pub(super) fn sync_actor_visuals(
             grid_size,
             render_config,
         );
-        let color = actor_color(actor.side, palette);
-        let accent_color = actor_accent_color(actor.side, palette);
+        let appearance_key = game_bevy::runtime_character_appearance_key(
+            &runtime_state.runtime,
+            actor.actor_id,
+            actor.definition_id.as_ref().map(|id| id.as_str()),
+        );
 
-        if let Some(entity) = actor_visual_state.by_actor.get(&actor.actor_id).copied() {
-            if let Ok((_, mut transform, body)) = actor_visuals.get_mut(entity) {
-                if body.actor_id == actor.actor_id {
-                    transform.translation = translation;
-                    if let Some(material) = materials.get_mut(&body.body_material) {
-                        material.base_color = color;
+        if let Some(existing) = actor_visual_state.by_actor.get(&actor.actor_id).cloned() {
+            if existing.appearance_key == appearance_key {
+                if let Ok((_, mut transform, body)) = actor_visuals.get_mut(existing.root_entity) {
+                    if body.actor_id == actor.actor_id {
+                        transform.translation = translation;
+                        continue;
                     }
-                    if let Some(material) = materials.get_mut(&body.head_material) {
-                        material.base_color = actor_head_color(color);
-                    }
-                    if let Some(material) = materials.get_mut(&body.accent_material) {
-                        material.base_color = accent_color;
-                    }
-                    continue;
                 }
             }
+            commands.entity(existing.root_entity).despawn();
+            actor_visual_state.by_actor.remove(&actor.actor_id);
         }
 
-        let body_material = make_standard_material(materials, color, MaterialStyle::CharacterBody);
-        let head_material = make_standard_material(
+        let root_entity = spawn_actor_visual_root(
+            commands,
+            asset_server,
+            meshes,
             materials,
-            actor_head_color(color),
-            MaterialStyle::CharacterHead,
+            palette,
+            render_config,
+            grid_size,
+            actor,
+            translation,
+            character_definitions,
+            item_definitions,
+            character_appearance_definitions,
+            runtime_state,
         );
-        let accent_material =
-            make_standard_material(materials, accent_color, MaterialStyle::CharacterAccent);
-        let shadow_material = make_standard_material(
-            materials,
-            Color::srgba(
-                0.02,
-                0.025,
-                0.032,
-                render_config.shadow_opacity_scale * 0.62,
-            ),
-            MaterialStyle::Shadow,
+        actor_visual_state.by_actor.insert(
+            actor.actor_id,
+            ActorVisualEntry {
+                root_entity,
+                appearance_key,
+            },
         );
-        let body_height = render_config.actor_body_length_world;
-        let body_width = (render_config.actor_radius_world * 1.65).max(0.18);
-        let body_depth = (render_config.actor_radius_world * 1.2).max(0.16);
-        let head_radius = (render_config.actor_radius_world * 0.92).max(0.12);
-        let shadow_width = body_width * 1.55;
-        let shadow_depth = body_depth * 1.7;
-        let pick_binding = ViewerPickBindingSpec::actor(actor.actor_id);
-        let outline_member = HoverOutlineMember::new(ViewerPickTarget::Actor(actor.actor_id));
-
-        let actor_transform =
-            Transform::from_translation(translation).with_scale(Vec3::splat(grid_size));
-        let entity = commands
-            .spawn((
-                actor_transform,
-                GlobalTransform::from(actor_transform),
-                Visibility::Visible,
-                InheritedVisibility::VISIBLE,
-                ActorBodyVisual {
-                    actor_id: actor.actor_id,
-                    body_material: body_material.clone(),
-                    head_material: head_material.clone(),
-                    accent_material: accent_material.clone(),
-                },
-            ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(shadow_width, 0.018, shadow_depth))),
-                    MeshMaterial3d(shadow_material),
-                    Transform::from_xyz(
-                        0.0,
-                        -(render_config.actor_radius_world + body_height * 0.5) + 0.01,
-                        0.0,
-                    ),
-                ));
-                parent.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(body_width, body_height, body_depth))),
-                    MeshMaterial3d(body_material.clone()),
-                    Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
-                    pickable_target(pick_binding.clone().into()),
-                    outline_member.clone(),
-                ));
-                parent.spawn((
-                    Mesh3d(meshes.add(Sphere::new(head_radius))),
-                    MeshMaterial3d(head_material),
-                    Transform::from_xyz(0.0, body_height * 0.5, 0.0),
-                    pickable_target(pick_binding.clone().into()),
-                    outline_member.clone(),
-                ));
-            })
-            .id();
-        actor_visual_state.by_actor.insert(actor.actor_id, entity);
     }
 
     let stale_actor_ids: Vec<_> = actor_visual_state
@@ -136,10 +91,111 @@ pub(super) fn sync_actor_visuals(
         .filter(|actor_id| !seen_actor_ids.contains(actor_id))
         .collect();
     for actor_id in stale_actor_ids {
-        if let Some(entity) = actor_visual_state.by_actor.remove(&actor_id) {
-            commands.entity(entity).despawn();
+        if let Some(entry) = actor_visual_state.by_actor.remove(&actor_id) {
+            commands.entity(entry.root_entity).despawn();
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_actor_visual_root(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    palette: &ViewerPalette,
+    render_config: ViewerRenderConfig,
+    grid_size: f32,
+    actor: &game_core::ActorDebugState,
+    translation: Vec3,
+    character_definitions: Option<&game_bevy::CharacterDefinitions>,
+    item_definitions: Option<&game_bevy::ItemDefinitions>,
+    character_appearance_definitions: Option<&game_bevy::CharacterAppearanceDefinitions>,
+    runtime_state: &ViewerRuntimeState,
+) -> Entity {
+    let actor_transform =
+        Transform::from_translation(translation).with_scale(Vec3::splat(grid_size));
+    let root_entity = commands
+        .spawn((
+            actor_transform,
+            GlobalTransform::from(actor_transform),
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+            ActorBodyVisual {
+                actor_id: actor.actor_id,
+            },
+        ))
+        .id();
+
+    let shadow_material = make_standard_material(
+        materials,
+        Color::srgba(
+            0.02,
+            0.025,
+            0.032,
+            render_config.shadow_opacity_scale * 0.62,
+        ),
+        MaterialStyle::Shadow,
+    );
+    let body_height = render_config.actor_body_length_world;
+    let body_width = (render_config.actor_radius_world * 1.65).max(0.18);
+    let body_depth = (render_config.actor_radius_world * 1.2).max(0.16);
+    let shadow_width = body_width * 1.55;
+    let shadow_depth = body_depth * 1.7;
+    let pick_binding = ViewerPickBindingSpec::actor(actor.actor_id);
+    let outline_member = HoverOutlineMember::new(ViewerPickTarget::Actor(actor.actor_id));
+    let pick_proxy_material = make_standard_material(
+        materials,
+        actor_color(actor.side, palette),
+        MaterialStyle::InvisiblePickProxy,
+    );
+
+    let appearance_preview = character_definitions
+        .zip(item_definitions)
+        .zip(character_appearance_definitions)
+        .and_then(|((definitions, items), appearances)| {
+            game_bevy::resolve_runtime_character_preview(
+                definitions,
+                items,
+                appearances,
+                &runtime_state.runtime,
+                actor.actor_id,
+                actor.definition_id.as_ref().map(|id| id.as_str()),
+            )
+        });
+
+    commands.entity(root_entity).with_children(|parent| {
+        parent.spawn((
+            Mesh3d(meshes.add(Cuboid::new(shadow_width, 0.018, shadow_depth))),
+            MeshMaterial3d(shadow_material),
+            Transform::from_xyz(
+                0.0,
+                -(render_config.actor_radius_world + body_height * 0.5) + 0.01,
+                0.0,
+            ),
+        ));
+        parent.spawn((
+            Mesh3d(meshes.add(Cuboid::new(body_width, body_height, body_depth))),
+            MeshMaterial3d(pick_proxy_material),
+            Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
+            pickable_target(pick_binding.into()),
+            outline_member,
+        ));
+    });
+
+    if let Some(preview) = appearance_preview.filter(game_bevy::character_preview_is_available) {
+        let appearance_entity =
+            game_bevy::spawn_character_preview_scene(
+                commands,
+                asset_server,
+                meshes,
+                materials,
+                &preview,
+            );
+        commands.entity(root_entity).add_child(appearance_entity);
+    }
+
+    root_entity
 }
 
 pub(crate) fn actor_visual_world_position(
@@ -221,23 +277,6 @@ pub(crate) fn actor_color(side: ActorSide, palette: &ViewerPalette) -> Color {
         ActorSide::Friendly => palette.friendly,
         ActorSide::Hostile => palette.hostile,
         ActorSide::Neutral => palette.neutral,
-    }
-}
-
-pub(super) fn actor_head_color(body_color: Color) -> Color {
-    let mut color = body_color.to_srgba();
-    color.red = (color.red * 1.08).min(1.0);
-    color.green = (color.green * 1.08).min(1.0);
-    color.blue = (color.blue * 1.08).min(1.0);
-    color.into()
-}
-
-pub(super) fn actor_accent_color(side: ActorSide, palette: &ViewerPalette) -> Color {
-    match side {
-        ActorSide::Player => lighten_color(palette.player, 0.2),
-        ActorSide::Friendly => lighten_color(palette.friendly, 0.16),
-        ActorSide::Hostile => lighten_color(palette.hostile, 0.12),
-        ActorSide::Neutral => lighten_color(palette.neutral, 0.12),
     }
 }
 

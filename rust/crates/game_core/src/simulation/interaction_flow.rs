@@ -1,6 +1,14 @@
 //! 交互流程编排层：负责目标解析、选项整理、主交互判定与执行分发。
 
-use super::{interaction_behaviors, *};
+use game_data::{
+    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, GridCoord,
+    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionDefinition,
+    InteractionOptionId, InteractionPrompt, InteractionTargetId, MapObjectDefinition,
+    MapObjectKind, ResolvedInteractionOption,
+};
+use tracing::{error, info, warn};
+
+use super::{interaction_behaviors, Simulation, SimulationEvent};
 
 impl Simulation {
     pub fn perform_interact(&mut self, actor_id: ActorId) -> ActionResult {

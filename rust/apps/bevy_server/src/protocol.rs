@@ -407,6 +407,20 @@ fn runtime_event_envelope(sequence: u64, event: SimulationEvent) -> RuntimeEvent
             }),
             ..RuntimeEventEnvelope::default()
         },
+        SimulationEvent::AttackResolved {
+            actor_id,
+            target_actor,
+            outcome,
+        } => RuntimeEventEnvelope {
+            sequence,
+            event_type: "attack_resolved".into(),
+            actor_id: Some(actor_id),
+            payload: json!({
+                "targetActor": target_actor,
+                "outcome": outcome
+            }),
+            ..RuntimeEventEnvelope::default()
+        },
         SimulationEvent::SkillActivationFailed {
             actor_id,
             skill_id,

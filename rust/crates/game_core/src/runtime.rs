@@ -1,12 +1,9 @@
-use std::collections::BTreeSet;
-
 use game_data::{
-    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorSide, CharacterId,
-    DialogueLibrary, DialogueRuleLibrary, EffectLibrary, GridCoord, InteractionContextSnapshot,
-    InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionId,
-    InteractionPrompt, InteractionTargetId, ItemFragment, ItemLibrary, MapLibrary,
-    OverworldLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary, SkillTargetRequest,
-    WorldCoord, WorldMode,
+    ActionResult, ActionType, ActorId, DialogueLibrary, DialogueRuleLibrary, EffectLibrary,
+    GridCoord, InteractionContextSnapshot, InteractionExecutionRequest, InteractionExecutionResult,
+    InteractionOptionId, InteractionPrompt, InteractionTargetId, ItemFragment, ItemLibrary,
+    MapLibrary, OverworldLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary,
+    WorldMode,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -14,18 +11,16 @@ use tracing::{info, warn};
 use crate::economy::{CraftOutcome, EconomyRuntimeError, HeadlessEconomyRuntime, TradeOutcome};
 use crate::grid::GridPathfindingError;
 use crate::movement::{
-    AutoMoveInterruptReason, MovementCommandOutcome, MovementPlan, MovementPlanError,
-    PendingInteractionIntent, PendingMovementIntent, PendingProgressionStep,
-    ProgressionAdvanceResult, RecentOverworldArrival,
+    AutoMoveInterruptReason, MovementPlanError, PendingInteractionIntent, PendingMovementIntent,
+    PendingProgressionStep, RecentOverworldArrival,
 };
 use crate::simulation::{
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
-    SimulationSnapshot, SimulationStateSnapshot, SkillActivationResult, SkillRuntimeState,
+    SimulationSnapshot, SimulationStateSnapshot,
 };
 use crate::vision::{
     ActorVisionSnapshot, ActorVisionUpdate, VisionRuntimeSnapshot, VisionRuntimeState,
 };
-use crate::{NpcBackgroundState, NpcRuntimeActionState};
 
 mod dialogue;
 mod interaction;
@@ -399,6 +394,90 @@ mod tests {
         assert_eq!(
             runtime.peek_pending_progression(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+    }
+
+    #[test]
+    fn continue_pending_movement_interrupts_when_move_enters_combat() {
+        let mut simulation = Simulation::new();
+        simulation.grid_world_mut().load_map(&MapDefinition {
+            id: MapId("runtime_combat_entry".into()),
+            name: "Runtime Combat Entry".into(),
+            size: MapSize {
+                width: 20,
+                height: 3,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: Vec::new(),
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: Vec::new(),
+        });
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("watcher".into())),
+            display_name: "Watcher".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(12, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+        let outcome = runtime
+            .issue_actor_move(player, GridCoord::new(4, 0, 0))
+            .expect("path should be planned");
+
+        assert!(outcome.result.success);
+        assert!(runtime.pending_movement().is_some());
+
+        assert_eq!(
+            runtime.advance_pending_progression().applied_step,
+            Some(PendingProgressionStep::RunNonCombatWorldCycle)
+        );
+        assert_eq!(
+            runtime.advance_pending_progression().applied_step,
+            Some(PendingProgressionStep::StartNextNonCombatPlayerTurn)
+        );
+
+        let continue_move = runtime.advance_pending_progression();
+
+        assert_eq!(
+            continue_move.applied_step,
+            Some(PendingProgressionStep::ContinuePendingMovement)
+        );
+        assert!(continue_move.interrupted);
+        assert!(!continue_move.reached_goal);
+        assert_eq!(
+            continue_move.interrupt_reason,
+            Some(AutoMoveInterruptReason::EnteredCombat)
+        );
+        assert!(runtime.is_in_combat());
+        assert!(runtime.pending_movement().is_none());
+        assert_eq!(runtime.current_actor(), Some(player));
+        assert_eq!(
+            runtime.get_actor_grid_position(player),
+            Some(GridCoord::new(2, 0, 0))
         );
     }
 

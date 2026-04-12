@@ -92,6 +92,7 @@ pub(crate) fn classify_event(event: &SimulationEvent) -> HudEventCategory {
         | SimulationEvent::CombatStateChanged { .. }
         | SimulationEvent::ActionRejected { .. }
         | SimulationEvent::ActionResolved { .. }
+        | SimulationEvent::AttackResolved { .. }
         | SimulationEvent::SkillActivated { .. }
         | SimulationEvent::SkillActivationFailed { .. }
         | SimulationEvent::ActorDamaged { .. }
@@ -192,6 +193,14 @@ fn format_event_text(event: SimulationEvent) -> String {
             skill_id,
             target,
             hit_actor_ids.len()
+        ),
+        SimulationEvent::AttackResolved {
+            actor_id,
+            target_actor,
+            outcome,
+        } => format!(
+            "attack resolved actor={:?} target={:?} kind={:?} damage={}",
+            actor_id, target_actor, outcome.hit_kind, outcome.damage
         ),
         SimulationEvent::SkillActivationFailed {
             actor_id,

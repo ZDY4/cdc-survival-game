@@ -6,7 +6,7 @@ use game_data::{
     OverworldLocationKind, WorldMode,
 };
 
-use crate::overworld::{default_outdoor_spawn_cell, is_outdoor_location_cell};
+use crate::overworld::default_outdoor_spawn_cell;
 use crate::overworld::{location_by_id, LocationTransitionContext, OverworldStateSnapshot};
 
 use super::{
@@ -60,9 +60,7 @@ impl Simulation {
                 MapCellDefinition {
                     x: cell.grid.x as u32,
                     z: cell.grid.z as u32,
-                    blocks_movement: cell.blocked
-                        || !cell.terrain.is_passable()
-                        || is_outdoor_location_cell(&definition, cell.grid),
+                    blocks_movement: cell.blocked || !cell.terrain.is_passable(),
                     blocks_sight: false,
                     terrain: cell.terrain.as_str().to_string(),
                     visual: None,

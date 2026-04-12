@@ -90,8 +90,9 @@ pub fn compute_cell_path(
     if start == goal {
         return Some(vec![start]);
     }
-    if !is_overworld_walkable(definition, start, true)
-        || !is_overworld_walkable(definition, goal, false)
+    if !is_overworld_path_cell_traversable(definition, start)
+        || !is_overworld_path_cell_traversable(definition, goal)
+        || is_outdoor_location_cell(definition, goal)
     {
         return None;
     }
@@ -112,7 +113,7 @@ pub fn compute_cell_path(
 
         let current_cost = *best_cost.get(&current)?;
         for neighbor in overworld_cardinal_neighbors(current) {
-            if !is_overworld_walkable(definition, neighbor, false) {
+            if !is_overworld_path_cell_traversable(definition, neighbor) {
                 continue;
             }
             let Some(step_cost) = movement_cost(definition, neighbor) else {
@@ -153,6 +154,12 @@ pub fn is_overworld_walkable(
         return false;
     }
     allow_outdoor_location_cell || !is_outdoor_location_cell(definition, grid)
+}
+
+fn is_overworld_path_cell_traversable(definition: &OverworldDefinition, grid: GridCoord) -> bool {
+    overworld_cell(definition, grid)
+        .map(overworld_cell_is_traversable)
+        .unwrap_or(false)
 }
 
 pub fn movement_cost(definition: &OverworldDefinition, grid: GridCoord) -> Option<u32> {

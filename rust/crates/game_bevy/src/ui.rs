@@ -222,6 +222,7 @@ pub struct UiTradeSessionState {
 #[derive(Debug, Clone, Default)]
 pub struct UiContainerSessionState {
     pub container_id: String,
+    pub anchor_object_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

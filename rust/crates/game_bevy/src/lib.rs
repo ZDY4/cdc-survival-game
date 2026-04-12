@@ -14,6 +14,7 @@ use spawn::register_actor_from_definition;
 
 mod ai_spawn;
 pub mod bootstrap;
+pub mod character_preview;
 pub mod container_visuals;
 mod content;
 mod logging;
@@ -29,6 +30,11 @@ pub use ai_spawn::advance_map_ai_spawn_runtime;
 pub use bootstrap::{
     build_default_startup_seed, build_runtime_from_default_startup_seed, load_runtime_bootstrap,
     RuntimeBootstrapBundle, RuntimeBootstrapError,
+};
+pub use character_preview::{
+    character_preview_is_available, parse_preview_color, resolve_runtime_character_preview,
+    runtime_actor_equipped_loadout, runtime_character_appearance_key, CharacterPreviewPart,
+    CharacterPreviewRoot, RuntimeCharacterAppearanceKey, spawn_character_preview_scene,
 };
 pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;

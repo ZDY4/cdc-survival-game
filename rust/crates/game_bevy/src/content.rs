@@ -11,8 +11,9 @@ use game_data::{
     load_dialogue_rule_library, load_effect_library, load_item_library, load_map_library,
     load_overworld_library, load_quest_library, load_recipe_library, load_settlement_library,
     load_shop_library, load_skill_library, load_skill_tree_library, load_world_tile_library,
-    validate_outdoor_transition_trigger_layout, AiModuleLibrary, AiModuleLoadError,
-    CharacterLibrary, CharacterLoadError, DialogueLibrary, DialogueLoadError, DialogueRuleLibrary,
+    load_character_appearance_library, validate_outdoor_transition_trigger_layout, AiModuleLibrary,
+    AiModuleLoadError, CharacterAppearanceLibrary, CharacterAppearanceLoadError, CharacterLibrary,
+    CharacterLoadError, DialogueLibrary, DialogueLoadError, DialogueRuleLibrary,
     DialogueRuleLoadError, EffectLibrary, EffectLoadError, ItemLibrary, ItemLoadError, MapId,
     MapLibrary, MapLoadError, OutdoorTransitionTriggerLayoutValidationError, OverworldLibrary,
     OverworldLoadError, QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError,
@@ -32,6 +33,18 @@ impl Default for CharacterDefinitionPath {
 
 #[derive(Resource, Debug, Clone)]
 pub struct CharacterDefinitions(pub CharacterLibrary);
+
+#[derive(Resource, Debug, Clone)]
+pub struct CharacterAppearanceDefinitionPath(pub PathBuf);
+
+impl Default for CharacterAppearanceDefinitionPath {
+    fn default() -> Self {
+        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/appearance/characters"))
+    }
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct CharacterAppearanceDefinitions(pub CharacterAppearanceLibrary);
 
 #[derive(Resource, Debug, Clone)]
 pub struct MapDefinitionPath(pub PathBuf);
@@ -284,6 +297,7 @@ pub struct RuntimeContentPlugin;
 impl Plugin for RuntimeContentPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CharacterDefinitionPath>()
+            .init_resource::<CharacterAppearanceDefinitionPath>()
             .init_resource::<MapDefinitionPath>()
             .init_resource::<OverworldDefinitionPath>()
             .init_resource::<WorldTileDefinitionPath>()
@@ -312,6 +326,7 @@ impl Plugin for RuntimeContentPlugin {
                 Startup,
                 (
                     load_character_definitions_on_startup,
+                    load_character_appearance_definitions_on_startup,
                     load_ai_definitions_on_startup,
                     load_effect_definitions_on_startup,
                     load_item_definitions_on_startup,
@@ -347,6 +362,14 @@ pub fn load_character_definitions(
     path: impl AsRef<Path>,
 ) -> Result<CharacterDefinitions, CharacterLoadError> {
     Ok(CharacterDefinitions(load_character_library(path)?))
+}
+
+pub fn load_character_appearance_definitions(
+    path: impl AsRef<Path>,
+) -> Result<CharacterAppearanceDefinitions, CharacterAppearanceLoadError> {
+    Ok(CharacterAppearanceDefinitions(load_character_appearance_library(
+        path,
+    )?))
 }
 
 pub fn load_effect_definitions(
@@ -538,6 +561,20 @@ pub fn load_map_definitions_on_startup(
         &mut state,
         "map_definitions",
         load_map_definitions(&path.0),
+        &path.0,
+    );
+}
+
+pub fn load_character_appearance_definitions_on_startup(
+    mut commands: Commands,
+    path: Res<CharacterAppearanceDefinitionPath>,
+    mut state: ResMut<RuntimeContentLoadState>,
+) {
+    insert_loaded_resource(
+        &mut commands,
+        &mut state,
+        "character_appearance_definitions",
+        load_character_appearance_definitions(&path.0),
         &path.0,
     );
 }

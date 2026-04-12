@@ -410,9 +410,13 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             ui.context_menu.clear();
             return;
         }
-        if container_active && container_item_hit.is_some() {
-            ui.context_menu.clear();
-            return;
+        if container_active {
+            if let Some(item_id) = container_item_hit {
+                ui.context_menu.visible = true;
+                ui.context_menu.cursor_position = cursor_position;
+                ui.context_menu.target = Some(UiContextMenuTarget::ContainerItem { item_id });
+                return;
+            }
         }
         if let Some(item_id) = effective_inventory_hit {
             ui.menu_state.selected_inventory_item = Some(item_id);

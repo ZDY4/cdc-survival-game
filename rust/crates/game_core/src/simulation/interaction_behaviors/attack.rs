@@ -1,4 +1,13 @@
-use super::*;
+use game_data::{
+    ActorId, ActorSide, InteractionExecutionResult, InteractionOptionDefinition,
+    InteractionOptionKind, InteractionTargetId,
+};
+use tracing::info;
+
+use crate::simulation::{
+    interaction_behaviors::{default_allows_primary, InteractionBehavior, InteractionExecutionContext},
+    Simulation, SimulationEvent,
+};
 
 const KINDS: &[InteractionOptionKind] = &[InteractionOptionKind::Attack];
 

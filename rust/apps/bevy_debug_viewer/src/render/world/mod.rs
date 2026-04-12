@@ -35,6 +35,9 @@ pub(crate) fn sync_world_visuals(
     mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
     mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     asset_server: Res<AssetServer>,
+    character_definitions: Option<Res<game_bevy::CharacterDefinitions>>,
+    item_definitions: Option<Res<game_bevy::ItemDefinitions>>,
+    character_appearance_definitions: Option<Res<game_bevy::CharacterAppearanceDefinitions>>,
     world_tiles: Res<game_bevy::WorldTileDefinitions>,
     time: Res<Time>,
     palette: Res<ViewerPalette>,
@@ -107,15 +110,19 @@ pub(crate) fn sync_world_visuals(
 
     actors::sync_actor_visuals(
         &mut commands,
+        &asset_server,
         &mut meshes,
         &mut materials,
-        &palette,
+        character_definitions.as_deref(),
+        item_definitions.as_deref(),
+        character_appearance_definitions.as_deref(),
         &runtime_state,
         &motion_state,
         &feedback_state,
         &snapshot,
         &viewer_state,
         *render_config,
+        &palette,
         &mut actor_visual_state,
         &mut actor_visuals,
     );
@@ -292,7 +299,7 @@ fn clear_actor_visual_entities(commands: &mut Commands, actor_visual_state: &mut
     for entity in actor_visual_state
         .by_actor
         .drain()
-        .map(|(_, entity)| entity)
+        .map(|(_, entry)| entry.root_entity)
     {
         commands.entity(entity).despawn();
     }

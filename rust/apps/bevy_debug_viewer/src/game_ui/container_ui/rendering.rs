@@ -1,61 +1,59 @@
-//! 容器页面渲染：双栏展示玩家背包与容器库存。
+//! 容器浮窗渲染：只展示容器库存，并按物件世界位置锚定到屏幕。
 
 use super::*;
 
 pub(super) fn render_container_page(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
+    window: &Window,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    runtime: &game_core::SimulationRuntime,
+    container_state: &game_bevy::UiContainerSessionState,
     container_snapshot: &game_bevy::UiContainerSnapshot,
-    inventory_snapshot: &game_bevy::UiInventoryPanelSnapshot,
-    menu_state: &UiMenuState,
     drag_state: &UiInventoryDragState,
 ) {
+    let (left, top) = container_window_screen_position(
+        window,
+        camera,
+        camera_transform,
+        runtime,
+        container_state,
+    );
+
     parent
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: px(0),
-                top: px(0),
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
+                left: px(left),
+                top: px(top),
+                width: px(CONTAINER_WINDOW_WIDTH),
+                height: px(CONTAINER_WINDOW_HEIGHT),
+                padding: UiRect::all(px(14)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(10),
+                border: UiRect::all(px(1)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.34)),
+            BackgroundColor(ui_panel_background()),
+            BorderColor::all(ui_border_strong_color()),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
+            UiMouseBlockerName("容器浮窗".to_string()),
         ))
-        .with_children(|overlay| {
-            overlay
+        .with_children(|panel| {
+            panel
                 .spawn((
                     Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(50.0),
-                        top: px(CONTAINER_PAGE_TOP),
-                        margin: UiRect {
-                            left: px(-((CONTAINER_PAGE_LEFT_WIDTH
-                                + CONTAINER_PAGE_RIGHT_WIDTH
-                                + CONTAINER_PAGE_GAP)
-                                / 2.0)),
-                            ..default()
-                        },
-                        width: px(CONTAINER_PAGE_LEFT_WIDTH
-                            + CONTAINER_PAGE_RIGHT_WIDTH
-                            + CONTAINER_PAGE_GAP),
-                        padding: UiRect::axes(px(18), px(14)),
+                        width: Val::Percent(100.0),
                         flex_direction: FlexDirection::Row,
                         justify_content: JustifyContent::SpaceBetween,
                         align_items: AlignItems::Center,
-                        border: UiRect::all(px(1)),
                         ..default()
                     },
-                    BackgroundColor(ui_panel_background()),
-                    BorderColor::all(ui_border_strong_color()),
-                    FocusPolicy::Block,
-                    RelativeCursorPosition::default(),
                     viewer_ui_passthrough_bundle(),
-                    UiMouseBlocker,
                 ))
                 .with_children(|header| {
                     header
@@ -68,7 +66,7 @@ pub(super) fn render_container_page(
                             titles.spawn(text_bundle(
                                 font,
                                 &format!("容器 · {}", container_snapshot.display_name),
-                                15.2,
+                                14.4,
                                 Color::WHITE,
                             ));
                             titles.spawn(text_bundle(
@@ -78,93 +76,25 @@ pub(super) fn render_container_page(
                                     container_snapshot.container_id,
                                     container_snapshot.item_kind_count
                                 ),
-                                10.4,
+                                10.0,
                                 ui_text_secondary_color(),
                             ));
                         });
                     header.spawn(action_button(
                         font,
-                        "关闭容器",
+                        "关闭",
                         GameUiButtonAction::CloseContainer,
                     ));
                 });
 
-            overlay
-                .spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(50.0),
-                        top: px(CONTAINER_PAGE_TOP + 74.0),
-                        bottom: px(CONTAINER_PAGE_BOTTOM),
-                        margin: UiRect {
-                            left: px(-((CONTAINER_PAGE_LEFT_WIDTH
-                                + CONTAINER_PAGE_RIGHT_WIDTH
-                                + CONTAINER_PAGE_GAP)
-                                / 2.0)),
-                            ..default()
-                        },
-                        width: px(CONTAINER_PAGE_LEFT_WIDTH
-                            + CONTAINER_PAGE_RIGHT_WIDTH
-                            + CONTAINER_PAGE_GAP),
-                        flex_direction: FlexDirection::Row,
-                        column_gap: px(CONTAINER_PAGE_GAP),
-                        ..default()
-                    },
-                    viewer_ui_passthrough_bundle(),
-                ))
-                .with_children(|columns| {
-                    render_container_inventory_column(
-                        columns,
-                        font,
-                        inventory_snapshot,
-                        menu_state,
-                        drag_state,
-                        &container_snapshot.container_id,
-                    );
-                    render_container_stock_column(columns, font, container_snapshot, drag_state);
-                });
-        });
-}
-
-fn render_container_inventory_column(
-    parent: &mut ChildSpawnerCommands,
-    font: &ViewerUiFont,
-    inventory_snapshot: &game_bevy::UiInventoryPanelSnapshot,
-    menu_state: &UiMenuState,
-    drag_state: &UiInventoryDragState,
-    container_id: &str,
-) {
-    parent
-        .spawn((
-            Node {
-                width: px(CONTAINER_PAGE_LEFT_WIDTH),
-                height: Val::Percent(100.0),
-                padding: UiRect::all(px(14)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(10),
-                border: UiRect::all(px(1)),
-                overflow: Overflow::clip_y(),
-                ..default()
-            },
-            BackgroundColor(ui_panel_background()),
-            BorderColor::all(ui_border_color()),
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
-            InventoryPanelBounds,
-            viewer_ui_passthrough_bundle(),
-            UiMouseBlocker,
-        ))
-        .with_children(|body| {
-            render_inventory_panel_contents(
-                body,
+            panel.spawn(text_bundle(
                 font,
-                inventory_snapshot,
-                menu_state,
-                drag_state,
-                InventoryPanelMode::Container {
-                    container_id: container_id.to_string(),
-                },
-            );
+                "背包面板保持正常显示；可从背包拖入这里，也可从这里拖回背包。",
+                9.6,
+                ui_text_muted_color(),
+            ));
+
+            render_container_stock_column(panel, font, container_snapshot, drag_state);
         });
 }
 
@@ -181,38 +111,33 @@ fn render_container_stock_column(
     parent
         .spawn((
             Node {
-                width: px(CONTAINER_PAGE_RIGHT_WIDTH),
-                height: Val::Percent(100.0),
-                padding: UiRect::all(px(14)),
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                min_height: px(0),
+                padding: UiRect::all(px(10)),
                 flex_direction: FlexDirection::Column,
-                row_gap: px(10),
-                border: UiRect::all(px(1)),
+                row_gap: px(8),
+                border: UiRect::all(px(if list_hover { 2.0 } else { 1.0 })),
                 overflow: Overflow::clip_y(),
                 ..default()
             },
-            BackgroundColor(ui_panel_background()),
-            BorderColor::all(ui_border_color()),
-            FocusPolicy::Block,
-            RelativeCursorPosition::default(),
+            BackgroundColor(ui_panel_background_alt()),
+            BorderColor::all(if list_hover {
+                Color::srgba(0.92, 0.80, 0.48, 1.0)
+            } else {
+                ui_border_color()
+            }),
             ContainerInventoryPanelBounds,
+            ContainerInventoryListDropZone,
+            RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
-            UiMouseBlocker,
         ))
         .with_children(|body| {
-            body.spawn(text_bundle(font, "容器库存", 11.4, ui_text_heading_color()));
+            body.spawn(text_bundle(font, "容器库存", 11.2, ui_text_heading_color()));
             body.spawn(text_bundle(
                 font,
-                &format!(
-                    "{} · 物品 {} 种",
-                    snapshot.display_name, snapshot.item_kind_count
-                ),
-                9.8,
-                ui_text_muted_color(),
-            ));
-            body.spawn(text_bundle(
-                font,
-                "点击取出；堆叠物品会先选择数量，也可直接拖回背包。",
-                9.8,
+                "右键可移动到背包；也可直接拖回背包。",
+                9.6,
                 ui_text_muted_color(),
             ));
 
@@ -220,20 +145,13 @@ fn render_container_stock_column(
                 Node {
                     width: Val::Percent(100.0),
                     flex_grow: 1.0,
-                    padding: UiRect::all(px(10)),
+                    min_height: px(0),
+                    padding: UiRect::top(px(4)),
                     flex_direction: FlexDirection::Column,
                     row_gap: px(8),
-                    border: UiRect::all(px(if list_hover { 2.0 } else { 1.0 })),
-                    overflow: Overflow::clip_y(),
+                    overflow: Overflow::scroll_y(),
                     ..default()
                 },
-                BackgroundColor(ui_panel_background()),
-                BorderColor::all(if list_hover {
-                    Color::srgba(0.92, 0.80, 0.48, 1.0)
-                } else {
-                    ui_border_color()
-                }),
-                ContainerInventoryListDropZone,
                 RelativeCursorPosition::default(),
                 viewer_ui_passthrough_bundle(),
             ))
@@ -252,8 +170,6 @@ fn render_container_stock_column(
                             Node {
                                 width: Val::Percent(100.0),
                                 flex_direction: FlexDirection::Row,
-                                column_gap: px(6),
-                                align_items: AlignItems::Stretch,
                                 ..default()
                             },
                             viewer_ui_passthrough_bundle(),
@@ -273,7 +189,7 @@ fn render_container_stock_column(
                                 BackgroundColor(if is_drag_hover {
                                     Color::srgba(0.19, 0.18, 0.14, 0.98).into()
                                 } else {
-                                    ui_panel_background_alt().into()
+                                    ui_panel_background().into()
                                 }),
                                 BorderColor::all(if is_drag_hover {
                                     Color::srgba(0.92, 0.80, 0.48, 1.0)
@@ -306,16 +222,53 @@ fn render_container_stock_column(
                                     ui_text_muted_color(),
                                 ));
                             });
-                            row.spawn(action_button(
-                                font,
-                                "取出",
-                                GameUiButtonAction::TakeContainerItem {
-                                    container_id: snapshot.container_id.clone(),
-                                    item_id: entry.item_id,
-                                },
-                            ));
                         });
                 }
             });
         });
+}
+
+fn container_window_screen_position(
+    window: &Window,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    runtime: &game_core::SimulationRuntime,
+    container_state: &game_bevy::UiContainerSessionState,
+) -> (f32, f32) {
+    let default_left = (window.width() - CONTAINER_WINDOW_WIDTH - CONTAINER_WINDOW_MARGIN)
+        .max(CONTAINER_WINDOW_MARGIN);
+    let default_top = (window.height() * 0.22).clamp(
+        CONTAINER_WINDOW_MARGIN,
+        (window.height() - CONTAINER_WINDOW_HEIGHT).max(0.0),
+    );
+
+    let Some(object_id) = container_state.anchor_object_id.as_ref() else {
+        return (default_left, default_top);
+    };
+    let snapshot = runtime.snapshot();
+    let Some(object) = snapshot
+        .grid
+        .map_objects
+        .iter()
+        .find(|object| object.object_id == *object_id)
+    else {
+        return (default_left, default_top);
+    };
+    let world = runtime.grid_to_world(object.anchor);
+    let world_position = Vec3::new(world.x, world.y + CONTAINER_WINDOW_ANCHOR_Y, world.z);
+    let Ok(viewport) = camera.world_to_viewport(camera_transform, world_position) else {
+        return (default_left, default_top);
+    };
+
+    let left = (viewport.x + CONTAINER_WINDOW_OFFSET_X).clamp(
+        CONTAINER_WINDOW_MARGIN,
+        (window.width() - CONTAINER_WINDOW_WIDTH - CONTAINER_WINDOW_MARGIN)
+            .max(CONTAINER_WINDOW_MARGIN),
+    );
+    let top = (viewport.y - CONTAINER_WINDOW_HEIGHT * 0.5).clamp(
+        CONTAINER_WINDOW_MARGIN,
+        (window.height() - CONTAINER_WINDOW_HEIGHT - CONTAINER_WINDOW_MARGIN)
+            .max(CONTAINER_WINDOW_MARGIN),
+    );
+    (left, top)
 }

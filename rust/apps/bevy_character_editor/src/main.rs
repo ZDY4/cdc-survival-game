@@ -18,10 +18,11 @@ use game_data::{
     ScheduleDay, SettlementDefinition, SettlementId, SettlementLibrary,
 };
 use game_editor::{
-    install_game_ui_fonts, preview_camera_input_system as shared_preview_camera_input_system,
-    preview_camera_sync_system as shared_preview_camera_sync_system, spawn_character_preview_scene,
-    spawn_preview_floor, spawn_preview_light_rig, CharacterPreviewPart, PreviewCameraController,
-    PreviewOrbitCamera, PreviewViewportRect,
+    character_preview_is_available, install_game_ui_fonts,
+    preview_camera_input_system as shared_preview_camera_input_system,
+    preview_camera_sync_system as shared_preview_camera_sync_system,
+    spawn_character_preview_scene, spawn_preview_floor, spawn_preview_light_rig,
+    CharacterPreviewPart, PreviewCameraController, PreviewOrbitCamera, PreviewViewportRect,
 };
 
 const LIST_PANEL_WIDTH: f32 = 250.0;
@@ -199,6 +200,7 @@ struct PreviewState {
     revision: u64,
     applied_revision: u64,
     resolved_preview: Option<ResolvedCharacterAppearancePreview>,
+    preview_notice: Option<String>,
     ai_preview: Option<CharacterAiPreview>,
     ai_error: Option<String>,
     appearance_error: Option<String>,
@@ -373,7 +375,9 @@ fn editor_ui_system(
             );
         });
 
-    egui::CentralPanel::default().show(ctx, |ui| {
+    egui::CentralPanel::default()
+        .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
+        .show(ctx, |ui| {
         let rect = ui.max_rect();
         preview_camera.viewport_rect = Some(PreviewViewportRect {
             min_x: rect.left(),
@@ -405,6 +409,15 @@ fn editor_ui_system(
             egui::FontId::new(11.0, egui::FontFamily::Proportional),
             egui::Color32::from_rgb(164, 170, 184),
         );
+        if let Some(notice) = preview_state.preview_notice.as_deref() {
+            ui.painter().text(
+                rect.left_top() + egui::vec2(14.0, 52.0),
+                egui::Align2::LEFT_TOP,
+                notice,
+                egui::FontId::new(11.0, egui::FontFamily::Proportional),
+                egui::Color32::from_rgb(210, 184, 120),
+            );
+        }
     });
 }
 
@@ -453,7 +466,7 @@ fn render_character_list_panel(
                     non_empty(&summary.role),
                     non_empty(&summary.behavior_profile_id)
                 ));
-                if response.clicked() {
+                if response.clicked() && !selected {
                     select_character(
                         summary.id.clone(),
                         data,
@@ -497,7 +510,7 @@ fn render_detail_panel(
             .clicked()
         {
             ui_state.try_on.clear();
-            refresh_preview_state(data, ui_state, preview_state, preview_camera);
+            refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
         }
     });
     ui.small(format!(
@@ -653,7 +666,7 @@ fn render_ai_tab(
             .changed();
     });
     if changed {
-        refresh_preview_state(data, ui_state, preview_state, preview_camera);
+        refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
     }
 
     ui.separator();
@@ -809,7 +822,7 @@ fn render_appearance_tab(
                     .clicked()
                 {
                     ui_state.try_on.remove(&ui_state.selected_slot);
-                    refresh_preview_state(data, ui_state, preview_state, preview_camera);
+                    refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
                 }
                 for item in items {
                     let label = format!("{} [{}]", item.name, item.id);
@@ -828,7 +841,7 @@ fn render_appearance_tab(
                         ui_state
                             .try_on
                             .insert(ui_state.selected_slot.clone(), item.id);
-                        refresh_preview_state(data, ui_state, preview_state, preview_camera);
+                        refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
                     }
                 }
             });
@@ -865,7 +878,11 @@ fn sync_preview_scene_system(
     for entity in &existing_parts {
         commands.entity(entity).despawn();
     }
-    if let Some(preview) = preview_state.resolved_preview.as_ref() {
+    if let Some(preview) = preview_state
+        .resolved_preview
+        .as_ref()
+        .filter(|preview| character_preview_is_available(preview))
+    {
         spawn_character_preview_scene(
             &mut commands,
             &asset_server,
@@ -1027,7 +1044,7 @@ fn select_character(
     ui_state.preview_context = selected_character(data, ui_state)
         .and_then(|character| default_context_for_character(character, data))
         .unwrap_or_else(default_preview_context);
-    refresh_preview_state(data, ui_state, preview_state, preview_camera);
+    refresh_preview_state(data, ui_state, preview_state, preview_camera, true);
 }
 
 fn refresh_preview_state(
@@ -1035,15 +1052,19 @@ fn refresh_preview_state(
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
     preview_camera: &mut PreviewCameraController,
+    reset_camera: bool,
 ) {
     preview_state.ai_preview = None;
     preview_state.ai_error = None;
     preview_state.appearance_error = None;
     preview_state.resolved_preview = None;
+    preview_state.preview_notice = None;
 
     let Some(character) = selected_character(data, ui_state) else {
         ui_state.status = "未选择角色。".to_string();
-        preview_camera.set_orbit(PreviewOrbitCamera::default());
+        if reset_camera {
+            preview_camera.set_orbit(PreviewOrbitCamera::default());
+        }
         preview_state.revision += 1;
         return;
     };
@@ -1056,7 +1077,15 @@ fn refresh_preview_state(
         &ui_state.try_on,
     ) {
         Ok(preview) => {
-            preview_camera.set_orbit(orbit_for_preview(&preview));
+            if reset_camera {
+                preview_camera.set_orbit(orbit_for_preview(&preview));
+            }
+            if !character_preview_is_available(&preview) {
+                preview_state.preview_notice = Some(format!(
+                    "当前角色没有可用模型：{}",
+                    preview.base_model_asset
+                ));
+            }
             preview_state.resolved_preview = Some(preview);
         }
         Err(error) => {

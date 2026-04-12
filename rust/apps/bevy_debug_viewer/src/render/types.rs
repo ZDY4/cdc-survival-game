@@ -1,7 +1,6 @@
 //! 渲染共享类型：定义交互菜单布局、静态世界规格和 viewer 专属组件类型。
 
 use crate::picking::{ViewerPickBindingSpec, ViewerPickTarget};
-use bevy::pbr::StandardMaterial;
 use bevy::prelude::*;
 use game_data::{ActorId, GridCoord, MapId, MapObjectKind};
 
@@ -157,9 +156,6 @@ pub(crate) enum MaterialStyle {
 #[derive(Component)]
 pub(crate) struct ActorBodyVisual {
     pub actor_id: ActorId,
-    pub body_material: Handle<StandardMaterial>,
-    pub head_material: Handle<StandardMaterial>,
-    pub accent_material: Handle<StandardMaterial>,
 }
 
 #[derive(Component)]

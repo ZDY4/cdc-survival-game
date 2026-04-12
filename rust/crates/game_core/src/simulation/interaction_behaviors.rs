@@ -1,6 +1,12 @@
 //! 交互行为注册层：按交互类型挂接具体行为模块，集中提供分发入口。
 
-use super::*;
+use game_data::{
+    ActorId, ActorSide, CharacterId, InteractionExecutionResult, InteractionOptionDefinition,
+    InteractionOptionKind, InteractionPrompt, InteractionTargetId, MapObjectDefinition,
+    MapObjectKind, ResolvedInteractionOption,
+};
+
+use super::Simulation;
 
 pub(crate) mod attack;
 pub(crate) mod door;

@@ -118,12 +118,21 @@ pub(crate) fn sync_game_ui_state(
         }
     }
     if let Some(container_id) = viewer_state.pending_open_container_id.take() {
+        let anchor_object_id =
+            viewer_state
+                .pending_open_container_target
+                .take()
+                .and_then(|target| match target {
+                    game_data::InteractionTargetId::MapObject(object_id) => Some(object_id),
+                    _ => None,
+                });
         if modal_state.container.is_none() {
-            modal_state.container = Some(game_bevy::UiContainerSessionState { container_id });
+            modal_state.container = Some(game_bevy::UiContainerSessionState {
+                container_id,
+                anchor_object_id,
+            });
         }
-        if modal_state.container.is_some() {
-            menu_state.close_all_panels();
-        }
+        menu_state.open_panel(UiMenuPanel::Inventory);
     }
 
     let in_main_menu_scene = should_render_main_menu(*scene_kind);

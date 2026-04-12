@@ -14,6 +14,7 @@ pub(super) fn render_inventory_panel(
     snapshot: &game_bevy::UiInventoryPanelSnapshot,
     menu_state: &UiMenuState,
     drag_state: &UiInventoryDragState,
+    mode: InventoryPanelMode,
     window_height: f32,
 ) {
     inventory::render_inventory_panel(
@@ -22,6 +23,7 @@ pub(super) fn render_inventory_panel(
         snapshot,
         menu_state,
         drag_state,
+        mode,
         window_height,
     )
 }

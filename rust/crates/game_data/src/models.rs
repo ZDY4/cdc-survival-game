@@ -82,6 +82,32 @@ pub enum SkillTargetRequest {
     Grid(GridCoord),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AttackHitKind {
+    Miss,
+    #[default]
+    Hit,
+    Crit,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AttackOutcome {
+    #[serde(default)]
+    pub hit_kind: AttackHitKind,
+    #[serde(default)]
+    pub hit_chance: f32,
+    #[serde(default)]
+    pub crit_chance: f32,
+    #[serde(default)]
+    pub damage: f32,
+    #[serde(default)]
+    pub remaining_hp: f32,
+    #[serde(default)]
+    pub defeated: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionResult {
     pub success: bool,

@@ -167,6 +167,43 @@ fn sample_los_targeting_map() -> MapDefinition {
     }
 }
 
+fn sample_aoe_occlusion_targeting_map() -> MapDefinition {
+    MapDefinition {
+        id: MapId("viewer_targeting_aoe_occlusion".into()),
+        name: "Viewer Targeting AOE Occlusion".into(),
+        size: MapSize {
+            width: 6,
+            height: 6,
+        },
+        default_level: 0,
+        levels: vec![
+            MapLevelDefinition {
+                y: 0,
+                cells: vec![MapCellDefinition {
+                    x: 3,
+                    z: 0,
+                    blocks_movement: true,
+                    blocks_sight: true,
+                    terrain: "wall".into(),
+                    visual: None,
+                    extra: BTreeMap::new(),
+                }],
+            },
+            MapLevelDefinition {
+                y: 1,
+                cells: Vec::new(),
+            },
+        ],
+        entry_points: vec![MapEntryPointDefinition {
+            id: "default_entry".into(),
+            grid: GridCoord::new(0, 0, 0),
+            facing: None,
+            extra: BTreeMap::new(),
+        }],
+        objects: Vec::new(),
+    }
+}
+
 fn sample_targeting_skill_definitions() -> SkillDefinitions {
     SkillDefinitions(game_data::SkillLibrary::from(BTreeMap::from([
         (
@@ -227,6 +264,39 @@ fn sample_targeting_skill_definitions() -> SkillDefinitions {
                         range_cells: 3,
                         shape: "diamond".to_string(),
                         radius: 1,
+                        handler_script: "damage_aoe".to_string(),
+                        ..SkillTargetingDefinition::default()
+                    }),
+                    ..SkillActivationDefinition::default()
+                }),
+                ..SkillDefinition::default()
+            },
+        ),
+        (
+            "shockwave_wide".to_string(),
+            SkillDefinition {
+                id: "shockwave_wide".to_string(),
+                name: "Shockwave Wide".to_string(),
+                activation: Some(SkillActivationDefinition {
+                    mode: "active".to_string(),
+                    cooldown: 0.0,
+                    effect: Some(SkillActivationEffect {
+                        modifiers: BTreeMap::from([(
+                            "damage".to_string(),
+                            SkillModifierDefinition {
+                                base: 2.0,
+                                per_level: 0.5,
+                                max_value: 3.0,
+                                ..SkillModifierDefinition::default()
+                            },
+                        )]),
+                        ..SkillActivationEffect::default()
+                    }),
+                    targeting: Some(SkillTargetingDefinition {
+                        enabled: true,
+                        range_cells: 4,
+                        shape: "diamond".to_string(),
+                        radius: 2,
                         handler_script: "damage_aoe".to_string(),
                         ..SkillTargetingDefinition::default()
                     }),
@@ -475,6 +545,102 @@ fn skill_targeting_preview_matches_runtime_result() {
     );
     assert!(targeting.preview_hit_actor_ids.contains(&hostile));
     assert!(targeting.preview_hit_actor_ids.contains(&flank));
+}
+
+#[test]
+fn skill_targeting_preview_excludes_aoe_targets_occluded_from_center() {
+    let mut simulation = game_core::Simulation::new();
+    simulation
+        .grid_world_mut()
+        .load_map(&sample_aoe_occlusion_targeting_map());
+    let skills = sample_targeting_skill_definitions();
+    simulation.set_skill_library(skills.0.clone());
+    let player = simulation.register_actor(game_core::RegisterActor {
+        definition_id: None,
+        display_name: "Player".into(),
+        kind: game_data::ActorKind::Player,
+        side: game_data::ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 3.0,
+        ai_controller: None,
+    });
+    let center_hostile = simulation.register_actor(game_core::RegisterActor {
+        definition_id: None,
+        display_name: "Center".into(),
+        kind: game_data::ActorKind::Enemy,
+        side: game_data::ActorSide::Hostile,
+        group_id: "hostile".into(),
+        grid_position: GridCoord::new(2, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let occluded_hostile = simulation.register_actor(game_core::RegisterActor {
+        definition_id: None,
+        display_name: "Occluded".into(),
+        kind: game_data::ActorKind::Enemy,
+        side: game_data::ActorSide::Hostile,
+        group_id: "hostile".into(),
+        grid_position: GridCoord::new(4, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation
+        .economy_mut()
+        .actor_mut(player)
+        .expect("player should exist")
+        .learned_skills
+        .insert("shockwave_wide".to_string(), 1);
+    simulation.set_actor_ap(player, 2.0);
+
+    let runtime = game_core::SimulationRuntime::from_simulation(simulation);
+    let runtime_preview = runtime.preview_skill_target(
+        player,
+        "shockwave_wide",
+        game_data::SkillTargetRequest::Grid(GridCoord::new(2, 0, 0)),
+    );
+    let runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    viewer_state.select_actor(player, ActorSide::Player);
+
+    enter_skill_targeting(
+        &runtime_state,
+        &mut viewer_state,
+        &skills,
+        "shockwave_wide",
+        ViewerTargetingSource::HotbarSlot(0),
+    )
+    .expect("wide AOE targeting should open");
+    refresh_targeting_preview(
+        &runtime_state,
+        &mut viewer_state,
+        Some(GridCoord::new(2, 0, 0)),
+    );
+
+    let targeting = viewer_state
+        .targeting_state
+        .as_ref()
+        .expect("targeting state should exist");
+    assert_eq!(
+        targeting.preview_hit_grids,
+        runtime_preview.preview_hit_grids
+    );
+    assert_eq!(
+        targeting.preview_hit_actor_ids,
+        runtime_preview.preview_hit_actor_ids
+    );
+    assert!(targeting.preview_hit_actor_ids.contains(&center_hostile));
+    assert!(!targeting.preview_hit_actor_ids.contains(&occluded_hostile));
+    assert!(!targeting
+        .preview_hit_grids
+        .contains(&GridCoord::new(4, 0, 0)));
 }
 
 #[test]

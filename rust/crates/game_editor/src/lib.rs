@@ -3,7 +3,8 @@ pub mod character_preview;
 pub mod preview;
 
 pub use character_preview::{
-    parse_preview_color, spawn_character_preview_scene, CharacterPreviewPart, CharacterPreviewRoot,
+    character_preview_is_available, parse_preview_color, spawn_character_preview_scene,
+    CharacterPreviewPart, CharacterPreviewRoot,
 };
 pub use preview::{
     apply_preview_orbit_camera, game_ui_font_bytes, install_game_ui_fonts, load_game_ui_font,

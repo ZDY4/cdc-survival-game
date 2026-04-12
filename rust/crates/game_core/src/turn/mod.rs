@@ -30,6 +30,12 @@ pub struct TurnRuntime {
     pub combat_turn_index: u64,
     pub current_group_id: Option<String>,
     pub current_actor_id: Option<ActorId>,
+    #[serde(default)]
+    pub turns_without_hostile_player_sight: u8,
+    #[serde(default = "default_combat_rng_seed")]
+    pub combat_rng_seed: u64,
+    #[serde(default)]
+    pub combat_rng_counter: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,6 +70,10 @@ pub(crate) struct ActiveActionsSnapshot {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct GroupOrderRegistrySnapshot {
     pub orders: BTreeMap<String, i32>,
+}
+
+const fn default_combat_rng_seed() -> u64 {
+    0xC0A7_A700_u64
 }
 
 impl ActiveActions {

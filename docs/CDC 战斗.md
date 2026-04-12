@@ -1,72 +1,246 @@
-# Bevy 战斗功能审查结论与优化优先级
+# Bevy 战斗审查结论、设计缺口与修正优先级
 
-## Summary
+## 背景与验证边界
 
-这次审查基于静态代码检查，未运行完整 `cargo test` 或实机 smoke。当前 Bevy 战斗链路已经具备最小可玩闭环：AP 门控、普通攻击、装备弹药/耐久消耗、伤害/击杀/掉落/经验/任务推进、主动技能与冷却、viewer 侧伤害反馈都已接上；但它仍明显处于“竖切片”阶段，核心缺口集中在战斗作用域、空间规则、命中判定、技能建模、AI 和测试覆盖。
+本次文档基于现有 `Rust / Bevy` 代码结构做静态审查，目标是判断当前战斗实现是否已经形成可持续扩展的规则基线，并给出下一步应优先收敛到 `Rust` 端的改造方向。
+
+本次结论的证据边界如下：
+
+- 已阅读并交叉核对战斗、技能、viewer 目标选择、视线与部分 AI 相关代码。
+- 未运行完整 `cargo test`、`cargo check` 或实机 smoke。
+- 结论重点不是“是否能触发一次攻击”，而是“当前实现是否已经达到可作为长期基准的规则层状态”。
+
+因此，本文档中的“问题”既包括明确的玩法正确性风险，也包括已经会阻碍后续迁移、复用和扩展的设计缺口。
+
+## 当前状态判断
+
+当前 `Rust / Bevy` 战斗链路已经打通了一条最小竖切片：
+
+- 已具备 AP 门控。
+- 已具备基于 hostile 视野的慢速战术节奏切换：敌人看见玩家时进入慢速模式，连续 3 个战斗 actor 回合未被发现则退出。
+- 已接通普通攻击。
+- 已接通装备弹药与耐久消耗。
+- 已接通伤害、击杀、掉落、经验和任务推进。
+- 已接通主动技能与冷却。
+- 已接通 viewer 侧的基础伤害反馈。
+
+但它还不能被视为“稳定可玩的战斗基线”。更准确的判断是：
+
+- 主链路已经存在。
+- 核心规则正确性仍有明显缺口。
+- 数据模型、调度模型和玩法模型尚未完全对齐。
+- viewer 已开始消费战斗结果，但规则层还没有形成足够稳定的唯一事实来源。
+
+换句话说，当前状态更接近“可继续推进的战斗竖切片”，而不是“已经完成第一版战斗系统”。
 
 ## Findings
 
-1. `P1` 战斗作用域是全局的，不是 encounter 级别的局部交战。
-   进入战斗时会把当前所有 actor 都标记为 `in_combat`，结束战斗时也按全局 Friendly/Hostile 计数判断是否退出；这会导致远处、未参与交战的单位被一并拖入回合制，也可能让战斗因为地图上别处残留敌人而无法结束。
-   参考 [combat.rs#L41](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation/combat.rs#L41) 和 [combat.rs#L390](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation/combat.rs#L390)
+### P1
 
-2. `P1` 普通攻击和技能目标判定没有复用已有视线阻挡能力，存在“隔墙命中”的规则漏洞。
-   攻击前置校验只检查目标存在、距离和弹药，技能选区也只按曼哈顿距离和 shape 扩散；但项目里其实已经有成熟的 `blocks_sight` / `has_line_of_sight` 视线实现。现在的结果是核心规则层和 viewer 目标预览层都可能允许穿墙攻击，且 UI 预览会误导玩家。
-   参考 [combat.rs#L84](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation/combat.rs#L84)、[targeting.rs#L176](D:/Projects/cdc-survival-game/rust/apps/bevy_debug_viewer/src/controls/targeting.rs#L176)、[vision.rs#L202](D:/Projects/cdc-survival-game/rust/crates/game_core/src/vision.rs#L202) 和 [vision.rs#L268](D:/Projects/cdc-survival-game/rust/crates/game_core/src/vision.rs#L268)
+1. 普通攻击缺少独立的命中结果层，`accuracy` 被折算成伤害倍率，难以继续扩展。
 
-3. `P1` 普通攻击没有真正的命中结果层，`accuracy` 被当成伤害倍率使用。
-   当前 `perform_attack()` 在动作成功后直接结算伤害；`resolve_attack_damage()` 把 `accuracy` 算成 `0.25..1.5` 的 damage multiplier，并用期望值方式折算 `crit`，但没有 miss / dodge / block / parry / graze / crit result 这些离散结果，也没有相应事件。这会让数值手感单调，且很难继续扩展状态、装备词条和战斗日志。
-   参考 [combat.rs#L4](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation/combat.rs#L4)、[combat.rs#L146](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation/combat.rs#L146) 和 [simulation.rs#L319](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation.rs#L319)
+当前实现更像“只要动作成功就结算伤害”，命中、暴击、格挡等结果没有被建模为显式 outcome，而是被部分折算进伤害值。这样做短期能跑通，但会立刻限制以下扩展：
 
-4. `P2` 技能系统能用，但仍然是 stringly-typed 的最小实现，且目前缺少阵营/目标过滤策略。
-   `handler_script` 现在只识别 `damage_single`、`damage_aoe`、`toggle_status` 三种字符串；未知 handler 统一退化为 `skill_handler_missing`。更重要的是，目标收集直接取范围内全部 actor，`damage_aoe` 也会无差别对 `preview.hit_actor_ids` 逐个扣血，现有测试还明确验证了 AOE 会打到友军。这意味着技能层目前没有 ally/enemy/self/exclude-caster 之类的 targeting policy。
-   参考 [simulation.rs#L2580](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation.rs#L2580)、[simulation.rs#L2636](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation.rs#L2636)、[simulation.rs#L2692](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation.rs#L2692) 和 [runtime.rs#L1102](D:/Projects/cdc-survival-game/rust/crates/game_core/src/runtime.rs#L1102)
+- `Miss / Graze / Hit / Crit / Block / Dodge` 等离散战斗结果。
+- 战斗日志与 viewer 文案反馈。
+- 由状态、掩体、装备词条、部位、防御机制引入的命中修正。
+- 协议层对战斗结果的稳定表达。
 
-5. `P2` Combat AI 基本缺失，目前只有通用占位 AI controller，没有专门的战斗决策。
-   回合制战斗里 AI 只是调用 `execute_turn_step()`，但现有 controller 只有 `NoopAiController`、沿目标点移动的 `FollowGridGoalAiController` 和一次性交互的 `InteractOnceAiController`，没有“选敌、接近、保持射程、切换技能、撤退、集火、利用地形”等 combat behavior。
-   参考 [combat.rs#L298](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation/combat.rs#L298)、[simulation.rs#L3238](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation.rs#L3238) 和 [actor.rs#L45](D:/Projects/cdc-survival-game/rust/crates/game_core/src/actor.rs#L45)
+这不是单纯的数值问题，而是规则输出结构过薄的问题。
 
-6. `P2` 回合顺序和攻速体系脱节，`attack_speed` 已存在于装备模型里，但没有进入战斗时序。
-   当前战斗轮换按 group 顺序和注册顺序推进，没有 initiative / speed / reaction / interrupt；与此同时，武器 profile 里已经有 `attack_speed` 字段，但在战斗逻辑中没有被消费。这说明数值模型和战斗调度还没有真正对齐。
-   参考 [combat.rs#L273](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation/combat.rs#L273)、[economy.rs#L34](D:/Projects/cdc-survival-game/rust/crates/game_core/src/economy.rs#L34) 和 `rg "attack_speed"` 的结果仅落在数据结构与样例数据，未进入战斗结算路径
+参考代码：
 
-7. `P3` viewer 目标选择与反馈已接通，但测试主要覆盖 happy path，缺少关键战斗回归用例。
-   核心层已有不少攻击/技能 happy-path 测试，viewer 也有事件反馈，但我没有找到覆盖 `enter_attack_targeting` / `enter_skill_targeting` / `refresh_targeting_preview` 的专门测试；同时也缺少 LoS、全局战斗作用域、友伤策略、miss/block 结果、AI 决策这些关键回归场景的测试。
-   参考 [runtime.rs#L1061](D:/Projects/cdc-survival-game/rust/crates/game_core/src/runtime.rs#L1061)、[simulation.rs#L3979](D:/Projects/cdc-survival-game/rust/crates/game_core/src/simulation.rs#L3979)、[event_feedback.rs#L30](D:/Projects/cdc-survival-game/rust/apps/bevy_debug_viewer/src/simulation/event_feedback.rs#L30) 和 [targeting.rs#L10](D:/Projects/cdc-survival-game/rust/apps/bevy_debug_viewer/src/controls/targeting.rs#L10)
+- `rust/crates/game_core/src/simulation/combat.rs`
+- `rust/crates/game_core/src/simulation.rs`
 
-## Implementation Changes
+### P2
 
-1. 先把战斗状态从“全局开关”改成“交战集合 / encounter 集合”。
-   最小可行方案是给 actor 增加 encounter membership，并让 `enter_combat`、`exit_combat_if_resolved`、回合选择都只在当前 encounter 内工作。
+2. 技能系统已具备最小闭环，但仍停留在字符串分发阶段，且目标策略缺失。
 
-2. 统一空间判定。
-   普通攻击、技能目标解析、viewer 预览都应复用同一套 `game_core` 视线/遮挡查询，不要在 viewer 再维护一套“只看距离”的简化规则。
+当前 `handler_script` 仍然是偏原型阶段的分发方式，这会带来两个问题：
 
-3. 重构攻击结算为两阶段。
-   第一阶段产出 `AttackOutcome`，至少区分 `Miss / Hit / Crit / Blocked`；第二阶段再根据 outcome 结算伤害、事件和反馈。这样后续才能挂闪避、掩体、词条、状态异常和详细战斗日志。
+- handler 语义不受类型系统约束，后续扩展容易变成弱约束字符串协议。
+- 技能目标缺少显式 targeting policy，`hostile_only`、`friendly_only`、`self_only`、`exclude_self`、是否允许友伤等都没有被清晰建模。
 
-4. 把技能系统从字符串分发推进到类型化/枚举化 handler，并补齐目标策略。
-   至少需要目标掩码或过滤规则，例如 `hostile_only`、`friendly_only`、`self_only`、`exclude_self`，否则 AOE 和 buff/debuff 很快会失控。
+如果这一层不尽快类型化，技能会很快演化成新的规则黑盒，而且还会把“友伤是否允许”这种设计问题默默固化成实现副作用。
 
-5. 单独建设 combat AI 层。
-   短期先做 rule-based controller：选最近威胁、进/退到合适距离、优先普通攻击或冷却完成技能；中期再考虑把现有 GOAP 线索接到战斗域。
+参考代码：
 
-6. 把时序属性收敛到统一设计。
-   要么让 `attack_speed`、速度、AP、initiative 其中之一成为唯一主导，要么明确区分“单回合动作数”和“轮转频率”，避免数据字段存在但不起作用。
+- `rust/crates/game_core/src/simulation.rs`
+- `rust/crates/game_core/src/runtime.rs`
 
-## Test Plan
+3. Combat AI 基本仍是占位状态，尚未形成战斗域决策。
 
-1. 增加核心层回归用例。
-   覆盖“隔墙攻击失败”“未参与 encounter 的敌人不进战斗”“远处敌人不阻止本地 encounter 结束”“AOE 仅命中允许阵营”“miss / crit / block 事件正确发出”。
+现有 AI controller 更接近通用移动/交互占位，而不是战斗智能。缺失的不是“更聪明的行为树”，而是最基本的战斗决策层：
 
-2. 增加 viewer 层目标预览用例。
-   覆盖普通攻击和技能选区在遮挡、越界、同层/异层、友军占位时的 valid grids 与 preview hits。
+- 选择目标。
+- 判断接敌还是保持距离。
+- 选择普通攻击还是技能。
+- AP 用尽后的回合结束策略。
+- 面对遮挡、射程和地形时的基本行动选择。
 
-3. 增加 AI smoke。
-   至少验证 hostile 在战斗中会接敌、会攻击、AP 耗尽后让出回合，不会因为 `NoopAiController` 卡住战斗流程。
+只要战斗域没有独立决策层，当前战斗回合即便可运行，也很难验证其玩法表现是否成立。
 
-## Assumptions
+参考代码：
 
-- 审查对象按仓库约束默认聚焦 `Rust / Bevy`，未把 `Godot` 侧作为功能基准。
-- 这里把“当前缺失”定义为：会影响玩法正确性、难以扩展、或已经让数据模型与运行时脱节的部分，不仅仅是 bug。
-- 友伤是否是最终设计我无法从仓库意图中完全确认；但当前实现至少缺少显式 targeting policy，这一点本身就是设计缺口。
+- `rust/crates/game_core/src/simulation/combat.rs`
+- `rust/crates/game_core/src/simulation.rs`
+- `rust/crates/game_core/src/actor.rs`
+
+4. 回合顺序、AP 与 `attack_speed` 之间的关系尚未收敛到同一套设计。
+
+当前文档和实现都能看出一个信号：战斗已经开始需要节奏系统，但“谁先行动”“一回合能做多少事”“武器快慢如何体现”这几件事还没有形成明确边界。
+
+这里不建议把 `attack_speed`、速度、`AP`、`initiative` 简单压成一个字段，因为它们通常描述的是不同层次：
+
+- `initiative` 更像轮到谁先动。
+- `AP` 更像当前回合可支配动作预算。
+- `attack_speed` 更像武器或动作成本节奏。
+
+真正的问题不是字段多，而是这些字段还没有被组织成一致的时序模型。
+
+参考代码：
+
+- `rust/crates/game_core/src/simulation/combat.rs`
+- `rust/crates/game_core/src/economy.rs`
+
+### P3
+
+5. 测试建议方向正确，但当前测试计划还缺少“确定性战斗验证”的前提。
+
+已有测试覆盖了一部分 happy path，但如果后续真的引入显式命中结果层、AI 决策、友伤策略和更细的技能行为，就需要先保证战斗结算可被稳定复现，否则测试很快会脆弱。
+
+当前缺少明确要求：
+
+- 战斗 RNG 是否可注入。
+- 是否支持固定 seed。
+- viewer 预览是否只消费规则层输出，而不自行推导。
+
+这些前提如果不先写进文档，后面即便补测试，也可能只是把不稳定行为包装成测试。
+
+参考代码：
+
+- `rust/crates/game_core/src/runtime.rs`
+- `rust/crates/game_core/src/simulation.rs`
+- `rust/apps/bevy_debug_viewer/src/simulation/event_feedback.rs`
+- `rust/apps/bevy_debug_viewer/src/controls/targeting.rs`
+
+## 修正方向与落点
+
+### Phase 1: 先修规则正确性
+
+1. 将攻击结算拆成“命中结果”与“伤害结算”两个阶段。
+
+建议落点：
+
+- `game_core`: 定义 `AttackOutcome` 一类的结果结构，例如 `Miss / Hit / Crit / Blocked`。
+- `game_protocol`: 视需要同步稳定的战斗事件，不直接暴露 viewer 专用语义。
+- viewer: 根据结果事件做反馈，而不是根据伤害值反推命中性质。
+
+### Phase 2: 收敛可扩展的数据与规则表达
+
+2. 把技能 handler 从字符串分发推进到类型化规则表达。
+
+建议落点：
+
+- `game_data`: 技能定义中保留稳定 schema，不把运行时逻辑写成随意字符串约定。
+- `game_core`: 将技能执行建模成可枚举、可校验、可扩展的效果类型。
+- `game_protocol`: 若技能结果需要跨端同步，传输结构应直接承载已解析后的规则结果，而不是脚本字符串。
+
+3. 明确 targeting policy，避免把设计决定藏在实现副作用里。
+
+至少需要显式定义这些维度：
+
+- 目标阵营限制。
+- 是否允许友伤。
+- 是否允许命中自身。
+- 是否排除施法者。
+- 是否要求 LoS。
+- 地面目标和单位目标是否共用一套规则。
+
+这部分应优先作为共享规则配置存在，而不是只写在 viewer 或单个 handler 分支里。
+
+4. 明确时序模型，不再让 `attack_speed` 处于“存在但未定义用途”的状态。
+
+建议做法不是强行合并字段，而是先写清模型：
+
+- 谁决定行动顺序。
+- 什么决定一回合内可执行动作数。
+- 武器或技能的节奏成本如何计入。
+- 是否存在反应、打断、预备动作等未来扩展位。
+
+只有模型先明确，`game_data` 中的数值字段才不会继续失真。
+
+### Phase 3: 建立可验证的战斗运行时
+
+5. 单独建设 combat AI 层，而不是继续依赖通用占位 controller。
+
+短期目标应是 rule-based 的最小实现：
+
+- 选择最近或最优威胁。
+- 判断接近、保持距离或换位。
+- 决定普通攻击还是技能。
+- AP 耗尽时可靠结束回合。
+
+这部分长期可以继续演化，但短期先保证“战斗回合能按战斗规则稳定运行”。
+
+6. 把测试从 happy path 扩展到确定性战斗回归。
+
+建议优先覆盖：
+
+- 隔墙攻击失败。
+- AOE 只命中 targeting policy 允许的对象。
+- `Miss / Crit / Block` 等结果会稳定发出正确事件。
+- viewer 只消费规则层 preview/result，不自己产生额外命中逻辑。
+
+同时建议补一个前置约束：
+
+- 战斗结算应支持固定 seed 或可注入 RNG。
+
+## 建议新增章节
+
+为了让这份文档更适合作为后续实现依据，建议补充以下章节。
+
+### Non-goals
+
+明确本轮不处理的事项，避免边界继续发散。例如：
+
+- 不补 Godot 侧兼容实现。
+- 不把战斗规则回写到表现层。
+- 不在本轮展开动画、特效和 UI polish。
+- 不为临时方便再新增一套独立数据结构。
+
+### 待确认设计问题
+
+建议把当前尚未定论、但会影响实现方向的问题显式列出：
+
+1. 友伤是默认开启、默认关闭，还是由技能显式配置。
+2. 近战攻击是否总是要求 LoS。
+3. 中立单位、召唤物、陷阱、地面效果分别如何归类。
+4. viewer 是否只做消费层，还是需要保留任何本地预测。
+
+这类问题不需要在本轮全部定稿，但应从“隐性实现选择”提升为“显性设计问题”。
+
+## 非目标偏移检查
+
+按仓库当前约束，这份审查与后续修正建议应保持以下边界：
+
+- 以 `Rust / Bevy` 为唯一长期实现方向。
+- 不以 `Godot` 现有逻辑作为兼容基准。
+- 不把核心战斗规则继续沉积到 viewer 或表现层。
+- 不新增与 `game_data` / `game_protocol` 平行的私有长期结构。
+
+当前这份修正后的建议没有偏离上述方向，但后续实现时最容易出现的偏移点有两个：
+
+- 把慢速模式切换条件继续散落在 viewer、输入层和规则层三处，而不是收敛到 `game_core`。
+- 把 targeting 和命中合法性再次拆成 viewer 和规则层两套实现。
+
+## 最自然的下一步
+
+如果要继续推进，推荐按以下顺序落地：
+
+1. 先把 `AttackOutcome` 收敛到 `game_core`。
+2. 再把技能目标策略和类型化效果定义补齐到共享规则层。
+3. 最后补战斗 AI 与确定性测试，避免在不稳定规则基线上堆行为。
+
+这条顺序的核心原因是：只有规则层先成为唯一事实来源，viewer、协议和 AI 才不会继续建立在临时实现上。

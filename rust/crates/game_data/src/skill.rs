@@ -6,6 +6,26 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillExecutionKind {
+    #[default]
+    None,
+    DamageSingle,
+    DamageAoe,
+    ToggleStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillTargetSideRule {
+    #[default]
+    Any,
+    HostileOnly,
+    FriendlyOnly,
+    PlayerOnly,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SkillModifierDefinition {
     #[serde(default)]
@@ -26,7 +46,7 @@ pub struct SkillGameplayEffect {
     pub extra: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkillTargetingDefinition {
     #[serde(default)]
     pub enabled: bool,
@@ -37,9 +57,37 @@ pub struct SkillTargetingDefinition {
     #[serde(default)]
     pub radius: i32,
     #[serde(default)]
+    pub execution_kind: SkillExecutionKind,
+    #[serde(default)]
+    pub target_side_rule: SkillTargetSideRule,
+    #[serde(default = "default_target_requires_los")]
+    pub require_los: bool,
+    #[serde(default = "default_target_allow_self")]
+    pub allow_self: bool,
+    #[serde(default = "default_target_allow_friendly_fire")]
+    pub allow_friendly_fire: bool,
+    #[serde(default)]
     pub handler_script: String,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+impl Default for SkillTargetingDefinition {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            range_cells: 0,
+            shape: default_target_shape(),
+            radius: 0,
+            execution_kind: SkillExecutionKind::None,
+            target_side_rule: SkillTargetSideRule::Any,
+            require_los: default_target_requires_los(),
+            allow_self: default_target_allow_self(),
+            allow_friendly_fire: default_target_allow_friendly_fire(),
+            handler_script: String::new(),
+            extra: BTreeMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -232,6 +280,8 @@ pub enum SkillDefinitionValidationError {
     NegativeCooldown { skill_id: String },
     #[error("skill {skill_id} targeting shape {shape} is invalid")]
     InvalidTargetShape { skill_id: String, shape: String },
+    #[error("skill {skill_id} target_side_rule is invalid for self-targeting policy")]
+    InvalidTargetSideRule { skill_id: String },
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -393,6 +443,13 @@ pub fn validate_skill_definition(
                 return Err(SkillDefinitionValidationError::InvalidTargetShape {
                     skill_id: skill_id.to_string(),
                     shape: shape.to_string(),
+                });
+            }
+            if matches!(targeting.target_side_rule, SkillTargetSideRule::PlayerOnly)
+                && !targeting.allow_self
+            {
+                return Err(SkillDefinitionValidationError::InvalidTargetSideRule {
+                    skill_id: skill_id.to_string(),
                 });
             }
         }
@@ -598,6 +655,18 @@ fn default_activation_mode() -> String {
 
 fn default_target_shape() -> String {
     "single".to_string()
+}
+
+const fn default_target_requires_los() -> bool {
+    true
+}
+
+const fn default_target_allow_self() -> bool {
+    true
+}
+
+const fn default_target_allow_friendly_fire() -> bool {
+    true
 }
 
 #[cfg(test)]
