@@ -179,6 +179,23 @@ pub struct AgentPlanStep {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NarrativeTurnKindCorrection {
+    pub from: String,
+    pub to: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NarrativeResponseStructureSummary {
+    pub question_count: usize,
+    pub option_count: usize,
+    pub plan_step_count: usize,
+    pub requested_action_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentExecutionStep {
     pub id: String,
     pub label: String,
@@ -216,6 +233,8 @@ pub struct ReviewQueueItem {
 pub struct NarrativeGenerateResponse {
     pub engine_mode: String,
     pub turn_kind: String,
+    pub turn_kind_source: String,
+    pub turn_kind_correction: Option<NarrativeTurnKindCorrection>,
     pub assistant_message: String,
     pub draft_markdown: String,
     pub summary: String,
@@ -232,6 +251,8 @@ pub struct NarrativeGenerateResponse {
     pub questions: Vec<AgentQuestion>,
     pub options: Vec<AgentOption>,
     pub plan_steps: Vec<AgentPlanStep>,
+    pub response_structure: NarrativeResponseStructureSummary,
+    pub diagnostic_flags: Vec<String>,
     pub requires_user_reply: bool,
     pub execution_steps: Vec<AgentExecutionStep>,
     pub current_step_id: Option<String>,
@@ -275,6 +296,13 @@ struct NarrativeGenerationProgressEvent {
 struct NarrativeGenerationProgressEmitter {
     app: AppHandle,
     request_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct TurnKindResolution {
+    kind: String,
+    source: String,
+    correction: Option<NarrativeTurnKindCorrection>,
 }
 
 impl NarrativeGenerationProgressEmitter {
@@ -718,6 +746,8 @@ async fn run_narrative_generation(
             Ok(NarrativeGenerateResponse {
                 engine_mode: "single_agent".to_string(),
                 turn_kind: "blocked".to_string(),
+                turn_kind_source: "provider_error".to_string(),
+                turn_kind_correction: None,
                 assistant_message: provider_error.clone(),
                 draft_markdown: String::new(),
                 summary: String::new(),
@@ -754,6 +784,13 @@ async fn run_narrative_generation(
                 questions: Vec::new(),
                 options: Vec::new(),
                 plan_steps: Vec::new(),
+                response_structure: NarrativeResponseStructureSummary {
+                    question_count: 0,
+                    option_count: 0,
+                    plan_step_count: 0,
+                    requested_action_count: 0,
+                },
+                diagnostic_flags: vec!["provider_error".to_string()],
                 requires_user_reply: false,
                 execution_steps: failed_execution_steps(
                     "request-model",
@@ -788,7 +825,9 @@ fn finalize_generation(
     let options = read_agent_options(&object);
     let plan_steps = read_agent_plan_steps(&object);
     let requested_actions = read_requested_actions(&object);
-    let turn_kind = resolve_turn_kind(&object, &draft_markdown, &questions, &options, &plan_steps);
+    let turn_kind_resolution =
+        resolve_turn_kind(&object, &draft_markdown, &questions, &options, &plan_steps);
+    let turn_kind = turn_kind_resolution.kind.clone();
     let model_notes = read_string_list(
         object
             .get("review_notes")
@@ -821,6 +860,14 @@ fn finalize_generation(
     let provenance_refs = context.used_context_refs.clone();
     let review_queue_items =
         build_review_queue_items(&turn_kind, &plan_steps, &requested_actions, &draft_markdown);
+    let response_structure = NarrativeResponseStructureSummary {
+        question_count: questions.len(),
+        option_count: options.len(),
+        plan_step_count: plan_steps.len(),
+        requested_action_count: requested_actions.len(),
+    };
+    let diagnostic_flags =
+        build_generation_diagnostic_flags(&request, &turn_kind, &requested_actions);
 
     if turn_kind == "options" || turn_kind == "clarification" || turn_kind == "plan" {
         eprintln!(
@@ -835,6 +882,8 @@ fn finalize_generation(
     Ok(NarrativeGenerateResponse {
         engine_mode: engine_mode.to_string(),
         turn_kind: turn_kind.clone(),
+        turn_kind_source: turn_kind_resolution.source.clone(),
+        turn_kind_correction: turn_kind_resolution.correction.clone(),
         assistant_message,
         draft_markdown,
         summary,
@@ -862,9 +911,13 @@ fn finalize_generation(
                 "engineMode": engine_mode,
                 "agentRuns": &agent_runs,
                 "turnKind": turn_kind,
+                "turnKindSource": turn_kind_resolution.source.clone(),
+                "turnKindCorrection": turn_kind_resolution.correction.clone(),
                 "options": options,
                 "questions": questions,
                 "planSteps": plan_steps,
+                "requestedActionCount": requested_actions.len(),
+                "diagnosticFlags": diagnostic_flags.clone(),
             }),
         ),
         raw_output,
@@ -876,6 +929,8 @@ fn finalize_generation(
         questions,
         options,
         plan_steps,
+        response_structure,
+        diagnostic_flags,
         requires_user_reply: matches!(turn_kind.as_str(), "clarification" | "options" | "plan"),
         execution_steps,
         current_step_id: None,
@@ -1212,7 +1267,7 @@ fn read_draft_markdown(object: &Map<String, Value>) -> String {
 }
 
 fn read_agent_questions(object: &Map<String, Value>) -> Vec<AgentQuestion> {
-    object
+    let explicit = object
         .get("questions")
         .and_then(Value::as_array)
         .map(|values| {
@@ -1253,7 +1308,13 @@ fn read_agent_questions(object: &Map<String, Value>) -> Vec<AgentQuestion> {
                 })
                 .collect::<Vec<_>>()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    if !explicit.is_empty() {
+        return explicit;
+    }
+
+    infer_questions_from_text(narrative_response_text(object))
 }
 
 fn read_agent_options(object: &Map<String, Value>) -> Vec<AgentOption> {
@@ -1305,7 +1366,7 @@ fn read_agent_options(object: &Map<String, Value>) -> Vec<AgentOption> {
         .unwrap_or_default();
 
     if options.len() < 2 {
-        Vec::new()
+        infer_options_from_text(narrative_response_text(object))
     } else {
         options.into_iter().take(4).collect()
     }
@@ -1396,6 +1457,112 @@ fn infer_plan_steps_from_text(text: &str) -> Vec<AgentPlanStep> {
         .collect()
 }
 
+fn narrative_response_text(object: &Map<String, Value>) -> String {
+    [
+        object
+            .get("assistant_message")
+            .or_else(|| object.get("assistantMessage"))
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        object.get("summary").and_then(Value::as_str).unwrap_or_default(),
+    ]
+    .into_iter()
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+fn infer_questions_from_text(text: String) -> Vec<AgentQuestion> {
+    let mut questions = Vec::new();
+    for raw_line in text.lines() {
+        let normalized = strip_plan_step_prefix(raw_line)
+            .trim_matches(['-', '*', '•', ' '])
+            .trim()
+            .to_string();
+        if normalized.is_empty() {
+            continue;
+        }
+        if !normalized.contains('？') && !normalized.contains('?') {
+            continue;
+        }
+        let label = normalized
+            .split_inclusive(['？', '?'])
+            .next()
+            .unwrap_or(normalized.as_str())
+            .trim()
+            .to_string();
+        if label.len() < 6 || questions.iter().any(|question: &AgentQuestion| question.label == label) {
+            continue;
+        }
+        questions.push(AgentQuestion {
+            id: format!("question-{}", questions.len() + 1),
+            label,
+            placeholder: String::new(),
+            required: true,
+        });
+        if questions.len() >= 3 {
+            break;
+        }
+    }
+    questions
+}
+
+fn infer_options_from_text(text: String) -> Vec<AgentOption> {
+    let mut options = Vec::new();
+    for raw_line in text.lines() {
+        let normalized = strip_plan_step_prefix(raw_line)
+            .trim_matches(['-', '*', '•', ' '])
+            .trim()
+            .to_string();
+        if normalized.is_empty() || normalized.contains('？') || normalized.contains('?') {
+            continue;
+        }
+        let has_list_prefix = raw_line.trim_start().starts_with('-')
+            || raw_line.trim_start().starts_with('*')
+            || raw_line.trim_start().starts_with('•')
+            || raw_line
+                .trim_start()
+                .chars()
+                .next()
+                .map(|ch| ch.is_ascii_digit())
+                .unwrap_or(false);
+        if !has_list_prefix {
+            continue;
+        }
+        let mut parts = normalized.splitn(2, ['：', ':', '-', ' ']);
+        let first = parts.next().unwrap_or_default().trim();
+        let rest = parts.next().unwrap_or_default().trim();
+        let label = if first.len() >= 4 && first.len() <= 24 {
+            first.to_string()
+        } else {
+            normalized.chars().take(24).collect::<String>()
+        };
+        if label.is_empty() || options.iter().any(|option: &AgentOption| option.label == label) {
+            continue;
+        }
+        options.push(AgentOption {
+            id: format!("option-{}", options.len() + 1),
+            label: label.clone(),
+            description: if rest.is_empty() {
+                normalized.clone()
+            } else {
+                rest.to_string()
+            },
+            followup_prompt: normalized,
+        });
+        if options.len() >= 4 {
+            break;
+        }
+    }
+
+    if options.len() < 2 {
+        Vec::new()
+    } else {
+        options
+    }
+}
+
 fn parse_plan_step_line(line: &str) -> Option<String> {
     let trimmed = strip_plan_step_prefix(line);
     if trimmed.is_empty() || trimmed == line {
@@ -1442,7 +1609,7 @@ fn resolve_turn_kind(
     questions: &[AgentQuestion],
     options: &[AgentOption],
     plan_steps: &[AgentPlanStep],
-) -> String {
+) -> TurnKindResolution {
     let explicit = object
         .get("turn_kind")
         .or_else(|| object.get("turnKind"))
@@ -1450,41 +1617,121 @@ fn resolve_turn_kind(
         .map(str::trim)
         .unwrap_or_default();
 
-    let resolved = match explicit {
+    let (resolved, source, correction_reason) = match explicit {
         "clarification" if questions.is_empty() => {
             if !draft_markdown.trim().is_empty() {
-                "final_answer".to_string()
+                (
+                    "final_answer".to_string(),
+                    "corrected_draft".to_string(),
+                    Some("clarification 缺少 questions，但存在 draft_markdown。".to_string()),
+                )
             } else {
-                "blocked".to_string()
+                (
+                    "blocked".to_string(),
+                    "corrected_invalid".to_string(),
+                    Some("clarification 缺少 questions。".to_string()),
+                )
             }
         }
         "options" if options.is_empty() => {
             if !draft_markdown.trim().is_empty() {
-                "final_answer".to_string()
+                (
+                    "final_answer".to_string(),
+                    "corrected_draft".to_string(),
+                    Some("options 缺少 options，但存在 draft_markdown。".to_string()),
+                )
             } else {
-                "blocked".to_string()
+                (
+                    "blocked".to_string(),
+                    "corrected_invalid".to_string(),
+                    Some("options 缺少 options。".to_string()),
+                )
             }
         }
         "plan" if plan_steps.is_empty() => {
             if !draft_markdown.trim().is_empty() {
-                "final_answer".to_string()
+                (
+                    "final_answer".to_string(),
+                    "corrected_draft".to_string(),
+                    Some("plan 缺少 plan_steps，但存在 draft_markdown。".to_string()),
+                )
             } else {
-                "blocked".to_string()
+                (
+                    "blocked".to_string(),
+                    "corrected_invalid".to_string(),
+                    Some("plan 缺少 plan_steps。".to_string()),
+                )
             }
         }
-        "final_answer" | "clarification" | "options" | "plan" | "blocked" => explicit.to_string(),
-        _ if !questions.is_empty() => "clarification".to_string(),
-        _ if !options.is_empty() => "options".to_string(),
-        _ if !plan_steps.is_empty() && draft_markdown.trim().is_empty() => "plan".to_string(),
-        _ if !draft_markdown.trim().is_empty() => "final_answer".to_string(),
-        _ => "blocked".to_string(),
+        "final_answer" | "clarification" | "options" | "plan" | "blocked" => {
+            (explicit.to_string(), "explicit".to_string(), None)
+        }
+        _ if !questions.is_empty() => (
+            "clarification".to_string(),
+            "inferred_questions".to_string(),
+            if explicit.is_empty() {
+                None
+            } else {
+                Some("turn_kind 无效，已根据 questions 推断 clarification。".to_string())
+            },
+        ),
+        _ if !options.is_empty() => (
+            "options".to_string(),
+            "inferred_options".to_string(),
+            if explicit.is_empty() {
+                None
+            } else {
+                Some("turn_kind 无效，已根据 options 推断 options。".to_string())
+            },
+        ),
+        _ if !plan_steps.is_empty() && draft_markdown.trim().is_empty() => (
+            "plan".to_string(),
+            "inferred_plan".to_string(),
+            if explicit.is_empty() {
+                None
+            } else {
+                Some("turn_kind 无效，已根据 plan_steps 推断 plan。".to_string())
+            },
+        ),
+        _ if !draft_markdown.trim().is_empty() => (
+            "final_answer".to_string(),
+            "inferred_draft".to_string(),
+            if explicit.is_empty() {
+                None
+            } else {
+                Some("turn_kind 无效，已根据 draft_markdown 推断 final_answer。".to_string())
+            },
+        ),
+        _ => (
+            "blocked".to_string(),
+            if explicit.is_empty() {
+                "inferred_blocked".to_string()
+            } else {
+                "corrected_invalid".to_string()
+            },
+            if explicit.is_empty() {
+                None
+            } else {
+                Some("turn_kind 无效，且缺少可推断结构。".to_string())
+            },
+        ),
     };
 
-    if explicit != resolved {
+    let correction = if explicit != resolved || correction_reason.is_some() {
+        Some(NarrativeTurnKindCorrection {
+            from: explicit.to_string(),
+            to: resolved.clone(),
+            reason: correction_reason.unwrap_or_else(|| "turn_kind 与结构不一致，已自动纠偏。".to_string()),
+        })
+    } else {
+        None
+    };
+
+    if let Some(correction) = correction.as_ref() {
         eprintln!(
             "[NarrativeLab] turn_kind corrected: {} -> {} (questions={}, options={}, plan={}, draft={})",
-            explicit,
-            resolved,
+            correction.from,
+            correction.to,
             questions.len(),
             options.len(),
             plan_steps.len(),
@@ -1492,7 +1739,26 @@ fn resolve_turn_kind(
         );
     }
 
-    resolved
+    TurnKindResolution {
+        kind: resolved,
+        source,
+        correction,
+    }
+}
+
+fn build_generation_diagnostic_flags(
+    request: &NarrativeGenerateRequest,
+    turn_kind: &str,
+    requested_actions: &[AgentActionRequest],
+) -> Vec<String> {
+    let mut flags = Vec::new();
+    let prompt = request.user_prompt.trim();
+    let split_like_prompt = (prompt.contains("移出去") || prompt.contains("拆出") || prompt.contains("单独创建"))
+        && (prompt.contains("人物设定") || prompt.contains("文档"));
+    if split_like_prompt && turn_kind == "final_answer" && requested_actions.is_empty() {
+        flags.push("missing_requested_actions_for_split".to_string());
+    }
+    flags
 }
 
 fn read_assistant_message(
@@ -2161,8 +2427,9 @@ mod tests {
     #[test]
     fn resolve_turn_kind_falls_back_to_final_answer_when_draft_exists() {
         let object = Map::new();
-        let turn_kind = resolve_turn_kind(&object, "# 标题", &[], &[], &[]);
-        assert_eq!(turn_kind, "final_answer");
+        let resolution = resolve_turn_kind(&object, "# 标题", &[], &[], &[]);
+        assert_eq!(resolution.kind, "final_answer");
+        assert_eq!(resolution.source, "inferred_draft");
     }
 
     #[test]
@@ -2184,6 +2451,47 @@ mod tests {
             ]
         });
         assert_eq!(read_agent_options(too_many.as_object().unwrap()).len(), 4);
+    }
+
+    #[test]
+    fn read_agent_questions_can_infer_from_question_lines() {
+        let payload = json!({
+            "assistant_message": "继续之前我需要确认：\n1. 这一章主要推进哪条主线？\n2. 你希望整体基调更偏调查还是冲突？"
+        });
+        let questions = read_agent_questions(payload.as_object().unwrap());
+        assert_eq!(questions.len(), 2);
+        assert!(questions[0].label.contains("主线"));
+        assert!(questions[1].label.contains("调查还是冲突"));
+    }
+
+    #[test]
+    fn read_agent_options_can_infer_from_bulleted_lines() {
+        let payload = json!({
+            "assistant_message": "可以从这几个方向切入：\n1. 医院调查线：强化陈医生的病例线索\n2. 据点秩序线：突出交易区与旧砖秘密\n3. 地下工程线：把守阈人与污染源提前推到前台"
+        });
+        let options = read_agent_options(payload.as_object().unwrap());
+        assert_eq!(options.len(), 3);
+        assert_eq!(options[0].label, "医院调查线");
+        assert!(options[1].description.contains("旧砖秘密"));
+    }
+
+    #[test]
+    fn build_generation_diagnostic_flags_marks_missing_split_actions() {
+        let request = NarrativeGenerateRequest {
+            request_id: Some("req-split".to_string()),
+            doc_type: "world_bible".to_string(),
+            target_slug: "doc-1".to_string(),
+            action: "revise_document".to_string(),
+            user_prompt: "把商人老王相关内容移出去，单独创建一份人物设定。".to_string(),
+            editor_instruction: String::new(),
+            current_markdown: "# 示例".to_string(),
+            selected_range: None,
+            selected_text: String::new(),
+            related_doc_slugs: Vec::new(),
+            derived_target_doc_type: None,
+        };
+        let flags = build_generation_diagnostic_flags(&request, "final_answer", &[]);
+        assert!(flags.contains(&"missing_requested_actions_for_split".to_string()));
     }
 
     #[test]

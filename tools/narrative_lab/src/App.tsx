@@ -52,6 +52,8 @@ const defaultNarrativeAppSettings: NarrativeAppSettings = {
 
 const defaultEditorRuntimeFlags: EditorRuntimeFlags = {
   menuSelfTestScenario: null,
+  chatRegressionMode: null,
+  autoCloseAfterSelfTest: false,
 };
 
 function App() {
@@ -300,6 +302,8 @@ function App() {
         canPersist={canPersist}
         startupReady={narrativeStartupReady}
         selfTestScenario={editorRuntimeFlags.menuSelfTestScenario ?? null}
+        chatRegressionMode={editorRuntimeFlags.chatRegressionMode ?? null}
+        autoCloseAfterSelfTest={editorRuntimeFlags.autoCloseAfterSelfTest ?? false}
         status={status}
         onStatusChange={setStatus}
         onReload={loadNarrativeWorkspaceOnly}

@@ -12,9 +12,9 @@ use crate::static_world::{
     StaticWorldSceneSpec,
 };
 use crate::tile_world::{
-    default_floor_top, resolve_map_object_visual_placements,
-    resolve_snapshot_object_visual_placements, resolve_tile_world_scene, TilePlacementSpec,
-    TileWorldSceneSpec,
+    default_floor_top, resolve_map_cell_surface_placements, resolve_map_object_visual_placements,
+    resolve_snapshot_cell_surface_placements, resolve_snapshot_object_visual_placements,
+    resolve_tile_world_scene, TilePlacementSpec, TileWorldSceneSpec,
 };
 
 mod doors;
@@ -221,7 +221,6 @@ pub struct WorldRenderPalette {
     pub pickup: Color,
     pub interactive: Color,
     pub trigger: Color,
-    pub ai_spawn: Color,
     pub current_turn: Color,
 }
 
@@ -240,7 +239,6 @@ impl Default for WorldRenderPalette {
             pickup: Color::srgb(0.42, 0.82, 0.62),
             interactive: Color::srgb(0.35, 0.61, 0.9),
             trigger: Color::srgb(0.96, 0.72, 0.29),
-            ai_spawn: Color::srgb(0.86, 0.35, 0.4),
             current_turn: Color::srgb(0.49, 0.89, 0.95),
         }
     }
@@ -327,6 +325,7 @@ pub fn build_world_render_scene_from_map_definition(
     definition: &MapDefinition,
     current_level: i32,
     config: WorldRenderConfig,
+    world_tiles: &WorldTileLibrary,
 ) -> WorldRenderScene {
     let mut grid_world = GridWorld::default();
     grid_world.load_map(definition);
@@ -342,6 +341,19 @@ pub fn build_world_render_scene_from_map_definition(
     );
     let grid_size = static_scene.grid_size;
     let floor_top = default_floor_top(current_level, grid_size, config.floor_thickness_world);
+    let mut tile_placements = resolve_map_cell_surface_placements(
+        definition,
+        current_level,
+        floor_top,
+        grid_size,
+        world_tiles,
+    );
+    tile_placements.extend(resolve_map_object_visual_placements(
+        definition,
+        current_level,
+        floor_top,
+        grid_size,
+    ));
     WorldRenderScene {
         current_level,
         static_scene,
@@ -351,12 +363,7 @@ pub fn build_world_render_scene_from_map_definition(
             .filter(|door| door.level == current_level)
             .cloned()
             .collect(),
-        tile_placements: resolve_map_object_visual_placements(
-            definition,
-            current_level,
-            floor_top,
-            grid_size,
-        ),
+        tile_placements,
     }
 }
 
@@ -365,6 +372,7 @@ pub fn build_world_render_scene_from_simulation_snapshot(
     current_level: i32,
     config: WorldRenderConfig,
     bounds_override: Option<StaticWorldGridBounds>,
+    world_tiles: &WorldTileLibrary,
 ) -> WorldRenderScene {
     let static_scene = build_static_world_from_simulation_snapshot(
         snapshot,
@@ -378,6 +386,19 @@ pub fn build_world_render_scene_from_simulation_snapshot(
     );
     let grid_size = static_scene.grid_size;
     let floor_top = default_floor_top(current_level, grid_size, config.floor_thickness_world);
+    let mut tile_placements = resolve_snapshot_cell_surface_placements(
+        snapshot,
+        current_level,
+        floor_top,
+        grid_size,
+        world_tiles,
+    );
+    tile_placements.extend(resolve_snapshot_object_visual_placements(
+        snapshot,
+        current_level,
+        floor_top,
+        grid_size,
+    ));
     WorldRenderScene {
         current_level,
         static_scene,
@@ -387,12 +408,7 @@ pub fn build_world_render_scene_from_simulation_snapshot(
             .filter(|door| door.level == current_level)
             .cloned()
             .collect(),
-        tile_placements: resolve_snapshot_object_visual_placements(
-            snapshot,
-            current_level,
-            floor_top,
-            grid_size,
-        ),
+        tile_placements,
     }
 }
 

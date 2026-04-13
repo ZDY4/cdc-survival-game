@@ -33,8 +33,9 @@ pub use bootstrap::{
 };
 pub use character_preview::{
     character_preview_is_available, parse_preview_color, resolve_runtime_character_preview,
-    runtime_actor_equipped_loadout, runtime_character_appearance_key, CharacterPreviewPart,
-    CharacterPreviewRoot, RuntimeCharacterAppearanceKey, spawn_character_preview_scene,
+    runtime_actor_equipped_loadout, runtime_character_appearance_key,
+    spawn_character_preview_scene, CharacterPreviewPart, CharacterPreviewRoot,
+    RuntimeCharacterAppearanceKey,
 };
 pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;
@@ -467,7 +468,7 @@ mod tests {
         MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation, MapSize,
         OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
         OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTravelRuleSet, WorldMode, WorldWallTileSetId,
+        OverworldTravelRuleSet, WorldMode, WorldSurfaceTileSetId, WorldWallTileSetId,
     };
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1260,7 +1261,7 @@ startup_map =
     fn sample_building_tile_set() -> MapBuildingTileSetSpec {
         MapBuildingTileSetSpec {
             wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-            floor_surface_set_id: None,
+            floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
             door_prototype_id: None,
         }
     }

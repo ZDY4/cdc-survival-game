@@ -4,8 +4,8 @@ use game_data::{
     ActionResult, ActionType, ActorId, ActorKind, ActorSide, AttackOutcome, CharacterId,
     CharacterInteractionProfile, GridCoord, InteractionContextSnapshot,
     InteractionExecutionRequest, InteractionExecutionResult, InteractionOptionId,
-    InteractionPrompt, InteractionTargetId, MapId, MapObjectFootprint, MapObjectKind, MapRotation,
-    SkillTargetRequest, TurnState,
+    InteractionPrompt, InteractionTargetId, MapCellVisualSpec, MapId, MapObjectFootprint,
+    MapObjectKind, MapRotation, SkillTargetRequest, TurnState,
 };
 use serde::{Deserialize, Serialize};
 
@@ -482,6 +482,7 @@ pub struct MapCellDebugState {
     pub blocks_movement: bool,
     pub blocks_sight: bool,
     pub terrain: String,
+    pub visual: Option<MapCellVisualSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

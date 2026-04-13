@@ -2,7 +2,9 @@ use game_data::{InteractionExecutionResult, InteractionOptionDefinition, Interac
 use tracing::info;
 
 use crate::simulation::{
-    interaction_behaviors::{build_default_behavior, InteractionBehavior, InteractionExecutionContext},
+    interaction_behaviors::{
+        build_default_behavior, InteractionBehavior, InteractionExecutionContext,
+    },
     Simulation, SimulationEvent,
 };
 

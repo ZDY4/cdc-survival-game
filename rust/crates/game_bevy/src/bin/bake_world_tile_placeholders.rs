@@ -1,8 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, VertexAttributeValues};
 use bevy::prelude::*;
+use bevy::render::render_resource::PrimitiveTopology;
 use game_bevy::static_world::{BuildingWallNeighborMask, StaticWorldBuildingWallTileSpec};
 use game_bevy::world_render::build_building_wall_tile_mesh;
 use game_data::{GridCoord, MapBuildingWallVisualKind, WorldWallTileSetId};
@@ -10,22 +12,26 @@ use serde_json::json;
 
 fn main() -> Result<(), String> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let asset_dir = repo_root.join("rust/assets/world_tiles/building_wall_legacy");
+    let wall_asset_dir = repo_root.join("rust/assets/world_tiles/building_wall_legacy");
+    let surface_asset_dir = repo_root.join("rust/assets/world_tiles/surface_placeholder_basic");
     let data_dir = repo_root.join("data/world_tiles");
 
-    fs::create_dir_all(&asset_dir).map_err(|error| {
-        format!(
-            "failed to create asset output directory {}: {error}",
-            asset_dir.display()
-        )
-    })?;
-    fs::create_dir_all(&data_dir).map_err(|error| {
-        format!(
-            "failed to create data output directory {}: {error}",
-            data_dir.display()
-        )
-    })?;
+    create_dir(&wall_asset_dir)?;
+    create_dir(&surface_asset_dir)?;
+    create_dir(&data_dir)?;
 
+    bake_building_wall_placeholders(&wall_asset_dir, &data_dir)?;
+    bake_surface_placeholders(&surface_asset_dir, &data_dir)?;
+
+    println!(
+        "baked placeholder tiles to {} and {}",
+        wall_asset_dir.display(),
+        surface_asset_dir.display()
+    );
+    Ok(())
+}
+
+fn bake_building_wall_placeholders(asset_dir: &Path, data_dir: &Path) -> Result<(), String> {
     let archetypes = [
         ("isolated", BuildingWallNeighborMask::none()),
         (
@@ -92,28 +98,26 @@ fn main() -> Result<(), String> {
         };
         let (mesh, _, _) = build_building_wall_tile_mesh(&spec, 1.0)
             .ok_or_else(|| format!("failed to build mesh for wall archetype {name}"))?;
-        let asset_name = format!("{name}.gltf");
-        let asset_path = asset_dir.join(&asset_name);
-        write_gltf_mesh(&asset_path, &mesh)?;
-        prototypes.push(json!({
-            "id": format!("building_wall_legacy/{name}"),
-            "source": {
-                "kind": "gltf_scene",
-                "path": format!("world_tiles/building_wall_legacy/{asset_name}"),
-                "scene_index": 0
-            },
-            "bounds": {
-                "center": { "x": 0.0, "y": 0.0, "z": 0.0 },
-                "size": {
-                    "x": 1.0,
-                    "y": 2.4,
-                    "z": 1.0
-                }
-            },
-            "cast_shadows": true,
-            "receive_shadows": true
-        }));
+        prototypes.push(bake_placeholder_prototype(
+            asset_dir,
+            &format!("building_wall_legacy/{name}"),
+            &format!("{name}.gltf"),
+            &mesh,
+            true,
+            true,
+        )?);
     }
+
+    let floor_asset_name = "floor_flat.gltf";
+    let floor_mesh = Mesh::from(Cuboid::new(1.0, 0.11, 1.0));
+    prototypes.push(bake_placeholder_prototype(
+        asset_dir,
+        "building_wall_legacy/floor_flat",
+        floor_asset_name,
+        &floor_mesh,
+        false,
+        true,
+    )?);
 
     let catalog = json!({
         "prototypes": prototypes,
@@ -128,24 +132,360 @@ fn main() -> Result<(), String> {
                 "cross_prototype_id": "building_wall_legacy/cross"
             }
         ],
-        "surface_sets": []
+        "surface_sets": [
+            {
+                "id": "building_wall_legacy/floor",
+                "flat_top_prototype_id": "building_wall_legacy/floor_flat"
+            }
+        ]
     });
-    let catalog_path = data_dir.join("building_wall_legacy.json");
-    let catalog_json = serde_json::to_string_pretty(&catalog)
-        .map_err(|error| format!("failed to serialize wall tile catalog: {error}"))?;
-    fs::write(&catalog_path, catalog_json).map_err(|error| {
-        format!(
-            "failed to write wall tile catalog {}: {error}",
-            catalog_path.display()
-        )
-    })?;
+    write_catalog_file(
+        data_dir.join("building_wall_legacy.json"),
+        &catalog,
+        "wall tile",
+    )?;
 
-    println!(
-        "baked wall placeholder assets to {} and {}",
-        asset_dir.display(),
-        catalog_path.display()
-    );
     Ok(())
+}
+
+fn bake_surface_placeholders(asset_dir: &Path, data_dir: &Path) -> Result<(), String> {
+    let flat_mesh = Mesh::from(Cuboid::new(1.0, 0.11, 1.0));
+    let ramp_north_mesh = build_ramp_mesh(1.0, 1.0, 0.11);
+    let ramp_east_mesh = rotated_mesh_y(&ramp_north_mesh, -std::f32::consts::FRAC_PI_2)?;
+    let ramp_south_mesh = rotated_mesh_y(&ramp_north_mesh, std::f32::consts::PI)?;
+    let ramp_west_mesh = rotated_mesh_y(&ramp_north_mesh, std::f32::consts::FRAC_PI_2)?;
+    let cliff_side_mesh = translated_mesh(
+        &Mesh::from(Cuboid::new(1.0, 1.0, 0.16)),
+        Vec3::new(0.0, 0.5, 0.42),
+    )?;
+    let cliff_outer_corner_mesh = translated_mesh(
+        &Mesh::from(Cuboid::new(0.32, 1.0, 0.32)),
+        Vec3::new(0.34, 0.5, 0.34),
+    )?;
+    let cliff_inner_corner_mesh = translated_mesh(
+        &Mesh::from(Cuboid::new(0.52, 1.0, 0.52)),
+        Vec3::new(0.14, 0.5, 0.14),
+    )?;
+
+    let prototypes = vec![
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/flat",
+            "flat.gltf",
+            &flat_mesh,
+            false,
+            true,
+        )?,
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/ramp_north",
+            "ramp_north.gltf",
+            &ramp_north_mesh,
+            false,
+            true,
+        )?,
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/ramp_east",
+            "ramp_east.gltf",
+            &ramp_east_mesh,
+            false,
+            true,
+        )?,
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/ramp_south",
+            "ramp_south.gltf",
+            &ramp_south_mesh,
+            false,
+            true,
+        )?,
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/ramp_west",
+            "ramp_west.gltf",
+            &ramp_west_mesh,
+            false,
+            true,
+        )?,
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/cliff_side",
+            "cliff_side.gltf",
+            &cliff_side_mesh,
+            true,
+            true,
+        )?,
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/cliff_outer_corner",
+            "cliff_outer_corner.gltf",
+            &cliff_outer_corner_mesh,
+            true,
+            true,
+        )?,
+        bake_placeholder_prototype(
+            asset_dir,
+            "surface_placeholder_basic/cliff_inner_corner",
+            "cliff_inner_corner.gltf",
+            &cliff_inner_corner_mesh,
+            true,
+            true,
+        )?,
+    ];
+
+    let catalog = json!({
+        "prototypes": prototypes,
+        "wall_sets": [],
+        "surface_sets": [
+            {
+                "id": "surface_placeholder_basic/default",
+                "flat_top_prototype_id": "surface_placeholder_basic/flat",
+                "ramp_top_prototype_ids": {
+                    "north": "surface_placeholder_basic/ramp_north",
+                    "east": "surface_placeholder_basic/ramp_east",
+                    "south": "surface_placeholder_basic/ramp_south",
+                    "west": "surface_placeholder_basic/ramp_west"
+                },
+                "cliff_side_prototype_id": "surface_placeholder_basic/cliff_side",
+                "cliff_outer_corner_prototype_id": "surface_placeholder_basic/cliff_outer_corner",
+                "cliff_inner_corner_prototype_id": "surface_placeholder_basic/cliff_inner_corner"
+            }
+        ]
+    });
+    write_catalog_file(
+        data_dir.join("surface_placeholder_basic.json"),
+        &catalog,
+        "surface tile",
+    )?;
+
+    Ok(())
+}
+
+fn bake_placeholder_prototype(
+    asset_dir: &Path,
+    prototype_id: &str,
+    asset_name: &str,
+    mesh: &Mesh,
+    cast_shadows: bool,
+    receive_shadows: bool,
+) -> Result<serde_json::Value, String> {
+    let asset_path = asset_dir.join(asset_name);
+    write_gltf_mesh(&asset_path, mesh)?;
+    let (center, size) = mesh_bounds(mesh)?;
+    let asset_folder = asset_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("invalid asset directory {}", asset_dir.display()))?;
+    Ok(json!({
+        "id": prototype_id,
+        "source": {
+            "kind": "gltf_scene",
+            "path": format!("world_tiles/{asset_folder}/{asset_name}"),
+            "scene_index": 0
+        },
+        "bounds": {
+            "center": { "x": center.x, "y": center.y, "z": center.z },
+            "size": { "x": size.x, "y": size.y, "z": size.z }
+        },
+        "cast_shadows": cast_shadows,
+        "receive_shadows": receive_shadows
+    }))
+}
+
+fn write_catalog_file(
+    path: PathBuf,
+    catalog: &serde_json::Value,
+    label: &str,
+) -> Result<(), String> {
+    let catalog_json = serde_json::to_string_pretty(catalog)
+        .map_err(|error| format!("failed to serialize {label} catalog: {error}"))?;
+    fs::write(&path, catalog_json)
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))
+}
+
+fn create_dir(path: &Path) -> Result<(), String> {
+    fs::create_dir_all(path)
+        .map_err(|error| format!("failed to create directory {}: {error}", path.display()))
+}
+
+fn build_ramp_mesh(width: f32, depth: f32, height: f32) -> Mesh {
+    let half_width = width * 0.5;
+    let half_depth = depth * 0.5;
+    let south_west = Vec3::new(-half_width, 0.0, half_depth);
+    let south_east = Vec3::new(half_width, 0.0, half_depth);
+    let north_west_bottom = Vec3::new(-half_width, 0.0, -half_depth);
+    let north_east_bottom = Vec3::new(half_width, 0.0, -half_depth);
+    let north_west_top = Vec3::new(-half_width, height, -half_depth);
+    let north_east_top = Vec3::new(half_width, height, -half_depth);
+    let mut positions = Vec::<[f32; 3]>::new();
+    let mut normals = Vec::<[f32; 3]>::new();
+    let mut uvs = Vec::<[f32; 2]>::new();
+    let mut indices = Vec::<u32>::new();
+
+    push_quad(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        south_west,
+        south_east,
+        north_east_top,
+        north_west_top,
+    );
+    push_quad(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        north_west_bottom,
+        north_east_bottom,
+        south_east,
+        south_west,
+    );
+    push_quad(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        north_west_bottom,
+        north_west_top,
+        north_east_top,
+        north_east_bottom,
+    );
+    push_triangle(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        south_east,
+        north_east_bottom,
+        north_east_top,
+    );
+    push_triangle(
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+        south_west,
+        north_west_top,
+        north_west_bottom,
+    );
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
+}
+
+fn translated_mesh(mesh: &Mesh, translation: Vec3) -> Result<Mesh, String> {
+    transformed_mesh(mesh, Mat4::from_translation(translation))
+}
+
+fn rotated_mesh_y(mesh: &Mesh, yaw: f32) -> Result<Mesh, String> {
+    transformed_mesh(mesh, Mat4::from_quat(Quat::from_rotation_y(yaw)))
+}
+
+fn transformed_mesh(mesh: &Mesh, transform: Mat4) -> Result<Mesh, String> {
+    let positions = mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .and_then(as_vec3_attribute)
+        .ok_or_else(|| "mesh is missing positions".to_string())?;
+    let normals = mesh
+        .attribute(Mesh::ATTRIBUTE_NORMAL)
+        .and_then(as_vec3_attribute)
+        .ok_or_else(|| "mesh is missing normals".to_string())?;
+    let uvs = mesh
+        .attribute(Mesh::ATTRIBUTE_UV_0)
+        .and_then(as_vec2_attribute)
+        .ok_or_else(|| "mesh is missing uvs".to_string())?;
+    let indices = mesh
+        .indices()
+        .and_then(as_u32_indices)
+        .ok_or_else(|| "mesh is missing indices".to_string())?;
+    let normal_matrix = Mat3::from_mat4(transform).inverse().transpose();
+    let transformed_positions = positions
+        .into_iter()
+        .map(|position| {
+            transform
+                .transform_point3(Vec3::new(position[0], position[1], position[2]))
+                .to_array()
+        })
+        .collect::<Vec<_>>();
+    let transformed_normals = normals
+        .into_iter()
+        .map(|normal| {
+            normal_matrix
+                .mul_vec3(Vec3::new(normal[0], normal[1], normal[2]))
+                .normalize_or_zero()
+                .to_array()
+        })
+        .collect::<Vec<_>>();
+    let mut transformed = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    transformed.insert_attribute(Mesh::ATTRIBUTE_POSITION, transformed_positions);
+    transformed.insert_attribute(Mesh::ATTRIBUTE_NORMAL, transformed_normals);
+    transformed.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    transformed.insert_indices(Indices::U32(indices));
+    Ok(transformed)
+}
+
+fn mesh_bounds(mesh: &Mesh) -> Result<(Vec3, Vec3), String> {
+    let positions = mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .and_then(as_vec3_attribute)
+        .ok_or_else(|| "mesh is missing positions".to_string())?;
+    let (min, max) = vec3_bounds(&positions);
+    Ok(((min + max) * 0.5, max - min))
+}
+
+fn push_quad(
+    positions: &mut Vec<[f32; 3]>,
+    normals: &mut Vec<[f32; 3]>,
+    uvs: &mut Vec<[f32; 2]>,
+    indices: &mut Vec<u32>,
+    a: Vec3,
+    b: Vec3,
+    c: Vec3,
+    d: Vec3,
+) {
+    let base_index = positions.len() as u32;
+    let normal = (b - a).cross(c - a).normalize_or_zero().to_array();
+    positions.extend([a.to_array(), b.to_array(), c.to_array(), d.to_array()]);
+    normals.extend([normal, normal, normal, normal]);
+    uvs.extend([[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]);
+    indices.extend([
+        base_index,
+        base_index + 1,
+        base_index + 2,
+        base_index,
+        base_index + 2,
+        base_index + 3,
+    ]);
+}
+
+fn push_triangle(
+    positions: &mut Vec<[f32; 3]>,
+    normals: &mut Vec<[f32; 3]>,
+    uvs: &mut Vec<[f32; 2]>,
+    indices: &mut Vec<u32>,
+    a: Vec3,
+    b: Vec3,
+    c: Vec3,
+) {
+    let base_index = positions.len() as u32;
+    let normal = (b - a).cross(c - a).normalize_or_zero().to_array();
+    positions.extend([a.to_array(), b.to_array(), c.to_array()]);
+    normals.extend([normal, normal, normal]);
+    uvs.extend([[0.0, 1.0], [1.0, 1.0], [0.5, 0.0]]);
+    indices.extend([base_index, base_index + 1, base_index + 2]);
 }
 
 fn write_gltf_mesh(path: &Path, mesh: &Mesh) -> Result<(), String> {

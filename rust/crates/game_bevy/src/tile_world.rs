@@ -1,14 +1,16 @@
 use bevy::prelude::*;
-use game_core::{MapObjectDebugState, SimulationSnapshot};
+use game_core::{MapCellDebugState, MapObjectDebugState, SimulationSnapshot};
 use game_data::{
     expand_object_footprint, GridCoord, MapDefinition, MapObjectDefinition, MapRotation,
-    WorldTileLibrary, WorldTilePrototypeId,
+    TileSlopeKind, WorldSurfaceTileSetDefinition, WorldTileBounds, WorldTileLibrary,
+    WorldTilePrototypeId,
 };
 use std::collections::HashMap;
 
 use crate::static_world::{
     BuildingWallNeighborMask, StaticWorldBoxSpec, StaticWorldBuildingWallTileSpec,
     StaticWorldMaterialRole, StaticWorldOccluderKind, StaticWorldSceneSpec, StaticWorldSemantic,
+    StaticWorldSurfaceTileSpec,
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TileRenderClass {
@@ -71,6 +73,10 @@ pub fn resolve_tile_world_scene(
 ) -> TileWorldSceneSpec {
     let mut placements =
         resolve_building_wall_tile_placements(&static_scene.building_wall_tiles, library);
+    placements.extend(resolve_surface_tile_placements(
+        &static_scene.surface_tiles,
+        library,
+    ));
     placements.extend(extra_placements.iter().cloned());
     let mut batches = Vec::<TileBatchSpec>::new();
     let mut batch_indices = HashMap::<TileBatchKey, usize>::new();
@@ -115,6 +121,29 @@ pub fn resolve_tile_world_scene(
         batches,
         pick_proxies,
     }
+}
+
+pub fn resolve_surface_tile_placements(
+    surface_tiles: &[StaticWorldSurfaceTileSpec],
+    library: &WorldTileLibrary,
+) -> Vec<TilePlacementSpec> {
+    surface_tiles
+        .iter()
+        .filter_map(|tile| {
+            let surface_set = library.surface_set(&tile.surface_set_id)?;
+            Some(TilePlacementSpec {
+                prototype_id: surface_set.flat_top_prototype_id.clone(),
+                translation: tile.translation,
+                rotation: tile.rotation,
+                scale: tile.scale,
+                render_class: TileRenderClass::Standard,
+                semantic: tile.semantic.clone(),
+                occluder_kind: None,
+                occluder_cells: Vec::new(),
+                pick_proxy: None,
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,6 +217,41 @@ pub fn resolve_snapshot_object_visual_placements(
         .filter(|object| object.anchor.y == current_level)
         .filter_map(|object| snapshot_object_visual_placement(object, floor_top, grid_size))
         .collect()
+}
+
+pub fn resolve_map_cell_surface_placements(
+    definition: &MapDefinition,
+    current_level: i32,
+    floor_top: f32,
+    grid_size: f32,
+    library: &WorldTileLibrary,
+) -> Vec<TilePlacementSpec> {
+    let cells = definition
+        .levels
+        .iter()
+        .find(|level| level.y == current_level)
+        .into_iter()
+        .flat_map(|level| level.cells.iter())
+        .filter_map(|cell| tactical_surface_cell_from_map_definition(cell, current_level))
+        .collect::<Vec<_>>();
+    resolve_tactical_surface_placements(&cells, floor_top, grid_size, library)
+}
+
+pub fn resolve_snapshot_cell_surface_placements(
+    snapshot: &SimulationSnapshot,
+    current_level: i32,
+    floor_top: f32,
+    grid_size: f32,
+    library: &WorldTileLibrary,
+) -> Vec<TilePlacementSpec> {
+    let cells = snapshot
+        .grid
+        .map_cells
+        .iter()
+        .filter(|cell| cell.grid.y == current_level)
+        .filter_map(tactical_surface_cell_from_snapshot)
+        .collect::<Vec<_>>();
+    resolve_tactical_surface_placements(&cells, floor_top, grid_size, library)
 }
 
 pub fn default_floor_top(current_level: i32, grid_size: f32, floor_thickness_world: f32) -> f32 {
@@ -333,6 +397,407 @@ fn parse_vec3_csv(value: &str) -> Option<Vec3> {
     Some(Vec3::new(x, y, z))
 }
 
+#[derive(Debug, Clone)]
+struct TacticalSurfaceCellSpec {
+    grid: GridCoord,
+    surface_set_id: game_data::WorldSurfaceTileSetId,
+    elevation_steps: i32,
+    slope: TileSlopeKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CardinalDirection {
+    North,
+    East,
+    South,
+    West,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CornerDirection {
+    NorthEast,
+    SouthEast,
+    SouthWest,
+    NorthWest,
+}
+
+fn tactical_surface_cell_from_map_definition(
+    cell: &game_data::MapCellDefinition,
+    current_level: i32,
+) -> Option<TacticalSurfaceCellSpec> {
+    let visual = cell.visual.as_ref()?;
+    let surface_set_id = visual.surface_set_id.clone()?;
+    Some(TacticalSurfaceCellSpec {
+        grid: GridCoord::new(cell.x as i32, current_level, cell.z as i32),
+        surface_set_id,
+        elevation_steps: visual.elevation_steps,
+        slope: visual.slope,
+    })
+}
+
+fn tactical_surface_cell_from_snapshot(
+    cell: &MapCellDebugState,
+) -> Option<TacticalSurfaceCellSpec> {
+    let visual = cell.visual.as_ref()?;
+    let surface_set_id = visual.surface_set_id.clone()?;
+    Some(TacticalSurfaceCellSpec {
+        grid: cell.grid,
+        surface_set_id,
+        elevation_steps: visual.elevation_steps,
+        slope: visual.slope,
+    })
+}
+
+fn resolve_tactical_surface_placements(
+    cells: &[TacticalSurfaceCellSpec],
+    floor_top: f32,
+    grid_size: f32,
+    library: &WorldTileLibrary,
+) -> Vec<TilePlacementSpec> {
+    let cells_by_grid = cells
+        .iter()
+        .map(|cell| (cell.grid, cell))
+        .collect::<HashMap<_, _>>();
+    let mut placements = Vec::new();
+
+    for cell in cells {
+        let Some(surface_set) = library.surface_set(&cell.surface_set_id) else {
+            continue;
+        };
+        let step_height = surface_step_height(surface_set, library);
+        push_surface_top_placement(
+            &mut placements,
+            cell,
+            surface_set,
+            floor_top,
+            grid_size,
+            step_height,
+            library,
+        );
+        push_surface_cliff_placements(
+            &mut placements,
+            cell,
+            surface_set,
+            &cells_by_grid,
+            floor_top,
+            grid_size,
+            step_height,
+            library,
+        );
+    }
+
+    placements
+}
+
+fn push_surface_top_placement(
+    placements: &mut Vec<TilePlacementSpec>,
+    cell: &TacticalSurfaceCellSpec,
+    surface_set: &WorldSurfaceTileSetDefinition,
+    floor_top: f32,
+    grid_size: f32,
+    step_height: f32,
+    library: &WorldTileLibrary,
+) {
+    let prototype_id = top_surface_prototype_id(surface_set, cell.slope);
+    let Some(bounds) = library
+        .prototype(prototype_id)
+        .map(|prototype| &prototype.bounds)
+    else {
+        return;
+    };
+    let scale = scale_surface_bounds(bounds, grid_size, bounds.size.y.max(0.001));
+    let height = scaled_surface_height(bounds, scale);
+    let top_surface_y = floor_top + cell.elevation_steps as f32 * step_height;
+    placements.push(TilePlacementSpec {
+        prototype_id: prototype_id.clone(),
+        translation: Vec3::new(
+            (cell.grid.x as f32 + 0.5) * grid_size,
+            top_surface_y - height * 0.5,
+            (cell.grid.z as f32 + 0.5) * grid_size,
+        ),
+        rotation: Quat::IDENTITY,
+        scale,
+        render_class: TileRenderClass::Standard,
+        semantic: None,
+        occluder_kind: None,
+        occluder_cells: Vec::new(),
+        pick_proxy: None,
+    });
+}
+
+fn push_surface_cliff_placements(
+    placements: &mut Vec<TilePlacementSpec>,
+    cell: &TacticalSurfaceCellSpec,
+    surface_set: &WorldSurfaceTileSetDefinition,
+    cells_by_grid: &HashMap<GridCoord, &TacticalSurfaceCellSpec>,
+    floor_top: f32,
+    grid_size: f32,
+    step_height: f32,
+    library: &WorldTileLibrary,
+) {
+    let top_surface_y = floor_top + cell.elevation_steps as f32 * step_height;
+
+    if let Some(prototype_id) = surface_set.cliff_side_prototype_id.as_ref() {
+        for direction in [
+            CardinalDirection::North,
+            CardinalDirection::East,
+            CardinalDirection::South,
+            CardinalDirection::West,
+        ] {
+            let drop_steps = cell.elevation_steps
+                - neighbor_elevation_steps(cell.grid, direction, cells_by_grid);
+            if drop_steps <= 0 {
+                continue;
+            }
+            push_surface_vertical_placement(
+                placements,
+                prototype_id,
+                cell.grid,
+                top_surface_y,
+                grid_size,
+                step_height,
+                drop_steps,
+                cardinal_rotation(direction),
+                library,
+            );
+        }
+    }
+
+    if let Some(prototype_id) = surface_set.cliff_outer_corner_prototype_id.as_ref() {
+        for (corner, first, second) in [
+            (
+                CornerDirection::NorthEast,
+                CardinalDirection::North,
+                CardinalDirection::East,
+            ),
+            (
+                CornerDirection::SouthEast,
+                CardinalDirection::South,
+                CardinalDirection::East,
+            ),
+            (
+                CornerDirection::SouthWest,
+                CardinalDirection::South,
+                CardinalDirection::West,
+            ),
+            (
+                CornerDirection::NorthWest,
+                CardinalDirection::North,
+                CardinalDirection::West,
+            ),
+        ] {
+            let first_drop =
+                cell.elevation_steps - neighbor_elevation_steps(cell.grid, first, cells_by_grid);
+            let second_drop =
+                cell.elevation_steps - neighbor_elevation_steps(cell.grid, second, cells_by_grid);
+            let drop_steps = first_drop.min(second_drop);
+            if drop_steps <= 0 {
+                continue;
+            }
+            push_surface_vertical_placement(
+                placements,
+                prototype_id,
+                cell.grid,
+                top_surface_y,
+                grid_size,
+                step_height,
+                drop_steps,
+                corner_rotation(corner),
+                library,
+            );
+        }
+    }
+
+    if let Some(prototype_id) = surface_set.cliff_inner_corner_prototype_id.as_ref() {
+        for (corner, diagonal, first, second) in [
+            (
+                CornerDirection::NorthEast,
+                GridCoord::new(cell.grid.x + 1, cell.grid.y, cell.grid.z - 1),
+                CardinalDirection::North,
+                CardinalDirection::East,
+            ),
+            (
+                CornerDirection::SouthEast,
+                GridCoord::new(cell.grid.x + 1, cell.grid.y, cell.grid.z + 1),
+                CardinalDirection::South,
+                CardinalDirection::East,
+            ),
+            (
+                CornerDirection::SouthWest,
+                GridCoord::new(cell.grid.x - 1, cell.grid.y, cell.grid.z + 1),
+                CardinalDirection::South,
+                CardinalDirection::West,
+            ),
+            (
+                CornerDirection::NorthWest,
+                GridCoord::new(cell.grid.x - 1, cell.grid.y, cell.grid.z - 1),
+                CardinalDirection::North,
+                CardinalDirection::West,
+            ),
+        ] {
+            let first_drop =
+                cell.elevation_steps - neighbor_elevation_steps(cell.grid, first, cells_by_grid);
+            let second_drop =
+                cell.elevation_steps - neighbor_elevation_steps(cell.grid, second, cells_by_grid);
+            if first_drop > 0 || second_drop > 0 {
+                continue;
+            }
+            let diagonal_drop = cell.elevation_steps
+                - cells_by_grid
+                    .get(&diagonal)
+                    .map(|neighbor| neighbor.elevation_steps)
+                    .unwrap_or_default();
+            if diagonal_drop <= 0 {
+                continue;
+            }
+            push_surface_vertical_placement(
+                placements,
+                prototype_id,
+                cell.grid,
+                top_surface_y,
+                grid_size,
+                step_height,
+                diagonal_drop,
+                corner_rotation(corner),
+                library,
+            );
+        }
+    }
+}
+
+fn push_surface_vertical_placement(
+    placements: &mut Vec<TilePlacementSpec>,
+    prototype_id: &WorldTilePrototypeId,
+    grid: GridCoord,
+    top_surface_y: f32,
+    grid_size: f32,
+    step_height: f32,
+    drop_steps: i32,
+    rotation: Quat,
+    library: &WorldTileLibrary,
+) {
+    let Some(bounds) = library
+        .prototype(prototype_id)
+        .map(|prototype| &prototype.bounds)
+    else {
+        return;
+    };
+    let desired_height = (drop_steps as f32 * step_height).max(step_height);
+    let scale = scale_surface_bounds(bounds, grid_size, desired_height);
+    let height = scaled_surface_height(bounds, scale);
+    placements.push(TilePlacementSpec {
+        prototype_id: prototype_id.clone(),
+        translation: Vec3::new(
+            (grid.x as f32 + 0.5) * grid_size,
+            top_surface_y - height * 0.5,
+            (grid.z as f32 + 0.5) * grid_size,
+        ),
+        rotation,
+        scale,
+        render_class: TileRenderClass::Standard,
+        semantic: None,
+        occluder_kind: None,
+        occluder_cells: Vec::new(),
+        pick_proxy: None,
+    });
+}
+
+fn top_surface_prototype_id<'a>(
+    surface_set: &'a WorldSurfaceTileSetDefinition,
+    slope: TileSlopeKind,
+) -> &'a WorldTilePrototypeId {
+    match slope {
+        TileSlopeKind::Flat => &surface_set.flat_top_prototype_id,
+        TileSlopeKind::RampNorth => surface_set
+            .ramp_top_prototype_ids
+            .north
+            .as_ref()
+            .unwrap_or(&surface_set.flat_top_prototype_id),
+        TileSlopeKind::RampEast => surface_set
+            .ramp_top_prototype_ids
+            .east
+            .as_ref()
+            .unwrap_or(&surface_set.flat_top_prototype_id),
+        TileSlopeKind::RampSouth => surface_set
+            .ramp_top_prototype_ids
+            .south
+            .as_ref()
+            .unwrap_or(&surface_set.flat_top_prototype_id),
+        TileSlopeKind::RampWest => surface_set
+            .ramp_top_prototype_ids
+            .west
+            .as_ref()
+            .unwrap_or(&surface_set.flat_top_prototype_id),
+    }
+}
+
+fn surface_step_height(
+    surface_set: &WorldSurfaceTileSetDefinition,
+    library: &WorldTileLibrary,
+) -> f32 {
+    library
+        .prototype(&surface_set.flat_top_prototype_id)
+        .map(|prototype| prototype.bounds.size.y.abs())
+        .filter(|height| *height > 0.001)
+        .unwrap_or(0.11)
+}
+
+fn scale_surface_bounds(bounds: &WorldTileBounds, grid_size: f32, desired_height: f32) -> Vec3 {
+    Vec3::new(
+        scale_axis(grid_size, bounds.size.x),
+        scale_axis(desired_height, bounds.size.y),
+        scale_axis(grid_size, bounds.size.z),
+    )
+}
+
+fn scaled_surface_height(bounds: &WorldTileBounds, scale: Vec3) -> f32 {
+    bounds.size.y.abs().max(0.001) * scale.y.abs().max(0.001)
+}
+
+fn scale_axis(target: f32, source: f32) -> f32 {
+    let source = source.abs();
+    if source > 0.001 {
+        (target / source).max(0.001)
+    } else {
+        1.0
+    }
+}
+
+fn neighbor_elevation_steps(
+    grid: GridCoord,
+    direction: CardinalDirection,
+    cells_by_grid: &HashMap<GridCoord, &TacticalSurfaceCellSpec>,
+) -> i32 {
+    let neighbor = match direction {
+        CardinalDirection::North => GridCoord::new(grid.x, grid.y, grid.z - 1),
+        CardinalDirection::East => GridCoord::new(grid.x + 1, grid.y, grid.z),
+        CardinalDirection::South => GridCoord::new(grid.x, grid.y, grid.z + 1),
+        CardinalDirection::West => GridCoord::new(grid.x - 1, grid.y, grid.z),
+    };
+    cells_by_grid
+        .get(&neighbor)
+        .map(|cell| cell.elevation_steps)
+        .unwrap_or_default()
+}
+
+fn cardinal_rotation(direction: CardinalDirection) -> Quat {
+    match direction {
+        CardinalDirection::North => Quat::from_rotation_y(std::f32::consts::PI),
+        CardinalDirection::East => Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+        CardinalDirection::South => Quat::IDENTITY,
+        CardinalDirection::West => Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+    }
+}
+
+fn corner_rotation(corner: CornerDirection) -> Quat {
+    match corner {
+        CornerDirection::NorthEast => Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+        CornerDirection::SouthEast => Quat::IDENTITY,
+        CornerDirection::SouthWest => Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+        CornerDirection::NorthWest => Quat::from_rotation_y(std::f32::consts::PI),
+    }
+}
+
 fn canonical_mask(archetype: WallTopologyArchetype) -> [bool; 4] {
     match archetype {
         WallTopologyArchetype::Isolated => [false, false, false, false],
@@ -355,7 +820,16 @@ fn rotate_mask_clockwise(mask: [bool; 4], steps: usize) -> [bool; 4] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_data::MapBuildingWallVisualKind;
+    use game_data::{
+        load_world_tile_library, MapBuildingWallVisualKind, MapCellDefinition, MapCellVisualSpec,
+        MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
+        WorldSurfaceTileSetId,
+    };
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn wall_topology_resolves_corner_rotation() {
@@ -433,5 +907,126 @@ mod tests {
             scene.pick_proxies[0].semantic,
             Some(StaticWorldSemantic::MapObject("crate_a".to_string()))
         );
+    }
+
+    #[test]
+    fn tactical_surface_resolver_routes_flat_ramp_and_cliff_prototypes() {
+        let temp_dir = create_temp_dir("tile_world_surface_resolver");
+        let catalog_path = temp_dir.join("surface.json");
+        fs::write(
+            &catalog_path,
+            serde_json::to_string_pretty(&json!({
+                "prototypes": [
+                    prototype_json("surface/flat", 1.0, 0.2, 1.0),
+                    prototype_json("surface/ramp_north", 1.0, 0.2, 1.0),
+                    prototype_json("surface/cliff_side", 1.0, 1.0, 1.0),
+                    prototype_json("surface/cliff_outer", 1.0, 1.0, 1.0),
+                    prototype_json("surface/cliff_inner", 1.0, 1.0, 1.0)
+                ],
+                "surface_sets": [
+                    {
+                        "id": "test_surface/basic",
+                        "flat_top_prototype_id": "surface/flat",
+                        "ramp_top_prototype_ids": {
+                            "north": "surface/ramp_north"
+                        },
+                        "cliff_side_prototype_id": "surface/cliff_side",
+                        "cliff_outer_corner_prototype_id": "surface/cliff_outer",
+                        "cliff_inner_corner_prototype_id": "surface/cliff_inner"
+                    }
+                ]
+            }))
+            .expect("serialize catalog"),
+        )
+        .expect("write catalog");
+        let library = load_world_tile_library(&temp_dir).expect("load test tile library");
+
+        let definition = MapDefinition {
+            id: MapId("surface_map".into()),
+            name: "Surface Map".into(),
+            size: MapSize {
+                width: 3,
+                height: 3,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: vec![
+                    map_cell_with_surface(1, 1, 2, TileSlopeKind::RampNorth),
+                    map_cell_with_surface(2, 1, 0, TileSlopeKind::Flat),
+                    map_cell_with_surface(1, 2, 2, TileSlopeKind::Flat),
+                ],
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(1, 0, 1),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: Vec::new(),
+        };
+
+        let placements = resolve_map_cell_surface_placements(&definition, 0, 0.11, 1.0, &library);
+
+        assert!(placements
+            .iter()
+            .any(|placement| placement.prototype_id.as_str() == "surface/ramp_north"));
+        assert!(placements
+            .iter()
+            .any(|placement| placement.prototype_id.as_str() == "surface/cliff_side"));
+        assert!(placements
+            .iter()
+            .any(|placement| placement.prototype_id.as_str() == "surface/cliff_outer"));
+        assert!(placements
+            .iter()
+            .all(|placement| placement.render_class == TileRenderClass::Standard));
+    }
+
+    fn map_cell_with_surface(
+        x: u32,
+        z: u32,
+        elevation_steps: i32,
+        slope: TileSlopeKind,
+    ) -> MapCellDefinition {
+        MapCellDefinition {
+            x,
+            z,
+            blocks_movement: false,
+            blocks_sight: false,
+            terrain: "ground".into(),
+            visual: Some(MapCellVisualSpec {
+                surface_set_id: Some(WorldSurfaceTileSetId("test_surface/basic".into())),
+                elevation_steps,
+                slope,
+            }),
+            extra: BTreeMap::new(),
+        }
+    }
+
+    fn prototype_json(id: &str, size_x: f32, size_y: f32, size_z: f32) -> serde_json::Value {
+        json!({
+            "id": id,
+            "source": {
+                "kind": "gltf_scene",
+                "path": format!("{id}.gltf"),
+                "scene_index": 0
+            },
+            "bounds": {
+                "center": { "x": 0.0, "y": 0.0, "z": 0.0 },
+                "size": { "x": size_x, "y": size_y, "z": size_z }
+            },
+            "cast_shadows": true,
+            "receive_shadows": true
+        })
+    }
+
+    fn create_temp_dir(label: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be available")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("cdc_tile_world_{label}_{suffix}"));
+        fs::create_dir_all(&dir).expect("temp dir should be created");
+        dir
     }
 }

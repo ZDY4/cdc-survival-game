@@ -20,7 +20,9 @@ use crate::ai_provider::test_ai_provider;
 use crate::ai_settings::{load_ai_settings, save_ai_settings};
 use crate::narrative_agent_actions::execute_narrative_agent_action;
 use crate::narrative_app_settings::{load_narrative_app_settings, save_narrative_app_settings};
-use crate::narrative_exports::export_narrative_session_summary;
+use crate::narrative_exports::{
+    export_narrative_chat_regression_report, export_narrative_session_summary,
+};
 use crate::narrative_provider::{
     cancel_narrative_request, generate_narrative_draft, resolve_narrative_action_intent,
     revise_narrative_draft, NarrativeRequestRegistry,
@@ -59,6 +61,8 @@ pub(crate) struct EditorBootstrap {
 #[serde(rename_all = "camelCase")]
 struct EditorRuntimeFlags {
     menu_self_test_scenario: Option<String>,
+    chat_regression_mode: Option<String>,
+    auto_close_after_self_test: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +132,14 @@ fn get_editor_runtime_flags() -> Result<EditorRuntimeFlags, String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    let chat_regression_mode = std::env::var("CDC_NARRATIVE_CHAT_REGRESSION_MODE")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let auto_close_after_self_test = std::env::var("CDC_EDITOR_SELF_TEST_AUTOCLOSE")
+        .ok()
+        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false);
 
     if let Some(scenario) = &menu_self_test_scenario {
         eprintln!(
@@ -138,6 +150,8 @@ fn get_editor_runtime_flags() -> Result<EditorRuntimeFlags, String> {
 
     Ok(EditorRuntimeFlags {
         menu_self_test_scenario,
+        chat_regression_mode,
+        auto_close_after_self_test,
     })
 }
 
@@ -256,6 +270,7 @@ pub fn run() {
             load_narrative_app_settings,
             save_narrative_app_settings,
             export_narrative_session_summary,
+            export_narrative_chat_regression_report,
             test_ai_provider,
             execute_narrative_agent_action,
             resolve_narrative_action_intent,

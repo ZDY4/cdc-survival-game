@@ -173,6 +173,17 @@ impl NarrativeAppSettings {
             self.connected_project_root = inferred.connected_project_root;
         }
 
+        if let Some(workspace_root) =
+            normalize_optional_path(std::env::var("CDC_NARRATIVE_WORKSPACE_ROOT").ok().as_deref())
+        {
+            self.last_workspace = Some(workspace_root);
+        }
+        if let Some(project_root) =
+            normalize_optional_path(std::env::var("CDC_NARRATIVE_PROJECT_ROOT").ok().as_deref())
+        {
+            self.connected_project_root = Some(project_root);
+        }
+
         self
     }
 }

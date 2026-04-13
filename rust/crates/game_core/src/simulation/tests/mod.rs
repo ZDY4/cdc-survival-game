@@ -409,7 +409,9 @@ fn sample_generated_building_map_definition() -> MapDefinition {
 fn sample_building_tile_set() -> game_data::MapBuildingTileSetSpec {
     game_data::MapBuildingTileSetSpec {
         wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-        floor_surface_set_id: None,
+        floor_surface_set_id: Some(game_data::WorldSurfaceTileSetId(
+            "building_wall_legacy/floor".into(),
+        )),
         door_prototype_id: None,
     }
 }

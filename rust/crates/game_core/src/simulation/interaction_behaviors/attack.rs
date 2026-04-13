@@ -5,7 +5,9 @@ use game_data::{
 use tracing::info;
 
 use crate::simulation::{
-    interaction_behaviors::{default_allows_primary, InteractionBehavior, InteractionExecutionContext},
+    interaction_behaviors::{
+        default_allows_primary, InteractionBehavior, InteractionExecutionContext,
+    },
     Simulation, SimulationEvent,
 };
 

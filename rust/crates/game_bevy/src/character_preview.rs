@@ -54,7 +54,15 @@ pub fn spawn_character_preview_scene(
             if hidden.contains(region_id) {
                 continue;
             }
-            spawn_base_region(commands, asset_server, meshes, materials, root, preview, region_id);
+            spawn_base_region(
+                commands,
+                asset_server,
+                meshes,
+                materials,
+                root,
+                preview,
+                region_id,
+            );
         }
     } else if let Some(asset_path) = resolve_scene_asset_path(preview.base_model_asset.as_str()) {
         let child = commands
@@ -90,7 +98,9 @@ pub fn character_preview_is_available(preview: &ResolvedCharacterAppearancePrevi
             .collect::<BTreeSet<_>>();
         if ["feet", "legs", "body", "head"]
             .into_iter()
-            .any(|region_id| !hidden.contains(region_id) && builtin_base_region_asset(region_id).is_some())
+            .any(|region_id| {
+                !hidden.contains(region_id) && builtin_base_region_asset(region_id).is_some()
+            })
         {
             return true;
         }

@@ -13,10 +13,14 @@ export type EditorBootstrap = {
   editorDomains: string[];
 };
 
-export type EditorMenuSelfTestScenario = "narrative-menu";
+export type EditorMenuSelfTestScenario =
+  | "narrative-menu"
+  | "narrative-chat-regression";
 
 export type EditorRuntimeFlags = {
   menuSelfTestScenario?: EditorMenuSelfTestScenario | null;
+  chatRegressionMode?: NarrativeChatRegressionMode | null;
+  autoCloseAfterSelfTest?: boolean;
 };
 
 export type EditorSettingsSection = "ai" | "narrative-sync" | "workspace";
@@ -842,6 +846,124 @@ export type NarrativeRegressionSuiteResult = {
   summary: string;
 };
 
+export type NarrativeChatRegressionMode =
+  | "offline"
+  | "online"
+  | "online-core"
+  | "online-structured";
+
+export type NarrativeChatRegressionSmokeTier = "core" | "structured";
+
+export type NarrativeChatRegressionFailureKind =
+  | "none"
+  | "product_defect"
+  | "provider_error"
+  | "model_variance"
+  | "timeout_unclassified"
+  | "skipped_unconfigured";
+
+export type NarrativeTurnKindCorrection = {
+  from: string;
+  to: string;
+  reason: string;
+};
+
+export type NarrativeResponseStructureSummary = {
+  questionCount: number;
+  optionCount: number;
+  planStepCount: number;
+  requestedActionCount: number;
+};
+
+export type NarrativeAiConfigSummary = {
+  baseUrl: string;
+  model: string;
+  timeoutSec: number;
+  apiKeyConfigured: boolean;
+};
+
+export type NarrativeChatRegressionScenario = {
+  id: string;
+  label: string;
+  prompt: string;
+  mode: NarrativeChatRegressionMode | "both";
+  smokeTier?: NarrativeChatRegressionSmokeTier;
+  expectedTurnKinds: NarrativeTurnKind[];
+  expectedActionType?: NarrativeAgentActionType | null;
+  expectedPreviewOnly?: boolean | null;
+  expectDocumentChange?: boolean;
+  expectDerivedDocumentSlug?: string | null;
+  expectDerivedDocumentDocType?: NarrativeDocType | null;
+  expectSelectedContextRefs?: boolean;
+  autoApproveAction?: boolean;
+  autoRejectAction?: boolean;
+  useSelectedContextSlugs?: string[];
+  skipOnline?: boolean;
+};
+
+export type NarrativeChatRegressionScenarioResult = {
+  id: string;
+  label: string;
+  ok: boolean;
+  prompt: string;
+  mode: NarrativeChatRegressionMode;
+  smokeTier?: NarrativeChatRegressionSmokeTier;
+  failureKind: NarrativeChatRegressionFailureKind;
+  actualTurnKind: NarrativeTurnKind | "blocked";
+  expectedTurnKinds: NarrativeTurnKind[];
+  requestedActionType?: NarrativeAgentActionType | null;
+  requestedPreviewOnly?: boolean | null;
+  assistantMessage: string;
+  providerError: string;
+  documentChanged: boolean;
+  activeDocumentSlug: string;
+  derivedDocumentSlug?: string | null;
+  derivedDocumentPath?: string | null;
+  contextRefCount: number;
+  questionCount: number;
+  optionCount: number;
+  planStepCount: number;
+  requestedActionCount: number;
+  turnKindSource?: string | null;
+  turnKindCorrection?: NarrativeTurnKindCorrection | null;
+  diagnosticFlags: string[];
+  statusMessage: string;
+  summary: string;
+  error?: string | null;
+};
+
+export type NarrativeChatRegressionReport = {
+  mode: NarrativeChatRegressionMode;
+  workspaceRoot: string;
+  connectedProjectRoot?: string | null;
+  aiConfig?: NarrativeAiConfigSummary | null;
+  startedAt: string;
+  completedAt: string;
+  ok: boolean;
+  summary: string;
+  scenarioResults: NarrativeChatRegressionScenarioResult[];
+  skippedScenarios: string[];
+};
+
+export type NarrativeChatRegressionExportInput = {
+  mode: NarrativeChatRegressionMode;
+  workspaceRoot: string;
+  connectedProjectRoot?: string | null;
+  aiConfig?: NarrativeAiConfigSummary | null;
+  startedAt: string;
+  completedAt: string;
+  ok: boolean;
+  summary: string;
+  scenarioResults: NarrativeChatRegressionScenarioResult[];
+  skippedScenarios: string[];
+};
+
+export type NarrativeChatRegressionExportResult = {
+  summary: string;
+  jsonPath: string;
+  markdownPath: string;
+};
+
 export type NarrativeAgentActionType =
   | "read_active_document"
   | "read_related_documents"
@@ -882,6 +1004,8 @@ export type AgentActionResult = {
 export type NarrativeGenerateResponse = {
   engineMode: "single_agent" | "multi_agent";
   turnKind: NarrativeTurnKind;
+  turnKindSource?: string | null;
+  turnKindCorrection?: NarrativeTurnKindCorrection | null;
   assistantMessage: string;
   draftMarkdown: string;
   summary: string;
@@ -898,6 +1022,8 @@ export type NarrativeGenerateResponse = {
   questions: AgentQuestion[];
   options: AgentOption[];
   planSteps: AgentPlanStep[];
+  responseStructure?: NarrativeResponseStructureSummary | null;
+  diagnosticFlags?: string[];
   requiresUserReply: boolean;
   executionSteps: AgentExecutionStep[];
   currentStepId?: string | null;

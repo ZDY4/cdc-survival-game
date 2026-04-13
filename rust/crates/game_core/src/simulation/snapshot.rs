@@ -62,6 +62,7 @@ impl Simulation {
                     blocks_movement: cell.blocks_movement,
                     blocks_sight: cell.blocks_sight,
                     terrain: cell.terrain,
+                    visual: cell.visual,
                 },
             )
             .collect()

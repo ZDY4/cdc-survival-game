@@ -6,7 +6,9 @@ use tracing::info;
 
 use crate::building::GeneratedDoorDebugState;
 use crate::simulation::{
-    interaction_behaviors::{default_resolve_view, InteractionBehavior, InteractionExecutionContext},
+    interaction_behaviors::{
+        default_resolve_view, InteractionBehavior, InteractionExecutionContext,
+    },
     Simulation, SimulationEvent,
 };
 

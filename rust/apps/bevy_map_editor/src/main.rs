@@ -1053,6 +1053,7 @@ fn rebuild_scene_system(
                 &document.definition,
                 editor.current_map_level,
                 *render_config,
+                &world_tiles.0,
             );
             for entity in spawn_world_render_scene(
                 &mut commands,

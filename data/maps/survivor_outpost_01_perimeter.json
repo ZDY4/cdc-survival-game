@@ -10,6 +10,174 @@
     {
       "y": 0,
       "cells": [
+        {
+          "x": 2,
+          "z": 14,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 3,
+          "z": 14,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 4,
+          "z": 14,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 2,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 3,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 4,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 2,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 3,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 4,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 1,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_east"
+          }
+        },
+        {
+          "x": 1,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_east"
+          }
+        },
+        {
+          "x": 2,
+          "z": 17,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_north"
+          }
+        },
+        {
+          "x": 3,
+          "z": 17,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_north"
+          }
+        },
+        {
+          "x": 4,
+          "z": 17,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_north"
+          }
+        },
         { "x": 4, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
         { "x": 5, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
         { "x": 6, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
@@ -46,7 +214,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_perimeter_barricade",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 2101,
             "target_room_count": 1,
@@ -72,7 +243,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_bus_wreck",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 2102,
             "target_room_count": 1,
@@ -150,6 +324,11 @@
       "props": {
         "building": null,
         "pickup": { "item_id": "1007", "min_count": 1, "max_count": 3 },
+        "visual": {
+          "prototype_id": "props/crate_wood",
+          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
+          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+        },
         "interactive": null,
         "ai_spawn": null
       }
@@ -165,6 +344,11 @@
       "props": {
         "building": null,
         "pickup": { "item_id": "1010", "min_count": 2, "max_count": 5 },
+        "visual": {
+          "prototype_id": "props/crate_wood",
+          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
+          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+        },
         "interactive": null,
         "ai_spawn": null
       }

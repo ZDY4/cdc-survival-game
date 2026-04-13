@@ -43,6 +43,8 @@ __pycache__/
 *.swp
 *~
 *.tsbuildinfo
+tmp/env_inherit.txt
+tmp/narrative_lab_regression_*/
 
 # Build artifacts
 *.pck

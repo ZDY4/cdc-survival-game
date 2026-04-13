@@ -59,6 +59,9 @@ export function responseMetaLabels(response: NarrativeGenerateResponse) {
   };
 
   return [
+    ...(response.diagnosticFlags?.includes("missing_requested_actions_for_split")
+      ? ["建议动作缺失"]
+      : []),
     response.providerError ? "提供方返回错误" : turnLabelLookup[response.turnKind],
     response.engineMode === "single_agent" ? "单文档助手" : "多 agent",
   ];

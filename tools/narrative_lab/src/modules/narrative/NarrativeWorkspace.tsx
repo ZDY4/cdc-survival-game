@@ -12,11 +12,21 @@ import {
 import { EDITOR_MENU_COMMANDS } from "../../menu/menuCommands";
 import type {
   AgentActionResult,
+  AiSettings,
   AiChatMessage,
+  NarrativeAiConfigSummary,
+  AiConnectionTestResult,
   DocumentAgentSession,
   NarrativeCancelRequestResult,
   EditorMenuSelfTestScenario,
   NarrativeAppSettings,
+  NarrativeChatRegressionExportInput,
+  NarrativeChatRegressionExportResult,
+  NarrativeChatRegressionFailureKind,
+  NarrativeChatRegressionMode,
+  NarrativeChatRegressionReport,
+  NarrativeChatRegressionScenario,
+  NarrativeChatRegressionScenarioResult,
   NarrativeDocType,
   NarrativeDocumentPayload,
   NarrativeRegressionSuiteResult,
@@ -34,6 +44,14 @@ import type {
   NarrativeWorkspacePayload,
   SaveNarrativeDocumentResult,
 } from "../../types";
+import {
+  NARRATIVE_CHAT_REGRESSION_ACTIVE_SLUG,
+  NARRATIVE_CHAT_REGRESSION_SCENARIOS,
+  isOnlineRegressionMode,
+  scenarioResultSummary,
+  scenariosForMode,
+  summarizeNarrativeChatRegression,
+} from "./narrativeChatRegression";
 import {
   applyNarrativePatch,
   buildNarrativePatchSet,
@@ -131,6 +149,8 @@ type NarrativeWorkspaceProps = {
   canPersist: boolean;
   startupReady: boolean;
   selfTestScenario: EditorMenuSelfTestScenario | null;
+  chatRegressionMode: NarrativeChatRegressionMode | null;
+  autoCloseAfterSelfTest: boolean;
   status: string;
   onStatusChange: (status: string) => void;
   onReload: () => Promise<void>;
@@ -389,7 +409,9 @@ export function NarrativeWorkspace({
   appSettings,
   canPersist,
   startupReady,
-  selfTestScenario: _selfTestScenario,
+  selfTestScenario,
+  chatRegressionMode,
+  autoCloseAfterSelfTest,
   status,
   onStatusChange,
   onReload,
@@ -434,6 +456,7 @@ export function NarrativeWorkspace({
   const workspaceRootRef = useRef("");
   const layoutSnapshotRef = useRef("");
   const agentSnapshotRef = useRef("");
+  const selfTestStartedRef = useRef(false);
 
   useEffect(() => {
     appSettingsRef.current = appSettings;
@@ -965,6 +988,18 @@ export function NarrativeWorkspace({
     });
   }
 
+  function commitDocumentAgents(
+    updater: (
+      current: Record<string, DocumentAgentSession>,
+    ) => Record<string, DocumentAgentSession>,
+  ) {
+    setDocumentAgents((current) => {
+      const next = updater(current);
+      documentAgentsRef.current = next;
+      return next;
+    });
+  }
+
   async function persistWorkspaceLayoutNow(
     persistedLayout = defaultWorkspaceLayout(
       tabState.activeTabKey,
@@ -1070,7 +1105,11 @@ export function NarrativeWorkspace({
 
   function openDocument(documentKey: string) {
     setDocContextMenu(null);
-    setTabState((current) => openNarrativeTab(current, documentKey));
+    setTabState((current) => {
+      const next = openNarrativeTab(current, documentKey);
+      tabStateRef.current = next;
+      return next;
+    });
   }
 
   function addContextDocument(documentKey: string) {
@@ -1306,6 +1345,607 @@ export function NarrativeWorkspace({
       const message = `运行 Narrative Lab 回归验证失败：${String(error)}`;
       setRegressionStatus(message);
       onStatusChange(message);
+    }
+  }
+
+  function activeRegressionDocumentKey() {
+    return (
+      documentsRef.current.find((document) => document.meta.slug === NARRATIVE_CHAT_REGRESSION_ACTIVE_SLUG)
+        ?.documentKey ??
+      documentsRef.current[0]?.documentKey ??
+      null
+    );
+  }
+
+  async function waitForNarrativeCondition<T>(
+    label: string,
+    predicate: () => T | null | undefined | false,
+    timeoutMs = 20000,
+    intervalMs = 80,
+  ): Promise<T> {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const value = predicate();
+      if (value) {
+        return value;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+    }
+
+    throw new Error(`等待 ${label} 超时。`);
+  }
+
+  async function loadRegressionAiConfigSummary(): Promise<NarrativeAiConfigSummary | null> {
+    try {
+      const settings = await invokeCommand<AiSettings>("load_ai_settings");
+      return {
+        baseUrl: settings.baseUrl,
+        model: settings.model,
+        timeoutSec: settings.timeoutSec,
+        apiKeyConfigured: Boolean(settings.apiKey.trim()),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function classifyRegressionFailure(
+    _scenario: NarrativeChatRegressionScenario,
+    response: NarrativeGenerateResponse | null,
+    diagnostics: {
+      domValid: boolean;
+      actionMatches: boolean;
+      previewMatches?: boolean;
+      changeMatches: boolean;
+      derivedMatches: boolean;
+      contextMatches: boolean;
+      timedOut?: boolean;
+      errorText?: string;
+    },
+  ): NarrativeChatRegressionFailureKind {
+    if (!response) {
+      if (diagnostics.timedOut || diagnostics.errorText?.includes("超时")) {
+        return "timeout_unclassified";
+      }
+      return "product_defect";
+    }
+
+    if (response.providerError.trim()) {
+      return "provider_error";
+    }
+
+    if (!diagnostics.domValid || !diagnostics.changeMatches) {
+      return "product_defect";
+    }
+
+    if (!diagnostics.derivedMatches && response.requestedActions.length > 0) {
+      return "product_defect";
+    }
+
+    if (
+      !diagnostics.actionMatches &&
+      response.diagnosticFlags?.includes("missing_requested_actions_for_split")
+    ) {
+      return "model_variance";
+    }
+
+    if (!diagnostics.actionMatches || diagnostics.previewMatches === false || !diagnostics.contextMatches) {
+      return "model_variance";
+    }
+
+    return "model_variance";
+  }
+
+  async function resetChatRegressionWorkspace(documentKey: string) {
+    const resetDocuments = hydrateEditableDocuments(workspace.documents);
+    commitDocuments(() => resetDocuments);
+    commitDocumentAgents(() => ({
+      [documentKey]: createDocumentAgentSession({ mode: "revise_document" }),
+    }));
+    const nextTabState = {
+      openTabs: [documentKey],
+      activeTabKey: documentKey,
+    };
+    tabStateRef.current = nextTabState;
+    setTabState(nextTabState);
+    setRegressionResult(null);
+    setRegressionStatus("");
+    setExportStatus("");
+    await waitForNarrativeCondition(
+      "回归工作区重置",
+      () => {
+        const document = getDocument(documentKey);
+        const session = getSession(documentKey);
+        if (!document || !session) {
+          return null;
+        }
+        if (tabStateRef.current.activeTabKey !== documentKey) {
+          return null;
+        }
+        if (
+          session.lastResponse ||
+          session.lastRequest ||
+          session.activeSubmission ||
+          session.pendingQuestions.length ||
+          session.pendingOptions.length ||
+          session.pendingActionRequests.length ||
+          session.chatMessages.length
+        ) {
+          return null;
+        }
+        return true;
+      },
+      12000,
+    );
+  }
+
+  function setScenarioContextDocuments(
+    documentKey: string,
+    scenario: NarrativeChatRegressionScenario,
+  ) {
+    const requestedDocumentKeys = (scenario.useSelectedContextSlugs ?? [])
+      .map((slug) =>
+        documentsRef.current.find((document) => document.meta.slug === slug)?.documentKey ?? null,
+      )
+      .filter(Boolean) as string[];
+
+    commitDocumentAgents((current) =>
+      updateDocumentAgentSessionWithReviewQueue(
+        ensureDocumentAgentSession(current, documentKey, "edit"),
+        documentKey,
+        (session) => ({
+          ...session,
+          selectedContextDocKeys: requestedDocumentKeys,
+        }),
+      ),
+    );
+  }
+
+  function validateRegressionDom(
+    scenario: NarrativeChatRegressionScenario,
+    response: NarrativeGenerateResponse | null,
+  ) {
+    const clarificationPanel = document.querySelector('[data-testid="narrative-clarification-panel"]');
+    const optionsPanel = document.querySelector('[data-testid="narrative-options-panel"]');
+    const planPanel = document.querySelector('[data-testid="narrative-plan-panel"]');
+    const actionsPanel = document.querySelector('[data-testid="narrative-pending-actions-panel"]');
+
+    if (scenario.id === "clarification-missing-brief") {
+      return Boolean(clarificationPanel?.querySelector("li"));
+    }
+    if (scenario.id === "options-branching") {
+      return (optionsPanel?.querySelectorAll('[data-testid="narrative-option-card"]').length ?? 0) >= 2;
+    }
+    if (scenario.id === "plan-complex-task") {
+      return (planPanel?.querySelectorAll("li").length ?? 0) >= 1;
+    }
+    if (scenario.id === "preview-actions-only") {
+      return Boolean(actionsPanel?.querySelector('[data-preview-only="true"]'));
+    }
+    if (scenario.id === "markdown-rich-render") {
+      const chatPanel = document.querySelector('[data-testid="narrative-chat-panel"]');
+      return Boolean(chatPanel?.querySelector("blockquote")) && Boolean(chatPanel?.querySelector("table"));
+    }
+    if (response?.turnKind === "blocked") {
+      const assistantMessages = Array.from(
+        document.querySelectorAll('[data-message-role="assistant"]'),
+      );
+      return assistantMessages.some((node) => node.textContent?.includes(response.assistantMessage ?? ""));
+    }
+    return true;
+  }
+
+  async function runSingleChatRegressionScenario(
+    scenario: NarrativeChatRegressionScenario,
+    mode: NarrativeChatRegressionMode,
+  ): Promise<NarrativeChatRegressionScenarioResult> {
+    const sessionTimeoutMs = isOnlineRegressionMode(mode) ? 70000 : 20000;
+    const documentKey = activeRegressionDocumentKey();
+    if (!documentKey) {
+      throw new Error("未找到 Narrative chat regression 主文稿。");
+    }
+
+    await resetChatRegressionWorkspace(documentKey);
+    setScenarioContextDocuments(documentKey, scenario);
+    openDocument(documentKey);
+
+    const beforeDocument = getDocument(documentKey);
+    if (!beforeDocument) {
+      throw new Error("回归主文稿不存在。");
+    }
+    const beforeMarkdown = beforeDocument.markdown;
+
+    const requestId = await submitNarrativePrompt(scenario.prompt, "composer");
+    if (!requestId) {
+      throw new Error(`场景 ${scenario.id} 未能成功提交请求。`);
+    }
+
+    if (scenario.id === "cancel-inflight") {
+      await waitForNarrativeCondition(
+        "取消场景进入可取消阶段",
+        () => {
+          const session = getSession(documentKey);
+          if (
+            (session?.activeSubmission?.requestId === requestId &&
+              session.activeSubmission.stage === "generating") ||
+            session?.status === "generating"
+          ) {
+            return true;
+          }
+          return null;
+        },
+        8000,
+      );
+      await cancelActiveSubmission();
+      await waitForNarrativeCondition(
+        "取消场景收敛",
+        () => {
+          const session = getSession(documentKey);
+          const hasCancelMessage = Boolean(
+            session?.chatMessages.some(
+              (message) =>
+                message.content.includes("已取消当前发送") ||
+                message.content.includes("当前请求已取消"),
+            ),
+          );
+          if (
+            session &&
+            !session.activeSubmission &&
+            !session.busy &&
+            (
+              hasCancelMessage ||
+              !session.lastResponse ||
+              session.status === "idle" ||
+              session.status === "error"
+            )
+          ) {
+            return session;
+          }
+          return null;
+        },
+        16000,
+      );
+
+      const cancelledDocument = getDocument(documentKey);
+      const documentChanged =
+        normalizeNarrativeMarkdown(cancelledDocument?.markdown ?? "") !==
+        normalizeNarrativeMarkdown(beforeMarkdown);
+
+      return {
+        id: scenario.id,
+        label: scenario.label,
+        ok: !documentChanged,
+        prompt: scenario.prompt,
+        mode,
+        smokeTier: scenario.smokeTier,
+        failureKind: documentChanged ? "product_defect" : "none",
+        actualTurnKind: "blocked",
+        expectedTurnKinds: scenario.expectedTurnKinds,
+        requestedActionType: null,
+        requestedPreviewOnly: null,
+        assistantMessage: "已取消当前发送。",
+        providerError: "",
+        documentChanged,
+        activeDocumentSlug: cancelledDocument?.meta.slug ?? beforeDocument.meta.slug,
+        derivedDocumentSlug: null,
+        derivedDocumentPath: null,
+        contextRefCount: 0,
+        questionCount: 0,
+        optionCount: 0,
+        planStepCount: 0,
+        requestedActionCount: 0,
+        turnKindSource: null,
+        turnKindCorrection: null,
+        diagnosticFlags: [],
+        statusMessage: "已取消当前发送。",
+        summary: documentChanged ? "取消后文稿仍发生变化。" : "取消后未残留半截输出。",
+        error: documentChanged ? "取消请求后文稿发生了意外变化。" : null,
+      };
+    }
+
+    const settledSession = await waitForNarrativeCondition(
+      `${scenario.id} 会话完成`,
+      () => {
+        const session = getSession(documentKey);
+        if (
+          session &&
+          !session.activeSubmission &&
+          !session.busy &&
+          session.lastResponse &&
+          session.lastRequest?.requestId === requestId
+        ) {
+          return session;
+        }
+        return null;
+      },
+      sessionTimeoutMs,
+    );
+    const response = settledSession.lastResponse!;
+    const requestedAction = settledSession.pendingActionRequests[0] ?? null;
+    const domValid = validateRegressionDom(scenario, response);
+
+    if (scenario.expectDocumentChange && response.turnKind === "final_answer" && !response.providerError.trim()) {
+      openDocument(documentKey);
+      applyAllSuggestions();
+      await waitForNarrativeCondition(
+        `${scenario.id} 应用整篇建议`,
+        () => {
+          const document = getDocument(documentKey);
+          if (
+            document &&
+            normalizeNarrativeMarkdown(document.markdown) ===
+              normalizeNarrativeMarkdown(response.draftMarkdown)
+          ) {
+            return document;
+          }
+          return null;
+        },
+        6000,
+      );
+      await saveDocument(documentKey);
+    }
+
+    if (scenario.autoApproveAction && requestedAction) {
+      openDocument(documentKey);
+      await approveActionRequest(requestedAction.id);
+      await waitForNarrativeCondition(
+        `${scenario.id} agent 动作完成`,
+        () => {
+          const session = getSession(documentKey);
+          if (session && !session.pendingActionRequests.length) {
+            return true;
+          }
+          return null;
+        },
+        8000,
+      );
+      if (scenario.expectDerivedDocumentSlug) {
+        await waitForNarrativeCondition(
+          `${scenario.id} 派生文稿落地`,
+          () =>
+            documentsRef.current.find(
+              (document) => document.meta.slug === scenario.expectDerivedDocumentSlug,
+            ) ?? null,
+          8000,
+        );
+      }
+    }
+
+    if (scenario.autoRejectAction && requestedAction) {
+      openDocument(documentKey);
+      rejectActionRequest(requestedAction.id);
+      await waitForNarrativeCondition(
+        `${scenario.id} agent 动作拒绝完成`,
+        () => {
+          const session = getSession(documentKey);
+          if (session && !session.pendingActionRequests.length) {
+            return true;
+          }
+          return null;
+        },
+        4000,
+      );
+    }
+
+    const afterDocument = getDocument(documentKey) ?? beforeDocument;
+    const derivedDocument =
+      documentsRef.current.find((document) => document.meta.slug === scenario.expectDerivedDocumentSlug) ??
+      null;
+    const documentChanged =
+      normalizeNarrativeMarkdown(afterDocument.markdown) !==
+      normalizeNarrativeMarkdown(beforeMarkdown);
+    const actionMatches = scenario.expectedActionType
+      ? requestedAction?.actionType === scenario.expectedActionType
+      : true;
+    const previewMatches =
+      scenario.expectedPreviewOnly === undefined || scenario.expectedPreviewOnly === null
+        ? true
+        : requestedAction?.previewOnly === scenario.expectedPreviewOnly;
+    const turnKindMatches = scenario.expectedTurnKinds.includes(response.turnKind);
+    const changeMatches =
+      scenario.expectDocumentChange === undefined
+        ? true
+        : documentChanged === scenario.expectDocumentChange;
+    const derivedMatches = scenario.expectDerivedDocumentSlug
+      ? derivedDocument?.meta.slug === scenario.expectDerivedDocumentSlug &&
+        (scenario.expectDerivedDocumentDocType
+          ? derivedDocument.meta.docType === scenario.expectDerivedDocumentDocType
+          : true)
+      : true;
+    const contextMatches = scenario.expectSelectedContextRefs ? response.usedContextRefs.length > 0 : true;
+
+    const ok =
+      turnKindMatches &&
+      actionMatches &&
+      previewMatches &&
+      changeMatches &&
+      derivedMatches &&
+      contextMatches &&
+      domValid;
+    const failureKind = ok
+      ? "none"
+      : classifyRegressionFailure(scenario, response, {
+          domValid,
+          actionMatches,
+          previewMatches,
+          changeMatches,
+          derivedMatches,
+          contextMatches,
+        });
+
+    return {
+      id: scenario.id,
+      label: scenario.label,
+      ok,
+      prompt: scenario.prompt,
+      mode,
+      smokeTier: scenario.smokeTier,
+      failureKind,
+      actualTurnKind: response.turnKind,
+      expectedTurnKinds: scenario.expectedTurnKinds,
+      requestedActionType: requestedAction?.actionType ?? null,
+      requestedPreviewOnly: requestedAction?.previewOnly ?? null,
+      assistantMessage: response.assistantMessage,
+      providerError: response.providerError,
+      documentChanged,
+      activeDocumentSlug: afterDocument.meta.slug,
+      derivedDocumentSlug: derivedDocument?.meta.slug ?? null,
+      derivedDocumentPath: derivedDocument?.relativePath ?? null,
+      contextRefCount: response.usedContextRefs.length,
+      questionCount: response.responseStructure?.questionCount ?? response.questions.length,
+      optionCount: response.responseStructure?.optionCount ?? response.options.length,
+      planStepCount: response.responseStructure?.planStepCount ?? response.planSteps.length,
+      requestedActionCount:
+        response.responseStructure?.requestedActionCount ?? response.requestedActions.length,
+      turnKindSource: response.turnKindSource ?? null,
+      turnKindCorrection: response.turnKindCorrection ?? null,
+      diagnosticFlags: response.diagnosticFlags ?? [],
+      statusMessage:
+        response.providerError ||
+        response.assistantMessage ||
+        response.summary ||
+        "无状态摘要",
+      summary: ok
+        ? response.summary || response.assistantMessage || "场景通过"
+        : [
+            !turnKindMatches ? `turn_kind=${response.turnKind}` : "",
+            !actionMatches ? `action=${requestedAction?.actionType ?? "none"}` : "",
+            !previewMatches ? `previewOnly=${String(requestedAction?.previewOnly ?? null)}` : "",
+            !changeMatches ? `documentChanged=${String(documentChanged)}` : "",
+            !derivedMatches ? `derived=${derivedDocument?.meta.slug ?? "missing"}` : "",
+            !contextMatches ? `contextRefCount=${response.usedContextRefs.length}` : "",
+            !domValid ? "dom=invalid" : "",
+          ]
+            .filter(Boolean)
+            .join("; "),
+      error: ok ? null : response.providerError || null,
+    };
+  }
+
+  async function exportChatRegressionReport(report: NarrativeChatRegressionReport) {
+    const input: NarrativeChatRegressionExportInput = {
+      mode: report.mode,
+      workspaceRoot: report.workspaceRoot,
+      connectedProjectRoot: report.connectedProjectRoot ?? null,
+      aiConfig: report.aiConfig ?? null,
+      startedAt: report.startedAt,
+      completedAt: report.completedAt,
+      ok: report.ok,
+      summary: report.summary,
+      scenarioResults: report.scenarioResults,
+      skippedScenarios: report.skippedScenarios,
+    };
+
+    return invokeCommand<NarrativeChatRegressionExportResult>(
+      "export_narrative_chat_regression_report",
+      {
+        workspaceRoot: workspace.workspaceRoot,
+        input,
+      },
+    );
+  }
+
+  async function runNarrativeChatRegression() {
+    const mode = chatRegressionMode ?? "offline";
+    const startedAt = nowIso();
+    const selectedScenarios = scenariosForMode(mode, NARRATIVE_CHAT_REGRESSION_SCENARIOS);
+    const aiConfig = await loadRegressionAiConfigSummary();
+
+    if (!selectedScenarios.length) {
+      onStatusChange("当前模式下没有可运行的 Narrative chat regression 场景。");
+      return;
+    }
+
+    if (isOnlineRegressionMode(mode)) {
+      const connection = await invokeCommand<AiConnectionTestResult>("test_ai_provider");
+      if (!connection.ok) {
+        const shouldSkip =
+          connection.error.includes("API Key 未配置") ||
+          connection.error.includes("Base URL 不能为空");
+        if (shouldSkip) {
+          const skippedReport = summarizeNarrativeChatRegression({
+            mode,
+            workspaceRoot: workspace.workspaceRoot,
+            connectedProjectRoot: workspace.connectedProjectRoot ?? null,
+            aiConfig,
+            startedAt,
+            completedAt: nowIso(),
+            scenarioResults: [],
+            skippedScenarios: selectedScenarios.map((scenario) => scenario.id),
+          });
+          const exported = await exportChatRegressionReport(skippedReport);
+          onStatusChange(`在线冒烟已跳过：${connection.error} ${exported.markdownPath}`);
+          if (autoCloseAfterSelfTest && isTauriRuntime()) {
+            window.setTimeout(() => {
+              void getCurrentWindow().close();
+            }, 600);
+          }
+          return;
+        }
+      }
+    }
+
+    const scenarioResults: NarrativeChatRegressionScenarioResult[] = [];
+    const skippedScenarios: string[] = [];
+
+    for (const scenario of selectedScenarios) {
+      onStatusChange(`正在运行 Narrative chat regression：${scenario.label}`);
+      try {
+        const result = await runSingleChatRegressionScenario(scenario, mode);
+        scenarioResults.push(result);
+        onStatusChange(scenarioResultSummary(result));
+      } catch (error) {
+        scenarioResults.push({
+          id: scenario.id,
+          label: scenario.label,
+          ok: false,
+          prompt: scenario.prompt,
+          mode,
+          smokeTier: scenario.smokeTier,
+          failureKind: String(error).includes("超时") ? "timeout_unclassified" : "product_defect",
+          actualTurnKind: "blocked",
+          expectedTurnKinds: scenario.expectedTurnKinds,
+          requestedActionType: null,
+          requestedPreviewOnly: null,
+          assistantMessage: "",
+          providerError: "",
+          documentChanged: false,
+          activeDocumentSlug: NARRATIVE_CHAT_REGRESSION_ACTIVE_SLUG,
+          derivedDocumentSlug: null,
+          derivedDocumentPath: null,
+          contextRefCount: 0,
+          questionCount: 0,
+          optionCount: 0,
+          planStepCount: 0,
+          requestedActionCount: 0,
+          turnKindSource: null,
+          turnKindCorrection: null,
+          diagnosticFlags: [],
+          statusMessage: String(error),
+          summary: `场景执行失败：${String(error)}`,
+          error: String(error),
+        });
+      }
+    }
+
+    const report = summarizeNarrativeChatRegression({
+      mode,
+      workspaceRoot: workspace.workspaceRoot,
+      connectedProjectRoot: workspace.connectedProjectRoot ?? null,
+      aiConfig,
+      startedAt,
+      completedAt: nowIso(),
+      scenarioResults,
+      skippedScenarios,
+    });
+    const exported = await exportChatRegressionReport(report);
+    onStatusChange(`${report.summary} ${exported.markdownPath}`);
+
+    if (autoCloseAfterSelfTest && isTauriRuntime()) {
+      window.setTimeout(() => {
+        void getCurrentWindow().close();
+      }, 600);
     }
   }
 
@@ -1750,30 +2390,37 @@ export function NarrativeWorkspace({
   async function submitNarrativePrompt(
     promptOverride?: string,
     source: NarrativeSubmissionSource = promptOverride ? "option" : "composer",
-  ) {
-    if (!activeDocument || !tabState.activeTabKey || !activeSession) {
+  ): Promise<string | null> {
+    const activeDocumentKey = tabStateRef.current.activeTabKey;
+    const currentDocument = activeDocumentKey ? getDocument(activeDocumentKey) : null;
+    const currentSession = currentDocument
+      ? getSession(currentDocument.documentKey) ?? createDocumentAgentSession()
+      : null;
+
+    if (!currentDocument || !activeDocumentKey || !currentSession) {
       onStatusChange("请先打开一个文档标签，再和 AI 协作。");
-      return;
+      return null;
     }
 
-    const submittedPrompt = (promptOverride ?? activeSession.composerText).trim();
+    const submittedPrompt = (promptOverride ?? currentSession.composerText).trim();
     if (!submittedPrompt) {
       onStatusChange("请输入本轮要告诉 AI 的内容。");
-      return;
+      return null;
     }
 
-    const activeDocumentKey = activeDocument.documentKey;
-    if (submissionGateRef.current[activeDocumentKey]) {
-      return;
+    if (submissionGateRef.current[currentDocument.documentKey]) {
+      return null;
     }
 
-    submissionGateRef.current[activeDocumentKey] = true;
+    submissionGateRef.current[currentDocument.documentKey] = true;
     let enqueueOutcome: "started" | "queued" | "duplicate_active" | "duplicate_tail" | null =
       null;
     let queuedCount = 0;
+    let submittedRequestId: string | null = null;
 
     try {
       const submission = createNarrativeQueuedSubmission(submittedPrompt, source);
+      submittedRequestId = submission.requestId;
       const userMessage = buildGenerationUserMessage({
         submittedPrompt: submission.prompt,
         action: null,
@@ -1809,37 +2456,41 @@ export function NarrativeWorkspace({
         }),
       );
     } finally {
-      submissionGateRef.current[activeDocumentKey] = false;
+      submissionGateRef.current[currentDocument.documentKey] = false;
     }
 
     if (enqueueOutcome === "duplicate_active") {
       onStatusChange("相同内容已在处理中。");
-      return;
+      return null;
     }
     if (enqueueOutcome === "duplicate_tail") {
       onStatusChange("相同内容已在待发送队列末尾。");
-      return;
+      return null;
     }
     if (enqueueOutcome === "queued") {
       onStatusChange(`已加入待发送队列，当前待发送 ${queuedCount} 条。`);
-      return;
+      return submittedRequestId;
     }
 
     onStatusChange("已提交给 AI，正在处理。");
+    return submittedRequestId;
   }
 
   async function cancelActiveSubmission() {
-    if (!activeDocument || !activeSession?.activeSubmission) {
+    const documentKey = tabStateRef.current.activeTabKey;
+    const currentDocument = documentKey ? getDocument(documentKey) : null;
+    const currentSession = currentDocument ? getSession(currentDocument.documentKey) : null;
+    if (!currentDocument || !currentSession?.activeSubmission) {
       return;
     }
 
-    const submission = activeSession.activeSubmission;
+    const submission = currentSession.activeSubmission;
     if (submission.stage === "cancelling") {
       return;
     }
 
     setDocumentAgents((current) =>
-      updateDocumentAgentSession(current, activeDocument.documentKey, (session) =>
+      updateDocumentAgentSession(current, currentDocument.documentKey, (session) =>
         session.activeSubmission?.submissionId === submission.submissionId
           ? updateActiveSubmissionStage(session, "cancelling")
           : session,
@@ -1859,7 +2510,7 @@ export function NarrativeWorkspace({
       }
     } catch (error) {
       setDocumentAgents((current) =>
-        updateDocumentAgentSession(current, activeDocument.documentKey, (session) => {
+        updateDocumentAgentSession(current, currentDocument.documentKey, (session) => {
           if (session.activeSubmission?.submissionId !== submission.submissionId) {
             return session;
           }
@@ -2097,11 +2748,16 @@ export function NarrativeWorkspace({
           ),
         ),
       );
+      const missingRequestedActionAlert = narrativeResponse.diagnosticFlags?.includes(
+        "missing_requested_actions_for_split",
+      );
       onStatusChange(
-        narrativeResponse.providerError ||
-          narrativeResponse.assistantMessage ||
-          narrativeResponse.summary ||
-          "AI 已生成文档修改建议。",
+        missingRequestedActionAlert
+          ? "AI 已生成正文，但未返回预期的待批准动作；请检查 provider 输出。"
+          : narrativeResponse.providerError ||
+            narrativeResponse.assistantMessage ||
+            narrativeResponse.summary ||
+            "AI 已生成文档修改建议。",
       );
     } catch (error) {
       if (isNarrativeCancellationError(error)) {
@@ -2161,32 +2817,58 @@ export function NarrativeWorkspace({
     }
   }, [documentAgents]);
 
-  function applyPatch(patchId: string) {
-    if (!activeDocument || !activeSession?.candidatePatchSet || !activeSession.lastResponse) {
+  useEffect(() => {
+    if (
+      selfTestStartedRef.current ||
+      selfTestScenario !== "narrative-chat-regression" ||
+      !startupReady ||
+      !workspace.workspaceRoot.trim() ||
+      !documents.length
+    ) {
       return;
     }
 
-    const patch = activeSession.candidatePatchSet.patches.find((entry) => entry.id === patchId);
+    selfTestStartedRef.current = true;
+    void runNarrativeChatRegression().catch((error) => {
+      onStatusChange(`Narrative chat regression 执行失败：${String(error)}`);
+    });
+  }, [
+    documents.length,
+    onStatusChange,
+    selfTestScenario,
+    startupReady,
+    workspace.workspaceRoot,
+  ]);
+
+  function applyPatch(patchId: string) {
+    const documentKey = tabStateRef.current.activeTabKey;
+    const currentDocument = documentKey ? getDocument(documentKey) : null;
+    const currentSession = currentDocument ? getSession(currentDocument.documentKey) : null;
+    if (!currentDocument || !currentSession?.candidatePatchSet || !currentSession.lastResponse) {
+      return;
+    }
+
+    const patch = currentSession.candidatePatchSet.patches.find((entry) => entry.id === patchId);
     if (!patch) {
       return;
     }
 
-    const nextMarkdown = applyNarrativePatch(activeDocument.markdown, patch);
-    updateDocumentState(activeDocument.documentKey, (document) => ({
+    const nextMarkdown = applyNarrativePatch(currentDocument.markdown, patch);
+    updateDocumentState(currentDocument.documentKey, (document) => ({
       ...document,
       markdown: nextMarkdown,
     }));
 
     const nextPatchSet = buildNarrativePatchSet(
       nextMarkdown,
-      activeSession.lastResponse.draftMarkdown,
+      currentSession.lastResponse.draftMarkdown,
     );
     const isComplete =
       normalizeNarrativeMarkdown(nextMarkdown) ===
-      normalizeNarrativeMarkdown(activeSession.lastResponse.draftMarkdown);
+      normalizeNarrativeMarkdown(currentSession.lastResponse.draftMarkdown);
 
     setDocumentAgents((current) =>
-      updateDocumentAgentSessionWithReviewQueue(current, activeDocument.documentKey, (session) =>
+      updateDocumentAgentSessionWithReviewQueue(current, currentDocument.documentKey, (session) =>
         appendContextMessage(
           {
             ...session,
@@ -2202,16 +2884,19 @@ export function NarrativeWorkspace({
   }
 
   function applyAllSuggestions() {
-    if (!activeDocument || !activeSession?.lastResponse?.draftMarkdown.trim()) {
+    const documentKey = tabStateRef.current.activeTabKey;
+    const currentDocument = documentKey ? getDocument(documentKey) : null;
+    const currentSession = currentDocument ? getSession(currentDocument.documentKey) : null;
+    if (!currentDocument || !currentSession?.lastResponse?.draftMarkdown.trim()) {
       return;
     }
 
-    updateDocumentState(activeDocument.documentKey, (document) => ({
+    updateDocumentState(currentDocument.documentKey, (document) => ({
       ...document,
-      markdown: activeSession.lastResponse?.draftMarkdown ?? document.markdown,
+      markdown: currentSession.lastResponse?.draftMarkdown ?? document.markdown,
     }));
     setDocumentAgents((current) =>
-      updateDocumentAgentSessionWithReviewQueue(current, activeDocument.documentKey, (session) =>
+      updateDocumentAgentSessionWithReviewQueue(current, currentDocument.documentKey, (session) =>
         appendContextMessage(
           {
             ...session,
@@ -2227,12 +2912,14 @@ export function NarrativeWorkspace({
   }
 
   function discardCurrentSuggestions() {
-    if (!activeDocument) {
+    const documentKey = tabStateRef.current.activeTabKey;
+    const currentDocument = documentKey ? getDocument(documentKey) : null;
+    if (!currentDocument) {
       return;
     }
 
     setDocumentAgents((current) =>
-      updateDocumentAgentSessionWithReviewQueue(current, activeDocument.documentKey, (session) =>
+      updateDocumentAgentSessionWithReviewQueue(current, currentDocument.documentKey, (session) =>
         appendContextMessage(
           {
             ...session,
@@ -2247,7 +2934,11 @@ export function NarrativeWorkspace({
     onStatusChange("已清空当前 patch 建议。");
   }
 
-  function applyAgentDocumentResult(result: AgentActionResult, requestId: string) {
+  function applyAgentDocumentResult(
+    result: AgentActionResult,
+    requestId: string,
+    sourceDocumentKey?: string | null,
+  ) {
     const derivedSummaries: NarrativeDocumentSummary[] = [];
     if (result.document) {
       derivedSummaries.push(summarizeNarrativeDocumentPayload(result.document));
@@ -2260,9 +2951,9 @@ export function NarrativeWorkspace({
       }
     }
 
-    if (derivedSummaries.length && activeDocument) {
+    if (derivedSummaries.length && sourceDocumentKey) {
       setDocumentAgents((current) =>
-        updateDocumentAgentSessionWithReviewQueue(current, activeDocument.documentKey, (session) =>
+        updateDocumentAgentSessionWithReviewQueue(current, sourceDocumentKey, (session) =>
           mergePendingDerivedDocuments(session, derivedSummaries),
         ),
       );
@@ -2323,11 +3014,14 @@ export function NarrativeWorkspace({
   }
 
   async function approveActionRequest(requestId: string) {
-    if (!activeDocument || !activeSession) {
+    const documentKey = tabStateRef.current.activeTabKey;
+    const currentDocument = documentKey ? getDocument(documentKey) : null;
+    const currentSession = currentDocument ? getSession(currentDocument.documentKey) : null;
+    if (!currentDocument || !currentSession) {
       return;
     }
 
-    const request = activeSession.pendingActionRequests.find((entry) => entry.id === requestId);
+    const request = currentSession.pendingActionRequests.find((entry) => entry.id === requestId);
     if (!request) {
       return;
     }
@@ -2365,7 +3059,7 @@ export function NarrativeWorkspace({
             requestId,
             actionType: request.actionType,
             payload: request.payload,
-            currentDocument: activeDocument,
+            currentDocument: currentDocument,
           },
         });
 
@@ -2376,11 +3070,11 @@ export function NarrativeWorkspace({
           }
         }
 
-        applyAgentDocumentResult(result, requestId);
+        applyAgentDocumentResult(result, requestId, currentDocument.documentKey);
       }
 
       setDocumentAgents((current) =>
-        updateDocumentAgentSessionWithReviewQueue(current, activeDocument.documentKey, (session) =>
+        updateDocumentAgentSessionWithReviewQueue(current, currentDocument.documentKey, (session) =>
           resolveActionRequestSession(
             session,
             requestId,
@@ -2398,7 +3092,7 @@ export function NarrativeWorkspace({
         summary: `agent 动作执行失败：${String(error)}`,
       };
       setDocumentAgents((current) =>
-        updateDocumentAgentSessionWithReviewQueue(current, activeDocument.documentKey, (session) =>
+        updateDocumentAgentSessionWithReviewQueue(current, currentDocument.documentKey, (session) =>
           resolveActionRequestSession(
             session,
             requestId,
@@ -2414,10 +3108,13 @@ export function NarrativeWorkspace({
   }
 
   function rejectActionRequest(requestId: string) {
-    if (!activeDocument || !activeSession) {
+    const documentKey = tabStateRef.current.activeTabKey;
+    const currentDocument = documentKey ? getDocument(documentKey) : null;
+    const currentSession = currentDocument ? getSession(currentDocument.documentKey) : null;
+    if (!currentDocument || !currentSession) {
       return;
     }
-    const request = activeSession.pendingActionRequests.find((entry) => entry.id === requestId);
+    const request = currentSession.pendingActionRequests.find((entry) => entry.id === requestId);
     if (!request) {
       return;
     }
@@ -2430,7 +3127,7 @@ export function NarrativeWorkspace({
     };
 
     setDocumentAgents((current) =>
-      updateDocumentAgentSessionWithReviewQueue(current, activeDocument.documentKey, (session) =>
+      updateDocumentAgentSessionWithReviewQueue(current, currentDocument.documentKey, (session) =>
         resolveActionRequestSession(
           session,
           requestId,
@@ -2783,12 +3480,13 @@ export function NarrativeWorkspace({
                 </div>
               </div>
 
-              <div className="narrative-chat-log">
+              <div className="narrative-chat-log" data-testid="narrative-chat-panel">
                 {activeSession.chatMessages.length ? (
                   activeSession.chatMessages.map((message) => (
                     <article
                       key={message.id}
                       className={`narrative-chat-message narrative-chat-message-${message.role}`.trim()}
+                      data-message-role={message.role}
                     >
                       {message.role === "context" ? (
                         <div className="narrative-chat-message-header">
@@ -2815,7 +3513,10 @@ export function NarrativeWorkspace({
                 )}
 
                 {isActionIntentClarification && actionIntentQuestion ? (
-                  <article className="narrative-chat-message narrative-chat-message-context">
+                  <article
+                    className="narrative-chat-message narrative-chat-message-context"
+                    data-testid="narrative-clarification-panel"
+                  >
                     <div className="narrative-chat-message-header">
                       <strong>确认动作</strong>
                       <Badge tone="warning">clarification</Badge>
@@ -2827,6 +3528,7 @@ export function NarrativeWorkspace({
                           key={option.id}
                           type="button"
                           className="narrative-option-card"
+                          data-testid="narrative-option-card"
                           onClick={() => void submitNarrativePrompt(option.followupPrompt, "option")}
                           title={option.followupPrompt || option.description}
                         >
@@ -2839,7 +3541,10 @@ export function NarrativeWorkspace({
                 ) : null}
 
                 {!isActionIntentClarification && pendingQuestions.length ? (
-                  <article className="narrative-chat-message narrative-chat-message-context">
+                  <article
+                    className="narrative-chat-message narrative-chat-message-context"
+                    data-testid="narrative-clarification-panel"
+                  >
                     <div className="narrative-chat-message-header">
                       <strong>待补充信息</strong>
                       <Badge tone="warning">clarification</Badge>
@@ -2857,7 +3562,10 @@ export function NarrativeWorkspace({
                 ) : null}
 
                 {!isActionIntentClarification && pendingOptions.length ? (
-                  <article className="narrative-chat-message narrative-chat-message-context">
+                  <article
+                    className="narrative-chat-message narrative-chat-message-context"
+                    data-testid="narrative-options-panel"
+                  >
                     <div className="narrative-chat-message-header">
                       <strong>可选方向</strong>
                       <Badge tone="accent">options</Badge>
@@ -2869,6 +3577,7 @@ export function NarrativeWorkspace({
                           key={option.id}
                           type="button"
                           className="narrative-option-card"
+                          data-testid="narrative-option-card"
                           onClick={() => void submitNarrativePrompt(option.followupPrompt, "option")}
                           title={option.followupPrompt || option.description}
                         >
@@ -2881,7 +3590,10 @@ export function NarrativeWorkspace({
                 ) : null}
 
                 {latestTurnKind === "plan" && latestPlan.length ? (
-                  <article className="narrative-chat-message narrative-chat-message-context">
+                  <article
+                    className="narrative-chat-message narrative-chat-message-context"
+                    data-testid="narrative-plan-panel"
+                  >
                     <div className="narrative-chat-message-header">
                       <strong>执行计划</strong>
                       <Badge tone="muted">plan</Badge>
@@ -2901,7 +3613,10 @@ export function NarrativeWorkspace({
                 ) : null}
 
                 {pendingActions.length ? (
-                  <article className="narrative-chat-message narrative-chat-message-context">
+                  <article
+                    className="narrative-chat-message narrative-chat-message-context"
+                    data-testid="narrative-pending-actions-panel"
+                  >
                     <div className="narrative-chat-message-header">
                       <strong>待批准动作</strong>
                       <Badge tone="warning">approval</Badge>
@@ -2910,7 +3625,13 @@ export function NarrativeWorkspace({
                       这些动作不会自动执行，只有你批准后才会继续。
                     </p>
                     {pendingActions.map((action) => (
-                      <div key={action.id} className="narrative-empty-state" style={{ marginBottom: 12 }}>
+                      <div
+                        key={action.id}
+                        className="narrative-empty-state"
+                        style={{ marginBottom: 12 }}
+                        data-action-type={action.actionType}
+                        data-preview-only={action.previewOnly ? "true" : "false"}
+                      >
                         <strong>{action.title}</strong>
                         <p style={{ whiteSpace: "pre-wrap" }}>{action.description}</p>
                         <div className="toolbar-summary">

@@ -91,7 +91,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_gatehouse",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 1101,
             "target_room_count": 1,
@@ -117,7 +120,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_dormitory",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 1102,
             "target_room_count": 1,
@@ -143,7 +149,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_canteen",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 1103,
             "target_room_count": 1,
@@ -169,7 +178,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_clinic",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 1104,
             "target_room_count": 1,
@@ -195,7 +207,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_storage",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 1105,
             "target_room_count": 1,
@@ -221,7 +236,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_workshop",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 1106,
             "target_room_count": 1,
@@ -247,7 +265,10 @@
         "building": {
           "prefab_id": "survivor_outpost_01_watchtower",
           "wall_visual": { "kind": "legacy_grid" },
-          "tile_set": { "wall_set_id": "building_wall_legacy" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy",
+            "floor_surface_set_id": "building_wall_legacy/floor"
+          },
           "layout": {
             "seed": 1107,
             "target_room_count": 1,
@@ -330,6 +351,11 @@
       "props": {
         "building": null,
         "pickup": { "item_id": "1005", "min_count": 1, "max_count": 2 },
+        "visual": {
+          "prototype_id": "props/crate_wood",
+          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
+          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+        },
         "interactive": null,
         "ai_spawn": null
       }
@@ -345,6 +371,11 @@
       "props": {
         "building": null,
         "pickup": { "item_id": "1007", "min_count": 2, "max_count": 4 },
+        "visual": {
+          "prototype_id": "props/crate_wood",
+          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
+          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+        },
         "interactive": null,
         "ai_spawn": null
       }
@@ -360,6 +391,11 @@
       "props": {
         "building": null,
         "pickup": { "item_id": "1010", "min_count": 3, "max_count": 6 },
+        "visual": {
+          "prototype_id": "props/crate_wood",
+          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
+          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+        },
         "interactive": null,
         "ai_spawn": null
       }

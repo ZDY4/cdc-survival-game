@@ -9,7 +9,7 @@ use game_core::{
 use game_data::{
     expand_object_footprint, GridCoord, MapBuildingWallVisualKind, MapDefinition,
     MapObjectDefinition, MapObjectKind, MapRotation, OverworldDefinition, OverworldTerrainKind,
-    WorldMode, WorldWallTileSetId,
+    WorldMode, WorldSurfaceTileSetId, WorldWallTileSetId,
 };
 
 const TRIGGER_DECAL_ELEVATION: f32 = 0.002;
@@ -60,8 +60,6 @@ pub enum StaticWorldMaterialRole {
     InteractiveAccent,
     TriggerBase,
     TriggerAccent,
-    AiSpawnBase,
-    AiSpawnAccent,
     InvisiblePickProxy,
     Warning,
     OverworldCell,
@@ -145,6 +143,16 @@ pub struct StaticWorldBuildingWallTileSpec {
 }
 
 #[derive(Debug, Clone)]
+pub struct StaticWorldSurfaceTileSpec {
+    pub grid: GridCoord,
+    pub surface_set_id: WorldSurfaceTileSetId,
+    pub translation: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
+    pub semantic: Option<StaticWorldSemantic>,
+}
+
+#[derive(Debug, Clone)]
 pub struct StaticWorldDecalSpec {
     pub size: Vec2,
     pub translation: Vec3,
@@ -168,6 +176,7 @@ pub struct StaticWorldSceneSpec {
     pub ground: Vec<StaticWorldGroundSpec>,
     pub boxes: Vec<StaticWorldBoxSpec>,
     pub building_wall_tiles: Vec<StaticWorldBuildingWallTileSpec>,
+    pub surface_tiles: Vec<StaticWorldSurfaceTileSpec>,
     pub decals: Vec<StaticWorldDecalSpec>,
     pub labels: Vec<StaticWorldBillboardLabelSpec>,
 }
@@ -177,6 +186,7 @@ struct StaticMapTopology {
     grid_size: f32,
     bounds: StaticWorldGridBounds,
     blocked_cells: Vec<GridCoord>,
+    surface_cells: Vec<GridCoord>,
     objects: Vec<StaticMapObject>,
     generated_buildings: Vec<GeneratedBuildingDebugState>,
     generated_doors: Vec<GeneratedDoorDebugState>,
@@ -190,6 +200,7 @@ struct StaticMapObject {
     rotation: MapRotation,
     occupied_cells: Vec<GridCoord>,
     has_viewer_function: bool,
+    has_visual_placement: bool,
     is_generated_door: bool,
     trigger_kind: Option<String>,
 }
@@ -233,6 +244,20 @@ pub fn build_static_world_from_map_definition(
             max_z: definition.size.height.saturating_sub(1) as i32,
         },
         blocked_cells: grid_world.map_blocked_cells(Some(current_level)),
+        surface_cells: definition
+            .levels
+            .iter()
+            .find(|level| level.y == current_level)
+            .into_iter()
+            .flat_map(|level| level.cells.iter())
+            .filter(|cell| {
+                cell.visual
+                    .as_ref()
+                    .and_then(|visual| visual.surface_set_id.as_ref())
+                    .is_some()
+            })
+            .map(|cell| GridCoord::new(cell.x as i32, current_level, cell.z as i32))
+            .collect(),
         objects: grid_world
             .map_object_entries()
             .into_iter()
@@ -263,6 +288,19 @@ pub fn build_static_world_from_simulation_snapshot(
             .map_cells
             .iter()
             .filter(|cell| cell.blocks_movement)
+            .map(|cell| cell.grid)
+            .collect(),
+        surface_cells: snapshot
+            .grid
+            .map_cells
+            .iter()
+            .filter(|cell| cell.grid.y == current_level)
+            .filter(|cell| {
+                cell.visual
+                    .as_ref()
+                    .and_then(|visual| visual.surface_set_id.as_ref())
+                    .is_some()
+            })
             .map(|cell| cell.grid)
             .collect(),
         objects: snapshot
@@ -318,6 +356,7 @@ fn build_static_world_from_overworld_snapshot(
         ),
         boxes: Vec::new(),
         building_wall_tiles: Vec::new(),
+        surface_tiles: Vec::new(),
         decals: Vec::new(),
         labels: Vec::new(),
     };
@@ -385,6 +424,7 @@ pub fn build_static_world_from_overworld_definition(
         ground: collect_overworld_ground_specs(definition, floor_y, floor_thickness_world),
         boxes: Vec::new(),
         building_wall_tiles: Vec::new(),
+        surface_tiles: Vec::new(),
         decals: Vec::new(),
         labels: Vec::new(),
     };
@@ -863,8 +903,6 @@ pub fn default_color_for_role(role: StaticWorldMaterialRole) -> Color {
         StaticWorldMaterialRole::InteractiveAccent => Color::srgb(0.35, 0.61, 0.90),
         StaticWorldMaterialRole::TriggerBase => Color::srgb(0.82, 0.58, 0.18),
         StaticWorldMaterialRole::TriggerAccent => Color::srgb(0.96, 0.72, 0.29),
-        StaticWorldMaterialRole::AiSpawnBase => Color::srgb(0.70, 0.29, 0.34),
-        StaticWorldMaterialRole::AiSpawnAccent => Color::srgb(0.86, 0.35, 0.40),
         StaticWorldMaterialRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
         StaticWorldMaterialRole::Warning => Color::srgb(0.95, 0.18, 0.18),
         StaticWorldMaterialRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
@@ -901,6 +939,7 @@ fn build_static_world_from_topology(
         ),
         boxes: Vec::new(),
         building_wall_tiles: Vec::new(),
+        surface_tiles: Vec::new(),
         decals: Vec::new(),
         labels: Vec::new(),
     };
@@ -915,6 +954,7 @@ fn build_static_world_from_topology(
         push_generated_building_specs(
             &mut scene.boxes,
             &mut scene.building_wall_tiles,
+            &mut scene.surface_tiles,
             building,
             current_level,
             floor_top,
@@ -993,6 +1033,7 @@ fn collect_ground_specs(
             excluded.extend(story.walkable_cells.iter().copied());
         }
     }
+    excluded.extend(topology.surface_cells.iter().copied());
     let mut cells = Vec::new();
     for x in bounds.min_x..=bounds.max_x {
         for z in bounds.min_z..=bounds.max_z {
@@ -1037,6 +1078,7 @@ fn overworld_ground_role(terrain: OverworldTerrainKind) -> StaticWorldMaterialRo
 fn push_generated_building_specs(
     specs: &mut Vec<StaticWorldBoxSpec>,
     wall_tiles: &mut Vec<StaticWorldBuildingWallTileSpec>,
+    surface_tiles: &mut Vec<StaticWorldSurfaceTileSpec>,
     building: &GeneratedBuildingDebugState,
     current_level: i32,
     floor_top: f32,
@@ -1050,23 +1092,25 @@ fn push_generated_building_specs(
     else {
         return;
     };
-    for cell in &story.walkable_cells {
-        specs.push(StaticWorldBoxSpec {
-            size: Vec3::new(
-                grid_size.max(grid_size * 0.2),
-                floor_thickness_world.max(0.02),
-                grid_size.max(grid_size * 0.2),
-            ),
-            translation: Vec3::new(
-                (cell.x as f32 + 0.5) * grid_size,
-                floor_top - floor_thickness_world * 0.5,
-                (cell.z as f32 + 0.5) * grid_size,
-            ),
-            material_role: StaticWorldMaterialRole::BuildingFloor,
-            occluder_kind: None,
-            occluder_cells: Vec::new(),
-            semantic: None,
-        });
+    if let Some(surface_set_id) = building.tile_set.floor_surface_set_id.clone() {
+        for cell in &story.walkable_cells {
+            surface_tiles.push(StaticWorldSurfaceTileSpec {
+                grid: *cell,
+                surface_set_id: surface_set_id.clone(),
+                translation: Vec3::new(
+                    (cell.x as f32 + 0.5) * grid_size,
+                    floor_top - floor_thickness_world * 0.5,
+                    (cell.z as f32 + 0.5) * grid_size,
+                ),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::new(
+                    grid_size.max(0.001),
+                    (floor_thickness_world / 0.11).max(0.001),
+                    grid_size.max(0.001),
+                ),
+                semantic: Some(StaticWorldSemantic::MapObject(building.object_id.clone())),
+            });
+        }
     }
     let wall_height = (story.wall_height * grid_size).max(grid_size * 0.4);
     let wall_cells = story.wall_cells.iter().copied().collect::<HashSet<_>>();
@@ -1168,6 +1212,12 @@ fn push_object_specs(
     grid_size: f32,
     object_style_seed: u32,
 ) {
+    if object.has_visual_placement {
+        match object.kind {
+            MapObjectKind::Pickup | MapObjectKind::Interactive | MapObjectKind::AiSpawn => return,
+            MapObjectKind::Building | MapObjectKind::Trigger => {}
+        }
+    }
     let (center_x, center_z, footprint_width, footprint_depth) =
         occupied_cells_box(&object.occupied_cells, grid_size);
     let anchor_noise = cell_style_noise(
@@ -1235,38 +1285,7 @@ fn push_object_specs(
         MapObjectKind::Trigger => {
             push_trigger_specs(scene, object, current_level, floor_top, grid_size)
         }
-        MapObjectKind::AiSpawn => {
-            let beacon_height = grid_size * (0.34 + anchor_noise * 0.16);
-            let side = grid_size * 0.28;
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(grid_size * 0.52, grid_size * 0.06, grid_size * 0.52),
-                translation: Vec3::new(center_x, floor_top + grid_size * 0.03, center_z),
-                material_role: StaticWorldMaterialRole::AiSpawnBase,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                semantic: semantic.clone(),
-            });
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(side, beacon_height, side),
-                translation: Vec3::new(center_x, floor_top + beacon_height * 0.5, center_z),
-                material_role: StaticWorldMaterialRole::AiSpawnAccent,
-                occluder_kind: Some(StaticWorldOccluderKind::MapObject(object.kind)),
-                occluder_cells: object.occupied_cells.clone(),
-                semantic: semantic.clone(),
-            });
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(side * 0.55, grid_size * 0.16, side * 0.55),
-                translation: Vec3::new(
-                    center_x,
-                    floor_top + beacon_height + grid_size * 0.08,
-                    center_z,
-                ),
-                material_role: StaticWorldMaterialRole::AiSpawnBase,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                semantic,
-            });
-        }
+        MapObjectKind::AiSpawn => {}
         MapObjectKind::Building => {}
     }
 }
@@ -1422,6 +1441,7 @@ fn static_map_object_from_definition(object: MapObjectDefinition) -> StaticMapOb
         rotation: object.rotation,
         occupied_cells: expand_object_footprint(&object),
         has_viewer_function,
+        has_visual_placement: object.props.visual.is_some(),
         is_generated_door,
         trigger_kind,
     }
@@ -1435,6 +1455,10 @@ fn static_map_object_from_debug(object: &MapObjectDebugState) -> StaticMapObject
         rotation: object.rotation,
         occupied_cells: object.occupied_cells.clone(),
         has_viewer_function: !object.payload_summary.is_empty(),
+        has_visual_placement: object
+            .payload_summary
+            .get("prototype_id")
+            .is_some_and(|value| !value.trim().is_empty()),
         is_generated_door: object
             .payload_summary
             .get("generated_door")
@@ -1654,10 +1678,11 @@ mod tests {
         GridCoord, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec,
         MapBuildingTileSetSpec, MapBuildingWallVisualKind, MapBuildingWallVisualSpec,
         MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
-        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
-        MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
-        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTerrainKind, OverworldTravelRuleSet, RelativeGridCell, WorldWallTileSetId,
+        MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+        MapObjectVisualSpec, MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition,
+        OverworldId, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTerrainKind, OverworldTravelRuleSet, RelativeGridCell, WorldSurfaceTileSetId,
+        WorldTilePrototypeId, WorldWallTileSetId,
     };
     use std::collections::BTreeMap;
 
@@ -1780,10 +1805,11 @@ mod tests {
         );
 
         assert_eq!(scene.building_wall_tiles.len(), 4);
+        assert!(scene.boxes.is_empty());
         assert!(scene
-            .boxes
+            .surface_tiles
             .iter()
-            .all(|spec| spec.material_role == StaticWorldMaterialRole::BuildingFloor));
+            .all(|tile| tile.surface_set_id.as_str() == "building_wall_legacy/floor"));
         assert!(scene
             .building_wall_tiles
             .iter()
@@ -1795,19 +1821,52 @@ mod tests {
     }
 
     #[test]
-    fn generated_building_walkable_cells_emit_individual_floor_boxes() {
+    fn generated_building_walkable_cells_emit_individual_floor_tiles() {
         let scene = build_static_world_from_topology(
             &sample_topology_with_walkable_generated_building(),
             0,
             StaticWorldBuildConfig::default(),
         );
 
-        let floor_boxes = scene
-            .boxes
+        let floor_tiles = scene
+            .surface_tiles
             .iter()
-            .filter(|spec| spec.material_role == StaticWorldMaterialRole::BuildingFloor)
+            .filter(|tile| tile.surface_set_id.as_str() == "building_wall_legacy/floor")
             .count();
-        assert_eq!(floor_boxes, 1);
+        assert_eq!(floor_tiles, 1);
+    }
+
+    #[test]
+    fn prototype_visual_props_do_not_emit_fallback_object_boxes() {
+        let scene = build_static_world_from_map_definition(
+            &sample_map_with_visual_interactive_object(),
+            0,
+            StaticWorldBuildConfig::default(),
+        );
+
+        assert!(scene.boxes.is_empty());
+    }
+
+    #[test]
+    fn prototype_visual_pickups_do_not_emit_fallback_object_boxes() {
+        let scene = build_static_world_from_map_definition(
+            &sample_map_with_visual_pickup_object(),
+            0,
+            StaticWorldBuildConfig::default(),
+        );
+
+        assert!(scene.boxes.is_empty());
+    }
+
+    #[test]
+    fn ai_spawn_objects_do_not_emit_static_world_boxes() {
+        let scene = build_static_world_from_map_definition(
+            &sample_map_with_ai_spawn_object(),
+            0,
+            Default::default(),
+        );
+
+        assert!(scene.boxes.is_empty());
     }
 
     fn sample_overworld(block_center: bool) -> OverworldDefinition {
@@ -1925,6 +1984,7 @@ mod tests {
                 max_z: 2,
             },
             blocked_cells: Vec::new(),
+            surface_cells: Vec::new(),
             objects: Vec::new(),
             generated_buildings: vec![GeneratedBuildingDebugState {
                 object_id: "generated_building".into(),
@@ -1976,10 +2036,156 @@ mod tests {
         }
     }
 
+    fn sample_map_with_visual_interactive_object() -> MapDefinition {
+        MapDefinition {
+            id: MapId("visual_interactive_map".into()),
+            name: "Visual Interactive".into(),
+            size: MapSize {
+                width: 2,
+                height: 2,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: vec![MapCellDefinition {
+                    x: 0,
+                    z: 0,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    terrain: String::new(),
+                    visual: None,
+                    extra: BTreeMap::new(),
+                }],
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: vec![MapObjectDefinition {
+                object_id: "terminal_visual".into(),
+                kind: MapObjectKind::Interactive,
+                anchor: GridCoord::new(1, 0, 1),
+                footprint: MapObjectFootprint {
+                    width: 1,
+                    height: 1,
+                },
+                rotation: MapRotation::South,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    visual: Some(MapObjectVisualSpec {
+                        prototype_id: WorldTilePrototypeId("props/locker_metal".into()),
+                        ..MapObjectVisualSpec::default()
+                    }),
+                    interactive: Some(Default::default()),
+                    ..MapObjectProps::default()
+                },
+            }],
+        }
+    }
+
+    fn sample_map_with_visual_pickup_object() -> MapDefinition {
+        MapDefinition {
+            id: MapId("visual_pickup_map".into()),
+            name: "Visual Pickup".into(),
+            size: MapSize {
+                width: 2,
+                height: 2,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: vec![MapCellDefinition {
+                    x: 0,
+                    z: 0,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    terrain: String::new(),
+                    visual: None,
+                    extra: BTreeMap::new(),
+                }],
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: vec![MapObjectDefinition {
+                object_id: "pickup_visual".into(),
+                kind: MapObjectKind::Pickup,
+                anchor: GridCoord::new(1, 0, 1),
+                footprint: MapObjectFootprint {
+                    width: 1,
+                    height: 1,
+                },
+                rotation: MapRotation::South,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    visual: Some(MapObjectVisualSpec {
+                        prototype_id: WorldTilePrototypeId("props/crate_wood".into()),
+                        ..MapObjectVisualSpec::default()
+                    }),
+                    pickup: Some(Default::default()),
+                    ..MapObjectProps::default()
+                },
+            }],
+        }
+    }
+
+    fn sample_map_with_ai_spawn_object() -> MapDefinition {
+        MapDefinition {
+            id: MapId("ai_spawn_map".into()),
+            name: "AI Spawn".into(),
+            size: MapSize {
+                width: 2,
+                height: 2,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: vec![MapCellDefinition {
+                    x: 0,
+                    z: 0,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    terrain: String::new(),
+                    visual: None,
+                    extra: BTreeMap::new(),
+                }],
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: vec![MapObjectDefinition {
+                object_id: "spawn_visual".into(),
+                kind: MapObjectKind::AiSpawn,
+                anchor: GridCoord::new(1, 0, 1),
+                footprint: MapObjectFootprint {
+                    width: 1,
+                    height: 1,
+                },
+                rotation: MapRotation::South,
+                blocks_movement: false,
+                blocks_sight: false,
+                props: MapObjectProps {
+                    ai_spawn: Some(Default::default()),
+                    ..MapObjectProps::default()
+                },
+            }],
+        }
+    }
+
     fn sample_building_tile_set() -> MapBuildingTileSetSpec {
         MapBuildingTileSetSpec {
             wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-            floor_surface_set_id: None,
+            floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
             door_prototype_id: None,
         }
     }

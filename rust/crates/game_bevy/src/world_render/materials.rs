@@ -191,9 +191,6 @@ pub fn world_render_color_for_role(
         StaticWorldMaterialRole::TriggerBase | StaticWorldMaterialRole::TriggerAccent => {
             palette.trigger
         }
-        StaticWorldMaterialRole::AiSpawnBase | StaticWorldMaterialRole::AiSpawnAccent => {
-            palette.ai_spawn
-        }
         StaticWorldMaterialRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
         StaticWorldMaterialRole::Warning => Color::srgb(0.95, 0.18, 0.18),
         StaticWorldMaterialRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
@@ -219,7 +216,6 @@ pub fn world_render_material_style_for_role(
         StaticWorldMaterialRole::PickupAccent
         | StaticWorldMaterialRole::InteractiveAccent
         | StaticWorldMaterialRole::TriggerAccent
-        | StaticWorldMaterialRole::AiSpawnAccent
         | StaticWorldMaterialRole::StairAccent => WorldRenderMaterialStyle::Utility,
         StaticWorldMaterialRole::InvisiblePickProxy => WorldRenderMaterialStyle::InvisiblePickProxy,
         _ => WorldRenderMaterialStyle::UtilityAccent,

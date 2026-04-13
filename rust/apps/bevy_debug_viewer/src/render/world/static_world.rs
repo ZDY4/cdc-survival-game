@@ -5,6 +5,7 @@ use super::*;
 use bevy::camera::visibility::NoFrustumCulling;
 use game_bevy::static_world as shared_static_world;
 use game_bevy::static_world::{
+    build_static_world_from_simulation_snapshot, StaticWorldBuildConfig,
     StaticWorldMaterialRole as SharedRole, StaticWorldSceneSpec as SharedSceneSpec,
     StaticWorldSemantic as SharedSemantic,
 };
@@ -55,6 +56,7 @@ pub(super) fn rebuild_static_world(
             object_style_seed: render_config.object_style_seed,
         },
         Some(shared_bounds(bounds)),
+        &world_tiles.0,
     );
     let shared_scene = world_render_scene.static_scene.clone();
     let tile_scene = world_render_scene.resolve_tile_scene(&world_tiles.0);
@@ -394,7 +396,6 @@ fn shared_material_role_to_viewer_material_style(
         shared_static_world::StaticWorldMaterialRole::StairBase
         | shared_static_world::StaticWorldMaterialRole::PickupBase
         | shared_static_world::StaticWorldMaterialRole::InteractiveBase
-        | shared_static_world::StaticWorldMaterialRole::AiSpawnBase
         | shared_static_world::StaticWorldMaterialRole::OverworldCell
         | shared_static_world::StaticWorldMaterialRole::OverworldLocationGeneric
         | shared_static_world::StaticWorldMaterialRole::OverworldLocationHospital
@@ -413,7 +414,6 @@ fn shared_material_role_to_viewer_material_style(
         | shared_static_world::StaticWorldMaterialRole::InteractiveAccent
         | shared_static_world::StaticWorldMaterialRole::TriggerBase
         | shared_static_world::StaticWorldMaterialRole::TriggerAccent
-        | shared_static_world::StaticWorldMaterialRole::AiSpawnAccent
         | shared_static_world::StaticWorldMaterialRole::OverworldBlockedCell
         | shared_static_world::StaticWorldMaterialRole::Warning => MaterialStyle::UtilityAccent,
         shared_static_world::StaticWorldMaterialRole::InvisiblePickProxy => {
@@ -635,25 +635,21 @@ fn shared_scene(
     render_config: ViewerRenderConfig,
     bounds: GridBounds,
 ) -> SharedSceneSpec {
-    build_world_render_scene_from_simulation_snapshot(
+    build_static_world_from_simulation_snapshot(
         snapshot,
         current_level,
-        SharedWorldRenderConfig {
-            camera_yaw_degrees: render_config.camera_yaw_degrees,
-            camera_pitch_degrees: render_config.camera_pitch_degrees,
-            camera_fov_degrees: render_config.camera_fov_degrees,
+        StaticWorldBuildConfig {
             floor_thickness_world: render_config.floor_thickness_world,
-            ground_variation_strength: render_config.ground_variation_strength,
             object_style_seed: render_config.object_style_seed,
+            include_generated_doors: false,
+            bounds_override: Some(game_bevy::static_world::StaticWorldGridBounds {
+                min_x: bounds.min_x,
+                max_x: bounds.max_x,
+                min_z: bounds.min_z,
+                max_z: bounds.max_z,
+            }),
         },
-        Some(game_bevy::static_world::StaticWorldGridBounds {
-            min_x: bounds.min_x,
-            max_x: bounds.max_x,
-            min_z: bounds.min_z,
-            max_z: bounds.max_z,
-        }),
     )
-    .static_scene
 }
 
 fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {
@@ -673,7 +669,6 @@ fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {
         SharedRole::PickupBase | SharedRole::PickupAccent => palette.pickup,
         SharedRole::InteractiveBase | SharedRole::InteractiveAccent => palette.interactive,
         SharedRole::TriggerBase | SharedRole::TriggerAccent => palette.trigger,
-        SharedRole::AiSpawnBase | SharedRole::AiSpawnAccent => palette.ai_spawn,
         SharedRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
         SharedRole::Warning => Color::srgb(0.95, 0.18, 0.18),
         SharedRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
@@ -697,7 +692,6 @@ fn shared_role_material_style(role: SharedRole) -> MaterialStyle {
         SharedRole::PickupAccent
         | SharedRole::InteractiveAccent
         | SharedRole::TriggerAccent
-        | SharedRole::AiSpawnAccent
         | SharedRole::StairAccent => MaterialStyle::Utility,
         SharedRole::InvisiblePickProxy => MaterialStyle::InvisiblePickProxy,
         _ => MaterialStyle::UtilityAccent,

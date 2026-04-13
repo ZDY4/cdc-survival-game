@@ -85,7 +85,7 @@ mod tests {
         OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
         OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
         OverworldTerrainKind, OverworldTravelRuleSet, RelativeGridCell, StairKind, WorldCoord,
-        WorldMode, WorldWallTileSetId,
+        WorldMode, WorldSurfaceTileSetId, WorldWallTileSetId,
     };
 
     fn seed_life_debug_spawns(app: &mut App) {
@@ -1314,7 +1314,7 @@ mod tests {
     fn sample_building_tile_set() -> MapBuildingTileSetSpec {
         MapBuildingTileSetSpec {
             wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-            floor_surface_set_id: None,
+            floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
             door_prototype_id: None,
         }
     }

@@ -35,15 +35,15 @@ use game_core::{
 };
 use game_data::{
     ActorId, GridCoord, InteractionContextSnapshot, InteractionOptionId, InteractionPrompt,
-    InteractionTargetId, MapBuildingTileSetSpec, MapBuildingWallVisualKind, MapObjectFootprint,
-    MapObjectKind, MapRotation, ResolvedInteractionOption, TurnState, WorldCoord,
-    WorldWallTileSetId,
+    InteractionTargetId, MapBuildingTileSetSpec, MapBuildingWallVisualKind, MapCellVisualSpec,
+    MapObjectFootprint, MapObjectKind, MapRotation, ResolvedInteractionOption, TileSlopeKind,
+    TurnState, WorldCoord, WorldSurfaceTileSetId, WorldWallTileSetId,
 };
 
 fn sample_building_tile_set() -> MapBuildingTileSetSpec {
     MapBuildingTileSetSpec {
         wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-        floor_surface_set_id: None,
+        floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
         door_prototype_id: None,
     }
 }
@@ -380,6 +380,35 @@ fn ground_cells_cover_full_bounds_without_generated_buildings() {
 }
 
 #[test]
+fn ground_cells_exclude_tactical_surface_visual_cells() {
+    let mut snapshot = snapshot_with_occluders();
+    snapshot.grid.map_cells.push(MapCellDebugState {
+        grid: GridCoord::new(0, 0, 1),
+        blocks_movement: false,
+        blocks_sight: false,
+        terrain: "ground".into(),
+        visual: Some(MapCellVisualSpec {
+            surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
+            elevation_steps: 0,
+            slope: TileSlopeKind::Flat,
+        }),
+    });
+
+    let cells = collect_ground_cells_to_render(
+        &snapshot,
+        0,
+        GridBounds {
+            min_x: 0,
+            max_x: 1,
+            min_z: 0,
+            max_z: 1,
+        },
+    );
+
+    assert!(!cells.contains(&GridCoord::new(0, 0, 1)));
+}
+
+#[test]
 fn ground_cells_exclude_walkable_cells_from_multiple_generated_buildings() {
     let mut snapshot = snapshot_with_generated_building();
     let mut second_building = snapshot.generated_buildings[0].clone();
@@ -670,6 +699,66 @@ fn static_world_building_wall_tiles_render_per_wall_cell() {
     assert!(box_specs
         .iter()
         .any(|spec| spec.material_style == MaterialStyle::UtilityAccent));
+}
+
+#[test]
+fn snapshot_visual_props_do_not_emit_fallback_object_boxes() {
+    let box_specs = collect_static_world_box_specs(
+        &snapshot_with_visual_interactive_prop(),
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 2,
+            min_z: 0,
+            max_z: 2,
+        },
+        world_from_grid,
+    );
+
+    assert!(box_specs.is_empty());
+}
+
+#[test]
+fn snapshot_visual_pickups_do_not_emit_fallback_object_boxes() {
+    let box_specs = collect_static_world_box_specs(
+        &snapshot_with_visual_pickup_prop(),
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 2,
+            min_z: 0,
+            max_z: 2,
+        },
+        world_from_grid,
+    );
+
+    assert!(box_specs.is_empty());
+}
+
+#[test]
+fn snapshot_ai_spawn_objects_do_not_emit_static_world_boxes() {
+    let box_specs = collect_static_world_box_specs(
+        &snapshot_with_ai_spawn_object(),
+        0,
+        false,
+        ViewerRenderConfig::default(),
+        &ViewerPalette::default(),
+        GridBounds {
+            min_x: 0,
+            max_x: 2,
+            min_z: 0,
+            max_z: 2,
+        },
+        world_from_grid,
+    );
+
+    assert!(box_specs.is_empty());
 }
 
 #[test]
@@ -1458,12 +1547,14 @@ fn snapshot_with_occluders() -> SimulationSnapshot {
                     blocks_movement: true,
                     blocks_sight: true,
                     terrain: "wall".into(),
+                    visual: None,
                 },
                 MapCellDebugState {
                     grid: GridCoord::new(1, 0, 1),
                     blocks_movement: false,
                     blocks_sight: true,
                     terrain: "curtain".into(),
+                    visual: None,
                 },
             ],
             map_objects: vec![
@@ -2092,6 +2183,162 @@ fn snapshot_with_generated_building() -> SimulationSnapshot {
             }],
             visual_outline: Vec::new(),
         }],
+        generated_doors: Vec::new(),
+        combat: CombatDebugState {
+            in_combat: false,
+            current_actor_id: None,
+            current_group_id: None,
+            current_turn_index: 0,
+        },
+        interaction_context: InteractionContextSnapshot::default(),
+        overworld: OverworldStateSnapshot::default(),
+        path_preview: Vec::new(),
+    }
+}
+
+fn snapshot_with_visual_interactive_prop() -> SimulationSnapshot {
+    SimulationSnapshot {
+        turn: TurnState::default(),
+        actors: Vec::new(),
+        grid: GridDebugState {
+            grid_size: 1.0,
+            map_id: None,
+            map_width: Some(3),
+            map_height: Some(3),
+            default_level: Some(0),
+            levels: vec![0],
+            static_obstacles: Vec::new(),
+            map_blocked_cells: Vec::new(),
+            map_cells: Vec::new(),
+            map_objects: vec![MapObjectDebugState {
+                object_id: "terminal_visual".into(),
+                kind: MapObjectKind::Interactive,
+                anchor: GridCoord::new(1, 0, 1),
+                footprint: MapObjectFootprint {
+                    width: 1,
+                    height: 1,
+                },
+                rotation: MapRotation::South,
+                blocks_movement: false,
+                blocks_sight: false,
+                occupied_cells: vec![GridCoord::new(1, 0, 1)],
+                payload_summary: [
+                    ("interaction_kind".to_string(), "terminal".to_string()),
+                    ("prototype_id".to_string(), "props/locker_metal".to_string()),
+                ]
+                .into_iter()
+                .collect(),
+            }],
+            runtime_blocked_cells: Vec::new(),
+            topology_version: 0,
+            runtime_obstacle_version: 0,
+        },
+        vision: Default::default(),
+        generated_buildings: Vec::new(),
+        generated_doors: Vec::new(),
+        combat: CombatDebugState {
+            in_combat: false,
+            current_actor_id: None,
+            current_group_id: None,
+            current_turn_index: 0,
+        },
+        interaction_context: InteractionContextSnapshot::default(),
+        overworld: OverworldStateSnapshot::default(),
+        path_preview: Vec::new(),
+    }
+}
+
+fn snapshot_with_visual_pickup_prop() -> SimulationSnapshot {
+    SimulationSnapshot {
+        turn: TurnState::default(),
+        actors: Vec::new(),
+        grid: GridDebugState {
+            grid_size: 1.0,
+            map_id: None,
+            map_width: Some(3),
+            map_height: Some(3),
+            default_level: Some(0),
+            levels: vec![0],
+            static_obstacles: Vec::new(),
+            map_blocked_cells: Vec::new(),
+            map_cells: Vec::new(),
+            map_objects: vec![MapObjectDebugState {
+                object_id: "pickup_visual".into(),
+                kind: MapObjectKind::Pickup,
+                anchor: GridCoord::new(1, 0, 1),
+                footprint: MapObjectFootprint {
+                    width: 1,
+                    height: 1,
+                },
+                rotation: MapRotation::South,
+                blocks_movement: false,
+                blocks_sight: false,
+                occupied_cells: vec![GridCoord::new(1, 0, 1)],
+                payload_summary: [
+                    ("item_id".to_string(), "1007".to_string()),
+                    ("prototype_id".to_string(), "props/crate_wood".to_string()),
+                ]
+                .into_iter()
+                .collect(),
+            }],
+            runtime_blocked_cells: Vec::new(),
+            topology_version: 0,
+            runtime_obstacle_version: 0,
+        },
+        vision: Default::default(),
+        generated_buildings: Vec::new(),
+        generated_doors: Vec::new(),
+        combat: CombatDebugState {
+            in_combat: false,
+            current_actor_id: None,
+            current_group_id: None,
+            current_turn_index: 0,
+        },
+        interaction_context: InteractionContextSnapshot::default(),
+        overworld: OverworldStateSnapshot::default(),
+        path_preview: Vec::new(),
+    }
+}
+
+fn snapshot_with_ai_spawn_object() -> SimulationSnapshot {
+    SimulationSnapshot {
+        turn: TurnState::default(),
+        actors: Vec::new(),
+        grid: GridDebugState {
+            grid_size: 1.0,
+            map_id: None,
+            map_width: Some(3),
+            map_height: Some(3),
+            default_level: Some(0),
+            levels: vec![0],
+            static_obstacles: Vec::new(),
+            map_blocked_cells: Vec::new(),
+            map_cells: Vec::new(),
+            map_objects: vec![MapObjectDebugState {
+                object_id: "spawn_visual".into(),
+                kind: MapObjectKind::AiSpawn,
+                anchor: GridCoord::new(1, 0, 1),
+                footprint: MapObjectFootprint {
+                    width: 1,
+                    height: 1,
+                },
+                rotation: MapRotation::South,
+                blocks_movement: false,
+                blocks_sight: false,
+                occupied_cells: vec![GridCoord::new(1, 0, 1)],
+                payload_summary: [
+                    ("spawn_id".to_string(), "spawn_visual".to_string()),
+                    ("character_id".to_string(), "zombie_walker".to_string()),
+                ]
+                .into_iter()
+                .collect(),
+            }],
+            runtime_blocked_cells: Vec::new(),
+            topology_version: 0,
+            runtime_obstacle_version: 0,
+        },
+        vision: Default::default(),
+        generated_buildings: Vec::new(),
         generated_doors: Vec::new(),
         combat: CombatDebugState {
             in_combat: false,

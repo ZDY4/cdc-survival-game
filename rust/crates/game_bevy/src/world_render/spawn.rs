@@ -729,10 +729,12 @@ fn cached_building_wall_material(
         .building_wall_materials
         .entry(key)
         .or_insert_with(|| {
-            let WorldRenderMaterialHandle::BuildingWallGrid(handle) = make_building_wall_material(
-                building_wall_materials,
-                super::materials::building_wall_visual_profile(visual_kind),
-            ) else {
+            let WorldRenderMaterialHandle::BuildingWallGrid(handle) =
+                super::materials::make_building_wall_material(
+                    building_wall_materials,
+                    super::materials::building_wall_visual_profile(visual_kind),
+                )
+            else {
                 unreachable!("building wall grid helper should return wall grid material");
             };
             handle

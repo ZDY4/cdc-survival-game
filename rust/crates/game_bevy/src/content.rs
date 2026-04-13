@@ -7,11 +7,11 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::{IntoScheduleConfigs, SystemSet};
 use game_core::{HeadlessEconomyRuntime, SimulationRuntime};
 use game_data::{
-    load_ai_module_library, load_character_library, load_dialogue_library,
-    load_dialogue_rule_library, load_effect_library, load_item_library, load_map_library,
-    load_overworld_library, load_quest_library, load_recipe_library, load_settlement_library,
-    load_shop_library, load_skill_library, load_skill_tree_library, load_world_tile_library,
-    load_character_appearance_library, validate_outdoor_transition_trigger_layout, AiModuleLibrary,
+    load_ai_module_library, load_character_appearance_library, load_character_library,
+    load_dialogue_library, load_dialogue_rule_library, load_effect_library, load_item_library,
+    load_map_library, load_overworld_library, load_quest_library, load_recipe_library,
+    load_settlement_library, load_shop_library, load_skill_library, load_skill_tree_library,
+    load_world_tile_library, validate_outdoor_transition_trigger_layout, AiModuleLibrary,
     AiModuleLoadError, CharacterAppearanceLibrary, CharacterAppearanceLoadError, CharacterLibrary,
     CharacterLoadError, DialogueLibrary, DialogueLoadError, DialogueRuleLibrary,
     DialogueRuleLoadError, EffectLibrary, EffectLoadError, ItemLibrary, ItemLoadError, MapId,
@@ -367,9 +367,9 @@ pub fn load_character_definitions(
 pub fn load_character_appearance_definitions(
     path: impl AsRef<Path>,
 ) -> Result<CharacterAppearanceDefinitions, CharacterAppearanceLoadError> {
-    Ok(CharacterAppearanceDefinitions(load_character_appearance_library(
-        path,
-    )?))
+    Ok(CharacterAppearanceDefinitions(
+        load_character_appearance_library(path)?,
+    ))
 }
 
 pub fn load_effect_definitions(

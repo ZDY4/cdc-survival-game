@@ -3,6 +3,7 @@ setlocal
 
 set "ROOT_DIR=%~dp0"
 set "EDITOR_DIR=%ROOT_DIR%tools\narrative_lab"
+set "EDITOR_DIR_PWSH=%EDITOR_DIR:'=''%"
 set "CARGO_EXE=%USERPROFILE%\.cargo\bin\cargo.exe"
 set "NPM_EXE=npm.cmd"
 set "VSDEVCMD="
@@ -12,7 +13,11 @@ set "PORT_1421_PID="
 set "PWSH_EXE=pwsh"
 
 if /I "%~1"=="--self-test" (
-    set "SELF_TEST_SCENARIO=narrative-menu"
+    if not "%~2"=="" (
+        set "SELF_TEST_SCENARIO=%~2"
+    ) else (
+        set "SELF_TEST_SCENARIO=narrative-menu"
+    )
 )
 
 if not exist "%EDITOR_DIR%\package.json" (
@@ -132,11 +137,11 @@ for /f "usebackq delims=" %%C in (`%PWSH_EXE% -NoLogo -NoProfile -Command "$proc
 
 if not defined PORT_1421_COMMAND_LINE exit /b 0
 
-echo %PORT_1421_COMMAND_LINE% | findstr /I /C:"G:\Projects\cdc_survival_game\tools\narrative_lab" >nul
+echo %PORT_1421_COMMAND_LINE% | findstr /I /C:"%EDITOR_DIR%" >nul
 if errorlevel 1 exit /b 0
 
 echo Detected an existing Narrative Lab dev server on port 1421. Stopping stale dev processes...
-%PWSH_EXE% -NoLogo -NoProfile -Command "$projectPath = 'G:\Projects\cdc_survival_game\tools\narrative_lab'; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like ('*' + $projectPath + '*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+%PWSH_EXE% -NoLogo -NoProfile -Command "$projectPath = '%EDITOR_DIR_PWSH%'; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like ('*' + $projectPath + '*') -and $_.CommandLine -like '*vite*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 timeout /t 2 >nul
 
 set "PORT_1421_PID="

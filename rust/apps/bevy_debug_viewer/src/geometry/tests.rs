@@ -220,6 +220,7 @@ fn movement_block_reasons_explain_multiple_sources() {
                 blocks_movement: true,
                 blocks_sight: false,
                 terrain: "wall".into(),
+                visual: None,
             }],
             map_objects: vec![MapObjectDebugState {
                 object_id: "crate".into(),

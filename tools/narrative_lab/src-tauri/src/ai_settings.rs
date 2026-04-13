@@ -56,6 +56,50 @@ impl AiSettings {
         self
     }
 
+    pub fn with_env_overrides(mut self) -> Self {
+        if let Ok(base_url) = std::env::var("CDC_NARRATIVE_AI_BASE_URL") {
+            if !base_url.trim().is_empty() {
+                self.base_url = base_url.trim().trim_end_matches('/').to_string();
+            }
+        }
+
+        if let Ok(model) = std::env::var("CDC_NARRATIVE_AI_MODEL") {
+            if !model.trim().is_empty() {
+                self.model = model.trim().to_string();
+            }
+        }
+
+        if let Ok(api_key) = std::env::var("CDC_NARRATIVE_AI_API_KEY") {
+            if !api_key.trim().is_empty() {
+                self.api_key = api_key.trim().to_string();
+            }
+        }
+        if self.api_key.trim().is_empty() {
+            for env_key in ["OPENAI_API_KEY", "AI_API_KEY"] {
+                if let Ok(api_key) = std::env::var(env_key) {
+                    if !api_key.trim().is_empty() {
+                        self.api_key = api_key.trim().to_string();
+                        break;
+                    }
+                }
+            }
+        }
+
+        if let Ok(timeout_sec) = std::env::var("CDC_NARRATIVE_AI_TIMEOUT_SEC") {
+            if let Ok(parsed) = timeout_sec.trim().parse::<u64>() {
+                self.timeout_sec = parsed;
+            }
+        }
+
+        if let Ok(max_context_records) = std::env::var("CDC_NARRATIVE_AI_MAX_CONTEXT_RECORDS") {
+            if let Ok(parsed) = max_context_records.trim().parse::<usize>() {
+                self.max_context_records = parsed;
+            }
+        }
+
+        self.normalized()
+    }
+
     pub fn effective_api_key(&self) -> String {
         if !self.api_key.trim().is_empty() {
             return self.api_key.trim().to_string();
@@ -96,14 +140,14 @@ pub fn save_ai_settings(app: AppHandle, settings: AiSettings) -> Result<AiSettin
 pub fn read_ai_settings(app: &AppHandle) -> Result<AiSettings, String> {
     let path = ai_settings_path(app)?;
     if !path.exists() {
-        return Ok(AiSettings::default());
+        return Ok(AiSettings::default().with_env_overrides());
     }
 
     let raw = fs::read_to_string(&path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
     let parsed: AiSettings = serde_json::from_str(&raw)
         .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-    Ok(parsed.normalized())
+    Ok(parsed.with_env_overrides())
 }
 
 fn ai_settings_path(app: &AppHandle) -> Result<PathBuf, String> {

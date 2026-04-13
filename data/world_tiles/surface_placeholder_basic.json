@@ -1,0 +1,196 @@
+{
+  "prototypes": [
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 0.10999999940395355,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": false,
+      "id": "surface_placeholder_basic/flat",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/flat.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.054999999701976776,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 0.10999999940395355,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": false,
+      "id": "surface_placeholder_basic/ramp_north",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/ramp_north.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.054999999701976776,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 0.10999999940395355,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": false,
+      "id": "surface_placeholder_basic/ramp_east",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/ramp_east.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.054999999701976776,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0000001192092896,
+          "y": 0.10999999940395355,
+          "z": 1.0000001192092896
+        }
+      },
+      "cast_shadows": false,
+      "id": "surface_placeholder_basic/ramp_south",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/ramp_south.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.054999999701976776,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 0.10999999940395355,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": false,
+      "id": "surface_placeholder_basic/ramp_west",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/ramp_west.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.5,
+          "z": 0.41999998688697815
+        },
+        "size": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 0.1600000262260437
+        }
+      },
+      "cast_shadows": true,
+      "id": "surface_placeholder_basic/cliff_side",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/cliff_side.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.3400000035762787,
+          "y": 0.5,
+          "z": 0.3400000035762787
+        },
+        "size": {
+          "x": 0.3199999928474426,
+          "y": 1.0,
+          "z": 0.3199999928474426
+        }
+      },
+      "cast_shadows": true,
+      "id": "surface_placeholder_basic/cliff_outer_corner",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/cliff_outer_corner.gltf",
+        "scene_index": 0
+      }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.13999998569488525,
+          "y": 0.5,
+          "z": 0.13999998569488525
+        },
+        "size": {
+          "x": 0.5199999809265137,
+          "y": 1.0,
+          "z": 0.5199999809265137
+        }
+      },
+      "cast_shadows": true,
+      "id": "surface_placeholder_basic/cliff_inner_corner",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/surface_placeholder_basic/cliff_inner_corner.gltf",
+        "scene_index": 0
+      }
+    }
+  ],
+  "surface_sets": [
+    {
+      "cliff_inner_corner_prototype_id": "surface_placeholder_basic/cliff_inner_corner",
+      "cliff_outer_corner_prototype_id": "surface_placeholder_basic/cliff_outer_corner",
+      "cliff_side_prototype_id": "surface_placeholder_basic/cliff_side",
+      "flat_top_prototype_id": "surface_placeholder_basic/flat",
+      "id": "surface_placeholder_basic/default",
+      "ramp_top_prototype_ids": {
+        "east": "surface_placeholder_basic/ramp_east",
+        "north": "surface_placeholder_basic/ramp_north",
+        "south": "surface_placeholder_basic/ramp_south",
+        "west": "surface_placeholder_basic/ramp_west"
+      }
+    }
+  ],
+  "wall_sets": []
+}

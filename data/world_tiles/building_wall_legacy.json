@@ -9,7 +9,7 @@
         },
         "size": {
           "x": 1.0,
-          "y": 2.4,
+          "y": 2.4000000953674316,
           "z": 1.0
         }
       },
@@ -31,7 +31,7 @@
         },
         "size": {
           "x": 1.0,
-          "y": 2.4,
+          "y": 2.4000000953674316,
           "z": 1.0
         }
       },
@@ -53,7 +53,7 @@
         },
         "size": {
           "x": 1.0,
-          "y": 2.4,
+          "y": 2.4000000953674316,
           "z": 1.0
         }
       },
@@ -75,7 +75,7 @@
         },
         "size": {
           "x": 1.0,
-          "y": 2.4,
+          "y": 2.4000000953674316,
           "z": 1.0
         }
       },
@@ -97,7 +97,7 @@
         },
         "size": {
           "x": 1.0,
-          "y": 2.4,
+          "y": 2.4000000953674316,
           "z": 1.0
         }
       },
@@ -114,12 +114,12 @@
       "bounds": {
         "center": {
           "x": 0.0,
-          "y": 0.0,
+          "y": 1.2000000476837158,
           "z": 0.0
         },
         "size": {
           "x": 1.0,
-          "y": 2.4,
+          "y": 0.0,
           "z": 1.0
         }
       },
@@ -131,9 +131,36 @@
         "path": "world_tiles/building_wall_legacy/cross.gltf",
         "scene_index": 0
       }
+    },
+    {
+      "bounds": {
+        "center": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "size": {
+          "x": 1.0,
+          "y": 0.10999999940395355,
+          "z": 1.0
+        }
+      },
+      "cast_shadows": false,
+      "id": "building_wall_legacy/floor_flat",
+      "receive_shadows": true,
+      "source": {
+        "kind": "gltf_scene",
+        "path": "world_tiles/building_wall_legacy/floor_flat.gltf",
+        "scene_index": 0
+      }
     }
   ],
-  "surface_sets": [],
+  "surface_sets": [
+    {
+      "flat_top_prototype_id": "building_wall_legacy/floor_flat",
+      "id": "building_wall_legacy/floor"
+    }
+  ],
   "wall_sets": [
     {
       "corner_prototype_id": "building_wall_legacy/corner",

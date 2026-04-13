@@ -20,9 +20,9 @@ use game_data::{
 use game_editor::{
     character_preview_is_available, install_game_ui_fonts,
     preview_camera_input_system as shared_preview_camera_input_system,
-    preview_camera_sync_system as shared_preview_camera_sync_system,
-    spawn_character_preview_scene, spawn_preview_floor, spawn_preview_light_rig,
-    CharacterPreviewPart, PreviewCameraController, PreviewOrbitCamera, PreviewViewportRect,
+    preview_camera_sync_system as shared_preview_camera_sync_system, spawn_character_preview_scene,
+    spawn_preview_floor, spawn_preview_light_rig, CharacterPreviewPart, PreviewCameraController,
+    PreviewOrbitCamera, PreviewViewportRect,
 };
 
 const LIST_PANEL_WIDTH: f32 = 250.0;
@@ -378,47 +378,47 @@ fn editor_ui_system(
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
         .show(ctx, |ui| {
-        let rect = ui.max_rect();
-        preview_camera.viewport_rect = Some(PreviewViewportRect {
-            min_x: rect.left(),
-            min_y: rect.top(),
-            width: rect.width(),
-            height: rect.height(),
-        });
-        ui.allocate_rect(rect, egui::Sense::hover());
-        let info_rect = egui::Rect::from_min_size(
-            rect.left_top() + egui::vec2(10.0, 10.0),
-            egui::vec2(380.0, 56.0),
-        );
-        ui.painter().rect_filled(
-            info_rect,
-            6.0,
-            egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176),
-        );
-        ui.painter().text(
-            rect.left_top() + egui::vec2(14.0, 12.0),
-            egui::Align2::LEFT_TOP,
-            "角色外观预览",
-            egui::FontId::new(14.0, egui::FontFamily::Proportional),
-            egui::Color32::from_rgb(228, 231, 238),
-        );
-        ui.painter().text(
-            rect.left_top() + egui::vec2(14.0, 32.0),
-            egui::Align2::LEFT_TOP,
-            "左键拖拽旋转，滚轮缩放，右侧页签中可切换试装槽位。",
-            egui::FontId::new(11.0, egui::FontFamily::Proportional),
-            egui::Color32::from_rgb(164, 170, 184),
-        );
-        if let Some(notice) = preview_state.preview_notice.as_deref() {
-            ui.painter().text(
-                rect.left_top() + egui::vec2(14.0, 52.0),
-                egui::Align2::LEFT_TOP,
-                notice,
-                egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                egui::Color32::from_rgb(210, 184, 120),
+            let rect = ui.max_rect();
+            preview_camera.viewport_rect = Some(PreviewViewportRect {
+                min_x: rect.left(),
+                min_y: rect.top(),
+                width: rect.width(),
+                height: rect.height(),
+            });
+            ui.allocate_rect(rect, egui::Sense::hover());
+            let info_rect = egui::Rect::from_min_size(
+                rect.left_top() + egui::vec2(10.0, 10.0),
+                egui::vec2(380.0, 56.0),
             );
-        }
-    });
+            ui.painter().rect_filled(
+                info_rect,
+                6.0,
+                egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176),
+            );
+            ui.painter().text(
+                rect.left_top() + egui::vec2(14.0, 12.0),
+                egui::Align2::LEFT_TOP,
+                "角色外观预览",
+                egui::FontId::new(14.0, egui::FontFamily::Proportional),
+                egui::Color32::from_rgb(228, 231, 238),
+            );
+            ui.painter().text(
+                rect.left_top() + egui::vec2(14.0, 32.0),
+                egui::Align2::LEFT_TOP,
+                "左键拖拽旋转，滚轮缩放，右侧页签中可切换试装槽位。",
+                egui::FontId::new(11.0, egui::FontFamily::Proportional),
+                egui::Color32::from_rgb(164, 170, 184),
+            );
+            if let Some(notice) = preview_state.preview_notice.as_deref() {
+                ui.painter().text(
+                    rect.left_top() + egui::vec2(14.0, 52.0),
+                    egui::Align2::LEFT_TOP,
+                    notice,
+                    egui::FontId::new(11.0, egui::FontFamily::Proportional),
+                    egui::Color32::from_rgb(210, 184, 120),
+                );
+            }
+        });
 }
 
 fn render_character_list_panel(
