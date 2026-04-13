@@ -621,36 +621,11 @@ impl Simulation {
         &self,
         activation: &game_data::SkillActivationDefinition,
     ) -> SkillExecutionKind {
-        if let Some(kind) = activation
+        activation
             .targeting
             .as_ref()
             .map(|targeting| targeting.execution_kind)
-            .filter(|kind| *kind != SkillExecutionKind::None)
-        {
-            return kind;
-        }
-
-        let legacy_handler = activation
-            .targeting
-            .as_ref()
-            .map(|targeting| targeting.handler_script.trim())
-            .filter(|handler| !handler.is_empty())
-            .or_else(|| {
-                activation
-                    .extra
-                    .get("handler_script")
-                    .and_then(|value| value.as_str())
-                    .map(str::trim)
-                    .filter(|handler| !handler.is_empty())
-            })
-            .unwrap_or("");
-
-        match legacy_handler {
-            "damage_single" => SkillExecutionKind::DamageSingle,
-            "damage_aoe" => SkillExecutionKind::DamageAoe,
-            "toggle_status" => SkillExecutionKind::ToggleStatus,
-            _ => SkillExecutionKind::None,
-        }
+            .unwrap_or(SkillExecutionKind::None)
     }
 
     fn validate_skill_target_center(

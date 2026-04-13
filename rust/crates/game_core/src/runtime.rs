@@ -182,16 +182,17 @@ mod tests {
         QuestDefinition, QuestFlow, QuestLibrary, QuestNode, QuestRewards, RecipeDefinition,
         RecipeLibrary, RecipeMaterial, RecipeOutput, ShopDefinition, ShopInventoryEntry,
         ShopLibrary, SkillActivationDefinition, SkillActivationEffect, SkillDefinition,
-        SkillLibrary, SkillModifierDefinition, SkillTargetRequest, SkillTargetingDefinition,
-        WorldMode,
+        SkillExecutionKind, SkillLibrary, SkillModifierDefinition, SkillTargetRequest,
+        SkillTargetingDefinition, WorldMode,
     };
 
     use super::SimulationRuntime;
     use crate::demo::create_demo_runtime;
     use crate::movement::{AutoMoveInterruptReason, PendingProgressionStep};
     use crate::simulation::{
-        RegisterActor, Simulation, SimulationCommand, SimulationCommandResult,
+        RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
     };
+    use crate::select_default_combat_ai_intent;
 
     #[test]
     fn demo_runtime_boots_with_player_turn_open() {
@@ -516,6 +517,57 @@ mod tests {
             runtime.peek_pending_progression(),
             Some(&PendingProgressionStep::RunNonCombatWorldCycle)
         );
+    }
+
+    #[test]
+    fn runtime_exposes_combat_ai_query_and_intent_execution() {
+        let (mut runtime, handles) = create_demo_runtime();
+        set_runtime_actor_ap(&mut runtime, handles.hostile, 1.0);
+        let move_friendly = runtime.submit_command(SimulationCommand::UpdateActorGridPosition {
+            actor_id: handles.friendly,
+            grid: GridCoord::new(4, 0, 2),
+        });
+        assert!(matches!(move_friendly, SimulationCommandResult::None));
+        let reposition = runtime.submit_command(SimulationCommand::UpdateActorGridPosition {
+            actor_id: handles.hostile,
+            grid: GridCoord::new(1, 0, 0),
+        });
+        assert!(matches!(reposition, SimulationCommandResult::None));
+        let enter = runtime.submit_command(SimulationCommand::EnterCombat {
+            trigger_actor: handles.hostile,
+            target_actor: handles.player,
+        });
+        assert!(matches!(enter, SimulationCommandResult::None));
+
+        let snapshot = runtime
+            .query_combat_ai(handles.hostile)
+            .expect("combat ai snapshot should exist");
+        assert_eq!(snapshot.actor_id, handles.hostile);
+        assert!((snapshot.actor_ap - runtime.get_actor_ap(handles.hostile)).abs() < f32::EPSILON);
+        assert!(snapshot.attack_ap_cost > 0.0);
+        assert!((snapshot.actor_hp_ratio - 1.0).abs() < 0.0001);
+        assert!(snapshot
+            .target_options
+            .iter()
+            .any(|option| {
+                option.target_actor_id == handles.player
+                    && option.can_basic_attack
+                    && (option.target_hp_ratio - 1.0).abs() < 0.0001
+            }));
+
+        let intent =
+            select_default_combat_ai_intent(&snapshot).expect("default combat intent should exist");
+        let execution = runtime.execute_combat_ai_intent(handles.hostile, intent);
+
+        assert!(execution.performed);
+        assert!(runtime
+            .drain_events()
+            .into_iter()
+            .any(|event| matches!(
+                event,
+                SimulationEvent::AttackResolved { actor_id, target_actor, .. }
+                    if actor_id == handles.hostile && target_actor == handles.player
+            )));
     }
 
     #[test]
@@ -2069,7 +2121,7 @@ mod tests {
                             range_cells: 5,
                             shape: "single".to_string(),
                             radius: 0,
-                            handler_script: "damage_single".to_string(),
+                            execution_kind: SkillExecutionKind::DamageSingle,
                             ..SkillTargetingDefinition::default()
                         }),
                         ..SkillActivationDefinition::default()
@@ -2104,7 +2156,7 @@ mod tests {
                             range_cells: 3,
                             shape: "diamond".to_string(),
                             radius: 1,
-                            handler_script: "damage_aoe".to_string(),
+                            execution_kind: SkillExecutionKind::DamageAoe,
                             ..SkillTargetingDefinition::default()
                         }),
                         ..SkillActivationDefinition::default()

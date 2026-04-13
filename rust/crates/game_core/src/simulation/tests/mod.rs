@@ -19,10 +19,10 @@ use game_data::{
     WorldWallTileSetId,
 };
 
-use crate::actor::{FollowGridGoalAiController, InteractOnceAiController};
+use crate::actor::{FollowRuntimeGoalController, OneShotInteractController};
 use crate::grid::GridPathfindingError;
 use crate::movement::PendingProgressionStep;
-use crate::AiController;
+use crate::RuntimeAiController;
 
 use super::{
     RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
@@ -209,7 +209,6 @@ fn sample_spatial_skill_library() -> SkillLibrary {
                         execution_kind: SkillExecutionKind::DamageSingle,
                         target_side_rule: SkillTargetSideRule::HostileOnly,
                         allow_self: false,
-                        handler_script: "damage_single".to_string(),
                         ..SkillTargetingDefinition::default()
                     }),
                     ..SkillActivationDefinition::default()
@@ -243,7 +242,6 @@ fn sample_spatial_skill_library() -> SkillLibrary {
                         shape: "diamond".to_string(),
                         radius: 1,
                         execution_kind: SkillExecutionKind::DamageAoe,
-                        handler_script: "damage_aoe".to_string(),
                         ..SkillTargetingDefinition::default()
                     }),
                     ..SkillActivationDefinition::default()
@@ -277,7 +275,6 @@ fn sample_spatial_skill_library() -> SkillLibrary {
                         shape: "diamond".to_string(),
                         radius: 2,
                         execution_kind: SkillExecutionKind::DamageAoe,
-                        handler_script: "damage_aoe".to_string(),
                         ..SkillTargetingDefinition::default()
                     }),
                     ..SkillActivationDefinition::default()
@@ -314,7 +311,6 @@ fn sample_spatial_skill_library() -> SkillLibrary {
                         target_side_rule: SkillTargetSideRule::HostileOnly,
                         allow_self: false,
                         allow_friendly_fire: false,
-                        handler_script: "damage_aoe".to_string(),
                         ..SkillTargetingDefinition::default()
                     }),
                     ..SkillActivationDefinition::default()

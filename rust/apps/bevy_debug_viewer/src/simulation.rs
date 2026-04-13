@@ -23,6 +23,7 @@ mod event_feedback;
 mod interaction_prompt_sync;
 mod motion;
 mod npc_actions;
+mod npc_combat;
 mod npc_presence;
 mod progression;
 mod runtime_basics;
@@ -32,6 +33,7 @@ pub(crate) use event_feedback::collect_events;
 pub(crate) use interaction_prompt_sync::refresh_interaction_prompt;
 pub(crate) use motion::{advance_actor_feedback, advance_actor_motion};
 pub(crate) use npc_actions::advance_online_npc_actions;
+pub(crate) use npc_combat::advance_online_npc_combat;
 pub(crate) use npc_presence::sync_npc_runtime_presence;
 pub(crate) use progression::{
     advance_runtime_progression, cancel_pending_movement, submit_end_turn,
@@ -53,9 +55,10 @@ mod tests {
 
     use super::progression::maybe_auto_end_turn_after_stop;
     use super::{
-        advance_online_npc_actions, advance_runtime_progression, collect_events, event_feedback,
-        refresh_interaction_prompt, sync_npc_runtime_presence, ACTOR_MOTION_DURATION_SCALE,
-        ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
+        advance_online_npc_actions, advance_online_npc_combat, advance_runtime_progression,
+        collect_events, event_feedback, refresh_interaction_prompt, sync_npc_runtime_presence,
+        ACTOR_MOTION_DURATION_SCALE, ACTOR_MOTION_MAX_DURATION_SEC,
+        ACTOR_MOTION_MIN_DURATION_SEC,
     };
     use crate::dialogue::apply_interaction_result;
     use crate::state::{
@@ -67,10 +70,11 @@ mod tests {
     use game_bevy::{
         build_runtime_from_default_startup_seed, load_ai_definitions, load_runtime_bootstrap,
         load_settlement_definitions, spawn_characters_from_definition, AiDefinitionPath,
-        CharacterDefinitionPath, CharacterDefinitions, CharacterSpawnRejected, CurrentAction,
-        CurrentPlan, NpcLifePlugin, NpcLifeState, RuntimeActorLink, RuntimeExecutionState,
-        SettlementDebugSnapshot, SettlementDefinitionPath, SettlementSimulationPlugin,
-        SpawnCharacterRequest,
+        BehaviorProfile,
+        CharacterDefinitionPath, CharacterDefinitions, CharacterSpawnRejected,
+        NpcActiveOfflineAction, NpcLifePlugin, NpcLifeState, NpcPlannedActionQueue,
+        NpcRuntimeAiMode, NpcRuntimeBridgeState, RuntimeActorLink, SettlementDebugSnapshot,
+        SettlementDefinitionPath, SettlementSimulationPlugin, SpawnCharacterRequest,
     };
     use game_core::{
         create_demo_runtime, PendingProgressionStep, RegisterActor, Simulation, SimulationCommand,
@@ -157,16 +161,16 @@ mod tests {
         let world = app.world_mut();
         let mut query = world.query::<(
             &NpcLifeState,
-            &CurrentPlan,
-            &CurrentAction,
-            &RuntimeExecutionState,
+            &NpcPlannedActionQueue,
+            &NpcActiveOfflineAction,
+            &NpcRuntimeBridgeState,
             &RuntimeActorLink,
         )>();
 
         let mut online_count = 0usize;
         let mut goal_count = 0usize;
         let mut moving_candidates = Vec::new();
-        for (life, plan, action, runtime_execution, runtime_link) in query.iter(world) {
+        for (life, plan, action, runtime_bridge, runtime_link) in query.iter(world) {
             if !life.online {
                 continue;
             }
@@ -176,7 +180,7 @@ mod tests {
                 "online NPC should have a plan or current action"
             );
 
-            if let Some(goal) = runtime_execution.runtime_goal_grid {
+            if let Some(goal) = runtime_bridge.runtime_goal_grid {
                 goal_count += 1;
                 moving_candidates.push((runtime_link.actor_id, goal));
             }
@@ -254,6 +258,150 @@ mod tests {
         assert!(
             moved_any || still_has_runtime_travel_intent,
             "expected at least one online NPC to either move or keep a registered runtime travel goal"
+        );
+    }
+
+    #[test]
+    fn online_npc_combat_bridge_executes_intent_and_records_debug_state() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Hostile".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_combat_attribute(player, "max_hp", 10.0);
+        simulation.set_actor_resource(player, "hp", 10.0);
+        simulation.set_actor_combat_attribute(hostile, "attack_power", 3.0);
+        simulation.set_actor_ap(hostile, 1.0);
+        simulation.enter_combat(hostile, player);
+
+        let mut app = App::new();
+        app.insert_resource(ViewerRuntimeState {
+            runtime: SimulationRuntime::from_simulation(simulation),
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        });
+        let entity = app
+            .world_mut()
+            .spawn((
+                BehaviorProfile("aggressive".into()),
+                RuntimeActorLink { actor_id: hostile },
+                NpcRuntimeBridgeState::default(),
+            ))
+            .id();
+        app.add_systems(Update, advance_online_npc_combat);
+
+        app.update();
+
+        let bridge = app
+            .world()
+            .entity(entity)
+            .get::<NpcRuntimeBridgeState>()
+            .expect("bridge state should exist");
+        assert_eq!(bridge.ai_mode, NpcRuntimeAiMode::Combat);
+        assert_eq!(bridge.combat_target_actor_id, Some(player));
+        assert_eq!(bridge.runtime_goal_grid, None);
+        assert_eq!(bridge.last_failure_reason, None);
+        assert!(bridge
+            .last_combat_intent
+            .as_deref()
+            .is_some_and(|intent| intent.starts_with("aggressive:attack->")));
+
+        let runtime_state = app.world().resource::<ViewerRuntimeState>();
+        assert!(runtime_state.runtime.get_actor_hit_points(player) < 10.0);
+        assert!(runtime_state
+            .runtime
+            .snapshot()
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == hostile)
+            .is_some_and(|actor| actor.in_combat));
+    }
+
+    #[test]
+    fn passive_combat_profile_holds_position_when_no_direct_action_exists() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let hostile = simulation.register_actor(RegisterActor {
+            definition_id: None,
+            display_name: "Walker".into(),
+            kind: ActorKind::Enemy,
+            side: ActorSide::Hostile,
+            group_id: "hostile".into(),
+            grid_position: GridCoord::new(3, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        simulation.set_actor_combat_attribute(player, "max_hp", 10.0);
+        simulation.set_actor_resource(player, "hp", 10.0);
+        simulation.set_actor_combat_attribute(hostile, "attack_power", 3.0);
+        simulation.set_actor_ap(hostile, 1.0);
+        simulation.enter_combat(hostile, player);
+
+        let mut app = App::new();
+        app.insert_resource(ViewerRuntimeState {
+            runtime: SimulationRuntime::from_simulation(simulation),
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        });
+        let entity = app
+            .world_mut()
+            .spawn((
+                BehaviorProfile("passive".into()),
+                RuntimeActorLink { actor_id: hostile },
+                NpcRuntimeBridgeState::default(),
+            ))
+            .id();
+        app.add_systems(Update, advance_online_npc_combat);
+
+        app.update();
+
+        let bridge = app
+            .world()
+            .entity(entity)
+            .get::<NpcRuntimeBridgeState>()
+            .expect("bridge state should exist");
+        assert_eq!(bridge.ai_mode, NpcRuntimeAiMode::Combat);
+        assert_eq!(bridge.combat_target_actor_id, None);
+        assert_eq!(bridge.runtime_goal_grid, None);
+        assert!(bridge
+            .last_combat_intent
+            .as_deref()
+            .is_some_and(|intent| intent == "passive:end_turn:no_available_intent"));
+
+        let runtime_state = app.world().resource::<ViewerRuntimeState>();
+        assert_eq!(runtime_state.runtime.get_actor_hit_points(player), 10.0);
+        assert_eq!(
+            runtime_state.runtime.get_actor_grid_position(hostile),
+            Some(GridCoord::new(3, 0, 0))
         );
     }
 

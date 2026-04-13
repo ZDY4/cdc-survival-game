@@ -12,7 +12,7 @@ use game_data::{
 };
 use tracing::info;
 
-use crate::actor::{ActorRecord, ActorRegistry, AiController};
+use crate::actor::{ActorRecord, ActorRegistry, RuntimeAiController};
 use crate::economy::HeadlessEconomyRuntime;
 use crate::goap::{NpcActionKey, NpcBackgroundState, NpcRuntimeActionState};
 use crate::grid::{find_path_grid, find_path_world, GridPathfindingError, GridWorld};
@@ -42,6 +42,11 @@ mod types;
 const DROP_ITEM_SEARCH_RADIUS: i32 = 4;
 
 pub(crate) use self::state_persistence::SimulationStateSnapshot;
+pub use self::combat_ai::{
+    resolve_combat_tactic_profile_id, select_combat_ai_intent_for_profile,
+    select_default_combat_ai_intent, CombatAiExecutionResult, CombatAiIntent, CombatAiSnapshot,
+    CombatSkillOption, CombatTargetOption,
+};
 pub use self::types::{
     ActorDebugState, ActorProgressionState, AttackTargetingQueryResult, CombatDebugState,
     GridDebugState, MapCellDebugState, MapObjectDebugState, QuestRuntimeState, RegisterActor,
@@ -87,7 +92,7 @@ pub struct Simulation {
     return_outdoor_location_id: Option<String>,
     unlocked_locations: UnlockedLocationSet,
     active_overworld_id: Option<String>,
-    ai_controllers: HashMap<ActorId, Box<dyn AiController>>,
+    ai_controllers: HashMap<ActorId, Box<dyn RuntimeAiController>>,
     grid_world: GridWorld,
     pending_progression: VecDeque<PendingProgressionStep>,
     next_actor_id: u64,
@@ -835,6 +840,10 @@ impl Simulation {
         self.get_actor_ap(actor_id) >= self.resolve_action_cost(action_type, &payload)
     }
 
+    pub fn attack_action_cost(&self, actor_id: ActorId) -> f32 {
+        self.resolve_attack_action_cost(actor_id)
+    }
+
     pub fn get_actor_side(&self, actor_id: ActorId) -> Option<ActorSide> {
         self.actors.get(actor_id).map(|actor| actor.side)
     }
@@ -931,6 +940,25 @@ impl Simulation {
 
     pub fn is_in_combat(&self) -> bool {
         self.turn.combat_active
+    }
+
+    pub fn actor_in_combat(&self, actor_id: ActorId) -> bool {
+        self.actors
+            .get(actor_id)
+            .map(|actor| actor.in_combat)
+            .unwrap_or(false)
+    }
+
+    pub fn query_combat_ai(&self, actor_id: ActorId) -> Option<CombatAiSnapshot> {
+        self.build_combat_ai_snapshot(actor_id)
+    }
+
+    pub fn run_combat_ai_intent(
+        &mut self,
+        actor_id: ActorId,
+        intent: CombatAiIntent,
+    ) -> CombatAiExecutionResult {
+        self.execute_combat_ai_intent(actor_id, intent)
     }
 
     pub fn grid_walkable(&self, grid: GridCoord) -> bool {

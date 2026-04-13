@@ -66,8 +66,6 @@ pub struct SkillTargetingDefinition {
     pub allow_self: bool,
     #[serde(default = "default_target_allow_friendly_fire")]
     pub allow_friendly_fire: bool,
-    #[serde(default)]
-    pub handler_script: String,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -84,7 +82,6 @@ impl Default for SkillTargetingDefinition {
             require_los: default_target_requires_los(),
             allow_self: default_target_allow_self(),
             allow_friendly_fire: default_target_allow_friendly_fire(),
-            handler_script: String::new(),
             extra: BTreeMap::new(),
         }
     }
@@ -280,6 +277,8 @@ pub enum SkillDefinitionValidationError {
     NegativeCooldown { skill_id: String },
     #[error("skill {skill_id} targeting shape {shape} is invalid")]
     InvalidTargetShape { skill_id: String, shape: String },
+    #[error("skill {skill_id} targeting requires a non-none execution_kind")]
+    MissingExecutionKind { skill_id: String },
     #[error("skill {skill_id} target_side_rule is invalid for self-targeting policy")]
     InvalidTargetSideRule { skill_id: String },
 }
@@ -443,6 +442,11 @@ pub fn validate_skill_definition(
                 return Err(SkillDefinitionValidationError::InvalidTargetShape {
                     skill_id: skill_id.to_string(),
                     shape: shape.to_string(),
+                });
+            }
+            if targeting.enabled && targeting.execution_kind == SkillExecutionKind::None {
+                return Err(SkillDefinitionValidationError::MissingExecutionKind {
+                    skill_id: skill_id.to_string(),
                 });
             }
             if matches!(targeting.target_side_rule, SkillTargetSideRule::PlayerOnly)
@@ -671,11 +675,13 @@ const fn default_target_allow_friendly_fire() -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     use super::{
-        load_skill_library, load_skill_tree_library, SkillTreeValidationCatalog,
-        SkillValidationCatalog,
+        load_skill_library, load_skill_tree_library, validate_skill_definition,
+        SkillActivationDefinition, SkillDefinition, SkillDefinitionValidationError,
+        SkillTargetingDefinition, SkillTreeValidationCatalog, SkillValidationCatalog,
     };
 
     #[test]
@@ -697,5 +703,36 @@ mod tests {
             load_skill_library(repo_root.join("data").join("skills"), Some(&catalog))
                 .expect("skills should load");
         assert!(!skill_library.is_empty());
+    }
+
+    #[test]
+    fn targeting_requires_non_none_execution_kind() {
+        let definition = SkillDefinition {
+            id: "fire_bolt".to_string(),
+            name: "Fire Bolt".to_string(),
+            tree_id: "combat".to_string(),
+            max_level: 1,
+            activation: Some(SkillActivationDefinition {
+                mode: "active".to_string(),
+                targeting: Some(SkillTargetingDefinition {
+                    enabled: true,
+                    range_cells: 5,
+                    shape: "single".to_string(),
+                    extra: BTreeMap::new(),
+                    ..SkillTargetingDefinition::default()
+                }),
+                ..SkillActivationDefinition::default()
+            }),
+            ..SkillDefinition::default()
+        };
+
+        let error = validate_skill_definition(&definition, None)
+            .expect_err("targeting without execution_kind should fail");
+        assert_eq!(
+            error,
+            SkillDefinitionValidationError::MissingExecutionKind {
+                skill_id: "fire_bolt".to_string(),
+            }
+        );
     }
 }

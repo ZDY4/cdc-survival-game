@@ -17,8 +17,8 @@ pub mod utility;
 pub mod vision;
 
 pub use actor::{
-    AiController, AiStepResult, FollowGridGoalAiController, InteractOnceAiController,
-    NoopAiController,
+    FollowRuntimeGoalController, NoopAiController, OneShotInteractController,
+    RuntimeAiController, RuntimeAiStepResult,
 };
 pub use building::{
     generate_building_layout, BuildingLayoutError, GeneratedBuildingDebugState,
@@ -65,9 +65,12 @@ pub use runtime::{
     RUNTIME_SNAPSHOT_SCHEMA_VERSION,
 };
 pub use simulation::{
-    ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState, MapObjectDebugState,
-    RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
-    SimulationSnapshot, SkillActivationResult, SkillRuntimeState,
+    resolve_combat_tactic_profile_id, select_combat_ai_intent_for_profile,
+    select_default_combat_ai_intent, ActorDebugState, CombatAiExecutionResult, CombatAiIntent,
+    CombatAiSnapshot, CombatDebugState, CombatSkillOption, CombatTargetOption, GridDebugState,
+    MapCellDebugState, MapObjectDebugState, RegisterActor, Simulation, SimulationCommand,
+    SimulationCommandResult, SimulationEvent, SimulationSnapshot, SkillActivationResult,
+    SkillRuntimeState,
 };
 pub use survival::{
     ActorSurvivalState, CraftingCheck, CraftingResult, MissingInventoryEntry,

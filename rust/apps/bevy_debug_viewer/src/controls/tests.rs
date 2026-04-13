@@ -23,7 +23,7 @@ use game_data::{
     ActorSide, GridCoord, InteractionTargetId, MapCellDefinition, MapDefinition,
     MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectFootprint, MapObjectKind,
     MapRotation, MapSize, SkillActivationDefinition, SkillActivationEffect, SkillDefinition,
-    SkillModifierDefinition, SkillTargetingDefinition,
+    SkillExecutionKind, SkillModifierDefinition, SkillTargetingDefinition,
 };
 
 #[test]
@@ -231,7 +231,7 @@ fn sample_targeting_skill_definitions() -> SkillDefinitions {
                         range_cells: 5,
                         shape: "single".to_string(),
                         radius: 0,
-                        handler_script: "damage_single".to_string(),
+                        execution_kind: SkillExecutionKind::DamageSingle,
                         ..SkillTargetingDefinition::default()
                     }),
                     ..SkillActivationDefinition::default()
@@ -264,7 +264,7 @@ fn sample_targeting_skill_definitions() -> SkillDefinitions {
                         range_cells: 3,
                         shape: "diamond".to_string(),
                         radius: 1,
-                        handler_script: "damage_aoe".to_string(),
+                        execution_kind: SkillExecutionKind::DamageAoe,
                         ..SkillTargetingDefinition::default()
                     }),
                     ..SkillActivationDefinition::default()
@@ -297,7 +297,7 @@ fn sample_targeting_skill_definitions() -> SkillDefinitions {
                         range_cells: 4,
                         shape: "diamond".to_string(),
                         radius: 2,
-                        handler_script: "damage_aoe".to_string(),
+                        execution_kind: SkillExecutionKind::DamageAoe,
                         ..SkillTargetingDefinition::default()
                     }),
                     ..SkillActivationDefinition::default()

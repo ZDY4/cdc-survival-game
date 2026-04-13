@@ -2,9 +2,9 @@
 
 use bevy::prelude::*;
 use game_bevy::{
-    CharacterDefinitionId, CurrentAction, CurrentPlan, GridPosition, NeedState, NpcLifeState,
-    ReservationState, RuntimeActorLink, RuntimeExecutionState, SettlementDefinitions,
-    SmartObjectReservations, WorldAlertState,
+    CharacterDefinitionId, GridPosition, NeedState, NpcActiveOfflineAction, NpcLifeState,
+    NpcPlannedActionQueue, NpcRuntimeAiMode, NpcRuntimeBridgeState, ReservationState, RuntimeActorLink,
+    SettlementDefinitions, SmartObjectReservations, WorldAlertState,
 };
 use game_core::{ActionExecutionPhase, NpcRuntimeActionState, SimulationEvent};
 use game_data::SettlementId;
@@ -26,10 +26,10 @@ pub(crate) fn advance_online_npc_actions(
         &mut GridPosition,
         &mut NpcLifeState,
         &mut NeedState,
-        &mut CurrentPlan,
-        &mut CurrentAction,
+        &mut NpcPlannedActionQueue,
+        &mut NpcActiveOfflineAction,
         &mut ReservationState,
-        &mut RuntimeExecutionState,
+        &mut NpcRuntimeBridgeState,
         &RuntimeActorLink,
     )>,
 ) {
@@ -51,11 +51,21 @@ pub(crate) fn advance_online_npc_actions(
         mut current_plan,
         mut current_action,
         mut reservation_state,
-        mut runtime_execution,
+        mut runtime_bridge,
         runtime_link,
     ) in &mut query
     {
         if !life.online {
+            continue;
+        }
+        if runtime_bridge.ai_mode == NpcRuntimeAiMode::Combat {
+            runtime_bridge.runtime_goal_grid = None;
+            runtime_state
+                .runtime
+                .clear_actor_autonomous_movement_goal(runtime_link.actor_id);
+            runtime_state
+                .runtime
+                .clear_actor_runtime_action_state(runtime_link.actor_id);
             continue;
         }
 
@@ -86,7 +96,7 @@ pub(crate) fn advance_online_npc_actions(
                 )
             })
         else {
-            runtime_execution.runtime_goal_grid = None;
+            runtime_bridge.runtime_goal_grid = None;
             runtime_state
                 .runtime
                 .clear_actor_autonomous_movement_goal(runtime_link.actor_id);
@@ -104,7 +114,7 @@ pub(crate) fn advance_online_npc_actions(
                 &mut life,
                 &mut current_plan,
                 &mut current_action,
-                &mut runtime_execution,
+                &mut runtime_bridge,
                 &mut reservation_state,
                 runtime_link.actor_id,
                 action_key,
@@ -130,7 +140,7 @@ pub(crate) fn advance_online_npc_actions(
                             &mut life,
                             &mut current_plan,
                             &mut current_action,
-                            &mut runtime_execution,
+                            &mut runtime_bridge,
                             &mut reservation_state,
                             runtime_link.actor_id,
                             action_key,
@@ -164,7 +174,7 @@ pub(crate) fn advance_online_npc_actions(
                             Some(runtime_link.actor_id),
                         )
                     });
-                runtime_execution.runtime_goal_grid = target_grid;
+                runtime_bridge.runtime_goal_grid = target_grid;
                 if let Some(target_grid) = target_grid {
                     runtime_state
                         .runtime
@@ -173,7 +183,7 @@ pub(crate) fn advance_online_npc_actions(
                         runtime_state
                             .runtime
                             .clear_actor_autonomous_movement_goal(runtime_link.actor_id);
-                        runtime_execution.runtime_goal_grid = None;
+                        runtime_bridge.runtime_goal_grid = None;
                         if let Some(anchor) = target_anchor.clone() {
                             life.current_anchor = Some(anchor);
                         }
@@ -204,7 +214,7 @@ pub(crate) fn advance_online_npc_actions(
                         &mut life,
                         &mut current_plan,
                         &mut current_action,
-                        &mut runtime_execution,
+                        &mut runtime_bridge,
                         &mut reservation_state,
                         runtime_link.actor_id,
                         action_key,
@@ -214,7 +224,7 @@ pub(crate) fn advance_online_npc_actions(
                 }
             }
             ActionExecutionPhase::Perform => {
-                runtime_execution.runtime_goal_grid = None;
+                runtime_bridge.runtime_goal_grid = None;
                 if perform_remaining_minutes <= step_minutes {
                     if let Some(set_world_alert_active) =
                         current_action.0.as_ref().and_then(|action_state| {
@@ -281,7 +291,7 @@ pub(crate) fn advance_online_npc_actions(
                 need.morale = morale;
                 current_plan.next_index += 1;
                 current_action.0 = None;
-                runtime_execution.last_failure_reason = None;
+                runtime_bridge.last_failure_reason = None;
                 runtime_state
                     .runtime
                     .push_event(SimulationEvent::NpcActionCompleted {
@@ -300,7 +310,7 @@ pub(crate) fn advance_online_npc_actions(
                     &mut life,
                     &mut current_plan,
                     &mut current_action,
-                    &mut runtime_execution,
+                    &mut runtime_bridge,
                     &mut reservation_state,
                     runtime_link.actor_id,
                     action_key,
@@ -316,8 +326,8 @@ pub(crate) fn advance_online_npc_actions(
                 NpcRuntimeActionState::from_offline_action(
                     action,
                     reservation_state.active.clone(),
-                    runtime_execution.last_failure_reason.clone(),
-                    runtime_execution.runtime_goal_grid,
+                    runtime_bridge.last_failure_reason.clone(),
+                    runtime_bridge.runtime_goal_grid,
                 ),
             );
         } else {
@@ -333,9 +343,9 @@ fn mark_online_replan_failure(
     entity: Entity,
     runtime_state: &mut ViewerRuntimeState,
     life: &mut NpcLifeState,
-    current_plan: &mut CurrentPlan,
-    current_action: &mut CurrentAction,
-    runtime_execution: &mut RuntimeExecutionState,
+    current_plan: &mut NpcPlannedActionQueue,
+    current_action: &mut NpcActiveOfflineAction,
+    runtime_bridge: &mut NpcRuntimeBridgeState,
     reservation_state: &mut ReservationState,
     actor_id: game_data::ActorId,
     action: game_core::NpcActionKey,
@@ -349,8 +359,8 @@ fn mark_online_replan_failure(
         reservations.release(&reservation, entity);
     }
     reservation_state.active.clear();
-    runtime_execution.runtime_goal_grid = None;
-    runtime_execution.last_failure_reason = Some(reason.to_string());
+    runtime_bridge.runtime_goal_grid = None;
+    runtime_bridge.last_failure_reason = Some(reason.to_string());
     runtime_state
         .runtime
         .clear_actor_autonomous_movement_goal(actor_id);

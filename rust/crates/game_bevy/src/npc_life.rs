@@ -105,10 +105,10 @@ pub struct ScheduleState {
 }
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
-pub struct CurrentGoal(pub Option<NpcGoalKey>);
+pub struct NpcPlannedGoal(pub Option<NpcGoalKey>);
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
-pub struct CurrentPlan {
+pub struct NpcPlannedActionQueue {
     pub steps: Vec<NpcPlanStep>,
     pub next_index: usize,
     pub total_cost: usize,
@@ -116,7 +116,7 @@ pub struct CurrentPlan {
 }
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
-pub struct CurrentAction(pub Option<OfflineActionState>);
+pub struct NpcActiveOfflineAction(pub Option<OfflineActionState>);
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Default)]
 pub struct ReservationState {
@@ -128,17 +128,30 @@ pub struct RuntimeActorLink {
     pub actor_id: ActorId,
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NpcRuntimeAiMode {
+    #[default]
+    Life,
+    Combat,
+}
+
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeExecutionState {
-    pub mode: NpcExecutionMode,
+pub struct NpcRuntimeBridgeState {
+    pub execution_mode: NpcExecutionMode,
+    pub ai_mode: NpcRuntimeAiMode,
+    pub combat_target_actor_id: Option<ActorId>,
+    pub last_combat_intent: Option<String>,
     pub runtime_goal_grid: Option<GridCoord>,
     pub last_failure_reason: Option<String>,
 }
 
-impl Default for RuntimeExecutionState {
+impl Default for NpcRuntimeBridgeState {
     fn default() -> Self {
         Self {
-            mode: NpcExecutionMode::Background,
+            execution_mode: NpcExecutionMode::Background,
+            ai_mode: NpcRuntimeAiMode::Life,
+            combat_target_actor_id: None,
+            last_combat_intent: None,
             runtime_goal_grid: None,
             last_failure_reason: None,
         }
@@ -185,7 +198,7 @@ pub struct PlannedActionDebug {
 }
 
 #[derive(Component, Debug, Clone, PartialEq, Default)]
-pub struct DecisionTrace {
+pub struct NpcDecisionTrace {
     pub facts: Vec<NpcFact>,
     pub goal_scores: Vec<NpcGoalScore>,
     pub selected_goal: Option<NpcGoalKey>,
@@ -198,6 +211,7 @@ pub struct SettlementDebugEntry {
     pub definition_id: String,
     pub runtime_actor_id: Option<ActorId>,
     pub execution_mode: NpcExecutionMode,
+    pub ai_mode: NpcRuntimeAiMode,
     pub settlement_id: String,
     pub role: NpcRole,
     pub goal: Option<NpcGoalKey>,
@@ -224,6 +238,8 @@ pub struct SettlementDebugEntry {
     pub plan_total_cost: usize,
     pub pending_plan: Vec<PlannedActionDebug>,
     pub current_anchor: Option<String>,
+    pub combat_target_actor_id: Option<ActorId>,
+    pub last_combat_intent: Option<String>,
     pub runtime_goal_grid: Option<GridCoord>,
     pub reservations: Vec<String>,
     pub last_failure_reason: Option<String>,
@@ -267,8 +283,9 @@ mod tests {
     };
 
     use super::{
-        CurrentAction, CurrentGoal, LifeProfileComponent, NpcLifePlugin, NpcLifeState,
-        ReservationState, ScheduleState, SettlementDebugSnapshot, SettlementSimulationPlugin,
+        LifeProfileComponent, NpcActiveOfflineAction, NpcLifePlugin, NpcLifeState,
+        NpcPlannedGoal, ReservationState, ScheduleState, SettlementDebugSnapshot,
+        SettlementSimulationPlugin,
     };
     use crate::{CharacterDefinitionId, CharacterDefinitions, SettlementDefinitions};
 
@@ -304,7 +321,7 @@ mod tests {
             if let Some(action) = app
                 .world()
                 .entity(entity)
-                .get::<CurrentAction>()
+                .get::<NpcActiveOfflineAction>()
                 .and_then(|current| current.0.as_ref().map(|state| state.step.action.clone()))
             {
                 seen_actions.insert(action);
@@ -314,7 +331,7 @@ mod tests {
         let goal = app
             .world()
             .entity(entity)
-            .get::<CurrentGoal>()
+            .get::<NpcPlannedGoal>()
             .expect("goal component");
         let life = app
             .world()
@@ -409,7 +426,7 @@ mod tests {
         let goal = app
             .world()
             .entity(entity)
-            .get::<CurrentGoal>()
+            .get::<NpcPlannedGoal>()
             .expect("goal component");
         assert_eq!(goal.0, Some(game_core::NpcGoalKey::RespondThreat));
     }
@@ -480,7 +497,7 @@ mod tests {
         let plan = app
             .world()
             .entity(doctor)
-            .get::<super::CurrentPlan>()
+            .get::<super::NpcPlannedActionQueue>()
             .expect("plan component");
         assert!(plan
             .steps
@@ -520,7 +537,7 @@ mod tests {
         let plan = app
             .world()
             .entity(doctor)
-            .get::<super::CurrentPlan>()
+            .get::<super::NpcPlannedActionQueue>()
             .expect("plan component");
         let travel = plan
             .steps

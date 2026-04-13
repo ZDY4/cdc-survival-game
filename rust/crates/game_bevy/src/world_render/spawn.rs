@@ -545,7 +545,7 @@ pub fn sync_world_render_standard_tile_render_batches(
             &WorldRenderStandardTileBatchSource,
             &mut WorldRenderTileBatchVisualState,
         ),
-        With<Mesh3d>,
+        (With<Mesh3d>, Without<WorldRenderTileBatchRoot>),
     >,
 ) {
     for (source, mut render_batch_visual_state) in &mut render_batches {
@@ -565,7 +565,7 @@ pub fn sync_world_render_building_wall_tile_render_batches(
             &WorldRenderBuildingWallTileBatchSource,
             &mut WorldRenderTileBatchVisualState,
         ),
-        With<Mesh3d>,
+        (With<Mesh3d>, Without<WorldRenderTileBatchRoot>),
     >,
 ) {
     for (source, mut render_batch_visual_state) in &mut render_batches {

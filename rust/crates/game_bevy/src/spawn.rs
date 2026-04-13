@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::*;
-use game_core::{FollowGridGoalAiController, NoopAiController, RegisterActor, SimulationRuntime};
+use game_core::{FollowRuntimeGoalController, NoopAiController, RegisterActor, SimulationRuntime};
 use game_data::{
     ActorId, ActorKind, ActorSide, CharacterArchetype, CharacterDefinition, CharacterDisposition,
     GridCoord,
@@ -148,7 +148,7 @@ pub(crate) fn register_actor_from_definition(
     grid_position: GridCoord,
 ) -> RegisterActor {
     let ai_controller = if definition.life.is_some() {
-        Some(Box::new(FollowGridGoalAiController) as Box<_>)
+        Some(Box::new(FollowRuntimeGoalController) as Box<_>)
     } else {
         Some(Box::new(NoopAiController) as Box<_>)
     };

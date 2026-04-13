@@ -40,10 +40,11 @@ impl Simulation {
                 result: result.clone(),
             });
         } else {
+            let reason = self.format_action_rejection_reason(&request, &result);
             self.events.push(SimulationEvent::ActionRejected {
                 actor_id,
                 action_type: request.action_type,
-                reason: result.reason.clone().unwrap_or_default(),
+                reason,
             });
         }
 
@@ -231,7 +232,7 @@ impl Simulation {
         while !self.turn.combat_active
             && self.get_actor_ap(actor_id) >= self.config.affordable_threshold
         {
-            if !self.execute_actor_turn_step(actor_id) {
+            if !self.execute_runtime_ai_step(actor_id) {
                 break;
             }
         }
@@ -241,7 +242,7 @@ impl Simulation {
         self.end_actor_turn(actor_id);
     }
 
-    pub(super) fn execute_actor_turn_step(&mut self, actor_id: ActorId) -> bool {
+    pub(super) fn execute_runtime_ai_step(&mut self, actor_id: ActorId) -> bool {
         let Some(mut controller) = self.ai_controllers.remove(&actor_id) else {
             return false;
         };
@@ -512,11 +513,31 @@ impl Simulation {
         if let Some(cost_override) = request.cost_override {
             return cost_override.max(0.0);
         }
-        if action_type == ActionType::Move {
-            request.steps.unwrap_or(1) as f32 * self.config.action_cost
-        } else {
-            self.config.action_cost
+        match action_type {
+            ActionType::Move => request.steps.unwrap_or(1) as f32 * self.config.action_cost,
+            ActionType::Attack => self.resolve_attack_action_cost(request.actor_id),
+            _ => self.config.action_cost,
         }
+    }
+
+    pub(super) fn resolve_attack_action_cost(&self, actor_id: ActorId) -> f32 {
+        let base_attack_cost = self.config.action_cost.max(0.0);
+        let min_attack_cost = 0.5 * base_attack_cost;
+        let max_attack_cost = self.config.turn_ap_max.max(min_attack_cost);
+        let effective_speed = self
+            .item_library
+            .as_ref()
+            .and_then(|items| {
+                self.economy
+                    .equipped_weapon(actor_id, "main_hand", items)
+                    .ok()
+                    .flatten()
+            })
+            .map(|weapon| weapon.attack_speed)
+            .filter(|speed| speed.is_finite() && *speed > 0.0)
+            .unwrap_or(1.0);
+        let raw_attack_cost = base_attack_cost / effective_speed;
+        raw_attack_cost.clamp(min_attack_cost, max_attack_cost)
     }
 
     pub(super) fn validate_turn_access(&self, actor_id: ActorId) -> bool {
@@ -582,6 +603,26 @@ impl Simulation {
         ap_after: f32,
     ) -> ActionResult {
         ActionResult::rejected(reason, ap_before, ap_after, self.turn.combat_active)
+    }
+
+    fn format_action_rejection_reason(
+        &self,
+        request: &ActionRequest,
+        result: &ActionResult,
+    ) -> String {
+        let Some(reason) = result.reason.as_deref() else {
+            return String::new();
+        };
+
+        if request.action_type == ActionType::Attack && reason == "insufficient_ap" {
+            return format!(
+                "{reason} available={:.1} required={:.1}",
+                result.ap_before,
+                self.resolve_action_cost(request.action_type, request)
+            );
+        }
+
+        reason.to_string()
     }
 
     pub(super) fn move_actor_along_path(

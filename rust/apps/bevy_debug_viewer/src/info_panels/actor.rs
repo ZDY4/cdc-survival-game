@@ -62,8 +62,11 @@ fn selected_actor_ai_entry<'a>(
 fn format_selected_ai_lines(entry: &SettlementDebugEntry) -> Vec<String> {
     vec![
         kv("  Role", format!("{:?}", entry.role)),
+        kv("  AI Mode", format!("{:?}", entry.ai_mode)),
         kv("  Goal", format!("{:?}", entry.goal)),
         kv("  Action", format!("{:?}", entry.action)),
+        kv("  Combat Target", format!("{:?}", entry.combat_target_actor_id)),
+        kv("  Last Intent", format!("{:?}", entry.last_combat_intent)),
         kv("  Failure", format!("{:?}", entry.last_failure_reason)),
         kv(
             "  Top Scores",

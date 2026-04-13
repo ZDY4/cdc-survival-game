@@ -28,11 +28,11 @@ pub(crate) struct ActorRegistrySnapshot {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AiStepResult {
+pub struct RuntimeAiStepResult {
     pub performed: bool,
 }
 
-impl AiStepResult {
+impl RuntimeAiStepResult {
     pub const fn performed() -> Self {
         Self { performed: true }
     }
@@ -42,58 +42,58 @@ impl AiStepResult {
     }
 }
 
-pub trait AiController: Send + Sync + std::fmt::Debug {
+pub trait RuntimeAiController: Send + Sync + std::fmt::Debug {
     fn execute_turn_step(&mut self, actor_id: ActorId, simulation: &mut Simulation)
-        -> AiStepResult;
+        -> RuntimeAiStepResult;
 }
 
 #[derive(Debug, Default)]
 pub struct NoopAiController;
 
-impl AiController for NoopAiController {
+impl RuntimeAiController for NoopAiController {
     fn execute_turn_step(
         &mut self,
         _actor_id: ActorId,
         _simulation: &mut Simulation,
-    ) -> AiStepResult {
-        AiStepResult::idle()
+    ) -> RuntimeAiStepResult {
+        RuntimeAiStepResult::idle()
     }
 }
 
 #[derive(Debug, Default)]
-pub struct FollowGridGoalAiController;
+pub struct FollowRuntimeGoalController;
 
-impl AiController for FollowGridGoalAiController {
+impl RuntimeAiController for FollowRuntimeGoalController {
     fn execute_turn_step(
         &mut self,
         actor_id: ActorId,
         simulation: &mut Simulation,
-    ) -> AiStepResult {
+    ) -> RuntimeAiStepResult {
         let Some(goal) = simulation.autonomous_movement_goal(actor_id) else {
-            return AiStepResult::idle();
+            return RuntimeAiStepResult::idle();
         };
 
         let Ok(outcome) = simulation.move_actor_to_reachable(actor_id, goal) else {
-            return AiStepResult::idle();
+            return RuntimeAiStepResult::idle();
         };
 
         if outcome.result.success && outcome.plan.resolved_steps() > 0 {
-            AiStepResult::performed()
+            RuntimeAiStepResult::performed()
         } else {
-            AiStepResult::idle()
+            RuntimeAiStepResult::idle()
         }
     }
 }
 
 #[derive(Debug, Default)]
-pub struct InteractOnceAiController;
+pub struct OneShotInteractController;
 
-impl AiController for InteractOnceAiController {
+impl RuntimeAiController for OneShotInteractController {
     fn execute_turn_step(
         &mut self,
         actor_id: ActorId,
         simulation: &mut Simulation,
-    ) -> AiStepResult {
+    ) -> RuntimeAiStepResult {
         let start_result = simulation.request_action(ActionRequest {
             actor_id,
             action_type: ActionType::Interact,
@@ -105,7 +105,7 @@ impl AiController for InteractOnceAiController {
         });
 
         if !start_result.success {
-            return AiStepResult::idle();
+            return RuntimeAiStepResult::idle();
         }
 
         let complete_result = simulation.request_action(ActionRequest {
@@ -119,9 +119,9 @@ impl AiController for InteractOnceAiController {
         });
 
         if complete_result.success {
-            AiStepResult::performed()
+            RuntimeAiStepResult::performed()
         } else {
-            AiStepResult::idle()
+            RuntimeAiStepResult::idle()
         }
     }
 }
@@ -177,8 +177,8 @@ impl ActorRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::FollowGridGoalAiController;
-    use crate::{AiController, RegisterActor, Simulation};
+    use super::FollowRuntimeGoalController;
+    use crate::{RegisterActor, RuntimeAiController, Simulation};
     use game_data::{ActorKind, ActorSide, GridCoord};
 
     #[test]
@@ -199,7 +199,7 @@ mod tests {
         simulation.set_actor_ap(actor_id, 2.0);
         simulation.set_actor_autonomous_movement_goal(actor_id, GridCoord::new(2, 0, 0));
 
-        let mut controller = FollowGridGoalAiController;
+        let mut controller = FollowRuntimeGoalController;
         let result = controller.execute_turn_step(actor_id, &mut simulation);
 
         assert!(result.performed);

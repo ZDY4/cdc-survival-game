@@ -14,7 +14,7 @@ use crate::goap::ActionExecutionPhase;
 use crate::grid::GridPathfindingError;
 use crate::overworld::{LocationTransitionContext, OverworldStateSnapshot};
 use crate::vision::VisionRuntimeSnapshot;
-use crate::{AiController, NpcActionKey};
+use crate::{NpcActionKey, RuntimeAiController};
 
 #[derive(Debug)]
 pub struct RegisterActor {
@@ -26,7 +26,7 @@ pub struct RegisterActor {
     pub grid_position: GridCoord,
     pub interaction: Option<CharacterInteractionProfile>,
     pub attack_range: f32,
-    pub ai_controller: Option<Box<dyn AiController>>,
+    pub ai_controller: Option<Box<dyn RuntimeAiController>>,
 }
 
 #[derive(Debug, Clone)]

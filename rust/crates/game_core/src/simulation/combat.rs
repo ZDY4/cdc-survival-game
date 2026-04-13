@@ -399,7 +399,9 @@ impl Simulation {
             && self.turn.current_actor_id == Some(actor_id)
             && self.get_actor_ap(actor_id) >= self.config.affordable_threshold
         {
-            if !self.execute_combat_ai_step(actor_id) && !self.execute_actor_turn_step(actor_id) {
+            if !self.execute_builtin_combat_tactic_step(actor_id)
+                && !self.execute_runtime_ai_step(actor_id)
+            {
                 break;
             }
         }

@@ -3,9 +3,10 @@
 use bevy::prelude::*;
 use game_bevy::{
     register_runtime_actor_from_definition, BackgroundLifeState, CharacterDefinitionId,
-    CharacterDefinitions, CurrentAction, CurrentPlan, DisplayName, GridPosition, NeedState,
-    NpcLifeState, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
-    SettlementDefinitions, SmartObjectReservations,
+    CharacterDefinitions, DisplayName, GridPosition, NeedState, NpcActiveOfflineAction,
+    NpcLifeState, NpcPlannedActionQueue, NpcRuntimeAiMode, NpcRuntimeBridgeState,
+    ReservationState, RuntimeActorLink, ScheduleState, SettlementDefinitions,
+    SmartObjectReservations,
 };
 use game_core::{NpcBackgroundState, NpcRuntimeActionState};
 use game_data::{GridCoord, MapId, SettlementId};
@@ -27,10 +28,10 @@ pub(crate) fn sync_npc_runtime_presence(
         &mut NpcLifeState,
         &NeedState,
         &ScheduleState,
-        &CurrentPlan,
-        &CurrentAction,
+        &NpcPlannedActionQueue,
+        &NpcActiveOfflineAction,
         &ReservationState,
-        &mut RuntimeExecutionState,
+        &mut NpcRuntimeBridgeState,
         &mut BackgroundLifeState,
         Option<&RuntimeActorLink>,
     )>,
@@ -66,7 +67,7 @@ pub(crate) fn sync_npc_runtime_presence(
         current_plan,
         current_action,
         reservation_state,
-        mut runtime_execution,
+        mut runtime_bridge,
         mut background_state,
         runtime_link,
     ) in &mut query
@@ -89,7 +90,7 @@ pub(crate) fn sync_npc_runtime_presence(
 
         if should_be_online {
             life.online = true;
-            runtime_execution.mode = game_core::NpcExecutionMode::Online;
+            runtime_bridge.execution_mode = game_core::NpcExecutionMode::Online;
             let actor_id = if let Some(link) = runtime_link.filter(|_| runtime_actor_exists) {
                 link.actor_id
             } else if let Some(actor_id) = runtime_actors_by_definition
@@ -138,12 +139,29 @@ pub(crate) fn sync_npc_runtime_presence(
             if let Some(runtime_grid) = runtime_state.runtime.get_actor_grid_position(actor_id) {
                 grid_position.0 = runtime_grid;
             }
-            runtime_execution.last_failure_reason = None;
+            runtime_bridge.last_failure_reason = None;
+            runtime_bridge.ai_mode = snapshot
+                .actors
+                .iter()
+                .find(|actor| actor.actor_id == actor_id)
+                .map(|actor| {
+                    if actor.in_combat {
+                        NpcRuntimeAiMode::Combat
+                    } else {
+                        NpcRuntimeAiMode::Life
+                    }
+                })
+                .unwrap_or(NpcRuntimeAiMode::Life);
+            runtime_bridge.combat_target_actor_id = None;
+            runtime_bridge.last_combat_intent = None;
             background_state.0 = None;
         } else {
             life.online = false;
-            runtime_execution.mode = game_core::NpcExecutionMode::Background;
-            runtime_execution.runtime_goal_grid = None;
+            runtime_bridge.execution_mode = game_core::NpcExecutionMode::Background;
+            runtime_bridge.ai_mode = NpcRuntimeAiMode::Life;
+            runtime_bridge.combat_target_actor_id = None;
+            runtime_bridge.last_combat_intent = None;
+            runtime_bridge.runtime_goal_grid = None;
 
             if let Some(link) = runtime_link {
                 let mut exported = runtime_state
@@ -161,7 +179,7 @@ pub(crate) fn sync_npc_runtime_presence(
                             current_plan,
                             current_action,
                             reservation_state,
-                            &runtime_execution,
+                            &runtime_bridge,
                         )
                     });
                 exported.definition_id = Some(definition_id.0.as_str().to_string());
@@ -175,8 +193,8 @@ pub(crate) fn sync_npc_runtime_presence(
                     NpcRuntimeActionState::from_offline_action(
                         action,
                         reservation_state.active.clone(),
-                        runtime_execution.last_failure_reason.clone(),
-                        runtime_execution.runtime_goal_grid,
+                        runtime_bridge.last_failure_reason.clone(),
+                        runtime_bridge.runtime_goal_grid,
                     )
                 });
                 exported.held_reservations = reservation_state.active.clone();
@@ -211,7 +229,7 @@ pub(crate) fn sync_npc_runtime_presence(
                     current_plan,
                     current_action,
                     reservation_state,
-                    &runtime_execution,
+                    &runtime_bridge,
                 ));
             }
         }
@@ -322,10 +340,10 @@ fn build_background_state(
     life: &NpcLifeState,
     need: &NeedState,
     schedule: &ScheduleState,
-    current_plan: &CurrentPlan,
-    current_action: &CurrentAction,
+    current_plan: &NpcPlannedActionQueue,
+    current_action: &NpcActiveOfflineAction,
     reservation_state: &ReservationState,
-    runtime_execution: &RuntimeExecutionState,
+    runtime_bridge: &NpcRuntimeBridgeState,
 ) -> NpcBackgroundState {
     NpcBackgroundState {
         definition_id: Some(definition_id.to_string()),
@@ -339,8 +357,8 @@ fn build_background_state(
             NpcRuntimeActionState::from_offline_action(
                 action,
                 reservation_state.active.clone(),
-                runtime_execution.last_failure_reason.clone(),
-                runtime_execution.runtime_goal_grid,
+                runtime_bridge.last_failure_reason.clone(),
+                runtime_bridge.runtime_goal_grid,
             )
         }),
         held_reservations: reservation_state.active.clone(),

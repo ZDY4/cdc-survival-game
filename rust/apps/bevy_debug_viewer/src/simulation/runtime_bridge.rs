@@ -178,10 +178,19 @@ fn format_event_text(event: SimulationEvent) -> String {
             actor_id,
             action_type,
             result,
-        } => format!(
-            "action resolved actor={:?} type={:?} ap={:.1}->{:.1} consumed={:.1}",
-            actor_id, action_type, result.ap_before, result.ap_after, result.consumed
-        ),
+        } => {
+            if action_type == game_data::ActionType::Attack {
+                format!(
+                    "action resolved actor={:?} type={:?} ap={:.1}->{:.1} attack_cost={:.1}",
+                    actor_id, action_type, result.ap_before, result.ap_after, result.consumed
+                )
+            } else {
+                format!(
+                    "action resolved actor={:?} type={:?} ap={:.1}->{:.1} consumed={:.1}",
+                    actor_id, action_type, result.ap_before, result.ap_after, result.consumed
+                )
+            }
+        }
         SimulationEvent::SkillActivated {
             actor_id,
             skill_id,

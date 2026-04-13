@@ -3,7 +3,7 @@ use game_data::{
     MapObjectKind, MapObjectProps, MapRotation,
 };
 
-use crate::actor::InteractOnceAiController;
+use crate::actor::OneShotInteractController;
 use crate::runtime::SimulationRuntime;
 use crate::simulation::{RegisterActor, Simulation};
 
@@ -51,7 +51,7 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         grid_position: GridCoord::new(1, 0, 0),
         interaction: None,
         attack_range: 1.2,
-        ai_controller: Some(Box::new(InteractOnceAiController)),
+        ai_controller: Some(Box::new(OneShotInteractController)),
     });
     let hostile = simulation.register_actor(RegisterActor {
         definition_id: None,
@@ -62,7 +62,7 @@ pub fn seed_demo_scenario(simulation: &mut Simulation) -> DemoScenarioHandles {
         grid_position: GridCoord::new(4, 0, 0),
         interaction: None,
         attack_range: 1.2,
-        ai_controller: Some(Box::new(InteractOnceAiController)),
+        ai_controller: Some(Box::new(OneShotInteractController)),
     });
 
     DemoScenarioHandles {

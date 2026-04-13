@@ -30,8 +30,11 @@ pub(crate) fn format_ai_panel(runtime_state: &ViewerRuntimeState) -> String {
             .join(", ");
         lines.push(format!("Entry {}:", index + 1));
         lines.push(kv("  Role", format!("{:?}", entry.role)));
+        lines.push(kv("  AI Mode", format!("{:?}", entry.ai_mode)));
         lines.push(kv("  Goal", format!("{:?}", entry.goal)));
         lines.push(kv("  Action", format!("{:?}", entry.action)));
+        lines.push(kv("  Combat Target", format!("{:?}", entry.combat_target_actor_id)));
+        lines.push(kv("  Last Intent", format!("{:?}", entry.last_combat_intent)));
         lines.push(kv("  Failure", format!("{:?}", entry.last_failure_reason)));
         lines.push(kv("  Top Scores", top_scores));
         lines.push(kv("  Summary", entry.decision_summary.clone()));

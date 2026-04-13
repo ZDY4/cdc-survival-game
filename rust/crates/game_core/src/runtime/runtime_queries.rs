@@ -5,8 +5,8 @@ use game_data::{
 };
 
 use crate::simulation::{
-    AttackTargetingQueryResult, SkillRuntimeState, SkillSpatialPreviewResult,
-    SkillTargetingQueryResult,
+    AttackTargetingQueryResult, CombatAiExecutionResult, CombatAiIntent, CombatAiSnapshot,
+    SkillRuntimeState, SkillSpatialPreviewResult, SkillTargetingQueryResult,
 };
 
 use super::SimulationRuntime;
@@ -205,6 +205,10 @@ impl SimulationRuntime {
         self.simulation.is_in_combat()
     }
 
+    pub fn actor_in_combat(&self, actor_id: ActorId) -> bool {
+        self.simulation.actor_in_combat(actor_id)
+    }
+
     pub fn current_actor(&self) -> Option<ActorId> {
         self.simulation.current_actor()
     }
@@ -231,5 +235,17 @@ impl SimulationRuntime {
 
     pub fn current_turn_index(&self) -> u64 {
         self.simulation.current_turn_index()
+    }
+
+    pub fn query_combat_ai(&self, actor_id: ActorId) -> Option<CombatAiSnapshot> {
+        self.simulation.query_combat_ai(actor_id)
+    }
+
+    pub fn execute_combat_ai_intent(
+        &mut self,
+        actor_id: ActorId,
+        intent: CombatAiIntent,
+    ) -> CombatAiExecutionResult {
+        self.simulation.run_combat_ai_intent(actor_id, intent)
     }
 }

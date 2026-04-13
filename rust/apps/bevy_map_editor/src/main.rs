@@ -1026,7 +1026,7 @@ fn rebuild_scene_system(
     mut ground_materials: ResMut<Assets<GridGroundMaterial>>,
     mut building_wall_materials: ResMut<Assets<BuildingWallGridMaterial>>,
     world_label_font: Res<EditorWorldLabelFont>,
-    scene_entities: Query<Entity, With<SceneEntity>>,
+    scene_entities: Query<Entity, (With<SceneEntity>, Without<ChildOf>)>,
 ) {
     if !editor.scene_dirty {
         return;

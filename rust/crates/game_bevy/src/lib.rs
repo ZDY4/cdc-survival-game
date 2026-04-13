@@ -41,11 +41,11 @@ pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;
 pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
 pub use npc_life::{
-    BackgroundLifeState, CurrentAction, CurrentGoal, CurrentPlan,
-    LifeProfileComponent as CharacterLifeProfileComponent, NeedState, NpcLifePlugin, NpcLifeState,
-    NpcLifeUpdateSet, ReservationState, RuntimeActorLink, RuntimeExecutionState, ScheduleState,
-    SettlementContext, SettlementDebugEntry, SettlementDebugSnapshot, SettlementSimulationPlugin,
-    SimClock, WorldAlertState,
+    BackgroundLifeState, LifeProfileComponent as CharacterLifeProfileComponent, NeedState,
+    NpcActiveOfflineAction, NpcDecisionTrace, NpcLifePlugin, NpcLifeState, NpcLifeUpdateSet,
+    NpcPlannedActionQueue, NpcPlannedGoal, NpcRuntimeAiMode, NpcRuntimeBridgeState,
+    ReservationState, RuntimeActorLink, ScheduleState, SettlementContext, SettlementDebugEntry,
+    SettlementDebugSnapshot, SettlementSimulationPlugin, SimClock, WorldAlertState,
 };
 pub use reservations::SmartObjectReservations;
 pub use spawn::{register_runtime_actor_from_definition, spawn_characters_from_definition};

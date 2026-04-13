@@ -44,8 +44,9 @@ use crate::render::{
 };
 use crate::simulation::{
     advance_actor_feedback, advance_actor_motion, advance_map_ai_spawns,
-    advance_online_npc_actions, collect_events, prime_viewer_state, refresh_interaction_prompt,
-    refresh_viewer_vision, sync_npc_runtime_presence, ViewerVisionTrackerState,
+    advance_online_npc_actions, advance_online_npc_combat, collect_events, prime_viewer_state,
+    refresh_interaction_prompt, refresh_viewer_vision, sync_npc_runtime_presence,
+    ViewerVisionTrackerState,
 };
 use crate::state::{
     ActorLabelEntities, UiContextMenuState, UiHoverTooltipState, UiInventoryDragState,
@@ -217,6 +218,7 @@ impl Plugin for ViewerAppPlugin {
             (
                 spawn_characters_from_definition,
                 sync_npc_runtime_presence,
+                advance_online_npc_combat,
                 advance_online_npc_actions,
                 advance_map_ai_spawns,
                 sync_ai_snapshot,
@@ -227,6 +229,7 @@ impl Plugin for ViewerAppPlugin {
                 handle_inventory_list_mouse_wheel,
                 handle_camera_pan,
             )
+                .chain()
                 .in_set(ViewerUpdateSet::RuntimeMutations),
         )
         .add_systems(

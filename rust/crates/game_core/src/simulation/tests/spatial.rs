@@ -909,7 +909,7 @@ fn follow_goal_ai_auto_opens_unlocked_generated_door() {
     simulation.set_actor_ap(actor_id, 4.0);
     simulation.set_actor_autonomous_movement_goal(actor_id, goal);
 
-    let mut controller = FollowGridGoalAiController;
+    let mut controller = FollowRuntimeGoalController;
     let result = controller.execute_turn_step(actor_id, &mut simulation);
 
     assert!(result.performed);
