@@ -5,6 +5,8 @@ use bevy_log::tracing_subscriber::fmt::writer::MakeWriterExt;
 use bevy_log::tracing_subscriber::prelude::*;
 use bevy_log::{Level, DEFAULT_FILTER};
 use thiserror::Error;
+use time::macros::format_description;
+use time::OffsetDateTime;
 use tracing_appender::rolling::{never, RollingFileAppender, Rotation};
 use tracing_log::LogTracer;
 
@@ -34,6 +36,11 @@ impl RuntimeLogSettings {
 
     pub fn with_file_name(mut self, file_name: impl Into<String>) -> Self {
         self.file_name = Some(file_name.into());
+        self
+    }
+
+    pub fn with_single_run_file(mut self) -> Self {
+        self.file_name = Some(single_run_log_file_name());
         self
     }
 }
@@ -100,4 +107,24 @@ fn build_file_appender(
         .filename_suffix("log")
         .max_log_files(settings.max_log_files)
         .build(settings.log_dir())
+}
+
+fn single_run_log_file_name() -> String {
+    let timestamp =
+        local_log_timestamp().unwrap_or_else(|| format!("unix-{}", unix_timestamp_millis()));
+    format!("runtime.{timestamp}.log")
+}
+
+fn local_log_timestamp() -> Option<String> {
+    let now = OffsetDateTime::now_local().ok()?;
+    let format =
+        format_description!("[year]-[month]-[day]_[hour]-[minute]-[second].[subsecond digits:3]");
+    now.format(&format).ok()
+}
+
+fn unix_timestamp_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_millis())
+        .unwrap_or_default()
 }

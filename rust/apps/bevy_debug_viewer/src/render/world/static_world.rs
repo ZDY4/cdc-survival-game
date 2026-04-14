@@ -439,8 +439,11 @@ fn shared_box_spec_to_viewer_box_spec(
     spec: shared_static_world::StaticWorldBoxSpec,
 ) -> StaticWorldBoxSpec {
     let pick_binding = spec.semantic.as_ref().map(shared_semantic_to_binding);
-    let outline_target =
-        shared_box_outline_target(spec.material_role, pick_binding.as_ref(), spec.semantic.as_ref());
+    let outline_target = shared_box_outline_target(
+        spec.material_role,
+        pick_binding.as_ref(),
+        spec.semantic.as_ref(),
+    );
     StaticWorldBoxSpec {
         size: spec.size,
         translation: spec.translation,
@@ -564,7 +567,8 @@ pub(crate) fn collect_static_world_box_specs(
     _grid_to_world: impl FnMut(GridCoord) -> game_data::WorldCoord,
 ) -> Vec<StaticWorldBoxSpec> {
     let scene = shared_scene(snapshot, current_level, render_config, bounds);
-    scene.boxes
+    scene
+        .boxes
         .into_iter()
         .chain(scene.pick_proxies)
         .map(|spec| shared_box_spec_for_collection(spec, palette))
@@ -737,7 +741,8 @@ fn shared_box_spec_for_collection(
     spec: shared_static_world::StaticWorldBoxSpec,
     palette: &ViewerPalette,
 ) -> StaticWorldBoxSpec {
-    let outline_target = shared_box_outline_target(spec.material_role, None, spec.semantic.as_ref());
+    let outline_target =
+        shared_box_outline_target(spec.material_role, None, spec.semantic.as_ref());
     StaticWorldBoxSpec {
         size: spec.size,
         translation: spec.translation,

@@ -1,5 +1,5 @@
 //! 外观页。
-//! 负责显示当前外观预览结果和试装槽位，不参与 AI 预览逻辑。
+//! 负责显示当前外观预览结果和全部试装槽位，不参与 AI 预览逻辑。
 
 use bevy_egui::egui;
 use game_data::CharacterDefinition;
@@ -19,6 +19,8 @@ pub(crate) fn render_appearance_tab(
     preview_state: &mut PreviewState,
     preview_camera: &mut PreviewCameraController,
 ) {
+    let mut pending_try_on_change: Option<(String, Option<u32>)> = None;
+
     key_value(ui, "外观配置", non_empty(&character.appearance_profile_id));
     if let Some(preview) = preview_state.resolved_preview.as_ref() {
         key_value(ui, "基础模型", &preview.base_model_asset);
@@ -36,58 +38,54 @@ pub(crate) fn render_appearance_tab(
         ui.colored_label(egui::Color32::from_rgb(240, 110, 110), error);
     }
     ui.separator();
-    ui.horizontal(|ui| {
-        ui.label("当前槽位");
-        egui::ComboBox::from_id_salt("appearance_slot")
-            .selected_text(&ui_state.selected_slot)
-            .show_ui(ui, |ui| {
-                for slot in data.item_catalog_by_slot.keys() {
-                    ui.selectable_value(&mut ui_state.selected_slot, slot.clone(), slot);
-                }
-            });
-    });
-    if let Some(items) = data.item_catalog_by_slot.get(&ui_state.selected_slot) {
-        let selected_text = ui_state
-            .try_on
-            .get(&ui_state.selected_slot)
-            .and_then(|item_id| items.iter().find(|item| item.id == *item_id))
+    if data.item_catalog_by_slot.is_empty() {
+        ui.small("当前仓库没有可试装的装备槽位。");
+    }
+
+    for (slot, items) in &data.item_catalog_by_slot {
+        let selected_item_id = ui_state.try_on.get(slot).copied();
+        let selected_text = selected_item_id
+            .and_then(|item_id| items.iter().find(|item| item.id == item_id))
             .map(|item| format!("{} [{}]", item.name, item.id))
             .unwrap_or_else(|| "未装备".to_string());
-        egui::ComboBox::from_id_salt("appearance_choice")
-            .selected_text(selected_text)
-            .show_ui(ui, |ui| {
-                if ui
-                    .add_sized(
-                        [ui.available_width(), 0.0],
-                        egui::Button::new("未装备")
-                            .selected(!ui_state.try_on.contains_key(&ui_state.selected_slot))
-                            .truncate(),
-                    )
-                    .clicked()
-                {
-                    ui_state.try_on.remove(&ui_state.selected_slot);
-                    refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
-                }
-                for item in items {
-                    let label = format!("{} [{}]", item.name, item.id);
+
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new(slot).strong());
+            egui::ComboBox::from_id_salt(("appearance_choice", slot))
+                .selected_text(selected_text)
+                .width(ui.available_width())
+                .show_ui(ui, |ui| {
                     if ui
-                        .add_sized(
-                            [ui.available_width(), 0.0],
-                            egui::Button::new(label.as_str())
-                                .selected(
-                                    ui_state.try_on.get(&ui_state.selected_slot) == Some(&item.id),
-                                )
-                                .truncate(),
-                        )
-                        .on_hover_text(label)
+                        .selectable_label(selected_item_id.is_none(), "未装备")
                         .clicked()
                     {
-                        ui_state
-                            .try_on
-                            .insert(ui_state.selected_slot.clone(), item.id);
-                        refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
+                        pending_try_on_change = Some((slot.clone(), None));
                     }
-                }
-            });
+                    for item in items {
+                        let label = format!("{} [{}]", item.name, item.id);
+                        if ui
+                            .selectable_label(selected_item_id == Some(item.id), label.as_str())
+                            .on_hover_text(label)
+                            .clicked()
+                        {
+                            pending_try_on_change = Some((slot.clone(), Some(item.id)));
+                        }
+                    }
+                });
+        });
+        ui.add_space(6.0);
+    }
+
+    if let Some((slot, item_id)) = pending_try_on_change {
+        match item_id {
+            Some(item_id) => {
+                ui_state.try_on.insert(slot, item_id);
+            }
+            None => {
+                ui_state.try_on.remove(&slot);
+            }
+        }
+        refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
     }
 }

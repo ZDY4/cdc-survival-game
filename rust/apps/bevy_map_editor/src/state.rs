@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use game_bevy::world_render::WorldRenderConfig;
 use game_data::{
     load_map_library, load_overworld_library, load_world_tile_library, GridCoord, MapDefinition,
-    MapEditDiagnostic, MapEditorService, MapId, OverworldLibrary, WorldTileLibrary,
+    MapEditDiagnostic, MapEditorService, MapId, OverworldId, OverworldLibrary, WorldTileLibrary,
 };
 use game_editor::ai_chat::{AiChatState, AiChatWorkerState};
 
@@ -120,6 +120,12 @@ pub(crate) enum LibraryView {
     Overworlds,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EditorViewportTarget {
+    Map { map_id: String, level: i32 },
+    Overworld { overworld_id: String },
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct WorkingMapDocument {
     pub(crate) original_id: Option<MapId>,
@@ -145,6 +151,7 @@ pub(crate) struct EditorState {
     pub(crate) status: String,
     pub(crate) scene_dirty: bool,
     pub(crate) scene_revision: u64,
+    pub(crate) last_rendered_target: Option<EditorViewportTarget>,
 }
 
 pub(crate) fn load_editor_state() -> EditorState {
@@ -190,6 +197,82 @@ pub(crate) fn load_editor_state() -> EditorState {
         status: "Loaded map and overworld content.".to_string(),
         scene_dirty: true,
         scene_revision: 0,
+        last_rendered_target: None,
+    }
+}
+
+impl EditorState {
+    pub(crate) fn desired_viewport_target(&self) -> Option<EditorViewportTarget> {
+        match self.selected_view {
+            LibraryView::Maps => {
+                let map_id = self.selected_map_id.as_ref()?;
+                self.maps.get(map_id)?;
+                Some(EditorViewportTarget::Map {
+                    map_id: map_id.clone(),
+                    level: self.current_map_level,
+                })
+            }
+            LibraryView::Overworlds => {
+                let overworld_id = self.selected_overworld_id.as_ref()?;
+                self.overworld_library
+                    .get(&OverworldId(overworld_id.clone()))?;
+                Some(EditorViewportTarget::Overworld {
+                    overworld_id: overworld_id.clone(),
+                })
+            }
+        }
+    }
+
+    pub(crate) fn request_scene_rebuild(&mut self) {
+        self.scene_dirty = true;
+    }
+
+    pub(crate) fn set_selected_view(&mut self, view: LibraryView) {
+        if self.selected_view != view {
+            self.selected_view = view;
+            self.request_scene_rebuild();
+        }
+    }
+
+    pub(crate) fn update_map_selection(&mut self, map_id: String, level: i32) {
+        self.selected_map_id = Some(map_id);
+        self.current_map_level = level;
+        self.request_scene_rebuild();
+    }
+
+    pub(crate) fn show_map(&mut self, map_id: String, level: i32) {
+        self.selected_view = LibraryView::Maps;
+        self.update_map_selection(map_id, level);
+    }
+
+    pub(crate) fn update_overworld_selection(&mut self, overworld_id: String) {
+        self.selected_overworld_id = Some(overworld_id);
+        self.request_scene_rebuild();
+    }
+
+    pub(crate) fn restore_selection_after_reload(
+        &mut self,
+        previous_selected_map: Option<String>,
+        previous_selected_overworld: Option<String>,
+    ) {
+        self.selected_map_id = previous_selected_map
+            .filter(|id| self.maps.contains_key(id))
+            .or_else(|| self.maps.keys().next().cloned());
+        self.selected_overworld_id = previous_selected_overworld
+            .filter(|id| self.overworld_library.get(&OverworldId(id.clone())).is_some())
+            .or_else(|| {
+                self.overworld_library
+                    .iter()
+                    .next()
+                    .map(|(id, _)| id.as_str().to_string())
+            });
+        self.current_map_level = self
+            .selected_map_id
+            .as_ref()
+            .and_then(|id| self.maps.get(id))
+            .map(|document| document.definition.default_level)
+            .unwrap_or(0);
+        self.request_scene_rebuild();
     }
 }
 

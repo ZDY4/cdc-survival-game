@@ -12,8 +12,6 @@ use game_bevy::{
     NpcLifePlugin, NpcLifeUpdateSet, RuntimeContentPlugin, RuntimeLogSettings,
     SettlementSimulationPlugin, SpawnCharacterRequest,
 };
-use time::macros::format_description;
-use time::OffsetDateTime;
 
 use crate::bootstrap::load_viewer_bootstrap;
 use crate::console::{
@@ -58,8 +56,7 @@ use crate::state::{
 };
 
 pub(crate) fn run() {
-    let log_settings = RuntimeLogSettings::new("bevy_debug_viewer")
-        .with_file_name(single_run_viewer_log_file_name());
+    let log_settings = RuntimeLogSettings::new("bevy_debug_viewer").with_single_run_file();
     if let Err(error) = init_runtime_logging(&log_settings) {
         eprintln!("failed to initialize bevy_debug_viewer logging: {error}");
     }
@@ -362,24 +359,4 @@ fn configure_runtime_gameplay_content(
         &shops,
         &overworld,
     );
-}
-
-fn single_run_viewer_log_file_name() -> String {
-    let timestamp =
-        local_log_timestamp().unwrap_or_else(|| format!("unix-{}", unix_timestamp_millis()));
-    format!("runtime.{timestamp}.log")
-}
-
-fn local_log_timestamp() -> Option<String> {
-    let now = OffsetDateTime::now_local().ok()?;
-    let format =
-        format_description!("[year]-[month]-[day]_[hour]-[minute]-[second].[subsecond digits:3]");
-    now.format(&format).ok()
-}
-
-fn unix_timestamp_millis() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_millis())
-        .unwrap_or_default()
 }

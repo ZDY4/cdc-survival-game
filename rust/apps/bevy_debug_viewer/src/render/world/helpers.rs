@@ -132,12 +132,8 @@ pub(crate) fn spawn_static_cuboid(
     color: Color,
     material_style: MaterialStyle,
 ) -> Entity {
-    let material_handle = make_static_world_material(
-        materials,
-        building_wall_materials,
-        color,
-        material_style,
-    );
+    let material_handle =
+        make_static_world_material(materials, building_wall_materials, color, material_style);
     let StaticWorldMaterialHandle::Standard(material) = material_handle else {
         unreachable!("static cuboids should not use building wall grid materials");
     };

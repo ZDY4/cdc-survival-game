@@ -2201,62 +2201,164 @@ fn infer_questions_from_text(text: String) -> Vec<AgentQuestion> {
 }
 
 fn infer_options_from_text(text: String) -> Vec<AgentOption> {
-    let mut options = Vec::new();
-    for raw_line in text.lines() {
-        let normalized = strip_plan_step_prefix(raw_line)
-            .trim_matches(['-', '*', '•', ' '])
-            .trim()
-            .to_string();
-        if normalized.is_empty() || normalized.contains('？') || normalized.contains('?') {
-            continue;
-        }
-        let has_list_prefix = raw_line.trim_start().starts_with('-')
-            || raw_line.trim_start().starts_with('*')
-            || raw_line.trim_start().starts_with('•')
-            || raw_line
-                .trim_start()
-                .chars()
-                .next()
-                .map(|ch| ch.is_ascii_digit())
-                .unwrap_or(false);
-        if !has_list_prefix {
-            continue;
-        }
-        let mut parts = normalized.splitn(2, ['：', ':', '-', ' ']);
-        let first = parts.next().unwrap_or_default().trim();
-        let rest = parts.next().unwrap_or_default().trim();
-        let label = if first.len() >= 4 && first.len() <= 24 {
-            first.to_string()
+    let line_based = text
+        .lines()
+        .filter_map(|raw_line| {
+            let has_list_prefix = raw_line.trim_start().starts_with('-')
+                || raw_line.trim_start().starts_with('*')
+                || raw_line.trim_start().starts_with('•')
+                || raw_line
+                    .trim_start()
+                    .chars()
+                    .next()
+                    .map(|ch| ch.is_ascii_digit())
+                    .unwrap_or(false);
+            if !has_list_prefix {
+                return None;
+            }
+            build_option_from_candidate(raw_line)
+        })
+        .collect::<Vec<_>>();
+    let line_based = normalize_inferred_options(line_based);
+    if line_based.len() >= 2 {
+        return line_based;
+    }
+
+    let inline_segments = split_inline_numbered_segments(&text);
+    let inline_options = normalize_inferred_options(
+        inline_segments
+        .iter()
+        .filter_map(|segment| build_option_from_candidate(segment))
+        .collect::<Vec<_>>(),
+    );
+    if inline_options.len() >= 2 {
+        return inline_options;
+    }
+
+    Vec::new()
+}
+
+fn build_option_from_candidate(raw_text: &str) -> Option<AgentOption> {
+    let normalized = strip_plan_step_prefix(raw_text)
+        .trim_matches(['-', '*', '•', ' '])
+        .trim()
+        .to_string();
+    if normalized.is_empty() || normalized.contains('？') || normalized.contains('?') {
+        return None;
+    }
+
+    let mut parts = normalized.splitn(2, ['：', ':', '-', ' ']);
+    let first = parts.next().unwrap_or_default().trim();
+    let rest = parts.next().unwrap_or_default().trim();
+    let label = if first.len() >= 4 && first.len() <= 24 {
+        first.to_string()
+    } else {
+        normalized.chars().take(24).collect::<String>()
+    };
+    if label.is_empty() {
+        return None;
+    }
+
+    Some(AgentOption {
+        id: String::new(),
+        label,
+        description: if rest.is_empty() {
+            normalized.clone()
         } else {
-            normalized.chars().take(24).collect::<String>()
-        };
-        if label.is_empty()
-            || options
-                .iter()
-                .any(|option: &AgentOption| option.label == label)
+            rest.to_string()
+        },
+        followup_prompt: normalized,
+    })
+}
+
+fn split_inline_numbered_segments(text: &str) -> Vec<String> {
+    let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.is_empty() {
+        return Vec::new();
+    }
+
+    let chars = compact.char_indices().collect::<Vec<_>>();
+    let mut starts = Vec::new();
+    let mut index = 0;
+    while index < chars.len() {
+        let (byte_index, ch) = chars[index];
+        if !ch.is_ascii_digit() {
+            index += 1;
+            continue;
+        }
+        if index > 0
+            && !matches!(
+                chars[index - 1].1,
+                ' ' | '\n' | '\r' | '\t' | '。' | '！' | '？' | ';' | '；'
+            )
+        {
+            index += 1;
+            continue;
+        }
+
+        let mut marker_index = index + 1;
+        while marker_index < chars.len() && chars[marker_index].1.is_ascii_digit() {
+            marker_index += 1;
+        }
+        if marker_index >= chars.len() {
+            break;
+        }
+
+        let marker = chars[marker_index].1;
+        if !matches!(marker, '.' | '、' | ')' | '）' | ':' | '：') {
+            index = marker_index;
+            continue;
+        }
+
+        let after_marker = chars.get(marker_index + 1).map(|(_, next)| *next);
+        if !after_marker.is_some_and(|next| next.is_whitespace()) {
+            index = marker_index + 1;
+            continue;
+        }
+
+        starts.push(byte_index);
+        index = marker_index + 1;
+    }
+
+    if starts.len() < 2 {
+        return Vec::new();
+    }
+
+    starts
+        .iter()
+        .enumerate()
+        .filter_map(|(position, start)| {
+            let end = starts
+                .get(position + 1)
+                .copied()
+                .unwrap_or_else(|| compact.len());
+            compact
+                .get(*start..end)
+                .map(str::trim)
+                .filter(|segment| !segment.is_empty())
+                .map(ToString::to_string)
+        })
+        .collect()
+}
+
+fn normalize_inferred_options(options: Vec<AgentOption>) -> Vec<AgentOption> {
+    let mut normalized = Vec::new();
+    for option in options {
+        if normalized
+            .iter()
+            .any(|existing: &AgentOption| existing.label == option.label)
         {
             continue;
         }
-        options.push(AgentOption {
-            id: format!("option-{}", options.len() + 1),
-            label: label.clone(),
-            description: if rest.is_empty() {
-                normalized.clone()
-            } else {
-                rest.to_string()
-            },
-            followup_prompt: normalized,
+        normalized.push(AgentOption {
+            id: format!("option-{}", normalized.len() + 1),
+            ..option
         });
-        if options.len() >= 4 {
+        if normalized.len() >= 4 {
             break;
         }
     }
-
-    if options.len() < 2 {
-        Vec::new()
-    } else {
-        options
-    }
+    normalized
 }
 
 fn parse_plan_step_line(line: &str) -> Option<String> {
@@ -3601,6 +3703,33 @@ mod tests {
         assert_eq!(options.len(), 3);
         assert_eq!(options[0].label, "医院调查线");
         assert!(options[1].description.contains("旧砖秘密"));
+    }
+
+    #[test]
+    fn read_agent_options_can_infer_from_inline_numbered_paragraph() {
+        let payload = json!({
+            "assistant_message": "1. 暗线深挖方向：聚焦灾变起源的隐藏逻辑，结合现有阴谋线索，补全超深地下工程的真相。2. 玩法落地方向：对接游戏开发需求，把相移污染层级与任务系统做绑定。3. 角色剧情方向：围绕陈医生、商人老王等核心角色扩展个人背景与支线剧情。"
+        });
+        let options = read_agent_options(payload.as_object().unwrap());
+        assert_eq!(options.len(), 3);
+        assert_eq!(options[0].label, "暗线深挖方向");
+        assert!(options[1].description.contains("任务系统"));
+        assert_eq!(options[2].id, "option-3");
+    }
+
+    #[test]
+    fn resolve_turn_kind_keeps_explicit_options_when_inferred_options_exist() {
+        let payload = json!({
+            "turn_kind": "options",
+            "assistant_message": "1. 暗线深挖方向：聚焦灾变起源的隐藏逻辑，结合现有阴谋线索。2. 玩法落地方向：把污染机制与关卡、任务、生存玩法绑定。3. 角色剧情方向：扩展核心角色的秘密与支线。"
+        });
+        let object = payload.as_object().unwrap();
+        let options = read_agent_options(object);
+        let resolution = resolve_turn_kind(object, "", &[], &options, &[]);
+        assert_eq!(options.len(), 3);
+        assert_eq!(resolution.kind, "options");
+        assert_eq!(resolution.source, "explicit");
+        assert!(resolution.correction.is_none());
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::log::{info, warn};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use game_data::{
@@ -71,10 +72,12 @@ pub(crate) fn editor_ui_system(
                 if ui.button("Reload").clicked() {
                     ai.clear_result();
                     editor.status = reload_editor_content(&mut editor);
+                    sync_camera_target_to_selected_view(&editor, &mut orbit_camera);
                     ui.close();
                 }
                 if ui.button("Save Current").clicked() {
                     editor.status = save_current_map(&mut editor).unwrap_or_else(|error| error);
+                    sync_camera_target_to_selected_view(&editor, &mut orbit_camera);
                     ui.close();
                 }
                 if ui.button("Validate Current").clicked() {
@@ -172,96 +175,110 @@ pub(crate) fn editor_ui_system(
     egui::SidePanel::left("library")
         .default_width(320.0)
         .show(ctx, |ui| {
+            let mut requested_view = editor.selected_view;
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut editor.selected_view, LibraryView::Maps, "Maps");
+                ui.selectable_value(&mut requested_view, LibraryView::Maps, "Maps");
                 ui.selectable_value(
-                    &mut editor.selected_view,
+                    &mut requested_view,
                     LibraryView::Overworlds,
                     "Overworlds",
                 );
             });
+            if requested_view != editor.selected_view {
+                editor.set_selected_view(requested_view);
+                sync_camera_target_to_selected_view(&editor, &mut orbit_camera);
+            }
             ui.text_edit_singleline(&mut editor.search_text);
             let query = editor.search_text.trim().to_lowercase();
-            egui::ScrollArea::vertical().show(ui, |ui| match editor.selected_view {
-                LibraryView::Maps => {
-                    let items = editor
-                        .maps
-                        .iter()
-                        .map(|(map_id, doc)| {
-                            (
-                                map_id.clone(),
-                                doc.definition.name.clone(),
-                                doc.definition.default_level,
-                                doc.dirty,
-                                !doc.diagnostics.is_empty(),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    for (map_id, name, default_level, dirty, has_diagnostics) in items {
-                        if !query.is_empty()
-                            && !map_id.to_lowercase().contains(&query)
-                            && !name.to_lowercase().contains(&query)
-                        {
-                            continue;
-                        }
-                        let label = map_library_item_label(&map_id, &name, dirty, has_diagnostics);
-                        if ui
-                            .add_sized(
-                                [ui.available_width(), 0.0],
-                                egui::Button::new(label.as_str())
-                                    .selected(
-                                        editor.selected_map_id.as_deref() == Some(map_id.as_str()),
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
+                    match editor.selected_view {
+                        LibraryView::Maps => {
+                            let items = editor
+                                .maps
+                                .iter()
+                                .map(|(map_id, doc)| {
+                                    (
+                                        map_id.clone(),
+                                        doc.definition.name.clone(),
+                                        doc.definition.default_level,
+                                        doc.dirty,
+                                        !doc.diagnostics.is_empty(),
                                     )
-                                    .truncate(),
-                            )
-                            .on_hover_text(label)
-                            .clicked()
-                        {
-                            let already_selected =
-                                editor.selected_map_id.as_deref() == Some(map_id.as_str());
-                            if !already_selected {
-                                editor.selected_map_id = Some(map_id.clone());
-                                editor.current_map_level = default_level;
-                                editor.scene_dirty = true;
-                                if let Some(doc) = editor.maps.get(&map_id) {
-                                    orbit_camera.target = map_focus_target(&doc.definition);
+                                })
+                                .collect::<Vec<_>>();
+                            for (map_id, name, default_level, dirty, has_diagnostics) in items {
+                                if !query.is_empty()
+                                    && !map_id.to_lowercase().contains(&query)
+                                    && !name.to_lowercase().contains(&query)
+                                {
+                                    continue;
+                                }
+                                let label =
+                                    map_library_item_label(&map_id, &name, dirty, has_diagnostics);
+                                if ui
+                                    .add_sized(
+                                        [ui.available_width(), 0.0],
+                                        egui::Button::new(label.as_str())
+                                            .selected(
+                                                editor.selected_map_id.as_deref()
+                                                    == Some(map_id.as_str()),
+                                            )
+                                            .truncate(),
+                                    )
+                                    .on_hover_text(label)
+                                    .clicked()
+                                {
+                                    let level =
+                                        if editor.selected_map_id.as_deref() == Some(map_id.as_str())
+                                        {
+                                            editor.current_map_level
+                                        } else {
+                                            default_level
+                                        };
+                                    editor.update_map_selection(map_id.clone(), level);
+                                    sync_camera_target_to_selected_view(
+                                        &editor,
+                                        &mut orbit_camera,
+                                    );
+                                }
+                            }
+                        }
+                        LibraryView::Overworlds => {
+                            let items = editor
+                                .overworld_library
+                                .iter()
+                                .map(|(id, def)| {
+                                    (id.as_str().to_string(), def.locations.len(), def.clone())
+                                })
+                                .collect::<Vec<_>>();
+                            for (overworld_id, locations, definition) in items {
+                                if !query.is_empty()
+                                    && !overworld_id.to_lowercase().contains(&query)
+                                {
+                                    continue;
+                                }
+                                let label = format!("{overworld_id} · {locations} locations");
+                                if ui
+                                    .add_sized(
+                                        [ui.available_width(), 0.0],
+                                        egui::Button::new(label.as_str())
+                                            .selected(
+                                                editor.selected_overworld_id.as_deref()
+                                                    == Some(overworld_id.as_str()),
+                                            )
+                                            .truncate(),
+                                    )
+                                    .on_hover_text(label)
+                                    .clicked()
+                                {
+                                    editor.update_overworld_selection(overworld_id.clone());
+                                    orbit_camera.target = overworld_focus_target(&definition);
                                 }
                             }
                         }
                     }
-                }
-                LibraryView::Overworlds => {
-                    let items = editor
-                        .overworld_library
-                        .iter()
-                        .map(|(id, def)| {
-                            (id.as_str().to_string(), def.locations.len(), def.clone())
-                        })
-                        .collect::<Vec<_>>();
-                    for (overworld_id, locations, definition) in items {
-                        if !query.is_empty() && !overworld_id.to_lowercase().contains(&query) {
-                            continue;
-                        }
-                        let label = format!("{overworld_id} · {locations} locations");
-                        if ui
-                            .add_sized(
-                                [ui.available_width(), 0.0],
-                                egui::Button::new(label.as_str())
-                                    .selected(
-                                        editor.selected_overworld_id.as_deref()
-                                            == Some(overworld_id.as_str()),
-                                    )
-                                    .truncate(),
-                            )
-                            .on_hover_text(label)
-                            .clicked()
-                        {
-                            editor.selected_overworld_id = Some(overworld_id.clone());
-                            editor.scene_dirty = true;
-                            orbit_camera.target = overworld_focus_target(&definition);
-                        }
-                    }
-                }
+                });
             });
         });
 
@@ -312,8 +329,18 @@ pub(crate) fn editor_ui_system(
                             }
                             AiChatUiAction::Host(MapAiUiAction::ApplyProposal) => {
                                 if let Some(proposal) = ai.result.as_ref() {
-                                    editor.status = apply_prepared_proposal(&mut editor, proposal)
-                                        .unwrap_or_else(|error| error);
+                                    match apply_prepared_proposal(&mut editor, proposal) {
+                                        Ok(status) => {
+                                            editor.status = status;
+                                            sync_camera_target_to_selected_view(
+                                                &editor,
+                                                &mut orbit_camera,
+                                            );
+                                        }
+                                        Err(error) => {
+                                            editor.status = error;
+                                        }
+                                    }
                                 }
                             }
                             AiChatUiAction::SaveSettings | AiChatUiAction::TestConnection => {}
@@ -409,6 +436,7 @@ fn editor_top_summary(editor: &EditorState) -> String {
 
 fn reload_editor_content(editor: &mut EditorState) -> String {
     if editor.maps.values().any(|document| document.dirty) {
+        warn!("map editor reload blocked: dirty drafts exist");
         return "Save or discard dirty map drafts before reloading content.".to_string();
     }
 
@@ -423,39 +451,34 @@ fn reload_editor_content(editor: &mut EditorState) -> String {
             let previous_selected_overworld = editor.selected_overworld_id.clone();
             editor.maps = build_working_maps(&editor.map_service, &map_library);
             editor.overworld_library = overworld_library;
-            editor.selected_map_id = previous_selected_map
-                .filter(|id| editor.maps.contains_key(id))
-                .or_else(|| editor.maps.keys().next().cloned());
-            editor.selected_overworld_id = previous_selected_overworld
-                .filter(|id| {
-                    editor
-                        .overworld_library
-                        .get(&OverworldId(id.clone()))
-                        .is_some()
-                })
-                .or_else(|| {
-                    editor
-                        .overworld_library
-                        .iter()
-                        .next()
-                        .map(|(id, _)| id.as_str().to_string())
-                });
-            editor.current_map_level = editor
-                .selected_map_id
-                .as_ref()
-                .and_then(|id| editor.maps.get(id))
-                .map(|document| document.definition.default_level)
-                .unwrap_or(0);
-            editor.scene_dirty = true;
+            editor.restore_selection_after_reload(
+                previous_selected_map,
+                previous_selected_overworld,
+            );
+            info!(
+                "map editor reloaded content: maps={}, overworlds={}",
+                editor.maps.len(),
+                editor.overworld_library.len()
+            );
             format!(
                 "Reloaded {} maps and {} overworld documents.",
                 editor.maps.len(),
                 editor.overworld_library.len()
             )
         }
-        (Err(map_error), Ok(_)) => format!("Failed to reload maps: {map_error}"),
-        (Ok(_), Err(overworld_error)) => format!("Failed to reload overworlds: {overworld_error}"),
+        (Err(map_error), Ok(_)) => {
+            warn!("map editor reload failed for maps: {map_error}");
+            format!("Failed to reload maps: {map_error}")
+        }
+        (Ok(_), Err(overworld_error)) => {
+            warn!("map editor reload failed for overworlds: {overworld_error}");
+            format!("Failed to reload overworlds: {overworld_error}")
+        }
         (Err(map_error), Err(overworld_error)) => {
+            warn!(
+                "map editor reload failed: maps={}, overworlds={}",
+                map_error, overworld_error
+            );
             format!("Failed to reload content. maps={map_error}; overworld={overworld_error}")
         }
     }
@@ -471,6 +494,11 @@ fn refresh_current_map_diagnostics(editor: &mut EditorState) -> Result<String, S
         .get_mut(&selected_map_id)
         .ok_or_else(|| "Selected map is no longer loaded.".to_string())?;
     document.diagnostics = validate_document(&editor.map_service, &document.definition);
+    info!(
+        "map editor validated map: map_id={}, diagnostics={}",
+        selected_map_id,
+        document.diagnostics.len()
+    );
     Ok(format!(
         "Validated map {} ({} diagnostic entries).",
         selected_map_id,
@@ -479,6 +507,7 @@ fn refresh_current_map_diagnostics(editor: &mut EditorState) -> Result<String, S
 }
 
 fn save_current_map(editor: &mut EditorState) -> Result<String, String> {
+    let preserved_level = editor.current_map_level;
     let selected_map_id = editor
         .selected_map_id
         .clone()
@@ -505,9 +534,35 @@ fn save_current_map(editor: &mut EditorState) -> Result<String, String> {
         editor.maps.remove(&selected_map_id);
     }
     editor.maps.insert(next_map_id.clone(), next_document);
-    editor.selected_map_id = Some(next_map_id.clone());
-    editor.scene_dirty = true;
+    editor.update_map_selection(next_map_id.clone(), preserved_level);
+    info!("map editor saved map: map_id={next_map_id}");
     Ok(format!("Saved map {}.", map_display_name(&next_map_id)))
+}
+
+fn sync_camera_target_to_selected_view(editor: &EditorState, orbit_camera: &mut OrbitCameraState) {
+    match editor.selected_view {
+        LibraryView::Maps => {
+            let Some(selected_map_id) = editor.selected_map_id.as_ref() else {
+                return;
+            };
+            let Some(document) = editor.maps.get(selected_map_id) else {
+                return;
+            };
+            orbit_camera.target = map_focus_target(&document.definition);
+        }
+        LibraryView::Overworlds => {
+            let Some(selected_overworld_id) = editor.selected_overworld_id.as_ref() else {
+                return;
+            };
+            let Some(definition) = editor
+                .overworld_library
+                .get(&OverworldId(selected_overworld_id.clone()))
+            else {
+                return;
+            };
+            orbit_camera.target = overworld_focus_target(definition);
+        }
+    }
 }
 
 fn current_fps_label(diagnostics: &DiagnosticsStore) -> String {

@@ -44,6 +44,8 @@ pub struct PreviewCameraController {
     pub orbit: PreviewOrbitCamera,
     pub focus_anchor: Vec3,
     pub viewport_rect: Option<PreviewViewportRect>,
+    pub rotate_drag_active: bool,
+    pub pan_drag_active: bool,
     pub pitch_min: f32,
     pub pitch_max: f32,
     pub radius_min: f32,
@@ -62,6 +64,8 @@ impl Default for PreviewCameraController {
             orbit,
             focus_anchor: orbit.focus,
             viewport_rect: None,
+            rotate_drag_active: false,
+            pan_drag_active: false,
             pitch_min: -1.2,
             pitch_max: 0.72,
             radius_min: 0.5,
@@ -109,16 +113,28 @@ pub fn preview_camera_input_system(
         mouse_wheel.clear();
         return;
     };
+
+    if !mouse_buttons.pressed(MouseButton::Left) {
+        controller.rotate_drag_active = false;
+    }
+    if !mouse_buttons.pressed(MouseButton::Right) {
+        controller.pan_drag_active = false;
+    }
+
     let Some(viewport) = controller.viewport_rect else {
-        return;
-    };
-    let Some(cursor) = window.cursor_position() else {
-        return;
-    };
-    if !viewport.contains(cursor) {
         mouse_motion.clear();
         mouse_wheel.clear();
         return;
+    };
+    let cursor_in_viewport = window
+        .cursor_position()
+        .is_some_and(|cursor| viewport.contains(cursor));
+
+    if mouse_buttons.just_pressed(MouseButton::Left) {
+        controller.rotate_drag_active = cursor_in_viewport;
+    }
+    if mouse_buttons.just_pressed(MouseButton::Right) {
+        controller.pan_drag_active = cursor_in_viewport;
     }
 
     let pitch_min = controller.pitch_min.min(controller.pitch_max);
@@ -130,12 +146,12 @@ pub fn preview_camera_input_system(
         .read()
         .fold(Vec2::ZERO, |acc, event| acc + event.delta);
 
-    if mouse_buttons.pressed(MouseButton::Left) {
+    if controller.rotate_drag_active && mouse_buttons.pressed(MouseButton::Left) {
         controller.orbit.yaw_radians -= total_mouse_delta.x * controller.rotate_speed_x;
         controller.orbit.pitch_radians = (controller.orbit.pitch_radians
             - total_mouse_delta.y * controller.rotate_speed_y)
             .clamp(pitch_min, pitch_max);
-    } else if mouse_buttons.pressed(MouseButton::Right) {
+    } else if controller.pan_drag_active && mouse_buttons.pressed(MouseButton::Right) {
         let mut transform = Transform::IDENTITY;
         apply_preview_orbit_camera(&mut transform, controller.orbit);
         let right = transform.right().as_vec3();
@@ -157,9 +173,13 @@ pub fn preview_camera_input_system(
         controller.clamp_focus();
     }
 
-    for event in mouse_wheel.read() {
-        controller.orbit.radius = (controller.orbit.radius - event.y * controller.zoom_speed)
-            .clamp(radius_min, radius_max);
+    if cursor_in_viewport {
+        for event in mouse_wheel.read() {
+            controller.orbit.radius = (controller.orbit.radius - event.y * controller.zoom_speed)
+                .clamp(radius_min, radius_max);
+        }
+    } else {
+        mouse_wheel.clear();
     }
 }
 

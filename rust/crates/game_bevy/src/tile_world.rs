@@ -548,13 +548,12 @@ fn push_surface_top_placement(
         return;
     };
     let scale = scale_surface_bounds(bounds, grid_size, bounds.size.y.max(0.001));
-    let height = scaled_surface_height(bounds, scale);
     let top_surface_y = floor_top + cell.elevation_steps as f32 * step_height;
     placements.push(TilePlacementSpec {
         prototype_id: prototype_id.clone(),
         translation: Vec3::new(
             (cell.grid.x as f32 + 0.5) * grid_size,
-            top_surface_y - height * 0.5,
+            top_surface_y - scaled_surface_local_max_y(bounds, scale),
             (cell.grid.z as f32 + 0.5) * grid_size,
         ),
         rotation: Quat::IDENTITY,
@@ -726,12 +725,11 @@ fn push_surface_vertical_placement(
     };
     let desired_height = (drop_steps as f32 * step_height).max(step_height);
     let scale = scale_surface_bounds(bounds, grid_size, desired_height);
-    let height = scaled_surface_height(bounds, scale);
     placements.push(TilePlacementSpec {
         prototype_id: prototype_id.clone(),
         translation: Vec3::new(
             (grid.x as f32 + 0.5) * grid_size,
-            top_surface_y - height * 0.5,
+            top_surface_y - scaled_surface_local_max_y(bounds, scale),
             (grid.z as f32 + 0.5) * grid_size,
         ),
         rotation,
@@ -792,8 +790,8 @@ fn scale_surface_bounds(bounds: &WorldTileBounds, grid_size: f32, desired_height
     )
 }
 
-fn scaled_surface_height(bounds: &WorldTileBounds, scale: Vec3) -> f32 {
-    bounds.size.y.abs().max(0.001) * scale.y.abs().max(0.001)
+fn scaled_surface_local_max_y(bounds: &WorldTileBounds, scale: Vec3) -> f32 {
+    (bounds.center.y + bounds.size.y * 0.5) * scale.y.abs().max(0.001)
 }
 
 fn scale_axis(target: f32, source: f32) -> f32 {
@@ -1024,6 +1022,80 @@ mod tests {
             .all(|placement| placement.render_class == TileRenderClass::Standard));
     }
 
+    #[test]
+    fn tactical_surface_resolver_aligns_bottom_anchored_tiles_to_surface_top() {
+        let temp_dir = create_temp_dir("tile_world_surface_alignment");
+        let catalog_path = temp_dir.join("surface.json");
+        fs::write(
+            &catalog_path,
+            serde_json::to_string_pretty(&json!({
+                "prototypes": [
+                    prototype_with_center_json("surface/ramp_east", 0.0, 0.055, 0.0, 1.0, 0.11, 1.0),
+                    prototype_with_center_json("surface/cliff_side", 0.0, 0.5, 0.42, 1.0, 1.0, 0.16)
+                ],
+                "surface_sets": [
+                    {
+                        "id": "test_surface/basic",
+                        "flat_top_prototype_id": "surface/ramp_east",
+                        "ramp_top_prototype_ids": {
+                            "east": "surface/ramp_east"
+                        },
+                        "cliff_side_prototype_id": "surface/cliff_side"
+                    }
+                ]
+            }))
+            .expect("serialize catalog"),
+        )
+        .expect("write catalog");
+        let library = load_world_tile_library(&temp_dir).expect("load test tile library");
+
+        let definition = MapDefinition {
+            id: MapId("surface_alignment_map".into()),
+            name: "Surface Alignment Map".into(),
+            size: MapSize {
+                width: 2,
+                height: 1,
+            },
+            default_level: 0,
+            levels: vec![MapLevelDefinition {
+                y: 0,
+                cells: vec![MapCellDefinition {
+                    x: 0,
+                    z: 0,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    terrain: "embankment_ramp".into(),
+                    visual: Some(MapCellVisualSpec {
+                        surface_set_id: Some(WorldSurfaceTileSetId("test_surface/basic".into())),
+                        elevation_steps: 1,
+                        slope: TileSlopeKind::RampEast,
+                    }),
+                    extra: BTreeMap::new(),
+                }],
+            }],
+            entry_points: vec![MapEntryPointDefinition {
+                id: "default_entry".into(),
+                grid: GridCoord::new(0, 0, 0),
+                facing: None,
+                extra: BTreeMap::new(),
+            }],
+            objects: Vec::new(),
+        };
+
+        let placements = resolve_map_cell_surface_placements(&definition, 0, 0.11, 1.0, &library);
+        let ramp = placements
+            .iter()
+            .find(|placement| placement.prototype_id.as_str() == "surface/ramp_east")
+            .expect("ramp placement should exist");
+        let cliff = placements
+            .iter()
+            .find(|placement| placement.prototype_id.as_str() == "surface/cliff_side")
+            .expect("cliff placement should exist");
+
+        assert!((ramp.translation.y - 0.11).abs() < 0.0001);
+        assert!((cliff.translation.y - 0.11).abs() < 0.0001);
+    }
+
     fn map_cell_with_surface(
         x: u32,
         z: u32,
@@ -1046,6 +1118,18 @@ mod tests {
     }
 
     fn prototype_json(id: &str, size_x: f32, size_y: f32, size_z: f32) -> serde_json::Value {
+        prototype_with_center_json(id, 0.0, 0.0, 0.0, size_x, size_y, size_z)
+    }
+
+    fn prototype_with_center_json(
+        id: &str,
+        center_x: f32,
+        center_y: f32,
+        center_z: f32,
+        size_x: f32,
+        size_y: f32,
+        size_z: f32,
+    ) -> serde_json::Value {
         json!({
             "id": id,
             "source": {
@@ -1054,7 +1138,7 @@ mod tests {
                 "scene_index": 0
             },
             "bounds": {
-                "center": { "x": 0.0, "y": 0.0, "z": 0.0 },
+                "center": { "x": center_x, "y": center_y, "z": center_z },
                 "size": { "x": size_x, "y": size_y, "z": size_z }
             },
             "cast_shadows": true,

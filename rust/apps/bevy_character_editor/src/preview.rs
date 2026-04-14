@@ -1,6 +1,7 @@
 //! 预览协调层。
 //! 负责角色选择、外观预览、AI 预览和相机状态之间的同步与刷新。
 
+use bevy::log::{info, warn};
 use bevy::prelude::*;
 use game_data::{
     build_character_ai_preview, build_character_ai_preview_at_time,
@@ -9,7 +10,7 @@ use game_data::{
     SettlementLibrary,
 };
 use game_editor::{
-    character_preview_is_available, spawn_character_preview_scene, CharacterPreviewPart,
+    character_preview_is_available, spawn_character_preview_scene, CharacterPreviewRoot,
     PreviewCameraController, PreviewOrbitCamera,
 };
 
@@ -29,12 +30,12 @@ pub(crate) fn sync_preview_scene_system(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut preview_state: ResMut<PreviewState>,
-    existing_parts: Query<Entity, With<CharacterPreviewPart>>,
+    existing_roots: Query<Entity, With<CharacterPreviewRoot>>,
 ) {
     if preview_state.revision == preview_state.applied_revision {
         return;
     }
-    for entity in &existing_parts {
+    for entity in &existing_roots {
         commands.entity(entity).despawn();
     }
     if let Some(preview) = preview_state
@@ -81,14 +82,9 @@ pub(crate) fn select_character(
     preview_state: &mut PreviewState,
     preview_camera: &mut PreviewCameraController,
 ) {
+    info!("character editor selected character: {character_id}");
     ui_state.selected_character_id = Some(character_id);
     ui_state.try_on.clear();
-    ui_state.selected_slot = data
-        .item_catalog_by_slot
-        .keys()
-        .next()
-        .cloned()
-        .unwrap_or_else(|| "main_hand".to_string());
     ui_state.preview_context = selected_character(data, ui_state)
         .and_then(|character| default_context_for_character(character, data))
         .unwrap_or_else(default_preview_context);
@@ -111,6 +107,7 @@ pub(crate) fn refresh_preview_state(
 
     let Some(character) = selected_character(data, ui_state) else {
         ui_state.status = "未选择角色。".to_string();
+        warn!("character editor refresh skipped: no selected character");
         if reset_camera {
             preview_camera.set_orbit(PreviewOrbitCamera::default());
         }
@@ -130,6 +127,11 @@ pub(crate) fn refresh_preview_state(
                 preview_camera.set_orbit(orbit_for_preview(&preview));
             }
             if !character_preview_is_available(&preview) {
+                warn!(
+                    "character editor preview has no available model for character {}: {}",
+                    character.id.as_str(),
+                    preview.base_model_asset
+                );
                 preview_state.preview_notice = Some(format!(
                     "当前角色没有可用模型：{}",
                     preview.base_model_asset
@@ -138,6 +140,11 @@ pub(crate) fn refresh_preview_state(
             preview_state.resolved_preview = Some(preview);
         }
         Err(error) => {
+            warn!(
+                "character editor appearance preview failed for {}: {}",
+                character.id.as_str(),
+                error
+            );
             preview_state.appearance_error = Some(error.to_string());
         }
     }
@@ -154,14 +161,27 @@ pub(crate) fn refresh_preview_state(
                 preview_state.ai_preview = Some(preview);
             }
             Err(error) => {
+                warn!(
+                    "character editor ai preview failed for {}: {}",
+                    character.id.as_str(),
+                    error
+                );
                 preview_state.ai_error = Some(error.to_string());
             }
         }
     } else {
+        warn!(
+            "character editor ai preview unavailable for {}: ai library not loaded",
+            character.id.as_str()
+        );
         preview_state.ai_error = Some("AI 模块库未加载。".to_string());
     }
 
     ui_state.status = format!("已加载角色 {}", character.identity.display_name);
+    info!(
+        "character editor preview refreshed: {}",
+        character.identity.display_name
+    );
     preview_state.revision += 1;
 }
 

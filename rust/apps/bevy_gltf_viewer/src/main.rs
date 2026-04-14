@@ -4,18 +4,20 @@ use std::path::{Path, PathBuf};
 use bevy::asset::LoadState;
 use bevy::camera::primitives::MeshAabb;
 use bevy::camera::{CameraOutputMode, ClearColorConfig};
+use bevy::log::{info, warn, LogPlugin};
 use bevy::prelude::*;
 use bevy::render::render_resource::BlendState;
 use bevy_egui::{
     egui, EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext,
 };
-use game_bevy::rust_asset_dir;
+use game_bevy::{init_runtime_logging, rust_asset_dir, RuntimeLogSettings};
 use game_editor::{
-    apply_preview_orbit_camera, install_game_ui_fonts,
+    apply_preview_orbit_camera, build_persisted_primary_window, install_game_ui_fonts,
     preview_camera_input_system as shared_preview_camera_input_system,
     preview_camera_sync_system as shared_preview_camera_sync_system, replace_preview_scene,
     spawn_preview_floor, spawn_preview_light_rig, spawn_preview_scene_host,
     PreviewCameraController, PreviewFloor, PreviewOrbitCamera, PreviewViewportRect,
+    WindowSizePersistenceConfig, WindowSizePersistencePlugin,
 };
 
 const PREVIEW_BG: Color = Color::srgb(0.095, 0.105, 0.125);
@@ -25,15 +27,24 @@ const CAMERA_RADIUS_MAX: f32 = 18.0;
 const DEFAULT_MODEL_VIEWPORT_FILL: f32 = 0.5;
 
 fn main() {
+    let window_config =
+        WindowSizePersistenceConfig::new("bevy_gltf_viewer", 1600.0, 920.0, 1280.0, 720.0);
+    let log_settings = RuntimeLogSettings::new("bevy_gltf_viewer").with_single_run_file();
+    if let Err(error) = init_runtime_logging(&log_settings) {
+        eprintln!("failed to initialize bevy_gltf_viewer logging: {error}");
+    } else {
+        info!("bevy_gltf_viewer logger initialized");
+    }
     App::new()
         .add_plugins(
             DefaultPlugins
+                .build()
+                .disable::<LogPlugin>()
                 .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "CDC glTF Viewer".into(),
-                        resolution: (1600, 920).into(),
-                        ..default()
-                    }),
+                    primary_window: Some(build_persisted_primary_window(
+                        window_config.clone(),
+                        "CDC glTF Viewer",
+                    )),
                     ..default()
                 })
                 .set(AssetPlugin {
@@ -42,6 +53,7 @@ fn main() {
                 }),
         )
         .add_plugins(EguiPlugin::default())
+        .add_plugins(WindowSizePersistencePlugin::new(window_config))
         .insert_resource(ClearColor(PREVIEW_BG))
         .insert_resource(ModelCatalog::scan(&gltf_viewer_asset_dir()))
         .insert_resource(ViewerUiState::default())
@@ -219,6 +231,10 @@ fn setup_viewer(
     mut preview_state: ResMut<PreviewState>,
 ) {
     egui_global_settings.auto_create_primary_context = false;
+    info!(
+        "gltf viewer catalog loaded: {} model(s)",
+        catalog.entries.len()
+    );
 
     ui_state.selected_model_path = catalog
         .entries
@@ -253,6 +269,8 @@ fn setup_viewer(
             orbit: default_viewer_orbit(),
             focus_anchor: default_viewer_orbit().focus,
             viewport_rect: None,
+            rotate_drag_active: false,
+            pan_drag_active: false,
             pitch_min: -1.2,
             pitch_max: 0.72,
             radius_min: CAMERA_RADIUS_MIN,
@@ -438,6 +456,7 @@ fn sync_preview_scene_system(
         return;
     };
 
+    info!("gltf viewer selected model: {path}");
     let (_, handle) = replace_preview_scene(
         &mut commands,
         &asset_server,
@@ -464,6 +483,7 @@ fn refresh_preview_load_status_system(
 
     match load_state {
         LoadState::Failed(error) => {
+            warn!("gltf viewer failed to load model: {}", error);
             preview_state.load_status = PreviewLoadStatus::Failed(error.to_string());
         }
         LoadState::Loaded => {

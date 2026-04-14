@@ -1026,7 +1026,6 @@ fn scan_json_file_ids(path: &Path) -> Result<Vec<String>, ContentRegistryLoadErr
     Ok(ids)
 }
 
-
 fn value_to_string(value: &Value) -> Option<String> {
     match value {
         Value::String(text) => Some(text.trim().to_string()),

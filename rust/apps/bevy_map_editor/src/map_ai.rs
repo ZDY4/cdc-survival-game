@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use bevy::log::{info, warn};
 use bevy_egui::egui;
 use game_bevy::container_visuals::ContainerVisualRegistry;
 use game_data::{
@@ -15,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
-    state::{map_display_name, validate_document, EditorState, LibraryView, WorkingMapDocument},
+    state::{map_display_name, validate_document, EditorState, WorkingMapDocument},
     ui::draw_diagnostic,
 };
 
@@ -137,16 +138,19 @@ pub fn start_map_ai_generation(
 ) {
     let Some(selected_map_id) = editor.selected_map_id.clone() else {
         ai.provider_status = "No map selected.".to_string();
+        warn!("map editor ai generation aborted: no selected map");
         return;
     };
     let Some(document) = editor.maps.get(&selected_map_id) else {
         ai.provider_status = "Selected map is no longer available.".to_string();
+        warn!("map editor ai generation aborted: selected map missing");
         return;
     };
     let submission = match prepare_prompt_submission(ai) {
         Ok(submission) => submission,
         Err(error) => {
             ai.provider_status = error;
+            warn!("map editor ai generation aborted: invalid prompt submission");
             return;
         }
     };
@@ -161,6 +165,11 @@ pub fn start_map_ai_generation(
         &generation_context,
         &submission.conversation,
         &submission.prompt,
+    );
+    info!(
+        "map editor ai generation started: map_id={}, prompt_chars={}",
+        selected_map.id.as_str(),
+        submission.prompt.len()
     );
     start_generation_job(
         ai,
@@ -279,10 +288,14 @@ pub fn apply_prepared_proposal(
             last_save_message: None,
         },
     );
-    editor.selected_view = LibraryView::Maps;
-    editor.selected_map_id = Some(target_map_id.clone());
-    editor.current_map_level = prepared.definition.default_level;
-    editor.scene_dirty = true;
+    editor.show_map(target_map_id.clone(), prepared.definition.default_level);
+    info!(
+        "map editor applied ai proposal: target_map_id={}, operations={}, diagnostics={}, is_new_map={}",
+        target_map_id,
+        proposal.proposal.operations.len(),
+        prepared.diagnostics.len(),
+        prepared.is_new_map
+    );
     Ok(format!(
         "Applied proposal to preview map {}. Save to write JSON.",
         map_display_name(&target_map_id)
@@ -530,11 +543,21 @@ fn load_available_content(
 
 pub fn parse_map_generation_response(response: ProviderSuccess) -> Result<AiProposalView, String> {
     serde_json::from_value::<AiMapProposal>(response.payload)
-        .map(|proposal| AiProposalView {
-            raw_output: response.raw_text,
-            proposal,
+        .map(|proposal| {
+            info!(
+                "map editor ai generation completed: operations={}, warnings={}",
+                proposal.operations.len(),
+                proposal.warnings.len()
+            );
+            AiProposalView {
+                raw_output: response.raw_text,
+                proposal,
+            }
         })
-        .map_err(|error| format!("AI proposal schema invalid: {error}"))
+        .map_err(|error| {
+            warn!("map editor ai proposal schema invalid: {error}");
+            format!("AI proposal schema invalid: {error}")
+        })
 }
 
 pub fn prepare_proposal(

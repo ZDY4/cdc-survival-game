@@ -1,10 +1,10 @@
 use bevy::asset::uuid_handle;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
-use bevy::mesh::{Mesh3d, MeshVertexBufferLayoutRef, VertexBufferLayout};
+use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
     MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-    SetMeshViewBindingArrayBindGroup,
+    SetMeshViewBindingArrayBindGroup, ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponentPlugin;
@@ -96,14 +96,13 @@ fn init_world_render_building_wall_tile_pipeline(
 
 fn prepare_world_render_building_wall_tile_instance_buffers(
     mut commands: Commands,
-    batches: Query<
-        (
-            Entity,
-            &WorldRenderTileBatchVisualState,
-            &WorldRenderBuildingWallTileBatchSource,
-        ),
-        With<Mesh3d>,
-    >,
+    // Building-wall batches are extracted into the render world without `Mesh3d`,
+    // so filtering on `Mesh3d` here would skip every wall batch and prevent buffer creation.
+    batches: Query<(
+        Entity,
+        &WorldRenderTileBatchVisualState,
+        &WorldRenderBuildingWallTileBatchSource,
+    )>,
     render_device: Res<RenderDevice>,
 ) {
     for (entity, batch_visual_state, batch_source) in &batches {
@@ -206,6 +205,7 @@ fn queue_world_render_building_wall_tile_batches(
     pipeline_cache: Res<PipelineCache>,
     meshes: Res<RenderAssets<RenderMesh>>,
     render_mesh_instances: Res<RenderMeshInstances>,
+    view_key_cache: Res<ViewKeyCache>,
     batches: Query<
         (
             Entity,
@@ -222,14 +222,15 @@ fn queue_world_render_building_wall_tile_batches(
         .read()
         .id::<DrawWorldRenderBuildingWallTileInstanced>();
 
-    for (view, msaa) in &views {
+    for (view, _msaa) in &views {
         let Some(transparent_phase) = transparent_render_phases.get_mut(&view.retained_view_entity)
         else {
             continue;
         };
 
-        let view_key = MeshPipelineKey::from_msaa_samples(msaa.samples())
-            | MeshPipelineKey::from_hdr(view.hdr);
+        let Some(view_key) = view_key_cache.get(&view.retained_view_entity).copied() else {
+            continue;
+        };
         let rangefinder = view.rangefinder3d();
 
         for (entity, main_entity, batch_visual_state, instance_buffer) in &batches {

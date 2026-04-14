@@ -3,16 +3,19 @@
 
 use bevy::asset::AssetPlugin;
 use bevy::camera::{visibility::RenderLayers, CameraOutputMode, ClearColorConfig};
+use bevy::log::{info, LogPlugin};
 use bevy::prelude::*;
 use bevy::render::render_resource::BlendState;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy::window::WindowPlugin;
 use bevy_egui::{EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext};
-use game_bevy::rust_asset_dir;
+use game_bevy::{init_runtime_logging, rust_asset_dir, RuntimeLogSettings};
 use game_editor::{
+    build_persisted_primary_window,
     preview_camera_input_system as shared_preview_camera_input_system,
     preview_camera_sync_system as shared_preview_camera_sync_system, spawn_preview_floor,
     spawn_preview_light_rig, PreviewCameraController, PreviewOrbitCamera,
+    WindowSizePersistenceConfig, WindowSizePersistencePlugin,
 };
 
 use crate::data::load_editor_data;
@@ -33,15 +36,24 @@ enum AppState {
 struct LoadingTask(Task<EditorData>);
 
 pub(crate) fn run() {
+    let window_config =
+        WindowSizePersistenceConfig::new("bevy_character_editor", 1720.0, 980.0, 1280.0, 720.0);
+    let log_settings = RuntimeLogSettings::new("bevy_character_editor").with_single_run_file();
+    if let Err(error) = init_runtime_logging(&log_settings) {
+        eprintln!("failed to initialize bevy_character_editor logging: {error}");
+    } else {
+        info!("bevy_character_editor logger initialized");
+    }
     App::new()
         .add_plugins(
             DefaultPlugins
+                .build()
+                .disable::<LogPlugin>()
                 .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "CDC Character Editor".into(),
-                        resolution: (1720, 980).into(),
-                        ..default()
-                    }),
+                    primary_window: Some(build_persisted_primary_window(
+                        window_config.clone(),
+                        "CDC Character Editor",
+                    )),
                     ..default()
                 })
                 .set(AssetPlugin {
@@ -50,6 +62,7 @@ pub(crate) fn run() {
                 }),
         )
         .add_plugins(EguiPlugin::default())
+        .add_plugins(WindowSizePersistencePlugin::new(window_config))
         .init_state::<AppState>()
         .insert_resource(ClearColor(PREVIEW_BG))
         .insert_resource(EditorUiState::default())
@@ -95,6 +108,11 @@ fn handle_loading_task(
 ) {
     for (entity, mut task) in &mut query {
         if let Some(data) = block_on(poll_once(&mut task.0)) {
+            info!(
+                "character editor loading completed: characters={}, warnings={}",
+                data.character_summaries.len(),
+                data.warnings.len()
+            );
             commands.insert_resource(data);
             commands.entity(entity).despawn();
             next_state.set(AppState::Ready);
@@ -130,6 +148,8 @@ fn setup_editor(
             orbit: PreviewOrbitCamera::default(),
             focus_anchor: PreviewOrbitCamera::default().focus,
             viewport_rect: None,
+            rotate_drag_active: false,
+            pan_drag_active: false,
             pitch_min: -1.1,
             pitch_max: 0.65,
             radius_min: CAMERA_RADIUS_MIN,

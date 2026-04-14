@@ -1,6 +1,7 @@
 pub mod ai_chat;
 pub mod character_preview;
 pub mod preview;
+pub mod window_size_persistence;
 
 pub use character_preview::{
     character_preview_is_available, parse_preview_color, spawn_character_preview_scene,
@@ -13,4 +14,7 @@ pub use preview::{
     spawn_preview_scene_host, PreviewCameraController, PreviewFloor, PreviewOrbitCamera,
     PreviewOriginAxes, PreviewSceneHost, PreviewSceneInstance, PreviewViewportRect,
     GAME_UI_FONT_NAME,
+};
+pub use window_size_persistence::{
+    build_persisted_primary_window, WindowSizePersistenceConfig, WindowSizePersistencePlugin,
 };

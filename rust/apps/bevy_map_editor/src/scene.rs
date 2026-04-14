@@ -14,8 +14,9 @@ use game_editor::load_game_ui_font;
 
 use crate::camera::ray_point_on_horizontal_plane;
 use crate::state::{
-    map_display_name, yes_no, EditorCamera, EditorState, EditorUiState, EditorWorldLabelFont,
-    EditorWorldTileDefinitions, HoveredCellInfo, LibraryView, OrbitCameraState, SceneEntity,
+    map_display_name, yes_no, EditorCamera, EditorState, EditorUiState, EditorViewportTarget,
+    EditorWorldLabelFont, EditorWorldTileDefinitions, HoveredCellInfo, LibraryView,
+    OrbitCameraState, SceneEntity,
 };
 
 const HOVERED_GRID_OUTLINE_COLOR: Color = Color::srgba(0.96, 0.97, 0.99, 0.98);
@@ -61,7 +62,8 @@ pub(crate) fn rebuild_scene_system(
     world_label_font: Res<EditorWorldLabelFont>,
     scene_entities: Query<Entity, (With<SceneEntity>, Without<ChildOf>)>,
 ) {
-    if !editor.scene_dirty {
+    let desired_target = editor.desired_viewport_target();
+    if !editor.scene_dirty && desired_target == editor.last_rendered_target {
         return;
     }
 
@@ -69,22 +71,27 @@ pub(crate) fn rebuild_scene_system(
         commands.entity(entity).despawn();
     }
 
-    match editor.selected_view {
-        LibraryView::Maps => {
-            let Some(selected_map_id) = editor.selected_map_id.clone() else {
-                editor.status = "No tactical map available to render.".to_string();
-                editor.scene_dirty = false;
-                return;
-            };
-            let Some(document) = editor.maps.get(&selected_map_id).cloned() else {
+    let Some(desired_target) = desired_target.clone() else {
+        editor.status = missing_viewport_target_status(&editor);
+        editor.last_rendered_target = None;
+        editor.scene_dirty = false;
+        editor.scene_revision = editor.scene_revision.saturating_add(1);
+        return;
+    };
+
+    match desired_target.clone() {
+        EditorViewportTarget::Map { map_id, level } => {
+            let Some(document) = editor.maps.get(&map_id).cloned() else {
                 editor.status = "Selected tactical map is no longer loaded.".to_string();
+                editor.last_rendered_target = None;
                 editor.scene_dirty = false;
+                editor.scene_revision = editor.scene_revision.saturating_add(1);
                 return;
             };
             orbit_camera.target = map_focus_target(&document.definition);
             let scene = build_world_render_scene_from_map_definition(
                 &document.definition,
-                editor.current_map_level,
+                level,
                 *render_config,
                 &world_tiles.0,
             );
@@ -107,22 +114,19 @@ pub(crate) fn rebuild_scene_system(
             editor.status = format!(
                 "Rendering map {} at level {} in native Bevy 3D.",
                 map_display_name(document.definition.id.as_str()),
-                editor.current_map_level
+                level
             );
         }
-        LibraryView::Overworlds => {
-            let Some(selected_overworld_id) = editor.selected_overworld_id.clone() else {
-                editor.status = "No overworld available to render.".to_string();
-                editor.scene_dirty = false;
-                return;
-            };
+        EditorViewportTarget::Overworld { overworld_id } => {
             let Some(definition) = editor
                 .overworld_library
-                .get(&OverworldId(selected_overworld_id))
+                .get(&OverworldId(overworld_id))
                 .cloned()
             else {
                 editor.status = "Selected overworld is no longer loaded.".to_string();
+                editor.last_rendered_target = None;
                 editor.scene_dirty = false;
+                editor.scene_revision = editor.scene_revision.saturating_add(1);
                 return;
             };
             orbit_camera.target = overworld_focus_target(&definition);
@@ -151,8 +155,28 @@ pub(crate) fn rebuild_scene_system(
         }
     }
 
+    editor.last_rendered_target = Some(desired_target);
     editor.scene_dirty = false;
     editor.scene_revision = editor.scene_revision.saturating_add(1);
+}
+
+fn missing_viewport_target_status(editor: &EditorState) -> String {
+    match editor.selected_view {
+        LibraryView::Maps => {
+            if editor.maps.is_empty() {
+                "No tactical map available to render.".to_string()
+            } else {
+                "Selected tactical map is no longer loaded.".to_string()
+            }
+        }
+        LibraryView::Overworlds => {
+            if editor.overworld_library.is_empty() {
+                "No overworld available to render.".to_string()
+            } else {
+                "Selected overworld is no longer loaded.".to_string()
+            }
+        }
+    }
 }
 
 pub(crate) fn map_focus_target(definition: &MapDefinition) -> Vec3 {

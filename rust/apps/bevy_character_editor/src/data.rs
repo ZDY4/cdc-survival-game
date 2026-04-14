@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use bevy::log::{info, warn};
 use game_data::{
     load_ai_module_library, load_character_appearance_library, load_character_library,
     load_effect_library, load_item_library, load_settlement_library, validate_ai_content,
@@ -116,6 +117,25 @@ pub(crate) fn load_editor_data() -> EditorData {
                 .cmp(&right.name)
                 .then_with(|| left.id.cmp(&right.id))
         });
+    }
+
+    info!(
+        "character editor data loaded: characters={}, items={}, settlements={}, ai_library_loaded={}, appearance_profiles={}, warnings={}",
+        characters.len(),
+        items.len(),
+        settlements.len(),
+        ai_library.is_some(),
+        appearance_library.iter().count(),
+        warnings.len(),
+    );
+    if !warnings.is_empty() {
+        let summary = warnings
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" | ");
+        warn!("character editor data warnings: {summary}");
     }
 
     EditorData {

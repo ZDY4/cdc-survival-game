@@ -171,7 +171,7 @@ pub(crate) fn editor_ui_system(
             ui.painter().text(
                 rect.left_top() + egui::vec2(14.0, 32.0),
                 egui::Align2::LEFT_TOP,
-                "左键拖拽旋转，滚轮缩放，右侧页签中可切换试装槽位。",
+                "左键拖拽旋转，滚轮缩放，右侧页签中可直接调整各装备槽位。",
                 egui::FontId::new(11.0, egui::FontFamily::Proportional),
                 egui::Color32::from_rgb(164, 170, 184),
             );
@@ -220,12 +220,29 @@ fn render_character_list_panel(
                 let selected =
                     ui_state.selected_character_id.as_deref() == Some(summary.id.as_str());
                 let label = format!("{}  [{}]", summary.display_name, summary.id);
-                let response = ui.add_sized(
-                    [ui.available_width(), 0.0],
-                    egui::Button::new(label.as_str())
-                        .selected(selected)
-                        .truncate(),
-                );
+                let desired_size = egui::vec2(ui.available_width(), 24.0);
+                let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+                if ui.is_rect_visible(rect) {
+                    let visuals = ui.style().interact_selectable(&response, selected);
+                    ui.painter().rect(
+                        rect,
+                        visuals.corner_radius,
+                        visuals.bg_fill,
+                        visuals.bg_stroke,
+                        egui::StrokeKind::Middle,
+                    );
+                    let text_pos = egui::pos2(
+                        rect.left() + ui.style().spacing.button_padding.x,
+                        rect.center().y,
+                    );
+                    ui.painter().text(
+                        text_pos,
+                        egui::Align2::LEFT_CENTER,
+                        label.as_str(),
+                        egui::TextStyle::Button.resolve(ui.style()),
+                        visuals.text_color(),
+                    );
+                }
                 let response = response.on_hover_text(format!(
                     "{}\n\n据点: {}\n角色职责: {}\n行为包: {}",
                     label,
