@@ -121,7 +121,7 @@
 - 不改 `game_data` 的 AI schema 协议
 - 不改 `game_core::lib` 和 `game_bevy::lib` 主要 public 导出名
 - 不把 viewer 侧临时适配层提升为共享规则权威
-- 不新增 Godot 侧对应实现
+- 不新增历史客户端侧对应实现
 
 ---
 

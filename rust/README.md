@@ -20,8 +20,8 @@ Character definitions now use Rust as the single source of truth:
 - Runtime loading: `game_data::load_character_library`
 - Bevy-side assembly: `rust/crates/game_bevy/src/lib.rs`
 
-Legacy script-side `CharacterData.gd` / `NPCData.gd` models are no longer
-authoritative and are not kept in sync with the Rust schema.
+Legacy script-side character models are no longer authoritative and are not
+kept in sync with the Rust schema.
 
 ## Runtime Assembly Layers
 
