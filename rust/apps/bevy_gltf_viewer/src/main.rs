@@ -9,6 +9,7 @@ use bevy::render::render_resource::BlendState;
 use bevy_egui::{
     egui, EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext,
 };
+use game_bevy::rust_asset_dir;
 use game_editor::{
     apply_preview_orbit_camera, install_game_ui_fonts,
     preview_camera_input_system as shared_preview_camera_input_system,
@@ -67,7 +68,7 @@ fn main() {
 }
 
 fn gltf_viewer_asset_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    rust_asset_dir()
 }
 
 fn default_viewer_orbit() -> PreviewOrbitCamera {

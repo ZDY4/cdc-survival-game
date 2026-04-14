@@ -7,9 +7,10 @@ use bevy::window::WindowPlugin;
 use bevy_mesh_outline::MeshOutlinePlugin;
 use game_bevy::world_render::WorldRenderPlugin;
 use game_bevy::{
-    apply_gameplay_libraries, init_runtime_logging, spawn_characters_from_definition,
-    CharacterSpawnRejected, GameUiPlugin, MapAiSpawnRuntimeState, NpcLifePlugin, NpcLifeUpdateSet,
-    RuntimeContentPlugin, RuntimeLogSettings, SettlementSimulationPlugin, SpawnCharacterRequest,
+    apply_gameplay_libraries, init_runtime_logging, rust_asset_dir,
+    spawn_characters_from_definition, CharacterSpawnRejected, GameUiPlugin, MapAiSpawnRuntimeState,
+    NpcLifePlugin, NpcLifeUpdateSet, RuntimeContentPlugin, RuntimeLogSettings,
+    SettlementSimulationPlugin, SpawnCharacterRequest,
 };
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -69,8 +70,7 @@ pub(crate) fn run() {
             (
                 crate::bootstrap::ViewerBootstrap {
                     runtime: game_core::SimulationRuntime::new(),
-                    asset_dir: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .join("../../assets"),
+                    asset_dir: rust_asset_dir(),
                 },
                 ViewerBootstrapStatus::Failed {
                     error: error.to_string(),

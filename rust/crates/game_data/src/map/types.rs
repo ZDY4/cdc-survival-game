@@ -107,6 +107,7 @@ pub struct MapEntryPointDefinition {
 #[serde(rename_all = "snake_case")]
 pub enum MapObjectKind {
     Building,
+    Prop,
     Pickup,
     Interactive,
     Trigger,

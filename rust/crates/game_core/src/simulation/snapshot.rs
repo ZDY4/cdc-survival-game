@@ -4,7 +4,8 @@ use game_data::{GridCoord, MapCellDefinition, MapObjectDefinition, MapObjectKind
 
 use super::state_persistence::{
     ActorAttackRangeSnapshotEntry, ActorAutonomousMovementGoalSnapshotEntry,
-    ActorCombatAttributesSnapshotEntry, ActorInteractionSnapshotEntry, ActorLootTableSnapshotEntry,
+    ActorCombatAttributesSnapshotEntry, ActorCombatBehaviorSnapshotEntry,
+    ActorCombatOriginSnapshotEntry, ActorInteractionSnapshotEntry, ActorLootTableSnapshotEntry,
     ActorProgressionSnapshotEntry, ActorRelationshipSnapshotEntry, ActorResourcesSnapshotEntry,
     ActorSkillStateSnapshotEntry, ActorXpRewardSnapshotEntry, DialogueSessionSnapshotEntry,
     SimulationStateSnapshot, SkillRuntimeSnapshotEntry,
@@ -100,6 +101,7 @@ impl Simulation {
                                 .insert("prefab_id".to_string(), building.prefab_id.clone());
                         }
                     }
+                    MapObjectKind::Prop => {}
                     MapObjectKind::Pickup => {
                         if let Some(pickup) = object.props.pickup.as_ref() {
                             payload_summary.insert("item_id".to_string(), pickup.item_id.clone());
@@ -275,6 +277,16 @@ impl Simulation {
             .collect::<Vec<_>>();
         actor_attack_ranges.sort_by_key(|entry| entry.actor_id);
 
+        let mut actor_combat_behaviors = self
+            .actor_combat_behaviors
+            .iter()
+            .map(|(actor_id, behavior)| ActorCombatBehaviorSnapshotEntry {
+                actor_id: *actor_id,
+                behavior: behavior.clone(),
+            })
+            .collect::<Vec<_>>();
+        actor_combat_behaviors.sort_by_key(|entry| entry.actor_id);
+
         let mut actor_combat_attributes = self
             .actor_combat_attributes
             .iter()
@@ -377,6 +389,16 @@ impl Simulation {
             .collect::<Vec<_>>();
         actor_autonomous_movement_goals.sort_by_key(|entry| entry.actor_id);
 
+        let mut actor_combat_origins = self
+            .actor_combat_origins
+            .iter()
+            .map(|(actor_id, grid)| ActorCombatOriginSnapshotEntry {
+                actor_id: *actor_id,
+                grid: *grid,
+            })
+            .collect::<Vec<_>>();
+        actor_combat_origins.sort_by_key(|entry| entry.actor_id);
+
         let mut active_dialogues = self
             .active_dialogues
             .iter()
@@ -395,6 +417,7 @@ impl Simulation {
             actors: self.actors.save_snapshot(),
             actor_interactions,
             actor_attack_ranges,
+            actor_combat_behaviors,
             actor_combat_attributes,
             actor_resources,
             actor_loot_tables,
@@ -405,6 +428,7 @@ impl Simulation {
             completed_quests,
             actor_relationships,
             actor_autonomous_movement_goals,
+            actor_combat_origins,
             active_dialogues,
             economy: self.economy.save_snapshot(),
             interaction_context: self.interaction_context.clone(),
@@ -436,6 +460,11 @@ impl Simulation {
             .actor_attack_ranges
             .into_iter()
             .map(|entry| (entry.actor_id, entry.attack_range))
+            .collect();
+        self.actor_combat_behaviors = snapshot
+            .actor_combat_behaviors
+            .into_iter()
+            .map(|entry| (entry.actor_id, entry.behavior))
             .collect();
         self.actor_combat_attributes = snapshot
             .actor_combat_attributes
@@ -491,6 +520,11 @@ impl Simulation {
             .actor_autonomous_movement_goals
             .into_iter()
             .map(|entry| (entry.actor_id, entry.goal))
+            .collect();
+        self.actor_combat_origins = snapshot
+            .actor_combat_origins
+            .into_iter()
+            .map(|entry| (entry.actor_id, entry.grid))
             .collect();
         self.active_dialogues = snapshot
             .active_dialogues

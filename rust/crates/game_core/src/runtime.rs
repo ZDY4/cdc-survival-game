@@ -189,10 +189,10 @@ mod tests {
     use super::SimulationRuntime;
     use crate::demo::create_demo_runtime;
     use crate::movement::{AutoMoveInterruptReason, PendingProgressionStep};
+    use crate::select_default_combat_ai_intent;
     use crate::simulation::{
         RegisterActor, Simulation, SimulationCommand, SimulationCommandResult, SimulationEvent,
     };
-    use crate::select_default_combat_ai_intent;
 
     #[test]
     fn demo_runtime_boots_with_player_turn_open() {
@@ -546,28 +546,22 @@ mod tests {
         assert!((snapshot.actor_ap - runtime.get_actor_ap(handles.hostile)).abs() < f32::EPSILON);
         assert!(snapshot.attack_ap_cost > 0.0);
         assert!((snapshot.actor_hp_ratio - 1.0).abs() < 0.0001);
-        assert!(snapshot
-            .target_options
-            .iter()
-            .any(|option| {
-                option.target_actor_id == handles.player
-                    && option.can_basic_attack
-                    && (option.target_hp_ratio - 1.0).abs() < 0.0001
-            }));
+        assert!(snapshot.target_options.iter().any(|option| {
+            option.target_actor_id == handles.player
+                && option.can_basic_attack
+                && (option.target_hp_ratio - 1.0).abs() < 0.0001
+        }));
 
         let intent =
             select_default_combat_ai_intent(&snapshot).expect("default combat intent should exist");
         let execution = runtime.execute_combat_ai_intent(handles.hostile, intent);
 
         assert!(execution.performed);
-        assert!(runtime
-            .drain_events()
-            .into_iter()
-            .any(|event| matches!(
-                event,
-                SimulationEvent::AttackResolved { actor_id, target_actor, .. }
-                    if actor_id == handles.hostile && target_actor == handles.player
-            )));
+        assert!(runtime.drain_events().into_iter().any(|event| matches!(
+            event,
+            SimulationEvent::AttackResolved { actor_id, target_actor, .. }
+                if actor_id == handles.hostile && target_actor == handles.player
+        )));
     }
 
     #[test]

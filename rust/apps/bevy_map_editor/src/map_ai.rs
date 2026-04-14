@@ -1,7 +1,11 @@
+use std::path::Path;
+
 use bevy_egui::egui;
+use game_bevy::container_visuals::ContainerVisualRegistry;
 use game_data::{
-    GridCoord, MapCellDefinition, MapDefinition, MapEditDiagnostic, MapEditError,
-    MapEntryPointDefinition, MapId, MapObjectDefinition, MapSize,
+    load_character_library, load_item_library, load_world_tile_library, GridCoord,
+    MapCellDefinition, MapDefinition, MapEditDiagnostic, MapEditError, MapEntryPointDefinition,
+    MapId, MapObjectDefinition, MapSize,
 };
 use game_editor::ai_chat::{
     conversation_payload, prepare_prompt_submission, start_generation_job, AiChatMessage,
@@ -11,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
-    draw_diagnostic, map_display_name, validate_document, EditorState, LibraryView,
-    WorkingMapDocument,
+    state::{map_display_name, validate_document, EditorState, LibraryView, WorkingMapDocument},
+    ui::draw_diagnostic,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +103,33 @@ struct MapCounts {
     cells: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Default)]
+struct MapAiAvailableContent {
+    item_ids: Vec<String>,
+    character_ids: Vec<String>,
+    prototype_ids: Vec<String>,
+    wall_set_ids: Vec<String>,
+    surface_set_ids: Vec<String>,
+    container_visual_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct MapAiObjectKindGuidance {
+    kind: &'static str,
+    required_fields: Vec<&'static str>,
+    notes: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct MapAiGenerationContext {
+    available_object_kinds: Vec<&'static str>,
+    object_kind_guidance: Vec<MapAiObjectKindGuidance>,
+    placement_rules: Vec<&'static str>,
+    available_content: MapAiAvailableContent,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    load_warnings: Vec<String>,
+}
+
 pub fn start_map_ai_generation(
     editor: &EditorState,
     ai: &mut AiChatState<AiProposalView>,
@@ -122,10 +153,12 @@ pub fn start_map_ai_generation(
 
     let selected_map = document.definition.clone();
     let available_map_ids = editor.maps.keys().cloned().collect::<Vec<_>>();
+    let generation_context = build_map_ai_generation_context(editor);
     let payload = build_map_prompt_payload(
         &submission.settings,
         &selected_map,
         &available_map_ids,
+        &generation_context,
         &submission.conversation,
         &submission.prompt,
     );
@@ -256,10 +289,11 @@ pub fn apply_prepared_proposal(
     ))
 }
 
-pub fn build_map_prompt_payload(
+fn build_map_prompt_payload(
     settings: &AiChatSettings,
     selected_map: &MapDefinition,
     available_map_ids: &[String],
+    generation_context: &MapAiGenerationContext,
     conversation: &[AiChatMessage],
     user_prompt: &str,
 ) -> Value {
@@ -270,6 +304,10 @@ pub fn build_map_prompt_payload(
         "target.kind must be current_map or new_map.",
         "Supported operation kinds: add_level, remove_level, upsert_entry_point, remove_entry_point, upsert_object, remove_object, paint_cells, clear_cells.",
         "Use the existing map JSON schema exactly for entry_point, object, cell, and grid payloads.",
+        "Use only the object kinds and content IDs listed in generation_context.available_content and generation_context.available_object_kinds.",
+        "Do not invent wall_set_id, surface_set_id, prototype_id, item_id, character_id, or container visual_id values.",
+        "For terrain and floors, prefer paint_cells and cell.visual.surface_set_id instead of fake prop objects.",
+        "If the request asks for unavailable content, keep the proposal valid, add a warning, and choose the closest supported content already listed in the catalog.",
         "Prefer the smallest valid change set that satisfies the request.",
     ]
     .join("\n");
@@ -292,12 +330,202 @@ pub fn build_map_prompt_payload(
                     "selected_map_id": selected_map.id.as_str(),
                     "selected_map": selected_map,
                     "available_map_ids": available_map_ids,
+                    "generation_context": generation_context,
                     "recent_conversation": conversation_payload(conversation),
                 }))
                 .unwrap_or_else(|_| "{}".to_string()),
             }
         ]
     })
+}
+
+fn build_map_ai_generation_context(editor: &EditorState) -> MapAiGenerationContext {
+    let mut load_warnings = Vec::new();
+    let available_content = editor
+        .map_service
+        .data_root()
+        .map(|data_root| load_available_content(data_root, &mut load_warnings))
+        .unwrap_or_else(|| {
+            load_warnings.push(
+                "Editor map service has no data_root; AI content catalog is incomplete."
+                    .to_string(),
+            );
+            MapAiAvailableContent::default()
+        });
+
+    MapAiGenerationContext {
+        available_object_kinds: vec![
+            "building",
+            "prop",
+            "pickup",
+            "interactive",
+            "trigger",
+            "ai_spawn",
+        ],
+        object_kind_guidance: vec![
+            MapAiObjectKindGuidance {
+                kind: "building",
+                required_fields: vec![
+                    "object.kind=building",
+                    "object.anchor",
+                    "object.footprint",
+                    "props.building.prefab_id",
+                    "props.building.wall_visual.kind",
+                    "props.building.tile_set.wall_set_id",
+                ],
+                notes: vec![
+                    "Use props.building.tile_set.floor_surface_set_id only when the building should paint floors.",
+                    "Use props.building.tile_set.door_prototype_id only with a prototype_id from the catalog.",
+                    "Only include props.building.layout when you actually need procedural building layout data.",
+                ],
+            },
+            MapAiObjectKindGuidance {
+                kind: "prop",
+                required_fields: vec![
+                    "object.kind=prop",
+                    "object.anchor",
+                    "object.footprint",
+                ],
+                notes: vec![
+                    "Use props.visual.prototype_id for static scene props backed by world tile prototypes.",
+                    "Set blocks_movement and blocks_sight to match the intended collision behavior.",
+                ],
+            },
+            MapAiObjectKindGuidance {
+                kind: "pickup",
+                required_fields: vec![
+                    "object.kind=pickup",
+                    "object.anchor",
+                    "props.pickup.item_id",
+                    "props.pickup.min_count",
+                    "props.pickup.max_count",
+                ],
+                notes: vec![
+                    "item_id must come from the item catalog.",
+                    "max_count must be >= min_count and both must be >= 1.",
+                ],
+            },
+            MapAiObjectKindGuidance {
+                kind: "interactive",
+                required_fields: vec![
+                    "object.kind=interactive",
+                    "object.anchor",
+                    "props.interactive.interaction_kind",
+                ],
+                notes: vec![
+                    "Lootable/openable containers should usually be interactive objects with both props.interactive and props.container.",
+                    "If props.container.visual_id is set, use a value from container_visual_ids.",
+                    "Container inventory item_ids must come from the item catalog.",
+                ],
+            },
+            MapAiObjectKindGuidance {
+                kind: "trigger",
+                required_fields: vec![
+                    "object.kind=trigger",
+                    "object.anchor",
+                    "props.trigger.interaction_kind",
+                ],
+                notes: vec![
+                    "Trigger options are reserved for scene-transition style interactions.",
+                ],
+            },
+            MapAiObjectKindGuidance {
+                kind: "ai_spawn",
+                required_fields: vec![
+                    "object.kind=ai_spawn",
+                    "object.anchor",
+                    "props.ai_spawn.spawn_id",
+                    "props.ai_spawn.character_id",
+                ],
+                notes: vec![
+                    "spawn_id must be unique within the map.",
+                    "character_id must come from the character catalog.",
+                ],
+            },
+        ],
+        placement_rules: vec![
+            "Use only IDs listed under available_content.",
+            "For new floor or ground visuals, use paint_cells and set cell.visual.surface_set_id.",
+            "For static world meshes, prefer prop objects with props.visual.prototype_id.",
+            "For building shells, use building objects with tile_set IDs from the catalog instead of inventing ad hoc wall cells.",
+            "Keep object_ids and spawn_ids stable and descriptive.",
+            "Prefer editing the current map unless the user explicitly asks for a new map.",
+        ],
+        available_content,
+        load_warnings,
+    }
+}
+
+fn load_available_content(
+    data_root: &Path,
+    load_warnings: &mut Vec<String>,
+) -> MapAiAvailableContent {
+    let items_dir = data_root.join("items");
+    let item_ids = if items_dir.exists() {
+        match load_item_library(&items_dir, None) {
+            Ok(library) => library
+                .iter()
+                .map(|(id, _)| id.to_string())
+                .collect::<Vec<_>>(),
+            Err(error) => {
+                load_warnings.push(format!(
+                    "Failed to load item catalog from {}: {error}",
+                    items_dir.display()
+                ));
+                Vec::new()
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let characters_dir = data_root.join("characters");
+    let character_ids = if characters_dir.exists() {
+        match load_character_library(&characters_dir) {
+            Ok(library) => library
+                .iter()
+                .map(|(id, _)| id.as_str().to_string())
+                .collect::<Vec<_>>(),
+            Err(error) => {
+                load_warnings.push(format!(
+                    "Failed to load character catalog from {}: {error}",
+                    characters_dir.display()
+                ));
+                Vec::new()
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let world_tiles_dir = data_root.join("world_tiles");
+    let (prototype_ids, wall_set_ids, surface_set_ids) = if world_tiles_dir.exists() {
+        match load_world_tile_library(&world_tiles_dir) {
+            Ok(library) => (
+                library.prototype_ids().into_iter().collect::<Vec<_>>(),
+                library.wall_set_ids().into_iter().collect::<Vec<_>>(),
+                library.surface_set_ids().into_iter().collect::<Vec<_>>(),
+            ),
+            Err(error) => {
+                load_warnings.push(format!(
+                    "Failed to load world tile catalog from {}: {error}",
+                    world_tiles_dir.display()
+                ));
+                (Vec::new(), Vec::new(), Vec::new())
+            }
+        }
+    } else {
+        (Vec::new(), Vec::new(), Vec::new())
+    };
+
+    MapAiAvailableContent {
+        item_ids,
+        character_ids,
+        prototype_ids,
+        wall_set_ids,
+        surface_set_ids,
+        container_visual_ids: ContainerVisualRegistry::builtin().ids(),
+    }
 }
 
 pub fn parse_map_generation_response(response: ProviderSuccess) -> Result<AiProposalView, String> {

@@ -4,8 +4,8 @@ use std::collections::HashSet;
 
 use bevy::prelude::*;
 use game_core::{
-    grid::GridWorld, GeneratedBuildingDebugState, GeneratedDoorDebugState,
-    GeneratedStairConnection, MapObjectDebugState, SimulationSnapshot,
+    grid::GridWorld, GeneratedBuildingDebugState, GeneratedStairConnection, MapObjectDebugState,
+    SimulationSnapshot,
 };
 use game_data::{
     expand_object_footprint, GridCoord, MapDefinition, MapObjectDefinition, MapObjectKind,
@@ -13,7 +13,7 @@ use game_data::{
 };
 
 use super::geometry::{
-    cell_style_noise, is_scene_transition_trigger_kind, level_base_height, merge_cells_into_rects,
+    is_scene_transition_trigger_kind, level_base_height, merge_cells_into_rects,
     occupied_cells_box, rect_center, rect_size, simulation_bounds, stair_run_direction,
     trigger_decal_rotation, wall_tile_neighbors,
 };
@@ -21,8 +21,8 @@ use super::overworld::build_static_world_from_overworld_snapshot;
 use super::types::{
     StaticMapObject, StaticMapTopology, StaticWorldBoxSpec, StaticWorldBuildConfig,
     StaticWorldBuildingWallTileSpec, StaticWorldDecalSpec, StaticWorldGridBounds,
-    StaticWorldGroundSpec, StaticWorldMaterialRole, StaticWorldOccluderKind, StaticWorldSceneSpec,
-    StaticWorldSemantic, StaticWorldSurfaceTileSpec,
+    StaticWorldGroundSpec, StaticWorldMaterialRole, StaticWorldSceneSpec, StaticWorldSemantic,
+    StaticWorldStairSpec, StaticWorldSurfaceTileSpec,
 };
 
 const TRIGGER_DECAL_ELEVATION: f32 = 0.002;
@@ -42,7 +42,6 @@ pub fn build_static_world_from_map_definition(
             min_z: 0,
             max_z: definition.size.height.saturating_sub(1) as i32,
         },
-        blocked_cells: grid_world.map_blocked_cells(Some(current_level)),
         surface_cells: definition
             .levels
             .iter()
@@ -63,7 +62,6 @@ pub fn build_static_world_from_map_definition(
             .map(static_map_object_from_definition)
             .collect(),
         generated_buildings: grid_world.generated_buildings().to_vec(),
-        generated_doors: grid_world.generated_doors().to_vec(),
     };
     build_static_world_from_topology(&topology, current_level, config)
 }
@@ -82,13 +80,6 @@ pub fn build_static_world_from_simulation_snapshot(
         bounds: config
             .bounds_override
             .unwrap_or_else(|| simulation_bounds(snapshot, current_level)),
-        blocked_cells: snapshot
-            .grid
-            .map_cells
-            .iter()
-            .filter(|cell| cell.blocks_movement)
-            .map(|cell| cell.grid)
-            .collect(),
         surface_cells: snapshot
             .grid
             .map_cells
@@ -109,7 +100,6 @@ pub fn build_static_world_from_simulation_snapshot(
             .map(static_map_object_from_debug)
             .collect(),
         generated_buildings: snapshot.generated_buildings.clone(),
-        generated_doors: snapshot.generated_doors.clone(),
     };
     build_static_world_from_topology(&topology, current_level, config)
 }
@@ -132,13 +122,13 @@ pub(crate) fn build_static_world_from_topology(
             config.floor_thickness_world,
         ),
         boxes: Vec::new(),
+        pick_proxies: Vec::new(),
+        stairs: Vec::new(),
         building_wall_tiles: Vec::new(),
         surface_tiles: Vec::new(),
         decals: Vec::new(),
         labels: Vec::new(),
     };
-    let mut rendered_cells = HashSet::new();
-
     for building in topology.generated_buildings.iter().filter(|building| {
         building
             .stories
@@ -146,7 +136,7 @@ pub(crate) fn build_static_world_from_topology(
             .any(|story| story.level == current_level)
     }) {
         push_generated_building_specs(
-            &mut scene.boxes,
+            &mut scene.stairs,
             &mut scene.building_wall_tiles,
             &mut scene.surface_tiles,
             building,
@@ -155,26 +145,6 @@ pub(crate) fn build_static_world_from_topology(
             grid_size,
             config.floor_thickness_world,
         );
-        for story in building
-            .stories
-            .iter()
-            .filter(|story| story.level == current_level)
-        {
-            rendered_cells.extend(story.wall_cells.iter().copied());
-            rendered_cells.extend(story.walkable_cells.iter().copied());
-        }
-    }
-
-    if config.include_generated_doors {
-        for door in topology
-            .generated_doors
-            .iter()
-            .filter(|door| door.level == current_level)
-        {
-            scene
-                .boxes
-                .push(generated_door_box_spec(door, floor_top, grid_size));
-        }
     }
 
     for object in topology
@@ -188,7 +158,6 @@ pub(crate) fn build_static_world_from_topology(
         {
             continue;
         }
-        rendered_cells.extend(object.occupied_cells.iter().copied());
         push_object_specs(
             &mut scene,
             object,
@@ -199,15 +168,6 @@ pub(crate) fn build_static_world_from_topology(
         );
     }
 
-    push_unrendered_blocked_specs(
-        &mut scene.boxes,
-        &topology.blocked_cells,
-        current_level,
-        floor_top,
-        grid_size,
-        bounds,
-        &rendered_cells,
-    );
     scene
 }
 
@@ -258,7 +218,7 @@ fn collect_ground_specs(
 }
 
 fn push_generated_building_specs(
-    specs: &mut Vec<StaticWorldBoxSpec>,
+    stair_specs: &mut Vec<StaticWorldStairSpec>,
     wall_tiles: &mut Vec<StaticWorldBuildingWallTileSpec>,
     surface_tiles: &mut Vec<StaticWorldSurfaceTileSpec>,
     building: &GeneratedBuildingDebugState,
@@ -315,11 +275,17 @@ fn push_generated_building_specs(
             semantic: Some(StaticWorldSemantic::MapObject(building.object_id.clone())),
         });
     }
-    push_generated_stair_specs(specs, &building.stairs, current_level, floor_top, grid_size);
+    push_generated_stair_specs(
+        stair_specs,
+        &building.stairs,
+        current_level,
+        floor_top,
+        grid_size,
+    );
 }
 
 fn push_generated_stair_specs(
-    specs: &mut Vec<StaticWorldBoxSpec>,
+    specs: &mut Vec<StaticWorldStairSpec>,
     stairs: &[GeneratedStairConnection],
     current_level: i32,
     floor_top: f32,
@@ -333,13 +299,10 @@ fn push_generated_stair_specs(
             for rect in merge_cells_into_rects(&stair.from_cells) {
                 let center = rect_center(rect, grid_size);
                 let base_size = rect_size(rect, grid_size, grid_size * 0.84);
-                specs.push(StaticWorldBoxSpec {
+                specs.push(StaticWorldStairSpec {
                     size: Vec3::new(base_size.x, landing_height, base_size.z),
                     translation: Vec3::new(center.x, floor_top + landing_height * 0.5, center.z),
                     material_role: StaticWorldMaterialRole::StairBase,
-                    occluder_kind: None,
-                    occluder_cells: Vec::new(),
-                    semantic: None,
                 });
                 let run_span = if direction.x.abs() > direction.y.abs() {
                     base_size.x
@@ -354,7 +317,7 @@ fn push_generated_stair_specs(
                     } else {
                         Vec3::new(base_size.x * 0.86, step_height, base_size.z * scale)
                     };
-                    specs.push(StaticWorldBoxSpec {
+                    specs.push(StaticWorldStairSpec {
                         size: step_size,
                         translation: Vec3::new(
                             center.x + direction.x * shift,
@@ -362,9 +325,6 @@ fn push_generated_stair_specs(
                             center.z + direction.y * shift,
                         ),
                         material_role: StaticWorldMaterialRole::StairAccent,
-                        occluder_kind: None,
-                        occluder_cells: Vec::new(),
-                        semantic: None,
                     });
                 }
             }
@@ -373,13 +333,10 @@ fn push_generated_stair_specs(
             for rect in merge_cells_into_rects(&stair.to_cells) {
                 let center = rect_center(rect, grid_size);
                 let size = rect_size(rect, grid_size, grid_size * 0.7);
-                specs.push(StaticWorldBoxSpec {
+                specs.push(StaticWorldStairSpec {
                     size: Vec3::new(size.x, landing_height, size.z),
                     translation: Vec3::new(center.x, floor_top + landing_height * 0.5, center.z),
                     material_role: StaticWorldMaterialRole::StairAccent,
-                    occluder_kind: None,
-                    occluder_cells: Vec::new(),
-                    semantic: None,
                 });
             }
         }
@@ -392,77 +349,33 @@ fn push_object_specs(
     current_level: i32,
     floor_top: f32,
     grid_size: f32,
-    object_style_seed: u32,
+    _object_style_seed: u32,
 ) {
     if object.has_visual_placement {
         match object.kind {
-            MapObjectKind::Pickup | MapObjectKind::Interactive | MapObjectKind::AiSpawn => return,
+            MapObjectKind::Prop
+            | MapObjectKind::Pickup
+            | MapObjectKind::Interactive
+            | MapObjectKind::AiSpawn => return,
             MapObjectKind::Building | MapObjectKind::Trigger => {}
         }
     }
     let (center_x, center_z, footprint_width, footprint_depth) =
         occupied_cells_box(&object.occupied_cells, grid_size);
-    let anchor_noise = cell_style_noise(
-        object_style_seed.wrapping_add(409),
-        object.anchor.x,
-        object.anchor.z,
-    );
     let semantic = Some(StaticWorldSemantic::MapObject(object.object_id.clone()));
 
     match object.kind {
-        MapObjectKind::Pickup => {
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(grid_size * 0.42, grid_size * 0.08, grid_size * 0.42),
-                translation: Vec3::new(center_x, floor_top + grid_size * 0.04, center_z),
-                material_role: StaticWorldMaterialRole::PickupBase,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                semantic: semantic.clone(),
-            });
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(grid_size * 0.28, grid_size * 0.22, grid_size * 0.28),
-                translation: Vec3::new(center_x, floor_top + grid_size * 0.19, center_z),
-                material_role: StaticWorldMaterialRole::PickupAccent,
-                occluder_kind: Some(StaticWorldOccluderKind::MapObject(object.kind)),
-                occluder_cells: object.occupied_cells.clone(),
+        MapObjectKind::Prop => {}
+        MapObjectKind::Pickup | MapObjectKind::Interactive => {
+            scene.pick_proxies.push(object_pick_proxy_box_spec(
+                center_x,
+                center_z,
+                footprint_width,
+                footprint_depth,
+                floor_top,
+                grid_size,
                 semantic,
-            });
-        }
-        MapObjectKind::Interactive => {
-            let pillar_height = grid_size * (0.72 + anchor_noise * 0.16);
-            let width = footprint_width.min(grid_size * 0.46).max(0.16);
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(grid_size * 0.52, grid_size * 0.08, grid_size * 0.52),
-                translation: Vec3::new(center_x, floor_top + grid_size * 0.04, center_z),
-                material_role: StaticWorldMaterialRole::InteractiveBase,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                semantic: semantic.clone(),
-            });
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(
-                    width,
-                    pillar_height,
-                    footprint_depth.min(grid_size * 0.42).max(0.16),
-                ),
-                translation: Vec3::new(center_x, floor_top + pillar_height * 0.5, center_z),
-                material_role: StaticWorldMaterialRole::InteractiveAccent,
-                occluder_kind: Some(StaticWorldOccluderKind::MapObject(object.kind)),
-                occluder_cells: object.occupied_cells.clone(),
-                semantic: semantic.clone(),
-            });
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(width * 0.58, grid_size * 0.16, grid_size * 0.22),
-                translation: Vec3::new(
-                    center_x,
-                    floor_top + pillar_height + grid_size * 0.08,
-                    center_z,
-                ),
-                material_role: StaticWorldMaterialRole::InteractiveBase,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                semantic,
-            });
+            ))
         }
         MapObjectKind::Trigger => {
             push_trigger_specs(scene, object, current_level, floor_top, grid_size)
@@ -485,23 +398,23 @@ fn push_trigger_specs(
             story_level: current_level,
             cell: *cell,
         });
+        scene.pick_proxies.push(StaticWorldBoxSpec {
+            size: Vec3::new(grid_size * 0.92, grid_size * 0.12, grid_size * 0.92),
+            translation: Vec3::new(
+                (cell.x as f32 + 0.5) * grid_size,
+                floor_top + grid_size * 0.06,
+                (cell.z as f32 + 0.5) * grid_size,
+            ),
+            material_role: StaticWorldMaterialRole::InvisiblePickProxy,
+            occluder_kind: None,
+            occluder_cells: Vec::new(),
+            semantic: semantic.clone(),
+        });
         if object
             .trigger_kind
             .as_deref()
             .is_some_and(is_scene_transition_trigger_kind)
         {
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(grid_size * 0.92, grid_size * 0.12, grid_size * 0.92),
-                translation: Vec3::new(
-                    (cell.x as f32 + 0.5) * grid_size,
-                    floor_top + grid_size * 0.06,
-                    (cell.z as f32 + 0.5) * grid_size,
-                ),
-                material_role: StaticWorldMaterialRole::InvisiblePickProxy,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                semantic: semantic.clone(),
-            });
             scene.decals.push(StaticWorldDecalSpec {
                 size: Vec2::splat(grid_size * 0.9),
                 translation: Vec3::new(
@@ -513,85 +426,30 @@ fn push_trigger_specs(
                 material_role: StaticWorldMaterialRole::TriggerAccent,
                 semantic,
             });
-        } else {
-            scene.boxes.push(StaticWorldBoxSpec {
-                size: Vec3::new(grid_size * 0.9, grid_size * 0.045, grid_size * 0.9),
-                translation: Vec3::new(
-                    (cell.x as f32 + 0.5) * grid_size,
-                    floor_top + grid_size * 0.0225,
-                    (cell.z as f32 + 0.5) * grid_size,
-                ),
-                material_role: StaticWorldMaterialRole::TriggerBase,
-                occluder_kind: None,
-                occluder_cells: Vec::new(),
-                semantic,
-            });
         }
     }
 }
 
-fn generated_door_box_spec(
-    door: &GeneratedDoorDebugState,
+fn object_pick_proxy_box_spec(
+    center_x: f32,
+    center_z: f32,
+    footprint_width: f32,
+    footprint_depth: f32,
     floor_top: f32,
     grid_size: f32,
+    semantic: Option<StaticWorldSemantic>,
 ) -> StaticWorldBoxSpec {
-    let horizontal = matches!(door.axis, game_core::GeometryAxis::Horizontal);
-    let width = if horizontal {
-        grid_size * 0.9
-    } else {
-        grid_size * 0.3
-    };
-    let depth = if horizontal {
-        grid_size * 0.3
-    } else {
-        grid_size * 0.9
-    };
-    let height = (door.wall_height * grid_size).max(grid_size * 0.8);
     StaticWorldBoxSpec {
-        size: Vec3::new(width, height, depth),
-        translation: Vec3::new(
-            (door.anchor_grid.x as f32 + 0.5) * grid_size,
-            floor_top + height * 0.5,
-            (door.anchor_grid.z as f32 + 0.5) * grid_size,
+        size: Vec3::new(
+            footprint_width.max(grid_size * 0.42),
+            grid_size,
+            footprint_depth.max(grid_size * 0.42),
         ),
-        material_role: StaticWorldMaterialRole::BuildingDoor,
-        occluder_kind: Some(StaticWorldOccluderKind::MapObject(
-            MapObjectKind::Interactive,
-        )),
-        occluder_cells: vec![door.anchor_grid],
-        semantic: Some(StaticWorldSemantic::MapObject(door.map_object_id.clone())),
-    }
-}
-
-fn push_unrendered_blocked_specs(
-    specs: &mut Vec<StaticWorldBoxSpec>,
-    blocked_cells: &[GridCoord],
-    current_level: i32,
-    floor_top: f32,
-    grid_size: f32,
-    bounds: StaticWorldGridBounds,
-    rendered_cells: &HashSet<GridCoord>,
-) {
-    for grid in blocked_cells
-        .iter()
-        .copied()
-        .filter(|grid| grid.y == current_level)
-        .filter(|grid| grid.x >= bounds.min_x && grid.x <= bounds.max_x)
-        .filter(|grid| grid.z >= bounds.min_z && grid.z <= bounds.max_z)
-        .filter(|grid| !rendered_cells.contains(grid))
-    {
-        specs.push(StaticWorldBoxSpec {
-            size: Vec3::new(grid_size * 0.82, grid_size * 0.82, grid_size * 0.82),
-            translation: Vec3::new(
-                (grid.x as f32 + 0.5) * grid_size,
-                floor_top + grid_size * 0.41,
-                (grid.z as f32 + 0.5) * grid_size,
-            ),
-            material_role: StaticWorldMaterialRole::Warning,
-            occluder_kind: None,
-            occluder_cells: Vec::new(),
-            semantic: None,
-        });
+        translation: Vec3::new(center_x, floor_top + grid_size * 0.5, center_z),
+        material_role: StaticWorldMaterialRole::InvisiblePickProxy,
+        occluder_kind: None,
+        occluder_cells: Vec::new(),
+        semantic,
     }
 }
 
@@ -611,6 +469,7 @@ fn static_map_object_from_definition(object: MapObjectDefinition) -> StaticMapOb
         .unwrap_or(false);
     let has_viewer_function = match object.kind {
         MapObjectKind::Building => true,
+        MapObjectKind::Prop => object.props.visual.is_some(),
         MapObjectKind::Pickup => object.props.pickup.is_some(),
         MapObjectKind::Interactive => object.props.interactive.is_some(),
         MapObjectKind::Trigger => object.props.trigger.is_some(),

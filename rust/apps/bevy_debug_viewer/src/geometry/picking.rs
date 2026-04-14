@@ -315,6 +315,25 @@ fn map_object_hit_fraction(
                 ),
             )
         }
+        MapObjectKind::Prop => {
+            let (center_x, center_z, footprint_width, footprint_depth) =
+                occupied_cells_box_world(&object.occupied_cells, grid_size)?;
+            let height = if object.blocks_sight {
+                grid_size * 1.25
+            } else {
+                grid_size * 0.9
+            };
+            segment_aabb_intersection_fraction(
+                ray_origin,
+                ray_end,
+                Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                Vec3::new(
+                    footprint_width.max(grid_size * 0.32) * 0.5,
+                    height * 0.5,
+                    footprint_depth.max(grid_size * 0.32) * 0.5,
+                ),
+            )
+        }
         MapObjectKind::Pickup => {
             let (center_x, center_z, _, _) =
                 occupied_cells_box_world(&object.occupied_cells, grid_size)?;

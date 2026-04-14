@@ -2,8 +2,8 @@ use bevy::gltf::GltfAssetLabel;
 use bevy::pbr::StandardMaterial;
 use bevy::prelude::*;
 use game_data::{WorldTileLibrary, WorldTilePrototypeDefinition, WorldTilePrototypeSource};
-use std::path::PathBuf;
 
+use crate::rust_asset_path;
 use crate::static_world::StaticWorldBoxSpec;
 use crate::tile_world::{TileBatchKey, TileRenderClass, TileWorldSceneSpec};
 use crate::world_render::{WorldRenderTileBatchId, WorldRenderTileInstanceHandle};
@@ -238,8 +238,6 @@ fn gltf_node_transform(node: &gltf::Node<'_>) -> Transform {
         .with_scale(Vec3::from_array(scale))
 }
 
-fn asset_path_on_disk(asset_path: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets")
-        .join(asset_path)
+fn asset_path_on_disk(asset_path: &str) -> std::path::PathBuf {
+    rust_asset_path(asset_path)
 }

@@ -177,16 +177,7 @@
             "elevation_steps": 1,
             "slope": "ramp_north"
           }
-        },
-        { "x": 4, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
-        { "x": 5, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
-        { "x": 6, "z": 8, "blocks_movement": true, "blocks_sight": false, "terrain": "roadblock" },
-        { "x": 10, "z": 5, "blocks_movement": true, "blocks_sight": true, "terrain": "wreckage" },
-        { "x": 11, "z": 5, "blocks_movement": true, "blocks_sight": true, "terrain": "wreckage" },
-        { "x": 12, "z": 5, "blocks_movement": true, "blocks_sight": true, "terrain": "wreckage" },
-        { "x": 13, "z": 14, "blocks_movement": true, "blocks_sight": false, "terrain": "sandbag" },
-        { "x": 14, "z": 14, "blocks_movement": true, "blocks_sight": false, "terrain": "sandbag" },
-        { "x": 15, "z": 14, "blocks_movement": true, "blocks_sight": false, "terrain": "sandbag" }
+        }
       ]
     }
   ],
@@ -311,6 +302,90 @@
           "options": []
         },
         "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_roadblock_prop",
+      "kind": "prop",
+      "anchor": { "x": 4, "y": 0, "z": 8 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/roadblock_concrete"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_wrecked_car_prop",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 5 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/wrecked_car"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_sandbag_prop",
+      "kind": "prop",
+      "anchor": { "x": 13, "y": 0, "z": 14 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/sandbag_barrier"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_dead_tree",
+      "kind": "prop",
+      "anchor": { "x": 17, "y": 0, "z": 2 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/tree_dead"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_dry_bush",
+      "kind": "prop",
+      "anchor": { "x": 8, "y": 0, "z": 15 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/bush_dry"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_rust_barrel",
+      "kind": "prop",
+      "anchor": { "x": 8, "y": 0, "z": 6 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/barrel_rust"
+        }
       }
     },
     {

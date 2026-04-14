@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager};
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_MODEL: &str = "gpt-4.1-mini";
-const DEFAULT_TIMEOUT_SEC: u64 = 45;
+const DEFAULT_TIMEOUT_SEC: u64 = 90;
 const DEFAULT_MAX_CONTEXT_RECORDS: usize = 24;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

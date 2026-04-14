@@ -10,43 +10,203 @@
     {
       "y": 0,
       "cells": [
-        { "x": 9, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "dorm_wall" },
-        { "x": 10, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "dorm_wall" },
-        { "x": 11, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "dorm_wall" },
-        { "x": 31, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "clinic_wall" },
-        { "x": 32, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "clinic_wall" },
-        { "x": 33, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "clinic_wall" },
-        { "x": 34, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "clinic_wall" },
-        { "x": 35, "z": 8, "blocks_movement": true, "blocks_sight": true, "terrain": "clinic_wall" },
-        { "x": 10, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "canteen_counter" },
-        { "x": 11, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "canteen_counter" },
-        { "x": 12, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "canteen_counter" },
-        { "x": 33, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "storage_stack" },
-        { "x": 34, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "storage_stack" },
-        { "x": 35, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "storage_stack" },
-        { "x": 36, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "storage_stack" },
-        { "x": 37, "z": 22, "blocks_movement": true, "blocks_sight": false, "terrain": "storage_stack" },
-        { "x": 31, "z": 33, "blocks_movement": true, "blocks_sight": false, "terrain": "workshop_crates" },
-        { "x": 32, "z": 33, "blocks_movement": true, "blocks_sight": false, "terrain": "workshop_crates" },
-        { "x": 33, "z": 33, "blocks_movement": true, "blocks_sight": false, "terrain": "workshop_crates" },
-        { "x": 22, "z": 31, "blocks_movement": true, "blocks_sight": false, "terrain": "inner_barricade" },
-        { "x": 25, "z": 31, "blocks_movement": true, "blocks_sight": false, "terrain": "inner_barricade" },
-        { "x": 21, "z": 37, "blocks_movement": true, "blocks_sight": true, "terrain": "gate_pillar" },
-        { "x": 26, "z": 37, "blocks_movement": true, "blocks_sight": true, "terrain": "gate_pillar" },
-        { "x": 20, "z": 38, "blocks_movement": true, "blocks_sight": true, "terrain": "outer_wall" },
-        { "x": 21, "z": 38, "blocks_movement": true, "blocks_sight": true, "terrain": "outer_wall" },
-        { "x": 26, "z": 38, "blocks_movement": true, "blocks_sight": true, "terrain": "outer_wall" },
-        { "x": 27, "z": 38, "blocks_movement": true, "blocks_sight": true, "terrain": "outer_wall" }
+        {
+          "x": 38,
+          "z": 14,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 39,
+          "z": 14,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 40,
+          "z": 14,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 41,
+          "z": 14,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 37,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_east"
+          }
+        },
+        {
+          "x": 38,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 39,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 41,
+          "z": 15,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 37,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_east"
+          }
+        },
+        {
+          "x": 38,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 39,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 40,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 41,
+          "z": 16,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "flat"
+          }
+        },
+        {
+          "x": 39,
+          "z": 17,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_north"
+          }
+        },
+        {
+          "x": 40,
+          "z": 17,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_north"
+          }
+        },
+        {
+          "x": 41,
+          "z": 17,
+          "blocks_movement": false,
+          "blocks_sight": false,
+          "terrain": "embankment_ramp",
+          "visual": {
+            "surface_set_id": "surface_placeholder_basic/default",
+            "elevation_steps": 1,
+            "slope": "ramp_north"
+          }
+        }
       ]
     },
     {
       "y": 1,
-      "cells": [
-        { "x": 40, "z": 31, "blocks_movement": true, "blocks_sight": true, "terrain": "watchtower_railing" },
-        { "x": 41, "z": 31, "blocks_movement": true, "blocks_sight": true, "terrain": "watchtower_railing" },
-        { "x": 40, "z": 32, "blocks_movement": true, "blocks_sight": true, "terrain": "watchtower_railing" },
-        { "x": 41, "z": 32, "blocks_movement": true, "blocks_sight": true, "terrain": "watchtower_railing" }
-      ]
+      "cells": []
     }
   ],
   "entry_points": [
@@ -297,6 +457,130 @@
       }
     },
     {
+      "object_id": "survivor_outpost_01_dorm_wall_segment",
+      "kind": "building",
+      "anchor": { "x": 9, "y": 0, "z": 8 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": {
+          "prefab_id": "survivor_outpost_01_dorm_wall_segment",
+          "wall_visual": { "kind": "legacy_grid" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy"
+          },
+          "layout": {
+            "shape_cells": [
+              { "x": 0, "z": 0 },
+              { "x": 1, "z": 0 },
+              { "x": 2, "z": 0 }
+            ],
+            "target_room_count": 1,
+            "exterior_door_count": 0,
+            "generator": "solid_shell"
+          }
+        },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_clinic_wall_segment",
+      "kind": "building",
+      "anchor": { "x": 31, "y": 0, "z": 8 },
+      "footprint": { "width": 5, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": {
+          "prefab_id": "survivor_outpost_01_clinic_wall_segment",
+          "wall_visual": { "kind": "legacy_grid" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy"
+          },
+          "layout": {
+            "shape_cells": [
+              { "x": 0, "z": 0 },
+              { "x": 1, "z": 0 },
+              { "x": 2, "z": 0 },
+              { "x": 3, "z": 0 },
+              { "x": 4, "z": 0 }
+            ],
+            "target_room_count": 1,
+            "exterior_door_count": 0,
+            "generator": "solid_shell"
+          }
+        },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_outer_wall_west",
+      "kind": "building",
+      "anchor": { "x": 20, "y": 0, "z": 38 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": {
+          "prefab_id": "survivor_outpost_01_outer_wall_segment",
+          "wall_visual": { "kind": "legacy_grid" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy"
+          },
+          "layout": {
+            "shape_cells": [
+              { "x": 0, "z": 0 },
+              { "x": 1, "z": 0 }
+            ],
+            "target_room_count": 1,
+            "exterior_door_count": 0,
+            "generator": "solid_shell"
+          }
+        },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_outer_wall_east",
+      "kind": "building",
+      "anchor": { "x": 26, "y": 0, "z": 38 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": {
+          "prefab_id": "survivor_outpost_01_outer_wall_segment",
+          "wall_visual": { "kind": "legacy_grid" },
+          "tile_set": {
+            "wall_set_id": "building_wall_legacy"
+          },
+          "layout": {
+            "shape_cells": [
+              { "x": 0, "z": 0 },
+              { "x": 1, "z": 0 }
+            ],
+            "target_room_count": 1,
+            "exterior_door_count": 0,
+            "generator": "solid_shell"
+          }
+        },
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
       "object_id": "survivor_outpost_01_perimeter_gate",
       "kind": "trigger",
       "anchor": { "x": 47, "y": 0, "z": 8 },
@@ -338,6 +622,232 @@
           "options": []
         },
         "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_canteen_table_a",
+      "kind": "prop",
+      "anchor": { "x": 8, "y": 0, "z": 20 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "east",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/table_metal"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_canteen_chair_a",
+      "kind": "prop",
+      "anchor": { "x": 7, "y": 0, "z": 20 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "east",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/chair_metal"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_canteen_chair_b",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 20 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "west",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/chair_metal"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_dorm_desk_a",
+      "kind": "prop",
+      "anchor": { "x": 8, "y": 0, "z": 10 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/desk_wood"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_dorm_chair_a",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 10 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "west",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/chair_metal"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_workshop_shelf_a",
+      "kind": "prop",
+      "anchor": { "x": 30, "y": 0, "z": 30 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/shelf_metal"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_workshop_cabinet_a",
+      "kind": "prop",
+      "anchor": { "x": 33, "y": 0, "z": 30 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/cabinet_wood"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_gate_pallet_stack",
+      "kind": "prop",
+      "anchor": { "x": 23, "y": 0, "z": 35 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/pallet_stack"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_canteen_counter_prop",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 22 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/counter_canteen"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_storage_stack_a",
+      "kind": "prop",
+      "anchor": { "x": 33, "y": 0, "z": 22 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/crate_stack_large",
+          "scale": { "x": 1.45, "y": 1.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_storage_stack_b",
+      "kind": "prop",
+      "anchor": { "x": 36, "y": 0, "z": 22 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/crate_stack_large"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_workshop_crates_prop",
+      "kind": "prop",
+      "anchor": { "x": 31, "y": 0, "z": 33 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/crate_stack_large",
+          "scale": { "x": 1.35, "y": 1.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_inner_barricade_west",
+      "kind": "prop",
+      "anchor": { "x": 22, "y": 0, "z": 31 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/barricade_scrap"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_inner_barricade_east",
+      "kind": "prop",
+      "anchor": { "x": 25, "y": 0, "z": 31 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/barricade_scrap"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_gate_pillar_west",
+      "kind": "prop",
+      "anchor": { "x": 21, "y": 0, "z": 37 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/gate_pillar_concrete"
+        }
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_gate_pillar_east",
+      "kind": "prop",
+      "anchor": { "x": 26, "y": 0, "z": 37 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/gate_pillar_concrete"
+        }
       }
     },
     {

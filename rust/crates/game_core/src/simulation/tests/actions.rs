@@ -558,6 +558,108 @@ fn combat_ai_approaches_target_when_attack_is_out_of_range() {
     );
 }
 
+#[test]
+fn passive_profile_holds_position_in_builtin_combat_turn() {
+    let mut simulation = Simulation::new();
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let hostile = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Watcher".into(),
+        kind: ActorKind::Enemy,
+        side: ActorSide::Hostile,
+        group_id: "hostile".into(),
+        grid_position: GridCoord::new(3, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation.seed_actor_combat_behavior(hostile, "passive");
+    simulation.set_actor_ap(hostile, 1.0);
+    simulation.enter_combat(hostile, player);
+
+    simulation.run_combat_ai_turn(hostile);
+
+    assert_eq!(
+        simulation.actor_grid_position(hostile),
+        Some(GridCoord::new(3, 0, 0))
+    );
+}
+
+#[test]
+fn builtin_combat_ai_prefers_aoe_skill_when_it_hits_multiple_targets() {
+    let mut simulation = Simulation::new();
+    simulation.set_skill_library(sample_spatial_skill_library());
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let ally = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Guard".into(),
+        kind: ActorKind::Npc,
+        side: ActorSide::Friendly,
+        group_id: "friendly".into(),
+        grid_position: GridCoord::new(1, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let hostile = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Caster".into(),
+        kind: ActorKind::Enemy,
+        side: ActorSide::Hostile,
+        group_id: "hostile".into(),
+        grid_position: GridCoord::new(1, 0, 1),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation
+        .economy
+        .actor_mut(hostile)
+        .expect("hostile should exist")
+        .learned_skills
+        .insert("shockwave_hostile_only".to_string(), 1);
+    simulation.seed_actor_combat_behavior(hostile, "neutral");
+    simulation.set_actor_ap(hostile, 1.0);
+    simulation.enter_combat(hostile, player);
+    simulation.drain_events();
+
+    simulation.run_combat_ai_turn(hostile);
+
+    let events = simulation.drain_events();
+    assert!(events.iter().any(|event| matches!(
+        event,
+        SimulationEvent::SkillActivated {
+            actor_id,
+            skill_id,
+            hit_actor_ids,
+            ..
+        } if *actor_id == hostile
+            && skill_id == "shockwave_hostile_only"
+            && hit_actor_ids.contains(&player)
+            && hit_actor_ids.contains(&ally)
+    )));
+}
+
 fn sample_weapon_item_library_with_speed(attack_speed: f32) -> ItemLibrary {
     ItemLibrary::from(BTreeMap::from([
         (

@@ -1,3 +1,6 @@
+//! Utility AI 上下文模块。
+//! 负责把规划请求转成 utility 打分视图，不负责具体打分规则或选择逻辑。
+
 use std::collections::BTreeSet;
 
 use game_data::{AiBehaviorProfile, NpcRole};

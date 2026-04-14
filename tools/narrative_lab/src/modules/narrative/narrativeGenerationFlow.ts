@@ -107,6 +107,21 @@ export function buildStrategyInstruction(session: DocumentAgentSession) {
   return [intensityLabel, priorityLabel, questionLabel].join("；");
 }
 
+export function shouldBypassActionIntentResolution(prompt: string) {
+  const normalized = prompt.trim();
+  return (
+    normalized.includes("先别动笔") ||
+    normalized.includes("还缺哪些必要信息") ||
+    normalized.includes("先告诉我还缺") ||
+    normalized.includes("推进方向") ||
+    normalized.includes("不同方向") ||
+    normalized.includes("三个截然不同") ||
+    normalized.includes("执行计划") ||
+    normalized.includes("分步骤") ||
+    normalized.includes("等我确认后再继续")
+  );
+}
+
 type BuildGenerationUserMessageInput = {
   submittedPrompt: string;
   action: "create" | "revise_document" | null;

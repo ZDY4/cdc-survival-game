@@ -618,6 +618,7 @@ fn validate_object_payload(
                 }
             }
         }
+        MapObjectKind::Prop => {}
         MapObjectKind::Interactive => {
             let Some(interactive) = object.props.interactive.as_ref() else {
                 return Err(MapDefinitionValidationError::MissingInteractiveKind {

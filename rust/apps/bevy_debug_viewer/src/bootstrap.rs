@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use game_bevy::{
     apply_dialogue_libraries, build_runtime_from_default_startup_seed, load_dialogue_definitions,
-    load_dialogue_rule_definitions, load_runtime_bootstrap, CharacterDefinitionPath,
-    DialogueDefinitionPath, DialogueRuleDefinitionPath, MapDefinitionPath, OverworldDefinitionPath,
-    RuntimeBootstrapError, RuntimeStartupConfigPath,
+    load_dialogue_rule_definitions, load_runtime_bootstrap, rust_asset_dir,
+    CharacterDefinitionPath, DialogueDefinitionPath, DialogueRuleDefinitionPath, MapDefinitionPath,
+    OverworldDefinitionPath, RuntimeBootstrapError, RuntimeStartupConfigPath,
 };
 use game_core::SimulationRuntime;
 
@@ -45,7 +45,7 @@ fn configure_viewer_runtime(runtime: &mut SimulationRuntime) -> Result<(), Runti
 }
 
 fn viewer_asset_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    rust_asset_dir()
 }
 
 #[cfg(test)]

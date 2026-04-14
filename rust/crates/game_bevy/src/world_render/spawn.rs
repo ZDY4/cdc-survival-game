@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use crate::static_world::{
     StaticWorldBillboardLabelSpec, StaticWorldBoxSpec, StaticWorldDecalSpec, StaticWorldGroundSpec,
-    StaticWorldMaterialRole,
+    StaticWorldMaterialRole, StaticWorldStairSpec,
 };
 use crate::tile_world::TileRenderClass;
 use game_data::WorldTileLibrary;
@@ -101,6 +101,15 @@ pub fn spawn_world_render_scene(
         ),
         ..default()
     };
+    spawned_scene.entities.extend(spawn_stair_sections(
+        commands,
+        meshes,
+        materials,
+        building_wall_materials,
+        &mut caches,
+        palette,
+        &scene.static_scene.stairs,
+    ));
     for spec in scene
         .static_scene
         .boxes
@@ -378,6 +387,33 @@ fn spawn_ground_sections(
         .collect()
 }
 
+fn spawn_stair_sections(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
+    palette: &WorldRenderPalette,
+    stair_specs: &[StaticWorldStairSpec],
+) -> Vec<Entity> {
+    stair_specs
+        .iter()
+        .map(|stair| {
+            spawn_static_cuboid(
+                commands,
+                meshes,
+                materials,
+                building_wall_materials,
+                caches,
+                stair.size,
+                stair.translation,
+                world_render_color_for_role(stair.material_role, palette),
+                world_render_material_style_for_role(stair.material_role),
+            )
+        })
+        .collect()
+}
+
 fn ground_colors_for_role(
     role: StaticWorldMaterialRole,
     palette: &WorldRenderPalette,
@@ -422,6 +458,37 @@ fn spawn_box(
             Mesh3d(mesh),
             MeshMaterial3d(material),
             Transform::from_translation(spec.translation),
+        ))
+        .id()
+}
+
+fn spawn_static_cuboid(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    caches: &mut WorldRenderSpawnCaches,
+    size: Vec3,
+    translation: Vec3,
+    color: Color,
+    material_style: WorldRenderMaterialStyle,
+) -> Entity {
+    let mesh = cached_cuboid_mesh(meshes, caches, size);
+    let material = cached_world_render_material(
+        materials,
+        building_wall_materials,
+        caches,
+        color,
+        material_style,
+    );
+    let WorldRenderMaterialHandle::Standard(material) = material else {
+        unreachable!("static cuboids should not use building wall grid materials");
+    };
+    commands
+        .spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(translation),
         ))
         .id()
 }

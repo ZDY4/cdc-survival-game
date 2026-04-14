@@ -73,6 +73,16 @@ pub(super) fn rebuild_static_world(
             &shared_scene.ground,
         ));
 
+    static_world_state
+        .entities
+        .extend(spawn_shared_stair_sections(
+            commands,
+            meshes,
+            materials,
+            building_wall_materials,
+            &shared_scene.stairs,
+        ));
+
     for spec in shared_scene
         .boxes
         .into_iter()
@@ -93,6 +103,15 @@ pub(super) fn rebuild_static_world(
                     render_config,
                 ));
         }
+    }
+
+    for spec in shared_scene
+        .pick_proxies
+        .into_iter()
+        .map(shared_box_spec_to_viewer_box_spec)
+    {
+        let spawned = spawn_box(commands, meshes, materials, building_wall_materials, spec);
+        static_world_state.entities.push(spawned.entity);
     }
 
     for spec in prepared_tile_scene
@@ -382,40 +401,19 @@ fn shared_material_role_to_viewer_material_style(
 ) -> MaterialStyle {
     match role {
         shared_static_world::StaticWorldMaterialRole::Ground
-        | shared_static_world::StaticWorldMaterialRole::OverworldGroundRoad
-        | shared_static_world::StaticWorldMaterialRole::OverworldGroundPlain
-        | shared_static_world::StaticWorldMaterialRole::OverworldGroundForest
-        | shared_static_world::StaticWorldMaterialRole::OverworldGroundRiver
-        | shared_static_world::StaticWorldMaterialRole::OverworldGroundLake
-        | shared_static_world::StaticWorldMaterialRole::OverworldGroundMountain
-        | shared_static_world::StaticWorldMaterialRole::OverworldGroundUrban
         | shared_static_world::StaticWorldMaterialRole::BuildingFloor => {
             MaterialStyle::StructureAccent
         }
-        shared_static_world::StaticWorldMaterialRole::BuildingDoor => MaterialStyle::BuildingDoor,
         shared_static_world::StaticWorldMaterialRole::StairBase
-        | shared_static_world::StaticWorldMaterialRole::PickupBase
-        | shared_static_world::StaticWorldMaterialRole::InteractiveBase
         | shared_static_world::StaticWorldMaterialRole::OverworldCell
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationGeneric
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationHospital
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationSchool
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationStore
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationStreet
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationOutpost
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationFactory
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationForest
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationRuins
-        | shared_static_world::StaticWorldMaterialRole::OverworldLocationSubway => {
+        | shared_static_world::StaticWorldMaterialRole::OverworldLocationLabel => {
             MaterialStyle::Utility
         }
         shared_static_world::StaticWorldMaterialRole::StairAccent
-        | shared_static_world::StaticWorldMaterialRole::PickupAccent
-        | shared_static_world::StaticWorldMaterialRole::InteractiveAccent
-        | shared_static_world::StaticWorldMaterialRole::TriggerBase
         | shared_static_world::StaticWorldMaterialRole::TriggerAccent
-        | shared_static_world::StaticWorldMaterialRole::OverworldBlockedCell
-        | shared_static_world::StaticWorldMaterialRole::Warning => MaterialStyle::UtilityAccent,
+        | shared_static_world::StaticWorldMaterialRole::OverworldBlockedCell => {
+            MaterialStyle::UtilityAccent
+        }
         shared_static_world::StaticWorldMaterialRole::InvisiblePickProxy => {
             MaterialStyle::InvisiblePickProxy
         }
@@ -441,9 +439,8 @@ fn shared_box_spec_to_viewer_box_spec(
     spec: shared_static_world::StaticWorldBoxSpec,
 ) -> StaticWorldBoxSpec {
     let pick_binding = spec.semantic.as_ref().map(shared_semantic_to_binding);
-    let outline_target = pick_binding
-        .as_ref()
-        .map(|binding| binding.semantic.clone());
+    let outline_target =
+        shared_box_outline_target(spec.material_role, pick_binding.as_ref(), spec.semantic.as_ref());
     StaticWorldBoxSpec {
         size: spec.size,
         translation: spec.translation,
@@ -533,6 +530,30 @@ fn spawn_shared_ground_sections(
         })
         .collect()
 }
+
+fn spawn_shared_stair_sections(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    stair_specs: &[shared_static_world::StaticWorldStairSpec],
+) -> Vec<Entity> {
+    stair_specs
+        .iter()
+        .map(|stair| {
+            spawn_static_cuboid(
+                commands,
+                meshes,
+                materials,
+                building_wall_materials,
+                stair.size,
+                stair.translation,
+                shared_static_world::default_color_for_role(stair.material_role),
+                shared_material_role_to_viewer_material_style(stair.material_role),
+            )
+        })
+        .collect()
+}
 pub(crate) fn collect_static_world_box_specs(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
@@ -542,26 +563,11 @@ pub(crate) fn collect_static_world_box_specs(
     bounds: GridBounds,
     _grid_to_world: impl FnMut(GridCoord) -> game_data::WorldCoord,
 ) -> Vec<StaticWorldBoxSpec> {
-    shared_scene(snapshot, current_level, render_config, bounds)
-        .boxes
+    let scene = shared_scene(snapshot, current_level, render_config, bounds);
+    scene.boxes
         .into_iter()
-        .map(|spec| StaticWorldBoxSpec {
-            size: spec.size,
-            translation: spec.translation,
-            color: shared_role_color(spec.material_role, palette),
-            material_style: shared_role_material_style(spec.material_role),
-            occluder_kind: spec.occluder_kind.map(|kind| match kind {
-                game_bevy::static_world::StaticWorldOccluderKind::MapObject(kind) => {
-                    StaticWorldOccluderKind::MapObject(kind)
-                }
-            }),
-            occluder_cells: spec.occluder_cells,
-            pick_binding: shared_semantic_pick_binding(spec.semantic.clone()),
-            outline_target: (spec.material_role
-                != game_bevy::static_world::StaticWorldMaterialRole::InvisiblePickProxy)
-                .then(|| shared_semantic_outline_target(spec.semantic))
-                .flatten(),
-        })
+        .chain(scene.pick_proxies)
+        .map(|spec| shared_box_spec_for_collection(spec, palette))
         .collect()
 }
 
@@ -641,7 +647,6 @@ fn shared_scene(
         StaticWorldBuildConfig {
             floor_thickness_world: render_config.floor_thickness_world,
             object_style_seed: render_config.object_style_seed,
-            include_generated_doors: false,
             bounds_override: Some(game_bevy::static_world::StaticWorldGridBounds {
                 min_x: bounds.min_x,
                 max_x: bounds.max_x,
@@ -655,44 +660,20 @@ fn shared_scene(
 fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {
     match role {
         SharedRole::Ground => palette.ground_light,
-        SharedRole::OverworldGroundRoad => Color::srgb(0.42, 0.40, 0.34),
-        SharedRole::OverworldGroundPlain => Color::srgb(0.48, 0.56, 0.30),
-        SharedRole::OverworldGroundForest => Color::srgb(0.20, 0.38, 0.19),
-        SharedRole::OverworldGroundRiver => Color::srgb(0.17, 0.43, 0.67),
-        SharedRole::OverworldGroundLake => Color::srgb(0.13, 0.34, 0.58),
-        SharedRole::OverworldGroundMountain => Color::srgb(0.39, 0.39, 0.41),
-        SharedRole::OverworldGroundUrban => Color::srgb(0.46, 0.45, 0.44),
         SharedRole::BuildingFloor => lerp_color(palette.building_top, palette.building_base, 0.38),
-        SharedRole::BuildingDoor => building_door_color(),
         SharedRole::StairBase => darken_color(palette.interactive, 0.18),
         SharedRole::StairAccent => lighten_color(palette.current_turn, 0.12),
-        SharedRole::PickupBase | SharedRole::PickupAccent => palette.pickup,
-        SharedRole::InteractiveBase | SharedRole::InteractiveAccent => palette.interactive,
-        SharedRole::TriggerBase | SharedRole::TriggerAccent => palette.trigger,
+        SharedRole::TriggerAccent => palette.trigger,
         SharedRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
-        SharedRole::Warning => Color::srgb(0.95, 0.18, 0.18),
         SharedRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
         SharedRole::OverworldBlockedCell => Color::srgb(0.52, 0.19, 0.14),
-        SharedRole::OverworldLocationGeneric => Color::srgb(0.22, 0.58, 0.86),
-        SharedRole::OverworldLocationHospital => Color::srgb(0.86, 0.34, 0.34),
-        SharedRole::OverworldLocationSchool => Color::srgb(0.91, 0.73, 0.28),
-        SharedRole::OverworldLocationStore => Color::srgb(0.89, 0.54, 0.22),
-        SharedRole::OverworldLocationStreet => Color::srgb(0.66, 0.68, 0.72),
-        SharedRole::OverworldLocationOutpost => Color::srgb(0.22, 0.72, 0.86),
-        SharedRole::OverworldLocationFactory => Color::srgb(0.63, 0.39, 0.24),
-        SharedRole::OverworldLocationForest => Color::srgb(0.27, 0.63, 0.31),
-        SharedRole::OverworldLocationRuins => Color::srgb(0.63, 0.55, 0.43),
-        SharedRole::OverworldLocationSubway => Color::srgb(0.26, 0.78, 0.74),
+        SharedRole::OverworldLocationLabel => Color::srgb(0.22, 0.72, 0.86),
     }
 }
 
 fn shared_role_material_style(role: SharedRole) -> MaterialStyle {
     match role {
-        SharedRole::BuildingDoor => MaterialStyle::BuildingDoor,
-        SharedRole::PickupAccent
-        | SharedRole::InteractiveAccent
-        | SharedRole::TriggerAccent
-        | SharedRole::StairAccent => MaterialStyle::Utility,
+        SharedRole::TriggerAccent | SharedRole::StairAccent => MaterialStyle::Utility,
         SharedRole::InvisiblePickProxy => MaterialStyle::InvisiblePickProxy,
         _ => MaterialStyle::UtilityAccent,
     }
@@ -750,4 +731,39 @@ fn shared_semantic_outline_target(semantic: Option<SharedSemantic>) -> Option<Vi
         )),
         None => None,
     }
+}
+
+fn shared_box_spec_for_collection(
+    spec: shared_static_world::StaticWorldBoxSpec,
+    palette: &ViewerPalette,
+) -> StaticWorldBoxSpec {
+    let outline_target = shared_box_outline_target(spec.material_role, None, spec.semantic.as_ref());
+    StaticWorldBoxSpec {
+        size: spec.size,
+        translation: spec.translation,
+        color: shared_role_color(spec.material_role, palette),
+        material_style: shared_role_material_style(spec.material_role),
+        occluder_kind: spec.occluder_kind.map(|kind| match kind {
+            game_bevy::static_world::StaticWorldOccluderKind::MapObject(kind) => {
+                StaticWorldOccluderKind::MapObject(kind)
+            }
+        }),
+        occluder_cells: spec.occluder_cells,
+        pick_binding: shared_semantic_pick_binding(spec.semantic.clone()),
+        outline_target,
+    }
+}
+
+fn shared_box_outline_target(
+    material_role: SharedRole,
+    pick_binding: Option<&ViewerPickBindingSpec>,
+    semantic: Option<&SharedSemantic>,
+) -> Option<ViewerPickTarget> {
+    if material_role == SharedRole::InvisiblePickProxy {
+        return None;
+    }
+
+    pick_binding
+        .map(|binding| binding.semantic.clone())
+        .or_else(|| shared_semantic_outline_target(semantic.cloned()))
 }

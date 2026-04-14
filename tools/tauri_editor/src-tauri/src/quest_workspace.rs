@@ -7,6 +7,7 @@ use game_data::{
     QuestValidationCatalog,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{EditorBootstrap, ValidationIssue};
 
@@ -190,12 +191,7 @@ pub fn quest_validation_catalog(
         quest_ids: quest_ids_from_fs()?,
         item_ids: load_numeric_ids(&repo_root.join("data").join("items"))?,
         dialog_ids: stem_ids(&repo_root.join("data").join("dialogues"))?,
-        map_location_ids: object_ids_from_file(
-            &repo_root
-                .join("data")
-                .join("json")
-                .join("map_locations.json"),
-        )?,
+        map_location_ids: overworld_location_ids(&repo_root.join("data").join("overworld"))?,
         recipe_ids: stem_ids(&repo_root.join("data").join("recipes"))?,
     };
 
@@ -451,20 +447,40 @@ fn stem_ids(directory: &Path) -> Result<BTreeSet<String>, String> {
     Ok(ids)
 }
 
-fn object_ids_from_file(path: &Path) -> Result<BTreeSet<String>, String> {
-    if !path.exists() {
+fn overworld_location_ids(directory: &Path) -> Result<BTreeSet<String>, String> {
+    if !directory.exists() {
         return Ok(BTreeSet::new());
     }
 
-    let raw = fs::read_to_string(path)
-        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-    let parsed: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-
     let mut ids = BTreeSet::new();
-    if let serde_json::Value::Object(map) = parsed {
-        for key in map.keys() {
-            ids.insert(key.clone());
+    let mut entries = fs::read_dir(directory)
+        .map_err(|error| format!("failed to read {}: {error}", directory.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to enumerate {}: {error}", directory.display()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+
+        let raw = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let parsed: Value = serde_json::from_str(&raw)
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+        let Some(locations) = parsed.get("locations").and_then(Value::as_array) else {
+            continue;
+        };
+
+        for location in locations {
+            let Some(location_id) = location.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            let location_id = location_id.trim();
+            if !location_id.is_empty() {
+                ids.insert(location_id.to_string());
+            }
         }
     }
     Ok(ids)

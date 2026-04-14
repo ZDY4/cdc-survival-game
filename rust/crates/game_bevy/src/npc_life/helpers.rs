@@ -1,3 +1,6 @@
+//! NPC life 辅助函数模块。
+//! 负责 blackboard、planning context 与 smart object 选择辅助，不负责系统调度或 viewer 适配。
+
 use std::collections::BTreeMap;
 
 use bevy_ecs::prelude::Entity;
@@ -11,7 +14,10 @@ use game_data::{
 
 use crate::reservations::SmartObjectReservations;
 
-use super::{NeedState, NpcLifeState, PersonalityState, ReservationState, ScheduleState};
+use super::components::{
+    NeedState, NpcLifeState, NpcRuntimeBridgeState, PersonalityState, ReservationState,
+    ScheduleState,
+};
 
 pub(super) fn route_duty_anchor(
     settlement: &SettlementDefinition,
@@ -210,6 +216,7 @@ pub(super) fn build_ai_blackboard(
     schedule: &ScheduleState,
     reservations: &ReservationState,
     world_alert_active: bool,
+    runtime_bridge: &NpcRuntimeBridgeState,
     active_guards: u32,
     min_guard_on_duty: u32,
     guard_post_available: bool,
@@ -233,6 +240,39 @@ pub(super) fn build_ai_blackboard(
     blackboard.set_bool("schedule.meal_window_open", schedule.meal_window_open);
     blackboard.set_bool("schedule.quiet_hours", schedule.quiet_hours);
     blackboard.set_bool("world.alert_active", world_alert_active);
+    blackboard.set_bool("combat.alert_active", runtime_bridge.combat_alert_active);
+    blackboard.set_bool(
+        "combat.replan_required",
+        runtime_bridge.combat_replan_required,
+    );
+    blackboard.set_bool(
+        "combat.threat_active",
+        runtime_bridge.combat_threat_actor_id.is_some(),
+    );
+    blackboard.set_optional_text(
+        "combat.threat_actor_id",
+        runtime_bridge
+            .combat_threat_actor_id
+            .map(|actor_id| actor_id.0.to_string()),
+    );
+    blackboard.set_optional_text(
+        "combat.last_target_actor_id",
+        runtime_bridge
+            .last_combat_target_actor_id
+            .map(|actor_id| actor_id.0.to_string()),
+    );
+    blackboard.set_optional_text(
+        "combat.last_outcome",
+        runtime_bridge.last_combat_outcome.clone(),
+    );
+    blackboard.set_number(
+        "combat.last_damage_taken",
+        runtime_bridge.last_damage_taken.unwrap_or(0.0),
+    );
+    blackboard.set_number(
+        "combat.last_damage_dealt",
+        runtime_bridge.last_damage_dealt.unwrap_or(0.0),
+    );
     blackboard.set_bool(
         "reservation.bed.active",
         life.bed_id

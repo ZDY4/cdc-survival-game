@@ -80,6 +80,11 @@ impl SimulationRuntime {
             .seed_actor_combat_profile(actor_id, combat_attributes, resources);
     }
 
+    pub fn seed_actor_combat_behavior(&mut self, actor_id: ActorId, behavior: &str) {
+        self.simulation
+            .seed_actor_combat_behavior(actor_id, behavior);
+    }
+
     pub fn seed_actor_loot_table(
         &mut self,
         actor_id: ActorId,

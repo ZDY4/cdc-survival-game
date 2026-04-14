@@ -3,18 +3,24 @@ use bevy::pbr::{MaterialPlugin, StandardMaterial};
 use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponent;
 use game_core::{grid::GridWorld, GeneratedDoorDebugState, SimulationSnapshot};
-use game_data::{MapDefinition, MapId, OverworldDefinition, WorldTileLibrary};
+use game_data::{
+    GridCoord, MapDefinition, MapId, OverworldDefinition, WorldMode, WorldTileLibrary,
+    WorldTilePrototypeId,
+};
 use std::collections::HashMap;
 
 use crate::static_world::{
     build_static_world_from_map_definition, build_static_world_from_overworld_definition,
-    build_static_world_from_simulation_snapshot, StaticWorldBuildConfig, StaticWorldGridBounds,
-    StaticWorldSceneSpec,
+    build_static_world_from_simulation_snapshot, overworld_location_marker_archetype,
+    OverworldLocationMarkerArchetype, StaticWorldBuildConfig, StaticWorldGridBounds,
+    StaticWorldSceneSpec, StaticWorldSemantic,
 };
 use crate::tile_world::{
     default_floor_top, resolve_map_cell_surface_placements, resolve_map_object_visual_placements,
+    resolve_overworld_definition_surface_placements, resolve_overworld_snapshot_surface_placements,
     resolve_snapshot_cell_surface_placements, resolve_snapshot_object_visual_placements,
-    resolve_tile_world_scene, TilePlacementSpec, TileWorldSceneSpec,
+    resolve_tile_world_scene, TilePickProxySpec, TilePlacementSpec, TileRenderClass,
+    TileWorldSceneSpec,
 };
 
 mod doors;
@@ -335,7 +341,6 @@ pub fn build_world_render_scene_from_map_definition(
         StaticWorldBuildConfig {
             floor_thickness_world: config.floor_thickness_world,
             object_style_seed: config.object_style_seed,
-            include_generated_doors: false,
             bounds_override: None,
         },
     );
@@ -380,7 +385,6 @@ pub fn build_world_render_scene_from_simulation_snapshot(
         StaticWorldBuildConfig {
             floor_thickness_world: config.floor_thickness_world,
             object_style_seed: config.object_style_seed,
-            include_generated_doors: false,
             bounds_override,
         },
     );
@@ -399,6 +403,17 @@ pub fn build_world_render_scene_from_simulation_snapshot(
         floor_top,
         grid_size,
     ));
+    if snapshot.interaction_context.world_mode == WorldMode::Overworld {
+        tile_placements.extend(resolve_overworld_snapshot_surface_placements(
+            snapshot,
+            floor_top,
+            grid_size,
+            world_tiles,
+        ));
+        tile_placements.extend(resolve_overworld_snapshot_location_placements(
+            snapshot, floor_top, grid_size,
+        ));
+    }
     WorldRenderScene {
         current_level,
         static_scene,
@@ -414,11 +429,356 @@ pub fn build_world_render_scene_from_simulation_snapshot(
 
 pub fn build_world_render_scene_from_overworld_definition(
     definition: &OverworldDefinition,
+    world_tiles: &WorldTileLibrary,
 ) -> WorldRenderScene {
     WorldRenderScene {
         current_level: 0,
         static_scene: build_static_world_from_overworld_definition(definition),
         generated_doors: Vec::new(),
-        tile_placements: Vec::new(),
+        tile_placements: {
+            let floor_top = default_floor_top(0, 1.0, 0.11);
+            let mut placements = resolve_overworld_definition_surface_placements(
+                definition,
+                floor_top,
+                1.0,
+                world_tiles,
+            );
+            placements.extend(resolve_overworld_definition_location_placements(
+                definition, floor_top, 1.0,
+            ));
+            placements
+        },
+    }
+}
+
+fn resolve_overworld_definition_location_placements(
+    definition: &OverworldDefinition,
+    floor_top: f32,
+    grid_size: f32,
+) -> Vec<TilePlacementSpec> {
+    definition
+        .locations
+        .iter()
+        .map(|location| {
+            overworld_location_marker_placement(
+                overworld_location_marker_archetype(
+                    location.id.as_str(),
+                    location.map_id.as_str(),
+                    Some(location.name.as_str()),
+                    Some(location.icon.as_str()),
+                ),
+                location.id.as_str().to_string(),
+                location.overworld_cell,
+                floor_top,
+                grid_size,
+            )
+        })
+        .collect()
+}
+
+fn resolve_overworld_snapshot_location_placements(
+    snapshot: &SimulationSnapshot,
+    floor_top: f32,
+    grid_size: f32,
+) -> Vec<TilePlacementSpec> {
+    snapshot
+        .grid
+        .map_objects
+        .iter()
+        .filter(|object| {
+            object.kind == game_data::MapObjectKind::Trigger
+                && object
+                    .payload_summary
+                    .get("trigger_kind")
+                    .is_some_and(|kind| kind == "enter_outdoor_location")
+        })
+        .map(|object| {
+            let location_id = object
+                .object_id
+                .strip_prefix("overworld_trigger::")
+                .unwrap_or(object.object_id.as_str());
+            overworld_location_marker_placement(
+                overworld_location_marker_archetype(location_id, location_id, None, None),
+                object.object_id.clone(),
+                object.anchor,
+                floor_top,
+                grid_size,
+            )
+        })
+        .collect()
+}
+
+fn overworld_location_marker_placement(
+    archetype: OverworldLocationMarkerArchetype,
+    semantic_id: String,
+    grid: GridCoord,
+    floor_top: f32,
+    grid_size: f32,
+) -> TilePlacementSpec {
+    let (prototype_id, scale) = overworld_location_marker_visual(archetype);
+    let center_x = (grid.x as f32 + 0.5) * grid_size;
+    let center_z = (grid.z as f32 + 0.5) * grid_size;
+    let semantic = Some(StaticWorldSemantic::MapObject(semantic_id));
+    TilePlacementSpec {
+        prototype_id,
+        translation: Vec3::new(center_x, floor_top, center_z),
+        rotation: Quat::IDENTITY,
+        scale,
+        render_class: TileRenderClass::Standard,
+        semantic: semantic.clone(),
+        occluder_kind: None,
+        occluder_cells: vec![grid],
+        pick_proxy: Some(TilePickProxySpec {
+            size: Vec3::new(grid_size * 0.86, grid_size, grid_size * 0.86),
+            translation: Vec3::new(center_x, floor_top + grid_size * 0.5, center_z),
+            semantic,
+        }),
+    }
+}
+
+fn overworld_location_marker_visual(
+    archetype: OverworldLocationMarkerArchetype,
+) -> (WorldTilePrototypeId, Vec3) {
+    let (prototype_id, uniform_scale) = match archetype {
+        OverworldLocationMarkerArchetype::Hospital => ("props/cabinet_medical", 0.82),
+        OverworldLocationMarkerArchetype::School => ("props/desk_wood", 0.58),
+        OverworldLocationMarkerArchetype::Store => ("props/shelf_metal", 0.62),
+        OverworldLocationMarkerArchetype::Street => ("props/roadblock_concrete", 0.36),
+        OverworldLocationMarkerArchetype::Outpost => ("props/sandbag_barrier", 0.40),
+        OverworldLocationMarkerArchetype::Factory => ("props/barrel_rust", 0.92),
+        OverworldLocationMarkerArchetype::Forest => ("props/tree_dead", 0.42),
+        OverworldLocationMarkerArchetype::Ruins => ("props/wrecked_car", 0.34),
+        OverworldLocationMarkerArchetype::Subway => ("props/roadblock_concrete", 0.32),
+        OverworldLocationMarkerArchetype::Generic => ("props/pallet_stack", 0.68),
+    };
+    (
+        WorldTilePrototypeId(prototype_id.to_string()),
+        Vec3::splat(uniform_scale),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use game_core::{
+        CombatDebugState, GridDebugState, MapObjectDebugState, OverworldStateSnapshot,
+    };
+    use game_data::{
+        InteractionContextSnapshot, MapObjectFootprint, MapObjectKind, MapRotation, MapSize,
+        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTravelRuleSet, TurnState,
+    };
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn overworld_definition_uses_tile_placements_for_location_markers() {
+        let scene = build_world_render_scene_from_overworld_definition(
+            &sample_overworld(),
+            &WorldTileLibrary::default(),
+        );
+
+        assert!(scene.static_scene.boxes.is_empty());
+        assert_eq!(scene.static_scene.labels.len(), 1);
+        assert_eq!(scene.tile_placements.len(), 1);
+        assert_eq!(
+            scene.tile_placements[0].prototype_id.as_str(),
+            "props/sandbag_barrier"
+        );
+        assert!(scene.tile_placements[0].pick_proxy.is_some());
+        assert_eq!(
+            scene.tile_placements[0].semantic,
+            Some(StaticWorldSemantic::MapObject("outpost".into()))
+        );
+    }
+
+    #[test]
+    fn overworld_definition_surface_visuals_become_tile_placements() {
+        let temp_dir = std::env::temp_dir().join("cdc_overworld_surface_world_render");
+        std::fs::create_dir_all(&temp_dir).expect("temp dir should exist");
+        let catalog_path = temp_dir.join("surface.json");
+        std::fs::write(
+            &catalog_path,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "prototypes": [
+                    {
+                        "id": "surface/flat",
+                        "source": { "kind": "gltf_scene", "path": "surface/flat.gltf", "scene_index": 0 },
+                        "bounds": {
+                            "center": { "x": 0.0, "y": 0.0, "z": 0.0 },
+                            "size": { "x": 1.0, "y": 0.2, "z": 1.0 }
+                        },
+                        "cast_shadows": true,
+                        "receive_shadows": true
+                    }
+                ],
+                "surface_sets": [
+                    {
+                        "id": "test_surface/basic",
+                        "flat_top_prototype_id": "surface/flat"
+                    }
+                ]
+            }))
+            .expect("serialize catalog"),
+        )
+        .expect("write catalog");
+        let world_tiles =
+            game_data::load_world_tile_library(&temp_dir).expect("load overworld tile library");
+        let scene = build_world_render_scene_from_overworld_definition(
+            &sample_overworld_with_surface(),
+            &world_tiles,
+        );
+
+        assert!(scene
+            .tile_placements
+            .iter()
+            .any(|placement| placement.prototype_id.as_str() == "surface/flat"));
+        assert!(scene.static_scene.ground.iter().all(|spec| {
+            let min_x = spec.translation.x - spec.size.x * 0.5;
+            let max_x = spec.translation.x + spec.size.x * 0.5;
+            let min_z = spec.translation.z - spec.size.z * 0.5;
+            let max_z = spec.translation.z + spec.size.z * 0.5;
+            !(1.5 >= min_x && 1.5 <= max_x && 1.5 >= min_z && 1.5 <= max_z)
+        }));
+    }
+
+    #[test]
+    fn overworld_snapshot_uses_tile_placements_for_location_triggers() {
+        let scene = build_world_render_scene_from_simulation_snapshot(
+            &sample_overworld_snapshot(),
+            0,
+            WorldRenderConfig::default(),
+            None,
+            &WorldTileLibrary::default(),
+        );
+
+        assert!(scene.static_scene.boxes.is_empty());
+        assert_eq!(scene.static_scene.labels.len(), 1);
+        assert_eq!(scene.tile_placements.len(), 1);
+        assert_eq!(
+            scene.tile_placements[0].prototype_id.as_str(),
+            "props/tree_dead"
+        );
+        assert!(scene.tile_placements[0].pick_proxy.is_some());
+        assert_eq!(
+            scene.tile_placements[0].semantic,
+            Some(StaticWorldSemantic::MapObject(
+                "overworld_trigger::forest".into()
+            ))
+        );
+    }
+
+    fn sample_overworld() -> OverworldDefinition {
+        OverworldDefinition {
+            id: game_data::OverworldId("test_overworld".into()),
+            size: MapSize {
+                width: 3,
+                height: 3,
+            },
+            locations: vec![OverworldLocationDefinition {
+                id: OverworldLocationId("outpost".into()),
+                name: "Outpost".into(),
+                description: String::new(),
+                kind: OverworldLocationKind::Outdoor,
+                map_id: MapId("outpost_map".into()),
+                entry_point_id: "default".into(),
+                parent_outdoor_location_id: None,
+                return_entry_point_id: None,
+                default_unlocked: true,
+                visible: true,
+                overworld_cell: GridCoord::new(1, 0, 1),
+                danger_level: 0,
+                icon: "safehouse".into(),
+                extra: BTreeMap::new(),
+            }],
+            cells: vec![
+                game_data::OverworldCellDefinition {
+                    grid: GridCoord::new(0, 0, 0),
+                    terrain: game_data::OverworldTerrainKind::Plain,
+                    blocked: false,
+                    visual: None,
+                    extra: BTreeMap::new(),
+                },
+                game_data::OverworldCellDefinition {
+                    grid: GridCoord::new(1, 0, 1),
+                    terrain: game_data::OverworldTerrainKind::Urban,
+                    blocked: false,
+                    visual: None,
+                    extra: BTreeMap::new(),
+                },
+            ],
+            travel_rules: OverworldTravelRuleSet::default(),
+        }
+    }
+
+    fn sample_overworld_with_surface() -> OverworldDefinition {
+        let mut definition = sample_overworld();
+        let cell = definition
+            .cells
+            .iter_mut()
+            .find(|cell| cell.grid == GridCoord::new(1, 0, 1))
+            .expect("sample overworld should contain the target cell");
+        cell.visual = Some(game_data::OverworldCellVisualSpec {
+            surface_set_id: Some(game_data::WorldSurfaceTileSetId(
+                "test_surface/basic".into(),
+            )),
+            elevation_steps: 0,
+            slope: game_data::TileSlopeKind::Flat,
+        });
+        definition
+    }
+
+    fn sample_overworld_snapshot() -> SimulationSnapshot {
+        SimulationSnapshot {
+            turn: TurnState::default(),
+            actors: Vec::new(),
+            grid: GridDebugState {
+                grid_size: 1.0,
+                map_id: None,
+                map_width: Some(3),
+                map_height: Some(3),
+                default_level: Some(0),
+                levels: vec![0],
+                static_obstacles: Vec::new(),
+                map_blocked_cells: Vec::new(),
+                map_cells: Vec::new(),
+                map_objects: vec![MapObjectDebugState {
+                    object_id: "overworld_trigger::forest".into(),
+                    kind: MapObjectKind::Trigger,
+                    anchor: GridCoord::new(2, 0, 1),
+                    footprint: MapObjectFootprint {
+                        width: 1,
+                        height: 1,
+                    },
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    occupied_cells: vec![GridCoord::new(2, 0, 1)],
+                    payload_summary: [(
+                        "trigger_kind".to_string(),
+                        "enter_outdoor_location".to_string(),
+                    )]
+                    .into_iter()
+                    .collect(),
+                }],
+                runtime_blocked_cells: Vec::new(),
+                topology_version: 0,
+                runtime_obstacle_version: 0,
+            },
+            vision: Default::default(),
+            generated_buildings: Vec::new(),
+            generated_doors: Vec::new(),
+            combat: CombatDebugState {
+                in_combat: false,
+                current_actor_id: None,
+                current_group_id: None,
+                current_turn_index: 0,
+            },
+            interaction_context: InteractionContextSnapshot {
+                world_mode: WorldMode::Overworld,
+                ..Default::default()
+            },
+            overworld: OverworldStateSnapshot::default(),
+            path_preview: Vec::new(),
+        }
     }
 }

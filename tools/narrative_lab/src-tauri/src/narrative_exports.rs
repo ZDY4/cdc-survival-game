@@ -194,7 +194,11 @@ fn write_chat_regression_export(
         .map_err(|error| format!("failed to create {}: {error}", export_dir.display()))?;
 
     let timestamp = unix_timestamp();
-    let file_stem = format!("narrative-chat-regression-{}-{}", sanitize_file_stem(&input.mode), timestamp);
+    let file_stem = format!(
+        "narrative-chat-regression-{}-{}",
+        sanitize_file_stem(&input.mode),
+        timestamp
+    );
     let json_path = export_dir.join(format!("{file_stem}.json"));
     let markdown_path = export_dir.join(format!("{file_stem}.md"));
 
@@ -316,12 +320,22 @@ fn render_chat_regression_export(input: &NarrativeChatRegressionExportInput) -> 
         output.push_str(&format!("- AI Timeout Sec: `{}`\n", ai_config.timeout_sec));
         output.push_str(&format!(
             "- AI Key Configured: `{}`\n",
-            if ai_config.api_key_configured { "true" } else { "false" }
+            if ai_config.api_key_configured {
+                "true"
+            } else {
+                "false"
+            }
         ));
     }
     output.push_str(&format!("- Started At: `{}`\n", input.started_at.trim()));
-    output.push_str(&format!("- Completed At: `{}`\n", input.completed_at.trim()));
-    output.push_str(&format!("- Result: `{}`\n", if input.ok { "passed" } else { "failed" }));
+    output.push_str(&format!(
+        "- Completed At: `{}`\n",
+        input.completed_at.trim()
+    ));
+    output.push_str(&format!(
+        "- Result: `{}`\n",
+        if input.ok { "passed" } else { "failed" }
+    ));
     output.push_str(&format!("- Summary: {}\n\n", input.summary.trim()));
 
     let mut failure_groups = std::collections::BTreeMap::<String, usize>::new();
@@ -357,14 +371,23 @@ fn render_chat_regression_export(input: &NarrativeChatRegressionExportInput) -> 
         if let Some(smoke_tier) = result.smoke_tier.as_ref() {
             output.push_str(&format!("- Smoke Tier: `{}`\n", smoke_tier.trim()));
         }
-        output.push_str(&format!("- Failure Kind: `{}`\n", result.failure_kind.trim()));
-        output.push_str(&format!("- Actual Turn Kind: `{}`\n", result.actual_turn_kind.trim()));
+        output.push_str(&format!(
+            "- Failure Kind: `{}`\n",
+            result.failure_kind.trim()
+        ));
+        output.push_str(&format!(
+            "- Actual Turn Kind: `{}`\n",
+            result.actual_turn_kind.trim()
+        ));
         output.push_str(&format!(
             "- Expected Turn Kinds: `{}`\n",
             result.expected_turn_kinds.join("`, `")
         ));
         if let Some(turn_kind_source) = result.turn_kind_source.as_ref() {
-            output.push_str(&format!("- Turn Kind Source: `{}`\n", turn_kind_source.trim()));
+            output.push_str(&format!(
+                "- Turn Kind Source: `{}`\n",
+                turn_kind_source.trim()
+            ));
         }
         if let Some(correction) = result.turn_kind_correction.as_ref() {
             output.push_str(&format!(
@@ -376,7 +399,11 @@ fn render_chat_regression_export(input: &NarrativeChatRegressionExportInput) -> 
         }
         output.push_str(&format!(
             "- Document Changed: `{}`\n",
-            if result.document_changed { "true" } else { "false" }
+            if result.document_changed {
+                "true"
+            } else {
+                "false"
+            }
         ));
         output.push_str(&format!(
             "- Active Document: `{}`\n",
@@ -397,7 +424,10 @@ fn render_chat_regression_export(input: &NarrativeChatRegressionExportInput) -> 
         if let Some(derived_path) = result.derived_document_path.as_ref() {
             output.push_str(&format!("- Derived Path: `{}`\n", derived_path.trim()));
         }
-        output.push_str(&format!("- Context Ref Count: `{}`\n", result.context_ref_count));
+        output.push_str(&format!(
+            "- Context Ref Count: `{}`\n",
+            result.context_ref_count
+        ));
         output.push_str(&format!("- Questions: `{}`\n", result.question_count));
         output.push_str(&format!("- Options: `{}`\n", result.option_count));
         output.push_str(&format!("- Plan Steps: `{}`\n", result.plan_step_count));
@@ -418,7 +448,10 @@ fn render_chat_regression_export(input: &NarrativeChatRegressionExportInput) -> 
             ));
         }
         if !result.provider_error.trim().is_empty() {
-            output.push_str(&format!("- Provider Error: {}\n", result.provider_error.trim()));
+            output.push_str(&format!(
+                "- Provider Error: {}\n",
+                result.provider_error.trim()
+            ));
         }
         output.push_str(&format!("- Status: {}\n", result.status_message.trim()));
         output.push_str(&format!("- Summary: {}\n", result.summary.trim()));

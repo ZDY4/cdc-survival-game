@@ -17,24 +17,9 @@ pub mod ids {
     pub const FILE_SAVE_ALL: &str = "file.save-all";
     pub const FILE_RELOAD: &str = "file.reload";
     pub const FILE_DELETE_CURRENT: &str = "file.delete-current";
-    pub const WORKBENCH_COMMAND_PALETTE: &str = "workbench.command-palette";
-    pub const WORKBENCH_QUICK_OPEN: &str = "workbench.quick-open";
-    pub const VIEW_TOGGLE_SIDEBAR: &str = "view.toggle-sidebar";
     pub const VIEW_TOGGLE_LEFT_SIDEBAR: &str = "view.toggle-left-sidebar";
-    pub const VIEW_TOGGLE_RIGHT_SIDEBAR: &str = "view.toggle-right-sidebar";
-    pub const VIEW_TOGGLE_BOTTOM_PANEL: &str = "view.toggle-bottom-panel";
-    pub const VIEW_TOGGLE_STATUS_BAR: &str = "view.toggle-status-bar";
-    pub const VIEW_RESET_LAYOUT: &str = "view.reset-layout";
-    pub const VIEW_RESTORE_DEFAULT_LAYOUT: &str = "view.restore-default-layout";
-    pub const VIEW_COLLAPSE_ADVANCED_PANELS: &str = "view.collapse-advanced-panels";
-    pub const VIEW_EXPAND_ALL_PANELS: &str = "view.expand-all-panels";
-    pub const VIEW_TOGGLE_INSPECTOR: &str = "view.toggle-inspector";
-    pub const VIEW_FOCUS_EXPLORER: &str = "view.focus-explorer";
     pub const VIEW_FOCUS_EDITOR: &str = "view.focus-editor";
-    pub const VIEW_FOCUS_PROBLEMS: &str = "view.focus-problems";
-    pub const VIEW_ZEN_MODE: &str = "view.zen-mode";
     pub const AI_GENERATE: &str = "ai.generate";
-    pub const AI_TEST_PROVIDER_CONNECTION: &str = "ai.test-provider-connection";
     pub const AI_OPEN_PROVIDER_SETTINGS: &str = "ai.open-provider-settings";
     pub const NAVIGATION_NEXT_TAB: &str = "navigation.next-tab";
     pub const NAVIGATION_PREV_TAB: &str = "navigation.prev-tab";
@@ -81,20 +66,6 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         true,
         Some("Delete"),
     )?;
-    let workbench_command_palette = MenuItem::with_id(
-        app,
-        ids::WORKBENCH_COMMAND_PALETTE,
-        "命令面板",
-        true,
-        Some("CmdOrCtrl+Shift+P"),
-    )?;
-    let workbench_quick_open = MenuItem::with_id(
-        app,
-        ids::WORKBENCH_QUICK_OPEN,
-        "快速打开",
-        true,
-        Some("CmdOrCtrl+P"),
-    )?;
 
     let narrative_new_task_setup = MenuItem::with_id(
         app,
@@ -132,77 +103,12 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         None::<&str>,
     )?;
 
-    let toggle_sidebar = MenuItem::with_id(
-        app,
-        ids::VIEW_TOGGLE_SIDEBAR,
-        "切换侧边栏",
-        true,
-        None::<&str>,
-    )?;
     let toggle_left_sidebar = MenuItem::with_id(
         app,
         ids::VIEW_TOGGLE_LEFT_SIDEBAR,
         "切换左侧边栏",
         true,
         Some("CmdOrCtrl+B"),
-    )?;
-    let toggle_right_sidebar = MenuItem::with_id(
-        app,
-        ids::VIEW_TOGGLE_RIGHT_SIDEBAR,
-        "切换右侧边栏",
-        true,
-        None::<&str>,
-    )?;
-    let toggle_bottom_panel = MenuItem::with_id(
-        app,
-        ids::VIEW_TOGGLE_BOTTOM_PANEL,
-        "切换底部面板",
-        true,
-        Some("CmdOrCtrl+J"),
-    )?;
-    let toggle_status_bar = MenuItem::with_id(
-        app,
-        ids::VIEW_TOGGLE_STATUS_BAR,
-        "切换状态栏",
-        true,
-        None::<&str>,
-    )?;
-    let reset_layout =
-        MenuItem::with_id(app, ids::VIEW_RESET_LAYOUT, "重置布局", true, None::<&str>)?;
-    let restore_default_layout = MenuItem::with_id(
-        app,
-        ids::VIEW_RESTORE_DEFAULT_LAYOUT,
-        "恢复默认布局",
-        true,
-        None::<&str>,
-    )?;
-    let collapse_advanced_panels = MenuItem::with_id(
-        app,
-        ids::VIEW_COLLAPSE_ADVANCED_PANELS,
-        "收起高级面板",
-        true,
-        None::<&str>,
-    )?;
-    let expand_all_panels = MenuItem::with_id(
-        app,
-        ids::VIEW_EXPAND_ALL_PANELS,
-        "展开全部面板",
-        true,
-        None::<&str>,
-    )?;
-    let toggle_inspector = MenuItem::with_id(
-        app,
-        ids::VIEW_TOGGLE_INSPECTOR,
-        "切换检查器",
-        true,
-        None::<&str>,
-    )?;
-    let focus_explorer = MenuItem::with_id(
-        app,
-        ids::VIEW_FOCUS_EXPLORER,
-        "聚焦资源栏",
-        true,
-        None::<&str>,
     )?;
     let focus_editor = MenuItem::with_id(
         app,
@@ -211,14 +117,6 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         true,
         None::<&str>,
     )?;
-    let focus_problems = MenuItem::with_id(
-        app,
-        ids::VIEW_FOCUS_PROBLEMS,
-        "聚焦问题面板",
-        true,
-        None::<&str>,
-    )?;
-    let zen_mode = MenuItem::with_id(app, ids::VIEW_ZEN_MODE, "专注模式", true, None::<&str>)?;
     let next_tab = MenuItem::with_id(
         app,
         ids::NAVIGATION_NEXT_TAB,
@@ -247,13 +145,6 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         "AI 生成",
         true,
         Some("CmdOrCtrl+Shift+G"),
-    )?;
-    let ai_test_provider = MenuItem::with_id(
-        app,
-        ids::AI_TEST_PROVIDER_CONNECTION,
-        "测试提供方连接",
-        true,
-        None::<&str>,
     )?;
     let ai_open_provider = MenuItem::with_id(
         app,
@@ -299,29 +190,12 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
         .build()?;
 
     let view_menu = SubmenuBuilder::new(app, "视图")
-        .item(&workbench_command_palette)
-        .separator()
-        .item(&toggle_sidebar)
         .item(&toggle_left_sidebar)
-        .item(&toggle_right_sidebar)
-        .item(&toggle_bottom_panel)
-        .item(&toggle_inspector)
-        .item(&toggle_status_bar)
         .separator()
-        .item(&focus_explorer)
         .item(&focus_editor)
-        .item(&focus_problems)
-        .item(&zen_mode)
-        .separator()
-        .item(&reset_layout)
-        .item(&restore_default_layout)
-        .item(&collapse_advanced_panels)
-        .item(&expand_all_panels)
         .build()?;
 
     let go_menu = SubmenuBuilder::new(app, "导航")
-        .item(&workbench_quick_open)
-        .separator()
         .item(&next_tab)
         .item(&prev_tab)
         .item(&close_active_tab)
@@ -329,7 +203,6 @@ pub fn build_narrative_lab_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
 
     let ai_menu = SubmenuBuilder::new(app, "AI")
         .item(&ai_generate)
-        .item(&ai_test_provider)
         .item(&ai_open_provider)
         .build()?;
 

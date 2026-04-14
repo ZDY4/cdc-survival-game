@@ -1,11 +1,16 @@
-pub mod actions;
-pub mod behavior;
-pub mod context;
+//! GOAP 规划模块。
+//! 负责生活 AI 的目标约束、动作规划与离线执行，不负责战斗启发式决策。
+
+pub mod blackboard;
+pub mod conditions;
+pub mod execution;
 pub mod facts;
+pub mod goal_requirements;
 pub mod goals;
-pub mod offline_sim;
-pub mod plan_runtime;
+pub mod offline_execution;
 pub mod planner;
+pub mod planner_actions;
+pub mod planning_context;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -16,16 +21,17 @@ use game_data::{
     GridCoord, MapId, NpcRole,
 };
 
-pub use behavior::AiBlackboard;
-pub use context::NpcPlanningContext;
-pub use facts::rebuild_facts;
-pub use offline_sim::{advance_offline_sim, NpcOfflineSimState, OfflineSimAdvanceResult};
-pub use plan_runtime::{
+pub use blackboard::AiBlackboard;
+pub use conditions::evaluate_condition;
+pub use execution::{
     tick_offline_action, ActionExecutionPhase, ActionTickResult, OfflineActionState,
 };
+pub use facts::rebuild_facts;
+pub use offline_execution::{advance_offline_sim, NpcOfflineSimState, OfflineSimAdvanceResult};
 pub use planner::{
     build_plan, build_plan_for_context, build_plan_for_goal, build_plan_for_goal_with_context,
 };
+pub use planning_context::NpcPlanningContext;
 
 macro_rules! npc_string_id {
     ($name:ident) => {

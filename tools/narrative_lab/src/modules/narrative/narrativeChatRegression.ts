@@ -52,6 +52,8 @@ export const NARRATIVE_CHAT_REGRESSION_SCENARIOS: NarrativeChatRegressionScenari
     expectDocumentChange: true,
     expectDerivedDocumentSlug: "trader-lao-wang-split",
     expectDerivedDocumentDocType: "character_card",
+    expectDerivedDocumentTitleIncludes: "商人老王",
+    allowDerivedSlugVariance: true,
     autoApproveAction: true,
   },
   {

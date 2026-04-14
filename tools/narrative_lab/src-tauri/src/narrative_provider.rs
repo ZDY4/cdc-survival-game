@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -33,6 +33,56 @@ pub struct NarrativeRequestRegistry {
 struct NarrativeRequestEntry {
     stage: String,
     cancellation: CancellationToken,
+}
+
+#[derive(Debug, Clone)]
+struct RequestedActionsBackfillResult {
+    payload: Value,
+    diagnostic_flags: Vec<String>,
+    agent_runs: Vec<NarrativeAgentRun>,
+}
+
+impl RequestedActionsBackfillResult {
+    fn passthrough(payload: Value) -> Self {
+        Self {
+            payload,
+            diagnostic_flags: Vec::new(),
+            agent_runs: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StructuredTurnKindOutput {
+    raw_output: String,
+    payload: Value,
+}
+
+#[derive(Debug, Clone)]
+struct StructuredTurnKindAttempt {
+    output: Option<StructuredTurnKindOutput>,
+    diagnostic_flags: Vec<String>,
+    agent_runs: Vec<NarrativeAgentRun>,
+    classified_turn_kind: Option<String>,
+}
+
+impl StructuredTurnKindAttempt {
+    fn skipped() -> Self {
+        Self {
+            output: None,
+            diagnostic_flags: Vec::new(),
+            agent_runs: Vec::new(),
+            classified_turn_kind: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ProviderRequestStage {
+    PrimaryGeneration,
+    TurnKindClassification,
+    StructuredContent,
+    RequestedActionsBackfill,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -578,7 +628,7 @@ async fn run_narrative_action_intent_resolution(
     }
 
     ensure_not_cancelled(cancellation)?;
-    let settings = read_ai_settings(app)?.normalized();
+    let settings = runtime_ai_settings(read_ai_settings(app)?.normalized());
     let workspace_root_path = resolve_workspace_root(workspace_root)?;
     let project_root_path = resolve_connected_project_root(project_root)?;
     let context_request = NarrativeGenerateRequest {
@@ -670,7 +720,6 @@ async fn run_narrative_generation(
         settings.max_context_records,
     )?;
     ensure_not_cancelled(cancellation)?;
-    let payload = build_single_agent_payload(&request, &context.context, &settings);
     if let Some(progress) = &progress {
         progress.completed_step(
             "build-context",
@@ -681,7 +730,77 @@ async fn run_narrative_generation(
         progress.status_step("request-model", "请求模型", "正在连接 AI 提供方...");
     }
 
-    match perform_chat_completion(&settings, &payload, progress.as_ref(), cancellation).await {
+    let staged_attempt = attempt_structured_turn_kind_generation(
+        &settings,
+        &request,
+        &context.context,
+        progress.as_ref(),
+        cancellation,
+    )
+    .await?;
+
+    if let Some(output) = staged_attempt.output {
+        if let Some(progress) = &progress {
+            progress.completed_step(
+                "request-model",
+                "请求模型",
+                "分阶段模型输出接收完成。",
+                output.raw_output.clone(),
+            );
+            progress.status_step("review-result", "整理结果", "正在整理最终结果...");
+        }
+        let mut response = finalize_generation(
+            "single_agent",
+            request,
+            selection,
+            context,
+            output.raw_output,
+            output.payload,
+            staged_attempt.agent_runs,
+        )?;
+        append_unique_strings(
+            &mut response.diagnostic_flags,
+            staged_attempt.diagnostic_flags,
+        );
+        let staged_flags = response.diagnostic_flags.clone();
+        if let Some(prompt_debug) = response.prompt_debug.as_object_mut() {
+            prompt_debug.insert(
+                "structuredTurnKindRoute".to_string(),
+                json!({
+                    "attempted": staged_flags
+                        .iter()
+                        .any(|flag| flag == "structured_turn_kind_stage_attempted"),
+                    "classifiedTurnKind": staged_attempt.classified_turn_kind,
+                    "usedStagedOutput": true,
+                    "flags": staged_flags,
+                }),
+            );
+        }
+        if let Some(progress) = &progress {
+            progress.completed_step(
+                "review-result",
+                "整理结果",
+                "结果整理完成。",
+                summarize_response_preview(&response),
+            );
+            progress.completed(
+                "AI 输出完成，正在整理结果...",
+                summarize_response_preview(&response),
+            );
+        }
+        return Ok(response);
+    }
+
+    let payload = build_single_agent_payload(&request, &context.context, &settings);
+    match perform_chat_completion_for_stage(
+        &settings,
+        ProviderRequestStage::PrimaryGeneration,
+        &payload,
+        progress.as_ref(),
+        cancellation,
+    )
+    .await
+    {
         Ok(success) => {
             if let Some(progress) = &progress {
                 progress.completed_step(
@@ -692,16 +811,59 @@ async fn run_narrative_generation(
                 );
                 progress.status_step("review-result", "整理结果", "正在整理最终结果...");
             }
-            let agent_run = build_single_agent_run(&success.payload, &success.raw_text);
-            let response = finalize_generation(
+            let primary_agent_run = build_single_agent_run(&success.payload, &success.raw_text);
+            let backfill = maybe_backfill_requested_actions(
+                &settings,
+                &request,
+                &context.context,
+                &success.payload,
+                progress.as_ref(),
+                cancellation,
+            )
+            .await?;
+            let mut agent_runs = staged_attempt.agent_runs;
+            agent_runs.push(primary_agent_run);
+            agent_runs.extend(backfill.agent_runs);
+            let mut response = finalize_generation(
                 "single_agent",
                 request,
                 selection,
                 context,
                 success.raw_text,
-                success.payload,
-                vec![agent_run],
+                backfill.payload,
+                agent_runs,
             )?;
+            append_unique_strings(
+                &mut response.diagnostic_flags,
+                staged_attempt.diagnostic_flags,
+            );
+            append_unique_strings(&mut response.diagnostic_flags, backfill.diagnostic_flags);
+            let backfill_flags = response.diagnostic_flags.clone();
+            if let Some(prompt_debug) = response.prompt_debug.as_object_mut() {
+                prompt_debug.insert(
+                    "structuredTurnKindRoute".to_string(),
+                    json!({
+                        "attempted": backfill_flags
+                            .iter()
+                            .any(|flag| flag == "structured_turn_kind_stage_attempted"),
+                        "classifiedTurnKind": staged_attempt.classified_turn_kind,
+                        "usedStagedOutput": false,
+                        "flags": backfill_flags,
+                    }),
+                );
+                prompt_debug.insert(
+                    "requestedActionsBackfill".to_string(),
+                    json!({
+                        "attempted": backfill_flags
+                            .iter()
+                            .any(|flag| flag == "requested_actions_backfill_attempted"),
+                        "succeeded": backfill_flags
+                            .iter()
+                            .any(|flag| flag == "requested_actions_backfilled"),
+                        "flags": backfill_flags,
+                    }),
+                );
+            }
             if let Some(progress) = &progress {
                 progress.completed_step(
                     "review-result",
@@ -803,6 +965,258 @@ async fn run_narrative_generation(
                 provenance_refs,
                 review_queue_items: Vec::new(),
             })
+        }
+    }
+}
+
+async fn attempt_structured_turn_kind_generation(
+    settings: &AiSettings,
+    request: &NarrativeGenerateRequest,
+    context: &Value,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+    cancellation: Option<&CancellationToken>,
+) -> Result<StructuredTurnKindAttempt, String> {
+    if !should_use_structured_turn_kind_staging(settings, request) {
+        return Ok(StructuredTurnKindAttempt::skipped());
+    }
+
+    let mut attempt = StructuredTurnKindAttempt::skipped();
+    attempt
+        .diagnostic_flags
+        .push("structured_turn_kind_stage_attempted".to_string());
+
+    if let Some(progress) = progress {
+        progress.status_step(
+            "request-model",
+            "请求模型",
+            "正在执行短分类，判断本轮更适合哪种对话回合...",
+        );
+    }
+
+    let classification_payload = build_turn_kind_classification_payload(request, context, settings);
+    let classification = match perform_chat_completion_for_stage(
+        settings,
+        ProviderRequestStage::TurnKindClassification,
+        &classification_payload,
+        None,
+        cancellation,
+    )
+    .await
+    {
+        Ok(success) => success,
+        Err(error) => {
+            if is_cancelled_provider_failure(&error) {
+                return Err(cancelled_request_error());
+            }
+            attempt.diagnostic_flags.push(
+                if is_provider_timeout(&error) {
+                    "structured_turn_kind_classification_timeout"
+                } else {
+                    "structured_turn_kind_classification_fallback"
+                }
+                .to_string(),
+            );
+            attempt.agent_runs.push(
+                failed_agent_run(
+                    "turn-kind-classifier",
+                    "回合分类助手",
+                    "先判断本轮更适合 clarification/options/plan/final_answer。",
+                    normalize_provider_error(&error),
+                )
+                .with_raw_output(error.raw_text),
+            );
+            return Ok(attempt);
+        }
+    };
+
+    let classified_turn_kind = classify_turn_kind_from_payload(&classification.payload, request);
+    let Some(turn_kind) = classified_turn_kind else {
+        attempt
+            .diagnostic_flags
+            .push("structured_turn_kind_classification_fallback".to_string());
+        attempt.agent_runs.push(build_turn_kind_classifier_run(
+            &classification.payload,
+            &classification.raw_text,
+            "final_answer",
+        ));
+        return Ok(attempt);
+    };
+
+    attempt.classified_turn_kind = Some(turn_kind.clone());
+    attempt.agent_runs.push(build_turn_kind_classifier_run(
+        &classification.payload,
+        &classification.raw_text,
+        &turn_kind,
+    ));
+    attempt
+        .diagnostic_flags
+        .push(format!("structured_turn_kind_classified_{turn_kind}"));
+
+    if turn_kind == "final_answer" {
+        attempt
+            .diagnostic_flags
+            .push("structured_turn_kind_fell_back_to_full_generation".to_string());
+        return Ok(attempt);
+    }
+
+    if let Some(progress) = progress {
+        progress.status_step(
+            "request-model",
+            "请求模型",
+            format!("已判定为 {turn_kind}，正在生成对应内容..."),
+        );
+    }
+
+    let content_payload =
+        build_structured_turn_kind_content_payload(&turn_kind, request, context, settings);
+    let content = match perform_chat_completion_for_stage(
+        settings,
+        ProviderRequestStage::StructuredContent,
+        &content_payload,
+        None,
+        cancellation,
+    )
+    .await
+    {
+        Ok(success) => success,
+        Err(error) => {
+            if is_cancelled_provider_failure(&error) {
+                return Err(cancelled_request_error());
+            }
+            attempt.diagnostic_flags.push(
+                if is_provider_timeout(&error) {
+                    "structured_turn_kind_generation_timeout"
+                } else {
+                    "structured_turn_kind_generation_fallback"
+                }
+                .to_string(),
+            );
+            attempt.agent_runs.push(
+                failed_agent_run(
+                    "turn-kind-content",
+                    "结构化内容助手",
+                    "根据已分类回合生成 questions/options/plan 等窄结构内容。",
+                    normalize_provider_error(&error),
+                )
+                .with_raw_output(error.raw_text),
+            );
+            return Ok(attempt);
+        }
+    };
+
+    attempt.agent_runs.push(build_turn_kind_content_run(
+        &content.payload,
+        &content.raw_text,
+        &turn_kind,
+    ));
+    attempt
+        .diagnostic_flags
+        .push("structured_turn_kind_generation_succeeded".to_string());
+    attempt.output = Some(StructuredTurnKindOutput {
+        raw_output: content.raw_text,
+        payload: content.payload,
+    });
+    Ok(attempt)
+}
+
+async fn maybe_backfill_requested_actions(
+    settings: &AiSettings,
+    request: &NarrativeGenerateRequest,
+    context: &Value,
+    primary_payload: &Value,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+    cancellation: Option<&CancellationToken>,
+) -> Result<RequestedActionsBackfillResult, String> {
+    let Some(primary_object) = primary_payload.as_object() else {
+        return Ok(RequestedActionsBackfillResult::passthrough(
+            primary_payload.clone(),
+        ));
+    };
+    if !should_attempt_requested_actions_backfill(request, primary_object) {
+        return Ok(RequestedActionsBackfillResult::passthrough(
+            primary_payload.clone(),
+        ));
+    }
+
+    if let Some(progress) = progress {
+        progress.status_step(
+            "review-result",
+            "整理结果",
+            "正文已生成，正在补提取待批准动作...",
+        );
+    }
+
+    let mut result = RequestedActionsBackfillResult::passthrough(primary_payload.clone());
+    result
+        .diagnostic_flags
+        .push("requested_actions_backfill_attempted".to_string());
+
+    let extraction_payload =
+        build_requested_actions_extraction_payload(request, context, primary_payload, settings);
+
+    match perform_chat_completion_for_stage(
+        settings,
+        ProviderRequestStage::RequestedActionsBackfill,
+        &extraction_payload,
+        None,
+        cancellation,
+    )
+    .await
+    {
+        Ok(success) => {
+            let extracted_object = success.payload.as_object().cloned().unwrap_or_default();
+            let extracted_actions = read_requested_actions(&extracted_object);
+            if extracted_actions.is_empty() {
+                result
+                    .diagnostic_flags
+                    .push("requested_actions_backfill_empty".to_string());
+                result
+                    .diagnostic_flags
+                    .extend(analyze_requested_actions_backfill_payload(&success.payload));
+                result.agent_runs.push(build_requested_actions_backfill_run(
+                    &success.payload,
+                    &success.raw_text,
+                ));
+                return Ok(result);
+            }
+
+            result.payload =
+                merge_requested_actions_into_payload(primary_payload, &extracted_actions);
+            result
+                .diagnostic_flags
+                .push("requested_actions_backfilled".to_string());
+            result.agent_runs.push(build_requested_actions_backfill_run(
+                &success.payload,
+                &success.raw_text,
+            ));
+            Ok(result)
+        }
+        Err(error) => {
+            if is_cancelled_provider_failure(&error) {
+                if let Some(progress) = progress {
+                    progress.error_step(
+                        "review-result",
+                        "整理结果",
+                        "当前请求已取消",
+                        "当前请求已取消",
+                    );
+                    progress.completed("当前请求已取消", "当前请求已取消");
+                }
+                return Err(cancelled_request_error());
+            }
+            result
+                .diagnostic_flags
+                .push(classify_requested_actions_backfill_failure(&error).to_string());
+            result.agent_runs.push(
+                failed_agent_run(
+                    "action-extractor",
+                    "动作提取助手",
+                    "在正文已生成后补提取待批准动作。",
+                    normalize_provider_error(&error),
+                )
+                .with_raw_output(error.raw_text),
+            );
+            Ok(result)
         }
     }
 }
@@ -1043,6 +1457,273 @@ fn build_single_agent_payload(
             },
         ]
     })
+}
+
+fn should_use_structured_turn_kind_staging(
+    settings: &AiSettings,
+    request: &NarrativeGenerateRequest,
+) -> bool {
+    if is_local_stub_provider(settings) {
+        return false;
+    }
+
+    if !matches!(
+        request.action.as_str(),
+        "create" | "revise_document" | "derive_new_doc"
+    ) {
+        return false;
+    }
+
+    prompt_prefers_structured_turn_kind_stage(&request.user_prompt)
+}
+
+fn is_local_stub_provider(settings: &AiSettings) -> bool {
+    let base_url = settings.base_url.to_lowercase();
+    let model = settings.model.to_lowercase();
+    base_url.contains("127.0.0.1")
+        || base_url.contains("localhost")
+        || model.contains("stub")
+        || model.contains("mock")
+}
+
+fn prompt_prefers_structured_turn_kind_stage(prompt: &str) -> bool {
+    infer_turn_kind_from_prompt(prompt).is_some()
+}
+
+fn infer_turn_kind_from_prompt(prompt: &str) -> Option<String> {
+    let prompt = prompt.trim();
+    let clarification = [
+        "先别动笔",
+        "还缺哪些必要信息",
+        "先告诉我还缺",
+        "缺哪些必要信息",
+        "先问我",
+    ]
+    .iter()
+    .any(|needle| prompt.contains(needle));
+    if clarification {
+        return Some("clarification".to_string());
+    }
+
+    let options = ["推进方向", "不同方向", "几个方向", "三个方向"]
+        .iter()
+        .any(|needle| prompt.contains(needle))
+        || (prompt.contains("不要直接改正文") && prompt.contains("方向"));
+    if options {
+        return Some("options".to_string());
+    }
+
+    let plan = [
+        "执行计划",
+        "分步骤",
+        "分步计划",
+        "等我确认后再继续",
+        "先给计划",
+    ]
+    .iter()
+    .any(|needle| prompt.contains(needle));
+    if plan {
+        return Some("plan".to_string());
+    }
+
+    None
+}
+
+fn build_turn_kind_classification_payload(
+    request: &NarrativeGenerateRequest,
+    context: &Value,
+    settings: &AiSettings,
+) -> Value {
+    let contract = [
+        "始终只返回一个 JSON 对象，不要输出 Markdown，不要加代码块围栏，不要附加解释文字。",
+        "JSON 允许字段：turn_kind, assistant_message。",
+        "turn_kind 只能是 final_answer, clarification, options, plan, blocked 之一。",
+        "这一轮只负责判断回合类型，不要返回 draft_markdown、questions、options、plan_steps、requested_actions。",
+        "如果用户明确要求先提问再继续，返回 clarification。",
+        "如果用户明确要求先给方向分叉，返回 options。",
+        "如果用户明确要求先给执行步骤或计划，返回 plan。",
+        "如果上下文仍不足以判断，返回 blocked。",
+        "如果信息足够且用户想直接产出内容，返回 final_answer。",
+    ]
+    .join("\n");
+
+    json!({
+        "provider_config": {
+            "base_url": settings.base_url,
+            "model": settings.model,
+            "api_key": settings.effective_api_key(),
+            "timeout_sec": settings.timeout_sec,
+        },
+        "temperature": 0.1,
+        "max_tokens": 600,
+        "messages": [
+            {
+                "role": "system",
+                "content": format!(
+                    "[你的身份]\n你是 Narrative Lab 的回合分类助手，只判断当前回合更适合哪种对话模式。\n\n[输出协议]\n{}\n\n[判断原则]\n{}\n{}\n{}",
+                    contract,
+                    "优先尊重用户是否要求“先问、先给选项、先给计划”。",
+                    "不要因为能写正文就忽略用户要求的对话模式。",
+                    "如果用户说“不要直接改正文”“等我确认后再继续”，通常不是 final_answer。",
+                ),
+            },
+            {
+                "role": "user",
+                "content": serde_json::to_string_pretty(&json!({
+                    "request": build_structured_turn_kind_request_input(request),
+                    "context": context,
+                }))
+                .unwrap_or_else(|_| "{}".to_string()),
+            },
+        ],
+    })
+}
+
+fn classify_turn_kind_from_payload(
+    payload: &Value,
+    request: &NarrativeGenerateRequest,
+) -> Option<String> {
+    let object = payload.as_object().cloned().unwrap_or_default();
+    let explicit = object
+        .get("turn_kind")
+        .or_else(|| object.get("turnKind"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .map(str::to_lowercase);
+
+    match explicit.as_deref() {
+        Some("final_answer" | "clarification" | "options" | "plan" | "blocked") => explicit,
+        _ => infer_turn_kind_from_prompt(&request.user_prompt),
+    }
+}
+
+fn build_structured_turn_kind_content_payload(
+    turn_kind: &str,
+    request: &NarrativeGenerateRequest,
+    context: &Value,
+    settings: &AiSettings,
+) -> Value {
+    let (contract, max_tokens) = match turn_kind {
+        "clarification" => (
+            [
+                "始终只返回一个 JSON 对象，不要输出 Markdown，不要加代码块围栏，不要附加解释文字。",
+                "JSON 允许字段：turn_kind, assistant_message, questions。",
+                "turn_kind 固定为 clarification。",
+                "questions 必须提供 1 到 3 个问题，每个问题都要具体、可直接回答。",
+                "assistant_message 必须把这些问题以编号列表再重复一遍，确保宿主可从自然语言中兜底解析。",
+                "不要返回 options、plan_steps、draft_markdown、requested_actions。",
+            ]
+            .join("\n"),
+            700,
+        ),
+        "options" => (
+            [
+                "始终只返回一个 JSON 对象，不要输出 Markdown，不要加代码块围栏，不要附加解释文字。",
+                "JSON 允许字段：turn_kind, assistant_message, options。",
+                "turn_kind 固定为 options。",
+                "options 必须提供 2 到 4 个方向，每个 option 必须包含 followup_prompt。",
+                "assistant_message 必须包含与 options 对应的编号列表，格式尽量接近“1. 标题：描述”。",
+                "不要返回 questions、plan_steps、draft_markdown、requested_actions。",
+            ]
+            .join("\n"),
+            900,
+        ),
+        "plan" => (
+            [
+                "始终只返回一个 JSON 对象，不要输出 Markdown，不要加代码块围栏，不要附加解释文字。",
+                "JSON 允许字段：turn_kind, assistant_message, plan_steps。",
+                "turn_kind 固定为 plan。",
+                "plan_steps 必须提供 3 到 5 步，每步简短明确。",
+                "assistant_message 必须把 plan_steps 以编号步骤再重复一遍，确保宿主可从自然语言中兜底解析。",
+                "不要返回 questions、options、draft_markdown、requested_actions。",
+            ]
+            .join("\n"),
+            800,
+        ),
+        _ => (
+            [
+                "始终只返回一个 JSON 对象，不要输出 Markdown，不要加代码块围栏，不要附加解释文字。",
+                "JSON 允许字段：turn_kind, assistant_message。",
+                "turn_kind 固定为 blocked。",
+                "只说明为什么当前不适合继续，不要返回 questions、options、plan_steps、draft_markdown、requested_actions。",
+            ]
+            .join("\n"),
+            500,
+        ),
+    };
+
+    json!({
+        "provider_config": {
+            "base_url": settings.base_url,
+            "model": settings.model,
+            "api_key": settings.effective_api_key(),
+            "timeout_sec": settings.timeout_sec,
+        },
+        "temperature": 0.2,
+        "max_tokens": max_tokens,
+        "messages": [
+            {
+                "role": "system",
+                "content": format!(
+                    "[你的身份]\n你是 Narrative Lab 的结构化内容助手，只为已经确定的回合类型生成必要字段。\n\n[目标回合]\n{}\n\n[输出协议]\n{}\n\n[工作原则]\n{}\n{}",
+                    turn_kind,
+                    contract,
+                    "严格只返回当前回合需要的字段，减少结构噪音。",
+                    "不要偷偷补正文，也不要混入其它回合字段。",
+                ),
+            },
+            {
+                "role": "user",
+                "content": serde_json::to_string_pretty(&json!({
+                    "request": build_structured_turn_kind_request_input(request),
+                    "context": context,
+                    "targetTurnKind": turn_kind,
+                }))
+                .unwrap_or_else(|_| "{}".to_string()),
+            },
+        ],
+    })
+}
+
+fn build_structured_turn_kind_request_input(request: &NarrativeGenerateRequest) -> Value {
+    json!({
+        "docType": request.doc_type,
+        "targetSlug": request.target_slug,
+        "action": request.action,
+        "userPrompt": request.user_prompt,
+        "editorInstruction": request.editor_instruction,
+        "selectedText": request.selected_text,
+        "relatedDocSlugs": request.related_doc_slugs,
+        "derivedTargetDocType": request.derived_target_doc_type,
+        "currentDocument": summarize_markdown_for_narrow_prompt(&request.current_markdown),
+    })
+}
+
+fn summarize_markdown_for_narrow_prompt(markdown: &str) -> Value {
+    let excerpt = excerpt_for_narrow_prompt(markdown, 1200);
+    let headings = markdown
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with('#'))
+        .map(|line| line.trim_start_matches('#').trim())
+        .filter(|line| !line.is_empty())
+        .take(8)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    json!({
+        "excerpt": excerpt,
+        "headings": headings,
+        "length": markdown.chars().count(),
+    })
+}
+
+fn excerpt_for_narrow_prompt(value: &str, max_chars: usize) -> String {
+    let mut output = String::new();
+    for ch in value.chars().take(max_chars) {
+        output.push(ch);
+    }
+    output.trim().to_string()
 }
 
 fn build_action_intent_resolution_payload(
@@ -1403,7 +2084,11 @@ fn read_agent_plan_steps(object: &Map<String, Value>) -> Vec<AgentPlanStep> {
 fn parse_agent_plan_step(value: &Value, index: usize) -> Option<AgentPlanStep> {
     let default_status = if index == 0 { "active" } else { "pending" };
 
-    if let Some(label) = value.as_str().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(label) = value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         return Some(AgentPlanStep {
             id: format!("step-{}", index + 1),
             label: strip_plan_step_prefix(label),
@@ -1464,7 +2149,10 @@ fn narrative_response_text(object: &Map<String, Value>) -> String {
             .or_else(|| object.get("assistantMessage"))
             .and_then(Value::as_str)
             .unwrap_or_default(),
-        object.get("summary").and_then(Value::as_str).unwrap_or_default(),
+        object
+            .get("summary")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
     ]
     .into_iter()
     .map(str::trim)
@@ -1492,7 +2180,11 @@ fn infer_questions_from_text(text: String) -> Vec<AgentQuestion> {
             .unwrap_or(normalized.as_str())
             .trim()
             .to_string();
-        if label.len() < 6 || questions.iter().any(|question: &AgentQuestion| question.label == label) {
+        if label.len() < 6
+            || questions
+                .iter()
+                .any(|question: &AgentQuestion| question.label == label)
+        {
             continue;
         }
         questions.push(AgentQuestion {
@@ -1538,7 +2230,11 @@ fn infer_options_from_text(text: String) -> Vec<AgentOption> {
         } else {
             normalized.chars().take(24).collect::<String>()
         };
-        if label.is_empty() || options.iter().any(|option: &AgentOption| option.label == label) {
+        if label.is_empty()
+            || options
+                .iter()
+                .any(|option: &AgentOption| option.label == label)
+        {
             continue;
         }
         options.push(AgentOption {
@@ -1721,7 +2417,8 @@ fn resolve_turn_kind(
         Some(NarrativeTurnKindCorrection {
             from: explicit.to_string(),
             to: resolved.clone(),
-            reason: correction_reason.unwrap_or_else(|| "turn_kind 与结构不一致，已自动纠偏。".to_string()),
+            reason: correction_reason
+                .unwrap_or_else(|| "turn_kind 与结构不一致，已自动纠偏。".to_string()),
         })
     } else {
         None
@@ -1752,13 +2449,271 @@ fn build_generation_diagnostic_flags(
     requested_actions: &[AgentActionRequest],
 ) -> Vec<String> {
     let mut flags = Vec::new();
-    let prompt = request.user_prompt.trim();
-    let split_like_prompt = (prompt.contains("移出去") || prompt.contains("拆出") || prompt.contains("单独创建"))
-        && (prompt.contains("人物设定") || prompt.contains("文档"));
+    let split_like_prompt = prompt_requires_requested_actions_backfill(request);
     if split_like_prompt && turn_kind == "final_answer" && requested_actions.is_empty() {
         flags.push("missing_requested_actions_for_split".to_string());
     }
     flags
+}
+
+fn should_attempt_requested_actions_backfill(
+    request: &NarrativeGenerateRequest,
+    payload: &Map<String, Value>,
+) -> bool {
+    if !prompt_requires_requested_actions_backfill(request) {
+        return false;
+    }
+
+    if !read_requested_actions(payload).is_empty() {
+        return false;
+    }
+
+    let draft_markdown = read_draft_markdown(payload);
+    let questions = read_agent_questions(payload);
+    let options = read_agent_options(payload);
+    let plan_steps = read_agent_plan_steps(payload);
+    let turn_kind =
+        resolve_turn_kind(payload, &draft_markdown, &questions, &options, &plan_steps).kind;
+
+    turn_kind == "final_answer"
+}
+
+fn prompt_requires_requested_actions_backfill(request: &NarrativeGenerateRequest) -> bool {
+    let prompt = request.user_prompt.trim();
+    let mentions_derivation = [
+        "移出去",
+        "拆出",
+        "单独创建",
+        "单独写一份",
+        "创建一份",
+        "新建文档",
+        "另起一份",
+        "派生",
+    ]
+    .iter()
+    .any(|needle| prompt.contains(needle));
+    let mentions_document_target = [
+        "人物设定",
+        "角色卡",
+        "地点设定",
+        "地点文档",
+        "任务文档",
+        "文档",
+    ]
+    .iter()
+    .any(|needle| prompt.contains(needle));
+
+    (mentions_derivation && mentions_document_target)
+        || (request.derived_target_doc_type.is_some()
+            && matches!(
+                request.action.as_str(),
+                "derive_new_doc" | "create" | "revise_document"
+            ))
+}
+
+fn build_requested_actions_extraction_payload(
+    request: &NarrativeGenerateRequest,
+    context: &Value,
+    primary_payload: &Value,
+    settings: &AiSettings,
+) -> Value {
+    let supported_doc_types =
+        "world_bible, task_setup, location_note, character_card, monster_note, item_note";
+    let doc_type_hint = infer_requested_action_doc_type_hint(request);
+    let contract = [
+        "始终只返回一个 JSON 对象，不要输出 Markdown，不要加代码块围栏，不要附加解释文字。",
+        "JSON 允许字段：requested_actions。",
+        "requested_actions 必须是数组；如果不需要任何动作，返回空数组。",
+        "只补提取待批准动作，不要重写正文，不要返回 turn_kind、draft_markdown、questions、options、plan_steps。",
+        "当用户要求把内容移出去、拆出去、或基于当前文稿另建独立文档时，如果主结果已经给出正文修订版，优先返回 create_derived_document。",
+        "requested_actions 中 action_type 只能是 read_active_document, read_related_documents, create_derived_document, apply_candidate_patch, apply_all_patches, save_active_document, open_document, list_workspace_documents, update_related_documents, rename_active_document, set_document_status, split_plan_into_documents, archive_document。",
+        "create_derived_document 的 payload 必须包含 docType，可选 title、slug、markdown；docType 只能是 supported doc types 之一。",
+        &format!(
+            "supported doc types: {}。",
+            supported_doc_types
+        ),
+        "如果返回 create_derived_document，顶层必须提供 title，payload 中也必须提供 title、docType，并尽量补全 slug、markdown，避免只返回空壳动作。",
+    ]
+    .join("\n");
+    let judgment_rules = [
+        "这是第二阶段补提取：当前文稿修订已经完成，你现在只需要判断是否还应补一个待批准动作。",
+        "如果用户要求“移出去 / 拆出去 / 单独创建 / 另起一份”独立文档，而 primaryResult 已经给出当前文稿修订版，则通常必须返回恰好一个 create_derived_document。",
+        "只有在用户并没有要求创建独立文档，或 primaryResult 已经包含了有效 requested_actions 时，才返回空数组。",
+        "不要返回说明文字，不要分析原因，不要把动作写进 summary。",
+    ]
+    .join("\n");
+    let example = json!({
+        "requested_actions": [
+            {
+                "action_type": "create_derived_document",
+                "title": "商人老王人物设定",
+                "description": "从当前世界观文稿拆出独立角色卡。",
+                "payload": {
+                    "docType": doc_type_hint
+                        .clone()
+                        .unwrap_or_else(|| "character_card".to_string()),
+                    "title": "商人老王人物设定",
+                    "slug": "trader-lao-wang-split",
+                    "markdown": "# 商人老王人物设定\n\n- 身份：黑市商人\n- 核心矛盾：..."
+                }
+            }
+        ]
+    });
+
+    json!({
+        "provider_config": {
+            "base_url": settings.base_url,
+            "model": settings.model,
+            "api_key": settings.effective_api_key(),
+            "timeout_sec": settings.timeout_sec,
+        },
+        "temperature": 0.1,
+        "max_tokens": 2400,
+        "messages": [
+            {
+                "role": "system",
+                "content": format!(
+                    "[你的身份]\n你是 Narrative Lab 的动作提取助手，只负责从已经生成的正文结果中补提取待批准动作。\n\n[输出协议]\n{}\n\n[判断原则]\n{}\n\n[示例]\n{}\n\n[附加要求]\n{}",
+                    contract,
+                    judgment_rules,
+                    serde_json::to_string_pretty(&example).unwrap_or_else(|_| "{}".to_string()),
+                    "不要解释流程，不要复述请求，只返回 JSON。",
+                ),
+            },
+            {
+                "role": "user",
+                "content": serde_json::to_string_pretty(&json!({
+                    "task": "extract_requested_actions_only",
+                    "userPrompt": request.user_prompt,
+                    "action": request.action,
+                    "targetDocument": {
+                        "docType": request.doc_type,
+                        "slug": request.target_slug,
+                    },
+                    "derivedDocumentHint": {
+                        "docType": doc_type_hint,
+                    },
+                    "context": context,
+                    "primaryResult": primary_payload,
+                }))
+                .unwrap_or_else(|_| "{}".to_string()),
+            },
+        ],
+    })
+}
+
+fn build_requested_actions_backfill_run(payload: &Value, raw_output: &str) -> NarrativeAgentRun {
+    let object = payload.as_object().cloned().unwrap_or_default();
+    let requested_actions = read_requested_actions(&object);
+    NarrativeAgentRun {
+        agent_id: "action-extractor".to_string(),
+        label: "动作提取助手".to_string(),
+        focus: "在正文已生成后补提取待批准动作。".to_string(),
+        status: "completed".to_string(),
+        summary: if requested_actions.is_empty() {
+            "未补提取到待批准动作。".to_string()
+        } else {
+            format!("已补提取 {} 个待批准动作。", requested_actions.len())
+        },
+        notes: Vec::new(),
+        risk_level: if requested_actions.is_empty() {
+            "medium".to_string()
+        } else {
+            highest_risk(
+                requested_actions
+                    .iter()
+                    .map(|action| action.risk_level.as_str()),
+            )
+        },
+        draft_markdown: String::new(),
+        raw_output: raw_output.to_string(),
+        provider_error: String::new(),
+    }
+}
+
+fn infer_requested_action_doc_type_hint(request: &NarrativeGenerateRequest) -> Option<String> {
+    if let Some(doc_type) = request
+        .derived_target_doc_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Some(doc_type.to_string());
+    }
+
+    let prompt = request.user_prompt.trim();
+    if ["人物设定", "角色卡", "人物卡", "角色设定"]
+        .iter()
+        .any(|needle| prompt.contains(needle))
+    {
+        return Some("character_card".to_string());
+    }
+    if ["地点设定", "地点文档", "地点卡", "场景设定"]
+        .iter()
+        .any(|needle| prompt.contains(needle))
+    {
+        return Some("location_note".to_string());
+    }
+    if ["任务文档", "任务设定", "任务卡"]
+        .iter()
+        .any(|needle| prompt.contains(needle))
+    {
+        return Some("task_setup".to_string());
+    }
+    if ["怪物设定", "怪物卡"]
+        .iter()
+        .any(|needle| prompt.contains(needle))
+    {
+        return Some("monster_note".to_string());
+    }
+    if ["道具设定", "物品设定", "物品卡", "道具卡"]
+        .iter()
+        .any(|needle| prompt.contains(needle))
+    {
+        return Some("item_note".to_string());
+    }
+    None
+}
+
+fn merge_requested_actions_into_payload(
+    primary_payload: &Value,
+    requested_actions: &[AgentActionRequest],
+) -> Value {
+    let mut object = primary_payload.as_object().cloned().unwrap_or_default();
+    object.insert(
+        "requested_actions".to_string(),
+        Value::Array(
+            requested_actions
+                .iter()
+                .map(agent_action_request_to_value)
+                .collect(),
+        ),
+    );
+    Value::Object(object)
+}
+
+fn agent_action_request_to_value(action: &AgentActionRequest) -> Value {
+    json!({
+        "id": &action.id,
+        "action_type": &action.action_type,
+        "title": &action.title,
+        "description": &action.description,
+        "payload": &action.payload,
+        "preview_only": action.preview_only,
+        "affected_document_keys": &action.affected_document_keys,
+        "risk_level": &action.risk_level,
+    })
+}
+
+fn classify_requested_actions_backfill_failure(failure: &ProviderFailure) -> &'static str {
+    if is_provider_timeout(failure) {
+        return "requested_actions_backfill_timeout";
+    }
+    if failure.status_code == 200 {
+        "requested_actions_backfill_unparseable"
+    } else {
+        "requested_actions_backfill_provider_error"
+    }
 }
 
 fn read_assistant_message(
@@ -1860,6 +2815,111 @@ fn read_requested_actions(object: &Map<String, Value>) -> Vec<AgentActionRequest
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+fn read_raw_action_type(object: &Map<String, Value>) -> Option<String> {
+    object
+        .get("action_type")
+        .or_else(|| object.get("actionType"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_lowercase)
+}
+
+fn derive_action_title(
+    action_type: &str,
+    object: &Map<String, Value>,
+    payload: &Value,
+) -> Option<String> {
+    read_trimmed_string(object.get("title")).or_else(|| {
+        if action_type == "create_derived_document" {
+            let payload = payload.as_object();
+            read_trimmed_string(payload.and_then(|map| map.get("title")))
+                .or_else(|| read_trimmed_string(payload.and_then(|map| map.get("slug"))))
+        } else {
+            None
+        }
+    })
+}
+
+fn analyze_requested_actions_backfill_payload(payload: &Value) -> Vec<String> {
+    let Some(object) = payload.as_object() else {
+        return vec!["requested_actions_backfill_non_object".to_string()];
+    };
+    let Some(value) = object
+        .get("requested_actions")
+        .or_else(|| object.get("requestedActions"))
+    else {
+        return vec!["requested_actions_backfill_missing_field".to_string()];
+    };
+    let Some(actions) = value.as_array() else {
+        return vec!["requested_actions_backfill_non_array".to_string()];
+    };
+    if actions.is_empty() {
+        return vec!["requested_actions_backfill_empty_array".to_string()];
+    }
+
+    let mut flags = BTreeSet::new();
+    let mut parsed_any = false;
+
+    for (index, entry) in actions.iter().enumerate() {
+        if parse_agent_action_request(entry, index).is_some() {
+            parsed_any = true;
+            continue;
+        }
+
+        let Some(object) = entry.as_object() else {
+            flags.insert("requested_actions_backfill_invalid_entry_shape".to_string());
+            continue;
+        };
+
+        let Some(action_type) = read_raw_action_type(object) else {
+            flags.insert("requested_actions_backfill_missing_action_type".to_string());
+            continue;
+        };
+        if !SUPPORTED_AGENT_ACTION_TYPES.contains(&action_type.as_str()) {
+            flags.insert("requested_actions_backfill_unsupported_action_type".to_string());
+            continue;
+        }
+
+        let raw_payload = object.get("payload").cloned().unwrap_or_else(|| json!({}));
+        if action_type == "create_derived_document" {
+            let payload_map = raw_payload.as_object().cloned().unwrap_or_default();
+            match read_trimmed_string(
+                payload_map
+                    .get("docType")
+                    .or_else(|| payload_map.get("doc_type")),
+            ) {
+                Some(doc_type) if !is_known_doc_type(&doc_type) => {
+                    flags.insert("requested_actions_backfill_invalid_doc_type".to_string());
+                }
+                None => {
+                    flags.insert("requested_actions_backfill_missing_doc_type".to_string());
+                }
+                _ => {}
+            }
+        }
+
+        let Some(validated_payload) = validate_action_payload(&action_type, raw_payload) else {
+            flags.insert("requested_actions_backfill_invalid_payload".to_string());
+            continue;
+        };
+
+        let has_top_level_title = read_trimmed_string(object.get("title")).is_some();
+        if !has_top_level_title {
+            flags.insert("requested_actions_backfill_missing_top_level_title".to_string());
+        }
+        if derive_action_title(&action_type, object, &validated_payload).is_none() {
+            flags.insert("requested_actions_backfill_missing_title".to_string());
+        }
+    }
+
+    if !parsed_any {
+        flags.insert("requested_actions_backfill_all_entries_invalid".to_string());
+    }
+
+    flags.into_iter().collect()
 }
 
 fn read_trimmed_string(value: Option<&Value>) -> Option<String> {
@@ -2033,20 +3093,8 @@ fn validate_action_payload(action_type: &str, payload: Value) -> Option<Value> {
 
 fn parse_agent_action_request(value: &Value, index: usize) -> Option<AgentActionRequest> {
     let object = value.as_object()?;
-    let action_type = object
-        .get("action_type")
-        .or_else(|| object.get("actionType"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_lowercase)
+    let action_type = read_raw_action_type(object)
         .filter(|value| SUPPORTED_AGENT_ACTION_TYPES.contains(&value.as_str()))?;
-    let title = object
-        .get("title")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?
-        .to_string();
     let description = object
         .get("description")
         .and_then(Value::as_str)
@@ -2066,13 +3114,12 @@ fn parse_agent_action_request(value: &Value, index: usize) -> Option<AgentAction
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let preview_only = preview_only_requested && action_supports_preview(&action_type);
-    let payload = inject_preview_flag(
-        validate_action_payload(
-            &action_type,
-            object.get("payload").cloned().unwrap_or_else(|| json!({})),
-        )?,
-        preview_only,
-    );
+    let validated_payload = validate_action_payload(
+        &action_type,
+        object.get("payload").cloned().unwrap_or_else(|| json!({})),
+    )?;
+    let title = derive_action_title(&action_type, object, &validated_payload)?;
+    let payload = inject_preview_flag(validated_payload, preview_only);
     let affected_document_keys = read_string_list(
         object
             .get("affected_document_keys")
@@ -2201,6 +3248,14 @@ fn read_string_list(value: Option<&Value>) -> Vec<String> {
     read_trimmed_string_list(value)
 }
 
+fn append_unique_strings(target: &mut Vec<String>, values: Vec<String>) {
+    for value in values {
+        if !target.iter().any(|existing| existing == &value) {
+            target.push(value);
+        }
+    }
+}
+
 fn failed_agent_run(agent_id: &str, label: &str, focus: &str, error: String) -> NarrativeAgentRun {
     NarrativeAgentRun {
         agent_id: agent_id.to_string(),
@@ -2224,6 +3279,61 @@ impl AgentRunExt for NarrativeAgentRun {
     fn with_raw_output(mut self, raw_output: String) -> Self {
         self.raw_output = raw_output;
         self
+    }
+}
+
+fn build_turn_kind_classifier_run(
+    payload: &Value,
+    raw_output: &str,
+    classified_turn_kind: &str,
+) -> NarrativeAgentRun {
+    let object = payload.as_object().cloned().unwrap_or_default();
+    let notes = read_string_list(
+        object
+            .get("notes")
+            .or_else(|| object.get("review_notes"))
+            .or_else(|| object.get("reviewNotes")),
+    );
+    NarrativeAgentRun {
+        agent_id: "turn-kind-classifier".to_string(),
+        label: "回合分类助手".to_string(),
+        focus: "先判断当前回合更适合 clarification/options/plan/final_answer。".to_string(),
+        status: "completed".to_string(),
+        summary: format!("已判断本轮优先进入 {classified_turn_kind}。"),
+        notes,
+        risk_level: "low".to_string(),
+        draft_markdown: String::new(),
+        raw_output: raw_output.to_string(),
+        provider_error: String::new(),
+    }
+}
+
+fn build_turn_kind_content_run(
+    payload: &Value,
+    raw_output: &str,
+    turn_kind: &str,
+) -> NarrativeAgentRun {
+    let object = payload.as_object().cloned().unwrap_or_default();
+    let questions = read_agent_questions(&object);
+    let options = read_agent_options(&object);
+    let plan_steps = read_agent_plan_steps(&object);
+    let summary = match turn_kind {
+        "clarification" => format!("已生成 {} 个澄清问题。", questions.len()),
+        "options" => format!("已生成 {} 个推进方向。", options.len()),
+        "plan" => format!("已生成 {} 个执行步骤。", plan_steps.len()),
+        _ => "已生成阻塞说明。".to_string(),
+    };
+    NarrativeAgentRun {
+        agent_id: "turn-kind-content".to_string(),
+        label: "结构化内容助手".to_string(),
+        focus: "根据已分类回合生成 questions/options/plan 等窄结构内容。".to_string(),
+        status: "completed".to_string(),
+        summary,
+        notes: Vec::new(),
+        risk_level: "low".to_string(),
+        draft_markdown: String::new(),
+        raw_output: raw_output.to_string(),
+        provider_error: String::new(),
     }
 }
 
@@ -2371,6 +3481,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_agent_action_request_uses_payload_title_for_create_derived_document() {
+        let action = json!({
+            "action_type": "create_derived_document",
+            "payload": {
+                "docType": "character_card",
+                "title": "商人老王人物设定",
+                "slug": "trader-lao-wang-split"
+            }
+        });
+        let parsed = parse_agent_action_request(&action, 0).unwrap();
+        assert_eq!(parsed.title, "商人老王人物设定");
+        assert_eq!(
+            parsed.payload.get("slug").and_then(Value::as_str),
+            Some("trader-lao-wang-split")
+        );
+    }
+
+    #[test]
     fn parse_agent_action_request_skips_invalid_payloads() {
         let action = json!({
             "action_type": "set_document_status",
@@ -2495,6 +3623,244 @@ mod tests {
     }
 
     #[test]
+    fn should_attempt_requested_actions_backfill_for_split_prompt_without_actions() {
+        let request = NarrativeGenerateRequest {
+            request_id: Some("req-split".to_string()),
+            doc_type: "world_bible".to_string(),
+            target_slug: "doc-1".to_string(),
+            action: "revise_document".to_string(),
+            user_prompt: "把商人老王相关内容移出去，单独创建一份人物设定。".to_string(),
+            editor_instruction: String::new(),
+            current_markdown: "# 示例".to_string(),
+            selected_range: None,
+            selected_text: String::new(),
+            related_doc_slugs: Vec::new(),
+            derived_target_doc_type: None,
+        };
+        let payload = json!({
+            "turn_kind": "final_answer",
+            "draft_markdown": "# 修订后正文"
+        });
+
+        assert!(should_attempt_requested_actions_backfill(
+            &request,
+            payload.as_object().unwrap()
+        ));
+    }
+
+    #[test]
+    fn should_not_attempt_requested_actions_backfill_when_actions_already_exist() {
+        let request = NarrativeGenerateRequest {
+            request_id: Some("req-split".to_string()),
+            doc_type: "world_bible".to_string(),
+            target_slug: "doc-1".to_string(),
+            action: "revise_document".to_string(),
+            user_prompt: "把商人老王相关内容移出去，单独创建一份人物设定。".to_string(),
+            editor_instruction: String::new(),
+            current_markdown: "# 示例".to_string(),
+            selected_range: None,
+            selected_text: String::new(),
+            related_doc_slugs: Vec::new(),
+            derived_target_doc_type: None,
+        };
+        let payload = json!({
+            "turn_kind": "final_answer",
+            "draft_markdown": "# 修订后正文",
+            "requested_actions": [
+                {
+                    "action_type": "create_derived_document",
+                    "title": "商人老王人物设定",
+                    "payload": {
+                        "docType": "character_card"
+                    }
+                }
+            ]
+        });
+
+        assert!(!should_attempt_requested_actions_backfill(
+            &request,
+            payload.as_object().unwrap()
+        ));
+    }
+
+    #[test]
+    fn merge_requested_actions_into_payload_keeps_backfilled_action() {
+        let primary_payload = json!({
+            "turn_kind": "final_answer",
+            "draft_markdown": "# 修订后正文"
+        });
+        let actions = vec![AgentActionRequest {
+            id: "action-1".to_string(),
+            action_type: "create_derived_document".to_string(),
+            title: "商人老王人物设定".to_string(),
+            description: "拆分出独立人物卡。".to_string(),
+            payload: json!({
+                "docType": "character_card",
+                "title": "商人老王",
+                "slug": "trader-lao-wang-split",
+                "markdown": "# 商人老王\n\n设定正文",
+                "previewOnly": false,
+                "preview_only": false,
+            }),
+            approval_policy: "always_require_user".to_string(),
+            preview_only: false,
+            affected_document_keys: vec!["cdc-world-core".to_string()],
+            risk_level: "medium".to_string(),
+        }];
+
+        let merged = merge_requested_actions_into_payload(&primary_payload, &actions);
+        let parsed = read_requested_actions(merged.as_object().unwrap());
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].action_type, "create_derived_document");
+        assert_eq!(
+            parsed[0].payload.get("slug").and_then(Value::as_str),
+            Some("trader-lao-wang-split")
+        );
+    }
+
+    #[test]
+    fn infer_requested_action_doc_type_hint_prefers_prompt_keywords() {
+        let request = NarrativeGenerateRequest {
+            request_id: Some("req-hint".to_string()),
+            doc_type: "world_bible".to_string(),
+            target_slug: "doc-1".to_string(),
+            action: "revise_document".to_string(),
+            user_prompt: "把商人老王相关内容移出去，单独创建一份人物设定。".to_string(),
+            editor_instruction: String::new(),
+            current_markdown: "# 示例".to_string(),
+            selected_range: None,
+            selected_text: String::new(),
+            related_doc_slugs: Vec::new(),
+            derived_target_doc_type: None,
+        };
+
+        assert_eq!(
+            infer_requested_action_doc_type_hint(&request).as_deref(),
+            Some("character_card")
+        );
+    }
+
+    #[test]
+    fn analyze_requested_actions_backfill_payload_marks_empty_array() {
+        let payload = json!({
+            "requested_actions": []
+        });
+        let flags = analyze_requested_actions_backfill_payload(&payload);
+        assert_eq!(
+            flags,
+            vec!["requested_actions_backfill_empty_array".to_string()]
+        );
+    }
+
+    #[test]
+    fn analyze_requested_actions_backfill_payload_marks_invalid_entries() {
+        let payload = json!({
+            "requested_actions": [
+                {
+                    "action_type": "create_derived_document",
+                    "payload": {
+                        "docType": "character_card"
+                    }
+                },
+                {
+                    "action_type": "create_derived_document",
+                    "title": "坏文稿",
+                    "payload": {
+                        "docType": "unknown_doc_type"
+                    }
+                }
+            ]
+        });
+        let flags = analyze_requested_actions_backfill_payload(&payload);
+        assert!(flags.contains(&"requested_actions_backfill_all_entries_invalid".to_string()));
+        assert!(flags.contains(&"requested_actions_backfill_missing_top_level_title".to_string()));
+        assert!(flags.contains(&"requested_actions_backfill_missing_title".to_string()));
+        assert!(flags.contains(&"requested_actions_backfill_invalid_doc_type".to_string()));
+        assert!(flags.contains(&"requested_actions_backfill_invalid_payload".to_string()));
+    }
+
+    #[test]
+    fn infer_turn_kind_from_prompt_prefers_clarification() {
+        let inferred = infer_turn_kind_from_prompt(
+            "我要写一个新篇章，但你先别动笔，先告诉我还缺哪些必要信息。",
+        );
+        assert_eq!(inferred.as_deref(), Some("clarification"));
+    }
+
+    #[test]
+    fn infer_turn_kind_from_prompt_prefers_options_and_plan() {
+        let options = infer_turn_kind_from_prompt(
+            "基于当前文稿先给我三个截然不同的推进方向，不要直接改正文。",
+        );
+        let plan =
+            infer_turn_kind_from_prompt("把当前文稿拆成一个分步骤执行计划，等我确认后再继续。");
+        assert_eq!(options.as_deref(), Some("options"));
+        assert_eq!(plan.as_deref(), Some("plan"));
+    }
+
+    #[test]
+    fn should_use_structured_turn_kind_staging_skips_local_stub() {
+        let settings = AiSettings {
+            base_url: "http://127.0.0.1:18765/v1".to_string(),
+            model: "narrative-lab-stub".to_string(),
+            api_key: "stub-key".to_string(),
+            timeout_sec: 12,
+            max_context_records: 12,
+        };
+        let request = NarrativeGenerateRequest {
+            request_id: Some("req-structured".to_string()),
+            doc_type: "world_bible".to_string(),
+            target_slug: "doc-1".to_string(),
+            action: "revise_document".to_string(),
+            user_prompt: "把当前文稿拆成一个分步骤执行计划，等我确认后再继续。".to_string(),
+            editor_instruction: String::new(),
+            current_markdown: "# 示例".to_string(),
+            selected_range: None,
+            selected_text: String::new(),
+            related_doc_slugs: Vec::new(),
+            derived_target_doc_type: None,
+        };
+
+        assert!(!should_use_structured_turn_kind_staging(
+            &settings, &request
+        ));
+    }
+
+    #[test]
+    fn runtime_ai_settings_applies_online_timeout_floor_only() {
+        let online = runtime_ai_settings(AiSettings {
+            base_url: "https://example.com/v1".to_string(),
+            model: "gpt-like".to_string(),
+            api_key: "key".to_string(),
+            timeout_sec: 45,
+            max_context_records: 12,
+        });
+        let offline = runtime_ai_settings(AiSettings {
+            base_url: "http://127.0.0.1:18765/v1".to_string(),
+            model: "narrative-lab-stub".to_string(),
+            api_key: "stub-key".to_string(),
+            timeout_sec: 12,
+            max_context_records: 12,
+        });
+
+        assert_eq!(online.timeout_sec, 90);
+        assert_eq!(offline.timeout_sec, 12);
+    }
+
+    #[test]
+    fn classify_requested_actions_backfill_failure_marks_timeout() {
+        let failure = ProviderFailure {
+            status_code: 408,
+            error: "AI 请求超时，请检查网络或增大 Timeout。".to_string(),
+            raw_text: String::new(),
+        };
+        assert_eq!(
+            classify_requested_actions_backfill_failure(&failure),
+            "requested_actions_backfill_timeout"
+        );
+    }
+
+    #[test]
     fn read_agent_plan_steps_accepts_string_entries_and_title_fields() {
         let payload = json!({
             "plan_steps": [
@@ -2572,6 +3938,14 @@ fn map_provider_failure_to_result_error(failure: ProviderFailure) -> String {
     normalize_provider_error(&failure)
 }
 
+fn runtime_ai_settings(settings: AiSettings) -> AiSettings {
+    let mut next = settings;
+    if !is_local_stub_provider(&next) {
+        next.timeout_sec = next.timeout_sec.max(90);
+    }
+    next
+}
+
 fn cancelled_provider_failure(raw_text: String) -> ProviderFailure {
     ProviderFailure {
         status_code: 499,
@@ -2583,6 +3957,17 @@ fn cancelled_provider_failure(raw_text: String) -> ProviderFailure {
 fn is_cancelled_provider_failure(failure: &ProviderFailure) -> bool {
     failure.error.contains(NARRATIVE_REQUEST_CANCELLED_CODE)
         || failure.error.contains("当前请求已取消")
+}
+
+fn is_provider_timeout(failure: &ProviderFailure) -> bool {
+    if failure.status_code == 408 {
+        return true;
+    }
+    let normalized = format!("{} {}", failure.error, failure.raw_text).to_lowercase();
+    normalized.contains("超时")
+        || normalized.contains("timed out")
+        || normalized.contains("timeout")
+        || normalized.contains("deadline has elapsed")
 }
 
 async fn sleep_with_cancel(
@@ -2614,6 +3999,32 @@ async fn perform_chat_completion(
         cancellation.cloned(),
     )
     .await
+}
+
+async fn perform_chat_completion_for_stage(
+    settings: &AiSettings,
+    stage: ProviderRequestStage,
+    payload: &Value,
+    progress: Option<&NarrativeGenerationProgressEmitter>,
+    cancellation: Option<&CancellationToken>,
+) -> Result<ProviderSuccess, ProviderFailure> {
+    let stage_settings = stage_settings(settings, stage);
+    perform_chat_completion(&stage_settings, payload, progress, cancellation).await
+}
+
+fn stage_settings(settings: &AiSettings, stage: ProviderRequestStage) -> AiSettings {
+    let mut next = settings.clone();
+    if is_local_stub_provider(&next) {
+        return next;
+    }
+
+    next.timeout_sec = match stage {
+        ProviderRequestStage::TurnKindClassification => next.timeout_sec.max(45),
+        ProviderRequestStage::StructuredContent => next.timeout_sec.max(90),
+        ProviderRequestStage::RequestedActionsBackfill => next.timeout_sec.max(90),
+        ProviderRequestStage::PrimaryGeneration => next.timeout_sec.max(90),
+    };
+    next
 }
 
 async fn perform_chat_completion_owned(
@@ -2896,9 +4307,15 @@ async fn send_chat_completion_request(
                 return parse_non_stream_response(raw_body, status, progress);
             }
             Err(error) => {
+                let status_code = if error.is_timeout() { 408 } else { 0 };
+                let error_message = if error.is_timeout() {
+                    "AI 请求超时，请检查网络或增大 Timeout。".to_string()
+                } else {
+                    format!("网络请求失败: {error}")
+                };
                 let failure = ProviderFailure {
-                    status_code: 0,
-                    error: format!("网络请求失败: {error}"),
+                    status_code,
+                    error: error_message,
                     raw_text: String::new(),
                 };
                 if attempt == 0 {

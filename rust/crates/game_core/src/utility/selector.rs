@@ -1,3 +1,6 @@
+//! Utility AI 选择模块。
+//! 负责从 goal 分数中选出当前目标，不负责 score rule 计算或动作规划。
+
 use crate::goap::{NpcGoalKey, NpcPlanRequest};
 
 use super::context::NpcUtilityContext;

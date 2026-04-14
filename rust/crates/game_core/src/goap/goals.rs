@@ -1,7 +1,10 @@
+//! GOAP 目标映射模块。
+//! 负责把选中的逻辑 goal 映射为规划目标，不负责打分或执行推进。
+
 use dogoap::prelude::{Compare, Goal};
 use game_data::AiGoalDefinition;
 
-use super::behavior::selected_goal_requirements;
+use super::goal_requirements::selected_goal_requirements;
 use super::{NpcGoalKey, NpcPlanRequest};
 
 pub fn goal_requirements(request: &NpcPlanRequest, goal: &NpcGoalKey) -> Goal {

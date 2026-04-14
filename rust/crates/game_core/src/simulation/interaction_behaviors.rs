@@ -130,6 +130,7 @@ pub(crate) fn resolve_map_object_options(
     object: &MapObjectDefinition,
 ) -> Vec<InteractionOptionDefinition> {
     match object.kind {
+        MapObjectKind::Prop => Vec::new(),
         MapObjectKind::Pickup => pickup::map_object_options(object),
         MapObjectKind::Interactive => resolve_interactive_object_options(object),
         MapObjectKind::Trigger => resolve_map_trigger_options(object),

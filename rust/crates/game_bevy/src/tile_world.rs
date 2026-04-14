@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use game_core::{MapCellDebugState, MapObjectDebugState, SimulationSnapshot};
 use game_data::{
     expand_object_footprint, GridCoord, MapDefinition, MapObjectDefinition, MapRotation,
-    TileSlopeKind, WorldSurfaceTileSetDefinition, WorldTileBounds, WorldTileLibrary,
-    WorldTilePrototypeId,
+    OverworldCellDefinition, OverworldDefinition, TileSlopeKind, WorldSurfaceTileSetDefinition,
+    WorldTileBounds, WorldTileLibrary, WorldTilePrototypeId,
 };
 use std::collections::HashMap;
 
@@ -254,6 +254,35 @@ pub fn resolve_snapshot_cell_surface_placements(
     resolve_tactical_surface_placements(&cells, floor_top, grid_size, library)
 }
 
+pub fn resolve_overworld_definition_surface_placements(
+    definition: &OverworldDefinition,
+    floor_top: f32,
+    grid_size: f32,
+    library: &WorldTileLibrary,
+) -> Vec<TilePlacementSpec> {
+    let cells = definition
+        .cells
+        .iter()
+        .filter_map(overworld_surface_cell_from_definition)
+        .collect::<Vec<_>>();
+    resolve_tactical_surface_placements(&cells, floor_top, grid_size, library)
+}
+
+pub fn resolve_overworld_snapshot_surface_placements(
+    snapshot: &SimulationSnapshot,
+    floor_top: f32,
+    grid_size: f32,
+    library: &WorldTileLibrary,
+) -> Vec<TilePlacementSpec> {
+    let cells = snapshot
+        .grid
+        .map_cells
+        .iter()
+        .filter_map(tactical_surface_cell_from_snapshot)
+        .collect::<Vec<_>>();
+    resolve_tactical_surface_placements(&cells, floor_top, grid_size, library)
+}
+
 pub fn default_floor_top(current_level: i32, grid_size: f32, floor_thickness_world: f32) -> f32 {
     current_level as f32 * grid_size + floor_thickness_world
 }
@@ -437,6 +466,19 @@ fn tactical_surface_cell_from_map_definition(
 
 fn tactical_surface_cell_from_snapshot(
     cell: &MapCellDebugState,
+) -> Option<TacticalSurfaceCellSpec> {
+    let visual = cell.visual.as_ref()?;
+    let surface_set_id = visual.surface_set_id.clone()?;
+    Some(TacticalSurfaceCellSpec {
+        grid: cell.grid,
+        surface_set_id,
+        elevation_steps: visual.elevation_steps,
+        slope: visual.slope,
+    })
+}
+
+fn overworld_surface_cell_from_definition(
+    cell: &OverworldCellDefinition,
 ) -> Option<TacticalSurfaceCellSpec> {
     let visual = cell.visual.as_ref()?;
     let surface_set_id = visual.surface_set_id.clone()?;

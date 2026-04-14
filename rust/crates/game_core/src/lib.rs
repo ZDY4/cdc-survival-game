@@ -10,16 +10,14 @@ pub mod grid;
 pub mod movement;
 pub mod overworld;
 pub mod runtime;
+pub mod runtime_ai;
 pub mod simulation;
 pub mod survival;
 pub mod turn;
 pub mod utility;
 pub mod vision;
 
-pub use actor::{
-    FollowRuntimeGoalController, NoopAiController, OneShotInteractController,
-    RuntimeAiController, RuntimeAiStepResult,
-};
+pub use actor::{ActorRecord, ActorRegistry};
 pub use building::{
     generate_building_layout, BuildingLayoutError, GeneratedBuildingDebugState,
     GeneratedBuildingLayout, GeneratedBuildingStory, GeneratedDoorDebugState, GeneratedOutlineEdge,
@@ -63,6 +61,10 @@ pub use overworld::{
 pub use runtime::{
     action_result_status, DropItemOutcome, RuntimeSnapshot, SimulationRuntime,
     RUNTIME_SNAPSHOT_SCHEMA_VERSION,
+};
+pub use runtime_ai::{
+    FollowRuntimeGoalController, NoopAiController, OneShotInteractController, RuntimeAiController,
+    RuntimeAiStepResult,
 };
 pub use simulation::{
     resolve_combat_tactic_profile_id, select_combat_ai_intent_for_profile,

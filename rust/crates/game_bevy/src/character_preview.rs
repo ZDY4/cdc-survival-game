@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
 
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 use game_core::SimulationRuntime;
@@ -9,7 +8,9 @@ use game_data::{
     ResolvedEquipmentPreviewEntry,
 };
 
-use crate::{CharacterAppearanceDefinitions, CharacterDefinitions, ItemDefinitions};
+use crate::{
+    rust_asset_dir, CharacterAppearanceDefinitions, CharacterDefinitions, ItemDefinitions,
+};
 
 const BUILTIN_HUMANOID_MANNEQUIN: &str = "builtin:humanoid_mannequin";
 
@@ -397,8 +398,8 @@ fn asset_path_exists(asset_path: &str) -> bool {
     preview_asset_root().join(asset_path).exists()
 }
 
-fn preview_asset_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+fn preview_asset_root() -> std::path::PathBuf {
+    rust_asset_dir()
 }
 
 fn preview_material(

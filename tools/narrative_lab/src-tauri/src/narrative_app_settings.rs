@@ -165,22 +165,41 @@ impl NarrativeAppSettings {
 
     pub fn with_inferred_defaults(mut self) -> Self {
         let inferred = infer_default_narrative_app_settings();
+        let workspace_override = normalize_optional_path(
+            std::env::var("CDC_NARRATIVE_WORKSPACE_ROOT")
+                .ok()
+                .as_deref(),
+        );
+        let project_override =
+            normalize_optional_path(std::env::var("CDC_NARRATIVE_PROJECT_ROOT").ok().as_deref());
+        let is_runtime_regression = std::env::var("CDC_EDITOR_SELF_TEST")
+            .ok()
+            .as_deref()
+            .is_some_and(|value| value.trim() == "narrative-chat-regression")
+            || std::env::var("CDC_NARRATIVE_CHAT_REGRESSION_MODE")
+                .ok()
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty());
 
         if self.last_workspace.is_none() {
-            self.last_workspace = inferred.last_workspace;
+            self.last_workspace = inferred.last_workspace.clone();
         }
         if self.connected_project_root.is_none() {
-            self.connected_project_root = inferred.connected_project_root;
+            self.connected_project_root = inferred.connected_project_root.clone();
         }
 
-        if let Some(workspace_root) =
-            normalize_optional_path(std::env::var("CDC_NARRATIVE_WORKSPACE_ROOT").ok().as_deref())
-        {
+        if let Some(workspace_root) = workspace_override {
             self.last_workspace = Some(workspace_root);
-        }
-        if let Some(project_root) =
-            normalize_optional_path(std::env::var("CDC_NARRATIVE_PROJECT_ROOT").ok().as_deref())
+        } else if !is_runtime_regression
+            && self
+                .last_workspace
+                .as_deref()
+                .is_some_and(is_regression_workspace_path)
         {
+            self.last_workspace = inferred.last_workspace.clone();
+        }
+
+        if let Some(project_root) = project_override {
             self.connected_project_root = Some(project_root);
         }
 
@@ -319,6 +338,11 @@ fn resolve_existing_dir(path: &Path) -> Option<PathBuf> {
     path.canonicalize()
         .ok()
         .or_else(|| Some(path.to_path_buf()))
+}
+
+fn is_regression_workspace_path(path: &str) -> bool {
+    let normalized = path.trim().replace('\\', "/").to_lowercase();
+    normalized.contains("/tmp/narrative_lab_regression_")
 }
 
 fn to_forward_slashes(path: PathBuf) -> String {

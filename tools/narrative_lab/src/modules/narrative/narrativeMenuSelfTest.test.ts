@@ -41,12 +41,7 @@ describe("narrativeMenuSelfTest", () => {
 
   it("passes when commands match expectations and executable checks succeed", async () => {
     const executableCommands = new Set([
-      EDITOR_MENU_COMMANDS.VIEW_RESET_LAYOUT,
-      EDITOR_MENU_COMMANDS.VIEW_RESTORE_DEFAULT_LAYOUT,
-      EDITOR_MENU_COMMANDS.VIEW_COLLAPSE_ADVANCED_PANELS,
-      EDITOR_MENU_COMMANDS.VIEW_EXPAND_ALL_PANELS,
-      EDITOR_MENU_COMMANDS.VIEW_TOGGLE_INSPECTOR,
-      EDITOR_MENU_COMMANDS.VIEW_ZEN_MODE,
+      EDITOR_MENU_COMMANDS.VIEW_TOGGLE_LEFT_SIDEBAR,
       EDITOR_MENU_COMMANDS.AI_OPEN_PROVIDER_SETTINGS,
     ]);
 

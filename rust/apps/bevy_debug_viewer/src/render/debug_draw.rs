@@ -556,6 +556,21 @@ fn map_object_outline_box(
                 Vec3::new(footprint_width, height, footprint_depth),
             ))
         }
+        game_data::MapObjectKind::Prop => {
+            let height = if object.blocks_sight {
+                grid_size * 1.25
+            } else {
+                grid_size * 0.9
+            };
+            Some((
+                Vec3::new(center_x, floor_top + height * 0.5, center_z),
+                Vec3::new(
+                    footprint_width.max(grid_size * 0.32),
+                    height,
+                    footprint_depth.max(grid_size * 0.32),
+                ),
+            ))
+        }
         game_data::MapObjectKind::Pickup => {
             let height = grid_size * 0.3;
             Some((

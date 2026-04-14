@@ -1,8 +1,14 @@
+//! 角色生成与 runtime 注册模块。
+//! 负责把角色定义映射为 Bevy 实体和 core runtime actor，不负责 NPC life 系统调度。
+
 use bevy_ecs::prelude::*;
-use game_core::{FollowRuntimeGoalController, NoopAiController, RegisterActor, SimulationRuntime};
+use game_core::{
+    FollowRuntimeGoalController, NoopAiController, RegisterActor, RuntimeAiController,
+    SimulationRuntime,
+};
 use game_data::{
-    ActorId, ActorKind, ActorSide, CharacterArchetype, CharacterDefinition, CharacterDisposition,
-    GridCoord,
+    normalize_combat_behavior_id, ActorId, ActorKind, ActorSide, CharacterArchetype,
+    CharacterDefinition, CharacterDisposition, GridCoord,
 };
 
 use crate::npc_life::LifeProfileComponent;
@@ -78,6 +84,7 @@ pub fn register_runtime_actor_from_definition(
         definition.progression.level as i32,
         definition.combat.xp_reward,
     );
+    runtime.seed_actor_combat_behavior(actor_id, &definition.combat.behavior);
     runtime.seed_actor_combat_profile(
         actor_id,
         definition
@@ -119,7 +126,11 @@ fn spawn_character_entity(
             display_name: DisplayName(definition.identity.display_name.clone()),
             description: Description(definition.identity.description.clone()),
             level: Level(definition.progression.level),
-            behavior: BehaviorProfile(definition.combat.behavior.clone()),
+            behavior: BehaviorProfile(
+                normalize_combat_behavior_id(&definition.combat.behavior)
+                    .unwrap_or("neutral")
+                    .to_string(),
+            ),
             ai: AiCombatProfile(definition.ai.clone()),
             xp_reward: XpReward(definition.combat.xp_reward),
             loot: LootTable(definition.combat.loot.clone()),
@@ -147,12 +158,6 @@ pub(crate) fn register_actor_from_definition(
     definition: &CharacterDefinition,
     grid_position: GridCoord,
 ) -> RegisterActor {
-    let ai_controller = if definition.life.is_some() {
-        Some(Box::new(FollowRuntimeGoalController) as Box<_>)
-    } else {
-        Some(Box::new(NoopAiController) as Box<_>)
-    };
-
     RegisterActor {
         definition_id: Some(definition.id.clone()),
         display_name: definition.identity.display_name.clone(),
@@ -162,7 +167,17 @@ pub(crate) fn register_actor_from_definition(
         grid_position,
         interaction: definition.interaction.clone(),
         attack_range: definition.ai.attack_range,
-        ai_controller,
+        ai_controller: select_runtime_ai_controller_for_definition(definition),
+    }
+}
+
+fn select_runtime_ai_controller_for_definition(
+    definition: &CharacterDefinition,
+) -> Option<Box<dyn RuntimeAiController>> {
+    if definition.life.is_some() {
+        Some(Box::new(FollowRuntimeGoalController))
+    } else {
+        Some(Box::new(NoopAiController))
     }
 }
 

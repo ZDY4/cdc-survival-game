@@ -2,21 +2,19 @@
 
 use super::{
     build_static_world_from_map_definition, build_static_world_from_overworld_definition,
-    build_static_world_from_topology, is_overworld_location_material_role,
-    push_overworld_location_marker_boxes, OverworldLocationMarkerArchetype, StaticMapTopology,
+    build_static_world_from_topology, is_overworld_location_material_role, StaticMapTopology,
     StaticWorldBuildConfig, StaticWorldGridBounds, StaticWorldMaterialRole,
 };
-use bevy::prelude::Vec3;
 use game_core::{GeneratedBuildingDebugState, GeneratedBuildingStory, GeneratedWalkablePolygons};
 use game_data::{
-    GridCoord, MapBuildingLayoutSpec, MapBuildingProps, MapBuildingStorySpec,
-    MapBuildingTileSetSpec, MapBuildingWallVisualKind, MapBuildingWallVisualSpec,
-    MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
-    MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapObjectVisualSpec,
-    MapRotation, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
-    OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind, OverworldTerrainKind,
-    OverworldTravelRuleSet, RelativeGridCell, WorldSurfaceTileSetId, WorldTilePrototypeId,
-    WorldWallTileSetId,
+    GridCoord, InteractionOptionDefinition, InteractionOptionId, MapBuildingLayoutSpec,
+    MapBuildingProps, MapBuildingStorySpec, MapBuildingTileSetSpec, MapBuildingWallVisualKind,
+    MapBuildingWallVisualSpec, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
+    MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+    MapObjectVisualSpec, MapRotation, MapSize, MapTriggerProps, OverworldCellDefinition,
+    OverworldDefinition, OverworldId, OverworldLocationDefinition, OverworldLocationId,
+    OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet, RelativeGridCell,
+    WorldSurfaceTileSetId, WorldTilePrototypeId, WorldWallTileSetId,
 };
 use std::collections::BTreeMap;
 
@@ -25,32 +23,31 @@ fn overworld_builds_continuous_ground_for_full_grid() {
     let scene = build_static_world_from_overworld_definition(&sample_overworld(false));
 
     assert_eq!(scene.ground.len(), 1);
-    assert!(scene
-        .boxes
-        .iter()
-        .all(|spec| spec.material_role != StaticWorldMaterialRole::OverworldCell));
+    assert!(scene.boxes.is_empty());
+    assert!(scene.decals.is_empty());
 }
 
 #[test]
-fn overworld_keeps_blocked_cells_as_overlay_boxes() {
+fn overworld_keeps_blocked_cells_as_overlay_decals() {
     let scene = build_static_world_from_overworld_definition(&sample_overworld(true));
 
     assert_eq!(
         scene
-            .boxes
+            .decals
             .iter()
-            .filter(|spec| spec.material_role == StaticWorldMaterialRole::OverworldBlockedCell)
+            .filter(|spec| { spec.material_role == StaticWorldMaterialRole::OverworldBlockedCell })
             .count(),
         1
     );
     assert!(
         scene
-            .boxes
+            .labels
             .iter()
             .filter(|spec| is_overworld_location_material_role(spec.material_role))
             .count()
-            >= 2
+            >= 1
     );
+    assert!(scene.boxes.is_empty());
     assert_eq!(scene.labels.len(), 1);
 }
 
@@ -59,75 +56,27 @@ fn overworld_overlays_are_centered_on_cells() {
     let scene = build_static_world_from_overworld_definition(&sample_overworld(true));
 
     let blocked = scene
-        .boxes
+        .decals
         .iter()
         .find(|spec| spec.material_role == StaticWorldMaterialRole::OverworldBlockedCell)
         .expect("blocked overlay should exist");
     assert_eq!(blocked.translation.x, 1.5);
     assert_eq!(blocked.translation.z, 1.5);
 
-    let location_markers = scene
-        .boxes
+    let location_labels = scene
+        .labels
         .iter()
         .filter(|spec| is_overworld_location_material_role(spec.material_role))
         .collect::<Vec<_>>();
-    assert!(location_markers.len() >= 2);
-    assert!(location_markers.iter().all(|spec| {
+    assert_eq!(location_labels.len(), 1);
+    assert!(location_labels.iter().all(|spec| {
         spec.translation.x >= 0.05
             && spec.translation.x <= 0.95
             && spec.translation.z >= 0.05
             && spec.translation.z <= 0.95
     }));
-    assert!(location_markers
-        .iter()
-        .any(|spec| spec.translation.y <= 0.78));
+    assert!(location_labels.iter().all(|spec| spec.translation.y > 0.3));
     assert_eq!(scene.labels[0].text, "据 Outpost");
-}
-
-#[test]
-fn overworld_location_archetypes_produce_distinct_placeholder_shapes() {
-    let center = Vec3::new(2.5, 0.0, 3.5);
-    let floor_top = 0.11;
-    let grid_size = 1.0;
-
-    let mut hospital_boxes = Vec::new();
-    let mut hospital_labels = Vec::new();
-    push_overworld_location_marker_boxes(
-        &mut hospital_boxes,
-        &mut hospital_labels,
-        OverworldLocationMarkerArchetype::Hospital,
-        Some("废弃医院"),
-        center,
-        floor_top,
-        grid_size,
-        "hospital".into(),
-    );
-
-    let mut street_boxes = Vec::new();
-    let mut street_labels = Vec::new();
-    push_overworld_location_marker_boxes(
-        &mut street_boxes,
-        &mut street_labels,
-        OverworldLocationMarkerArchetype::Street,
-        Some("废弃街道A"),
-        center,
-        floor_top,
-        grid_size,
-        "street".into(),
-    );
-
-    assert_ne!(
-        hospital_boxes
-            .iter()
-            .map(|spec| (spec.size.x, spec.size.y, spec.size.z))
-            .collect::<Vec<_>>(),
-        street_boxes
-            .iter()
-            .map(|spec| (spec.size.x, spec.size.y, spec.size.z))
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(hospital_labels[0].text, "医 废弃医院");
-    assert_eq!(street_labels[0].text, "路 废弃街道A");
 }
 
 #[test]
@@ -171,9 +120,29 @@ fn generated_building_walkable_cells_emit_individual_floor_tiles() {
 }
 
 #[test]
+fn generated_stairs_use_dedicated_stair_specs_instead_of_boxes() {
+    let scene = build_static_world_from_topology(
+        &sample_topology_with_generated_stairs(),
+        0,
+        StaticWorldBuildConfig::default(),
+    );
+
+    assert!(scene.boxes.is_empty());
+    assert!(!scene.stairs.is_empty());
+    assert!(scene
+        .stairs
+        .iter()
+        .any(|spec| spec.material_role == StaticWorldMaterialRole::StairBase));
+    assert!(scene
+        .stairs
+        .iter()
+        .any(|spec| spec.material_role == StaticWorldMaterialRole::StairAccent));
+}
+
+#[test]
 fn prototype_visual_props_do_not_emit_fallback_object_boxes() {
     let scene = build_static_world_from_map_definition(
-        &sample_map_with_visual_interactive_object(),
+        &sample_map_with_interactive_object(true),
         0,
         StaticWorldBuildConfig::default(),
     );
@@ -184,12 +153,44 @@ fn prototype_visual_props_do_not_emit_fallback_object_boxes() {
 #[test]
 fn prototype_visual_pickups_do_not_emit_fallback_object_boxes() {
     let scene = build_static_world_from_map_definition(
-        &sample_map_with_visual_pickup_object(),
+        &sample_map_with_pickup_object(true),
         0,
         StaticWorldBuildConfig::default(),
     );
 
     assert!(scene.boxes.is_empty());
+}
+
+#[test]
+fn non_visual_interactives_downgrade_to_pick_proxies_only() {
+    let scene = build_static_world_from_map_definition(
+        &sample_map_with_interactive_object(false),
+        0,
+        StaticWorldBuildConfig::default(),
+    );
+
+    assert!(scene.boxes.is_empty());
+    assert_eq!(scene.pick_proxies.len(), 1);
+    assert!(scene
+        .pick_proxies
+        .iter()
+        .all(|spec| spec.material_role == StaticWorldMaterialRole::InvisiblePickProxy));
+}
+
+#[test]
+fn non_visual_pickups_downgrade_to_pick_proxies_only() {
+    let scene = build_static_world_from_map_definition(
+        &sample_map_with_pickup_object(false),
+        0,
+        StaticWorldBuildConfig::default(),
+    );
+
+    assert!(scene.boxes.is_empty());
+    assert_eq!(scene.pick_proxies.len(), 1);
+    assert!(scene
+        .pick_proxies
+        .iter()
+        .all(|spec| spec.material_role == StaticWorldMaterialRole::InvisiblePickProxy));
 }
 
 #[test]
@@ -201,6 +202,44 @@ fn ai_spawn_objects_do_not_emit_static_world_boxes() {
     );
 
     assert!(scene.boxes.is_empty());
+}
+
+#[test]
+fn scene_transition_triggers_emit_pick_proxies_and_decals_only() {
+    let scene = build_static_world_from_map_definition(
+        &sample_map_with_trigger_object("enter_subscene"),
+        0,
+        Default::default(),
+    );
+
+    assert!(scene.boxes.is_empty());
+    assert_eq!(scene.pick_proxies.len(), 2);
+    assert!(scene
+        .pick_proxies
+        .iter()
+        .all(|spec| spec.material_role == StaticWorldMaterialRole::InvisiblePickProxy));
+    assert_eq!(scene.decals.len(), 2);
+    assert!(scene
+        .decals
+        .iter()
+        .all(|spec| spec.material_role == StaticWorldMaterialRole::TriggerAccent));
+}
+
+#[test]
+fn non_transition_triggers_emit_pick_proxies_without_visible_box_fallback() {
+    let scene = build_static_world_from_map_definition(
+        &sample_map_with_trigger_object("inspect_console"),
+        0,
+        Default::default(),
+    );
+
+    assert!(scene.boxes.is_empty());
+    assert_eq!(scene.pick_proxies.len(), 2);
+    assert!(scene
+        .pick_proxies
+        .iter()
+        .all(|spec| spec.material_role == StaticWorldMaterialRole::InvisiblePickProxy));
+    assert!(scene.decals.is_empty());
 }
 
 fn sample_overworld(block_center: bool) -> OverworldDefinition {
@@ -317,7 +356,6 @@ fn sample_topology_with_walkable_generated_building() -> StaticMapTopology {
             min_z: 0,
             max_z: 2,
         },
-        blocked_cells: Vec::new(),
         surface_cells: Vec::new(),
         objects: Vec::new(),
         generated_buildings: vec![GeneratedBuildingDebugState {
@@ -366,11 +404,23 @@ fn sample_topology_with_walkable_generated_building() -> StaticMapTopology {
             stairs: Vec::new(),
             visual_outline: Vec::new(),
         }],
-        generated_doors: Vec::new(),
     }
 }
 
-fn sample_map_with_visual_interactive_object() -> MapDefinition {
+fn sample_topology_with_generated_stairs() -> StaticMapTopology {
+    let mut topology = sample_topology_with_walkable_generated_building();
+    topology.generated_buildings[0].stairs = vec![game_core::GeneratedStairConnection {
+        from_level: 0,
+        to_level: 1,
+        from_cells: vec![GridCoord::new(1, 0, 1)],
+        to_cells: vec![GridCoord::new(1, 1, 1)],
+        width: 1,
+        kind: game_data::StairKind::Straight,
+    }];
+    topology
+}
+
+fn sample_map_with_interactive_object(include_visual: bool) -> MapDefinition {
     MapDefinition {
         id: MapId("visual_interactive_map".into()),
         name: "Visual Interactive".into(),
@@ -409,7 +459,7 @@ fn sample_map_with_visual_interactive_object() -> MapDefinition {
             blocks_movement: false,
             blocks_sight: false,
             props: MapObjectProps {
-                visual: Some(MapObjectVisualSpec {
+                visual: include_visual.then(|| MapObjectVisualSpec {
                     prototype_id: WorldTilePrototypeId("props/locker_metal".into()),
                     ..MapObjectVisualSpec::default()
                 }),
@@ -420,7 +470,7 @@ fn sample_map_with_visual_interactive_object() -> MapDefinition {
     }
 }
 
-fn sample_map_with_visual_pickup_object() -> MapDefinition {
+fn sample_map_with_pickup_object(include_visual: bool) -> MapDefinition {
     MapDefinition {
         id: MapId("visual_pickup_map".into()),
         name: "Visual Pickup".into(),
@@ -459,7 +509,7 @@ fn sample_map_with_visual_pickup_object() -> MapDefinition {
             blocks_movement: false,
             blocks_sight: false,
             props: MapObjectProps {
-                visual: Some(MapObjectVisualSpec {
+                visual: include_visual.then(|| MapObjectVisualSpec {
                     prototype_id: WorldTilePrototypeId("props/crate_wood".into()),
                     ..MapObjectVisualSpec::default()
                 }),
@@ -510,6 +560,59 @@ fn sample_map_with_ai_spawn_object() -> MapDefinition {
             blocks_sight: false,
             props: MapObjectProps {
                 ai_spawn: Some(Default::default()),
+                ..MapObjectProps::default()
+            },
+        }],
+    }
+}
+
+fn sample_map_with_trigger_object(trigger_kind: &str) -> MapDefinition {
+    MapDefinition {
+        id: MapId(format!("trigger_map_{trigger_kind}").into()),
+        name: "Trigger Map".into(),
+        size: MapSize {
+            width: 3,
+            height: 2,
+        },
+        default_level: 0,
+        levels: vec![MapLevelDefinition {
+            y: 0,
+            cells: vec![MapCellDefinition {
+                x: 0,
+                z: 0,
+                blocks_movement: false,
+                blocks_sight: false,
+                terrain: String::new(),
+                visual: None,
+                extra: BTreeMap::new(),
+            }],
+        }],
+        entry_points: vec![MapEntryPointDefinition {
+            id: "default".into(),
+            grid: GridCoord::new(0, 0, 0),
+            facing: None,
+            extra: BTreeMap::new(),
+        }],
+        objects: vec![MapObjectDefinition {
+            object_id: format!("trigger_{trigger_kind}"),
+            kind: MapObjectKind::Trigger,
+            anchor: GridCoord::new(1, 0, 0),
+            footprint: MapObjectFootprint {
+                width: 2,
+                height: 1,
+            },
+            rotation: MapRotation::East,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                trigger: Some(MapTriggerProps {
+                    display_name: "Trigger".into(),
+                    options: vec![InteractionOptionDefinition {
+                        id: InteractionOptionId(trigger_kind.into()),
+                        ..InteractionOptionDefinition::default()
+                    }],
+                    ..MapTriggerProps::default()
+                }),
                 ..MapObjectProps::default()
             },
         }],

@@ -44,40 +44,7 @@ function buildNarrativeMenuSelfTestChecks(): SelfTestCheck[] {
       expected: "enabled",
     },
     {
-      commandId: EDITOR_MENU_COMMANDS.VIEW_RESET_LAYOUT,
-      expected: "enabled",
-      execute: true,
-    },
-    {
-      commandId: EDITOR_MENU_COMMANDS.VIEW_RESTORE_DEFAULT_LAYOUT,
-      expected: "enabled",
-      execute: true,
-    },
-    {
-      commandId: EDITOR_MENU_COMMANDS.VIEW_COLLAPSE_ADVANCED_PANELS,
-      expected: "enabled",
-      execute: true,
-    },
-    {
-      commandId: EDITOR_MENU_COMMANDS.VIEW_EXPAND_ALL_PANELS,
-      expected: "enabled",
-      execute: true,
-    },
-    {
-      commandId: EDITOR_MENU_COMMANDS.WORKBENCH_COMMAND_PALETTE,
-      expected: "enabled",
-    },
-    {
-      commandId: EDITOR_MENU_COMMANDS.WORKBENCH_QUICK_OPEN,
-      expected: "enabled",
-    },
-    {
-      commandId: EDITOR_MENU_COMMANDS.VIEW_TOGGLE_INSPECTOR,
-      expected: "enabled",
-      execute: true,
-    },
-    {
-      commandId: EDITOR_MENU_COMMANDS.VIEW_ZEN_MODE,
+      commandId: EDITOR_MENU_COMMANDS.VIEW_TOGGLE_LEFT_SIDEBAR,
       expected: "enabled",
       execute: true,
     },

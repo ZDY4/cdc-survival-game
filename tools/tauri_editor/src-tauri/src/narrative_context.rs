@@ -248,7 +248,10 @@ fn load_runtime_category(
             load_directory_records(&project_root.join("data").join("characters"), "id", &mut result)?
         }
         "map_locations" => {
-            load_object_file(&project_root.join("data").join("json").join("map_locations.json"), &mut result)?
+            load_overworld_location_records(
+                &project_root.join("data").join("overworld"),
+                &mut result,
+            )?
         }
         "structures" => {
             load_object_file(&project_root.join("data").join("json").join("structures.json"), &mut result)?
@@ -309,6 +312,46 @@ fn load_object_file(path: &Path, target: &mut BTreeMap<String, Value>) -> Result
             target.insert(key, value);
         }
     }
+    Ok(())
+}
+
+fn load_overworld_location_records(
+    dir: &Path,
+    target: &mut BTreeMap<String, Value>,
+) -> Result<(), String> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let mut entries = fs::read_dir(dir)
+        .map_err(|error| format!("failed to read {}: {error}", dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to enumerate {}: {error}", dir.display()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let raw = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let parsed: Value = serde_json::from_str(&raw)
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+        let Some(locations) = parsed.get("locations").and_then(Value::as_array) else {
+            continue;
+        };
+        for location in locations {
+            let Some(location_id) = location.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            let location_id = location_id.trim();
+            if !location_id.is_empty() {
+                target.insert(location_id.to_string(), location.clone());
+            }
+        }
+    }
+
     Ok(())
 }
 

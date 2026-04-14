@@ -40,11 +40,14 @@ pub use ai_content::{validate_ai_content, AiContentIssue, AiContentIssueSeverity
 pub use ai_preview::{
     build_behavior_preview, build_character_ai_preview, build_character_ai_preview_at_time,
     build_schedule_preview, resolve_character_life_profile, AiActionAvailabilityPreview,
-    AiAvailabilityContext, AiBehaviorPreview, AiGoalScorePreview, AiPreviewModuleRef,
-    CharacterAiPreview, CharacterAiPreviewContext, CharacterAiPreviewError,
-    CharacterLifeBindingPreview, NeedProfilePreview, PersonalityProfilePreview,
-    ResolvedCharacterLifeProfile, SmartObjectAccessProfilePreview, SmartObjectAccessRulePreview,
-    WeeklyScheduleEntryPreview, WeeklySchedulePreview,
+    AiActionBlockerKind, AiActionBlockerPreview, AiActionEvaluationPreview, AiAvailabilityContext,
+    AiBehaviorPreview, AiBlackboardEntryPreview, AiBlackboardValueKind, AiConditionTraceKind,
+    AiConditionTracePreview, AiFactEvaluationPreview, AiGoalEvaluationPreview,
+    AiGoalRuleEvaluationPreview, AiGoalScorePreview, AiPreviewModuleRef,
+    CharacterAiDiagnosticsPreview, CharacterAiPreview, CharacterAiPreviewContext,
+    CharacterAiPreviewError, CharacterLifeBindingPreview, NeedProfilePreview,
+    PersonalityProfilePreview, ResolvedCharacterLifeProfile, SmartObjectAccessProfilePreview,
+    SmartObjectAccessRulePreview, WeeklyScheduleEntryPreview, WeeklySchedulePreview,
 };
 pub use appearance::{
     build_character_appearance_preview, build_character_appearance_preview_for_definition,
@@ -59,13 +62,13 @@ pub use appearance::{
     ResolvedEquipmentPreviewLoadout,
 };
 pub use character::{
-    load_character_library, validate_character_definition, CharacterAiProfile, CharacterArchetype,
-    CharacterAttributeTemplate, CharacterCombatProfile, CharacterDefinition,
-    CharacterDefinitionValidationError, CharacterDisposition, CharacterFaction, CharacterId,
-    CharacterIdentity, CharacterLibrary, CharacterLifeProfile, CharacterLoadError,
-    CharacterLootEntry, CharacterPlaceholderColors, CharacterPresentation, CharacterProgression,
-    CharacterResourcePool, NeedProfile, NpcRole, PersonalityProfileOverride, ScheduleBlock,
-    ScheduleDay,
+    load_character_library, normalize_combat_behavior_id, validate_character_definition,
+    CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
+    CharacterDefinition, CharacterDefinitionValidationError, CharacterDisposition,
+    CharacterFaction, CharacterId, CharacterIdentity, CharacterLibrary, CharacterLifeProfile,
+    CharacterLoadError, CharacterLootEntry, CharacterPlaceholderColors, CharacterPresentation,
+    CharacterProgression, CharacterResourcePool, NeedProfile, NpcRole, PersonalityProfileOverride,
+    ScheduleBlock, ScheduleDay, CHARACTER_COMBAT_BEHAVIOR_IDS,
 };
 pub use content::{
     load_effect_library, load_item_library, migrate_legacy_item_value, validate_effect_definition,

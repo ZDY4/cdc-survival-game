@@ -26,6 +26,12 @@ pub(crate) struct ActorAttackRangeSnapshotEntry {
     pub attack_range: f32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ActorCombatBehaviorSnapshotEntry {
+    pub actor_id: ActorId,
+    pub behavior: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ActorCombatAttributesSnapshotEntry {
     pub actor_id: ActorId,
@@ -69,6 +75,12 @@ pub(crate) struct ActorAutonomousMovementGoalSnapshotEntry {
     pub goal: GridCoord,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ActorCombatOriginSnapshotEntry {
+    pub actor_id: ActorId,
+    pub grid: GridCoord,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct DialogueSessionSnapshotEntry {
     pub actor_id: ActorId,
@@ -96,6 +108,7 @@ pub(crate) struct SimulationStateSnapshot {
     pub actors: ActorRegistrySnapshot,
     pub actor_interactions: Vec<ActorInteractionSnapshotEntry>,
     pub actor_attack_ranges: Vec<ActorAttackRangeSnapshotEntry>,
+    pub actor_combat_behaviors: Vec<ActorCombatBehaviorSnapshotEntry>,
     pub actor_combat_attributes: Vec<ActorCombatAttributesSnapshotEntry>,
     pub actor_resources: Vec<ActorResourcesSnapshotEntry>,
     pub actor_loot_tables: Vec<ActorLootTableSnapshotEntry>,
@@ -106,6 +119,7 @@ pub(crate) struct SimulationStateSnapshot {
     pub completed_quests: Vec<String>,
     pub actor_relationships: Vec<ActorRelationshipSnapshotEntry>,
     pub actor_autonomous_movement_goals: Vec<ActorAutonomousMovementGoalSnapshotEntry>,
+    pub actor_combat_origins: Vec<ActorCombatOriginSnapshotEntry>,
     pub active_dialogues: Vec<DialogueSessionSnapshotEntry>,
     pub economy: HeadlessEconomyRuntimeSnapshot,
     pub interaction_context: InteractionContextSnapshot,

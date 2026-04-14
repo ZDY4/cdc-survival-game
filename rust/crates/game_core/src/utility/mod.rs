@@ -1,3 +1,6 @@
+//! Utility AI 模块。
+//! 负责生活 AI 的 goal 打分与选择，不负责 GOAP 规划执行或战斗启发式决策。
+
 pub mod context;
 pub mod scoring;
 pub mod selector;

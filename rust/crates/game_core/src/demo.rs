@@ -3,8 +3,8 @@ use game_data::{
     MapObjectKind, MapObjectProps, MapRotation,
 };
 
-use crate::actor::OneShotInteractController;
 use crate::runtime::SimulationRuntime;
+use crate::runtime_ai::OneShotInteractController;
 use crate::simulation::{RegisterActor, Simulation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

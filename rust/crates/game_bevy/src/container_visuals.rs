@@ -75,6 +75,12 @@ impl ContainerVisualRegistry {
     pub fn contains(&self, visual_id: &str) -> bool {
         self.definitions.contains_key(visual_id)
     }
+
+    pub fn ids(&self) -> Vec<String> {
+        let mut ids = self.definitions.keys().cloned().collect::<Vec<_>>();
+        ids.sort();
+        ids
+    }
 }
 
 impl Default for ContainerVisualRegistry {

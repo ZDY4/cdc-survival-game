@@ -22,9 +22,7 @@ use crate::state::{
 mod event_feedback;
 mod interaction_prompt_sync;
 mod motion;
-mod npc_actions;
-mod npc_combat;
-mod npc_presence;
+mod npc_runtime;
 mod progression;
 mod runtime_basics;
 mod runtime_bridge;
@@ -32,9 +30,9 @@ mod runtime_bridge;
 pub(crate) use event_feedback::collect_events;
 pub(crate) use interaction_prompt_sync::refresh_interaction_prompt;
 pub(crate) use motion::{advance_actor_feedback, advance_actor_motion};
-pub(crate) use npc_actions::advance_online_npc_actions;
-pub(crate) use npc_combat::advance_online_npc_combat;
-pub(crate) use npc_presence::sync_npc_runtime_presence;
+pub(crate) use npc_runtime::{
+    advance_online_npc_actions, advance_online_npc_combat, sync_npc_runtime_presence,
+};
 pub(crate) use progression::{
     advance_runtime_progression, cancel_pending_movement, submit_end_turn,
 };
@@ -57,8 +55,7 @@ mod tests {
     use super::{
         advance_online_npc_actions, advance_online_npc_combat, advance_runtime_progression,
         collect_events, event_feedback, refresh_interaction_prompt, sync_npc_runtime_presence,
-        ACTOR_MOTION_DURATION_SCALE, ACTOR_MOTION_MAX_DURATION_SEC,
-        ACTOR_MOTION_MIN_DURATION_SEC,
+        ACTOR_MOTION_DURATION_SCALE, ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
     };
     use crate::dialogue::apply_interaction_result;
     use crate::state::{
@@ -70,8 +67,7 @@ mod tests {
     use game_bevy::{
         build_runtime_from_default_startup_seed, load_ai_definitions, load_runtime_bootstrap,
         load_settlement_definitions, spawn_characters_from_definition, AiDefinitionPath,
-        BehaviorProfile,
-        CharacterDefinitionPath, CharacterDefinitions, CharacterSpawnRejected,
+        BehaviorProfile, CharacterDefinitionPath, CharacterDefinitions, CharacterSpawnRejected,
         NpcActiveOfflineAction, NpcLifePlugin, NpcLifeState, NpcPlannedActionQueue,
         NpcRuntimeAiMode, NpcRuntimeBridgeState, RuntimeActorLink, SettlementDebugSnapshot,
         SettlementDefinitionPath, SettlementSimulationPlugin, SpawnCharacterRequest,

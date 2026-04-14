@@ -468,6 +468,28 @@ pub(super) fn spawn_box(
     helpers::spawn_box(commands, meshes, materials, building_wall_materials, spec)
 }
 
+pub(super) fn spawn_static_cuboid(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    size: Vec3,
+    translation: Vec3,
+    color: Color,
+    material_style: MaterialStyle,
+) -> Entity {
+    helpers::spawn_static_cuboid(
+        commands,
+        meshes,
+        materials,
+        building_wall_materials,
+        size,
+        translation,
+        color,
+        material_style,
+    )
+}
+
 pub(super) fn spawn_decal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,

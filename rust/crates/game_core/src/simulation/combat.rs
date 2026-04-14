@@ -98,6 +98,9 @@ impl Simulation {
                 if let Some(actor) = self.actors.get_mut(actor_id) {
                     actor.in_combat = true;
                 }
+                if let Some(grid) = self.actor_grid_position(actor_id) {
+                    self.actor_combat_origins.entry(actor_id).or_insert(grid);
+                }
             }
             self.events
                 .push(SimulationEvent::CombatStateChanged { in_combat: true });
@@ -111,6 +114,11 @@ impl Simulation {
 
         if let Some(target) = self.actors.get_mut(target_actor) {
             target.in_combat = true;
+        }
+        if let Some(grid) = self.actor_grid_position(target_actor) {
+            self.actor_combat_origins
+                .entry(target_actor)
+                .or_insert(grid);
         }
 
         if start_turn_if_needed
@@ -589,6 +597,7 @@ impl Simulation {
                 actor.turn_open = false;
             }
         }
+        self.actor_combat_origins.clear();
 
         self.events
             .push(SimulationEvent::CombatStateChanged { in_combat: false });

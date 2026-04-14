@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    load_character_library, load_effect_library, load_item_library, validate_map_definition,
-    GridCoord, MapCellDefinition, MapDefinition, MapDefinitionValidationError,
-    MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectDefinition, MapSize,
-    MapValidationCatalog,
+    load_character_library, load_effect_library, load_item_library, load_world_tile_library,
+    validate_map_definition, GridCoord, MapCellDefinition, MapDefinition,
+    MapDefinitionValidationError, MapEntryPointDefinition, MapId, MapLevelDefinition,
+    MapObjectDefinition, MapSize, MapValidationCatalog,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -167,6 +167,8 @@ pub enum MapEditError {
     LoadItemCatalog { path: PathBuf, message: String },
     #[error("failed to load character catalog from {path}: {message}")]
     LoadCharacterCatalog { path: PathBuf, message: String },
+    #[error("failed to load world tile catalog from {path}: {message}")]
+    LoadWorldTileCatalog { path: PathBuf, message: String },
     #[error("failed to serialize map {map_id}: {source}")]
     SerializeMap {
         map_id: MapId,
@@ -948,7 +950,8 @@ impl MapEditorService {
 
         let items_dir = data_root.join("items");
         let characters_dir = data_root.join("characters");
-        if !items_dir.exists() && !characters_dir.exists() {
+        let world_tiles_dir = data_root.join("world_tiles");
+        if !items_dir.exists() && !characters_dir.exists() && !world_tiles_dir.exists() {
             return Ok(None);
         }
 
@@ -988,12 +991,28 @@ impl MapEditorService {
             Default::default()
         };
 
+        let (prototype_ids, wall_set_ids, surface_set_ids) = if world_tiles_dir.exists() {
+            let library = load_world_tile_library(&world_tiles_dir).map_err(|error| {
+                MapEditError::LoadWorldTileCatalog {
+                    path: world_tiles_dir.clone(),
+                    message: error.to_string(),
+                }
+            })?;
+            (
+                library.prototype_ids(),
+                library.wall_set_ids(),
+                library.surface_set_ids(),
+            )
+        } else {
+            Default::default()
+        };
+
         Ok(Some(MapValidationCatalog {
             item_ids,
             character_ids,
-            prototype_ids: Default::default(),
-            wall_set_ids: Default::default(),
-            surface_set_ids: Default::default(),
+            prototype_ids,
+            wall_set_ids,
+            surface_set_ids,
         }))
     }
 

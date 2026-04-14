@@ -860,6 +860,9 @@ export type NarrativeChatRegressionFailureKind =
   | "provider_error"
   | "model_variance"
   | "timeout_unclassified"
+  | "timeout_turn_kind_classification"
+  | "timeout_structured_content"
+  | "timeout_requested_actions_backfill"
   | "skipped_unconfigured";
 
 export type NarrativeTurnKindCorrection = {
@@ -894,6 +897,8 @@ export type NarrativeChatRegressionScenario = {
   expectDocumentChange?: boolean;
   expectDerivedDocumentSlug?: string | null;
   expectDerivedDocumentDocType?: NarrativeDocType | null;
+  expectDerivedDocumentTitleIncludes?: string | null;
+  allowDerivedSlugVariance?: boolean;
   expectSelectedContextRefs?: boolean;
   autoApproveAction?: boolean;
   autoRejectAction?: boolean;

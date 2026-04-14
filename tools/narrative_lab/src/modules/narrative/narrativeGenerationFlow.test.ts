@@ -9,6 +9,7 @@ import {
   buildStrategyInstruction,
   buildUsedContextSummary,
   extractTitleFromMarkdown,
+  shouldBypassActionIntentResolution,
   summarizeGenerationResponseForChat,
 } from "./narrativeGenerationFlow";
 import { buildEditableDraftDocument } from "./narrativeDocumentState";
@@ -227,5 +228,17 @@ describe("narrativeGenerationFlow", () => {
     );
 
     expect(summary).toBe("激进重构；优先戏剧性；信息不足时先提问");
+  });
+
+  it("bypasses action intent resolution for structured conversation prompts", () => {
+    expect(
+      shouldBypassActionIntentResolution("我要写一个新篇章，但你先别动笔，先告诉我还缺哪些必要信息。"),
+    ).toBe(true);
+    expect(
+      shouldBypassActionIntentResolution("把当前文稿拆成一个分步骤执行计划，等我确认后再继续。"),
+    ).toBe(true);
+    expect(shouldBypassActionIntentResolution("把商人老王移出去，单独创建一份人物设定。")).toBe(
+      false,
+    );
   });
 });

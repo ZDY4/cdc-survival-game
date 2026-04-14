@@ -1,3 +1,6 @@
+//! AI 内容 schema 模块。
+//! 负责共享 AI 配置结构、加载与校验，不负责运行时规划或战斗决策执行。
+
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;

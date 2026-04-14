@@ -13,9 +13,9 @@ use crate::state::{
 use game_bevy::UiMenuState;
 
 mod actor;
-mod ai;
 mod events;
 mod interaction_panel;
+mod npc_ai;
 mod overview;
 mod performance;
 mod selection;
@@ -23,9 +23,9 @@ mod turn_sys;
 mod world;
 
 use actor::format_actor_panel;
-use ai::format_ai_panel;
 use events::format_events_panel;
 use interaction_panel::format_interaction_panel;
+use npc_ai::format_ai_panel;
 use overview::format_overview_panel;
 use performance::{current_fps_label, format_performance_panel};
 use selection::format_selection_panel;

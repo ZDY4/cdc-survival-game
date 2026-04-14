@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::narrative_templates::{doc_type_label, is_known_doc_type};
+use crate::narrative_templates::{doc_type_label, is_known_doc_type, slugify};
 use crate::narrative_workspace::{
     create_narrative_document, load_narrative_documents, resolve_workspace_root,
     save_narrative_document, CreateNarrativeDocumentInput, NarrativeDocumentPayload,
@@ -120,6 +120,8 @@ fn execute_create_derived_document(
     workspace_root: &str,
     input: ExecuteNarrativeAgentActionInput,
 ) -> Result<NarrativeAgentActionExecutionResult, String> {
+    let workspace_root_path = resolve_workspace_root(workspace_root)?;
+    let existing_documents = load_narrative_documents(&workspace_root_path)?;
     let payload = input.payload.as_object().cloned().unwrap_or_default();
     let doc_type = required_payload_string(
         &payload,
@@ -130,7 +132,10 @@ fn execute_create_derived_document(
         return Err(format!("未知文稿类型: {}", doc_type));
     }
     let title = payload_string_value(&payload, &["title"]);
-    let slug = payload_string_value(&payload, &["slug"]);
+    let slug = normalize_create_derived_slug(
+        payload_string_value(&payload, &["slug"]).as_deref(),
+        &existing_documents,
+    );
     let markdown_override = payload_string_value(&payload, &["markdown"]);
 
     if is_preview_only(&input) {
@@ -181,7 +186,6 @@ fn execute_create_derived_document(
         },
     )?;
     let saved_slug = save_result.saved_slug;
-    let workspace_root_path = resolve_workspace_root(workspace_root)?;
     let saved_document = load_narrative_documents(&workspace_root_path)?
         .into_iter()
         .find(|document| document.meta.slug == saved_slug)
@@ -200,6 +204,43 @@ fn execute_create_derived_document(
         document_summaries: Vec::new(),
         opened_slug: None,
     })
+}
+
+fn normalize_create_derived_slug(
+    requested_slug: Option<&str>,
+    existing_documents: &[NarrativeDocumentPayload],
+) -> Option<String> {
+    let normalized = requested_slug
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(slugify)
+        .filter(|value| !value.is_empty())?;
+    if !existing_documents
+        .iter()
+        .any(|document| document.meta.slug == normalized)
+    {
+        return Some(normalized);
+    }
+
+    let split_seed = format!("{normalized}-split");
+    if !existing_documents
+        .iter()
+        .any(|document| document.meta.slug == split_seed)
+    {
+        return Some(split_seed);
+    }
+
+    let mut index = 2usize;
+    loop {
+        let candidate = format!("{split_seed}-{index}");
+        if !existing_documents
+            .iter()
+            .any(|document| document.meta.slug == candidate)
+        {
+            return Some(candidate);
+        }
+        index += 1;
+    }
 }
 
 fn execute_save_active_document(
@@ -821,5 +862,50 @@ mod tests {
     fn preview_summary_for_split_handles_multiple() {
         let summary = preview_summary_for_split(3);
         assert!(summary.contains("3 份"));
+    }
+
+    #[test]
+    fn normalize_create_derived_slug_appends_split_suffix_for_conflicts() {
+        let existing = vec![
+            NarrativeDocumentPayload {
+                document_key: "trader-lao-wang-card".to_string(),
+                original_slug: "trader-lao-wang-card".to_string(),
+                file_name: "trader-lao-wang-card.md".to_string(),
+                relative_path: "narrative/characters/trader-lao-wang-card.md".to_string(),
+                meta: crate::narrative_workspace::NarrativeDocumentMeta {
+                    doc_type: "character_card".to_string(),
+                    slug: "trader-lao-wang-card".to_string(),
+                    title: "商人老王角色卡".to_string(),
+                    status: "draft".to_string(),
+                    tags: Vec::new(),
+                    related_docs: Vec::new(),
+                    source_refs: Vec::new(),
+                },
+                markdown: "# 商人老王角色卡".to_string(),
+                validation: Vec::new(),
+            },
+            NarrativeDocumentPayload {
+                document_key: "trader-lao-wang-card-split".to_string(),
+                original_slug: "trader-lao-wang-card-split".to_string(),
+                file_name: "trader-lao-wang-card-split.md".to_string(),
+                relative_path: "narrative/characters/trader-lao-wang-card-split.md".to_string(),
+                meta: crate::narrative_workspace::NarrativeDocumentMeta {
+                    doc_type: "character_card".to_string(),
+                    slug: "trader-lao-wang-card-split".to_string(),
+                    title: "商人老王角色卡（拆分）".to_string(),
+                    status: "draft".to_string(),
+                    tags: Vec::new(),
+                    related_docs: Vec::new(),
+                    source_refs: Vec::new(),
+                },
+                markdown: "# 商人老王角色卡（拆分）".to_string(),
+                validation: Vec::new(),
+            },
+        ];
+
+        assert_eq!(
+            normalize_create_derived_slug(Some("trader-lao-wang-card"), &existing).as_deref(),
+            Some("trader-lao-wang-card-split-2")
+        );
     }
 }

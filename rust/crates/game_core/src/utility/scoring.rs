@@ -1,4 +1,7 @@
-use crate::goap::behavior::evaluate_condition;
+//! Utility AI 打分模块。
+//! 负责根据 score rule 计算各 goal 分数，不负责最终选目标或 GOAP 规划。
+
+use crate::goap::evaluate_condition;
 use crate::goap::{NpcGoalKey, NpcGoalScore, NpcPlanRequest};
 
 use super::context::NpcUtilityContext;

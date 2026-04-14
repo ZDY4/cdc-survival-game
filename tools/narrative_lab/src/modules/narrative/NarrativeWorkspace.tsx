@@ -128,6 +128,7 @@ import {
   buildStrategyInstruction,
   buildUsedContextSummary,
   extractTitleFromMarkdown,
+  shouldBypassActionIntentResolution,
   summarizeGenerationResponseForChat,
 } from "./narrativeGenerationFlow";
 import { runNarrativeRegressionSuite } from "./narrativeRegressionSuite";
@@ -1379,10 +1380,15 @@ export function NarrativeWorkspace({
   async function loadRegressionAiConfigSummary(): Promise<NarrativeAiConfigSummary | null> {
     try {
       const settings = await invokeCommand<AiSettings>("load_ai_settings");
+      const isLocalStub =
+        settings.baseUrl.includes("127.0.0.1") ||
+        settings.baseUrl.includes("localhost") ||
+        settings.model.toLowerCase().includes("stub") ||
+        settings.model.toLowerCase().includes("mock");
       return {
         baseUrl: settings.baseUrl,
         model: settings.model,
-        timeoutSec: settings.timeoutSec,
+        timeoutSec: isLocalStub ? settings.timeoutSec : Math.max(settings.timeoutSec, 90),
         apiKeyConfigured: Boolean(settings.apiKey.trim()),
       };
     } catch {
@@ -1412,6 +1418,22 @@ export function NarrativeWorkspace({
     }
 
     if (response.providerError.trim()) {
+      return "provider_error";
+    }
+
+    if (response.diagnosticFlags?.includes("structured_turn_kind_classification_timeout")) {
+      return "timeout_turn_kind_classification";
+    }
+
+    if (response.diagnosticFlags?.includes("structured_turn_kind_generation_timeout")) {
+      return "timeout_structured_content";
+    }
+
+    if (response.diagnosticFlags?.includes("requested_actions_backfill_timeout")) {
+      return "timeout_requested_actions_backfill";
+    }
+
+    if (response.diagnosticFlags?.includes("requested_actions_backfill_provider_error")) {
       return "provider_error";
     }
 
@@ -1536,11 +1558,77 @@ export function NarrativeWorkspace({
     return true;
   }
 
+  function inferTimedOutRegressionFailureKind(
+    session: DocumentAgentSession | null | undefined,
+    requestId: string,
+  ): NarrativeChatRegressionFailureKind {
+    if (!session) {
+      return "timeout_unclassified";
+    }
+
+    const assistantMessage = session.chatMessages.find(
+      (message) => message.id === assistantMessageIdForRequest(requestId),
+    );
+    const step = session.executionSteps.find((entry) => entry.id === session.currentStepId);
+    const signals = [
+      assistantMessage?.meta?.join("\n") ?? "",
+      assistantMessage?.content ?? "",
+      step?.detail ?? "",
+      step?.previewText ?? "",
+    ]
+      .join("\n")
+      .toLowerCase();
+
+    if (signals.includes("补提取待批准动作") || signals.includes("backfill")) {
+      return "timeout_requested_actions_backfill";
+    }
+
+    if (
+      signals.includes("已判定为 clarification") ||
+      signals.includes("已判定为 options") ||
+      signals.includes("已判定为 plan") ||
+      signals.includes("正在生成对应内容") ||
+      signals.includes("结构化内容")
+    ) {
+      return "timeout_structured_content";
+    }
+
+    if (signals.includes("正在执行短分类") || signals.includes("回合分类")) {
+      return "timeout_turn_kind_classification";
+    }
+
+    return "timeout_unclassified";
+  }
+
+  function timedOutRegressionSummary(
+    session: DocumentAgentSession | null | undefined,
+    requestId: string,
+  ) {
+    if (!session) {
+      return "";
+    }
+
+    const assistantMessage = session.chatMessages.find(
+      (message) => message.id === assistantMessageIdForRequest(requestId),
+    );
+    const step = session.executionSteps.find((entry) => entry.id === session.currentStepId);
+    return (
+      assistantMessage?.meta?.[0] ??
+      step?.detail ??
+      step?.previewText ??
+      assistantMessage?.content ??
+      ""
+    ).trim();
+  }
+
   async function runSingleChatRegressionScenario(
     scenario: NarrativeChatRegressionScenario,
     mode: NarrativeChatRegressionMode,
+    aiConfig: NarrativeAiConfigSummary | null,
   ): Promise<NarrativeChatRegressionScenarioResult> {
-    const sessionTimeoutMs = isOnlineRegressionMode(mode) ? 70000 : 20000;
+    const sessionTimeoutMs = isOnlineRegressionMode(mode)
+      ? Math.max(70000, (aiConfig?.timeoutSec ?? 45) * 4000 + 30000)
+      : 20000;
     const documentKey = activeRegressionDocumentKey();
     if (!documentKey) {
       throw new Error("未找到 Narrative chat regression 主文稿。");
@@ -1555,6 +1643,54 @@ export function NarrativeWorkspace({
       throw new Error("回归主文稿不存在。");
     }
     const beforeMarkdown = beforeDocument.markdown;
+    const beforeDocuments = documentsRef.current.map((document) => ({
+      documentKey: document.documentKey,
+      slug: document.meta.slug,
+      docType: document.meta.docType,
+      title: document.meta.title,
+      markdown: document.markdown,
+    }));
+    const findDerivedDocument = () => {
+      const exactMatch = scenario.expectDerivedDocumentSlug
+        ? documentsRef.current.find((document) => document.meta.slug === scenario.expectDerivedDocumentSlug) ?? null
+        : null;
+      if (exactMatch) {
+        return exactMatch;
+      }
+      if (!scenario.allowDerivedSlugVariance) {
+        return null;
+      }
+      return (
+        documentsRef.current.find((document) => {
+          if (document.documentKey === documentKey) {
+            return false;
+          }
+          if (
+            scenario.expectDerivedDocumentDocType &&
+            document.meta.docType !== scenario.expectDerivedDocumentDocType
+          ) {
+            return false;
+          }
+          if (
+            scenario.expectDerivedDocumentTitleIncludes &&
+            !document.meta.title.includes(scenario.expectDerivedDocumentTitleIncludes)
+          ) {
+            return false;
+          }
+          const previous = beforeDocuments.find((entry) => entry.documentKey === document.documentKey);
+          if (!previous) {
+            return true;
+          }
+          return (
+            previous.slug !== document.meta.slug ||
+            previous.title !== document.meta.title ||
+            previous.docType !== document.meta.docType ||
+            normalizeNarrativeMarkdown(previous.markdown) !==
+              normalizeNarrativeMarkdown(document.markdown)
+          );
+        }) ?? null
+      );
+    };
 
     const requestId = await submitNarrativePrompt(scenario.prompt, "composer");
     if (!requestId) {
@@ -1644,23 +1780,64 @@ export function NarrativeWorkspace({
       };
     }
 
-    const settledSession = await waitForNarrativeCondition(
-      `${scenario.id} 会话完成`,
-      () => {
-        const session = getSession(documentKey);
-        if (
-          session &&
-          !session.activeSubmission &&
-          !session.busy &&
-          session.lastResponse &&
-          session.lastRequest?.requestId === requestId
-        ) {
-          return session;
-        }
-        return null;
-      },
-      sessionTimeoutMs,
-    );
+    let settledSession: DocumentAgentSession;
+    try {
+      settledSession = await waitForNarrativeCondition(
+        `${scenario.id} 会话完成`,
+        () => {
+          const session = getSession(documentKey);
+          if (
+            session &&
+            !session.activeSubmission &&
+            !session.busy &&
+            session.lastResponse &&
+            session.lastRequest?.requestId === requestId
+          ) {
+            return session;
+          }
+          return null;
+        },
+        sessionTimeoutMs,
+      );
+    } catch (error) {
+      const timedOutSession = getSession(documentKey);
+      const failureKind = String(error).includes("超时")
+        ? inferTimedOutRegressionFailureKind(timedOutSession, requestId)
+        : "product_defect";
+      const timeoutDetail = timedOutRegressionSummary(timedOutSession, requestId);
+      return {
+        id: scenario.id,
+        label: scenario.label,
+        ok: false,
+        prompt: scenario.prompt,
+        mode,
+        smokeTier: scenario.smokeTier,
+        failureKind,
+        actualTurnKind: "blocked",
+        expectedTurnKinds: scenario.expectedTurnKinds,
+        requestedActionType: null,
+        requestedPreviewOnly: null,
+        assistantMessage: timeoutDetail,
+        providerError: "",
+        documentChanged: false,
+        activeDocumentSlug: NARRATIVE_CHAT_REGRESSION_ACTIVE_SLUG,
+        derivedDocumentSlug: null,
+        derivedDocumentPath: null,
+        contextRefCount: 0,
+        questionCount: 0,
+        optionCount: 0,
+        planStepCount: 0,
+        requestedActionCount: 0,
+        turnKindSource: null,
+        turnKindCorrection: null,
+        diagnosticFlags: [],
+        statusMessage: String(error),
+        summary: timeoutDetail
+          ? `场景执行失败：${String(error)} 当前阶段：${timeoutDetail}`
+          : `场景执行失败：${String(error)}`,
+        error: String(error),
+      };
+    }
     const response = settledSession.lastResponse!;
     const requestedAction = settledSession.pendingActionRequests[0] ?? null;
     const domValid = validateRegressionDom(scenario, response);
@@ -1700,13 +1877,14 @@ export function NarrativeWorkspace({
         },
         8000,
       );
-      if (scenario.expectDerivedDocumentSlug) {
+      if (
+        scenario.expectDerivedDocumentSlug ||
+        (scenario.allowDerivedSlugVariance &&
+          (scenario.expectDerivedDocumentDocType || scenario.expectDerivedDocumentTitleIncludes))
+      ) {
         await waitForNarrativeCondition(
           `${scenario.id} 派生文稿落地`,
-          () =>
-            documentsRef.current.find(
-              (document) => document.meta.slug === scenario.expectDerivedDocumentSlug,
-            ) ?? null,
+          () => findDerivedDocument(),
           8000,
         );
       }
@@ -1729,9 +1907,7 @@ export function NarrativeWorkspace({
     }
 
     const afterDocument = getDocument(documentKey) ?? beforeDocument;
-    const derivedDocument =
-      documentsRef.current.find((document) => document.meta.slug === scenario.expectDerivedDocumentSlug) ??
-      null;
+    const derivedDocument = findDerivedDocument();
     const documentChanged =
       normalizeNarrativeMarkdown(afterDocument.markdown) !==
       normalizeNarrativeMarkdown(beforeMarkdown);
@@ -1747,12 +1923,19 @@ export function NarrativeWorkspace({
       scenario.expectDocumentChange === undefined
         ? true
         : documentChanged === scenario.expectDocumentChange;
-    const derivedMatches = scenario.expectDerivedDocumentSlug
-      ? derivedDocument?.meta.slug === scenario.expectDerivedDocumentSlug &&
-        (scenario.expectDerivedDocumentDocType
-          ? derivedDocument.meta.docType === scenario.expectDerivedDocumentDocType
-          : true)
-      : true;
+    const derivedMatches =
+      scenario.expectDerivedDocumentSlug ||
+      scenario.expectDerivedDocumentDocType ||
+      scenario.expectDerivedDocumentTitleIncludes
+        ? Boolean(derivedDocument) &&
+          (!scenario.expectDerivedDocumentSlug ||
+            scenario.allowDerivedSlugVariance ||
+            derivedDocument?.meta.slug === scenario.expectDerivedDocumentSlug) &&
+          (!scenario.expectDerivedDocumentDocType ||
+            derivedDocument?.meta.docType === scenario.expectDerivedDocumentDocType) &&
+          (!scenario.expectDerivedDocumentTitleIncludes ||
+            derivedDocument?.meta.title.includes(scenario.expectDerivedDocumentTitleIncludes))
+        : true;
     const contextMatches = scenario.expectSelectedContextRefs ? response.usedContextRefs.length > 0 : true;
 
     const ok =
@@ -1892,7 +2075,7 @@ export function NarrativeWorkspace({
     for (const scenario of selectedScenarios) {
       onStatusChange(`正在运行 Narrative chat regression：${scenario.label}`);
       try {
-        const result = await runSingleChatRegressionScenario(scenario, mode);
+        const result = await runSingleChatRegressionScenario(scenario, mode, aiConfig);
         scenarioResults.push(result);
         onStatusChange(scenarioResultSummary(result));
       } catch (error) {
@@ -2549,21 +2732,27 @@ export function NarrativeWorkspace({
     const placeholderAssistantId = assistantMessageIdForRequest(submission.requestId);
 
     try {
-      const actionIntentRequest = buildActionIntentRequest({
-        requestId: submission.requestId,
-        submittedPrompt: submission.prompt,
-        activeDocument: activeDocumentSnapshot,
-        session: sessionSnapshot,
-        selectedContextDocuments: selectedContextDocumentSnapshot,
-      });
-      const actionIntent = await invokeCommand<ResolveNarrativeActionIntentResult>(
-        "resolve_narrative_action_intent",
-        {
-          workspaceRoot: workspace.workspaceRoot,
-          projectRoot: workspace.connectedProjectRoot ?? null,
-          input: actionIntentRequest,
-        },
-      );
+      const actionIntent = shouldBypassActionIntentResolution(submission.prompt)
+        ? ({
+            action: "revise_document",
+            assistantMessage: "",
+            questions: [],
+            options: [],
+          } satisfies ResolveNarrativeActionIntentResult)
+        : await invokeCommand<ResolveNarrativeActionIntentResult>(
+            "resolve_narrative_action_intent",
+            {
+              workspaceRoot: workspace.workspaceRoot,
+              projectRoot: workspace.connectedProjectRoot ?? null,
+              input: buildActionIntentRequest({
+                requestId: submission.requestId,
+                submittedPrompt: submission.prompt,
+                activeDocument: activeDocumentSnapshot,
+                session: sessionSnapshot,
+                selectedContextDocuments: selectedContextDocumentSnapshot,
+              }),
+            },
+          );
 
       if (!actionIntent.action) {
         setDocumentAgents((current) =>

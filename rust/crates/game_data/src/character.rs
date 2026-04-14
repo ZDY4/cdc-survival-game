@@ -228,6 +228,20 @@ pub struct CharacterCombatProfile {
     pub loot: Vec<CharacterLootEntry>,
 }
 
+pub const CHARACTER_COMBAT_BEHAVIOR_IDS: [&str; 5] =
+    ["neutral", "aggressive", "territorial", "passive", "player"];
+
+pub fn normalize_combat_behavior_id(behavior: &str) -> Option<&'static str> {
+    match behavior.trim() {
+        "" | "neutral" => Some("neutral"),
+        "aggressive" => Some("aggressive"),
+        "territorial" => Some("territorial"),
+        "passive" => Some("passive"),
+        "player" => Some("player"),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CharacterAiProfile {
     pub aggro_range: f32,
@@ -334,6 +348,8 @@ pub enum CharacterDefinitionValidationError {
     InvalidLevel { level: u32 },
     #[error("combat xp_reward must be >= 0, got {xp_reward}")]
     InvalidXpReward { xp_reward: i32 },
+    #[error("combat behavior {behavior} is invalid")]
+    InvalidCombatBehavior { behavior: String },
     #[error("loot entry for item {item_id} has invalid chance {chance}")]
     InvalidLootChance { item_id: u32, chance: f32 },
     #[error("ai field {field} must be >= 0, got {value}")]
@@ -383,6 +399,11 @@ pub fn validate_character_definition(
     if definition.combat.xp_reward < 0 {
         return Err(CharacterDefinitionValidationError::InvalidXpReward {
             xp_reward: definition.combat.xp_reward,
+        });
+    }
+    if normalize_combat_behavior_id(&definition.combat.behavior).is_none() {
+        return Err(CharacterDefinitionValidationError::InvalidCombatBehavior {
+            behavior: definition.combat.behavior.clone(),
         });
     }
     for loot in &definition.combat.loot {
@@ -584,8 +605,8 @@ const fn default_safety_bias() -> f32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_character_library, validate_character_definition, CharacterAiProfile,
-        CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
+        load_character_library, normalize_combat_behavior_id, validate_character_definition,
+        CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
         CharacterDefinition, CharacterDefinitionValidationError, CharacterFaction, CharacterId,
         CharacterIdentity, CharacterLootEntry, CharacterPlaceholderColors, CharacterPresentation,
         CharacterProgression, CharacterResourcePool,
@@ -703,6 +724,29 @@ mod tests {
                 disposition: CharacterDisposition::Friendly
             }
         );
+    }
+
+    #[test]
+    fn invalid_combat_behavior_is_rejected() {
+        let mut definition = sample_definition("bandit");
+        definition.combat.behavior = "mystery".to_string();
+
+        let error = validate_character_definition(&definition).expect_err("behavior should fail");
+
+        assert_eq!(
+            error,
+            CharacterDefinitionValidationError::InvalidCombatBehavior {
+                behavior: "mystery".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn blank_combat_behavior_normalizes_to_neutral() {
+        assert_eq!(normalize_combat_behavior_id(""), Some("neutral"));
+        assert_eq!(normalize_combat_behavior_id(" neutral "), Some("neutral"));
+        assert_eq!(normalize_combat_behavior_id("player"), Some("player"));
+        assert_eq!(normalize_combat_behavior_id("mystery"), None);
     }
 
     #[test]

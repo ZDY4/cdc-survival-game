@@ -19,9 +19,9 @@ use game_data::{
     WorldWallTileSetId,
 };
 
-use crate::actor::{FollowRuntimeGoalController, OneShotInteractController};
 use crate::grid::GridPathfindingError;
 use crate::movement::PendingProgressionStep;
+use crate::runtime_ai::{FollowRuntimeGoalController, OneShotInteractController};
 use crate::RuntimeAiController;
 
 use super::{

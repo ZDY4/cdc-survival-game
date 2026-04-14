@@ -169,42 +169,16 @@ pub fn world_render_color_for_role(
 ) -> Color {
     match role {
         StaticWorldMaterialRole::Ground => palette.ground_light,
-        StaticWorldMaterialRole::OverworldGroundRoad => Color::srgb(0.42, 0.40, 0.34),
-        StaticWorldMaterialRole::OverworldGroundPlain => Color::srgb(0.48, 0.56, 0.30),
-        StaticWorldMaterialRole::OverworldGroundForest => Color::srgb(0.20, 0.38, 0.19),
-        StaticWorldMaterialRole::OverworldGroundRiver => Color::srgb(0.17, 0.43, 0.67),
-        StaticWorldMaterialRole::OverworldGroundLake => Color::srgb(0.13, 0.34, 0.58),
-        StaticWorldMaterialRole::OverworldGroundMountain => Color::srgb(0.39, 0.39, 0.41),
-        StaticWorldMaterialRole::OverworldGroundUrban => Color::srgb(0.46, 0.45, 0.44),
         StaticWorldMaterialRole::BuildingFloor => {
             lerp_color(palette.building_top, palette.building_base, 0.38)
         }
-        StaticWorldMaterialRole::BuildingDoor => building_door_color(),
         StaticWorldMaterialRole::StairBase => darken_color(palette.interactive, 0.18),
         StaticWorldMaterialRole::StairAccent => lighten_color(palette.current_turn, 0.12),
-        StaticWorldMaterialRole::PickupBase | StaticWorldMaterialRole::PickupAccent => {
-            palette.pickup
-        }
-        StaticWorldMaterialRole::InteractiveBase | StaticWorldMaterialRole::InteractiveAccent => {
-            palette.interactive
-        }
-        StaticWorldMaterialRole::TriggerBase | StaticWorldMaterialRole::TriggerAccent => {
-            palette.trigger
-        }
+        StaticWorldMaterialRole::TriggerAccent => palette.trigger,
         StaticWorldMaterialRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
-        StaticWorldMaterialRole::Warning => Color::srgb(0.95, 0.18, 0.18),
         StaticWorldMaterialRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
         StaticWorldMaterialRole::OverworldBlockedCell => Color::srgb(0.52, 0.19, 0.14),
-        StaticWorldMaterialRole::OverworldLocationGeneric => Color::srgb(0.22, 0.58, 0.86),
-        StaticWorldMaterialRole::OverworldLocationHospital => Color::srgb(0.86, 0.34, 0.34),
-        StaticWorldMaterialRole::OverworldLocationSchool => Color::srgb(0.91, 0.73, 0.28),
-        StaticWorldMaterialRole::OverworldLocationStore => Color::srgb(0.89, 0.54, 0.22),
-        StaticWorldMaterialRole::OverworldLocationStreet => Color::srgb(0.66, 0.68, 0.72),
-        StaticWorldMaterialRole::OverworldLocationOutpost => Color::srgb(0.22, 0.72, 0.86),
-        StaticWorldMaterialRole::OverworldLocationFactory => Color::srgb(0.63, 0.39, 0.24),
-        StaticWorldMaterialRole::OverworldLocationForest => Color::srgb(0.27, 0.63, 0.31),
-        StaticWorldMaterialRole::OverworldLocationRuins => Color::srgb(0.63, 0.55, 0.43),
-        StaticWorldMaterialRole::OverworldLocationSubway => Color::srgb(0.26, 0.78, 0.74),
+        StaticWorldMaterialRole::OverworldLocationLabel => Color::srgb(0.22, 0.72, 0.86),
     }
 }
 
@@ -212,11 +186,9 @@ pub fn world_render_material_style_for_role(
     role: StaticWorldMaterialRole,
 ) -> WorldRenderMaterialStyle {
     match role {
-        StaticWorldMaterialRole::BuildingDoor => WorldRenderMaterialStyle::BuildingDoor,
-        StaticWorldMaterialRole::PickupAccent
-        | StaticWorldMaterialRole::InteractiveAccent
-        | StaticWorldMaterialRole::TriggerAccent
-        | StaticWorldMaterialRole::StairAccent => WorldRenderMaterialStyle::Utility,
+        StaticWorldMaterialRole::TriggerAccent | StaticWorldMaterialRole::StairAccent => {
+            WorldRenderMaterialStyle::Utility
+        }
         StaticWorldMaterialRole::InvisiblePickProxy => WorldRenderMaterialStyle::InvisiblePickProxy,
         _ => WorldRenderMaterialStyle::UtilityAccent,
     }

@@ -109,6 +109,10 @@ impl SimulationRuntime {
         self.simulation.get_actor_definition_id(actor_id)
     }
 
+    pub fn get_actor_combat_behavior_profile(&self, actor_id: ActorId) -> Option<&str> {
+        self.simulation.actor_combat_behavior(actor_id)
+    }
+
     pub fn set_actor_autonomous_movement_goal(&mut self, actor_id: ActorId, goal: GridCoord) {
         self.simulation
             .set_actor_autonomous_movement_goal(actor_id, goal);

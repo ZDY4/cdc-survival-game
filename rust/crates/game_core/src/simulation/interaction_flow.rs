@@ -285,6 +285,7 @@ impl Simulation {
 
     fn map_object_display_name(&self, object: &MapObjectDefinition) -> String {
         match object.kind {
+            MapObjectKind::Prop => object.object_id.clone(),
             MapObjectKind::Pickup => object
                 .props
                 .pickup

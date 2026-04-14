@@ -198,17 +198,6 @@ pub(crate) fn level_base_height(level: i32, grid_size: f32) -> f32 {
     level as f32 * grid_size
 }
 
-pub(crate) fn cell_style_noise(seed: u32, x: i32, z: i32) -> f32 {
-    let mut hash = seed
-        .wrapping_mul(0x9E37_79B9)
-        .wrapping_add((x as u32).wrapping_mul(0x85EB_CA6B))
-        .wrapping_add((z as u32).wrapping_mul(0xC2B2_AE35));
-    hash ^= hash >> 15;
-    hash = hash.wrapping_mul(0x27D4_EB2D);
-    hash ^= hash >> 13;
-    (hash & 0xFFFF) as f32 / 65_535.0
-}
-
 pub(crate) fn is_scene_transition_trigger_kind(kind: &str) -> bool {
     matches!(
         kind.trim(),

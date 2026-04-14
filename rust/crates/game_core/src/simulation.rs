@@ -3,16 +3,16 @@ use std::collections::VecDeque;
 use std::collections::{BTreeMap, BTreeSet};
 
 use game_data::{
-    ActionPhase, ActionRequest, ActionResult, ActionType, ActorId, ActorSide, CharacterId,
-    CharacterInteractionProfile, CharacterLootEntry, CharacterResourcePool, DialogueAction,
-    DialogueLibrary, DialogueRuleLibrary, DialogueSessionState, GridCoord,
+    normalize_combat_behavior_id, ActionPhase, ActionRequest, ActionResult, ActionType, ActorId,
+    ActorSide, CharacterId, CharacterInteractionProfile, CharacterLootEntry, CharacterResourcePool,
+    DialogueAction, DialogueLibrary, DialogueRuleLibrary, DialogueSessionState, GridCoord,
     InteractionContextSnapshot, InteractionTargetId, ItemLibrary, MapLibrary, MapObjectDefinition,
     OverworldDefinition, OverworldLibrary, QuestLibrary, RecipeLibrary, ShopLibrary, SkillLibrary,
     TurnState, WorldCoord, WorldMode,
 };
 use tracing::info;
 
-use crate::actor::{ActorRecord, ActorRegistry, RuntimeAiController};
+use crate::actor::{ActorRecord, ActorRegistry};
 use crate::economy::HeadlessEconomyRuntime;
 use crate::goap::{NpcActionKey, NpcBackgroundState, NpcRuntimeActionState};
 use crate::grid::{find_path_grid, find_path_world, GridPathfindingError, GridWorld};
@@ -21,6 +21,7 @@ use crate::movement::{
 };
 use crate::overworld::{compute_cell_path, resolve_overworld_goal, UnlockedLocationSet};
 use crate::runtime::DropItemOutcome;
+use crate::runtime_ai::RuntimeAiController;
 use crate::turn::{ActiveActions, GroupOrderRegistry, TurnConfig, TurnRuntime};
 
 mod actions;
@@ -41,12 +42,12 @@ mod types;
 
 const DROP_ITEM_SEARCH_RADIUS: i32 = 4;
 
-pub(crate) use self::state_persistence::SimulationStateSnapshot;
 pub use self::combat_ai::{
     resolve_combat_tactic_profile_id, select_combat_ai_intent_for_profile,
     select_default_combat_ai_intent, CombatAiExecutionResult, CombatAiIntent, CombatAiSnapshot,
     CombatSkillOption, CombatTargetOption,
 };
+pub(crate) use self::state_persistence::SimulationStateSnapshot;
 pub use self::types::{
     ActorDebugState, ActorProgressionState, AttackTargetingQueryResult, CombatDebugState,
     GridDebugState, MapCellDebugState, MapObjectDebugState, QuestRuntimeState, RegisterActor,
@@ -63,6 +64,7 @@ pub struct Simulation {
     actors: ActorRegistry,
     actor_interactions: HashMap<ActorId, CharacterInteractionProfile>,
     actor_attack_ranges: HashMap<ActorId, f32>,
+    actor_combat_behaviors: HashMap<ActorId, String>,
     actor_combat_attributes: HashMap<ActorId, BTreeMap<String, f32>>,
     actor_resources: HashMap<ActorId, BTreeMap<String, f32>>,
     actor_loot_tables: HashMap<ActorId, Vec<CharacterLootEntry>>,
@@ -81,6 +83,7 @@ pub struct Simulation {
     actor_autonomous_movement_goals: HashMap<ActorId, GridCoord>,
     active_dialogues: HashMap<ActorId, DialogueSessionState>,
     actor_runtime_actions: HashMap<ActorId, NpcRuntimeActionState>,
+    actor_combat_origins: HashMap<ActorId, GridCoord>,
     economy: HeadlessEconomyRuntime,
     item_library: Option<ItemLibrary>,
     map_library: Option<MapLibrary>,
@@ -110,6 +113,7 @@ impl Default for Simulation {
             actors: ActorRegistry::default(),
             actor_interactions: HashMap::new(),
             actor_attack_ranges: HashMap::new(),
+            actor_combat_behaviors: HashMap::new(),
             actor_combat_attributes: HashMap::new(),
             actor_resources: HashMap::new(),
             actor_loot_tables: HashMap::new(),
@@ -128,6 +132,7 @@ impl Default for Simulation {
             actor_autonomous_movement_goals: HashMap::new(),
             active_dialogues: HashMap::new(),
             actor_runtime_actions: HashMap::new(),
+            actor_combat_origins: HashMap::new(),
             economy: HeadlessEconomyRuntime::default(),
             item_library: None,
             map_library: None,
@@ -463,6 +468,16 @@ impl Simulation {
         );
     }
 
+    pub fn seed_actor_combat_behavior(&mut self, actor_id: ActorId, behavior: impl AsRef<str>) {
+        if !self.actors.contains(actor_id) {
+            return;
+        }
+
+        let normalized = normalize_combat_behavior_id(behavior.as_ref()).unwrap_or("neutral");
+        self.actor_combat_behaviors
+            .insert(actor_id, normalized.to_string());
+    }
+
     pub fn set_actor_combat_attribute(
         &mut self,
         actor_id: ActorId,
@@ -510,6 +525,17 @@ impl Simulation {
 
     pub fn actor_combat_attribute(&self, actor_id: ActorId, attribute: &str) -> f32 {
         self.actor_combat_attribute_value(actor_id, attribute)
+    }
+
+    pub fn actor_combat_behavior(&self, actor_id: ActorId) -> Option<&str> {
+        self.actor_combat_behaviors
+            .get(&actor_id)
+            .map(String::as_str)
+            .or_else(|| self.actors.get(actor_id).map(|_| "neutral"))
+    }
+
+    pub fn actor_combat_origin_grid(&self, actor_id: ActorId) -> Option<GridCoord> {
+        self.actor_combat_origins.get(&actor_id).copied()
     }
 
     pub fn max_hit_points(&self, actor_id: ActorId) -> f32 {
@@ -773,6 +799,7 @@ impl Simulation {
         self.actors.remove(actor_id);
         self.actor_interactions.remove(&actor_id);
         self.actor_attack_ranges.remove(&actor_id);
+        self.actor_combat_behaviors.remove(&actor_id);
         self.actor_combat_attributes.remove(&actor_id);
         self.actor_resources.remove(&actor_id);
         self.actor_loot_tables.remove(&actor_id);
@@ -791,6 +818,7 @@ impl Simulation {
             !matches!(session.target_id, Some(InteractionTargetId::Actor(target_actor_id)) if target_actor_id == actor_id)
         });
         self.actor_runtime_actions.remove(&actor_id);
+        self.actor_combat_origins.remove(&actor_id);
         self.economy.remove_actor(actor_id);
         self.ai_controllers.remove(&actor_id);
         self.active_actions.by_actor.remove(&actor_id);

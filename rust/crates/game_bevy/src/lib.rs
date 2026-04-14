@@ -13,6 +13,7 @@ use game_data::{
 use spawn::register_actor_from_definition;
 
 mod ai_spawn;
+pub mod asset_paths;
 pub mod bootstrap;
 pub mod character_preview;
 pub mod container_visuals;
@@ -27,6 +28,7 @@ pub mod ui;
 pub mod world_render;
 
 pub use ai_spawn::advance_map_ai_spawn_runtime;
+pub use asset_paths::{rust_asset_dir, rust_asset_path};
 pub use bootstrap::{
     build_default_startup_seed, build_runtime_from_default_startup_seed, load_runtime_bootstrap,
     RuntimeBootstrapBundle, RuntimeBootstrapError,

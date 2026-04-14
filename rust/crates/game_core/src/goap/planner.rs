@@ -1,9 +1,12 @@
+//! GOAP 规划编排模块。
+//! 负责调用 dogoap 求解计划，不负责条件解释或执行阶段推进。
+
 use dogoap::prelude::{format_plan, get_effects_from_plan, make_plan};
 
-use super::actions::{
+use super::goals::goal_requirements;
+use super::planner_actions::{
     build_action_set_for_context, build_start_state, parse_action_key, step_for_action_with_context,
 };
-use super::goals::goal_requirements;
 use super::{NpcGoalKey, NpcPlanRequest, NpcPlanResult, NpcPlanningContext};
 use crate::utility::{select_goal_for_context, NpcUtilityContext};
 

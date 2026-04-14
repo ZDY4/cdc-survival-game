@@ -394,6 +394,10 @@ fn load_story_background(repo_root: &Path) -> Result<Value, String> {
 }
 
 fn load_category(repo_root: &Path, category: &str) -> Result<BTreeMap<String, Value>, String> {
+    if category == "map_locations" {
+        return load_overworld_location_records(&repo_root.join("data").join("overworld"));
+    }
+
     match category_source(category) {
         Some(CategorySource::Directory {
             relative_path,
@@ -442,9 +446,6 @@ fn category_source(category: &str) -> Option<CategorySource> {
         }),
         "story_chapters" => Some(CategorySource::File {
             relative_path: "data/json/story_chapters.json",
-        }),
-        "map_locations" => Some(CategorySource::File {
-            relative_path: "data/json/map_locations.json",
         }),
         "structures" => Some(CategorySource::File {
             relative_path: "data/json/structures.json",
@@ -523,6 +524,44 @@ fn load_file_records(path: &Path) -> Result<BTreeMap<String, Value>, String> {
             }
         }
         _ => {}
+    }
+
+    Ok(result)
+}
+
+fn load_overworld_location_records(dir: &Path) -> Result<BTreeMap<String, Value>, String> {
+    if !dir.exists() {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut entries = fs::read_dir(dir)
+        .map_err(|error| format!("failed to read {}: {error}", dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to enumerate {}: {error}", dir.display()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    let mut result = BTreeMap::new();
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let raw = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let parsed: Value = serde_json::from_str(&raw)
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+        let Some(locations) = parsed.get("locations").and_then(Value::as_array) else {
+            continue;
+        };
+        for location in locations {
+            let Some(location_id) = location.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            let location_id = location_id.trim();
+            if !location_id.is_empty() {
+                result.insert(location_id.to_string(), location.clone());
+            }
+        }
     }
 
     Ok(result)

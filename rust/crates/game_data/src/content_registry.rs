@@ -356,10 +356,18 @@ pub fn load_shared_content_registry(
         ),
         build_domain_summary(
             "map_locations",
-            ContentAuthorityKind::LegacyJson,
-            PathBuf::from("data/json/map_locations.json"),
+            ContentAuthorityKind::RustSchema,
+            PathBuf::from("data/overworld"),
             "json",
-            scan_json_file_ids(&data_root.join("json").join("map_locations.json"))?,
+            overworld_library
+                .iter()
+                .flat_map(|(_, definition)| {
+                    definition
+                        .locations
+                        .iter()
+                        .map(|location| location.id.as_str().to_string())
+                })
+                .collect::<Vec<_>>(),
         ),
         build_domain_summary(
             "structures",
@@ -703,6 +711,7 @@ fn collect_map_references(
 ) {
     for object in &definition.objects {
         match object.kind {
+            MapObjectKind::Prop => {}
             MapObjectKind::Pickup => {
                 if let Some(pickup) = object.props.pickup.as_ref() {
                     push_reference(

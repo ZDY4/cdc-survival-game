@@ -122,6 +122,35 @@ pub(crate) fn spawn_box(
     }
 }
 
+pub(crate) fn spawn_static_cuboid(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    size: Vec3,
+    translation: Vec3,
+    color: Color,
+    material_style: MaterialStyle,
+) -> Entity {
+    let material_handle = make_static_world_material(
+        materials,
+        building_wall_materials,
+        color,
+        material_style,
+    );
+    let StaticWorldMaterialHandle::Standard(material) = material_handle else {
+        unreachable!("static cuboids should not use building wall grid materials");
+    };
+
+    commands
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
+            MeshMaterial3d(material),
+            Transform::from_translation(translation),
+        ))
+        .id()
+}
+
 pub(crate) fn spawn_decal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,

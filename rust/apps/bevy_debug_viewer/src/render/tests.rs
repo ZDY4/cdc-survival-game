@@ -501,71 +501,6 @@ fn static_world_specs_skip_missing_geo_buildings_and_keep_functional_objects() {
 }
 
 #[test]
-fn static_world_specs_add_wireframe_boxes_for_unrendered_blocked_map_cells() {
-    let specs = collect_static_world_box_specs(
-        &snapshot_with_occluders(),
-        0,
-        false,
-        ViewerRenderConfig::default(),
-        &ViewerPalette::default(),
-        GridBounds {
-            min_x: 0,
-            max_x: 1,
-            min_z: 0,
-            max_z: 1,
-        },
-        world_from_grid,
-    );
-
-    let wireframe_spec_count = specs
-        .iter()
-        .filter(|spec| {
-            let color = spec.color.to_srgba();
-            spec.material_style == MaterialStyle::UtilityAccent
-                && (color.red - 0.95).abs() < 0.001
-                && (color.green - 0.18).abs() < 0.001
-                && (color.blue - 0.18).abs() < 0.001
-        })
-        .count();
-
-    assert_eq!(wireframe_spec_count, 1);
-}
-
-#[test]
-fn static_world_specs_skip_wireframe_fallback_when_cell_already_has_visible_object() {
-    let mut snapshot = snapshot_with_occluders();
-    snapshot.grid.map_cells[0].grid = GridCoord::new(1, 0, 1);
-
-    let specs = collect_static_world_box_specs(
-        &snapshot,
-        0,
-        false,
-        ViewerRenderConfig::default(),
-        &ViewerPalette::default(),
-        GridBounds {
-            min_x: 0,
-            max_x: 1,
-            min_z: 0,
-            max_z: 1,
-        },
-        world_from_grid,
-    );
-
-    let wireframe_spec_count = specs
-        .iter()
-        .filter(|spec| {
-            let color = spec.color.to_srgba();
-            spec.material_style == MaterialStyle::UtilityAccent
-                && (color.red - 0.95).abs() < 0.001
-                && (color.green - 0.18).abs() < 0.001
-                && (color.blue - 0.18).abs() < 0.001
-        })
-        .count();
-
-    assert_eq!(wireframe_spec_count, 0);
-}
-
-#[test]
 fn scene_transition_triggers_render_floor_arrow_decals_per_cell() {
     let palette = ViewerPalette::default();
     let box_specs = collect_static_world_box_specs(
@@ -664,7 +599,7 @@ fn static_world_specs_do_not_emit_fallback_building_roofs() {
 }
 
 #[test]
-fn static_world_building_wall_tiles_render_per_wall_cell() {
+fn generated_building_tiles_do_not_require_visible_fallback_boxes() {
     let tile_specs = collect_static_world_building_wall_tile_specs(
         &snapshot_with_generated_building(),
         0,
@@ -698,7 +633,7 @@ fn static_world_building_wall_tiles_render_per_wall_cell() {
         .all(|spec| spec.material_style != MaterialStyle::StructureAccent));
     assert!(box_specs
         .iter()
-        .any(|spec| spec.material_style == MaterialStyle::UtilityAccent));
+        .all(|spec| spec.material_style == MaterialStyle::InvisiblePickProxy));
 }
 
 #[test]
