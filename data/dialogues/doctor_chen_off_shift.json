@@ -7,7 +7,7 @@
       "title": "Off Shift",
       "speaker": "陈医生",
       "text": "我刚从诊所下来，想喘口气。真要拿药的话，我还是能帮你看看。",
-      "portrait": "res://assets/portraits/doctor.png",
+      "portrait": "assets/portraits/doctor.png",
       "is_start": true,
       "next": "choice_1"
     },

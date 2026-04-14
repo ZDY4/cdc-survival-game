@@ -2,7 +2,7 @@
   "id": 1023,
   "name": "石子",
   "description": "可用于弹弓的简易弹药",
-  "icon_path": "res://assets/icons/ammo/stone.png",
+  "icon_path": "assets/icons/ammo/stone.png",
   "value": 1,
   "weight": 0.05,
   "fragments": [

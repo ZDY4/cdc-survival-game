@@ -10,7 +10,7 @@
     "disposition": "hostile"
   },
   "presentation": {
-    "portrait_path": "res://assets/portraits/bandit.png",
+    "portrait_path": "assets/portraits/bandit.png",
     "avatar_path": "",
     "model_path": "",
     "placeholder_colors": {

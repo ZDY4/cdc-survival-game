@@ -7,7 +7,7 @@
       "title": "Clinic Shift",
       "speaker": "陈医生",
       "text": "我这边还在轮值。要补给就快一点，外面随时可能再送伤员进来。",
-      "portrait": "res://assets/portraits/doctor.png",
+      "portrait": "assets/portraits/doctor.png",
       "is_start": true,
       "next": "choice_1"
     },

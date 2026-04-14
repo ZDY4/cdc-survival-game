@@ -7,7 +7,7 @@
   "stack_mode": "refresh",
   "color_tint": "#666666",
   "description": "伤害降低20%",
-  "icon_path": "res://assets/icons/effects/weakness.png",
+  "icon_path": "assets/icons/effects/weakness.png",
   "tick_interval": 0.0,
   "duration": 60.0,
   "visual_effect": "",

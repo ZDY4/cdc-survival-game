@@ -7,7 +7,7 @@
   "stack_mode": "intensity",
   "color_tint": "#00FF00",
   "description": "增加5点敏捷值",
-  "icon_path": "res://assets/icons/effects/agility_boost.png",
+  "icon_path": "assets/icons/effects/agility_boost.png",
   "tick_interval": 0.0,
   "duration": 300.0,
   "visual_effect": "",

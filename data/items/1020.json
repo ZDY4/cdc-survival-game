@@ -2,7 +2,7 @@
   "id": 1020,
   "name": "突击步枪",
   "description": "全自动火力压制",
-  "icon_path": "res://assets/icons/weapons/assault_rifle.png",
+  "icon_path": "assets/icons/weapons/assault_rifle.png",
   "value": 0,
   "weight": 4.2,
   "fragments": [

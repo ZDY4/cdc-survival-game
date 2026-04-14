@@ -7,7 +7,7 @@
   "stack_mode": "refresh",
   "color_tint": "#0066FF",
   "description": "增加10点防御力",
-  "icon_path": "res://assets/icons/effects/defense_boost.png",
+  "icon_path": "assets/icons/effects/defense_boost.png",
   "tick_interval": 0.0,
   "duration": 180.0,
   "visual_effect": "",

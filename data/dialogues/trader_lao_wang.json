@@ -7,7 +7,7 @@
 			"title": "Start",
 			"speaker": "老王",
 			"text": "要看看货吗？今天刚整理出一批还算像样的物资。",
-			"portrait": "res://assets/portraits/trader_lao_wang.png",
+			"portrait": "assets/portraits/trader_lao_wang.png",
 			"is_start": true,
 			"next": "choice_1"
 		},

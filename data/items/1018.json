@@ -2,7 +2,7 @@
   "id": 1018,
   "name": "霰弹枪",
   "description": "近距离威力巨大",
-  "icon_path": "res://assets/icons/weapons/shotgun.png",
+  "icon_path": "assets/icons/weapons/shotgun.png",
   "value": 0,
   "weight": 4.0,
   "fragments": [

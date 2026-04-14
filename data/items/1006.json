@@ -2,7 +2,7 @@
   "id": 1006,
   "name": "绷带",
   "description": "恢复25点生命值",
-  "icon_path": "res://assets/icons/items/bandage.png",
+  "icon_path": "assets/icons/items/bandage.png",
   "value": 20,
   "weight": 0.1,
   "fragments": [

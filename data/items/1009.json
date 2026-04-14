@@ -2,7 +2,7 @@
   "id": 1009,
   "name": "手枪弹药",
   "description": "适用于手枪的弹药",
-  "icon_path": "res://assets/icons/ammo/ammo_pistol.png",
+  "icon_path": "assets/icons/ammo/ammo_pistol.png",
   "value": 5,
   "weight": 0.01,
   "fragments": [

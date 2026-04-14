@@ -2,7 +2,7 @@
   "id": 1011,
   "name": "布料",
   "description": "基础制作材料",
-  "icon_path": "res://assets/icons/materials/cloth.png",
+  "icon_path": "assets/icons/materials/cloth.png",
   "value": 3,
   "weight": 0.1,
   "fragments": [

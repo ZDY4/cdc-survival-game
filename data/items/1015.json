@@ -2,7 +2,7 @@
   "id": 1015,
   "name": "武士刀",
   "description": "锋利的日本刀，极其致命",
-  "icon_path": "res://assets/icons/weapons/katana.png",
+  "icon_path": "assets/icons/weapons/katana.png",
   "value": 0,
   "weight": 1.2,
   "fragments": [

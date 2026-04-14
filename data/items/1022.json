@@ -2,7 +2,7 @@
   "id": 1022,
   "name": "步枪弹药",
   "description": "步枪使用的弹药",
-  "icon_path": "res://assets/icons/ammo/ammo_rifle.png",
+  "icon_path": "assets/icons/ammo/ammo_rifle.png",
   "value": 3,
   "weight": 0.1,
   "fragments": [

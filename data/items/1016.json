@@ -2,7 +2,7 @@
   "id": 1016,
   "name": "电锯",
   "description": "恐怖的伤害，但需要燃料",
-  "icon_path": "res://assets/icons/weapons/chainsaw.png",
+  "icon_path": "assets/icons/weapons/chainsaw.png",
   "value": 0,
   "weight": 4.0,
   "fragments": [

@@ -1577,7 +1577,7 @@ mod tests {
             "value": 100,
             "stackable": true,
             "max_stack": 10,
-            "icon_path": "res://assets/icons/items/medkit.png",
+            "icon_path": "assets/icons/items/medkit.png",
             "equippable": false,
             "slot": "",
             "inventory_width": 2,

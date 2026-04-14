@@ -1,0 +1,38 @@
+{
+  "id": "trader_lao_wang_shop",
+  "buy_price_modifier": 1.2,
+  "sell_price_modifier": 0.8,
+  "money": 500,
+  "inventory": [
+    {
+      "item_id": 1005,
+      "count": 3,
+      "price": 50
+    },
+    {
+      "item_id": 1006,
+      "count": 10,
+      "price": 10
+    },
+    {
+      "item_id": 1009,
+      "count": 50,
+      "price": 5
+    },
+    {
+      "item_id": 1007,
+      "count": 5,
+      "price": 15
+    },
+    {
+      "item_id": 1008,
+      "count": 8,
+      "price": 12
+    },
+    {
+      "item_id": 1002,
+      "count": 2,
+      "price": 100
+    }
+  ]
+}

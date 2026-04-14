@@ -2,7 +2,7 @@
   "id": 1005,
   "name": "急救包",
   "description": "恢复50点生命值",
-  "icon_path": "res://assets/icons/items/medkit.png",
+  "icon_path": "assets/icons/items/medkit.png",
   "value": 100,
   "weight": 0.5,
   "fragments": [

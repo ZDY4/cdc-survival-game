@@ -22,8 +22,6 @@ use crate::{
 pub enum ContentAuthorityKind {
     RustSchema,
     LegacyJson,
-    GodotResource,
-    GodotConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -351,7 +349,7 @@ pub fn load_shared_content_registry(
             "shops",
             ContentAuthorityKind::RustSchema,
             PathBuf::from("data/shops"),
-            "godot_tres",
+            "json",
             shop_library.ids().into_iter().collect(),
         ),
         build_domain_summary(
@@ -389,16 +387,6 @@ pub fn load_shared_content_registry(
             PathBuf::from("data/json/clues.json"),
             "json",
             scan_json_file_ids(&data_root.join("json").join("clues.json"))?,
-        ),
-        build_domain_summary(
-            "gameplay_tags",
-            ContentAuthorityKind::GodotConfig,
-            PathBuf::from("config/gameplay_tags.ini"),
-            "ini",
-            scan_single_file_marker(
-                &repo_root.join("config").join("gameplay_tags.ini"),
-                "registry",
-            )?,
         ),
     ];
     domains.sort_by(|left, right| left.domain.cmp(&right.domain));
@@ -1038,20 +1026,6 @@ fn scan_json_file_ids(path: &Path) -> Result<Vec<String>, ContentRegistryLoadErr
     Ok(ids)
 }
 
-fn scan_single_file_marker(
-    path: &Path,
-    marker_id: &str,
-) -> Result<Vec<String>, ContentRegistryLoadError> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-
-    fs::metadata(path).map_err(|source| ContentRegistryLoadError::ReadRawFile {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    Ok(vec![marker_id.to_string()])
-}
 
 fn value_to_string(value: &Value) -> Option<String> {
     match value {

@@ -7,7 +7,7 @@
       "title": "Trusted Trader",
       "speaker": "老王",
       "text": "是你啊。给你留了点压箱底的货，别人来我可不会轻易拿出来。",
-      "portrait": "res://assets/portraits/trader_lao_wang.png",
+      "portrait": "assets/portraits/trader_lao_wang.png",
       "is_start": true,
       "next": "choice_1"
     },

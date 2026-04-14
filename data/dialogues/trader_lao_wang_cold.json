@@ -7,7 +7,7 @@
       "title": "Cold Trader",
       "speaker": "老王",
       "text": "有事说事，没事别在我摊子前磨蹭。想看货就自己掏钱。",
-      "portrait": "res://assets/portraits/trader_lao_wang.png",
+      "portrait": "assets/portraits/trader_lao_wang.png",
       "is_start": true,
       "next": "choice_1"
     },

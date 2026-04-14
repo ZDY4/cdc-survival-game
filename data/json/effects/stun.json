@@ -9,10 +9,10 @@
   "stack_mode": "extend",
   "color_tint": "#FFFF00",
   "description": "无法行动",
-  "icon_path": "res://assets/icons/effects/stun.png",
+  "icon_path": "assets/icons/effects/stun.png",
   "tick_interval": 0.0,
   "duration": 3.0,
-  "visual_effect": "res://effects/stun_particles.tscn",
+  "visual_effect": "stun_particles",
   "name": "眩晕",
   "stat_modifiers": {
     "speed": -100

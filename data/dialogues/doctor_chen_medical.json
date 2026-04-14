@@ -7,7 +7,7 @@
       "title": "Medical Priority",
       "speaker": "陈医生",
       "text": "先别逞强，你这伤势得马上处理。坐下，我先给你止血。",
-      "portrait": "res://assets/portraits/doctor.png",
+      "portrait": "assets/portraits/doctor.png",
       "is_start": true,
       "next": "choice_1"
     },

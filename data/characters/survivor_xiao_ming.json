@@ -10,7 +10,7 @@
     "disposition": "friendly"
   },
   "presentation": {
-    "portrait_path": "res://assets/portraits/xiao_ming.png",
+    "portrait_path": "assets/portraits/xiao_ming.png",
     "avatar_path": "",
     "model_path": "",
     "placeholder_colors": {

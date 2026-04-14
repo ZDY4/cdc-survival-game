@@ -2,7 +2,7 @@
   "id": 1007,
   "name": "罐头食品",
   "description": "恢复30点饥饿值",
-  "icon_path": "res://assets/icons/items/food_canned.png",
+  "icon_path": "assets/icons/items/food_canned.png",
   "value": 15,
   "weight": 0.3,
   "fragments": [

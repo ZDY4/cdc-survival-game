@@ -9,7 +9,7 @@
   "stack_mode": "intensity",
   "color_tint": "#990000",
   "description": "每秒损失5点生命值",
-  "icon_path": "res://assets/icons/effects/bleeding.png",
+  "icon_path": "assets/icons/effects/bleeding.png",
   "tick_interval": 1.0,
   "duration": 15.0,
   "visual_effect": "",

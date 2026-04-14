@@ -2,7 +2,7 @@
   "id": 1017,
   "name": "弹弓",
   "description": "简易的远程武器",
-  "icon_path": "res://assets/icons/weapons/slingshot.png",
+  "icon_path": "assets/icons/weapons/slingshot.png",
   "value": 0,
   "weight": 0.2,
   "fragments": [

@@ -7,7 +7,7 @@
 			"title": "Start",
 			"speaker": "陈医生",
 			"text": "你看起来还撑得住。要不要补充点药品，或者让我给你看看伤势？",
-			"portrait": "res://assets/portraits/doctor.png",
+			"portrait": "assets/portraits/doctor.png",
 			"is_start": true,
 			"next": "choice_1"
 		},

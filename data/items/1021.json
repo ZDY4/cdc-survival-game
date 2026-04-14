@@ -2,7 +2,7 @@
   "id": 1021,
   "name": "霰弹弹药",
   "description": "霰弹枪使用的弹药",
-  "icon_path": "res://assets/icons/ammo/ammo_shotgun.png",
+  "icon_path": "assets/icons/ammo/ammo_shotgun.png",
   "value": 2,
   "weight": 0.1,
   "fragments": [

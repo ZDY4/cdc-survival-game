@@ -9,10 +9,10 @@
   "stack_mode": "intensity",
   "color_tint": "#00FF66",
   "description": "每秒恢复5点生命值",
-  "icon_path": "res://assets/icons/effects/regeneration.png",
+  "icon_path": "assets/icons/effects/regeneration.png",
   "tick_interval": 1.0,
   "duration": 30.0,
-  "visual_effect": "res://effects/heal_particles.tscn",
+  "visual_effect": "heal_particles",
   "name": "生命恢复",
   "stat_modifiers": {},
   "category": "buff"

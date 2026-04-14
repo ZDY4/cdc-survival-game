@@ -2,7 +2,7 @@
   "id": 1010,
   "name": "废金属",
   "description": "可以回收利用的金属材料",
-  "icon_path": "res://assets/icons/materials/scrap_metal.png",
+  "icon_path": "assets/icons/materials/scrap_metal.png",
   "value": 5,
   "weight": 0.2,
   "fragments": [

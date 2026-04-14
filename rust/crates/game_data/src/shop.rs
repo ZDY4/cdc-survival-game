@@ -182,34 +182,32 @@ pub fn load_shop_library(
         source,
     })?;
 
-    let mut definitions = BTreeMap::new();
-    let mut origins = BTreeMap::<String, PathBuf>::new();
-
+    let mut file_paths = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|source| ShopLoadError::ReadDir {
             path: dir.to_path_buf(),
             source,
         })?;
         let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|value| value.to_str()) != Some("tres") {
-            continue;
+        if path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("json") {
+            file_paths.push(path);
         }
+    }
+    file_paths.sort();
 
+    let mut definitions = BTreeMap::new();
+    let mut origins = BTreeMap::<String, PathBuf>::new();
+
+    for path in file_paths {
         let raw = fs::read_to_string(&path).map_err(|source| ShopLoadError::ReadFile {
             path: path.clone(),
             source,
         })?;
-        let source_id = path
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_string();
-        let definition = parse_shop_definition(&source_id, &raw).map_err(|message| {
-            ShopLoadError::ParseFile {
+        let definition: ShopDefinition =
+            serde_json::from_str(&raw).map_err(|error| ShopLoadError::ParseFile {
                 path: path.clone(),
-                message,
-            }
-        })?;
+                message: error.to_string(),
+            })?;
 
         validate_shop_definition(&definition, catalog).map_err(|source| {
             ShopLoadError::Validation {
@@ -230,131 +228,6 @@ pub fn load_shop_library(
     }
 
     Ok(ShopLibrary { definitions })
-}
-
-fn parse_shop_definition(source_id: &str, raw: &str) -> Result<ShopDefinition, String> {
-    let mut definition = ShopDefinition {
-        id: source_id.to_string(),
-        buy_price_modifier: 1.0,
-        sell_price_modifier: 1.0,
-        money: 0,
-        inventory: Vec::new(),
-    };
-
-    let mut in_resource = false;
-    let mut inventory_buffer = String::new();
-    let mut collecting_inventory = false;
-    let mut bracket_balance = 0i32;
-
-    for line in raw.lines() {
-        let trimmed = line.trim();
-        if trimmed == "[resource]" {
-            in_resource = true;
-            continue;
-        }
-        if !in_resource || trimmed.is_empty() {
-            continue;
-        }
-
-        if collecting_inventory {
-            inventory_buffer.push_str(trimmed);
-            inventory_buffer.push('\n');
-            bracket_balance += bracket_delta(trimmed);
-            if bracket_balance <= 0 {
-                definition.inventory =
-                    serde_json::from_str::<Vec<RawShopInventoryEntry>>(&inventory_buffer)
-                        .map_err(|error| {
-                            format!("failed to parse inventory JSON payload: {error}")
-                        })?
-                        .into_iter()
-                        .map(|entry| {
-                            Ok::<ShopInventoryEntry, String>(ShopInventoryEntry {
-                                item_id: entry.id.parse::<u32>().map_err(|error| {
-                                    format!("invalid shop inventory item id {}: {error}", entry.id)
-                                })?,
-                                count: entry.count,
-                                price: entry.price,
-                            })
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                collecting_inventory = false;
-                inventory_buffer.clear();
-            }
-            continue;
-        }
-
-        let Some((key, value)) = trimmed.split_once('=') else {
-            continue;
-        };
-        let key = key.trim();
-        let value = value.trim();
-        match key {
-            "buy_price_modifier" => {
-                definition.buy_price_modifier = value
-                    .parse::<f32>()
-                    .map_err(|error| format!("invalid buy_price_modifier {value}: {error}"))?;
-            }
-            "sell_price_modifier" => {
-                definition.sell_price_modifier = value
-                    .parse::<f32>()
-                    .map_err(|error| format!("invalid sell_price_modifier {value}: {error}"))?;
-            }
-            "money" => {
-                definition.money = value
-                    .parse::<i32>()
-                    .map_err(|error| format!("invalid money {value}: {error}"))?;
-            }
-            "inventory" => {
-                collecting_inventory = true;
-                inventory_buffer.push_str(value);
-                inventory_buffer.push('\n');
-                bracket_balance = bracket_delta(value);
-                if bracket_balance <= 0 {
-                    definition.inventory =
-                        serde_json::from_str::<Vec<RawShopInventoryEntry>>(&inventory_buffer)
-                            .map_err(|error| {
-                                format!("failed to parse inventory JSON payload: {error}")
-                            })?
-                            .into_iter()
-                            .map(|entry| {
-                                Ok::<ShopInventoryEntry, String>(ShopInventoryEntry {
-                                    item_id: entry.id.parse::<u32>().map_err(|error| {
-                                        format!(
-                                            "invalid shop inventory item id {}: {error}",
-                                            entry.id
-                                        )
-                                    })?,
-                                    count: entry.count,
-                                    price: entry.price,
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-                    collecting_inventory = false;
-                    inventory_buffer.clear();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if collecting_inventory {
-        return Err("unterminated inventory payload".to_string());
-    }
-
-    Ok(definition)
-}
-
-fn bracket_delta(line: &str) -> i32 {
-    let open = line.chars().filter(|character| *character == '[').count() as i32;
-    let close = line.chars().filter(|character| *character == ']').count() as i32;
-    open - close
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct RawShopInventoryEntry {
-    id: String,
-    count: i32,
-    price: i32,
 }
 
 #[cfg(test)]

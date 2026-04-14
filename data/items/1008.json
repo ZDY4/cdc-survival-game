@@ -2,7 +2,7 @@
   "id": 1008,
   "name": "水瓶",
   "description": "恢复40点口渴值",
-  "icon_path": "res://assets/icons/items/water_bottle.png",
+  "icon_path": "assets/icons/items/water_bottle.png",
   "value": 10,
   "weight": 0.5,
   "fragments": [

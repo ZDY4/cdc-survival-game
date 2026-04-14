@@ -2,7 +2,7 @@
   "id": 1012,
   "name": "电子元件",
   "description": "制作高级装备所需的电子部件",
-  "icon_path": "res://assets/icons/materials/component_electronic.png",
+  "icon_path": "assets/icons/materials/component_electronic.png",
   "value": 25,
   "weight": 0.05,
   "fragments": [

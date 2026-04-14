@@ -2,7 +2,7 @@
   "id": 1019,
   "name": "步枪",
   "description": "精准的中距离武器",
-  "icon_path": "res://assets/icons/weapons/rifle.png",
+  "icon_path": "assets/icons/weapons/rifle.png",
   "value": 0,
   "weight": 3.5,
   "fragments": [

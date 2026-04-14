@@ -625,7 +625,7 @@ mod tests {
             "identity": { "display_name": "陈医生", "description": "..." },
             "faction": { "camp_id": "survivor", "disposition": "friendly" },
             "presentation": {
-                "portrait_path": "res://assets/portraits/doctor.png",
+                "portrait_path": "assets/portraits/doctor.png",
                 "avatar_path": "",
                 "model_path": "",
                 "placeholder_colors": {

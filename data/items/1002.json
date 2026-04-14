@@ -2,7 +2,7 @@
   "id": 1002,
   "name": "小刀",
   "description": "锋利的匕首，适合近距离战斗",
-  "icon_path": "res://assets/icons/weapons/knife.png",
+  "icon_path": "assets/icons/weapons/knife.png",
   "value": 50,
   "weight": 0.3,
   "fragments": [

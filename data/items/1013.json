@@ -2,7 +2,7 @@
   "id": 1013,
   "name": "管钳",
   "description": "沉重的金属工具，伤害可观",
-  "icon_path": "res://assets/icons/weapons/pipe_wrench.png",
+  "icon_path": "assets/icons/weapons/pipe_wrench.png",
   "value": 0,
   "weight": 2.0,
   "fragments": [

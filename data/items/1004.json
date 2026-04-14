@@ -2,7 +2,7 @@
   "id": 1004,
   "name": "手枪",
   "description": "可靠的副武器",
-  "icon_path": "res://assets/icons/weapons/pistol.png",
+  "icon_path": "assets/icons/weapons/pistol.png",
   "value": 250,
   "weight": 0.8,
   "fragments": [
