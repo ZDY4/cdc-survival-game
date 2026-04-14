@@ -500,7 +500,7 @@ fn ranged_attack_targeting_uses_cell_distance() {
 }
 
 #[test]
-fn grid_math_matches_godot_behavior() {
+fn grid_math_matches_reference_grid_behavior() {
     let world = crate::grid::GridWorld::default();
     let grid = world.world_to_grid(WorldCoord::new(0.6, 0.4, 1.8));
     assert_eq!(grid, GridCoord::new(0, 0, 1));
