@@ -316,7 +316,9 @@ fn infer_default_narrative_app_settings_from_base(base_dir: Option<&Path>) -> Na
 fn find_connected_project_root(base_dir: &Path) -> Option<PathBuf> {
     base_dir
         .ancestors()
-        .find(|path| path.join("project.godot").is_file())
+        .find(|path| {
+            path.join("rust").join("Cargo.toml").is_file() && path.join("data").is_dir()
+        })
         .and_then(resolve_existing_dir)
 }
 
@@ -509,7 +511,9 @@ mod tests {
 
         fs::create_dir_all(&editor_root).unwrap();
         fs::create_dir_all(&workspace_root).unwrap();
-        fs::write(repo_root.join("project.godot"), "").unwrap();
+        fs::create_dir_all(repo_root.join("rust")).unwrap();
+        fs::create_dir_all(repo_root.join("data")).unwrap();
+        fs::write(repo_root.join("rust").join("Cargo.toml"), "[workspace]\n").unwrap();
 
         let inferred = infer_default_narrative_app_settings_from_base(Some(&editor_root));
 

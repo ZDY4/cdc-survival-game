@@ -23,7 +23,7 @@ export const fallbackDialogueWorkspace: DialogueWorkspacePayload = {
         id: "phase-3",
         title: "Phase 3: Editor Independence",
         description:
-          "Replace Godot plugin editing flows with standalone editor modules incrementally.",
+          "Replace legacy plugin editing flows with standalone editor modules incrementally.",
       },
     ],
     editorDomains: [

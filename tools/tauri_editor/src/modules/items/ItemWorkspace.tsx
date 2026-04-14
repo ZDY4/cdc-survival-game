@@ -2453,7 +2453,7 @@ export function ItemWorkspace({
                     onChange={(value) =>
                       updateSelectedItem((item) => ({ ...item, icon_path: value }))
                     }
-                    placeholder="res://assets/..."
+                    placeholder="assets/..."
                   />
                   <NumberField
                     label="Value"

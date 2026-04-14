@@ -21,7 +21,7 @@ export const fallbackQuestWorkspace: QuestWorkspacePayload = {
       {
         id: "phase-3",
         title: "Phase 3: Editor Independence",
-        description: "Migrate content workflows from the Godot plugin into this standalone editor incrementally.",
+        description: "Consolidate content workflows into this standalone editor incrementally.",
       },
     ],
     editorDomains: [

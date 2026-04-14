@@ -578,7 +578,7 @@ pub(crate) fn editor_bootstrap() -> Result<EditorBootstrap, String> {
                 id: "phase-3",
                 title: "Phase 3: Editor Independence",
                 description:
-                    "Migrate content workflows from the Godot plugin into this standalone editor incrementally.",
+                    "Consolidate content workflows into this standalone editor incrementally.",
             },
         ],
         editor_domains: vec![

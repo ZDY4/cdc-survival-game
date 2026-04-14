@@ -23,7 +23,7 @@ export const fallbackWorkspace: ItemWorkspacePayload = {
         id: "phase-3",
         title: "Phase 3: Editor Independence",
         description:
-          "Replace Godot plugin editing flows with standalone editor modules incrementally.",
+          "Replace legacy plugin editing flows with standalone editor modules incrementally.",
       },
     ],
     editorDomains: [
@@ -78,7 +78,7 @@ export const fallbackWorkspace: ItemWorkspacePayload = {
         id: 1001,
         name: "拳头",
         description: "最基础的攻击方式",
-        icon_path: "res://assets/icons/weapons/fist.png",
+        icon_path: "assets/icons/weapons/fist.png",
         value: 0,
         weight: 0,
         fragments: [

@@ -357,7 +357,7 @@ fn build_prompt_payload(
         format!(
             "[输出协议]\n{}",
             [
-                "你正在为 Godot 生存游戏编辑器生成结构化内容。",
+                "你正在为末日生存游戏内容编辑器生成结构化内容。",
                 "只能输出一个 JSON 对象，不能输出 Markdown、解释或代码块。",
                 "输出必须严格遵守合同：{\"record_type\":\"dialog|quest\",\"operation\":\"create|revise\",\"target_id\":\"string\",\"summary\":\"string\",\"warnings\":[\"string\"],\"record\":{}}。",
                 "record 必须是该类型最终落盘 JSON 格式，而不是表单子集。",

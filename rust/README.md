@@ -20,7 +20,7 @@ Character definitions now use Rust as the single source of truth:
 - Runtime loading: `game_data::load_character_library`
 - Bevy-side assembly: `rust/crates/game_bevy/src/lib.rs`
 
-The legacy Godot-side `CharacterData.gd` / `NPCData.gd` models are no longer
+Legacy script-side `CharacterData.gd` / `NPCData.gd` models are no longer
 authoritative and are not kept in sync with the Rust schema.
 
 ## Runtime Assembly Layers
@@ -38,4 +38,4 @@ authoritative and are not kept in sync with the Rust schema.
 4. Run `cargo run -p bevy_server` for the headless demo flow.
 5. Run `cargo run -p bevy_debug_viewer` for the windowed logic viewer.
 6. Add a transport layer in `game_protocol` or `bevy_server`.
-7. Migrate suitable systems from Godot into `game_core`.
+7. Continue migrating remaining legacy systems into `game_core`.
