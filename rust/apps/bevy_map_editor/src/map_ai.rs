@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use bevy::log::{info, warn};
@@ -5,8 +6,8 @@ use bevy_egui::egui;
 use game_bevy::container_visuals::ContainerVisualRegistry;
 use game_data::{
     load_character_library, load_item_library, load_world_tile_library, GridCoord,
-    MapCellDefinition, MapDefinition, MapEditDiagnostic, MapEditError, MapEntryPointDefinition,
-    MapId, MapObjectDefinition, MapSize,
+    MapCellDefinition, MapDefinition, MapEditDiagnostic, MapEditDiagnosticSeverity, MapEditError,
+    MapEntryPointDefinition, MapId, MapObjectDefinition, MapSize,
 };
 use game_editor::ai_chat::{
     conversation_payload, prepare_prompt_submission, start_generation_job, AiChatMessage,
@@ -82,6 +83,7 @@ pub struct PreparedProposal {
     pub definition: MapDefinition,
     pub details: Vec<String>,
     pub diagnostics: Vec<MapEditDiagnostic>,
+    pub review: ProposalReview,
     pub is_new_map: bool,
 }
 
@@ -102,6 +104,46 @@ struct MapCounts {
     entry_points: usize,
     objects: usize,
     cells: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProposalChangeKind {
+    Added,
+    Removed,
+    Updated,
+}
+
+#[derive(Debug, Clone)]
+struct ProposalEntityChange {
+    kind: ProposalChangeKind,
+    label: String,
+    details: Vec<String>,
+    diagnostics: Vec<MapEditDiagnostic>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ProposalLevelReview {
+    added: Vec<i32>,
+    removed: Vec<i32>,
+    diagnostics: Vec<MapEditDiagnostic>,
+}
+
+#[derive(Debug, Clone)]
+struct ProposalCellChangeGroup {
+    level: i32,
+    added: usize,
+    removed: usize,
+    updated: usize,
+    samples: Vec<String>,
+    diagnostics: Vec<MapEditDiagnostic>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ProposalReview {
+    levels: ProposalLevelReview,
+    entry_points: Vec<ProposalEntityChange>,
+    objects: Vec<ProposalEntityChange>,
+    cells: Vec<ProposalCellChangeGroup>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -146,6 +188,23 @@ pub fn start_map_ai_generation(
         warn!("map editor ai generation aborted: selected map missing");
         return;
     };
+    let selected_map = document.definition.clone();
+    let selected_map_diagnostics = validate_document(&editor.map_service, &selected_map);
+    let selected_map_error_count = selected_map_diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == MapEditDiagnosticSeverity::Error)
+        .count();
+    if selected_map_error_count > 0 {
+        ai.provider_status = format!(
+            "Selected map has {selected_map_error_count} validation error(s). Fix them before generating a proposal."
+        );
+        warn!(
+            "map editor ai generation aborted: map_id={} has {} validation errors",
+            selected_map.id.as_str(),
+            selected_map_error_count
+        );
+        return;
+    }
     let submission = match prepare_prompt_submission(ai) {
         Ok(submission) => submission,
         Err(error) => {
@@ -155,9 +214,15 @@ pub fn start_map_ai_generation(
         }
     };
 
-    let selected_map = document.definition.clone();
     let available_map_ids = editor.maps.keys().cloned().collect::<Vec<_>>();
     let generation_context = build_map_ai_generation_context(editor);
+    let provider_notes = build_generation_provider_status(
+        &selected_map_diagnostics,
+        &generation_context.load_warnings,
+    );
+    if !provider_notes.is_empty() {
+        ai.provider_status = provider_notes;
+    }
     let payload = build_map_prompt_payload(
         &submission.settings,
         &selected_map,
@@ -235,6 +300,8 @@ pub fn render_map_ai_result(
             for detail in &prepared.details {
                 ui.label(format!("- {detail}"));
             }
+            ui.add_space(6.0);
+            render_proposal_review(ui, &prepared.review);
             if !prepared.diagnostics.is_empty() {
                 ui.add_space(6.0);
                 ui.label("Diagnostics");
@@ -606,6 +673,15 @@ pub fn prepare_proposal(
     }
     let after_counts = map_counts(&definition);
     let diagnostics = validate_document(&editor.map_service, &definition);
+    let review = build_proposal_review(
+        if is_new_map {
+            None
+        } else {
+            editor.maps.get(&target_map_id)
+        },
+        &definition,
+        &diagnostics,
+    );
     Ok(PreparedProposal {
         target_map_id,
         original_id,
@@ -629,6 +705,7 @@ pub fn prepare_proposal(
             ),
         ],
         diagnostics,
+        review,
         is_new_map,
     })
 }
@@ -674,5 +751,616 @@ fn apply_proposal_operation(
         AiMapOperation::ClearCells { level, cells } => {
             map_service.clear_cells_definition(definition, *level, cells.clone())
         }
+    }
+}
+
+fn build_generation_provider_status(
+    selected_map_diagnostics: &[MapEditDiagnostic],
+    catalog_warnings: &[String],
+) -> String {
+    let warning_count = selected_map_diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == MapEditDiagnosticSeverity::Warning)
+        .count();
+    let info_count = selected_map_diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == MapEditDiagnosticSeverity::Info)
+        .count();
+    let mut parts = Vec::new();
+    if warning_count > 0 || info_count > 0 {
+        parts.push(format!(
+            "Selected map preflight: {warning_count} warning(s), {info_count} info item(s)."
+        ));
+    }
+    if !catalog_warnings.is_empty() {
+        parts.push(format!(
+            "AI content catalog warnings: {}",
+            catalog_warnings.join(" | ")
+        ));
+    }
+    parts.join(" ")
+}
+
+fn build_proposal_review(
+    before_document: Option<&WorkingMapDocument>,
+    after_definition: &MapDefinition,
+    diagnostics: &[MapEditDiagnostic],
+) -> ProposalReview {
+    let Some(before_definition) = before_document.map(|document| &document.definition) else {
+        return build_new_map_review(after_definition, diagnostics);
+    };
+
+    ProposalReview {
+        levels: build_level_review(before_definition, after_definition, diagnostics),
+        entry_points: build_entry_point_review(before_definition, after_definition, diagnostics),
+        objects: build_object_review(before_definition, after_definition, diagnostics),
+        cells: build_cell_review(before_definition, after_definition, diagnostics),
+    }
+}
+
+fn build_new_map_review(
+    definition: &MapDefinition,
+    diagnostics: &[MapEditDiagnostic],
+) -> ProposalReview {
+    let entry_points = definition
+        .entry_points
+        .iter()
+        .map(|entry_point| ProposalEntityChange {
+            kind: ProposalChangeKind::Added,
+            label: entry_point.id.clone(),
+            details: vec![
+                format!("grid {}", grid_label(entry_point.grid)),
+                format!("facing {}", entry_point.facing.as_deref().unwrap_or("none")),
+            ],
+            diagnostics: diagnostics_matching(diagnostics, &[entry_point.id.clone()]),
+        })
+        .collect();
+    let objects = definition
+        .objects
+        .iter()
+        .map(|object| ProposalEntityChange {
+            kind: ProposalChangeKind::Added,
+            label: object.object_id.clone(),
+            details: object_summary(object),
+            diagnostics: diagnostics_matching(diagnostics, &[object.object_id.clone()]),
+        })
+        .collect();
+    let mut level_cells = BTreeMap::<i32, Vec<String>>::new();
+    for level in &definition.levels {
+        for cell in &level.cells {
+            level_cells.entry(level.y).or_default().push(format!(
+                "({}, {}) {}",
+                cell.x,
+                cell.z,
+                cell_brief(cell)
+            ));
+        }
+    }
+    let cells = level_cells
+        .into_iter()
+        .map(|(level, samples)| ProposalCellChangeGroup {
+            level,
+            added: samples.len(),
+            removed: 0,
+            updated: 0,
+            samples: samples.into_iter().take(6).collect(),
+            diagnostics: diagnostics_matching(diagnostics, &[format!("level {level}")]),
+        })
+        .collect();
+
+    ProposalReview {
+        levels: ProposalLevelReview {
+            added: definition.levels.iter().map(|level| level.y).collect(),
+            removed: Vec::new(),
+            diagnostics: Vec::new(),
+        },
+        entry_points,
+        objects,
+        cells,
+    }
+}
+
+fn build_level_review(
+    before: &MapDefinition,
+    after: &MapDefinition,
+    diagnostics: &[MapEditDiagnostic],
+) -> ProposalLevelReview {
+    let before_levels = before
+        .levels
+        .iter()
+        .map(|level| level.y)
+        .collect::<BTreeSet<_>>();
+    let after_levels = after
+        .levels
+        .iter()
+        .map(|level| level.y)
+        .collect::<BTreeSet<_>>();
+    let added = after_levels
+        .difference(&before_levels)
+        .copied()
+        .collect::<Vec<_>>();
+    let removed = before_levels
+        .difference(&after_levels)
+        .copied()
+        .collect::<Vec<_>>();
+    let mut patterns = added
+        .iter()
+        .chain(removed.iter())
+        .map(|level| format!("level {level}"))
+        .collect::<Vec<_>>();
+    patterns.extend(
+        added
+            .iter()
+            .chain(removed.iter())
+            .map(|level| format!(" y {level}")),
+    );
+    ProposalLevelReview {
+        added,
+        removed,
+        diagnostics: diagnostics_matching(diagnostics, &patterns),
+    }
+}
+
+fn build_entry_point_review(
+    before: &MapDefinition,
+    after: &MapDefinition,
+    diagnostics: &[MapEditDiagnostic],
+) -> Vec<ProposalEntityChange> {
+    let before_map = before
+        .entry_points
+        .iter()
+        .map(|entry_point| (entry_point.id.as_str(), entry_point))
+        .collect::<BTreeMap<_, _>>();
+    let after_map = after
+        .entry_points
+        .iter()
+        .map(|entry_point| (entry_point.id.as_str(), entry_point))
+        .collect::<BTreeMap<_, _>>();
+    let ids = before_map
+        .keys()
+        .chain(after_map.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut changes = Vec::new();
+    for id in ids {
+        match (before_map.get(id), after_map.get(id)) {
+            (None, Some(entry_point)) => changes.push(ProposalEntityChange {
+                kind: ProposalChangeKind::Added,
+                label: id.to_string(),
+                details: vec![
+                    format!("grid {}", grid_label(entry_point.grid)),
+                    format!("facing {}", entry_point.facing.as_deref().unwrap_or("none")),
+                ],
+                diagnostics: diagnostics_matching(diagnostics, &[id.to_string()]),
+            }),
+            (Some(entry_point), None) => changes.push(ProposalEntityChange {
+                kind: ProposalChangeKind::Removed,
+                label: id.to_string(),
+                details: vec![format!("removed from {}", grid_label(entry_point.grid))],
+                diagnostics: diagnostics_matching(diagnostics, &[id.to_string()]),
+            }),
+            (Some(before_entry_point), Some(after_entry_point))
+                if before_entry_point != after_entry_point =>
+            {
+                changes.push(ProposalEntityChange {
+                    kind: ProposalChangeKind::Updated,
+                    label: id.to_string(),
+                    details: entry_point_delta(before_entry_point, after_entry_point),
+                    diagnostics: diagnostics_matching(diagnostics, &[id.to_string()]),
+                });
+            }
+            _ => {}
+        }
+    }
+    changes
+}
+
+fn build_object_review(
+    before: &MapDefinition,
+    after: &MapDefinition,
+    diagnostics: &[MapEditDiagnostic],
+) -> Vec<ProposalEntityChange> {
+    let before_map = before
+        .objects
+        .iter()
+        .map(|object| (object.object_id.as_str(), object))
+        .collect::<BTreeMap<_, _>>();
+    let after_map = after
+        .objects
+        .iter()
+        .map(|object| (object.object_id.as_str(), object))
+        .collect::<BTreeMap<_, _>>();
+    let ids = before_map
+        .keys()
+        .chain(after_map.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut changes = Vec::new();
+    for id in ids {
+        match (before_map.get(id), after_map.get(id)) {
+            (None, Some(object)) => changes.push(ProposalEntityChange {
+                kind: ProposalChangeKind::Added,
+                label: id.to_string(),
+                details: object_summary(object),
+                diagnostics: diagnostics_matching(diagnostics, &[id.to_string()]),
+            }),
+            (Some(object), None) => changes.push(ProposalEntityChange {
+                kind: ProposalChangeKind::Removed,
+                label: id.to_string(),
+                details: vec![format!("removed {}", object_kind_label(object))],
+                diagnostics: diagnostics_matching(diagnostics, &[id.to_string()]),
+            }),
+            (Some(before_object), Some(after_object)) if before_object != after_object => {
+                changes.push(ProposalEntityChange {
+                    kind: ProposalChangeKind::Updated,
+                    label: id.to_string(),
+                    details: object_delta(before_object, after_object),
+                    diagnostics: diagnostics_matching(diagnostics, &[id.to_string()]),
+                });
+            }
+            _ => {}
+        }
+    }
+    changes
+}
+
+fn build_cell_review(
+    before: &MapDefinition,
+    after: &MapDefinition,
+    diagnostics: &[MapEditDiagnostic],
+) -> Vec<ProposalCellChangeGroup> {
+    let before_cells = collect_cells(before);
+    let after_cells = collect_cells(after);
+    let keys = before_cells
+        .keys()
+        .chain(after_cells.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut by_level = BTreeMap::<i32, ProposalCellChangeGroup>::new();
+
+    for key @ (level, x, z) in keys {
+        let group = by_level
+            .entry(level)
+            .or_insert_with(|| ProposalCellChangeGroup {
+                level,
+                added: 0,
+                removed: 0,
+                updated: 0,
+                samples: Vec::new(),
+                diagnostics: Vec::new(),
+            });
+        match (before_cells.get(&key), after_cells.get(&key)) {
+            (None, Some(after_cell)) => {
+                group.added += 1;
+                push_cell_sample(
+                    &mut group.samples,
+                    format!("({}, {}) added {}", x, z, cell_brief(after_cell)),
+                );
+            }
+            (Some(before_cell), None) => {
+                group.removed += 1;
+                push_cell_sample(
+                    &mut group.samples,
+                    format!("({}, {}) removed {}", x, z, cell_brief(before_cell)),
+                );
+            }
+            (Some(before_cell), Some(after_cell)) if before_cell != after_cell => {
+                group.updated += 1;
+                push_cell_sample(
+                    &mut group.samples,
+                    format!("({}, {}) {}", x, z, cell_delta(before_cell, after_cell)),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    for group in by_level.values_mut() {
+        group.diagnostics = diagnostics_matching(
+            diagnostics,
+            &[
+                format!("level {}", group.level),
+                format!(", {},", group.level),
+            ],
+        );
+    }
+
+    by_level
+        .into_values()
+        .filter(|group| group.added > 0 || group.removed > 0 || group.updated > 0)
+        .collect()
+}
+
+fn collect_cells(definition: &MapDefinition) -> BTreeMap<(i32, u32, u32), MapCellDefinition> {
+    let mut cells = BTreeMap::new();
+    for level in &definition.levels {
+        for cell in &level.cells {
+            cells.insert((level.y, cell.x, cell.z), cell.clone());
+        }
+    }
+    cells
+}
+
+fn entry_point_delta(
+    before: &MapEntryPointDefinition,
+    after: &MapEntryPointDefinition,
+) -> Vec<String> {
+    let mut details = Vec::new();
+    if before.grid != after.grid {
+        details.push(format!(
+            "grid {} -> {}",
+            grid_label(before.grid),
+            grid_label(after.grid)
+        ));
+    }
+    if before.facing != after.facing {
+        details.push(format!(
+            "facing {} -> {}",
+            before.facing.as_deref().unwrap_or("none"),
+            after.facing.as_deref().unwrap_or("none")
+        ));
+    }
+    if before.extra != after.extra {
+        details.push("extra fields changed".to_string());
+    }
+    if details.is_empty() {
+        details.push("definition changed".to_string());
+    }
+    details
+}
+
+fn object_summary(object: &MapObjectDefinition) -> Vec<String> {
+    vec![
+        object_kind_label(object).to_string(),
+        format!("anchor {}", grid_label(object.anchor)),
+        format!(
+            "footprint {}x{}",
+            object.footprint.width, object.footprint.height
+        ),
+    ]
+}
+
+fn object_delta(before: &MapObjectDefinition, after: &MapObjectDefinition) -> Vec<String> {
+    let mut details = Vec::new();
+    if before.kind != after.kind {
+        details.push(format!(
+            "kind {} -> {}",
+            object_kind_label(before),
+            object_kind_label(after)
+        ));
+    }
+    if before.anchor != after.anchor {
+        details.push(format!(
+            "anchor {} -> {}",
+            grid_label(before.anchor),
+            grid_label(after.anchor)
+        ));
+    }
+    if before.footprint != after.footprint {
+        details.push(format!(
+            "footprint {}x{} -> {}x{}",
+            before.footprint.width,
+            before.footprint.height,
+            after.footprint.width,
+            after.footprint.height
+        ));
+    }
+    if before.rotation != after.rotation {
+        details.push(format!(
+            "rotation {:?} -> {:?}",
+            before.rotation, after.rotation
+        ));
+    }
+    if before.blocks_movement != after.blocks_movement {
+        details.push(format!(
+            "blocks_movement {} -> {}",
+            before.blocks_movement, after.blocks_movement
+        ));
+    }
+    if before.blocks_sight != after.blocks_sight {
+        details.push(format!(
+            "blocks_sight {} -> {}",
+            before.blocks_sight, after.blocks_sight
+        ));
+    }
+    if before.props != after.props {
+        details.push("props changed".to_string());
+    }
+    if details.is_empty() {
+        details.push("definition changed".to_string());
+    }
+    details
+}
+
+fn object_kind_label(object: &MapObjectDefinition) -> &'static str {
+    match object.kind {
+        game_data::MapObjectKind::Building => "building",
+        game_data::MapObjectKind::Prop => "prop",
+        game_data::MapObjectKind::Pickup => "pickup",
+        game_data::MapObjectKind::Interactive => "interactive",
+        game_data::MapObjectKind::Trigger => "trigger",
+        game_data::MapObjectKind::AiSpawn => "ai_spawn",
+    }
+}
+
+fn grid_label(grid: GridCoord) -> String {
+    format!("({}, {}, {})", grid.x, grid.y, grid.z)
+}
+
+fn cell_brief(cell: &MapCellDefinition) -> String {
+    let mut parts = Vec::new();
+    if !cell.terrain.trim().is_empty() {
+        parts.push(format!("terrain={}", cell.terrain));
+    }
+    if let Some(visual) = cell.visual.as_ref() {
+        if let Some(surface_set_id) = visual.surface_set_id.as_ref() {
+            parts.push(format!("surface={}", surface_set_id.as_str()));
+        }
+    }
+    if parts.is_empty() {
+        "cell".to_string()
+    } else {
+        parts.join(", ")
+    }
+}
+
+fn cell_delta(before: &MapCellDefinition, after: &MapCellDefinition) -> String {
+    let mut parts = Vec::new();
+    if before.terrain != after.terrain {
+        parts.push(format!("terrain {} -> {}", before.terrain, after.terrain));
+    }
+    if before.blocks_movement != after.blocks_movement {
+        parts.push(format!(
+            "blocks_movement {} -> {}",
+            before.blocks_movement, after.blocks_movement
+        ));
+    }
+    if before.blocks_sight != after.blocks_sight {
+        parts.push(format!(
+            "blocks_sight {} -> {}",
+            before.blocks_sight, after.blocks_sight
+        ));
+    }
+    if before.visual != after.visual {
+        parts.push(format!(
+            "visual {} -> {}",
+            cell_visual_label(before),
+            cell_visual_label(after)
+        ));
+    }
+    if before.extra != after.extra {
+        parts.push("extra fields changed".to_string());
+    }
+    if parts.is_empty() {
+        "updated".to_string()
+    } else {
+        parts.join("; ")
+    }
+}
+
+fn cell_visual_label(cell: &MapCellDefinition) -> String {
+    cell.visual
+        .as_ref()
+        .and_then(|visual| visual.surface_set_id.as_ref())
+        .map(|surface_set_id| surface_set_id.as_str().to_string())
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn diagnostics_matching(
+    diagnostics: &[MapEditDiagnostic],
+    patterns: &[String],
+) -> Vec<MapEditDiagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            patterns
+                .iter()
+                .any(|pattern| diagnostic.message.contains(pattern))
+        })
+        .cloned()
+        .collect()
+}
+
+fn push_cell_sample(samples: &mut Vec<String>, sample: String) {
+    if samples.len() < 6 {
+        samples.push(sample);
+    }
+}
+
+fn render_proposal_review(ui: &mut egui::Ui, review: &ProposalReview) {
+    ui.label("Structured Changes");
+
+    let level_change_count = review.levels.added.len() + review.levels.removed.len();
+    let entry_point_change_count = review.entry_points.len();
+    let object_change_count = review.objects.len();
+    let cell_change_count = review.cells.len();
+    if level_change_count == 0
+        && entry_point_change_count == 0
+        && object_change_count == 0
+        && cell_change_count == 0
+    {
+        ui.label("- No structural changes detected.");
+        return;
+    }
+
+    if level_change_count > 0 {
+        ui.collapsing(format!("Levels ({level_change_count})"), |ui| {
+            for level in &review.levels.added {
+                render_change_row(ui, ProposalChangeKind::Added, format!("level {level}"), &[]);
+            }
+            for level in &review.levels.removed {
+                render_change_row(
+                    ui,
+                    ProposalChangeKind::Removed,
+                    format!("level {level}"),
+                    &[],
+                );
+            }
+            for diagnostic in &review.levels.diagnostics {
+                draw_diagnostic(ui, diagnostic);
+            }
+        });
+    }
+
+    if entry_point_change_count > 0 {
+        ui.collapsing(format!("Entry Points ({entry_point_change_count})"), |ui| {
+            for change in &review.entry_points {
+                render_entity_change(ui, change);
+            }
+        });
+    }
+
+    if object_change_count > 0 {
+        ui.collapsing(format!("Objects ({object_change_count})"), |ui| {
+            for change in &review.objects {
+                render_entity_change(ui, change);
+            }
+        });
+    }
+
+    if cell_change_count > 0 {
+        ui.collapsing(
+            format!("Cells ({cell_change_count} levels touched)"),
+            |ui| {
+                for group in &review.cells {
+                    ui.label(format!(
+                        "Level {}: +{} / -{} / ~{}",
+                        group.level, group.added, group.removed, group.updated
+                    ));
+                    for sample in &group.samples {
+                        ui.small(format!("· {sample}"));
+                    }
+                    for diagnostic in &group.diagnostics {
+                        draw_diagnostic(ui, diagnostic);
+                    }
+                    ui.add_space(4.0);
+                }
+            },
+        );
+    }
+}
+
+fn render_entity_change(ui: &mut egui::Ui, change: &ProposalEntityChange) {
+    render_change_row(ui, change.kind, change.label.clone(), &change.details);
+    for diagnostic in &change.diagnostics {
+        draw_diagnostic(ui, diagnostic);
+    }
+    ui.add_space(4.0);
+}
+
+fn render_change_row(
+    ui: &mut egui::Ui,
+    kind: ProposalChangeKind,
+    label: String,
+    details: &[String],
+) {
+    let (prefix, color) = match kind {
+        ProposalChangeKind::Added => ("+", egui::Color32::from_rgb(80, 180, 110)),
+        ProposalChangeKind::Removed => ("-", egui::Color32::from_rgb(220, 100, 100)),
+        ProposalChangeKind::Updated => ("~", egui::Color32::from_rgb(233, 180, 64)),
+    };
+    ui.colored_label(color, format!("{prefix} {label}"));
+    for detail in details {
+        ui.small(format!("· {detail}"));
     }
 }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::appearance::ItemAppearanceDefinition;
+use crate::appearance::{is_supported_project_3d_asset_reference, ItemAppearanceDefinition};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DialogueOption {
@@ -506,6 +506,8 @@ pub enum ItemDefinitionValidationError {
     EmptyEffectId { item_id: u32, fragment: String },
     #[error("item {item_id} references an invalid amount entry in {fragment}")]
     InvalidAmountEntry { item_id: u32, fragment: String },
+    #[error("item {item_id} appearance asset must be a builtin:* id or .gltf asset, got {asset}")]
+    InvalidAppearanceAssetFormat { item_id: u32, asset: String },
 }
 
 #[derive(Debug, Error)]
@@ -846,6 +848,16 @@ pub fn validate_item_definition(
                     return Err(ItemDefinitionValidationError::EmptyEquipSlot {
                         item_id: definition.id,
                     });
+                }
+                if !appearance.visual_asset.trim().is_empty()
+                    && !is_supported_project_3d_asset_reference(&appearance.visual_asset)
+                {
+                    return Err(
+                        ItemDefinitionValidationError::InvalidAppearanceAssetFormat {
+                            item_id: definition.id,
+                            asset: appearance.visual_asset.trim().to_string(),
+                        },
+                    );
                 }
             }
             ItemFragment::Durability {
@@ -1562,6 +1574,86 @@ mod tests {
             error,
             ItemDefinitionValidationError::UnknownEffectId { .. }
         ));
+    }
+
+    #[test]
+    fn validate_item_accepts_gltf_appearance_assets() {
+        let definition = ItemDefinition {
+            id: 10,
+            name: "Preview Mesh".to_string(),
+            description: String::new(),
+            icon_path: String::new(),
+            value: 5,
+            weight: 0.2,
+            fragments: vec![
+                ItemFragment::Equip {
+                    slots: vec!["body".to_string()],
+                    level_requirement: 0,
+                    equip_effect_ids: Vec::new(),
+                    unequip_effect_ids: Vec::new(),
+                },
+                ItemFragment::Appearance {
+                    definition: crate::ItemAppearanceDefinition {
+                        equip_slot: "body".to_string(),
+                        visual_asset: "assets/bevy_preview/placeholders/equipment_body.gltf"
+                            .to_string(),
+                        attach_target: None,
+                        presentation_mode: crate::ItemAppearancePresentationMode::Attach,
+                        hide_base_regions: Vec::new(),
+                        preview_transform: Default::default(),
+                        tint: None,
+                    },
+                },
+            ],
+            extra: BTreeMap::new(),
+        };
+
+        validate_item_definition(&definition, None)
+            .expect(".gltf appearance assets should validate");
+    }
+
+    #[test]
+    fn validate_item_rejects_non_gltf_appearance_assets() {
+        for asset in [
+            "assets/bevy_preview/placeholders/equipment_body.glb",
+            "assets/bevy_preview/placeholders/equipment_body.fbx",
+        ] {
+            let definition = ItemDefinition {
+                id: 11,
+                name: "Bad Preview Mesh".to_string(),
+                description: String::new(),
+                icon_path: String::new(),
+                value: 5,
+                weight: 0.2,
+                fragments: vec![
+                    ItemFragment::Equip {
+                        slots: vec!["body".to_string()],
+                        level_requirement: 0,
+                        equip_effect_ids: Vec::new(),
+                        unequip_effect_ids: Vec::new(),
+                    },
+                    ItemFragment::Appearance {
+                        definition: crate::ItemAppearanceDefinition {
+                            equip_slot: "body".to_string(),
+                            visual_asset: asset.to_string(),
+                            attach_target: None,
+                            presentation_mode: crate::ItemAppearancePresentationMode::Attach,
+                            hide_base_regions: Vec::new(),
+                            preview_transform: Default::default(),
+                            tint: None,
+                        },
+                    },
+                ],
+                extra: BTreeMap::new(),
+            };
+
+            let error = validate_item_definition(&definition, None)
+                .expect_err("non-.gltf appearance assets should fail");
+            assert!(matches!(
+                error,
+                ItemDefinitionValidationError::InvalidAppearanceAssetFormat { .. }
+            ));
+        }
     }
 
     #[test]

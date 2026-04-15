@@ -12,9 +12,9 @@ use serde_json::json;
 
 fn main() -> Result<(), String> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let wall_asset_dir = repo_root.join("rust/assets/world_tiles/building_wall_legacy");
-    let surface_asset_dir = repo_root.join("rust/assets/world_tiles/surface_placeholder_basic");
-    let prop_asset_dir = repo_root.join("rust/assets/world_tiles/prop_placeholder_basic");
+    let wall_asset_dir = repo_root.join("assets/world_tiles/building_wall_legacy");
+    let surface_asset_dir = repo_root.join("assets/world_tiles/surface_placeholder_basic");
+    let prop_asset_dir = repo_root.join("assets/world_tiles/prop_placeholder_basic");
     let data_dir = repo_root.join("data/world_tiles");
 
     create_dir(&wall_asset_dir)?;

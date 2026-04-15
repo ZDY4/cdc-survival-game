@@ -1,10 +1,12 @@
 //! 外观页。
 //! 负责显示当前外观预览结果和全部试装槽位，不参与 AI 预览逻辑。
 
+use bevy::prelude::Projection;
 use bevy_egui::egui;
 use game_data::CharacterDefinition;
 use game_editor::PreviewCameraController;
 
+use crate::camera_mode::PreviewCameraModeState;
 use crate::preview::refresh_preview_state;
 use crate::state::{non_empty, EditorData, EditorUiState, PreviewState};
 
@@ -17,7 +19,9 @@ pub(crate) fn render_appearance_tab(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    camera_mode: &mut PreviewCameraModeState,
     preview_camera: &mut PreviewCameraController,
+    preview_projection: &mut Projection,
 ) {
     let mut pending_try_on_change: Option<(String, Option<u32>)> = None;
 
@@ -86,6 +90,14 @@ pub(crate) fn render_appearance_tab(
                 ui_state.try_on.remove(&slot);
             }
         }
-        refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
+        refresh_preview_state(
+            data,
+            ui_state,
+            preview_state,
+            camera_mode,
+            preview_camera,
+            preview_projection,
+            false,
+        );
     }
 }

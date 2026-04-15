@@ -241,6 +241,11 @@ pub enum WorldTileLoadError {
     MissingSurfaceSetId,
     #[error("world tile prototype {id} gltf path must not be empty")]
     MissingPrototypePath { id: WorldTilePrototypeId },
+    #[error("world tile prototype {id} must reference a .gltf asset, got {path}")]
+    InvalidPrototypeAssetFormat {
+        id: WorldTilePrototypeId,
+        path: String,
+    },
     #[error("world wall tile set {wall_set_id} references missing prototype {prototype_id}")]
     UnknownWallSetPrototype {
         wall_set_id: WorldWallTileSetId,
@@ -371,9 +376,16 @@ fn validate_prototype(prototype: &WorldTilePrototypeDefinition) -> Result<(), Wo
     }
     match &prototype.source {
         WorldTilePrototypeSource::GltfScene { path, .. } => {
-            if path.trim().is_empty() {
+            let path = path.trim();
+            if path.is_empty() {
                 return Err(WorldTileLoadError::MissingPrototypePath {
                     id: prototype.id.clone(),
+                });
+            }
+            if !path.ends_with(".gltf") {
+                return Err(WorldTileLoadError::InvalidPrototypeAssetFormat {
+                    id: prototype.id.clone(),
+                    path: path.to_string(),
                 });
             }
         }
@@ -428,5 +440,49 @@ mod tests {
             error,
             WorldTileLoadError::UnknownWallSetPrototype { .. }
         ));
+    }
+
+    #[test]
+    fn prototype_accepts_gltf_scene_assets() {
+        let prototype = WorldTilePrototypeDefinition {
+            id: WorldTilePrototypeId("floor_flat".into()),
+            source: WorldTilePrototypeSource::GltfScene {
+                path: "assets/world_tiles/floor_flat.gltf".into(),
+                scene_index: 0,
+            },
+            bounds: WorldTileBounds::default(),
+            cast_shadows: true,
+            receive_shadows: true,
+            door_behavior: None,
+        };
+
+        validate_prototype(&prototype).expect(".gltf prototype path should validate");
+    }
+
+    #[test]
+    fn prototype_rejects_non_gltf_scene_assets() {
+        for path in [
+            "assets/world_tiles/floor_flat.glb",
+            "assets/world_tiles/floor_flat.fbx",
+        ] {
+            let prototype = WorldTilePrototypeDefinition {
+                id: WorldTilePrototypeId("floor_flat".into()),
+                source: WorldTilePrototypeSource::GltfScene {
+                    path: path.into(),
+                    scene_index: 0,
+                },
+                bounds: WorldTileBounds::default(),
+                cast_shadows: true,
+                receive_shadows: true,
+                door_behavior: None,
+            };
+
+            let error = validate_prototype(&prototype)
+                .expect_err("non-.gltf prototype path should fail validation");
+            assert!(matches!(
+                error,
+                WorldTileLoadError::InvalidPrototypeAssetFormat { .. }
+            ));
+        }
     }
 }

@@ -4,7 +4,7 @@ use bevy_egui::egui;
 pub const GAME_UI_FONT_NAME: &str = "cdc_game_ui_cjk";
 
 const GAME_UI_FONT_BYTES: &[u8] =
-    include_bytes!("../../../game_bevy/assets/fonts/NotoSansCJKsc-Regular.otf");
+    include_bytes!("../../../../../assets/fonts/NotoSansCJKsc-Regular.otf");
 
 pub fn game_ui_font_bytes() -> &'static [u8] {
     GAME_UI_FONT_BYTES

@@ -10,6 +10,9 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use game_editor::{install_game_ui_fonts, PreviewCameraController, PreviewViewportRect};
 
+use crate::camera_mode::{
+    sync_preview_camera_mode, toggle_preview_camera_mode, PreviewCameraModeState,
+};
 use crate::preview::{ensure_selected_character, select_character, PreviewCamera};
 use crate::state::{non_empty, EditorData, EditorEguiFontState, EditorUiState, PreviewState};
 use common::build_diagnostic_hover_text;
@@ -81,18 +84,29 @@ pub(crate) fn editor_ui_system(
     data: Res<EditorData>,
     mut ui_state: ResMut<EditorUiState>,
     mut preview_state: ResMut<PreviewState>,
-    mut preview_camera: Single<&mut PreviewCameraController, With<PreviewCamera>>,
+    mut camera_mode: ResMut<PreviewCameraModeState>,
+    mut preview_camera_query: Query<
+        (&mut PreviewCameraController, &mut Projection),
+        With<PreviewCamera>,
+    >,
 ) {
     let ctx = contexts
         .ctx_mut()
         .expect("primary egui context should exist for the character editor");
 
+    let Ok((mut preview_camera, mut preview_projection)) = preview_camera_query.single_mut() else {
+        return;
+    };
+
     ensure_selected_character(
         &data,
         &mut ui_state,
         &mut preview_state,
+        &mut camera_mode,
         &mut preview_camera,
+        &mut preview_projection,
     );
+    sync_preview_camera_mode(&camera_mode, &mut preview_camera, &mut preview_projection);
 
     egui::TopBottomPanel::top("character_editor_topbar").show(ctx, |ui| {
         ui.horizontal(|ui| {
@@ -124,7 +138,9 @@ pub(crate) fn editor_ui_system(
                 &data,
                 &mut ui_state,
                 &mut preview_state,
+                &mut camera_mode,
                 &mut preview_camera,
+                &mut preview_projection,
             );
         });
 
@@ -137,7 +153,9 @@ pub(crate) fn editor_ui_system(
                 &data,
                 &mut ui_state,
                 &mut preview_state,
+                &mut camera_mode,
                 &mut preview_camera,
+                &mut preview_projection,
             );
         });
 
@@ -151,39 +169,17 @@ pub(crate) fn editor_ui_system(
                 width: rect.width(),
                 height: rect.height(),
             });
+            preview_camera.block_pointer_input = false;
             ui.allocate_rect(rect, egui::Sense::hover());
-            let info_rect = egui::Rect::from_min_size(
-                rect.left_top() + egui::vec2(10.0, 10.0),
-                egui::vec2(380.0, 56.0),
+            render_preview_overlay(
+                ui.ctx(),
+                rect,
+                &mut ui_state,
+                &mut preview_state,
+                &mut camera_mode,
+                &mut preview_camera,
+                &mut preview_projection,
             );
-            ui.painter().rect_filled(
-                info_rect,
-                6.0,
-                egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176),
-            );
-            ui.painter().text(
-                rect.left_top() + egui::vec2(14.0, 12.0),
-                egui::Align2::LEFT_TOP,
-                "角色外观预览",
-                egui::FontId::new(14.0, egui::FontFamily::Proportional),
-                egui::Color32::from_rgb(228, 231, 238),
-            );
-            ui.painter().text(
-                rect.left_top() + egui::vec2(14.0, 32.0),
-                egui::Align2::LEFT_TOP,
-                "左键拖拽旋转，滚轮缩放，右侧页签中可直接调整各装备槽位。",
-                egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                egui::Color32::from_rgb(164, 170, 184),
-            );
-            if let Some(notice) = preview_state.preview_notice.as_deref() {
-                ui.painter().text(
-                    rect.left_top() + egui::vec2(14.0, 52.0),
-                    egui::Align2::LEFT_TOP,
-                    notice,
-                    egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                    egui::Color32::from_rgb(210, 184, 120),
-                );
-            }
         });
 }
 
@@ -193,7 +189,9 @@ fn render_character_list_panel(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    camera_mode: &mut PreviewCameraModeState,
     preview_camera: &mut PreviewCameraController,
+    preview_projection: &mut Projection,
 ) {
     ui.horizontal(|ui| {
         ui.label("搜索");
@@ -256,9 +254,76 @@ fn render_character_list_panel(
                         data,
                         ui_state,
                         preview_state,
+                        camera_mode,
                         preview_camera,
+                        preview_projection,
                     );
                 }
             }
         });
+}
+
+fn render_preview_overlay(
+    ctx: &egui::Context,
+    rect: egui::Rect,
+    ui_state: &mut EditorUiState,
+    preview_state: &mut PreviewState,
+    camera_mode: &mut PreviewCameraModeState,
+    preview_camera: &mut PreviewCameraController,
+    preview_projection: &mut Projection,
+) {
+    let area = egui::Area::new("character_preview_overlay".into())
+        .order(egui::Order::Foreground)
+        .fixed_pos(rect.left_top() + egui::vec2(10.0, 10.0))
+        .show(ctx, |ui| {
+            egui::Frame::NONE
+                .fill(egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176))
+                .corner_radius(6.0)
+                .inner_margin(egui::Margin::same(10))
+                .show(ui, |ui| {
+                    ui.set_width(420.0);
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("角色外观预览")
+                                .size(14.0)
+                                .color(egui::Color32::from_rgb(228, 231, 238)),
+                        );
+                        ui.add_space(8.0);
+                        ui.label(
+                            egui::RichText::new(camera_mode.mode.badge_text())
+                                .size(11.0)
+                                .color(egui::Color32::from_rgb(164, 170, 184)),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .small_button(camera_mode.mode.toggle_button_label())
+                                .clicked()
+                            {
+                                toggle_preview_camera_mode(
+                                    camera_mode,
+                                    ui_state.selected_character_id.as_deref(),
+                                    preview_state.resolved_preview.as_ref(),
+                                    preview_camera,
+                                    preview_projection,
+                                );
+                            }
+                        });
+                    });
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new(camera_mode.mode.interaction_hint())
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(164, 170, 184)),
+                    );
+                    if let Some(notice) = preview_state.preview_notice.as_deref() {
+                        ui.add_space(2.0);
+                        ui.label(
+                            egui::RichText::new(notice)
+                                .size(11.0)
+                                .color(egui::Color32::from_rgb(210, 184, 120)),
+                        );
+                    }
+                });
+        });
+    preview_camera.block_pointer_input = area.response.hovered();
 }

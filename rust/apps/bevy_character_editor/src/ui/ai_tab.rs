@@ -3,6 +3,7 @@
 
 use std::collections::BTreeSet;
 
+use bevy::prelude::Projection;
 use bevy_egui::egui;
 use game_data::{
     AiActionAvailabilityPreview, AiActionBlockerKind, AiActionEvaluationPreview,
@@ -11,6 +12,7 @@ use game_data::{
 };
 use game_editor::PreviewCameraController;
 
+use crate::camera_mode::PreviewCameraModeState;
 use crate::preview::{
     default_context_for_character, refresh_preview_state, settlement_for_character,
 };
@@ -31,7 +33,9 @@ pub(crate) fn render_ai_tab(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    camera_mode: &mut PreviewCameraModeState,
     preview_camera: &mut PreviewCameraController,
+    preview_projection: &mut Projection,
 ) {
     let settlement = settlement_for_character(character, &data.settlements);
 
@@ -57,7 +61,15 @@ pub(crate) fn render_ai_tab(
     }
 
     if changed {
-        refresh_preview_state(data, ui_state, preview_state, preview_camera, false);
+        refresh_preview_state(
+            data,
+            ui_state,
+            preview_state,
+            camera_mode,
+            preview_camera,
+            preview_projection,
+            false,
+        );
     }
 
     let Some(preview) = preview_state.ai_preview.as_ref() else {

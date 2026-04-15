@@ -8,6 +8,7 @@ pub mod content_registry;
 pub mod dialogue_rules;
 pub mod dialogue_runtime;
 pub mod interaction;
+pub mod item_edit;
 pub mod map;
 pub mod map_edit;
 pub mod models;
@@ -15,6 +16,7 @@ pub mod outdoor_transition;
 pub mod overworld;
 pub mod quest;
 pub mod recipe;
+pub mod recipe_edit;
 pub mod settlement;
 pub mod shop;
 pub mod skill;
@@ -105,6 +107,10 @@ pub use interaction::{
     InteractionOptionKind, InteractionPrompt, InteractionSuccessTurnPolicy, InteractionTargetId,
     ResolvedInteractionOption, WorldMode,
 };
+pub use item_edit::{
+    ItemEditDiagnostic, ItemEditDiagnosticSeverity, ItemEditDocument, ItemEditError,
+    ItemEditOperationSummary, ItemEditResult, ItemEditorService,
+};
 pub use map::{
     building_layout_story_levels, expand_object_footprint, load_map_library,
     load_map_library_with_catalog, object_effectively_blocks_movement,
@@ -147,6 +153,10 @@ pub use recipe::{
     load_recipe_library, validate_recipe_definition, RecipeDefinition,
     RecipeDefinitionValidationError, RecipeLibrary, RecipeLoadError, RecipeMaterial, RecipeOutput,
     RecipeUnlockCondition, RecipeValidationCatalog,
+};
+pub use recipe_edit::{
+    RecipeEditDiagnostic, RecipeEditDiagnosticSeverity, RecipeEditDocument, RecipeEditError,
+    RecipeEditOperationSummary, RecipeEditResult, RecipeEditorService,
 };
 pub use settlement::{
     load_settlement_library, validate_settlement_definition, ServiceRules,

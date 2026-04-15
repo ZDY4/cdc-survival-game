@@ -11,11 +11,11 @@ set "PWSH_EXE=pwsh"
 set "PORT_1420_PID="
 set "SURFACE=%~1"
 
-if "%SURFACE%"=="" set "SURFACE=items"
+if "%SURFACE%"=="" set "SURFACE=dialogues"
 
-if /I not "%SURFACE%"=="items" if /I not "%SURFACE%"=="dialogues" if /I not "%SURFACE%"=="quests" (
+if /I not "%SURFACE%"=="dialogues" if /I not "%SURFACE%"=="quests" (
     echo [ERROR] Unknown editor surface: "%SURFACE%"
-    echo [ERROR] Supported surfaces: items, dialogues, quests
+    echo [ERROR] Supported surfaces: dialogues, quests
     exit /b 1
 )
 

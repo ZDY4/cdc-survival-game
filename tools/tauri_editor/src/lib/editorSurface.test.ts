@@ -6,13 +6,11 @@ import {
 
 describe("editorSurface", () => {
   it("prefers module surfaces from the query string", () => {
-    expect(resolveEditorSurface({ search: "?surface=items" })).toBe("items");
     expect(resolveEditorSurface({ search: "?surface=dialogues" })).toBe("dialogues");
     expect(resolveEditorSurface({ search: "?surface=quests" })).toBe("quests");
   });
 
   it("falls back to module surfaces when the current label matches a dedicated editor window", () => {
-    expect(resolveEditorSurface({ label: "items" })).toBe("items");
     expect(resolveEditorSurface({ label: "dialogues" })).toBe("dialogues");
     expect(resolveEditorSurface({ label: "quests" })).toBe("quests");
   });

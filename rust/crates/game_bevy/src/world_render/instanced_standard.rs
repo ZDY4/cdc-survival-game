@@ -94,14 +94,12 @@ fn prepare_world_render_standard_tile_instance_buffers(
     mut commands: Commands,
     // Standard tile batches are extracted into the render world without `Mesh3d`,
     // so filtering on `Mesh3d` here would skip ramps, floors, and other tile instances.
-    batches: Query<
-        (
-            Entity,
-            &WorldRenderTileBatchVisualState,
-            &WorldRenderStandardTileBatchSource,
-            &WorldRenderStandardTileBatchMaterialState,
-        ),
-    >,
+    batches: Query<(
+        Entity,
+        &WorldRenderTileBatchVisualState,
+        &WorldRenderStandardTileBatchSource,
+        &WorldRenderStandardTileBatchMaterialState,
+    )>,
     render_device: Res<RenderDevice>,
 ) {
     for (entity, batch_visual_state, batch_source, batch_material_state) in &batches {

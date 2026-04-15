@@ -9,7 +9,7 @@ const bootstrap: EditorBootstrap = {
   sharedRustPath: "G:/Projects/cdc_survival_game/rust",
   activeStage: "Stage 2",
   stages: [],
-  editorDomains: ["items", "dialogues"],
+  editorDomains: ["dialogues", "quests"],
 };
 
 describe("DataEditorShell", () => {

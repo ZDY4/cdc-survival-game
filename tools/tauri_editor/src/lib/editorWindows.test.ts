@@ -28,7 +28,7 @@ vi.mock("@tauri-apps/api/webviewWindow", () => {
 
     static getCurrent() {
       return {
-        label: "items",
+        label: "dialogues",
         emitTo: emitToMock,
       };
     }
@@ -60,26 +60,24 @@ describe("editorWindows", () => {
 
   it("builds module editor URLs", async () => {
     const { buildEditorWindowUrl } = await import("./editorWindows");
-    expect(buildEditorWindowUrl("items")).toBe("/?surface=items");
     expect(buildEditorWindowUrl("dialogues")).toBe("/?surface=dialogues");
     expect(buildEditorWindowUrl("quests")).toBe("/?surface=quests");
   });
 
   it("maps supported module menu commands to dedicated editor surfaces", async () => {
     const { getSurfaceForModuleCommand } = await import("./editorWindows");
-    expect(getSurfaceForModuleCommand(EDITOR_MENU_COMMANDS.MODULE_ITEMS)).toBe("items");
     expect(getSurfaceForModuleCommand(EDITOR_MENU_COMMANDS.MODULE_DIALOGUES)).toBe("dialogues");
     expect(getSurfaceForModuleCommand(EDITOR_MENU_COMMANDS.MODULE_QUESTS)).toBe("quests");
   });
 
   it("focuses an existing module editor window", async () => {
     getByLabelMock.mockResolvedValue({
-      label: "items",
+      label: "dialogues",
       setFocus: setFocusMock,
     });
 
     const { openOrFocusEditorWindow } = await import("./editorWindows");
-    await openOrFocusEditorWindow("items");
+    await openOrFocusEditorWindow("dialogues");
 
     expect(createdWindows).toHaveLength(0);
     expect(setFocusMock).toHaveBeenCalledTimes(1);
@@ -101,10 +99,10 @@ describe("editorWindows", () => {
     });
   });
 
-  it("falls back to items for an invalid startup surface", async () => {
+  it("falls back to dialogues for an invalid startup surface", async () => {
     const { getConfiguredStartupSurface } = await import("./editorWindows");
-    expect(getConfiguredStartupSurface("maps")).toBe("items");
-    expect(getConfiguredStartupSurface("invalid")).toBe("items");
-    expect(getConfiguredStartupSurface(undefined)).toBe("items");
+    expect(getConfiguredStartupSurface("maps")).toBe("dialogues");
+    expect(getConfiguredStartupSurface("invalid")).toBe("dialogues");
+    expect(getConfiguredStartupSurface(undefined)).toBe("dialogues");
   });
 });

@@ -18,6 +18,7 @@ use game_editor::{
     WindowSizePersistenceConfig, WindowSizePersistencePlugin,
 };
 
+use crate::camera_mode::{PreviewCameraModeState, FREE_PREVIEW_FOV};
 use crate::data::load_editor_data;
 use crate::preview::{
     sync_preview_scene_system, PreviewCamera, CAMERA_RADIUS_MAX, CAMERA_RADIUS_MIN, PREVIEW_BG,
@@ -67,6 +68,7 @@ pub(crate) fn run() {
         .insert_resource(ClearColor(PREVIEW_BG))
         .insert_resource(EditorUiState::default())
         .insert_resource(PreviewState::default())
+        .insert_resource(PreviewCameraModeState::default())
         .insert_resource(EditorEguiFontState::default())
         .add_systems(Startup, (setup_editor, load_editor_data_async))
         .add_systems(
@@ -138,7 +140,7 @@ fn setup_editor(
             ..default()
         },
         Projection::Perspective(PerspectiveProjection {
-            fov: std::f32::consts::FRAC_PI_4,
+            fov: FREE_PREVIEW_FOV,
             near: 0.01,
             far: 100.0,
             ..default()
@@ -150,6 +152,10 @@ fn setup_editor(
             viewport_rect: None,
             rotate_drag_active: false,
             pan_drag_active: false,
+            block_pointer_input: false,
+            allow_rotate: true,
+            allow_pan: true,
+            allow_zoom: true,
             pitch_min: -1.1,
             pitch_max: 0.65,
             radius_min: CAMERA_RADIUS_MIN,

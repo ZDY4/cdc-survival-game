@@ -178,11 +178,7 @@ pub(crate) fn editor_ui_system(
             let mut requested_view = editor.selected_view;
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut requested_view, LibraryView::Maps, "Maps");
-                ui.selectable_value(
-                    &mut requested_view,
-                    LibraryView::Overworlds,
-                    "Overworlds",
-                );
+                ui.selectable_value(&mut requested_view, LibraryView::Overworlds, "Overworlds");
             });
             if requested_view != editor.selected_view {
                 editor.set_selected_view(requested_view);
@@ -229,18 +225,15 @@ pub(crate) fn editor_ui_system(
                                     .on_hover_text(label)
                                     .clicked()
                                 {
-                                    let level =
-                                        if editor.selected_map_id.as_deref() == Some(map_id.as_str())
-                                        {
-                                            editor.current_map_level
-                                        } else {
-                                            default_level
-                                        };
+                                    let level = if editor.selected_map_id.as_deref()
+                                        == Some(map_id.as_str())
+                                    {
+                                        editor.current_map_level
+                                    } else {
+                                        default_level
+                                    };
                                     editor.update_map_selection(map_id.clone(), level);
-                                    sync_camera_target_to_selected_view(
-                                        &editor,
-                                        &mut orbit_camera,
-                                    );
+                                    sync_camera_target_to_selected_view(&editor, &mut orbit_camera);
                                 }
                             }
                         }
@@ -451,10 +444,8 @@ fn reload_editor_content(editor: &mut EditorState) -> String {
             let previous_selected_overworld = editor.selected_overworld_id.clone();
             editor.maps = build_working_maps(&editor.map_service, &map_library);
             editor.overworld_library = overworld_library;
-            editor.restore_selection_after_reload(
-                previous_selected_map,
-                previous_selected_overworld,
-            );
+            editor
+                .restore_selection_after_reload(previous_selected_map, previous_selected_overworld);
             info!(
                 "map editor reloaded content: maps={}, overworlds={}",
                 editor.maps.len(),

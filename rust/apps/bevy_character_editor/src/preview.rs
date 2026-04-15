@@ -6,14 +6,17 @@ use bevy::prelude::*;
 use game_data::{
     build_character_ai_preview, build_character_ai_preview_at_time,
     build_character_appearance_preview, CharacterAiPreviewContext, CharacterDefinition,
-    CharacterId, ResolvedCharacterAppearancePreview, SettlementDefinition, SettlementId,
-    SettlementLibrary,
+    CharacterId, SettlementDefinition, SettlementId, SettlementLibrary,
 };
 use game_editor::{
     character_preview_is_available, spawn_character_preview_scene, CharacterPreviewRoot,
-    PreviewCameraController, PreviewOrbitCamera,
+    PreviewCameraController,
 };
 
+use crate::camera_mode::{
+    default_orbit_for_mode, reset_active_preview_camera, sync_preview_camera_mode,
+    PreviewCameraModeState,
+};
 use crate::state::{default_preview_context, EditorData, EditorUiState, PreviewState};
 
 pub(crate) const CAMERA_RADIUS_MIN: f32 = 1.2;
@@ -59,7 +62,9 @@ pub(crate) fn ensure_selected_character(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    camera_mode: &mut PreviewCameraModeState,
     preview_camera: &mut PreviewCameraController,
+    preview_projection: &mut Projection,
 ) {
     if ui_state.selected_character_id.is_none() {
         if let Some(summary) = data.character_summaries.first() {
@@ -68,7 +73,9 @@ pub(crate) fn ensure_selected_character(
                 data,
                 ui_state,
                 preview_state,
+                camera_mode,
                 preview_camera,
+                preview_projection,
             );
         }
     }
@@ -80,7 +87,9 @@ pub(crate) fn select_character(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    camera_mode: &mut PreviewCameraModeState,
     preview_camera: &mut PreviewCameraController,
+    preview_projection: &mut Projection,
 ) {
     info!("character editor selected character: {character_id}");
     ui_state.selected_character_id = Some(character_id);
@@ -88,7 +97,15 @@ pub(crate) fn select_character(
     ui_state.preview_context = selected_character(data, ui_state)
         .and_then(|character| default_context_for_character(character, data))
         .unwrap_or_else(default_preview_context);
-    refresh_preview_state(data, ui_state, preview_state, preview_camera, true);
+    refresh_preview_state(
+        data,
+        ui_state,
+        preview_state,
+        camera_mode,
+        preview_camera,
+        preview_projection,
+        true,
+    );
 }
 
 // 刷新外观预览、AI 预览和提示文本，是编辑器的核心协调入口。
@@ -96,7 +113,9 @@ pub(crate) fn refresh_preview_state(
     data: &EditorData,
     ui_state: &mut EditorUiState,
     preview_state: &mut PreviewState,
+    camera_mode: &mut PreviewCameraModeState,
     preview_camera: &mut PreviewCameraController,
+    preview_projection: &mut Projection,
     reset_camera: bool,
 ) {
     preview_state.ai_preview = None;
@@ -109,8 +128,9 @@ pub(crate) fn refresh_preview_state(
         ui_state.status = "未选择角色。".to_string();
         warn!("character editor refresh skipped: no selected character");
         if reset_camera {
-            preview_camera.set_orbit(PreviewOrbitCamera::default());
+            reset_active_preview_camera(camera_mode, None, preview_camera, preview_projection);
         }
+        sync_preview_camera_mode(camera_mode, preview_camera, preview_projection);
         preview_state.revision += 1;
         return;
     };
@@ -123,8 +143,12 @@ pub(crate) fn refresh_preview_state(
         &ui_state.try_on,
     ) {
         Ok(preview) => {
+            let next_orbit =
+                reset_camera.then(|| default_orbit_for_mode(camera_mode.mode, Some(&preview)));
             if reset_camera {
-                preview_camera.set_orbit(orbit_for_preview(&preview));
+                if let Some(next_orbit) = next_orbit {
+                    preview_camera.set_orbit(next_orbit);
+                }
             }
             if !character_preview_is_available(&preview) {
                 warn!(
@@ -182,6 +206,7 @@ pub(crate) fn refresh_preview_state(
         "character editor preview refreshed: {}",
         character.identity.display_name
     );
+    sync_preview_camera_mode(camera_mode, preview_camera, preview_projection);
     preview_state.revision += 1;
 }
 
@@ -213,28 +238,4 @@ pub(crate) fn default_context_for_character(
     build_character_ai_preview(character, settlement, ai_library)
         .map(|preview| preview.context)
         .ok()
-}
-
-// 兜底预览上下文，供无有效角色或预览失败时使用。
-pub(crate) fn reset_orbit_from_current_preview(
-    preview_state: &PreviewState,
-    preview_camera: &mut PreviewCameraController,
-) {
-    if let Some(preview) = preview_state.resolved_preview.as_ref() {
-        preview_camera.set_orbit(orbit_for_preview(preview));
-    } else {
-        preview_camera.set_orbit(PreviewOrbitCamera::default());
-    }
-}
-
-// 按角色外观包围盒推导一个稳定的观察视角。
-pub(crate) fn orbit_for_preview(
-    preview: &ResolvedCharacterAppearancePreview,
-) -> PreviewOrbitCamera {
-    PreviewOrbitCamera {
-        focus: Vec3::new(0.0, preview.preview_bounds.focus_y, 0.0),
-        yaw_radians: -0.55,
-        pitch_radians: -0.2,
-        radius: (preview.preview_bounds.radius * 2.9).clamp(CAMERA_RADIUS_MIN, CAMERA_RADIUS_MAX),
-    }
 }

@@ -243,6 +243,10 @@ pub enum CharacterAppearanceProfileValidationError {
     MissingId,
     #[error("appearance profile {profile_id} base_model_asset must not be empty")]
     MissingBaseModelAsset { profile_id: String },
+    #[error(
+        "appearance profile {profile_id} base_model_asset must be a builtin:* id or .gltf asset, got {asset}"
+    )]
+    InvalidBaseModelAssetFormat { profile_id: String, asset: String },
 }
 
 #[derive(Debug, Error)]
@@ -297,6 +301,14 @@ pub fn validate_character_appearance_profile(
         return Err(
             CharacterAppearanceProfileValidationError::MissingBaseModelAsset {
                 profile_id: definition.id.clone(),
+            },
+        );
+    }
+    if !is_supported_project_3d_asset_reference(&definition.base_model_asset) {
+        return Err(
+            CharacterAppearanceProfileValidationError::InvalidBaseModelAssetFormat {
+                profile_id: definition.id.clone(),
+                asset: definition.base_model_asset.trim().to_string(),
             },
         );
     }
@@ -483,6 +495,18 @@ pub fn validate_character_appearance_content(
                         .to_string(),
                 });
             }
+            if !appearance.visual_asset.trim().is_empty()
+                && !is_supported_project_3d_asset_reference(&appearance.visual_asset)
+            {
+                issues.push(CharacterAppearanceIssue {
+                    severity: CharacterAppearanceIssueSeverity::Error,
+                    scope: format!("item:{item_id}"),
+                    message: format!(
+                        "appearance visual_asset must be a builtin:* id or .gltf asset, got {}",
+                        appearance.visual_asset.trim()
+                    ),
+                });
+            }
         }
     }
 
@@ -497,6 +521,11 @@ pub fn validate_character_appearance_content(
     }
 
     issues
+}
+
+pub(crate) fn is_supported_project_3d_asset_reference(asset_id: &str) -> bool {
+    let asset_id = asset_id.trim();
+    asset_id.starts_with("builtin:") || asset_id.ends_with(".gltf")
 }
 
 fn resolve_character_appearance_profile(
@@ -761,8 +790,10 @@ mod tests {
 
     use super::{
         build_character_appearance_preview_for_definition, load_character_appearance_library,
-        resolve_preview_loadout, CharacterAppearanceLibrary, CharacterAppearanceProfileDefinition,
-        CharacterAttachTarget, ItemAppearanceDefinition, ItemAppearancePresentationMode,
+        resolve_preview_loadout, validate_character_appearance_content,
+        validate_character_appearance_profile, CharacterAppearanceLibrary,
+        CharacterAppearanceProfileDefinition, CharacterAttachTarget, ItemAppearanceDefinition,
+        ItemAppearancePresentationMode,
     };
     use crate::{
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
@@ -886,6 +917,93 @@ mod tests {
 
         let library = load_character_appearance_library(&temp_dir).expect("library should load");
         assert!(library.get("default_humanoid").is_some());
+    }
+
+    #[test]
+    fn appearance_profile_accepts_builtin_and_gltf_assets() {
+        for asset in [
+            "builtin:humanoid_mannequin",
+            "assets/characters/survivor_base.gltf",
+        ] {
+            let definition = CharacterAppearanceProfileDefinition {
+                id: "default_humanoid".to_string(),
+                base_model_asset: asset.to_string(),
+                preview_camera_preset_id: "character_standard".to_string(),
+                equip_anchor_profile_id: "humanoid_basic".to_string(),
+                idle_animation: "idle".to_string(),
+                material_variant: String::new(),
+                preview_bounds: Default::default(),
+            };
+
+            validate_character_appearance_profile(&definition)
+                .expect("builtin:* and .gltf base models should validate");
+        }
+    }
+
+    #[test]
+    fn appearance_profile_rejects_non_gltf_assets() {
+        let definition = CharacterAppearanceProfileDefinition {
+            id: "default_humanoid".to_string(),
+            base_model_asset: "assets/characters/survivor_base.glb".to_string(),
+            preview_camera_preset_id: "character_standard".to_string(),
+            equip_anchor_profile_id: "humanoid_basic".to_string(),
+            idle_animation: "idle".to_string(),
+            material_variant: String::new(),
+            preview_bounds: Default::default(),
+        };
+
+        let error = validate_character_appearance_profile(&definition)
+            .expect_err("non-.gltf base model should fail validation");
+        assert!(matches!(
+            error,
+            super::CharacterAppearanceProfileValidationError::InvalidBaseModelAssetFormat { .. }
+        ));
+    }
+
+    #[test]
+    fn appearance_content_reports_invalid_item_visual_asset_format() {
+        let character = sample_character();
+        let item = ItemDefinition {
+            id: 3001,
+            name: "Invalid Mesh".to_string(),
+            description: String::new(),
+            icon_path: String::new(),
+            value: 0,
+            weight: 0.0,
+            fragments: vec![
+                ItemFragment::Equip {
+                    slots: vec!["body".to_string()],
+                    level_requirement: 0,
+                    equip_effect_ids: Vec::new(),
+                    unequip_effect_ids: Vec::new(),
+                },
+                ItemFragment::Appearance {
+                    definition: ItemAppearanceDefinition {
+                        equip_slot: "body".to_string(),
+                        visual_asset: "assets/characters/invalid_mesh.glb".to_string(),
+                        attach_target: Some(CharacterAttachTarget::Body),
+                        presentation_mode: ItemAppearancePresentationMode::ReplaceRegion,
+                        hide_base_regions: vec!["body".to_string()],
+                        preview_transform: Default::default(),
+                        tint: None,
+                    },
+                },
+            ],
+            extra: BTreeMap::new(),
+        };
+
+        let characters =
+            crate::CharacterLibrary::from(BTreeMap::from([(character.id.clone(), character)]));
+        let items = ItemLibrary::from(BTreeMap::from([(item.id, item)]));
+        let issues = validate_character_appearance_content(
+            &characters,
+            &items,
+            &CharacterAppearanceLibrary::default(),
+        );
+
+        assert!(issues
+            .iter()
+            .any(|issue| { issue.scope == "item:3001" && issue.message.contains(".gltf asset") }));
     }
 
     fn sample_character() -> CharacterDefinition {

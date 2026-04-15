@@ -9,10 +9,9 @@ use game_data::{
 };
 
 use crate::{
-    rust_asset_dir, CharacterAppearanceDefinitions, CharacterDefinitions, ItemDefinitions,
+    resolve_item_preview_asset_path, CharacterAppearanceDefinitions, CharacterDefinitions,
+    ItemDefinitions,
 };
-
-const BUILTIN_HUMANOID_MANNEQUIN: &str = "builtin:humanoid_mannequin";
 
 #[derive(Component)]
 pub struct CharacterPreviewRoot;
@@ -221,7 +220,7 @@ fn spawn_equipment_entry(
         | ItemAppearancePresentationMode::OverlayRegion => {
             let child = commands
                 .spawn((
-                    Mesh3d(preview_mesh_asset(asset_server, mesh_asset)),
+                    Mesh3d(preview_mesh_asset(asset_server, &mesh_asset)),
                     preview_material(materials, tint),
                     transform,
                     GlobalTransform::default(),
@@ -273,7 +272,7 @@ fn spawn_base_region(
     };
     let entity = commands
         .spawn((
-            Mesh3d(preview_mesh_asset(asset_server, mesh_asset)),
+            Mesh3d(preview_mesh_asset(asset_server, &mesh_asset)),
             preview_material(materials, base_region_color(preview, region_id)),
             Transform::from_translation(translation),
             GlobalTransform::default(),
@@ -333,15 +332,7 @@ fn transform_from_preview(base_translation: Vec3, preview: &PreviewTransform) ->
 }
 
 fn resolve_scene_asset_path(asset_id: &str) -> Option<String> {
-    if is_builtin_humanoid_mannequin(asset_id) {
-        return None;
-    }
-    match asset_id {
-        value if value.ends_with(".gltf") || value.ends_with(".glb") => {
-            asset_path_exists(value).then(|| value.to_string())
-        }
-        _ => None,
-    }
+    resolve_item_preview_asset_path(asset_id)
 }
 
 fn preview_mesh_asset(asset_server: &AssetServer, asset_path: &str) -> Handle<Mesh> {
@@ -354,7 +345,7 @@ fn preview_mesh_asset(asset_server: &AssetServer, asset_path: &str) -> Handle<Me
     )
 }
 
-fn builtin_base_region_asset(region_id: &str) -> Option<&'static str> {
+fn builtin_base_region_asset(region_id: &str) -> Option<String> {
     let path = match region_id {
         "head" => "bevy_preview/placeholders/base_head.gltf",
         "body" => "bevy_preview/placeholders/base_body.gltf",
@@ -362,44 +353,15 @@ fn builtin_base_region_asset(region_id: &str) -> Option<&'static str> {
         "feet" => "bevy_preview/placeholders/base_feet.gltf",
         _ => return None,
     };
-    asset_path_exists(path).then_some(path)
+    resolve_item_preview_asset_path(path)
 }
 
-fn resolve_placeholder_mesh_asset(asset_id: &str) -> Option<&str> {
-    let path = match asset_id {
-        "builtin:weapon:unarmed" => "bevy_preview/placeholders/weapon_unarmed.gltf",
-        "builtin:weapon:dagger" => "bevy_preview/placeholders/weapon_dagger.gltf",
-        "builtin:weapon:blunt" => "bevy_preview/placeholders/weapon_blunt.gltf",
-        "builtin:weapon:sword" => "bevy_preview/placeholders/weapon_sword.gltf",
-        "builtin:weapon:pistol" => "bevy_preview/placeholders/weapon_pistol.gltf",
-        "builtin:weapon:shotgun" => "bevy_preview/placeholders/weapon_shotgun.gltf",
-        "builtin:weapon:rifle" => "bevy_preview/placeholders/weapon_rifle.gltf",
-        "builtin:weapon:heavy" => "bevy_preview/placeholders/weapon_heavy.gltf",
-        "builtin:weapon:light" => "bevy_preview/placeholders/weapon_light.gltf",
-        "builtin:weapon:pole" => "bevy_preview/placeholders/weapon_pole.gltf",
-        "builtin:item:head" => "bevy_preview/placeholders/equipment_head.gltf",
-        "builtin:item:body" => "bevy_preview/placeholders/equipment_body.gltf",
-        "builtin:item:hands" => "bevy_preview/placeholders/equipment_hands.gltf",
-        "builtin:item:legs" => "bevy_preview/placeholders/equipment_legs.gltf",
-        "builtin:item:feet" => "bevy_preview/placeholders/equipment_feet.gltf",
-        "builtin:item:back" => "bevy_preview/placeholders/equipment_back.gltf",
-        "builtin:item:accessory" => "bevy_preview/placeholders/equipment_accessory.gltf",
-        value if value.ends_with(".gltf") || value.ends_with(".glb") => value,
-        _ => return None,
-    };
-    asset_path_exists(path).then_some(path)
+fn resolve_placeholder_mesh_asset(asset_id: &str) -> Option<String> {
+    resolve_item_preview_asset_path(asset_id)
 }
 
 fn is_builtin_humanoid_mannequin(asset_id: &str) -> bool {
-    asset_id.trim() == BUILTIN_HUMANOID_MANNEQUIN
-}
-
-fn asset_path_exists(asset_path: &str) -> bool {
-    preview_asset_root().join(asset_path).exists()
-}
-
-fn preview_asset_root() -> std::path::PathBuf {
-    rust_asset_dir()
+    asset_id.trim() == crate::item_preview::BUILTIN_HUMANOID_MANNEQUIN
 }
 
 fn preview_material(

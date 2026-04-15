@@ -18,6 +18,7 @@ pub mod bootstrap;
 pub mod character_preview;
 pub mod container_visuals;
 mod content;
+pub mod item_preview;
 mod logging;
 pub mod npc_life;
 pub mod reservations;
@@ -41,6 +42,10 @@ pub use character_preview::{
 };
 pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;
+pub use item_preview::{
+    is_builtin_humanoid_mannequin, resolve_item_preview_asset_path,
+    resolve_standalone_item_preview, ResolvedStandaloneItemPreview,
+};
 pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
 pub use npc_life::{
     BackgroundLifeState, LifeProfileComponent as CharacterLifeProfileComponent, NeedState,

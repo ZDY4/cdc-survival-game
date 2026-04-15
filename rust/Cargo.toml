@@ -10,6 +10,8 @@ members = [
     "apps/bevy_map_editor",
     "apps/bevy_character_editor",
     "apps/bevy_gltf_viewer",
+    "apps/bevy_item_editor",
+    "apps/bevy_recipe_editor",
     "apps/narrative_sync_server",
 ]
 resolver = "2"
@@ -33,3 +35,17 @@ tracing = "0.1"
 tracing-appender = "0.2.4"
 tracing-log = "0.2.0"
 time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
+
+[profile.dev]
+opt-level = 1
+debug = 1
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.play]
+inherits = "release"
+debug = 0
+lto = "off"
+codegen-units = 16

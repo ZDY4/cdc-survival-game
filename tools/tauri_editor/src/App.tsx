@@ -15,20 +15,16 @@ import { useEditorMenuBridge } from "./menu/menuBridge";
 import { EDITOR_MENU_COMMANDS } from "./menu/menuCommands";
 import { DialogueWorkspace } from "./modules/dialogues/DialogueWorkspace";
 import { fallbackDialogueWorkspace } from "./modules/dialogues/fallback";
-import { fallbackWorkspace } from "./modules/items/fallback";
-import { ItemWorkspace } from "./modules/items/ItemWorkspace";
 import { fallbackQuestWorkspace } from "./modules/quests/fallback";
 import { QuestWorkspace } from "./modules/quests/QuestWorkspace";
 import { SettingsWindow } from "./modules/settings/SettingsWindow";
 import type {
   DialogueWorkspacePayload,
-  ItemWorkspacePayload,
   QuestWorkspacePayload,
 } from "./types";
 
 function App() {
   const surface = detectCurrentSurface();
-  const [itemWorkspace, setItemWorkspace] = useState<ItemWorkspacePayload>(fallbackWorkspace);
   const [dialogueWorkspace, setDialogueWorkspace] = useState<DialogueWorkspacePayload>(
     fallbackDialogueWorkspace,
   );
@@ -38,19 +34,6 @@ function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
   const bootstrapStartedRef = useRef(false);
-
-  async function loadItemWorkspace() {
-    try {
-      const payload = await invokeCommand<ItemWorkspacePayload>("load_item_workspace");
-      setItemWorkspace(payload);
-      setCanPersist(true);
-      setStatus(`Loaded ${payload.itemCount} items from project data.`);
-    } catch (error) {
-      setItemWorkspace(fallbackWorkspace);
-      setCanPersist(false);
-      setStatus(`Running in fallback mode. ${String(error)}. Start the Tauri host to read project files.`);
-    }
-  }
 
   async function loadDialogueWorkspace() {
     try {
@@ -106,9 +89,6 @@ function App() {
     }
 
     switch (surface) {
-      case "items":
-        void loadItemWorkspace();
-        break;
       case "dialogues":
         void loadDialogueWorkspace();
         break;
@@ -136,12 +116,6 @@ function App() {
       [EDITOR_MENU_COMMANDS.VIEW_TOGGLE_STATUS_BAR]: {
         execute: () => {
           setStatusBarVisible((current) => !current);
-        },
-      },
-      [EDITOR_MENU_COMMANDS.MODULE_ITEMS]: {
-        execute: async () => {
-          await openOrFocusModuleEditor(EDITOR_MENU_COMMANDS.MODULE_ITEMS);
-          setStatus("Opened Items editor.");
         },
       },
       [EDITOR_MENU_COMMANDS.MODULE_DIALOGUES]: {
@@ -182,27 +156,6 @@ function App() {
   }
 
   const runtimeLabel = isTauriRuntime() && canPersist ? "Tauri host connected" : "UI fallback mode";
-
-  if (surface === "items") {
-    return (
-      <DataEditorShell
-        title="Items"
-        subtitle="Item definitions and validation."
-        bootstrap={itemWorkspace.bootstrap}
-        status={status}
-        runtimeLabel={runtimeLabel}
-        showStatusBar={statusBarVisible}
-      >
-        <ItemWorkspace
-          workspace={itemWorkspace}
-          canPersist={canPersist}
-          onStatusChange={setStatus}
-          onReload={loadItemWorkspace}
-          indexVisible={sidebarVisible}
-        />
-      </DataEditorShell>
-    );
-  }
 
   if (surface === "dialogues") {
     return (

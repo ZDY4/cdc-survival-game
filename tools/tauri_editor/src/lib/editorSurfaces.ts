@@ -1,6 +1,6 @@
 export const EDITOR_BOOTSTRAP_WINDOW_LABEL = "main";
 
-export const MODULE_EDITOR_SURFACES = ["items", "dialogues", "quests"] as const;
+export const MODULE_EDITOR_SURFACES = ["dialogues", "quests"] as const;
 export const AUXILIARY_EDITOR_SURFACES = ["settings"] as const;
 export const OPENABLE_EDITOR_SURFACES = [
   ...MODULE_EDITOR_SURFACES,
@@ -13,7 +13,7 @@ export type AuxiliaryEditorSurface = (typeof AUXILIARY_EDITOR_SURFACES)[number];
 export type OpenableEditorSurface = (typeof OPENABLE_EDITOR_SURFACES)[number];
 export type EditorSurface = OpenableEditorSurface | "main";
 
-export const DEFAULT_EDITOR_START_SURFACE: ModuleEditorSurface = "items";
+export const DEFAULT_EDITOR_START_SURFACE: ModuleEditorSurface = "dialogues";
 
 export function isModuleEditorSurface(value: string | null | undefined): value is ModuleEditorSurface {
   return MODULE_EDITOR_SURFACES.includes(value as ModuleEditorSurface);

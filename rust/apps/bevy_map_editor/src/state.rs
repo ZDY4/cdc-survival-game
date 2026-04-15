@@ -259,7 +259,11 @@ impl EditorState {
             .filter(|id| self.maps.contains_key(id))
             .or_else(|| self.maps.keys().next().cloned());
         self.selected_overworld_id = previous_selected_overworld
-            .filter(|id| self.overworld_library.get(&OverworldId(id.clone())).is_some())
+            .filter(|id| {
+                self.overworld_library
+                    .get(&OverworldId(id.clone()))
+                    .is_some()
+            })
             .or_else(|| {
                 self.overworld_library
                     .iter()

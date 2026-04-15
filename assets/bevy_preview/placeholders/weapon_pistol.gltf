@@ -1,0 +1,91 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "codex-placeholder-generator"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "weapon_pistol"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "weapon_pistol",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "indices": 2,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1296,
+      "uri": "data:application/octet-stream;base64,KVyPvQAAAAAAAIA+KVyPPQAAAAAAAIA+KVyPPc3MzD0AAIA+KVyPvc3MzD0AAIA+KVyPPQAAAADsUbi9KVyPvQAAAADsUbi9KVyPvc3MzD3sUbi9KVyPPc3MzD3sUbi9KVyPvQAAAADsUbi9KVyPvQAAAAAAAIA+KVyPvc3MzD0AAIA+KVyPvc3MzD3sUbi9KVyPPQAAAAAAAIA+KVyPPQAAAADsUbi9KVyPPc3MzD3sUbi9KVyPPc3MzD0AAIA+KVyPvc3MzD0AAIA+KVyPPc3MzD0AAIA+KVyPPc3MzD3sUbi9KVyPvc3MzD3sUbi9KVyPvQAAAADsUbi9KVyPPQAAAADsUbi9KVyPPQAAAAAAAIA+KVyPvQAAAAAAAIA+zcxMvT0KV74K16M8zcxMPT0KV74K16M8zcxMPQrXIzwK16M8zcxMvQrXIzwK16M8zcxMPT0KV77NzMy9zcxMvT0KV77NzMy9zcxMvQrXIzzNzMy9zcxMPQrXIzzNzMy9zcxMvT0KV77NzMy9zcxMvT0KV74K16M8zcxMvQrXIzwK16M8zcxMvQrXIzzNzMy9zcxMPT0KV74K16M8zcxMPT0KV77NzMy9zcxMPQrXIzzNzMy9zcxMPQrXIzwK16M8zcxMvQrXIzwK16M8zcxMPQrXIzwK16M8zcxMPQrXIzzNzMy9zcxMvQrXIzzNzMy9zcxMvT0KV77NzMy9zcxMPT0KV77NzMy9zcxMPT0KV74K16M8zcxMvT0KV74K16M8AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcAGAAZABoAGAAaABsAHAAdAB4AHAAeAB8AIAAhACIAIAAiACMAJAAlACYAJAAmACcAKAApACoAKAAqACsALAAtAC4ALAAuAC8A"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 576,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 576,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1152,
+      "byteLength": 144,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 48,
+      "type": "VEC3",
+      "min": [
+        -0.07,
+        -0.21000000000000002,
+        -0.1
+      ],
+      "max": [
+        0.07,
+        0.1,
+        0.25
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 48,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 72,
+      "type": "SCALAR"
+    }
+  ]
+}

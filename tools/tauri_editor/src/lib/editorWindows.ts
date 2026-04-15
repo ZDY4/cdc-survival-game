@@ -24,16 +24,6 @@ type WindowDescriptor = {
 };
 
 const WINDOW_DESCRIPTORS: Record<Exclude<OpenableEditorSurface, "settings">, WindowDescriptor> = {
-  items: {
-    label: "items",
-    title: "CDC Item Editor",
-    width: 1440,
-    height: 920,
-    minWidth: 1100,
-    minHeight: 700,
-    resizable: true,
-    buildUrl: () => "/?surface=items",
-  },
   dialogues: {
     label: "dialogues",
     title: "CDC Dialogue Editor",
@@ -112,8 +102,6 @@ export function getSurfaceForModuleCommand(
   commandId: string,
 ): ModuleEditorSurface | null {
   switch (commandId) {
-    case EDITOR_MENU_COMMANDS.MODULE_ITEMS:
-      return "items";
     case EDITOR_MENU_COMMANDS.MODULE_DIALOGUES:
       return "dialogues";
     case EDITOR_MENU_COMMANDS.MODULE_QUESTS:

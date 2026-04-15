@@ -2,6 +2,7 @@
 //! 这里只负责声明模块并启动应用，避免业务逻辑继续堆积在 `main.rs`。
 
 mod app;
+mod camera_mode;
 mod data;
 mod preview;
 mod state;

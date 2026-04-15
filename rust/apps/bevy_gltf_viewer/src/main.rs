@@ -271,6 +271,9 @@ fn setup_viewer(
             viewport_rect: None,
             rotate_drag_active: false,
             pan_drag_active: false,
+            allow_rotate: true,
+            allow_pan: true,
+            allow_zoom: true,
             pitch_min: -1.2,
             pitch_max: 0.72,
             radius_min: CAMERA_RADIUS_MIN,
@@ -672,7 +675,7 @@ fn collect_models(asset_root: &Path, current_dir: &Path, entries: &mut Vec<Model
         let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
             continue;
         };
-        if !matches!(extension, "gltf" | "glb") {
+        if extension != "gltf" {
             continue;
         }
         let Ok(relative) = path.strip_prefix(asset_root) else {
