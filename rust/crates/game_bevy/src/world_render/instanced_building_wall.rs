@@ -84,6 +84,12 @@ struct WorldRenderBuildingWallTilePipeline {
     mesh_pipeline: MeshPipeline,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct WorldRenderBuildingWallTilePipelineKey {
+    mesh_key: MeshPipelineKey,
+    blended: bool,
+}
+
 fn init_world_render_building_wall_tile_pipeline(
     mut commands: Commands,
     mesh_pipeline: Res<MeshPipeline>,
@@ -246,8 +252,13 @@ fn queue_world_render_building_wall_tile_batches(
                 continue;
             };
             let batch_center = batch_center(batch_visual_state);
-            let key =
+            let mesh_key =
                 view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
+            let blended = batch_visual_state
+                .instances
+                .iter()
+                .any(|instance| instance.fade_alpha < 0.999 || instance.tint.to_linear().to_vec4().w < 0.999);
+            let key = WorldRenderBuildingWallTilePipelineKey { mesh_key, blended };
             let pipeline =
                 match pipelines.specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout) {
                     Ok(pipeline) => pipeline,
@@ -278,14 +289,14 @@ fn batch_center(batch_visual_state: &WorldRenderTileBatchVisualState) -> Vec3 {
 }
 
 impl SpecializedMeshPipeline for WorldRenderBuildingWallTilePipeline {
-    type Key = MeshPipelineKey;
+    type Key = WorldRenderBuildingWallTilePipelineKey;
 
     fn specialize(
         &self,
         key: Self::Key,
         layout: &MeshVertexBufferLayoutRef,
     ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
-        let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
+        let mut descriptor = self.mesh_pipeline.specialize(key.mesh_key, layout)?;
         descriptor.label = Some("world_render_building_wall_tile_instanced_pipeline".into());
         descriptor.vertex.shader = self.shader.clone();
         descriptor.vertex.buffers.push(VertexBufferLayout {
@@ -347,11 +358,11 @@ impl SpecializedMeshPipeline for WorldRenderBuildingWallTilePipeline {
         if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
             if let Some(Some(target)) = fragment.targets.first_mut() {
-                target.blend = Some(BlendState::ALPHA_BLENDING);
+                target.blend = key.blended.then_some(BlendState::ALPHA_BLENDING);
             }
         }
         if let Some(depth_stencil) = descriptor.depth_stencil.as_mut() {
-            depth_stencil.depth_write_enabled = false;
+            depth_stencil.depth_write_enabled = !key.blended;
         }
         Ok(descriptor)
     }

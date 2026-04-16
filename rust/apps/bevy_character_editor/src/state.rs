@@ -11,11 +11,6 @@ use game_data::{
     NpcRole, ResolvedCharacterAppearancePreview, ScheduleDay, SettlementLibrary,
 };
 
-#[derive(Resource, Default)]
-pub(crate) struct EditorEguiFontState {
-    pub(crate) initialized: bool,
-}
-
 /// 编辑器运行期持有的只读内容数据和校验结果。
 #[derive(Resource)]
 pub(crate) struct EditorData {
@@ -100,6 +95,11 @@ pub(crate) struct PreviewState {
     pub(crate) ai_preview: Option<CharacterAiPreview>,
     pub(crate) ai_error: Option<String>,
     pub(crate) appearance_error: Option<String>,
+}
+
+#[derive(Resource, Debug, Clone, Default)]
+pub(crate) struct CharacterUiStyleState {
+    pub(crate) initialized: bool,
 }
 
 /// 构造一个稳定的默认 AI 预览上下文。

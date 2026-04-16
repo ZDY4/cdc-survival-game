@@ -1,13 +1,11 @@
 //! 外观页。
 //! 负责显示当前外观预览结果和全部试装槽位，不参与 AI 预览逻辑。
 
-use bevy::prelude::Projection;
+use bevy::prelude::MessageWriter;
 use bevy_egui::egui;
 use game_data::CharacterDefinition;
-use game_editor::PreviewCameraController;
 
-use crate::camera_mode::PreviewCameraModeState;
-use crate::preview::refresh_preview_state;
+use crate::commands::CharacterEditorCommand;
 use crate::state::{non_empty, EditorData, EditorUiState, PreviewState};
 
 use super::common::key_value;
@@ -18,10 +16,8 @@ pub(crate) fn render_appearance_tab(
     character: &CharacterDefinition,
     data: &EditorData,
     ui_state: &mut EditorUiState,
-    preview_state: &mut PreviewState,
-    camera_mode: &mut PreviewCameraModeState,
-    preview_camera: &mut PreviewCameraController,
-    preview_projection: &mut Projection,
+    preview_state: &PreviewState,
+    requests: &mut MessageWriter<CharacterEditorCommand>,
 ) {
     let mut pending_try_on_change: Option<(String, Option<u32>)> = None;
 
@@ -82,22 +78,6 @@ pub(crate) fn render_appearance_tab(
     }
 
     if let Some((slot, item_id)) = pending_try_on_change {
-        match item_id {
-            Some(item_id) => {
-                ui_state.try_on.insert(slot, item_id);
-            }
-            None => {
-                ui_state.try_on.remove(&slot);
-            }
-        }
-        refresh_preview_state(
-            data,
-            ui_state,
-            preview_state,
-            camera_mode,
-            preview_camera,
-            preview_projection,
-            false,
-        );
+        requests.write(CharacterEditorCommand::SetTryOnItem { slot, item_id });
     }
 }

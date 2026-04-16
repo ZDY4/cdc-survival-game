@@ -109,11 +109,6 @@ impl Default for EditorUiState {
     }
 }
 
-#[derive(Resource, Debug, Clone, Default)]
-pub(crate) struct EditorEguiFontState {
-    pub(crate) initialized: bool,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LibraryView {
     Maps,
@@ -169,7 +164,7 @@ pub(crate) fn load_editor_state() -> EditorState {
                     original_id: Some(map_id.clone()),
                     definition: definition.clone(),
                     dirty: false,
-                    diagnostics: validate_document(&map_service, definition),
+                    diagnostics: Vec::new(),
                     last_save_message: None,
                 },
             )
@@ -322,7 +317,7 @@ pub(crate) fn map_library_item_label(
 }
 
 pub(crate) fn build_working_maps(
-    map_service: &MapEditorService,
+    _map_service: &MapEditorService,
     map_library: &game_data::MapLibrary,
 ) -> BTreeMap<String, WorkingMapDocument> {
     map_library
@@ -334,7 +329,7 @@ pub(crate) fn build_working_maps(
                     original_id: Some(map_id.clone()),
                     definition: definition.clone(),
                     dirty: false,
-                    diagnostics: validate_document(map_service, definition),
+                    diagnostics: Vec::new(),
                     last_save_message: None,
                 },
             )

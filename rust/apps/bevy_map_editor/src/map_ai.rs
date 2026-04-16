@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 
 use crate::{
     state::{map_display_name, validate_document, EditorState, WorkingMapDocument},
-    ui::draw_diagnostic,
+    ui::panels::draw_diagnostic,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

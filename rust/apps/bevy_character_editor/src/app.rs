@@ -1,30 +1,29 @@
 //! Bevy App 装配层。
 //! 负责窗口、插件、启动系统、加载态切换和预览场景基础搭建。
 
-use bevy::asset::AssetPlugin;
-use bevy::camera::{visibility::RenderLayers, CameraOutputMode, ClearColorConfig};
-use bevy::log::{info, LogPlugin};
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use bevy::render::render_resource::BlendState;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
-use bevy::window::WindowPlugin;
-use bevy_egui::{EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext};
-use game_bevy::{init_runtime_logging, rust_asset_dir, RuntimeLogSettings};
+use bevy_egui::EguiPrimaryContextPass;
+use game_bevy::rust_asset_dir;
 use game_editor::{
-    build_persisted_primary_window,
+    configure_editor_app_shell, configure_game_ui_fonts_system,
     preview_camera_input_system as shared_preview_camera_input_system,
-    preview_camera_sync_system as shared_preview_camera_sync_system, spawn_preview_floor,
-    spawn_preview_light_rig, PreviewCameraController, PreviewOrbitCamera,
-    WindowSizePersistenceConfig, WindowSizePersistencePlugin,
+    preview_camera_sync_system as shared_preview_camera_sync_system, setup_preview_stage,
+    EditorAppShellConfig, GameUiFontsState, PreviewCameraController,
+    PreviewStageConfig, WindowSizePersistenceConfig,
 };
 
 use crate::camera_mode::{PreviewCameraModeState, FREE_PREVIEW_FOV};
+use crate::commands::{
+    ensure_selected_character_system, handle_character_editor_commands, CharacterEditorCommand,
+};
 use crate::data::load_editor_data;
 use crate::preview::{
     sync_preview_scene_system, PreviewCamera, CAMERA_RADIUS_MAX, CAMERA_RADIUS_MIN, PREVIEW_BG,
 };
-use crate::state::{EditorData, EditorEguiFontState, EditorUiState, PreviewState};
-use crate::ui::{configure_egui_fonts_system, editor_ui_system, loading_ui_system};
+use crate::state::{CharacterUiStyleState, EditorData, EditorUiState, PreviewState};
+use crate::ui::{configure_character_ui_style_system, editor_ui_system, loading_ui_system};
 
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 enum AppState {
@@ -37,44 +36,30 @@ enum AppState {
 struct LoadingTask(Task<EditorData>);
 
 pub(crate) fn run() {
-    let window_config =
-        WindowSizePersistenceConfig::new("bevy_character_editor", 1720.0, 980.0, 1280.0, 720.0);
-    let log_settings = RuntimeLogSettings::new("bevy_character_editor").with_single_run_file();
-    if let Err(error) = init_runtime_logging(&log_settings) {
-        eprintln!("failed to initialize bevy_character_editor logging: {error}");
-    } else {
-        info!("bevy_character_editor logger initialized");
-    }
-    App::new()
-        .add_plugins(
-            DefaultPlugins
-                .build()
-                .disable::<LogPlugin>()
-                .set(WindowPlugin {
-                    primary_window: Some(build_persisted_primary_window(
-                        window_config.clone(),
-                        "CDC Character Editor",
-                    )),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    file_path: rust_asset_dir().display().to_string(),
-                    ..default()
-                }),
-        )
-        .add_plugins(EguiPlugin::default())
-        .add_plugins(WindowSizePersistencePlugin::new(window_config))
-        .init_state::<AppState>()
+    let mut app = App::new();
+    configure_editor_app_shell(
+        &mut app,
+        &EditorAppShellConfig::new(
+            "bevy_character_editor",
+            "CDC Character Editor",
+            rust_asset_dir(),
+            WindowSizePersistenceConfig::new("bevy_character_editor", 1720.0, 980.0, 1280.0, 720.0),
+        ),
+    );
+    app.init_state::<AppState>()
+        .add_message::<CharacterEditorCommand>()
         .insert_resource(ClearColor(PREVIEW_BG))
         .insert_resource(EditorUiState::default())
         .insert_resource(PreviewState::default())
         .insert_resource(PreviewCameraModeState::default())
-        .insert_resource(EditorEguiFontState::default())
+        .insert_resource(GameUiFontsState::default())
+        .insert_resource(CharacterUiStyleState::default())
         .add_systems(Startup, (setup_editor, load_editor_data_async))
         .add_systems(
             EguiPrimaryContextPass,
             (
-                configure_egui_fonts_system,
+                configure_game_ui_fonts_system,
+                configure_character_ui_style_system,
                 loading_ui_system.run_if(in_state(AppState::Loading)),
                 editor_ui_system.run_if(in_state(AppState::Ready)),
             )
@@ -84,6 +69,8 @@ pub(crate) fn run() {
             Update,
             (
                 handle_loading_task.run_if(in_state(AppState::Loading)),
+                ensure_selected_character_system.run_if(in_state(AppState::Ready)),
+                handle_character_editor_commands.run_if(in_state(AppState::Ready)),
                 (
                     sync_preview_scene_system,
                     shared_preview_camera_input_system,
@@ -125,68 +112,52 @@ fn handle_loading_task(
 // 初始化预览相机、光照、地板和 Egui 主上下文相机。
 fn setup_editor(
     mut commands: Commands,
-    mut egui_global_settings: ResMut<EguiGlobalSettings>,
+    mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    egui_global_settings.auto_create_primary_context = false;
-
-    spawn_preview_light_rig(&mut commands);
-    commands.spawn((
-        Camera3d::default(),
-        Camera {
-            order: 0,
-            clear_color: ClearColorConfig::Custom(PREVIEW_BG),
-            ..default()
-        },
-        Projection::Perspective(PerspectiveProjection {
-            fov: FREE_PREVIEW_FOV,
-            near: 0.01,
-            far: 100.0,
-            ..default()
-        }),
-        Transform::from_xyz(2.2, 1.6, 3.0).looking_at(Vec3::new(0.0, 0.95, 0.0), Vec3::Y),
-        PreviewCameraController {
-            orbit: PreviewOrbitCamera::default(),
-            focus_anchor: PreviewOrbitCamera::default().focus,
-            viewport_rect: None,
-            rotate_drag_active: false,
-            pan_drag_active: false,
-            block_pointer_input: false,
-            allow_rotate: true,
-            allow_pan: true,
-            allow_zoom: true,
-            pitch_min: -1.1,
-            pitch_max: 0.65,
-            radius_min: CAMERA_RADIUS_MIN,
-            radius_max: CAMERA_RADIUS_MAX,
-            rotate_speed_x: 0.012,
-            rotate_speed_y: 0.008,
-            zoom_speed: 0.16,
-            pan_speed: 1.0,
-            pan_max_focus_offset: 1.35,
-        },
-        PreviewCamera,
-    ));
-    commands.spawn((
-        PrimaryEguiContext,
-        Camera2d,
-        RenderLayers::none(),
-        Camera {
-            order: 1,
-            output_mode: CameraOutputMode::Write {
-                blend_state: Some(BlendState::ALPHA_BLENDING),
-                clear_color: ClearColorConfig::None,
-            },
-            clear_color: ClearColorConfig::Custom(Color::NONE),
-            ..default()
-        },
-    ));
-    spawn_preview_floor(
+    let stage = setup_preview_stage(
         &mut commands,
+        &mut egui_global_settings,
         &mut meshes,
         &mut materials,
-        Vec2::new(5.0, 5.0),
-        Color::srgb(0.22, 0.235, 0.26),
+        &PreviewStageConfig {
+            clear_color: PREVIEW_BG,
+            projection: Projection::Perspective(PerspectiveProjection {
+                fov: FREE_PREVIEW_FOV,
+                near: 0.01,
+                far: 100.0,
+                ..default()
+            }),
+            camera_transform: Transform::from_xyz(2.2, 1.6, 3.0)
+                .looking_at(Vec3::new(0.0, 0.95, 0.0), Vec3::Y),
+            controller: PreviewCameraController {
+                orbit: game_editor::PreviewOrbitCamera::default(),
+                focus_anchor: game_editor::PreviewOrbitCamera::default().focus,
+                viewport_rect: None,
+                rotate_drag_active: false,
+                pan_drag_active: false,
+                block_pointer_input: false,
+                allow_rotate: true,
+                allow_pan: true,
+                allow_zoom: true,
+                pitch_min: -1.1,
+                pitch_max: 0.65,
+                radius_min: CAMERA_RADIUS_MIN,
+                radius_max: CAMERA_RADIUS_MAX,
+                rotate_speed_x: 0.012,
+                rotate_speed_y: 0.008,
+                zoom_speed: 0.16,
+                pan_speed: 1.0,
+                pan_max_focus_offset: 1.35,
+            },
+            floor_size: Vec2::new(5.0, 5.0),
+            floor_color: Color::srgb(0.22, 0.235, 0.26),
+            spawn_scene_host: false,
+        },
     );
+    commands.entity(stage.preview_camera).insert(PreviewCamera);
+    commands
+        .entity(stage.egui_camera)
+        .insert(RenderLayers::none());
 }

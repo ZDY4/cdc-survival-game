@@ -80,3 +80,5 @@ config/bevy_viewer_ui_settings.json
 
 # Rust lockfiles should be versioned for app crates
 !rust/Cargo.lock
+.local
+tmp

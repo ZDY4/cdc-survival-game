@@ -1,13 +1,13 @@
 //! 右侧详情面板。
 //! 负责角色摘要、生活页、AI 页、外观页的页签路由和公共头部操作。
 
-use bevy::prelude::Projection;
+use bevy::prelude::MessageWriter;
 use bevy_egui::egui;
 use game_data::{CharacterDefinition, SettlementId};
-use game_editor::PreviewCameraController;
 
-use crate::camera_mode::{reset_active_preview_camera, PreviewCameraModeState};
-use crate::preview::{refresh_preview_state, selected_character};
+use crate::camera_mode::PreviewCameraModeState;
+use crate::commands::CharacterEditorCommand;
+use crate::preview::selected_character;
 use crate::state::{
     archetype_label, disposition_label, non_empty, npc_role_label, CharacterTab, EditorData,
     EditorUiState, PreviewState,
@@ -22,10 +22,9 @@ pub(crate) fn render_detail_panel(
     ui: &mut egui::Ui,
     data: &EditorData,
     ui_state: &mut EditorUiState,
-    preview_state: &mut PreviewState,
-    camera_mode: &mut PreviewCameraModeState,
-    preview_camera: &mut PreviewCameraController,
-    preview_projection: &mut Projection,
+    preview_state: &PreviewState,
+    _camera_mode: &PreviewCameraModeState,
+    requests: &mut MessageWriter<CharacterEditorCommand>,
 ) {
     let Some(character) = selected_character(data, ui_state) else {
         ui.label("没有可用角色数据。");
@@ -43,28 +42,14 @@ pub(crate) fn render_detail_panel(
             .on_hover_text("将预览相机重置到当前模式的默认构图。")
             .clicked()
         {
-            reset_active_preview_camera(
-                camera_mode,
-                preview_state.resolved_preview.as_ref(),
-                preview_camera,
-                preview_projection,
-            );
+            requests.write(CharacterEditorCommand::ResetCamera);
         }
         if ui
             .small_button("清空试装")
             .on_hover_text("清空所有临时试装槽位，仅显示角色基础外观。")
             .clicked()
         {
-            ui_state.try_on.clear();
-            refresh_preview_state(
-                data,
-                ui_state,
-                preview_state,
-                camera_mode,
-                preview_camera,
-                preview_projection,
-                false,
-            );
+            requests.write(CharacterEditorCommand::ClearTryOn);
         }
     });
     ui.small(format!(
@@ -88,26 +73,12 @@ pub(crate) fn render_detail_panel(
         .show(ui, |ui| match ui_state.selected_tab {
             CharacterTab::Summary => render_summary_tab(ui, character),
             CharacterTab::Life => render_life_tab(ui, character, data),
-            CharacterTab::AiPreview => render_ai_tab(
-                ui,
-                character,
-                data,
-                ui_state,
-                preview_state,
-                camera_mode,
-                preview_camera,
-                preview_projection,
-            ),
-            CharacterTab::Appearance => render_appearance_tab(
-                ui,
-                character,
-                data,
-                ui_state,
-                preview_state,
-                camera_mode,
-                preview_camera,
-                preview_projection,
-            ),
+            CharacterTab::AiPreview => {
+                render_ai_tab(ui, character, data, ui_state, preview_state, requests)
+            }
+            CharacterTab::Appearance => {
+                render_appearance_tab(ui, character, data, ui_state, preview_state, requests)
+            }
         });
 }
 

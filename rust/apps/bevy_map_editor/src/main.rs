@@ -1,5 +1,6 @@
 mod app;
 mod camera;
+mod commands;
 mod map_ai;
 mod scene;
 mod state;

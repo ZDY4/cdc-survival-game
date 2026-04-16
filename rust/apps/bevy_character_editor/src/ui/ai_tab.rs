@@ -1,21 +1,22 @@
 //! AI 预览页。
 //! 负责展示 AI 输入上下文、据点关联、推导过程和行动阻断原因，不写回任何数据。
 
+mod context;
+mod derivation;
+mod execution;
+
 use std::collections::BTreeSet;
 
-use bevy::prelude::Projection;
+use bevy::prelude::*;
 use bevy_egui::egui;
 use game_data::{
     AiActionAvailabilityPreview, AiActionBlockerKind, AiActionEvaluationPreview,
     AiBlackboardEntryPreview, AiConditionTracePreview, AiFactEvaluationPreview, CharacterAiPreview,
     CharacterDefinition, ScheduleDay, WeeklyScheduleEntryPreview,
 };
-use game_editor::PreviewCameraController;
 
-use crate::camera_mode::PreviewCameraModeState;
-use crate::preview::{
-    default_context_for_character, refresh_preview_state, settlement_for_character,
-};
+use crate::commands::CharacterEditorCommand;
+use crate::preview::{default_context_for_character, settlement_for_character};
 use crate::state::{
     default_preview_context, non_empty, npc_role_label, schedule_day_label, EditorData,
     EditorUiState, PreviewState,
@@ -31,11 +32,9 @@ pub(crate) fn render_ai_tab(
     ui: &mut egui::Ui,
     character: &CharacterDefinition,
     data: &EditorData,
-    ui_state: &mut EditorUiState,
-    preview_state: &mut PreviewState,
-    camera_mode: &mut PreviewCameraModeState,
-    preview_camera: &mut PreviewCameraController,
-    preview_projection: &mut Projection,
+    ui_state: &EditorUiState,
+    preview_state: &PreviewState,
+    requests: &mut MessageWriter<CharacterEditorCommand>,
 ) {
     let settlement = settlement_for_character(character, &data.settlements);
 
@@ -43,7 +42,6 @@ pub(crate) fn render_ai_tab(
         ui.colored_label(egui::Color32::from_rgb(240, 110, 110), error);
         return;
     }
-    let mut changed = false;
     {
         let Some(preview) = preview_state.ai_preview.as_ref() else {
             ui.label("当前没有 AI 预览结果。");
@@ -56,19 +54,7 @@ pub(crate) fn render_ai_tab(
             settlement.is_some(),
             preview,
             ui_state,
-            &mut changed,
-        );
-    }
-
-    if changed {
-        refresh_preview_state(
-            data,
-            ui_state,
-            preview_state,
-            camera_mode,
-            preview_camera,
-            preview_projection,
-            false,
+            requests,
         );
     }
 
@@ -78,19 +64,11 @@ pub(crate) fn render_ai_tab(
     };
 
     ui.separator();
-    render_conclusion_summary(ui, preview, ui_state);
+    context::render_context_sections(ui, data, preview, ui_state);
     ui.separator();
-    render_effective_profiles(ui, data, preview);
+    derivation::render_derivation_sections(ui, preview, ui_state);
     ui.separator();
-    render_scene_snapshot(ui, preview, ui_state);
-    ui.separator();
-    render_goal_ranking(ui, preview);
-    ui.separator();
-    render_action_results(ui, preview);
-    ui.separator();
-    render_fact_results(ui, preview);
-    ui.separator();
-    render_advanced_diagnostics(ui, preview);
+    execution::render_execution_sections(ui, preview);
 }
 
 fn render_scene_controls(
@@ -99,9 +77,11 @@ fn render_scene_controls(
     data: &EditorData,
     has_settlement: bool,
     preview: &CharacterAiPreview,
-    ui_state: &mut EditorUiState,
-    changed: &mut bool,
+    ui_state: &EditorUiState,
+    requests: &mut MessageWriter<CharacterEditorCommand>,
 ) {
+    let mut next_context = ui_state.preview_context.clone();
+    let mut changed = false;
     section_header(
         ui,
         "预览场景",
@@ -110,12 +90,12 @@ fn render_scene_controls(
     ui.horizontal_wrapped(|ui| {
         status_badge(
             ui,
-            if ui_state.preview_context.world_alert_active {
+            if next_context.world_alert_active {
                 "警报中"
             } else {
                 "正常"
             },
-            if ui_state.preview_context.world_alert_active {
+            if next_context.world_alert_active {
                 egui::Color32::from_rgb(110, 38, 38)
             } else {
                 egui::Color32::from_rgb(44, 76, 56)
@@ -123,7 +103,7 @@ fn render_scene_controls(
             egui::Color32::from_rgb(236, 240, 244),
         );
         if ui
-            .small_button(if ui_state.preview_context.world_alert_active {
+            .small_button(if next_context.world_alert_active {
                 "切换为正常"
             } else {
                 "切换为警报"
@@ -131,9 +111,8 @@ fn render_scene_controls(
             .on_hover_text(ai_context_tooltip("世界警报"))
             .clicked()
         {
-            ui_state.preview_context.world_alert_active =
-                !ui_state.preview_context.world_alert_active;
-            *changed = true;
+            next_context.world_alert_active = !next_context.world_alert_active;
+            changed = true;
         }
         if ui
             .small_button("重置场景")
@@ -142,9 +121,9 @@ fn render_scene_controls(
             )
             .clicked()
         {
-            ui_state.preview_context = default_context_for_character(character, data)
+            next_context = default_context_for_character(character, data)
                 .unwrap_or_else(default_preview_context);
-            *changed = true;
+            changed = true;
         }
     });
 
@@ -156,7 +135,7 @@ fn render_scene_controls(
     );
     ui.horizontal_wrapped(|ui| {
         for entry in &preview.schedule.entries {
-            let selected = schedule_entry_matches(entry, &ui_state.preview_context);
+            let selected = schedule_entry_matches(entry, &next_context);
             let label = format!(
                 "{} {}-{}",
                 entry.label,
@@ -172,8 +151,8 @@ fn render_scene_controls(
                 .on_hover_text(schedule_entry_tooltip(entry))
                 .clicked()
             {
-                apply_schedule_entry(ui_state, entry);
-                *changed = true;
+                apply_schedule_entry(&mut next_context, entry);
+                changed = true;
             }
         }
     });
@@ -186,8 +165,7 @@ fn render_scene_controls(
     );
     ui.horizontal_wrapped(|ui| {
         for (slot_key, label, anchor_id) in quick_anchor_options(preview) {
-            let selected =
-                ui_state.preview_context.current_anchor.as_deref() == Some(anchor_id.as_str());
+            let selected = next_context.current_anchor.as_deref() == Some(anchor_id.as_str());
             if ui
                 .add(
                     egui::Button::new(format!("{label} [{anchor_id}]"))
@@ -197,8 +175,8 @@ fn render_scene_controls(
                 .on_hover_text(resolved_anchor_tooltip(slot_key))
                 .clicked()
             {
-                ui_state.preview_context.current_anchor = Some(anchor_id);
-                *changed = true;
+                next_context.current_anchor = Some(anchor_id);
+                changed = true;
             }
         }
     });
@@ -213,7 +191,7 @@ fn render_scene_controls(
             ui.horizontal(|ui| {
                 small_label_with_tooltip(ui, "星期", ai_context_tooltip("星期"));
                 egui::ComboBox::from_id_salt("preview_day")
-                    .selected_text(schedule_day_label(ui_state.preview_context.day))
+                    .selected_text(schedule_day_label(next_context.day))
                     .show_ui(ui, |ui| {
                         for day in [
                             ScheduleDay::Monday,
@@ -224,9 +202,9 @@ fn render_scene_controls(
                             ScheduleDay::Saturday,
                             ScheduleDay::Sunday,
                         ] {
-                            *changed |= ui
+                            changed |= ui
                                 .selectable_value(
-                                    &mut ui_state.preview_context.day,
+                                    &mut next_context.day,
                                     day,
                                     schedule_day_label(day),
                                 )
@@ -235,48 +213,33 @@ fn render_scene_controls(
                     })
                     .response
                     .on_hover_text(ai_context_tooltip("星期"));
-                *changed |= ui
-                    .add(
-                        egui::Slider::new(&mut ui_state.preview_context.minute_of_day, 0..=1439)
-                            .text("分钟"),
-                    )
+                changed |= ui
+                    .add(egui::Slider::new(&mut next_context.minute_of_day, 0..=1439).text("分钟"))
                     .on_hover_text(ai_context_tooltip("分钟"))
                     .changed();
             });
             ui.horizontal(|ui| {
-                *changed |= ui
-                    .add(
-                        egui::Slider::new(&mut ui_state.preview_context.hunger, 0.0..=100.0)
-                            .text("饥饿"),
-                    )
+                changed |= ui
+                    .add(egui::Slider::new(&mut next_context.hunger, 0.0..=100.0).text("饥饿"))
                     .on_hover_text(ai_context_tooltip("饥饿"))
                     .changed();
-                *changed |= ui
-                    .add(
-                        egui::Slider::new(&mut ui_state.preview_context.energy, 0.0..=100.0)
-                            .text("精力"),
-                    )
+                changed |= ui
+                    .add(egui::Slider::new(&mut next_context.energy, 0.0..=100.0).text("精力"))
                     .on_hover_text(ai_context_tooltip("精力"))
                     .changed();
-                *changed |= ui
-                    .add(
-                        egui::Slider::new(&mut ui_state.preview_context.morale, 0.0..=100.0)
-                            .text("士气"),
-                    )
+                changed |= ui
+                    .add(egui::Slider::new(&mut next_context.morale, 0.0..=100.0).text("士气"))
                     .on_hover_text(ai_context_tooltip("士气"))
                     .changed();
             });
             ui.horizontal(|ui| {
-                *changed |= ui
-                    .add(
-                        egui::DragValue::new(&mut ui_state.preview_context.active_guards)
-                            .prefix("值班守卫 "),
-                    )
+                changed |= ui
+                    .add(egui::DragValue::new(&mut next_context.active_guards).prefix("值班守卫 "))
                     .on_hover_text(ai_context_tooltip("值班守卫"))
                     .changed();
-                *changed |= ui
+                changed |= ui
                     .add(
-                        egui::DragValue::new(&mut ui_state.preview_context.min_guard_on_duty)
+                        egui::DragValue::new(&mut next_context.min_guard_on_duty)
                             .prefix("最低守卫 "),
                     )
                     .on_hover_text(ai_context_tooltip("最低守卫"))
@@ -284,62 +247,50 @@ fn render_scene_controls(
             });
             ui.horizontal(|ui| {
                 small_label_with_tooltip(ui, "当前锚点", ai_context_tooltip("当前锚点"));
-                let current_anchor = ui_state
-                    .preview_context
-                    .current_anchor
-                    .get_or_insert_with(String::new);
-                *changed |= ui
+                let current_anchor = next_context.current_anchor.get_or_insert_with(String::new);
+                changed |= ui
                     .add(egui::TextEdit::singleline(current_anchor).hint_text("自定义锚点"))
                     .on_hover_text(ai_context_tooltip("当前锚点"))
                     .changed();
             });
             ui.horizontal_wrapped(|ui| {
-                *changed |= ui
+                changed |= ui
                     .checkbox(
-                        &mut ui_state.preview_context.availability.guard_post_available,
+                        &mut next_context.availability.guard_post_available,
                         "guard_post",
                     )
                     .on_hover_text(ai_context_tooltip("guard_post"))
                     .changed();
-                *changed |= ui
+                changed |= ui
                     .checkbox(
-                        &mut ui_state.preview_context.availability.meal_object_available,
+                        &mut next_context.availability.meal_object_available,
                         "meal_object",
                     )
                     .on_hover_text(ai_context_tooltip("meal_object"))
                     .changed();
-                *changed |= ui
+                changed |= ui
                     .checkbox(
-                        &mut ui_state
-                            .preview_context
-                            .availability
-                            .leisure_object_available,
+                        &mut next_context.availability.leisure_object_available,
                         "leisure_object",
                     )
                     .on_hover_text(ai_context_tooltip("leisure_object"))
                     .changed();
-                *changed |= ui
+                changed |= ui
                     .checkbox(
-                        &mut ui_state
-                            .preview_context
-                            .availability
-                            .medical_station_available,
+                        &mut next_context.availability.medical_station_available,
                         "medical_station",
                     )
                     .on_hover_text(ai_context_tooltip("medical_station"))
                     .changed();
-                *changed |= ui
+                changed |= ui
                     .checkbox(
-                        &mut ui_state.preview_context.availability.patrol_route_available,
+                        &mut next_context.availability.patrol_route_available,
                         "patrol_route",
                     )
                     .on_hover_text(ai_context_tooltip("patrol_route"))
                     .changed();
-                *changed |= ui
-                    .checkbox(
-                        &mut ui_state.preview_context.availability.bed_available,
-                        "bed",
-                    )
+                changed |= ui
+                    .checkbox(&mut next_context.availability.bed_available, "bed")
                     .on_hover_text(ai_context_tooltip("bed"))
                     .changed();
             });
@@ -355,6 +306,10 @@ fn render_scene_controls(
         .on_hover_text(
             "默认折叠的低层输入区。这里保留精细调节能力，但主界面优先使用上面的场景快捷切换。",
         );
+
+    if changed {
+        requests.write(CharacterEditorCommand::UpdatePreviewContext(next_context));
+    }
 }
 
 fn render_conclusion_summary(
@@ -1167,12 +1122,14 @@ fn schedule_entry_matches(
         && context.minute_of_day < entry.end_minute
 }
 
-fn apply_schedule_entry(ui_state: &mut EditorUiState, entry: &WeeklyScheduleEntryPreview) {
+fn apply_schedule_entry(
+    context: &mut game_data::CharacterAiPreviewContext,
+    entry: &WeeklyScheduleEntryPreview,
+) {
     if let Some(day) = entry.days.first().copied() {
-        ui_state.preview_context.day = day;
+        context.day = day;
     }
-    ui_state.preview_context.minute_of_day =
-        ((entry.start_minute as u32 + entry.end_minute as u32) / 2) as u16;
+    context.minute_of_day = ((entry.start_minute as u32 + entry.end_minute as u32) / 2) as u16;
 }
 
 fn schedule_entry_tooltip(entry: &WeeklyScheduleEntryPreview) -> String {

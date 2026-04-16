@@ -25,6 +25,18 @@ pub struct RuntimeCharacterAppearanceKey {
     pub equipped_slots: BTreeMap<String, u32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PreviewWeaponPoseKind {
+    Rifle,
+    Pole,
+    Sidearm,
+    Dagger,
+    Sword,
+    Blunt,
+    Heavy,
+    Generic,
+}
+
 pub fn spawn_character_preview_scene(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -64,6 +76,7 @@ pub fn spawn_character_preview_scene(
                 region_id,
             );
         }
+        spawn_builtin_arms(commands, meshes, materials, root, preview);
     } else if let Some(asset_path) = resolve_scene_asset_path(preview.base_model_asset.as_str()) {
         let child = commands
             .spawn((
@@ -212,6 +225,7 @@ fn spawn_equipment_entry(
     if matches!(entry.attach_target, CharacterAttachTarget::MainHand) {
         transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
     }
+    apply_hand_pose_adjustment(entry, &mut transform);
 
     match entry.presentation_mode {
         ItemAppearancePresentationMode::HideOnly => {}
@@ -231,6 +245,55 @@ fn spawn_equipment_entry(
                 .id();
             commands.entity(parent).add_child(child);
         }
+    }
+}
+
+fn apply_hand_pose_adjustment(entry: &ResolvedEquipmentPreviewEntry, transform: &mut Transform) {
+    let Some((offset, rotation_degrees)) = hand_pose_adjustment(entry) else {
+        return;
+    };
+
+    transform.translation += offset;
+    transform.rotation *= Quat::from_euler(
+        EulerRot::XYZ,
+        rotation_degrees.x.to_radians(),
+        rotation_degrees.y.to_radians(),
+        rotation_degrees.z.to_radians(),
+    );
+}
+
+fn hand_pose_adjustment(entry: &ResolvedEquipmentPreviewEntry) -> Option<(Vec3, Vec3)> {
+    match entry.attach_target {
+        CharacterAttachTarget::MainHand => {
+            Some(main_hand_pose_adjustment(entry.visual_asset.as_str()))
+        }
+        CharacterAttachTarget::OffHand => {
+            Some((Vec3::new(0.0, 0.02, -0.04), Vec3::new(0.0, 0.0, 88.0)))
+        }
+        _ => None,
+    }
+}
+
+fn main_hand_pose_adjustment(asset_id: &str) -> (Vec3, Vec3) {
+    match preview_weapon_pose_kind(asset_id) {
+        PreviewWeaponPoseKind::Rifle => {
+            (Vec3::new(-0.04, 0.02, -0.16), Vec3::new(-12.0, 4.0, -76.0))
+        }
+        PreviewWeaponPoseKind::Pole => (Vec3::new(-0.02, 0.06, -0.22), Vec3::new(-8.0, 0.0, -78.0)),
+        PreviewWeaponPoseKind::Sidearm => {
+            (Vec3::new(0.02, 0.03, -0.04), Vec3::new(6.0, -4.0, -88.0))
+        }
+        PreviewWeaponPoseKind::Dagger => {
+            (Vec3::new(0.03, 0.01, -0.02), Vec3::new(14.0, -8.0, -102.0))
+        }
+        PreviewWeaponPoseKind::Sword => {
+            (Vec3::new(0.01, 0.02, -0.10), Vec3::new(10.0, -2.0, -94.0))
+        }
+        PreviewWeaponPoseKind::Blunt => (Vec3::new(0.0, 0.02, -0.12), Vec3::new(2.0, -3.0, -92.0)),
+        PreviewWeaponPoseKind::Heavy => {
+            (Vec3::new(-0.03, 0.04, -0.14), Vec3::new(-6.0, 0.0, -84.0))
+        }
+        PreviewWeaponPoseKind::Generic => (Vec3::new(0.0, 0.02, -0.08), Vec3::new(4.0, 0.0, -90.0)),
     }
 }
 
@@ -284,6 +347,131 @@ fn spawn_base_region(
     commands.entity(parent).add_child(entity);
 }
 
+fn spawn_builtin_arms(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    parent: Entity,
+    preview: &ResolvedCharacterAppearancePreview,
+) {
+    let arm_color = base_region_color(preview, "body");
+    let (left_arm, right_arm) = builtin_arm_pose(preview);
+    for transform in [left_arm, right_arm] {
+        let entity = commands
+            .spawn((
+                Mesh3d(meshes.add(Capsule3d::new(0.07, 0.46))),
+                preview_material(materials, arm_color),
+                transform,
+                GlobalTransform::default(),
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
+                CharacterPreviewPart,
+            ))
+            .id();
+        commands.entity(parent).add_child(entity);
+    }
+}
+
+fn builtin_arm_pose(preview: &ResolvedCharacterAppearancePreview) -> (Transform, Transform) {
+    let main_hand_kind = preview
+        .equipment
+        .iter()
+        .find(|entry| matches!(entry.attach_target, CharacterAttachTarget::MainHand))
+        .map(|entry| preview_weapon_pose_kind(entry.visual_asset.as_str()));
+    let has_offhand_item = preview
+        .equipment
+        .iter()
+        .any(|entry| matches!(entry.attach_target, CharacterAttachTarget::OffHand));
+
+    if has_offhand_item
+        && !matches!(
+            main_hand_kind,
+            Some(
+                PreviewWeaponPoseKind::Rifle
+                    | PreviewWeaponPoseKind::Pole
+                    | PreviewWeaponPoseKind::Heavy
+            )
+        )
+    {
+        return (
+            arm_transform(Vec3::new(-0.36, 1.13, 0.06), Vec3::new(16.0, 0.0, 44.0)),
+            arm_transform(Vec3::new(0.36, 1.13, 0.06), Vec3::new(16.0, 0.0, -44.0)),
+        );
+    }
+
+    match main_hand_kind.unwrap_or(PreviewWeaponPoseKind::Generic) {
+        PreviewWeaponPoseKind::Rifle => (
+            arm_transform(Vec3::new(-0.24, 1.08, 0.18), Vec3::new(30.0, 8.0, 42.0)),
+            arm_transform(Vec3::new(0.34, 1.18, 0.08), Vec3::new(12.0, 0.0, -40.0)),
+        ),
+        PreviewWeaponPoseKind::Pole => (
+            arm_transform(Vec3::new(-0.18, 1.02, 0.24), Vec3::new(28.0, 4.0, 58.0)),
+            arm_transform(Vec3::new(0.36, 1.16, 0.04), Vec3::new(8.0, 0.0, -36.0)),
+        ),
+        PreviewWeaponPoseKind::Heavy => (
+            arm_transform(Vec3::new(-0.24, 1.04, 0.16), Vec3::new(24.0, 6.0, 36.0)),
+            arm_transform(Vec3::new(0.34, 1.18, 0.06), Vec3::new(4.0, 0.0, -42.0)),
+        ),
+        PreviewWeaponPoseKind::Sidearm => (
+            arm_transform(Vec3::new(-0.40, 1.08, 0.02), Vec3::new(-6.0, 0.0, 20.0)),
+            arm_transform(Vec3::new(0.36, 1.15, 0.08), Vec3::new(18.0, 0.0, -48.0)),
+        ),
+        PreviewWeaponPoseKind::Dagger => (
+            arm_transform(Vec3::new(-0.40, 1.08, 0.02), Vec3::new(-4.0, 0.0, 20.0)),
+            arm_transform(Vec3::new(0.34, 1.12, 0.10), Vec3::new(20.0, 8.0, -62.0)),
+        ),
+        PreviewWeaponPoseKind::Sword | PreviewWeaponPoseKind::Blunt => (
+            arm_transform(Vec3::new(-0.40, 1.07, 0.02), Vec3::new(-6.0, 0.0, 18.0)),
+            arm_transform(Vec3::new(0.38, 1.16, 0.06), Vec3::new(10.0, 4.0, -50.0)),
+        ),
+        PreviewWeaponPoseKind::Generic => (
+            arm_transform(Vec3::new(-0.42, 1.10, 0.0), Vec3::new(0.0, 0.0, 18.0)),
+            arm_transform(Vec3::new(0.42, 1.10, 0.0), Vec3::new(0.0, 0.0, -18.0)),
+        ),
+    }
+}
+
+fn arm_transform(translation: Vec3, rotation_degrees: Vec3) -> Transform {
+    Transform {
+        translation,
+        rotation: Quat::from_euler(
+            EulerRot::XYZ,
+            rotation_degrees.x.to_radians(),
+            rotation_degrees.y.to_radians(),
+            rotation_degrees.z.to_radians(),
+        ),
+        ..default()
+    }
+}
+
+fn preview_weapon_pose_kind(asset_id: &str) -> PreviewWeaponPoseKind {
+    let asset_id = asset_id.trim().to_ascii_lowercase();
+
+    if asset_id.contains("rifle") || asset_id.contains("shotgun") {
+        return PreviewWeaponPoseKind::Rifle;
+    }
+    if asset_id.contains("pole") {
+        return PreviewWeaponPoseKind::Pole;
+    }
+    if asset_id.contains("pistol") || asset_id.contains("light") {
+        return PreviewWeaponPoseKind::Sidearm;
+    }
+    if asset_id.contains("dagger") || asset_id.contains("knife") {
+        return PreviewWeaponPoseKind::Dagger;
+    }
+    if asset_id.contains("sword") {
+        return PreviewWeaponPoseKind::Sword;
+    }
+    if asset_id.contains("blunt") || asset_id.contains("bat") {
+        return PreviewWeaponPoseKind::Blunt;
+    }
+    if asset_id.contains("heavy") {
+        return PreviewWeaponPoseKind::Heavy;
+    }
+
+    PreviewWeaponPoseKind::Generic
+}
+
 fn preview_geometry_for_entry(entry: &ResolvedEquipmentPreviewEntry) -> (Vec3, Vec3) {
     match entry.attach_target {
         CharacterAttachTarget::Head => (Vec3::new(0.34, 0.12, 0.34), Vec3::new(0.0, 1.88, 0.0)),
@@ -299,10 +487,10 @@ fn preview_geometry_for_entry(entry: &ResolvedEquipmentPreviewEntry) -> (Vec3, V
                 value if value.contains("knife") => Vec3::new(0.10, 0.04, 0.46),
                 _ => Vec3::new(0.12, 0.12, 0.86),
             };
-            (size, Vec3::new(0.42, 1.02, 0.0))
+            (size, Vec3::new(0.62, 0.98, 0.02))
         }
         CharacterAttachTarget::OffHand => {
-            (Vec3::new(0.16, 0.16, 0.62), Vec3::new(-0.42, 1.02, 0.0))
+            (Vec3::new(0.16, 0.16, 0.62), Vec3::new(-0.62, 0.98, 0.02))
         }
         CharacterAttachTarget::Back => (Vec3::new(0.24, 0.74, 0.16), Vec3::new(0.0, 1.06, -0.26)),
         CharacterAttachTarget::Accessory => {

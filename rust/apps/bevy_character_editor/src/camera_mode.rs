@@ -45,8 +45,6 @@ impl PreviewCameraMode {
 #[derive(Resource, Debug, Clone, Default)]
 pub(crate) struct PreviewCameraModeState {
     pub(crate) mode: PreviewCameraMode,
-    pub(crate) saved_free_orbit: Option<PreviewOrbitCamera>,
-    pub(crate) saved_free_character_id: Option<String>,
 }
 
 pub(crate) fn sync_preview_camera_mode(
@@ -68,38 +66,6 @@ pub(crate) fn sync_preview_camera_mode(
             PreviewCameraMode::GameFixed => WorldRenderConfig::default().camera_fov_radians(),
         };
     }
-}
-
-pub(crate) fn toggle_preview_camera_mode(
-    camera_mode: &mut PreviewCameraModeState,
-    selected_character_id: Option<&str>,
-    preview: Option<&ResolvedCharacterAppearancePreview>,
-    preview_camera: &mut PreviewCameraController,
-    preview_projection: &mut Projection,
-) {
-    match camera_mode.mode {
-        PreviewCameraMode::Free => {
-            camera_mode.saved_free_orbit = Some(preview_camera.orbit);
-            camera_mode.saved_free_character_id = selected_character_id.map(str::to_string);
-            camera_mode.mode = PreviewCameraMode::GameFixed;
-            preview_camera.set_orbit(default_orbit_for_mode(
-                PreviewCameraMode::GameFixed,
-                preview,
-            ));
-        }
-        PreviewCameraMode::GameFixed => {
-            camera_mode.mode = PreviewCameraMode::Free;
-            let restore_saved_free = camera_mode.saved_free_orbit.filter(|_| {
-                camera_mode.saved_free_character_id.as_deref() == selected_character_id
-            });
-            preview_camera.set_orbit(
-                restore_saved_free
-                    .unwrap_or_else(|| default_orbit_for_mode(PreviewCameraMode::Free, preview)),
-            );
-        }
-    }
-
-    sync_preview_camera_mode(camera_mode, preview_camera, preview_projection);
 }
 
 pub(crate) fn reset_active_preview_camera(

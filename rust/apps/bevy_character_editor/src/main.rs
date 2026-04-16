@@ -3,6 +3,7 @@
 
 mod app;
 mod camera_mode;
+mod commands;
 mod data;
 mod preview;
 mod state;

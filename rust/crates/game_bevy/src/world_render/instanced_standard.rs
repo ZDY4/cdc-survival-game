@@ -80,6 +80,12 @@ struct WorldRenderStandardTilePipeline {
     mesh_pipeline: MeshPipeline,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct WorldRenderStandardTilePipelineKey {
+    mesh_key: MeshPipelineKey,
+    blended: bool,
+}
+
 fn init_world_render_standard_tile_pipeline(
     mut commands: Commands,
     mesh_pipeline: Res<MeshPipeline>,
@@ -164,6 +170,7 @@ fn queue_world_render_standard_tile_batches(
             Entity,
             &MainEntity,
             &WorldRenderTileBatchVisualState,
+            &WorldRenderStandardTileBatchMaterialState,
             &WorldRenderStandardTileInstanceBuffer,
         ),
         With<WorldRenderStandardTileBatchMaterialState>,
@@ -186,7 +193,7 @@ fn queue_world_render_standard_tile_batches(
         };
         let rangefinder = view.rangefinder3d();
 
-        for (entity, main_entity, batch_visual_state, instance_buffer) in &batches {
+        for (entity, main_entity, batch_visual_state, batch_material_state, instance_buffer) in &batches {
             if instance_buffer.length == 0 || batch_visual_state.instances.is_empty() {
                 continue;
             }
@@ -199,8 +206,14 @@ fn queue_world_render_standard_tile_batches(
                 continue;
             };
             let batch_center = batch_center(batch_visual_state);
-            let key =
+            let mesh_key =
                 view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
+            let base_alpha = batch_material_state.base_color.to_linear().to_vec4().w;
+            let blended = base_alpha < 0.999
+                || batch_visual_state.instances.iter().any(|instance| {
+                    instance.fade_alpha < 0.999 || instance.tint.to_linear().to_vec4().w < 0.999
+                });
+            let key = WorldRenderStandardTilePipelineKey { mesh_key, blended };
             let pipeline =
                 match pipelines.specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout) {
                     Ok(pipeline) => pipeline,
@@ -231,14 +244,14 @@ fn batch_center(batch_visual_state: &WorldRenderTileBatchVisualState) -> Vec3 {
 }
 
 impl SpecializedMeshPipeline for WorldRenderStandardTilePipeline {
-    type Key = MeshPipelineKey;
+    type Key = WorldRenderStandardTilePipelineKey;
 
     fn specialize(
         &self,
         key: Self::Key,
         layout: &MeshVertexBufferLayoutRef,
     ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
-        let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
+        let mut descriptor = self.mesh_pipeline.specialize(key.mesh_key, layout)?;
         descriptor.label = Some("world_render_standard_tile_instanced_pipeline".into());
         descriptor.vertex.shader = self.shader.clone();
         descriptor.vertex.buffers.push(VertexBufferLayout {
@@ -275,11 +288,11 @@ impl SpecializedMeshPipeline for WorldRenderStandardTilePipeline {
         if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
             if let Some(Some(target)) = fragment.targets.first_mut() {
-                target.blend = Some(BlendState::ALPHA_BLENDING);
+                target.blend = key.blended.then_some(BlendState::ALPHA_BLENDING);
             }
         }
         if let Some(depth_stencil) = descriptor.depth_stencil.as_mut() {
-            depth_stencil.depth_write_enabled = false;
+            depth_stencil.depth_write_enabled = !key.blended;
         }
         Ok(descriptor)
     }

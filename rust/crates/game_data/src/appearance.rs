@@ -708,7 +708,7 @@ fn default_preview_transform_for_slot(slot: &str) -> PreviewTransform {
         "main_hand" => PreviewTransform {
             offset: PreviewVec3 {
                 x: 0.0,
-                y: -0.15,
+                y: 0.0,
                 z: 0.0,
             },
             rotation_degrees: PreviewVec3 {

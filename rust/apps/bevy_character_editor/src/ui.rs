@@ -8,13 +8,12 @@ mod detail_panel;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use game_editor::{install_game_ui_fonts, PreviewCameraController, PreviewViewportRect};
+use game_editor::{GameUiFontsState, PreviewCameraController, PreviewViewportRect};
 
-use crate::camera_mode::{
-    sync_preview_camera_mode, toggle_preview_camera_mode, PreviewCameraModeState,
-};
-use crate::preview::{ensure_selected_character, select_character, PreviewCamera};
-use crate::state::{non_empty, EditorData, EditorEguiFontState, EditorUiState, PreviewState};
+use crate::camera_mode::{PreviewCameraMode, PreviewCameraModeState};
+use crate::commands::CharacterEditorCommand;
+use crate::preview::PreviewCamera;
+use crate::state::{non_empty, CharacterUiStyleState, EditorData, EditorUiState, PreviewState};
 use common::build_diagnostic_hover_text;
 use detail_panel::render_detail_panel;
 
@@ -22,18 +21,17 @@ const LIST_PANEL_WIDTH: f32 = 250.0;
 const DETAIL_PANEL_WIDTH: f32 = 430.0;
 
 // 初始化编辑器统一字体和基础控件样式。
-pub(crate) fn configure_egui_fonts_system(
+pub(crate) fn configure_character_ui_style_system(
     mut contexts: EguiContexts,
-    mut font_state: ResMut<EditorEguiFontState>,
+    fonts_state: Res<GameUiFontsState>,
+    mut style_state: ResMut<CharacterUiStyleState>,
 ) {
-    if font_state.initialized {
+    if !fonts_state.initialized || style_state.initialized {
         return;
     }
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
-
-    install_game_ui_fonts(ctx);
 
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(6.0, 4.0);
@@ -59,7 +57,7 @@ pub(crate) fn configure_egui_fonts_system(
         egui::FontId::new(11.0, egui::FontFamily::Proportional),
     );
     ctx.set_style(style);
-    font_state.initialized = true;
+    style_state.initialized = true;
 }
 
 // 加载态占位 UI。
@@ -83,30 +81,18 @@ pub(crate) fn editor_ui_system(
     mut contexts: EguiContexts,
     data: Res<EditorData>,
     mut ui_state: ResMut<EditorUiState>,
-    mut preview_state: ResMut<PreviewState>,
-    mut camera_mode: ResMut<PreviewCameraModeState>,
-    mut preview_camera_query: Query<
-        (&mut PreviewCameraController, &mut Projection),
-        With<PreviewCamera>,
-    >,
+    preview_state: Res<PreviewState>,
+    camera_mode: Res<PreviewCameraModeState>,
+    mut preview_camera_query: Query<&mut PreviewCameraController, With<PreviewCamera>>,
+    mut requests: MessageWriter<CharacterEditorCommand>,
 ) {
     let ctx = contexts
         .ctx_mut()
         .expect("primary egui context should exist for the character editor");
 
-    let Ok((mut preview_camera, mut preview_projection)) = preview_camera_query.single_mut() else {
+    let Ok(mut preview_camera) = preview_camera_query.single_mut() else {
         return;
     };
-
-    ensure_selected_character(
-        &data,
-        &mut ui_state,
-        &mut preview_state,
-        &mut camera_mode,
-        &mut preview_camera,
-        &mut preview_projection,
-    );
-    sync_preview_camera_mode(&camera_mode, &mut preview_camera, &mut preview_projection);
 
     egui::TopBottomPanel::top("character_editor_topbar").show(ctx, |ui| {
         ui.horizontal(|ui| {
@@ -133,15 +119,7 @@ pub(crate) fn editor_ui_system(
         .default_width(LIST_PANEL_WIDTH)
         .resizable(true)
         .show(ctx, |ui| {
-            render_character_list_panel(
-                ui,
-                &data,
-                &mut ui_state,
-                &mut preview_state,
-                &mut camera_mode,
-                &mut preview_camera,
-                &mut preview_projection,
-            );
+            render_character_list_panel(ui, &data, &mut ui_state, &mut requests);
         });
 
     egui::SidePanel::left("character_details")
@@ -152,10 +130,9 @@ pub(crate) fn editor_ui_system(
                 ui,
                 &data,
                 &mut ui_state,
-                &mut preview_state,
-                &mut camera_mode,
-                &mut preview_camera,
-                &mut preview_projection,
+                &preview_state,
+                &camera_mode,
+                &mut requests,
             );
         });
 
@@ -174,11 +151,11 @@ pub(crate) fn editor_ui_system(
             render_preview_overlay(
                 ui.ctx(),
                 rect,
-                &mut ui_state,
-                &mut preview_state,
-                &mut camera_mode,
+                &ui_state,
+                &preview_state,
+                &camera_mode,
                 &mut preview_camera,
-                &mut preview_projection,
+                &mut requests,
             );
         });
 }
@@ -188,10 +165,7 @@ fn render_character_list_panel(
     ui: &mut egui::Ui,
     data: &EditorData,
     ui_state: &mut EditorUiState,
-    preview_state: &mut PreviewState,
-    camera_mode: &mut PreviewCameraModeState,
-    preview_camera: &mut PreviewCameraController,
-    preview_projection: &mut Projection,
+    requests: &mut MessageWriter<CharacterEditorCommand>,
 ) {
     ui.horizontal(|ui| {
         ui.label("搜索");
@@ -249,15 +223,7 @@ fn render_character_list_panel(
                     non_empty(&summary.behavior_profile_id)
                 ));
                 if response.clicked() && !selected {
-                    select_character(
-                        summary.id.clone(),
-                        data,
-                        ui_state,
-                        preview_state,
-                        camera_mode,
-                        preview_camera,
-                        preview_projection,
-                    );
+                    requests.write(CharacterEditorCommand::SelectCharacter(summary.id.clone()));
                 }
             }
         });
@@ -266,11 +232,11 @@ fn render_character_list_panel(
 fn render_preview_overlay(
     ctx: &egui::Context,
     rect: egui::Rect,
-    ui_state: &mut EditorUiState,
-    preview_state: &mut PreviewState,
-    camera_mode: &mut PreviewCameraModeState,
+    _ui_state: &EditorUiState,
+    preview_state: &PreviewState,
+    camera_mode: &PreviewCameraModeState,
     preview_camera: &mut PreviewCameraController,
-    preview_projection: &mut Projection,
+    requests: &mut MessageWriter<CharacterEditorCommand>,
 ) {
     let area = egui::Area::new("character_preview_overlay".into())
         .order(egui::Order::Foreground)
@@ -299,13 +265,11 @@ fn render_preview_overlay(
                                 .small_button(camera_mode.mode.toggle_button_label())
                                 .clicked()
                             {
-                                toggle_preview_camera_mode(
-                                    camera_mode,
-                                    ui_state.selected_character_id.as_deref(),
-                                    preview_state.resolved_preview.as_ref(),
-                                    preview_camera,
-                                    preview_projection,
-                                );
+                                let next_mode = match camera_mode.mode {
+                                    PreviewCameraMode::Free => PreviewCameraMode::GameFixed,
+                                    PreviewCameraMode::GameFixed => PreviewCameraMode::Free,
+                                };
+                                requests.write(CharacterEditorCommand::SetCameraMode(next_mode));
                             }
                         });
                     });
