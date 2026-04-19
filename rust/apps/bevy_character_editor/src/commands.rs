@@ -9,7 +9,7 @@ use crate::camera_mode::{
 use crate::preview::{
     ensure_selected_character, refresh_preview_state, select_character, PreviewCamera,
 };
-use crate::state::{EditorData, EditorUiState, PreviewState};
+use crate::state::{EditorData, EditorUiState, InitialCharacterSelection, PreviewState};
 
 #[derive(Message, Debug, Clone)]
 pub(crate) enum CharacterEditorCommand {
@@ -24,12 +24,20 @@ pub(crate) enum CharacterEditorCommand {
 pub(crate) fn ensure_selected_character_system(
     data: Res<EditorData>,
     ui_state: Res<EditorUiState>,
+    mut initial_selection: ResMut<InitialCharacterSelection>,
     mut requests: MessageWriter<CharacterEditorCommand>,
 ) {
     if ui_state.selected_character_id.is_none() && !data.character_summaries.is_empty() {
-        requests.write(CharacterEditorCommand::SelectCharacter(
-            data.character_summaries[0].id.clone(),
-        ));
+        let next_character_id = initial_selection
+            .0
+            .take()
+            .filter(|requested_id| {
+                data.character_summaries
+                    .iter()
+                    .any(|summary| summary.id == *requested_id)
+            })
+            .unwrap_or_else(|| data.character_summaries[0].id.clone());
+        requests.write(CharacterEditorCommand::SelectCharacter(next_character_id));
     }
 }
 

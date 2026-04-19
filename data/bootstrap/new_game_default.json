@@ -1,0 +1,48 @@
+{
+  "clearActorLoadout": true,
+  "startupMapId": "survivor_outpost_01",
+  "startLocationId": "survivor_outpost_01",
+  "startEntryPointId": "default_entry",
+  "attributes": {
+    "strength": 5,
+    "agility": 5,
+    "constitution": 5
+  },
+  "items": [
+    { "itemId": 1008, "count": 2 },
+    { "itemId": 1006, "count": 3 },
+    { "itemId": 1002, "count": 1 },
+    { "itemId": 1003, "count": 1 },
+    { "itemId": 2004, "count": 1 },
+    { "itemId": 2013, "count": 1 },
+    { "itemId": 2015, "count": 1 }
+  ],
+  "ammo": [
+    { "itemId": 1009, "count": 12 }
+  ],
+  "equipment": [
+    { "itemId": 1002, "slotId": "main_hand" },
+    { "itemId": 2004, "slotId": "body" },
+    { "itemId": 2013, "slotId": "legs" },
+    { "itemId": 2015, "slotId": "feet" }
+  ],
+  "unlockedLocations": [
+    "survivor_outpost_01",
+    "survivor_outpost_01_perimeter",
+    "survivor_outpost_01_interior"
+  ],
+  "spawnEntries": [
+    {
+      "definitionId": "player",
+      "gridPosition": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "definitionId": "trader_lao_wang",
+      "gridPosition": { "x": 1, "y": 0, "z": 0 }
+    },
+    {
+      "definitionId": "doctor_chen",
+      "gridPosition": { "x": 33, "y": 0, "z": 10 }
+    }
+  ]
+}

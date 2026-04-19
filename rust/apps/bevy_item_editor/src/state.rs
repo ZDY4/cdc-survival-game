@@ -1,11 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
 use game_data::{EffectLibrary, ItemDefinition, ItemEditDiagnostic, ItemEditorService};
-use game_editor::ai_chat::{AiChatState, AiChatWorkerState};
-
-use crate::ai::AiItemProposalView;
+use game_editor::{WorkingDocumentStore, WorkspaceDocument};
 
 pub(crate) const DEFAULT_EQUIPMENT_SLOTS: &[&str] = &[
     "head",
@@ -27,9 +25,6 @@ pub(crate) const DEFAULT_KNOWN_SUBTYPES: &[&str] = &[
     "metal", "wood", "fabric", "medical", "chemical", "key", "device", "misc",
 ];
 
-pub(crate) type ItemAiState = AiChatState<AiItemProposalView>;
-pub(crate) type ItemAiWorkerState = AiChatWorkerState<AiItemProposalView>;
-
 #[derive(Debug, Clone)]
 pub(crate) struct WorkingItemDocument {
     pub(crate) document_key: String,
@@ -40,6 +35,18 @@ pub(crate) struct WorkingItemDocument {
     pub(crate) dirty: bool,
     pub(crate) diagnostics: Vec<ItemEditDiagnostic>,
     pub(crate) last_save_message: Option<String>,
+}
+
+impl WorkspaceDocument for WorkingItemDocument {
+    type Id = u32;
+
+    fn document_id(&self) -> Self::Id {
+        self.definition.id
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -54,37 +61,28 @@ pub(crate) struct EditorState {
     pub(crate) repo_root: PathBuf,
     pub(crate) service: ItemEditorService,
     pub(crate) effects: EffectLibrary,
-    pub(crate) documents: BTreeMap<String, WorkingItemDocument>,
-    pub(crate) selected_document_key: Option<String>,
+    pub(crate) workspace: WorkingDocumentStore<WorkingItemDocument>,
     pub(crate) search_text: String,
     pub(crate) status: String,
 }
 
 impl EditorState {
     pub(crate) fn ensure_selection(&mut self) {
-        if self
-            .selected_document_key
-            .as_ref()
-            .is_some_and(|key| self.documents.contains_key(key))
-        {
-            return;
-        }
-        self.selected_document_key = self.documents.keys().next().cloned();
+        self.workspace.ensure_selection();
     }
 
     pub(crate) fn selected_document(&self) -> Option<&WorkingItemDocument> {
-        let key = self.selected_document_key.as_ref()?;
-        self.documents.get(key)
+        self.workspace.selected_document()
     }
 
     pub(crate) fn select_item_id(&mut self, item_id: u32) -> bool {
         let next_key = self
-            .documents
+            .workspace
             .iter()
             .find(|(_, document)| document.definition.id == item_id)
             .map(|(key, _)| key.clone());
         if let Some(next_key) = next_key {
-            self.selected_document_key = Some(next_key);
+            self.workspace.set_selected_document_key(Some(next_key));
             true
         } else {
             false
@@ -92,43 +90,29 @@ impl EditorState {
     }
 
     pub(crate) fn current_item_ids(&self) -> BTreeSet<u32> {
-        self.documents
-            .values()
-            .map(|document| document.definition.id)
-            .collect()
+        self.workspace.current_ids()
     }
 
     pub(crate) fn has_duplicate_ids(&self) -> bool {
-        let mut ids = BTreeSet::new();
-        self.documents
-            .values()
-            .any(|document| !ids.insert(document.definition.id))
+        self.workspace.has_duplicate_ids()
     }
 
     pub(crate) fn has_dirty_documents(&self) -> bool {
-        self.documents.values().any(|document| document.dirty)
+        self.workspace.has_dirty_documents()
     }
 
     pub(crate) fn dirty_document_keys(&self) -> Vec<String> {
-        self.documents
-            .iter()
-            .filter_map(|(key, document)| document.dirty.then_some(key.clone()))
-            .collect()
+        self.workspace.dirty_document_keys()
     }
 
     pub(crate) fn suggested_next_item_id(&self) -> u32 {
-        self.documents
+        self.workspace
             .values()
             .map(|document| document.definition.id)
             .max()
             .unwrap_or(1000)
             .saturating_add(1)
     }
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct EditorEguiFontState {
-    pub(crate) initialized: bool,
 }
 
 #[derive(Resource)]

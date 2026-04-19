@@ -1,0 +1,50 @@
+{
+  "dialog_id": "trader_lao_wang_tutorial_active",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Supply Run Reminder",
+      "speaker": "老王",
+      "text": "别往远处跑，就在据点外警戒区找。靠近路障和补给箱那边，拿够两罐罐头就回来。",
+      "portrait": "assets/portraits/trader_lao_wang.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "明白，我这就去。",
+          "next": "leave_end"
+        },
+        {
+          "text": "先看看货。",
+          "next": "trade_action"
+        }
+      ]
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

@@ -3,10 +3,7 @@ use bevy::camera::primitives::MeshAabb;
 use bevy::log::{info, warn};
 use bevy::prelude::*;
 use game_bevy::{resolve_item_preview_asset_path, resolve_standalone_item_preview};
-use game_editor::{
-    replace_preview_scene, spawn_preview_light_rig, spawn_preview_scene_host,
-    PreviewCameraController, PreviewOrbitCamera,
-};
+use game_editor::{replace_preview_scene, PreviewCameraController, PreviewOrbitCamera};
 
 use crate::state::EditorState;
 
@@ -262,12 +259,6 @@ pub(crate) fn frame_loaded_scene_system(
         radius,
     });
     preview_state.framed_asset_path = Some(asset_path.clone());
-}
-
-pub(crate) fn setup_preview_scene(commands: &mut Commands) -> Entity {
-    let host = spawn_preview_scene_host(commands);
-    spawn_preview_light_rig(commands);
-    host
 }
 
 fn scene_world_bounds(

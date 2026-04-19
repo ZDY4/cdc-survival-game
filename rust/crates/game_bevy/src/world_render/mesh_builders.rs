@@ -266,12 +266,13 @@ pub fn build_building_wall_tile_mesh(
         .min((grid_size - spec.thickness).max(0.0) * 0.35);
     let body_half = (grid_size * 0.5 - body_inset).clamp(0.08, grid_size * 0.5);
     let cap_half = grid_size * 0.5;
+    let body_bounds = connected_wall_body_bounds(body_half, cap_half, &spec.neighbors);
     let bottom = -spec.height * 0.5;
     let body_top = bottom + body_height;
     let cap_top = spec.height * 0.5;
 
     let mut builder = MeshBuilder::default();
-    push_exposed_prism_sides(&mut builder, body_half, bottom, body_top, &spec.neighbors);
+    push_exposed_prism_sides(&mut builder, body_bounds, bottom, body_top, &spec.neighbors);
     push_exposed_prism_sides(&mut builder, cap_half, body_top, cap_top, &spec.neighbors);
     builder.push_quad(
         Vec3::new(-cap_half, cap_top, -cap_half),
@@ -285,55 +286,126 @@ pub fn build_building_wall_tile_mesh(
     builder.build()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct WallPrismBounds {
+    min_x: f32,
+    max_x: f32,
+    min_z: f32,
+    max_z: f32,
+}
+
+impl From<f32> for WallPrismBounds {
+    fn from(half_extent: f32) -> Self {
+        Self {
+            min_x: -half_extent,
+            max_x: half_extent,
+            min_z: -half_extent,
+            max_z: half_extent,
+        }
+    }
+}
+
+fn connected_wall_body_bounds(
+    body_half: f32,
+    cap_half: f32,
+    neighbors: &BuildingWallNeighborMask,
+) -> WallPrismBounds {
+    WallPrismBounds {
+        min_x: if neighbors.west {
+            -cap_half
+        } else {
+            -body_half
+        },
+        max_x: if neighbors.east { cap_half } else { body_half },
+        min_z: if neighbors.north {
+            -cap_half
+        } else {
+            -body_half
+        },
+        max_z: if neighbors.south { cap_half } else { body_half },
+    }
+}
+
 fn push_exposed_prism_sides(
     builder: &mut MeshBuilder,
-    half_extent: f32,
+    prism: impl Into<WallPrismBounds>,
     bottom_y: f32,
     top_y: f32,
     neighbors: &BuildingWallNeighborMask,
 ) {
+    let prism = prism.into();
     if !neighbors.north {
         builder.push_quad(
-            Vec3::new(-half_extent, bottom_y, -half_extent),
-            Vec3::new(half_extent, bottom_y, -half_extent),
-            Vec3::new(half_extent, top_y, -half_extent),
-            Vec3::new(-half_extent, top_y, -half_extent),
+            Vec3::new(prism.min_x, bottom_y, prism.min_z),
+            Vec3::new(prism.max_x, bottom_y, prism.min_z),
+            Vec3::new(prism.max_x, top_y, prism.min_z),
+            Vec3::new(prism.min_x, top_y, prism.min_z),
             -Vec3::Z,
             Vec2::ZERO,
-            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+            Vec2::new(prism.max_x - prism.min_x, top_y - bottom_y),
         );
     }
     if !neighbors.east {
         builder.push_quad(
-            Vec3::new(half_extent, bottom_y, -half_extent),
-            Vec3::new(half_extent, bottom_y, half_extent),
-            Vec3::new(half_extent, top_y, half_extent),
-            Vec3::new(half_extent, top_y, -half_extent),
+            Vec3::new(prism.max_x, bottom_y, prism.min_z),
+            Vec3::new(prism.max_x, bottom_y, prism.max_z),
+            Vec3::new(prism.max_x, top_y, prism.max_z),
+            Vec3::new(prism.max_x, top_y, prism.min_z),
             Vec3::X,
             Vec2::ZERO,
-            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+            Vec2::new(prism.max_z - prism.min_z, top_y - bottom_y),
         );
     }
     if !neighbors.south {
         builder.push_quad(
-            Vec3::new(half_extent, bottom_y, half_extent),
-            Vec3::new(-half_extent, bottom_y, half_extent),
-            Vec3::new(-half_extent, top_y, half_extent),
-            Vec3::new(half_extent, top_y, half_extent),
+            Vec3::new(prism.max_x, bottom_y, prism.max_z),
+            Vec3::new(prism.min_x, bottom_y, prism.max_z),
+            Vec3::new(prism.min_x, top_y, prism.max_z),
+            Vec3::new(prism.max_x, top_y, prism.max_z),
             Vec3::Z,
             Vec2::ZERO,
-            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+            Vec2::new(prism.max_x - prism.min_x, top_y - bottom_y),
         );
     }
     if !neighbors.west {
         builder.push_quad(
-            Vec3::new(-half_extent, bottom_y, half_extent),
-            Vec3::new(-half_extent, bottom_y, -half_extent),
-            Vec3::new(-half_extent, top_y, -half_extent),
-            Vec3::new(-half_extent, top_y, half_extent),
+            Vec3::new(prism.min_x, bottom_y, prism.max_z),
+            Vec3::new(prism.min_x, bottom_y, prism.min_z),
+            Vec3::new(prism.min_x, top_y, prism.min_z),
+            Vec3::new(prism.min_x, top_y, prism.max_z),
             -Vec3::X,
             Vec2::ZERO,
-            Vec2::new(half_extent * 2.0, top_y - bottom_y),
+            Vec2::new(prism.max_z - prism.min_z, top_y - bottom_y),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{connected_wall_body_bounds, WallPrismBounds};
+    use crate::static_world::BuildingWallNeighborMask;
+
+    #[test]
+    fn connected_wall_body_bounds_keep_shared_edges_flush() {
+        let bounds = connected_wall_body_bounds(
+            0.46,
+            0.5,
+            &BuildingWallNeighborMask {
+                north: true,
+                east: true,
+                south: false,
+                west: false,
+            },
+        );
+
+        assert_eq!(
+            bounds,
+            WallPrismBounds {
+                min_x: -0.46,
+                max_x: 0.5,
+                min_z: -0.5,
+                max_z: 0.46,
+            }
         );
     }
 }

@@ -7,6 +7,7 @@ pub mod content;
 pub mod content_registry;
 pub mod dialogue_rules;
 pub mod dialogue_runtime;
+pub mod file_backed;
 pub mod interaction;
 pub mod item_edit;
 pub mod map;

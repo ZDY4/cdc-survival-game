@@ -1,0 +1,78 @@
+{
+  "dialog_id": "trader_lao_wang_intro",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Supply Run Offer",
+      "speaker": "老王",
+      "text": "外面的警戒区刚清过一轮，但还散着些能吃的存货。你要是真想在据点里站稳脚，先替我带两罐罐头回来。",
+      "portrait": "assets/portraits/trader_lao_wang.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "我去警戒区找罐头。",
+          "next": "accept_job"
+        },
+        {
+          "text": "先看看你卖什么。",
+          "next": "trade_action"
+        },
+        {
+          "text": "等我准备一下。",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "accept_job",
+      "type": "action",
+      "actions": [
+        {
+          "type": "start_quest",
+          "quest_id": "tutorial_survive"
+        }
+      ],
+      "next": "accept_confirm"
+    },
+    {
+      "id": "accept_confirm",
+      "type": "dialog",
+      "speaker": "老王",
+      "text": "就去外面那片警戒区，带回两罐罐头就算你过关。别贪，拿到东西就回来。",
+      "portrait": "assets/portraits/trader_lao_wang.png",
+      "next": "accept_end"
+    },
+    {
+      "id": "accept_end",
+      "type": "end",
+      "end_type": "leave"
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

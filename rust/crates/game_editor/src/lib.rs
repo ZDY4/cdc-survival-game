@@ -1,23 +1,23 @@
-pub mod ai_chat;
 pub mod app_shell;
 pub mod character_preview;
 pub mod editor_handoff;
 pub mod fonts;
 pub mod preview;
 pub mod preview_stage;
+pub mod primary_egui;
 pub mod window_size_persistence;
+pub mod workspace;
 
 pub use app_shell::{configure_editor_app_shell, EditorAppShellConfig};
 pub use character_preview::{
     character_preview_is_available, parse_preview_color, spawn_character_preview_scene,
-    CharacterPreviewPart, CharacterPreviewRoot,
+    sync_builtin_humanoid_mannequin_scene_system, CharacterPreviewPart, CharacterPreviewRoot,
 };
 pub use editor_handoff::{
-    clear_item_editor_selection_request, clear_item_editor_session,
-    item_editor_selection_request_path, item_editor_session_is_recent, item_editor_session_path,
-    read_item_editor_selection_request, read_item_editor_session,
-    write_item_editor_selection_request, write_item_editor_session, ItemEditorSelectionRequest,
-    ItemEditorSession,
+    clear_editor_navigation_request, clear_editor_session, editor_navigation_request_path,
+    editor_session_is_recent, editor_session_path, read_editor_navigation_request,
+    read_editor_session, write_editor_navigation_request, write_editor_session, EditorKind,
+    EditorNavigationAction, EditorNavigationRequest, EditorSession,
 };
 pub use fonts::{
     configure_game_ui_fonts_system, game_ui_font_bytes, install_game_ui_fonts, load_game_ui_font,
@@ -30,6 +30,8 @@ pub use preview::{
     PreviewOriginAxes, PreviewSceneHost, PreviewSceneInstance, PreviewViewportRect,
 };
 pub use preview_stage::{setup_preview_stage, PreviewStageConfig, PreviewStageEntities};
+pub use primary_egui::setup_primary_egui_context_camera;
 pub use window_size_persistence::{
     build_persisted_primary_window, WindowSizePersistenceConfig, WindowSizePersistencePlugin,
 };
+pub use workspace::{WorkingDocumentStore, WorkspaceDocument};

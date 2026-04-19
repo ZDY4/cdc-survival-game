@@ -1,0 +1,557 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "codex-humanoid-mannequin-generator"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        37
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "body_mesh",
+      "scale": [
+        0.66,
+        0.82,
+        0.38
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "head_mesh",
+      "scale": [
+        0.48,
+        0.48,
+        0.48
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "upper_arm_l_mesh",
+      "translation": [
+        0.0,
+        -0.14,
+        0.02
+      ],
+      "scale": [
+        0.16,
+        0.34,
+        0.16
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "lower_arm_l_mesh",
+      "translation": [
+        0.0,
+        -0.14,
+        0.02
+      ],
+      "scale": [
+        0.14,
+        0.32,
+        0.14
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "hand_l_mesh",
+      "scale": [
+        0.12,
+        0.12,
+        0.18
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "upper_arm_r_mesh",
+      "translation": [
+        0.0,
+        -0.14,
+        0.02
+      ],
+      "scale": [
+        0.16,
+        0.34,
+        0.16
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "lower_arm_r_mesh",
+      "translation": [
+        0.0,
+        -0.14,
+        0.02
+      ],
+      "scale": [
+        0.14,
+        0.32,
+        0.14
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "hand_r_mesh",
+      "scale": [
+        0.12,
+        0.12,
+        0.18
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "upper_leg_l_mesh",
+      "translation": [
+        0.0,
+        -0.18,
+        0.0
+      ],
+      "scale": [
+        0.2,
+        0.46,
+        0.22
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "lower_leg_l_mesh",
+      "translation": [
+        0.0,
+        -0.16,
+        0.0
+      ],
+      "scale": [
+        0.18,
+        0.42,
+        0.2
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "foot_l_mesh",
+      "scale": [
+        0.24,
+        0.1,
+        0.34
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "upper_leg_r_mesh",
+      "translation": [
+        0.0,
+        -0.18,
+        0.0
+      ],
+      "scale": [
+        0.2,
+        0.46,
+        0.22
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "lower_leg_r_mesh",
+      "translation": [
+        0.0,
+        -0.16,
+        0.0
+      ],
+      "scale": [
+        0.18,
+        0.42,
+        0.2
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "foot_r_mesh",
+      "scale": [
+        0.24,
+        0.1,
+        0.34
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "body_socket",
+      "translation": [
+        0.0,
+        -0.02,
+        0.02
+      ]
+    },
+    {
+      "name": "hands_socket",
+      "translation": [
+        0.0,
+        0.03,
+        0.04
+      ]
+    },
+    {
+      "name": "head_socket",
+      "translation": [
+        0.0,
+        0.24,
+        0.02
+      ]
+    },
+    {
+      "name": "head",
+      "translation": [
+        0.0,
+        0.12,
+        0.0
+      ],
+      "children": [
+        1,
+        16
+      ]
+    },
+    {
+      "name": "neck",
+      "translation": [
+        0.0,
+        0.36,
+        0.0
+      ],
+      "children": [
+        17
+      ]
+    },
+    {
+      "name": "back_socket",
+      "translation": [
+        0.0,
+        -0.1,
+        -0.28
+      ],
+      "rotation": [
+        0.104528,
+        0.0,
+        0.0,
+        0.994522
+      ]
+    },
+    {
+      "name": "accessory_socket",
+      "translation": [
+        0.18,
+        0.08,
+        0.14
+      ]
+    },
+    {
+      "name": "spine",
+      "translation": [
+        0.0,
+        0.14,
+        0.0
+      ],
+      "children": [
+        0,
+        18,
+        14,
+        15,
+        19,
+        20
+      ]
+    },
+    {
+      "name": "hand_l",
+      "translation": [
+        0.0,
+        -0.28,
+        0.04
+      ],
+      "children": [
+        4
+      ]
+    },
+    {
+      "name": "lower_arm_l",
+      "translation": [
+        0.0,
+        -0.28,
+        0.06
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.087156,
+        0.996195
+      ],
+      "children": [
+        3,
+        22
+      ]
+    },
+    {
+      "name": "upper_arm_l",
+      "translation": [
+        -0.38,
+        0.16,
+        0.02
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.190809,
+        0.981627
+      ],
+      "children": [
+        2,
+        23
+      ]
+    },
+    {
+      "name": "hand_r",
+      "translation": [
+        0.0,
+        -0.28,
+        0.04
+      ],
+      "children": [
+        7
+      ]
+    },
+    {
+      "name": "lower_arm_r",
+      "translation": [
+        0.0,
+        -0.28,
+        0.06
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        -0.087156,
+        0.996195
+      ],
+      "children": [
+        6,
+        25
+      ]
+    },
+    {
+      "name": "upper_arm_r",
+      "translation": [
+        0.38,
+        0.16,
+        0.02
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        -0.190809,
+        0.981627
+      ],
+      "children": [
+        5,
+        26
+      ]
+    },
+    {
+      "name": "foot_l",
+      "translation": [
+        0.02,
+        -0.34,
+        0.1
+      ],
+      "children": [
+        10
+      ]
+    },
+    {
+      "name": "lower_leg_l",
+      "translation": [
+        0.0,
+        -0.36,
+        0.0
+      ],
+      "children": [
+        9,
+        28
+      ]
+    },
+    {
+      "name": "upper_leg_l",
+      "translation": [
+        -0.16,
+        -0.18,
+        0.0
+      ],
+      "children": [
+        8,
+        29
+      ]
+    },
+    {
+      "name": "foot_r",
+      "translation": [
+        -0.02,
+        -0.34,
+        0.1
+      ],
+      "children": [
+        13
+      ]
+    },
+    {
+      "name": "lower_leg_r",
+      "translation": [
+        0.0,
+        -0.36,
+        0.0
+      ],
+      "children": [
+        12,
+        31
+      ]
+    },
+    {
+      "name": "upper_leg_r",
+      "translation": [
+        0.16,
+        -0.18,
+        0.0
+      ],
+      "children": [
+        11,
+        32
+      ]
+    },
+    {
+      "name": "legs_socket",
+      "translation": [
+        0.0,
+        -0.5,
+        0.02
+      ]
+    },
+    {
+      "name": "feet_socket",
+      "translation": [
+        0.0,
+        -0.88,
+        0.08
+      ]
+    },
+    {
+      "name": "pelvis",
+      "translation": [
+        0.0,
+        0.94,
+        0.0
+      ],
+      "children": [
+        21,
+        24,
+        27,
+        30,
+        33,
+        34,
+        35
+      ]
+    },
+    {
+      "name": "humanoid_root",
+      "children": [
+        36
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "mannequin_default",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.82,
+          0.84,
+          0.88,
+          1.0
+        ],
+        "metallicFactor": 0.02,
+        "roughnessFactor": 0.9
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "unit_cube",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "indices": 2,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 648,
+      "uri": "data:application/octet-stream;base64,AAAAPwAAAL8AAAC/AAAAPwAAAL8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAD8AAAC/AAAAvwAAAL8AAAA/AAAAvwAAAL8AAAC/AAAAvwAAAD8AAAC/AAAAvwAAAD8AAAA/AAAAvwAAAD8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAD8AAAA/AAAAvwAAAD8AAAA/AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAL8AAAC/AAAAvwAAAL8AAAC/AAAAvwAAAL8AAAA/AAAAvwAAAD8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAL8AAAC/AAAAPwAAAD8AAAC/AAAAvwAAAD8AAAC/AAAAvwAAAL8AAAC/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 288,
+      "byteLength": 288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 72,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "min": [
+        -0.5,
+        -0.5,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 36,
+      "type": "SCALAR"
+    }
+  ]
+}

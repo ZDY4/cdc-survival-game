@@ -1,0 +1,82 @@
+{
+  "dialog_id": "doctor_chen_find_medicine_offer",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Medicine Run Offer",
+      "speaker": "陈医生",
+      "text": "老王应该已经跟你提过了。诊所的急救包快见底了，城里的废弃医院也许还能翻出一份能用的，你愿意跑一趟吗？",
+      "portrait": "assets/portraits/doctor.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "我去医院找急救包。",
+          "next": "accept_job"
+        },
+        {
+          "text": "先看看药品。",
+          "next": "trade_action"
+        },
+        {
+          "text": "等我准备一下。",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "accept_job",
+      "type": "action",
+      "actions": [
+        {
+          "type": "unlock_location",
+          "location_id": "hospital"
+        },
+        {
+          "type": "start_quest",
+          "quest_id": "find_medicine"
+        }
+      ],
+      "next": "accept_confirm"
+    },
+    {
+      "id": "accept_confirm",
+      "type": "dialog",
+      "speaker": "陈医生",
+      "text": "目标很简单，去废弃医院带回 1 份急救包就行。别久留，拿到东西立刻回撤。",
+      "portrait": "assets/portraits/doctor.png",
+      "next": "accept_end"
+    },
+    {
+      "id": "accept_end",
+      "type": "end",
+      "end_type": "leave"
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

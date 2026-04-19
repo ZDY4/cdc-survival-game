@@ -68,6 +68,7 @@ pub(crate) fn run() {
                 crate::bootstrap::ViewerBootstrap {
                     runtime: game_core::SimulationRuntime::new(),
                     asset_dir: rust_asset_dir(),
+                    new_game_config: game_bevy::NewGameConfig::default(),
                 },
                 ViewerBootstrapStatus::Failed {
                     error: error.to_string(),

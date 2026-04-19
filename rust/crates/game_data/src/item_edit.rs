@@ -6,8 +6,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
+    file_backed::{
+        collect_sorted_dir_entries, duplicate_values, read_json_file, relative_path_from_root,
+        write_json_atomically,
+    },
     load_effect_library, validate_item_definition, EffectLoadError, ItemDefinition,
-    ItemDefinitionValidationError, ItemEditDiagnosticSeverity::Error as DiagnosticError,
+    ItemDefinitionValidationError,
+    ItemEditDiagnosticSeverity::Error as DiagnosticError,
     ItemValidationCatalog,
 };
 
@@ -169,17 +174,11 @@ impl ItemEditorService {
         }
 
         let effect_ids = self.effect_ids()?;
-        let mut entries = fs::read_dir(&self.items_dir)
-            .map_err(|source| ItemEditError::ReadDir {
-                path: self.items_dir.clone(),
-                source,
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|source| ItemEditError::ReadDir {
-                path: self.items_dir.clone(),
+        let entries =
+            collect_sorted_dir_entries(&self.items_dir, |path, source| ItemEditError::ReadDir {
+                path: path.to_path_buf(),
                 source,
             })?;
-        entries.sort_by_key(|entry| entry.file_name());
 
         let mut definitions = Vec::new();
         for entry in entries {
@@ -187,15 +186,17 @@ impl ItemEditorService {
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
-            let raw = fs::read_to_string(&path).map_err(|source| ItemEditError::ReadFile {
-                path: path.clone(),
-                source,
-            })?;
-            let definition: ItemDefinition =
-                serde_json::from_str(&raw).map_err(|source| ItemEditError::ParseFile {
-                    path: path.clone(),
+            let definition: ItemDefinition = read_json_file(
+                &path,
+                |path, source| ItemEditError::ReadFile {
+                    path: path.to_path_buf(),
                     source,
-                })?;
+                },
+                |path, source| ItemEditError::ParseFile {
+                    path: path.to_path_buf(),
+                    source,
+                },
+            )?;
             let file_name = path
                 .file_name()
                 .and_then(|value| value.to_str())
@@ -217,7 +218,7 @@ impl ItemEditorService {
                     &item_ids,
                     &effect_ids,
                 )?;
-                let relative_path = relative_to_root(&path, self.data_root.as_deref())
+                let relative_path = relative_path_from_root(&path, self.data_root.as_deref())
                     .unwrap_or_else(|| path.to_string_lossy().replace('\\', "/"));
                 Ok(ItemEditDocument {
                     file_name,
@@ -228,7 +229,8 @@ impl ItemEditorService {
             })
             .collect::<Result<Vec<_>, ItemEditError>>()?;
 
-        let duplicate_ids = duplicate_ids(documents.iter().map(|document| document.definition.id));
+        let duplicate_ids =
+            duplicate_values(documents.iter().map(|document| document.definition.id));
         for document in &mut documents {
             if duplicate_ids.contains(&document.definition.id) {
                 document.diagnostics.push(ItemEditDiagnostic::error(
@@ -407,35 +409,22 @@ impl ItemEditorService {
             }
         })?;
 
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|source| ItemEditError::CreateDir {
-                path: parent.to_path_buf(),
-                source,
-            })?;
-        }
-
-        if let Ok(existing_raw) = fs::read_to_string(path) {
-            if existing_raw == raw {
-                return Ok(false);
-            }
-        }
-
-        let temp_path = temporary_path_for(path);
-        fs::write(&temp_path, raw).map_err(|source| ItemEditError::WriteTempFile {
-            path: temp_path.clone(),
-            source,
-        })?;
-        if path.exists() {
-            fs::remove_file(path).map_err(|source| ItemEditError::ReplaceFile {
+        write_json_atomically(
+            path,
+            &raw,
+            |path, source| ItemEditError::CreateDir {
                 path: path.to_path_buf(),
                 source,
-            })?;
-        }
-        fs::rename(&temp_path, path).map_err(|source| ItemEditError::ReplaceFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        Ok(true)
+            },
+            |path, source| ItemEditError::WriteTempFile {
+                path: path.to_path_buf(),
+                source,
+            },
+            |path, source| ItemEditError::ReplaceFile {
+                path: path.to_path_buf(),
+                source,
+            },
+        )
     }
 }
 
@@ -446,32 +435,6 @@ fn infer_data_root(items_dir: &Path) -> Option<PathBuf> {
         return None;
     }
     Some(parent.to_path_buf())
-}
-
-fn relative_to_root(path: &Path, data_root: Option<&Path>) -> Option<String> {
-    let data_root = data_root?;
-    path.strip_prefix(data_root)
-        .ok()
-        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
-}
-
-fn duplicate_ids(ids: impl IntoIterator<Item = u32>) -> BTreeSet<u32> {
-    let mut seen = BTreeSet::new();
-    let mut duplicates = BTreeSet::new();
-    for id in ids {
-        if !seen.insert(id) {
-            duplicates.insert(id);
-        }
-    }
-    duplicates
-}
-
-fn temporary_path_for(path: &Path) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("item.json");
-    path.with_file_name(format!("{file_name}.tmp"))
 }
 
 #[cfg(test)]

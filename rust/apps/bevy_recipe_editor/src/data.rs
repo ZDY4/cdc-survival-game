@@ -2,14 +2,23 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use bevy::log::{info, warn};
+use bevy::prelude::{Res, ResMut, Time};
 use game_data::{
     load_item_library, load_skill_library, RecipeEditDiagnostic, RecipeEditorService,
     SkillValidationCatalog,
 };
+use game_editor::{
+    clear_editor_navigation_request, read_editor_navigation_request, write_editor_session,
+    EditorKind, EditorNavigationAction, WorkingDocumentStore,
+};
 
-use crate::state::{EditorState, RecipeEditorCatalogs, WorkingRecipeDocument};
+use crate::state::{
+    EditorState, ExternalRecipeSelectionState, RecipeEditorCatalogs, WorkingRecipeDocument,
+};
 
-pub(crate) fn load_editor_resources() -> Result<(EditorState, RecipeEditorCatalogs), String> {
+pub(crate) fn load_editor_resources(
+    initial_selection: Option<String>,
+) -> Result<(EditorState, RecipeEditorCatalogs), String> {
     let repo_root = repo_root();
     let data_root = repo_root.join("data");
     let recipes_dir = data_root.join("recipes");
@@ -56,16 +65,27 @@ pub(crate) fn load_editor_resources() -> Result<(EditorState, RecipeEditorCatalo
     let mut editor = EditorState {
         repo_root,
         service,
-        documents: working_documents,
-        selected_document_key: None,
+        workspace: WorkingDocumentStore::from_documents(working_documents),
         search_text: String::new(),
         status: "Loaded recipe workspace.".to_string(),
     };
-    editor.ensure_selection();
+    if let Some(recipe_id) = initial_selection.as_deref() {
+        if editor.select_recipe_id(recipe_id) {
+            editor.status = format!("Loaded recipe workspace and selected recipe {recipe_id}.");
+        } else {
+            editor.status = format!(
+                "Loaded recipe workspace. Requested recipe {recipe_id} was not found."
+            );
+            warn!("recipe editor startup selection not found: recipe_id={recipe_id}");
+            editor.ensure_selection();
+        }
+    } else {
+        editor.ensure_selection();
+    }
 
     info!(
         "recipe editor data loaded: recipes={}, items={}, skills={}, diagnostics={}",
-        editor.documents.len(),
+        editor.workspace.len(),
         catalogs.item_ids.len(),
         catalogs.skill_ids.len(),
         diagnostics
@@ -83,18 +103,18 @@ pub(crate) fn validate_all_documents(
 ) -> Result<(), String> {
     let duplicate_ids = duplicate_ids(
         editor
-            .documents
+            .workspace
             .values()
             .map(|document| document.definition.id.clone()),
     );
     let recipe_ids = editor.current_recipe_ids();
     let item_ids = catalogs.item_ids.iter().copied().collect::<BTreeSet<_>>();
     let skill_ids = catalogs.skill_ids.iter().cloned().collect::<BTreeSet<_>>();
-    let keys = editor.documents.keys().cloned().collect::<Vec<_>>();
+    let keys = editor.workspace.keys().cloned().collect::<Vec<_>>();
 
     for key in keys {
         let definition = editor
-            .documents
+            .workspace
             .get(&key)
             .map(|document| document.definition.clone())
             .ok_or_else(|| format!("missing document {key}"))?;
@@ -117,7 +137,7 @@ pub(crate) fn validate_all_documents(
                 ),
             ));
         }
-        if let Some(document) = editor.documents.get_mut(&key) {
+        if let Some(document) = editor.workspace.get_mut(&key) {
             document.diagnostics = diagnostics;
         }
     }
@@ -134,6 +154,79 @@ fn duplicate_ids(ids: impl IntoIterator<Item = String>) -> BTreeSet<String> {
         }
     }
     duplicates
+}
+
+pub(crate) fn poll_external_selection_system(
+    time: Res<Time>,
+    mut editor: ResMut<EditorState>,
+    mut external: ResMut<ExternalRecipeSelectionState>,
+) {
+    if external.heartbeat_timer.tick(time.delta()).just_finished() {
+        if let Err(error) =
+            write_editor_session(&external.repo_root, EditorKind::Recipe, std::process::id())
+        {
+            warn!("recipe editor failed to refresh handoff session: {error}");
+        }
+    }
+
+    if !external
+        .request_poll_timer
+        .tick(time.delta())
+        .just_finished()
+    {
+        return;
+    }
+
+    let request = match read_editor_navigation_request(&external.repo_root, EditorKind::Recipe) {
+        Ok(request) => request,
+        Err(error) => {
+            warn!("recipe editor failed to read selection request: {error}");
+            return;
+        }
+    };
+    let Some(request) = request else {
+        return;
+    };
+
+    if external.last_request_id.as_deref() == Some(request.request_id.as_str()) {
+        return;
+    }
+    external.last_request_id = Some(request.request_id.clone());
+
+    if !matches!(request.action, EditorNavigationAction::SelectRecord)
+        || request.target_kind != "recipe"
+    {
+        warn!(
+            "recipe editor ignored unsupported navigation request: request_id={}, target_kind={}",
+            request.request_id, request.target_kind
+        );
+        if let Err(error) = clear_editor_navigation_request(&external.repo_root, EditorKind::Recipe)
+        {
+            warn!("recipe editor failed to clear selection request: {error}");
+        }
+        return;
+    }
+
+    editor.status = if editor.select_recipe_id(&request.target_id) {
+        info!(
+            "recipe editor applied external selection request: recipe_id={}, request_id={}",
+            request.target_id, request.request_id
+        );
+        format!(
+            "Selected recipe {} from external request.",
+            request.target_id
+        )
+    } else {
+        warn!(
+            "recipe editor received external selection for unknown recipe: recipe_id={}, request_id={}",
+            request.target_id, request.request_id
+        );
+        format!("External request targeted missing recipe {}.", request.target_id)
+    };
+
+    if let Err(error) = clear_editor_navigation_request(&external.repo_root, EditorKind::Recipe) {
+        warn!("recipe editor failed to clear selection request: {error}");
+    }
 }
 
 fn repo_root() -> PathBuf {

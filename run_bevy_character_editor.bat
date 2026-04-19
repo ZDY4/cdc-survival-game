@@ -22,7 +22,7 @@ if not exist "%CARGO_EXE%" (
 pushd "%RUST_DIR%"
 
 echo Starting bevy_character_editor...
-"%CARGO_EXE%" run -p bevy_character_editor
+"%CARGO_EXE%" run -p bevy_character_editor -- %*
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 

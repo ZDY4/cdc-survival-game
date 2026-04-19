@@ -279,15 +279,28 @@ fn render_preview_overlay(
                             .size(11.0)
                             .color(egui::Color32::from_rgb(164, 170, 184)),
                     );
-                    if let Some(notice) = preview_state.preview_notice.as_deref() {
-                        ui.add_space(2.0);
-                        ui.label(
-                            egui::RichText::new(notice)
-                                .size(11.0)
-                                .color(egui::Color32::from_rgb(210, 184, 120)),
-                        );
-                    }
                 });
         });
+
+    if let Some(notice) = preview_state.preview_notice.as_deref() {
+        egui::Area::new("character_preview_notice".into())
+            .order(egui::Order::Foreground)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .fixed_pos(rect.center())
+            .show(ctx, |ui| {
+                egui::Frame::NONE
+                    .fill(egui::Color32::from_rgba_unmultiplied(18, 21, 28, 212))
+                    .corner_radius(8.0)
+                    .inner_margin(egui::Margin::symmetric(18, 14))
+                    .show(ui, |ui| {
+                        ui.set_max_width(420.0);
+                        ui.label(
+                            egui::RichText::new(notice)
+                                .size(16.0)
+                                .color(egui::Color32::from_rgb(232, 236, 244)),
+                        );
+                    });
+            });
+    }
     preview_camera.block_pointer_input = area.response.hovered();
 }

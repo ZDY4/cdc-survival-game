@@ -3,15 +3,22 @@ use std::process::Command;
 use std::time::Duration;
 
 use game_editor::{
-    item_editor_session_is_recent, read_item_editor_session, write_item_editor_selection_request,
+    editor_session_is_recent, read_editor_session, write_editor_navigation_request, EditorKind,
+    EditorNavigationAction,
 };
 
 const ITEM_EDITOR_ACTIVE_MAX_AGE: Duration = Duration::from_secs(5);
 
 pub(crate) fn open_item_in_editor(repo_root: &Path, item_id: u32) -> Result<String, String> {
-    write_item_editor_selection_request(repo_root, item_id)?;
+    write_editor_navigation_request(
+        repo_root,
+        EditorKind::Item,
+        EditorNavigationAction::SelectRecord,
+        "item",
+        item_id.to_string(),
+    )?;
 
-    if item_editor_session_is_recent(repo_root, ITEM_EDITOR_ACTIVE_MAX_AGE)? {
+    if editor_session_is_recent(repo_root, EditorKind::Item, ITEM_EDITOR_ACTIVE_MAX_AGE)? {
         let focused = focus_existing_item_editor(repo_root);
         return Ok(if focused {
             format!("Requested item editor to select item {item_id}.")
@@ -54,7 +61,7 @@ fn launch_item_editor(repo_root: &Path, item_id: u32) -> Result<(), String> {
 }
 
 fn focus_existing_item_editor(repo_root: &Path) -> bool {
-    let Ok(Some(session)) = read_item_editor_session(repo_root) else {
+    let Ok(Some(session)) = read_editor_session(repo_root, EditorKind::Item) else {
         return false;
     };
 

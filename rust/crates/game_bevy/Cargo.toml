@@ -14,6 +14,7 @@ bytemuck = { version = "1", features = ["derive"] }
 gltf = "1"
 game_core = { path = "../game_core" }
 game_data = { path = "../game_data" }
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

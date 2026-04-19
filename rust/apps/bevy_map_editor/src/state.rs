@@ -7,16 +7,10 @@ use game_data::{
     load_map_library, load_overworld_library, load_world_tile_library, GridCoord, MapDefinition,
     MapEditDiagnostic, MapEditorService, MapId, OverworldId, OverworldLibrary, WorldTileLibrary,
 };
-use game_editor::ai_chat::{AiChatState, AiChatWorkerState};
-
-use crate::map_ai::AiProposalView;
 
 const PERSPECTIVE_DISTANCE_DEFAULT: f32 = 28.0;
 const TOP_DOWN_DISTANCE_DEFAULT: f32 = 40.0;
 const DEFAULT_CAMERA_PAN_SPEED_MULTIPLIER: f32 = 1.0;
-
-pub(crate) type MapAiState = AiChatState<AiProposalView>;
-pub(crate) type MapAiWorkerState = AiChatWorkerState<AiProposalView>;
 
 #[derive(Component)]
 pub(crate) struct EditorCamera;
@@ -81,6 +75,31 @@ impl OrbitCameraState {
 #[derive(Resource, Debug, Clone, Default)]
 pub(crate) struct MiddleClickState {
     pub(crate) drag_anchor_world: Option<Vec2>,
+}
+
+#[derive(Resource)]
+pub(crate) struct ExternalMapSelectionState {
+    pub(crate) repo_root: PathBuf,
+    pub(crate) heartbeat_timer: Timer,
+    pub(crate) request_poll_timer: Timer,
+    pub(crate) last_request_id: Option<String>,
+}
+
+impl ExternalMapSelectionState {
+    pub(crate) fn new(repo_root: PathBuf) -> Self {
+        let mut heartbeat_timer = Timer::from_seconds(1.0, TimerMode::Repeating);
+        heartbeat_timer.set_elapsed(heartbeat_timer.duration());
+
+        let mut request_poll_timer = Timer::from_seconds(0.25, TimerMode::Repeating);
+        request_poll_timer.set_elapsed(request_poll_timer.duration());
+
+        Self {
+            repo_root,
+            heartbeat_timer,
+            request_poll_timer,
+            last_request_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]

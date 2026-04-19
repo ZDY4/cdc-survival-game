@@ -1,7 +1,7 @@
 {
 	"quest_id": "tutorial_survive",
-	"title": "第一课：生存",
-	"description": "在安全屋休息一晚，恢复你的状态",
+	"title": "补给试跑",
+	"description": "老王让你去据点外警戒区带回两罐能吃的东西，证明你已经能安全进出外围。",
 	"prerequisites": [],
 	"time_limit": -1,
 	"flow": {
@@ -22,9 +22,10 @@
 					"x": 420,
 					"y": 160
 				},
-				"objective_type": "sleep",
-				"description": "在安全屋睡觉",
-				"count": 1
+				"objective_type": "collect",
+				"description": "从据点外警戒区带回 2 罐罐头",
+				"item_id": 1007,
+				"count": 2
 			},
 			"reward_1": {
 				"id": "reward_1",
@@ -36,11 +37,11 @@
 				"rewards": {
 					"items": [
 						{
-							"id": 1007,
+							"id": 1006,
 							"count": 2
 						}
 					],
-					"experience": 50
+					"experience": 60
 				}
 			},
 			"end": {

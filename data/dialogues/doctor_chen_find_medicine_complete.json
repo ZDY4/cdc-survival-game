@@ -1,0 +1,50 @@
+{
+  "dialog_id": "doctor_chen_find_medicine_complete",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Medicine Run Complete",
+      "speaker": "陈医生",
+      "text": "这份急救包来得正是时候。诊所至少又能多撑几天，你先休整一下，后面还会有更远的活。",
+      "portrait": "assets/portraits/doctor.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "看看还能换什么。",
+          "next": "trade_action"
+        },
+        {
+          "text": "我去准备下一趟。",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

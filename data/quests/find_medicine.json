@@ -1,7 +1,7 @@
 {
 	"quest_id": "find_medicine",
-	"title": "寻找药品",
-	"description": "前往废弃医院，搜索医疗物资",
+	"title": "医院取药",
+	"description": "陈医生点名要你去废弃医院取回一份急救包，补上据点已经见底的应急储备。",
 	"prerequisites": [
 		"zombie_hunter"
 	],
@@ -24,31 +24,8 @@
 					"x": 420,
 					"y": 160
 				},
-				"objective_type": "travel",
-				"description": "前往医院",
-				"target": "hospital",
-				"count": 1
-			},
-			"step_2": {
-				"id": "step_2",
-				"type": "objective",
-				"position": {
-					"x": 720,
-					"y": 160
-				},
-				"objective_type": "search",
-				"description": "搜索医院",
-				"count": 2
-			},
-			"step_3": {
-				"id": "step_3",
-				"type": "objective",
-				"position": {
-					"x": 1020,
-					"y": 160
-				},
 				"objective_type": "collect",
-				"description": "获得急救包",
+				"description": "从废弃医院带回 1 份急救包",
 				"item_id": 1005,
 				"count": 1
 			},
@@ -56,7 +33,7 @@
 				"id": "reward_1",
 				"type": "reward",
 				"position": {
-					"x": 1320,
+					"x": 720,
 					"y": 160
 				},
 				"rewards": {
@@ -74,7 +51,7 @@
 				"id": "end",
 				"type": "end",
 				"position": {
-					"x": 1620,
+					"x": 1020,
 					"y": 160
 				}
 			}
@@ -88,18 +65,6 @@
 			},
 			{
 				"from": "step_1",
-				"to": "step_2",
-				"from_port": 0,
-				"to_port": 0
-			},
-			{
-				"from": "step_2",
-				"to": "step_3",
-				"from_port": 0,
-				"to_port": 0
-			},
-			{
-				"from": "step_3",
 				"to": "reward_1",
 				"from_port": 0,
 				"to_port": 0

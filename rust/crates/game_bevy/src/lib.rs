@@ -20,6 +20,7 @@ pub mod container_visuals;
 mod content;
 pub mod item_preview;
 mod logging;
+pub mod new_game;
 pub mod npc_life;
 pub mod reservations;
 mod spawn;
@@ -37,8 +38,8 @@ pub use bootstrap::{
 pub use character_preview::{
     character_preview_is_available, parse_preview_color, resolve_runtime_character_preview,
     runtime_actor_equipped_loadout, runtime_character_appearance_key,
-    spawn_character_preview_scene, CharacterPreviewPart, CharacterPreviewRoot,
-    RuntimeCharacterAppearanceKey,
+    spawn_character_preview_scene, sync_builtin_humanoid_mannequin_scene_system,
+    CharacterPreviewPart, CharacterPreviewRoot, RuntimeCharacterAppearanceKey,
 };
 pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;
@@ -47,6 +48,11 @@ pub use item_preview::{
     resolve_standalone_item_preview, ResolvedStandaloneItemPreview,
 };
 pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
+pub use new_game::{
+    apply_new_game_config, apply_new_game_seed_overrides, load_new_game_config,
+    load_new_game_config_on_startup, NewGameConfig, NewGameConfigError, NewGameConfigPath,
+    NewGameEquipmentEntry, NewGameItemStack, NewGameSpawnEntry,
+};
 pub use npc_life::{
     BackgroundLifeState, LifeProfileComponent as CharacterLifeProfileComponent, NeedState,
     NpcActiveOfflineAction, NpcDecisionTrace, NpcLifePlugin, NpcLifeState, NpcLifeUpdateSet,
@@ -370,7 +376,7 @@ pub fn build_runtime_from_seed(
     ))
 }
 
-pub fn default_debug_seed() -> RuntimeScenarioSeed {
+pub fn debug_viewer_seed_preset() -> RuntimeScenarioSeed {
     let map_id = MapId("survivor_outpost_01".to_string());
 
     RuntimeScenarioSeed {
@@ -452,7 +458,7 @@ pub(crate) fn auto_spawn_characters_for_map(
 mod tests {
     use super::{
         advance_map_ai_spawn_runtime, auto_spawn_characters_for_map, build_runtime_from_seed,
-        debug_seed_characters_for_map, default_debug_seed, load_runtime_startup_config,
+        debug_seed_characters_for_map, debug_viewer_seed_preset, load_runtime_startup_config,
         parse_runtime_startup_config, resolve_startup_map_id, spawn_characters_from_definition,
         AiCombatProfile, AvatarPath, BaseAttributeSet, BehaviorProfile, CampId,
         CharacterArchetypeComponent, CharacterDefinitionId, CharacterDefinitionPath,
@@ -799,8 +805,8 @@ mod tests {
     }
 
     #[test]
-    fn default_debug_seed_uses_known_character_ids() {
-        let ids: Vec<String> = default_debug_seed()
+    fn debug_viewer_seed_preset_uses_known_character_ids() {
+        let ids: Vec<String> = debug_viewer_seed_preset()
             .characters
             .into_iter()
             .map(|entry| entry.definition_id.0)
@@ -811,11 +817,11 @@ mod tests {
             vec!["player".to_string(), "trader_lao_wang".to_string(),]
         );
         assert_eq!(
-            default_debug_seed().map_id.as_ref().map(MapId::as_str),
+            debug_viewer_seed_preset().map_id.as_ref().map(MapId::as_str),
             Some("survivor_outpost_01")
         );
         assert_eq!(
-            default_debug_seed().start_location_id.as_deref(),
+            debug_viewer_seed_preset().start_location_id.as_deref(),
             Some("survivor_outpost_01")
         );
     }

@@ -253,66 +253,9 @@ pub(super) fn configure_runtime_after_restore(
 pub(super) fn apply_new_game_defaults(
     runtime: &mut game_core::SimulationRuntime,
     items: &ItemDefinitions,
+    new_game_config: &game_bevy::NewGameConfig,
 ) -> Result<(), String> {
-    let actor_id = player_actor_id(runtime).ok_or_else(|| "missing_player".to_string())?;
-    runtime
-        .economy_mut()
-        .clear_actor_loadout(actor_id)
-        .map_err(|error| error.to_string())?;
-    runtime
-        .economy_mut()
-        .set_actor_attribute(actor_id, "strength", 5);
-    runtime
-        .economy_mut()
-        .set_actor_attribute(actor_id, "agility", 5);
-    runtime
-        .economy_mut()
-        .set_actor_attribute(actor_id, "constitution", 5);
-    for (item_id, count) in [
-        (1008, 2),
-        (1007, 1),
-        (1006, 3),
-        (1002, 1),
-        (1003, 1),
-        (2004, 1),
-        (2013, 1),
-        (2015, 1),
-    ] {
-        runtime
-            .economy_mut()
-            .add_item(actor_id, item_id, count, &items.0)
-            .map_err(|error| error.to_string())?;
-    }
-    runtime
-        .economy_mut()
-        .add_ammo(actor_id, 1009, 12, &items.0)
-        .map_err(|error| error.to_string())?;
-    runtime
-        .economy_mut()
-        .equip_item(actor_id, 1002, Some("main_hand"), &items.0)
-        .map_err(|error| error.to_string())?;
-    let _ = runtime
-        .economy_mut()
-        .equip_item(actor_id, 2004, Some("body"), &items.0);
-    let _ = runtime
-        .economy_mut()
-        .equip_item(actor_id, 2013, Some("legs"), &items.0);
-    let _ = runtime
-        .economy_mut()
-        .equip_item(actor_id, 2015, Some("feet"), &items.0);
-    for location_id in [
-        "survivor_outpost_01",
-        "survivor_outpost_01_perimeter",
-        "street_a",
-        "street_b",
-        "factory",
-        "supermarket",
-    ] {
-        let _ = runtime.submit_command(game_core::SimulationCommand::UnlockLocation {
-            location_id: location_id.to_string(),
-        });
-    }
-    Ok(())
+    game_bevy::apply_new_game_config(runtime, items, new_game_config)
 }
 
 pub(super) fn rebuild_runtime_with_new_game_defaults(
@@ -333,7 +276,7 @@ pub(super) fn rebuild_runtime_with_new_game_defaults(
         shops,
         overworld,
     );
-    apply_new_game_defaults(&mut bootstrap.runtime, items)?;
+    apply_new_game_defaults(&mut bootstrap.runtime, items, &bootstrap.new_game_config)?;
     Ok(bootstrap.runtime)
 }
 

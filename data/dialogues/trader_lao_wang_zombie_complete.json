@@ -1,0 +1,50 @@
+{
+  "dialog_id": "trader_lao_wang_zombie_complete",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Zombie Hunt Complete",
+      "speaker": "老王",
+      "text": "干得不错，门口总算能喘口气了。医院那条线我已经跟陈医生打过招呼，你去诊所找他，他会告诉你下一步要拿什么。",
+      "portrait": "assets/portraits/trader_lao_wang.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "先看看货。",
+          "next": "trade_action"
+        },
+        {
+          "text": "明白了。",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

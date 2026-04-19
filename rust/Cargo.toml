@@ -12,6 +12,7 @@ members = [
     "apps/bevy_gltf_viewer",
     "apps/bevy_item_editor",
     "apps/bevy_recipe_editor",
+    "apps/content_tools",
     "apps/narrative_sync_server",
 ]
 resolver = "2"

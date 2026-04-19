@@ -3,6 +3,24 @@
   "default_dialogue_id": "doctor_chen",
   "variants": [
     {
+      "dialogue_id": "doctor_chen_find_medicine_active",
+      "when": {
+        "player_active_quests_any": ["find_medicine"]
+      }
+    },
+    {
+      "dialogue_id": "doctor_chen_find_medicine_complete",
+      "when": {
+        "player_completed_quests_any": ["find_medicine"]
+      }
+    },
+    {
+      "dialogue_id": "doctor_chen_find_medicine_offer",
+      "when": {
+        "player_completed_quests_any": ["zombie_hunter"]
+      }
+    },
+    {
       "dialogue_id": "doctor_chen_medical",
       "when": {
         "npc_role_in": ["doctor"],

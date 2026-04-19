@@ -222,6 +222,14 @@ pub enum QuestDefinitionValidationError {
     },
     #[error("quest {quest_id} objective node {node_id} requires objective_type")]
     MissingObjectiveType { quest_id: String, node_id: String },
+    #[error(
+        "quest {quest_id} objective node {node_id} uses unsupported objective_type {objective_type}"
+    )]
+    UnsupportedObjectiveType {
+        quest_id: String,
+        node_id: String,
+        objective_type: String,
+    },
     #[error("quest {quest_id} objective node {node_id} references unknown item id {item_id}")]
     UnknownObjectiveItem {
         quest_id: String,
@@ -361,13 +369,21 @@ pub fn validate_quest_definition(
             "start" => start_count += 1,
             "end" => end_count += 1,
             "objective" => {
-                if node.objective_type.trim().is_empty() {
+                let objective_type = node.objective_type.trim();
+                if objective_type.is_empty() {
                     return Err(QuestDefinitionValidationError::MissingObjectiveType {
                         quest_id: quest_id.to_string(),
                         node_id: node.id.clone(),
                     });
                 }
-                if node.objective_type == "collect" {
+                if !is_supported_objective_type(objective_type) {
+                    return Err(QuestDefinitionValidationError::UnsupportedObjectiveType {
+                        quest_id: quest_id.to_string(),
+                        node_id: node.id.clone(),
+                        objective_type: objective_type.to_string(),
+                    });
+                }
+                if objective_type == "collect" {
                     if let Some(item_id) = node.item_id {
                         if let Some(catalog) = catalog {
                             if !catalog.item_ids.is_empty() && !catalog.item_ids.contains(&item_id)
@@ -629,6 +645,10 @@ fn default_count() -> i32 {
     1
 }
 
+fn is_supported_objective_type(objective_type: &str) -> bool {
+    matches!(objective_type, "collect" | "kill")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -757,6 +777,65 @@ mod tests {
             error,
             QuestDefinitionValidationError::InvalidStartNodeCount { .. }
                 | QuestDefinitionValidationError::UnknownStartNode { .. }
+        ));
+    }
+
+    #[test]
+    fn validate_quest_rejects_unsupported_objective_type() {
+        let definition = QuestDefinition {
+            quest_id: "broken".to_string(),
+            title: "Broken".to_string(),
+            flow: QuestFlow {
+                start_node_id: "start".to_string(),
+                nodes: BTreeMap::from([
+                    (
+                        "start".to_string(),
+                        QuestNode {
+                            id: "start".to_string(),
+                            node_type: "start".to_string(),
+                            ..QuestNode::default()
+                        },
+                    ),
+                    (
+                        "travel".to_string(),
+                        QuestNode {
+                            id: "travel".to_string(),
+                            node_type: "objective".to_string(),
+                            objective_type: "travel".to_string(),
+                            ..QuestNode::default()
+                        },
+                    ),
+                    (
+                        "end".to_string(),
+                        QuestNode {
+                            id: "end".to_string(),
+                            node_type: "end".to_string(),
+                            ..QuestNode::default()
+                        },
+                    ),
+                ]),
+                connections: vec![
+                    QuestConnection {
+                        from: "start".to_string(),
+                        to: "travel".to_string(),
+                        ..QuestConnection::default()
+                    },
+                    QuestConnection {
+                        from: "travel".to_string(),
+                        to: "end".to_string(),
+                        ..QuestConnection::default()
+                    },
+                ],
+                ..QuestFlow::default()
+            },
+            ..QuestDefinition::default()
+        };
+
+        let error = validate_quest_definition(&definition, None)
+            .expect_err("unsupported objective should fail");
+        assert!(matches!(
+            error,
+            QuestDefinitionValidationError::UnsupportedObjectiveType { .. }
         ));
     }
 

@@ -413,10 +413,11 @@ mod tests {
     use bevy_ecs::message::MessageReader;
     use bevy_ecs::prelude::*;
     use game_bevy::{
-        default_debug_seed, CharacterDefinitions, DialogueDefinitions, DialogueRuleDefinitions,
-        EffectDefinitions, ItemDefinitions, MapDefinitions, OverworldDefinitions, QuestDefinitions,
-        RecipeDefinitions, RuntimeContentLoadState, RuntimeContentLoadStatus, RuntimeStartupConfig,
-        ShopDefinitions, SkillDefinitions, SkillTreeDefinitions, SpawnCharacterRequest,
+        build_default_startup_seed, CharacterDefinitions, DialogueDefinitions,
+        DialogueRuleDefinitions, EffectDefinitions, ItemDefinitions, MapDefinitions,
+        OverworldDefinitions, QuestDefinitions, RecipeDefinitions, RuntimeContentLoadState,
+        RuntimeContentLoadStatus, RuntimeStartupConfig, ShopDefinitions, SkillDefinitions,
+        SkillTreeDefinitions, SpawnCharacterRequest,
     };
     use game_data::{
         CharacterAiProfile, CharacterArchetype, CharacterAttributeTemplate, CharacterCombatProfile,
@@ -474,7 +475,10 @@ mod tests {
             .iter()
             .map(|request| request.definition_id.as_str())
             .collect();
-        let seed = default_debug_seed();
+        let maps = app.world().resource::<MapDefinitions>();
+        let overworld = app.world().resource::<OverworldDefinitions>();
+        let startup = app.world().resource::<RuntimeStartupConfig>();
+        let seed = build_default_startup_seed(&maps.0, &overworld.0, startup.startup_map.clone());
         let expected: Vec<&str> = seed
             .characters
             .iter()
@@ -640,6 +644,7 @@ mod tests {
                         blocks_movement: true,
                         blocks_sight: true,
                         terrain: "pillar".into(),
+                        visual: None,
                         extra: BTreeMap::new(),
                     }],
                 },
@@ -671,6 +676,7 @@ mod tests {
                         wall_visual: Some(game_data::MapBuildingWallVisualSpec {
                             kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
                         }),
+                        tile_set: None,
                         layout: None,
                         extra: BTreeMap::new(),
                     }),
@@ -723,38 +729,44 @@ mod tests {
             cells: vec![
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 0),
-                    terrain: "road".into(),
+                    terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(1, 0, 0),
-                    terrain: "road".into(),
+                    terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(2, 0, 0),
-                    terrain: "road".into(),
+                    terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(0, 0, 1),
-                    terrain: "road".into(),
+                    terrain: game_data::OverworldTerrainKind::Road,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(1, 0, 1),
-                    terrain: "wilderness".into(),
+                    terrain: game_data::OverworldTerrainKind::Forest,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
                 OverworldCellDefinition {
                     grid: GridCoord::new(2, 0, 1),
-                    terrain: "wilderness".into(),
+                    terrain: game_data::OverworldTerrainKind::Forest,
                     blocked: false,
+                    visual: None,
                     extra: BTreeMap::new(),
                 },
             ],
@@ -818,6 +830,7 @@ mod tests {
                     legs: "#3c5c90".to_string(),
                 },
             },
+            appearance_profile_id: "default_humanoid".to_string(),
             progression: CharacterProgression { level: 5 },
             combat: CharacterCombatProfile {
                 behavior: "neutral".to_string(),
@@ -870,22 +883,27 @@ mod tests {
                 settlement_id: "survivor_outpost_01_settlement".to_string(),
                 role: NpcRole::Guard,
                 ai_behavior_profile_id: "guard_settlement".to_string(),
+                schedule_profile_id: "guard_shift_weekday".to_string(),
+                personality_profile_id: "guard_disciplined".to_string(),
+                need_profile_id: "guard_standard".to_string(),
+                smart_object_access_profile_id: "guard_settlement_access".to_string(),
                 home_anchor: "guard_home_01".to_string(),
                 duty_route_id: "guard_patrol_north".to_string(),
                 schedule: vec![ScheduleBlock {
-                    day: ScheduleDay::Monday,
+                    day: Some(ScheduleDay::Monday),
+                    days: Vec::new(),
                     start_minute: 8 * 60,
                     end_minute: 16 * 60,
                     label: "白班执勤".to_string(),
                     tags: vec!["shift".to_string(), "guard".to_string()],
                 }],
-                smart_object_access: vec!["guard_post".to_string(), "bed".to_string()],
-                need_profile: NeedProfile {
+                need_profile_override: Some(NeedProfile {
                     hunger_decay_per_hour: 4.0,
                     energy_decay_per_hour: 3.0,
                     morale_decay_per_hour: 1.5,
                     safety_bias: 0.7,
-                },
+                }),
+                personality_override: Default::default(),
             }),
             ..sample_definition(id, archetype, disposition, camp_id, display_name)
         }

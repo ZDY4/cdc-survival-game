@@ -1,7 +1,10 @@
 //! Bevy App 装配层。
 //! 负责窗口、插件、启动系统、加载态切换和预览场景基础搭建。
 
+use std::path::PathBuf;
+
 use bevy::camera::visibility::RenderLayers;
+use bevy::log::warn;
 use bevy::prelude::*;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::EguiPrimaryContextPass;
@@ -10,8 +13,9 @@ use game_editor::{
     configure_editor_app_shell, configure_game_ui_fonts_system,
     preview_camera_input_system as shared_preview_camera_input_system,
     preview_camera_sync_system as shared_preview_camera_sync_system, setup_preview_stage,
-    EditorAppShellConfig, GameUiFontsState, PreviewCameraController,
-    PreviewStageConfig, WindowSizePersistenceConfig,
+    sync_builtin_humanoid_mannequin_scene_system, write_editor_session, EditorAppShellConfig,
+    EditorKind, GameUiFontsState, PreviewCameraController, PreviewStageConfig,
+    WindowSizePersistenceConfig,
 };
 
 use crate::camera_mode::{PreviewCameraModeState, FREE_PREVIEW_FOV};
@@ -19,10 +23,14 @@ use crate::commands::{
     ensure_selected_character_system, handle_character_editor_commands, CharacterEditorCommand,
 };
 use crate::data::load_editor_data;
+use crate::handoff::poll_external_selection_system;
 use crate::preview::{
     sync_preview_scene_system, PreviewCamera, CAMERA_RADIUS_MAX, CAMERA_RADIUS_MIN, PREVIEW_BG,
 };
-use crate::state::{CharacterUiStyleState, EditorData, EditorUiState, PreviewState};
+use crate::state::{
+    CharacterUiStyleState, EditorData, EditorUiState, ExternalCharacterSelectionState,
+    InitialCharacterSelection, PreviewState,
+};
 use crate::ui::{configure_character_ui_style_system, editor_ui_system, loading_ui_system};
 
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -35,7 +43,13 @@ enum AppState {
 #[derive(Component)]
 struct LoadingTask(Task<EditorData>);
 
-pub(crate) fn run() {
+pub(crate) fn run(initial_character_id: Option<String>) {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    if let Err(error) = write_editor_session(&repo_root, EditorKind::Character, std::process::id())
+    {
+        warn!("character editor failed to create initial handoff session: {error}");
+    }
+
     let mut app = App::new();
     configure_editor_app_shell(
         &mut app,
@@ -54,6 +68,8 @@ pub(crate) fn run() {
         .insert_resource(PreviewCameraModeState::default())
         .insert_resource(GameUiFontsState::default())
         .insert_resource(CharacterUiStyleState::default())
+        .insert_resource(ExternalCharacterSelectionState::new(repo_root))
+        .insert_resource(InitialCharacterSelection(initial_character_id))
         .add_systems(Startup, (setup_editor, load_editor_data_async))
         .add_systems(
             EguiPrimaryContextPass,
@@ -70,9 +86,11 @@ pub(crate) fn run() {
             (
                 handle_loading_task.run_if(in_state(AppState::Loading)),
                 ensure_selected_character_system.run_if(in_state(AppState::Ready)),
+                poll_external_selection_system.run_if(in_state(AppState::Ready)),
                 handle_character_editor_commands.run_if(in_state(AppState::Ready)),
                 (
                     sync_preview_scene_system,
+                    sync_builtin_humanoid_mannequin_scene_system,
                     shared_preview_camera_input_system,
                     shared_preview_camera_sync_system,
                 )

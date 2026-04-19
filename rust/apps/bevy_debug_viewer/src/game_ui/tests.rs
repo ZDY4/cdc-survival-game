@@ -11,7 +11,7 @@ use crate::state::{
 };
 use bevy::picking::prelude::Pickable;
 use bevy::prelude::App;
-use game_bevy::{ItemDefinitions, UiMenuPanel, UiMenuState, UiModalState};
+use game_bevy::{ItemDefinitions, NewGameConfig, NewGameEquipmentEntry, NewGameItemStack, UiMenuPanel, UiMenuState, UiModalState};
 use game_core::create_demo_runtime;
 use game_data::{DialogueData, InteractionTargetId, ItemDefinition, ItemFragment};
 
@@ -54,6 +54,74 @@ fn sample_new_game_item_definitions() -> ItemDefinitions {
         (2013, equippable(2013, "Pants", "legs")),
         (2015, equippable(2015, "Boots", "feet")),
     ])))
+}
+
+fn sample_new_game_config() -> NewGameConfig {
+    NewGameConfig {
+        attributes: BTreeMap::from([
+            ("strength".to_string(), 5),
+            ("agility".to_string(), 5),
+            ("constitution".to_string(), 5),
+        ]),
+        items: vec![
+            NewGameItemStack {
+                item_id: 1008,
+                count: 2,
+            },
+            NewGameItemStack {
+                item_id: 1006,
+                count: 3,
+            },
+            NewGameItemStack {
+                item_id: 1002,
+                count: 1,
+            },
+            NewGameItemStack {
+                item_id: 1003,
+                count: 1,
+            },
+            NewGameItemStack {
+                item_id: 2004,
+                count: 1,
+            },
+            NewGameItemStack {
+                item_id: 2013,
+                count: 1,
+            },
+            NewGameItemStack {
+                item_id: 2015,
+                count: 1,
+            },
+        ],
+        ammo: vec![NewGameItemStack {
+            item_id: 1009,
+            count: 12,
+        }],
+        equipment: vec![
+            NewGameEquipmentEntry {
+                item_id: 1002,
+                slot_id: "main_hand".into(),
+            },
+            NewGameEquipmentEntry {
+                item_id: 2004,
+                slot_id: "body".into(),
+            },
+            NewGameEquipmentEntry {
+                item_id: 2013,
+                slot_id: "legs".into(),
+            },
+            NewGameEquipmentEntry {
+                item_id: 2015,
+                slot_id: "feet".into(),
+            },
+        ],
+        unlocked_locations: vec![
+            "survivor_outpost_01".into(),
+            "survivor_outpost_01_perimeter".into(),
+            "survivor_outpost_01_interior".into(),
+        ],
+        ..NewGameConfig::default()
+    }
 }
 
 #[test]
@@ -196,13 +264,15 @@ fn main_menu_ui_renders_only_in_main_menu_scene() {
 fn apply_new_game_defaults_does_not_require_ap() {
     let (mut runtime, handles) = create_demo_runtime();
     let items = sample_new_game_item_definitions();
+    let config = sample_new_game_config();
     runtime.economy_mut().set_actor_level(handles.player, 1);
     let _ = runtime.submit_command(game_core::SimulationCommand::SetActorAp {
         actor_id: handles.player,
         ap: 0.0,
     });
 
-    apply_new_game_defaults(&mut runtime, &items).expect("new game setup should succeed");
+    apply_new_game_defaults(&mut runtime, &items, &config)
+        .expect("new game setup should succeed");
 
     assert_eq!(runtime.get_actor_ap(handles.player), 0.0);
     assert_eq!(runtime.get_actor_inventory_count(handles.player, "1008"), 2);

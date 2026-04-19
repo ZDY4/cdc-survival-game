@@ -1,5 +1,6 @@
 use bevy::asset::uuid_handle;
-use bevy::core_pipeline::core_3d::Transparent3d;
+use bevy::core_pipeline::core_3d::{Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, Transparent3d};
+use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
@@ -7,12 +8,14 @@ use bevy::pbr::{
     SetMeshViewBindingArrayBindGroup, ViewKeyCache,
 };
 use bevy::prelude::*;
+use bevy::render::batching::gpu_preprocessing::GpuPreprocessingSupport;
 use bevy::render::extract_component::ExtractComponentPlugin;
 use bevy::render::mesh::{allocator::MeshAllocator, RenderMesh, RenderMeshBufferInfo};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_phase::{
-    AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
-    RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
+    AddRenderCommand, BinnedRenderPhaseType, DrawFunctions, PhaseItem, PhaseItemExtraIndex,
+    RenderCommand, RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewBinnedRenderPhases,
+    ViewSortedRenderPhases,
 };
 use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
@@ -42,13 +45,16 @@ impl Plugin for WorldRenderBuildingWallTileInstancingPlugin {
         };
 
         render_app
-            .add_render_command::<Transparent3d, DrawWorldRenderBuildingWallTileInstanced>()
+            .add_render_command::<Opaque3d, DrawWorldRenderBuildingWallTileInstancedOpaque>()
+            .add_render_command::<Transparent3d, DrawWorldRenderBuildingWallTileInstancedTransparent>()
             .init_resource::<SpecializedMeshPipelines<WorldRenderBuildingWallTilePipeline>>()
             .add_systems(RenderStartup, init_world_render_building_wall_tile_pipeline)
             .add_systems(
                 Render,
                 (
-                    queue_world_render_building_wall_tile_batches
+                    queue_world_render_building_wall_tile_opaque_batches
+                        .in_set(RenderSystems::QueueMeshes),
+                    queue_world_render_building_wall_tile_transparent_batches
                         .in_set(RenderSystems::QueueMeshes),
                     prepare_world_render_building_wall_tile_instance_buffers
                         .in_set(RenderSystems::PrepareResources),
@@ -58,9 +64,16 @@ impl Plugin for WorldRenderBuildingWallTileInstancingPlugin {
 }
 
 #[derive(Component)]
-struct WorldRenderBuildingWallTileInstanceBuffer {
+struct WorldRenderBuildingWallTileOpaqueInstanceBuffer {
     buffer: Buffer,
     length: usize,
+}
+
+#[derive(Component)]
+struct WorldRenderBuildingWallTileTransparentInstanceBuffer {
+    buffer: Buffer,
+    length: usize,
+    center: Vec3,
 }
 
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -85,9 +98,15 @@ struct WorldRenderBuildingWallTilePipeline {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum WorldRenderBuildingWallTilePass {
+    Opaque,
+    Transparent,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct WorldRenderBuildingWallTilePipelineKey {
     mesh_key: MeshPipelineKey,
-    blended: bool,
+    pass: WorldRenderBuildingWallTilePass,
 }
 
 fn init_world_render_building_wall_tile_pipeline(
@@ -115,96 +134,246 @@ fn prepare_world_render_building_wall_tile_instance_buffers(
         if batch_visual_state.instances.is_empty() {
             commands
                 .entity(entity)
-                .remove::<WorldRenderBuildingWallTileInstanceBuffer>();
+                .remove::<WorldRenderBuildingWallTileOpaqueInstanceBuffer>()
+                .remove::<WorldRenderBuildingWallTileTransparentInstanceBuffer>();
             continue;
         }
 
         let profile = building_wall_visual_profile(batch_source.visual_kind);
-        let instance_data = batch_visual_state
-            .instances
-            .iter()
-            .map(|instance| {
-                let tint = instance.tint.to_linear().to_vec4();
-                let fade_alpha = instance.fade_alpha.clamp(0.0, 1.0);
-                let faded = fade_alpha < 0.999;
-                let tint_rgb = Vec3::new(tint.x, tint.y, tint.z);
-                let face_color = profile.face_color.to_linear().to_vec4();
-                let major_line_color = profile.major_line_color.to_linear().to_vec4();
-                let minor_line_color = profile.minor_line_color.to_linear().to_vec4();
-                let cap_color = profile.cap_color.to_linear().to_vec4();
-                let matrix = (instance.transform.to_matrix()
-                    * batch_source.prototype_local_transform.to_matrix())
-                .to_cols_array_2d();
+        let face_color = profile.face_color.to_linear().to_vec4();
+        let major_line_color = profile.major_line_color.to_linear().to_vec4();
+        let minor_line_color = profile.minor_line_color.to_linear().to_vec4();
+        let cap_color = profile.cap_color.to_linear().to_vec4();
 
-                WorldRenderBuildingWallTileInstanceGpuData {
-                    world_from_local_0: matrix[0],
-                    world_from_local_1: matrix[1],
-                    world_from_local_2: matrix[2],
-                    world_from_local_3: matrix[3],
-                    face_color: [
-                        face_color.x * tint_rgb.x,
-                        face_color.y * tint_rgb.y,
-                        face_color.z * tint_rgb.z,
-                        face_color.w * fade_alpha,
-                    ],
-                    major_line_color: [
-                        major_line_color.x * tint_rgb.x,
-                        major_line_color.y * tint_rgb.y,
-                        major_line_color.z * tint_rgb.z,
-                        major_line_color.w * fade_alpha,
-                    ],
-                    minor_line_color: [
-                        minor_line_color.x * tint_rgb.x,
-                        minor_line_color.y * tint_rgb.y,
-                        minor_line_color.z * tint_rgb.z,
-                        minor_line_color.w * fade_alpha,
-                    ],
-                    cap_color: [
-                        cap_color.x * tint_rgb.x,
-                        cap_color.y * tint_rgb.y,
-                        cap_color.z * tint_rgb.z,
-                        cap_color.w * fade_alpha,
-                    ],
-                    params_0: [
-                        profile.major_grid_size.max(0.001),
-                        profile.minor_grid_size.max(0.001),
-                        profile.major_line_width.max(0.0005),
-                        profile.minor_line_width.max(0.0005),
-                    ],
-                    params_1: [
-                        profile.face_tint_strength.clamp(0.0, 1.0),
-                        if faded {
-                            0.0
-                        } else {
-                            profile.grid_line_visibility.clamp(0.0, 1.0)
-                        },
-                        if faded {
-                            0.0
-                        } else {
-                            profile.top_face_grid_visibility.clamp(0.0, 1.0)
-                        },
-                        0.0,
-                    ],
-                }
-            })
-            .collect::<Vec<_>>();
+        let mut opaque_instance_data = Vec::with_capacity(batch_visual_state.instances.len());
+        let mut transparent_instance_data = Vec::new();
+        let mut transparent_center_sum = Vec3::ZERO;
 
-        let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("world render building wall tile instance buffer"),
-            contents: bytemuck::cast_slice(instance_data.as_slice()),
-            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-        });
+        for instance in &batch_visual_state.instances {
+            let tint = instance.tint.to_linear().to_vec4();
+            let fade_alpha = instance.fade_alpha.clamp(0.0, 1.0);
+            let faded = fade_alpha < 0.999;
+            let tint_rgb = Vec3::new(tint.x, tint.y, tint.z);
+            let matrix = (instance.transform.to_matrix()
+                * batch_source.prototype_local_transform.to_matrix())
+            .to_cols_array_2d();
 
-        commands
-            .entity(entity)
-            .insert(WorldRenderBuildingWallTileInstanceBuffer {
-                buffer,
-                length: instance_data.len(),
-            });
+            let gpu_data = WorldRenderBuildingWallTileInstanceGpuData {
+                world_from_local_0: matrix[0],
+                world_from_local_1: matrix[1],
+                world_from_local_2: matrix[2],
+                world_from_local_3: matrix[3],
+                face_color: [
+                    face_color.x * tint_rgb.x,
+                    face_color.y * tint_rgb.y,
+                    face_color.z * tint_rgb.z,
+                    face_color.w * fade_alpha,
+                ],
+                major_line_color: [
+                    major_line_color.x * tint_rgb.x,
+                    major_line_color.y * tint_rgb.y,
+                    major_line_color.z * tint_rgb.z,
+                    major_line_color.w * fade_alpha,
+                ],
+                minor_line_color: [
+                    minor_line_color.x * tint_rgb.x,
+                    minor_line_color.y * tint_rgb.y,
+                    minor_line_color.z * tint_rgb.z,
+                    minor_line_color.w * fade_alpha,
+                ],
+                cap_color: [
+                    cap_color.x * tint_rgb.x,
+                    cap_color.y * tint_rgb.y,
+                    cap_color.z * tint_rgb.z,
+                    cap_color.w * fade_alpha,
+                ],
+                params_0: [
+                    profile.major_grid_size.max(0.001),
+                    profile.minor_grid_size.max(0.001),
+                    profile.major_line_width.max(0.0005),
+                    profile.minor_line_width.max(0.0005),
+                ],
+                params_1: [
+                    profile.face_tint_strength.clamp(0.0, 1.0),
+                    if faded {
+                        0.0
+                    } else {
+                        profile.grid_line_visibility.clamp(0.0, 1.0)
+                    },
+                    if faded {
+                        0.0
+                    } else {
+                        profile.top_face_grid_visibility.clamp(0.0, 1.0)
+                    },
+                    0.0,
+                ],
+            };
+
+            let is_transparent = fade_alpha < 0.999
+                || tint.w < 0.999
+                || face_color.w < 0.999
+                || major_line_color.w < 0.999
+                || minor_line_color.w < 0.999
+                || cap_color.w < 0.999;
+
+            if is_transparent {
+                transparent_center_sum += instance.transform.translation;
+                transparent_instance_data.push(gpu_data);
+            } else {
+                opaque_instance_data.push(gpu_data);
+            }
+        }
+
+        let mut entity_commands = commands.entity(entity);
+        write_building_wall_opaque_buffer(
+            &mut entity_commands,
+            &render_device,
+            opaque_instance_data.as_slice(),
+        );
+        write_building_wall_transparent_buffer(
+            &mut entity_commands,
+            &render_device,
+            transparent_instance_data.as_slice(),
+            transparent_center_sum,
+        );
     }
 }
 
-fn queue_world_render_building_wall_tile_batches(
+fn write_building_wall_opaque_buffer(
+    entity_commands: &mut EntityCommands,
+    render_device: &RenderDevice,
+    instance_data: &[WorldRenderBuildingWallTileInstanceGpuData],
+) {
+    if instance_data.is_empty() {
+        entity_commands.remove::<WorldRenderBuildingWallTileOpaqueInstanceBuffer>();
+        return;
+    }
+
+    let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("world render building wall tile opaque instance buffer"),
+        contents: bytemuck::cast_slice(instance_data),
+        usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+    });
+
+    entity_commands.insert(WorldRenderBuildingWallTileOpaqueInstanceBuffer {
+        buffer,
+        length: instance_data.len(),
+    });
+}
+
+fn write_building_wall_transparent_buffer(
+    entity_commands: &mut EntityCommands,
+    render_device: &RenderDevice,
+    instance_data: &[WorldRenderBuildingWallTileInstanceGpuData],
+    center_sum: Vec3,
+) {
+    if instance_data.is_empty() {
+        entity_commands.remove::<WorldRenderBuildingWallTileTransparentInstanceBuffer>();
+        return;
+    }
+
+    let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("world render building wall tile transparent instance buffer"),
+        contents: bytemuck::cast_slice(instance_data),
+        usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+    });
+
+    entity_commands.insert(WorldRenderBuildingWallTileTransparentInstanceBuffer {
+        buffer,
+        length: instance_data.len(),
+        center: center_sum / instance_data.len() as f32,
+    });
+}
+
+fn queue_world_render_building_wall_tile_opaque_batches(
+    opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
+    custom_pipeline: Res<WorldRenderBuildingWallTilePipeline>,
+    mut pipelines: ResMut<SpecializedMeshPipelines<WorldRenderBuildingWallTilePipeline>>,
+    pipeline_cache: Res<PipelineCache>,
+    meshes: Res<RenderAssets<RenderMesh>>,
+    render_mesh_instances: Res<RenderMeshInstances>,
+    view_key_cache: Res<ViewKeyCache>,
+    mesh_allocator: Res<MeshAllocator>,
+    gpu_preprocessing_support: Res<GpuPreprocessingSupport>,
+    batches: Query<
+        (
+            Entity,
+            &MainEntity,
+            &WorldRenderBuildingWallTileOpaqueInstanceBuffer,
+        ),
+        With<WorldRenderBuildingWallTileBatchSource>,
+    >,
+    mut opaque_render_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
+    views: Query<&ExtractedView>,
+    mut change_tick: Local<Tick>,
+) {
+    let draw_function = opaque_draw_functions
+        .read()
+        .id::<DrawWorldRenderBuildingWallTileInstancedOpaque>();
+
+    for view in &views {
+        let Some(opaque_phase) = opaque_render_phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+        let Some(view_key) = view_key_cache.get(&view.retained_view_entity).copied() else {
+            continue;
+        };
+
+        for (entity, main_entity, instance_buffer) in &batches {
+            if instance_buffer.length == 0 {
+                continue;
+            }
+
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
+            else {
+                continue;
+            };
+            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
+                continue;
+            };
+            let (vertex_slab, index_slab) = mesh_allocator.mesh_slabs(&mesh_instance.mesh_asset_id);
+            let mesh_key =
+                view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
+            let pipeline = match pipelines.specialize(
+                &pipeline_cache,
+                &custom_pipeline,
+                WorldRenderBuildingWallTilePipelineKey {
+                    mesh_key,
+                    pass: WorldRenderBuildingWallTilePass::Opaque,
+                },
+                &mesh.layout,
+            ) {
+                Ok(pipeline) => pipeline,
+                Err(_) => continue,
+            };
+
+            let next_change_tick = change_tick.get().wrapping_add(1);
+            change_tick.set(next_change_tick);
+
+            opaque_phase.add(
+                Opaque3dBatchSetKey {
+                    draw_function,
+                    pipeline,
+                    material_bind_group_index: None,
+                    vertex_slab: vertex_slab.unwrap_or_default(),
+                    index_slab,
+                    lightmap_slab: None,
+                },
+                Opaque3dBinKey {
+                    asset_id: mesh_instance.mesh_asset_id.into(),
+                },
+                (entity, *main_entity),
+                mesh_instance.current_uniform_index,
+                // The instance payload is stored per render entity, so cross-entity
+                // batching would bind the wrong custom instance buffer.
+                BinnedRenderPhaseType::mesh(false, &gpu_preprocessing_support),
+                *change_tick,
+            );
+        }
+    }
+}
+
+fn queue_world_render_building_wall_tile_transparent_batches(
     transparent_draw_functions: Res<DrawFunctions<Transparent3d>>,
     custom_pipeline: Res<WorldRenderBuildingWallTilePipeline>,
     mut pipelines: ResMut<SpecializedMeshPipelines<WorldRenderBuildingWallTilePipeline>>,
@@ -216,31 +385,29 @@ fn queue_world_render_building_wall_tile_batches(
         (
             Entity,
             &MainEntity,
-            &WorldRenderTileBatchVisualState,
-            &WorldRenderBuildingWallTileInstanceBuffer,
+            &WorldRenderBuildingWallTileTransparentInstanceBuffer,
         ),
         With<WorldRenderBuildingWallTileBatchSource>,
     >,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
-    views: Query<(&ExtractedView, &Msaa)>,
+    views: Query<&ExtractedView>,
 ) {
     let draw_function = transparent_draw_functions
         .read()
-        .id::<DrawWorldRenderBuildingWallTileInstanced>();
+        .id::<DrawWorldRenderBuildingWallTileInstancedTransparent>();
 
-    for (view, _msaa) in &views {
+    for view in &views {
         let Some(transparent_phase) = transparent_render_phases.get_mut(&view.retained_view_entity)
         else {
             continue;
         };
-
         let Some(view_key) = view_key_cache.get(&view.retained_view_entity).copied() else {
             continue;
         };
         let rangefinder = view.rangefinder3d();
 
-        for (entity, main_entity, batch_visual_state, instance_buffer) in &batches {
-            if instance_buffer.length == 0 || batch_visual_state.instances.is_empty() {
+        for (entity, main_entity, instance_buffer) in &batches {
+            if instance_buffer.length == 0 {
                 continue;
             }
 
@@ -251,41 +418,32 @@ fn queue_world_render_building_wall_tile_batches(
             let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
                 continue;
             };
-            let batch_center = batch_center(batch_visual_state);
             let mesh_key =
                 view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
-            let blended = batch_visual_state
-                .instances
-                .iter()
-                .any(|instance| instance.fade_alpha < 0.999 || instance.tint.to_linear().to_vec4().w < 0.999);
-            let key = WorldRenderBuildingWallTilePipelineKey { mesh_key, blended };
-            let pipeline =
-                match pipelines.specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout) {
-                    Ok(pipeline) => pipeline,
-                    Err(_) => continue,
-                };
+            let pipeline = match pipelines.specialize(
+                &pipeline_cache,
+                &custom_pipeline,
+                WorldRenderBuildingWallTilePipelineKey {
+                    mesh_key,
+                    pass: WorldRenderBuildingWallTilePass::Transparent,
+                },
+                &mesh.layout,
+            ) {
+                Ok(pipeline) => pipeline,
+                Err(_) => continue,
+            };
 
             transparent_phase.add(Transparent3d {
                 entity: (entity, *main_entity),
                 pipeline,
                 draw_function,
-                distance: rangefinder.distance(&batch_center),
+                distance: rangefinder.distance(&instance_buffer.center),
                 batch_range: 0..1,
                 extra_index: PhaseItemExtraIndex::None,
                 indexed: matches!(mesh.buffer_info, RenderMeshBufferInfo::Indexed { .. }),
             });
         }
     }
-}
-
-fn batch_center(batch_visual_state: &WorldRenderTileBatchVisualState) -> Vec3 {
-    let sum = batch_visual_state
-        .instances
-        .iter()
-        .fold(Vec3::ZERO, |acc, instance| {
-            acc + instance.transform.translation
-        });
-    sum / batch_visual_state.instances.len().max(1) as f32
 }
 
 impl SpecializedMeshPipeline for WorldRenderBuildingWallTilePipeline {
@@ -358,86 +516,171 @@ impl SpecializedMeshPipeline for WorldRenderBuildingWallTilePipeline {
         if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
             if let Some(Some(target)) = fragment.targets.first_mut() {
-                target.blend = key.blended.then_some(BlendState::ALPHA_BLENDING);
+                target.blend = match key.pass {
+                    WorldRenderBuildingWallTilePass::Opaque => None,
+                    WorldRenderBuildingWallTilePass::Transparent => {
+                        Some(BlendState::ALPHA_BLENDING)
+                    }
+                };
             }
         }
         if let Some(depth_stencil) = descriptor.depth_stencil.as_mut() {
-            depth_stencil.depth_write_enabled = !key.blended;
+            depth_stencil.depth_write_enabled =
+                matches!(key.pass, WorldRenderBuildingWallTilePass::Opaque);
         }
         Ok(descriptor)
     }
 }
 
-type DrawWorldRenderBuildingWallTileInstanced = (
+type DrawWorldRenderBuildingWallTileInstancedOpaque = (
     SetItemPipeline,
     SetMeshViewBindGroup<0>,
     SetMeshViewBindingArrayBindGroup<1>,
     SetMeshBindGroup<2>,
-    DrawWorldRenderBuildingWallTileInstancedMesh,
+    DrawWorldRenderBuildingWallTileInstancedOpaqueMesh,
 );
 
-struct DrawWorldRenderBuildingWallTileInstancedMesh;
+type DrawWorldRenderBuildingWallTileInstancedTransparent = (
+    SetItemPipeline,
+    SetMeshViewBindGroup<0>,
+    SetMeshViewBindingArrayBindGroup<1>,
+    SetMeshBindGroup<2>,
+    DrawWorldRenderBuildingWallTileInstancedTransparentMesh,
+);
 
-impl<P: PhaseItem> RenderCommand<P> for DrawWorldRenderBuildingWallTileInstancedMesh {
+struct DrawWorldRenderBuildingWallTileInstancedOpaqueMesh;
+
+impl<P: PhaseItem> RenderCommand<P> for DrawWorldRenderBuildingWallTileInstancedOpaqueMesh {
     type Param = (
         SRes<RenderAssets<RenderMesh>>,
         SRes<RenderMeshInstances>,
         SRes<MeshAllocator>,
     );
     type ViewQuery = ();
-    type ItemQuery = Read<WorldRenderBuildingWallTileInstanceBuffer>;
+    type ItemQuery = Read<WorldRenderBuildingWallTileOpaqueInstanceBuffer>;
 
     fn render<'w>(
         item: &P,
         _view: (),
-        instance_buffer: Option<&'w WorldRenderBuildingWallTileInstanceBuffer>,
-        (meshes, render_mesh_instances, mesh_allocator): SystemParamItem<'w, '_, Self::Param>,
+        instance_buffer: Option<&'w WorldRenderBuildingWallTileOpaqueInstanceBuffer>,
+        params: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        let mesh_allocator = mesh_allocator.into_inner();
-
-        let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(item.main_entity())
-        else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(gpu_mesh) = meshes.into_inner().get(mesh_instance.mesh_asset_id) else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(instance_buffer) = instance_buffer else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(vertex_buffer_slice) =
-            mesh_allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id)
-        else {
-            return RenderCommandResult::Skip;
-        };
-
-        pass.set_vertex_buffer(0, vertex_buffer_slice.buffer.slice(..));
-        pass.set_vertex_buffer(1, instance_buffer.buffer.slice(..));
-
-        match &gpu_mesh.buffer_info {
-            RenderMeshBufferInfo::Indexed {
-                index_format,
-                count,
-            } => {
-                let Some(index_buffer_slice) =
-                    mesh_allocator.mesh_index_slice(&mesh_instance.mesh_asset_id)
-                else {
-                    return RenderCommandResult::Skip;
-                };
-
-                pass.set_index_buffer(index_buffer_slice.buffer.slice(..), *index_format);
-                pass.draw_indexed(
-                    index_buffer_slice.range.start..(index_buffer_slice.range.start + count),
-                    vertex_buffer_slice.range.start as i32,
-                    0..instance_buffer.length as u32,
-                );
-            }
-            RenderMeshBufferInfo::NonIndexed => {
-                pass.draw(vertex_buffer_slice.range, 0..instance_buffer.length as u32);
-            }
-        }
-
-        RenderCommandResult::Success
+        render_building_wall_tile_instanced_mesh(item, instance_buffer, params, pass)
     }
+}
+
+struct DrawWorldRenderBuildingWallTileInstancedTransparentMesh;
+
+impl<P: PhaseItem> RenderCommand<P> for DrawWorldRenderBuildingWallTileInstancedTransparentMesh {
+    type Param = (
+        SRes<RenderAssets<RenderMesh>>,
+        SRes<RenderMeshInstances>,
+        SRes<MeshAllocator>,
+    );
+    type ViewQuery = ();
+    type ItemQuery = Read<WorldRenderBuildingWallTileTransparentInstanceBuffer>;
+
+    fn render<'w>(
+        item: &P,
+        _view: (),
+        instance_buffer: Option<&'w WorldRenderBuildingWallTileTransparentInstanceBuffer>,
+        params: SystemParamItem<'w, '_, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) -> RenderCommandResult {
+        render_building_wall_tile_instanced_mesh(item, instance_buffer, params, pass)
+    }
+}
+
+trait WorldRenderBuildingWallTileInstanceBufferExt {
+    fn buffer(&self) -> &Buffer;
+    fn len(&self) -> usize;
+}
+
+impl WorldRenderBuildingWallTileInstanceBufferExt
+    for WorldRenderBuildingWallTileOpaqueInstanceBuffer
+{
+    fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    fn len(&self) -> usize {
+        self.length
+    }
+}
+
+impl WorldRenderBuildingWallTileInstanceBufferExt
+    for WorldRenderBuildingWallTileTransparentInstanceBuffer
+{
+    fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    fn len(&self) -> usize {
+        self.length
+    }
+}
+
+fn render_building_wall_tile_instanced_mesh<'w, P, B>(
+    item: &P,
+    instance_buffer: Option<&'w B>,
+    (meshes, render_mesh_instances, mesh_allocator): SystemParamItem<
+        'w,
+        '_,
+        (
+            SRes<RenderAssets<RenderMesh>>,
+            SRes<RenderMeshInstances>,
+            SRes<MeshAllocator>,
+        ),
+    >,
+    pass: &mut TrackedRenderPass<'w>,
+) -> RenderCommandResult
+where
+    P: PhaseItem,
+    B: WorldRenderBuildingWallTileInstanceBufferExt,
+{
+    let mesh_allocator = mesh_allocator.into_inner();
+
+    let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(item.main_entity())
+    else {
+        return RenderCommandResult::Skip;
+    };
+    let Some(gpu_mesh) = meshes.into_inner().get(mesh_instance.mesh_asset_id) else {
+        return RenderCommandResult::Skip;
+    };
+    let Some(instance_buffer) = instance_buffer else {
+        return RenderCommandResult::Skip;
+    };
+    let Some(vertex_buffer_slice) = mesh_allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id)
+    else {
+        return RenderCommandResult::Skip;
+    };
+
+    pass.set_vertex_buffer(0, vertex_buffer_slice.buffer.slice(..));
+    pass.set_vertex_buffer(1, instance_buffer.buffer().slice(..));
+
+    match &gpu_mesh.buffer_info {
+        RenderMeshBufferInfo::Indexed {
+            index_format,
+            count,
+        } => {
+            let Some(index_buffer_slice) =
+                mesh_allocator.mesh_index_slice(&mesh_instance.mesh_asset_id)
+            else {
+                return RenderCommandResult::Skip;
+            };
+
+            pass.set_index_buffer(index_buffer_slice.buffer.slice(..), *index_format);
+            pass.draw_indexed(
+                index_buffer_slice.range.start..(index_buffer_slice.range.start + count),
+                vertex_buffer_slice.range.start as i32,
+                0..instance_buffer.len() as u32,
+            );
+        }
+        RenderMeshBufferInfo::NonIndexed => {
+            pass.draw(vertex_buffer_slice.range, 0..instance_buffer.len() as u32);
+        }
+    }
+
+    RenderCommandResult::Success
 }

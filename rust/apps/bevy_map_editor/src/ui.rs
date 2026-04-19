@@ -4,17 +4,12 @@ pub(crate) mod panels;
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use game_editor::ai_chat::{
-    persist_ai_chat_settings, poll_generation_job, render_ai_chat_panel, render_ai_settings_window,
-    start_connection_test, AiChatUiAction,
-};
 
 use crate::camera::{CAMERA_PAN_SPEED_MULTIPLIER_MAX, CAMERA_PAN_SPEED_MULTIPLIER_MIN};
 use crate::commands::MapEditorCommand;
-use crate::map_ai::{
-    assistant_summary_text, render_map_ai_result, success_status_text, MapAiUiAction,
+use crate::state::{
+    map_library_item_label, EditorState, EditorUiState, LibraryView, OrbitCameraState,
 };
-use crate::state::{map_library_item_label, EditorState, EditorUiState, LibraryView, MapAiState, MapAiWorkerState, OrbitCameraState};
 use panels::{current_fps_label, draw_diagnostic, editor_top_summary};
 
 pub(crate) fn loading_ui_system(mut contexts: EguiContexts) {
@@ -36,8 +31,6 @@ pub(crate) fn editor_ui_system(
     mut editor: ResMut<EditorState>,
     mut ui_state: ResMut<EditorUiState>,
     mut orbit_camera: ResMut<OrbitCameraState>,
-    mut ai: ResMut<MapAiState>,
-    mut worker: ResMut<MapAiWorkerState>,
     diagnostics: Res<DiagnosticsStore>,
     mut requests: MessageWriter<MapEditorCommand>,
 ) {
@@ -115,13 +108,6 @@ pub(crate) fn editor_ui_system(
                 ui.label("T: toggle top-down");
                 ui.label("Q / E: temporary yaw offset");
             });
-            ui.menu_button("Settings", |ui| {
-                if ui.button("Open AI Settings").clicked() {
-                    ai.show_settings_window = true;
-                    ui.close();
-                }
-            });
-
             ui.separator();
             ui.strong(top_summary);
 
@@ -137,14 +123,6 @@ pub(crate) fn editor_ui_system(
     egui::TopBottomPanel::bottom("bottom").show(ctx, |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.label(&editor.status);
-            if !ai.pending_status.is_empty() {
-                ui.separator();
-                ui.label(&ai.pending_status);
-            }
-            if !ai.provider_status.is_empty() {
-                ui.separator();
-                ui.label(&ai.provider_status);
-            }
         });
     });
 
@@ -256,6 +234,9 @@ pub(crate) fn editor_ui_system(
     egui::SidePanel::right("authoring")
         .default_width(430.0)
         .show(ctx, |ui| {
+            ui.heading("检查面板");
+            ui.label("地图修改的 AI 主路径已迁出 editor，当前窗口仅保留可视化检查与手工复核。");
+            ui.separator();
             match editor.selected_view {
                 LibraryView::Maps => {
                     if let Some(selected_map_id) = editor.selected_map_id.clone() {
@@ -275,51 +256,10 @@ pub(crate) fn editor_ui_system(
                 }
                 LibraryView::Overworlds => {
                     ui.heading("Overworld");
-                    ui.label("Overworld is view-first in this phase. AI authoring targets maps.");
+                    ui.label("当前阶段以查看与复核为主。");
                 }
             }
-
-            ui.separator();
-            ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), ui.available_height().max(0.0)),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    let ai_actions = render_ai_chat_panel(
-                        ui,
-                        &mut ai,
-                        worker.is_busy(),
-                        "AI",
-                        "Generate Proposal",
-                        |ui, proposal, busy| render_map_ai_result(ui, &editor, proposal, busy),
-                    );
-                    for action in ai_actions {
-                        match action {
-                            AiChatUiAction::OpenSettings => ai.show_settings_window = true,
-                            AiChatUiAction::SubmitPrompt => {
-                                requests.write(MapEditorCommand::StartAiGeneration);
-                            }
-                            AiChatUiAction::Host(MapAiUiAction::ApplyProposal) => {
-                                requests.write(MapEditorCommand::ApplyAiProposal);
-                            }
-                            AiChatUiAction::SaveSettings | AiChatUiAction::TestConnection => {}
-                        }
-                    }
-                },
-            );
         });
-
-    for action in render_ai_settings_window(ctx, &mut ai, worker.is_busy()) {
-        match action {
-            AiChatUiAction::SaveSettings => {
-                ai.provider_status =
-                    persist_ai_chat_settings(&mut ai).unwrap_or_else(|error| error);
-            }
-            AiChatUiAction::TestConnection => start_connection_test(&mut ai, &mut worker),
-            AiChatUiAction::OpenSettings
-            | AiChatUiAction::SubmitPrompt
-            | AiChatUiAction::Host(_) => {}
-        }
-    }
 
     if ui_state.show_fps_overlay {
         egui::Area::new("fps_overlay".into())
@@ -348,16 +288,4 @@ pub(crate) fn editor_ui_system(
                 });
         }
     }
-}
-
-pub(crate) fn poll_ai_worker_system(
-    mut ai: ResMut<MapAiState>,
-    mut worker: ResMut<MapAiWorkerState>,
-) {
-    poll_generation_job(
-        &mut ai,
-        &mut worker,
-        assistant_summary_text,
-        success_status_text,
-    );
 }

@@ -5,8 +5,8 @@ use bevy::log::{info, warn};
 use bevy::prelude::*;
 use game_data::{load_effect_library, ItemEditDiagnostic, ItemEditorService};
 use game_editor::{
-    clear_item_editor_selection_request, read_item_editor_selection_request,
-    write_item_editor_session,
+    clear_editor_navigation_request, read_editor_navigation_request, write_editor_session,
+    EditorKind, EditorNavigationAction, WorkingDocumentStore,
 };
 
 use crate::state::{
@@ -77,8 +77,7 @@ pub(crate) fn load_editor_resources(
         repo_root,
         service,
         effects,
-        documents: working_documents,
-        selected_document_key: None,
+        workspace: WorkingDocumentStore::from_documents(working_documents),
         search_text: String::new(),
         status: "Loaded item workspace.".to_string(),
     };
@@ -102,7 +101,7 @@ pub(crate) fn load_editor_resources(
 
     info!(
         "item editor data loaded: items={}, effects={}, diagnostics={}",
-        editor.documents.len(),
+        editor.workspace.len(),
         catalogs.effect_ids.len(),
         diagnostics
     );
@@ -119,7 +118,9 @@ pub(crate) fn poll_external_selection_system(
     mut external: ResMut<ExternalItemSelectionState>,
 ) {
     if external.heartbeat_timer.tick(time.delta()).just_finished() {
-        if let Err(error) = write_item_editor_session(&external.repo_root, std::process::id()) {
+        if let Err(error) =
+            write_editor_session(&external.repo_root, EditorKind::Item, std::process::id())
+        {
             warn!("item editor failed to refresh handoff session: {error}");
         }
     }
@@ -132,7 +133,7 @@ pub(crate) fn poll_external_selection_system(
         return;
     }
 
-    let request = match read_item_editor_selection_request(&external.repo_root) {
+    let request = match read_editor_navigation_request(&external.repo_root, EditorKind::Item) {
         Ok(request) => request,
         Err(error) => {
             warn!("item editor failed to read selection request: {error}");
@@ -148,24 +149,50 @@ pub(crate) fn poll_external_selection_system(
     }
     external.last_request_id = Some(request.request_id.clone());
 
-    editor.status = if editor.select_item_id(request.item_id) {
+    if !matches!(request.action, EditorNavigationAction::SelectRecord)
+        || request.target_kind != "item"
+    {
+        warn!(
+            "item editor ignored unsupported navigation request: request_id={}, target_kind={}",
+            request.request_id, request.target_kind
+        );
+        if let Err(error) = clear_editor_navigation_request(&external.repo_root, EditorKind::Item) {
+            warn!("item editor failed to clear selection request: {error}");
+        }
+        return;
+    }
+
+    let item_id = match request.target_id.parse::<u32>() {
+        Ok(item_id) => item_id,
+        Err(error) => {
+            warn!(
+                "item editor received invalid navigation request target id: target_id={}, request_id={}, error={}",
+                request.target_id, request.request_id, error
+            );
+            if let Err(clear_error) =
+                clear_editor_navigation_request(&external.repo_root, EditorKind::Item)
+            {
+                warn!("item editor failed to clear invalid selection request: {clear_error}");
+            }
+            return;
+        }
+    };
+
+    editor.status = if editor.select_item_id(item_id) {
         info!(
             "item editor applied external selection request: item_id={}, request_id={}",
-            request.item_id, request.request_id
+            item_id, request.request_id
         );
-        format!("Selected item {} from external request.", request.item_id)
+        format!("Selected item {} from external request.", item_id)
     } else {
         warn!(
             "item editor received external selection for unknown item: item_id={}, request_id={}",
-            request.item_id, request.request_id
+            item_id, request.request_id
         );
-        format!(
-            "External request targeted missing item {}.",
-            request.item_id
-        )
+        format!("External request targeted missing item {}.", item_id)
     };
 
-    if let Err(error) = clear_item_editor_selection_request(&external.repo_root) {
+    if let Err(error) = clear_editor_navigation_request(&external.repo_root, EditorKind::Item) {
         warn!("item editor failed to clear selection request: {error}");
     }
 }
@@ -173,16 +200,16 @@ pub(crate) fn poll_external_selection_system(
 pub(crate) fn validate_all_documents(editor: &mut EditorState) -> Result<(), String> {
     let duplicate_ids = duplicate_ids(
         editor
-            .documents
+            .workspace
             .values()
             .map(|document| document.definition.id),
     );
     let item_ids = editor.current_item_ids();
-    let keys = editor.documents.keys().cloned().collect::<Vec<_>>();
+    let keys = editor.workspace.keys().cloned().collect::<Vec<_>>();
 
     for key in keys {
         let definition = editor
-            .documents
+            .workspace
             .get(&key)
             .map(|document| document.definition.clone())
             .ok_or_else(|| format!("missing document {key}"))?;
@@ -200,7 +227,7 @@ pub(crate) fn validate_all_documents(editor: &mut EditorState) -> Result<(), Str
                 ),
             ));
         }
-        if let Some(document) = editor.documents.get_mut(&key) {
+        if let Some(document) = editor.workspace.get_mut(&key) {
             document.diagnostics = diagnostics;
         }
     }

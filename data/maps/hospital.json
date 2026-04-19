@@ -23,5 +23,70 @@
       "facing": null
     }
   ],
-  "objects": []
+  "objects": [
+    {
+      "object_id": "hospital_pickup_medkit",
+      "kind": "pickup",
+      "anchor": { "x": 8, "y": 0, "z": 8 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1005", "min_count": 1, "max_count": 1 },
+        "visual": {
+          "prototype_id": "props/crate_wood",
+          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
+          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+        },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "hospital_spawn_walker_a",
+      "kind": "ai_spawn",
+      "anchor": { "x": 6, "y": 0, "z": 5 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "hospital_spawn_walker_a",
+          "character_id": "zombie_walker",
+          "auto_spawn": true,
+          "respawn_enabled": true,
+          "respawn_delay": 24.0,
+          "spawn_radius": 2.5
+        }
+      }
+    },
+    {
+      "object_id": "hospital_spawn_runner_a",
+      "kind": "ai_spawn",
+      "anchor": { "x": 9, "y": 0, "z": 3 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "hospital_spawn_runner_a",
+          "character_id": "zombie_runner",
+          "auto_spawn": true,
+          "respawn_enabled": true,
+          "respawn_delay": 30.0,
+          "spawn_radius": 2.5
+        }
+      }
+    }
+  ]
 }

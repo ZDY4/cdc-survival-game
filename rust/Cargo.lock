@@ -2207,6 +2207,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "content_tools"
+version = "0.1.0"
+dependencies = [
+ "game_data",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3003,6 +3012,7 @@ dependencies = [
  "game_core",
  "game_data",
  "gltf",
+ "serde",
  "serde_json",
  "thiserror 1.0.69",
  "time",

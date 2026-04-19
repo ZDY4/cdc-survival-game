@@ -3,6 +3,7 @@
 
 use bevy::log::{info, warn};
 use bevy::prelude::*;
+use game_bevy::resolve_item_preview_asset_path;
 use game_data::{
     build_character_ai_preview, build_character_ai_preview_at_time,
     build_character_appearance_preview, CharacterAiPreviewContext, CharacterDefinition,
@@ -44,7 +45,7 @@ pub(crate) fn sync_preview_scene_system(
     if let Some(preview) = preview_state
         .resolved_preview
         .as_ref()
-        .filter(|preview| character_preview_is_available(preview))
+        .filter(|preview| character_preview_has_explicit_gltf_model(preview))
     {
         spawn_character_preview_scene(
             &mut commands,
@@ -150,14 +151,21 @@ pub(crate) fn refresh_preview_state(
                     preview_camera.set_orbit(next_orbit);
                 }
             }
-            if !character_preview_is_available(&preview) {
+            if let Some(notice) = preview_model_notice(&preview) {
                 warn!(
-                    "character editor preview has no available model for character {}: {}",
+                    "character editor preview has no configured gltf model for character {}: {}",
+                    character.id.as_str(),
+                    preview.base_model_asset
+                );
+                preview_state.preview_notice = Some(notice);
+            } else if !character_preview_is_available(&preview) {
+                warn!(
+                    "character editor preview model asset failed availability check for character {}: {}",
                     character.id.as_str(),
                     preview.base_model_asset
                 );
                 preview_state.preview_notice = Some(format!(
-                    "当前角色没有可用模型：{}",
+                    "当前角色配置的 glTF 模型不可用：{}",
                     preview.base_model_asset
                 ));
             }
@@ -238,4 +246,25 @@ pub(crate) fn default_context_for_character(
     build_character_ai_preview(character, settlement, ai_library)
         .map(|preview| preview.context)
         .ok()
+}
+
+fn character_preview_has_explicit_gltf_model(
+    preview: &game_data::ResolvedCharacterAppearancePreview,
+) -> bool {
+    let asset_id = preview.base_model_asset.trim();
+    asset_id.ends_with(".gltf") && resolve_item_preview_asset_path(asset_id).is_some()
+}
+
+fn preview_model_notice(preview: &game_data::ResolvedCharacterAppearancePreview) -> Option<String> {
+    let asset_id = preview.base_model_asset.trim();
+    if !asset_id.ends_with(".gltf") {
+        return Some(
+            "当前角色未配置 glTF 模型，请在 appearance profile 或 model_path 中填写角色模型。"
+                .to_string(),
+        );
+    }
+    if resolve_item_preview_asset_path(asset_id).is_none() {
+        return Some(format!("当前角色配置的 glTF 模型不存在：{asset_id}"));
+    }
+    None
 }

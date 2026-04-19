@@ -1,7 +1,31 @@
 {
   "dialogue_key": "trader_lao_wang",
-  "default_dialogue_id": "trader_lao_wang",
+  "default_dialogue_id": "trader_lao_wang_intro",
   "variants": [
+    {
+      "dialogue_id": "trader_lao_wang_zombie_active",
+      "when": {
+        "player_active_quests_any": ["zombie_hunter"]
+      }
+    },
+    {
+      "dialogue_id": "trader_lao_wang_zombie_complete",
+      "when": {
+        "player_completed_quests_any": ["zombie_hunter"]
+      }
+    },
+    {
+      "dialogue_id": "trader_lao_wang_tutorial_active",
+      "when": {
+        "player_active_quests_any": ["tutorial_survive"]
+      }
+    },
+    {
+      "dialogue_id": "trader_lao_wang_tutorial_complete",
+      "when": {
+        "player_completed_quests_any": ["tutorial_survive"]
+      }
+    },
     {
       "dialogue_id": "trader_lao_wang_trusted",
       "when": {

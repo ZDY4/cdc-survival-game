@@ -22,7 +22,7 @@ if not exist "%CARGO_EXE%" (
 pushd "%RUST_DIR%"
 
 echo Starting bevy_map_editor...
-"%CARGO_EXE%" run -p bevy_map_editor
+"%CARGO_EXE%" run -p bevy_map_editor -- %*
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 

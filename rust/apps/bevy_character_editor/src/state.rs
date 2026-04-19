@@ -73,6 +73,34 @@ pub(crate) struct EditorUiState {
     pub(crate) status: String,
 }
 
+#[derive(Resource, Debug, Clone, Default)]
+pub(crate) struct InitialCharacterSelection(pub(crate) Option<String>);
+
+#[derive(Resource)]
+pub(crate) struct ExternalCharacterSelectionState {
+    pub(crate) repo_root: PathBuf,
+    pub(crate) heartbeat_timer: Timer,
+    pub(crate) request_poll_timer: Timer,
+    pub(crate) last_request_id: Option<String>,
+}
+
+impl ExternalCharacterSelectionState {
+    pub(crate) fn new(repo_root: PathBuf) -> Self {
+        let mut heartbeat_timer = Timer::from_seconds(1.0, TimerMode::Repeating);
+        heartbeat_timer.set_elapsed(heartbeat_timer.duration());
+
+        let mut request_poll_timer = Timer::from_seconds(0.25, TimerMode::Repeating);
+        request_poll_timer.set_elapsed(request_poll_timer.duration());
+
+        Self {
+            repo_root,
+            heartbeat_timer,
+            request_poll_timer,
+            last_request_id: None,
+        }
+    }
+}
+
 impl Default for EditorUiState {
     fn default() -> Self {
         Self {

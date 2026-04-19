@@ -860,7 +860,7 @@
       "blocks_sight": false,
       "props": {
         "building": null,
-        "pickup": { "item_id": "1005", "min_count": 1, "max_count": 2 },
+        "pickup": { "item_id": "1006", "min_count": 2, "max_count": 4 },
         "visual": {
           "prototype_id": "props/crate_wood",
           "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
@@ -880,7 +880,7 @@
       "blocks_sight": false,
       "props": {
         "building": null,
-        "pickup": { "item_id": "1007", "min_count": 2, "max_count": 4 },
+        "pickup": { "item_id": "1008", "min_count": 2, "max_count": 4 },
         "visual": {
           "prototype_id": "props/crate_wood",
           "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },

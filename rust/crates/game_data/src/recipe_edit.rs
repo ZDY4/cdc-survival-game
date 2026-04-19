@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
+    file_backed::{
+        collect_sorted_dir_entries, duplicate_values, read_json_file, relative_path_from_root,
+        write_json_atomically,
+    },
     load_item_library, load_recipe_library, load_skill_library, validate_recipe_definition,
     ItemLoadError, RecipeDefinition, RecipeDefinitionValidationError, RecipeLoadError,
     RecipeValidationCatalog, SkillLoadError, SkillValidationCatalog,
@@ -176,17 +180,12 @@ impl RecipeEditorService {
 
         let item_ids = self.item_ids()?;
         let skill_ids = self.skill_ids()?;
-        let mut entries = fs::read_dir(&self.recipes_dir)
-            .map_err(|source| RecipeEditError::ReadDir {
-                path: self.recipes_dir.clone(),
+        let entries = collect_sorted_dir_entries(&self.recipes_dir, |path, source| {
+            RecipeEditError::ReadDir {
+                path: path.to_path_buf(),
                 source,
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|source| RecipeEditError::ReadDir {
-                path: self.recipes_dir.clone(),
-                source,
-            })?;
-        entries.sort_by_key(|entry| entry.file_name());
+            }
+        })?;
 
         let mut definitions = Vec::new();
         for entry in entries {
@@ -194,15 +193,17 @@ impl RecipeEditorService {
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
-            let raw = fs::read_to_string(&path).map_err(|source| RecipeEditError::ReadFile {
-                path: path.clone(),
-                source,
-            })?;
-            let mut definition: RecipeDefinition =
-                serde_json::from_str(&raw).map_err(|source| RecipeEditError::ParseFile {
-                    path: path.clone(),
+            let mut definition: RecipeDefinition = read_json_file(
+                &path,
+                |path, source| RecipeEditError::ReadFile {
+                    path: path.to_path_buf(),
                     source,
-                })?;
+                },
+                |path, source| RecipeEditError::ParseFile {
+                    path: path.to_path_buf(),
+                    source,
+                },
+            )?;
             if definition.id.trim().is_empty() {
                 definition.id = path
                     .file_stem()
@@ -232,7 +233,7 @@ impl RecipeEditorService {
                     &skill_ids,
                     &recipe_ids,
                 )?;
-                let relative_path = relative_to_root(&path, self.data_root.as_deref())
+                let relative_path = relative_path_from_root(&path, self.data_root.as_deref())
                     .unwrap_or_else(|| path.to_string_lossy().replace('\\', "/"));
                 Ok(RecipeEditDocument {
                     file_name,
@@ -243,7 +244,7 @@ impl RecipeEditorService {
             })
             .collect::<Result<Vec<_>, RecipeEditError>>()?;
 
-        let duplicate_ids = duplicate_ids(
+        let duplicate_ids = duplicate_values(
             documents
                 .iter()
                 .map(|document| document.definition.id.clone()),
@@ -477,35 +478,22 @@ impl RecipeEditorService {
             }
         })?;
 
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|source| RecipeEditError::CreateDir {
-                path: parent.to_path_buf(),
-                source,
-            })?;
-        }
-
-        if let Ok(existing_raw) = fs::read_to_string(path) {
-            if existing_raw == raw {
-                return Ok(false);
-            }
-        }
-
-        let temp_path = temporary_path_for(path);
-        fs::write(&temp_path, raw).map_err(|source| RecipeEditError::WriteTempFile {
-            path: temp_path.clone(),
-            source,
-        })?;
-        if path.exists() {
-            fs::remove_file(path).map_err(|source| RecipeEditError::ReplaceFile {
+        write_json_atomically(
+            path,
+            &raw,
+            |path, source| RecipeEditError::CreateDir {
                 path: path.to_path_buf(),
                 source,
-            })?;
-        }
-        fs::rename(&temp_path, path).map_err(|source| RecipeEditError::ReplaceFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        Ok(true)
+            },
+            |path, source| RecipeEditError::WriteTempFile {
+                path: path.to_path_buf(),
+                source,
+            },
+            |path, source| RecipeEditError::ReplaceFile {
+                path: path.to_path_buf(),
+                source,
+            },
+        )
     }
 }
 
@@ -516,32 +504,6 @@ fn infer_data_root(recipes_dir: &Path) -> Option<PathBuf> {
         return None;
     }
     Some(parent.to_path_buf())
-}
-
-fn relative_to_root(path: &Path, data_root: Option<&Path>) -> Option<String> {
-    let data_root = data_root?;
-    path.strip_prefix(data_root)
-        .ok()
-        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
-}
-
-fn duplicate_ids(ids: impl IntoIterator<Item = String>) -> BTreeSet<String> {
-    let mut seen = BTreeSet::new();
-    let mut duplicates = BTreeSet::new();
-    for id in ids {
-        if !seen.insert(id.clone()) {
-            duplicates.insert(id);
-        }
-    }
-    duplicates
-}
-
-fn temporary_path_for(path: &Path) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("recipe.json");
-    path.with_file_name(format!("{file_name}.tmp"))
 }
 
 #[cfg(test)]

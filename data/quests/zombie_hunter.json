@@ -1,9 +1,9 @@
 {
 	"quest_id": "zombie_hunter",
-	"title": "僵尸猎人",
-	"description": "在街道上击败3只僵尸",
+	"title": "警戒区清剿",
+	"description": "据点外警戒区已经有感染者逼近，击败 2 只僵尸，替幸存者把外围再清一遍。",
 	"prerequisites": [
-		"first_explore"
+		"tutorial_survive"
 	],
 	"time_limit": -1,
 	"flow": {
@@ -25,9 +25,9 @@
 					"y": 160
 				},
 				"objective_type": "kill",
-				"description": "击败僵尸",
+				"description": "击败警戒区里的僵尸",
 				"enemy_type": "zombie",
-				"count": 3
+				"count": 2
 			},
 			"reward_1": {
 				"id": "reward_1",
@@ -43,8 +43,7 @@
 							"count": 3
 						}
 					],
-					"experience": 200,
-					"unlock_location": "hospital"
+					"experience": 200
 				}
 			},
 			"end": {

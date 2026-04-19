@@ -5,12 +5,7 @@ use bevy::prelude::*;
 use game_data::{
     RecipeDefinition, RecipeEditDiagnostic, RecipeEditDiagnosticSeverity, RecipeEditorService,
 };
-use game_editor::ai_chat::{AiChatState, AiChatWorkerState};
-
-use crate::ai::AiRecipeProposalView;
-
-pub(crate) type RecipeAiState = AiChatState<AiRecipeProposalView>;
-pub(crate) type RecipeAiWorkerState = AiChatWorkerState<AiRecipeProposalView>;
+use game_editor::{WorkingDocumentStore, WorkspaceDocument};
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkingRecipeDocument {
@@ -22,6 +17,18 @@ pub(crate) struct WorkingRecipeDocument {
     pub(crate) dirty: bool,
     pub(crate) diagnostics: Vec<RecipeEditDiagnostic>,
     pub(crate) last_save_message: Option<String>,
+}
+
+impl WorkspaceDocument for WorkingRecipeDocument {
+    type Id = String;
+
+    fn document_id(&self) -> Self::Id {
+        self.definition.id.clone()
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -41,67 +48,51 @@ impl RecipeEditorCatalogs {
 pub(crate) struct EditorState {
     pub(crate) repo_root: PathBuf,
     pub(crate) service: RecipeEditorService,
-    pub(crate) documents: BTreeMap<String, WorkingRecipeDocument>,
-    pub(crate) selected_document_key: Option<String>,
+    pub(crate) workspace: WorkingDocumentStore<WorkingRecipeDocument>,
     pub(crate) search_text: String,
     pub(crate) status: String,
 }
 
 impl EditorState {
-    pub(crate) fn ensure_selection(&mut self) {
-        if self
-            .selected_document_key
-            .as_ref()
-            .is_some_and(|key| self.documents.contains_key(key))
-        {
-            return;
+    pub(crate) fn select_recipe_id(&mut self, recipe_id: &str) -> bool {
+        let selected_key = self
+            .workspace
+            .iter()
+            .find_map(|(key, document)| (document.definition.id == recipe_id).then(|| key.clone()));
+        if let Some(key) = selected_key {
+            self.workspace.set_selected_document_key(Some(key));
+            true
+        } else {
+            false
         }
-        self.selected_document_key = self.documents.keys().next().cloned();
+    }
+
+    pub(crate) fn ensure_selection(&mut self) {
+        self.workspace.ensure_selection();
     }
 
     pub(crate) fn selected_document(&self) -> Option<&WorkingRecipeDocument> {
-        let key = self.selected_document_key.as_ref()?;
-        self.documents.get(key)
+        self.workspace.selected_document()
     }
 
     pub(crate) fn current_recipe_ids(&self) -> BTreeSet<String> {
-        self.documents
-            .values()
-            .map(|document| document.definition.id.clone())
-            .collect()
+        self.workspace.current_ids()
     }
 
     pub(crate) fn has_duplicate_ids(&self) -> bool {
-        let mut ids = BTreeSet::new();
-        self.documents
-            .values()
-            .any(|document| !ids.insert(document.definition.id.clone()))
+        self.workspace.has_duplicate_ids()
     }
 
     pub(crate) fn has_dirty_documents(&self) -> bool {
-        self.documents.values().any(|document| document.dirty)
+        self.workspace.has_dirty_documents()
     }
 
     pub(crate) fn dirty_document_keys(&self) -> Vec<String> {
-        self.documents
-            .iter()
-            .filter_map(|(key, document)| document.dirty.then_some(key.clone()))
-            .collect()
-    }
-
-    pub(crate) fn suggested_next_recipe_id(&self) -> String {
-        let used_ids = self.current_recipe_ids();
-        for index in 1.. {
-            let candidate = format!("recipe_new_{index}");
-            if !used_ids.contains(candidate.as_str()) {
-                return candidate;
-            }
-        }
-        "recipe_new".to_string()
+        self.workspace.dirty_document_keys()
     }
 
     pub(crate) fn recipe_error_count(&self) -> usize {
-        self.documents
+        self.workspace
             .values()
             .map(|document| {
                 document
@@ -116,7 +107,27 @@ impl EditorState {
     }
 }
 
-#[derive(Resource, Default)]
-pub(crate) struct EditorEguiFontState {
-    pub(crate) initialized: bool,
+#[derive(Resource)]
+pub(crate) struct ExternalRecipeSelectionState {
+    pub(crate) repo_root: PathBuf,
+    pub(crate) heartbeat_timer: Timer,
+    pub(crate) request_poll_timer: Timer,
+    pub(crate) last_request_id: Option<String>,
+}
+
+impl ExternalRecipeSelectionState {
+    pub(crate) fn new(repo_root: PathBuf) -> Self {
+        let mut heartbeat_timer = Timer::from_seconds(1.0, TimerMode::Repeating);
+        heartbeat_timer.set_elapsed(heartbeat_timer.duration());
+
+        let mut request_poll_timer = Timer::from_seconds(0.25, TimerMode::Repeating);
+        request_poll_timer.set_elapsed(request_poll_timer.duration());
+
+        Self {
+            repo_root,
+            heartbeat_timer,
+            request_poll_timer,
+            last_request_id: None,
+        }
+    }
 }

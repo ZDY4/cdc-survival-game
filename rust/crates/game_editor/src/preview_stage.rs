@@ -1,10 +1,10 @@
-use bevy::camera::{CameraOutputMode, ClearColorConfig};
+use bevy::camera::ClearColorConfig;
 use bevy::prelude::*;
-use bevy::render::render_resource::BlendState;
-use bevy_egui::{EguiGlobalSettings, PrimaryEguiContext};
+use bevy_egui::EguiGlobalSettings;
 
 use crate::{
-    spawn_preview_floor, spawn_preview_light_rig, spawn_preview_scene_host, PreviewCameraController,
+    setup_primary_egui_context_camera, spawn_preview_floor, spawn_preview_light_rig,
+    spawn_preview_scene_host, PreviewCameraController,
 };
 
 #[derive(Debug, Clone)]
@@ -60,21 +60,7 @@ pub fn setup_preview_stage(
             config.controller,
         ))
         .id();
-    let egui_camera = commands
-        .spawn((
-            PrimaryEguiContext,
-            Camera2d,
-            Camera {
-                order: 1,
-                output_mode: CameraOutputMode::Write {
-                    blend_state: Some(BlendState::ALPHA_BLENDING),
-                    clear_color: ClearColorConfig::None,
-                },
-                clear_color: ClearColorConfig::Custom(Color::NONE),
-                ..default()
-            },
-        ))
-        .id();
+    let egui_camera = setup_primary_egui_context_camera(commands, egui_global_settings);
 
     PreviewStageEntities {
         preview_camera,

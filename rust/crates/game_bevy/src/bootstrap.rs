@@ -3,17 +3,16 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::{
-    build_runtime_from_seed, debug_seed_characters_for_map, default_debug_seed,
-    load_character_definitions, load_map_definitions, load_overworld_definitions,
-    load_runtime_startup_config, resolve_startup_map_id,
-    validate_runtime_outdoor_transition_layout, CharacterDefinitions, MapDefinitions,
-    OverworldDefinitions, RuntimeBuildError, RuntimeScenarioSeed, RuntimeStartupConfig,
-    RuntimeStartupConfigError,
+    build_runtime_from_seed, debug_seed_characters_for_map, load_character_definitions,
+    load_map_definitions, load_overworld_definitions, load_runtime_startup_config,
+    resolve_startup_map_id, NewGameConfigError, validate_runtime_outdoor_transition_layout,
+    CharacterDefinitions, MapDefinitions, OverworldDefinitions, RuntimeBuildError,
+    RuntimeScenarioSeed, RuntimeStartupConfig, RuntimeStartupConfigError,
 };
 use game_core::SimulationRuntime;
 use game_data::{
     CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapLoadError,
-    OutdoorTransitionTriggerLayoutValidationError, OverworldLoadError,
+    OutdoorTransitionTriggerLayoutValidationError, OverworldLoadError, WorldMode,
 };
 
 #[derive(Debug, Clone)]
@@ -40,6 +39,8 @@ pub enum RuntimeBootstrapError {
     OutdoorTransitionTriggerLayout(#[from] OutdoorTransitionTriggerLayoutValidationError),
     #[error(transparent)]
     RuntimeStartupConfig(#[from] RuntimeStartupConfigError),
+    #[error(transparent)]
+    NewGameConfig(#[from] NewGameConfigError),
     #[error(transparent)]
     RuntimeBuild(#[from] RuntimeBuildError),
 }
@@ -68,11 +69,15 @@ pub fn build_default_startup_seed(
     overworld: &game_data::OverworldLibrary,
     startup_map: Option<game_data::MapId>,
 ) -> RuntimeScenarioSeed {
-    let mut seed = default_debug_seed();
     let resolved_map_id = resolve_startup_map_id(maps, startup_map);
-    seed.map_id = resolved_map_id.clone();
-    seed.start_map_id = resolved_map_id.clone();
-    seed.characters = debug_seed_characters_for_map(resolved_map_id.as_ref());
+    let mut seed = RuntimeScenarioSeed {
+        map_id: resolved_map_id.clone(),
+        start_world_mode: Some(WorldMode::Outdoor),
+        start_map_id: resolved_map_id.clone(),
+        static_obstacles: Vec::new(),
+        characters: debug_seed_characters_for_map(resolved_map_id.as_ref()),
+        ..RuntimeScenarioSeed::default()
+    };
 
     if let Some((location_id, entry_point_id)) =
         resolve_location_start_for_map(overworld, resolved_map_id.as_ref())
@@ -199,6 +204,19 @@ mod tests {
             .map(|entry| entry.definition_id.as_str())
             .collect();
         assert_eq!(ids, vec!["player", "trader_lao_wang"]);
+    }
+
+    #[test]
+    fn startup_seed_keeps_unlocked_locations_empty_for_runtime_defaults() {
+        let maps = MapLibrary::from(BTreeMap::from([(
+            MapId("survivor_outpost_01".into()),
+            sample_map("survivor_outpost_01"),
+        )]));
+        let overworld = sample_overworld_library();
+
+        let seed = build_default_startup_seed(&maps, &overworld, None);
+
+        assert!(seed.unlocked_locations.is_empty());
     }
 
     fn sample_map(id: &str) -> game_data::MapDefinition {

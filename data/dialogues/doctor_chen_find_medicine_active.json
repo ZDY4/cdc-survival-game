@@ -1,0 +1,50 @@
+{
+  "dialog_id": "doctor_chen_find_medicine_active",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Medicine Run Active",
+      "speaker": "陈医生",
+      "text": "医院那边的感染者不会少。你只要带回 1 份急救包就够了，别在里面硬撑。",
+      "portrait": "assets/portraits/doctor.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "先补给一下。",
+          "next": "trade_action"
+        },
+        {
+          "text": "我这就出发。",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "trade_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "open_trade"
+        }
+      ],
+      "next": "trade_end"
+    },
+    {
+      "id": "trade_end",
+      "type": "end",
+      "end_type": "trade"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

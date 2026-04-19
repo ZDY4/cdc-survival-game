@@ -313,6 +313,7 @@ impl Plugin for RuntimeContentPlugin {
             .init_resource::<DialogueDefinitionPath>()
             .init_resource::<DialogueRuleDefinitionPath>()
             .init_resource::<RuntimeStartupConfigPath>()
+            .init_resource::<crate::NewGameConfigPath>()
             .init_resource::<RuntimeContentLoadState>()
             .configure_sets(
                 Startup,
@@ -342,6 +343,7 @@ impl Plugin for RuntimeContentPlugin {
                     load_dialogue_definitions_on_startup,
                     load_dialogue_rule_definitions_on_startup,
                     load_runtime_startup_config_on_startup,
+                    crate::load_new_game_config_on_startup,
                 )
                     .chain()
                     .in_set(RuntimeContentStartupSet::LoadResources),

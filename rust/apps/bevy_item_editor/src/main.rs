@@ -1,7 +1,8 @@
 use std::env;
 
-mod ai;
+mod actions;
 mod app;
+mod commands;
 mod data;
 mod preview;
 mod state;
