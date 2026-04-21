@@ -9,8 +9,8 @@
     "constitution": 5
   },
   "items": [
-    { "itemId": 1008, "count": 2 },
-    { "itemId": 1006, "count": 3 },
+    { "itemId": 1008, "count": 1 },
+    { "itemId": 1006, "count": 1 },
     { "itemId": 1002, "count": 1 },
     { "itemId": 1003, "count": 1 },
     { "itemId": 2004, "count": 1 },
@@ -18,7 +18,7 @@
     { "itemId": 2015, "count": 1 }
   ],
   "ammo": [
-    { "itemId": 1009, "count": 12 }
+    { "itemId": 1009, "count": 10 }
   ],
   "equipment": [
     { "itemId": 1002, "slotId": "main_hand" },

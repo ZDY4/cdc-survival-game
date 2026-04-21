@@ -5,6 +5,17 @@ use game_data::{ActorId, QuestNode};
 use super::{ActorProgressionState, QuestRuntimeState, Simulation, SimulationEvent};
 
 impl Simulation {
+    pub fn active_quest_states_for_actor(&self, actor_id: ActorId) -> Vec<QuestRuntimeState> {
+        let mut quests = self
+            .active_quests
+            .values()
+            .filter(|state| state.owner_actor_id == actor_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        quests.sort_by(|left, right| left.quest_id.cmp(&right.quest_id));
+        quests
+    }
+
     pub fn start_quest(&mut self, actor_id: ActorId, quest_id: &str) -> bool {
         if !self.actors.contains(actor_id) {
             return false;
@@ -48,6 +59,50 @@ impl Simulation {
         });
         self.advance_active_quest(quest_id);
         true
+    }
+
+    pub fn turn_in_active_quest(
+        &mut self,
+        actor_id: ActorId,
+        quest_id: &str,
+    ) -> Result<(), String> {
+        let Some(state) = self.active_quests.get(quest_id) else {
+            return Err(format!("quest_not_active:{quest_id}"));
+        };
+        if state.owner_actor_id != actor_id {
+            return Err(format!("quest_owner_mismatch:{quest_id}"));
+        }
+
+        let Some(node) = self.current_active_quest_node(quest_id).cloned() else {
+            return Err(format!("quest_node_missing:{quest_id}"));
+        };
+        if node.node_type != "objective" || !quest_node_requires_manual_turn_in(&node) {
+            return Err(format!("quest_not_waiting_for_turn_in:{quest_id}"));
+        }
+
+        let current = state
+            .completed_objectives
+            .get(&node.id)
+            .copied()
+            .unwrap_or(0);
+        if current < objective_target(&node) {
+            return Err(format!("quest_objective_incomplete:{quest_id}"));
+        }
+
+        if let Some(item_id) = node.item_id {
+            self.economy
+                .remove_item(actor_id, item_id, objective_target(&node))
+                .map_err(|error| error.to_string())?;
+        }
+
+        if !self.advance_quest_to_connection(quest_id, &node.id, 0) {
+            return Err(format!(
+                "quest_turn_in_connection_missing:{quest_id}:{}",
+                node.id
+            ));
+        }
+        self.advance_active_quest(quest_id);
+        Ok(())
     }
 
     pub fn seed_actor_progression(&mut self, actor_id: ActorId, level: i32, xp_reward: i32) {
@@ -245,6 +300,9 @@ impl Simulation {
                     if current < objective_target(&node) {
                         return;
                     }
+                    if quest_node_requires_manual_turn_in(&node) {
+                        return;
+                    }
                     if !self.advance_quest_to_connection(quest_id, &node.id, 0) {
                         return;
                     }
@@ -414,6 +472,13 @@ fn xp_to_next_level(level: i32) -> i32 {
 
 fn objective_target(node: &QuestNode) -> i32 {
     node.count.max(1)
+}
+
+fn quest_node_requires_manual_turn_in(node: &QuestNode) -> bool {
+    node.extra
+        .get("manual_turn_in")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
 }
 
 fn target_location_matches(node: &QuestNode, provided_location: Option<&str>) -> bool {

@@ -31,12 +31,10 @@ fn references_item(target_id: &str, repo_root: &Path) -> Result<i32, String> {
     let mut hits = Vec::new();
     let data_root = repo_root.join("data");
 
-    for mut document in game_data::RecipeEditorService::with_data_root(
-        data_root.join("recipes"),
-        data_root.clone(),
-    )
-    .load_documents()
-    .map_err(|error| error.to_string())?
+    for mut document in
+        game_data::RecipeEditorService::with_data_root(data_root.join("recipes"), data_root.clone())
+            .load_documents()
+            .map_err(|error| error.to_string())?
     {
         document.relative_path = normalize_data_relative_path(&document.relative_path);
         if document.definition.output.item_id == item_id {
@@ -79,12 +77,10 @@ fn references_item(target_id: &str, repo_root: &Path) -> Result<i32, String> {
         }
     }
 
-    for mut document in game_data::ItemEditorService::with_data_root(
-        data_root.join("items"),
-        data_root,
-    )
-    .load_documents()
-    .map_err(|error| error.to_string())?
+    for mut document in
+        game_data::ItemEditorService::with_data_root(data_root.join("items"), data_root)
+            .load_documents()
+            .map_err(|error| error.to_string())?
     {
         document.relative_path = normalize_data_relative_path(&document.relative_path);
         for (index, fragment) in document.definition.fragments.iter().enumerate() {

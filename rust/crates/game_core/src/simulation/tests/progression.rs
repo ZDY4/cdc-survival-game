@@ -139,6 +139,128 @@ fn collect_objective_completes_after_pickup_and_grants_skill_points() {
 }
 
 #[test]
+fn manual_turn_in_collect_objective_waits_for_dialogue_delivery() {
+    let items = sample_combat_item_library();
+    let mut simulation = Simulation::new();
+    simulation.set_item_library(items);
+    simulation.set_quest_library(QuestLibrary::from(BTreeMap::from([(
+        "deliver_medkit".to_string(),
+        QuestDefinition {
+            quest_id: "deliver_medkit".to_string(),
+            title: "交付急救包".to_string(),
+            flow: QuestFlow {
+                start_node_id: "start".to_string(),
+                nodes: BTreeMap::from([
+                    (
+                        "start".to_string(),
+                        QuestNode {
+                            id: "start".to_string(),
+                            node_type: "start".to_string(),
+                            ..QuestNode::default()
+                        },
+                    ),
+                    (
+                        "collect".to_string(),
+                        QuestNode {
+                            id: "collect".to_string(),
+                            node_type: "objective".to_string(),
+                            objective_type: "collect".to_string(),
+                            item_id: Some(1005),
+                            count: 1,
+                            extra: BTreeMap::from([(
+                                "manual_turn_in".to_string(),
+                                serde_json::Value::Bool(true),
+                            )]),
+                            ..QuestNode::default()
+                        },
+                    ),
+                    (
+                        "reward".to_string(),
+                        QuestNode {
+                            id: "reward".to_string(),
+                            node_type: "reward".to_string(),
+                            rewards: QuestRewards {
+                                experience: 25,
+                                ..QuestRewards::default()
+                            },
+                            ..QuestNode::default()
+                        },
+                    ),
+                    (
+                        "end".to_string(),
+                        QuestNode {
+                            id: "end".to_string(),
+                            node_type: "end".to_string(),
+                            ..QuestNode::default()
+                        },
+                    ),
+                ]),
+                connections: vec![
+                    QuestConnection {
+                        from: "start".to_string(),
+                        to: "collect".to_string(),
+                        from_port: 0,
+                        to_port: 0,
+                        extra: BTreeMap::new(),
+                    },
+                    QuestConnection {
+                        from: "collect".to_string(),
+                        to: "reward".to_string(),
+                        from_port: 0,
+                        to_port: 0,
+                        extra: BTreeMap::new(),
+                    },
+                    QuestConnection {
+                        from: "reward".to_string(),
+                        to: "end".to_string(),
+                        from_port: 0,
+                        to_port: 0,
+                        extra: BTreeMap::new(),
+                    },
+                ],
+                ..QuestFlow::default()
+            },
+            ..QuestDefinition::default()
+        },
+    )])));
+    simulation
+        .grid_world_mut()
+        .load_map(&sample_interaction_map_definition());
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("player".into())),
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(1, 0, 1),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+
+    assert!(simulation.start_quest(player, "deliver_medkit"));
+
+    let result = simulation.execute_interaction(InteractionExecutionRequest {
+        actor_id: player,
+        target_id: InteractionTargetId::MapObject("pickup".into()),
+        option_id: InteractionOptionId("pickup".into()),
+    });
+
+    assert!(result.success);
+    assert!(simulation.is_quest_active("deliver_medkit"));
+    assert!(!simulation.is_quest_completed("deliver_medkit"));
+    assert_eq!(simulation.inventory_count(player, "1005"), 2);
+
+    simulation
+        .turn_in_active_quest(player, "deliver_medkit")
+        .expect("manual turn-in should succeed");
+
+    assert!(simulation.is_quest_completed("deliver_medkit"));
+    assert_eq!(simulation.inventory_count(player, "1005"), 1);
+    assert_eq!(simulation.actor_current_xp(player), 25);
+}
+
+#[test]
 fn relationship_scores_seed_from_actor_sides() {
     let mut simulation = Simulation::new();
     let player = simulation.register_actor(RegisterActor {

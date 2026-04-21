@@ -1,3 +1,29 @@
+<#
+.SYNOPSIS
+Run the standard map visual review flow for a map id.
+
+.DESCRIPTION
+This script is the standard repo-local visual review entry for map changes.
+It runs `content_tools` locate, summarize, references, and validate commands inside the Rust
+workspace, prints a fixed review checklist, and then optionally opens or reuses `bevy_map_editor`
+through `tools/agent/open-editor.ps1`.
+
+.PARAMETER Map
+Map id to review.
+
+.PARAMETER NoOpenEditor
+When set, only print CLI review information and skip opening `bevy_map_editor`.
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map forest
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map factory -NoOpenEditor
+
+.NOTES
+This workflow is intended for post-edit spatial review, not for editing map data directly inside
+the script.
+#>
 param(
     [Parameter(Mandatory = $true)]
     [string]$Map,

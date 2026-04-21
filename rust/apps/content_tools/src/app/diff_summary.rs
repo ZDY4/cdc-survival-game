@@ -6,9 +6,20 @@ pub(super) fn print_diff_summary(repo_root: &Path, input_path: &str) -> Result<i
     let relative_path = normalize_input_path(repo_root, input_path)?;
     let status_output = git_output(
         repo_root,
-        &["status", "--short", "--untracked-files=all", "--", &relative_path],
+        &[
+            "status",
+            "--short",
+            "--untracked-files=all",
+            "--",
+            &relative_path,
+        ],
     )?;
-    let status_line = status_output.lines().next().unwrap_or_default().trim().to_string();
+    let status_line = status_output
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
 
     println!("mode: diff_summary");
     println!("path: {relative_path}");
@@ -32,16 +43,23 @@ pub(super) fn print_diff_summary(repo_root: &Path, input_path: &str) -> Result<i
         return Ok(0);
     }
 
-    let numstat = git_output(repo_root, &["diff", "--numstat", "HEAD", "--", &relative_path])?;
+    let numstat = git_output(
+        repo_root,
+        &["diff", "--numstat", "HEAD", "--", &relative_path],
+    )?;
     let (added_lines, removed_lines) = parse_numstat(&numstat);
     let diff = git_output(
         repo_root,
-        &["diff", "--no-ext-diff", "--unified=0", "HEAD", "--", &relative_path],
+        &[
+            "diff",
+            "--no-ext-diff",
+            "--unified=0",
+            "HEAD",
+            "--",
+            &relative_path,
+        ],
     )?;
-    let changed_hunks = diff
-        .lines()
-        .filter(|line| line.starts_with("@@"))
-        .count();
+    let changed_hunks = diff.lines().filter(|line| line.starts_with("@@")).count();
 
     println!("status: {}", normalize_status_code(&status_line));
     println!("added_lines: {added_lines}");

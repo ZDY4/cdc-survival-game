@@ -1,13 +1,13 @@
 {
-  "dialog_id": "doctor_chen_find_medicine_complete",
+  "dialog_id": "trader_lao_wang_mainline_idle",
   "nodes": [
     {
       "id": "start",
       "type": "dialog",
-      "title": "Medicine Run Complete",
-      "speaker": "陈医生",
-      "text": "这份急救包来得正是时候。诊所至少又能多撑几天，你先休整一下，后面还会有更远的活。",
-      "portrait": "assets/portraits/doctor.png",
+      "title": "Outpost Trade",
+      "speaker": "老王",
+      "text": "东侧路口先稳住了，后面要跑更远。你要补给就直说，别等到出了门才发现自己少东西。",
+      "portrait": "assets/portraits/trader_lao_wang.png",
       "is_start": true,
       "next": "choice_1"
     },
@@ -16,11 +16,11 @@
       "type": "choice",
       "options": [
         {
-          "text": "看看还能换什么。",
+          "text": "看看货。",
           "next": "trade_action"
         },
         {
-          "text": "我去准备下一趟。",
+          "text": "我再去准备一下。",
           "next": "leave_end"
         }
       ]

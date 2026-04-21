@@ -11,7 +11,10 @@ use crate::state::{
 };
 use bevy::picking::prelude::Pickable;
 use bevy::prelude::App;
-use game_bevy::{ItemDefinitions, NewGameConfig, NewGameEquipmentEntry, NewGameItemStack, UiMenuPanel, UiMenuState, UiModalState};
+use game_bevy::{
+    ItemDefinitions, NewGameConfig, NewGameEquipmentEntry, NewGameItemStack, UiMenuPanel,
+    UiMenuState, UiModalState,
+};
 use game_core::create_demo_runtime;
 use game_data::{DialogueData, InteractionTargetId, ItemDefinition, ItemFragment};
 
@@ -271,8 +274,7 @@ fn apply_new_game_defaults_does_not_require_ap() {
         ap: 0.0,
     });
 
-    apply_new_game_defaults(&mut runtime, &items, &config)
-        .expect("new game setup should succeed");
+    apply_new_game_defaults(&mut runtime, &items, &config).expect("new game setup should succeed");
 
     assert_eq!(runtime.get_actor_ap(handles.player), 0.0);
     assert_eq!(runtime.get_actor_inventory_count(handles.player, "1008"), 2);

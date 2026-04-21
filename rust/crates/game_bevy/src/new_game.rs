@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use bevy_ecs::prelude::{Commands, Res, ResMut, Resource};
 use game_core::{SimulationCommand, SimulationRuntime};
 use game_data::{
-    ActorKind, ActorId, MapId, MapLibrary, OverworldLibrary, OverworldLocationDefinition,
+    ActorId, ActorKind, MapId, MapLibrary, OverworldLibrary, OverworldLocationDefinition,
     OverworldLocationKind, WorldMode,
 };
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,10 @@ pub struct NewGameConfigPath(pub PathBuf);
 
 impl Default for NewGameConfigPath {
     fn default() -> Self {
-        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/bootstrap/new_game_default.json"))
+        Self(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../data/bootstrap/new_game_default.json"),
+        )
     }
 }
 
@@ -178,8 +181,7 @@ pub fn apply_new_game_seed_overrides(
             resolve_location_start_for_map(overworld, &map_id)
         {
             seed.start_location_id = Some(location_id);
-            seed.start_entry_point_id =
-                Some(configured_entry_point.unwrap_or(entry_point_id));
+            seed.start_entry_point_id = Some(configured_entry_point.unwrap_or(entry_point_id));
             seed.start_world_mode = Some(world_mode);
         } else if let Some(entry_point_id) = configured_entry_point {
             seed.start_entry_point_id = Some(entry_point_id);
@@ -317,7 +319,10 @@ fn resolve_location_start_for_map(
     map_id: &MapId,
 ) -> Option<(String, String, WorldMode)> {
     for (_, definition) in overworld.iter() {
-        if let Some(location) = definition.locations.iter().find(|location| location.map_id == *map_id)
+        if let Some(location) = definition
+            .locations
+            .iter()
+            .find(|location| location.map_id == *map_id)
         {
             return Some((
                 location.id.as_str().to_string(),
@@ -357,11 +362,11 @@ mod tests {
     use game_data::{
         CharacterId, GridCoord, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition,
         MapLibrary, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
-        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId,
-        OverworldLocationKind, OverworldTravelRuleSet, WorldMode,
+        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        OverworldTravelRuleSet, WorldMode,
     };
-    use std::fs;
     use std::collections::BTreeMap;
+    use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -594,7 +599,9 @@ mod tests {
     ) -> OverworldLocationDefinition {
         OverworldLocationDefinition {
             kind: OverworldLocationKind::Interior,
-            parent_outdoor_location_id: Some(OverworldLocationId(parent_outdoor_location_id.into())),
+            parent_outdoor_location_id: Some(OverworldLocationId(
+                parent_outdoor_location_id.into(),
+            )),
             ..sample_location(id, map_id)
         }
     }

@@ -13,7 +13,6 @@
   - `bevy_item_editor`
   - `bevy_recipe_editor`
   - `tools/tauri_editor`
-  - `tools/narrative_lab`
 - 这说明基础方向是对的，但还需要把“内容如何稳定进入可玩版本”定义清楚。
 
 ## 核心问题
@@ -66,12 +65,11 @@
 
 职责：
 
-- 任务、对话、叙事、表单型内容、工作流型内容
+- 任务、对话、表单型内容、工作流型内容
 
 对应目录：
 
 - `tools/tauri_editor`
-- `tools/narrative_lab`
 
 ## 可玩里程碑下的推荐内容包组织
 
@@ -105,7 +103,6 @@
 - `rust/apps/bevy_map_editor`
 - `rust/apps/bevy_character_editor`
 - `tools/tauri_editor`
-- `tools/narrative_lab`
 
 ## 任务拆分
 

@@ -3,13 +3,22 @@
   "default_dialogue_id": "doctor_chen",
   "variants": [
     {
+      "dialogue_id": "doctor_chen_find_medicine_turn_in",
+      "when": {
+        "player_active_quests_any": ["find_medicine"],
+        "player_item_count_min": {
+          "1005": 1
+        }
+      }
+    },
+    {
       "dialogue_id": "doctor_chen_find_medicine_active",
       "when": {
         "player_active_quests_any": ["find_medicine"]
       }
     },
     {
-      "dialogue_id": "doctor_chen_find_medicine_complete",
+      "dialogue_id": "doctor_chen",
       "when": {
         "player_completed_quests_any": ["find_medicine"]
       }

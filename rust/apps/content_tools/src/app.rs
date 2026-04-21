@@ -1,5 +1,5 @@
-mod content;
 mod changed;
+mod content;
 mod diff_summary;
 mod format;
 mod references;
@@ -44,7 +44,9 @@ pub(crate) fn run() -> Result<i32, String> {
         (Command::DiffSummary, [_, flag, path]) if flag == "--path" => {
             print_diff_summary(&repo_root, path)
         }
-        (Command::Format, [_, changed]) if changed == "changed" => format_content(None, None, &repo_root),
+        (Command::Format, [_, changed]) if changed == "changed" => {
+            format_content(None, None, &repo_root)
+        }
         (Command::Validate, [_, changed]) if changed == "changed" => {
             validate_changed_content(&repo_root)
         }

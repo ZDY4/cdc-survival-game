@@ -31,6 +31,8 @@ pub struct DialogueRuleConditions {
     #[serde(default)]
     pub player_completed_quests_any: Vec<String>,
     #[serde(default)]
+    pub player_item_count_min: BTreeMap<String, i32>,
+    #[serde(default)]
     pub relation_score_min: Option<i32>,
     #[serde(default)]
     pub relation_score_max: Option<i32>,
@@ -92,6 +94,9 @@ impl DialogueRuleConditions {
             &self.player_completed_quests_any,
             &context.player_completed_quests,
         ) {
+            return false;
+        }
+        if !matches_inventory_min_counts(&self.player_item_count_min, &context.player_item_counts) {
             return false;
         }
         if !matches_optional_min_max_i32(
@@ -164,6 +169,8 @@ pub struct DialogueResolutionContext {
     pub player_active_quests: BTreeSet<String>,
     #[serde(default)]
     pub player_completed_quests: BTreeSet<String>,
+    #[serde(default)]
+    pub player_item_counts: BTreeMap<String, i32>,
     #[serde(default)]
     pub relation_score: Option<i32>,
     #[serde(default)]
@@ -599,6 +606,18 @@ fn matches_any_set(expected: &[String], actual: &BTreeSet<String>) -> bool {
     expected.iter().any(|value| actual.contains(value))
 }
 
+fn matches_inventory_min_counts(
+    expected: &BTreeMap<String, i32>,
+    actual: &BTreeMap<String, i32>,
+) -> bool {
+    if expected.is_empty() {
+        return true;
+    }
+    expected.iter().all(|(item_id, min_count)| {
+        actual.get(item_id).copied().unwrap_or(0) >= (*min_count).max(1)
+    })
+}
+
 fn matches_min_max_i32(value: i32, min: Option<i32>, max: Option<i32>) -> bool {
     min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max)
 }
@@ -630,6 +649,7 @@ fn file_stem_id(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -750,6 +770,23 @@ mod tests {
             npc_role: Some(NpcRole::Doctor),
             npc_schedule_labels: vec!["诊所轮值".to_string()],
             npc_action: Some("treat_patients".to_string()),
+            ..DialogueResolutionContext::default()
+        }));
+    }
+
+    #[test]
+    fn dialogue_rule_conditions_match_required_inventory_counts() {
+        let conditions = DialogueRuleConditions {
+            player_item_count_min: BTreeMap::from([("1005".to_string(), 1)]),
+            ..DialogueRuleConditions::default()
+        };
+
+        assert!(conditions.matches(&DialogueResolutionContext {
+            player_item_counts: BTreeMap::from([("1005".to_string(), 2)]),
+            ..DialogueResolutionContext::default()
+        }));
+        assert!(!conditions.matches(&DialogueResolutionContext {
+            player_item_counts: BTreeMap::from([("1005".to_string(), 0)]),
             ..DialogueResolutionContext::default()
         }));
     }

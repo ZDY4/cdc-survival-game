@@ -1,3 +1,42 @@
+<#
+.SYNOPSIS
+Open or reuse a Bevy editor instance and select a specific item, recipe, character, or map.
+
+.DESCRIPTION
+This script is the standard repo-local handoff entry for editor review and manual refinement.
+It first checks whether the target editor has a recent active session recorded under
+`tmp/editor_handoff/*.session.json`. If so, it writes a navigation request into
+`tmp/editor_handoff/*.navigation.json` so the running editor can switch selection in place.
+If no recent session exists, it launches the corresponding `run_bevy_*_editor.bat` script with
+the matching `--select-*` startup argument.
+
+.PARAMETER Item
+Numeric item id to open in `bevy_item_editor`.
+
+.PARAMETER Recipe
+Recipe id to open in `bevy_recipe_editor`.
+
+.PARAMETER Map
+Map id to open in `bevy_map_editor`.
+
+.PARAMETER Character
+Character id to open in `bevy_character_editor`.
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item 1001
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe recipe_bandage_basic
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map forest
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character scavenger_maya
+
+.NOTES
+Use exactly one of `-Item`, `-Recipe`, `-Map`, or `-Character`.
+#>
 param(
     [int]$Item,
     [string]$Recipe,

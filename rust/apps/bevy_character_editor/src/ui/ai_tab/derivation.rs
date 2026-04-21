@@ -1,10 +1,10 @@
-use bevy_egui::egui;
-use game_data::{
-    AiBlackboardEntryPreview, AiConditionTracePreview, AiFactEvaluationPreview, CharacterAiPreview,
-};
 use crate::ui::common::{
     key_value_with_tooltip, label_with_tooltip, negative_text, positive_text, section_header,
     small_label_with_tooltip, summary_card,
+};
+use bevy_egui::egui;
+use game_data::{
+    AiBlackboardEntryPreview, AiConditionTracePreview, AiFactEvaluationPreview, CharacterAiPreview,
 };
 
 use super::helpers::{

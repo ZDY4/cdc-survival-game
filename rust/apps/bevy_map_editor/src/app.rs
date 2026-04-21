@@ -10,8 +10,8 @@ use game_bevy::{
     },
 };
 use game_editor::{
-    configure_editor_app_shell, configure_game_ui_fonts_system, EditorAppShellConfig,
-    GameUiFontsState, WindowSizePersistenceConfig, write_editor_session, EditorKind,
+    configure_editor_app_shell, configure_game_ui_fonts_system, write_editor_session,
+    EditorAppShellConfig, EditorKind, GameUiFontsState, WindowSizePersistenceConfig,
 };
 
 use crate::camera::{apply_camera_transform_system, camera_input_system};
@@ -133,8 +133,7 @@ fn handle_loading_task(
                     loaded
                         .editor
                         .show_map(map_id.clone(), document.definition.default_level);
-                    loaded.editor.status =
-                        format!("Loaded map editor and selected map {map_id}.");
+                    loaded.editor.status = format!("Loaded map editor and selected map {map_id}.");
                 } else {
                     loaded.editor.status =
                         format!("Loaded map editor. Requested map {map_id} was not found.");

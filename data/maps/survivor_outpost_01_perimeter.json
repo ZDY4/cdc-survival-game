@@ -398,7 +398,27 @@
       "blocks_sight": false,
       "props": {
         "building": null,
-        "pickup": { "item_id": "1007", "min_count": 1, "max_count": 3 },
+        "pickup": { "item_id": "1007", "min_count": 1, "max_count": 1 },
+        "visual": {
+          "prototype_id": "props/crate_wood",
+          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
+          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+        },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "survivor_outpost_01_perimeter_supply_box_b",
+      "kind": "pickup",
+      "anchor": { "x": 10, "y": 0, "z": 13 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1007", "min_count": 1, "max_count": 1 },
         "visual": {
           "prototype_id": "props/crate_wood",
           "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
@@ -431,7 +451,7 @@
     {
       "object_id": "survivor_outpost_01_perimeter_spawn_walker",
       "kind": "ai_spawn",
-      "anchor": { "x": 15, "y": 0, "z": 4 },
+      "anchor": { "x": 14, "y": 0, "z": 5 },
       "footprint": { "width": 1, "height": 1 },
       "rotation": "north",
       "blocks_movement": false,
@@ -446,14 +466,14 @@
           "auto_spawn": true,
           "respawn_enabled": true,
           "respawn_delay": 24.0,
-          "spawn_radius": 2.5
+          "spawn_radius": 1.8
         }
       }
     },
     {
       "object_id": "survivor_outpost_01_perimeter_spawn_runner",
       "kind": "ai_spawn",
-      "anchor": { "x": 16, "y": 0, "z": 15 },
+      "anchor": { "x": 16, "y": 0, "z": 7 },
       "footprint": { "width": 1, "height": 1 },
       "rotation": "north",
       "blocks_movement": false,
@@ -468,7 +488,7 @@
           "auto_spawn": true,
           "respawn_enabled": true,
           "respawn_delay": 28.0,
-          "spawn_radius": 2.5
+          "spawn_radius": 1.8
         }
       }
     },

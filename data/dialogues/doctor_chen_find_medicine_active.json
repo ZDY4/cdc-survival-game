@@ -6,7 +6,7 @@
       "type": "dialog",
       "title": "Medicine Run Active",
       "speaker": "陈医生",
-      "text": "医院那边的感染者不会少。你只要带回 1 份急救包就够了，别在里面硬撑。",
+      "text": "医院那边的感染者不会少。找到急救包以后别自己拆用，直接带回来交给我。",
       "portrait": "assets/portraits/doctor.png",
       "is_start": true,
       "next": "choice_1"

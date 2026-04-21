@@ -610,6 +610,18 @@ fn build_dialogue_resolution_context(
             .map(str::to_string),
         InteractionTargetId::MapObject(_) => None,
     });
+    let player_item_counts = runtime_state
+        .runtime
+        .economy()
+        .actor(actor_id)
+        .map(|actor| {
+            actor
+                .inventory
+                .iter()
+                .map(|(item_id, count)| (item_id.to_string(), *count))
+                .collect()
+        })
+        .unwrap_or_default();
     let npc_debug_entry = target_actor_definition_id
         .as_deref()
         .and_then(|definition_id| {
@@ -635,6 +647,7 @@ fn build_dialogue_resolution_context(
         player_hp_ratio,
         player_active_quests: runtime_state.runtime.active_quest_ids_for_actor(actor_id),
         player_completed_quests: runtime_state.runtime.completed_quest_ids(),
+        player_item_counts,
         relation_score: target_id.and_then(|target_id| match target_id {
             InteractionTargetId::Actor(target_actor_id) => Some(
                 runtime_state

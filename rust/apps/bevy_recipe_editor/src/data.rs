@@ -73,9 +73,8 @@ pub(crate) fn load_editor_resources(
         if editor.select_recipe_id(recipe_id) {
             editor.status = format!("Loaded recipe workspace and selected recipe {recipe_id}.");
         } else {
-            editor.status = format!(
-                "Loaded recipe workspace. Requested recipe {recipe_id} was not found."
-            );
+            editor.status =
+                format!("Loaded recipe workspace. Requested recipe {recipe_id} was not found.");
             warn!("recipe editor startup selection not found: recipe_id={recipe_id}");
             editor.ensure_selection();
         }
@@ -221,7 +220,10 @@ pub(crate) fn poll_external_selection_system(
             "recipe editor received external selection for unknown recipe: recipe_id={}, request_id={}",
             request.target_id, request.request_id
         );
-        format!("External request targeted missing recipe {}.", request.target_id)
+        format!(
+            "External request targeted missing recipe {}.",
+            request.target_id
+        )
     };
 
     if let Err(error) = clear_editor_navigation_request(&external.repo_root, EditorKind::Recipe) {

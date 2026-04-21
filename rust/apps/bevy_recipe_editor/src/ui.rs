@@ -1,10 +1,10 @@
 mod panels;
 
+use crate::commands::RecipeEditorCommand;
+use crate::state::{EditorState, RecipeEditorCatalogs};
 use bevy::log::warn;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use crate::commands::RecipeEditorCommand;
-use crate::state::{EditorState, RecipeEditorCatalogs};
 
 pub(crate) fn editor_ui_system(
     mut contexts: EguiContexts,

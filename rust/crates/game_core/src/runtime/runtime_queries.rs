@@ -6,7 +6,7 @@ use game_data::{
 
 use crate::simulation::{
     AttackTargetingQueryResult, CombatAiExecutionResult, CombatAiIntent, CombatAiSnapshot,
-    SkillRuntimeState, SkillSpatialPreviewResult, SkillTargetingQueryResult,
+    QuestRuntimeState, SkillRuntimeState, SkillSpatialPreviewResult, SkillTargetingQueryResult,
 };
 
 use super::SimulationRuntime;
@@ -162,6 +162,10 @@ impl SimulationRuntime {
 
     pub fn active_quest_ids_for_actor(&self, actor_id: ActorId) -> BTreeSet<String> {
         self.simulation.active_quest_ids_for_actor(actor_id)
+    }
+
+    pub fn active_quest_states_for_actor(&self, actor_id: ActorId) -> Vec<QuestRuntimeState> {
+        self.simulation.active_quest_states_for_actor(actor_id)
     }
 
     pub fn completed_quest_ids(&self) -> BTreeSet<String> {

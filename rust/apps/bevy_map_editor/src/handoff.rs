@@ -70,7 +70,10 @@ pub(crate) fn poll_external_selection_system(
             request.target_id, request.request_id
         );
     } else {
-        editor.status = format!("External request targeted missing map {}.", request.target_id);
+        editor.status = format!(
+            "External request targeted missing map {}.",
+            request.target_id
+        );
         warn!(
             "map editor received external selection for unknown map: map_id={}, request_id={}",
             request.target_id, request.request_id

@@ -6,7 +6,7 @@
       "type": "dialog",
       "title": "Supply Run Complete",
       "speaker": "老王",
-      "text": "动作比我想的利索。这点止血绷带拿着，外面那两只行尸也该顺手清了，省得它们老在门口晃。",
+      "text": "动作比我想的利索。这点止血绷带拿着，东侧路口那两只行尸也该顺手清了，省得它们老在门口晃。",
       "portrait": "assets/portraits/trader_lao_wang.png",
       "is_start": true,
       "next": "choice_1"
@@ -44,7 +44,7 @@
       "id": "accept_confirm",
       "type": "dialog",
       "speaker": "老王",
-      "text": "就在警戒区里收掉两只僵尸。别恋战，清完就回来，我再告诉你下一步往哪走。",
+      "text": "就在警戒区东侧路口把那两只僵尸收掉。别恋战，清完就回来，我再告诉你下一步往哪走。",
       "portrait": "assets/portraits/trader_lao_wang.png",
       "next": "accept_end"
     },

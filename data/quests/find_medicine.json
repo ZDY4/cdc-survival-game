@@ -27,7 +27,8 @@
 				"objective_type": "collect",
 				"description": "从废弃医院带回 1 份急救包",
 				"item_id": 1005,
-				"count": 1
+				"count": 1,
+				"manual_turn_in": true
 			},
 			"reward_1": {
 				"id": "reward_1",
@@ -37,12 +38,6 @@
 					"y": 160
 				},
 				"rewards": {
-					"items": [
-						{
-							"id": 1005,
-							"count": 2
-						}
-					],
 					"experience": 300,
 					"skill_points": 1
 				}

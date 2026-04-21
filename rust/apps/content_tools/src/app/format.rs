@@ -41,7 +41,11 @@ fn format_changed(repo_root: &Path) -> Result<i32, String> {
         changed_count += usize::from(report.changed);
         println!(
             "- [{}] {} {} @ {}",
-            if report.changed { "changed" } else { "unchanged" },
+            if report.changed {
+                "changed"
+            } else {
+                "unchanged"
+            },
             report.kind,
             report.id,
             report.relative_path
@@ -52,7 +56,11 @@ fn format_changed(repo_root: &Path) -> Result<i32, String> {
     Ok(0)
 }
 
-fn format_single(kind: ContentKind, target_id: &str, repo_root: &Path) -> Result<FormatReport, String> {
+fn format_single(
+    kind: ContentKind,
+    target_id: &str,
+    repo_root: &Path,
+) -> Result<FormatReport, String> {
     match kind {
         ContentKind::Item => format_item(target_id, repo_root),
         ContentKind::Recipe => format_recipe(target_id, repo_root),
@@ -128,11 +136,12 @@ fn format_character(target_id: &str, repo_root: &Path) -> Result<FormatReport, S
 
 fn format_map(target_id: &str, repo_root: &Path) -> Result<FormatReport, String> {
     let entry = find_map_document(target_id, repo_root)?;
-    let result = MapEditorService::with_data_root(repo_root.join("data/maps"), repo_root.join("data"))
-        .execute(MapEditCommand::FormatMap {
-            target: MapEditTarget::Path(entry.path),
-        })
-        .map_err(|error| error.to_string())?;
+    let result =
+        MapEditorService::with_data_root(repo_root.join("data/maps"), repo_root.join("data"))
+            .execute(MapEditCommand::FormatMap {
+                target: MapEditTarget::Path(entry.path),
+            })
+            .map_err(|error| error.to_string())?;
     Ok(FormatReport::new(
         "map",
         entry.definition.id.to_string(),
@@ -151,7 +160,12 @@ where
         path,
         &raw,
         |path, source| format!("failed to create directory {}: {source}", path.display()),
-        |path, source| format!("failed to write temporary file {}: {source}", path.display()),
+        |path, source| {
+            format!(
+                "failed to write temporary file {}: {source}",
+                path.display()
+            )
+        },
         |path, source| format!("failed to replace file {}: {source}", path.display()),
     )
 }

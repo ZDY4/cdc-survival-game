@@ -6,7 +6,7 @@
       "type": "dialog",
       "title": "Supply Run Offer",
       "speaker": "老王",
-      "text": "外面的警戒区刚清过一轮，但还散着些能吃的存货。你要是真想在据点里站稳脚，先替我带两罐罐头回来。",
+      "text": "外面的警戒区刚清过一轮，前沿还散着两处能吃的存货。你要是真想在据点里站稳脚，先替我把那两罐罐头带回来。",
       "portrait": "assets/portraits/trader_lao_wang.png",
       "is_start": true,
       "next": "choice_1"
@@ -44,7 +44,7 @@
       "id": "accept_confirm",
       "type": "dialog",
       "speaker": "老王",
-      "text": "就去外面那片警戒区，带回两罐罐头就算你过关。别贪，拿到东西就回来。",
+      "text": "就去外面那片警戒区，先摸前沿那两处补给点，带回两罐罐头就算你过关。别贪，拿到东西就回来。",
       "portrait": "assets/portraits/trader_lao_wang.png",
       "next": "accept_end"
     },

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::*;
+use game_core::simulation::QuestRuntimeState;
 use game_core::SimulationRuntime;
 use game_data::{
     ActorId, ActorSide, GridCoord, InteractionContextSnapshot, InteractionPrompt, ItemDefinition,
@@ -486,9 +487,18 @@ pub struct UiCharacterSnapshot {
     pub attributes: BTreeMap<String, i32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UiJournalQuestView {
+    pub quest_id: String,
+    pub title: String,
+    pub objective_text: String,
+    pub progress_current: i32,
+    pub progress_target: i32,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct UiJournalSnapshot {
-    pub quest_titles: Vec<String>,
+    pub quests: Vec<UiJournalQuestView>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -789,17 +799,49 @@ pub fn journal_snapshot(
     actor_id: ActorId,
     quests: &QuestLibrary,
 ) -> UiJournalSnapshot {
-    let quest_titles = runtime
-        .active_quest_ids_for_actor(actor_id)
-        .into_iter()
-        .map(|quest_id| {
-            quests
-                .get(&quest_id)
-                .map(|quest| quest.title.clone())
-                .unwrap_or(quest_id)
+    let mut active_quests = runtime
+        .active_quest_states_for_actor(actor_id)
+        .iter()
+        .filter_map(|state| journal_quest_view(state, quests))
+        .collect::<Vec<_>>();
+    active_quests.sort_by(|left, right| {
+        left.title
+            .cmp(&right.title)
+            .then(left.quest_id.cmp(&right.quest_id))
+    });
+    UiJournalSnapshot {
+        quests: active_quests,
+    }
+}
+
+fn journal_quest_view(
+    state: &QuestRuntimeState,
+    quests: &QuestLibrary,
+) -> Option<UiJournalQuestView> {
+    let quest = quests.get(&state.quest_id)?;
+    let current_node = quest.flow.nodes.get(&state.current_node_id);
+    let (objective_text, progress_current, progress_target) = current_node
+        .filter(|node| node.node_type == "objective")
+        .map(|node| {
+            (
+                node.description.clone(),
+                state
+                    .completed_objectives
+                    .get(&node.id)
+                    .copied()
+                    .unwrap_or(0),
+                node.count.max(1),
+            )
         })
-        .collect();
-    UiJournalSnapshot { quest_titles }
+        .unwrap_or_else(|| (quest.description.clone(), 0, 0));
+
+    Some(UiJournalQuestView {
+        quest_id: state.quest_id.clone(),
+        title: quest.title.clone(),
+        objective_text,
+        progress_current,
+        progress_target,
+    })
 }
 
 pub fn skills_snapshot(
@@ -1248,13 +1290,17 @@ pub fn item_usable(definition: &ItemDefinition) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{overworld_location_prompt_snapshot, UiOverworldLocationPromptSnapshot};
+    use super::{
+        journal_snapshot, overworld_location_prompt_snapshot, UiJournalQuestView,
+        UiOverworldLocationPromptSnapshot,
+    };
     use game_core::SimulationRuntime;
     use game_data::{
         ActorId, ActorSide, CharacterId, GridCoord, MapDefinition, MapEntryPointDefinition, MapId,
         MapLevelDefinition, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
         OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
-        OverworldTerrainKind, OverworldTravelRuleSet, WorldMode,
+        OverworldTerrainKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow,
+        QuestLibrary, QuestNode, WorldMode,
     };
     use std::collections::BTreeMap;
 
@@ -1340,6 +1386,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn journal_snapshot_includes_objective_description_and_progress() {
+        let (mut runtime, player) = sample_journal_runtime();
+        let quests = sample_journal_quest_library();
+        runtime.set_quest_library(quests.clone());
+        assert!(runtime.start_quest(player, "supply_run"));
+
+        let snapshot = journal_snapshot(&runtime, player, &quests);
+
+        assert_eq!(
+            snapshot.quests,
+            vec![UiJournalQuestView {
+                quest_id: "supply_run".to_string(),
+                title: "补给试跑".to_string(),
+                objective_text: "从据点外带回 2 罐罐头".to_string(),
+                progress_current: 0,
+                progress_target: 2,
+            }]
+        );
+    }
+
     fn sample_overworld_prompt_runtime() -> (SimulationRuntime, ActorId, OverworldLibrary) {
         let overworld = sample_overworld_prompt_library();
         let mut runtime = SimulationRuntime::new();
@@ -1366,6 +1433,79 @@ mod tests {
         });
         runtime.submit_command(game_core::SimulationCommand::SetActorAp { actor_id, ap: 3.0 });
         (runtime, actor_id, overworld)
+    }
+
+    fn sample_journal_runtime() -> (SimulationRuntime, ActorId) {
+        let mut runtime = SimulationRuntime::new();
+        let actor_id = runtime.register_actor(game_core::RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: game_data::ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        (runtime, actor_id)
+    }
+
+    fn sample_journal_quest_library() -> QuestLibrary {
+        QuestLibrary::from(BTreeMap::from([(
+            "supply_run".to_string(),
+            QuestDefinition {
+                quest_id: "supply_run".to_string(),
+                title: "补给试跑".to_string(),
+                flow: QuestFlow {
+                    start_node_id: "start".to_string(),
+                    nodes: BTreeMap::from([
+                        (
+                            "start".to_string(),
+                            QuestNode {
+                                id: "start".to_string(),
+                                node_type: "start".to_string(),
+                                ..QuestNode::default()
+                            },
+                        ),
+                        (
+                            "step_1".to_string(),
+                            QuestNode {
+                                id: "step_1".to_string(),
+                                node_type: "objective".to_string(),
+                                objective_type: "collect".to_string(),
+                                description: "从据点外带回 2 罐罐头".to_string(),
+                                item_id: Some(1007),
+                                count: 2,
+                                ..QuestNode::default()
+                            },
+                        ),
+                        (
+                            "end".to_string(),
+                            QuestNode {
+                                id: "end".to_string(),
+                                node_type: "end".to_string(),
+                                ..QuestNode::default()
+                            },
+                        ),
+                    ]),
+                    connections: vec![
+                        QuestConnection {
+                            from: "start".to_string(),
+                            to: "step_1".to_string(),
+                            ..QuestConnection::default()
+                        },
+                        QuestConnection {
+                            from: "step_1".to_string(),
+                            to: "end".to_string(),
+                            ..QuestConnection::default()
+                        },
+                    ],
+                    ..QuestFlow::default()
+                },
+                ..QuestDefinition::default()
+            },
+        )]))
     }
 
     fn sample_overworld_prompt_map_library() -> game_data::MapLibrary {

@@ -1,8 +1,8 @@
-use bevy_egui::egui;
-use game_data::CharacterAiPreview;
 use crate::ui::common::{
     key_value_with_tooltip, label_with_tooltip, negative_text, section_header, status_badge,
 };
+use bevy_egui::egui;
+use game_data::CharacterAiPreview;
 
 use super::helpers::{ai_metric_tooltip, blocked_actions, blocker_label, recommended_action};
 

@@ -147,7 +147,11 @@ fn format_object_kind_counts(definition: &game_data::MapDefinition) -> Vec<Strin
 
 fn empty_as_dash(value: &str) -> &str {
     let trimmed = value.trim();
-    if trimmed.is_empty() { "-" } else { trimmed }
+    if trimmed.is_empty() {
+        "-"
+    } else {
+        trimmed
+    }
 }
 
 fn join_or_dash<T>(values: &[T]) -> String

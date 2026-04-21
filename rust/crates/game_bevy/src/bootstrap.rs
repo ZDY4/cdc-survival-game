@@ -5,8 +5,8 @@ use thiserror::Error;
 use crate::{
     build_runtime_from_seed, debug_seed_characters_for_map, load_character_definitions,
     load_map_definitions, load_overworld_definitions, load_runtime_startup_config,
-    resolve_startup_map_id, NewGameConfigError, validate_runtime_outdoor_transition_layout,
-    CharacterDefinitions, MapDefinitions, OverworldDefinitions, RuntimeBuildError,
+    resolve_startup_map_id, validate_runtime_outdoor_transition_layout, CharacterDefinitions,
+    MapDefinitions, NewGameConfigError, OverworldDefinitions, RuntimeBuildError,
     RuntimeScenarioSeed, RuntimeStartupConfig, RuntimeStartupConfigError,
 };
 use game_core::SimulationRuntime;

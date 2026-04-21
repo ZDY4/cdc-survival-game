@@ -1,0 +1,59 @@
+{
+  "dialog_id": "doctor_chen_find_medicine_turn_in",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Medicine Run Turn In",
+      "speaker": "陈医生",
+      "text": "你真把急救包带回来了。先给我，我马上拆开补进诊所储备。",
+      "portrait": "assets/portraits/doctor.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "把急救包交给陈医生。",
+          "next": "turn_in_action"
+        },
+        {
+          "text": "先等等，我还想准备一下。",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "id": "turn_in_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "turn_in_quest",
+          "quest_id": "find_medicine"
+        }
+      ],
+      "next": "turn_in_confirm"
+    },
+    {
+      "id": "turn_in_confirm",
+      "type": "dialog",
+      "speaker": "陈医生",
+      "text": "够用了，这一趟救了诊所的命。你先休整，后面我再安排更远的活。",
+      "portrait": "assets/portraits/doctor.png",
+      "next": "turn_in_end"
+    },
+    {
+      "id": "turn_in_end",
+      "type": "end",
+      "end_type": "leave"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use bevy::prelude::*;
 use game_bevy::{
     advance_map_ai_spawn_runtime, CharacterDefinitions, MapAiSpawnRuntimeState, MapDefinitions,
+    QuestDefinitions,
 };
 use game_core::runtime::action_result_status;
 use game_core::{

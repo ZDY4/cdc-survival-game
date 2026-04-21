@@ -45,7 +45,7 @@
 - `rust/apps/bevy_server`: Bevy 运行时核心入口。
 - `rust/apps/bevy_debug_viewer`: 运行时调试与显示入口。
 - `rust/apps/bevy_map_editor` / `rust/apps/bevy_character_editor`: Bevy 侧专用编辑器。
-- `tools/tauri_editor` / `tools/narrative_lab`: 独立桌面编辑器。
+- `tools/tauri_editor`: 独立桌面编辑器。
 
 ## 编辑器约束
 
@@ -54,6 +54,14 @@
 - 偏内容管理、表单、工作流、文本生产的编辑能力优先放在独立编辑器侧。
 - 需求不明确时，优先把新增能力放到共享 Rust 层，再接到具体 app 或编辑器；若现有实现与共享层方向冲突，优先收口到共享层，而不是继续扩散到消费端。
 - 若一段逻辑既能做成共享规则库，也能直接写进 Bevy system，优先先抽共享规则，再做 Bevy 集成；开发时优先做“小模块组合”，不要做“大文件追加”。
+
+## Agent 工具使用
+
+- `tools/agent/` 下的脚本是 repo-local agent workflow 的标准工具入口；处理内容编辑复核时，优先查看 `tools/agent/README.md` 和 `docs/agent-workflows/*.md`，不要靠猜测脚本用途。
+- 需要打开或复用 Bevy editor 并定位到指定目标时，优先使用 `tools/agent/open-editor.ps1`，不要只告诉用户“手动打开 editor 再搜索”。
+- 地图改动完成后，需要做空间结果复核时，优先使用 `tools/agent/review-map-visual.ps1`；它会先串联 map 摘要、引用和校验，再进入 `bevy_map_editor`。
+- 若脚本已提供 PowerShell comment-based help，先用 `Get-Help tools/agent/<script>.ps1` 确认参数、示例和副作用，再执行。
+- 新增 `tools/agent/` 脚本时，必须同时补这三处说明：脚本自身 help、`tools/agent/README.md`、相关 workflow 文档；不要只落脚本文件本体。
 
 ## Bug / Crash 排查
 

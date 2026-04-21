@@ -16,9 +16,11 @@ pub(crate) fn poll_external_selection_system(
     mut requests: MessageWriter<CharacterEditorCommand>,
 ) {
     if external.heartbeat_timer.tick(time.delta()).just_finished() {
-        if let Err(error) =
-            write_editor_session(&external.repo_root, EditorKind::Character, std::process::id())
-        {
+        if let Err(error) = write_editor_session(
+            &external.repo_root,
+            EditorKind::Character,
+            std::process::id(),
+        ) {
             warn!("character editor failed to refresh handoff session: {error}");
         }
     }

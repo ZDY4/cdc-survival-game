@@ -1,7 +1,7 @@
 {
 	"quest_id": "tutorial_survive",
 	"title": "补给试跑",
-	"description": "老王让你去据点外警戒区带回两罐能吃的东西，证明你已经能安全进出外围。",
+	"description": "老王让你去据点外警戒区前沿两处补给点带回两罐能吃的东西，证明你已经能安全进出外围。",
 	"prerequisites": [],
 	"time_limit": -1,
 	"flow": {
@@ -23,7 +23,7 @@
 					"y": 160
 				},
 				"objective_type": "collect",
-				"description": "从据点外警戒区带回 2 罐罐头",
+				"description": "摸一遍警戒区前沿补给点，带回 2 罐罐头",
 				"item_id": 1007,
 				"count": 2
 			},
@@ -38,7 +38,7 @@
 					"items": [
 						{
 							"id": 1006,
-							"count": 2
+							"count": 1
 						}
 					],
 					"experience": 60

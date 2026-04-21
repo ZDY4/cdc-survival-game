@@ -6,12 +6,12 @@
   "inventory": [
     {
       "item_id": 1005,
-      "count": 3,
+      "count": 1,
       "price": 50
     },
     {
       "item_id": 1006,
-      "count": 10,
+      "count": 6,
       "price": 10
     },
     {
@@ -26,7 +26,7 @@
     },
     {
       "item_id": 1008,
-      "count": 8,
+      "count": 4,
       "price": 12
     },
     {

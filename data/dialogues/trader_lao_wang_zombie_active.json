@@ -6,7 +6,7 @@
       "type": "dialog",
       "title": "Zombie Hunt Reminder",
       "speaker": "老王",
-      "text": "那两只行尸还在外面晃。你把它们收掉，警戒区这道口子才算真的稳下来。",
+      "text": "那两只行尸还卡在东侧路口和车骸附近。你把它们收掉，警戒区这道口子才算真的稳下来。",
       "portrait": "assets/portraits/trader_lao_wang.png",
       "is_start": true,
       "next": "choice_1"

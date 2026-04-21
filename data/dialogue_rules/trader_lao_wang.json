@@ -9,6 +9,18 @@
       }
     },
     {
+      "dialogue_id": "trader_lao_wang_mainline_idle",
+      "when": {
+        "player_active_quests_any": ["find_medicine"]
+      }
+    },
+    {
+      "dialogue_id": "trader_lao_wang_mainline_idle",
+      "when": {
+        "player_completed_quests_any": ["find_medicine"]
+      }
+    },
+    {
       "dialogue_id": "trader_lao_wang_zombie_complete",
       "when": {
         "player_completed_quests_any": ["zombie_hunter"]

@@ -38,7 +38,6 @@ echo   - release\*.pdb
 echo   - release\deps\*.pdb
 echo   - log files older than %LOG_RETENTION_DAYS% days under logs\
 echo   - *.log files older than %LOG_RETENTION_DAYS% days under target\
-echo   - tmp\narrative_lab_regression_* directories older than %LOG_RETENTION_DAYS% days
 echo   - npm cache log files older than %LOG_RETENTION_DAYS% days
 echo   - tools\npm-cache\_update-notifier-last-checked
 echo.
@@ -60,9 +59,6 @@ call :clean_expired_logs
 if errorlevel 1 exit /b 1
 
 call :clean_root_target_logs
-if errorlevel 1 exit /b 1
-
-call :clean_expired_tmp_outputs
 if errorlevel 1 exit /b 1
 
 call :clean_npm_cache_logs
@@ -125,25 +121,6 @@ pwsh -NoLogo -NoProfile -Command ^
   "Write-Host ('[DONE] Removed ' + $expiredFiles.Count + ' expired target log file(s).')"
 if errorlevel 1 (
     echo [ERROR] Failed to clean expired target logs under "%ROOT_TARGET_DIR%"
-    exit /b 1
-)
-exit /b 0
-
-:clean_expired_tmp_outputs
-if not exist "%TMP_DIR%" (
-    echo [INFO] Skipping tmp cleanup. Directory not found: "%TMP_DIR%"
-    exit /b 0
-)
-
-echo [CLEAN] Removing narrative_lab_regression_* directories older than %LOG_RETENTION_DAYS% days under "%TMP_DIR%"
-pwsh -NoLogo -NoProfile -Command ^
-  "$cutoff = (Get-Date).AddDays(-[int]$env:LOG_RETENTION_DAYS);" ^
-  "$tmpRoot = $env:TMP_DIR;" ^
-  "$expiredDirs = Get-ChildItem -LiteralPath $tmpRoot -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'narrative_lab_regression_*' -and $_.LastWriteTime -lt $cutoff };" ^
-  "foreach ($directory in $expiredDirs) { Remove-Item -LiteralPath $directory.FullName -Recurse -Force -ErrorAction Stop };" ^
-  "Write-Host ('[DONE] Removed ' + $expiredDirs.Count + ' expired tmp regression directorie(s).')"
-if errorlevel 1 (
-    echo [ERROR] Failed to clean expired tmp outputs under "%TMP_DIR%"
     exit /b 1
 )
 exit /b 0

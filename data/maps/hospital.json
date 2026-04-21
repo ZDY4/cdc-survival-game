@@ -2,8 +2,8 @@
   "id": "hospital",
   "name": "hospital",
   "size": {
-    "width": 12,
-    "height": 12
+    "width": 16,
+    "height": 14
   },
   "default_level": 0,
   "levels": [
@@ -18,16 +18,226 @@
       "grid": {
         "x": 1,
         "y": 0,
-        "z": 1
+        "z": 12
       },
       "facing": null
     }
   ],
   "objects": [
     {
+      "object_id": "hospital_reception_counter",
+      "kind": "prop",
+      "anchor": { "x": 2, "y": 0, "z": 10 },
+      "footprint": { "width": 4, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/counter_canteen"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_reception_desk",
+      "kind": "prop",
+      "anchor": { "x": 6, "y": 0, "z": 11 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/desk_wood"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_waiting_chair_a",
+      "kind": "prop",
+      "anchor": { "x": 2, "y": 0, "z": 12 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/chair_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_waiting_chair_b",
+      "kind": "prop",
+      "anchor": { "x": 3, "y": 0, "z": 12 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/chair_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_waiting_table",
+      "kind": "prop",
+      "anchor": { "x": 4, "y": 0, "z": 12 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/table_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_quarantine_barricade",
+      "kind": "prop",
+      "anchor": { "x": 5, "y": 0, "z": 8 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/barricade_scrap"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_supply_pallet",
+      "kind": "prop",
+      "anchor": { "x": 6, "y": 0, "z": 6 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/pallet_stack"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_partition_shelf_a",
+      "kind": "prop",
+      "anchor": { "x": 8, "y": 0, "z": 9 },
+      "footprint": { "width": 1, "height": 3 },
+      "rotation": "east",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/shelf_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_partition_shelf_b",
+      "kind": "prop",
+      "anchor": { "x": 8, "y": 0, "z": 4 },
+      "footprint": { "width": 1, "height": 3 },
+      "rotation": "east",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/shelf_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_treatment_table",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 7 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "east",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/table_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_archive_desk",
+      "kind": "prop",
+      "anchor": { "x": 11, "y": 0, "z": 6 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "east",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/desk_wood"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_steel_locker_a",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 2 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/locker_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_steel_locker_b",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 3 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/locker_metal"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_medical_cabinet_a",
+      "kind": "prop",
+      "anchor": { "x": 11, "y": 0, "z": 3 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/cabinet_medical"
+        }
+      }
+    },
+    {
+      "object_id": "hospital_medical_cabinet_b",
+      "kind": "prop",
+      "anchor": { "x": 12, "y": 0, "z": 3 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/cabinet_medical"
+        }
+      }
+    },
+    {
       "object_id": "hospital_pickup_medkit",
       "kind": "pickup",
-      "anchor": { "x": 8, "y": 0, "z": 8 },
+      "anchor": { "x": 13, "y": 0, "z": 2 },
       "footprint": { "width": 1, "height": 1 },
       "rotation": "north",
       "blocks_movement": false,
@@ -36,9 +246,7 @@
         "building": null,
         "pickup": { "item_id": "1005", "min_count": 1, "max_count": 1 },
         "visual": {
-          "prototype_id": "props/crate_wood",
-          "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
-          "scale": { "x": 0.35, "y": 0.2, "z": 0.35 }
+          "prototype_id": "props/cabinet_medical"
         },
         "interactive": null,
         "ai_spawn": null
@@ -47,7 +255,7 @@
     {
       "object_id": "hospital_spawn_walker_a",
       "kind": "ai_spawn",
-      "anchor": { "x": 6, "y": 0, "z": 5 },
+      "anchor": { "x": 7, "y": 0, "z": 7 },
       "footprint": { "width": 1, "height": 1 },
       "rotation": "north",
       "blocks_movement": false,
@@ -62,14 +270,14 @@
           "auto_spawn": true,
           "respawn_enabled": true,
           "respawn_delay": 24.0,
-          "spawn_radius": 2.5
+          "spawn_radius": 2.0
         }
       }
     },
     {
       "object_id": "hospital_spawn_runner_a",
       "kind": "ai_spawn",
-      "anchor": { "x": 9, "y": 0, "z": 3 },
+      "anchor": { "x": 12, "y": 0, "z": 5 },
       "footprint": { "width": 1, "height": 1 },
       "rotation": "north",
       "blocks_movement": false,
@@ -84,7 +292,7 @@
           "auto_spawn": true,
           "respawn_enabled": true,
           "respawn_delay": 30.0,
-          "spawn_radius": 2.5
+          "spawn_radius": 2.0
         }
       }
     }

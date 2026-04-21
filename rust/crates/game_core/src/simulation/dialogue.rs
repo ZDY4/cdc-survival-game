@@ -84,6 +84,17 @@ impl Simulation {
             }
             _ => (None, None, None, None),
         };
+        let player_item_counts = self
+            .economy
+            .actor(actor_id)
+            .map(|actor| {
+                actor
+                    .inventory
+                    .iter()
+                    .map(|(item_id, count)| (item_id.to_string(), *count))
+                    .collect()
+            })
+            .unwrap_or_default();
 
         DialogueResolutionContext {
             world_mode: self.interaction_context.world_mode,
@@ -97,6 +108,7 @@ impl Simulation {
             player_hp_ratio,
             player_active_quests: self.active_quest_ids_for_actor(actor_id),
             player_completed_quests: self.completed_quest_ids(),
+            player_item_counts,
             relation_score,
             npc_definition_id,
             npc_role: None,
@@ -346,6 +358,19 @@ impl Simulation {
                     if !self.start_quest(actor_id, &quest_id) {
                         warn!(
                             "dialogue start_quest rejected actor={actor_id:?} quest_id={quest_id}"
+                        );
+                    }
+                }
+                "turn_in_quest" => {
+                    let Some(quest_id) =
+                        super::dialogue_action_string(action, &["quest_id", "questId"])
+                    else {
+                        warn!("dialogue action missing quest id: {:?}", action);
+                        continue;
+                    };
+                    if let Err(error) = self.turn_in_active_quest(actor_id, &quest_id) {
+                        warn!(
+                            "dialogue turn_in_quest failed actor={actor_id:?} quest_id={quest_id}: {error}"
                         );
                     }
                 }

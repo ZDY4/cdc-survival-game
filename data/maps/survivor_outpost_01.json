@@ -860,7 +860,7 @@
       "blocks_sight": false,
       "props": {
         "building": null,
-        "pickup": { "item_id": "1006", "min_count": 2, "max_count": 4 },
+        "pickup": { "item_id": "1006", "min_count": 1, "max_count": 2 },
         "visual": {
           "prototype_id": "props/crate_wood",
           "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
@@ -880,7 +880,7 @@
       "blocks_sight": false,
       "props": {
         "building": null,
-        "pickup": { "item_id": "1008", "min_count": 2, "max_count": 4 },
+        "pickup": { "item_id": "1008", "min_count": 1, "max_count": 2 },
         "visual": {
           "prototype_id": "props/crate_wood",
           "local_offset_world": { "x": 0.0, "y": 0.08, "z": 0.0 },
@@ -925,8 +925,7 @@
           "display_name": "诊所补给柜",
           "visual_id": "cabinet_medical",
           "initial_inventory": [
-            { "item_id": "1005", "count": 2 },
-            { "item_id": "1006", "count": 4 },
+            { "item_id": "1006", "count": 2 },
             { "item_id": "1031", "count": 1 }
           ]
         },
@@ -959,9 +958,8 @@
           "display_name": "食堂食品箱",
           "visual_id": "crate_wood",
           "initial_inventory": [
-            { "item_id": "1007", "count": 5 },
-            { "item_id": "1008", "count": 2 },
-            { "item_id": "1006", "count": 2 }
+            { "item_id": "1007", "count": 3 },
+            { "item_id": "1008", "count": 1 }
           ]
         },
         "interactive": {
@@ -1029,7 +1027,7 @@
           "initial_inventory": [
             { "item_id": "1010", "count": 4 },
             { "item_id": "1002", "count": 1 },
-            { "item_id": "1006", "count": 3 }
+            { "item_id": "1006", "count": 1 }
           ]
         },
         "interactive": {

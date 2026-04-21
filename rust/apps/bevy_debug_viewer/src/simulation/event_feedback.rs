@@ -10,6 +10,7 @@ pub(crate) fn collect_events(
     mut damage_number_state: ResMut<ViewerDamageNumberState>,
     mut motion_state: ResMut<ViewerActorMotionState>,
     mut viewer_state: ResMut<ViewerState>,
+    quests: Res<QuestDefinitions>,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let turn_index = snapshot.combat.current_turn_index;
@@ -60,6 +61,9 @@ pub(crate) fn collect_events(
             viewer_state.pending_open_container_id = Some(container_id.clone());
             viewer_state.pending_open_container_target = Some(target_id.clone());
         }
+        if let Some(status) = quest_event_status(&event, &quests.0) {
+            viewer_state.status_line = status;
+        }
         sync_dialogue_from_event(&runtime_state, &mut viewer_state, &event);
         runtime_state
             .recent_events
@@ -104,6 +108,40 @@ fn clear_interaction_ui_for_consumed_target(
     viewer_state.focused_target = None;
     viewer_state.current_prompt = None;
     viewer_state.interaction_menu = None;
+}
+
+fn quest_event_status(event: &SimulationEvent, quests: &game_data::QuestLibrary) -> Option<String> {
+    match event {
+        SimulationEvent::QuestStarted { quest_id, .. } => {
+            let quest = quests.get(quest_id)?;
+            Some(format!("新任务: {}", quest.title))
+        }
+        SimulationEvent::QuestObjectiveProgressed {
+            quest_id,
+            node_id,
+            current,
+            target,
+            ..
+        } => {
+            let quest = quests.get(quest_id)?;
+            let objective = quest
+                .flow
+                .nodes
+                .get(node_id)
+                .map(|node| node.description.as_str())
+                .filter(|description| !description.trim().is_empty())
+                .unwrap_or("目标推进");
+            Some(format!(
+                "任务进度: {} {}/{} · {}",
+                quest.title, current, target, objective
+            ))
+        }
+        SimulationEvent::QuestCompleted { quest_id, .. } => {
+            let quest = quests.get(quest_id)?;
+            Some(format!("任务完成: {}", quest.title))
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn queue_actor_motion(

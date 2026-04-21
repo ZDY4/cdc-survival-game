@@ -4,8 +4,8 @@ use std::path::Path;
 use std::process::Command;
 
 use game_data::{
-    CharacterDefinition, ItemDefinition, ItemEditorService, MapDefinition, MapEditorService,
-    RecipeDefinition, RecipeEditorService, validate_character_definition,
+    validate_character_definition, CharacterDefinition, ItemDefinition, ItemEditorService,
+    MapDefinition, MapEditorService, RecipeDefinition, RecipeEditorService,
 };
 use serde::de::DeserializeOwned;
 
@@ -95,7 +95,10 @@ fn is_supported_content_path(path: &str) -> bool {
             || path.starts_with("data/maps/"))
 }
 
-fn validate_changed_path(repo_root: &Path, relative_path: &str) -> Result<ValidationReport, String> {
+fn validate_changed_path(
+    repo_root: &Path,
+    relative_path: &str,
+) -> Result<ValidationReport, String> {
     let absolute_path = repo_root.join(relative_path);
     if relative_path.starts_with("data/items/") {
         validate_item_path(repo_root, relative_path, &absolute_path)
@@ -116,9 +119,10 @@ fn validate_item_path(
     absolute_path: &Path,
 ) -> Result<ValidationReport, String> {
     let definition = read_json_file::<ItemDefinition>(absolute_path)?;
-    let result = ItemEditorService::with_data_root(repo_root.join("data/items"), repo_root.join("data"))
-        .validate_definition_result(&definition)
-        .map_err(|error| error.to_string())?;
+    let result =
+        ItemEditorService::with_data_root(repo_root.join("data/items"), repo_root.join("data"))
+            .validate_definition_result(&definition)
+            .map_err(|error| error.to_string())?;
     Ok(ValidationReport {
         kind: "item".to_string(),
         id: Some(definition.id.to_string()),
@@ -127,7 +131,12 @@ fn validate_item_path(
         diagnostics: result
             .diagnostics
             .into_iter()
-            .map(|diagnostic| format!("[{:?}] {}: {}", diagnostic.severity, diagnostic.code, diagnostic.message))
+            .map(|diagnostic| {
+                format!(
+                    "[{:?}] {}: {}",
+                    diagnostic.severity, diagnostic.code, diagnostic.message
+                )
+            })
             .collect(),
     })
 }
@@ -138,12 +147,10 @@ fn validate_recipe_path(
     absolute_path: &Path,
 ) -> Result<ValidationReport, String> {
     let definition = read_json_file::<RecipeDefinition>(absolute_path)?;
-    let result = RecipeEditorService::with_data_root(
-        repo_root.join("data/recipes"),
-        repo_root.join("data"),
-    )
-    .validate_definition_result(&definition)
-    .map_err(|error| error.to_string())?;
+    let result =
+        RecipeEditorService::with_data_root(repo_root.join("data/recipes"), repo_root.join("data"))
+            .validate_definition_result(&definition)
+            .map_err(|error| error.to_string())?;
     Ok(ValidationReport {
         kind: "recipe".to_string(),
         id: Some(definition.id.clone()),
@@ -152,7 +159,12 @@ fn validate_recipe_path(
         diagnostics: result
             .diagnostics
             .into_iter()
-            .map(|diagnostic| format!("[{:?}] {}: {}", diagnostic.severity, diagnostic.code, diagnostic.message))
+            .map(|diagnostic| {
+                format!(
+                    "[{:?}] {}: {}",
+                    diagnostic.severity, diagnostic.code, diagnostic.message
+                )
+            })
             .collect(),
     })
 }
@@ -184,9 +196,10 @@ fn validate_map_path(
     absolute_path: &Path,
 ) -> Result<ValidationReport, String> {
     let definition = read_json_file::<MapDefinition>(absolute_path)?;
-    let result = MapEditorService::with_data_root(repo_root.join("data/maps"), repo_root.join("data"))
-        .validate_definition_result(&definition)
-        .map_err(|error| error.to_string())?;
+    let result =
+        MapEditorService::with_data_root(repo_root.join("data/maps"), repo_root.join("data"))
+            .validate_definition_result(&definition)
+            .map_err(|error| error.to_string())?;
     Ok(ValidationReport {
         kind: "map".to_string(),
         id: Some(definition.id.to_string()),
@@ -195,7 +208,12 @@ fn validate_map_path(
         diagnostics: result
             .diagnostics
             .into_iter()
-            .map(|diagnostic| format!("[{:?}] {}: {}", diagnostic.severity, diagnostic.code, diagnostic.message))
+            .map(|diagnostic| {
+                format!(
+                    "[{:?}] {}: {}",
+                    diagnostic.severity, diagnostic.code, diagnostic.message
+                )
+            })
             .collect(),
     })
 }
@@ -206,7 +224,8 @@ where
 {
     let raw = fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-    serde_json::from_str(&raw).map_err(|error| format!("failed to parse {}: {error}", path.display()))
+    serde_json::from_str(&raw)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))
 }
 
 #[derive(Debug)]

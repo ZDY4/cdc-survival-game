@@ -817,7 +817,10 @@ mod tests {
             vec!["player".to_string(), "trader_lao_wang".to_string(),]
         );
         assert_eq!(
-            debug_viewer_seed_preset().map_id.as_ref().map(MapId::as_str),
+            debug_viewer_seed_preset()
+                .map_id
+                .as_ref()
+                .map(MapId::as_str),
             Some("survivor_outpost_01")
         );
         assert_eq!(

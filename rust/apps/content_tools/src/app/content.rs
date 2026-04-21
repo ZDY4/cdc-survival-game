@@ -2,8 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use game_data::{
-    CharacterDefinition, ItemEditDocument, ItemEditorService, MapDefinition, MapEditorService,
-    OverworldDefinition, RecipeEditDocument, RecipeEditorService, validate_character_definition,
+    validate_character_definition, CharacterDefinition, ItemEditDocument, ItemEditorService,
+    MapDefinition, MapEditorService, OverworldDefinition, RecipeEditDocument, RecipeEditorService,
 };
 use serde::de::DeserializeOwned;
 
@@ -25,7 +25,12 @@ pub(super) fn locate_content(
         ContentKind::Map => locate_map(target_id, repo_root)?,
     };
 
-    print_location(kind, target_id, &located.relative_path, &located.absolute_path);
+    print_location(
+        kind,
+        target_id,
+        &located.relative_path,
+        &located.absolute_path,
+    );
     Ok(0)
 }
 
@@ -83,24 +88,32 @@ pub(super) fn find_character_document(
         .ok_or_else(|| format!("character {target_id} not found"))
 }
 
-pub(super) fn find_map_document(target_id: &str, repo_root: &Path) -> Result<MapDocumentEntry, String> {
+pub(super) fn find_map_document(
+    target_id: &str,
+    repo_root: &Path,
+) -> Result<MapDocumentEntry, String> {
     scan_map_documents(repo_root)?
         .into_iter()
         .find(|entry| entry.definition.id.as_str() == target_id)
         .ok_or_else(|| format!("map {target_id} not found"))
 }
 
-pub(super) fn scan_character_documents(repo_root: &Path) -> Result<Vec<CharacterDocumentEntry>, String> {
-    scan_json_documents::<CharacterDefinition>(&repo_root.join("data").join("characters"), "character")?
-        .into_iter()
-        .map(|(path, definition)| {
-            Ok(CharacterDocumentEntry {
-                relative_path: make_relative_path(repo_root, &path),
-                path,
-                definition,
-            })
+pub(super) fn scan_character_documents(
+    repo_root: &Path,
+) -> Result<Vec<CharacterDocumentEntry>, String> {
+    scan_json_documents::<CharacterDefinition>(
+        &repo_root.join("data").join("characters"),
+        "character",
+    )?
+    .into_iter()
+    .map(|(path, definition)| {
+        Ok(CharacterDocumentEntry {
+            relative_path: make_relative_path(repo_root, &path),
+            path,
+            definition,
         })
-        .collect()
+    })
+    .collect()
 }
 
 pub(super) fn scan_map_documents(repo_root: &Path) -> Result<Vec<MapDocumentEntry>, String> {
@@ -119,15 +132,18 @@ pub(super) fn scan_map_documents(repo_root: &Path) -> Result<Vec<MapDocumentEntr
 pub(super) fn scan_overworld_documents(
     repo_root: &Path,
 ) -> Result<Vec<OverworldDocumentEntry>, String> {
-    scan_json_documents::<OverworldDefinition>(&repo_root.join("data").join("overworld"), "overworld")?
-        .into_iter()
-        .map(|(path, definition)| {
-            Ok(OverworldDocumentEntry {
-                relative_path: make_relative_path(repo_root, &path),
-                definition,
-            })
+    scan_json_documents::<OverworldDefinition>(
+        &repo_root.join("data").join("overworld"),
+        "overworld",
+    )?
+    .into_iter()
+    .map(|(path, definition)| {
+        Ok(OverworldDocumentEntry {
+            relative_path: make_relative_path(repo_root, &path),
+            definition,
         })
-        .collect()
+    })
+    .collect()
 }
 
 pub(super) fn make_relative_path(repo_root: &Path, path: &Path) -> String {
@@ -238,7 +254,12 @@ where
     T: DeserializeOwned,
 {
     let mut paths = fs::read_dir(dir)
-        .map_err(|error| format!("failed to read {label} directory {}: {error}", dir.display()))?
+        .map_err(|error| {
+            format!(
+                "failed to read {label} directory {}: {error}",
+                dir.display()
+            )
+        })?
         .filter_map(|entry| entry.ok().map(|value| value.path()))
         .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
         .collect::<Vec<_>>();
@@ -284,7 +305,10 @@ fn data_root(repo_root: &Path) -> Result<PathBuf, String> {
     Ok(data_root)
 }
 
-fn resolve_located_content(repo_root: &Path, relative_path: &str) -> Result<LocatedContent, String> {
+fn resolve_located_content(
+    repo_root: &Path,
+    relative_path: &str,
+) -> Result<LocatedContent, String> {
     let absolute_path = canonical_or_original(repo_root.join(relative_path));
     if !absolute_path.exists() {
         return Err(format!(
