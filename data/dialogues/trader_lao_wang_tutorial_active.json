@@ -1,4 +1,5 @@
 {
+  "_comment": "补给试跑任务进行中的提醒对话：老王会反复强调去警戒区前沿拿够两罐罐头。",
   "dialog_id": "trader_lao_wang_tutorial_active",
   "nodes": [
     {

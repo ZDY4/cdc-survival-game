@@ -1,10 +1,10 @@
 {
-	"_comment": "第二段主线任务：在完成补给试跑后，清掉警戒区东侧路口的两只僵尸。",
-	"quest_id": "zombie_hunter",
-	"title": "警戒区清剿",
-	"description": "据点外警戒区东侧路口还有感染者逼近，击败 2 只僵尸，替幸存者把外围再清一遍。",
+	"_comment": "工厂段主线任务：医院取药之后，由老王发放，目标是从废弃工厂控制间带回稳压器模块。",
+	"quest_id": "factory_spare_power",
+	"title": "备用电源",
+	"description": "老王要你去废弃工厂拆回一块还能用的稳压器模块，好给据点拼一套备用电机，顶住下一轮长途外出前的夜间供电。",
 	"prerequisites": [
-		"tutorial_survive"
+		"find_medicine"
 	],
 	"time_limit": -1,
 	"flow": {
@@ -25,10 +25,11 @@
 					"x": 420,
 					"y": 160
 				},
-				"objective_type": "kill",
-				"description": "清掉警戒区东侧路口的僵尸",
-				"enemy_type": "zombie",
-				"count": 2
+				"objective_type": "collect",
+				"description": "从废弃工厂控制间带回 1 块稳压器模块",
+				"item_id": 1042,
+				"count": 1,
+				"manual_turn_in": true
 			},
 			"reward_1": {
 				"id": "reward_1",
@@ -40,11 +41,15 @@
 				"rewards": {
 					"items": [
 						{
-							"id": 1006,
-							"count": 2
+							"id": 1009,
+							"count": 8
+						},
+						{
+							"id": 1012,
+							"count": 1
 						}
 					],
-					"experience": 200
+					"experience": 420
 				}
 			},
 			"end": {
@@ -79,7 +84,7 @@
 	},
 	"_editor": {
 		"relationship_position": {
-			"x": 700,
+			"x": 1260,
 			"y": 120
 		}
 	}

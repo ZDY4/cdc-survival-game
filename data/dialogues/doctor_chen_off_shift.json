@@ -1,4 +1,5 @@
 {
+  "_comment": "陈医生的非值班常态对话：不在岗位时的简短交易/交流入口。",
   "dialog_id": "doctor_chen_off_shift",
   "nodes": [
     {

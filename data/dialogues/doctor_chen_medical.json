@@ -1,4 +1,5 @@
 {
+  "_comment": "陈医生的高优先级医疗对话：当玩家伤势较重时优先触发，强调先治疗再谈其他事。",
   "dialog_id": "doctor_chen_medical",
   "nodes": [
     {

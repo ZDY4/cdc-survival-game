@@ -1,4 +1,5 @@
 {
+  "_comment": "陈医生回收医院任务的交付对话：玩家带着急救包回来后，通过手动 turn_in 完成任务。",
   "dialog_id": "doctor_chen_find_medicine_turn_in",
   "nodes": [
     {

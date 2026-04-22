@@ -1,13 +1,13 @@
 {
-  "_comment": "老王在医院段之间的常态主线对话：不发任务，只提醒玩家补给和后续长线准备。",
-  "dialog_id": "trader_lao_wang_mainline_idle",
+  "_comment": "工厂任务进行中的提醒对话：玩家未交付前，老王反复强调路线、撤回点和补给压力。",
+  "dialog_id": "trader_lao_wang_factory_active",
   "nodes": [
     {
       "id": "start",
       "type": "dialog",
-      "title": "Outpost Trade",
+      "title": "Factory Run Reminder",
       "speaker": "老王",
-      "text": "东侧路口先稳住了，后面要跑更远。你要补给就直说，别等到出了门才发现自己少东西。",
+      "text": "别在工厂外面晃太久。先过装卸区，再摸进后面的控制间，把那块稳压器模块拿到手就回撤。那趟比医院长，绷带和子弹别省到路上。",
       "portrait": "assets/portraits/trader_lao_wang.png",
       "is_start": true,
       "next": "choice_1"
@@ -17,12 +17,12 @@
       "type": "choice",
       "options": [
         {
-          "text": "看看货。",
-          "next": "trade_action"
+          "text": "明白，我这就去。",
+          "next": "leave_end"
         },
         {
-          "text": "我再去准备一下。",
-          "next": "leave_end"
+          "text": "先看看货。",
+          "next": "trade_action"
         }
       ]
     },

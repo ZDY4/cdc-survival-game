@@ -925,7 +925,7 @@
           "display_name": "诊所补给柜",
           "visual_id": "cabinet_medical",
           "initial_inventory": [
-            { "item_id": "1006", "count": 2 },
+            { "item_id": "1006", "count": 1 },
             { "item_id": "1031", "count": 1 }
           ]
         },
@@ -958,7 +958,7 @@
           "display_name": "食堂食品箱",
           "visual_id": "crate_wood",
           "initial_inventory": [
-            { "item_id": "1007", "count": 3 },
+            { "item_id": "1007", "count": 2 },
             { "item_id": "1008", "count": 1 }
           ]
         },
@@ -1026,8 +1026,7 @@
           "visual_id": "locker_metal",
           "initial_inventory": [
             { "item_id": "1010", "count": 4 },
-            { "item_id": "1002", "count": 1 },
-            { "item_id": "1006", "count": 1 }
+            { "item_id": "1002", "count": 1 }
           ]
         },
         "interactive": {

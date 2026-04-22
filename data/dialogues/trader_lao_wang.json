@@ -1,5 +1,6 @@
 {
-	"dialog_id": "trader_lao_wang",
+  "_comment": "老王的默认对话：没有更高优先级主线或关系分支时的常规交易入口。",
+  "dialog_id": "trader_lao_wang",
 	"nodes": [
 		{
 			"id": "start",

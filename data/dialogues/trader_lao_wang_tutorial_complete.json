@@ -1,4 +1,5 @@
 {
+  "_comment": "补给试跑完成后的衔接对话：老王确认玩家完成首段任务，并发放清剿僵尸的下一步。",
   "dialog_id": "trader_lao_wang_tutorial_complete",
   "nodes": [
     {

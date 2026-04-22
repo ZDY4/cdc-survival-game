@@ -1,4 +1,5 @@
 {
+  "_comment": "老王的高关系常态对话：关系较高时触发，体现更信任的交易口吻。",
   "dialog_id": "trader_lao_wang_trusted",
   "nodes": [
     {

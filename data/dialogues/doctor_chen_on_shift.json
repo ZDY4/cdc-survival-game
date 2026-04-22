@@ -1,4 +1,5 @@
 {
+  "_comment": "陈医生的值班常态对话：在诊所轮值期间的普通补给和交流入口。",
   "dialog_id": "doctor_chen_on_shift",
   "nodes": [
     {

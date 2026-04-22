@@ -2,8 +2,8 @@
   "id": "factory",
   "name": "factory",
   "size": {
-    "width": 12,
-    "height": 12
+    "width": 18,
+    "height": 14
   },
   "default_level": 0,
   "levels": [
@@ -18,10 +18,335 @@
       "grid": {
         "x": 1,
         "y": 0,
-        "z": 1
+        "z": 12
       },
       "facing": null
     }
   ],
-  "objects": []
+  "objects": [
+    {
+      "object_id": "factory_loading_crate_stack",
+      "kind": "prop",
+      "anchor": { "x": 3, "y": 0, "z": 10 },
+      "footprint": { "width": 2, "height": 2 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/crate_stack_large"
+        }
+      }
+    },
+    {
+      "object_id": "factory_loading_pallet_a",
+      "kind": "prop",
+      "anchor": { "x": 6, "y": 0, "z": 11 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/pallet_stack"
+        }
+      }
+    },
+    {
+      "object_id": "factory_loading_pallet_b",
+      "kind": "prop",
+      "anchor": { "x": 8, "y": 0, "z": 9 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/pallet_stack"
+        }
+      }
+    },
+    {
+      "object_id": "factory_scrap_barricade_a",
+      "kind": "prop",
+      "anchor": { "x": 5, "y": 0, "z": 12 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/barricade_scrap"
+        }
+      }
+    },
+    {
+      "object_id": "factory_scrap_barricade_b",
+      "kind": "prop",
+      "anchor": { "x": 9, "y": 0, "z": 8 },
+      "footprint": { "width": 3, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/barricade_scrap"
+        }
+      }
+    },
+    {
+      "object_id": "factory_assembly_shelf_a",
+      "kind": "prop",
+      "anchor": { "x": 7, "y": 0, "z": 6 },
+      "footprint": { "width": 1, "height": 4 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/shelf_metal"
+        }
+      }
+    },
+    {
+      "object_id": "factory_assembly_shelf_b",
+      "kind": "prop",
+      "anchor": { "x": 10, "y": 0, "z": 4 },
+      "footprint": { "width": 1, "height": 4 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/shelf_metal"
+        }
+      }
+    },
+    {
+      "object_id": "factory_assembly_shelf_c",
+      "kind": "prop",
+      "anchor": { "x": 13, "y": 0, "z": 1 },
+      "footprint": { "width": 1, "height": 3 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/shelf_metal"
+        }
+      }
+    },
+    {
+      "object_id": "factory_control_table",
+      "kind": "prop",
+      "anchor": { "x": 12, "y": 0, "z": 4 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "east",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/table_metal"
+        }
+      }
+    },
+    {
+      "object_id": "factory_control_desk",
+      "kind": "prop",
+      "anchor": { "x": 15, "y": 0, "z": 4 },
+      "footprint": { "width": 2, "height": 1 },
+      "rotation": "east",
+      "blocks_movement": true,
+      "blocks_sight": false,
+      "props": {
+        "visual": {
+          "prototype_id": "props/desk_wood"
+        }
+      }
+    },
+    {
+      "object_id": "factory_control_locker_a",
+      "kind": "prop",
+      "anchor": { "x": 15, "y": 0, "z": 2 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/locker_metal"
+        }
+      }
+    },
+    {
+      "object_id": "factory_control_locker_b",
+      "kind": "prop",
+      "anchor": { "x": 16, "y": 0, "z": 2 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "south",
+      "blocks_movement": true,
+      "blocks_sight": true,
+      "props": {
+        "visual": {
+          "prototype_id": "props/locker_metal"
+        }
+      }
+    },
+    {
+      "object_id": "factory_pickup_water",
+      "kind": "pickup",
+      "anchor": { "x": 2, "y": 0, "z": 11 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1008", "min_count": 1, "max_count": 1 },
+        "visual": {
+          "prototype_id": "props/crate_wood"
+        },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "factory_pickup_bandage",
+      "kind": "pickup",
+      "anchor": { "x": 6, "y": 0, "z": 7 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1006", "min_count": 1, "max_count": 1 },
+        "visual": {
+          "prototype_id": "props/crate_wood"
+        },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "factory_pickup_scrap",
+      "kind": "pickup",
+      "anchor": { "x": 9, "y": 0, "z": 9 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1010", "min_count": 2, "max_count": 3 },
+        "visual": {
+          "prototype_id": "props/crate_wood"
+        },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "factory_pickup_electronics",
+      "kind": "pickup",
+      "anchor": { "x": 14, "y": 0, "z": 5 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1012", "min_count": 1, "max_count": 1 },
+        "visual": {
+          "prototype_id": "props/locker_metal"
+        },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "factory_pickup_regulator",
+      "kind": "pickup",
+      "anchor": { "x": 16, "y": 0, "z": 1 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": { "item_id": "1042", "min_count": 1, "max_count": 1 },
+        "visual": {
+          "prototype_id": "props/locker_metal"
+        },
+        "interactive": null,
+        "ai_spawn": null
+      }
+    },
+    {
+      "object_id": "factory_spawn_walker_loading",
+      "kind": "ai_spawn",
+      "anchor": { "x": 6, "y": 0, "z": 10 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "factory_spawn_walker_loading",
+          "character_id": "zombie_walker",
+          "auto_spawn": true,
+          "respawn_enabled": true,
+          "respawn_delay": 24.0,
+          "spawn_radius": 2.0
+        }
+      }
+    },
+    {
+      "object_id": "factory_spawn_walker_floor",
+      "kind": "ai_spawn",
+      "anchor": { "x": 10, "y": 0, "z": 6 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "factory_spawn_walker_floor",
+          "character_id": "zombie_walker",
+          "auto_spawn": true,
+          "respawn_enabled": true,
+          "respawn_delay": 28.0,
+          "spawn_radius": 2.0
+        }
+      }
+    },
+    {
+      "object_id": "factory_spawn_runner_control",
+      "kind": "ai_spawn",
+      "anchor": { "x": 14, "y": 0, "z": 3 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "ai_spawn": {
+          "spawn_id": "factory_spawn_runner_control",
+          "character_id": "zombie_runner",
+          "auto_spawn": true,
+          "respawn_enabled": true,
+          "respawn_delay": 30.0,
+          "spawn_radius": 2.0
+        }
+      }
+    }
+  ]
 }

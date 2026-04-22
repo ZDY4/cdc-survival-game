@@ -1,4 +1,5 @@
 {
+  "_comment": "陈医生发放医院取药任务的对话：说明诊所缺药，并在接受时解锁医院地点和任务。",
   "dialog_id": "doctor_chen_find_medicine_offer",
   "nodes": [
     {

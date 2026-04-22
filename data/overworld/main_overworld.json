@@ -128,7 +128,7 @@
       "entry_point_id": "default_entry",
       "parent_outdoor_location_id": null,
       "return_entry_point_id": null,
-      "default_unlocked": true,
+      "default_unlocked": false,
       "visible": true,
       "overworld_cell": {
         "x": 1,

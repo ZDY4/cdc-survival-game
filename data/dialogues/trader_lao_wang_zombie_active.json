@@ -1,4 +1,5 @@
 {
+  "_comment": "警戒区清剿任务进行中的提醒对话：老王提示玩家去东侧路口处理僵尸。",
   "dialog_id": "trader_lao_wang_zombie_active",
   "nodes": [
     {

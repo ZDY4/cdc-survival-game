@@ -1,4 +1,5 @@
 {
+  "_comment": "老王的低关系常态对话：关系较差时触发，语气更冷硬但仍保留交易入口。",
   "dialog_id": "trader_lao_wang_cold",
   "nodes": [
     {

@@ -3,6 +3,33 @@
   "default_dialogue_id": "trader_lao_wang_intro",
   "variants": [
     {
+      "dialogue_id": "trader_lao_wang_factory_turn_in",
+      "when": {
+        "player_active_quests_any": ["factory_spare_power"],
+        "player_item_count_min": {
+          "1042": 1
+        }
+      }
+    },
+    {
+      "dialogue_id": "trader_lao_wang_factory_active",
+      "when": {
+        "player_active_quests_any": ["factory_spare_power"]
+      }
+    },
+    {
+      "dialogue_id": "trader_lao_wang_after_factory",
+      "when": {
+        "player_completed_quests_any": ["factory_spare_power"]
+      }
+    },
+    {
+      "dialogue_id": "trader_lao_wang_factory_offer",
+      "when": {
+        "player_completed_quests_any": ["find_medicine"]
+      }
+    },
+    {
       "dialogue_id": "trader_lao_wang_zombie_active",
       "when": {
         "player_active_quests_any": ["zombie_hunter"]

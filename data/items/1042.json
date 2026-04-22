@@ -1,0 +1,19 @@
+{
+  "id": 1042,
+  "name": "稳压器模块",
+  "description": "从老旧工业设备上拆下来的稳压组件，还能给据点备用电机续一口气。",
+  "icon_path": "assets/icons/materials/component_electronic.png",
+  "value": 60,
+  "weight": 0.6,
+  "fragments": [
+    {
+      "kind": "economy",
+      "rarity": "uncommon"
+    },
+    {
+      "kind": "stacking",
+      "stackable": true,
+      "max_stack": 1
+    }
+  ]
+}

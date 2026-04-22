@@ -1,4 +1,5 @@
 {
+	"_comment": "陈医生的默认对话：用于没有更高优先级任务状态时的常规交易和医疗交流。",
 	"dialog_id": "doctor_chen",
 	"nodes": [
 		{

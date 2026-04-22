@@ -1,0 +1,62 @@
+{
+  "_comment": "工厂任务交付对话：玩家带回稳压器模块后，由老王手动回收任务并给出下一步钩子。",
+  "dialog_id": "trader_lao_wang_factory_turn_in",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Factory Run Turn In",
+      "speaker": "老王",
+      "text": "看你这身灰，东西应该带回来了。把稳压器模块给我，我马上让工坊装到备用电机上。",
+      "portrait": "assets/portraits/trader_lao_wang.png",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "把稳压器模块交给老王。",
+          "next": "turn_in_action"
+        },
+        {
+          "text": "先等等，我还想整理一下。",
+          "next": "leave_end"
+        }
+      ]
+    },
+    {
+      "_comment": "真正的手动交付动作节点，执行任务 turn_in。",
+      "id": "turn_in_action",
+      "type": "action",
+      "actions": [
+        {
+          "type": "turn_in_quest",
+          "quest_id": "factory_spare_power"
+        }
+      ],
+      "next": "turn_in_confirm"
+    },
+    {
+      "_comment": "交付完成后的结算文本，同时把后续方向指向超市长途口粮线。",
+      "id": "turn_in_confirm",
+      "type": "dialog",
+      "speaker": "老王",
+      "text": "行，这块还能用。备用电机先能顶住几晚了。拿上这点弹药和元件，接下来我得盯一趟废弃超市的长途口粮单，你先把补给备齐。",
+      "portrait": "assets/portraits/trader_lao_wang.png",
+      "next": "turn_in_end"
+    },
+    {
+      "id": "turn_in_end",
+      "type": "end",
+      "end_type": "leave"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

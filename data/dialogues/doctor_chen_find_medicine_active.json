@@ -1,4 +1,5 @@
 {
+  "_comment": "陈医生的医院任务进行中对话：提醒玩家拿到急救包后直接带回据点，不要自行消耗。",
   "dialog_id": "doctor_chen_find_medicine_active",
   "nodes": [
     {
