@@ -1,0 +1,44 @@
+{
+  "_comment": "据点卫兵刘山的基础值守对话：用于主门附近的常规交流。",
+  "dialog_id": "survivor_outpost_01_guard_liu",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Gate Duty",
+      "speaker": "刘山",
+      "text": "门口这边我盯着。你要出据点就提前说一声，最近外面不太安稳。",
+      "portrait": "",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "我知道了。",
+          "next": "leave_end"
+        },
+        {
+          "text": "最近有什么情况？",
+          "next": "briefing"
+        }
+      ]
+    },
+    {
+      "id": "briefing",
+      "type": "dialog",
+      "speaker": "刘山",
+      "text": "昨晚外圈有几只游荡尸群贴过来，好在没冲破路障。你要出去，别一个人走太远。",
+      "portrait": "",
+      "next": "leave_end"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

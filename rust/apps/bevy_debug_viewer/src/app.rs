@@ -233,7 +233,7 @@ impl Plugin for ViewerAppPlugin {
         .add_systems(
             Update,
             (
-                handle_mouse_input,
+                handle_mouse_input.after(handle_game_ui_buttons),
                 crate::info_panels::handle_info_panel_tab_buttons,
                 handle_interaction_menu_buttons,
                 handle_dialogue_choice_buttons,

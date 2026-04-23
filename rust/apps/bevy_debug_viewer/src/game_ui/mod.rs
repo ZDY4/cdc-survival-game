@@ -22,6 +22,7 @@ use game_data::{ActorId, InteractionTargetId};
 use crate::bootstrap::load_viewer_gameplay_bootstrap;
 use crate::console::ViewerConsoleState;
 use crate::controls::{cancel_targeting, enter_attack_targeting};
+use crate::picking::ViewerPickingState;
 use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_basics};
 use crate::state::{
     viewer_ui_passthrough_bundle, ActivePanelRoot, ContainerInventoryItemClickTarget,
@@ -97,6 +98,11 @@ pub(crate) struct GameUiCommandState<'w, 's> {
     settings: ResMut<'w, ViewerUiSettings>,
     inventory_context_menu: ResMut<'w, UiContextMenuState>,
     drag_state: ResMut<'w, UiInventoryDragState>,
+    scrollbar_drag_state: ResMut<'w, UiInventoryScrollbarDragState>,
+    hover_tooltip: ResMut<'w, UiHoverTooltipState>,
+    picking_state: ResMut<'w, ViewerPickingState>,
+    key_buttons: ResMut<'w, ButtonInput<KeyCode>>,
+    mouse_buttons: ResMut<'w, ButtonInput<MouseButton>>,
     marker: PhantomData<&'s ()>,
 }
 

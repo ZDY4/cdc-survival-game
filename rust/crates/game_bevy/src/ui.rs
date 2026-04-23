@@ -517,11 +517,26 @@ pub struct UiSkillEntryView {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct UiSkillTreeNodeView {
+    pub skill_id: String,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UiSkillTreeLinkView {
+    pub from_skill_id: String,
+    pub to_skill_id: String,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct UiSkillTreeView {
     pub tree_id: String,
     pub tree_name: String,
     pub tree_description: String,
     pub entries: Vec<UiSkillEntryView>,
+    pub nodes: Vec<UiSkillTreeNodeView>,
+    pub links: Vec<UiSkillTreeLinkView>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -855,20 +870,7 @@ pub fn skills_snapshot(
         .actor(actor_id)
         .map(|actor| actor.learned_skills.clone())
         .unwrap_or_default();
-    let mut trees_by_id = trees
-        .iter()
-        .map(|(tree_id, definition)| {
-            (
-                tree_id.clone(),
-                UiSkillTreeView {
-                    tree_id: tree_id.clone(),
-                    tree_name: definition.name.clone(),
-                    tree_description: definition.description.clone(),
-                    entries: Vec::new(),
-                },
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
+    let mut entries_by_tree = BTreeMap::<String, Vec<UiSkillEntryView>>::new();
 
     for (skill_id, definition) in skills.iter() {
         let learned_level = learned.get(skill_id).copied().unwrap_or(0);
@@ -890,46 +892,150 @@ pub fn skills_snapshot(
             })
             .collect::<Vec<_>>();
 
-        let tree_entry = trees_by_id
+        entries_by_tree
             .entry(definition.tree_id.clone())
-            .or_insert_with(|| UiSkillTreeView {
+            .or_default()
+            .push(UiSkillEntryView {
+                skill_id: skill_id.clone(),
                 tree_id: definition.tree_id.clone(),
-                tree_name: definition.tree_id.clone(),
-                tree_description: String::new(),
-                entries: Vec::new(),
+                name: definition.name.clone(),
+                description: definition.description.clone(),
+                learned_level,
+                max_level: definition.max_level,
+                hotbar_eligible: learned_level > 0 && activation_mode != "passive",
+                activation_mode,
+                cooldown_seconds: definition
+                    .activation
+                    .as_ref()
+                    .map(|activation| activation.cooldown)
+                    .unwrap_or_default(),
+                prerequisite_names,
+                attribute_requirements: definition.attribute_requirements.clone(),
             });
-
-        tree_entry.entries.push(UiSkillEntryView {
-            skill_id: skill_id.clone(),
-            tree_id: definition.tree_id.clone(),
-            name: definition.name.clone(),
-            description: definition.description.clone(),
-            learned_level,
-            max_level: definition.max_level,
-            hotbar_eligible: learned_level > 0 && activation_mode != "passive",
-            activation_mode,
-            cooldown_seconds: definition
-                .activation
-                .as_ref()
-                .map(|activation| activation.cooldown)
-                .unwrap_or_default(),
-            prerequisite_names,
-            attribute_requirements: definition.attribute_requirements.clone(),
-        });
     }
 
-    let mut tree_views = trees_by_id.into_values().collect::<Vec<_>>();
-    for tree in &mut tree_views {
-        tree.entries.sort_by(|left, right| {
+    let mut tree_views = trees
+        .iter()
+        .map(|(tree_id, definition)| {
+            let mut entries = entries_by_tree.remove(tree_id).unwrap_or_default();
+            entries.sort_by(|left, right| {
+                right
+                    .learned_level
+                    .cmp(&left.learned_level)
+                    .then(left.name.cmp(&right.name))
+            });
+            let entry_skill_ids = entries
+                .iter()
+                .map(|entry| entry.skill_id.as_str())
+                .collect::<BTreeSet<_>>();
+            let mut ordered_skill_ids = definition
+                .skills
+                .iter()
+                .filter(|skill_id| entry_skill_ids.contains(skill_id.as_str()))
+                .cloned()
+                .collect::<Vec<_>>();
+            for entry in &entries {
+                if !ordered_skill_ids
+                    .iter()
+                    .any(|skill_id| skill_id == &entry.skill_id)
+                {
+                    ordered_skill_ids.push(entry.skill_id.clone());
+                }
+            }
+
+            UiSkillTreeView {
+                tree_id: tree_id.clone(),
+                tree_name: definition.name.clone(),
+                tree_description: definition.description.clone(),
+                nodes: build_skill_tree_nodes(&ordered_skill_ids, &definition.layout),
+                links: definition
+                    .links
+                    .iter()
+                    .filter(|link| {
+                        entry_skill_ids.contains(link.from.as_str())
+                            && entry_skill_ids.contains(link.to.as_str())
+                    })
+                    .map(|link| UiSkillTreeLinkView {
+                        from_skill_id: link.from.clone(),
+                        to_skill_id: link.to.clone(),
+                    })
+                    .collect(),
+                entries,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    for (tree_id, mut entries) in entries_by_tree {
+        entries.sort_by(|left, right| {
             right
                 .learned_level
                 .cmp(&left.learned_level)
                 .then(left.name.cmp(&right.name))
         });
+        let ordered_skill_ids = entries
+            .iter()
+            .map(|entry| entry.skill_id.clone())
+            .collect::<Vec<_>>();
+        tree_views.push(UiSkillTreeView {
+            tree_id: tree_id.clone(),
+            tree_name: tree_id,
+            tree_description: String::new(),
+            nodes: build_skill_tree_nodes(&ordered_skill_ids, &BTreeMap::new()),
+            links: Vec::new(),
+            entries,
+        });
+    }
+
+    for tree in &mut tree_views {
+        tree.nodes.sort_by(|left, right| {
+            left.y
+                .total_cmp(&right.y)
+                .then_with(|| left.x.total_cmp(&right.x))
+                .then(left.skill_id.cmp(&right.skill_id))
+        });
     }
     tree_views.sort_by(|left, right| left.tree_name.cmp(&right.tree_name));
 
     UiSkillsSnapshot { trees: tree_views }
+}
+
+fn build_skill_tree_nodes(
+    ordered_skill_ids: &[String],
+    layout: &BTreeMap<String, game_data::SkillTreePosition>,
+) -> Vec<UiSkillTreeNodeView> {
+    const FALLBACK_COLUMNS: usize = 3;
+    const FALLBACK_X_STEP: f32 = 220.0;
+    const FALLBACK_Y_STEP: f32 = 150.0;
+
+    let fallback_origin_y = layout
+        .values()
+        .map(|position| position.y)
+        .max_by(f32::total_cmp)
+        .map(|max_y| max_y + FALLBACK_Y_STEP)
+        .unwrap_or_default();
+    let mut fallback_index = 0usize;
+
+    ordered_skill_ids
+        .iter()
+        .map(|skill_id| {
+            if let Some(position) = layout.get(skill_id) {
+                UiSkillTreeNodeView {
+                    skill_id: skill_id.clone(),
+                    x: position.x,
+                    y: position.y,
+                }
+            } else {
+                let column = (fallback_index % FALLBACK_COLUMNS) as f32;
+                let row = (fallback_index / FALLBACK_COLUMNS) as f32;
+                fallback_index += 1;
+                UiSkillTreeNodeView {
+                    skill_id: skill_id.clone(),
+                    x: column * FALLBACK_X_STEP,
+                    y: fallback_origin_y + row * FALLBACK_Y_STEP,
+                }
+            }
+        })
+        .collect()
 }
 
 pub fn crafting_snapshot(

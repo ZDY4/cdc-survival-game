@@ -5,8 +5,10 @@ use super::*;
 use std::collections::BTreeMap;
 
 use super::{apply_new_game_defaults, should_render_main_menu, transition_to_gameplay_scene};
+use crate::picking::ViewerPickingState;
 use crate::state::{
     ActiveDialogueState, GameUiRoot, GameUiScaffold, InteractionMenuState, MainMenuRoot,
+    UiContextMenuState, UiHoverTooltipState, UiInventoryDragState, UiInventoryScrollbarDragState,
     ViewerRuntimeState, ViewerSceneKind, ViewerState,
 };
 use bevy::picking::prelude::Pickable;
@@ -255,6 +257,100 @@ fn transition_to_gameplay_scene_clears_runtime_movement_transients() {
             .get_actor_grid_position(handles.player),
         Some(expected_position)
     );
+}
+
+#[test]
+fn flush_viewer_input_after_scene_transition_resets_button_and_pointer_state() {
+    let mut key_buttons = ButtonInput::<KeyCode>::default();
+    key_buttons.press(KeyCode::KeyW);
+    let mut mouse_buttons = ButtonInput::<MouseButton>::default();
+    mouse_buttons.press(MouseButton::Left);
+    let mut viewer_state = ViewerState {
+        hovered_grid: Some(game_data::GridCoord::new(1, 0, 1)),
+        camera_drag_cursor: Some(Vec2::new(12.0, 18.0)),
+        camera_drag_anchor_world: Some(Vec2::new(4.0, 6.0)),
+        ..ViewerState::default()
+    };
+    let mut picking_state = ViewerPickingState {
+        hovered: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(1),
+            semantic: crate::picking::ViewerPickTarget::MapObject("crate".into()),
+            interaction: Some(InteractionTargetId::MapObject("crate".into())),
+            priority: crate::picking::ViewerPickPriority::MapObject,
+            depth: 0.5,
+            position: None,
+        }),
+        primary_click: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(2),
+            semantic: crate::picking::ViewerPickTarget::Actor(game_data::ActorId(1)),
+            interaction: Some(InteractionTargetId::Actor(game_data::ActorId(1))),
+            priority: crate::picking::ViewerPickPriority::Actor,
+            depth: 0.2,
+            position: None,
+        }),
+        secondary_click: Some(crate::picking::ViewerResolvedPick {
+            entity: Entity::from_bits(3),
+            semantic: crate::picking::ViewerPickTarget::MapObject("door".into()),
+            interaction: Some(InteractionTargetId::MapObject("door".into())),
+            priority: crate::picking::ViewerPickPriority::MapObject,
+            depth: 0.3,
+            position: None,
+        }),
+        cursor_position: Some(Vec2::new(320.0, 180.0)),
+    };
+    let mut hover_tooltip = UiHoverTooltipState {
+        visible: true,
+        cursor_position: Vec2::new(12.0, 24.0),
+        content: Some(crate::state::UiHoverTooltipContent::InventoryItem { item_id: 1006 }),
+    };
+    let mut inventory_context_menu = UiContextMenuState {
+        visible: true,
+        cursor_position: Vec2::new(64.0, 96.0),
+        target: Some(crate::state::UiContextMenuTarget::InventoryItem { item_id: 1006 }),
+    };
+    let mut drag_state = UiInventoryDragState {
+        active_source: Some(crate::state::UiInventoryDragSource::InventoryItem { item_id: 1006 }),
+        hover_target: Some(crate::state::UiInventoryDragHoverTarget::InventoryListEnd),
+        press_cursor_position: Vec2::new(10.0, 10.0),
+        cursor_position: Vec2::new(20.0, 20.0),
+        dragging: true,
+        suppress_button_press_once: true,
+        preview_label: "Bandage".into(),
+        allowed_equipment_slots: vec!["body".into()],
+    };
+    let mut scrollbar_drag_state = UiInventoryScrollbarDragState {
+        active: true,
+        grab_offset_y: 14.0,
+    };
+
+    flush_viewer_input_after_scene_transition(
+        &mut key_buttons,
+        &mut mouse_buttons,
+        &mut viewer_state,
+        &mut picking_state,
+        &mut hover_tooltip,
+        &mut inventory_context_menu,
+        &mut drag_state,
+        &mut scrollbar_drag_state,
+    );
+
+    assert!(!key_buttons.pressed(KeyCode::KeyW));
+    assert!(!key_buttons.just_pressed(KeyCode::KeyW));
+    assert!(!mouse_buttons.pressed(MouseButton::Left));
+    assert!(!mouse_buttons.just_pressed(MouseButton::Left));
+    assert!(viewer_state.hovered_grid.is_none());
+    assert!(viewer_state.camera_drag_cursor.is_none());
+    assert!(viewer_state.camera_drag_anchor_world.is_none());
+    assert!(picking_state.hovered.is_none());
+    assert!(picking_state.primary_click.is_none());
+    assert!(picking_state.secondary_click.is_none());
+    assert!(hover_tooltip.content.is_none());
+    assert!(!hover_tooltip.visible);
+    assert!(inventory_context_menu.target.is_none());
+    assert!(!inventory_context_menu.visible);
+    assert!(!drag_state.dragging);
+    assert!(drag_state.active_source.is_none());
+    assert!(!scrollbar_drag_state.active);
 }
 
 #[test]

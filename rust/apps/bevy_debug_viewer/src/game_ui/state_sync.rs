@@ -234,6 +234,30 @@ pub(super) fn transition_to_gameplay_scene(
     modal_state.container = None;
 }
 
+pub(super) fn flush_viewer_input_after_scene_transition(
+    key_buttons: &mut ButtonInput<KeyCode>,
+    mouse_buttons: &mut ButtonInput<MouseButton>,
+    viewer_state: &mut ViewerState,
+    picking_state: &mut ViewerPickingState,
+    hover_tooltip: &mut UiHoverTooltipState,
+    inventory_context_menu: &mut UiContextMenuState,
+    drag_state: &mut UiInventoryDragState,
+    scrollbar_drag_state: &mut UiInventoryScrollbarDragState,
+) {
+    key_buttons.reset_all();
+    mouse_buttons.reset_all();
+    viewer_state.hovered_grid = None;
+    viewer_state.camera_drag_cursor = None;
+    viewer_state.camera_drag_anchor_world = None;
+    picking_state.hovered = None;
+    picking_state.primary_click = None;
+    picking_state.secondary_click = None;
+    hover_tooltip.clear();
+    inventory_context_menu.clear();
+    drag_state.clear();
+    scrollbar_drag_state.clear();
+}
+
 pub(super) fn should_render_main_menu(scene_kind: ViewerSceneKind) -> bool {
     scene_kind.is_main_menu()
 }

@@ -1,0 +1,44 @@
+{
+  "_comment": "据点厨师梅姨的基础后勤对话：用于厨房窗口的常规交流。",
+  "dialog_id": "survivor_outpost_01_cook_mei",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "dialog",
+      "title": "Kitchen Talk",
+      "speaker": "梅姨",
+      "text": "饭点快到了，后厨正忙着分配口粮。你要是刚从外面回来，记得先喝口热汤缓缓。",
+      "portrait": "",
+      "is_start": true,
+      "next": "choice_1"
+    },
+    {
+      "id": "choice_1",
+      "type": "choice",
+      "options": [
+        {
+          "text": "辛苦了。",
+          "next": "leave_end"
+        },
+        {
+          "text": "今天供应怎么样？",
+          "next": "supply_status"
+        }
+      ]
+    },
+    {
+      "id": "supply_status",
+      "type": "dialog",
+      "speaker": "梅姨",
+      "text": "勉强够用，但能省还是得省。要是前线再拖几天不回来，咱们的菜锅就真要见底了。",
+      "portrait": "",
+      "next": "leave_end"
+    },
+    {
+      "id": "leave_end",
+      "type": "end",
+      "end_type": "leave"
+    }
+  ],
+  "connections": []
+}

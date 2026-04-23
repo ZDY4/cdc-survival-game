@@ -770,13 +770,14 @@ mod tests {
 
     use super::{
         advance_dialogue, apply_interaction_result, current_dialogue_has_options,
-        resolve_dialogue_content_from_context, sync_dialogue_from_event, DialogueAssetDirs,
+        default_dialogue_asset_dirs, resolve_dialogue_content_from_context,
+        sync_dialogue_from_event, DialogueAssetDirs,
     };
     use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
     use game_data::{
-        ActorKind, ActorSide, CharacterId, DialogueData, DialogueLibrary, DialogueNode,
-        DialogueOption, DialogueResolutionContext, DialogueResolutionSource, InteractionOptionId,
-        InteractionTargetId, NpcRole, WorldMode,
+        resolve_dialogue_start_node_id, ActorKind, ActorSide, CharacterId, DialogueData,
+        DialogueLibrary, DialogueNode, DialogueOption, DialogueResolutionContext,
+        DialogueResolutionSource, InteractionOptionId, InteractionTargetId, NpcRole, WorldMode,
     };
 
     #[test]
@@ -1122,6 +1123,37 @@ mod tests {
                 .map(|node| node.speaker.as_str()),
             Some("老王")
         );
+    }
+
+    #[test]
+    fn outpost_npc_dialogues_resolve_from_repo_assets_without_fallback() {
+        let asset_dirs = default_dialogue_asset_dirs();
+
+        for (dialogue_key, target_name) in [
+            ("survivor_outpost_01_guard_liu", "据点卫兵·刘山"),
+            ("survivor_outpost_01_cook_mei", "据点厨师·梅姨"),
+        ] {
+            let resolved = resolve_dialogue_content_from_context(
+                dialogue_key,
+                target_name,
+                &DialogueResolutionContext::default(),
+                &asset_dirs,
+            );
+
+            assert!(
+                !resolved.result.used_fallback_dialogue,
+                "{dialogue_key} should resolve without fallback"
+            );
+            assert_eq!(
+                resolved.result.resolved_dialogue_id.as_deref(),
+                Some(dialogue_key)
+            );
+            assert_eq!(resolved.data.dialog_id, dialogue_key);
+            assert_eq!(
+                resolve_dialogue_start_node_id(&resolved.data).as_deref(),
+                Some("start")
+            );
+        }
     }
 
     fn test_dialogue_asset_dirs(root: &Path) -> DialogueAssetDirs {

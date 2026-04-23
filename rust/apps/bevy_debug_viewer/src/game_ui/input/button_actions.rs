@@ -84,6 +84,16 @@ pub(crate) fn handle_game_ui_buttons(
                             &mut ui.modal_state,
                             "开始新游戏",
                         );
+                        flush_viewer_input_after_scene_transition(
+                            &mut ui.key_buttons,
+                            &mut ui.mouse_buttons,
+                            &mut ui.viewer_state,
+                            &mut ui.picking_state,
+                            &mut ui.hover_tooltip,
+                            &mut ui.inventory_context_menu,
+                            &mut ui.drag_state,
+                            &mut ui.scrollbar_drag_state,
+                        );
                         save_runtime_snapshot(&save_path, &ui.runtime_state.runtime);
                     }
                     Err(error) => {
@@ -116,6 +126,16 @@ pub(crate) fn handle_game_ui_buttons(
                                 &mut ui.menu_state,
                                 &mut ui.modal_state,
                                 "已继续最近存档",
+                            );
+                            flush_viewer_input_after_scene_transition(
+                                &mut ui.key_buttons,
+                                &mut ui.mouse_buttons,
+                                &mut ui.viewer_state,
+                                &mut ui.picking_state,
+                                &mut ui.hover_tooltip,
+                                &mut ui.inventory_context_menu,
+                                &mut ui.drag_state,
+                                &mut ui.scrollbar_drag_state,
                             );
                         }
                     }

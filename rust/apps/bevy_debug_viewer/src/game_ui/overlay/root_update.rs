@@ -630,7 +630,7 @@ fn render_single_panel(
                 &content.skills.0,
                 &content.skill_trees.0,
             );
-            render_skills_panel(parent, font, &snapshot, &ui.menu_state);
+            render_skills_panel(parent, font, &snapshot, &ui.menu_state, &ui.hotbar_state);
         }
         UiMenuPanel::Crafting => {
             render_panel_shell(parent, font, panel);

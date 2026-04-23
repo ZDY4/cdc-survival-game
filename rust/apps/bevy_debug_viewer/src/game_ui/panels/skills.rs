@@ -1,4 +1,7 @@
-//! 集中构建技能页面的树/列表/详情三列展示。
+//! 技能页面：左列选择技能树，右列渲染技能树图并显示当前选中技能摘要。
+
+use super::skills_graph::render_skill_tree_canvas;
+
 use super::*;
 
 pub(super) fn render_skills_panel(
@@ -6,6 +9,7 @@ pub(super) fn render_skills_panel(
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiSkillsSnapshot,
     menu_state: &UiMenuState,
+    hotbar_state: &UiHotbarState,
 ) {
     let body = panel_body(parent, UiMenuPanel::Skills);
     parent.commands().entity(body).insert(Node {
@@ -27,7 +31,7 @@ pub(super) fn render_skills_panel(
     parent.commands().entity(body).with_children(|body| {
         body.spawn(text_bundle(
             font,
-            "左侧切技能树，右侧浏览当前树；技能说明统一通过鼠标悬浮查看，右键技能可直接加到快捷栏，或直接点击底栏槽位精确绑定。",
+            "左侧切技能树；右侧按真实树关系显示节点与连线。悬浮看详情，右键技能可直接加到快捷栏，或直接点击底栏槽位精确绑定。",
             10.5,
             ui_text_secondary_color(),
         ));
@@ -138,103 +142,78 @@ pub(super) fn render_skills_panel(
                     BorderColor::all(ui_border_color()),
                     viewer_ui_passthrough_bundle(),
                 ))
-                .with_children(|list_column| {
+                .with_children(|tree_canvas_column| {
                     let title = selected_tree
-                        .map(|tree| format!("{} 技能", tree.tree_name))
-                        .unwrap_or_else(|| "技能列表".to_string());
-                    list_column.spawn(text_bundle(
+                        .map(|tree| format!("{} 技能树", tree.tree_name))
+                        .unwrap_or_else(|| "技能树详情".to_string());
+                    tree_canvas_column.spawn(text_bundle(
                         font,
                         &title,
                         11.5,
                         ui_text_heading_color(),
                     ));
                     if let Some(tree) = selected_tree {
+                        if !tree.tree_description.trim().is_empty() {
+                            tree_canvas_column.spawn(text_bundle(
+                                font,
+                                &tree.tree_description,
+                                10.5,
+                                ui_text_muted_color(),
+                            ));
+                        }
+                        tree_canvas_column.spawn(text_bundle(
+                            font,
+                            "连线表示技能间的前置/解锁关系；节点颜色表示学习状态。",
+                            9.4,
+                            ui_text_secondary_color(),
+                        ));
                         if tree.entries.is_empty() {
-                            list_column.spawn(text_bundle(
+                            tree_canvas_column.spawn(text_bundle(
                                 font,
                                 "该技能树暂无技能条目",
                                 10.5,
                                 ui_text_muted_color(),
                             ));
+                        } else {
+                            render_skill_tree_canvas(tree_canvas_column, font, tree, menu_state);
                         }
-                        for entry in &tree.entries {
-                            let is_selected = menu_state
-                                .selected_skill_id
-                                .as_deref()
-                                .map(|selected| selected == entry.skill_id)
-                                .unwrap_or(false);
-                            let state_label = if entry.learned_level > 0 {
-                                if entry.hotbar_eligible {
-                                    "可绑定"
-                                } else {
-                                    "已学习"
-                                }
-                            } else {
-                                "未学习"
-                            };
-                            let state_color = if entry.learned_level > 0 {
-                                Color::srgba(0.72, 0.92, 0.72, 1.0)
-                            } else {
-                                Color::srgba(0.58, 0.63, 0.70, 1.0)
-                            };
-                            list_column
+
+                        if let Some(entry) =
+                            selected_skill_entry(tree, menu_state.selected_skill_id.as_deref())
+                        {
+                            let detail = build_skill_detail_display(Some(tree), entry, hotbar_state);
+                            tree_canvas_column
                                 .spawn((
-                                    Button,
                                     Node {
                                         width: Val::Percent(100.0),
-                                        padding: UiRect::all(px(9)),
-                                        margin: UiRect::bottom(px(2)),
+                                        padding: UiRect::all(px(10)),
                                         flex_direction: FlexDirection::Column,
-                                        row_gap: px(3),
-                                        border: UiRect::all(px(if is_selected { 2.0 } else { 1.0 })),
+                                        row_gap: px(6),
+                                        border: UiRect::all(px(1)),
                                         ..default()
                                     },
-                                    BackgroundColor(if is_selected {
-                                        ui_panel_background_selected().into()
-                                    } else {
-                                        ui_panel_background_alt().into()
-                                    }),
-                                    BorderColor::all(if is_selected {
-                                        ui_border_selected_color()
-                                    } else {
-                                        ui_border_color()
-                                    }),
-                                    GameUiButtonAction::SelectSkill(entry.skill_id.clone()),
-                                    SkillHoverTarget {
-                                        tree_id: tree.tree_id.clone(),
-                                        skill_id: entry.skill_id.clone(),
-                                    },
-                                    RelativeCursorPosition::default(),
+                                    BackgroundColor(ui_panel_background_alt().into()),
+                                    BorderColor::all(ui_border_color()),
                                     viewer_ui_passthrough_bundle(),
                                 ))
-                                .with_children(|button| {
-                                    button.spawn(text_bundle(
+                                .with_children(|detail_column| {
+                                    detail_column.spawn(text_bundle(
                                         font,
-                                        &format!(
-                                            "{} · Lv {}/{}",
-                                            entry.name, entry.learned_level, entry.max_level
-                                        ),
-                                        10.6,
-                                        if entry.learned_level > 0 {
-                                            Color::WHITE
-                                        } else {
-                                            ui_text_secondary_color()
-                                        },
+                                        "当前技能",
+                                        10.5,
+                                        ui_text_heading_color(),
                                     ));
-                                    button.spawn(text_bundle(
+                                    render_skill_detail_content(
+                                        detail_column,
                                         font,
-                                        &format!(
-                                            "{} · {}",
-                                            activation_mode_label(&entry.activation_mode),
-                                            state_label
-                                        ),
-                                        9.2,
-                                        state_color,
-                                    ));
+                                        &detail,
+                                        entry,
+                                        false,
+                                    );
                                 });
                         }
                     } else {
-                        list_column.spawn(text_bundle(
+                        tree_canvas_column.spawn(text_bundle(
                             font,
                             "没有可供选择的技能",
                             10.5,

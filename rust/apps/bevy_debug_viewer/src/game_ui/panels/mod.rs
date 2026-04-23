@@ -5,6 +5,7 @@ mod inventory;
 mod map_settings;
 mod progression;
 mod skills;
+mod skills_graph;
 
 pub(super) use inventory::{render_inventory_panel_contents, InventoryPanelMode};
 
@@ -57,8 +58,9 @@ pub(super) fn render_skills_panel(
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiSkillsSnapshot,
     menu_state: &UiMenuState,
+    hotbar_state: &UiHotbarState,
 ) {
-    skills::render_skills_panel(parent, font, snapshot, menu_state)
+    skills::render_skills_panel(parent, font, snapshot, menu_state, hotbar_state)
 }
 
 pub(super) fn render_map_panel(
