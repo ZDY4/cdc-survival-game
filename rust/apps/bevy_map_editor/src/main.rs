@@ -3,6 +3,9 @@ mod camera;
 mod commands;
 mod handoff;
 mod scene;
+mod selection;
+mod selection_info;
+mod selection_targets;
 mod state;
 mod ui;
 

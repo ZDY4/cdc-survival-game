@@ -12,7 +12,7 @@ use serde_json::json;
 
 fn main() -> Result<(), String> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let wall_asset_dir = repo_root.join("assets/world_tiles/building_wall_legacy");
+    let wall_asset_dir = repo_root.join("assets/world_tiles/building_wall");
     let surface_asset_dir = repo_root.join("assets/world_tiles/surface_placeholder_basic");
     let prop_asset_dir = repo_root.join("assets/world_tiles/prop_placeholder_basic");
     let data_dir = repo_root.join("data/world_tiles");
@@ -91,11 +91,11 @@ fn bake_building_wall_placeholders(asset_dir: &Path, data_dir: &Path) -> Result<
             building_object_id: "placeholder_building".into(),
             story_level: 0,
             grid: GridCoord::new(0, 0, 0),
-            wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+            wall_set_id: WorldWallTileSetId("building_wall".into()),
             translation: Vec3::ZERO,
             height: 2.4,
             thickness: 0.6,
-            visual_kind: MapBuildingWallVisualKind::LegacyGrid,
+            visual_kind: MapBuildingWallVisualKind::Grid,
             neighbors,
             occluder_cells: vec![GridCoord::new(0, 0, 0)],
             semantic: None,
@@ -104,7 +104,7 @@ fn bake_building_wall_placeholders(asset_dir: &Path, data_dir: &Path) -> Result<
             .ok_or_else(|| format!("failed to build mesh for wall archetype {name}"))?;
         prototypes.push(bake_placeholder_prototype(
             asset_dir,
-            &format!("building_wall_legacy/{name}"),
+            &format!("building_wall/{name}"),
             &format!("{name}.gltf"),
             &mesh,
             true,
@@ -116,7 +116,7 @@ fn bake_building_wall_placeholders(asset_dir: &Path, data_dir: &Path) -> Result<
     let floor_mesh = Mesh::from(Cuboid::new(1.0, 0.11, 1.0));
     prototypes.push(bake_placeholder_prototype(
         asset_dir,
-        "building_wall_legacy/floor_flat",
+        "building_wall/floor_flat",
         floor_asset_name,
         &floor_mesh,
         false,
@@ -127,27 +127,23 @@ fn bake_building_wall_placeholders(asset_dir: &Path, data_dir: &Path) -> Result<
         "prototypes": prototypes,
         "wall_sets": [
             {
-                "id": "building_wall_legacy",
-                "isolated_prototype_id": "building_wall_legacy/isolated",
-                "end_prototype_id": "building_wall_legacy/end",
-                "straight_prototype_id": "building_wall_legacy/straight",
-                "corner_prototype_id": "building_wall_legacy/corner",
-                "t_junction_prototype_id": "building_wall_legacy/t_junction",
-                "cross_prototype_id": "building_wall_legacy/cross"
+                "id": "building_wall",
+                "isolated_prototype_id": "building_wall/isolated",
+                "end_prototype_id": "building_wall/end",
+                "straight_prototype_id": "building_wall/straight",
+                "corner_prototype_id": "building_wall/corner",
+                "t_junction_prototype_id": "building_wall/t_junction",
+                "cross_prototype_id": "building_wall/cross"
             }
         ],
         "surface_sets": [
             {
-                "id": "building_wall_legacy/floor",
-                "flat_top_prototype_id": "building_wall_legacy/floor_flat"
+                "id": "building_wall/floor",
+                "flat_top_prototype_id": "building_wall/floor_flat"
             }
         ]
     });
-    write_catalog_file(
-        data_dir.join("building_wall_legacy.json"),
-        &catalog,
-        "wall tile",
-    )?;
+    write_catalog_file(data_dir.join("building_wall.json"), &catalog, "wall tile")?;
 
     Ok(())
 }

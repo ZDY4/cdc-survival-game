@@ -250,10 +250,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_gatehouse",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 1101,
@@ -279,10 +279,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_dormitory",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 1102,
@@ -308,10 +308,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_canteen",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 1103,
@@ -337,10 +337,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_clinic",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 1104,
@@ -366,10 +366,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_storage",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 1105,
@@ -395,10 +395,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_workshop",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 1106,
@@ -424,10 +424,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_watchtower",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 1107,
@@ -467,9 +467,9 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_dorm_wall_segment",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy"
+            "wall_set_id": "building_wall"
           },
           "layout": {
             "shape_cells": [
@@ -498,9 +498,9 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_clinic_wall_segment",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy"
+            "wall_set_id": "building_wall"
           },
           "layout": {
             "shape_cells": [
@@ -531,9 +531,9 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_outer_wall_segment",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy"
+            "wall_set_id": "building_wall"
           },
           "layout": {
             "shape_cells": [
@@ -561,9 +561,9 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_outer_wall_segment",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy"
+            "wall_set_id": "building_wall"
           },
           "layout": {
             "shape_cells": [

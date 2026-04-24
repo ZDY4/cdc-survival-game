@@ -3,6 +3,7 @@ use bevy::log::warn;
 use bevy::prelude::*;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::EguiPrimaryContextPass;
+use bevy_mesh_outline::MeshOutlinePlugin;
 use game_bevy::{
     rust_asset_dir,
     world_render::{
@@ -14,11 +15,16 @@ use game_editor::{
     EditorAppShellConfig, EditorKind, GameUiFontsState, WindowSizePersistenceConfig,
 };
 
-use crate::camera::{apply_camera_transform_system, camera_input_system};
+use crate::camera::{
+    apply_camera_transform_system, camera_input_system, sync_camera_viewport_system,
+};
 use crate::commands::{handle_map_editor_commands, MapEditorCommand};
 use crate::handoff::poll_external_selection_system;
 use crate::scene::{
     draw_hovered_grid_outline_system, rebuild_scene_system, setup_editor, update_hover_info_system,
+};
+use crate::selection::{
+    handle_primary_selection_system, sync_selected_outline_visual_system, EditorSelectionIndex,
 };
 use crate::state::{
     load_editor_state, load_editor_world_tiles, repo_root, EditorState, EditorUiState,
@@ -68,6 +74,7 @@ pub(crate) fn run(initial_map_id: Option<String>) {
 
     app.init_state::<AppState>()
         .add_message::<MapEditorCommand>()
+        .add_plugins(MeshOutlinePlugin)
         .add_plugins(WorldRenderPlugin)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .insert_resource(ClearColor(render_palette.clear_color))
@@ -76,6 +83,7 @@ pub(crate) fn run(initial_map_id: Option<String>) {
         .insert_resource(render_config)
         .insert_resource(GameUiFontsState::default())
         .insert_resource(EditorUiState::default())
+        .init_resource::<EditorSelectionIndex>()
         .insert_resource(OrbitCameraState::default())
         .insert_resource(MiddleClickState::default())
         .insert_resource(ExternalMapSelectionState::new(repo_root))
@@ -98,10 +106,13 @@ pub(crate) fn run(initial_map_id: Option<String>) {
                 handle_map_editor_commands.run_if(in_state(AppState::Ready)),
                 (
                     rebuild_scene_system,
+                    sync_camera_viewport_system,
+                    handle_primary_selection_system,
                     camera_input_system,
                     apply_camera_transform_system,
                     update_hover_info_system,
                     draw_hovered_grid_outline_system,
+                    sync_selected_outline_visual_system,
                 )
                     .chain()
                     .run_if(in_state(AppState::Ready)),

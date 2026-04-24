@@ -92,7 +92,7 @@ fn generated_buildings_emit_one_wall_tile_per_wall_cell() {
     assert!(scene
         .surface_tiles
         .iter()
-        .all(|tile| tile.surface_set_id.as_str() == "building_wall_legacy/floor"));
+        .all(|tile| tile.surface_set_id.as_str() == "building_wall/floor"));
     assert!(scene
         .building_wall_tiles
         .iter()
@@ -100,7 +100,7 @@ fn generated_buildings_emit_one_wall_tile_per_wall_cell() {
     assert!(scene
         .building_wall_tiles
         .iter()
-        .all(|tile| tile.visual_kind == MapBuildingWallVisualKind::LegacyGrid));
+        .all(|tile| tile.visual_kind == MapBuildingWallVisualKind::Grid));
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn generated_building_walkable_cells_emit_individual_floor_tiles() {
     let floor_tiles = scene
         .surface_tiles
         .iter()
-        .filter(|tile| tile.surface_set_id.as_str() == "building_wall_legacy/floor")
+        .filter(|tile| tile.surface_set_id.as_str() == "building_wall/floor")
         .count();
     assert_eq!(floor_tiles, 1);
 }
@@ -322,7 +322,7 @@ fn sample_generated_building_map() -> MapDefinition {
                 building: Some(MapBuildingProps {
                     prefab_id: "generated_house".into(),
                     wall_visual: Some(MapBuildingWallVisualSpec {
-                        kind: MapBuildingWallVisualKind::LegacyGrid,
+                        kind: MapBuildingWallVisualKind::Grid,
                     }),
                     tile_set: Some(sample_building_tile_set()),
                     layout: Some(MapBuildingLayoutSpec {
@@ -362,7 +362,7 @@ fn sample_topology_with_walkable_generated_building() -> StaticMapTopology {
             object_id: "generated_building".into(),
             prefab_id: "generated_building".into(),
             wall_visual: MapBuildingWallVisualSpec {
-                kind: MapBuildingWallVisualKind::LegacyGrid,
+                kind: MapBuildingWallVisualKind::Grid,
             },
             tile_set: sample_building_tile_set(),
             anchor: GridCoord::new(0, 0, 0),
@@ -621,8 +621,8 @@ fn sample_map_with_trigger_object(trigger_kind: &str) -> MapDefinition {
 
 fn sample_building_tile_set() -> MapBuildingTileSetSpec {
     MapBuildingTileSetSpec {
-        wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-        floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
+        wall_set_id: WorldWallTileSetId("building_wall".into()),
+        floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall/floor".into())),
         door_prototype_id: None,
     }
 }

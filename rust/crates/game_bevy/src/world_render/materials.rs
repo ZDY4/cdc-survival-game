@@ -304,7 +304,7 @@ pub fn building_door_color() -> Color {
 
 pub fn building_wall_visual_profile(kind: MapBuildingWallVisualKind) -> BuildingWallVisualProfile {
     match kind {
-        MapBuildingWallVisualKind::LegacyGrid => BuildingWallVisualProfile {
+        MapBuildingWallVisualKind::Grid => BuildingWallVisualProfile {
             face_color: building_wall_grid_face_color(),
             major_line_color: building_wall_grid_major_line_color(),
             minor_line_color: building_wall_grid_minor_line_color(),

@@ -4,8 +4,12 @@ use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
-    MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-    SetMeshViewBindingArrayBindGroup, ViewKeyCache,
+    ErasedMaterialKey, ErasedMaterialPipelineKey, MaterialProperties, MeshPipeline,
+    MeshPipelineKey, PrepassPipeline, PrepassPipelineSpecializer, PrepassVertexShader,
+    RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
+    SetMeshViewBindingArrayBindGroup, SetPrepassViewBindGroup,
+    SetPrepassViewEmptyBindGroup, Shadow, ShadowBatchSetKey, ShadowBinKey, ShadowView,
+    ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::batching::gpu_preprocessing::GpuPreprocessingSupport;
@@ -23,6 +27,7 @@ use bevy::render::sync_world::MainEntity;
 use bevy::render::view::ExtractedView;
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use bytemuck::{Pod, Zeroable};
+use std::{any::TypeId, sync::Arc};
 
 use super::{
     building_wall_visual_profile, WorldRenderBuildingWallTileBatchSource,
@@ -47,14 +52,24 @@ impl Plugin for WorldRenderBuildingWallTileInstancingPlugin {
         render_app
             .add_render_command::<Opaque3d, DrawWorldRenderBuildingWallTileInstancedOpaque>()
             .add_render_command::<Transparent3d, DrawWorldRenderBuildingWallTileInstancedTransparent>()
+            .add_render_command::<Shadow, DrawWorldRenderBuildingWallTileInstancedShadow>()
             .init_resource::<SpecializedMeshPipelines<WorldRenderBuildingWallTilePipeline>>()
-            .add_systems(RenderStartup, init_world_render_building_wall_tile_pipeline)
+            .add_systems(
+                RenderStartup,
+                (
+                    init_world_render_building_wall_tile_pipeline,
+                    init_world_render_building_wall_tile_shadow_pipeline
+                        .after(bevy::pbr::init_prepass_pipeline),
+                ),
+            )
             .add_systems(
                 Render,
                 (
                     queue_world_render_building_wall_tile_opaque_batches
                         .in_set(RenderSystems::QueueMeshes),
                     queue_world_render_building_wall_tile_transparent_batches
+                        .in_set(RenderSystems::QueueMeshes),
+                    queue_world_render_building_wall_tile_shadow_batches
                         .in_set(RenderSystems::QueueMeshes),
                     prepare_world_render_building_wall_tile_instance_buffers
                         .in_set(RenderSystems::PrepareResources),
@@ -97,6 +112,12 @@ struct WorldRenderBuildingWallTilePipeline {
     mesh_pipeline: MeshPipeline,
 }
 
+#[derive(Resource, Clone)]
+struct WorldRenderBuildingWallTileShadowPipeline {
+    pipeline: PrepassPipeline,
+    properties: Arc<MaterialProperties>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum WorldRenderBuildingWallTilePass {
     Opaque,
@@ -117,6 +138,98 @@ fn init_world_render_building_wall_tile_pipeline(
         shader: BUILDING_WALL_TILE_INSTANCING_SHADER_HANDLE.clone(),
         mesh_pipeline: mesh_pipeline.clone(),
     });
+}
+
+fn init_world_render_building_wall_tile_shadow_pipeline(
+    mut commands: Commands,
+    prepass_pipeline: Res<PrepassPipeline>,
+) {
+    let mut properties = MaterialProperties::default();
+    properties.add_shader(
+        PrepassVertexShader,
+        BUILDING_WALL_TILE_INSTANCING_SHADER_HANDLE.clone(),
+    );
+    properties.specialize = Some(specialize_world_render_building_wall_tile_shadow_pipeline);
+    properties.shadows_enabled = true;
+    properties.prepass_enabled = true;
+    properties.material_layout = Some(prepass_pipeline.empty_layout.clone());
+    commands.insert_resource(WorldRenderBuildingWallTileShadowPipeline {
+        pipeline: prepass_pipeline.clone(),
+        properties: Arc::new(properties),
+    });
+}
+
+fn building_wall_instance_buffer_layout() -> VertexBufferLayout {
+    VertexBufferLayout {
+        array_stride: std::mem::size_of::<WorldRenderBuildingWallTileInstanceGpuData>() as u64,
+        step_mode: VertexStepMode::Instance,
+        attributes: vec![
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 0,
+                shader_location: 8,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size(),
+                shader_location: 9,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 2,
+                shader_location: 10,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 3,
+                shader_location: 11,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 4,
+                shader_location: 12,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 5,
+                shader_location: 13,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 6,
+                shader_location: 14,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 7,
+                shader_location: 15,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 8,
+                shader_location: 16,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 9,
+                shader_location: 17,
+            },
+        ],
+    }
+}
+
+fn specialize_world_render_building_wall_tile_shadow_pipeline(
+    _pipeline: &bevy::pbr::MaterialPipeline,
+    descriptor: &mut RenderPipelineDescriptor,
+    _layout: &MeshVertexBufferLayoutRef,
+    _key: ErasedMaterialPipelineKey,
+) -> Result<(), SpecializedMeshPipelineError> {
+    descriptor.label = Some("world_render_building_wall_tile_instanced_shadow_pipeline".into());
+    descriptor
+        .vertex
+        .buffers
+        .push(building_wall_instance_buffer_layout());
+    Ok(())
 }
 
 fn prepare_world_render_building_wall_tile_instance_buffers(
@@ -205,7 +318,7 @@ fn prepare_world_render_building_wall_tile_instance_buffers(
                     } else {
                         profile.top_face_grid_visibility.clamp(0.0, 1.0)
                     },
-                    0.0,
+                    if batch_source.receive_shadows { 1.0 } else { 0.0 },
                 ],
             };
 
@@ -446,6 +559,98 @@ fn queue_world_render_building_wall_tile_transparent_batches(
     }
 }
 
+fn queue_world_render_building_wall_tile_shadow_batches(
+    shadow_draw_functions: Res<DrawFunctions<Shadow>>,
+    custom_pipeline: Res<WorldRenderBuildingWallTileShadowPipeline>,
+    mut pipelines: ResMut<SpecializedMeshPipelines<PrepassPipelineSpecializer>>,
+    pipeline_cache: Res<PipelineCache>,
+    meshes: Res<RenderAssets<RenderMesh>>,
+    render_mesh_instances: Res<RenderMeshInstances>,
+    mesh_allocator: Res<MeshAllocator>,
+    gpu_preprocessing_support: Res<GpuPreprocessingSupport>,
+    batches: Query<
+        (
+            Entity,
+            &MainEntity,
+            &WorldRenderBuildingWallTileOpaqueInstanceBuffer,
+            &WorldRenderBuildingWallTileBatchSource,
+        ),
+        With<WorldRenderBuildingWallTileBatchSource>,
+    >,
+    mut shadow_render_phases: ResMut<ViewBinnedRenderPhases<Shadow>>,
+    views: Query<&ExtractedView, With<ShadowView>>,
+    mut change_tick: Local<Tick>,
+) {
+    let draw_function = shadow_draw_functions
+        .read()
+        .id::<DrawWorldRenderBuildingWallTileInstancedShadow>();
+
+    for view in &views {
+        let Some(shadow_phase) = shadow_render_phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+
+        let mut view_key = MeshPipelineKey::DEPTH_PREPASS;
+        view_key.set(
+            MeshPipelineKey::UNCLIPPED_DEPTH_ORTHO,
+            view.clip_from_view.w_axis.w.abs() > 0.5,
+        );
+
+        for (entity, main_entity, instance_buffer, batch_source) in &batches {
+            if instance_buffer.length == 0 || !batch_source.cast_shadows {
+                continue;
+            }
+
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
+            else {
+                continue;
+            };
+            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
+                continue;
+            };
+            let (vertex_slab, index_slab) = mesh_allocator.mesh_slabs(&mesh_instance.mesh_asset_id);
+            let mesh_key =
+                view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
+            let pipeline = match pipelines.specialize(
+                &pipeline_cache,
+                &PrepassPipelineSpecializer {
+                    pipeline: custom_pipeline.pipeline.clone(),
+                    properties: custom_pipeline.properties.clone(),
+                },
+                ErasedMaterialPipelineKey {
+                    mesh_key,
+                    material_key: ErasedMaterialKey::default(),
+                    type_id: TypeId::of::<WorldRenderBuildingWallTileShadowPipeline>(),
+                },
+                &mesh.layout,
+            ) {
+                Ok(pipeline) => pipeline,
+                Err(_) => continue,
+            };
+
+            let next_change_tick = change_tick.get().wrapping_add(1);
+            change_tick.set(next_change_tick);
+
+            shadow_phase.add(
+                ShadowBatchSetKey {
+                    pipeline,
+                    draw_function,
+                    material_bind_group_index: None,
+                    vertex_slab: vertex_slab.unwrap_or_default(),
+                    index_slab,
+                },
+                ShadowBinKey {
+                    asset_id: mesh_instance.mesh_asset_id.into(),
+                },
+                (entity, *main_entity),
+                mesh_instance.current_uniform_index,
+                BinnedRenderPhaseType::mesh(false, &gpu_preprocessing_support),
+                *change_tick,
+            );
+        }
+    }
+}
+
 impl SpecializedMeshPipeline for WorldRenderBuildingWallTilePipeline {
     type Key = WorldRenderBuildingWallTilePipelineKey;
 
@@ -457,63 +662,13 @@ impl SpecializedMeshPipeline for WorldRenderBuildingWallTilePipeline {
         let mut descriptor = self.mesh_pipeline.specialize(key.mesh_key, layout)?;
         descriptor.label = Some("world_render_building_wall_tile_instanced_pipeline".into());
         descriptor.vertex.shader = self.shader.clone();
-        descriptor.vertex.buffers.push(VertexBufferLayout {
-            array_stride: std::mem::size_of::<WorldRenderBuildingWallTileInstanceGpuData>() as u64,
-            step_mode: VertexStepMode::Instance,
-            attributes: vec![
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 8,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size(),
-                    shader_location: 9,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 2,
-                    shader_location: 10,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 3,
-                    shader_location: 11,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 4,
-                    shader_location: 12,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 5,
-                    shader_location: 13,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 6,
-                    shader_location: 14,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 7,
-                    shader_location: 15,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 8,
-                    shader_location: 16,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 9,
-                    shader_location: 17,
-                },
-            ],
-        });
-        if let Some(fragment) = descriptor.fragment.as_mut() {
+        descriptor
+            .vertex
+            .buffers
+            .push(building_wall_instance_buffer_layout());
+        if key.mesh_key.contains(MeshPipelineKey::DEPTH_PREPASS) {
+            descriptor.fragment = None;
+        } else if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
             if let Some(Some(target)) = fragment.targets.first_mut() {
                 target.blend = match key.pass {
@@ -546,6 +701,15 @@ type DrawWorldRenderBuildingWallTileInstancedTransparent = (
     SetMeshViewBindingArrayBindGroup<1>,
     SetMeshBindGroup<2>,
     DrawWorldRenderBuildingWallTileInstancedTransparentMesh,
+);
+
+type DrawWorldRenderBuildingWallTileInstancedShadow = (
+    SetItemPipeline,
+    SetPrepassViewBindGroup<0>,
+    SetPrepassViewEmptyBindGroup<1>,
+    SetMeshBindGroup<2>,
+    SetPrepassViewEmptyBindGroup<3>,
+    DrawWorldRenderBuildingWallTileInstancedOpaqueMesh,
 );
 
 struct DrawWorldRenderBuildingWallTileInstancedOpaqueMesh;

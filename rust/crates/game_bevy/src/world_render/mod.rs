@@ -137,6 +137,17 @@ impl Default for WorldRenderTileInstanceVisualState {
     }
 }
 
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct WorldRenderSemanticTag(pub StaticWorldSemantic);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WorldRenderPickProxy;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct WorldRenderPickProxyBounds {
+    pub size: Vec3,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorldRenderTileInstanceRenderData {
     pub handle: WorldRenderTileInstanceHandle,
@@ -155,6 +166,8 @@ pub struct WorldRenderStandardTileBatchSource {
     pub logical_batch_entity: Entity,
     pub material: Handle<StandardMaterial>,
     pub prototype_local_transform: Transform,
+    pub cast_shadows: bool,
+    pub receive_shadows: bool,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, ExtractComponent)]
@@ -162,17 +175,31 @@ pub struct WorldRenderBuildingWallTileBatchSource {
     pub logical_batch_entity: Entity,
     pub visual_kind: game_data::MapBuildingWallVisualKind,
     pub prototype_local_transform: Transform,
+    pub cast_shadows: bool,
+    pub receive_shadows: bool,
 }
 
 #[derive(Component, Debug, Clone, PartialEq, ExtractComponent)]
 pub struct WorldRenderStandardTileBatchMaterialState {
     pub base_color: Color,
+    pub emissive: Vec4,
+    pub perceptual_roughness: f32,
+    pub reflectance: f32,
+    pub metallic: f32,
+    pub unlit: bool,
+    pub double_sided: bool,
 }
 
 impl Default for WorldRenderStandardTileBatchMaterialState {
     fn default() -> Self {
         Self {
             base_color: Color::WHITE,
+            emissive: Vec4::ZERO,
+            perceptual_roughness: 0.5,
+            reflectance: 0.5,
+            metallic: 0.0,
+            unlit: false,
+            double_sided: false,
         }
     }
 }

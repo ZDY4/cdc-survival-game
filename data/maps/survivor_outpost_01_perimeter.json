@@ -204,10 +204,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_perimeter_barricade",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 2101,
@@ -233,10 +233,10 @@
       "props": {
         "building": {
           "prefab_id": "survivor_outpost_01_bus_wreck",
-          "wall_visual": { "kind": "legacy_grid" },
+          "wall_visual": { "kind": "grid" },
           "tile_set": {
-            "wall_set_id": "building_wall_legacy",
-            "floor_surface_set_id": "building_wall_legacy/floor"
+            "wall_set_id": "building_wall",
+            "floor_surface_set_id": "building_wall/floor"
           },
           "layout": {
             "seed": 2102,

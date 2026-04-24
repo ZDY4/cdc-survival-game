@@ -4,8 +4,12 @@ use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
-    MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-    SetMeshViewBindingArrayBindGroup, ViewKeyCache,
+    ErasedMaterialKey, ErasedMaterialPipelineKey, MaterialProperties, MeshPipeline,
+    MeshPipelineKey, PrepassPipeline, PrepassPipelineSpecializer, PrepassVertexShader,
+    RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
+    SetMeshViewBindingArrayBindGroup, SetPrepassViewBindGroup,
+    SetPrepassViewEmptyBindGroup, Shadow, ShadowBatchSetKey, ShadowBinKey, ShadowView,
+    ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::batching::gpu_preprocessing::GpuPreprocessingSupport;
@@ -23,6 +27,7 @@ use bevy::render::sync_world::MainEntity;
 use bevy::render::view::ExtractedView;
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use bytemuck::{Pod, Zeroable};
+use std::{any::TypeId, sync::Arc};
 
 use super::{
     WorldRenderStandardTileBatchMaterialState, WorldRenderStandardTileBatchSource,
@@ -49,14 +54,24 @@ impl Plugin for WorldRenderStandardTileInstancingPlugin {
         render_app
             .add_render_command::<Opaque3d, DrawWorldRenderStandardTileInstancedOpaque>()
             .add_render_command::<Transparent3d, DrawWorldRenderStandardTileInstancedTransparent>()
+            .add_render_command::<Shadow, DrawWorldRenderStandardTileInstancedShadow>()
             .init_resource::<SpecializedMeshPipelines<WorldRenderStandardTilePipeline>>()
-            .add_systems(RenderStartup, init_world_render_standard_tile_pipeline)
+            .add_systems(
+                RenderStartup,
+                (
+                    init_world_render_standard_tile_pipeline,
+                    init_world_render_standard_tile_shadow_pipeline
+                        .after(bevy::pbr::init_prepass_pipeline),
+                ),
+            )
             .add_systems(
                 Render,
                 (
                     queue_world_render_standard_tile_opaque_batches
                         .in_set(RenderSystems::QueueMeshes),
                     queue_world_render_standard_tile_transparent_batches
+                        .in_set(RenderSystems::QueueMeshes),
+                    queue_world_render_standard_tile_shadow_batches
                         .in_set(RenderSystems::QueueMeshes),
                     prepare_world_render_standard_tile_instance_buffers
                         .in_set(RenderSystems::PrepareResources),
@@ -86,12 +101,21 @@ struct WorldRenderStandardTileInstanceGpuData {
     world_from_local_2: [f32; 4],
     world_from_local_3: [f32; 4],
     color: [f32; 4],
+    emissive: [f32; 4],
+    material_params: [f32; 4],
+    option_flags: [f32; 4],
 }
 
 #[derive(Resource)]
 struct WorldRenderStandardTilePipeline {
     shader: Handle<Shader>,
     mesh_pipeline: MeshPipeline,
+}
+
+#[derive(Resource, Clone)]
+struct WorldRenderStandardTileShadowPipeline {
+    pipeline: PrepassPipeline,
+    properties: Arc<MaterialProperties>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -114,6 +138,85 @@ fn init_world_render_standard_tile_pipeline(
         shader: STANDARD_TILE_INSTANCING_SHADER_HANDLE.clone(),
         mesh_pipeline: mesh_pipeline.clone(),
     });
+}
+
+fn init_world_render_standard_tile_shadow_pipeline(
+    mut commands: Commands,
+    prepass_pipeline: Res<PrepassPipeline>,
+) {
+    let mut properties = MaterialProperties::default();
+    properties.add_shader(
+        PrepassVertexShader,
+        STANDARD_TILE_INSTANCING_SHADER_HANDLE.clone(),
+    );
+    properties.specialize = Some(specialize_world_render_standard_tile_shadow_pipeline);
+    properties.shadows_enabled = true;
+    properties.prepass_enabled = true;
+    properties.material_layout = Some(prepass_pipeline.empty_layout.clone());
+    commands.insert_resource(WorldRenderStandardTileShadowPipeline {
+        pipeline: prepass_pipeline.clone(),
+        properties: Arc::new(properties),
+    });
+}
+
+fn standard_tile_instance_buffer_layout() -> VertexBufferLayout {
+    VertexBufferLayout {
+        array_stride: std::mem::size_of::<WorldRenderStandardTileInstanceGpuData>() as u64,
+        step_mode: VertexStepMode::Instance,
+        attributes: vec![
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: 0,
+                shader_location: 8,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size(),
+                shader_location: 9,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 2,
+                shader_location: 10,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 3,
+                shader_location: 11,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 4,
+                shader_location: 12,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 5,
+                shader_location: 13,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 6,
+                shader_location: 14,
+            },
+            VertexAttribute {
+                format: VertexFormat::Float32x4,
+                offset: VertexFormat::Float32x4.size() * 7,
+                shader_location: 15,
+            },
+        ],
+    }
+}
+
+fn specialize_world_render_standard_tile_shadow_pipeline(
+    _pipeline: &bevy::pbr::MaterialPipeline,
+    descriptor: &mut RenderPipelineDescriptor,
+    _layout: &MeshVertexBufferLayoutRef,
+    _key: ErasedMaterialPipelineKey,
+) -> Result<(), SpecializedMeshPipelineError> {
+    descriptor.label = Some("world_render_standard_tile_instanced_shadow_pipeline".into());
+    descriptor.vertex.buffers.push(standard_tile_instance_buffer_layout());
+    Ok(())
 }
 
 fn prepare_world_render_standard_tile_instance_buffers(
@@ -141,6 +244,19 @@ fn prepare_world_render_standard_tile_instance_buffers(
         let mut opaque_instance_data = Vec::with_capacity(batch_visual_state.instances.len());
         let mut transparent_instance_data = Vec::new();
         let mut transparent_center_sum = Vec3::ZERO;
+        let emissive = batch_material_state.emissive.to_array();
+        let material_params = [
+            batch_material_state.perceptual_roughness,
+            batch_material_state.reflectance,
+            batch_material_state.metallic,
+            0.0,
+        ];
+        let option_flags = [
+            if batch_material_state.double_sided { 1.0 } else { 0.0 },
+            if batch_material_state.unlit { 1.0 } else { 0.0 },
+            if batch_source.receive_shadows { 1.0 } else { 0.0 },
+            0.0,
+        ];
 
         for instance in &batch_visual_state.instances {
             let tint = instance.tint.to_linear().to_vec4();
@@ -160,6 +276,9 @@ fn prepare_world_render_standard_tile_instance_buffers(
                     base_color.z * tint.z,
                     alpha,
                 ],
+                emissive,
+                material_params,
+                option_flags,
             };
 
             if alpha < 0.999 {
@@ -392,6 +511,98 @@ fn queue_world_render_standard_tile_transparent_batches(
     }
 }
 
+fn queue_world_render_standard_tile_shadow_batches(
+    shadow_draw_functions: Res<DrawFunctions<Shadow>>,
+    custom_pipeline: Res<WorldRenderStandardTileShadowPipeline>,
+    mut pipelines: ResMut<SpecializedMeshPipelines<PrepassPipelineSpecializer>>,
+    pipeline_cache: Res<PipelineCache>,
+    meshes: Res<RenderAssets<RenderMesh>>,
+    render_mesh_instances: Res<RenderMeshInstances>,
+    mesh_allocator: Res<MeshAllocator>,
+    gpu_preprocessing_support: Res<GpuPreprocessingSupport>,
+    batches: Query<
+        (
+            Entity,
+            &MainEntity,
+            &WorldRenderStandardTileOpaqueInstanceBuffer,
+            &WorldRenderStandardTileBatchSource,
+        ),
+        With<WorldRenderStandardTileBatchMaterialState>,
+    >,
+    mut shadow_render_phases: ResMut<ViewBinnedRenderPhases<Shadow>>,
+    views: Query<&ExtractedView, With<ShadowView>>,
+    mut change_tick: Local<Tick>,
+) {
+    let draw_function = shadow_draw_functions
+        .read()
+        .id::<DrawWorldRenderStandardTileInstancedShadow>();
+
+    for view in &views {
+        let Some(shadow_phase) = shadow_render_phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+
+        let mut view_key = MeshPipelineKey::DEPTH_PREPASS;
+        view_key.set(
+            MeshPipelineKey::UNCLIPPED_DEPTH_ORTHO,
+            view.clip_from_view.w_axis.w.abs() > 0.5,
+        );
+
+        for (entity, main_entity, instance_buffer, batch_source) in &batches {
+            if instance_buffer.length == 0 || !batch_source.cast_shadows {
+                continue;
+            }
+
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
+            else {
+                continue;
+            };
+            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
+                continue;
+            };
+            let (vertex_slab, index_slab) = mesh_allocator.mesh_slabs(&mesh_instance.mesh_asset_id);
+            let mesh_key =
+                view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
+            let pipeline = match pipelines.specialize(
+                &pipeline_cache,
+                &PrepassPipelineSpecializer {
+                    pipeline: custom_pipeline.pipeline.clone(),
+                    properties: custom_pipeline.properties.clone(),
+                },
+                ErasedMaterialPipelineKey {
+                    mesh_key,
+                    material_key: ErasedMaterialKey::default(),
+                    type_id: TypeId::of::<WorldRenderStandardTileShadowPipeline>(),
+                },
+                &mesh.layout,
+            ) {
+                Ok(pipeline) => pipeline,
+                Err(_) => continue,
+            };
+
+            let next_change_tick = change_tick.get().wrapping_add(1);
+            change_tick.set(next_change_tick);
+
+            shadow_phase.add(
+                ShadowBatchSetKey {
+                    pipeline,
+                    draw_function,
+                    material_bind_group_index: None,
+                    vertex_slab: vertex_slab.unwrap_or_default(),
+                    index_slab,
+                },
+                ShadowBinKey {
+                    asset_id: mesh_instance.mesh_asset_id.into(),
+                },
+                (entity, *main_entity),
+                mesh_instance.current_uniform_index,
+                BinnedRenderPhaseType::mesh(false, &gpu_preprocessing_support),
+                *change_tick,
+            );
+        }
+    }
+}
+
 impl SpecializedMeshPipeline for WorldRenderStandardTilePipeline {
     type Key = WorldRenderStandardTilePipelineKey;
 
@@ -403,38 +614,13 @@ impl SpecializedMeshPipeline for WorldRenderStandardTilePipeline {
         let mut descriptor = self.mesh_pipeline.specialize(key.mesh_key, layout)?;
         descriptor.label = Some("world_render_standard_tile_instanced_pipeline".into());
         descriptor.vertex.shader = self.shader.clone();
-        descriptor.vertex.buffers.push(VertexBufferLayout {
-            array_stride: std::mem::size_of::<WorldRenderStandardTileInstanceGpuData>() as u64,
-            step_mode: VertexStepMode::Instance,
-            attributes: vec![
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 8,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size(),
-                    shader_location: 9,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 2,
-                    shader_location: 10,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 3,
-                    shader_location: 11,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size() * 4,
-                    shader_location: 12,
-                },
-            ],
-        });
-        if let Some(fragment) = descriptor.fragment.as_mut() {
+        descriptor
+            .vertex
+            .buffers
+            .push(standard_tile_instance_buffer_layout());
+        if key.mesh_key.contains(MeshPipelineKey::DEPTH_PREPASS) {
+            descriptor.fragment = None;
+        } else if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
             if let Some(Some(target)) = fragment.targets.first_mut() {
                 target.blend = match key.pass {
@@ -465,6 +651,15 @@ type DrawWorldRenderStandardTileInstancedTransparent = (
     SetMeshViewBindingArrayBindGroup<1>,
     SetMeshBindGroup<2>,
     DrawWorldRenderStandardTileInstancedTransparentMesh,
+);
+
+type DrawWorldRenderStandardTileInstancedShadow = (
+    SetItemPipeline,
+    SetPrepassViewBindGroup<0>,
+    SetPrepassViewEmptyBindGroup<1>,
+    SetMeshBindGroup<2>,
+    SetPrepassViewEmptyBindGroup<3>,
+    DrawWorldRenderStandardTileInstancedOpaqueMesh,
 );
 
 struct DrawWorldRenderStandardTileInstancedOpaqueMesh;

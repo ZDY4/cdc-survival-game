@@ -1,4 +1,13 @@
-#import bevy_pbr::mesh_view_bindings::view
+#import bevy_pbr::{
+    mesh_types::MESH_FLAGS_SHADOW_RECEIVER_BIT,
+    mesh_view_bindings::view,
+    pbr_functions::{
+        apply_pbr_lighting, calculate_view, main_pass_post_lighting_processing,
+        prepare_world_normal,
+    },
+    pbr_types::{pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
+    forward_io::FragmentOutput,
+}
 
 struct Vertex {
     @location(0) position: vec3<f32>,
@@ -18,7 +27,7 @@ struct Vertex {
 };
 
 struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
+    @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
     @location(2) @interpolate(flat) face_color: vec4<f32>,
@@ -45,7 +54,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 #endif
 
     var out: VertexOutput;
-    out.clip_position = view.clip_from_world * world_position;
+    out.position = view.clip_from_world * world_position;
     out.world_position = world_position;
     out.world_normal = world_normal;
     out.face_color = vertex.face_color;
@@ -97,17 +106,18 @@ fn dashed_minor_grid_mask(projected_position: vec2<f32>, cell_size: f32, line_wi
 }
 
 @fragment
-fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     let major_grid_size = in.params_0.x;
     let minor_grid_size = in.params_0.y;
     let major_line_width = in.params_0.z;
     let minor_line_width = in.params_0.w;
     let grid_line_visibility = in.params_1.y;
     let top_face_grid_visibility = in.params_1.z;
+    let receive_shadows = in.params_1.w > 0.5;
 
-    let world_normal = normalize(in.world_normal);
-    let projected = dominant_face_uv(in.world_position, world_normal);
-    let is_top_face = abs(world_normal.y) > 0.7;
+    let projected = dominant_face_uv(in.world_position, in.world_normal);
+    let base_world_normal = normalize(in.world_normal);
+    let is_top_face = abs(base_world_normal.y) > 0.7;
     let major_mask = grid_line_mask(projected, major_grid_size, major_line_width)
         * grid_line_visibility;
     let side_minor_mask = dashed_minor_grid_mask(projected, minor_grid_size, minor_line_width)
@@ -130,9 +140,25 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         wall_color = mix(wall_color, in.major_line_color, major_mask);
     }
 
-    let light_dir = normalize(vec3<f32>(-0.45, 0.82, -0.35));
-    let diffuse = max(dot(world_normal, light_dir), 0.0);
-    let hemi = world_normal.y * 0.5 + 0.5;
-    let lighting = 0.28 + diffuse * 0.52 + hemi * 0.20;
-    return vec4(wall_color.rgb * lighting, wall_color.a);
+    var pbr_input = pbr_input_new();
+    pbr_input.material.base_color = wall_color;
+    pbr_input.material.perceptual_roughness = 0.92;
+    pbr_input.material.reflectance = vec3<f32>(0.035);
+    pbr_input.material.metallic = 0.0;
+    pbr_input.material.flags |= STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
+    pbr_input.frag_coord = in.position;
+    pbr_input.world_position = in.world_position;
+    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
+    pbr_input.V = calculate_view(in.world_position, pbr_input.is_orthographic);
+    pbr_input.world_normal = prepare_world_normal(base_world_normal, true, is_front);
+    pbr_input.N = normalize(pbr_input.world_normal);
+
+    if receive_shadows {
+        pbr_input.flags |= MESH_FLAGS_SHADOW_RECEIVER_BIT;
+    }
+
+    var out: FragmentOutput;
+    out.color = apply_pbr_lighting(pbr_input);
+    out.color = main_pass_post_lighting_processing(pbr_input, out.color);
+    return out;
 }

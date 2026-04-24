@@ -42,8 +42,8 @@ use game_data::{
 
 fn sample_building_tile_set() -> MapBuildingTileSetSpec {
     MapBuildingTileSetSpec {
-        wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-        floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
+        wall_set_id: WorldWallTileSetId("building_wall".into()),
+        floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall/floor".into())),
         door_prototype_id: None,
     }
 }
@@ -388,7 +388,7 @@ fn ground_cells_exclude_tactical_surface_visual_cells() {
         blocks_sight: false,
         terrain: "ground".into(),
         visual: Some(MapCellVisualSpec {
-            surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
+            surface_set_id: Some(WorldSurfaceTileSetId("building_wall/floor".into())),
             elevation_steps: 0,
             slope: TileSlopeKind::Flat,
         }),
@@ -1627,7 +1627,7 @@ fn sample_occluder(
 #[test]
 fn building_wall_grid_material_defaults_to_visible_grid_lines() {
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
-    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::LegacyGrid);
+    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::Grid);
     let material = make_building_wall_material(&mut building_wall_materials, wall_profile);
     let StaticWorldMaterialHandle::BuildingWallGrid(handle) = material else {
         panic!("building wall tile path should create wall grid material");
@@ -1672,7 +1672,7 @@ fn building_door_material_uses_standard_path_with_door_color() {
 fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
     let mut materials = Assets::<StandardMaterial>::default();
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
-    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::LegacyGrid);
+    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::Grid);
     let material = make_building_wall_material(&mut building_wall_materials, wall_profile.clone());
     let StaticWorldMaterialHandle::BuildingWallGrid(handle) = material.clone() else {
         panic!("building wall tile path should create wall grid material");
@@ -1721,7 +1721,7 @@ fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
 fn tile_instance_occluder_records_desired_fade_before_material_apply() {
     let mut materials = Assets::<StandardMaterial>::default();
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
-    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::LegacyGrid);
+    let wall_profile = building_wall_visual_profile(MapBuildingWallVisualKind::Grid);
     let material = make_building_wall_material(&mut building_wall_materials, wall_profile.clone());
     let handle = WorldRenderTileInstanceHandle {
         batch_id: game_bevy::world_render::WorldRenderTileBatchId(3),
@@ -2056,7 +2056,7 @@ fn snapshot_with_generated_building() -> SimulationSnapshot {
             object_id: "generated_house".into(),
             prefab_id: "generated_house".into(),
             wall_visual: game_data::MapBuildingWallVisualSpec {
-                kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                kind: game_data::MapBuildingWallVisualKind::Grid,
             },
             tile_set: sample_building_tile_set(),
             anchor: GridCoord::new(0, 0, 0),

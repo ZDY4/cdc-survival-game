@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 use game_bevy::world_render::WorldRenderConfig;
+use game_bevy::StaticWorldSemantic;
 use game_data::{
     load_map_library, load_overworld_library, load_world_tile_library, GridCoord, MapDefinition,
     MapEditDiagnostic, MapEditorService, MapId, OverworldId, OverworldLibrary, WorldTileLibrary,
@@ -109,12 +110,44 @@ pub(crate) struct HoveredCellInfo {
     pub(crate) lines: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EditorSelectionTarget {
+    SceneSemantic(StaticWorldSemantic),
+    GridCell(GridCoord),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct EditorSceneViewport {
+    pub(crate) min: Vec2,
+    pub(crate) max: Vec2,
+}
+
+impl EditorSceneViewport {
+    pub(crate) fn from_min_max(min: Vec2, max: Vec2) -> Option<Self> {
+        let size = max - min;
+        (size.x > 1.0 && size.y > 1.0).then_some(Self { min, max })
+    }
+
+    pub(crate) fn contains(self, point: Vec2) -> bool {
+        point.x >= self.min.x
+            && point.x <= self.max.x
+            && point.y >= self.min.y
+            && point.y <= self.max.y
+    }
+
+    pub(crate) fn size(self) -> Vec2 {
+        self.max - self.min
+    }
+}
+
 #[derive(Resource, Debug, Clone)]
 pub(crate) struct EditorUiState {
     pub(crate) show_fps_overlay: bool,
     pub(crate) camera_pan_speed_multiplier: f32,
+    pub(crate) scene_viewport: Option<EditorSceneViewport>,
     pub(crate) hovered_cell: Option<HoveredCellInfo>,
     pub(crate) hovered_grid: Option<GridCoord>,
+    pub(crate) selected_target: Option<EditorSelectionTarget>,
 }
 
 impl Default for EditorUiState {
@@ -122,8 +155,10 @@ impl Default for EditorUiState {
         Self {
             show_fps_overlay: false,
             camera_pan_speed_multiplier: DEFAULT_CAMERA_PAN_SPEED_MULTIPLIER,
+            scene_viewport: None,
             hovered_cell: None,
             hovered_grid: None,
+            selected_target: None,
         }
     }
 }

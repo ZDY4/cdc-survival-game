@@ -24,10 +24,10 @@ use super::{
     prepare_tile_batch_scene, PreparedTileBatch, PreparedTileInstance, SpawnedWorldRenderScene,
     SpawnedWorldRenderTileBatch, SpawnedWorldRenderTileInstance,
     WorldRenderBuildingWallTileBatchSource, WorldRenderConfig, WorldRenderPalette,
-    WorldRenderScene, WorldRenderStandardTileBatchMaterialState,
-    WorldRenderStandardTileBatchSource, WorldRenderStyleProfile, WorldRenderTileBatchRoot,
-    WorldRenderTileBatchVisualState, WorldRenderTileInstanceRenderData, WorldRenderTileInstanceTag,
-    WorldRenderTileInstanceVisualState,
+    WorldRenderPickProxy, WorldRenderPickProxyBounds, WorldRenderScene, WorldRenderSemanticTag,
+    WorldRenderStandardTileBatchMaterialState, WorldRenderStandardTileBatchSource,
+    WorldRenderStyleProfile, WorldRenderTileBatchRoot, WorldRenderTileBatchVisualState,
+    WorldRenderTileInstanceRenderData, WorldRenderTileInstanceTag, WorldRenderTileInstanceVisualState,
 };
 
 const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;
@@ -38,6 +38,8 @@ struct WorldRenderBoxVisualSpec {
     translation: Vec3,
     color: Color,
     material_style: WorldRenderMaterialStyle,
+    semantic: Option<crate::static_world::StaticWorldSemantic>,
+    is_pick_proxy: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -115,7 +117,23 @@ pub fn spawn_world_render_scene(
         .boxes
         .iter()
         .cloned()
-        .map(|spec| world_render_box_spec(spec, palette))
+        .map(|spec| world_render_box_spec(spec, palette, false))
+    {
+        spawned_scene.entities.push(spawn_box(
+            commands,
+            meshes,
+            materials,
+            building_wall_materials,
+            &mut caches,
+            spec,
+        ));
+    }
+    for spec in scene
+        .static_scene
+        .pick_proxies
+        .iter()
+        .cloned()
+        .map(|spec| world_render_box_spec(spec, palette, true))
     {
         spawned_scene.entities.push(spawn_box(
             commands,
@@ -156,7 +174,25 @@ pub fn spawn_world_render_scene(
     }
     let tile_scene = scene.resolve_tile_scene(world_tiles);
     let prepared_tile_scene = prepare_tile_batch_scene(asset_server, world_tiles, &tile_scene);
+    for spec in prepared_tile_scene
+        .pick_proxies
+        .iter()
+        .cloned()
+        .map(|spec| world_render_box_spec(spec, palette, true))
+    {
+        spawned_scene.entities.push(spawn_box(
+            commands,
+            meshes,
+            materials,
+            building_wall_materials,
+            &mut caches,
+            spec,
+        ));
+    }
     for batch in &prepared_tile_scene.batches {
+        let prototype = world_tiles.prototype(&batch.key.prototype_id);
+        let cast_shadows = prototype.is_none_or(|prototype| prototype.cast_shadows);
+        let receive_shadows = prototype.is_none_or(|prototype| prototype.receive_shadows);
         let batch_root = commands.spawn((
             Transform::IDENTITY,
             GlobalTransform::IDENTITY,
@@ -193,6 +229,8 @@ pub fn spawn_world_render_scene(
                                 },
                             ),
                             prototype_local_transform: render_primitive.local_transform,
+                            cast_shadows,
+                            receive_shadows,
                         },
                         WorldRenderStandardTileBatchMaterialState::default(),
                     ));
@@ -202,6 +240,8 @@ pub fn spawn_world_render_scene(
                         logical_batch_entity: batch_root,
                         visual_kind,
                         prototype_local_transform: render_primitive.local_transform,
+                        cast_shadows,
+                        receive_shadows,
                     });
                 }
             }
@@ -308,12 +348,15 @@ pub fn spawn_world_render_light_rig(
 fn world_render_box_spec(
     spec: StaticWorldBoxSpec,
     palette: &WorldRenderPalette,
+    is_pick_proxy: bool,
 ) -> WorldRenderBoxVisualSpec {
     WorldRenderBoxVisualSpec {
         size: spec.size,
         translation: spec.translation,
         color: world_render_color_for_role(spec.material_role, palette),
         material_style: world_render_material_style_for_role(spec.material_role),
+        semantic: spec.semantic,
+        is_pick_proxy,
     }
 }
 
@@ -453,13 +496,21 @@ fn spawn_box(
     let WorldRenderMaterialHandle::Standard(material) = material else {
         unreachable!("static world boxes should not use building wall grid materials");
     };
-    commands
-        .spawn((
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
-            Transform::from_translation(spec.translation),
-        ))
-        .id()
+    let mut entity = commands.spawn((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::from_translation(spec.translation),
+    ));
+    if let Some(semantic) = spec.semantic {
+        entity.insert(WorldRenderSemanticTag(semantic));
+    }
+    if spec.is_pick_proxy {
+        entity.insert((
+            WorldRenderPickProxy,
+            WorldRenderPickProxyBounds { size: spec.size },
+        ));
+    }
+    entity.id()
 }
 
 fn spawn_static_cuboid(
@@ -566,10 +617,17 @@ pub fn sync_world_render_standard_tile_batch_material_states(
     )>,
 ) {
     for (source, mut state) in &mut batches {
-        state.base_color = materials
-            .get(&source.material)
-            .map(|material| material.base_color)
-            .unwrap_or(Color::WHITE);
+        if let Some(material) = materials.get(&source.material) {
+            state.base_color = material.base_color;
+            state.emissive = material.emissive.to_vec4();
+            state.perceptual_roughness = material.perceptual_roughness;
+            state.reflectance = material.reflectance;
+            state.metallic = material.metallic;
+            state.unlit = material.unlit;
+            state.double_sided = material.cull_mode.is_none();
+        } else {
+            *state = WorldRenderStandardTileBatchMaterialState::default();
+        }
     }
 }
 
@@ -790,7 +848,7 @@ fn cached_building_wall_material(
     visual_kind: game_data::MapBuildingWallVisualKind,
 ) -> WorldRenderMaterialHandle {
     let key = match visual_kind {
-        game_data::MapBuildingWallVisualKind::LegacyGrid => 0,
+        game_data::MapBuildingWallVisualKind::Grid => 0,
     };
     let handle = caches
         .building_wall_materials
@@ -855,12 +913,12 @@ mod tests {
         let first = cached_building_wall_material(
             &mut wall_materials,
             &mut caches,
-            MapBuildingWallVisualKind::LegacyGrid,
+            MapBuildingWallVisualKind::Grid,
         );
         let second = cached_building_wall_material(
             &mut wall_materials,
             &mut caches,
-            MapBuildingWallVisualKind::LegacyGrid,
+            MapBuildingWallVisualKind::Grid,
         );
 
         let WorldRenderMaterialHandle::BuildingWallGrid(first) = first else {

@@ -14,11 +14,11 @@
         }
       },
       "cast_shadows": true,
-      "id": "building_wall_legacy/isolated",
+      "id": "building_wall/isolated",
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall_legacy/isolated.gltf",
+        "path": "world_tiles/building_wall/isolated.gltf",
         "scene_index": 0
       }
     },
@@ -36,11 +36,11 @@
         }
       },
       "cast_shadows": true,
-      "id": "building_wall_legacy/end",
+      "id": "building_wall/end",
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall_legacy/end.gltf",
+        "path": "world_tiles/building_wall/end.gltf",
         "scene_index": 0
       }
     },
@@ -58,11 +58,11 @@
         }
       },
       "cast_shadows": true,
-      "id": "building_wall_legacy/straight",
+      "id": "building_wall/straight",
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall_legacy/straight.gltf",
+        "path": "world_tiles/building_wall/straight.gltf",
         "scene_index": 0
       }
     },
@@ -80,11 +80,11 @@
         }
       },
       "cast_shadows": true,
-      "id": "building_wall_legacy/corner",
+      "id": "building_wall/corner",
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall_legacy/corner.gltf",
+        "path": "world_tiles/building_wall/corner.gltf",
         "scene_index": 0
       }
     },
@@ -102,11 +102,11 @@
         }
       },
       "cast_shadows": true,
-      "id": "building_wall_legacy/t_junction",
+      "id": "building_wall/t_junction",
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall_legacy/t_junction.gltf",
+        "path": "world_tiles/building_wall/t_junction.gltf",
         "scene_index": 0
       }
     },
@@ -124,11 +124,11 @@
         }
       },
       "cast_shadows": true,
-      "id": "building_wall_legacy/cross",
+      "id": "building_wall/cross",
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall_legacy/cross.gltf",
+        "path": "world_tiles/building_wall/cross.gltf",
         "scene_index": 0
       }
     },
@@ -146,30 +146,30 @@
         }
       },
       "cast_shadows": false,
-      "id": "building_wall_legacy/floor_flat",
+      "id": "building_wall/floor_flat",
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall_legacy/floor_flat.gltf",
+        "path": "world_tiles/building_wall/floor_flat.gltf",
         "scene_index": 0
       }
     }
   ],
   "surface_sets": [
     {
-      "flat_top_prototype_id": "building_wall_legacy/floor_flat",
-      "id": "building_wall_legacy/floor"
+      "flat_top_prototype_id": "building_wall/floor_flat",
+      "id": "building_wall/floor"
     }
   ],
   "wall_sets": [
     {
-      "corner_prototype_id": "building_wall_legacy/corner",
-      "cross_prototype_id": "building_wall_legacy/cross",
-      "end_prototype_id": "building_wall_legacy/end",
-      "id": "building_wall_legacy",
-      "isolated_prototype_id": "building_wall_legacy/isolated",
-      "straight_prototype_id": "building_wall_legacy/straight",
-      "t_junction_prototype_id": "building_wall_legacy/t_junction"
+      "corner_prototype_id": "building_wall/corner",
+      "cross_prototype_id": "building_wall/cross",
+      "end_prototype_id": "building_wall/end",
+      "id": "building_wall",
+      "isolated_prototype_id": "building_wall/isolated",
+      "straight_prototype_id": "building_wall/straight",
+      "t_junction_prototype_id": "building_wall/t_junction"
     }
   ]
 }

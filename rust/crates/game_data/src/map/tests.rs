@@ -34,7 +34,7 @@ fn footprint_rotation_swaps_rect_dimensions() {
             building: Some(MapBuildingProps {
                 prefab_id: "survivor_outpost_01_dormitory".into(),
                 wall_visual: Some(MapBuildingWallVisualSpec {
-                    kind: MapBuildingWallVisualKind::LegacyGrid,
+                    kind: MapBuildingWallVisualKind::Grid,
                 }),
                 tile_set: Some(sample_building_tile_set()),
                 layout: None,
@@ -431,7 +431,7 @@ fn sample_building(
             building: Some(MapBuildingProps {
                 prefab_id: "survivor_outpost_01_dormitory".into(),
                 wall_visual: Some(MapBuildingWallVisualSpec {
-                    kind: MapBuildingWallVisualKind::LegacyGrid,
+                    kind: MapBuildingWallVisualKind::Grid,
                 }),
                 tile_set: Some(sample_building_tile_set()),
                 layout: None,
@@ -536,7 +536,7 @@ fn sample_catalog() -> MapValidationCatalog {
 
 fn sample_building_tile_set() -> MapBuildingTileSetSpec {
     MapBuildingTileSetSpec {
-        wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+        wall_set_id: WorldWallTileSetId("building_wall".into()),
         floor_surface_set_id: None,
         door_prototype_id: None,
     }

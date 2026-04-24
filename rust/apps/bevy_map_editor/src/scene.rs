@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::render::view::NoIndirectDrawing;
 use bevy_egui::input::EguiWantsInput;
+use bevy_mesh_outline::OutlineCamera;
 use game_bevy::world_render::{
     apply_world_render_camera_projection, build_world_render_scene_from_map_definition,
     build_world_render_scene_from_overworld_definition, spawn_world_render_light_rig,
@@ -13,6 +14,7 @@ use game_data::{
 use game_editor::load_game_ui_font;
 
 use crate::camera::ray_point_on_horizontal_plane;
+use crate::selection::{build_selection_index_from_scene, EditorSelectionIndex};
 use crate::state::{
     map_display_name, yes_no, EditorCamera, EditorState, EditorUiState, EditorViewportTarget,
     EditorWorldLabelFont, EditorWorldTileDefinitions, HoveredCellInfo, LibraryView,
@@ -42,6 +44,7 @@ pub(crate) fn setup_editor(
         Projection::from(perspective),
         Transform::from_xyz(18.0, 18.0, 18.0).looking_at(Vec3::ZERO, Vec3::Y),
         EditorCamera,
+        OutlineCamera,
         NoIndirectDrawing,
     ));
 }
@@ -49,7 +52,9 @@ pub(crate) fn setup_editor(
 pub(crate) fn rebuild_scene_system(
     mut commands: Commands,
     mut editor: ResMut<EditorState>,
+    mut ui_state: ResMut<EditorUiState>,
     mut orbit_camera: ResMut<OrbitCameraState>,
+    mut selection_index: ResMut<EditorSelectionIndex>,
     render_config: Res<WorldRenderConfig>,
     render_palette: Res<WorldRenderPalette>,
     asset_server: Res<AssetServer>,
@@ -67,6 +72,10 @@ pub(crate) fn rebuild_scene_system(
         return;
     }
 
+    if desired_target != editor.last_rendered_target {
+        ui_state.selected_target = None;
+    }
+
     for entity in scene_entities.iter() {
         commands.entity(entity).despawn();
     }
@@ -76,6 +85,7 @@ pub(crate) fn rebuild_scene_system(
         editor.last_rendered_target = None;
         editor.scene_dirty = false;
         editor.scene_revision = editor.scene_revision.saturating_add(1);
+        selection_index.clear();
         return;
     };
 
@@ -86,6 +96,7 @@ pub(crate) fn rebuild_scene_system(
                 editor.last_rendered_target = None;
                 editor.scene_dirty = false;
                 editor.scene_revision = editor.scene_revision.saturating_add(1);
+                selection_index.clear();
                 return;
             };
             orbit_camera.target = map_focus_target(&document.definition);
@@ -111,6 +122,11 @@ pub(crate) fn rebuild_scene_system(
             ) {
                 commands.entity(entity).insert(SceneEntity);
             }
+            *selection_index = build_selection_index_from_scene(
+                &scene,
+                &world_tiles.0,
+                render_config.floor_thickness_world,
+            );
             editor.status = format!(
                 "Rendering map {} at level {} in native Bevy 3D.",
                 map_display_name(document.definition.id.as_str()),
@@ -127,6 +143,7 @@ pub(crate) fn rebuild_scene_system(
                 editor.last_rendered_target = None;
                 editor.scene_dirty = false;
                 editor.scene_revision = editor.scene_revision.saturating_add(1);
+                selection_index.clear();
                 return;
             };
             orbit_camera.target = overworld_focus_target(&definition);
@@ -148,6 +165,11 @@ pub(crate) fn rebuild_scene_system(
             ) {
                 commands.entity(entity).insert(SceneEntity);
             }
+            *selection_index = build_selection_index_from_scene(
+                &scene,
+                &world_tiles.0,
+                render_config.floor_thickness_world,
+            );
             editor.status = format!(
                 "Rendering overworld {} in native Bevy 3D.",
                 definition.id.as_str()
@@ -213,6 +235,14 @@ pub(crate) fn update_hover_info_system(
         ui_state.hovered_grid = None;
         return;
     };
+    if ui_state
+        .scene_viewport
+        .is_some_and(|viewport| !viewport.contains(cursor_position))
+    {
+        ui_state.hovered_cell = None;
+        ui_state.hovered_grid = None;
+        return;
+    }
 
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);

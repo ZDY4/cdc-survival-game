@@ -674,7 +674,7 @@ mod tests {
                     building: Some(MapBuildingProps {
                         prefab_id: "survivor_outpost_01_dormitory".into(),
                         wall_visual: Some(game_data::MapBuildingWallVisualSpec {
-                            kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                            kind: game_data::MapBuildingWallVisualKind::Grid,
                         }),
                         tile_set: None,
                         layout: None,

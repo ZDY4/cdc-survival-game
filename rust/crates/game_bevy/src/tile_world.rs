@@ -921,9 +921,7 @@ mod tests {
                 translation: Vec3::new(3.0, 0.0, 1.0),
                 rotation: Quat::IDENTITY,
                 scale: Vec3::ONE,
-                render_class: TileRenderClass::BuildingWallGrid(
-                    MapBuildingWallVisualKind::LegacyGrid,
-                ),
+                render_class: TileRenderClass::BuildingWallGrid(MapBuildingWallVisualKind::Grid),
                 semantic: None,
                 occluder_kind: None,
                 occluder_cells: Vec::new(),

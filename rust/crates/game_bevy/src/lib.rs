@@ -1193,7 +1193,7 @@ startup_map =
                     building: Some(MapBuildingProps {
                         prefab_id: "survivor_outpost_01_dormitory".into(),
                         wall_visual: Some(game_data::MapBuildingWallVisualSpec {
-                            kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                            kind: game_data::MapBuildingWallVisualKind::Grid,
                         }),
                         tile_set: Some(sample_building_tile_set()),
                         layout: None,
@@ -1276,8 +1276,8 @@ startup_map =
 
     fn sample_building_tile_set() -> MapBuildingTileSetSpec {
         MapBuildingTileSetSpec {
-            wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
-            floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall_legacy/floor".into())),
+            wall_set_id: WorldWallTileSetId("building_wall".into()),
+            floor_surface_set_id: Some(WorldSurfaceTileSetId("building_wall/floor".into())),
             door_prototype_id: None,
         }
     }

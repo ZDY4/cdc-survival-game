@@ -95,7 +95,7 @@ fn sample_map_definition() -> MapDefinition {
                     building: Some(MapBuildingProps {
                         prefab_id: "survivor_outpost_01_dormitory".into(),
                         wall_visual: Some(game_data::MapBuildingWallVisualSpec {
-                            kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                            kind: game_data::MapBuildingWallVisualKind::Grid,
                         }),
                         tile_set: None,
                         layout: None,
@@ -361,7 +361,7 @@ fn sample_generated_building_map_definition() -> MapDefinition {
                 building: Some(MapBuildingProps {
                     prefab_id: "generated_house".into(),
                     wall_visual: Some(game_data::MapBuildingWallVisualSpec {
-                        kind: game_data::MapBuildingWallVisualKind::LegacyGrid,
+                        kind: game_data::MapBuildingWallVisualKind::Grid,
                     }),
                     tile_set: Some(sample_building_tile_set()),
                     layout: Some(MapBuildingLayoutSpec {
@@ -404,9 +404,9 @@ fn sample_generated_building_map_definition() -> MapDefinition {
 
 fn sample_building_tile_set() -> game_data::MapBuildingTileSetSpec {
     game_data::MapBuildingTileSetSpec {
-        wall_set_id: WorldWallTileSetId("building_wall_legacy".into()),
+        wall_set_id: WorldWallTileSetId("building_wall".into()),
         floor_surface_set_id: Some(game_data::WorldSurfaceTileSetId(
-            "building_wall_legacy/floor".into(),
+            "building_wall/floor".into(),
         )),
         door_prototype_id: None,
     }

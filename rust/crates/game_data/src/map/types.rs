@@ -222,7 +222,7 @@ pub struct MapBuildingVisualOutline {
 #[serde(rename_all = "snake_case")]
 pub enum MapBuildingWallVisualKind {
     #[default]
-    LegacyGrid,
+    Grid,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -233,7 +233,7 @@ pub struct MapBuildingWallVisualSpec {
 impl Default for MapBuildingWallVisualSpec {
     fn default() -> Self {
         Self {
-            kind: MapBuildingWallVisualKind::LegacyGrid,
+            kind: MapBuildingWallVisualKind::Grid,
         }
     }
 }

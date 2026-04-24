@@ -1,5 +1,6 @@
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
+use bevy::camera::Viewport;
 use bevy_egui::input::EguiWantsInput;
 use game_bevy::world_render::{apply_world_render_camera_projection, WorldRenderConfig};
 
@@ -90,6 +91,13 @@ pub(crate) fn camera_input_system(
         middle_click_state.drag_anchor_world = None;
         return;
     };
+    if ui_state
+        .scene_viewport
+        .is_some_and(|viewport| !viewport.contains(cursor_position))
+    {
+        middle_click_state.drag_anchor_world = None;
+        return;
+    }
 
     let (camera, camera_transform) = *camera_query;
     let camera_transform = GlobalTransform::from(*camera_transform);
@@ -117,6 +125,37 @@ pub(crate) fn camera_input_system(
     }
 
     orbit_camera.target += Vec3::new(pan_delta.x, 0.0, pan_delta.y);
+}
+
+pub(crate) fn sync_camera_viewport_system(
+    window: Single<&Window>,
+    ui_state: Res<EditorUiState>,
+    mut cameras: Query<&mut Camera, With<EditorCamera>>,
+) {
+    let Ok(mut camera) = cameras.single_mut() else {
+        return;
+    };
+
+    let Some(scene_viewport) = ui_state.scene_viewport else {
+        camera.viewport = None;
+        return;
+    };
+
+    let scale_factor = window.scale_factor() as f32;
+    let physical_position = (scene_viewport.min * scale_factor)
+        .round()
+        .max(Vec2::ZERO)
+        .as_uvec2();
+    let physical_size = (scene_viewport.size() * scale_factor)
+        .round()
+        .max(Vec2::splat(1.0))
+        .as_uvec2();
+
+    camera.viewport = Some(Viewport {
+        physical_position,
+        physical_size,
+        depth: 0.0..1.0,
+    });
 }
 
 pub(crate) fn apply_camera_transform_system(

@@ -7,8 +7,10 @@ use bevy_egui::{egui, EguiContexts};
 
 use crate::camera::{CAMERA_PAN_SPEED_MULTIPLIER_MAX, CAMERA_PAN_SPEED_MULTIPLIER_MIN};
 use crate::commands::MapEditorCommand;
+use crate::selection::selected_scene_target_info;
 use crate::state::{
-    map_library_item_label, EditorState, EditorUiState, LibraryView, OrbitCameraState,
+    map_library_item_label, EditorSceneViewport, EditorState, EditorUiState,
+    EditorWorldTileDefinitions, LibraryView, OrbitCameraState,
 };
 use panels::{current_fps_label, draw_diagnostic, editor_top_summary};
 
@@ -31,6 +33,7 @@ pub(crate) fn editor_ui_system(
     mut editor: ResMut<EditorState>,
     mut ui_state: ResMut<EditorUiState>,
     mut orbit_camera: ResMut<OrbitCameraState>,
+    world_tiles: Res<EditorWorldTileDefinitions>,
     diagnostics: Res<DiagnosticsStore>,
     mut requests: MessageWriter<MapEditorCommand>,
 ) {
@@ -234,8 +237,27 @@ pub(crate) fn editor_ui_system(
     egui::SidePanel::right("authoring")
         .default_width(430.0)
         .show(ctx, |ui| {
-            ui.heading("检查面板");
+            ui.heading("细节面板");
             ui.label("地图修改的 AI 主路径已迁出 editor，当前窗口仅保留可视化检查与手工复核。");
+            ui.separator();
+            ui.heading("选中内容");
+            if let Some(selected) = selected_scene_target_info(
+                &editor,
+                &world_tiles.0,
+                ui_state.selected_target.as_ref(),
+            ) {
+                ui.strong(selected.title);
+                ui.add_space(6.0);
+                egui::ScrollArea::vertical()
+                    .max_height(260.0)
+                    .show(ui, |ui| {
+                        for line in selected.lines {
+                            ui.label(line);
+                        }
+                    });
+            } else {
+                ui.label("左键点击场景中的对象或地图格子后，这里会显示细节。");
+            }
             ui.separator();
             match editor.selected_view {
                 LibraryView::Maps => {
@@ -260,6 +282,12 @@ pub(crate) fn editor_ui_system(
                 }
             }
         });
+
+    let scene_rect = ctx.available_rect();
+    ui_state.scene_viewport = EditorSceneViewport::from_min_max(
+        Vec2::new(scene_rect.left(), scene_rect.top()),
+        Vec2::new(scene_rect.right(), scene_rect.bottom()),
+    );
 
     if ui_state.show_fps_overlay {
         egui::Area::new("fps_overlay".into())
