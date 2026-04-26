@@ -1,6 +1,6 @@
+use bevy::camera::Viewport;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
-use bevy::camera::Viewport;
 use bevy_egui::input::EguiWantsInput;
 use game_bevy::world_render::{apply_world_render_camera_projection, WorldRenderConfig};
 

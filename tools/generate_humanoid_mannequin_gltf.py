@@ -70,43 +70,75 @@ def cube_geometry():
     ]
     indices = [
         0,
+        2,
         1,
-        2,
         0,
-        2,
         3,
+        2,
         4,
+        6,
         5,
-        6,
         4,
-        6,
         7,
+        6,
         8,
+        10,
         9,
-        10,
         8,
-        10,
         11,
+        10,
         12,
+        14,
         13,
-        14,
         12,
-        14,
         15,
+        14,
         16,
+        18,
         17,
-        18,
         16,
-        18,
         19,
+        18,
         20,
+        22,
         21,
-        22,
         20,
-        22,
         23,
+        22,
     ]
-    return positions, normals, indices
+    return {"positions": positions, "normals": normals, "indices": indices}
+
+
+def uv_sphere_geometry(latitude_segments=12, longitude_segments=24):
+    positions = []
+    normals = []
+    indices = []
+
+    for lat in range(latitude_segments + 1):
+        theta = math.pi * lat / latitude_segments
+        sin_theta = math.sin(theta)
+        cos_theta = math.cos(theta)
+        for lon in range(longitude_segments + 1):
+            phi = 2.0 * math.pi * lon / longitude_segments
+            sin_phi = math.sin(phi)
+            cos_phi = math.cos(phi)
+            normal = (cos_phi * sin_theta, cos_theta, sin_phi * sin_theta)
+            positions.append(tuple(0.5 * value for value in normal))
+            normals.append(normal)
+
+    columns = longitude_segments + 1
+    for lat in range(latitude_segments):
+        for lon in range(longitude_segments):
+            a = lat * columns + lon
+            b = a + columns
+            c = a + 1
+            d = b + 1
+            if lat != 0:
+                indices.extend([a, c, b])
+            if lat != latitude_segments - 1:
+                indices.extend([c, d, b])
+
+    return {"positions": positions, "normals": normals, "indices": indices}
 
 
 def pack_f32_triplets(values):
@@ -117,11 +149,84 @@ def pack_u16(values):
     return b"".join(struct.pack("<H", value) for value in values)
 
 
-def align_four(data):
-    padding = (-len(data)) % 4
-    if padding:
-        data += b"\x00" * padding
-    return data
+def append_aligned(binary, payload):
+    while len(binary) % 4:
+        binary.append(0)
+    offset = len(binary)
+    binary.extend(payload)
+    return offset
+
+
+def component_bounds(values):
+    return [min(axis) for axis in zip(*values)], [max(axis) for axis in zip(*values)]
+
+
+def append_vec3_accessor(binary, buffer_views, accessors, values):
+    payload = pack_f32_triplets(values)
+    offset = append_aligned(binary, payload)
+    buffer_view_index = len(buffer_views)
+    buffer_views.append(
+        {
+            "buffer": 0,
+            "byteOffset": offset,
+            "byteLength": len(payload),
+            "target": 34962,
+        }
+    )
+    minimum, maximum = component_bounds(values)
+    accessor_index = len(accessors)
+    accessors.append(
+        {
+            "bufferView": buffer_view_index,
+            "componentType": 5126,
+            "count": len(values),
+            "type": "VEC3",
+            "min": minimum,
+            "max": maximum,
+        }
+    )
+    return accessor_index
+
+
+def append_index_accessor(binary, buffer_views, accessors, values):
+    payload = pack_u16(values)
+    offset = append_aligned(binary, payload)
+    buffer_view_index = len(buffer_views)
+    buffer_views.append(
+        {
+            "buffer": 0,
+            "byteOffset": offset,
+            "byteLength": len(payload),
+            "target": 34963,
+        }
+    )
+    accessor_index = len(accessors)
+    accessors.append(
+        {
+            "bufferView": buffer_view_index,
+            "componentType": 5123,
+            "count": len(values),
+            "type": "SCALAR",
+        }
+    )
+    return accessor_index
+
+
+def build_mesh(binary, buffer_views, accessors, geometry, name, material_index):
+    position_accessor = append_vec3_accessor(binary, buffer_views, accessors, geometry["positions"])
+    normal_accessor = append_vec3_accessor(binary, buffer_views, accessors, geometry["normals"])
+    index_accessor = append_index_accessor(binary, buffer_views, accessors, geometry["indices"])
+    return {
+        "name": name,
+        "primitives": [
+            {
+                "attributes": {"POSITION": position_accessor, "NORMAL": normal_accessor},
+                "indices": index_accessor,
+                "material": material_index,
+                "mode": 4,
+            }
+        ],
+    }
 
 
 def euler_xyz_deg_to_quat(x_deg, y_deg, z_deg):
@@ -169,123 +274,80 @@ class NodeBuilder:
 
 
 def mannequin_nodes():
-    mesh_index = 0
+    cube_mesh_index = 0
+    sphere_mesh_index = 1
     nodes = NodeBuilder()
 
-    body_mesh = nodes.add("body_mesh", mesh=mesh_index, scale=(0.66, 0.82, 0.38))
-    head_mesh = nodes.add("head_mesh", mesh=mesh_index, scale=(0.48, 0.48, 0.48))
-    upper_arm_l_mesh = nodes.add(
-        "upper_arm_l_mesh", translation=(0.0, -0.14, 0.02), mesh=mesh_index, scale=(0.16, 0.34, 0.16)
+    body_mesh = nodes.add("body_mesh", mesh=cube_mesh_index, scale=(0.78, 0.70, 0.28))
+    head_mesh = nodes.add("head_mesh", mesh=sphere_mesh_index, scale=(0.48, 0.48, 0.48))
+    upper_leg_l_mesh = nodes.add("upper_leg_l_mesh", mesh=cube_mesh_index, scale=(0.20, 0.72, 0.22))
+    upper_leg_r_mesh = nodes.add("upper_leg_r_mesh", mesh=cube_mesh_index, scale=(0.20, 0.72, 0.22))
+    foot_l_mesh = nodes.add(
+        "foot_l_mesh",
+        translation=(0.0, 0.0, 0.03),
+        mesh=cube_mesh_index,
+        scale=(0.42, 0.10, 0.28),
     )
-    lower_arm_l_mesh = nodes.add(
-        "lower_arm_l_mesh", translation=(0.0, -0.14, 0.02), mesh=mesh_index, scale=(0.14, 0.32, 0.14)
+    foot_r_mesh = nodes.add(
+        "foot_r_mesh",
+        translation=(0.0, 0.0, 0.03),
+        mesh=cube_mesh_index,
+        scale=(0.42, 0.10, 0.28),
     )
-    hand_l_mesh = nodes.add("hand_l_mesh", mesh=mesh_index, scale=(0.12, 0.12, 0.18))
-    upper_arm_r_mesh = nodes.add(
-        "upper_arm_r_mesh", translation=(0.0, -0.14, 0.02), mesh=mesh_index, scale=(0.16, 0.34, 0.16)
-    )
-    lower_arm_r_mesh = nodes.add(
-        "lower_arm_r_mesh", translation=(0.0, -0.14, 0.02), mesh=mesh_index, scale=(0.14, 0.32, 0.14)
-    )
-    hand_r_mesh = nodes.add("hand_r_mesh", mesh=mesh_index, scale=(0.12, 0.12, 0.18))
-    upper_leg_l_mesh = nodes.add(
-        "upper_leg_l_mesh", translation=(0.0, -0.18, 0.0), mesh=mesh_index, scale=(0.20, 0.46, 0.22)
-    )
-    lower_leg_l_mesh = nodes.add(
-        "lower_leg_l_mesh", translation=(0.0, -0.16, 0.0), mesh=mesh_index, scale=(0.18, 0.42, 0.20)
-    )
-    foot_l_mesh = nodes.add("foot_l_mesh", mesh=mesh_index, scale=(0.24, 0.10, 0.34))
-    upper_leg_r_mesh = nodes.add(
-        "upper_leg_r_mesh", translation=(0.0, -0.18, 0.0), mesh=mesh_index, scale=(0.20, 0.46, 0.22)
-    )
-    lower_leg_r_mesh = nodes.add(
-        "lower_leg_r_mesh", translation=(0.0, -0.16, 0.0), mesh=mesh_index, scale=(0.18, 0.42, 0.20)
-    )
-    foot_r_mesh = nodes.add("foot_r_mesh", mesh=mesh_index, scale=(0.24, 0.10, 0.34))
 
-    body_socket = nodes.add("body_socket", translation=(0.0, -0.02, 0.02))
-    hands_socket = nodes.add("hands_socket", translation=(0.0, 0.03, 0.04))
+    body_socket = nodes.add("body_socket", translation=(0.0, 0.0, 0.02))
+    hands_socket = nodes.add("hands_socket", translation=(0.0, 0.0, 0.04))
     head_socket = nodes.add("head_socket", translation=(0.0, 0.24, 0.02))
-    head = nodes.add("head", translation=(0.0, 0.12, 0.0), children=[head_mesh, head_socket])
-    neck = nodes.add("neck", translation=(0.0, 0.36, 0.0), children=[head])
+    head = nodes.add("head", translation=(0.0, 0.60, 0.0), children=[head_mesh, head_socket])
+    hand_l = nodes.add("hand_l", translation=(-0.62, -0.04, 0.02))
+    hand_r = nodes.add("hand_r", translation=(0.62, -0.04, 0.02))
     back_socket = nodes.add(
-        "back_socket", translation=(0.0, -0.10, -0.28), rotation_deg=(12.0, 0.0, 0.0)
+        "back_socket", translation=(0.0, 0.02, -0.20), rotation_deg=(12.0, 0.0, 0.0)
     )
-    accessory_socket = nodes.add("accessory_socket", translation=(0.18, 0.08, 0.14))
-    spine = nodes.add(
-        "spine",
-        translation=(0.0, 0.14, 0.0),
-        children=[body_mesh, neck, body_socket, hands_socket, back_socket, accessory_socket],
-    )
-
-    hand_l = nodes.add("hand_l", translation=(0.0, -0.28, 0.04), children=[hand_l_mesh])
-    lower_arm_l = nodes.add(
-        "lower_arm_l",
-        translation=(0.0, -0.28, 0.06),
-        rotation_deg=(0.0, 0.0, 10.0),
-        children=[lower_arm_l_mesh, hand_l],
-    )
-    upper_arm_l = nodes.add(
-        "upper_arm_l",
-        translation=(-0.38, 0.16, 0.02),
-        rotation_deg=(0.0, 0.0, 22.0),
-        children=[upper_arm_l_mesh, lower_arm_l],
+    accessory_socket = nodes.add("accessory_socket", translation=(0.24, 0.12, 0.14))
+    body = nodes.add(
+        "body",
+        translation=(0.0, 1.02, 0.0),
+        children=[
+            body_mesh,
+            head,
+            body_socket,
+            hands_socket,
+            hand_l,
+            hand_r,
+            back_socket,
+            accessory_socket,
+        ],
     )
 
-    hand_r = nodes.add("hand_r", translation=(0.0, -0.28, 0.04), children=[hand_r_mesh])
-    lower_arm_r = nodes.add(
-        "lower_arm_r",
-        translation=(0.0, -0.28, 0.06),
-        rotation_deg=(0.0, 0.0, -10.0),
-        children=[lower_arm_r_mesh, hand_r],
-    )
-    upper_arm_r = nodes.add(
-        "upper_arm_r",
-        translation=(0.38, 0.16, 0.02),
-        rotation_deg=(0.0, 0.0, -22.0),
-        children=[upper_arm_r_mesh, lower_arm_r],
-    )
+    upper_leg_l = nodes.add("upper_leg_l", translation=(-0.12, 0.50, 0.0), children=[upper_leg_l_mesh])
+    upper_leg_r = nodes.add("upper_leg_r", translation=(0.12, 0.50, 0.0), children=[upper_leg_r_mesh])
+    foot_l = nodes.add("foot_l", translation=(-0.12, 0.08, 0.0), children=[foot_l_mesh])
+    foot_r = nodes.add("foot_r", translation=(0.12, 0.08, 0.0), children=[foot_r_mesh])
 
-    foot_l = nodes.add("foot_l", translation=(0.02, -0.34, 0.10), children=[foot_l_mesh])
-    lower_leg_l = nodes.add(
-        "lower_leg_l", translation=(0.0, -0.36, 0.0), children=[lower_leg_l_mesh, foot_l]
+    legs_socket = nodes.add("legs_socket", translation=(0.0, 0.50, 0.02))
+    feet_socket = nodes.add("feet_socket", translation=(0.0, 0.08, 0.08))
+    root = nodes.add(
+        "humanoid_root",
+        children=[body, upper_leg_l, upper_leg_r, foot_l, foot_r, legs_socket, feet_socket],
     )
-    upper_leg_l = nodes.add(
-        "upper_leg_l", translation=(-0.16, -0.18, 0.0), children=[upper_leg_l_mesh, lower_leg_l]
-    )
-
-    foot_r = nodes.add("foot_r", translation=(-0.02, -0.34, 0.10), children=[foot_r_mesh])
-    lower_leg_r = nodes.add(
-        "lower_leg_r", translation=(0.0, -0.36, 0.0), children=[lower_leg_r_mesh, foot_r]
-    )
-    upper_leg_r = nodes.add(
-        "upper_leg_r", translation=(0.16, -0.18, 0.0), children=[upper_leg_r_mesh, lower_leg_r]
-    )
-
-    legs_socket = nodes.add("legs_socket", translation=(0.0, -0.50, 0.02))
-    feet_socket = nodes.add("feet_socket", translation=(0.0, -0.88, 0.08))
-    pelvis = nodes.add(
-        "pelvis",
-        translation=(0.0, 0.94, 0.0),
-        children=[spine, upper_arm_l, upper_arm_r, upper_leg_l, upper_leg_r, legs_socket, feet_socket],
-    )
-    root = nodes.add("humanoid_root", children=[pelvis])
     return nodes.nodes, root
 
 
 def build_gltf():
-    positions, normals, indices = cube_geometry()
-    position_bytes = pack_f32_triplets(positions)
-    normal_bytes = pack_f32_triplets(normals)
-    index_bytes = pack_u16(indices)
+    binary = bytearray()
+    buffer_views = []
+    accessors = []
+    material_index = 0
 
-    binary = align_four(position_bytes)
-    normal_offset = len(binary)
-    binary += align_four(normal_bytes)
-    index_offset = len(binary)
-    binary += align_four(index_bytes)
+    meshes = [
+        build_mesh(binary, buffer_views, accessors, cube_geometry(), "unit_cube", material_index),
+        build_mesh(binary, buffer_views, accessors, uv_sphere_geometry(), "unit_sphere", material_index),
+    ]
 
     nodes, root = mannequin_nodes()
+    while len(binary) % 4:
+        binary.append(0)
 
     return {
         "asset": {"version": "2.0", "generator": "codex-humanoid-mannequin-generator"},
@@ -302,19 +364,7 @@ def build_gltf():
                 },
             }
         ],
-        "meshes": [
-            {
-                "name": "unit_cube",
-                "primitives": [
-                    {
-                        "attributes": {"POSITION": 0, "NORMAL": 1},
-                        "indices": 2,
-                        "material": 0,
-                        "mode": 4,
-                    }
-                ],
-            }
-        ],
+        "meshes": meshes,
         "buffers": [
             {
                 "byteLength": len(binary),
@@ -322,43 +372,8 @@ def build_gltf():
                 + base64.b64encode(binary).decode("ascii"),
             }
         ],
-        "bufferViews": [
-            {"buffer": 0, "byteOffset": 0, "byteLength": len(position_bytes), "target": 34962},
-            {
-                "buffer": 0,
-                "byteOffset": normal_offset,
-                "byteLength": len(normal_bytes),
-                "target": 34962,
-            },
-            {
-                "buffer": 0,
-                "byteOffset": index_offset,
-                "byteLength": len(index_bytes),
-                "target": 34963,
-            },
-        ],
-        "accessors": [
-            {
-                "bufferView": 0,
-                "componentType": 5126,
-                "count": len(positions),
-                "type": "VEC3",
-                "min": [-0.5, -0.5, -0.5],
-                "max": [0.5, 0.5, 0.5],
-            },
-            {
-                "bufferView": 1,
-                "componentType": 5126,
-                "count": len(normals),
-                "type": "VEC3",
-            },
-            {
-                "bufferView": 2,
-                "componentType": 5123,
-                "count": len(indices),
-                "type": "SCALAR",
-            },
-        ],
+        "bufferViews": buffer_views,
+        "accessors": accessors,
     }
 
 

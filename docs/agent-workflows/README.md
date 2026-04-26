@@ -38,13 +38,15 @@
 - `cargo run -p content_tools -- diff-summary --path <file>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe <id>`
+- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Dialogue <id>`
+- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
 
 保底编译基线：
 
-- `cargo check -p game_editor -p bevy_item_editor -p bevy_recipe_editor -p bevy_map_editor -p content_tools`
+- `cargo check -p game_editor -p bevy_item_editor -p bevy_recipe_editor -p bevy_dialogue_editor -p bevy_quest_editor -p bevy_map_editor -p content_tools`
 
 ## Editor Handoff
 
@@ -52,6 +54,8 @@
 
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe <id>`
+- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Dialogue <id>`
+- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`

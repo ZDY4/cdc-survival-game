@@ -6,10 +6,9 @@ use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
     ErasedMaterialKey, ErasedMaterialPipelineKey, MaterialProperties, MeshPipeline,
     MeshPipelineKey, PrepassPipeline, PrepassPipelineSpecializer, PrepassVertexShader,
-    RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-    SetMeshViewBindingArrayBindGroup, SetPrepassViewBindGroup,
-    SetPrepassViewEmptyBindGroup, Shadow, ShadowBatchSetKey, ShadowBinKey, ShadowView,
-    ViewKeyCache,
+    RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup,
+    SetPrepassViewBindGroup, SetPrepassViewEmptyBindGroup, Shadow, ShadowBatchSetKey, ShadowBinKey,
+    ShadowView, ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::batching::gpu_preprocessing::GpuPreprocessingSupport;
@@ -215,7 +214,10 @@ fn specialize_world_render_standard_tile_shadow_pipeline(
     _key: ErasedMaterialPipelineKey,
 ) -> Result<(), SpecializedMeshPipelineError> {
     descriptor.label = Some("world_render_standard_tile_instanced_shadow_pipeline".into());
-    descriptor.vertex.buffers.push(standard_tile_instance_buffer_layout());
+    descriptor
+        .vertex
+        .buffers
+        .push(standard_tile_instance_buffer_layout());
     Ok(())
 }
 
@@ -252,9 +254,17 @@ fn prepare_world_render_standard_tile_instance_buffers(
             0.0,
         ];
         let option_flags = [
-            if batch_material_state.double_sided { 1.0 } else { 0.0 },
+            if batch_material_state.double_sided {
+                1.0
+            } else {
+                0.0
+            },
             if batch_material_state.unlit { 1.0 } else { 0.0 },
-            if batch_source.receive_shadows { 1.0 } else { 0.0 },
+            if batch_source.receive_shadows {
+                1.0
+            } else {
+                0.0
+            },
             0.0,
         ];
 

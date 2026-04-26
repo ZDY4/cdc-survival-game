@@ -31,7 +31,6 @@ pub(crate) struct PreviewCamera;
 pub(crate) fn sync_preview_scene_system(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut preview_state: ResMut<PreviewState>,
     existing_roots: Query<Entity, With<CharacterPreviewRoot>>,
@@ -47,13 +46,7 @@ pub(crate) fn sync_preview_scene_system(
         .as_ref()
         .filter(|preview| character_preview_has_explicit_gltf_model(preview))
     {
-        spawn_character_preview_scene(
-            &mut commands,
-            &asset_server,
-            &mut meshes,
-            &mut materials,
-            preview,
-        );
+        spawn_character_preview_scene(&mut commands, &asset_server, &mut materials, preview);
     }
     preview_state.applied_revision = preview_state.revision;
 }

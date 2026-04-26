@@ -12,6 +12,9 @@ members = [
     "apps/bevy_gltf_viewer",
     "apps/bevy_item_editor",
     "apps/bevy_recipe_editor",
+    "apps/bevy_dialogue_editor",
+    "apps/bevy_quest_editor",
+    "apps/bevy_skill_editor",
     "apps/content_tools",
 ]
 resolver = "2"

@@ -1,8 +1,7 @@
 use game_bevy::StaticWorldSemantic;
 use game_data::{
-    GridCoord, OverworldId, WorldSurfaceTileSetDefinition, WorldSurfaceTileSetId,
-    WorldTileLibrary, WorldTilePrototypeId, WorldTilePrototypeSource, WorldWallTileSetDefinition,
-    WorldWallTileSetId,
+    GridCoord, OverworldId, WorldSurfaceTileSetDefinition, WorldSurfaceTileSetId, WorldTileLibrary,
+    WorldTilePrototypeId, WorldTilePrototypeSource, WorldWallTileSetDefinition, WorldWallTileSetId,
 };
 
 use crate::state::{yes_no, EditorSelectionTarget, EditorState, LibraryView};
@@ -272,11 +271,7 @@ fn selected_map_cell_info(
     } else {
         lines.push(format!("Objects on cell: {}", objects.len()));
         for object in objects {
-            lines.push(format!(
-                "- {} [{:?}]",
-                object.object_id,
-                object.kind
-            ));
+            lines.push(format!("- {} [{:?}]", object.object_id, object.kind));
         }
     }
 

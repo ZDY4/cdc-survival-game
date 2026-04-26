@@ -11,8 +11,9 @@ use game_bevy::{
     },
 };
 use game_editor::{
-    configure_editor_app_shell, configure_game_ui_fonts_system, write_editor_session,
-    EditorAppShellConfig, EditorKind, GameUiFontsState, WindowSizePersistenceConfig,
+    configure_editor_app_shell, configure_game_ui_fonts_system, setup_primary_egui_context_camera,
+    write_editor_session, EditorAppShellConfig, EditorKind, GameUiFontsState,
+    WindowSizePersistenceConfig,
 };
 
 use crate::camera::{
@@ -88,7 +89,10 @@ pub(crate) fn run(initial_map_id: Option<String>) {
         .insert_resource(MiddleClickState::default())
         .insert_resource(ExternalMapSelectionState::new(repo_root))
         .insert_resource(InitialMapSelection(initial_map_id))
-        .add_systems(Startup, (setup_editor, load_editor_data_async))
+        .add_systems(
+            Startup,
+            (setup_primary_egui_camera, setup_editor, load_editor_data_async),
+        )
         .add_systems(
             EguiPrimaryContextPass,
             (
@@ -129,6 +133,13 @@ fn load_editor_data_async(mut commands: Commands) {
         }
     });
     commands.spawn((LoadingTask(task),));
+}
+
+fn setup_primary_egui_camera(
+    mut commands: Commands,
+    mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
+) {
+    setup_primary_egui_context_camera(&mut commands, &mut egui_global_settings);
 }
 
 fn handle_loading_task(

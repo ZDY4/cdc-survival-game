@@ -1,7 +1,8 @@
 use bevy_egui::egui;
+use game_editor::selectable_list_row;
 
 use crate::commands::RecipeEditorCommand;
-use crate::navigation::open_item_in_editor;
+use crate::navigation::{open_item_in_editor, open_skill_in_editor};
 use crate::state::{EditorState, RecipeEditorCatalogs};
 
 pub(crate) const LIST_PANEL_WIDTH: f32 = 300.0;
@@ -101,12 +102,7 @@ pub(crate) fn render_recipe_list_panel(
                     category
                 };
                 let display = format!("{label} <{category_label}>{suffix}");
-                if ui
-                    .add(
-                        egui::Button::selectable(selected, display.as_str())
-                            .truncate()
-                            .min_size(egui::vec2(ui.available_width(), 0.0)),
-                    )
+                if selectable_list_row(ui, selected, display.as_str())
                     .on_hover_text(display)
                     .clicked()
                 {
@@ -262,7 +258,17 @@ pub(crate) fn render_recipe_detail_panel(
             ui.label("无技能要求。");
         } else {
             for (skill_id, level) in &document.definition.skill_requirements {
-                ui.label(format!("{skill_id}: {level}"));
+                let status = render_skill_link_row(
+                    ui,
+                    editor,
+                    catalogs,
+                    "skill_requirements",
+                    skill_id,
+                    *level,
+                );
+                if navigation_status.is_none() {
+                    navigation_status = status;
+                }
             }
         }
     });
@@ -396,6 +402,27 @@ fn render_item_link_row(
     let button_text = format!("{label}: #{item_id} · {item_name}");
     if ui.link(button_text).clicked() {
         return Some(open_item_in_editor(&editor.repo_root, item_id).unwrap_or_else(|error| error));
+    }
+    None
+}
+
+fn render_skill_link_row(
+    ui: &mut egui::Ui,
+    editor: &EditorState,
+    catalogs: &RecipeEditorCatalogs,
+    label: &str,
+    skill_id: &str,
+    level: i32,
+) -> Option<String> {
+    let skill_name = catalogs
+        .skill_name(skill_id)
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("Unknown skill");
+    let button_text = format!("{label}: {skill_name} [{skill_id}] · Lv {level}");
+    if ui.link(button_text).clicked() {
+        return Some(
+            open_skill_in_editor(&editor.repo_root, skill_id).unwrap_or_else(|error| error),
+        );
     }
     None
 }

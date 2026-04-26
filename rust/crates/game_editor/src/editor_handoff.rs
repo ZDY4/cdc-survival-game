@@ -11,6 +11,9 @@ const HANDOFF_DIR: &str = "tmp/editor_handoff";
 pub enum EditorKind {
     Item,
     Recipe,
+    Dialogue,
+    Quest,
+    Skill,
     Character,
     Map,
     GltfViewer,
@@ -21,6 +24,9 @@ impl EditorKind {
         match self {
             Self::Item => "bevy_item_editor",
             Self::Recipe => "bevy_recipe_editor",
+            Self::Dialogue => "bevy_dialogue_editor",
+            Self::Quest => "bevy_quest_editor",
+            Self::Skill => "bevy_skill_editor",
             Self::Character => "bevy_character_editor",
             Self::Map => "bevy_map_editor",
             Self::GltfViewer => "bevy_gltf_viewer",

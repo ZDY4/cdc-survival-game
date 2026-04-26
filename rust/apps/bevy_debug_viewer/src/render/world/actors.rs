@@ -184,13 +184,8 @@ fn spawn_actor_visual_root(
     });
 
     if let Some(preview) = appearance_preview.filter(game_bevy::character_preview_is_available) {
-        let appearance_entity = game_bevy::spawn_character_preview_scene(
-            commands,
-            asset_server,
-            meshes,
-            materials,
-            &preview,
-        );
+        let appearance_entity =
+            game_bevy::spawn_character_preview_scene(commands, asset_server, materials, &preview);
         commands.entity(root_entity).add_child(appearance_entity);
     }
 

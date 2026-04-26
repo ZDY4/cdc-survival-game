@@ -34,6 +34,7 @@ impl WorkspaceDocument for WorkingRecipeDocument {
 #[derive(Resource, Debug, Clone)]
 pub(crate) struct RecipeEditorCatalogs {
     pub(crate) item_name_lookup: BTreeMap<u32, String>,
+    pub(crate) skill_name_lookup: BTreeMap<String, String>,
     pub(crate) item_ids: Vec<u32>,
     pub(crate) skill_ids: Vec<String>,
 }
@@ -41,6 +42,10 @@ pub(crate) struct RecipeEditorCatalogs {
 impl RecipeEditorCatalogs {
     pub(crate) fn item_name(&self, item_id: u32) -> Option<&str> {
         self.item_name_lookup.get(&item_id).map(String::as_str)
+    }
+
+    pub(crate) fn skill_name(&self, skill_id: &str) -> Option<&str> {
+        self.skill_name_lookup.get(skill_id).map(String::as_str)
     }
 }
 

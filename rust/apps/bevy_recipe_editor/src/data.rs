@@ -58,6 +58,10 @@ pub(crate) fn load_editor_resources(
             .iter()
             .map(|(item_id, definition)| (*item_id, definition.name.clone()))
             .collect::<BTreeMap<_, _>>(),
+        skill_name_lookup: skill_library
+            .iter()
+            .map(|(skill_id, definition)| (skill_id.clone(), definition.name.clone()))
+            .collect::<BTreeMap<_, _>>(),
         item_ids: item_library.ids().into_iter().collect(),
         skill_ids: skill_library.ids().into_iter().collect(),
     };

@@ -399,7 +399,11 @@ fn selected_outline_visual_state(
                 grid.y as f32 + render_config.floor_thickness_world * 0.5,
                 grid.z as f32 + 0.5,
             ),
-            Vec3::new(0.5, render_config.floor_thickness_world.max(0.04) * 0.5, 0.5),
+            Vec3::new(
+                0.5,
+                render_config.floor_thickness_world.max(0.04) * 0.5,
+                0.5,
+            ),
         ),
     };
 
@@ -409,10 +413,7 @@ fn selected_outline_visual_state(
     })
 }
 
-fn fallback_grid_selection(
-    editor: &EditorState,
-    ray: Ray3d,
-) -> Option<EditorSelectionTarget> {
+fn fallback_grid_selection(editor: &EditorState, ray: Ray3d) -> Option<EditorSelectionTarget> {
     let point = ray_point_on_horizontal_plane(ray, 0.0)?;
     let grid = match editor.selected_view {
         LibraryView::Maps => {
@@ -606,8 +607,10 @@ mod tests {
         );
 
         let centered_ray = Ray3d::new(Vec3::new(0.0, 0.0, 0.0), Dir3::Z);
-        let offset_ray =
-            Ray3d::new(Vec3::new(1.1, 0.0, 0.0), Dir3::new(Vec3::new(0.0, 0.0, 1.0)).unwrap());
+        let offset_ray = Ray3d::new(
+            Vec3::new(1.1, 0.0, 0.0),
+            Dir3::new(Vec3::new(0.0, 0.0, 1.0)).unwrap(),
+        );
 
         assert!(volume.ray_intersection_distance(centered_ray).is_some());
         assert!(volume.ray_intersection_distance(offset_ray).is_none());

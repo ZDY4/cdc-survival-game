@@ -12,7 +12,8 @@
   - `bevy_character_editor`
   - `bevy_item_editor`
   - `bevy_recipe_editor`
-  - `tools/tauri_editor`
+  - `bevy_dialogue_editor`
+  - `bevy_quest_editor`
 - 这说明基础方向是对的，但还需要把“内容如何稳定进入可玩版本”定义清楚。
 
 ## 核心问题
@@ -61,16 +62,6 @@
 - `rust/apps/bevy_character_editor`
 - 其他 Bevy 侧专用编辑器
 
-### 独立编辑器
-
-职责：
-
-- 任务、对话、表单型内容、工作流型内容
-
-对应目录：
-
-- `tools/tauri_editor`
-
 ## 可玩里程碑下的推荐内容包组织
 
 建议以后围绕“一个内容包”来推进，而不是散着改：
@@ -102,7 +93,8 @@
 - `rust/crates/game_editor`
 - `rust/apps/bevy_map_editor`
 - `rust/apps/bevy_character_editor`
-- `tools/tauri_editor`
+- `rust/apps/bevy_dialogue_editor`
+- `rust/apps/bevy_quest_editor`
 
 ## 任务拆分
 
@@ -114,7 +106,7 @@
 ### B. 定义工具边界
 
 - 空间内容优先走 Bevy 编辑器。
-- 表单型叙事内容优先走独立编辑器。
+- 非空间内容优先走共享 Rust 层 + 专用 Bevy viewer / editor。
 - 通用校验统一落到共享 Rust 层。
 
 ### C. 加强进入 playable 的验证链

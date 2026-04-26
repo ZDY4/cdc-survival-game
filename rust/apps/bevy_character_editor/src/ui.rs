@@ -8,7 +8,7 @@ mod detail_panel;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use game_editor::{GameUiFontsState, PreviewCameraController, PreviewViewportRect};
+use game_editor::{selectable_list_row, GameUiFontsState, PreviewCameraController, PreviewViewportRect};
 
 use crate::camera_mode::{PreviewCameraMode, PreviewCameraModeState};
 use crate::commands::CharacterEditorCommand;
@@ -192,30 +192,7 @@ fn render_character_list_panel(
                 let selected =
                     ui_state.selected_character_id.as_deref() == Some(summary.id.as_str());
                 let label = format!("{}  [{}]", summary.display_name, summary.id);
-                let desired_size = egui::vec2(ui.available_width(), 24.0);
-                let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
-                if ui.is_rect_visible(rect) {
-                    let visuals = ui.style().interact_selectable(&response, selected);
-                    ui.painter().rect(
-                        rect,
-                        visuals.corner_radius,
-                        visuals.bg_fill,
-                        visuals.bg_stroke,
-                        egui::StrokeKind::Middle,
-                    );
-                    let text_pos = egui::pos2(
-                        rect.left() + ui.style().spacing.button_padding.x,
-                        rect.center().y,
-                    );
-                    ui.painter().text(
-                        text_pos,
-                        egui::Align2::LEFT_CENTER,
-                        label.as_str(),
-                        egui::TextStyle::Button.resolve(ui.style()),
-                        visuals.text_color(),
-                    );
-                }
-                let response = response.on_hover_text(format!(
+                let response = selectable_list_row(ui, selected, label.as_str()).on_hover_text(format!(
                     "{}\n\n据点: {}\n角色职责: {}\n行为包: {}",
                     label,
                     non_empty(&summary.settlement_id),

@@ -4,6 +4,7 @@ pub(crate) mod panels;
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
+use game_editor::selectable_list_row;
 
 use crate::camera::{CAMERA_PAN_SPEED_MULTIPLIER_MAX, CAMERA_PAN_SPEED_MULTIPLIER_MIN};
 use crate::commands::MapEditorCommand;
@@ -168,16 +169,11 @@ pub(crate) fn editor_ui_system(
                                 }
                                 let label =
                                     map_library_item_label(&map_id, &name, dirty, has_diagnostics);
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width(), 0.0],
-                                        egui::Button::new(label.as_str())
-                                            .selected(
-                                                editor.selected_map_id.as_deref()
-                                                    == Some(map_id.as_str()),
-                                            )
-                                            .truncate(),
-                                    )
+                                if selectable_list_row(
+                                    ui,
+                                    editor.selected_map_id.as_deref() == Some(map_id.as_str()),
+                                    label.as_str(),
+                                )
                                     .on_hover_text(label)
                                     .clicked()
                                 {
@@ -210,16 +206,12 @@ pub(crate) fn editor_ui_system(
                                     continue;
                                 }
                                 let label = format!("{overworld_id} · {locations} locations");
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width(), 0.0],
-                                        egui::Button::new(label.as_str())
-                                            .selected(
-                                                editor.selected_overworld_id.as_deref()
-                                                    == Some(overworld_id.as_str()),
-                                            )
-                                            .truncate(),
-                                    )
+                                if selectable_list_row(
+                                    ui,
+                                    editor.selected_overworld_id.as_deref()
+                                        == Some(overworld_id.as_str()),
+                                    label.as_str(),
+                                )
                                     .on_hover_text(label)
                                     .clicked()
                                 {

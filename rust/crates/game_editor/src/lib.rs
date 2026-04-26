@@ -1,7 +1,9 @@
 pub mod app_shell;
 pub mod character_preview;
 pub mod editor_handoff;
+pub mod flow_graph;
 pub mod fonts;
+pub mod list_row;
 pub mod preview;
 pub mod preview_stage;
 pub mod primary_egui;
@@ -19,10 +21,15 @@ pub use editor_handoff::{
     read_editor_session, write_editor_navigation_request, write_editor_session, EditorKind,
     EditorNavigationAction, EditorNavigationRequest, EditorSession,
 };
+pub use flow_graph::{
+    render_read_only_flow_graph, FlowGraphCanvasState, FlowGraphEdge, FlowGraphModel,
+    FlowGraphNode, FlowGraphResponse,
+};
 pub use fonts::{
     configure_game_ui_fonts_system, game_ui_font_bytes, install_game_ui_fonts, load_game_ui_font,
     GameUiFontsState, GAME_UI_FONT_NAME,
 };
+pub use list_row::selectable_list_row;
 pub use preview::{
     apply_preview_orbit_camera, preview_camera_input_system, preview_camera_sync_system,
     replace_preview_scene, spawn_preview_floor, spawn_preview_light_rig, spawn_preview_origin_axes,

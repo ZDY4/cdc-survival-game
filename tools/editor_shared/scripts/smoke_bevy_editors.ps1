@@ -2,6 +2,8 @@ param(
     [string[]]$Editors = @(
         "bevy_item_editor",
         "bevy_recipe_editor",
+        "bevy_dialogue_editor",
+        "bevy_quest_editor",
         "bevy_character_editor",
         "bevy_map_editor"
     ),
@@ -30,6 +32,16 @@ $editorConfigs = @{
         AppId = "bevy_recipe_editor"
         Title = "CDC Recipe Editor"
         Launcher = Join-Path $repoRoot "run_bevy_recipe_editor.bat"
+    }
+    bevy_dialogue_editor = @{
+        AppId = "bevy_dialogue_editor"
+        Title = "CDC Dialogue Viewer"
+        Launcher = Join-Path $repoRoot "run_bevy_dialogue_editor.bat"
+    }
+    bevy_quest_editor = @{
+        AppId = "bevy_quest_editor"
+        Title = "CDC Quest Viewer"
+        Launcher = Join-Path $repoRoot "run_bevy_quest_editor.bat"
     }
     bevy_character_editor = @{
         AppId = "bevy_character_editor"

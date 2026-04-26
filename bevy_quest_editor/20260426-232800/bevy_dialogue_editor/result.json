@@ -1,0 +1,14 @@
+{
+  "editor": "bevy_dialogue_editor",
+  "status": "passed",
+  "launcher": "G:\\Projects\\cdc_survival_game\\run_bevy_dialogue_editor.bat",
+  "startedAt": "2026-04-26T23:28:03.4048067+08:00",
+  "launcherRootPid": 5004,
+  "windowProcessId": 20556,
+  "windowTitle": "",
+  "runtimeLog": "G:\\Projects\\cdc_survival_game\\logs\\bevy_dialogue_editor\\runtime.2026-04-26_23-28-38.442.log",
+  "consoleLog": "bevy_quest_editor\\20260426-232800\\bevy_dialogue_editor\\console.log",
+  "launcherWrapper": "bevy_quest_editor\\20260426-232800\\bevy_dialogue_editor\\launch-wrapper.cmd",
+  "screenshot": null,
+  "error": null
+}

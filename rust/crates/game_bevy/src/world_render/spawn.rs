@@ -27,7 +27,8 @@ use super::{
     WorldRenderPickProxy, WorldRenderPickProxyBounds, WorldRenderScene, WorldRenderSemanticTag,
     WorldRenderStandardTileBatchMaterialState, WorldRenderStandardTileBatchSource,
     WorldRenderStyleProfile, WorldRenderTileBatchRoot, WorldRenderTileBatchVisualState,
-    WorldRenderTileInstanceRenderData, WorldRenderTileInstanceTag, WorldRenderTileInstanceVisualState,
+    WorldRenderTileInstanceRenderData, WorldRenderTileInstanceTag,
+    WorldRenderTileInstanceVisualState,
 };
 
 const TRIGGER_ARROW_TEXTURE_SIZE: u32 = 64;

@@ -61,7 +61,6 @@ enum PreviewWeaponPoseKind {
 pub fn spawn_character_preview_scene(
     commands: &mut Commands,
     asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     preview: &ResolvedCharacterAppearancePreview,
 ) -> Entity {
@@ -98,28 +97,6 @@ pub fn spawn_character_preview_scene(
                 .id();
             commands.entity(root).add_child(child);
             builtin_mannequin_scene_root = Some(child);
-        } else {
-            let hidden = preview
-                .hidden_base_regions
-                .iter()
-                .cloned()
-                .collect::<BTreeSet<_>>();
-
-            for region_id in ["feet", "legs", "body", "head"] {
-                if hidden.contains(region_id) {
-                    continue;
-                }
-                spawn_base_region(
-                    commands,
-                    asset_server,
-                    meshes,
-                    materials,
-                    root,
-                    preview,
-                    region_id,
-                );
-            }
-            spawn_builtin_arms(commands, meshes, materials, root, preview);
         }
     } else if let Some(asset_path) = resolve_scene_asset_path(preview.base_model_asset.as_str()) {
         let child = commands
@@ -155,28 +132,10 @@ pub fn character_preview_is_available(preview: &ResolvedCharacterAppearancePrevi
     }
 
     if is_builtin_humanoid_mannequin(preview.base_model_asset.as_str()) {
-        if builtin_humanoid_mannequin_scene_asset().is_some() {
-            return true;
-        }
-        let hidden = preview
-            .hidden_base_regions
-            .iter()
-            .map(|region| region.as_str())
-            .collect::<BTreeSet<_>>();
-        if ["feet", "legs", "body", "head"]
-            .into_iter()
-            .any(|region_id| {
-                !hidden.contains(region_id) && builtin_base_region_asset(region_id).is_some()
-            })
-        {
-            return true;
-        }
+        return builtin_humanoid_mannequin_scene_asset().is_some();
     }
 
-    preview
-        .equipment
-        .iter()
-        .any(|entry| resolve_placeholder_mesh_asset(entry.visual_asset.as_str()).is_some())
+    false
 }
 
 pub fn sync_builtin_humanoid_mannequin_scene_system(
@@ -473,153 +432,6 @@ fn main_hand_pose_adjustment(asset_id: &str) -> (Vec3, Vec3) {
     }
 }
 
-fn spawn_base_region(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    parent: Entity,
-    preview: &ResolvedCharacterAppearancePreview,
-    region_id: &str,
-) {
-    if region_id == "head" {
-        let entity = commands
-            .spawn((
-                Mesh3d(meshes.add(Sphere::new(0.24))),
-                preview_material(materials, base_region_color(preview, region_id)),
-                Transform::from_translation(Vec3::new(0.0, 1.62, 0.0)),
-                GlobalTransform::default(),
-                Visibility::Visible,
-                InheritedVisibility::VISIBLE,
-                CharacterPreviewPart,
-            ))
-            .id();
-        commands.entity(parent).add_child(entity);
-        return;
-    }
-
-    let Some(mesh_asset) = builtin_base_region_asset(region_id) else {
-        return;
-    };
-
-    let translation = match region_id {
-        "feet" => Vec3::new(0.0, 0.08, 0.0),
-        "legs" => Vec3::new(0.0, 0.50, 0.0),
-        "body" => Vec3::new(0.0, 1.02, 0.0),
-        "head" => Vec3::new(0.0, 1.62, 0.0),
-        _ => Vec3::ZERO,
-    };
-    let entity = commands
-        .spawn((
-            Mesh3d(preview_mesh_asset(asset_server, &mesh_asset)),
-            preview_material(materials, base_region_color(preview, region_id)),
-            Transform::from_translation(translation),
-            GlobalTransform::default(),
-            Visibility::Visible,
-            InheritedVisibility::VISIBLE,
-            CharacterPreviewPart,
-        ))
-        .id();
-    commands.entity(parent).add_child(entity);
-}
-
-fn spawn_builtin_arms(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    parent: Entity,
-    preview: &ResolvedCharacterAppearancePreview,
-) {
-    let arm_color = base_region_color(preview, "body");
-    let (left_arm, right_arm) = builtin_arm_pose(preview);
-    for transform in [left_arm, right_arm] {
-        let entity = commands
-            .spawn((
-                Mesh3d(meshes.add(Capsule3d::new(0.07, 0.46))),
-                preview_material(materials, arm_color),
-                transform,
-                GlobalTransform::default(),
-                Visibility::Visible,
-                InheritedVisibility::VISIBLE,
-                CharacterPreviewPart,
-            ))
-            .id();
-        commands.entity(parent).add_child(entity);
-    }
-}
-
-fn builtin_arm_pose(preview: &ResolvedCharacterAppearancePreview) -> (Transform, Transform) {
-    let main_hand_kind = preview
-        .equipment
-        .iter()
-        .find(|entry| matches!(entry.attach_target, CharacterAttachTarget::MainHand))
-        .map(|entry| preview_weapon_pose_kind(entry.visual_asset.as_str()));
-    let has_offhand_item = preview
-        .equipment
-        .iter()
-        .any(|entry| matches!(entry.attach_target, CharacterAttachTarget::OffHand));
-
-    if has_offhand_item
-        && !matches!(
-            main_hand_kind,
-            Some(
-                PreviewWeaponPoseKind::Rifle
-                    | PreviewWeaponPoseKind::Pole
-                    | PreviewWeaponPoseKind::Heavy
-            )
-        )
-    {
-        return (
-            arm_transform(Vec3::new(-0.36, 1.13, 0.06), Vec3::new(16.0, 0.0, 44.0)),
-            arm_transform(Vec3::new(0.36, 1.13, 0.06), Vec3::new(16.0, 0.0, -44.0)),
-        );
-    }
-
-    match main_hand_kind.unwrap_or(PreviewWeaponPoseKind::Generic) {
-        PreviewWeaponPoseKind::Rifle => (
-            arm_transform(Vec3::new(-0.24, 1.08, 0.18), Vec3::new(30.0, 8.0, 42.0)),
-            arm_transform(Vec3::new(0.34, 1.18, 0.08), Vec3::new(12.0, 0.0, -40.0)),
-        ),
-        PreviewWeaponPoseKind::Pole => (
-            arm_transform(Vec3::new(-0.18, 1.02, 0.24), Vec3::new(28.0, 4.0, 58.0)),
-            arm_transform(Vec3::new(0.36, 1.16, 0.04), Vec3::new(8.0, 0.0, -36.0)),
-        ),
-        PreviewWeaponPoseKind::Heavy => (
-            arm_transform(Vec3::new(-0.24, 1.04, 0.16), Vec3::new(24.0, 6.0, 36.0)),
-            arm_transform(Vec3::new(0.34, 1.18, 0.06), Vec3::new(4.0, 0.0, -42.0)),
-        ),
-        PreviewWeaponPoseKind::Sidearm => (
-            arm_transform(Vec3::new(-0.40, 1.08, 0.02), Vec3::new(-6.0, 0.0, 20.0)),
-            arm_transform(Vec3::new(0.36, 1.15, 0.08), Vec3::new(18.0, 0.0, -48.0)),
-        ),
-        PreviewWeaponPoseKind::Dagger => (
-            arm_transform(Vec3::new(-0.40, 1.08, 0.02), Vec3::new(-4.0, 0.0, 20.0)),
-            arm_transform(Vec3::new(0.34, 1.12, 0.10), Vec3::new(20.0, 8.0, -62.0)),
-        ),
-        PreviewWeaponPoseKind::Sword | PreviewWeaponPoseKind::Blunt => (
-            arm_transform(Vec3::new(-0.40, 1.07, 0.02), Vec3::new(-6.0, 0.0, 18.0)),
-            arm_transform(Vec3::new(0.38, 1.16, 0.06), Vec3::new(10.0, 4.0, -50.0)),
-        ),
-        PreviewWeaponPoseKind::Generic => (
-            arm_transform(Vec3::new(-0.42, 1.10, 0.0), Vec3::new(0.0, 0.0, 18.0)),
-            arm_transform(Vec3::new(0.42, 1.10, 0.0), Vec3::new(0.0, 0.0, -18.0)),
-        ),
-    }
-}
-
-fn arm_transform(translation: Vec3, rotation_degrees: Vec3) -> Transform {
-    Transform {
-        translation,
-        rotation: Quat::from_euler(
-            EulerRot::XYZ,
-            rotation_degrees.x.to_radians(),
-            rotation_degrees.y.to_radians(),
-            rotation_degrees.z.to_radians(),
-        ),
-        ..default()
-    }
-}
-
 fn preview_weapon_pose_kind(asset_id: &str) -> PreviewWeaponPoseKind {
     let asset_id = asset_id.trim().to_ascii_lowercase();
 
@@ -741,17 +553,6 @@ fn preview_mesh_asset(asset_server: &AssetServer, asset_path: &str) -> Handle<Me
         }
         .from_asset(asset_path.to_string()),
     )
-}
-
-fn builtin_base_region_asset(region_id: &str) -> Option<String> {
-    let path = match region_id {
-        "head" => "bevy_preview/placeholders/base_head.gltf",
-        "body" => "bevy_preview/placeholders/base_body.gltf",
-        "legs" => "bevy_preview/placeholders/base_legs.gltf",
-        "feet" => "bevy_preview/placeholders/base_feet.gltf",
-        _ => return None,
-    };
-    resolve_item_preview_asset_path(path)
 }
 
 fn resolve_placeholder_mesh_asset(asset_id: &str) -> Option<String> {

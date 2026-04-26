@@ -44,14 +44,15 @@
 - `rust/crates/game_editor`: Rust 侧可复用的编辑器支撑能力。
 - `rust/apps/bevy_server`: Bevy 运行时核心入口。
 - `rust/apps/bevy_debug_viewer`: 运行时调试与显示入口。
-- `rust/apps/bevy_map_editor` / `rust/apps/bevy_character_editor`: Bevy 侧专用编辑器。
-- `tools/tauri_editor`: 独立桌面编辑器。
+- `rust/apps/bevy_map_editor` / `rust/apps/bevy_character_editor`: Bevy 侧空间与角色专用编辑器。
+- `rust/apps/bevy_item_editor` / `rust/apps/bevy_recipe_editor`: Bevy 侧共享数据查看与编辑入口。
+- `rust/apps/bevy_dialogue_editor` / `rust/apps/bevy_quest_editor`: Bevy 侧共享叙事数据查看入口。
 
 ## 编辑器约束
 
 - 数据编辑、保存、校验尽量复用共享 Rust 层能力，不让编辑器前端各自维护一套独立长期数据格式。
 - 强依赖 3D 场景、预览、空间交互的编辑能力可放在 Bevy 编辑器侧。
-- 偏内容管理、表单、工作流、文本生产的编辑能力优先放在独立编辑器侧。
+- 偏内容管理、表单、工作流、文本生产的能力优先收口到共享 Rust 层，再按需要接到专用 Bevy app。
 - 需求不明确时，优先把新增能力放到共享 Rust 层，再接到具体 app 或编辑器；若现有实现与共享层方向冲突，优先收口到共享层，而不是继续扩散到消费端。
 - 若一段逻辑既能做成共享规则库，也能直接写进 Bevy system，优先先抽共享规则，再做 Bevy 集成；开发时优先做“小模块组合”，不要做“大文件追加”。
 

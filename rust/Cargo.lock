@@ -719,6 +719,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_dialogue_editor"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_egui",
+ "game_bevy",
+ "game_data",
+ "game_editor",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bevy_ecs"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1344,6 +1357,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7a9329e8dc4e01ced480eeec4902e6d7cb56e56ec37f6fbc4323e5c937290a7"
 
 [[package]]
+name = "bevy_quest_editor"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_egui",
+ "game_bevy",
+ "game_data",
+ "game_editor",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bevy_recipe_editor"
 version = "0.1.0"
 dependencies = [
@@ -1513,6 +1539,18 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "wgpu-types",
+]
+
+[[package]]
+name = "bevy_skill_editor"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_egui",
+ "game_bevy",
+ "game_data",
+ "game_editor",
+ "serde_json",
 ]
 
 [[package]]

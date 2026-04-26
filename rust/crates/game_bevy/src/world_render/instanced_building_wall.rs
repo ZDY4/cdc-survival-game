@@ -6,10 +6,9 @@ use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
     ErasedMaterialKey, ErasedMaterialPipelineKey, MaterialProperties, MeshPipeline,
     MeshPipelineKey, PrepassPipeline, PrepassPipelineSpecializer, PrepassVertexShader,
-    RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-    SetMeshViewBindingArrayBindGroup, SetPrepassViewBindGroup,
-    SetPrepassViewEmptyBindGroup, Shadow, ShadowBatchSetKey, ShadowBinKey, ShadowView,
-    ViewKeyCache,
+    RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup,
+    SetPrepassViewBindGroup, SetPrepassViewEmptyBindGroup, Shadow, ShadowBatchSetKey, ShadowBinKey,
+    ShadowView, ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::batching::gpu_preprocessing::GpuPreprocessingSupport;
@@ -318,7 +317,11 @@ fn prepare_world_render_building_wall_tile_instance_buffers(
                     } else {
                         profile.top_face_grid_visibility.clamp(0.0, 1.0)
                     },
-                    if batch_source.receive_shadows { 1.0 } else { 0.0 },
+                    if batch_source.receive_shadows {
+                        1.0
+                    } else {
+                        0.0
+                    },
                 ],
             };
 

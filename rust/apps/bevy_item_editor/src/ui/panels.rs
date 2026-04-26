@@ -1,4 +1,5 @@
 use bevy_egui::egui;
+use game_editor::selectable_list_row;
 
 use crate::commands::ItemEditorCommand;
 use crate::preview::PreviewState;
@@ -93,12 +94,7 @@ pub(crate) fn render_item_list_panel(
                     (false, false) => "",
                 };
                 let display = format!("{label}{suffix}");
-                if ui
-                    .add(
-                        egui::Button::selectable(selected, display.as_str())
-                            .truncate()
-                            .min_size(egui::vec2(ui.available_width(), 0.0)),
-                    )
+                if selectable_list_row(ui, selected, display.as_str())
                     .on_hover_text(display)
                     .clicked()
                 {

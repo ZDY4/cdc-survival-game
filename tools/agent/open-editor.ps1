@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Open or reuse a Bevy editor instance and select a specific item, recipe, character, or map.
+Open or reuse a Bevy editor instance and select a specific item, recipe, dialogue, quest, character, or map.
 
 .DESCRIPTION
 This script is the standard repo-local handoff entry for editor review and manual refinement.
@@ -16,6 +16,12 @@ Numeric item id to open in `bevy_item_editor`.
 .PARAMETER Recipe
 Recipe id to open in `bevy_recipe_editor`.
 
+.PARAMETER Dialogue
+Dialogue id to open in `bevy_dialogue_editor`.
+
+.PARAMETER Quest
+Quest id to open in `bevy_quest_editor`.
+
 .PARAMETER Map
 Map id to open in `bevy_map_editor`.
 
@@ -29,17 +35,25 @@ pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item 1001
 pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe recipe_bandage_basic
 
 .EXAMPLE
+pwsh -NoProfile -File tools/agent/open-editor.ps1 -Dialogue trader_lao_wang
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest tutorial_survive
+
+.EXAMPLE
 pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map forest
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character scavenger_maya
 
 .NOTES
-Use exactly one of `-Item`, `-Recipe`, `-Map`, or `-Character`.
+Use exactly one of `-Item`, `-Recipe`, `-Dialogue`, `-Quest`, `-Map`, or `-Character`.
 #>
 param(
     [int]$Item,
     [string]$Recipe,
+    [string]$Dialogue,
+    [string]$Quest,
     [string]$Map,
     [string]$Character
 )
@@ -60,6 +74,8 @@ function Get-EditorFileStem {
     switch ($Target) {
         "item" { return "bevy_item_editor" }
         "recipe" { return "bevy_recipe_editor" }
+        "dialogue" { return "bevy_dialogue_editor" }
+        "quest" { return "bevy_quest_editor" }
         "map" { return "bevy_map_editor" }
         "character" { return "bevy_character_editor" }
         default { throw "unsupported editor target: $Target" }
@@ -146,12 +162,14 @@ function Try-FocusEditorProcess {
 $requestedTargets = @(
     if ($PSBoundParameters.ContainsKey("Item")) { "item" }
     if ($PSBoundParameters.ContainsKey("Recipe")) { "recipe" }
+    if ($PSBoundParameters.ContainsKey("Dialogue")) { "dialogue" }
+    if ($PSBoundParameters.ContainsKey("Quest")) { "quest" }
     if ($PSBoundParameters.ContainsKey("Map")) { "map" }
     if ($PSBoundParameters.ContainsKey("Character")) { "character" }
 )
 
 if ($requestedTargets.Count -ne 1) {
-    throw "use exactly one of -Item, -Recipe, -Map, or -Character"
+    throw "use exactly one of -Item, -Recipe, -Dialogue, -Quest, -Map, or -Character"
 }
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
@@ -167,6 +185,20 @@ switch ($requestedTargets[0]) {
         }
         $launcher = Join-Path $repoRoot "run_bevy_recipe_editor.bat"
         $arguments = @("--select-recipe", $Recipe)
+    }
+    "dialogue" {
+        if ([string]::IsNullOrWhiteSpace($Dialogue)) {
+            throw "-Dialogue requires a non-empty dialogue id"
+        }
+        $launcher = Join-Path $repoRoot "run_bevy_dialogue_editor.bat"
+        $arguments = @("--select-dialogue", $Dialogue)
+    }
+    "quest" {
+        if ([string]::IsNullOrWhiteSpace($Quest)) {
+            throw "-Quest requires a non-empty quest id"
+        }
+        $launcher = Join-Path $repoRoot "run_bevy_quest_editor.bat"
+        $arguments = @("--select-quest", $Quest)
     }
     "map" {
         if ([string]::IsNullOrWhiteSpace($Map)) {
@@ -189,7 +221,7 @@ if (-not (Test-Path -LiteralPath $launcher)) {
 }
 
 $existingSession = $null
-if ($requestedTargets[0] -in @("item", "recipe", "map", "character")) {
+if ($requestedTargets[0] -in @("item", "recipe", "dialogue", "quest", "map", "character")) {
     $existingSession = Test-RecentEditorSession -RepoRoot $repoRoot -Target $requestedTargets[0]
 }
 
@@ -197,6 +229,8 @@ if ($null -ne $existingSession) {
     $targetId = switch ($requestedTargets[0]) {
         "item" { "$Item" }
         "recipe" { $Recipe }
+        "dialogue" { $Dialogue }
+        "quest" { $Quest }
         "map" { $Map }
         "character" { $Character }
         default { throw "unsupported navigation target: $($requestedTargets[0])" }

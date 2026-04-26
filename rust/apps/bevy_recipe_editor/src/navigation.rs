@@ -8,6 +8,7 @@ use game_editor::{
 };
 
 const ITEM_EDITOR_ACTIVE_MAX_AGE: Duration = Duration::from_secs(5);
+const SKILL_EDITOR_ACTIVE_MAX_AGE: Duration = Duration::from_secs(5);
 
 pub(crate) fn open_item_in_editor(repo_root: &Path, item_id: u32) -> Result<String, String> {
     write_editor_navigation_request(
@@ -30,6 +31,30 @@ pub(crate) fn open_item_in_editor(repo_root: &Path, item_id: u32) -> Result<Stri
     launch_item_editor(repo_root, item_id)?;
     Ok(format!(
         "Launched item editor and requested selection for item {item_id}."
+    ))
+}
+
+pub(crate) fn open_skill_in_editor(repo_root: &Path, skill_id: &str) -> Result<String, String> {
+    write_editor_navigation_request(
+        repo_root,
+        EditorKind::Skill,
+        EditorNavigationAction::SelectRecord,
+        "skill",
+        skill_id,
+    )?;
+
+    if editor_session_is_recent(repo_root, EditorKind::Skill, SKILL_EDITOR_ACTIVE_MAX_AGE)? {
+        let focused = focus_existing_editor(repo_root, EditorKind::Skill);
+        return Ok(if focused {
+            format!("Requested skill editor to select skill {skill_id}.")
+        } else {
+            format!("Updated skill editor selection to skill {skill_id}.")
+        });
+    }
+
+    launch_skill_editor(repo_root, skill_id)?;
+    Ok(format!(
+        "Launched skill editor and requested selection for skill {skill_id}."
     ))
 }
 
@@ -60,8 +85,38 @@ fn launch_item_editor(repo_root: &Path, item_id: u32) -> Result<(), String> {
     }
 }
 
+fn launch_skill_editor(repo_root: &Path, skill_id: &str) -> Result<(), String> {
+    let script_path = repo_root.join("run_bevy_skill_editor.bat");
+    if !script_path.exists() {
+        return Err(format!(
+            "skill editor launcher is missing: {}",
+            script_path.display()
+        ));
+    }
+
+    let script = script_path.display().to_string();
+    let status = Command::new("cmd")
+        .args(["/C", "start", "", &script, "--select-skill", skill_id])
+        .current_dir(repo_root)
+        .status()
+        .map_err(|error| format!("failed to launch skill editor: {error}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "skill editor launcher exited with status {:?}",
+            status.code()
+        ))
+    }
+}
+
 fn focus_existing_item_editor(repo_root: &Path) -> bool {
-    let Ok(Some(session)) = read_editor_session(repo_root, EditorKind::Item) else {
+    focus_existing_editor(repo_root, EditorKind::Item)
+}
+
+fn focus_existing_editor(repo_root: &Path, editor: EditorKind) -> bool {
+    let Ok(Some(session)) = read_editor_session(repo_root, editor) else {
         return false;
     };
 

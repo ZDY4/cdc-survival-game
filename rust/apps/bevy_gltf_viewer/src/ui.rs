@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use game_editor::{GameUiFontsState, PreviewCameraController, PreviewViewportRect};
+use game_editor::{selectable_list_row, GameUiFontsState, PreviewCameraController, PreviewViewportRect};
 
 use crate::catalog::ModelCatalog;
 use crate::commands::GltfViewerCommand;
@@ -95,13 +95,7 @@ pub(crate) fn viewer_ui_system(
                 for entry in filtered {
                     let selected = ui_state.selected_model_path.as_deref()
                         == Some(entry.relative_path.as_str());
-                    let response = ui
-                        .add_sized(
-                            [ui.available_width(), 0.0],
-                            egui::Button::new(entry.display_name.as_str())
-                                .selected(selected)
-                                .truncate(),
-                        )
+                    let response = selectable_list_row(ui, selected, entry.display_name.as_str())
                         .on_hover_text(entry.relative_path.as_str());
                     if response.clicked() && !selected {
                         requests.write(GltfViewerCommand::SelectModel(entry.relative_path.clone()));
