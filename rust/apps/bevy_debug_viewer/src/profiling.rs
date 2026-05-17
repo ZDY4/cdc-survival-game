@@ -306,6 +306,7 @@ pub(crate) fn profiled_sync_actor_labels(
         runtime_state,
         motion_state,
         viewer_state,
+        info_panel_state,
         palette,
         render_config,
         viewer_font,

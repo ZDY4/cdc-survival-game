@@ -17,6 +17,7 @@ pub(crate) fn sync_actor_labels(
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    info_panel_state: Res<ViewerInfoPanelState>,
     palette: Res<ViewerPalette>,
     render_config: Res<ViewerRenderConfig>,
     viewer_font: Res<ViewerUiFont>,
@@ -45,6 +46,7 @@ pub(crate) fn sync_actor_labels(
                 .find(|actor| actor.grid_position == grid)
         })
         .map(|actor| actor.actor_id);
+    let current_actor_label_enabled = info_panel_state.active_page() == Some(ViewerHudPage::TurnSys);
 
     for actor in snapshot
         .actors
@@ -63,12 +65,11 @@ pub(crate) fn sync_actor_labels(
             actor,
             interaction_locked,
             hovered_actor_id,
-        ) && actor_visible;
-        let label = if interaction_locked {
-            format!("{} [交互中]", actor_label(actor))
-        } else {
-            actor_label(actor)
-        };
+        );
+        let is_current_turn_actor = snapshot.combat.current_actor_id == Some(actor.actor_id);
+        let show_current_turn_label = current_actor_label_enabled && is_current_turn_actor;
+        let should_show_label = (should_show_label || show_current_turn_label) && actor_visible;
+        let label = actor_overlay_label(actor, interaction_locked, show_current_turn_label);
         let color = actor_color(actor.side, &palette);
         let world_position = actor_label_world_position(
             actor_visual_world_position(&runtime_state, &motion_state, actor),
@@ -156,6 +157,22 @@ pub(crate) fn sync_actor_labels(
             commands.entity(entity).despawn();
         }
     }
+}
+
+fn actor_overlay_label(
+    actor: &game_core::ActorDebugState,
+    interaction_locked: bool,
+    show_current_turn_label: bool,
+) -> String {
+    let mut label = if show_current_turn_label {
+        format!("当前行动: {}", actor_label(actor))
+    } else {
+        actor_label(actor)
+    };
+    if interaction_locked {
+        label.push_str(" [交互中]");
+    }
+    label
 }
 
 pub(crate) fn clear_damage_numbers(

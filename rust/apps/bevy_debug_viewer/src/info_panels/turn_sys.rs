@@ -14,10 +14,7 @@ pub(crate) fn format_turn_sys_panel(
         "Turn System",
         vec![
             kv("Combat Active", snapshot.combat.in_combat),
-            kv(
-                "Current Actor",
-                format!("{:?}", snapshot.combat.current_actor_id),
-            ),
+            kv("Current Actor", current_actor_label(snapshot)),
             kv("Combat Turn Index", combat_turn_index_label(snapshot)),
             kv("Runtime Tick", runtime_state.runtime.tick_count()),
             kv(
@@ -72,4 +69,17 @@ pub(crate) fn format_turn_sys_panel(
     sections.push(section("Selected Actor Turn State", selected_turn_lines));
 
     sections.join("\n\n")
+}
+
+fn current_actor_label(snapshot: &SimulationSnapshot) -> String {
+    let Some(actor_id) = snapshot.combat.current_actor_id else {
+        return "None".to_string();
+    };
+
+    snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == actor_id)
+        .map(|actor| format!("{} ({:?})", actor_label(actor), actor_id))
+        .unwrap_or_else(|| format!("{actor_id:?} (missing actor)"))
 }

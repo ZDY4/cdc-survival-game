@@ -37,8 +37,8 @@ use crate::state::{
     InteractionMenuOptionsRoot, InteractionMenuRoot, InteractionMenuState, UiMouseBlocker,
     UiMouseBlockerName, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
     ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerOverlayMode,
-    ViewerPalette, ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState,
-    ViewerStyleProfile, ViewerUiFont,
+    ViewerHudPage, ViewerInfoPanelState, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState,
+    ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiFont,
 };
 use crate::ui_context_menu::{
     context_menu_border_color, context_menu_button_color, context_menu_button_node,
