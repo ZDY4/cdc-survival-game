@@ -2,6 +2,7 @@
 
 use super::*;
 use game_bevy::world_render::build_generated_door_mesh_spec;
+use std::collections::HashSet;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sync_generated_door_visuals(
@@ -86,13 +87,13 @@ pub(super) fn sync_generated_door_visuals(
         }
     }
 
-    restore_occluder_list(
-        &mut door_visual_state.occluders,
-        None,
+    let previous_occluders = std::mem::take(&mut door_visual_state.occluders);
+    door_visual_state.occluders = refresh_closed_door_occluders(
+        door_visual_state,
+        previous_occluders,
         materials,
         building_wall_materials,
     );
-    door_visual_state.occluders = collect_closed_door_occluders(door_visual_state);
 }
 
 pub(super) fn collect_closed_door_occluders(
@@ -115,6 +116,51 @@ pub(super) fn collect_closed_door_occluders(
             currently_faded: false,
         })
         .collect()
+}
+
+pub(super) fn refresh_closed_door_occluders(
+    door_visual_state: &GeneratedDoorVisualState,
+    previous_occluders: Vec<StaticWorldOccluderVisual>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+) -> Vec<StaticWorldOccluderVisual> {
+    let closed_object_ids = door_visual_state
+        .by_door
+        .values()
+        .filter(|visual| !visual.is_open)
+        .map(|visual| visual.map_object_id.as_str())
+        .collect::<HashSet<_>>();
+    let faded_object_ids = previous_occluders
+        .iter()
+        .filter(|occluder| occluder.currently_faded)
+        .filter_map(|occluder| occluder.hover_map_object_id.as_deref())
+        .map(str::to_owned)
+        .collect::<HashSet<_>>();
+
+    for mut occluder in previous_occluders {
+        let still_closed = occluder
+            .hover_map_object_id
+            .as_deref()
+            .is_some_and(|object_id| closed_object_ids.contains(object_id));
+        if !still_closed {
+            set_occluder_faded(
+                &mut occluder,
+                false,
+                None,
+                materials,
+                building_wall_materials,
+            );
+        }
+    }
+
+    let mut next_occluders = collect_closed_door_occluders(door_visual_state);
+    for occluder in &mut next_occluders {
+        occluder.currently_faded = occluder
+            .hover_map_object_id
+            .as_deref()
+            .is_some_and(|object_id| faded_object_ids.contains(object_id));
+    }
+    next_occluders
 }
 
 #[allow(clippy::too_many_arguments)]

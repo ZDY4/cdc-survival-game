@@ -9,11 +9,12 @@ use super::{
     collect_walkable_tile_overlay_cells, darken_color, generated_door_render_polygon,
     interaction_menu_button_font_size_for_label, interaction_menu_layout, lighten_color,
     occluder_blocks_visible_cells, occluder_should_fade, occupied_cells_box,
-    project_shadowed_visible_cells, resolve_active_interaction_hover,
-    should_draw_actor_selection_ring, should_fade_occluder, should_hide_building_roofs,
-    should_show_actor_label, sync_hover_mesh_outlines, update_camera_follow_focus, GridBounds,
-    HoverOutlineMember, MaterialStyle, StaticWorldOccluderKind, WalkableTileOverlayKind,
-    HOVER_MESH_OUTLINE_WIDTH_PX, INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
+    project_shadowed_visible_cells, refresh_closed_door_occluders,
+    resolve_active_interaction_hover, should_draw_actor_selection_ring, should_fade_occluder,
+    should_hide_building_roofs, should_show_actor_label, sync_hover_mesh_outlines,
+    update_camera_follow_focus, GridBounds, HoverOutlineMember, MaterialStyle,
+    StaticWorldOccluderKind, WalkableTileOverlayKind, HOVER_MESH_OUTLINE_WIDTH_PX,
+    INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
     INTERACTION_MENU_ITEM_HEIGHT_PX, INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX,
     INTERACTION_MENU_PADDING_PX, INTERACTION_MENU_WIDTH_PX,
 };
@@ -860,6 +861,85 @@ fn closed_doors_only_contribute_occluders() {
         occluders[0].hover_map_object_id.as_deref(),
         Some("door_object")
     );
+}
+
+#[test]
+fn closed_door_occluder_refresh_preserves_existing_fade() {
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let material_handle = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        alpha_mode: AlphaMode::Opaque,
+        ..default()
+    });
+    let mut door_visual_state = GeneratedDoorVisualState::default();
+    let mut visual = sample_door_visual(false, vec![GridCoord::new(2, 0, 3)]);
+    visual.material = StaticWorldMaterialHandle::Standard(material_handle.clone());
+    door_visual_state.by_door.insert("closed".into(), visual);
+    let mut previous_occluders = collect_closed_door_occluders(&door_visual_state);
+
+    set_occluder_faded(
+        &mut previous_occluders[0],
+        true,
+        None,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+    let refreshed = refresh_closed_door_occluders(
+        &door_visual_state,
+        previous_occluders,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    assert_eq!(refreshed.len(), 1);
+    assert!(refreshed[0].currently_faded);
+    let material = materials
+        .get(&material_handle)
+        .expect("door material should still exist after refresh");
+    assert_eq!(material.base_color.to_srgba().alpha, 0.28);
+    assert_eq!(material.alpha_mode, AlphaMode::Blend);
+}
+
+#[test]
+fn closed_door_occluder_refresh_restores_opened_doors() {
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let material_handle = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        alpha_mode: AlphaMode::Opaque,
+        ..default()
+    });
+    let mut door_visual_state = GeneratedDoorVisualState::default();
+    let mut visual = sample_door_visual(false, vec![GridCoord::new(2, 0, 3)]);
+    visual.material = StaticWorldMaterialHandle::Standard(material_handle.clone());
+    door_visual_state
+        .by_door
+        .insert("door".into(), visual.clone());
+    let mut previous_occluders = collect_closed_door_occluders(&door_visual_state);
+    set_occluder_faded(
+        &mut previous_occluders[0],
+        true,
+        None,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    visual.is_open = true;
+    door_visual_state.by_door.insert("door".into(), visual);
+    let refreshed = refresh_closed_door_occluders(
+        &door_visual_state,
+        previous_occluders,
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    assert!(refreshed.is_empty());
+    let material = materials
+        .get(&material_handle)
+        .expect("door material should still exist after restore");
+    assert_eq!(material.base_color.to_srgba().alpha, 1.0);
+    assert_eq!(material.alpha_mode, AlphaMode::Opaque);
 }
 
 #[test]

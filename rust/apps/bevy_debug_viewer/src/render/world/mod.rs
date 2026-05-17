@@ -321,6 +321,21 @@ pub(super) fn collect_closed_door_occluders(
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn refresh_closed_door_occluders(
+    door_visual_state: &GeneratedDoorVisualState,
+    previous_occluders: Vec<StaticWorldOccluderVisual>,
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+) -> Vec<StaticWorldOccluderVisual> {
+    doors::refresh_closed_door_occluders(
+        door_visual_state,
+        previous_occluders,
+        materials,
+        building_wall_materials,
+    )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn generated_door_render_polygon(
     door: &game_core::GeneratedDoorDebugState,
     grid_size: f32,
