@@ -1,4 +1,8 @@
 use bevy::prelude::*;
+use game_bevy::rust_asset_dir;
+use game_editor::{
+    open_model_directory, open_model_in_blockbench, open_model_in_gltf_viewer,
+};
 
 use crate::actions::{
     delete_current_document, reload_editor_content, save_all_dirty_documents,
@@ -14,6 +18,9 @@ pub(crate) enum ItemEditorCommand {
     SaveAllDirty,
     DeleteCurrent,
     SelectDocument { key: String },
+    OpenPreviewModelInBlockbench(String),
+    OpenPreviewModelInGltfViewer(String),
+    OpenPreviewModelDirectory(String),
 }
 
 pub(crate) fn handle_item_editor_commands(
@@ -43,6 +50,20 @@ pub(crate) fn handle_item_editor_commands(
                     .workspace
                     .set_selected_document_key(Some(key.clone()));
                 editor.ensure_selection();
+            }
+            ItemEditorCommand::OpenPreviewModelInBlockbench(asset_path) => {
+                editor.status = open_model_in_blockbench(&rust_asset_dir(), asset_path)
+                    .unwrap_or_else(|error| error);
+            }
+            ItemEditorCommand::OpenPreviewModelInGltfViewer(asset_path) => {
+                editor.status =
+                    open_model_in_gltf_viewer(&editor.repo_root, &rust_asset_dir(), asset_path)
+                        .unwrap_or_else(|error| error);
+            }
+            ItemEditorCommand::OpenPreviewModelDirectory(asset_path) => {
+                editor.status = open_model_directory(&rust_asset_dir(), asset_path)
+                    .map(|directory| format!("已打开模型目录: {}", directory.display()))
+                    .unwrap_or_else(|error| error);
             }
         }
     }

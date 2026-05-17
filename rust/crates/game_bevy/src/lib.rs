@@ -20,6 +20,7 @@ pub mod container_visuals;
 mod content;
 pub mod item_preview;
 mod logging;
+pub mod mesh_picking;
 pub mod new_game;
 pub mod npc_life;
 pub mod reservations;
@@ -39,7 +40,8 @@ pub use character_preview::{
     character_preview_is_available, parse_preview_color, resolve_runtime_character_preview,
     runtime_actor_equipped_loadout, runtime_character_appearance_key,
     spawn_character_preview_scene, sync_builtin_humanoid_mannequin_scene_system,
-    CharacterPreviewPart, CharacterPreviewRoot, RuntimeCharacterAppearanceKey,
+    CharacterPreviewModelAsset, CharacterPreviewPart, CharacterPreviewRoot,
+    RuntimeCharacterAppearanceKey,
 };
 pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;
@@ -48,6 +50,7 @@ pub use item_preview::{
     resolve_standalone_item_preview, ResolvedStandaloneItemPreview,
 };
 pub use logging::{init_runtime_logging, RuntimeLogInitError, RuntimeLogSettings};
+pub use mesh_picking::{MeshPickHit, MeshPickIndex, MeshPickPrototypeKey};
 pub use new_game::{
     apply_new_game_config, apply_new_game_seed_overrides, load_new_game_config,
     load_new_game_config_on_startup, NewGameConfig, NewGameConfigError, NewGameConfigPath,

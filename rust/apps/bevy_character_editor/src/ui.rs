@@ -8,7 +8,10 @@ mod detail_panel;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use game_editor::{selectable_list_row, GameUiFontsState, PreviewCameraController, PreviewViewportRect};
+use game_bevy::MeshPickIndex;
+use game_editor::{
+    selectable_list_row, GameUiFontsState, PreviewCameraController, PreviewViewportRect,
+};
 
 use crate::camera_mode::{PreviewCameraMode, PreviewCameraModeState};
 use crate::commands::CharacterEditorCommand;
@@ -82,15 +85,21 @@ pub(crate) fn editor_ui_system(
     data: Res<EditorData>,
     mut ui_state: ResMut<EditorUiState>,
     preview_state: Res<PreviewState>,
+    pick_index: Res<MeshPickIndex<String>>,
     camera_mode: Res<PreviewCameraModeState>,
-    mut preview_camera_query: Query<&mut PreviewCameraController, With<PreviewCamera>>,
+    mut preview_camera_query: Query<
+        (&Camera, &GlobalTransform, &mut PreviewCameraController),
+        With<PreviewCamera>,
+    >,
     mut requests: MessageWriter<CharacterEditorCommand>,
 ) {
     let ctx = contexts
         .ctx_mut()
         .expect("primary egui context should exist for the character editor");
 
-    let Ok(mut preview_camera) = preview_camera_query.single_mut() else {
+    let Ok((preview_camera_component, preview_camera_transform, mut preview_camera)) =
+        preview_camera_query.single_mut()
+    else {
         return;
     };
 
@@ -147,7 +156,42 @@ pub(crate) fn editor_ui_system(
                 height: rect.height(),
             });
             preview_camera.block_pointer_input = false;
-            ui.allocate_rect(rect, egui::Sense::hover());
+            let response = ui.allocate_rect(rect, egui::Sense::hover());
+            if response.secondary_clicked() {
+                ui_state.preview_context_model_path = picked_preview_model_asset(
+                    ui.ctx(),
+                    preview_camera_component,
+                    preview_camera_transform,
+                    &pick_index,
+                );
+            }
+            let context_asset_path = ui_state.preview_context_model_path.clone();
+            response.context_menu(|ui| {
+                let Some(asset_path) = context_asset_path.as_deref() else {
+                    ui.close();
+                    return;
+                };
+                ui.label(asset_path);
+                ui.separator();
+                if ui.button("用 Blockbench 编辑").clicked() {
+                    requests.write(CharacterEditorCommand::OpenPreviewModelInBlockbench(
+                        asset_path.to_string(),
+                    ));
+                    ui.close();
+                }
+                if ui.button("gltf viewer 中打开").clicked() {
+                    requests.write(CharacterEditorCommand::OpenPreviewModelInGltfViewer(
+                        asset_path.to_string(),
+                    ));
+                    ui.close();
+                }
+                if ui.button("打开模型所在目录").clicked() {
+                    requests.write(CharacterEditorCommand::OpenPreviewModelDirectory(
+                        asset_path.to_string(),
+                    ));
+                    ui.close();
+                }
+            });
             render_preview_overlay(
                 ui.ctx(),
                 rect,
@@ -192,13 +236,14 @@ fn render_character_list_panel(
                 let selected =
                     ui_state.selected_character_id.as_deref() == Some(summary.id.as_str());
                 let label = format!("{}  [{}]", summary.display_name, summary.id);
-                let response = selectable_list_row(ui, selected, label.as_str()).on_hover_text(format!(
-                    "{}\n\n据点: {}\n角色职责: {}\n行为包: {}",
-                    label,
-                    non_empty(&summary.settlement_id),
-                    non_empty(&summary.role),
-                    non_empty(&summary.behavior_profile_id)
-                ));
+                let response =
+                    selectable_list_row(ui, selected, label.as_str()).on_hover_text(format!(
+                        "{}\n\n据点: {}\n角色职责: {}\n行为包: {}",
+                        label,
+                        non_empty(&summary.settlement_id),
+                        non_empty(&summary.role),
+                        non_empty(&summary.behavior_profile_id)
+                    ));
                 if response.clicked() && !selected {
                     requests.write(CharacterEditorCommand::SelectCharacter(summary.id.clone()));
                 }
@@ -280,4 +325,16 @@ fn render_preview_overlay(
             });
     }
     preview_camera.block_pointer_input = area.response.hovered();
+}
+
+fn picked_preview_model_asset(
+    ctx: &egui::Context,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    pick_index: &MeshPickIndex<String>,
+) -> Option<String> {
+    let cursor = ctx.pointer_latest_pos()?;
+    let cursor = Vec2::new(cursor.x, cursor.y);
+    let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
+    pick_index.query_nearest(ray).map(|hit| hit.data)
 }

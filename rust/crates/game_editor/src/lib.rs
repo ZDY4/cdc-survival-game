@@ -4,6 +4,7 @@ pub mod editor_handoff;
 pub mod flow_graph;
 pub mod fonts;
 pub mod list_row;
+pub mod model_tools;
 pub mod preview;
 pub mod preview_stage;
 pub mod primary_egui;
@@ -30,11 +31,18 @@ pub use fonts::{
     GameUiFontsState, GAME_UI_FONT_NAME,
 };
 pub use list_row::selectable_list_row;
+pub use model_tools::{
+    clear_explicit_link, explicit_bbmodel_link, normalize_relative_asset_path,
+    open_model_directory, open_model_in_blockbench, open_model_in_gltf_viewer,
+    resolve_blockbench_source, save_explicit_link, sibling_bbmodel_relative_path, BlockbenchSource,
+    BlockbenchSourceKind,
+};
 pub use preview::{
     apply_preview_orbit_camera, preview_camera_input_system, preview_camera_sync_system,
     replace_preview_scene, spawn_preview_floor, spawn_preview_light_rig, spawn_preview_origin_axes,
-    spawn_preview_scene_host, PreviewCameraController, PreviewFloor, PreviewOrbitCamera,
-    PreviewOriginAxes, PreviewSceneHost, PreviewSceneInstance, PreviewViewportRect,
+    spawn_preview_scene_host, sync_preview_ground_visibility_system, PreviewCameraController,
+    PreviewFloor, PreviewGroundVisibility, PreviewOrbitCamera, PreviewOriginAxes,
+    PreviewSceneHost, PreviewSceneInstance, PreviewViewportRect,
 };
 pub use preview_stage::{setup_preview_stage, PreviewStageConfig, PreviewStageEntities};
 pub use primary_egui::setup_primary_egui_context_camera;

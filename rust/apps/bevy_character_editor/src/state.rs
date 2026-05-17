@@ -70,6 +70,7 @@ pub(crate) struct EditorUiState {
     pub(crate) selected_tab: CharacterTab,
     pub(crate) try_on: BTreeMap<String, u32>,
     pub(crate) preview_context: CharacterAiPreviewContext,
+    pub(crate) preview_context_model_path: Option<String>,
     pub(crate) status: String,
 }
 
@@ -109,6 +110,7 @@ impl Default for EditorUiState {
             selected_tab: CharacterTab::Summary,
             try_on: BTreeMap::new(),
             preview_context: default_preview_context(),
+            preview_context_model_path: None,
             status: "加载角色数据中…".to_string(),
         }
     }

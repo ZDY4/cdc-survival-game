@@ -2,7 +2,10 @@ use bevy::asset::LoadState;
 use bevy::camera::primitives::MeshAabb;
 use bevy::log::{info, warn};
 use bevy::prelude::*;
-use game_bevy::{resolve_item_preview_asset_path, resolve_standalone_item_preview};
+use game_bevy::{
+    resolve_item_preview_asset_path, resolve_standalone_item_preview, MeshPickIndex,
+    MeshPickPrototypeKey,
+};
 use game_editor::{replace_preview_scene, PreviewCameraController, PreviewOrbitCamera};
 
 use crate::state::EditorState;
@@ -261,6 +264,30 @@ pub(crate) fn frame_loaded_scene_system(
     preview_state.framed_asset_path = Some(asset_path.clone());
 }
 
+pub(crate) fn sync_preview_mesh_pick_index_system(
+    preview_state: Res<PreviewState>,
+    mut pick_index: ResMut<MeshPickIndex<String>>,
+    children_query: Query<&Children>,
+    mesh_query: Query<(&Mesh3d, &GlobalTransform, Option<&Visibility>)>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    pick_index.clear();
+    let (Some(scene_root), Some(asset_path)) = (
+        preview_state.scene_instance,
+        preview_state.applied_asset_path.as_deref(),
+    ) else {
+        return;
+    };
+    register_pick_tree(
+        scene_root,
+        asset_path,
+        &children_query,
+        &mesh_query,
+        &meshes,
+        &mut pick_index,
+    );
+}
+
 fn scene_world_bounds(
     root: Entity,
     children_query: &Query<&Children>,
@@ -322,5 +349,40 @@ fn transform_from_preview(preview: &game_data::PreviewTransform) -> Transform {
             preview.rotation_degrees.z.to_radians(),
         ),
         scale,
+    }
+}
+
+fn register_pick_tree(
+    root: Entity,
+    asset_path: &str,
+    children_query: &Query<&Children>,
+    mesh_query: &Query<(&Mesh3d, &GlobalTransform, Option<&Visibility>)>,
+    meshes: &Assets<Mesh>,
+    pick_index: &mut MeshPickIndex<String>,
+) {
+    let mut stack = vec![root];
+    while let Some(entity) = stack.pop() {
+        if let Ok(children) = children_query.get(entity) {
+            for child in children.iter() {
+                stack.push(child);
+            }
+        }
+
+        let Ok((mesh_handle, transform, visibility)) = mesh_query.get(entity) else {
+            continue;
+        };
+        if matches!(visibility, Some(Visibility::Hidden)) {
+            continue;
+        }
+        let Some(mesh) = meshes.get(&mesh_handle.0) else {
+            continue;
+        };
+        pick_index.register_mesh_instance(
+            entity,
+            mesh,
+            MeshPickPrototypeKey::mesh(&mesh_handle.0),
+            transform.compute_transform(),
+            asset_path.to_string(),
+        );
     }
 }

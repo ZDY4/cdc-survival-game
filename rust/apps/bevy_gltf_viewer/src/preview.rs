@@ -3,11 +3,11 @@ use bevy::camera::primitives::MeshAabb;
 use bevy::log::warn;
 use bevy::prelude::*;
 use game_editor::{
-    apply_preview_orbit_camera, replace_preview_scene, PreviewCameraController, PreviewFloor,
+    apply_preview_orbit_camera, replace_preview_scene, PreviewCameraController,
     PreviewOrbitCamera,
 };
 
-use crate::state::{PreviewCamera, PreviewLoadStatus, PreviewState, ViewerUiState};
+use crate::state::{PivotInfo, PreviewCamera, PreviewLoadStatus, PreviewState, ViewerUiState};
 
 const CAMERA_RADIUS_MIN: f32 = 0.8;
 const CAMERA_RADIUS_MAX: f32 = 18.0;
@@ -162,18 +162,56 @@ pub(crate) fn frame_loaded_scene_system(
     preview_state.framed_model_path = Some(model_path.clone());
 }
 
-pub(crate) fn sync_preview_ground_visibility_system(
+pub(crate) fn update_pivot_info_system(
     ui_state: Res<ViewerUiState>,
-    mut floor_query: Query<&mut Visibility, With<PreviewFloor>>,
+    mut preview_state: ResMut<PreviewState>,
+    transform_query: Query<&GlobalTransform>,
 ) {
-    let visibility = if ui_state.show_ground {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    for mut floor_visibility in &mut floor_query {
-        *floor_visibility = visibility;
+    if !ui_state.show_pivot {
+        preview_state.pivot_info = None;
+        return;
     }
+
+    let Some(scene_root) = preview_state.scene_instance else {
+        preview_state.pivot_info = None;
+        return;
+    };
+    let Ok(global_transform) = transform_query.get(scene_root) else {
+        preview_state.pivot_info = None;
+        return;
+    };
+
+    let transform = global_transform.compute_transform();
+    let (rotation_x, rotation_y, rotation_z) = transform.rotation.to_euler(EulerRot::XYZ);
+    preview_state.pivot_info = Some(PivotInfo {
+        translation: transform.translation,
+        rotation_degrees: Vec3::new(
+            rotation_x.to_degrees(),
+            rotation_y.to_degrees(),
+            rotation_z.to_degrees(),
+        ),
+    });
+}
+
+pub(crate) fn draw_pivot_gizmo_system(
+    ui_state: Res<ViewerUiState>,
+    preview_state: Res<PreviewState>,
+    transform_query: Query<&GlobalTransform>,
+    mut gizmos: Gizmos,
+) {
+    if !ui_state.show_pivot {
+        return;
+    }
+
+    let Some(scene_root) = preview_state.scene_instance else {
+        return;
+    };
+    let Ok(global_transform) = transform_query.get(scene_root) else {
+        return;
+    };
+
+    let transform = global_transform.compute_transform();
+    draw_pivot_gizmo(&mut gizmos, transform.translation, transform.rotation);
 }
 
 fn scene_world_bounds(
@@ -220,6 +258,45 @@ fn scene_world_bounds(
     }
 
     bounds
+}
+
+fn draw_pivot_gizmo(gizmos: &mut Gizmos, origin: Vec3, rotation: Quat) {
+    let axis_length = 0.36;
+    let marker_radius = 0.055;
+    let x_axis = rotation * Vec3::X;
+    let y_axis = rotation * Vec3::Y;
+    let z_axis = rotation * Vec3::Z;
+
+    gizmos.line(
+        origin - x_axis * marker_radius,
+        origin + x_axis * marker_radius,
+        Color::WHITE,
+    );
+    gizmos.line(
+        origin - y_axis * marker_radius,
+        origin + y_axis * marker_radius,
+        Color::WHITE,
+    );
+    gizmos.line(
+        origin - z_axis * marker_radius,
+        origin + z_axis * marker_radius,
+        Color::WHITE,
+    );
+    gizmos.line(
+        origin,
+        origin + x_axis * axis_length,
+        Color::srgb(1.0, 0.16, 0.12),
+    );
+    gizmos.line(
+        origin,
+        origin + y_axis * axis_length,
+        Color::srgb(0.16, 0.9, 0.24),
+    );
+    gizmos.line(
+        origin,
+        origin + z_axis * axis_length,
+        Color::srgb(0.16, 0.36, 1.0),
+    );
 }
 
 pub(crate) fn paint_axis_gizmo(

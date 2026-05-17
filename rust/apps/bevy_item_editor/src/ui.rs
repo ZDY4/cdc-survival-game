@@ -3,6 +3,7 @@ mod panels;
 use bevy::log::warn;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
+use game_bevy::MeshPickIndex;
 use game_editor::PreviewViewportRect;
 
 use crate::commands::ItemEditorCommand;
@@ -15,7 +16,15 @@ pub(crate) fn editor_ui_system(
     mut contexts: EguiContexts,
     mut editor: ResMut<EditorState>,
     preview_state: Res<PreviewState>,
-    mut preview_camera: Single<&mut game_editor::PreviewCameraController, With<PreviewCamera>>,
+    pick_index: Res<MeshPickIndex<String>>,
+    mut preview_camera: Query<
+        (
+            &Camera,
+            &GlobalTransform,
+            &mut game_editor::PreviewCameraController,
+        ),
+        With<PreviewCamera>,
+    >,
     mut commands: MessageWriter<ItemEditorCommand>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else {
@@ -44,6 +53,12 @@ pub(crate) fn editor_ui_system(
             });
         });
 
+    let Ok((preview_camera_component, preview_camera_transform, mut preview_camera)) =
+        preview_camera.single_mut()
+    else {
+        return;
+    };
+
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
         .show(ctx, |ui| {
@@ -54,7 +69,54 @@ pub(crate) fn editor_ui_system(
                 width: rect.width(),
                 height: rect.height(),
             });
-            ui.allocate_rect(rect, egui::Sense::hover());
+            let response = ui.allocate_rect(rect, egui::Sense::hover());
+            if response.secondary_clicked() {
+                editor.preview_context_model_path = picked_preview_model_asset(
+                    ui.ctx(),
+                    preview_camera_component,
+                    preview_camera_transform,
+                    &pick_index,
+                );
+            }
+            let context_asset_path = editor.preview_context_model_path.clone();
+            response.context_menu(|ui| {
+                let Some(asset_path) = context_asset_path.as_deref() else {
+                    ui.close();
+                    return;
+                };
+                ui.label(asset_path);
+                ui.separator();
+                if ui.button("用 Blockbench 编辑").clicked() {
+                    commands.write(ItemEditorCommand::OpenPreviewModelInBlockbench(
+                        asset_path.to_string(),
+                    ));
+                    ui.close();
+                }
+                if ui.button("gltf viewer 中打开").clicked() {
+                    commands.write(ItemEditorCommand::OpenPreviewModelInGltfViewer(
+                        asset_path.to_string(),
+                    ));
+                    ui.close();
+                }
+                if ui.button("打开模型所在目录").clicked() {
+                    commands.write(ItemEditorCommand::OpenPreviewModelDirectory(
+                        asset_path.to_string(),
+                    ));
+                    ui.close();
+                }
+            });
             panels::render_preview_overlay(ui.ctx(), rect, &editor, &preview_state);
         });
+}
+
+fn picked_preview_model_asset(
+    ctx: &egui::Context,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    pick_index: &MeshPickIndex<String>,
+) -> Option<String> {
+    let cursor = ctx.pointer_latest_pos()?;
+    let cursor = Vec2::new(cursor.x, cursor.y);
+    let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
+    pick_index.query_nearest(ray).map(|hit| hit.data)
 }

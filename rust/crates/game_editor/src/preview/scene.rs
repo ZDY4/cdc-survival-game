@@ -9,6 +9,31 @@ pub struct PreviewSceneInstance;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PreviewFloor;
 
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreviewGroundVisibility {
+    pub visible: bool,
+}
+
+impl PreviewGroundVisibility {
+    pub fn visible() -> Self {
+        Self { visible: true }
+    }
+
+    pub fn hidden() -> Self {
+        Self { visible: false }
+    }
+
+    pub fn toggle(&mut self) {
+        self.visible = !self.visible;
+    }
+}
+
+impl Default for PreviewGroundVisibility {
+    fn default() -> Self {
+        Self::visible()
+    }
+}
+
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PreviewOriginAxes;
 
@@ -94,6 +119,23 @@ pub fn spawn_preview_floor(
             PreviewFloor,
         ))
         .id()
+}
+
+pub fn sync_preview_ground_visibility_system(
+    ground_visibility: Res<PreviewGroundVisibility>,
+    mut floor_query: Query<&mut Visibility, With<PreviewFloor>>,
+) {
+    if !ground_visibility.is_changed() {
+        return;
+    }
+    let visibility = if ground_visibility.visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for mut floor_visibility in &mut floor_query {
+        *floor_visibility = visibility;
+    }
 }
 
 pub fn spawn_preview_origin_axes(

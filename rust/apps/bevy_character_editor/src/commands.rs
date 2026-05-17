@@ -1,6 +1,10 @@
 use bevy::prelude::*;
+use game_bevy::rust_asset_dir;
 use game_data::CharacterAiPreviewContext;
-use game_editor::PreviewCameraController;
+use game_editor::{
+    open_model_directory, open_model_in_blockbench, open_model_in_gltf_viewer,
+    PreviewCameraController,
+};
 
 use crate::camera_mode::{
     reset_active_preview_camera, sync_preview_camera_mode, PreviewCameraMode,
@@ -19,6 +23,9 @@ pub(crate) enum CharacterEditorCommand {
     SetCameraMode(PreviewCameraMode),
     ResetCamera,
     ClearTryOn,
+    OpenPreviewModelInBlockbench(String),
+    OpenPreviewModelInGltfViewer(String),
+    OpenPreviewModelDirectory(String),
 }
 
 pub(crate) fn ensure_selected_character_system(
@@ -135,6 +142,20 @@ pub(crate) fn handle_character_editor_commands(
                     &mut preview_projection,
                     false,
                 );
+            }
+            CharacterEditorCommand::OpenPreviewModelInBlockbench(asset_path) => {
+                ui_state.status = open_model_in_blockbench(&rust_asset_dir(), asset_path)
+                    .unwrap_or_else(|error| error);
+            }
+            CharacterEditorCommand::OpenPreviewModelInGltfViewer(asset_path) => {
+                ui_state.status =
+                    open_model_in_gltf_viewer(&data.repo_root, &rust_asset_dir(), asset_path)
+                        .unwrap_or_else(|error| error);
+            }
+            CharacterEditorCommand::OpenPreviewModelDirectory(asset_path) => {
+                ui_state.status = open_model_directory(&rust_asset_dir(), asset_path)
+                    .map(|directory| format!("已打开模型目录: {}", directory.display()))
+                    .unwrap_or_else(|error| error);
             }
         }
     }

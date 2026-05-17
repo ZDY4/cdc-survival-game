@@ -63,6 +63,7 @@ pub(crate) struct EditorState {
     pub(crate) effects: EffectLibrary,
     pub(crate) workspace: WorkingDocumentStore<WorkingItemDocument>,
     pub(crate) search_text: String,
+    pub(crate) preview_context_model_path: Option<String>,
     pub(crate) status: String,
 }
 

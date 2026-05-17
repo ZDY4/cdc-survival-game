@@ -8,13 +8,14 @@ use bevy::log::warn;
 use bevy::prelude::*;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::EguiPrimaryContextPass;
-use game_bevy::rust_asset_dir;
+use game_bevy::{rust_asset_dir, MeshPickIndex};
 use game_editor::{
     configure_editor_app_shell, configure_game_ui_fonts_system,
     preview_camera_input_system as shared_preview_camera_input_system,
     preview_camera_sync_system as shared_preview_camera_sync_system, setup_preview_stage,
-    sync_builtin_humanoid_mannequin_scene_system, write_editor_session, EditorAppShellConfig,
-    EditorKind, GameUiFontsState, PreviewCameraController, PreviewStageConfig,
+    sync_builtin_humanoid_mannequin_scene_system, sync_preview_ground_visibility_system,
+    write_editor_session, EditorAppShellConfig, EditorKind, GameUiFontsState,
+    PreviewCameraController, PreviewGroundVisibility, PreviewStageConfig,
     WindowSizePersistenceConfig,
 };
 
@@ -25,7 +26,8 @@ use crate::commands::{
 use crate::data::load_editor_data;
 use crate::handoff::poll_external_selection_system;
 use crate::preview::{
-    sync_preview_scene_system, PreviewCamera, CAMERA_RADIUS_MAX, CAMERA_RADIUS_MIN, PREVIEW_BG,
+    sync_preview_mesh_pick_index_system, sync_preview_scene_system, PreviewCamera,
+    CAMERA_RADIUS_MAX, CAMERA_RADIUS_MIN, PREVIEW_BG,
 };
 use crate::state::{
     CharacterUiStyleState, EditorData, EditorUiState, ExternalCharacterSelectionState,
@@ -65,6 +67,8 @@ pub(crate) fn run(initial_character_id: Option<String>) {
         .insert_resource(ClearColor(PREVIEW_BG))
         .insert_resource(EditorUiState::default())
         .insert_resource(PreviewState::default())
+        .insert_resource(MeshPickIndex::<String>::default())
+        .insert_resource(PreviewGroundVisibility::visible())
         .insert_resource(PreviewCameraModeState::default())
         .insert_resource(GameUiFontsState::default())
         .insert_resource(CharacterUiStyleState::default())
@@ -91,6 +95,8 @@ pub(crate) fn run(initial_character_id: Option<String>) {
                 (
                     sync_preview_scene_system,
                     sync_builtin_humanoid_mannequin_scene_system,
+                    sync_preview_mesh_pick_index_system,
+                    sync_preview_ground_visibility_system,
                     shared_preview_camera_input_system,
                     shared_preview_camera_sync_system,
                 )

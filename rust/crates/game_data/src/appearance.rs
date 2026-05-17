@@ -133,6 +133,8 @@ pub struct ItemAppearanceDefinition {
     pub visual_asset: String,
     #[serde(default)]
     pub attach_target: Option<CharacterAttachTarget>,
+    #[serde(default)]
+    pub attach_socket: Option<String>,
     #[serde(default = "default_item_presentation_mode")]
     pub presentation_mode: ItemAppearancePresentationMode,
     #[serde(default)]
@@ -149,6 +151,7 @@ impl Default for ItemAppearanceDefinition {
             equip_slot: String::new(),
             visual_asset: String::new(),
             attach_target: None,
+            attach_socket: None,
             presentation_mode: default_item_presentation_mode(),
             hide_base_regions: Vec::new(),
             preview_transform: PreviewTransform::default(),
@@ -170,6 +173,7 @@ pub struct ResolvedEquipmentPreviewEntry {
     pub item_name: String,
     pub visual_asset: String,
     pub attach_target: CharacterAttachTarget,
+    pub attach_socket: Option<String>,
     pub presentation_mode: ItemAppearancePresentationMode,
     pub hide_base_regions: Vec<String>,
     pub preview_transform: PreviewTransform,
@@ -588,6 +592,10 @@ fn resolve_item_preview_entry(
         .as_ref()
         .and_then(|definition| definition.attach_target)
         .unwrap_or_else(|| default_attach_target_for_slot(&equip_slot));
+    let attach_socket = explicit.as_ref().and_then(|definition| {
+        let socket = definition.attach_socket.as_deref()?.trim();
+        (!socket.is_empty()).then(|| socket.to_string())
+    });
     let presentation_mode = explicit
         .as_ref()
         .map(|definition| definition.presentation_mode)
@@ -616,6 +624,7 @@ fn resolve_item_preview_entry(
         item_name: item.name.clone(),
         visual_asset,
         attach_target,
+        attach_socket,
         presentation_mode,
         hide_base_regions,
         preview_transform,
@@ -823,6 +832,7 @@ mod tests {
                         equip_slot: "body".to_string(),
                         visual_asset: "builtin:item:body".to_string(),
                         attach_target: Some(CharacterAttachTarget::Body),
+                        attach_socket: None,
                         presentation_mode: ItemAppearancePresentationMode::ReplaceRegion,
                         hide_base_regions: vec!["body".to_string()],
                         preview_transform: Default::default(),
@@ -894,6 +904,70 @@ mod tests {
         assert_eq!(preview.character_id, "player");
         assert_eq!(preview.base_regions.len(), 4);
         assert_eq!(preview.equipment.len(), 1);
+    }
+
+    #[test]
+    fn item_appearance_accepts_missing_attach_socket() {
+        let raw = r##"{
+          "equip_slot": "back",
+          "visual_asset": "builtin:item:back",
+          "attach_target": "back",
+          "presentation_mode": "attach"
+        }"##;
+
+        let definition: ItemAppearanceDefinition =
+            serde_json::from_str(raw).expect("legacy appearance should deserialize");
+
+        assert_eq!(definition.attach_target, Some(CharacterAttachTarget::Back));
+        assert_eq!(definition.attach_socket, None);
+    }
+
+    #[test]
+    fn preview_loadout_preserves_explicit_attach_socket() {
+        let item = ItemDefinition {
+            id: 4010,
+            name: "侧挂小包".to_string(),
+            description: String::new(),
+            icon_path: String::new(),
+            value: 0,
+            weight: 0.0,
+            fragments: vec![
+                ItemFragment::Equip {
+                    slots: vec!["accessory".to_string()],
+                    level_requirement: 0,
+                    equip_effect_ids: Vec::new(),
+                    unequip_effect_ids: Vec::new(),
+                },
+                ItemFragment::Appearance {
+                    definition: ItemAppearanceDefinition {
+                        equip_slot: "accessory".to_string(),
+                        visual_asset: "builtin:item:accessory".to_string(),
+                        attach_target: Some(CharacterAttachTarget::Accessory),
+                        attach_socket: Some("hip_pouch_socket".to_string()),
+                        presentation_mode: ItemAppearancePresentationMode::Attach,
+                        hide_base_regions: Vec::new(),
+                        preview_transform: Default::default(),
+                        tint: None,
+                    },
+                },
+            ],
+            extra: BTreeMap::new(),
+        };
+        let items = ItemLibrary::from(BTreeMap::from([(item.id, item)]));
+
+        let loadout = resolve_preview_loadout(
+            &items,
+            &BTreeMap::from([("accessory".to_string(), 4010_u32)]),
+        )
+        .expect("loadout should resolve");
+
+        assert_eq!(
+            loadout
+                .slots
+                .get("accessory")
+                .and_then(|entry| entry.attach_socket.as_deref()),
+            Some("hip_pouch_socket")
+        );
     }
 
     #[test]
@@ -982,6 +1056,7 @@ mod tests {
                         equip_slot: "body".to_string(),
                         visual_asset: "assets/characters/invalid_mesh.glb".to_string(),
                         attach_target: Some(CharacterAttachTarget::Body),
+                        attach_socket: None,
                         presentation_mode: ItemAppearancePresentationMode::ReplaceRegion,
                         hide_base_regions: vec!["body".to_string()],
                         preview_transform: Default::default(),

@@ -1,17 +1,22 @@
 //! 预览协调层。
 //! 负责角色选择、外观预览、AI 预览和相机状态之间的同步与刷新。
 
+use std::collections::HashSet;
+
 use bevy::log::{info, warn};
 use bevy::prelude::*;
-use game_bevy::resolve_item_preview_asset_path;
+use game_bevy::{
+    resolve_item_preview_asset_path, CharacterPreviewModelAsset, MeshPickIndex,
+    MeshPickPrototypeKey,
+};
 use game_data::{
     build_character_ai_preview, build_character_ai_preview_at_time,
     build_character_appearance_preview, CharacterAiPreviewContext, CharacterDefinition,
     CharacterId, SettlementDefinition, SettlementId, SettlementLibrary,
 };
 use game_editor::{
-    character_preview_is_available, spawn_character_preview_scene, CharacterPreviewRoot,
-    PreviewCameraController,
+    character_preview_is_available, spawn_character_preview_scene, CharacterPreviewPart,
+    CharacterPreviewRoot, PreviewCameraController,
 };
 
 use crate::camera_mode::{
@@ -49,6 +54,28 @@ pub(crate) fn sync_preview_scene_system(
         spawn_character_preview_scene(&mut commands, &asset_server, &mut materials, preview);
     }
     preview_state.applied_revision = preview_state.revision;
+}
+
+pub(crate) fn sync_preview_mesh_pick_index_system(
+    mut pick_index: ResMut<MeshPickIndex<String>>,
+    sources: Query<(Entity, &CharacterPreviewModelAsset), With<CharacterPreviewPart>>,
+    children_query: Query<&Children>,
+    mesh_query: Query<(&Mesh3d, &GlobalTransform, Option<&Visibility>)>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    pick_index.clear();
+    let source_roots = sources.iter().map(|(entity, _)| entity).collect::<HashSet<_>>();
+    for (root, source) in &sources {
+        register_pick_tree(
+            root,
+            source.asset_path.as_str(),
+            &source_roots,
+            &children_query,
+            &mesh_query,
+            &meshes,
+            &mut pick_index,
+        );
+    }
 }
 
 // 确保编辑器始终有一个默认选中的角色。
@@ -260,4 +287,43 @@ fn preview_model_notice(preview: &game_data::ResolvedCharacterAppearancePreview)
         return Some(format!("当前角色配置的 glTF 模型不存在：{asset_id}"));
     }
     None
+}
+
+fn register_pick_tree(
+    root: Entity,
+    asset_path: &str,
+    source_roots: &HashSet<Entity>,
+    children_query: &Query<&Children>,
+    mesh_query: &Query<(&Mesh3d, &GlobalTransform, Option<&Visibility>)>,
+    meshes: &Assets<Mesh>,
+    pick_index: &mut MeshPickIndex<String>,
+) {
+    let mut stack = vec![root];
+    while let Some(entity) = stack.pop() {
+        if entity != root && source_roots.contains(&entity) {
+            continue;
+        }
+        if let Ok(children) = children_query.get(entity) {
+            for child in children.iter() {
+                stack.push(child);
+            }
+        }
+
+        let Ok((mesh_handle, transform, visibility)) = mesh_query.get(entity) else {
+            continue;
+        };
+        if matches!(visibility, Some(Visibility::Hidden)) {
+            continue;
+        }
+        let Some(mesh) = meshes.get(&mesh_handle.0) else {
+            continue;
+        };
+        pick_index.register_mesh_instance_preserving_fallback(
+            entity,
+            mesh,
+            MeshPickPrototypeKey::mesh(&mesh_handle.0),
+            transform.compute_transform(),
+            asset_path.to_string(),
+        );
+    }
 }

@@ -5,7 +5,9 @@ use bevy::log::info;
 use bevy::prelude::*;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 
-use crate::state::{PreviewState, ViewerAppState, ViewerAssetRoot, ViewerUiState};
+use crate::state::{
+    InitialModelSelection, PreviewState, ViewerAppState, ViewerAssetRoot, ViewerUiState,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ModelEntry {
@@ -66,6 +68,7 @@ pub(crate) fn handle_catalog_loading_task(
     mut query: Query<(Entity, &mut CatalogLoadingTask)>,
     mut ui_state: ResMut<ViewerUiState>,
     mut preview_state: ResMut<PreviewState>,
+    initial_selection: Res<InitialModelSelection>,
     mut next_state: ResMut<NextState<ViewerAppState>>,
 ) {
     for (entity, mut task) in &mut query {
@@ -74,10 +77,17 @@ pub(crate) fn handle_catalog_loading_task(
                 "gltf viewer catalog loaded: {} model(s)",
                 catalog.entries.len()
             );
-            ui_state.selected_model_path = catalog
-                .entries
-                .first()
-                .map(|entry| entry.relative_path.clone());
+            ui_state.selected_model_path = initial_selection
+                .0
+                .as_deref()
+                .and_then(|requested| {
+                    catalog
+                        .entries
+                        .iter()
+                        .find(|entry| entry.relative_path == requested)
+                        .map(|entry| entry.relative_path.clone())
+                })
+                .or_else(|| catalog.entries.first().map(|entry| entry.relative_path.clone()));
             preview_state.requested_model_path = ui_state.selected_model_path.clone();
             commands.insert_resource(catalog);
             commands.entity(entity).despawn();

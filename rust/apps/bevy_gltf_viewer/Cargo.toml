@@ -10,3 +10,4 @@ bevy.workspace = true
 bevy_egui = "0.39.1"
 game_bevy = { path = "../../crates/game_bevy" }
 game_editor = { path = "../../crates/game_editor" }
+serde_json.workspace = true

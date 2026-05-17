@@ -22,7 +22,7 @@ if not exist "%CARGO_EXE%" (
 pushd "%RUST_DIR%"
 
 echo Starting bevy_gltf_viewer...
-"%CARGO_EXE%" run -p bevy_gltf_viewer
+"%CARGO_EXE%" run -p bevy_gltf_viewer -- %*
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 

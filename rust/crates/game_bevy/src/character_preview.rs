@@ -20,6 +20,11 @@ pub struct CharacterPreviewRoot;
 pub struct CharacterPreviewPart;
 
 #[derive(Component, Debug, Clone)]
+pub struct CharacterPreviewModelAsset {
+    pub asset_path: String,
+}
+
+#[derive(Component, Debug, Clone)]
 pub struct BuiltinHumanoidMannequinScene {
     head_color: Color,
     body_color: Color,
@@ -31,14 +36,16 @@ pub struct BuiltinHumanoidMannequinScene {
 #[derive(Component)]
 pub struct BuiltinHumanoidMannequinConfigured;
 
-#[derive(Component, Debug, Clone, Copy)]
-pub struct BuiltinHumanoidSocketAttachment {
+#[derive(Component, Debug, Clone)]
+pub struct CharacterPreviewSocketAttachment {
     scene_root: Entity,
-    socket_name: &'static str,
+    socket_transform: Transform,
+    fallback_transform: Transform,
+    socket_name: String,
 }
 
 #[derive(Component)]
-pub struct BuiltinHumanoidSocketAttached;
+pub struct CharacterPreviewSocketAttached;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeCharacterAppearanceKey {
@@ -64,7 +71,7 @@ pub fn spawn_character_preview_scene(
     materials: &mut Assets<StandardMaterial>,
     preview: &ResolvedCharacterAppearancePreview,
 ) -> Entity {
-    let mut builtin_mannequin_scene_root = None;
+    let mut base_model_scene_root = None;
     let root = commands
         .spawn((
             Transform::default(),
@@ -80,12 +87,17 @@ pub fn spawn_character_preview_scene(
         if let Some(asset_path) = builtin_humanoid_mannequin_scene_asset() {
             let child = commands
                 .spawn((
-                    SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path))),
+                    SceneRoot(
+                        asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path.clone())),
+                    ),
                     Transform::default(),
                     GlobalTransform::default(),
                     Visibility::Visible,
                     InheritedVisibility::VISIBLE,
                     CharacterPreviewPart,
+                    CharacterPreviewModelAsset {
+                        asset_path: asset_path.clone(),
+                    },
                     BuiltinHumanoidMannequinScene {
                         head_color: base_region_color(preview, "head"),
                         body_color: base_region_color(preview, "body"),
@@ -96,20 +108,26 @@ pub fn spawn_character_preview_scene(
                 ))
                 .id();
             commands.entity(root).add_child(child);
-            builtin_mannequin_scene_root = Some(child);
+            base_model_scene_root = Some(child);
         }
     } else if let Some(asset_path) = resolve_scene_asset_path(preview.base_model_asset.as_str()) {
         let child = commands
             .spawn((
-                SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path))),
+                SceneRoot(
+                    asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path.clone())),
+                ),
                 Transform::default(),
                 GlobalTransform::default(),
                 Visibility::Visible,
                 InheritedVisibility::VISIBLE,
                 CharacterPreviewPart,
+                CharacterPreviewModelAsset {
+                    asset_path: asset_path.clone(),
+                },
             ))
             .id();
         commands.entity(root).add_child(child);
+        base_model_scene_root = Some(child);
     }
 
     for entry in &preview.equipment {
@@ -118,7 +136,7 @@ pub fn spawn_character_preview_scene(
             asset_server,
             materials,
             root,
-            builtin_mannequin_scene_root,
+            base_model_scene_root,
             entry,
         );
     }
@@ -151,22 +169,38 @@ pub fn sync_builtin_humanoid_mannequin_scene_system(
     mut material_query: Query<&mut MeshMaterial3d<StandardMaterial>>,
     mut visibility_query: Query<&mut Visibility>,
     pending_attachments: Query<
-        (Entity, &BuiltinHumanoidSocketAttachment),
-        Without<BuiltinHumanoidSocketAttached>,
+        (Entity, &CharacterPreviewSocketAttachment),
+        Without<CharacterPreviewSocketAttached>,
     >,
+    mut transform_query: Query<&mut Transform>,
 ) {
+    for (entity, attachment) in &pending_attachments {
+        if let Some(target_socket) = find_named_descendant(
+            attachment.scene_root,
+            attachment.socket_name.as_str(),
+            &children_query,
+            &name_query,
+        ) {
+            if let Ok(mut transform) = transform_query.get_mut(entity) {
+                *transform = attachment.socket_transform;
+            }
+            commands.entity(target_socket).add_child(entity);
+            commands
+                .entity(entity)
+                .insert(CharacterPreviewSocketAttached);
+        } else if children_query.get(attachment.scene_root).is_ok() {
+            if let Ok(mut transform) = transform_query.get_mut(entity) {
+                *transform = attachment.fallback_transform;
+            }
+            commands
+                .entity(entity)
+                .insert(CharacterPreviewSocketAttached);
+        }
+    }
+
     for (root, scene, configured) in &scene_roots {
         let mut stack = vec![root];
         let mut configured_meshes = 0_usize;
-        let mut hand_r_socket = None;
-        let mut hand_l_socket = None;
-        let mut body_socket = None;
-        let mut hands_socket = None;
-        let mut head_socket = None;
-        let mut back_socket = None;
-        let mut accessory_socket = None;
-        let mut legs_socket = None;
-        let mut feet_socket = None;
 
         while let Some(entity) = stack.pop() {
             if let Ok(children) = children_query.get(entity) {
@@ -179,19 +213,6 @@ pub fn sync_builtin_humanoid_mannequin_scene_system(
                 continue;
             };
             let name = name.as_str();
-
-            match name {
-                "hand_r" => hand_r_socket = Some(entity),
-                "hand_l" => hand_l_socket = Some(entity),
-                "body_socket" => body_socket = Some(entity),
-                "hands_socket" => hands_socket = Some(entity),
-                "head_socket" => head_socket = Some(entity),
-                "back_socket" => back_socket = Some(entity),
-                "accessory_socket" => accessory_socket = Some(entity),
-                "legs_socket" => legs_socket = Some(entity),
-                "feet_socket" => feet_socket = Some(entity),
-                _ => {}
-            }
 
             if configured.is_none() {
                 if let Some(color) = mannequin_material_color(name, scene) {
@@ -213,36 +234,35 @@ pub fn sync_builtin_humanoid_mannequin_scene_system(
             }
         }
 
-        for (entity, attachment) in &pending_attachments {
-            if attachment.scene_root != root {
-                continue;
-            }
-            let Some(target_socket) = (match attachment.socket_name {
-                "hand_r" => hand_r_socket,
-                "hand_l" => hand_l_socket,
-                "body_socket" => body_socket,
-                "hands_socket" => hands_socket,
-                "head_socket" => head_socket,
-                "back_socket" => back_socket,
-                "accessory_socket" => accessory_socket,
-                "legs_socket" => legs_socket,
-                "feet_socket" => feet_socket,
-                _ => None,
-            }) else {
-                continue;
-            };
-            commands.entity(target_socket).add_child(entity);
-            commands
-                .entity(entity)
-                .insert(BuiltinHumanoidSocketAttached);
-        }
-
         if configured.is_none() && configured_meshes > 0 {
             commands
                 .entity(root)
                 .insert(BuiltinHumanoidMannequinConfigured);
         }
     }
+}
+
+fn find_named_descendant(
+    root: Entity,
+    target_name: &str,
+    children_query: &Query<&Children>,
+    name_query: &Query<&Name>,
+) -> Option<Entity> {
+    let mut stack = vec![root];
+    while let Some(entity) = stack.pop() {
+        if name_query
+            .get(entity)
+            .is_ok_and(|name| name.as_str() == target_name)
+        {
+            return Some(entity);
+        }
+        if let Ok(children) = children_query.get(entity) {
+            for child in children.iter() {
+                stack.push(child);
+            }
+        }
+    }
+    None
 }
 
 pub fn parse_preview_color(color_hex: &str) -> Color {
@@ -328,7 +348,7 @@ fn spawn_equipment_entry(
     asset_server: &AssetServer,
     materials: &mut Assets<StandardMaterial>,
     parent: Entity,
-    builtin_mannequin_scene_root: Option<Entity>,
+    base_model_scene_root: Option<Entity>,
     entry: &ResolvedEquipmentPreviewEntry,
 ) {
     let Some(mesh_asset) = resolve_placeholder_mesh_asset(entry.visual_asset.as_str()) else {
@@ -340,25 +360,23 @@ fn spawn_equipment_entry(
         .as_deref()
         .map(parse_preview_color)
         .unwrap_or_else(|| Color::srgb(0.75, 0.75, 0.75));
-    let socket_attachment = builtin_mannequin_scene_root.and_then(|scene_root| {
-        builtin_humanoid_socket_name(entry.attach_target).map(|socket_name| {
-            BuiltinHumanoidSocketAttachment {
-                scene_root,
-                socket_name,
-            }
-        })
-    });
-    let (_, position) = if socket_attachment.is_some() {
-        socket_preview_geometry_for_entry(entry)
+    let socket_name = socket_name_for_entry(entry);
+    let fallback_position = preview_geometry_for_entry(entry).1;
+    let socket_position = if socket_name.is_some() {
+        socket_preview_geometry_for_entry(entry).1
     } else {
-        preview_geometry_for_entry(entry)
+        fallback_position
     };
-    let mut transform = transform_from_preview(position, &entry.preview_transform);
+    let mut fallback_transform =
+        transform_from_preview(fallback_position, &entry.preview_transform);
+    let mut socket_transform = transform_from_preview(socket_position, &entry.preview_transform);
 
     if matches!(entry.attach_target, CharacterAttachTarget::MainHand) {
-        transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        fallback_transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        socket_transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
     }
-    apply_hand_pose_adjustment(entry, &mut transform);
+    apply_hand_pose_adjustment(entry, &mut fallback_transform);
+    apply_hand_pose_adjustment(entry, &mut socket_transform);
 
     match entry.presentation_mode {
         ItemAppearancePresentationMode::HideOnly => {}
@@ -368,14 +386,22 @@ fn spawn_equipment_entry(
             let mut child = commands.spawn((
                 Mesh3d(preview_mesh_asset(asset_server, &mesh_asset)),
                 preview_material(materials, tint),
-                transform,
+                fallback_transform,
                 GlobalTransform::default(),
                 Visibility::Visible,
                 InheritedVisibility::VISIBLE,
                 CharacterPreviewPart,
+                CharacterPreviewModelAsset {
+                    asset_path: mesh_asset.clone(),
+                },
             ));
-            if let Some(socket_attachment) = socket_attachment {
-                child.insert(socket_attachment);
+            if let (Some(scene_root), Some(socket_name)) = (base_model_scene_root, socket_name) {
+                child.insert(CharacterPreviewSocketAttachment {
+                    scene_root,
+                    socket_transform,
+                    fallback_transform,
+                    socket_name,
+                });
             }
             let child = child.id();
             commands.entity(parent).add_child(child);
@@ -528,6 +554,16 @@ fn resolve_scene_asset_path(asset_id: &str) -> Option<String> {
 
 fn builtin_humanoid_mannequin_scene_asset() -> Option<String> {
     resolve_item_preview_asset_path("bevy_preview/characters/humanoid_mannequin.gltf")
+}
+
+fn socket_name_for_entry(entry: &ResolvedEquipmentPreviewEntry) -> Option<String> {
+    entry
+        .attach_socket
+        .as_deref()
+        .map(str::trim)
+        .filter(|socket| !socket.is_empty())
+        .map(str::to_string)
+        .or_else(|| builtin_humanoid_socket_name(entry.attach_target).map(str::to_string))
 }
 
 fn builtin_humanoid_socket_name(attach_target: CharacterAttachTarget) -> Option<&'static str> {

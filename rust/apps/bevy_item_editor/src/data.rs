@@ -79,6 +79,7 @@ pub(crate) fn load_editor_resources(
         effects,
         workspace: WorkingDocumentStore::from_documents(working_documents),
         search_text: String::new(),
+        preview_context_model_path: None,
         status: "Loaded item workspace.".to_string(),
     };
     if let Some(item_id) = initial_selection {

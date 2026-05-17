@@ -9,6 +9,6 @@ pub use camera::{
 pub use egui::{game_ui_font_bytes, install_game_ui_fonts, load_game_ui_font, GAME_UI_FONT_NAME};
 pub use scene::{
     replace_preview_scene, spawn_preview_floor, spawn_preview_light_rig, spawn_preview_origin_axes,
-    spawn_preview_scene_host, PreviewFloor, PreviewOriginAxes, PreviewSceneHost,
-    PreviewSceneInstance,
+    spawn_preview_scene_host, sync_preview_ground_visibility_system, PreviewFloor,
+    PreviewGroundVisibility, PreviewOriginAxes, PreviewSceneHost, PreviewSceneInstance,
 };
