@@ -29,10 +29,12 @@ use super::{
 };
 
 mod actions;
+mod actor_progression;
 mod combat;
 mod dialogue;
 mod overworld;
-mod progression;
+mod quest_progression;
+mod relationships;
 mod snapshot;
 mod spatial;
 
