@@ -127,6 +127,14 @@ pub(crate) fn context_menu_button_color(
     }
 }
 
+pub(crate) fn dialogue_choice_button_color(interaction: Interaction) -> Color {
+    match interaction {
+        Interaction::Pressed => Color::srgba(0.24, 0.21, 0.13, 0.72),
+        Interaction::Hovered => Color::srgba(0.18, 0.18, 0.15, 0.56),
+        Interaction::None => Color::srgba(0.0, 0.0, 0.0, 0.0),
+    }
+}
+
 pub(crate) fn context_menu_root_node(style: ContextMenuStyle, position: Vec2) -> Node {
     Node {
         position_type: PositionType::Absolute,

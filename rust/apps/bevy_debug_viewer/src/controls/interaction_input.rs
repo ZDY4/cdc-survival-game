@@ -302,14 +302,8 @@ pub(crate) fn handle_dialogue_choice_buttons(
         return;
     }
 
-    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
     for (interaction, mut background, choice_button) in &mut buttons {
-        *background = BackgroundColor(context_menu_button_color(
-            button_style,
-            false,
-            false,
-            *interaction,
-        ));
+        *background = BackgroundColor(dialogue_choice_button_color(*interaction));
         if *interaction != Interaction::Pressed {
             continue;
         }

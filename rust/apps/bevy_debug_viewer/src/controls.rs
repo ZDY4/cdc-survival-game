@@ -29,7 +29,9 @@ use crate::state::{
     ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
     ViewerTargetingState, ViewerUiSettings,
 };
-use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
+use crate::ui_context_menu::{
+    context_menu_button_color, dialogue_choice_button_color, ContextMenuStyle, ContextMenuVariant,
+};
 
 mod camera;
 mod interaction_input;

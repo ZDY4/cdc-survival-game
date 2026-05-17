@@ -401,6 +401,11 @@ pub(crate) fn update_interaction_menu(
     }
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DialogueChoiceLabel {
+    index: usize,
+}
+
 pub(crate) fn update_dialogue_panel(
     mut commands: Commands,
     window: Single<&Window>,
@@ -427,13 +432,14 @@ pub(crate) fn update_dialogue_panel(
     mut choices: Query<
         (
             &DialogueChoiceRow,
+            &Interaction,
             &mut Visibility,
             &mut BackgroundColor,
-            &mut Text,
             &mut DialogueChoiceButton,
         ),
         With<Button>,
     >,
+    mut choice_texts: Query<(&DialogueChoiceLabel, &mut Text)>,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
@@ -444,7 +450,7 @@ pub(crate) fn update_dialogue_panel(
 
     if scene_kind.is_main_menu() || console_state.is_open {
         *visibility = Visibility::Hidden;
-        for (_, mut choice_visibility, ..) in &mut choices {
+        for (_, _, mut choice_visibility, ..) in &mut choices {
             *choice_visibility = Visibility::Hidden;
         }
         return;
@@ -452,7 +458,7 @@ pub(crate) fn update_dialogue_panel(
 
     let Some(dialogue) = viewer_state.active_dialogue.as_ref() else {
         *visibility = Visibility::Hidden;
-        for (_, mut choice_visibility, ..) in &mut choices {
+        for (_, _, mut choice_visibility, ..) in &mut choices {
             *choice_visibility = Visibility::Hidden;
         }
         return;
@@ -478,48 +484,53 @@ pub(crate) fn update_dialogue_panel(
 
     let existing_rows = choices.iter().count();
     if existing_rows < choice_labels.len() {
-        let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
         commands.entity(choices_entity).with_children(|parent| {
             for index in existing_rows..choice_labels.len() {
-                parent.spawn((
-                    Button,
-                    dialogue_choice_button_node(),
-                    BackgroundColor(context_menu_button_color(
-                        button_style,
-                        false,
-                        false,
-                        Interaction::None,
-                    )),
-                    Text::new(""),
-                    TextFont::from_font_size(DIALOGUE_CHOICE_BUTTON_FONT_SIZE_PX)
-                        .with_font(viewer_font.0.clone()),
-                    TextColor(context_menu_text_color()),
-                    Visibility::Hidden,
-                    viewer_ui_passthrough_bundle(),
-                    DialogueChoiceRow { index },
-                    DialogueChoiceButton {
-                        choice_index: index,
-                    },
-                ));
+                parent
+                    .spawn((
+                        Button,
+                        dialogue_choice_button_node(),
+                        BackgroundColor(dialogue_choice_button_color(Interaction::None)),
+                        Visibility::Hidden,
+                        viewer_ui_passthrough_bundle(),
+                        DialogueChoiceRow { index },
+                        DialogueChoiceButton {
+                            choice_index: index,
+                        },
+                    ))
+                    .with_children(|button| {
+                        button.spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                ..default()
+                            },
+                            Text::new(choice_labels.get(index).cloned().unwrap_or_default()),
+                            TextFont::from_font_size(DIALOGUE_CHOICE_BUTTON_FONT_SIZE_PX)
+                                .with_font(viewer_font.0.clone()),
+                            TextColor(context_menu_text_color()),
+                            TextLayout::new(Justify::Left, LineBreak::NoWrap),
+                            viewer_ui_passthrough_bundle(),
+                            DialogueChoiceLabel { index },
+                        ));
+                    });
             }
         });
     }
 
-    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
-    for (row, mut row_visibility, mut background, mut text, mut button) in &mut choices {
+    for (row, interaction, mut row_visibility, mut background, mut button) in &mut choices {
         let Some(label) = choice_labels.get(row.index) else {
             *row_visibility = Visibility::Hidden;
             continue;
         };
         *row_visibility = Visibility::Visible;
-        *background = BackgroundColor(context_menu_button_color(
-            button_style,
-            false,
-            false,
-            Interaction::None,
-        ));
-        *text = Text::new(label.clone());
+        *background = BackgroundColor(dialogue_choice_button_color(*interaction));
         button.choice_index = row.index;
+
+        for (choice_label, mut text) in &mut choice_texts {
+            if choice_label.index == row.index {
+                *text = Text::new(label.clone());
+            }
+        }
     }
 }
 
@@ -592,6 +603,7 @@ pub(super) fn dialogue_choice_button_node() -> Node {
         ),
         margin: UiRect::bottom(px(DIALOGUE_CHOICE_BUTTON_GAP_PX)),
         align_items: AlignItems::Center,
+        justify_content: JustifyContent::FlexStart,
         ..default()
     }
 }
