@@ -1,6 +1,7 @@
 //! 屏幕叠加层模块：负责角色标签、伤害数字、交互菜单和对话面板等 2D 叠加内容。
 
 use super::*;
+use bevy::log::{info, warn};
 use bevy::text::{Justify, LineBreak, TextLayout};
 
 pub(crate) fn clear_actor_labels(
@@ -46,7 +47,8 @@ pub(crate) fn sync_actor_labels(
                 .find(|actor| actor.grid_position == grid)
         })
         .map(|actor| actor.actor_id);
-    let current_actor_label_enabled = info_panel_state.active_page() == Some(ViewerHudPage::TurnSys);
+    let current_actor_label_enabled =
+        info_panel_state.active_page() == Some(ViewerHudPage::TurnSys);
 
     for actor in snapshot
         .actors
@@ -401,6 +403,51 @@ pub(crate) fn update_interaction_menu(
     }
 }
 
+pub(crate) fn sync_dialogue_panel_diagnostics(
+    viewer_state: Res<ViewerState>,
+    scene_kind: Res<ViewerSceneKind>,
+    console_state: Res<crate::console::ViewerConsoleState>,
+    panel_roots: Query<&Visibility, With<DialoguePanelRoot>>,
+    choices_roots: Query<&Visibility, With<DialoguePanelChoicesRoot>>,
+    mut last_logged_state: Local<Option<String>>,
+) {
+    let active_dialogue = viewer_state
+        .active_dialogue
+        .as_ref()
+        .map(|dialogue| {
+            format!(
+                "{:?}|{}|{}|target={:?}",
+                dialogue.actor_id, dialogue.dialog_id, dialogue.current_node_id, dialogue.target_id
+            )
+        })
+        .unwrap_or_else(|| "none".to_string());
+    let panel_visibilities = panel_roots
+        .iter()
+        .map(|visibility| format!("{visibility:?}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let choices_visibilities = choices_roots
+        .iter()
+        .map(|visibility| format!("{visibility:?}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let state_key = format!(
+        "active={active_dialogue};scene={:?};console={};panel_count={};panel_vis=[{}];choices_count={};choices_vis=[{}]",
+        scene_kind.as_ref(),
+        console_state.is_open,
+        panel_roots.iter().len(),
+        panel_visibilities,
+        choices_roots.iter().len(),
+        choices_visibilities,
+    );
+    if last_logged_state.as_ref() == Some(&state_key) {
+        return;
+    }
+
+    info!("viewer.dialogue.panel_diagnostic {state_key}");
+    *last_logged_state = Some(state_key);
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DialogueChoiceLabel {
     index: usize,
@@ -409,8 +456,11 @@ pub(crate) struct DialogueChoiceLabel {
 pub(crate) fn update_dialogue_panel(
     mut commands: Commands,
     window: Single<&Window>,
-    dialogue_root: Single<(&mut Node, &mut Visibility), (With<DialoguePanelRoot>, Without<Button>)>,
-    choices_root: Single<(Entity, &Children), With<DialoguePanelChoicesRoot>>,
+    mut dialogue_roots: Query<
+        (&mut Node, &mut Visibility),
+        (With<DialoguePanelRoot>, Without<Button>),
+    >,
+    choices_roots: Query<Entity, With<DialoguePanelChoicesRoot>>,
     mut labels: Query<
         (
             &mut Text,
@@ -427,6 +477,7 @@ pub(crate) fn update_dialogue_panel(
                 With<DialoguePanelHintLabel>,
             )>,
             Without<Button>,
+            Without<DialogueChoiceLabel>,
         ),
     >,
     mut choices: Query<
@@ -439,16 +490,65 @@ pub(crate) fn update_dialogue_panel(
         ),
         With<Button>,
     >,
-    mut choice_texts: Query<(&DialogueChoiceLabel, &mut Text)>,
+    mut choice_texts: Query<(&DialogueChoiceLabel, &mut Text), With<DialogueChoiceLabel>>,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
     console_state: Res<crate::console::ViewerConsoleState>,
+    mut last_logged_dialogue: Local<Option<(game_data::ActorId, String, String)>>,
+    mut last_logged_panel_error: Local<Option<String>>,
 ) {
-    let (mut node, mut visibility) = dialogue_root.into_inner();
-    let (choices_entity, _) = choices_root.into_inner();
+    let mut dialogue_root_iter = dialogue_roots.iter_mut();
+    let Some((mut node, mut visibility)) = dialogue_root_iter.next() else {
+        log_dialogue_panel_setup_error(
+            "missing_dialogue_root",
+            viewer_state.active_dialogue.as_ref(),
+            &mut last_logged_panel_error,
+        );
+        return;
+    };
+    if dialogue_root_iter.next().is_some() {
+        log_dialogue_panel_setup_error(
+            "duplicate_dialogue_roots",
+            viewer_state.active_dialogue.as_ref(),
+            &mut last_logged_panel_error,
+        );
+        return;
+    }
+
+    let mut choices_root_iter = choices_roots.iter();
+    let Some(choices_entity) = choices_root_iter.next() else {
+        log_dialogue_panel_setup_error(
+            "missing_choices_root",
+            viewer_state.active_dialogue.as_ref(),
+            &mut last_logged_panel_error,
+        );
+        return;
+    };
+    if choices_root_iter.next().is_some() {
+        log_dialogue_panel_setup_error(
+            "duplicate_choices_roots",
+            viewer_state.active_dialogue.as_ref(),
+            &mut last_logged_panel_error,
+        );
+        return;
+    }
+    *last_logged_panel_error = None;
 
     if scene_kind.is_main_menu() || console_state.is_open {
+        if let Some((actor_id, dialog_id, node_id)) = last_logged_dialogue.take() {
+            info!(
+                "viewer.dialogue.panel_hidden reason={} actor={:?} dialog_id={} node={}",
+                if scene_kind.is_main_menu() {
+                    "main_menu"
+                } else {
+                    "console_open"
+                },
+                actor_id,
+                dialog_id,
+                node_id,
+            );
+        }
         *visibility = Visibility::Hidden;
         for (_, _, mut choice_visibility, ..) in &mut choices {
             *choice_visibility = Visibility::Hidden;
@@ -457,6 +557,12 @@ pub(crate) fn update_dialogue_panel(
     }
 
     let Some(dialogue) = viewer_state.active_dialogue.as_ref() else {
+        if let Some((actor_id, dialog_id, node_id)) = last_logged_dialogue.take() {
+            info!(
+                "viewer.dialogue.panel_hidden reason=no_active_dialogue actor={:?} dialog_id={} node={}",
+                actor_id, dialog_id, node_id
+            );
+        }
         *visibility = Visibility::Hidden;
         for (_, _, mut choice_visibility, ..) in &mut choices {
             *choice_visibility = Visibility::Hidden;
@@ -466,10 +572,31 @@ pub(crate) fn update_dialogue_panel(
     let width =
         (window.width() - 520.0).clamp(DIALOGUE_PANEL_MIN_WIDTH_PX, DIALOGUE_PANEL_MAX_WIDTH_PX);
     node.width = px(width);
+    node.left = Val::Percent(50.0);
+    node.margin.left = px(-(width / 2.0));
     node.bottom = px(DIALOGUE_PANEL_BOTTOM_PX);
     *visibility = Visibility::Visible;
 
     let (speaker_text, body_text, choice_labels, hint_text) = dialogue_panel_content(dialogue);
+    let dialogue_key = (
+        dialogue.actor_id,
+        dialogue.dialog_id.clone(),
+        dialogue.current_node_id.clone(),
+    );
+    if last_logged_dialogue.as_ref() != Some(&dialogue_key) {
+        info!(
+            "viewer.dialogue.panel_visible actor={:?} target={:?} dialog_id={} dialogue_key={} node={} target_name={} choices={} width={}",
+            dialogue.actor_id,
+            dialogue.target_id,
+            dialogue.dialog_id,
+            dialogue.dialogue_key,
+            dialogue.current_node_id,
+            dialogue.target_name,
+            choice_labels.len(),
+            width,
+        );
+        *last_logged_dialogue = Some(dialogue_key);
+    }
     for (mut text, title, speaker, body, hint) in &mut labels {
         if title.is_some() {
             *text = Text::new(format!("对话 · {}", dialogue.target_name));
@@ -532,6 +659,31 @@ pub(crate) fn update_dialogue_panel(
             }
         }
     }
+}
+
+fn log_dialogue_panel_setup_error(
+    reason: &str,
+    active_dialogue: Option<&crate::state::ActiveDialogueState>,
+    last_logged_panel_error: &mut Option<String>,
+) {
+    let state_key = active_dialogue
+        .map(|dialogue| {
+            format!(
+                "{}|actor={:?}|target={:?}|dialog_id={}|node={}",
+                reason,
+                dialogue.actor_id,
+                dialogue.target_id,
+                dialogue.dialog_id,
+                dialogue.current_node_id
+            )
+        })
+        .unwrap_or_else(|| format!("{reason}|active=none"));
+    if last_logged_panel_error.as_ref() == Some(&state_key) {
+        return;
+    }
+
+    warn!("viewer.dialogue.panel_setup_error {state_key}");
+    *last_logged_panel_error = Some(state_key);
 }
 
 #[allow(clippy::too_many_arguments)]

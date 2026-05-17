@@ -31,7 +31,9 @@ impl InteractionMenuLayout {
 pub(crate) struct StaticWorldVisualKey {
     pub map_id: Option<MapId>,
     pub current_level: i32,
-    pub topology_version: u64,
+    // Do not key static rendering by GridWorld::topology_version. Generated door open/close
+    // changes pathfinding topology, but doors are animated by GeneratedDoorVisualState and should
+    // not force a full static scene despawn/rebuild that makes the whole viewer flash.
     pub hide_building_roofs: bool,
     pub camera_yaw_degrees: i32,
     pub camera_pitch_degrees: i32,
@@ -99,6 +101,7 @@ pub(crate) struct SpawnedBoxVisual {
 
 pub(crate) struct SpawnedMeshVisual {
     pub entity: Entity,
+    pub proxy_entity: Option<Entity>,
     pub material: StaticWorldMaterialHandle,
     pub tile_instance_handle: Option<WorldRenderTileInstanceHandle>,
     pub aabb_center: Vec3,
@@ -126,6 +129,7 @@ pub(crate) struct GeneratedDoorVisual {
     pub pivot_entity: Entity,
     pub leaf_entity: Entity,
     pub map_object_id: String,
+    pub mesh: Handle<Mesh>,
     pub material: StaticWorldMaterialHandle,
     pub base_color: Color,
     pub base_alpha: f32,

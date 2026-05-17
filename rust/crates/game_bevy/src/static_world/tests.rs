@@ -370,7 +370,7 @@ fn sample_topology_with_walkable_generated_building() -> StaticMapTopology {
             stories: vec![GeneratedBuildingStory {
                 level: 0,
                 wall_height: 2.4,
-                wall_thickness: 0.6,
+                wall_thickness: 0.36,
                 shape_cells: vec![
                     GridCoord::new(0, 0, 0),
                     GridCoord::new(1, 0, 0),

@@ -64,7 +64,10 @@ pub(crate) fn sync_preview_mesh_pick_index_system(
     meshes: Res<Assets<Mesh>>,
 ) {
     pick_index.clear();
-    let source_roots = sources.iter().map(|(entity, _)| entity).collect::<HashSet<_>>();
+    let source_roots = sources
+        .iter()
+        .map(|(entity, _)| entity)
+        .collect::<HashSet<_>>();
     for (root, source) in &sources {
         register_pick_tree(
             root,

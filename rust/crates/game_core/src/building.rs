@@ -42,7 +42,7 @@ pub struct GeneratedBuildingStory {
 }
 
 const fn default_generated_wall_thickness() -> f32 {
-    0.6
+    0.36
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -538,7 +538,7 @@ fn build_story_geometry(
     let door_width = layout.map(|layout| layout.door_width as f64).unwrap_or(1.0);
     let wall_thickness = layout
         .map(|layout| layout.wall_thickness as f64)
-        .unwrap_or(0.08);
+        .unwrap_or(0.048);
     let door_openings = collect_story_door_openings(
         interior_door_cells,
         DoorOpeningKind::Interior,

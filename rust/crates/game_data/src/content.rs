@@ -1598,6 +1598,7 @@ mod tests {
                         visual_asset: "assets/bevy_preview/placeholders/equipment_body.gltf"
                             .to_string(),
                         attach_target: None,
+                        attach_socket: None,
                         presentation_mode: crate::ItemAppearancePresentationMode::Attach,
                         hide_base_regions: Vec::new(),
                         preview_transform: Default::default(),
@@ -1637,6 +1638,7 @@ mod tests {
                             equip_slot: "body".to_string(),
                             visual_asset: asset.to_string(),
                             attach_target: None,
+                            attach_socket: None,
                             presentation_mode: crate::ItemAppearancePresentationMode::Attach,
                             hide_base_regions: Vec::new(),
                             preview_transform: Default::default(),

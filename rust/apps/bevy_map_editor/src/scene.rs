@@ -124,6 +124,8 @@ pub(crate) fn rebuild_scene_system(
             }
             *selection_index = build_selection_index_from_scene(
                 &scene,
+                &asset_server,
+                &mut meshes,
                 &world_tiles.0,
                 render_config.floor_thickness_world,
             );
@@ -167,6 +169,8 @@ pub(crate) fn rebuild_scene_system(
             }
             *selection_index = build_selection_index_from_scene(
                 &scene,
+                &asset_server,
+                &mut meshes,
                 &world_tiles.0,
                 render_config.floor_thickness_world,
             );

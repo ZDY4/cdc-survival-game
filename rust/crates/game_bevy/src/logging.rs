@@ -11,6 +11,7 @@ use tracing_appender::rolling::{never, RollingFileAppender, Rotation};
 use tracing_log::LogTracer;
 
 static LOGGING_INITIALIZED: OnceLock<()> = OnceLock::new();
+static PANIC_HOOK_INSTALLED: OnceLock<()> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub struct RuntimeLogSettings {
@@ -86,6 +87,7 @@ pub fn init_runtime_logging(settings: &RuntimeLogSettings) -> Result<(), Runtime
 
     LogTracer::init()?;
     tracing::subscriber::set_global_default(subscriber)?;
+    install_runtime_panic_hook(settings);
     let _ = LOGGING_INITIALIZED.set(());
     Ok(())
 }
@@ -113,6 +115,78 @@ fn single_run_log_file_name() -> String {
     let timestamp =
         local_log_timestamp().unwrap_or_else(|| format!("unix-{}", unix_timestamp_millis()));
     format!("runtime.{timestamp}.log")
+}
+
+fn install_runtime_panic_hook(settings: &RuntimeLogSettings) {
+    if PANIC_HOOK_INSTALLED.get().is_some() {
+        return;
+    }
+
+    let log_path = panic_log_path(settings);
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let payload = panic_payload_text(panic_info);
+        let location = panic_info
+            .location()
+            .map(|location| {
+                format!(
+                    "{}:{}:{}",
+                    location.file(),
+                    location.line(),
+                    location.column()
+                )
+            })
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let current_thread = std::thread::current();
+        let thread_name = current_thread.name().unwrap_or("<unnamed>");
+        let timestamp =
+            local_log_timestamp().unwrap_or_else(|| format!("unix-{}", unix_timestamp_millis()));
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let report = format!(
+            "{timestamp} PANIC thread={thread_name} location={location}\nmessage: {payload}\nbacktrace:\n{backtrace}\n"
+        );
+        if let Some(parent) = log_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Err(error) = append_panic_report(&log_path, &report) {
+            eprintln!(
+                "failed to append panic report to {}: {error}",
+                log_path.display()
+            );
+        }
+        previous_hook(panic_info);
+    }));
+    let _ = PANIC_HOOK_INSTALLED.set(());
+}
+
+fn panic_log_path(settings: &RuntimeLogSettings) -> PathBuf {
+    settings.log_dir().join(
+        settings
+            .file_name
+            .clone()
+            .unwrap_or_else(|| "runtime.panic.log".to_string()),
+    )
+}
+
+fn panic_payload_text(panic_info: &std::panic::PanicHookInfo<'_>) -> String {
+    if let Some(message) = panic_info.payload().downcast_ref::<&str>() {
+        return (*message).to_string();
+    }
+    if let Some(message) = panic_info.payload().downcast_ref::<String>() {
+        return message.clone();
+    }
+    "non-string panic payload".to_string()
+}
+
+fn append_panic_report(path: &PathBuf, report: &str) -> Result<(), std::io::Error> {
+    use std::io::Write;
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(file)?;
+    file.write_all(report.as_bytes())
 }
 
 fn local_log_timestamp() -> Option<String> {

@@ -87,7 +87,12 @@ pub(crate) fn handle_catalog_loading_task(
                         .find(|entry| entry.relative_path == requested)
                         .map(|entry| entry.relative_path.clone())
                 })
-                .or_else(|| catalog.entries.first().map(|entry| entry.relative_path.clone()));
+                .or_else(|| {
+                    catalog
+                        .entries
+                        .first()
+                        .map(|entry| entry.relative_path.clone())
+                });
             preview_state.requested_model_path = ui_state.selected_model_path.clone();
             commands.insert_resource(catalog);
             commands.entity(entity).despawn();

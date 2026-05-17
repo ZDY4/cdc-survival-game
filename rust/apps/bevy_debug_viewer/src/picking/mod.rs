@@ -7,6 +7,8 @@ use bevy::picking::prelude::Pickable;
 use bevy::prelude::*;
 use game_data::{ActorId, GridCoord, InteractionTargetId};
 
+pub(crate) use game_bevy::MeshPickPrototypeKey as PickMeshPrototypeKey;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ViewerPickTarget {
     Actor(ActorId),
@@ -161,13 +163,26 @@ impl Plugin for ViewerPickingPlugin {
                 require_markers: true,
                 ..default()
             })
-            .init_resource::<ViewerPickingState>();
+            .init_resource::<ViewerPickingState>()
+            .init_resource::<ViewerMeshPickIndex>()
+            .add_systems(Update, sync_viewer_mesh_pick_index_assets);
     }
+}
+
+pub(crate) type ViewerMeshPickIndex = game_bevy::MeshPickIndex<ViewerPickBinding>;
+
+fn sync_viewer_mesh_pick_index_assets(
+    mut mesh_pick_index: ResMut<ViewerMeshPickIndex>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    mesh_pick_index.sync_pending_mesh_instances(&meshes);
 }
 
 pub(crate) fn sync_viewer_picking_state(
     window: Single<&Window>,
     buttons: Res<ButtonInput<MouseButton>>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<crate::state::ViewerCamera>>,
+    mesh_pick_index: Res<ViewerMeshPickIndex>,
     hover_map: Res<HoverMap>,
     bindings: Query<&ViewerPickBinding>,
     mut picking_state: ResMut<ViewerPickingState>,
@@ -176,7 +191,10 @@ pub(crate) fn sync_viewer_picking_state(
     picking_state.primary_click = None;
     picking_state.secondary_click = None;
 
-    let hovered = resolve_hovered_pick(&hover_map, &bindings);
+    // Mesh index is the authoritative gameplay-world pick path. HoverMap remains only as a
+    // compatibility fallback for older explicit pick proxies and non-world pickable entities.
+    let hovered = resolve_mesh_index_pick(&window, &camera_query, &mesh_pick_index)
+        .or_else(|| resolve_hovered_pick(&hover_map, &bindings));
     picking_state.hovered = hovered.clone();
 
     if buttons.just_pressed(MouseButton::Left) {
@@ -220,7 +238,7 @@ fn resolve_hovered_pick(
     best
 }
 
-fn should_replace_pick(
+pub(super) fn should_replace_pick(
     current: Option<&ViewerResolvedPick>,
     candidate: &ViewerResolvedPick,
 ) -> bool {
@@ -231,6 +249,46 @@ fn should_replace_pick(
                 || (candidate.priority == current.priority && candidate.depth < current.depth)
         }
     }
+}
+
+fn resolve_mesh_index_pick(
+    window: &Window,
+    camera_query: &Query<(&Camera, &GlobalTransform), With<crate::state::ViewerCamera>>,
+    mesh_pick_index: &ViewerMeshPickIndex,
+) -> Option<ViewerResolvedPick> {
+    let cursor_position = window.cursor_position()?;
+    let (camera, camera_transform) = camera_query.iter().next()?;
+    let ray = camera
+        .viewport_to_world(camera_transform, cursor_position)
+        .ok()?;
+    mesh_pick_index
+        .query_by(ray, |current, candidate| {
+            let resolved_candidate = ViewerResolvedPick {
+                entity: candidate.entity,
+                semantic: candidate.data.semantic.clone(),
+                interaction: candidate.data.interaction.clone(),
+                priority: candidate.data.priority,
+                depth: candidate.depth,
+                position: Some(candidate.position),
+            };
+            let resolved_current = current.map(|current| ViewerResolvedPick {
+                entity: current.entity,
+                semantic: current.data.semantic.clone(),
+                interaction: current.data.interaction.clone(),
+                priority: current.data.priority,
+                depth: current.depth,
+                position: Some(current.position),
+            });
+            should_replace_pick(resolved_current.as_ref(), &resolved_candidate)
+        })
+        .map(|hit| ViewerResolvedPick {
+            entity: hit.entity,
+            semantic: hit.data.semantic,
+            interaction: hit.data.interaction,
+            priority: hit.data.priority,
+            depth: hit.depth,
+            position: Some(hit.position),
+        })
 }
 
 #[cfg(test)]

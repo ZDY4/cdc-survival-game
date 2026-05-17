@@ -54,6 +54,7 @@ pub(crate) fn update_game_ui(
     } else {
         None
     };
+    let dialogue_active = ui.viewer_state.active_dialogue.is_some();
 
     let show_main_menu = in_main_menu_scene;
     refresh_section(
@@ -71,7 +72,8 @@ pub(crate) fn update_game_ui(
         },
     );
 
-    let show_badges = !show_main_menu && !esc_menu_open && trade_state.is_none();
+    let show_badges =
+        !show_main_menu && !dialogue_active && !esc_menu_open && trade_state.is_none();
     let badge_key = show_badges.then(|| {
         format!(
             "{:?}|{:?}|{:?}|{:?}",
@@ -141,7 +143,7 @@ pub(crate) fn update_game_ui(
 
     if let Some(actor_id) = player_actor {
         let panel_key = open_panels_key(actor_id, &ui, &content);
-        let show_active_panel = panel_key.is_some();
+        let show_active_panel = panel_key.is_some() && !dialogue_active;
         refresh_section(
             &mut commands,
             &ui_children,
@@ -149,7 +151,7 @@ pub(crate) fn update_game_ui(
             scaffold.active_panel,
             show_active_panel,
             &mut cache.active_panel,
-            panel_key,
+            show_active_panel.then_some(panel_key).flatten(),
             |commands, entity| {
                 commands.entity(entity).with_children(|parent| {
                     render_open_panels(parent, &font, &window, actor_id, &ui, &content);
@@ -157,28 +159,31 @@ pub(crate) fn update_game_ui(
             },
         );
 
-        let trade_key = trade_state.map(|trade| {
-            let trade_snapshot = trade_snapshot(
-                &ui.runtime_state.runtime,
-                actor_id,
-                trade.target_actor_id,
-                &trade.shop_id,
-                &content.items.0,
-                &content.shops.0,
-            );
-            let inventory = trade_inventory_snapshot(
-                &ui.runtime_state.runtime,
-                actor_id,
-                &content.items.0,
-                ui.filter_state.filter,
-                ui.menu_state.selected_inventory_item,
-            );
-            format!(
-                "{trade_snapshot:?}|{inventory:?}|{:?}|{:?}",
-                ui.menu_state,
-                drag_visual_key(&ui.drag_state)
-            )
-        });
+        let trade_key = (!dialogue_active)
+            .then(|| trade_state)
+            .flatten()
+            .map(|trade| {
+                let trade_snapshot = trade_snapshot(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    trade.target_actor_id,
+                    &trade.shop_id,
+                    &content.items.0,
+                    &content.shops.0,
+                );
+                let inventory = trade_inventory_snapshot(
+                    &ui.runtime_state.runtime,
+                    actor_id,
+                    &content.items.0,
+                    ui.filter_state.filter,
+                    ui.menu_state.selected_inventory_item,
+                );
+                format!(
+                    "{trade_snapshot:?}|{inventory:?}|{:?}|{:?}",
+                    ui.menu_state,
+                    drag_visual_key(&ui.drag_state)
+                )
+            });
         refresh_section(
             &mut commands,
             &ui_children,
@@ -219,21 +224,25 @@ pub(crate) fn update_game_ui(
             },
         );
 
-        let container_key = container_state.map(|container| {
-            let container_snapshot = container_snapshot(
-                &ui.runtime_state.runtime,
-                &container.container_id,
-                &content.items.0,
-            );
-            format!(
-                "{container_snapshot:?}|{container:?}|{:?}|{:?}|{:?}|{:.1}|{:.1}",
-                ui.menu_state,
-                drag_visual_key(&ui.drag_state),
-                camera_transform.translation(),
-                window.width(),
-                window.height()
-            )
-        });
+        let container_key =
+            (!dialogue_active)
+                .then(|| container_state)
+                .flatten()
+                .map(|container| {
+                    let container_snapshot = container_snapshot(
+                        &ui.runtime_state.runtime,
+                        &container.container_id,
+                        &content.items.0,
+                    );
+                    format!(
+                        "{container_snapshot:?}|{container:?}|{:?}|{:?}|{:?}|{:.1}|{:.1}",
+                        ui.menu_state,
+                        drag_visual_key(&ui.drag_state),
+                        camera_transform.translation(),
+                        window.width(),
+                        window.height()
+                    )
+                });
         refresh_section(
             &mut commands,
             &ui_children,
@@ -268,6 +277,7 @@ pub(crate) fn update_game_ui(
         );
 
         let prompt_blocked = ui.input_block_state.blocked
+            || dialogue_active
             || ui.inventory_context_menu.visible
             || trade_state.is_some()
             || container_state.is_some();
@@ -325,9 +335,7 @@ pub(crate) fn update_game_ui(
         hide_section(&mut visibilities, scaffold.overworld_prompt);
     }
 
-    let tooltip_key = ui
-        .hover_tooltip
-        .visible
+    let tooltip_key = (ui.hover_tooltip.visible && !dialogue_active)
         .then(|| format!("{:?}", ui.hover_tooltip.as_ref()));
     refresh_section(
         &mut commands,
@@ -344,9 +352,7 @@ pub(crate) fn update_game_ui(
         },
     );
 
-    let context_menu_key = ui
-        .inventory_context_menu
-        .visible
+    let context_menu_key = (ui.inventory_context_menu.visible && !dialogue_active)
         .then(|| format!("{:?}", ui.inventory_context_menu.as_ref()));
     refresh_section(
         &mut commands,
@@ -363,9 +369,7 @@ pub(crate) fn update_game_ui(
         },
     );
 
-    let drag_preview_key = ui
-        .drag_state
-        .dragging
+    let drag_preview_key = (ui.drag_state.dragging && !dialogue_active)
         .then(|| format!("{:?}", ui.drag_state.as_ref()));
     refresh_section(
         &mut commands,
@@ -386,6 +390,7 @@ pub(crate) fn update_game_ui(
         .modal_state
         .item_quantity
         .as_ref()
+        .filter(|_| !dialogue_active)
         .map(|modal| format!("{modal:?}"));
     refresh_section(
         &mut commands,

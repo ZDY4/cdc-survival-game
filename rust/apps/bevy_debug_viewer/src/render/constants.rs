@@ -14,6 +14,7 @@ pub(crate) const DIALOGUE_CHOICE_BUTTON_FONT_SIZE_PX: f32 = 13.2;
 pub(crate) const DIALOGUE_PANEL_BOTTOM_PX: f32 = 24.0;
 pub(crate) const DIALOGUE_PANEL_MIN_WIDTH_PX: f32 = 360.0;
 pub(crate) const DIALOGUE_PANEL_MAX_WIDTH_PX: f32 = 920.0;
+pub(crate) const WORLD_INTERACTION_UI_Z_INDEX: i32 = 100;
 pub(crate) const GRID_LINE_ELEVATION: f32 = 0.002;
 pub(crate) const OVERLAY_ELEVATION: f32 = 0.03;
 pub(crate) const HOVER_MESH_OUTLINE_WIDTH_PX: f32 = 4.0;

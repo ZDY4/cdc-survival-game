@@ -25,7 +25,8 @@ use crate::scene::{
     draw_hovered_grid_outline_system, rebuild_scene_system, setup_editor, update_hover_info_system,
 };
 use crate::selection::{
-    handle_primary_selection_system, sync_selected_outline_visual_system, EditorSelectionIndex,
+    handle_primary_selection_system, sync_selected_outline_visual_system,
+    sync_selection_index_mesh_assets_system, EditorSelectionIndex,
 };
 use crate::state::{
     load_editor_state, load_editor_world_tiles, repo_root, EditorState, EditorUiState,
@@ -91,7 +92,11 @@ pub(crate) fn run(initial_map_id: Option<String>) {
         .insert_resource(InitialMapSelection(initial_map_id))
         .add_systems(
             Startup,
-            (setup_primary_egui_camera, setup_editor, load_editor_data_async),
+            (
+                setup_primary_egui_camera,
+                setup_editor,
+                load_editor_data_async,
+            ),
         )
         .add_systems(
             EguiPrimaryContextPass,
@@ -110,6 +115,7 @@ pub(crate) fn run(initial_map_id: Option<String>) {
                 handle_map_editor_commands.run_if(in_state(AppState::Ready)),
                 (
                     rebuild_scene_system,
+                    sync_selection_index_mesh_assets_system,
                     sync_camera_viewport_system,
                     handle_primary_selection_system,
                     camera_input_system,

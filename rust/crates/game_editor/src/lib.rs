@@ -41,8 +41,8 @@ pub use preview::{
     apply_preview_orbit_camera, preview_camera_input_system, preview_camera_sync_system,
     replace_preview_scene, spawn_preview_floor, spawn_preview_light_rig, spawn_preview_origin_axes,
     spawn_preview_scene_host, sync_preview_ground_visibility_system, PreviewCameraController,
-    PreviewFloor, PreviewGroundVisibility, PreviewOrbitCamera, PreviewOriginAxes,
-    PreviewSceneHost, PreviewSceneInstance, PreviewViewportRect,
+    PreviewFloor, PreviewGroundVisibility, PreviewOrbitCamera, PreviewOriginAxes, PreviewSceneHost,
+    PreviewSceneInstance, PreviewViewportRect,
 };
 pub use preview_stage::{setup_preview_stage, PreviewStageConfig, PreviewStageEntities};
 pub use primary_egui::setup_primary_egui_context_camera;

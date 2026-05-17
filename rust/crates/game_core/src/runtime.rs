@@ -937,6 +937,54 @@ mod tests {
     }
 
     #[test]
+    fn pending_interaction_can_be_cancelled_before_resume() {
+        let mut simulation = Simulation::new();
+        simulation.set_dialogue_library(sample_runtime_dialogue_library());
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("trader_lao_wang".into())),
+            display_name: "Trader".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: GridCoord::new(4, 0, 1),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+
+        let mut runtime = SimulationRuntime::from_simulation(simulation);
+        let result = runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+
+        assert!(result.success);
+        assert!(result.approach_required);
+        assert!(runtime.pending_movement().is_some());
+        assert!(runtime.pending_interaction().is_some());
+
+        assert!(runtime.cancel_pending_interaction(player));
+
+        assert!(runtime.pending_movement().is_none());
+        assert!(runtime.pending_interaction().is_none());
+        assert!(!runtime.has_pending_progression());
+        assert!(runtime.snapshot().path_preview.is_empty());
+        assert!(!runtime.cancel_pending_interaction(player));
+    }
+
+    #[test]
     fn pending_interaction_executes_when_target_moves_into_range() {
         let mut simulation = Simulation::new();
         simulation.set_dialogue_library(sample_runtime_dialogue_library());

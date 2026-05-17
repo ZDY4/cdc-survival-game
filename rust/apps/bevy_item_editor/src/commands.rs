@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use game_bevy::rust_asset_dir;
-use game_editor::{
-    open_model_directory, open_model_in_blockbench, open_model_in_gltf_viewer,
-};
+use game_editor::{open_model_directory, open_model_in_blockbench, open_model_in_gltf_viewer};
 
 use crate::actions::{
     delete_current_document, reload_editor_content, save_all_dirty_documents,

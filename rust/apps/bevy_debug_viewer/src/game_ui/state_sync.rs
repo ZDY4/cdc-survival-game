@@ -1,6 +1,7 @@
 //! UI 状态同步：负责场景切换后的默认值恢复、运行时快照同步和存档读写辅助。
 
 use super::*;
+use bevy::log::info;
 
 pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMenuState>) {
     menu_state.main_menu_open = false;
@@ -217,6 +218,7 @@ pub(super) fn transition_to_gameplay_scene(
 ) {
     *scene_kind = ViewerSceneKind::Gameplay;
     runtime_state.runtime.clear_gameplay_entry_transients();
+    log_gameplay_scene_transition(runtime_state, status_text);
     reset_viewer_runtime_transients(viewer_state);
     sync_viewer_runtime_basics(runtime_state, viewer_state);
     viewer_state.status_line = status_text.to_string();
@@ -232,6 +234,25 @@ pub(super) fn transition_to_gameplay_scene(
     modal_state.item_quantity = None;
     modal_state.trade = None;
     modal_state.container = None;
+}
+
+fn log_gameplay_scene_transition(runtime_state: &ViewerRuntimeState, reason: &str) {
+    let snapshot = runtime_state.runtime.snapshot();
+    let current_map_id = snapshot
+        .interaction_context
+        .current_map_id
+        .as_deref()
+        .or_else(|| snapshot.grid.map_id.as_ref().map(|map_id| map_id.as_str()))
+        .unwrap_or("<none>");
+    info!(
+        "viewer.scene.enter_gameplay: reason={reason}, world_mode={:?}, map_id={current_map_id}, actors={}, map_objects={}, generated_buildings={}, generated_doors={}, turn_index={}",
+        snapshot.interaction_context.world_mode,
+        snapshot.actors.len(),
+        snapshot.grid.map_objects.len(),
+        snapshot.generated_buildings.len(),
+        snapshot.generated_doors.len(),
+        snapshot.combat.current_turn_index,
+    );
 }
 
 pub(super) fn flush_viewer_input_after_scene_transition(

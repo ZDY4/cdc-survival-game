@@ -21,7 +21,7 @@ if not exist "%CARGO_EXE%" (
 
 pushd "%RUST_DIR%"
 
-echo Starting bevy_debug_viewer in release mode...
+echo Starting Bevy Game in release mode...
 "%CARGO_EXE%" run -r -p bevy_debug_viewer
 set "EXIT_CODE=%ERRORLEVEL%"
 popd

@@ -17,6 +17,7 @@ pub(super) fn sync_generated_door_visuals(
     palette: &ViewerPalette,
     door_visual_state: &mut GeneratedDoorVisualState,
     door_pivots: &mut Query<&mut Transform, (With<GeneratedDoorPivot>, Without<ActorBodyVisual>)>,
+    mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
 ) {
     let next_key = GeneratedDoorVisualKey {
         map_id: snapshot.grid.map_id.clone(),
@@ -32,7 +33,9 @@ pub(super) fn sync_generated_door_visuals(
             building_wall_materials,
         );
         for visual in door_visual_state.by_door.drain().map(|(_, visual)| visual) {
-            commands.entity(visual.leaf_entity).despawn();
+            mesh_pick_index.clear_entity(visual.leaf_entity);
+            // The leaf is a child of the pivot. Despawning both queues a second command for an
+            // already-despawned entity and can produce warning storms during door rebuilds.
             commands.entity(visual.pivot_entity).despawn();
         }
         door_visual_state.key = Some(next_key);
@@ -52,7 +55,7 @@ pub(super) fn sync_generated_door_visuals(
         .collect::<Vec<_>>();
     for door_id in stale_doors {
         if let Some(visual) = door_visual_state.by_door.remove(&door_id) {
-            commands.entity(visual.leaf_entity).despawn();
+            mesh_pick_index.clear_entity(visual.leaf_entity);
             commands.entity(visual.pivot_entity).despawn();
         }
     }
@@ -85,6 +88,7 @@ pub(super) fn sync_generated_door_visuals(
             transform.translation = visual.pivot_translation;
             transform.rotation = Quat::from_rotation_y(visual.current_yaw);
         }
+        register_generated_door_pick_mesh(mesh_pick_index, meshes, visual);
     }
 
     let previous_occluders = std::mem::take(&mut door_visual_state.occluders);
@@ -236,6 +240,7 @@ pub(super) fn spawn_generated_door_visual(
         pivot_entity,
         leaf_entity: leaf_entity.expect("generated door leaf should spawn"),
         map_object_id: door.map_object_id.clone(),
+        mesh: mesh_handle,
         material,
         base_color: color,
         base_alpha: color.to_srgba().alpha,
@@ -257,4 +262,36 @@ pub(super) fn spawn_generated_door_visual(
         shadowed_visible_cells,
         is_open: door.is_open,
     }
+}
+
+fn register_generated_door_pick_mesh(
+    mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
+    meshes: &Assets<Mesh>,
+    visual: &GeneratedDoorVisual,
+) {
+    mesh_pick_index.clear_entity(visual.leaf_entity);
+    let binding = ViewerPickBindingSpec::map_object(visual.map_object_id.clone());
+    let transform = Transform::from_translation(visual.pivot_translation)
+        .with_rotation(Quat::from_rotation_y(visual.current_yaw));
+    // Door interaction should follow the visible leaf mesh, not the floor tile under it.
+    // The AABB below is only a temporary fallback until the generated door mesh asset is ready.
+    if mesh_pick_index.register_mesh_handle_instance(
+        visual.leaf_entity,
+        visual.mesh.clone(),
+        meshes,
+        crate::picking::PickMeshPrototypeKey::mesh(&visual.mesh),
+        transform,
+        binding.clone(),
+    ) {
+        return;
+    }
+    let rotation = Quat::from_rotation_y(visual.current_yaw);
+    let center = visual.pivot_translation
+        + rotation * (visual.closed_aabb_center - visual.pivot_translation);
+    mesh_pick_index.register_cuboid_instance(
+        visual.leaf_entity,
+        visual.closed_aabb_half_extents * 2.0,
+        Transform::from_translation(center).with_rotation(rotation),
+        binding,
+    );
 }

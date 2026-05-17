@@ -23,6 +23,7 @@ pub(super) fn sync_actor_visuals(
         (Entity, &mut Transform, &ActorBodyVisual),
         Without<GeneratedDoorPivot>,
     >,
+    mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
 ) {
     let mut seen_actor_ids = HashSet::new();
     let grid_size = snapshot.grid.grid_size;
@@ -52,10 +53,19 @@ pub(super) fn sync_actor_visuals(
                 if let Ok((_, mut transform, body)) = actor_visuals.get_mut(existing.root_entity) {
                     if body.actor_id == actor.actor_id {
                         transform.translation = translation;
+                        register_actor_pick_mesh(
+                            mesh_pick_index,
+                            existing.root_entity,
+                            actor,
+                            translation,
+                            grid_size,
+                            render_config,
+                        );
                         continue;
                     }
                 }
             }
+            mesh_pick_index.clear_entity(existing.root_entity);
             commands.entity(existing.root_entity).despawn();
             actor_visual_state.by_actor.remove(&actor.actor_id);
         }
@@ -75,6 +85,14 @@ pub(super) fn sync_actor_visuals(
             character_appearance_definitions,
             runtime_state,
         );
+        register_actor_pick_mesh(
+            mesh_pick_index,
+            root_entity,
+            actor,
+            translation,
+            grid_size,
+            render_config,
+        );
         actor_visual_state.by_actor.insert(
             actor.actor_id,
             ActorVisualEntry {
@@ -92,7 +110,49 @@ pub(super) fn sync_actor_visuals(
         .collect();
     for actor_id in stale_actor_ids {
         if let Some(entry) = actor_visual_state.by_actor.remove(&actor_id) {
+            mesh_pick_index.clear_entity(entry.root_entity);
             commands.entity(entry.root_entity).despawn();
+        }
+    }
+}
+
+pub(crate) fn sync_actor_precise_pick_meshes(
+    mut mesh_pick_index: ResMut<crate::picking::ViewerMeshPickIndex>,
+    meshes: Res<Assets<Mesh>>,
+    actor_roots: Query<(Entity, &ActorBodyVisual)>,
+    children_query: Query<&Children>,
+    mesh_query: Query<(Entity, &Mesh3d, &GlobalTransform)>,
+) {
+    for (root_entity, body) in &actor_roots {
+        // The fallback body proxy is registered by sync_actor_visuals. Clear only the previous
+        // frame's precise child meshes here so loaded glTF parts can move/update without growing
+        // duplicate pick instances or losing the fallback before assets are ready.
+        mesh_pick_index.clear_precise_entity(root_entity);
+        let mut stack = vec![root_entity];
+        while let Some(entity) = stack.pop() {
+            if let Ok(children) = children_query.get(entity) {
+                for child in children.iter() {
+                    stack.push(child);
+                }
+            }
+
+            let Ok((_, mesh_handle, global_transform)) = mesh_query.get(entity) else {
+                continue;
+            };
+            let Some(mesh) = meshes.get(&mesh_handle.0) else {
+                continue;
+            };
+            let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
+            let transform = Transform::from_translation(translation)
+                .with_rotation(rotation)
+                .with_scale(scale);
+            mesh_pick_index.register_mesh_instance_preserving_fallback(
+                root_entity,
+                mesh,
+                crate::picking::PickMeshPrototypeKey::mesh(&mesh_handle.0),
+                transform,
+                ViewerPickBindingSpec::actor(body.actor_id),
+            );
         }
     }
 }
@@ -190,6 +250,32 @@ fn spawn_actor_visual_root(
     }
 
     root_entity
+}
+
+fn register_actor_pick_mesh(
+    mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
+    root_entity: Entity,
+    actor: &game_core::ActorDebugState,
+    translation: Vec3,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+) {
+    mesh_pick_index.clear_entity(root_entity);
+    // Keep actors in the unified mesh index so body/head hover does not fall back to the
+    // occupied tile. This proxy is intentionally oversized until spawned glTF children are
+    // indexed directly.
+    let body_height = render_config.actor_body_length_world;
+    let width = (render_config.actor_radius_world * 2.8).max(0.34);
+    let depth = (render_config.actor_radius_world * 2.8).max(0.34);
+    let height = (body_height + render_config.actor_radius_world * 3.2).max(0.9);
+    let local_center_y = -render_config.actor_radius_world + body_height * 0.35;
+    mesh_pick_index.register_cuboid_instance(
+        root_entity,
+        Vec3::new(width, height, depth),
+        Transform::from_translation(translation + Vec3::Y * local_center_y * grid_size)
+            .with_scale(Vec3::splat(grid_size)),
+        ViewerPickBindingSpec::actor(actor.actor_id),
+    );
 }
 
 pub(crate) fn actor_visual_world_position(

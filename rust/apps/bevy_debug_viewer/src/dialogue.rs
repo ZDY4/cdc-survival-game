@@ -1,13 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use bevy::log::warn;
+use bevy::log::{info, warn};
 use game_core::runtime::action_result_status;
 use game_core::{NpcActionKey, SimulationEvent};
 use game_data::{
     advance_dialogue as advance_dialogue_local_runtime,
     current_dialogue_node as current_dialogue_node_runtime, resolve_dialogue_start_node_id,
-    ActorId, CharacterId, DialogueAdvanceError, DialogueData, DialogueNode,
+    ActorId, ActorSide, CharacterId, DialogueAdvanceError, DialogueData, DialogueNode,
     DialogueResolutionContext, DialogueResolutionResult, DialogueResolutionSource,
     DialogueRuleDefinition, DialogueRuntimeState, InteractionExecutionResult, InteractionTargetId,
 };
@@ -33,11 +33,42 @@ pub(crate) fn apply_interaction_result(
     viewer_state: &mut ViewerState,
     result: InteractionExecutionResult,
 ) {
+    apply_interaction_result_for_actor(runtime_state, viewer_state, result, None);
+}
+
+pub(crate) fn apply_interaction_result_for_actor(
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    result: InteractionExecutionResult,
+    explicit_actor_id: Option<ActorId>,
+) {
+    info!(
+        "viewer.dialogue.apply_interaction_result explicit_actor={:?} success={} approach_required={} reason={:?} dialogue_id={:?} has_dialogue_state={} prompt_target={:?} focused_target={:?} active_before={}",
+        explicit_actor_id,
+        result.success,
+        result.approach_required,
+        result.reason,
+        result.dialogue_id,
+        result.dialogue_state.is_some(),
+        result.prompt.as_ref().map(|prompt| &prompt.target_id),
+        viewer_state.focused_target,
+        viewer_state.active_dialogue.is_some(),
+    );
+
     if let Some(prompt) = result.prompt.clone() {
         viewer_state.current_prompt = Some(prompt);
     }
 
     if let Some(dialogue_state) = result.dialogue_state.clone() {
+        info!(
+            "viewer.dialogue.apply_runtime_state_from_result actor={:?} target={:?} dialogue_key={} dialogue_id={} node={} finished={}",
+            dialogue_state.session.actor_id,
+            dialogue_state.session.target_id,
+            dialogue_state.session.dialogue_key,
+            dialogue_state.session.dialogue_id,
+            dialogue_state.session.current_node_id,
+            dialogue_state.finished,
+        );
         let dialogue_key = if dialogue_state.session.dialogue_key.trim().is_empty() {
             dialogue_state.session.dialogue_id.clone()
         } else {
@@ -55,7 +86,11 @@ pub(crate) fn apply_interaction_result(
     let dialogue_key = result.dialogue_id.clone();
     if let Some(dialogue_key) = dialogue_key.as_deref() {
         let snapshot = runtime_state.runtime.snapshot();
-        if let Some(actor_id) = viewer_state.command_actor_id(&snapshot) {
+        // Talk can end the actor's turn as part of the same interaction that starts dialogue.
+        // Prefer the actor that issued the interaction when the caller knows it; otherwise a
+        // post-EndTurn snapshot can fail to resolve a command actor and silently drop the UI.
+        let actor_id = explicit_actor_id.or_else(|| viewer_state.command_actor_id(&snapshot));
+        if let Some(actor_id) = actor_id {
             let target_id = viewer_state
                 .current_prompt
                 .as_ref()
@@ -78,6 +113,15 @@ pub(crate) fn apply_interaction_result(
             viewer_state.status_line = interaction_dialogue_status(&resolution);
             return;
         }
+        warn!(
+            "viewer.dialogue.drop_result_no_actor explicit_actor={:?} command_actor={:?} focus_actor={:?} dialogue_id={} prompt_target={:?} focused_target={:?}",
+            explicit_actor_id,
+            viewer_state.command_actor_id(&snapshot),
+            viewer_state.focus_actor_id(&snapshot),
+            dialogue_key,
+            viewer_state.current_prompt.as_ref().map(|prompt| &prompt.target_id),
+            viewer_state.focused_target,
+        );
     } else if result.success && result.consumed_target {
         viewer_state.focused_target = None;
         viewer_state.current_prompt = None;
@@ -224,11 +268,33 @@ pub(crate) fn sync_dialogue_from_event(
             target_id,
             dialogue_id,
         } => {
-            if !should_follow_dialogue_event(runtime_state, viewer_state, *actor_id) {
+            let should_follow =
+                should_follow_dialogue_event(runtime_state, viewer_state, *actor_id);
+            let snapshot = runtime_state.runtime.snapshot();
+            info!(
+                "viewer.dialogue.event_started actor={:?} target={:?} dialogue_id={} should_follow={} command_actor={:?} focus_actor={:?} active_actor={:?} actor_side={:?}",
+                actor_id,
+                target_id,
+                dialogue_id,
+                should_follow,
+                viewer_state.command_actor_id(&snapshot),
+                viewer_state.focus_actor_id(&snapshot),
+                viewer_state.active_dialogue.as_ref().map(|dialogue| dialogue.actor_id),
+                runtime_state.runtime.get_actor_side(*actor_id),
+            );
+            if !should_follow {
                 return;
             }
 
             if let Some(dialogue_state) = runtime_state.runtime.active_dialogue_state(*actor_id) {
+                info!(
+                    "viewer.dialogue.event_started_runtime_state actor={:?} dialogue_key={} dialogue_id={} node={} target={:?}",
+                    dialogue_state.session.actor_id,
+                    dialogue_state.session.dialogue_key,
+                    dialogue_state.session.dialogue_id,
+                    dialogue_state.session.current_node_id,
+                    dialogue_state.session.target_id,
+                );
                 apply_dialogue_runtime_state(
                     viewer_state,
                     dialogue_state,
@@ -237,6 +303,10 @@ pub(crate) fn sync_dialogue_from_event(
                 return;
             }
 
+            warn!(
+                "viewer.dialogue.event_started_missing_runtime_state actor={:?} dialogue_id={} target={:?}; opening viewer fallback",
+                actor_id, dialogue_id, target_id
+            );
             open_dialogue(
                 runtime_state,
                 viewer_state,
@@ -252,7 +322,17 @@ pub(crate) fn sync_dialogue_from_event(
             dialogue_id,
             node_id,
         } => {
-            if !should_follow_dialogue_event(runtime_state, viewer_state, *actor_id) {
+            let should_follow =
+                should_follow_dialogue_event(runtime_state, viewer_state, *actor_id);
+            info!(
+                "viewer.dialogue.event_advanced actor={:?} dialogue_id={} node={} should_follow={} active_actor={:?}",
+                actor_id,
+                dialogue_id,
+                node_id,
+                should_follow,
+                viewer_state.active_dialogue.as_ref().map(|dialogue| dialogue.actor_id),
+            );
+            if !should_follow {
                 return;
             }
 
@@ -304,6 +384,7 @@ fn should_follow_dialogue_event(
         == Some(actor_id)
         || viewer_state.command_actor_id(&snapshot) == Some(actor_id)
         || viewer_state.focus_actor_id(&snapshot) == Some(actor_id)
+        || runtime_state.runtime.get_actor_side(actor_id) == Some(ActorSide::Player)
 }
 
 fn open_dialogue(
@@ -325,6 +406,17 @@ fn open_dialogue(
     let current_node_id = current_node_id.unwrap_or_else(|| {
         resolve_dialogue_start_node_id(&resolved.data).unwrap_or_else(|| "start".to_string())
     });
+    info!(
+        "viewer.dialogue.open actor={:?} target={:?} dialogue_key={} resolved_id={:?} fallback={} node={} target_name={} node_count={}",
+        actor_id,
+        target_id,
+        dialogue_key,
+        resolved.result.resolved_dialogue_id,
+        resolved.result.used_fallback_dialogue,
+        current_node_id,
+        target_name,
+        resolved.data.nodes.len(),
+    );
     viewer_state.active_dialogue = Some(ActiveDialogueState {
         actor_id,
         target_id: target_id.cloned(),
@@ -411,6 +503,16 @@ fn apply_dialogue_runtime_state(
         dialogue_state.session.dialogue_id.clone()
     };
 
+    info!(
+        "viewer.dialogue.apply_runtime_state actor={:?} target={:?} dialogue_key={} dialog_id={} node={} options={} target_name={}",
+        dialogue_state.session.actor_id,
+        dialogue_state.session.target_id,
+        dialogue_key,
+        dialog_id,
+        dialogue_state.session.current_node_id,
+        dialogue_state.available_options.len(),
+        target_name,
+    );
     viewer_state.active_dialogue = Some(ActiveDialogueState {
         actor_id: dialogue_state.session.actor_id,
         target_id: dialogue_state.session.target_id.clone(),
@@ -769,11 +871,11 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        advance_dialogue, apply_interaction_result, current_dialogue_has_options,
-        default_dialogue_asset_dirs, resolve_dialogue_content_from_context,
-        sync_dialogue_from_event, DialogueAssetDirs,
+        advance_dialogue, apply_interaction_result, apply_interaction_result_for_actor,
+        current_dialogue_has_options, default_dialogue_asset_dirs,
+        resolve_dialogue_content_from_context, sync_dialogue_from_event, DialogueAssetDirs,
     };
-    use crate::state::{ActiveDialogueState, ViewerRuntimeState, ViewerState};
+    use crate::state::{ActiveDialogueState, ViewerControlMode, ViewerRuntimeState, ViewerState};
     use game_data::{
         resolve_dialogue_start_node_id, ActorKind, ActorSide, CharacterId, DialogueData,
         DialogueLibrary, DialogueNode, DialogueOption, DialogueResolutionContext,
@@ -956,6 +1058,71 @@ mod tests {
             active_dialogue.target_id,
             Some(InteractionTargetId::Actor(npc))
         );
+        assert_eq!(active_dialogue.current_node_id, "start");
+    }
+
+    #[test]
+    fn explicit_interaction_actor_opens_viewer_dialogue_after_turn_state_changes() {
+        let mut simulation = Simulation::new();
+        let player = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: game_data::GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let npc = simulation.register_actor(RegisterActor {
+            definition_id: Some(CharacterId("survivor_outpost_01_guard_liu".into())),
+            display_name: "Guard".into(),
+            kind: ActorKind::Npc,
+            side: ActorSide::Friendly,
+            group_id: "friendly".into(),
+            grid_position: game_data::GridCoord::new(1, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        let mut runtime_state = ViewerRuntimeState {
+            runtime: SimulationRuntime::from_simulation(simulation),
+            recent_events: Vec::new(),
+            ai_snapshot: SettlementDebugSnapshot::default(),
+        };
+        let mut viewer_state = ViewerState::default();
+        viewer_state.select_actor(player, ActorSide::Player);
+        viewer_state.focused_target = Some(InteractionTargetId::Actor(npc));
+        viewer_state.current_prompt = runtime_state
+            .runtime
+            .query_interaction_prompt(player, InteractionTargetId::Actor(npc));
+
+        let result = runtime_state.runtime.issue_interaction(
+            player,
+            InteractionTargetId::Actor(npc),
+            InteractionOptionId("talk".into()),
+        );
+        assert!(result.success);
+        assert!(result.dialogue_state.is_none());
+        assert_eq!(
+            result.dialogue_id.as_deref(),
+            Some("survivor_outpost_01_guard_liu")
+        );
+
+        viewer_state.control_mode = ViewerControlMode::FreeObserve;
+        apply_interaction_result_for_actor(&runtime_state, &mut viewer_state, result, Some(player));
+
+        let active_dialogue = viewer_state
+            .active_dialogue
+            .as_ref()
+            .expect("known interaction actor should open the viewer fallback dialogue");
+        assert_eq!(active_dialogue.actor_id, player);
+        assert_eq!(
+            active_dialogue.target_id,
+            Some(InteractionTargetId::Actor(npc))
+        );
+        assert_eq!(active_dialogue.dialog_id, "survivor_outpost_01_guard_liu");
         assert_eq!(active_dialogue.current_node_id, "start");
     }
 

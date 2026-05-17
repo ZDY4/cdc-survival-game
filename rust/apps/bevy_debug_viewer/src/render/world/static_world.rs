@@ -3,6 +3,7 @@
 
 use super::*;
 use bevy::camera::visibility::NoFrustumCulling;
+use bevy::log::{info, warn};
 use game_bevy::static_world as shared_static_world;
 use game_bevy::static_world::{
     build_static_world_from_simulation_snapshot, StaticWorldBuildConfig,
@@ -35,11 +36,13 @@ pub(super) fn rebuild_static_world(
     render_config: ViewerRenderConfig,
     bounds: GridBounds,
     static_world_state: &mut StaticWorldVisualState,
+    mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
 ) {
     static_world_state.entities.clear();
     static_world_state.occluders.clear();
     static_world_state.occluder_by_tile_instance.clear();
     static_world_state.tile_instances.clear();
+    mesh_pick_index.clear();
     let grid_size = snapshot.grid.grid_size;
     let floor_top =
         level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
@@ -61,6 +64,30 @@ pub(super) fn rebuild_static_world(
     let shared_scene = world_render_scene.static_scene.clone();
     let tile_scene = world_render_scene.resolve_tile_scene(&world_tiles.0);
     let prepared_tile_scene = prepare_tile_batch_scene(asset_server, &world_tiles.0, &tile_scene);
+    let shared_box_count = shared_scene.boxes.len();
+    let shared_pick_proxy_count = shared_scene.pick_proxies.len();
+    let decal_count = shared_scene.decals.len();
+    let tile_batch_count = prepared_tile_scene.batches.len();
+    let tile_pick_proxy_count = prepared_tile_scene.pick_proxies.len();
+    let tile_render_primitive_count: usize = prepared_tile_scene
+        .batches
+        .iter()
+        .map(|batch| batch.render_primitives.len())
+        .sum();
+    let tile_instance_count: usize = prepared_tile_scene
+        .batches
+        .iter()
+        .map(|batch| batch.instances.len())
+        .sum();
+    let map_id = snapshot
+        .grid
+        .map_id
+        .as_ref()
+        .map(|map_id| map_id.as_str())
+        .unwrap_or("<none>");
+    info!(
+        "viewer.static_world.rebuild: map_id={map_id}, level={current_level}, tile_batches={tile_batch_count}, tile_render_primitives={tile_render_primitive_count}, tile_instances={tile_instance_count}, shared_boxes={shared_box_count}, shared_pick_proxies={shared_pick_proxy_count}, tile_pick_proxies={tile_pick_proxy_count}, decals={decal_count}, hide_building_roofs={_hide_building_roofs}",
+    );
 
     static_world_state
         .entities
@@ -90,7 +117,17 @@ pub(super) fn rebuild_static_world(
     {
         let occluder_cells = spec.occluder_cells.clone();
         let occluder_kind = spec.occluder_kind.clone();
+        let pick_binding = spec.pick_binding.clone();
+        let size = spec.size;
+        let translation = spec.translation;
         let spawned = spawn_box(commands, meshes, materials, building_wall_materials, spec);
+        register_cuboid_pick_mesh(
+            mesh_pick_index,
+            spawned.entity,
+            size,
+            translation,
+            pick_binding,
+        );
         static_world_state.entities.push(spawned.entity);
         if occluder_kind.is_some() {
             static_world_state
@@ -110,7 +147,17 @@ pub(super) fn rebuild_static_world(
         .into_iter()
         .map(shared_box_spec_to_viewer_box_spec)
     {
+        let pick_binding = spec.pick_binding.clone();
+        let size = spec.size;
+        let translation = spec.translation;
         let spawned = spawn_box(commands, meshes, materials, building_wall_materials, spec);
+        register_cuboid_pick_mesh(
+            mesh_pick_index,
+            spawned.entity,
+            size,
+            translation,
+            pick_binding,
+        );
         static_world_state.entities.push(spawned.entity);
     }
 
@@ -119,11 +166,34 @@ pub(super) fn rebuild_static_world(
         .into_iter()
         .map(shared_box_spec_to_viewer_box_spec)
     {
+        let pick_binding = spec.pick_binding.clone();
+        let size = spec.size;
+        let translation = spec.translation;
         let spawned = spawn_box(commands, meshes, materials, building_wall_materials, spec);
+        register_cuboid_pick_mesh(
+            mesh_pick_index,
+            spawned.entity,
+            size,
+            translation,
+            pick_binding,
+        );
         static_world_state.entities.push(spawned.entity);
     }
 
     for batch in prepared_tile_scene.batches {
+        let prototype = world_tiles.0.prototype(&batch.key.prototype_id);
+        if prototype.is_none() {
+            warn!(
+                "viewer.static_world.tile_batch_missing_prototype: batch_id={:?}, prototype_id={}, render_class={:?}, render_primitives={}, instances={}",
+                batch.id,
+                batch.key.prototype_id.as_str(),
+                batch.key.render_class,
+                batch.render_primitives.len(),
+                batch.instances.len(),
+            );
+        }
+        let cast_shadows = prototype.is_none_or(|prototype| prototype.cast_shadows);
+        let receive_shadows = prototype.is_none_or(|prototype| prototype.receive_shadows);
         let batch_root = commands
             .spawn((
                 Transform::IDENTITY,
@@ -150,15 +220,19 @@ pub(super) fn rebuild_static_world(
                     render_entity.insert((
                         WorldRenderStandardTileBatchSource {
                             logical_batch_entity: batch_root,
-                            material: render_primitive.standard_material.clone().unwrap_or_else(
-                                || {
-                                    materials.add(StandardMaterial {
-                                        base_color: Color::WHITE,
-                                        ..default()
-                                    })
-                                },
-                            ),
+                            material: render_primitive.standard_material.clone().unwrap_or_else(|| {
+                                warn!(
+                                    "viewer.static_world.standard_batch_missing_material: batch_id={:?}, prototype_id={}, render_primitive_index={}, render_class={:?}",
+                                    batch.id,
+                                    batch.key.prototype_id.as_str(),
+                                    render_entities.len(),
+                                    batch.key.render_class,
+                                );
+                                fallback_standard_material(materials)
+                            }),
                             prototype_local_transform: render_primitive.local_transform,
+                            cast_shadows,
+                            receive_shadows,
                         },
                         WorldRenderStandardTileBatchMaterialState::default(),
                     ));
@@ -168,31 +242,40 @@ pub(super) fn rebuild_static_world(
                         logical_batch_entity: batch_root,
                         visual_kind,
                         prototype_local_transform: render_primitive.local_transform,
+                        cast_shadows,
+                        receive_shadows,
                     });
                 }
             }
             let render_entity = render_entity.id();
             commands.entity(batch_root).add_child(render_entity);
-            static_world_state.entities.push(render_entity);
             render_entities.push(render_entity);
         }
+        // Only the batch root is tracked for teardown. Its render and semantic instance children
+        // despawn with it; storing the children here causes duplicate despawn commands during
+        // static-world rebuilds.
         static_world_state.entities.push(batch_root);
-        let standard_instance_material =
-            if matches!(batch.key.render_class, TileRenderClass::Standard) {
-                Some(
+        let standard_instance_material = if matches!(
+            batch.key.render_class,
+            TileRenderClass::Standard
+        ) {
+            Some(
                     batch
                         .primary_render_primitive()
                         .and_then(|primitive| primitive.standard_material.clone())
                         .unwrap_or_else(|| {
-                            materials.add(StandardMaterial {
-                                base_color: Color::WHITE,
-                                ..default()
-                            })
+                            warn!(
+                                "viewer.static_world.standard_instance_missing_material: batch_id={:?}, prototype_id={}, render_class={:?}",
+                                batch.id,
+                                batch.key.prototype_id.as_str(),
+                                batch.key.render_class,
+                            );
+                            fallback_standard_material(materials)
                         }),
                 )
-            } else {
-                None
-            };
+        } else {
+            None
+        };
         let building_wall_instance_material = match batch.key.render_class {
             TileRenderClass::BuildingWallGrid(visual_kind) => Some(make_building_wall_material(
                 building_wall_materials,
@@ -214,7 +297,9 @@ pub(super) fn rebuild_static_world(
                 continue;
             };
             commands.entity(batch_root).add_child(spawned.entity);
-            static_world_state.entities.push(spawned.entity);
+            if let Some(proxy_entity) = spawned.proxy_entity {
+                commands.entity(batch_root).add_child(proxy_entity);
+            }
             if let Some(handle) = spawned.tile_instance_handle {
                 static_world_state.tile_instances.insert(
                     handle,
@@ -230,6 +315,15 @@ pub(super) fn rebuild_static_world(
                     },
                 );
             }
+            register_tile_instance_pick_mesh(
+                mesh_pick_index,
+                meshes,
+                &batch,
+                instance,
+                spawned.proxy_entity.unwrap_or(spawned.entity),
+                spawned.aabb_center,
+                spawned.aabb_half_extents,
+            );
             if occluder_kind.is_some() {
                 static_world_state
                     .occluders
@@ -260,6 +354,88 @@ pub(super) fn rebuild_static_world(
     }
 
     static_world_state.rebuild_occluder_index();
+}
+
+fn register_cuboid_pick_mesh(
+    mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
+    entity: Entity,
+    size: Vec3,
+    translation: Vec3,
+    pick_binding: Option<ViewerPickBindingSpec>,
+) {
+    let Some(pick_binding) = pick_binding else {
+        return;
+    };
+    mesh_pick_index.register_cuboid_instance(
+        entity,
+        size,
+        Transform::from_translation(translation),
+        pick_binding,
+    );
+}
+
+fn register_tile_instance_pick_mesh(
+    mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
+    meshes: &Assets<Mesh>,
+    batch: &PreparedTileBatch,
+    instance: &PreparedTileInstance,
+    entity: Entity,
+    aabb_center: Vec3,
+    aabb_half_extents: Vec3,
+) {
+    let Some(pick_binding) = tile_instance_pick_binding(batch, instance) else {
+        return;
+    };
+    let mut registered_any = false;
+    for render_primitive in &batch.render_primitives {
+        // Register every primitive on the semantic instance. The mesh index shares prototype
+        // triangles by handle, so many instances of the same tile do not duplicate geometry.
+        let transform = instance
+            .transform
+            .mul_transform(render_primitive.local_transform);
+        registered_any |= mesh_pick_index.register_mesh_handle_instance(
+            entity,
+            render_primitive.mesh.clone(),
+            meshes,
+            crate::picking::PickMeshPrototypeKey::mesh(&render_primitive.mesh),
+            transform,
+            pick_binding.clone(),
+        );
+    }
+    if !registered_any {
+        // Temporary safety net for not-yet-loaded meshes. Pending mesh registration will remove
+        // this fallback when the real primitive arrives, preserving mesh-accurate hover behavior.
+        mesh_pick_index.register_cuboid_instance(
+            entity,
+            aabb_half_extents * 2.0,
+            Transform::from_translation(aabb_center),
+            pick_binding,
+        );
+    }
+}
+
+fn tile_instance_pick_binding(
+    batch: &PreparedTileBatch,
+    instance: &PreparedTileInstance,
+) -> Option<ViewerPickBindingSpec> {
+    let semantic = instance.semantic.as_ref()?;
+    match batch.key.render_class {
+        TileRenderClass::BuildingWallGrid(_) => {
+            let wall_cell = instance.occluder_cells.first().copied()?;
+            match semantic {
+                shared_static_world::StaticWorldSemantic::MapObject(object_id) => {
+                    Some(ViewerPickBindingSpec::building_part(
+                        object_id.clone(),
+                        wall_cell.y,
+                        crate::picking::BuildingPartKind::WallCell,
+                        wall_cell,
+                    ))
+                }
+                _ => Some(shared_semantic_to_binding(semantic)),
+            }
+        }
+        TileRenderClass::Standard => Some(shared_semantic_to_binding(semantic)),
+    }
 }
 
 fn spawn_tile_instance(
@@ -317,17 +493,18 @@ fn spawn_tile_instance(
                     occluder_kind: None,
                     occluder_cells: Vec::new(),
                     pick_binding: wall_pick_binding,
-                    outline_target,
+                    outline_target: outline_target.clone(),
                 },
             );
+            let entity = spawn_tile_instance_metadata(commands, instance);
             commands.entity(spawned_box.entity).insert((
                 game_bevy::world_render::WorldRenderTileInstanceTag {
                     handle: instance.handle,
                 },
-                game_bevy::world_render::WorldRenderTileInstanceVisualState::default(),
             ));
             SpawnedMeshVisual {
-                entity: spawned_box.entity,
+                entity,
+                proxy_entity: Some(spawned_box.entity),
                 material: building_wall_instance_material
                     .expect("building wall tile metadata should carry wall material"),
                 tile_instance_handle: Some(instance.handle),
@@ -365,26 +542,58 @@ fn spawn_standard_tile_instance_metadata(
     material: Handle<StandardMaterial>,
 ) -> SpawnedMeshVisual {
     let entity = commands
-        .spawn((
-            instance.transform,
-            GlobalTransform::from(instance.transform),
-            Visibility::Visible,
-            InheritedVisibility::VISIBLE,
-            game_bevy::world_render::WorldRenderTileInstanceTag {
-                handle: instance.handle,
-            },
-            game_bevy::world_render::WorldRenderTileInstanceVisualState::default(),
-        ))
+        .spawn(tile_instance_metadata_components(instance))
         .id();
 
     SpawnedMeshVisual {
         entity,
+        proxy_entity: None,
         material: StaticWorldMaterialHandle::Standard(material),
         tile_instance_handle: Some(instance.handle),
         aabb_center: instance.world_aabb_center,
         aabb_half_extents: instance.world_aabb_half_extents,
         color: Color::WHITE,
     }
+}
+
+fn spawn_tile_instance_metadata(
+    commands: &mut Commands,
+    instance: &PreparedTileInstance,
+) -> Entity {
+    commands
+        .spawn(tile_instance_metadata_components(instance))
+        .id()
+}
+
+fn tile_instance_metadata_components(
+    instance: &PreparedTileInstance,
+) -> (
+    Transform,
+    GlobalTransform,
+    Visibility,
+    InheritedVisibility,
+    game_bevy::world_render::WorldRenderTileInstanceTag,
+    game_bevy::world_render::WorldRenderTileInstanceVisualState,
+) {
+    (
+        instance.transform,
+        GlobalTransform::from(instance.transform),
+        Visibility::Visible,
+        InheritedVisibility::VISIBLE,
+        game_bevy::world_render::WorldRenderTileInstanceTag {
+            handle: instance.handle,
+        },
+        game_bevy::world_render::WorldRenderTileInstanceVisualState::default(),
+    )
+}
+
+fn fallback_standard_material(
+    materials: &mut Assets<StandardMaterial>,
+) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        ..default()
+    })
 }
 
 fn shared_bounds(bounds: GridBounds) -> shared_static_world::StaticWorldGridBounds {

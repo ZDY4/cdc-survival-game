@@ -3,8 +3,7 @@ use bevy::camera::primitives::MeshAabb;
 use bevy::log::warn;
 use bevy::prelude::*;
 use game_editor::{
-    apply_preview_orbit_camera, replace_preview_scene, PreviewCameraController,
-    PreviewOrbitCamera,
+    apply_preview_orbit_camera, replace_preview_scene, PreviewCameraController, PreviewOrbitCamera,
 };
 
 use crate::state::{PivotInfo, PreviewCamera, PreviewLoadStatus, PreviewState, ViewerUiState};

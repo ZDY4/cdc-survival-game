@@ -463,7 +463,7 @@ fn static_world_specs_hide_nonfunctional_environment_geometry() {
         .count();
 
     assert!(non_occluder_count > 0);
-    assert_eq!(occluder_count, 1);
+    assert_eq!(occluder_count, 0);
     assert!(specs.iter().all(|spec| {
         spec.occluder_kind.is_none()
             || matches!(
@@ -494,10 +494,10 @@ fn static_world_specs_skip_missing_geo_buildings_and_keep_functional_objects() {
         spec.occluder_kind == Some(StaticWorldOccluderKind::MapObject(MapObjectKind::Building))
     }));
     assert!(specs.iter().any(|spec| {
-        spec.occluder_kind
-            == Some(StaticWorldOccluderKind::MapObject(
-                MapObjectKind::Interactive,
-            ))
+        spec.occluder_kind.is_none()
+            && spec.pick_binding.as_ref().is_some_and(|binding| {
+                binding.semantic == ViewerPickTarget::MapObject("terminal".into())
+            })
     }));
 }
 
@@ -979,7 +979,6 @@ fn occluder_keys_change_when_camera_projection_changes() {
     let base_world_key = StaticWorldVisualKey {
         map_id: None,
         current_level: 0,
-        topology_version: 7,
         hide_building_roofs: false,
         camera_yaw_degrees: 0,
         camera_pitch_degrees: 36,
@@ -1965,6 +1964,7 @@ fn sample_door_visual(
         pivot_entity: Entity::from_bits(1),
         leaf_entity: Entity::from_bits(2),
         map_object_id: "door_object".into(),
+        mesh: Handle::default(),
         material: StaticWorldMaterialHandle::Standard(Handle::default()),
         base_color: Color::WHITE,
         base_alpha: 1.0,
@@ -2144,7 +2144,7 @@ fn snapshot_with_generated_building() -> SimulationSnapshot {
             stories: vec![GeneratedBuildingStory {
                 level: 0,
                 wall_height: 2.35,
-                wall_thickness: 0.08,
+                wall_thickness: 0.048,
                 shape_cells: vec![
                     GridCoord::new(0, 0, 0),
                     GridCoord::new(1, 0, 0),

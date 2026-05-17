@@ -97,6 +97,7 @@ pub(crate) fn setup_viewer(
             BackgroundColor(context_menu_panel_color()),
             BorderColor::all(context_menu_border_color()),
             Visibility::Hidden,
+            GlobalZIndex(WORLD_INTERACTION_UI_Z_INDEX),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
@@ -119,15 +120,20 @@ pub(crate) fn setup_viewer(
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: px(24),
+                left: Val::Percent(50.0),
                 bottom: px(DIALOGUE_PANEL_BOTTOM_PX),
                 width: px(720),
+                margin: UiRect {
+                    left: px(-360),
+                    ..default()
+                },
                 padding: UiRect::all(px(16)),
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
             BackgroundColor(palette.dialogue_background),
             Visibility::Hidden,
+            GlobalZIndex(WORLD_INTERACTION_UI_Z_INDEX),
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),

@@ -35,7 +35,8 @@ pub(crate) use npc_runtime::{
     advance_online_npc_actions, advance_online_npc_combat, sync_npc_runtime_presence,
 };
 pub(crate) use progression::{
-    advance_runtime_progression, cancel_pending_movement, submit_end_turn,
+    advance_runtime_progression, cancel_pending_interaction, cancel_pending_movement,
+    submit_end_turn,
 };
 pub(crate) use runtime_basics::{
     advance_map_ai_spawns, prime_viewer_state, refresh_viewer_vision,

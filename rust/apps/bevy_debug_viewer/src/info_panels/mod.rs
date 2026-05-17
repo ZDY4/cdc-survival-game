@@ -226,7 +226,7 @@ pub(crate) fn update_info_panel(
 
     *visibility = Visibility::Visible;
     let snapshot = runtime_state.runtime.snapshot();
-    let header = format!("Bevy Debug Viewer · {}", active_page.title());
+    let header = format!("Bevy Game · {}", active_page.title());
     let summary = format_status_summary(&viewer_state, *render_config);
     let page_body = match active_page {
         ViewerHudPage::Overview => format_overview_panel(&snapshot, &runtime_state, &viewer_state),

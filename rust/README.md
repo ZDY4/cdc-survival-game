@@ -9,7 +9,7 @@ This directory contains the incremental Rust-side architecture for the project.
 - `crates/game_core`: reusable gameplay logic
 - `crates/game_bevy`: shared Bevy runtime assembly
 - `apps/bevy_server`: headless Bevy runtime
-- `apps/bevy_debug_viewer`: windowed Bevy debug viewer
+- `apps/bevy_debug_viewer`: windowed Bevy game client
 
 ## Character Definition Authority
 
@@ -28,7 +28,7 @@ kept in sync with the Rust schema.
 - `game_data` owns content schema, loading, and validation.
 - `game_core` owns engine-agnostic simulation/runtime rules.
 - `game_bevy` owns shared Bevy app assembly, including definition-to-ECS and definition-to-runtime seed integration.
-- `bevy_server` and `bevy_debug_viewer` only own app entrypoints, reporting, and presentation.
+- `bevy_server` and the Bevy game client only own app entrypoints, reporting, and presentation.
 
 ## Intended next steps
 
@@ -36,6 +36,6 @@ kept in sync with the Rust schema.
 2. Run `cargo check` inside `rust/`.
 3. Expand `game_data` with real content schemas from `data/`.
 4. Run `cargo run -p bevy_server` for the headless demo flow.
-5. Run `cargo run -p bevy_debug_viewer` for the windowed logic viewer.
+5. Run `cargo run -p bevy_debug_viewer` or `../run_bevy_game.bat` for the windowed game client.
 6. Add a transport layer in `game_protocol` or `bevy_server`.
 7. Continue migrating remaining legacy systems into `game_core`.

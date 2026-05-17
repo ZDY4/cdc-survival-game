@@ -974,6 +974,7 @@ dependencies = [
  "bevy_egui",
  "game_bevy",
  "game_editor",
+ "serde_json",
 ]
 
 [[package]]

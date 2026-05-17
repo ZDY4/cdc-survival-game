@@ -174,8 +174,8 @@ pub(crate) fn editor_ui_system(
                                     editor.selected_map_id.as_deref() == Some(map_id.as_str()),
                                     label.as_str(),
                                 )
-                                    .on_hover_text(label)
-                                    .clicked()
+                                .on_hover_text(label)
+                                .clicked()
                                 {
                                     let level = if editor.selected_map_id.as_deref()
                                         == Some(map_id.as_str())
@@ -212,8 +212,8 @@ pub(crate) fn editor_ui_system(
                                         == Some(overworld_id.as_str()),
                                     label.as_str(),
                                 )
-                                    .on_hover_text(label)
-                                    .clicked()
+                                .on_hover_text(label)
+                                .clicked()
                                 {
                                     requests.write(MapEditorCommand::SelectOverworld {
                                         overworld_id: overworld_id.clone(),

@@ -111,6 +111,7 @@ pub(crate) struct WorldVisualSyncParams<'w, 's> {
     static_world_state: ResMut<'w, crate::render::StaticWorldVisualState>,
     door_visual_state: ResMut<'w, crate::render::GeneratedDoorVisualState>,
     actor_visual_state: ResMut<'w, crate::render::ActorVisualState>,
+    mesh_pick_index: ResMut<'w, crate::picking::ViewerMeshPickIndex>,
     actor_visuals: Query<
         'w,
         's,
@@ -194,6 +195,7 @@ pub(crate) fn profiled_sync_world_visuals(
             params.static_world_state,
             params.door_visual_state,
             params.actor_visual_state,
+            params.mesh_pick_index,
         );
         return;
     }
@@ -221,6 +223,7 @@ pub(crate) fn profiled_sync_world_visuals(
         params.static_world_state,
         params.door_visual_state,
         params.actor_visual_state,
+        params.mesh_pick_index,
         params.actor_visuals,
         params.door_pivots,
     );

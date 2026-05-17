@@ -22,10 +22,12 @@ pub(crate) fn clear_world_visuals(
     mut static_world_state: ResMut<StaticWorldVisualState>,
     mut door_visual_state: ResMut<GeneratedDoorVisualState>,
     mut actor_visual_state: ResMut<ActorVisualState>,
+    mut mesh_pick_index: ResMut<crate::picking::ViewerMeshPickIndex>,
 ) {
     clear_static_world_entities(&mut commands, &mut static_world_state);
     clear_generated_door_entities(&mut commands, &mut door_visual_state);
     clear_actor_visual_entities(&mut commands, &mut actor_visual_state);
+    mesh_pick_index.clear();
 }
 
 pub(crate) fn sync_world_visuals(
@@ -50,6 +52,7 @@ pub(crate) fn sync_world_visuals(
     mut static_world_state: ResMut<StaticWorldVisualState>,
     mut door_visual_state: ResMut<GeneratedDoorVisualState>,
     mut actor_visual_state: ResMut<ActorVisualState>,
+    mut mesh_pick_index: ResMut<crate::picking::ViewerMeshPickIndex>,
     mut actor_visuals: Query<
         (Entity, &mut Transform, &ActorBodyVisual),
         Without<GeneratedDoorPivot>,
@@ -63,7 +66,6 @@ pub(crate) fn sync_world_visuals(
     let next_key = StaticWorldVisualKey {
         map_id: snapshot.grid.map_id.clone(),
         current_level: viewer_state.current_level,
-        topology_version: snapshot.grid.topology_version,
         hide_building_roofs,
         camera_yaw_degrees: render_config.camera_yaw_degrees.round() as i32,
         camera_pitch_degrees: render_config.camera_pitch_degrees.round() as i32,
@@ -90,6 +92,7 @@ pub(crate) fn sync_world_visuals(
             *render_config,
             bounds,
             &mut static_world_state,
+            &mut mesh_pick_index,
         );
         static_world_state.key = Some(next_key);
     }
@@ -106,6 +109,7 @@ pub(crate) fn sync_world_visuals(
         &palette,
         &mut door_visual_state,
         &mut door_pivots,
+        &mut mesh_pick_index,
     );
 
     actors::sync_actor_visuals(
@@ -125,8 +129,11 @@ pub(crate) fn sync_world_visuals(
         &palette,
         &mut actor_visual_state,
         &mut actor_visuals,
+        &mut mesh_pick_index,
     );
 }
+
+pub(crate) use actors::sync_actor_precise_pick_meshes;
 
 pub(crate) fn update_occluding_world_visuals(
     runtime_state: Res<ViewerRuntimeState>,

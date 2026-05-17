@@ -513,7 +513,7 @@ pub(crate) fn default_exterior_door_count() -> u32 {
 }
 
 pub(crate) fn default_wall_thickness() -> f32 {
-    0.6
+    0.36
 }
 
 pub(crate) fn default_wall_height() -> f32 {

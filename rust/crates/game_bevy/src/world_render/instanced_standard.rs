@@ -2,6 +2,7 @@ use bevy::asset::uuid_handle;
 use bevy::core_pipeline::core_3d::{Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, Transparent3d};
 use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
+use bevy::log::warn;
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
     ErasedMaterialKey, ErasedMaterialPipelineKey, MaterialProperties, MeshPipeline,
@@ -628,9 +629,19 @@ impl SpecializedMeshPipeline for WorldRenderStandardTilePipeline {
             .vertex
             .buffers
             .push(standard_tile_instance_buffer_layout());
-        if key.mesh_key.contains(MeshPipelineKey::DEPTH_PREPASS) {
-            descriptor.fragment = None;
-        } else if let Some(fragment) = descriptor.fragment.as_mut() {
+        if descriptor
+            .fragment
+            .as_ref()
+            .is_none_or(|fragment| fragment.targets.is_empty())
+        {
+            warn!(
+                "world_render_standard_tile main-pass pipeline missing fragment targets: pass={:?}, mesh_key_bits=0x{:016x}, prepass_flags={}",
+                key.pass,
+                key.mesh_key.bits(),
+                summarize_mesh_prepass_flags(key.mesh_key),
+            );
+        }
+        if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
             if let Some(Some(target)) = fragment.targets.first_mut() {
                 target.blend = match key.pass {
@@ -644,6 +655,34 @@ impl SpecializedMeshPipeline for WorldRenderStandardTilePipeline {
                 matches!(key.pass, WorldRenderStandardTilePass::Opaque);
         }
         Ok(descriptor)
+    }
+}
+
+fn summarize_mesh_prepass_flags(mesh_key: MeshPipelineKey) -> &'static str {
+    match (
+        mesh_key.contains(MeshPipelineKey::DEPTH_PREPASS),
+        mesh_key.contains(MeshPipelineKey::NORMAL_PREPASS),
+        mesh_key.contains(MeshPipelineKey::MOTION_VECTOR_PREPASS),
+        mesh_key.contains(MeshPipelineKey::DEFERRED_PREPASS),
+    ) {
+        (false, false, false, false) => "none",
+        (true, false, false, false) => "DEPTH_PREPASS",
+        (false, true, false, false) => "NORMAL_PREPASS",
+        (false, false, true, false) => "MOTION_VECTOR_PREPASS",
+        (false, false, false, true) => "DEFERRED_PREPASS",
+        (true, true, false, false) => "DEPTH_PREPASS|NORMAL_PREPASS",
+        (true, false, true, false) => "DEPTH_PREPASS|MOTION_VECTOR_PREPASS",
+        (true, false, false, true) => "DEPTH_PREPASS|DEFERRED_PREPASS",
+        (false, true, true, false) => "NORMAL_PREPASS|MOTION_VECTOR_PREPASS",
+        (false, true, false, true) => "NORMAL_PREPASS|DEFERRED_PREPASS",
+        (false, false, true, true) => "MOTION_VECTOR_PREPASS|DEFERRED_PREPASS",
+        (true, true, true, false) => "DEPTH_PREPASS|NORMAL_PREPASS|MOTION_VECTOR_PREPASS",
+        (true, true, false, true) => "DEPTH_PREPASS|NORMAL_PREPASS|DEFERRED_PREPASS",
+        (true, false, true, true) => "DEPTH_PREPASS|MOTION_VECTOR_PREPASS|DEFERRED_PREPASS",
+        (false, true, true, true) => "NORMAL_PREPASS|MOTION_VECTOR_PREPASS|DEFERRED_PREPASS",
+        (true, true, true, true) => {
+            "DEPTH_PREPASS|NORMAL_PREPASS|MOTION_VECTOR_PREPASS|DEFERRED_PREPASS"
+        }
     }
 }
 

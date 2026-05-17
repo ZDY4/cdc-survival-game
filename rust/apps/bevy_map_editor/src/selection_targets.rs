@@ -1,9 +1,13 @@
+use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
 use bevy_egui::input::EguiWantsInput;
 use bevy_mesh_outline::MeshOutline;
-use game_bevy::world_render::{build_generated_door_mesh_spec, WorldRenderScene};
-use game_bevy::StaticWorldSemantic;
+use game_bevy::world_render::{
+    build_generated_door_mesh_spec, prepare_tile_batch_scene, PreparedTileBatch,
+    PreparedTileInstance, WorldRenderScene,
+};
+use game_bevy::{MeshPickHit, MeshPickIndex, MeshPickPrototypeKey, StaticWorldSemantic};
 use game_data::WorldTileLibrary;
 
 use crate::camera::ray_point_on_horizontal_plane;
@@ -12,6 +16,7 @@ use crate::state::{
 };
 
 const SELECTED_OUTLINE_COLOR: Color = Color::srgba(0.98, 0.62, 0.22, 1.0);
+const SELECTED_OUTLINE_MASK_COLOR: Color = Color::srgba(0.98, 0.62, 0.22, 0.0);
 const SELECTED_OUTLINE_FILL_COLOR: Color = Color::srgba(0.98, 0.62, 0.22, 0.035);
 const SELECTED_OUTLINE_WIDTH_PX: f32 = 4.0;
 const SELECTED_OUTLINE_INTENSITY: f32 = 1.0;
@@ -23,24 +28,72 @@ const PICK_DISTANCE_EPSILON: f32 = 0.0001;
 
 #[derive(Resource, Debug, Clone, Default)]
 pub(crate) struct EditorSelectionIndex {
+    mesh_index: MeshPickIndex<SelectionCandidateData>,
+    outline_meshes: Vec<SelectionOutlineMesh>,
     visible_candidates: Vec<SelectionCandidate>,
     proxy_candidates: Vec<SelectionCandidate>,
 }
 
 impl EditorSelectionIndex {
     pub(crate) fn clear(&mut self) {
+        self.mesh_index.clear();
+        self.outline_meshes.clear();
         self.visible_candidates.clear();
         self.proxy_candidates.clear();
     }
 
     fn resolve_pick(&self, ray: Ray3d) -> Option<EditorResolvedPick> {
-        resolve_pick_from_candidates(ray, &self.visible_candidates)
+        self.mesh_index
+            .query_by(ray, should_replace_mesh_pick)
+            .map(EditorResolvedPick::from_mesh_hit)
+            .or_else(|| resolve_pick_from_candidates(ray, &self.visible_candidates))
             .or_else(|| resolve_pick_from_candidates(ray, &self.proxy_candidates))
     }
 
     fn outline_bounds_for(&self, semantic: &StaticWorldSemantic) -> Option<SelectionBounds> {
-        outline_bounds_for_semantic(&self.visible_candidates, semantic)
+        outline_bounds_for_meshes(&self.outline_meshes, semantic)
+            .or_else(|| outline_bounds_for_semantic(&self.visible_candidates, semantic))
             .or_else(|| outline_bounds_for_semantic(&self.proxy_candidates, semantic))
+    }
+
+    fn outline_meshes_for(&self, semantic: &StaticWorldSemantic) -> Vec<SelectionOutlineMesh> {
+        self.outline_meshes
+            .iter()
+            .filter(|mesh| &mesh.semantic == semantic)
+            .cloned()
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum SelectionPickPriority {
+    Proxy = 0,
+    Visible = 1,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct SelectionCandidateData {
+    semantic: StaticWorldSemantic,
+    priority: SelectionPickPriority,
+    bounds_volume: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PickEntityAllocator {
+    next: u64,
+}
+
+impl Default for PickEntityAllocator {
+    fn default() -> Self {
+        Self { next: 1 }
+    }
+}
+
+impl PickEntityAllocator {
+    fn next(&mut self) -> Entity {
+        let entity = Entity::from_bits(self.next);
+        self.next = self.next.saturating_add(1);
+        entity
     }
 }
 
@@ -49,6 +102,14 @@ struct SelectionCandidate {
     semantic: StaticWorldSemantic,
     volume: SelectionVolume,
     outline_bounds: SelectionBounds,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct SelectionOutlineMesh {
+    semantic: StaticWorldSemantic,
+    mesh: Handle<Mesh>,
+    transform: Transform,
+    bounds: SelectionBounds,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -174,18 +235,34 @@ struct EditorResolvedPick {
     bounds_volume: f32,
 }
 
+impl EditorResolvedPick {
+    fn from_mesh_hit(hit: MeshPickHit<SelectionCandidateData>) -> Self {
+        Self {
+            semantic: hit.data.semantic,
+            distance: hit.depth,
+            bounds_volume: hit.data.bounds_volume,
+        }
+    }
+}
+
 #[derive(Component, Debug, Clone, PartialEq)]
 pub(crate) struct SelectedOutlineVisualState {
     target: EditorSelectionTarget,
     bounds: SelectionBounds,
+    mesh_count: usize,
 }
 
 pub(crate) fn build_selection_index_from_scene(
     scene: &WorldRenderScene,
+    asset_server: &AssetServer,
+    meshes: &mut Assets<Mesh>,
     world_tiles: &WorldTileLibrary,
     floor_thickness_world: f32,
 ) -> EditorSelectionIndex {
     let mut index = EditorSelectionIndex::default();
+    let mut pick_entities = PickEntityAllocator::default();
+    let tile_scene = scene.resolve_tile_scene(world_tiles);
+    let prepared_tile_scene = prepare_tile_batch_scene(asset_server, world_tiles, &tile_scene);
 
     for placement in &scene.tile_placements {
         if let Some(semantic) = placement.semantic.as_ref() {
@@ -210,25 +287,85 @@ pub(crate) fn build_selection_index_from_scene(
         }
     }
 
+    for batch in &prepared_tile_scene.batches {
+        for instance in &batch.instances {
+            register_tile_instance_pick_mesh(
+                &mut index,
+                meshes,
+                batch,
+                instance,
+                pick_entities.next(),
+            );
+        }
+    }
+
+    for proxy in prepared_tile_scene.pick_proxies {
+        if let Some(semantic) = proxy.semantic {
+            register_cuboid_pick_mesh(
+                &mut index,
+                pick_entities.next(),
+                proxy.size,
+                Transform::from_translation(proxy.translation),
+                semantic,
+                SelectionPickPriority::Proxy,
+                proxy.size.x * proxy.size.y * proxy.size.z,
+            );
+        }
+    }
+
     for spec in &scene.static_scene.boxes {
         if let Some(semantic) = spec.semantic.as_ref() {
             let volume = SelectionVolume::from_box(spec.size, spec.translation);
+            let outline_bounds = volume.outline_bounds();
             index.visible_candidates.push(SelectionCandidate {
                 semantic: semantic.clone(),
-                outline_bounds: volume.outline_bounds(),
+                outline_bounds,
                 volume,
             });
+            index.outline_meshes.push(SelectionOutlineMesh {
+                semantic: semantic.clone(),
+                mesh: meshes.add(Cuboid::new(spec.size.x, spec.size.y, spec.size.z)),
+                transform: Transform::from_translation(spec.translation),
+                bounds: outline_bounds,
+            });
+            register_cuboid_pick_mesh(
+                &mut index,
+                pick_entities.next(),
+                spec.size,
+                Transform::from_translation(spec.translation),
+                semantic.clone(),
+                SelectionPickPriority::Visible,
+                outline_bounds.volume(),
+            );
         }
     }
 
     for spec in &scene.static_scene.decals {
         if let Some(semantic) = spec.semantic.as_ref() {
             let volume = decal_volume(spec);
+            let outline_bounds = volume.outline_bounds();
             index.visible_candidates.push(SelectionCandidate {
                 semantic: semantic.clone(),
-                outline_bounds: volume.outline_bounds(),
+                outline_bounds,
                 volume,
             });
+            let decal_size = volume.half_extents * 2.0;
+            index.outline_meshes.push(SelectionOutlineMesh {
+                semantic: semantic.clone(),
+                mesh: meshes.add(Cuboid::new(decal_size.x, decal_size.y, decal_size.z)),
+                transform: Transform::from_translation(volume.center)
+                    .with_rotation(volume.rotation),
+                bounds: outline_bounds,
+            });
+            register_cuboid_pick_mesh(
+                &mut index,
+                pick_entities.next(),
+                decal_size,
+                Transform::from_translation(volume.center).with_rotation(volume.rotation),
+                semantic.clone(),
+                SelectionPickPriority::Visible,
+                outline_bounds.volume(),
+            );
         }
     }
 
@@ -240,6 +377,15 @@ pub(crate) fn build_selection_index_from_scene(
                 outline_bounds: volume.outline_bounds(),
                 volume,
             });
+            register_cuboid_pick_mesh(
+                &mut index,
+                pick_entities.next(),
+                spec.size,
+                Transform::from_translation(spec.translation),
+                semantic.clone(),
+                SelectionPickPriority::Proxy,
+                volume.outline_bounds().volume(),
+            );
         }
     }
 
@@ -261,14 +407,124 @@ pub(crate) fn build_selection_index_from_scene(
             rotation,
             mesh_spec.local_aabb_half_extents,
         );
+        let semantic = StaticWorldSemantic::MapObject(door.map_object_id.clone());
+        let outline_bounds = volume.outline_bounds();
+        let transform =
+            Transform::from_translation(mesh_spec.pivot_translation).with_rotation(rotation);
+        let mesh_handle = meshes.add(mesh_spec.mesh);
         index.visible_candidates.push(SelectionCandidate {
-            semantic: StaticWorldSemantic::MapObject(door.map_object_id.clone()),
-            outline_bounds: volume.outline_bounds(),
+            semantic: semantic.clone(),
+            outline_bounds,
             volume,
         });
+        index.outline_meshes.push(SelectionOutlineMesh {
+            semantic: semantic.clone(),
+            mesh: mesh_handle.clone(),
+            transform,
+            bounds: outline_bounds,
+        });
+        let entity = pick_entities.next();
+        let data = SelectionCandidateData {
+            semantic,
+            priority: SelectionPickPriority::Visible,
+            bounds_volume: outline_bounds.volume(),
+        };
+        if !index.mesh_index.register_mesh_handle_instance(
+            entity,
+            mesh_handle.clone(),
+            meshes,
+            MeshPickPrototypeKey::mesh(&mesh_handle),
+            transform,
+            data.clone(),
+        ) {
+            index.mesh_index.register_cuboid_instance(
+                entity,
+                mesh_spec.local_aabb_half_extents * 2.0,
+                Transform::from_translation(
+                    mesh_spec.pivot_translation + rotation * mesh_spec.local_aabb_center,
+                )
+                .with_rotation(rotation),
+                data,
+            );
+        }
     }
 
     index
+}
+
+fn register_tile_instance_pick_mesh(
+    index: &mut EditorSelectionIndex,
+    meshes: &Assets<Mesh>,
+    batch: &PreparedTileBatch,
+    instance: &PreparedTileInstance,
+    entity: Entity,
+) {
+    let Some(semantic) = instance.semantic.clone() else {
+        return;
+    };
+    let outline_bounds = SelectionBounds::from_center_half_extents(
+        instance.world_aabb_center,
+        instance.world_aabb_half_extents,
+    );
+    let semantic = semantic;
+    let data = SelectionCandidateData {
+        semantic: semantic.clone(),
+        priority: SelectionPickPriority::Visible,
+        bounds_volume: outline_bounds.volume(),
+    };
+    let mut registered_any = false;
+    for render_primitive in &batch.render_primitives {
+        let transform = instance
+            .transform
+            .mul_transform(render_primitive.local_transform);
+        index.outline_meshes.push(SelectionOutlineMesh {
+            semantic: semantic.clone(),
+            mesh: render_primitive.mesh.clone(),
+            transform,
+            bounds: outline_bounds,
+        });
+        // Use the same shared mesh index as debug viewer: prototype triangles are cached by mesh
+        // handle, while each tile instance contributes only transform and semantic data.
+        registered_any |= index.mesh_index.register_mesh_handle_instance(
+            entity,
+            render_primitive.mesh.clone(),
+            meshes,
+            MeshPickPrototypeKey::mesh(&render_primitive.mesh),
+            transform,
+            data.clone(),
+        );
+    }
+    if !registered_any {
+        // Mesh assets can arrive after scene rebuild. Keep a cuboid fallback in the shared index;
+        // pending mesh registration removes it once the primitive is available.
+        index.mesh_index.register_cuboid_instance(
+            entity,
+            instance.world_aabb_half_extents * 2.0,
+            Transform::from_translation(instance.world_aabb_center),
+            data,
+        );
+    }
+}
+
+fn register_cuboid_pick_mesh(
+    index: &mut EditorSelectionIndex,
+    entity: Entity,
+    size: Vec3,
+    transform: Transform,
+    semantic: StaticWorldSemantic,
+    priority: SelectionPickPriority,
+    bounds_volume: f32,
+) {
+    index.mesh_index.register_cuboid_instance(
+        entity,
+        size,
+        transform,
+        SelectionCandidateData {
+            semantic,
+            priority,
+            bounds_volume,
+        },
+    );
 }
 
 pub(crate) fn handle_primary_selection_system(
@@ -328,6 +584,15 @@ pub(crate) fn handle_primary_selection_system(
     };
 }
 
+pub(crate) fn sync_selection_index_mesh_assets_system(
+    mut selection_index: ResMut<EditorSelectionIndex>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    selection_index
+        .mesh_index
+        .sync_pending_mesh_instances(&meshes);
+}
+
 pub(crate) fn sync_selected_outline_visual_system(
     mut commands: Commands,
     selection_index: Res<EditorSelectionIndex>,
@@ -340,11 +605,14 @@ pub(crate) fn sync_selected_outline_visual_system(
     let desired_visual = ui_state
         .selected_target
         .as_ref()
-        .and_then(|target| selected_outline_visual_state(target, &selection_index, &render_config));
+        .and_then(|target| selected_outline_visual(target, &selection_index, &render_config));
 
     let mut needs_respawn = desired_visual.is_some();
     for (entity, current) in &current_visuals {
-        if desired_visual.as_ref() == Some(current) {
+        if desired_visual
+            .as_ref()
+            .is_some_and(|desired| &desired.state == current)
+        {
             needs_respawn = false;
             continue;
         }
@@ -358,23 +626,62 @@ pub(crate) fn sync_selected_outline_visual_system(
         return;
     }
 
-    let size = desired_visual.bounds.size() + Vec3::splat(SELECTED_OUTLINE_PADDING_WORLD);
-    let center = desired_visual.bounds.center + Vec3::Y * SELECTED_OUTLINE_LIFT_WORLD;
-    let mesh = meshes.add(Cuboid::new(size.x, size.y, size.z));
-    let material = materials.add(StandardMaterial {
-        base_color: SELECTED_OUTLINE_FILL_COLOR,
+    let mask_material = materials.add(StandardMaterial {
+        base_color: SELECTED_OUTLINE_MASK_COLOR,
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         double_sided: true,
         ..default()
     });
 
+    if !desired_visual.meshes.is_empty() {
+        for outline_mesh in desired_visual.meshes {
+            // Instanced world tiles are rendered in shared GPU batches, so adding MeshOutline to
+            // the original batch would outline every instance. These invisible mesh copies are
+            // outline masks for the selected semantic only; keep bounds boxes as fallback only.
+            commands.spawn((
+                SceneEntity,
+                desired_visual.state.clone(),
+                Mesh3d(outline_mesh.mesh),
+                MeshMaterial3d(mask_material.clone()),
+                outline_mesh.transform,
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
+                NoFrustumCulling,
+                MeshOutline::new(SELECTED_OUTLINE_WIDTH_PX)
+                    .with_intensity(SELECTED_OUTLINE_INTENSITY)
+                    .with_priority(SELECTED_OUTLINE_PRIORITY)
+                    .with_color(SELECTED_OUTLINE_COLOR),
+                NotShadowCaster,
+                NotShadowReceiver,
+            ));
+        }
+        return;
+    }
+
+    let fill_material = materials.add(StandardMaterial {
+        base_color: SELECTED_OUTLINE_FILL_COLOR,
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        double_sided: true,
+        ..default()
+    });
+    let size = desired_visual.state.bounds.size() + Vec3::splat(SELECTED_OUTLINE_PADDING_WORLD);
+    let center = desired_visual.state.bounds.center + Vec3::Y * SELECTED_OUTLINE_LIFT_WORLD;
+    let mesh = meshes.add(Cuboid::new(size.x, size.y, size.z));
+
+    // Grid cells and legacy proxy-only objects have no render mesh to mask, so they intentionally
+    // fall back to a simple bounds volume. Scene objects should reach this branch only when their
+    // mesh is not available from the shared render scene.
     commands.spawn((
         SceneEntity,
-        desired_visual,
+        desired_visual.state,
         Mesh3d(mesh),
-        MeshMaterial3d(material),
+        MeshMaterial3d(fill_material),
         Transform::from_translation(center),
+        Visibility::Visible,
+        InheritedVisibility::VISIBLE,
+        NoFrustumCulling,
         MeshOutline::new(SELECTED_OUTLINE_WIDTH_PX)
             .with_intensity(SELECTED_OUTLINE_INTENSITY)
             .with_priority(SELECTED_OUTLINE_PRIORITY)
@@ -384,32 +691,51 @@ pub(crate) fn sync_selected_outline_visual_system(
     ));
 }
 
-fn selected_outline_visual_state(
+#[derive(Debug, Clone, PartialEq)]
+struct SelectedOutlineVisual {
+    state: SelectedOutlineVisualState,
+    meshes: Vec<SelectionOutlineMesh>,
+}
+
+fn selected_outline_visual(
     target: &EditorSelectionTarget,
     selection_index: &EditorSelectionIndex,
     render_config: &game_bevy::world_render::WorldRenderConfig,
-) -> Option<SelectedOutlineVisualState> {
-    let bounds = match target {
+) -> Option<SelectedOutlineVisual> {
+    let (bounds, meshes) = match target {
         EditorSelectionTarget::SceneSemantic(semantic) => {
-            selection_index.outline_bounds_for(semantic)?
+            let meshes = selection_index.outline_meshes_for(semantic);
+            let bounds = meshes
+                .iter()
+                .map(|mesh| mesh.bounds)
+                .reduce(|current, next| current.union(next))
+                .or_else(|| selection_index.outline_bounds_for(semantic))?;
+            (bounds, meshes)
         }
-        EditorSelectionTarget::GridCell(grid) => SelectionBounds::from_center_half_extents(
-            Vec3::new(
-                grid.x as f32 + 0.5,
-                grid.y as f32 + render_config.floor_thickness_world * 0.5,
-                grid.z as f32 + 0.5,
+        EditorSelectionTarget::GridCell(grid) => (
+            SelectionBounds::from_center_half_extents(
+                Vec3::new(
+                    grid.x as f32 + 0.5,
+                    grid.y as f32 + render_config.floor_thickness_world * 0.5,
+                    grid.z as f32 + 0.5,
+                ),
+                Vec3::new(
+                    0.5,
+                    render_config.floor_thickness_world.max(0.04) * 0.5,
+                    0.5,
+                ),
             ),
-            Vec3::new(
-                0.5,
-                render_config.floor_thickness_world.max(0.04) * 0.5,
-                0.5,
-            ),
+            Vec::new(),
         ),
     };
 
-    Some(SelectedOutlineVisualState {
-        target: target.clone(),
-        bounds,
+    Some(SelectedOutlineVisual {
+        state: SelectedOutlineVisualState {
+            target: target.clone(),
+            bounds,
+            mesh_count: meshes.len(),
+        },
+        meshes,
     })
 }
 
@@ -533,6 +859,17 @@ fn outline_bounds_for_semantic(
         .reduce(|current, next| current.union(next))
 }
 
+fn outline_bounds_for_meshes(
+    meshes: &[SelectionOutlineMesh],
+    semantic: &StaticWorldSemantic,
+) -> Option<SelectionBounds> {
+    meshes
+        .iter()
+        .filter(|mesh| &mesh.semantic == semantic)
+        .map(|mesh| mesh.bounds)
+        .reduce(|current, next| current.union(next))
+}
+
 fn should_replace_pick(
     current: Option<&EditorResolvedPick>,
     candidate: &EditorResolvedPick,
@@ -543,6 +880,22 @@ fn should_replace_pick(
             candidate.distance < current.distance - PICK_DISTANCE_EPSILON
                 || ((candidate.distance - current.distance).abs() <= PICK_DISTANCE_EPSILON
                     && candidate.bounds_volume < current.bounds_volume)
+        }
+    }
+}
+
+fn should_replace_mesh_pick(
+    current: Option<&MeshPickHit<SelectionCandidateData>>,
+    candidate: &MeshPickHit<SelectionCandidateData>,
+) -> bool {
+    match current {
+        None => true,
+        Some(current) => {
+            candidate.data.priority > current.data.priority
+                || (candidate.data.priority == current.data.priority
+                    && (candidate.depth < current.depth - PICK_DISTANCE_EPSILON
+                        || ((candidate.depth - current.depth).abs() <= PICK_DISTANCE_EPSILON
+                            && candidate.data.bounds_volume < current.data.bounds_volume)))
         }
     }
 }
@@ -571,6 +924,8 @@ mod tests {
     #[test]
     fn visible_candidates_beat_proxy_hits() {
         let index = EditorSelectionIndex {
+            mesh_index: MeshPickIndex::default(),
+            outline_meshes: Vec::new(),
             visible_candidates: vec![SelectionCandidate {
                 semantic: StaticWorldSemantic::MapObject("visible".into()),
                 volume: SelectionVolume::from_box(Vec3::splat(1.0), Vec3::new(0.0, 0.0, 5.0)),
@@ -591,6 +946,40 @@ mod tests {
 
         let ray = Ray3d::new(Vec3::ZERO, Dir3::Z);
         let pick = index.resolve_pick(ray).expect("pick should resolve");
+
+        assert_eq!(
+            pick.semantic,
+            StaticWorldSemantic::MapObject("visible".into())
+        );
+    }
+
+    #[test]
+    fn mesh_pick_visible_priority_beats_nearer_proxy() {
+        let mut index = EditorSelectionIndex::default();
+        index.mesh_index.register_cuboid_instance(
+            Entity::from_bits(1),
+            Vec3::splat(2.0),
+            Transform::from_xyz(0.0, 0.0, 1.0),
+            SelectionCandidateData {
+                semantic: StaticWorldSemantic::MapObject("proxy".into()),
+                priority: SelectionPickPriority::Proxy,
+                bounds_volume: 8.0,
+            },
+        );
+        index.mesh_index.register_cuboid_instance(
+            Entity::from_bits(2),
+            Vec3::splat(1.0),
+            Transform::from_xyz(0.0, 0.0, 5.0),
+            SelectionCandidateData {
+                semantic: StaticWorldSemantic::MapObject("visible".into()),
+                priority: SelectionPickPriority::Visible,
+                bounds_volume: 1.0,
+            },
+        );
+
+        let pick = index
+            .resolve_pick(Ray3d::new(Vec3::ZERO, Dir3::Z))
+            .expect("pick should resolve");
 
         assert_eq!(
             pick.semantic,
@@ -620,6 +1009,8 @@ mod tests {
     fn outline_bounds_prefer_visible_geometry() {
         let semantic = StaticWorldSemantic::MapObject("crate".into());
         let index = EditorSelectionIndex {
+            mesh_index: MeshPickIndex::default(),
+            outline_meshes: Vec::new(),
             visible_candidates: vec![SelectionCandidate {
                 semantic: semantic.clone(),
                 volume: SelectionVolume::from_box(Vec3::new(1.0, 2.0, 3.0), Vec3::ZERO),
@@ -643,5 +1034,39 @@ mod tests {
             .expect("outline bounds should resolve");
 
         assert_eq!(outline.size(), Vec3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn selected_outline_prefers_mesh_masks_over_bounds_boxes() {
+        let semantic = StaticWorldSemantic::MapObject("crate".into());
+        let index = EditorSelectionIndex {
+            mesh_index: MeshPickIndex::default(),
+            outline_meshes: vec![SelectionOutlineMesh {
+                semantic: semantic.clone(),
+                mesh: Handle::default(),
+                transform: Transform::from_xyz(1.0, 2.0, 3.0),
+                bounds: SelectionBounds::from_center_half_extents(Vec3::ONE, Vec3::splat(0.25)),
+            }],
+            visible_candidates: vec![SelectionCandidate {
+                semantic: semantic.clone(),
+                volume: SelectionVolume::from_box(Vec3::splat(6.0), Vec3::ZERO),
+                outline_bounds: SelectionBounds::from_center_half_extents(
+                    Vec3::ZERO,
+                    Vec3::splat(3.0),
+                ),
+            }],
+            proxy_candidates: Vec::new(),
+        };
+
+        let visual = selected_outline_visual(
+            &EditorSelectionTarget::SceneSemantic(semantic),
+            &index,
+            &game_bevy::world_render::WorldRenderConfig::default(),
+        )
+        .expect("selected object should have an outline visual");
+
+        assert_eq!(visual.meshes.len(), 1);
+        assert_eq!(visual.state.mesh_count, 1);
+        assert_eq!(visual.state.bounds.size(), Vec3::splat(0.5));
     }
 }
