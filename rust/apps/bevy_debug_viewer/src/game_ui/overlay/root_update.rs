@@ -1,6 +1,7 @@
 //! UI 主更新链：负责按当前场景与菜单状态刷新 retained 游戏 UI 各分区。
 
 use super::*;
+use game_bevy::trade_inventory_snapshot;
 
 #[derive(Default)]
 pub(crate) struct GameUiRetainedCache {
@@ -165,7 +166,7 @@ pub(crate) fn update_game_ui(
                 &content.items.0,
                 &content.shops.0,
             );
-            let inventory = inventory_snapshot(
+            let inventory = trade_inventory_snapshot(
                 &ui.runtime_state.runtime,
                 actor_id,
                 &content.items.0,
@@ -198,7 +199,7 @@ pub(crate) fn update_game_ui(
                     &content.items.0,
                     &content.shops.0,
                 );
-                let inventory = inventory_snapshot(
+                let inventory = trade_inventory_snapshot(
                     &ui.runtime_state.runtime,
                     actor_id,
                     &content.items.0,

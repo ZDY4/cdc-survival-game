@@ -50,9 +50,11 @@ pub(in crate::game_ui) fn render_inventory_panel_contents(
             viewer_ui_passthrough_bundle(),
         ))
         .with_children(|layout| {
-            render_inventory_equipment_section(
-                layout, font, snapshot, menu_state, drag_state, &mode,
-            );
+            if !matches!(mode, InventoryPanelMode::Trade) {
+                render_inventory_equipment_section(
+                    layout, font, snapshot, menu_state, drag_state, &mode,
+                );
+            }
             render_inventory_filter_row(layout, font, snapshot.filter);
             render_inventory_entry_section(layout, font, snapshot, menu_state, drag_state, &mode);
         });
@@ -347,6 +349,7 @@ fn render_inventory_entry_section(
                         for entry in &snapshot.entries {
                             let is_selected =
                                 menu_state.selected_inventory_item == Some(entry.item_id);
+                            let equipped_slot_id = entry.equipped_slot_id.as_ref();
                             let is_drag_hover = matches!(
                                 drag_state.hover_target.as_ref(),
                                 Some(UiInventoryDragHoverTarget::InventoryItem { item_id })
@@ -364,7 +367,7 @@ fn render_inventory_entry_section(
                                 viewer_ui_passthrough_bundle(),
                             ))
                             .with_children(|row| {
-                                row.spawn((
+                                let mut item_button = row.spawn((
                                     Button,
                                     Node {
                                         flex_grow: 1.0,
@@ -376,6 +379,7 @@ fn render_inventory_entry_section(
                                             1.0
                                         })),
                                         align_items: AlignItems::Center,
+                                        column_gap: px(7),
                                         ..default()
                                     },
                                     BackgroundColor(if is_selected {
@@ -400,24 +404,66 @@ fn render_inventory_entry_section(
                                     } else {
                                         ui_border_color()
                                     }),
-                                    Text::new(format!(
-                                        "{} x{} · {} · {:.1}kg",
-                                        entry.name,
-                                        entry.count,
-                                        entry.item_type.as_str(),
-                                        entry.total_weight
-                                    )),
-                                    TextFont::from_font_size(11.0).with_font(font.0.clone()),
-                                    TextColor(Color::WHITE),
                                     InventoryItemHoverTarget {
-                                        item_id: entry.item_id,
-                                    },
-                                    InventoryItemClickTarget {
                                         item_id: entry.item_id,
                                     },
                                     RelativeCursorPosition::default(),
                                     viewer_ui_passthrough_bundle(),
                                 ));
+                                if let Some(slot_id) = equipped_slot_id {
+                                    item_button.insert(EquipmentSlotClickTarget {
+                                        slot_id: slot_id.clone(),
+                                        item_id: Some(entry.item_id),
+                                    });
+                                } else {
+                                    item_button.insert(InventoryItemClickTarget {
+                                        item_id: entry.item_id,
+                                    });
+                                }
+                                item_button.with_children(|button| {
+                                    if equipped_slot_id.is_some() {
+                                        button
+                                            .spawn((
+                                                Node {
+                                                    width: px(16),
+                                                    height: px(16),
+                                                    justify_content: JustifyContent::Center,
+                                                    align_items: AlignItems::Center,
+                                                    border: UiRect::all(px(1)),
+                                                    flex_shrink: 0.0,
+                                                    ..default()
+                                                },
+                                                BackgroundColor(
+                                                    Color::srgba(0.25, 0.22, 0.13, 0.96).into(),
+                                                ),
+                                                BorderColor::all(Color::srgba(
+                                                    0.93, 0.78, 0.38, 0.98,
+                                                )),
+                                                viewer_ui_passthrough_bundle(),
+                                            ))
+                                            .with_children(|badge| {
+                                                badge.spawn((
+                                                    Text::new("E"),
+                                                    TextFont::from_font_size(9.0)
+                                                        .with_font(font.0.clone()),
+                                                    TextColor(Color::srgba(1.0, 0.88, 0.48, 1.0)),
+                                                    viewer_ui_passthrough_bundle(),
+                                                ));
+                                            });
+                                    }
+                                    button.spawn((
+                                        Text::new(format!(
+                                            "{} x{} · {} · {:.1}kg",
+                                            entry.name,
+                                            entry.count,
+                                            entry.item_type.as_str(),
+                                            entry.total_weight
+                                        )),
+                                        TextFont::from_font_size(11.0).with_font(font.0.clone()),
+                                        TextColor(Color::WHITE),
+                                        viewer_ui_passthrough_bundle(),
+                                    ));
+                                });
                             });
                         }
                     });

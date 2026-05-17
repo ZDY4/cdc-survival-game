@@ -4,8 +4,8 @@ use super::*;
 
 const TRADE_PAGE_LEFT_WIDTH: f32 = 568.0;
 const TRADE_PAGE_RIGHT_WIDTH: f32 = UI_PANEL_WIDTH;
-const TRADE_PAGE_TOP: f32 = 72.0;
-const TRADE_PAGE_BOTTOM: f32 = 158.0;
+const TRADE_PAGE_TOP: f32 = 28.0;
+const TRADE_PAGE_BOTTOM: f32 = 32.0;
 const TRADE_PAGE_GAP: f32 = 14.0;
 
 mod actions;

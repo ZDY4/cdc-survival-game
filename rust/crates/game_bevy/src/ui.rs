@@ -450,6 +450,7 @@ pub struct UiInventoryEntryView {
     pub total_weight: f32,
     pub can_use: bool,
     pub can_equip: bool,
+    pub equipped_slot_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -665,6 +666,27 @@ pub fn inventory_snapshot(
     filter: UiInventoryFilter,
     selected_item_id: Option<u32>,
 ) -> UiInventoryPanelSnapshot {
+    inventory_snapshot_inner(runtime, actor_id, items, filter, selected_item_id, false)
+}
+
+pub fn trade_inventory_snapshot(
+    runtime: &SimulationRuntime,
+    actor_id: ActorId,
+    items: &ItemLibrary,
+    filter: UiInventoryFilter,
+    selected_item_id: Option<u32>,
+) -> UiInventoryPanelSnapshot {
+    inventory_snapshot_inner(runtime, actor_id, items, filter, selected_item_id, true)
+}
+
+fn inventory_snapshot_inner(
+    runtime: &SimulationRuntime,
+    actor_id: ActorId,
+    items: &ItemLibrary,
+    filter: UiInventoryFilter,
+    selected_item_id: Option<u32>,
+    include_equipped_entries: bool,
+) -> UiInventoryPanelSnapshot {
     let actor = match runtime.economy().actor(actor_id) {
         Some(actor) => actor,
         None => {
@@ -701,23 +723,11 @@ pub fn inventory_snapshot(
                 total_weight: definition.weight * (count as f32),
                 can_use: item_usable(definition),
                 can_equip: item_equippable(definition),
+                equipped_slot_id: None,
             })
         })
         .collect::<Vec<_>>();
-
-    let detail = selected_item_id.and_then(|item_id| {
-        let definition = items.get(item_id)?;
-        let count = actor.inventory.get(&item_id).copied().unwrap_or(0);
-        Some(UiInventoryDetailView {
-            item_id,
-            name: definition.name.clone(),
-            description: definition.description.clone(),
-            count,
-            item_type: classify_item(definition, &ammo_ids),
-            weight: definition.weight,
-            attribute_bonuses: item_attribute_bonuses(definition),
-        })
-    });
+    let mut entries = entries;
 
     let mut equipment_slot_ids = DEFAULT_EQUIPMENT_SLOT_ORDER
         .iter()
@@ -744,6 +754,52 @@ pub fn inventory_snapshot(
             }
         })
         .collect::<Vec<_>>();
+
+    if include_equipped_entries {
+        let mut next_display_index = entries.len();
+        for slot in &equipment {
+            let Some(item_id) = slot.item_id else {
+                continue;
+            };
+            let Some(definition) = items.get(item_id) else {
+                continue;
+            };
+            let item_type = classify_item(definition, &ammo_ids);
+            if !filter.matches_type(item_type) {
+                continue;
+            }
+            entries.push(UiInventoryEntryView {
+                item_id,
+                display_index: next_display_index,
+                name: definition.name.clone(),
+                count: 1,
+                item_type,
+                total_weight: definition.weight,
+                can_use: item_usable(definition),
+                can_equip: item_equippable(definition),
+                equipped_slot_id: Some(slot.slot_id.clone()),
+            });
+            next_display_index += 1;
+        }
+    }
+
+    let detail = selected_item_id.and_then(|item_id| {
+        let definition = items.get(item_id)?;
+        let entry_count = entries
+            .iter()
+            .find(|entry| entry.item_id == item_id)
+            .map(|entry| entry.count)
+            .unwrap_or_else(|| actor.inventory.get(&item_id).copied().unwrap_or(0));
+        Some(UiInventoryDetailView {
+            item_id,
+            name: definition.name.clone(),
+            description: definition.description.clone(),
+            count: entry_count,
+            item_type: classify_item(definition, &ammo_ids),
+            weight: definition.weight,
+            attribute_bonuses: item_attribute_bonuses(definition),
+        })
+    });
 
     let total_weight = runtime
         .economy()
@@ -1397,14 +1453,16 @@ pub fn item_usable(definition: &ItemDefinition) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        journal_snapshot, overworld_location_prompt_snapshot, UiJournalQuestView,
+        inventory_snapshot, journal_snapshot, overworld_location_prompt_snapshot,
+        trade_inventory_snapshot, UiInventoryFilter, UiJournalQuestView,
         UiOverworldLocationPromptSnapshot,
     };
     use game_core::SimulationRuntime;
     use game_data::{
-        ActorId, ActorSide, CharacterId, GridCoord, MapDefinition, MapEntryPointDefinition, MapId,
-        MapLevelDefinition, MapSize, OverworldCellDefinition, OverworldDefinition, OverworldId,
-        OverworldLibrary, OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
+        ActorId, ActorKind, ActorSide, CharacterId, GridCoord, ItemDefinition, ItemFragment,
+        ItemLibrary, MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
+        OverworldCellDefinition, OverworldDefinition, OverworldId, OverworldLibrary,
+        OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind,
         OverworldTerrainKind, OverworldTravelRuleSet, QuestConnection, QuestDefinition, QuestFlow,
         QuestLibrary, QuestNode, WorldMode,
     };
@@ -1513,6 +1571,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn trade_inventory_snapshot_lists_equipped_items_with_slot_marker() {
+        let (mut runtime, player) = sample_inventory_runtime();
+        let items = sample_inventory_item_library();
+        runtime.economy_mut().set_actor_level(player, 1);
+        runtime
+            .economy_mut()
+            .add_item(player, 1002, 1, &items)
+            .expect("item should be added");
+        runtime
+            .economy_mut()
+            .equip_item(player, 1002, Some("main_hand"), &items)
+            .expect("item should be equipped");
+
+        let normal = inventory_snapshot(&runtime, player, &items, UiInventoryFilter::All, None);
+        let trade =
+            trade_inventory_snapshot(&runtime, player, &items, UiInventoryFilter::All, None);
+
+        assert!(normal.entries.is_empty());
+        let equipped_entry = trade
+            .entries
+            .iter()
+            .find(|entry| entry.item_id == 1002)
+            .expect("equipped item should appear in trade list");
+        assert_eq!(equipped_entry.count, 1);
+        assert_eq!(
+            equipped_entry.equipped_slot_id.as_deref(),
+            Some("main_hand")
+        );
+    }
+
     fn sample_overworld_prompt_runtime() -> (SimulationRuntime, ActorId, OverworldLibrary) {
         let overworld = sample_overworld_prompt_library();
         let mut runtime = SimulationRuntime::new();
@@ -1555,6 +1644,46 @@ mod tests {
             ai_controller: None,
         });
         (runtime, actor_id)
+    }
+
+    fn sample_inventory_runtime() -> (SimulationRuntime, ActorId) {
+        let mut runtime = SimulationRuntime::new();
+        let actor_id = runtime.register_actor(game_core::RegisterActor {
+            definition_id: Some(CharacterId("player".into())),
+            display_name: "Player".into(),
+            kind: ActorKind::Player,
+            side: ActorSide::Player,
+            group_id: "player".into(),
+            grid_position: GridCoord::new(0, 0, 0),
+            interaction: None,
+            attack_range: 1.2,
+            ai_controller: None,
+        });
+        (runtime, actor_id)
+    }
+
+    fn sample_inventory_item_library() -> ItemLibrary {
+        ItemLibrary::from(BTreeMap::from([(
+            1002,
+            ItemDefinition {
+                id: 1002,
+                name: "Knife".to_string(),
+                weight: 0.6,
+                fragments: vec![
+                    ItemFragment::Stacking {
+                        stackable: false,
+                        max_stack: 1,
+                    },
+                    ItemFragment::Equip {
+                        slots: vec!["main_hand".to_string()],
+                        level_requirement: 1,
+                        equip_effect_ids: Vec::new(),
+                        unequip_effect_ids: Vec::new(),
+                    },
+                ],
+                ..ItemDefinition::default()
+            },
+        )]))
     }
 
     fn sample_journal_quest_library() -> QuestLibrary {

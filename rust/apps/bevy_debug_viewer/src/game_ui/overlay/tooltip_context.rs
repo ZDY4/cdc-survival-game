@@ -64,6 +64,7 @@ pub(super) fn render_hover_tooltip(
                         total_weight: definition.weight,
                         can_use: game_bevy::item_usable(definition),
                         can_equip: game_bevy::item_equippable(definition),
+                        equipped_slot_id: None,
                     }),
                 )
             };
