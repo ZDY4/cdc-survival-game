@@ -3,11 +3,13 @@
 use std::collections::BTreeMap;
 
 use super::{
-    clear_pending_post_cancel_turn_policy, cursor_interaction_target, enter_attack_targeting,
-    enter_skill_targeting, execute_primary_target_interaction, handle_keyboard_input,
-    handle_object_primary_click, is_command_actor_self_target, manual_pan_offset_from_follow_focus,
+    clear_pending_post_cancel_turn_policy, cursor_interaction_target, cursor_interaction_targets,
+    enter_attack_targeting, enter_skill_targeting, execute_primary_target_interaction,
+    focus_target_and_query_prompt, handle_keyboard_input, handle_object_primary_click,
+    is_command_actor_self_target, manual_pan_offset_from_follow_focus,
     post_cancel_turn_policy_for_context, refresh_targeting_preview,
-    request_cancel_pending_movement, CancelMovementContext, PostCancelTurnPolicy,
+    request_cancel_pending_interaction, request_cancel_pending_movement, CancelMovementContext,
+    PostCancelTurnPolicy,
 };
 use crate::console::ViewerConsoleState;
 use crate::geometry::{clamp_camera_pan_offset, grid_bounds, selected_actor};
@@ -18,12 +20,16 @@ use crate::state::{
 use bevy::prelude::*;
 use game_bevy::SettlementDebugSnapshot;
 use game_bevy::{SkillDefinitions, UiHotbarState, UiMenuState, UiModalState};
-use game_core::{create_demo_runtime, MapObjectDebugState, PendingProgressionStep};
+use game_core::{
+    create_demo_runtime, MapObjectDebugState, PendingProgressionStep, RegisterActor, Simulation,
+    SimulationCommand, SimulationRuntime,
+};
 use game_data::{
-    ActorSide, GridCoord, InteractionTargetId, MapCellDefinition, MapDefinition,
-    MapEntryPointDefinition, MapId, MapLevelDefinition, MapObjectFootprint, MapObjectKind,
-    MapRotation, MapSize, SkillActivationDefinition, SkillActivationEffect, SkillDefinition,
-    SkillExecutionKind, SkillModifierDefinition, SkillTargetingDefinition,
+    ActorId, ActorKind, ActorSide, CharacterId, GridCoord, InteractionOptionId,
+    InteractionTargetId, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
+    MapLevelDefinition, MapObjectFootprint, MapObjectKind, MapRotation, MapSize,
+    SkillActivationDefinition, SkillActivationEffect, SkillDefinition, SkillExecutionKind,
+    SkillModifierDefinition, SkillTargetingDefinition,
 };
 
 #[test]
@@ -128,6 +134,138 @@ fn clear_pending_post_cancel_turn_policy_resets_state_for_new_move() {
     clear_pending_post_cancel_turn_policy(&mut viewer_state);
 
     assert!(!viewer_state.auto_end_turn_after_stop);
+}
+
+#[test]
+fn request_cancel_pending_interaction_clears_viewer_focus_and_lock() {
+    let (mut runtime, player, npc) = pending_talk_runtime();
+    let result = runtime.issue_interaction(
+        player,
+        InteractionTargetId::Actor(npc),
+        InteractionOptionId("talk".into()),
+    );
+    assert!(result.success);
+    assert!(result.approach_required);
+    runtime.submit_command(SimulationCommand::SetActorAp {
+        actor_id: player,
+        ap: 1.0,
+    });
+    let mut runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    viewer_state.select_actor(player, ActorSide::Player);
+    viewer_state.focused_target = Some(InteractionTargetId::Actor(npc));
+    viewer_state.current_prompt = runtime_state
+        .runtime
+        .peek_interaction_prompt(player, &InteractionTargetId::Actor(npc));
+
+    assert!(request_cancel_pending_interaction(
+        &mut runtime_state,
+        &mut viewer_state
+    ));
+
+    assert!(runtime_state.runtime.pending_interaction().is_none());
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert!(viewer_state.focused_target.is_none());
+    assert!(viewer_state.current_prompt.is_none());
+    assert!(!runtime_state.runtime.actor_turn_open(player));
+}
+
+#[test]
+fn interaction_prompt_query_for_target_cancels_pending_movement() {
+    let (mut runtime, player, npc) = pending_talk_runtime();
+    runtime
+        .issue_actor_move(player, GridCoord::new(0, 0, 3))
+        .expect("path should be planned");
+    assert!(runtime.pending_movement().is_some());
+    let mut runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    viewer_state.select_actor(player, ActorSide::Player);
+
+    let prompt = focus_target_and_query_prompt(
+        &mut runtime_state,
+        &mut viewer_state,
+        InteractionTargetId::Actor(npc),
+    );
+
+    assert!(prompt.is_some());
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert_eq!(
+        viewer_state.focused_target,
+        Some(InteractionTargetId::Actor(npc))
+    );
+    assert!(viewer_state.current_prompt.is_some());
+}
+
+#[test]
+fn cancel_pending_interaction_auto_ends_turn_when_actor_has_no_ap() {
+    let (mut runtime, player, npc) = pending_talk_runtime();
+    let result = runtime.issue_interaction(
+        player,
+        InteractionTargetId::Actor(npc),
+        InteractionOptionId("talk".into()),
+    );
+    assert!(result.success);
+    assert!(result.approach_required);
+    runtime.submit_command(SimulationCommand::SetActorAp {
+        actor_id: player,
+        ap: 0.0,
+    });
+    let mut runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    viewer_state.select_actor(player, ActorSide::Player);
+
+    assert!(request_cancel_pending_interaction(
+        &mut runtime_state,
+        &mut viewer_state
+    ));
+
+    assert!(runtime_state.runtime.pending_interaction().is_none());
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert!(!runtime_state.runtime.actor_turn_open(player));
+}
+
+#[test]
+fn cancel_pending_interaction_auto_ends_turn_when_actor_has_ap() {
+    let (mut runtime, player, npc) = pending_talk_runtime();
+    let result = runtime.issue_interaction(
+        player,
+        InteractionTargetId::Actor(npc),
+        InteractionOptionId("talk".into()),
+    );
+    assert!(result.success);
+    assert!(result.approach_required);
+    runtime.submit_command(SimulationCommand::SetActorAp {
+        actor_id: player,
+        ap: 1.0,
+    });
+    let mut runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    viewer_state.select_actor(player, ActorSide::Player);
+
+    assert!(request_cancel_pending_interaction(
+        &mut runtime_state,
+        &mut viewer_state
+    ));
+
+    assert!(runtime_state.runtime.pending_interaction().is_none());
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert!(!runtime_state.runtime.actor_turn_open(player));
 }
 
 fn sample_los_targeting_map() -> MapDefinition {
@@ -749,6 +887,32 @@ fn command_actor_self_target_is_detected_for_wait_interaction() {
 }
 
 #[test]
+fn cursor_interaction_targets_falls_back_to_grid_actor_after_picked_target() {
+    let (runtime, _player, npc) = pending_talk_runtime();
+    let snapshot = runtime.snapshot();
+    let actor = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == npc)
+        .expect("npc actor should exist");
+
+    let targets = cursor_interaction_targets(
+        None,
+        Some(InteractionTargetId::MapObject("visual_shell".into())),
+        Some(actor),
+        None,
+    );
+
+    assert_eq!(
+        targets,
+        vec![
+            InteractionTargetId::MapObject("visual_shell".into()),
+            InteractionTargetId::Actor(npc),
+        ]
+    );
+}
+
+#[test]
 fn self_primary_interaction_wait_queues_turn_progression() {
     let (runtime, handles) = create_demo_runtime();
     let snapshot = runtime.snapshot();
@@ -871,6 +1035,146 @@ fn gameplay_escape_closes_discard_modal_before_trade() {
 }
 
 #[test]
+fn gameplay_escape_cancels_pending_interaction_before_opening_settings() {
+    let (mut runtime, player, npc) = pending_talk_runtime();
+    let result = runtime.issue_interaction(
+        player,
+        InteractionTargetId::Actor(npc),
+        InteractionOptionId("talk".into()),
+    );
+    assert!(result.success);
+    assert!(result.approach_required);
+    runtime.submit_command(SimulationCommand::SetActorAp {
+        actor_id: player,
+        ap: 1.0,
+    });
+
+    let mut app = keyboard_input_app_with_runtime(ViewerSceneKind::Gameplay, runtime);
+    app.world_mut()
+        .resource_mut::<ViewerState>()
+        .select_actor(player, ActorSide::Player);
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Escape);
+
+    app.update();
+
+    let runtime_state = app.world().resource::<ViewerRuntimeState>();
+    let menu_state = app.world().resource::<UiMenuState>();
+    let viewer_state = app.world().resource::<ViewerState>();
+    assert!(runtime_state.runtime.pending_interaction().is_none());
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert!(!runtime_state.runtime.actor_turn_open(player));
+    assert!(!menu_state.is_settings_open());
+    assert!(viewer_state.status_line.starts_with("end turn:"));
+}
+
+#[test]
+fn gameplay_escape_cancels_pending_movement_before_opening_settings() {
+    let (mut runtime, handles) = create_demo_runtime();
+    runtime
+        .issue_actor_move(handles.player, GridCoord::new(0, 0, 2))
+        .expect("path should be planned");
+
+    let mut app = keyboard_input_app_with_runtime(ViewerSceneKind::Gameplay, runtime);
+    app.world_mut()
+        .resource_mut::<ViewerState>()
+        .select_actor(handles.player, ActorSide::Player);
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Escape);
+
+    app.update();
+
+    let runtime_state = app.world().resource::<ViewerRuntimeState>();
+    let menu_state = app.world().resource::<UiMenuState>();
+    let viewer_state = app.world().resource::<ViewerState>();
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert!(!menu_state.is_settings_open());
+    assert!(viewer_state
+        .status_line
+        .starts_with("move: cancelled actor"));
+}
+
+#[test]
+fn space_cancels_pending_movement() {
+    let (mut runtime, handles) = create_demo_runtime();
+    runtime
+        .issue_actor_move(handles.player, GridCoord::new(0, 0, 2))
+        .expect("path should be planned");
+
+    let mut app = keyboard_input_app_with_runtime(ViewerSceneKind::Gameplay, runtime);
+    app.world_mut()
+        .resource_mut::<ViewerState>()
+        .select_actor(handles.player, ActorSide::Player);
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Space);
+
+    app.update();
+
+    let runtime_state = app.world().resource::<ViewerRuntimeState>();
+    assert!(runtime_state.runtime.pending_movement().is_none());
+}
+
+#[test]
+fn space_cancels_pending_interaction() {
+    let (mut runtime, player, npc) = pending_talk_runtime();
+    let result = runtime.issue_interaction(
+        player,
+        InteractionTargetId::Actor(npc),
+        InteractionOptionId("talk".into()),
+    );
+    assert!(result.success);
+    assert!(result.approach_required);
+
+    let mut app = keyboard_input_app_with_runtime(ViewerSceneKind::Gameplay, runtime);
+    app.world_mut()
+        .resource_mut::<ViewerState>()
+        .select_actor(player, ActorSide::Player);
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Space);
+
+    app.update();
+
+    let runtime_state = app.world().resource::<ViewerRuntimeState>();
+    let viewer_state = app.world().resource::<ViewerState>();
+    assert!(runtime_state.runtime.pending_interaction().is_none());
+    assert!(runtime_state.runtime.pending_movement().is_none());
+    assert!(!runtime_state.runtime.actor_turn_open(player));
+    assert!(viewer_state.focused_target.is_none());
+}
+
+fn pending_talk_runtime() -> (SimulationRuntime, ActorId, ActorId) {
+    let mut simulation = Simulation::new();
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("player".into())),
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 1),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let npc = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("trader_lao_wang".into())),
+        display_name: "Trader".into(),
+        kind: ActorKind::Npc,
+        side: ActorSide::Friendly,
+        group_id: "friendly".into(),
+        grid_position: GridCoord::new(4, 0, 1),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+
+    (SimulationRuntime::from_simulation(simulation), player, npc)
+}
+
+#[test]
 fn ctrl_p_no_longer_toggles_free_observe_mode() {
     let (runtime, _) = create_demo_runtime();
     let mut app = App::new();
@@ -946,6 +1250,15 @@ fn space_toggles_ob_playback_in_free_observe_mode() {
 
 fn keyboard_input_app(scene_kind: ViewerSceneKind, key: KeyCode) -> App {
     let (runtime, _) = create_demo_runtime();
+    let mut app = keyboard_input_app_with_runtime(scene_kind, runtime);
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(key);
+    app.update();
+    app
+}
+
+fn keyboard_input_app_with_runtime(scene_kind: ViewerSceneKind, runtime: SimulationRuntime) -> App {
     let mut app = App::new();
     app.insert_resource(ButtonInput::<KeyCode>::default())
         .insert_resource(Time::<()>::default())
@@ -965,10 +1278,5 @@ fn keyboard_input_app(scene_kind: ViewerSceneKind, key: KeyCode) -> App {
         .insert_resource(ViewerConsoleState::default())
         .insert_resource(scene_kind)
         .add_systems(Update, handle_keyboard_input);
-
-    app.world_mut()
-        .resource_mut::<ButtonInput<KeyCode>>()
-        .press(key);
-    app.update();
     app
 }

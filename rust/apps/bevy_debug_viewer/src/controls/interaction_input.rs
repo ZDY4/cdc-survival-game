@@ -137,6 +137,33 @@ pub(super) fn cursor_interaction_target(
     map_object.map(|object| InteractionTargetId::MapObject(object.object_id.clone()))
 }
 
+pub(super) fn cursor_interaction_targets(
+    command_actor_id: Option<ActorId>,
+    picked_target: Option<InteractionTargetId>,
+    actor: Option<&game_core::ActorDebugState>,
+    map_object: Option<&game_core::MapObjectDebugState>,
+) -> Vec<InteractionTargetId> {
+    let mut targets = Vec::new();
+    push_unique_interaction_target(&mut targets, picked_target);
+    push_unique_interaction_target(
+        &mut targets,
+        cursor_interaction_target(command_actor_id, actor, map_object),
+    );
+    targets
+}
+
+fn push_unique_interaction_target(
+    targets: &mut Vec<InteractionTargetId>,
+    target: Option<InteractionTargetId>,
+) {
+    let Some(target) = target else {
+        return;
+    };
+    if !targets.contains(&target) {
+        targets.push(target);
+    }
+}
+
 pub(super) fn is_command_actor_self_target(
     snapshot: &game_core::SimulationSnapshot,
     viewer_state: &ViewerState,
@@ -161,10 +188,36 @@ fn execute_target_interaction_option(
 
     viewer_state.progression_elapsed_sec = 0.0;
     viewer_state.interaction_menu = None;
+    let target_log = target_id.clone();
+    let option_log = option_id.clone();
     let result = runtime_state
         .runtime
         .issue_interaction(actor_id, target_id, option_id);
-    apply_interaction_result(runtime_state, viewer_state, result);
+    info!(
+        "viewer.interaction.result actor={:?} target={:?} option_id={} success={} approach_required={} reason={:?} dialogue_id={:?} has_dialogue_state={} prompt_target={:?} active_dialogue_before={}",
+        actor_id,
+        target_log,
+        option_log.as_str(),
+        result.success,
+        result.approach_required,
+        result.reason,
+        result.dialogue_id,
+        result.dialogue_state.is_some(),
+        result.prompt.as_ref().map(|prompt| &prompt.target_id),
+        viewer_state.active_dialogue.is_some(),
+    );
+    apply_interaction_result_for_actor(runtime_state, viewer_state, result, Some(actor_id));
+    info!(
+        "viewer.interaction.result_applied actor={:?} target={:?} option_id={} active_dialogue={:?} status={}",
+        actor_id,
+        target_log,
+        option_log.as_str(),
+        viewer_state
+            .active_dialogue
+            .as_ref()
+            .map(|dialogue| (&dialogue.dialog_id, &dialogue.current_node_id)),
+        viewer_state.status_line,
+    );
 }
 
 pub(super) fn interaction_menu_contains_cursor(

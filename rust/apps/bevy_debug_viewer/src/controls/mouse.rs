@@ -68,26 +68,15 @@ pub(crate) fn handle_mouse_input(
     let hovered_pick = picking_state.hovered.as_ref();
     let primary_pick = picking_state.primary_click.as_ref().or(hovered_pick);
     let secondary_pick = picking_state.secondary_click.as_ref().or(hovered_pick);
-    let has_hovered_pick = hovered_pick.is_some();
-    let actor_at_cursor = pick_actor_from_resolved(&snapshot, hovered_pick).or_else(|| {
-        (!has_hovered_pick)
-            .then(|| actor_at_grid(&snapshot, grid))
-            .flatten()
-    });
-    let grid_map_object = (!has_hovered_pick)
-        .then(|| map_object_at_grid(&snapshot, grid))
-        .flatten();
-    let cursor_target = if let Some(target) = pick_interaction_target(secondary_pick) {
-        Some(target)
-    } else if !has_hovered_pick {
-        cursor_interaction_target(
-            viewer_state.command_actor_id(&snapshot),
-            actor_at_cursor.as_ref(),
-            grid_map_object.as_ref(),
-        )
-    } else {
-        None
-    };
+    let actor_at_cursor = pick_actor_from_resolved(&snapshot, hovered_pick)
+        .or_else(|| actor_at_grid(&snapshot, grid));
+    let grid_map_object = map_object_at_grid(&snapshot, grid);
+    let cursor_targets = cursor_interaction_targets(
+        viewer_state.command_actor_id(&snapshot),
+        pick_interaction_target(secondary_pick),
+        actor_at_cursor.as_ref(),
+        grid_map_object.as_ref(),
+    );
 
     if viewer_state.active_dialogue.is_some() {
         if buttons.just_pressed(MouseButton::Left) {
@@ -140,7 +129,7 @@ pub(crate) fn handle_mouse_input(
     if selected_actor_locked
         && (buttons.just_pressed(MouseButton::Left) || buttons.just_pressed(MouseButton::Right))
     {
-        viewer_state.status_line = "interaction: actor is busy".to_string();
+        request_cancel_pending_interaction(&mut runtime_state, &mut viewer_state);
         return;
     }
 
@@ -312,13 +301,17 @@ pub(crate) fn handle_mouse_input(
             viewer_state.status_line = "free observe: interactions disabled".to_string();
             return;
         }
-        if let Some(target_id) = cursor_target {
-            let prompt = focus_target_and_query_prompt(
-                &mut runtime_state,
-                &mut viewer_state,
-                target_id.clone(),
-            );
-            if let Some(prompt) = prompt {
+        if !cursor_targets.is_empty() {
+            let mut opened_menu = false;
+            for target_id in cursor_targets {
+                let prompt = focus_target_and_query_prompt(
+                    &mut runtime_state,
+                    &mut viewer_state,
+                    target_id.clone(),
+                );
+                let Some(prompt) = prompt else {
+                    continue;
+                };
                 log_viewer_interaction(
                     "menu_open",
                     viewer_state.selected_actor,
@@ -333,10 +326,23 @@ pub(crate) fn handle_mouse_input(
                 });
                 viewer_state.status_line =
                     format!("interaction menu: {} option(s)", prompt.options.len());
-            } else {
+                opened_menu = true;
+                break;
+            }
+
+            if !opened_menu {
                 viewer_state.status_line = "interaction: no available options".to_string();
             }
         } else {
+            let cancel_outcome = request_cancel_pending_movement(
+                &mut runtime_state,
+                &mut viewer_state,
+                CancelMovementContext::KeyboardShortcut,
+                snapshot.combat.in_combat,
+            );
+            if cancel_outcome.cancelled {
+                return;
+            }
             viewer_state.status_line = "interaction menu: closed".to_string();
         }
     }

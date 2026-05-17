@@ -33,6 +33,40 @@ pub(crate) fn cancel_pending_movement(
     true
 }
 
+pub(crate) fn cancel_pending_interaction(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+) -> bool {
+    let Some(intent) = runtime_state.runtime.pending_interaction().cloned() else {
+        return false;
+    };
+    if runtime_state.runtime.get_actor_side(intent.actor_id) != Some(ActorSide::Player) {
+        return false;
+    }
+
+    let should_end_turn_after_cancel = !runtime_state.runtime.snapshot().combat.in_combat;
+
+    if !runtime_state
+        .runtime
+        .cancel_pending_interaction(intent.actor_id)
+    {
+        return false;
+    }
+
+    viewer_state.progression_elapsed_sec = 0.0;
+    viewer_state.end_turn_hold_sec = 0.0;
+    viewer_state.end_turn_repeat_elapsed_sec = 0.0;
+    viewer_state.auto_end_turn_after_stop = should_end_turn_after_cancel;
+    viewer_state.focused_target = None;
+    viewer_state.current_prompt = None;
+    viewer_state.interaction_menu = None;
+    viewer_state.status_line = format!("interaction: cancelled actor {:?}", intent.actor_id);
+    if should_end_turn_after_cancel {
+        maybe_auto_end_turn_after_stop(runtime_state, viewer_state);
+    }
+    true
+}
+
 pub(crate) fn submit_end_turn(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,

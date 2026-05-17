@@ -160,6 +160,20 @@ impl SimulationRuntime {
         result
     }
 
+    pub fn cancel_pending_interaction(&mut self, actor_id: ActorId) -> bool {
+        if !self
+            .pending_interaction
+            .as_ref()
+            .map(|intent| intent.actor_id == actor_id)
+            .unwrap_or(false)
+        {
+            return false;
+        }
+
+        self.clear_pending_movement_internal(Some(AutoMoveInterruptReason::CancelledByNewCommand));
+        true
+    }
+
     pub(super) fn execute_pending_interaction_after_movement(
         &mut self,
     ) -> Option<InteractionExecutionResult> {

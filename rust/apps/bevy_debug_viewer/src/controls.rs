@@ -12,7 +12,8 @@ use game_data::{
 
 use crate::console::ViewerConsoleState;
 use crate::dialogue::{
-    advance_dialogue, apply_interaction_result, current_dialogue_has_options, current_dialogue_node,
+    advance_dialogue, apply_interaction_result_for_actor, current_dialogue_has_options,
+    current_dialogue_node,
 };
 use crate::game_ui::{activate_hotbar_slot, HOTBAR_DOCK_HEIGHT, HOTBAR_DOCK_WIDTH};
 use crate::geometry::{
@@ -20,7 +21,7 @@ use crate::geometry::{
     map_object_at_grid, pick_grid_from_ray, ray_point_on_horizontal_plane, selected_actor,
 };
 use crate::render::interaction_menu_layout;
-use crate::simulation::{cancel_pending_movement, submit_end_turn};
+use crate::simulation::{cancel_pending_interaction, cancel_pending_movement, submit_end_turn};
 use crate::state::{
     cursor_over_visible_ui_blocker, DialogueChoiceButton, InteractionMenuButton,
     InteractionMenuState, UiMouseBlocker, UiMouseBlockerName, ViewerActorMotionState, ViewerCamera,
@@ -37,7 +38,7 @@ mod targeting;
 
 pub(crate) use camera::{handle_camera_pan, handle_mouse_wheel_zoom};
 use interaction_input::{
-    cursor_interaction_target, execute_primary_target_interaction, focus_target_and_query_prompt,
+    cursor_interaction_targets, execute_primary_target_interaction, focus_target_and_query_prompt,
     handle_object_primary_click, interaction_menu_contains_cursor, is_command_actor_self_target,
 };
 pub(crate) use interaction_input::{
@@ -51,6 +52,8 @@ pub(crate) use targeting::{
 
 #[cfg(test)]
 use camera::manual_pan_offset_from_follow_focus;
+#[cfg(test)]
+use interaction_input::cursor_interaction_target;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PostCancelTurnPolicy {
@@ -125,6 +128,13 @@ fn request_cancel_pending_movement(
     };
     viewer_state.auto_end_turn_after_stop = outcome.should_auto_end_turn_after_stop();
     outcome
+}
+
+fn request_cancel_pending_interaction(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+) -> bool {
+    cancel_pending_interaction(runtime_state, viewer_state)
 }
 
 fn clear_pending_post_cancel_turn_policy(viewer_state: &mut ViewerState) {

@@ -59,7 +59,22 @@ pub(crate) fn handle_keyboard_input(
             menu_state.close_panel(UiMenuPanel::Settings);
             viewer_state.status_line = "menu: closed".to_string();
             return;
-        } else if scene_kind.is_gameplay() {
+        } else if request_cancel_pending_interaction(&mut runtime_state, &mut viewer_state) {
+            return;
+        } else {
+            let in_combat = runtime_state.runtime.snapshot().combat.in_combat;
+            let cancel_outcome = request_cancel_pending_movement(
+                &mut runtime_state,
+                &mut viewer_state,
+                CancelMovementContext::KeyboardShortcut,
+                in_combat,
+            );
+            if cancel_outcome.cancelled {
+                return;
+            }
+        }
+
+        if scene_kind.is_gameplay() {
             menu_state.open_panel(UiMenuPanel::Settings);
             viewer_state.status_line = "menu: settings".to_string();
             return;
@@ -232,11 +247,7 @@ pub(crate) fn handle_keyboard_input(
         }
     }
 
-    if selected_actor_locked
-        && (keys.just_pressed(KeyCode::Tab)
-            || keys.just_pressed(KeyCode::Space)
-            || keys.pressed(KeyCode::Space))
-    {
+    if selected_actor_locked && keys.just_pressed(KeyCode::Tab) {
         viewer_state.end_turn_hold_sec = 0.0;
         viewer_state.end_turn_repeat_elapsed_sec = 0.0;
         viewer_state.status_line = "interaction: actor is busy".to_string();
@@ -287,6 +298,9 @@ pub(crate) fn handle_keyboard_input(
             viewer_state.status_line = viewer_state.observe_playback_status();
             return;
         }
+        if request_cancel_pending_interaction(&mut runtime_state, &mut viewer_state) {
+            return;
+        }
         let in_combat = runtime_state.runtime.snapshot().combat.in_combat;
         let cancel_outcome = request_cancel_pending_movement(
             &mut runtime_state,
@@ -294,9 +308,10 @@ pub(crate) fn handle_keyboard_input(
             CancelMovementContext::KeyboardShortcut,
             in_combat,
         );
-        if !cancel_outcome.cancelled {
-            submit_end_turn(&mut runtime_state, &mut viewer_state);
+        if cancel_outcome.cancelled {
+            return;
         }
+        submit_end_turn(&mut runtime_state, &mut viewer_state);
     } else if keys.pressed(KeyCode::Space) {
         if viewer_state.is_free_observe() {
             return;
