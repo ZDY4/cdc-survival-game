@@ -48,7 +48,6 @@ pub(crate) fn handle_mouse_input(
                 .map(current_dialogue_has_options)
                 .unwrap_or(false)
             {
-                viewer_state.status_line = "dialogue: click an option or press 1-9".to_string();
                 return;
             }
             log_dialogue_input(
