@@ -262,28 +262,10 @@ fn advance_dialogue_command_updates_runtime_state_and_finishes_session() {
         SimulationCommandResult::DialogueState(result) => result.expect("choice should succeed"),
         other => panic!("unexpected command result: {other:?}"),
     };
-    assert_eq!(
-        selected.current_node.as_ref().map(|node| node.id.as_str()),
-        Some("trade_action")
-    );
-    assert_eq!(selected.emitted_actions.len(), 0);
-
-    let action_state = match simulation.apply_command(SimulationCommand::AdvanceDialogue {
-        actor_id: player,
-        target_id: Some(InteractionTargetId::Actor(trader)),
-        dialogue_id: "trader_lao_wang".into(),
-        option_id: None,
-        option_index: None,
-    }) {
-        SimulationCommandResult::DialogueState(result) => {
-            result.expect("action node should advance")
-        }
-        other => panic!("unexpected command result: {other:?}"),
-    };
-    assert!(action_state.finished);
-    assert_eq!(action_state.end_type.as_deref(), Some("trade"));
-    assert_eq!(action_state.emitted_actions.len(), 1);
-    assert_eq!(action_state.emitted_actions[0].action_type, "open_trade");
+    assert!(selected.finished);
+    assert_eq!(selected.end_type.as_deref(), Some("trade"));
+    assert_eq!(selected.emitted_actions.len(), 1);
+    assert_eq!(selected.emitted_actions[0].action_type, "open_trade");
     assert!(simulation.active_dialogue_state(player).is_none());
 }
 

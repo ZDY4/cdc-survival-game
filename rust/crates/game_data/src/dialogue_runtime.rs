@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -108,31 +110,69 @@ pub fn advance_dialogue(
     };
 
     let mut emitted_actions = node.actions.clone();
-    let mut finished = next_node_id.is_none();
-    let mut resolved_next_node_id = next_node_id.clone();
-    let mut end_type = if finished {
-        normalized_next_node_id(node.end_type.as_str())
-    } else {
-        None
-    };
+    resolve_automatic_nodes(
+        dialogue,
+        next_node_id,
+        &mut emitted_actions,
+        normalized_next_node_id(node.end_type.as_str()),
+    )
+}
 
-    if let Some(next_node) = resolved_next_node_id
-        .as_deref()
-        .and_then(|next_node_id| current_dialogue_node(dialogue, next_node_id))
-        .filter(|next_node| next_node.node_type == "end")
-    {
-        emitted_actions.extend(next_node.actions.clone());
-        finished = true;
-        resolved_next_node_id = None;
-        end_type = normalized_next_node_id(next_node.end_type.as_str());
+fn resolve_automatic_nodes(
+    dialogue: &DialogueData,
+    mut next_node_id: Option<String>,
+    emitted_actions: &mut Vec<DialogueAction>,
+    current_end_type: Option<String>,
+) -> Result<DialogueAdvanceOutcome, DialogueAdvanceError> {
+    let mut visited_action_nodes = BTreeSet::new();
+
+    loop {
+        let Some(node_id) = next_node_id.clone() else {
+            return Ok(DialogueAdvanceOutcome {
+                next_node_id: None,
+                finished: true,
+                emitted_actions: emitted_actions.clone(),
+                end_type: current_end_type,
+            });
+        };
+
+        let Some(next_node) = current_dialogue_node(dialogue, &node_id) else {
+            return Ok(DialogueAdvanceOutcome {
+                next_node_id: Some(node_id),
+                finished: false,
+                emitted_actions: emitted_actions.clone(),
+                end_type: None,
+            });
+        };
+
+        match next_node.node_type.as_str() {
+            "action" => {
+                if !visited_action_nodes.insert(node_id.clone()) {
+                    return Err(DialogueAdvanceError::MissingNode { node_id });
+                }
+                // action 节点只承载规则副作用，不应作为空白对话 UI 停留。
+                emitted_actions.extend(next_node.actions.clone());
+                next_node_id = normalized_next_node_id(next_node.next.as_str());
+            }
+            "end" => {
+                emitted_actions.extend(next_node.actions.clone());
+                return Ok(DialogueAdvanceOutcome {
+                    next_node_id: None,
+                    finished: true,
+                    emitted_actions: emitted_actions.clone(),
+                    end_type: normalized_next_node_id(next_node.end_type.as_str()),
+                });
+            }
+            _ => {
+                return Ok(DialogueAdvanceOutcome {
+                    next_node_id: Some(node_id),
+                    finished: false,
+                    emitted_actions: emitted_actions.clone(),
+                    end_type: None,
+                });
+            }
+        }
     }
-
-    Ok(DialogueAdvanceOutcome {
-        finished,
-        next_node_id: resolved_next_node_id,
-        emitted_actions,
-        end_type,
-    })
 }
 
 pub fn dialogue_runtime_state(
@@ -173,7 +213,9 @@ mod tests {
         resolve_dialogue_start_node_id, DialogueAdvanceError, DialogueAdvanceOutcome,
         DialogueSessionState,
     };
-    use crate::{ActorId, DialogueData, DialogueNode, DialogueOption, InteractionTargetId};
+    use crate::{
+        ActorId, DialogueAction, DialogueData, DialogueNode, DialogueOption, InteractionTargetId,
+    };
 
     #[test]
     fn start_node_prefers_explicit_start_flag() {
@@ -244,6 +286,48 @@ mod tests {
                 finished: true,
                 emitted_actions: Vec::new(),
                 end_type: Some("leave".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn choice_node_executes_action_node_before_finishing() {
+        let dialogue = sample_trade_dialogue();
+
+        let outcome = advance_dialogue(&dialogue, "choice", Some(0))
+            .expect("action node should execute immediately");
+
+        assert_eq!(
+            outcome,
+            DialogueAdvanceOutcome {
+                next_node_id: None,
+                finished: true,
+                emitted_actions: vec![DialogueAction {
+                    action_type: "open_trade".into(),
+                    ..DialogueAction::default()
+                }],
+                end_type: Some("trade".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn action_node_advances_to_next_visible_node() {
+        let dialogue = sample_action_confirmation_dialogue();
+
+        let outcome = advance_dialogue(&dialogue, "choice", Some(0))
+            .expect("action node should resolve before confirmation text");
+
+        assert_eq!(
+            outcome,
+            DialogueAdvanceOutcome {
+                next_node_id: Some("confirm".into()),
+                finished: false,
+                emitted_actions: vec![DialogueAction {
+                    action_type: "start_quest".into(),
+                    ..DialogueAction::default()
+                }],
+                end_type: None,
             }
         );
     }
@@ -327,6 +411,75 @@ mod tests {
                     id: "leave_end".into(),
                     node_type: "end".into(),
                     end_type: "leave".into(),
+                    ..DialogueNode::default()
+                },
+            ],
+            ..DialogueData::default()
+        }
+    }
+
+    fn sample_trade_dialogue() -> DialogueData {
+        DialogueData {
+            dialog_id: "trade".into(),
+            nodes: vec![
+                DialogueNode {
+                    id: "choice".into(),
+                    node_type: "choice".into(),
+                    options: vec![DialogueOption {
+                        text: "Trade".into(),
+                        next: "trade_action".into(),
+                        ..DialogueOption::default()
+                    }],
+                    ..DialogueNode::default()
+                },
+                DialogueNode {
+                    id: "trade_action".into(),
+                    node_type: "action".into(),
+                    actions: vec![DialogueAction {
+                        action_type: "open_trade".into(),
+                        ..DialogueAction::default()
+                    }],
+                    next: "trade_end".into(),
+                    ..DialogueNode::default()
+                },
+                DialogueNode {
+                    id: "trade_end".into(),
+                    node_type: "end".into(),
+                    end_type: "trade".into(),
+                    ..DialogueNode::default()
+                },
+            ],
+            ..DialogueData::default()
+        }
+    }
+
+    fn sample_action_confirmation_dialogue() -> DialogueData {
+        DialogueData {
+            dialog_id: "quest".into(),
+            nodes: vec![
+                DialogueNode {
+                    id: "choice".into(),
+                    node_type: "choice".into(),
+                    options: vec![DialogueOption {
+                        text: "Accept".into(),
+                        next: "accept_action".into(),
+                        ..DialogueOption::default()
+                    }],
+                    ..DialogueNode::default()
+                },
+                DialogueNode {
+                    id: "accept_action".into(),
+                    node_type: "action".into(),
+                    actions: vec![DialogueAction {
+                        action_type: "start_quest".into(),
+                        ..DialogueAction::default()
+                    }],
+                    next: "confirm".into(),
+                    ..DialogueNode::default()
+                },
+                DialogueNode {
+                    id: "confirm".into(),
+                    node_type: "dialog".into(),
                     ..DialogueNode::default()
                 },
             ],
