@@ -37,6 +37,30 @@ pub(crate) fn handle_mouse_input(
         clear_world_hover_state(&runtime_state, &mut viewer_state);
         return;
     };
+    let cursor_over_dialogue_panel =
+        cursor_over_named_ui_blocker(Some(cursor_position), &ui_blockers, "对话面板");
+    if viewer_state.active_dialogue.is_some() {
+        clear_world_hover_state(&runtime_state, &mut viewer_state);
+        if buttons.just_pressed(MouseButton::Left) && cursor_over_dialogue_panel {
+            if viewer_state
+                .active_dialogue
+                .as_ref()
+                .map(current_dialogue_has_options)
+                .unwrap_or(false)
+            {
+                viewer_state.status_line = "dialogue: click an option or press 1-9".to_string();
+                return;
+            }
+            log_dialogue_input(
+                &viewer_state,
+                "dialogue_advance",
+                "dialogue_panel_click",
+                None,
+            );
+            advance_dialogue(&mut runtime_state, &mut viewer_state, None);
+        }
+        return;
+    }
     if scene_kind.is_main_menu()
         || modal_state.item_quantity.is_some()
         || cursor_over_visible_ui_blocker(Some(cursor_position), &ui_blockers)
@@ -77,22 +101,6 @@ pub(crate) fn handle_mouse_input(
         actor_at_cursor.as_ref(),
         grid_map_object.as_ref(),
     );
-
-    if viewer_state.active_dialogue.is_some() {
-        if buttons.just_pressed(MouseButton::Left) {
-            if viewer_state
-                .active_dialogue
-                .as_ref()
-                .map(current_dialogue_has_options)
-                .unwrap_or(false)
-            {
-                return;
-            }
-            log_dialogue_input(&viewer_state, "dialogue_advance", "dialogue_click", None);
-            advance_dialogue(&mut runtime_state, &mut viewer_state, None);
-        }
-        return;
-    }
 
     if scene_kind.is_main_menu()
         || menu_state.any_panel_open()
@@ -380,4 +388,38 @@ fn pick_interaction_target(
     pick: Option<&crate::picking::ViewerResolvedPick>,
 ) -> Option<InteractionTargetId> {
     pick.and_then(|pick| pick.interaction.clone())
+}
+
+fn cursor_over_named_ui_blocker(
+    cursor_position: Option<Vec2>,
+    ui_blockers: &Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+            &InheritedVisibility,
+            Option<&UiMouseBlockerName>,
+        ),
+        With<UiMouseBlocker>,
+    >,
+    blocker_name: &str,
+) -> bool {
+    let Some(cursor_position) = cursor_position else {
+        return false;
+    };
+
+    ui_blockers.iter().any(
+        |(computed_node, transform, cursor, visibility, inherited_visibility, name)| {
+            name.is_some_and(|name| name.0 == blocker_name)
+                && visible_ui_blocker_contains_cursor(
+                    cursor_position,
+                    computed_node,
+                    transform,
+                    cursor,
+                    visibility,
+                    inherited_visibility,
+                )
+        },
+    )
 }
