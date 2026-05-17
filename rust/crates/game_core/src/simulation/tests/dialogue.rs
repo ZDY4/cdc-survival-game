@@ -38,6 +38,141 @@ fn friendly_actor_interaction_prompt_prefers_talk() {
 }
 
 #[test]
+fn combat_target_actor_interaction_prompt_filters_talk() {
+    let mut simulation = Simulation::new();
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("player".into())),
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let trader = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("trader_lao_wang".into())),
+        display_name: "Trader".into(),
+        kind: ActorKind::Npc,
+        side: ActorSide::Friendly,
+        group_id: "friendly".into(),
+        grid_position: GridCoord::new(1, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+
+    let prompt = simulation
+        .query_interaction_options(player, &InteractionTargetId::Actor(trader))
+        .expect("friendly actor should expose options before combat");
+    assert!(prompt
+        .options
+        .iter()
+        .any(|option| option.kind == InteractionOptionKind::Talk));
+
+    simulation.enter_combat(player, trader);
+
+    let prompt = simulation
+        .query_interaction_options(player, &InteractionTargetId::Actor(trader))
+        .expect("combat target actor should still expose non-talk options");
+    assert!(!prompt
+        .options
+        .iter()
+        .any(|option| option.kind == InteractionOptionKind::Talk));
+    assert!(prompt
+        .options
+        .iter()
+        .any(|option| option.kind == InteractionOptionKind::Attack));
+}
+
+#[test]
+fn combat_target_actor_rejects_direct_talk_execution() {
+    let mut simulation = Simulation::new();
+    simulation.set_dialogue_library(sample_dialogue_library());
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("player".into())),
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let trader = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("trader_lao_wang".into())),
+        display_name: "Trader".into(),
+        kind: ActorKind::Npc,
+        side: ActorSide::Friendly,
+        group_id: "friendly".into(),
+        grid_position: GridCoord::new(1, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation.enter_combat(player, trader);
+
+    let result = simulation.execute_interaction(InteractionExecutionRequest {
+        actor_id: player,
+        target_id: InteractionTargetId::Actor(trader),
+        option_id: InteractionOptionId("talk".into()),
+    });
+
+    assert!(!result.success);
+    assert_eq!(
+        result.reason.as_deref(),
+        Some("interaction_option_unavailable")
+    );
+    assert!(result.dialogue_id.is_none());
+    assert!(result.dialogue_state.is_none());
+    assert!(simulation.active_dialogue_state(player).is_none());
+}
+
+#[test]
+fn combat_target_actor_filters_custom_profile_talk() {
+    let mut simulation = Simulation::new();
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("player".into())),
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let trader = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("custom_trader".into())),
+        display_name: "Custom Trader".into(),
+        kind: ActorKind::Npc,
+        side: ActorSide::Friendly,
+        group_id: "friendly".into(),
+        grid_position: GridCoord::new(1, 0, 0),
+        interaction: Some(CharacterInteractionProfile {
+            display_name: "Custom Trader".into(),
+            options: vec![InteractionOptionDefinition {
+                kind: InteractionOptionKind::Talk,
+                dialogue_id: "custom_trader".into(),
+                ..InteractionOptionDefinition::default()
+            }],
+        }),
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation.enter_combat(player, trader);
+
+    let prompt = simulation
+        .query_interaction_options(player, &InteractionTargetId::Actor(trader))
+        .expect("custom target actor should resolve during combat");
+
+    assert!(prompt.options.is_empty());
+    assert!(prompt.primary_option_id.is_none());
+}
+
+#[test]
 fn self_interaction_prompt_exposes_wait_as_primary_option() {
     let mut simulation = Simulation::new();
     let player = simulation.register_actor(RegisterActor {

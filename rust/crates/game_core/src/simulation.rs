@@ -30,6 +30,7 @@ mod combat;
 mod combat_ai;
 mod dialogue;
 pub(crate) mod interaction_behaviors;
+mod interaction_filters;
 mod interaction_flow;
 mod level_transition;
 mod overworld;

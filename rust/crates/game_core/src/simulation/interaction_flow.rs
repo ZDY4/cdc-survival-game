@@ -8,7 +8,11 @@ use game_data::{
 };
 use tracing::{error, info, warn};
 
-use super::{interaction_behaviors, Simulation, SimulationEvent};
+use super::{
+    interaction_behaviors,
+    interaction_filters::{self, InteractionOptionFilterContext},
+    Simulation, SimulationEvent,
+};
 
 impl Simulation {
     pub fn perform_interact(&mut self, actor_id: ActorId) -> ActionResult {
@@ -54,11 +58,17 @@ impl Simulation {
         }
 
         let target = self.resolve_target_interaction_data(actor_id, target_id)?;
+        let filter_context = InteractionOptionFilterContext {
+            simulation: self,
+            actor_id,
+            target_id,
+        };
         let mut option_views: Vec<(InteractionOptionDefinition, ResolvedInteractionOption)> =
             target
                 .options
                 .into_iter()
                 .filter(|option| option.enabled && option.visible)
+                .filter(|option| interaction_filters::option_is_available(&filter_context, option))
                 .map(|mut option| {
                     option.ensure_defaults();
                     let resolved = interaction_behaviors::resolve_interaction_option_view(
