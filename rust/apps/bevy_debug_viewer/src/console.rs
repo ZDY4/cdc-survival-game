@@ -1094,7 +1094,7 @@ mod tests {
         assert!(viewer_state.is_free_observe());
         assert!(viewer_state.auto_tick);
         assert_eq!(viewer_state.observe_speed, ViewerObserveSpeed::X1);
-        assert_eq!(viewer_state.min_progression_interval_sec, 0.1);
+        assert_eq!(viewer_state.min_progression_interval_sec, 0.08);
         assert_eq!(first.text, "control mode: Free Observe");
 
         let second = execute_ob_command(&["mode"], &runtime_state, &mut viewer_state);
@@ -1102,7 +1102,7 @@ mod tests {
         assert!(viewer_state.is_player_control());
         assert!(!viewer_state.auto_tick);
         assert_eq!(viewer_state.observe_speed, ViewerObserveSpeed::X1);
-        assert_eq!(viewer_state.min_progression_interval_sec, 0.1);
+        assert_eq!(viewer_state.min_progression_interval_sec, 0.08);
         assert_eq!(second.text, "control mode: Player Control");
     }
 

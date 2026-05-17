@@ -44,9 +44,9 @@ pub(crate) use runtime_basics::{
 };
 pub(crate) use runtime_bridge::viewer_event_entry;
 
-const ACTOR_MOTION_DURATION_SCALE: f32 = 2.0 / 3.0;
+const ACTOR_MOTION_DURATION_SCALE: f32 = 0.9;
 const ACTOR_MOTION_MIN_DURATION_SEC: f32 = 0.04 * ACTOR_MOTION_DURATION_SCALE;
-const ACTOR_MOTION_MAX_DURATION_SEC: f32 = 0.16 * ACTOR_MOTION_DURATION_SCALE;
+const ACTOR_MOTION_MAX_DURATION_SEC: f32 = 0.08 * ACTOR_MOTION_DURATION_SCALE;
 
 #[cfg(test)]
 mod tests {
@@ -413,7 +413,8 @@ mod tests {
             ACTOR_MOTION_MAX_DURATION_SEC
         );
         assert!(
-            (event_feedback::actor_motion_duration_sec(0.1) - (0.1 * ACTOR_MOTION_DURATION_SCALE))
+            (event_feedback::actor_motion_duration_sec(0.08)
+                - (0.08 * ACTOR_MOTION_DURATION_SCALE))
                 .abs()
                 <= 0.0001
         );

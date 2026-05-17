@@ -71,10 +71,10 @@ impl ViewerObserveSpeed {
 
     pub(crate) fn progression_interval_sec(self) -> f32 {
         match self {
-            Self::X1 => 0.1,
-            Self::X2 => 0.05,
-            Self::X5 => 0.02,
-            Self::X10 => 0.01,
+            Self::X1 => 0.08,
+            Self::X2 => 0.04,
+            Self::X5 => 0.016,
+            Self::X10 => 0.008,
         }
     }
 }
