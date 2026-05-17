@@ -1,9 +1,11 @@
 //! 面板子模块门面：按职责域组织子实现并对外暴露稳定的 render_* 入口。
 use super::*;
 
+mod character;
+mod crafting;
 mod inventory;
+mod journal;
 mod map_settings;
-mod progression;
 mod skills;
 mod skills_graph;
 
@@ -34,7 +36,7 @@ pub(super) fn render_character_panel(
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiCharacterSnapshot,
 ) {
-    progression::render_character_panel(parent, font, snapshot)
+    character::render_character_panel(parent, font, snapshot)
 }
 
 pub(super) fn render_journal_panel(
@@ -42,7 +44,7 @@ pub(super) fn render_journal_panel(
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiJournalSnapshot,
 ) {
-    progression::render_journal_panel(parent, font, snapshot)
+    journal::render_journal_panel(parent, font, snapshot)
 }
 
 pub(super) fn render_crafting_panel(
@@ -50,7 +52,7 @@ pub(super) fn render_crafting_panel(
     font: &ViewerUiFont,
     snapshot: &game_bevy::UiCraftingSnapshot,
 ) {
-    progression::render_crafting_panel(parent, font, snapshot)
+    crafting::render_crafting_panel(parent, font, snapshot)
 }
 
 pub(super) fn render_skills_panel(
