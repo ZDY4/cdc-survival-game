@@ -10,6 +10,7 @@ use crate::movement::PendingProgressionStep;
 use crate::vision::{has_grid_line_of_sight, DEFAULT_VISION_RADIUS};
 
 use super::{Simulation, SimulationEvent};
+use tracing::{info, warn};
 
 const COMBAT_EXIT_NO_SIGHT_TURNS: u8 = 3;
 
@@ -87,6 +88,10 @@ impl Simulation {
         start_turn_if_needed: bool,
     ) {
         if !self.actors.contains(trigger_actor) {
+            warn!(
+                "core.turn.enter_combat_missing_trigger trigger_actor={:?} target_actor={:?}",
+                trigger_actor, target_actor
+            );
             return;
         }
 
@@ -104,6 +109,13 @@ impl Simulation {
             }
             self.events
                 .push(SimulationEvent::CombatStateChanged { in_combat: true });
+            info!(
+                "core.turn.combat_entered trigger_actor={:?} target_actor={:?} actor_count={} start_turn_if_needed={}",
+                trigger_actor,
+                target_actor,
+                self.actors.ids().count(),
+                start_turn_if_needed,
+            );
         }
 
         self.turn.current_actor_id = Some(trigger_actor);
@@ -111,6 +123,13 @@ impl Simulation {
             .actors
             .get(trigger_actor)
             .map(|actor| actor.group_id.clone());
+        info!(
+            "core.turn.combat_current_actor_set actor={:?} group={:?} target_actor={:?} combat_turn_index={}",
+            trigger_actor,
+            self.turn.current_group_id,
+            target_actor,
+            self.turn.combat_turn_index,
+        );
 
         if let Some(target) = self.actors.get_mut(target_actor) {
             target.in_combat = true;
@@ -134,6 +153,10 @@ impl Simulation {
 
     pub fn force_end_combat(&mut self) {
         if self.turn.combat_active {
+            info!(
+                "core.turn.combat_force_end current_actor={:?} combat_turn_index={}",
+                self.turn.current_actor_id, self.turn.combat_turn_index
+            );
             self.finish_combat_state_and_resume_exploration();
         }
     }
@@ -362,14 +385,27 @@ impl Simulation {
 
     pub(super) fn end_current_combat_turn(&mut self) {
         let Some(current_actor) = self.turn.current_actor_id else {
+            warn!("core.turn.end_current_combat_turn_without_actor");
             return;
         };
 
+        info!(
+            "core.turn.combat_turn_end_start actor={:?} group={:?} combat_turn_index={}",
+            current_actor, self.turn.current_group_id, self.turn.combat_turn_index
+        );
         self.end_actor_turn(current_actor);
         if self.exit_combat_if_resolved() {
+            info!(
+                "core.turn.combat_turn_end_resolved actor={:?} reason=combat_resolved",
+                current_actor
+            );
             return;
         }
         if self.update_combat_visibility_decay() {
+            info!(
+                "core.turn.combat_turn_end_resolved actor={:?} reason=visibility_decay",
+                current_actor
+            );
             return;
         }
         if self.turn.combat_active {
@@ -380,6 +416,10 @@ impl Simulation {
     fn select_next_combat_actor(&mut self) {
         let ordered_groups = self.sorted_group_ids();
         if ordered_groups.is_empty() {
+            warn!(
+                "core.turn.combat_next_actor_no_groups current_actor={:?} combat_turn_index={}",
+                self.turn.current_actor_id, self.turn.combat_turn_index
+            );
             return;
         }
 
@@ -393,16 +433,40 @@ impl Simulation {
         let Some((group_id, actor_id)) =
             self.find_next_combat_actor(&ordered_groups, start_group_index, current_actor)
         else {
+            warn!(
+                "core.turn.combat_next_actor_missing current_actor={:?} current_group={} groups={:?} combat_turn_index={}",
+                current_actor,
+                current_group,
+                ordered_groups,
+                self.turn.combat_turn_index,
+            );
             return;
         };
 
+        let previous_actor = self.turn.current_actor_id;
+        let previous_group = self.turn.current_group_id.clone();
         self.turn.current_group_id = Some(group_id);
         self.turn.current_actor_id = Some(actor_id);
         self.turn.combat_turn_index += 1;
+        info!(
+            "core.turn.combat_next_actor previous_actor={:?} previous_group={:?} next_actor={:?} next_group={:?} combat_turn_index={}",
+            previous_actor,
+            previous_group,
+            actor_id,
+            self.turn.current_group_id,
+            self.turn.combat_turn_index,
+        );
         self.start_actor_turn(actor_id);
     }
 
     pub(super) fn run_combat_ai_turn(&mut self, actor_id: ActorId) {
+        info!(
+            "core.turn.combat_ai_turn_start actor={:?} ap={:.1} current_actor={:?} combat_turn_index={}",
+            actor_id,
+            self.get_actor_ap(actor_id),
+            self.turn.current_actor_id,
+            self.turn.combat_turn_index,
+        );
         while self.turn.combat_active
             && self.turn.current_actor_id == Some(actor_id)
             && self.get_actor_ap(actor_id) >= self.config.affordable_threshold
@@ -415,6 +479,12 @@ impl Simulation {
         }
 
         if self.turn.combat_active && self.turn.current_actor_id == Some(actor_id) {
+            info!(
+                "core.turn.combat_ai_turn_queue_end actor={:?} remaining_ap={:.1} combat_turn_index={}",
+                actor_id,
+                self.get_actor_ap(actor_id),
+                self.turn.combat_turn_index,
+            );
             self.queue_pending_progression_once(PendingProgressionStep::EndCurrentCombatTurn);
         }
     }
@@ -562,6 +632,12 @@ impl Simulation {
 
     fn update_combat_visibility_decay(&mut self) -> bool {
         if self.hostile_player_visibility_pair().is_some() {
+            if self.turn.turns_without_hostile_player_sight > 0 {
+                info!(
+                    "core.turn.combat_visibility_restored previous_no_sight_turns={}",
+                    self.turn.turns_without_hostile_player_sight
+                );
+            }
             self.turn.turns_without_hostile_player_sight = 0;
             return false;
         }
@@ -570,6 +646,10 @@ impl Simulation {
             .turn
             .turns_without_hostile_player_sight
             .saturating_add(1);
+        info!(
+            "core.turn.combat_visibility_decay no_sight_turns={} threshold={}",
+            self.turn.turns_without_hostile_player_sight, COMBAT_EXIT_NO_SIGHT_TURNS
+        );
         if self.turn.turns_without_hostile_player_sight < COMBAT_EXIT_NO_SIGHT_TURNS {
             return false;
         }
@@ -579,11 +659,19 @@ impl Simulation {
     }
 
     fn finish_combat_state_and_resume_exploration(&mut self) {
+        info!(
+            "core.turn.combat_finish_resume_exploration current_actor={:?} combat_turn_index={}",
+            self.turn.current_actor_id, self.turn.combat_turn_index
+        );
         self.finish_combat_state();
         self.queue_pending_progression_once(PendingProgressionStep::StartNextNonCombatPlayerTurn);
     }
 
     fn finish_combat_state(&mut self) {
+        info!(
+            "core.turn.combat_exited current_actor={:?} current_group={:?} combat_turn_index={}",
+            self.turn.current_actor_id, self.turn.current_group_id, self.turn.combat_turn_index
+        );
         self.turn.combat_active = false;
         self.turn.current_actor_id = None;
         self.turn.current_group_id = None;

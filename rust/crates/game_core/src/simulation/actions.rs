@@ -12,6 +12,7 @@ use crate::runtime::DropItemOutcome;
 use crate::turn::ActiveActionState;
 
 use super::{interaction_flow, Simulation, SimulationEvent, DROP_ITEM_SEARCH_RADIUS};
+use tracing::{info, warn};
 
 impl Simulation {
     pub fn actor_turn_open(&self, actor_id: ActorId) -> bool {
@@ -254,12 +255,23 @@ impl Simulation {
 
     pub(super) fn start_actor_turn(&mut self, actor_id: ActorId) {
         let Some(actor) = self.actors.get_mut(actor_id) else {
+            warn!("core.turn.start_actor_turn_missing actor={actor_id:?}");
             return;
         };
 
         let old_ap = actor.ap;
         actor.ap = (old_ap + self.config.turn_ap_gain).clamp(0.0, self.config.turn_ap_max);
         actor.turn_open = true;
+        info!(
+            "core.turn.actor_started actor={:?} group={} ap_before={:.1} ap_after={:.1} combat={} combat_turn_index={} current_actor={:?}",
+            actor_id,
+            actor.group_id,
+            old_ap,
+            actor.ap,
+            self.turn.combat_active,
+            self.turn.combat_turn_index,
+            self.turn.current_actor_id,
+        );
         self.events.push(SimulationEvent::ActorTurnStarted {
             actor_id,
             group_id: actor.group_id.clone(),
@@ -269,10 +281,20 @@ impl Simulation {
 
     pub(super) fn end_actor_turn(&mut self, actor_id: ActorId) {
         let Some(actor) = self.actors.get_mut(actor_id) else {
+            warn!("core.turn.end_actor_turn_missing actor={actor_id:?}");
             return;
         };
 
         actor.turn_open = false;
+        info!(
+            "core.turn.actor_ended actor={:?} group={} remaining_ap={:.1} combat={} combat_turn_index={} current_actor={:?}",
+            actor_id,
+            actor.group_id,
+            actor.ap,
+            self.turn.combat_active,
+            self.turn.combat_turn_index,
+            self.turn.current_actor_id,
+        );
         self.events.push(SimulationEvent::ActorTurnEnded {
             actor_id,
             group_id: actor.group_id.clone(),
@@ -316,6 +338,14 @@ impl Simulation {
     }
 
     pub(super) fn queue_turn_end_for_actor(&mut self, actor_id: ActorId) {
+        info!(
+            "core.turn.queue_turn_end actor={:?} combat={} current_actor={:?} turn_open={} pending_len={}",
+            actor_id,
+            self.turn.combat_active,
+            self.turn.current_actor_id,
+            self.actor_turn_open(actor_id),
+            self.pending_progression.len(),
+        );
         if self.turn.combat_active {
             if self.turn.current_actor_id == Some(actor_id) {
                 self.queue_pending_progression_once(PendingProgressionStep::EndCurrentCombatTurn);
@@ -339,6 +369,13 @@ impl Simulation {
             .iter()
             .any(|queued| *queued == step)
         {
+            info!(
+                "core.turn.pending_progression_duplicate step={:?} pending_len={} current_actor={:?} combat={}",
+                step,
+                self.pending_progression.len(),
+                self.turn.current_actor_id,
+                self.turn.combat_active,
+            );
             return;
         }
         self.queue_pending_progression(step);

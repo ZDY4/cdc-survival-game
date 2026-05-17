@@ -1,6 +1,7 @@
 //! 运行时基础操作：负责新游戏初始化、基础命令包装和 viewer 运行时快捷操作。
 
 use super::*;
+use bevy::log::info;
 
 #[derive(Resource, Debug, Default)]
 pub(crate) struct ViewerVisionTrackerState {
@@ -81,6 +82,13 @@ pub(crate) fn tick_runtime(
                 .iter()
                 .find(|actor| actor.side == ActorSide::Player)
             {
+                info!(
+                    "viewer.turn.auto_tick_end_turn actor={:?} tick={} combat={} turn_open={} active_dialogue=false pending_interaction=false",
+                    player_actor.actor_id,
+                    runtime_state.runtime.tick_count(),
+                    snapshot.combat.in_combat,
+                    player_actor.turn_open,
+                );
                 let _ = runtime_state
                     .runtime
                     .submit_command(SimulationCommand::EndTurn {

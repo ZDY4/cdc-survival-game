@@ -883,18 +883,53 @@ impl Simulation {
     }
 
     pub fn clear_pending_progression(&mut self) {
+        if !self.pending_progression.is_empty() {
+            info!(
+                "core.turn.pending_progression_cleared pending_len={} current_actor={:?} combat={}",
+                self.pending_progression.len(),
+                self.turn.current_actor_id,
+                self.turn.combat_active,
+            );
+        }
         self.pending_progression.clear();
     }
 
     pub fn queue_pending_progression(&mut self, step: PendingProgressionStep) {
+        info!(
+            "core.turn.pending_progression_queued step={:?} pending_len_before={} current_actor={:?} combat={} combat_turn_index={}",
+            step,
+            self.pending_progression.len(),
+            self.turn.current_actor_id,
+            self.turn.combat_active,
+            self.turn.combat_turn_index,
+        );
         self.pending_progression.push_back(step);
     }
 
     pub(crate) fn pop_pending_progression(&mut self) -> Option<PendingProgressionStep> {
-        self.pending_progression.pop_front()
+        let step = self.pending_progression.pop_front();
+        if let Some(step) = step {
+            info!(
+                "core.turn.pending_progression_popped step={:?} pending_len_after={} current_actor={:?} combat={} combat_turn_index={}",
+                step,
+                self.pending_progression.len(),
+                self.turn.current_actor_id,
+                self.turn.combat_active,
+                self.turn.combat_turn_index,
+            );
+        }
+        step
     }
 
     pub(crate) fn apply_pending_progression_step(&mut self, step: PendingProgressionStep) {
+        info!(
+            "core.turn.pending_progression_apply_start step={:?} current_actor={:?} combat={} combat_turn_index={} pending_len={}",
+            step,
+            self.turn.current_actor_id,
+            self.turn.combat_active,
+            self.turn.combat_turn_index,
+            self.pending_progression.len(),
+        );
         match step {
             PendingProgressionStep::EndCurrentCombatTurn => {
                 self.end_current_combat_turn();
@@ -912,6 +947,14 @@ impl Simulation {
             }
             PendingProgressionStep::ContinuePendingMovement => {}
         }
+        info!(
+            "core.turn.pending_progression_apply_finish step={:?} current_actor={:?} combat={} combat_turn_index={} pending_len={}",
+            step,
+            self.turn.current_actor_id,
+            self.turn.combat_active,
+            self.turn.combat_turn_index,
+            self.pending_progression.len(),
+        );
     }
 
     pub fn is_in_combat(&self) -> bool {
