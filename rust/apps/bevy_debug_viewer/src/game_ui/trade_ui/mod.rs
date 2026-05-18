@@ -2,8 +2,9 @@
 
 use super::*;
 
-const TRADE_PAGE_LEFT_WIDTH: f32 = 568.0;
-const TRADE_PAGE_RIGHT_WIDTH: f32 = UI_PANEL_WIDTH;
+const TRADE_PAGE_LEFT_WIDTH: f32 = 360.0;
+const TRADE_PAGE_MIDDLE_WIDTH: f32 = 360.0;
+const TRADE_PAGE_RIGHT_WIDTH: f32 = 360.0;
 const TRADE_PAGE_TOP: f32 = 28.0;
 const TRADE_PAGE_BOTTOM: f32 = 32.0;
 const TRADE_PAGE_GAP: f32 = 14.0;
@@ -24,6 +25,7 @@ pub(super) fn resolve_trade_session_for_target(
 pub(super) fn render_trade_page(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
+    trade: &game_bevy::UiTradeSessionState,
     trade_snapshot: &game_bevy::UiTradeSnapshot,
     inventory_snapshot: &game_bevy::UiInventoryPanelSnapshot,
     menu_state: &UiMenuState,
@@ -32,6 +34,7 @@ pub(super) fn render_trade_page(
     rendering::render_trade_page(
         parent,
         font,
+        trade,
         trade_snapshot,
         inventory_snapshot,
         menu_state,

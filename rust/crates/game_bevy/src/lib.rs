@@ -79,7 +79,8 @@ pub use ui::{
     UiItemQuantityModalState, UiItemType, UiJournalSnapshot, UiMainMenuCommand, UiMainMenuSnapshot,
     UiMapLocationView, UiMapSnapshot, UiMenuCommand, UiMenuPanel, UiMenuState, UiModalState,
     UiOverworldLocationPromptSnapshot, UiSettingsCommand, UiSkillCommand, UiSkillEntryView,
-    UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCommand, UiTradeEntryView,
+    UiSkillTreeView, UiSkillsSnapshot, UiStatusBannerState, UiTradeCartBuyLine,
+    UiTradeCartSellLine, UiTradeCartSellSource, UiTradeCartState, UiTradeCommand, UiTradeEntryView,
     UiTradeSessionState, UiTradeSnapshot, UiWorldStatusSnapshot,
 };
 

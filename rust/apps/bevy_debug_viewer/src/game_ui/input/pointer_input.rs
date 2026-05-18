@@ -1,9 +1,9 @@
 //! UI 指针输入：负责背包点击、右键菜单、装备选择和拖拽分发。
 
 use super::button_actions::{
-    execute_inventory_drop, execute_trade_sell, plan_container_store, plan_container_take,
-    plan_inventory_drop, plan_trade_sell, ContainerQuantityPlan, InventoryDropPlan,
-    TradeQuantityPlan,
+    execute_inventory_drop, plan_container_store, plan_container_take, plan_inventory_drop,
+    plan_trade_cart_sell, queue_trade_equipped_sell, queue_trade_sell, trade_sell_unit_price,
+    ContainerQuantityPlan, InventoryDropPlan, TradeQuantityPlan,
 };
 use super::*;
 
@@ -574,6 +574,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             trade_active,
             container_active,
             &mut ui.menu_state,
+            &mut ui.modal_state,
+            &mut ui.viewer_state,
             &mut ui.context_menu,
             &mut ui.runtime_state,
             &ui.save_path,
@@ -600,6 +602,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             trade_active,
             container_active,
             &mut ui.menu_state,
+            &mut ui.modal_state,
+            &mut ui.viewer_state,
             &mut ui.context_menu,
             &mut ui.runtime_state,
             &ui.save_path,
@@ -717,7 +721,6 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                                 &mut ui.viewer_state,
                                 &mut ui.menu_state,
                                 &mut ui.modal_state,
-                                &ui.save_path,
                                 &ui.items,
                                 actor_id,
                                 &trade_shop_id,
@@ -871,15 +874,20 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 );
             }
             Some(UiInventoryDragHoverTarget::TradeSellZone) if trade_active => {
-                if let Some(trade) = ui.modal_state.trade.as_ref() {
+                if let Some(trade_shop_id) = ui
+                    .modal_state
+                    .trade
+                    .as_ref()
+                    .map(|trade| trade.shop_id.clone())
+                {
                     applied_drop = apply_trade_equipped_sell(
                         &mut ui.runtime_state,
                         &mut ui.viewer_state,
                         &mut ui.menu_state,
-                        &ui.save_path,
+                        &mut ui.modal_state,
                         &ui.items,
                         actor_id,
-                        &trade.shop_id,
+                        &trade_shop_id,
                         &slot_id,
                         item_id,
                     );
@@ -1140,16 +1148,58 @@ fn handle_click_release(
     trade_active: bool,
     container_active: bool,
     menu_state: &mut UiMenuState,
+    modal_state: &mut UiModalState,
+    viewer_state: &mut ViewerState,
     context_menu: &mut UiContextMenuState,
-    _runtime_state: &mut ViewerRuntimeState,
+    runtime_state: &mut ViewerRuntimeState,
     _save_path: &ViewerRuntimeSavePath,
-    _items: &ItemDefinitions,
+    items: &ItemDefinitions,
     inventory_hit: Option<u32>,
     container_item_hit: Option<u32>,
     equipment_hit: Option<&EquipmentSlotClickTarget>,
     clicked_context_menu: bool,
 ) {
     if let Some(item_id) = inventory_hit {
+        if trade_active {
+            if let (Some(actor_id), Some(trade)) = (
+                player_actor_id(&runtime_state.runtime),
+                modal_state.trade.clone(),
+            ) {
+                match plan_trade_cart_sell(&runtime_state.runtime, actor_id, &trade, item_id, items)
+                {
+                    TradeQuantityPlan::Immediate { count } => {
+                        if let Some(unit_price) = trade_sell_unit_price(
+                            &runtime_state.runtime,
+                            &trade.shop_id,
+                            item_id,
+                            items,
+                        ) {
+                            let status = queue_trade_sell(
+                                modal_state,
+                                items,
+                                &trade.shop_id,
+                                item_id,
+                                unit_price,
+                                count,
+                            );
+                            viewer_state.status_line = status.clone();
+                            menu_state.status_text = status;
+                        }
+                    }
+                    TradeQuantityPlan::OpenModal(modal) => {
+                        modal_state.item_quantity = Some(modal);
+                        viewer_state.status_line = "选择要加入待卖出的数量".to_string();
+                        menu_state.status_text = viewer_state.status_line.clone();
+                    }
+                    TradeQuantityPlan::Blocked { status } => {
+                        viewer_state.status_line = status.clone();
+                        menu_state.status_text = status;
+                    }
+                }
+            }
+            context_menu.clear();
+            return;
+        }
         menu_state.selected_inventory_item = Some(item_id);
         menu_state.selected_equipment_slot = None;
         context_menu.clear();
@@ -1157,6 +1207,26 @@ fn handle_click_release(
     }
 
     if let Some(target) = equipment_hit {
+        if trade_active {
+            if let (Some(actor_id), Some(trade), Some(_item_id)) = (
+                player_actor_id(&runtime_state.runtime),
+                modal_state.trade.clone(),
+                target.item_id,
+            ) {
+                let status = queue_trade_equipped_sell(
+                    &runtime_state.runtime,
+                    modal_state,
+                    items,
+                    actor_id,
+                    &trade.shop_id,
+                    &target.slot_id,
+                );
+                viewer_state.status_line = status.clone();
+                menu_state.status_text = status;
+            }
+            context_menu.clear();
+            return;
+        }
         context_menu.clear();
         let _ = target;
         menu_state.selected_equipment_slot = None;
@@ -1587,24 +1657,27 @@ fn apply_trade_sell(
     viewer_state: &mut ViewerState,
     menu_state: &mut UiMenuState,
     modal_state: &mut UiModalState,
-    save_path: &ViewerRuntimeSavePath,
     items: &ItemDefinitions,
     actor_id: ActorId,
     shop_id: &str,
     item_id: u32,
 ) -> bool {
-    match plan_trade_sell(&runtime_state.runtime, actor_id, shop_id, item_id, items) {
+    let Some(trade) = modal_state.trade.clone() else {
+        viewer_state.status_line = "交易会话已关闭".to_string();
+        menu_state.status_text = viewer_state.status_line.clone();
+        return false;
+    };
+    match plan_trade_cart_sell(&runtime_state.runtime, actor_id, &trade, item_id, items) {
         TradeQuantityPlan::Immediate { count } => {
-            let status = execute_trade_sell(
-                runtime_state,
-                menu_state,
-                save_path,
-                items,
-                actor_id,
-                shop_id,
-                item_id,
-                count,
-            );
+            let Some(unit_price) =
+                trade_sell_unit_price(&runtime_state.runtime, shop_id, item_id, items)
+            else {
+                let status = format!("unknown_item:{item_id}");
+                viewer_state.status_line = status.clone();
+                menu_state.status_text = status;
+                return false;
+            };
+            let status = queue_trade_sell(modal_state, items, shop_id, item_id, unit_price, count);
             viewer_state.status_line = status.clone();
             menu_state.status_text = status;
             true
@@ -1627,32 +1700,25 @@ fn apply_trade_equipped_sell(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
     menu_state: &mut UiMenuState,
-    save_path: &ViewerRuntimeSavePath,
+    modal_state: &mut UiModalState,
     items: &ItemDefinitions,
     actor_id: ActorId,
     shop_id: &str,
     slot_id: &str,
-    item_id: u32,
+    _item_id: u32,
 ) -> bool {
-    let item_name = item_preview_label(&items.0, item_id);
-    match runtime_state
-        .runtime
-        .sell_equipped_item_to_shop(actor_id, shop_id, slot_id, &items.0)
-    {
-        Ok(_) => {
-            save_runtime_snapshot(save_path, &runtime_state.runtime);
-            let status = format!("已卖出装备 {} x1", item_name);
-            viewer_state.status_line = status.clone();
-            menu_state.status_text = status;
-            true
-        }
-        Err(error) => {
-            let status = error.to_string();
-            viewer_state.status_line = status.clone();
-            menu_state.status_text = status;
-            false
-        }
-    }
+    let status = queue_trade_equipped_sell(
+        &runtime_state.runtime,
+        modal_state,
+        items,
+        actor_id,
+        shop_id,
+        slot_id,
+    );
+    let success = status.starts_with("已加入");
+    viewer_state.status_line = status.clone();
+    menu_state.status_text = status;
+    success
 }
 
 fn apply_inventory_drop(

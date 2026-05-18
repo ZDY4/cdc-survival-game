@@ -439,8 +439,15 @@ pub(crate) enum GameUiButtonAction {
     CraftRecipe(String),
     SelectMapLocation(String),
     EnterOverworldLocation(String),
-    BuyTradeItem {
+    QueueTradeBuy {
         shop_id: String,
+        item_id: u32,
+    },
+    AdjustTradeBuy {
+        item_id: u32,
+        delta: i32,
+    },
+    RemoveTradeBuy {
         item_id: u32,
     },
     StoreContainerItem {
@@ -451,14 +458,25 @@ pub(crate) enum GameUiButtonAction {
         container_id: String,
         item_id: u32,
     },
-    SellTradeItem {
+    QueueTradeSell {
         shop_id: String,
         item_id: u32,
     },
-    SellEquippedTradeItem {
+    QueueTradeEquippedSell {
         shop_id: String,
         slot_id: String,
     },
+    AdjustTradeSell {
+        item_id: u32,
+        source: game_bevy::UiTradeCartSellSource,
+        delta: i32,
+    },
+    RemoveTradeSell {
+        item_id: u32,
+        source: game_bevy::UiTradeCartSellSource,
+    },
+    ClearTradeCart,
+    ConfirmTradeCart,
     SettingsSetMaster(f32),
     SettingsSetMusic(f32),
     SettingsSetSfx(f32),

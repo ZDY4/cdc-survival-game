@@ -214,10 +214,173 @@ impl UiMenuState {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UiTradeCartBuyLine {
+    pub item_id: u32,
+    pub name: String,
+    pub count: i32,
+    pub unit_price: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiTradeCartSellSource {
+    Inventory,
+    Equipped { slot_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UiTradeCartSellLine {
+    pub item_id: u32,
+    pub name: String,
+    pub count: i32,
+    pub unit_price: i32,
+    pub source: UiTradeCartSellSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UiTradeCartState {
+    pub buy_lines: Vec<UiTradeCartBuyLine>,
+    pub sell_lines: Vec<UiTradeCartSellLine>,
+}
+
+impl UiTradeCartState {
+    pub fn is_empty(&self) -> bool {
+        self.buy_lines.is_empty() && self.sell_lines.is_empty()
+    }
+
+    pub fn buy_total(&self) -> i32 {
+        self.buy_lines
+            .iter()
+            .map(|line| line.count.max(0) * line.unit_price.max(0))
+            .sum()
+    }
+
+    pub fn sell_total(&self) -> i32 {
+        self.sell_lines
+            .iter()
+            .map(|line| line.count.max(0) * line.unit_price.max(0))
+            .sum()
+    }
+
+    pub fn net_payment(&self) -> i32 {
+        self.buy_total() - self.sell_total()
+    }
+
+    pub fn queued_buy_count(&self, item_id: u32) -> i32 {
+        self.buy_lines
+            .iter()
+            .filter(|line| line.item_id == item_id)
+            .map(|line| line.count.max(0))
+            .sum()
+    }
+
+    pub fn queued_inventory_sell_count(&self, item_id: u32) -> i32 {
+        self.sell_lines
+            .iter()
+            .filter(|line| {
+                line.item_id == item_id && matches!(line.source, UiTradeCartSellSource::Inventory)
+            })
+            .map(|line| line.count.max(0))
+            .sum()
+    }
+
+    pub fn has_equipped_sell_slot(&self, slot_id: &str) -> bool {
+        self.sell_lines.iter().any(|line| {
+            matches!(
+                &line.source,
+                UiTradeCartSellSource::Equipped { slot_id: queued_slot } if queued_slot == slot_id
+            )
+        })
+    }
+
+    pub fn add_buy(&mut self, item_id: u32, name: String, count: i32, unit_price: i32) {
+        if count <= 0 {
+            return;
+        }
+        if let Some(line) = self
+            .buy_lines
+            .iter_mut()
+            .find(|line| line.item_id == item_id && line.unit_price == unit_price)
+        {
+            line.count += count;
+        } else {
+            self.buy_lines.push(UiTradeCartBuyLine {
+                item_id,
+                name,
+                count,
+                unit_price,
+            });
+        }
+    }
+
+    pub fn add_inventory_sell(&mut self, item_id: u32, name: String, count: i32, unit_price: i32) {
+        if count <= 0 {
+            return;
+        }
+        if let Some(line) = self.sell_lines.iter_mut().find(|line| {
+            line.item_id == item_id
+                && line.unit_price == unit_price
+                && matches!(line.source, UiTradeCartSellSource::Inventory)
+        }) {
+            line.count += count;
+        } else {
+            self.sell_lines.push(UiTradeCartSellLine {
+                item_id,
+                name,
+                count,
+                unit_price,
+                source: UiTradeCartSellSource::Inventory,
+            });
+        }
+    }
+
+    pub fn add_equipped_sell(
+        &mut self,
+        item_id: u32,
+        name: String,
+        slot_id: String,
+        unit_price: i32,
+    ) {
+        if self.has_equipped_sell_slot(&slot_id) {
+            return;
+        }
+        self.sell_lines.push(UiTradeCartSellLine {
+            item_id,
+            name,
+            count: 1,
+            unit_price,
+            source: UiTradeCartSellSource::Equipped { slot_id },
+        });
+    }
+
+    pub fn adjust_buy(&mut self, item_id: u32, delta: i32) {
+        adjust_trade_cart_lines(&mut self.buy_lines, item_id, delta);
+    }
+
+    pub fn adjust_sell(&mut self, item_id: u32, source: &UiTradeCartSellSource, delta: i32) {
+        if let Some(line) = self
+            .sell_lines
+            .iter_mut()
+            .find(|line| line.item_id == item_id && &line.source == source)
+        {
+            line.count += delta;
+        }
+        self.sell_lines.retain(|line| line.count > 0);
+    }
+}
+
+fn adjust_trade_cart_lines(lines: &mut Vec<UiTradeCartBuyLine>, item_id: u32, delta: i32) {
+    if let Some(line) = lines.iter_mut().find(|line| line.item_id == item_id) {
+        line.count += delta;
+    }
+    lines.retain(|line| line.count > 0);
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct UiTradeSessionState {
     pub shop_id: String,
     pub target_actor_id: Option<ActorId>,
+    pub cart: UiTradeCartState,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -235,6 +398,14 @@ pub enum UiItemQuantityIntent {
         unit_price: i32,
     },
     TradeSell {
+        shop_id: String,
+        unit_price: i32,
+    },
+    TradeCartBuy {
+        shop_id: String,
+        unit_price: i32,
+    },
+    TradeCartSell {
         shop_id: String,
         unit_price: i32,
     },
@@ -1455,7 +1626,7 @@ mod tests {
     use super::{
         inventory_snapshot, journal_snapshot, overworld_location_prompt_snapshot,
         trade_inventory_snapshot, UiInventoryFilter, UiJournalQuestView,
-        UiOverworldLocationPromptSnapshot,
+        UiOverworldLocationPromptSnapshot, UiTradeCartSellSource, UiTradeCartState,
     };
     use game_core::SimulationRuntime;
     use game_data::{
@@ -1600,6 +1771,29 @@ mod tests {
             equipped_entry.equipped_slot_id.as_deref(),
             Some("main_hand")
         );
+    }
+
+    #[test]
+    fn trade_cart_totals_and_queued_counts_are_derived_from_pending_lines() {
+        let mut cart = UiTradeCartState::default();
+        cart.add_buy(1001, "Bandage".to_string(), 2, 15);
+        cart.add_buy(1001, "Bandage".to_string(), 1, 15);
+        cart.add_inventory_sell(2001, "Scrap".to_string(), 4, 5);
+        cart.add_equipped_sell(3001, "Knife".to_string(), "main_hand".to_string(), 12);
+        cart.add_equipped_sell(3001, "Knife".to_string(), "main_hand".to_string(), 12);
+
+        assert_eq!(cart.queued_buy_count(1001), 3);
+        assert_eq!(cart.queued_inventory_sell_count(2001), 4);
+        assert!(cart.has_equipped_sell_slot("main_hand"));
+        assert_eq!(cart.buy_total(), 45);
+        assert_eq!(cart.sell_total(), 32);
+        assert_eq!(cart.net_payment(), 13);
+        assert_eq!(cart.sell_lines.len(), 2);
+
+        cart.adjust_sell(2001, &UiTradeCartSellSource::Inventory, -4);
+
+        assert_eq!(cart.queued_inventory_sell_count(2001), 0);
+        assert_eq!(cart.sell_total(), 12);
     }
 
     fn sample_overworld_prompt_runtime() -> (SimulationRuntime, ActorId, OverworldLibrary) {

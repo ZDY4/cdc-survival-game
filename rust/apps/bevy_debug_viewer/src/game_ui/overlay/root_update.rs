@@ -179,7 +179,7 @@ pub(crate) fn update_game_ui(
                     ui.menu_state.selected_inventory_item,
                 );
                 format!(
-                    "{trade_snapshot:?}|{inventory:?}|{:?}|{:?}",
+                    "{trade:?}|{trade_snapshot:?}|{inventory:?}|{:?}|{:?}",
                     ui.menu_state,
                     drag_visual_key(&ui.drag_state)
                 )
@@ -215,6 +215,7 @@ pub(crate) fn update_game_ui(
                     render_trade_page(
                         parent,
                         &font,
+                        trade,
                         &trade_snapshot,
                         &inventory,
                         &ui.menu_state,

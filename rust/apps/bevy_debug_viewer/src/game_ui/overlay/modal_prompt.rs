@@ -35,6 +35,20 @@ pub(super) fn render_item_quantity_modal(
             "确认卖出",
             Some(format!("当前最多可卖 x{}", modal.available_count)),
         ),
+        game_bevy::UiItemQuantityIntent::TradeCartBuy { .. } => (
+            "加入待买入",
+            format!("商店库存 x{}", modal.source_count),
+            format!("待加入 x{}", modal.selected_count),
+            "加入待买入",
+            Some(format!("当前最多可加入 x{}", modal.available_count)),
+        ),
+        game_bevy::UiItemQuantityIntent::TradeCartSell { .. } => (
+            "加入待卖出",
+            format!("当前持有 x{}", modal.source_count),
+            format!("待加入 x{}", modal.selected_count),
+            "加入待卖出",
+            Some(format!("当前最多可加入 x{}", modal.available_count)),
+        ),
         game_bevy::UiItemQuantityIntent::ContainerStore { .. } => (
             "存入容器",
             format!("当前持有 x{}", modal.source_count),

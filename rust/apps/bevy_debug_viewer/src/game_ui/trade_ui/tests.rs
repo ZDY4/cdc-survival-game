@@ -4,7 +4,10 @@ use super::*;
 use std::collections::BTreeMap;
 
 use crate::bootstrap::load_viewer_gameplay_bootstrap;
-use game_data::{CharacterId, InteractionTargetId, ShopDefinition, ShopInventoryEntry};
+use game_core::create_demo_runtime;
+use game_data::{
+    CharacterId, InteractionTargetId, ItemDefinition, ShopDefinition, ShopInventoryEntry,
+};
 
 fn sample_shops() -> game_data::ShopLibrary {
     game_data::ShopLibrary::from(BTreeMap::from([
@@ -88,32 +91,67 @@ fn resolve_trade_session_falls_back_to_first_shop_for_non_actor_target() {
 }
 
 #[test]
-fn trade_sell_button_label_reflects_selected_item() {
-    let snapshot = game_bevy::UiTradeSnapshot {
-        shop_id: "test_shop".into(),
-        relation_score: 0,
-        player_money: 20,
-        shop_money: 80,
-        player_items: vec![game_bevy::UiTradeEntryView {
-            item_id: 1008,
-            name: "Scrap".into(),
-            count: 3,
-            unit_price: 7,
-            total_weight: 1.5,
-        }],
-        shop_items: Vec::new(),
-    };
+fn trade_cart_confirmation_sells_before_buying_and_executes_on_confirm() {
+    let (mut runtime, handles) = create_demo_runtime();
+    let items = game_bevy::ItemDefinitions(game_data::ItemLibrary::from(BTreeMap::from([
+        (
+            1001,
+            ItemDefinition {
+                id: 1001,
+                name: "绷带".to_string(),
+                value: 10,
+                ..ItemDefinition::default()
+            },
+        ),
+        (
+            1002,
+            ItemDefinition {
+                id: 1002,
+                name: "废料".to_string(),
+                value: 25,
+                ..ItemDefinition::default()
+            },
+        ),
+    ])));
+    runtime.set_shop_library(game_data::ShopLibrary::from(BTreeMap::from([(
+        "test_shop".to_string(),
+        ShopDefinition {
+            id: "test_shop".to_string(),
+            buy_price_modifier: 1.0,
+            sell_price_modifier: 1.0,
+            money: 100,
+            inventory: vec![ShopInventoryEntry {
+                item_id: 1001,
+                count: 3,
+                price: 10,
+            }],
+        },
+    )])));
+    runtime
+        .economy_mut()
+        .add_item(handles.player, 1002, 1, &items.0)
+        .expect("sell item should be added");
+    let starting_money = runtime.economy().actor_money(handles.player).unwrap_or(0);
+    let mut cart = game_bevy::UiTradeCartState::default();
+    cart.add_buy(1001, "绷带".to_string(), 2, 10);
+    cart.add_inventory_sell(1002, "废料".to_string(), 1, 25);
+
+    actions::validate_trade_cart(&runtime, handles.player, "test_shop", &cart)
+        .expect("net settlement should validate");
+
+    actions::execute_trade_cart(&mut runtime, handles.player, "test_shop", &cart, &items)
+        .expect("cart should execute");
 
     assert_eq!(
-        rendering::trade_sell_button_label(&snapshot, None),
-        "选择一个物品后，可在这里卖出 x1"
+        runtime.economy().inventory_count(handles.player, 1001),
+        Some(2)
     );
     assert_eq!(
-        rendering::trade_sell_button_label(&snapshot, Some(1008)),
-        "已选中 Scrap · 库存 x3 · 预计卖出 7 货币"
+        runtime.economy().inventory_count(handles.player, 1002),
+        Some(0)
     );
     assert_eq!(
-        rendering::trade_sell_button_label(&snapshot, Some(9999)),
-        "该物品当前不可交易，请重新选择一个可售物品"
+        runtime.economy().actor_money(handles.player),
+        Some(starting_money + 5)
     );
 }

@@ -505,11 +505,17 @@ pub(crate) fn handle_game_ui_buttons(
             }
             GameUiButtonAction::CloseTrade
             | GameUiButtonAction::CloseContainer
-            | GameUiButtonAction::BuyTradeItem { .. }
+            | GameUiButtonAction::QueueTradeBuy { .. }
+            | GameUiButtonAction::AdjustTradeBuy { .. }
+            | GameUiButtonAction::RemoveTradeBuy { .. }
             | GameUiButtonAction::StoreContainerItem { .. }
             | GameUiButtonAction::TakeContainerItem { .. }
-            | GameUiButtonAction::SellTradeItem { .. }
-            | GameUiButtonAction::SellEquippedTradeItem { .. } => unreachable!(),
+            | GameUiButtonAction::QueueTradeSell { .. }
+            | GameUiButtonAction::QueueTradeEquippedSell { .. }
+            | GameUiButtonAction::AdjustTradeSell { .. }
+            | GameUiButtonAction::RemoveTradeSell { .. }
+            | GameUiButtonAction::ClearTradeCart
+            | GameUiButtonAction::ConfirmTradeCart => unreachable!(),
         }
     }
 }
@@ -544,42 +550,39 @@ pub(crate) fn adjust_item_quantity(current: i32, available_count: i32, delta: i3
     (current + delta).clamp(1, available_count.max(1))
 }
 
-pub(crate) fn plan_trade_buy(
+pub(crate) fn plan_trade_cart_buy(
     runtime: &game_core::SimulationRuntime,
-    actor_id: ActorId,
-    shop_id: &str,
+    trade: &game_bevy::UiTradeSessionState,
     item_id: u32,
     items: &ItemDefinitions,
 ) -> TradeQuantityPlan {
     let raw_available_count = runtime
         .economy()
-        .shop(shop_id)
+        .shop(&trade.shop_id)
         .and_then(|shop| shop.inventory.get(&item_id).map(|entry| entry.count))
         .unwrap_or(0);
-    let Some(unit_price) = trade_buy_unit_price(runtime, shop_id, item_id, items) else {
+    let Some(unit_price) = trade_buy_unit_price(runtime, &trade.shop_id, item_id, items) else {
         return TradeQuantityPlan::Blocked {
             status: format!("unknown_item:{item_id}"),
         };
     };
-    let buyer_money = runtime.economy().actor_money(actor_id).unwrap_or(0);
-    let max_tradeable_count =
-        resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
+    let available_count = raw_available_count - trade.cart.queued_buy_count(item_id);
     plan_trade_quantity(
         raw_available_count,
-        max_tradeable_count,
+        available_count,
         item_id,
-        game_bevy::UiItemQuantityIntent::TradeBuy {
-            shop_id: shop_id.to_string(),
+        game_bevy::UiItemQuantityIntent::TradeCartBuy {
+            shop_id: trade.shop_id.clone(),
             unit_price,
         },
-        "资金不足",
+        "商店库存不足",
     )
 }
 
-pub(crate) fn plan_trade_sell(
+pub(crate) fn plan_trade_cart_sell(
     runtime: &game_core::SimulationRuntime,
     actor_id: ActorId,
-    shop_id: &str,
+    trade: &game_bevy::UiTradeSessionState,
     item_id: u32,
     items: &ItemDefinitions,
 ) -> TradeQuantityPlan {
@@ -587,28 +590,99 @@ pub(crate) fn plan_trade_sell(
         .economy()
         .inventory_count(actor_id, item_id)
         .unwrap_or(0);
-    let Some(unit_price) = trade_sell_unit_price(runtime, shop_id, item_id, items) else {
+    let Some(unit_price) = trade_sell_unit_price(runtime, &trade.shop_id, item_id, items) else {
         return TradeQuantityPlan::Blocked {
             status: format!("unknown_item:{item_id}"),
         };
     };
-    let buyer_money = runtime
-        .economy()
-        .shop(shop_id)
-        .map(|shop| shop.money)
-        .unwrap_or(0);
-    let max_tradeable_count =
-        resolve_max_tradeable_count(raw_available_count, buyer_money, unit_price);
+    let available_count = raw_available_count - trade.cart.queued_inventory_sell_count(item_id);
     plan_trade_quantity(
         raw_available_count,
-        max_tradeable_count,
+        available_count,
         item_id,
-        game_bevy::UiItemQuantityIntent::TradeSell {
-            shop_id: shop_id.to_string(),
+        game_bevy::UiItemQuantityIntent::TradeCartSell {
+            shop_id: trade.shop_id.clone(),
             unit_price,
         },
-        "商店资金不足",
+        "库存不足",
     )
+}
+
+pub(crate) fn queue_trade_buy(
+    modal_state: &mut UiModalState,
+    items: &ItemDefinitions,
+    shop_id: &str,
+    item_id: u32,
+    unit_price: i32,
+    count: i32,
+) -> String {
+    let Some(trade) = modal_state.trade.as_mut() else {
+        return "交易会话已关闭".to_string();
+    };
+    if trade.shop_id != shop_id {
+        return "交易对象已变化，请重新选择物品".to_string();
+    }
+    let item_name = item_preview_label(&items.0, item_id);
+    trade
+        .cart
+        .add_buy(item_id, item_name.clone(), count, unit_price);
+    format!("已加入待买入 {item_name} x{count}")
+}
+
+pub(crate) fn queue_trade_sell(
+    modal_state: &mut UiModalState,
+    items: &ItemDefinitions,
+    shop_id: &str,
+    item_id: u32,
+    unit_price: i32,
+    count: i32,
+) -> String {
+    let Some(trade) = modal_state.trade.as_mut() else {
+        return "交易会话已关闭".to_string();
+    };
+    if trade.shop_id != shop_id {
+        return "交易对象已变化，请重新选择物品".to_string();
+    }
+    let item_name = item_preview_label(&items.0, item_id);
+    trade
+        .cart
+        .add_inventory_sell(item_id, item_name.clone(), count, unit_price);
+    format!("已加入待卖出 {item_name} x{count}")
+}
+
+pub(crate) fn queue_trade_equipped_sell(
+    runtime: &game_core::SimulationRuntime,
+    modal_state: &mut UiModalState,
+    items: &ItemDefinitions,
+    actor_id: ActorId,
+    shop_id: &str,
+    slot_id: &str,
+) -> String {
+    let Some(trade) = modal_state.trade.as_mut() else {
+        return "交易会话已关闭".to_string();
+    };
+    if trade.shop_id != shop_id {
+        return "交易对象已变化，请重新选择物品".to_string();
+    }
+    if trade.cart.has_equipped_sell_slot(slot_id) {
+        return "该装备已在待卖出列表".to_string();
+    }
+    let Some(item_id) = runtime
+        .economy()
+        .actor(actor_id)
+        .and_then(|actor| actor.equipped_slots.get(slot_id))
+        .map(|equipped| equipped.item_id)
+    else {
+        return "装备槽为空".to_string();
+    };
+    let Some(unit_price) = trade_sell_unit_price(runtime, shop_id, item_id, items) else {
+        return format!("unknown_item:{item_id}");
+    };
+    let item_name = item_preview_label(&items.0, item_id);
+    trade
+        .cart
+        .add_equipped_sell(item_id, item_name.clone(), slot_id.to_string(), unit_price);
+    format!("已加入待卖出装备 {item_name} x1")
 }
 
 pub(crate) fn plan_container_store(
@@ -682,14 +756,6 @@ pub(crate) fn plan_container_take(
     )
 }
 
-fn resolve_max_tradeable_count(raw_available_count: i32, buyer_money: i32, unit_price: i32) -> i32 {
-    if raw_available_count <= 0 || unit_price <= 0 {
-        return 0;
-    }
-    let max_affordable_count = buyer_money.max(0) / unit_price;
-    raw_available_count.min(max_affordable_count)
-}
-
 fn plan_trade_quantity(
     raw_available_count: i32,
     max_tradeable_count: i32,
@@ -744,7 +810,7 @@ fn adjusted_trade_unit_price(base_value: i32, modifier: f32) -> i32 {
         .max(1.0) as i32
 }
 
-fn trade_buy_unit_price(
+pub(crate) fn trade_buy_unit_price(
     runtime: &game_core::SimulationRuntime,
     shop_id: &str,
     item_id: u32,
@@ -755,7 +821,7 @@ fn trade_buy_unit_price(
     Some(adjusted_trade_unit_price(base_value, modifier))
 }
 
-fn trade_sell_unit_price(
+pub(crate) fn trade_sell_unit_price(
     runtime: &game_core::SimulationRuntime,
     shop_id: &str,
     item_id: u32,
@@ -820,6 +886,38 @@ pub(crate) fn execute_item_quantity_modal(
                 actor_id,
                 &shop_id,
                 item_id,
+                selected_count,
+            );
+            modal_state.item_quantity = None;
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+        }
+        game_bevy::UiItemQuantityIntent::TradeCartBuy {
+            shop_id,
+            unit_price,
+        } => {
+            let status = queue_trade_buy(
+                modal_state,
+                items,
+                &shop_id,
+                item_id,
+                unit_price,
+                selected_count,
+            );
+            modal_state.item_quantity = None;
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+        }
+        game_bevy::UiItemQuantityIntent::TradeCartSell {
+            shop_id,
+            unit_price,
+        } => {
+            let status = queue_trade_sell(
+                modal_state,
+                items,
+                &shop_id,
+                item_id,
+                unit_price,
                 selected_count,
             );
             modal_state.item_quantity = None;
@@ -1108,13 +1206,13 @@ pub(super) fn cycle_binding(settings: &mut ViewerUiSettings, action_name: &str) 
 #[cfg(test)]
 mod tests {
     use super::{
-        adjust_item_quantity, execute_inventory_drop, plan_inventory_drop,
-        resolve_max_tradeable_count, InventoryDropPlan,
+        adjust_item_quantity, execute_inventory_drop, plan_inventory_drop, plan_trade_cart_buy,
+        InventoryDropPlan, TradeQuantityPlan,
     };
     use crate::state::{ViewerRuntimeSavePath, ViewerRuntimeState, ViewerState};
     use game_bevy::{ItemDefinitions, UiMenuState, UiModalState};
     use game_core::{create_demo_runtime, SimulationCommand};
-    use game_data::{ItemDefinition, ItemFragment};
+    use game_data::{ItemDefinition, ItemFragment, ShopDefinition, ShopInventoryEntry};
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1174,10 +1272,41 @@ mod tests {
     }
 
     #[test]
-    fn trade_max_count_is_limited_by_buyer_money() {
-        assert_eq!(resolve_max_tradeable_count(7, 25, 6), 4);
-        assert_eq!(resolve_max_tradeable_count(7, 5, 6), 0);
-        assert_eq!(resolve_max_tradeable_count(1, 100, 6), 1);
+    fn trade_cart_buy_quantity_is_limited_by_pending_count() {
+        let (mut runtime, _handles) = create_demo_runtime();
+        let items = sample_item_definitions();
+        runtime.set_shop_library(game_data::ShopLibrary::from(BTreeMap::from([(
+            "test_shop".to_string(),
+            ShopDefinition {
+                id: "test_shop".to_string(),
+                inventory: vec![ShopInventoryEntry {
+                    item_id: 1006,
+                    count: 3,
+                    price: 10,
+                }],
+                ..ShopDefinition::default()
+            },
+        )])));
+        let mut trade = game_bevy::UiTradeSessionState {
+            shop_id: "test_shop".to_string(),
+            target_actor_id: None,
+            cart: game_bevy::UiTradeCartState::default(),
+        };
+        trade.cart.add_buy(1006, "绷带".to_string(), 2, 10);
+
+        assert_eq!(
+            plan_trade_cart_buy(&runtime, &trade, 1006, &items),
+            TradeQuantityPlan::Immediate { count: 1 }
+        );
+
+        trade.cart.add_buy(1006, "绷带".to_string(), 1, 10);
+
+        assert_eq!(
+            plan_trade_cart_buy(&runtime, &trade, 1006, &items),
+            TradeQuantityPlan::Blocked {
+                status: "商店库存不足".to_string()
+            }
+        );
     }
 
     #[test]
