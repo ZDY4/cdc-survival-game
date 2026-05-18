@@ -80,11 +80,7 @@ pub(super) fn render_container_page(
                                 ui_text_secondary_color(),
                             ));
                         });
-                    header.spawn(action_button(
-                        font,
-                        "关闭",
-                        GameUiButtonAction::CloseContainer,
-                    ));
+                    header.spawn(close_icon_button(font, GameUiButtonAction::CloseContainer));
                 });
 
             panel.spawn(text_bundle(

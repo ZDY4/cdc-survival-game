@@ -5,6 +5,7 @@ use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::picking::prelude::MeshPickingCamera;
 use bevy::render::view::NoIndirectDrawing;
+use bevy::text::{Justify, LineBreak, TextLayout};
 use bevy_mesh_outline::OutlineCamera;
 use game_editor::load_game_ui_font;
 
@@ -109,6 +110,39 @@ pub(crate) fn setup_viewer(
             menu.spawn((
                 Node {
                     width: Val::Percent(100.0),
+                    min_height: px(18),
+                    justify_content: JustifyContent::FlexEnd,
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+            ))
+            .with_children(|header| {
+                header.spawn((
+                    Button,
+                    Node {
+                        width: px(18),
+                        height: px(18),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(context_menu_button_color(
+                        interaction_style,
+                        false,
+                        false,
+                        Interaction::None,
+                    )),
+                    Text::new("X"),
+                    TextFont::from_font_size(9.0).with_font(ui_font.clone()),
+                    TextColor(context_menu_text_color()),
+                    TextLayout::new(Justify::Center, LineBreak::NoWrap),
+                    viewer_ui_passthrough_bundle(),
+                    crate::state::InteractionMenuCloseButton,
+                ));
+            });
+            menu.spawn((
+                Node {
+                    width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },
@@ -142,6 +176,33 @@ pub(crate) fn setup_viewer(
             UiMouseBlockerName("对话面板".to_string()),
         ))
         .with_children(|panel| {
+            panel.spawn((
+                Button,
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: px(10),
+                    top: px(10),
+                    width: px(24),
+                    height: px(24),
+                    border: UiRect::all(px(1)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(context_menu_button_color(
+                    interaction_style,
+                    false,
+                    false,
+                    Interaction::None,
+                )),
+                BorderColor::all(context_menu_border_color()),
+                Text::new("X"),
+                TextFont::from_font_size(10.5).with_font(ui_font.clone()),
+                TextColor(context_menu_text_color()),
+                TextLayout::new(Justify::Center, LineBreak::NoWrap),
+                viewer_ui_passthrough_bundle(),
+                crate::state::DialoguePanelCloseButton,
+            ));
             panel.spawn((
                 Text::new(""),
                 TextFont::from_font_size(17.0).with_font(ui_font.clone()),

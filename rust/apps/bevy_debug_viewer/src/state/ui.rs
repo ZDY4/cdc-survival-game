@@ -405,6 +405,7 @@ pub(crate) enum GameUiButtonAction {
     MainMenuContinue,
     MainMenuExit,
     TogglePanel(UiMenuPanel),
+    ClosePanel(UiMenuPanel),
     CloseTrade,
     CloseContainer,
     InventoryFilter(UiInventoryFilter),

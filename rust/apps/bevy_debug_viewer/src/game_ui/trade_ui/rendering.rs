@@ -83,11 +83,7 @@ pub(super) fn render_trade_page(
                                 ui_text_secondary_color(),
                             ));
                         });
-                    header.spawn(action_button(
-                        font,
-                        "关闭交易",
-                        GameUiButtonAction::CloseTrade,
-                    ));
+                    header.spawn(close_icon_button(font, GameUiButtonAction::CloseTrade));
                 });
 
             overlay

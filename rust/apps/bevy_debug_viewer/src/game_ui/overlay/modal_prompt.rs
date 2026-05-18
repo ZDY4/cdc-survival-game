@@ -85,7 +85,24 @@ pub(super) fn render_item_quantity_modal(
                     UiMouseBlockerName("数量选择弹窗".to_string()),
                 ))
                 .with_children(|panel| {
-                    panel.spawn(text_bundle(font, title, 15.0, Color::WHITE));
+                    panel
+                        .spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                justify_content: JustifyContent::SpaceBetween,
+                                align_items: AlignItems::Center,
+                                column_gap: px(12.0),
+                                ..default()
+                            },
+                            viewer_ui_passthrough_bundle(),
+                        ))
+                        .with_children(|header| {
+                            header.spawn(text_bundle(font, title, 15.0, Color::WHITE));
+                            header.spawn(close_icon_button(
+                                font,
+                                GameUiButtonAction::CancelItemQuantity,
+                            ));
+                        });
                     panel.spawn(text_bundle(font, item_name, 12.0, ui_text_heading_color()));
                     panel.spawn(text_bundle(
                         font,

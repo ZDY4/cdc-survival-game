@@ -258,6 +258,15 @@ pub(super) fn interaction_menu_contains_cursor(
 }
 
 pub(crate) fn handle_interaction_menu_buttons(
+    mut close_buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            With<crate::state::InteractionMenuCloseButton>,
+            Without<InteractionMenuButton>,
+        ),
+    >,
     mut buttons: Query<
         (
             &Interaction,
@@ -265,7 +274,11 @@ pub(crate) fn handle_interaction_menu_buttons(
             &InteractionMenuButton,
             Option<&crate::ui_context_menu::ContextMenuItemDisabled>,
         ),
-        (Changed<Interaction>, With<Button>),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<crate::state::InteractionMenuCloseButton>,
+        ),
     >,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
@@ -276,6 +289,19 @@ pub(crate) fn handle_interaction_menu_buttons(
     }
 
     let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
+    for (interaction, mut background) in &mut close_buttons {
+        *background = BackgroundColor(context_menu_button_color(
+            button_style,
+            false,
+            false,
+            *interaction,
+        ));
+        if *interaction == Interaction::Pressed {
+            viewer_state.interaction_menu = None;
+            viewer_state.status_line = "interaction menu: closed".to_string();
+        }
+    }
+
     for (interaction, mut background, menu_button, disabled) in &mut buttons {
         *background = BackgroundColor(context_menu_button_color(
             button_style,
@@ -309,9 +335,22 @@ pub(crate) fn handle_interaction_menu_buttons(
 }
 
 pub(crate) fn handle_dialogue_choice_buttons(
+    mut close_buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            With<crate::state::DialoguePanelCloseButton>,
+            Without<DialogueChoiceButton>,
+        ),
+    >,
     mut buttons: Query<
         (&Interaction, &mut BackgroundColor, &DialogueChoiceButton),
-        (Changed<Interaction>, With<Button>),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<crate::state::DialoguePanelCloseButton>,
+        ),
     >,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
@@ -319,6 +358,20 @@ pub(crate) fn handle_dialogue_choice_buttons(
 ) {
     if console_state.is_open {
         return;
+    }
+
+    let close_style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
+    for (interaction, mut background) in &mut close_buttons {
+        *background = BackgroundColor(context_menu_button_color(
+            close_style,
+            false,
+            false,
+            *interaction,
+        ));
+        if *interaction == Interaction::Pressed {
+            viewer_state.active_dialogue = None;
+            viewer_state.status_line = "dialogue closed".to_string();
+        }
     }
 
     for (interaction, mut background, choice_button) in &mut buttons {

@@ -166,6 +166,11 @@ pub(crate) fn handle_game_ui_buttons(
                     );
                 }
             }
+            GameUiButtonAction::ClosePanel(panel) => {
+                ui.menu_state.close_panel(panel);
+                ui.drag_state.clear();
+                ui.viewer_state.status_line = format!("menu: {} closed", panel_tab_label(panel));
+            }
             GameUiButtonAction::InventoryFilter(filter) => ui.filter_state.filter = filter,
             GameUiButtonAction::UseInventoryItem => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {

@@ -107,7 +107,23 @@ pub(super) fn render_settings_panel(
             UiMouseBlockerName("游戏菜单".to_string()),
         ))
         .with_children(|body| {
-            body.spawn(text_bundle(font, "游戏菜单", 18.0, Color::WHITE));
+            body.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    column_gap: px(12),
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+            ))
+            .with_children(|header| {
+                header.spawn(text_bundle(font, "游戏菜单", 18.0, Color::WHITE));
+                header.spawn(close_icon_button(
+                    font,
+                    GameUiButtonAction::ClosePanel(UiMenuPanel::Settings),
+                ));
+            });
             body.spawn(text_bundle(
                 font,
                 "按 Esc 关闭菜单并返回游戏",

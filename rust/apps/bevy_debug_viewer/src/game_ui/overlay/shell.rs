@@ -95,14 +95,29 @@ pub(super) fn render_panel_shell(
         ))
         .with_children(|header| {
             header.spawn(text_bundle(font, panel_title(panel), 13.5, Color::WHITE));
-            if panel != UiMenuPanel::Inventory {
-                header.spawn(text_bundle(
-                    font,
-                    panel_tab_label(panel),
-                    9.5,
-                    ui_text_muted_color(),
-                ));
-            }
+            header
+                .spawn((
+                    Node {
+                        column_gap: px(8),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    viewer_ui_passthrough_bundle(),
+                ))
+                .with_children(|actions| {
+                    if panel != UiMenuPanel::Inventory {
+                        actions.spawn(text_bundle(
+                            font,
+                            panel_tab_label(panel),
+                            9.5,
+                            ui_text_muted_color(),
+                        ));
+                    }
+                    actions.spawn(close_icon_button(
+                        font,
+                        GameUiButtonAction::ClosePanel(panel),
+                    ));
+                });
         });
 }
 
