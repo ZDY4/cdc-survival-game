@@ -309,16 +309,29 @@ pub(crate) fn handle_mouse_input(
             return;
         }
         if !cursor_targets.is_empty() {
+            request_cancel_pending_movement(
+                &mut runtime_state,
+                &mut viewer_state,
+                CancelMovementContext::TargetClick,
+                snapshot.combat.in_combat,
+            );
             let mut opened_menu = false;
             for target_id in cursor_targets {
-                let prompt = focus_target_and_query_prompt(
-                    &mut runtime_state,
+                let prompt = focus_target_and_peek_prompt(
+                    &runtime_state,
                     &mut viewer_state,
                     target_id.clone(),
                 );
                 let Some(prompt) = prompt else {
                     continue;
                 };
+                if prompt.options.is_empty() {
+                    info!(
+                        "viewer.interaction.menu_unavailable target={target_id:?} target_name={} reason=no_options input_source=mouse_menu",
+                        prompt.target_name
+                    );
+                    continue;
+                }
                 log_viewer_interaction(
                     "menu_open",
                     viewer_state.selected_actor,

@@ -41,7 +41,7 @@ mod targeting;
 
 pub(crate) use camera::{handle_camera_pan, handle_mouse_wheel_zoom};
 use interaction_input::{
-    cursor_interaction_targets, execute_primary_target_interaction, focus_target_and_query_prompt,
+    cursor_interaction_targets, execute_primary_target_interaction, focus_target_and_peek_prompt,
     handle_object_primary_click, interaction_menu_contains_cursor, is_command_actor_self_target,
 };
 pub(crate) use interaction_input::{
@@ -56,7 +56,7 @@ pub(crate) use targeting::{
 #[cfg(test)]
 use camera::manual_pan_offset_from_follow_focus;
 #[cfg(test)]
-use interaction_input::cursor_interaction_target;
+use interaction_input::{cursor_interaction_target, focus_target_and_query_prompt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PostCancelTurnPolicy {

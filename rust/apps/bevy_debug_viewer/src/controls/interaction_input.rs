@@ -105,6 +105,7 @@ fn prompt_has_locked_door_options(prompt: &InteractionPrompt) -> bool {
     }) && prompt.primary_option_id.is_none()
 }
 
+#[cfg(test)]
 pub(super) fn focus_target_and_query_prompt(
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,
@@ -118,6 +119,24 @@ pub(super) fn focus_target_and_query_prompt(
             runtime_state
                 .runtime
                 .query_interaction_prompt(actor_id, target_id)
+        });
+    viewer_state.current_prompt = prompt.clone();
+    prompt
+}
+
+pub(super) fn focus_target_and_peek_prompt(
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    target_id: InteractionTargetId,
+) -> Option<InteractionPrompt> {
+    viewer_state.focused_target = Some(target_id.clone());
+    let snapshot = runtime_state.runtime.snapshot();
+    let prompt = viewer_state
+        .command_actor_id(&snapshot)
+        .and_then(|actor_id| {
+            runtime_state
+                .runtime
+                .peek_interaction_prompt(actor_id, &target_id)
         });
     viewer_state.current_prompt = prompt.clone();
     prompt
