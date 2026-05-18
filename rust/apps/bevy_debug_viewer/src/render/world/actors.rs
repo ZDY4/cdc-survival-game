@@ -1,6 +1,10 @@
 //! 角色可视化 helper：负责角色实体同步、世界位置换算与颜色策略。
 
 use super::*;
+use crate::state::ActorMotionTrack;
+
+const ACTOR_STEP_BOB_HEIGHT: f32 = 0.035;
+const ACTOR_STEP_LEAN_RADIANS: f32 = 0.055;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sync_actor_visuals(
@@ -22,6 +26,14 @@ pub(super) fn sync_actor_visuals(
     actor_visuals: &mut Query<
         (Entity, &mut Transform, &ActorBodyVisual),
         Without<GeneratedDoorPivot>,
+    >,
+    actor_motion_anchors: &mut Query<
+        &mut Transform,
+        (
+            With<ActorMotionVisualAnchor>,
+            Without<ActorBodyVisual>,
+            Without<GeneratedDoorPivot>,
+        ),
     >,
     mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
 ) {
@@ -47,12 +59,30 @@ pub(super) fn sync_actor_visuals(
             actor.actor_id,
             actor.definition_id.as_ref().map(|id| id.as_str()),
         );
+        let motion_track = motion_state.tracks.get(&actor.actor_id);
+        let previous_yaw = actor_visual_state
+            .by_actor
+            .get(&actor.actor_id)
+            .map(|entry| entry.facing_yaw)
+            .unwrap_or(0.0);
+        let facing_yaw = actor_facing_yaw(motion_track, previous_yaw);
+        let root_rotation = Quat::from_rotation_y(facing_yaw);
+        let anchor_transform = actor_motion_anchor_transform(motion_track);
 
         if let Some(existing) = actor_visual_state.by_actor.get(&actor.actor_id).cloned() {
             if existing.appearance_key == appearance_key {
                 if let Ok((_, mut transform, body)) = actor_visuals.get_mut(existing.root_entity) {
                     if body.actor_id == actor.actor_id {
                         transform.translation = translation;
+                        transform.rotation = root_rotation;
+                        if let Ok(mut anchor) =
+                            actor_motion_anchors.get_mut(existing.motion_anchor_entity)
+                        {
+                            *anchor = anchor_transform;
+                        }
+                        if let Some(entry) = actor_visual_state.by_actor.get_mut(&actor.actor_id) {
+                            entry.facing_yaw = facing_yaw;
+                        }
                         register_actor_pick_mesh(
                             mesh_pick_index,
                             existing.root_entity,
@@ -70,7 +100,7 @@ pub(super) fn sync_actor_visuals(
             actor_visual_state.by_actor.remove(&actor.actor_id);
         }
 
-        let root_entity = spawn_actor_visual_root(
+        let (root_entity, motion_anchor_entity) = spawn_actor_visual_root(
             commands,
             asset_server,
             meshes,
@@ -80,6 +110,8 @@ pub(super) fn sync_actor_visuals(
             grid_size,
             actor,
             translation,
+            root_rotation,
+            anchor_transform,
             character_definitions,
             item_definitions,
             character_appearance_definitions,
@@ -97,7 +129,9 @@ pub(super) fn sync_actor_visuals(
             actor.actor_id,
             ActorVisualEntry {
                 root_entity,
+                motion_anchor_entity,
                 appearance_key,
+                facing_yaw,
             },
         );
     }
@@ -114,6 +148,23 @@ pub(super) fn sync_actor_visuals(
             commands.entity(entry.root_entity).despawn();
         }
     }
+}
+
+fn actor_facing_yaw(motion_track: Option<&ActorMotionTrack>, previous_yaw: f32) -> f32 {
+    motion_track
+        .and_then(ActorMotionTrack::direction_xz)
+        .map(actor_direction_yaw)
+        .unwrap_or(previous_yaw)
+}
+
+fn actor_direction_yaw(direction: Vec2) -> f32 {
+    direction.x.atan2(direction.y)
+}
+
+fn actor_motion_anchor_transform(motion_track: Option<&ActorMotionTrack>) -> Transform {
+    let step_arc = motion_track.map(ActorMotionTrack::step_arc).unwrap_or(0.0);
+    Transform::from_translation(Vec3::Y * (step_arc * ACTOR_STEP_BOB_HEIGHT))
+        .with_rotation(Quat::from_rotation_x(step_arc * ACTOR_STEP_LEAN_RADIANS))
 }
 
 pub(crate) fn sync_actor_precise_pick_meshes(
@@ -168,13 +219,16 @@ fn spawn_actor_visual_root(
     grid_size: f32,
     actor: &game_core::ActorDebugState,
     translation: Vec3,
+    root_rotation: Quat,
+    anchor_transform: Transform,
     character_definitions: Option<&game_bevy::CharacterDefinitions>,
     item_definitions: Option<&game_bevy::ItemDefinitions>,
     character_appearance_definitions: Option<&game_bevy::CharacterAppearanceDefinitions>,
     runtime_state: &ViewerRuntimeState,
-) -> Entity {
-    let actor_transform =
-        Transform::from_translation(translation).with_scale(Vec3::splat(grid_size));
+) -> (Entity, Entity) {
+    let actor_transform = Transform::from_translation(translation)
+        .with_rotation(root_rotation)
+        .with_scale(Vec3::splat(grid_size));
     let root_entity = commands
         .spawn((
             actor_transform,
@@ -186,6 +240,17 @@ fn spawn_actor_visual_root(
             },
         ))
         .id();
+
+    let motion_anchor_entity = commands
+        .spawn((
+            anchor_transform,
+            GlobalTransform::from(anchor_transform),
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+            ActorMotionVisualAnchor,
+        ))
+        .id();
+    commands.entity(root_entity).add_child(motion_anchor_entity);
 
     let shadow_material = make_standard_material(
         materials,
@@ -234,22 +299,29 @@ fn spawn_actor_visual_root(
                 0.0,
             ),
         ));
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(body_width, body_height, body_depth))),
-            MeshMaterial3d(pick_proxy_material),
-            Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
-            pickable_target(pick_binding.into()),
-            outline_member,
-        ));
     });
+
+    commands
+        .entity(motion_anchor_entity)
+        .with_children(|parent| {
+            parent.spawn((
+                Mesh3d(meshes.add(Cuboid::new(body_width, body_height, body_depth))),
+                MeshMaterial3d(pick_proxy_material),
+                Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
+                pickable_target(pick_binding.into()),
+                outline_member,
+            ));
+        });
 
     if let Some(preview) = appearance_preview.filter(game_bevy::character_preview_is_available) {
         let appearance_entity =
             game_bevy::spawn_character_preview_scene(commands, asset_server, materials, &preview);
-        commands.entity(root_entity).add_child(appearance_entity);
+        commands
+            .entity(motion_anchor_entity)
+            .add_child(appearance_entity);
     }
 
-    root_entity
+    (root_entity, motion_anchor_entity)
 }
 
 fn register_actor_pick_mesh(

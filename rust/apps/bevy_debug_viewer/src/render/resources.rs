@@ -46,7 +46,9 @@ pub(crate) struct ActorVisualState {
 #[derive(Debug, Clone)]
 pub(crate) struct ActorVisualEntry {
     pub root_entity: Entity,
+    pub motion_anchor_entity: Entity,
     pub appearance_key: RuntimeCharacterAppearanceKey,
+    pub facing_yaw: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

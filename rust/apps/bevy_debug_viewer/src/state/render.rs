@@ -1,6 +1,7 @@
 //! 渲染状态：定义相机、颜色主题、动作插值、战斗反馈和渲染相关标记组件。
 
 use std::collections::HashMap;
+use std::f32::consts::PI;
 
 use bevy::prelude::*;
 use game_data::{ActorId, InteractionTargetId, WorldCoord};
@@ -59,6 +60,31 @@ impl ActorMotionTrack {
         }
     }
 
+    pub(crate) fn progress(&self) -> f32 {
+        if self.duration_sec <= f32::EPSILON {
+            1.0
+        } else {
+            (self.elapsed_sec / self.duration_sec).clamp(0.0, 1.0)
+        }
+    }
+
+    pub(crate) fn direction_xz(&self) -> Option<Vec2> {
+        let delta = Vec2::new(
+            self.to_world.x - self.from_world.x,
+            self.to_world.z - self.from_world.z,
+        );
+        let distance = delta.length();
+        if distance <= f32::EPSILON {
+            None
+        } else {
+            Some(delta / distance)
+        }
+    }
+
+    pub(crate) fn step_arc(&self) -> f32 {
+        actor_motion_step_arc(self.progress())
+    }
+
     pub(crate) fn snap_to(&mut self, world: WorldCoord, level: i32) {
         self.from_world = world;
         self.to_world = world;
@@ -67,6 +93,10 @@ impl ActorMotionTrack {
         self.level = level;
         self.active = false;
     }
+}
+
+pub(crate) fn actor_motion_step_arc(progress: f32) -> f32 {
+    (progress.clamp(0.0, 1.0) * PI).sin().max(0.0)
 }
 
 #[derive(Resource, Debug, Default)]

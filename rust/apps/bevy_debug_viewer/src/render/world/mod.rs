@@ -57,6 +57,14 @@ pub(crate) fn sync_world_visuals(
         (Entity, &mut Transform, &ActorBodyVisual),
         Without<GeneratedDoorPivot>,
     >,
+    mut actor_motion_anchors: Query<
+        &mut Transform,
+        (
+            With<ActorMotionVisualAnchor>,
+            Without<ActorBodyVisual>,
+            Without<GeneratedDoorPivot>,
+        ),
+    >,
     mut door_pivots: Query<&mut Transform, (With<GeneratedDoorPivot>, Without<ActorBodyVisual>)>,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
@@ -129,6 +137,7 @@ pub(crate) fn sync_world_visuals(
         &palette,
         &mut actor_visual_state,
         &mut actor_visuals,
+        &mut actor_motion_anchors,
         &mut mesh_pick_index,
     );
 }

@@ -1,10 +1,11 @@
 //! 状态模块测试：覆盖控制模式、插值轨迹和战斗反馈等基础行为。
 
 use super::{
-    ActorMotionTrack, AttackLungeTrack, HitReactionTrack, ViewerActorFeedbackState,
-    ViewerCameraMode, ViewerCameraShakeState, ViewerControlMode, ViewerDamageNumberState,
-    ViewerState,
+    actor_motion_step_arc, ActorMotionTrack, AttackLungeTrack, HitReactionTrack,
+    ViewerActorFeedbackState, ViewerCameraMode, ViewerCameraShakeState, ViewerControlMode,
+    ViewerDamageNumberState, ViewerState,
 };
+use bevy::prelude::Vec2;
 use game_core::{
     ActorDebugState, CombatDebugState, GridDebugState, OverworldStateSnapshot, SimulationSnapshot,
 };
@@ -98,6 +99,31 @@ fn actor_motion_track_interpolates_linearly() {
 
     assert_eq!(track.current_world, WorldCoord::new(1.5, 0.5, 0.5));
     assert!(!track.active);
+}
+
+#[test]
+fn actor_motion_track_reports_progress_and_direction() {
+    let mut track = ActorMotionTrack::new(
+        WorldCoord::new(0.5, 0.5, 0.5),
+        WorldCoord::new(1.5, 0.5, 0.5),
+        0,
+        0.1,
+    );
+
+    assert_eq!(track.progress(), 0.0);
+    assert_eq!(track.direction_xz(), Some(Vec2::X));
+
+    track.advance(0.05);
+
+    assert!((track.progress() - 0.5).abs() <= f32::EPSILON);
+    assert_eq!(track.current_world, WorldCoord::new(1.0, 0.5, 0.5));
+}
+
+#[test]
+fn actor_motion_step_arc_lifts_only_mid_step() {
+    assert_eq!(actor_motion_step_arc(0.0), 0.0);
+    assert!((actor_motion_step_arc(0.5) - 1.0).abs() <= 0.0001);
+    assert!(actor_motion_step_arc(1.0).abs() <= 0.0001);
 }
 
 #[test]
