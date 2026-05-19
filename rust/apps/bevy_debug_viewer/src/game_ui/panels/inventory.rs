@@ -4,7 +4,6 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::game_ui) enum InventoryPanelMode {
     Normal,
-    Trade,
     Container { container_id: String },
 }
 
@@ -50,11 +49,9 @@ pub(in crate::game_ui) fn render_inventory_panel_contents(
             viewer_ui_passthrough_bundle(),
         ))
         .with_children(|layout| {
-            if !matches!(mode, InventoryPanelMode::Trade) {
-                render_inventory_equipment_section(
-                    layout, font, snapshot, menu_state, drag_state, &mode,
-                );
-            }
+            render_inventory_equipment_section(
+                layout, font, snapshot, menu_state, drag_state, &mode,
+            );
             render_inventory_filter_row(layout, font, snapshot.filter);
             render_inventory_entry_section(layout, font, snapshot, menu_state, drag_state, &mode);
         });

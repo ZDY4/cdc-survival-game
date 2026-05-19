@@ -1412,7 +1412,10 @@ pub fn trade_snapshot(
     items: &ItemLibrary,
     shops: &ShopLibrary,
 ) -> UiTradeSnapshot {
-    let player_items = runtime
+    let shop = runtime.economy().shop(shop_id);
+    let sell_modifier = shop.map(|shop| shop.sell_price_modifier).unwrap_or(1.0);
+    let buy_modifier = shop.map(|shop| shop.buy_price_modifier).unwrap_or(1.0);
+    let mut player_items = runtime
         .economy()
         .inventory_display_order(actor_id)
         .map(|order| {
@@ -1427,16 +1430,7 @@ pub fn trade_snapshot(
                         return None;
                     }
                     let definition = items.get(item_id)?;
-                    let unit_price = runtime
-                        .economy()
-                        .shop(shop_id)
-                        .and_then(|shop| {
-                            shop.inventory
-                                .get(&item_id)
-                                .map(|entry| entry.price)
-                                .or(Some(definition.value))
-                        })
-                        .unwrap_or(definition.value);
+                    let unit_price = adjusted_trade_snapshot_price(definition.value, sell_modifier);
                     Some(UiTradeEntryView {
                         item_id,
                         name: definition.name.clone(),
@@ -1448,6 +1442,18 @@ pub fn trade_snapshot(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    if let Some(actor) = runtime.economy().actor(actor_id) {
+        player_items.extend(actor.equipped_slots.values().filter_map(|equipped| {
+            let definition = items.get(equipped.item_id)?;
+            Some(UiTradeEntryView {
+                item_id: equipped.item_id,
+                name: definition.name.clone(),
+                count: 1,
+                unit_price: adjusted_trade_snapshot_price(definition.value, sell_modifier),
+                total_weight: definition.weight,
+            })
+        }));
+    }
     let shop_items = runtime
         .economy()
         .shop(shop_id)
@@ -1460,7 +1466,7 @@ pub fn trade_snapshot(
                         item_id: entry.item_id,
                         name: definition.name.clone(),
                         count: entry.count,
-                        unit_price: entry.price,
+                        unit_price: adjusted_trade_snapshot_price(definition.value, buy_modifier),
                         total_weight: definition.weight * (entry.count as f32),
                     })
                 })
@@ -1487,6 +1493,12 @@ pub fn trade_snapshot(
         player_items,
         shop_items,
     }
+}
+
+fn adjusted_trade_snapshot_price(base_value: i32, modifier: f32) -> i32 {
+    ((base_value.max(0) as f32) * modifier.max(0.0))
+        .round()
+        .max(1.0) as i32
 }
 
 pub fn container_snapshot(
