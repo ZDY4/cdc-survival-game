@@ -399,6 +399,9 @@ pub(crate) struct TradeSellZone;
 #[derive(Component)]
 pub(crate) struct UiContextMenuRoot;
 
+#[derive(Component)]
+pub(crate) struct GameUiCloseButton;
+
 #[derive(Component, Debug, Clone)]
 pub(crate) enum GameUiButtonAction {
     MainMenuNewGame,

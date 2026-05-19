@@ -113,10 +113,12 @@ pub(super) fn render_panel_shell(
                             ui_text_muted_color(),
                         ));
                     }
-                    actions.spawn(close_icon_button(
-                        font,
-                        GameUiButtonAction::ClosePanel(panel),
-                    ));
+                    let close_action = GameUiButtonAction::ClosePanel(panel);
+                    actions
+                        .spawn(close_icon_button(close_action))
+                        .with_children(|button| {
+                            button.spawn(close_icon_label(font));
+                        });
                 });
         });
 }

@@ -105,7 +105,12 @@ pub(super) fn render_trade_page(
                                 GameUiButtonAction::ClearTradeCart,
                             ));
                         });
-                    header.spawn(close_icon_button(font, GameUiButtonAction::CloseTrade));
+                    let close_action = GameUiButtonAction::CloseTrade;
+                    header
+                        .spawn(close_icon_button(close_action))
+                        .with_children(|button| {
+                            button.spawn(close_icon_label(font));
+                        });
                 });
 
             overlay

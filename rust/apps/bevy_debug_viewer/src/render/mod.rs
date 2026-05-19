@@ -41,9 +41,9 @@ use crate::state::{
     ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiFont,
 };
 use crate::ui_context_menu::{
-    context_menu_border_color, context_menu_button_color, context_menu_button_node,
-    context_menu_panel_color, context_menu_root_node, context_menu_text_color,
-    dialogue_choice_button_color, ContextMenuStyle, ContextMenuVariant,
+    close_icon_button_color, context_menu_border_color, context_menu_button_color,
+    context_menu_button_node, context_menu_panel_color, context_menu_root_node,
+    context_menu_text_color, dialogue_choice_button_color, ContextMenuStyle, ContextMenuVariant,
 };
 
 mod camera;

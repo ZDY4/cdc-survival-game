@@ -29,6 +29,7 @@ pub(crate) fn handle_game_ui_buttons(
             &Interaction,
             &mut BackgroundColor,
             &GameUiButtonAction,
+            Option<&GameUiCloseButton>,
             Option<&crate::ui_context_menu::ContextMenuItemDisabled>,
         ),
         (Changed<Interaction>, With<Button>),
@@ -44,13 +45,12 @@ pub(crate) fn handle_game_ui_buttons(
     }
 
     let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
-    for (interaction, mut background, action, disabled) in &mut buttons {
-        *background = BackgroundColor(context_menu_button_color(
-            button_style,
-            false,
-            disabled.is_some(),
-            *interaction,
-        ));
+    for (interaction, mut background, action, close_button, disabled) in &mut buttons {
+        *background = BackgroundColor(if close_button.is_some() {
+            close_icon_button_color(*interaction)
+        } else {
+            context_menu_button_color(button_style, false, disabled.is_some(), *interaction)
+        });
         if disabled.is_some() {
             continue;
         }

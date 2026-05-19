@@ -80,7 +80,12 @@ pub(super) fn render_container_page(
                                 ui_text_secondary_color(),
                             ));
                         });
-                    header.spawn(close_icon_button(font, GameUiButtonAction::CloseContainer));
+                    let close_action = GameUiButtonAction::CloseContainer;
+                    header
+                        .spawn(close_icon_button(close_action))
+                        .with_children(|button| {
+                            button.spawn(close_icon_label(font));
+                        });
                 });
 
             panel.spawn(text_bundle(

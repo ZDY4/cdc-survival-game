@@ -103,30 +103,29 @@ pub(in crate::game_ui) fn action_button(
     )
 }
 
-pub(in crate::game_ui) fn close_icon_button(
-    font: &ViewerUiFont,
-    action: GameUiButtonAction,
-) -> impl Bundle {
-    let style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
+pub(in crate::game_ui) fn close_icon_button(action: GameUiButtonAction) -> impl Bundle {
     (
         Button,
         Node {
             width: px(24),
             height: px(24),
+            padding: UiRect::ZERO,
             border: UiRect::all(px(1)),
             flex_shrink: 0.0,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(context_menu_button_color(
-            style,
-            false,
-            false,
-            Interaction::None,
-        )),
+        BackgroundColor(close_icon_button_color(Interaction::None)),
         BorderColor::all(ui_border_color()),
         action,
+        GameUiCloseButton,
+        viewer_ui_passthrough_bundle(),
+    )
+}
+
+pub(in crate::game_ui) fn close_icon_label(font: &ViewerUiFont) -> impl Bundle {
+    (
         Text::new("X"),
         TextFont::from_font_size(10.5).with_font(font.0.clone()),
         TextColor(Color::WHITE),

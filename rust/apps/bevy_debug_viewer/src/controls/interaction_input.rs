@@ -288,20 +288,15 @@ pub(crate) fn handle_interaction_menu_buttons(
         return;
     }
 
-    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
     for (interaction, mut background) in &mut close_buttons {
-        *background = BackgroundColor(context_menu_button_color(
-            button_style,
-            false,
-            false,
-            *interaction,
-        ));
+        *background = BackgroundColor(close_icon_button_color(*interaction));
         if *interaction == Interaction::Pressed {
             viewer_state.interaction_menu = None;
             viewer_state.status_line = "interaction menu: closed".to_string();
         }
     }
 
+    let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
     for (interaction, mut background, menu_button, disabled) in &mut buttons {
         *background = BackgroundColor(context_menu_button_color(
             button_style,
@@ -360,14 +355,8 @@ pub(crate) fn handle_dialogue_choice_buttons(
         return;
     }
 
-    let close_style = ContextMenuStyle::for_variant(ContextMenuVariant::UiContext);
     for (interaction, mut background) in &mut close_buttons {
-        *background = BackgroundColor(context_menu_button_color(
-            close_style,
-            false,
-            false,
-            *interaction,
-        ));
+        *background = BackgroundColor(close_icon_button_color(*interaction));
         if *interaction == Interaction::Pressed {
             viewer_state.active_dialogue = None;
             viewer_state.status_line = "dialogue closed".to_string();

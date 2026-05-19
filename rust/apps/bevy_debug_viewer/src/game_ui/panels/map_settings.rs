@@ -119,10 +119,12 @@ pub(super) fn render_settings_panel(
             ))
             .with_children(|header| {
                 header.spawn(text_bundle(font, "游戏菜单", 18.0, Color::WHITE));
-                header.spawn(close_icon_button(
-                    font,
-                    GameUiButtonAction::ClosePanel(UiMenuPanel::Settings),
-                ));
+                let close_action = GameUiButtonAction::ClosePanel(UiMenuPanel::Settings);
+                header
+                    .spawn(close_icon_button(close_action))
+                    .with_children(|button| {
+                        button.spawn(close_icon_label(font));
+                    });
             });
             body.spawn(text_bundle(
                 font,

@@ -27,8 +27,8 @@ use crate::simulation::{reset_viewer_runtime_transients, sync_viewer_runtime_bas
 use crate::state::{
     viewer_ui_passthrough_bundle, ActivePanelRoot, ContainerInventoryItemClickTarget,
     ContainerInventoryListDropZone, ContainerInventoryPanelBounds, ContainerRoot, DiscardModalRoot,
-    DragPreviewRoot, EquipmentSlotClickTarget, GameUiButtonAction, GameUiRoot, GameUiScaffold,
-    HotbarRoot, InventoryContextMenuLayerRoot, InventoryEntryScrollArea,
+    DragPreviewRoot, EquipmentSlotClickTarget, GameUiButtonAction, GameUiCloseButton, GameUiRoot,
+    GameUiScaffold, HotbarRoot, InventoryContextMenuLayerRoot, InventoryEntryScrollArea,
     InventoryEntryScrollbarThumb, InventoryEntryScrollbarTrack, InventoryItemClickTarget,
     InventoryItemHoverTarget, InventoryListDropZone, InventoryPanelBounds, MainMenuRoot,
     OverworldPromptRoot, SkillHoverTarget, TooltipRoot, TopBadgeRoot,
@@ -40,7 +40,9 @@ use crate::state::{
     ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath,
     ViewerWindowResolution,
 };
-use crate::ui_context_menu::{context_menu_button_color, ContextMenuStyle, ContextMenuVariant};
+use crate::ui_context_menu::{
+    close_icon_button_color, context_menu_button_color, ContextMenuStyle, ContextMenuVariant,
+};
 
 const UI_PANEL_WIDTH: f32 = 448.0;
 const INVENTORY_PANEL_WIDTH: f32 = 300.0;

@@ -127,6 +127,14 @@ pub(crate) fn context_menu_button_color(
     }
 }
 
+pub(crate) fn close_icon_button_color(interaction: Interaction) -> Color {
+    match interaction {
+        Interaction::Pressed => Color::srgba(0.30, 0.06, 0.045, 1.0),
+        Interaction::Hovered => Color::srgba(0.50, 0.12, 0.09, 1.0),
+        Interaction::None => Color::srgba(0.17, 0.13, 0.12, 1.0),
+    }
+}
+
 pub(crate) fn dialogue_choice_button_color(interaction: Interaction) -> Color {
     match interaction {
         Interaction::Pressed => Color::srgba(0.24, 0.21, 0.13, 0.72),

@@ -112,10 +112,12 @@ pub(super) fn render_item_quantity_modal(
                         ))
                         .with_children(|header| {
                             header.spawn(text_bundle(font, title, 15.0, Color::WHITE));
-                            header.spawn(close_icon_button(
-                                font,
-                                GameUiButtonAction::CancelItemQuantity,
-                            ));
+                            let close_action = GameUiButtonAction::CancelItemQuantity;
+                            header
+                                .spawn(close_icon_button(close_action))
+                                .with_children(|button| {
+                                    button.spawn(close_icon_label(font));
+                                });
                         });
                     panel.spawn(text_bundle(font, item_name, 12.0, ui_text_heading_color()));
                     panel.spawn(text_bundle(

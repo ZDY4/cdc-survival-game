@@ -30,7 +30,8 @@ use crate::state::{
     ViewerTargetingState, ViewerUiSettings,
 };
 use crate::ui_context_menu::{
-    context_menu_button_color, dialogue_choice_button_color, ContextMenuStyle, ContextMenuVariant,
+    close_icon_button_color, context_menu_button_color, dialogue_choice_button_color,
+    ContextMenuStyle, ContextMenuVariant,
 };
 
 mod camera;
