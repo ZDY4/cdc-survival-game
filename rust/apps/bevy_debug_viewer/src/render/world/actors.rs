@@ -85,13 +85,6 @@ pub(super) fn sync_actor_visuals(
                 )
             });
         let motion_track = motion_state.tracks.get(&actor.actor_id);
-        let previous_yaw = actor_visual_state
-            .by_actor
-            .get(&actor.actor_id)
-            .map(|entry| entry.facing_yaw)
-            .unwrap_or(0.0);
-        let facing_yaw = actor_facing_yaw(motion_track, previous_yaw);
-        let root_rotation = Quat::from_rotation_y(facing_yaw);
         let anchor_transform = actor_motion_anchor_transform(motion_track);
         let appearance_available = appearance_preview
             .as_ref()
@@ -104,7 +97,6 @@ pub(super) fn sync_actor_visuals(
                 if let Ok((_, mut transform, body)) = actor_visuals.get_mut(existing.root_entity) {
                     if body.actor_id == actor.actor_id {
                         transform.translation = translation;
-                        transform.rotation = root_rotation;
                         if let Ok(mut anchor) =
                             actor_motion_anchors.get_mut(existing.motion_anchor_entity)
                         {
@@ -123,9 +115,6 @@ pub(super) fn sync_actor_visuals(
                                     preview.base_model_asset.as_str(),
                                 );
                             }
-                        }
-                        if let Some(entry) = actor_visual_state.by_actor.get_mut(&actor.actor_id) {
-                            entry.facing_yaw = facing_yaw;
                         }
                         register_actor_pick_mesh(
                             mesh_pick_index,
@@ -155,7 +144,6 @@ pub(super) fn sync_actor_visuals(
                 grid_size,
                 actor,
                 translation,
-                root_rotation,
                 anchor_transform,
                 character_definitions,
                 item_definitions,
@@ -177,7 +165,6 @@ pub(super) fn sync_actor_visuals(
                 motion_anchor_entity,
                 model_ground_anchor_entity,
                 appearance_key,
-                facing_yaw,
             },
         );
     }
@@ -194,17 +181,6 @@ pub(super) fn sync_actor_visuals(
             commands.entity(entry.root_entity).despawn();
         }
     }
-}
-
-fn actor_facing_yaw(motion_track: Option<&ActorMotionTrack>, previous_yaw: f32) -> f32 {
-    motion_track
-        .and_then(ActorMotionTrack::direction_xz)
-        .map(actor_direction_yaw)
-        .unwrap_or(previous_yaw)
-}
-
-fn actor_direction_yaw(direction: Vec2) -> f32 {
-    direction.x.atan2(direction.y)
 }
 
 fn actor_motion_anchor_transform(motion_track: Option<&ActorMotionTrack>) -> Transform {
@@ -287,16 +263,14 @@ fn spawn_actor_visual_root(
     grid_size: f32,
     actor: &game_core::ActorDebugState,
     translation: Vec3,
-    root_rotation: Quat,
     anchor_transform: Transform,
     character_definitions: Option<&game_bevy::CharacterDefinitions>,
     item_definitions: Option<&game_bevy::ItemDefinitions>,
     character_appearance_definitions: Option<&game_bevy::CharacterAppearanceDefinitions>,
     runtime_state: &ViewerRuntimeState,
 ) -> (Entity, Entity, Option<Entity>) {
-    let actor_transform = Transform::from_translation(translation)
-        .with_rotation(root_rotation)
-        .with_scale(Vec3::splat(grid_size));
+    let actor_transform =
+        Transform::from_translation(translation).with_scale(Vec3::splat(grid_size));
     let root_entity = commands
         .spawn((
             actor_transform,

@@ -49,7 +49,6 @@ pub(crate) struct ActorVisualEntry {
     pub motion_anchor_entity: Entity,
     pub model_ground_anchor_entity: Option<Entity>,
     pub appearance_key: RuntimeCharacterAppearanceKey,
-    pub facing_yaw: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
