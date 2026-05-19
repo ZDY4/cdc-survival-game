@@ -44,10 +44,17 @@ pub(crate) enum StaticWorldOccluderKind {
     MapObject(MapObjectKind),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StaticWorldOccluderFadeRule {
+    RayOrVisibleCells,
+    VisibleCellsOnly,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct StaticWorldOccluderVisual {
     pub material: StaticWorldMaterialHandle,
     pub tile_instance_handle: Option<WorldRenderTileInstanceHandle>,
+    pub fade_rule: StaticWorldOccluderFadeRule,
     pub base_color: Color,
     pub base_alpha: f32,
     pub base_alpha_mode: AlphaMode,
@@ -104,6 +111,7 @@ pub(crate) struct SpawnedMeshVisual {
     pub proxy_entity: Option<Entity>,
     pub material: StaticWorldMaterialHandle,
     pub tile_instance_handle: Option<WorldRenderTileInstanceHandle>,
+    pub occluder_fade_rule: StaticWorldOccluderFadeRule,
     pub aabb_center: Vec3,
     pub aabb_half_extents: Vec3,
     pub color: Color,

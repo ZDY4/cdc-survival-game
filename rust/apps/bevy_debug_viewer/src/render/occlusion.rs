@@ -137,6 +137,7 @@ pub(super) fn occluder_visual_from_spawned_box(
     StaticWorldOccluderVisual {
         material: spawned.material,
         tile_instance_handle: None,
+        fade_rule: StaticWorldOccluderFadeRule::RayOrVisibleCells,
         base_color: spawned.color,
         base_alpha,
         base_alpha_mode: AlphaMode::Opaque,
@@ -166,6 +167,7 @@ pub(super) fn occluder_visual_from_spawned_mesh(
     StaticWorldOccluderVisual {
         material: spawned.material,
         tile_instance_handle: spawned.tile_instance_handle,
+        fade_rule: spawned.occluder_fade_rule,
         base_color: spawned.color,
         base_alpha,
         base_alpha_mode: AlphaMode::Opaque,
@@ -268,12 +270,20 @@ pub(super) fn should_fade_occluder(
     occluder: &StaticWorldOccluderVisual,
     visible_cells: &HashSet<GridCoord>,
 ) -> bool {
-    occluder_should_fade(
-        camera_position,
-        focus_points,
-        occluder.aabb_center,
-        occluder.aabb_half_extents,
-    ) || occluder_blocks_visible_cells(occluder, visible_cells)
+    match occluder.fade_rule {
+        // 建筑墙只在遮挡玩家可见格子时半透，避免相机到角色的射线让无关墙段一起淡化。
+        StaticWorldOccluderFadeRule::VisibleCellsOnly => {
+            occluder_blocks_visible_cells(occluder, visible_cells)
+        }
+        StaticWorldOccluderFadeRule::RayOrVisibleCells => {
+            occluder_should_fade(
+                camera_position,
+                focus_points,
+                occluder.aabb_center,
+                occluder.aabb_half_extents,
+            ) || occluder_blocks_visible_cells(occluder, visible_cells)
+        }
+    }
 }
 
 pub(super) fn set_occluder_faded(

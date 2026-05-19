@@ -841,6 +841,25 @@ fn occluder_can_fade_from_ray_or_projected_visible_cells() {
 }
 
 #[test]
+fn visible_cell_only_occluder_ignores_ray_fade() {
+    let mut wall = sample_occluder(vec![GridCoord::new(5, 0, 5)], Vec3::new(0.0, 1.0, -5.0));
+    wall.fade_rule = StaticWorldOccluderFadeRule::VisibleCellsOnly;
+
+    assert!(!should_fade_occluder(
+        Vec3::new(0.0, 2.0, -10.0),
+        &[Vec3::new(0.0, 0.2, 0.0)],
+        &wall,
+        &HashSet::new(),
+    ));
+    assert!(should_fade_occluder(
+        Vec3::new(0.0, 2.0, -10.0),
+        &[Vec3::new(0.0, 0.2, 0.0)],
+        &wall,
+        &HashSet::from([GridCoord::new(5, 0, 5)]),
+    ));
+}
+
+#[test]
 fn closed_doors_only_contribute_occluders() {
     let closed_shadow = vec![GridCoord::new(2, 0, 3)];
     let mut door_visual_state = GeneratedDoorVisualState::default();
@@ -860,6 +879,10 @@ fn closed_doors_only_contribute_occluders() {
     assert_eq!(
         occluders[0].hover_map_object_id.as_deref(),
         Some("door_object")
+    );
+    assert_eq!(
+        occluders[0].fade_rule,
+        StaticWorldOccluderFadeRule::RayOrVisibleCells
     );
 }
 
@@ -1692,6 +1715,7 @@ fn sample_occluder(
     StaticWorldOccluderVisual {
         material: StaticWorldMaterialHandle::Standard(Handle::default()),
         tile_instance_handle: None,
+        fade_rule: StaticWorldOccluderFadeRule::RayOrVisibleCells,
         base_color: Color::WHITE,
         base_alpha: 1.0,
         base_alpha_mode: AlphaMode::Opaque,
@@ -1759,6 +1783,7 @@ fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
     let mut occluder = StaticWorldOccluderVisual {
         material,
         tile_instance_handle: None,
+        fade_rule: StaticWorldOccluderFadeRule::RayOrVisibleCells,
         base_color: wall_profile.face_color,
         base_alpha: 1.0,
         base_alpha_mode: AlphaMode::Opaque,
@@ -1825,6 +1850,7 @@ fn tile_instance_occluder_records_desired_fade_before_material_apply() {
     let mut occluder = StaticWorldOccluderVisual {
         material,
         tile_instance_handle: Some(handle),
+        fade_rule: StaticWorldOccluderFadeRule::VisibleCellsOnly,
         base_color: wall_profile.face_color,
         base_alpha: 1.0,
         base_alpha_mode: AlphaMode::Opaque,

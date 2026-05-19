@@ -508,6 +508,7 @@ fn spawn_tile_instance(
                 material: building_wall_instance_material
                     .expect("building wall tile metadata should carry wall material"),
                 tile_instance_handle: Some(instance.handle),
+                occluder_fade_rule: StaticWorldOccluderFadeRule::VisibleCellsOnly,
                 aabb_center: instance.world_aabb_center,
                 aabb_half_extents: instance.world_aabb_half_extents,
                 color: Color::WHITE,
@@ -550,6 +551,7 @@ fn spawn_standard_tile_instance_metadata(
         proxy_entity: None,
         material: StaticWorldMaterialHandle::Standard(material),
         tile_instance_handle: Some(instance.handle),
+        occluder_fade_rule: StaticWorldOccluderFadeRule::RayOrVisibleCells,
         aabb_center: instance.world_aabb_center,
         aabb_half_extents: instance.world_aabb_half_extents,
         color: Color::WHITE,

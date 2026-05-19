@@ -110,6 +110,7 @@ pub(super) fn collect_closed_door_occluders(
         .map(|visual| StaticWorldOccluderVisual {
             material: visual.material.clone(),
             tile_instance_handle: None,
+            fade_rule: StaticWorldOccluderFadeRule::RayOrVisibleCells,
             base_color: visual.base_color,
             base_alpha: visual.base_alpha,
             base_alpha_mode: visual.base_alpha_mode.clone(),
