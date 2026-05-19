@@ -19,7 +19,6 @@ pub(crate) struct InitialModelSelection(pub(crate) Option<String>);
 pub(crate) struct ViewerUiState {
     pub(crate) search_text: String,
     pub(crate) selected_model_path: Option<String>,
-    pub(crate) show_pivot: bool,
     pub(crate) show_socket_editor: bool,
     pub(crate) external_tool_status: Option<String>,
     pub(crate) bbmodel_link_model_path: Option<String>,
@@ -32,7 +31,6 @@ impl Default for ViewerUiState {
         Self {
             search_text: String::new(),
             selected_model_path: None,
-            show_pivot: false,
             show_socket_editor: false,
             external_tool_status: None,
             bbmodel_link_model_path: None,
@@ -67,12 +65,6 @@ impl PreviewLoadStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct PivotInfo {
-    pub(crate) translation: Vec3,
-    pub(crate) rotation_degrees: Vec3,
-}
-
 #[derive(Resource, Debug, Default)]
 pub(crate) struct PreviewState {
     pub(crate) host_entity: Option<Entity>,
@@ -82,7 +74,7 @@ pub(crate) struct PreviewState {
     pub(crate) applied_model_path: Option<String>,
     pub(crate) framed_model_path: Option<String>,
     pub(crate) load_status: PreviewLoadStatus,
-    pub(crate) pivot_info: Option<PivotInfo>,
+    pub(crate) model_size: Option<Vec3>,
 }
 
 #[derive(Resource, Debug, Clone, Default)]

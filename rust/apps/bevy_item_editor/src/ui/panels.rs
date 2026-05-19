@@ -169,55 +169,6 @@ pub(crate) fn render_detail_panel(
     });
 }
 
-pub(crate) fn render_preview_overlay(
-    ctx: &egui::Context,
-    rect: egui::Rect,
-    editor: &EditorState,
-    preview_state: &PreviewState,
-) {
-    egui::Area::new("item_preview_overlay".into())
-        .order(egui::Order::Foreground)
-        .fixed_pos(rect.left_top() + egui::vec2(10.0, 10.0))
-        .show(ctx, |ui| {
-            egui::Frame::new()
-                .fill(egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176))
-                .corner_radius(6.0)
-                .inner_margin(egui::Margin::same(10))
-                .show(ui, |ui| {
-                    ui.set_width(380.0);
-                    ui.label(
-                        egui::RichText::new("物品模型预览")
-                            .size(14.0)
-                            .color(egui::Color32::from_rgb(228, 231, 238)),
-                    );
-                    ui.label(
-                        egui::RichText::new(
-                            editor
-                                .selected_document()
-                                .map(|document| {
-                                    if document.definition.name.trim().is_empty() {
-                                        format!("#{}", document.definition.id)
-                                    } else {
-                                        format!(
-                                            "{} · #{}",
-                                            document.definition.name, document.definition.id
-                                        )
-                                    }
-                                })
-                                .unwrap_or_else(|| "未选择物品".to_string()),
-                        )
-                        .size(11.0)
-                        .color(egui::Color32::from_rgb(164, 170, 184)),
-                    );
-                    ui.label(
-                        egui::RichText::new(preview_state.load_status.label())
-                            .size(11.0)
-                            .color(egui::Color32::from_rgb(164, 170, 184)),
-                    );
-                });
-        });
-}
-
 fn empty_placeholder(value: &str) -> &str {
     if value.trim().is_empty() {
         "-"

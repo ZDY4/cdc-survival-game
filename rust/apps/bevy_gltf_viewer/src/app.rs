@@ -5,14 +5,14 @@ use game_editor::{
     configure_editor_app_shell, configure_game_ui_fonts_system, preview_camera_input_system,
     preview_camera_sync_system, setup_preview_stage, sync_preview_ground_visibility_system,
     EditorAppShellConfig, GameUiFontsState, PreviewCameraController, PreviewGroundVisibility,
-    PreviewStageConfig, WindowSizePersistenceConfig,
+    PreviewPivotVisibility, PreviewStageConfig, WindowSizePersistenceConfig,
 };
 
 use crate::catalog::{handle_catalog_loading_task, spawn_catalog_scan_task};
 use crate::commands::{handle_viewer_commands, GltfViewerCommand};
 use crate::preview::{
     default_viewer_orbit, draw_pivot_gizmo_system, frame_loaded_scene_system,
-    refresh_preview_load_status_system, sync_preview_scene_system, update_pivot_info_system,
+    refresh_preview_load_status_system, sync_preview_scene_system,
 };
 use crate::socket_editor::{
     draw_socket_gizmos_system, handle_socket_editor_commands_system, socket_editor_ui_system,
@@ -45,6 +45,7 @@ pub(crate) fn run(initial_model_path: Option<String>) {
         .insert_resource(ViewerAssetRoot(asset_dir))
         .insert_resource(InitialModelSelection(initial_model_path))
         .insert_resource(PreviewGroundVisibility::hidden())
+        .insert_resource(PreviewPivotVisibility::hidden())
         .insert_resource(ViewerUiState::default())
         .insert_resource(PreviewState::default())
         .insert_resource(SocketEditorState::default())
@@ -74,7 +75,6 @@ pub(crate) fn run(initial_model_path: Option<String>) {
                     refresh_preview_load_status_system,
                     frame_loaded_scene_system,
                     sync_preview_ground_visibility_system,
-                    update_pivot_info_system,
                     draw_pivot_gizmo_system,
                     sync_socket_editor_document_system,
                     draw_socket_gizmos_system,

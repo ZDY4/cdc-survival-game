@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use game_editor::{
-    selectable_list_row, GameUiFontsState, PreviewCameraController, PreviewViewportRect,
+    render_model_preview_hud, selectable_list_row, GameUiFontsState, ModelPreviewHud,
+    PreviewCameraController, PreviewGroundVisibility, PreviewPivotVisibility, PreviewViewportRect,
 };
 
 use crate::bbmodel_links::sync_bbmodel_link_ui_state;
@@ -55,7 +56,8 @@ pub(crate) fn viewer_ui_system(
     catalog: Res<ModelCatalog>,
     mut ui_state: ResMut<ViewerUiState>,
     preview_state: Res<PreviewState>,
-    ground_visibility: Res<game_editor::PreviewGroundVisibility>,
+    mut ground_visibility: ResMut<PreviewGroundVisibility>,
+    mut pivot_visibility: ResMut<PreviewPivotVisibility>,
     mut preview_camera: Single<&mut PreviewCameraController, With<PreviewCamera>>,
     mut requests: MessageWriter<GltfViewerCommand>,
 ) {
@@ -73,14 +75,6 @@ pub(crate) fn viewer_ui_system(
             ui.add_space(8.0);
             ui.label("搜索");
             ui.text_edit_singleline(&mut ui_state.search_text);
-            let mut show_ground = ground_visibility.visible;
-            if ui.checkbox(&mut show_ground, "显示地面").changed() {
-                requests.write(GltfViewerCommand::ToggleGround);
-            }
-            let mut show_pivot = ui_state.show_pivot;
-            if ui.checkbox(&mut show_pivot, "显示 Pivot").changed() {
-                requests.write(GltfViewerCommand::TogglePivot);
-            }
             let mut show_socket_editor = ui_state.show_socket_editor;
             if ui
                 .checkbox(&mut show_socket_editor, "Socket 编辑")
@@ -184,69 +178,40 @@ pub(crate) fn viewer_ui_system(
                 height: rect.height(),
             });
             ui.allocate_rect(rect, egui::Sense::hover());
-            let info_height = if ui_state.show_pivot { 96.0 } else { 56.0 };
-            let info_rect = egui::Rect::from_min_size(
-                rect.left_top() + egui::vec2(10.0, 10.0),
-                egui::vec2(420.0, info_height),
+            let status = preview_status_for_hud(&preview_state);
+            let hud_response = render_model_preview_hud(
+                ui.ctx(),
+                "gltf_viewer_preview_hud",
+                rect,
+                ModelPreviewHud {
+                    title: ui_state
+                        .selected_model_path
+                        .as_deref()
+                        .unwrap_or("未找到可预览的 glTF"),
+                    size: preview_state.model_size,
+                    status: status.as_deref(),
+                    ground_visible: ground_visibility.visible,
+                    pivot_visible: pivot_visibility.visible,
+                },
+                |_| {},
             );
-            ui.painter().rect_filled(
-                info_rect,
-                6.0,
-                egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176),
-            );
-            ui.painter().text(
-                rect.left_top() + egui::vec2(14.0, 12.0),
-                egui::Align2::LEFT_TOP,
-                "glTF 预览",
-                egui::FontId::new(14.0, egui::FontFamily::Proportional),
-                egui::Color32::from_rgb(228, 231, 238),
-            );
-            ui.painter().text(
-                rect.left_top() + egui::vec2(14.0, 32.0),
-                egui::Align2::LEFT_TOP,
-                ui_state
-                    .selected_model_path
-                    .as_deref()
-                    .unwrap_or("未找到可预览的 glTF/glb"),
-                egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                egui::Color32::from_rgb(164, 170, 184),
-            );
-            ui.painter().text(
-                rect.left_top() + egui::vec2(14.0, 50.0),
-                egui::Align2::LEFT_TOP,
-                preview_state.load_status.label(),
-                egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                egui::Color32::from_rgb(164, 170, 184),
-            );
-            if ui_state.show_pivot {
-                let (position, rotation) = preview_state
-                    .pivot_info
-                    .map(|pivot| {
-                        (
-                            format_vec3(pivot.translation),
-                            format_vec3(pivot.rotation_degrees),
-                        )
-                    })
-                    .unwrap_or_else(|| ("未加载".to_string(), "未加载".to_string()));
-                ui.painter().text(
-                    rect.left_top() + egui::vec2(14.0, 68.0),
-                    egui::Align2::LEFT_TOP,
-                    format!("Pivot 位置: {position}"),
-                    egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                    egui::Color32::from_rgb(196, 202, 214),
-                );
-                ui.painter().text(
-                    rect.left_top() + egui::vec2(14.0, 84.0),
-                    egui::Align2::LEFT_TOP,
-                    format!("Pivot 旋转: {rotation} deg"),
-                    egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                    egui::Color32::from_rgb(196, 202, 214),
-                );
+            if hud_response.toggle_ground {
+                ground_visibility.toggle();
+            }
+            if hud_response.toggle_pivot {
+                pivot_visibility.toggle();
             }
             paint_axis_gizmo(ui, rect, preview_camera.orbit);
         });
 }
 
-fn format_vec3(value: Vec3) -> String {
-    format!("{:.3}, {:.3}, {:.3}", value.x, value.y, value.z)
+fn preview_status_for_hud(preview_state: &PreviewState) -> Option<String> {
+    if matches!(
+        preview_state.load_status,
+        crate::state::PreviewLoadStatus::Ready
+    ) {
+        None
+    } else {
+        Some(preview_state.load_status.label())
+    }
 }

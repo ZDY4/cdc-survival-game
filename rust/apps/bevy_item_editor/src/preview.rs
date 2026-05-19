@@ -6,7 +6,10 @@ use game_bevy::{
     resolve_item_preview_asset_path, resolve_standalone_item_preview, MeshPickIndex,
     MeshPickPrototypeKey,
 };
-use game_editor::{replace_preview_scene, PreviewCameraController, PreviewOrbitCamera};
+use game_editor::{
+    draw_preview_pivot_gizmo, replace_preview_scene, PreviewCameraController, PreviewOrbitCamera,
+    PreviewPivotVisibility,
+};
 
 use crate::state::EditorState;
 
@@ -59,6 +62,7 @@ pub(crate) struct PreviewState {
     pub(crate) framed_asset_path: Option<String>,
     pub(crate) item_label: String,
     pub(crate) load_status: PreviewLoadStatus,
+    pub(crate) model_size: Option<Vec3>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -107,6 +111,7 @@ pub(crate) fn sync_preview_request_from_selection(
         if preview_state.requested_item_id.is_some() {
             preview_state.requested_item_id = None;
             preview_state.requested_asset_path = None;
+            preview_state.model_size = None;
             preview_state.item_label.clear();
             preview_state.load_status = PreviewLoadStatus::Idle;
         }
@@ -116,6 +121,7 @@ pub(crate) fn sync_preview_request_from_selection(
     let Some(preview) = resolve_standalone_item_preview(&document.definition) else {
         preview_state.requested_item_id = Some(document.definition.id);
         preview_state.requested_asset_path = None;
+        preview_state.model_size = None;
         preview_state.item_label =
             format!("{} · #{}", document.definition.name, document.definition.id);
         preview_state.load_status =
@@ -137,10 +143,12 @@ pub(crate) fn sync_preview_request_from_selection(
     match next_asset_path {
         Some(asset_path) => {
             preview_state.requested_asset_path = Some(asset_path);
+            preview_state.model_size = None;
             preview_state.load_status = PreviewLoadStatus::Loading;
         }
         None => {
             preview_state.requested_asset_path = None;
+            preview_state.model_size = None;
             preview_state.load_status =
                 PreviewLoadStatus::Missing(format!("无可预览模型：{}", preview.visual_asset));
         }
@@ -169,6 +177,7 @@ pub(crate) fn sync_preview_scene_system(
         preview_state.scene_handle = None;
         preview_state.applied_asset_path = None;
         preview_state.framed_asset_path = None;
+        preview_state.model_size = None;
         return;
     };
 
@@ -186,6 +195,7 @@ pub(crate) fn sync_preview_scene_system(
     preview_state.scene_handle = Some(handle);
     preview_state.applied_asset_path = Some(path);
     preview_state.framed_asset_path = None;
+    preview_state.model_size = None;
     preview_state.load_status = PreviewLoadStatus::Loading;
 }
 
@@ -231,7 +241,7 @@ pub(crate) fn frame_loaded_scene_system(
     if preview_state.load_status != PreviewLoadStatus::Ready {
         return;
     }
-    let Some(asset_path) = preview_state.applied_asset_path.as_ref() else {
+    let Some(asset_path) = preview_state.applied_asset_path.clone() else {
         return;
     };
     if preview_state.framed_asset_path.as_deref() == Some(asset_path.as_str()) {
@@ -246,6 +256,7 @@ pub(crate) fn frame_loaded_scene_system(
     };
 
     let size = bounds.size();
+    preview_state.model_size = Some(size);
     let half_extents = size * 0.5;
     let vertical_half_fov = std::f32::consts::FRAC_PI_4 * 0.5;
     let target_fill = DEFAULT_MODEL_VIEWPORT_FILL.clamp(0.1, 0.95);
@@ -261,7 +272,26 @@ pub(crate) fn frame_loaded_scene_system(
         pitch_radians: -0.12,
         radius,
     });
-    preview_state.framed_asset_path = Some(asset_path.clone());
+    preview_state.framed_asset_path = Some(asset_path);
+}
+
+pub(crate) fn draw_pivot_gizmo_system(
+    pivot_visibility: Res<PreviewPivotVisibility>,
+    preview_state: Res<PreviewState>,
+    transform_query: Query<&GlobalTransform>,
+    mut gizmos: Gizmos,
+) {
+    if !pivot_visibility.visible {
+        return;
+    }
+    let Some(scene_root) = preview_state.scene_instance else {
+        return;
+    };
+    let Ok(transform) = transform_query.get(scene_root) else {
+        return;
+    };
+    let transform = transform.compute_transform();
+    draw_preview_pivot_gizmo(&mut gizmos, transform.translation, transform.rotation);
 }
 
 pub(crate) fn sync_preview_mesh_pick_index_system(

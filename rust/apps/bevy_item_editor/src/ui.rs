@@ -4,7 +4,10 @@ use bevy::log::warn;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use game_bevy::MeshPickIndex;
-use game_editor::PreviewViewportRect;
+use game_editor::{
+    render_model_preview_hud, ModelPreviewHud, PreviewGroundVisibility, PreviewPivotVisibility,
+    PreviewViewportRect,
+};
 
 use crate::commands::ItemEditorCommand;
 use crate::preview::{PreviewCamera, PreviewState};
@@ -17,6 +20,8 @@ pub(crate) fn editor_ui_system(
     mut editor: ResMut<EditorState>,
     preview_state: Res<PreviewState>,
     pick_index: Res<MeshPickIndex<String>>,
+    mut ground_visibility: ResMut<PreviewGroundVisibility>,
+    mut pivot_visibility: ResMut<PreviewPivotVisibility>,
     mut preview_camera: Query<
         (
             &Camera,
@@ -105,7 +110,30 @@ pub(crate) fn editor_ui_system(
                     ui.close();
                 }
             });
-            panels::render_preview_overlay(ui.ctx(), rect, &editor, &preview_state);
+            let status = preview_status_for_hud(&preview_state);
+            let hud_response = render_model_preview_hud(
+                ui.ctx(),
+                "item_preview_hud",
+                rect,
+                ModelPreviewHud {
+                    title: if preview_state.item_label.trim().is_empty() {
+                        "未选择物品"
+                    } else {
+                        preview_state.item_label.as_str()
+                    },
+                    size: preview_state.model_size,
+                    status: status.as_deref(),
+                    ground_visible: ground_visibility.visible,
+                    pivot_visible: pivot_visibility.visible,
+                },
+                |_| {},
+            );
+            if hud_response.toggle_ground {
+                ground_visibility.toggle();
+            }
+            if hud_response.toggle_pivot {
+                pivot_visibility.toggle();
+            }
         });
 }
 
@@ -119,4 +147,15 @@ fn picked_preview_model_asset(
     let cursor = Vec2::new(cursor.x, cursor.y);
     let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
     pick_index.query_nearest(ray).map(|hit| hit.data)
+}
+
+fn preview_status_for_hud(preview_state: &PreviewState) -> Option<String> {
+    if matches!(
+        preview_state.load_status,
+        crate::preview::PreviewLoadStatus::Ready
+    ) {
+        None
+    } else {
+        Some(preview_state.load_status.label())
+    }
 }

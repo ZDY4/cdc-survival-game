@@ -3,6 +3,7 @@
 
 use std::collections::HashSet;
 
+use bevy::camera::primitives::MeshAabb;
 use bevy::log::{info, warn};
 use bevy::prelude::*;
 use game_bevy::{
@@ -15,8 +16,8 @@ use game_data::{
     CharacterId, SettlementDefinition, SettlementId, SettlementLibrary,
 };
 use game_editor::{
-    character_preview_is_available, spawn_character_preview_scene, CharacterPreviewPart,
-    CharacterPreviewRoot, PreviewCameraController,
+    character_preview_is_available, draw_preview_pivot_gizmo, spawn_character_preview_scene,
+    CharacterPreviewPart, CharacterPreviewRoot, PreviewCameraController, PreviewPivotVisibility,
 };
 
 use crate::camera_mode::{
@@ -79,6 +80,36 @@ pub(crate) fn sync_preview_mesh_pick_index_system(
             &mut pick_index,
         );
     }
+}
+
+pub(crate) fn sync_preview_bounds_system(
+    mut preview_state: ResMut<PreviewState>,
+    root_query: Query<Entity, With<CharacterPreviewRoot>>,
+    children_query: Query<&Children>,
+    mesh_query: Query<(&Mesh3d, &GlobalTransform, Option<&Visibility>)>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    let Some(root) = root_query.iter().next() else {
+        preview_state.model_size = None;
+        return;
+    };
+    preview_state.model_size =
+        scene_world_bounds(root, &children_query, &mesh_query, &meshes).map(|bounds| bounds.size());
+}
+
+pub(crate) fn draw_pivot_gizmo_system(
+    pivot_visibility: Res<PreviewPivotVisibility>,
+    root_query: Query<&GlobalTransform, With<CharacterPreviewRoot>>,
+    mut gizmos: Gizmos,
+) {
+    if !pivot_visibility.visible {
+        return;
+    }
+    let Some(transform) = root_query.iter().next() else {
+        return;
+    };
+    let transform = transform.compute_transform();
+    draw_preview_pivot_gizmo(&mut gizmos, transform.translation, transform.rotation);
 }
 
 // 确保编辑器始终有一个默认选中的角色。
@@ -147,6 +178,7 @@ pub(crate) fn refresh_preview_state(
     preview_state.appearance_error = None;
     preview_state.resolved_preview = None;
     preview_state.preview_notice = None;
+    preview_state.model_size = None;
 
     let Some(character) = selected_character(data, ui_state) else {
         ui_state.status = "未选择角色。".to_string();
@@ -290,6 +322,82 @@ fn preview_model_notice(preview: &game_data::ResolvedCharacterAppearancePreview)
         return Some(format!("当前角色配置的 glTF 模型不存在：{asset_id}"));
     }
     None
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SceneWorldBounds {
+    min: Vec3,
+    max: Vec3,
+}
+
+impl SceneWorldBounds {
+    fn from_point(point: Vec3) -> Self {
+        Self {
+            min: point,
+            max: point,
+        }
+    }
+
+    fn include_point(&mut self, point: Vec3) {
+        self.min = self.min.min(point);
+        self.max = self.max.max(point);
+    }
+
+    fn size(self) -> Vec3 {
+        self.max - self.min
+    }
+}
+
+fn scene_world_bounds(
+    root: Entity,
+    children_query: &Query<&Children>,
+    mesh_query: &Query<(&Mesh3d, &GlobalTransform, Option<&Visibility>)>,
+    meshes: &Assets<Mesh>,
+) -> Option<SceneWorldBounds> {
+    let mut stack = vec![root];
+    let mut bounds: Option<SceneWorldBounds> = None;
+
+    while let Some(entity) = stack.pop() {
+        if let Ok(children) = children_query.get(entity) {
+            for child in children.iter() {
+                stack.push(child);
+            }
+        }
+
+        let Ok((mesh_handle, transform, visibility)) = mesh_query.get(entity) else {
+            continue;
+        };
+        if matches!(visibility, Some(Visibility::Hidden)) {
+            continue;
+        }
+        let Some(mesh) = meshes.get(&mesh_handle.0) else {
+            continue;
+        };
+        let Some(mesh_aabb) = mesh.compute_aabb() else {
+            continue;
+        };
+        let center = Vec3::from(mesh_aabb.center);
+        let half_extents = Vec3::from(mesh_aabb.half_extents);
+        let affine = transform.affine();
+        for corner in [
+            Vec3::new(-half_extents.x, -half_extents.y, -half_extents.z),
+            Vec3::new(-half_extents.x, -half_extents.y, half_extents.z),
+            Vec3::new(-half_extents.x, half_extents.y, -half_extents.z),
+            Vec3::new(-half_extents.x, half_extents.y, half_extents.z),
+            Vec3::new(half_extents.x, -half_extents.y, -half_extents.z),
+            Vec3::new(half_extents.x, -half_extents.y, half_extents.z),
+            Vec3::new(half_extents.x, half_extents.y, -half_extents.z),
+            Vec3::new(half_extents.x, half_extents.y, half_extents.z),
+        ] {
+            let world_point = affine.transform_point3(center + corner);
+            match &mut bounds {
+                Some(world_bounds) => world_bounds.include_point(world_point),
+                None => bounds = Some(SceneWorldBounds::from_point(world_point)),
+            }
+        }
+    }
+
+    bounds
 }
 
 fn register_pick_tree(

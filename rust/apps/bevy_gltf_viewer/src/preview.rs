@@ -3,10 +3,11 @@ use bevy::camera::primitives::MeshAabb;
 use bevy::log::warn;
 use bevy::prelude::*;
 use game_editor::{
-    apply_preview_orbit_camera, replace_preview_scene, PreviewCameraController, PreviewOrbitCamera,
+    apply_preview_orbit_camera, draw_preview_pivot_gizmo, replace_preview_scene,
+    PreviewCameraController, PreviewOrbitCamera, PreviewPivotVisibility,
 };
 
-use crate::state::{PivotInfo, PreviewCamera, PreviewLoadStatus, PreviewState, ViewerUiState};
+use crate::state::{PreviewCamera, PreviewLoadStatus, PreviewState};
 
 const CAMERA_RADIUS_MIN: f32 = 0.8;
 const CAMERA_RADIUS_MAX: f32 = 18.0;
@@ -69,6 +70,7 @@ pub(crate) fn sync_preview_scene_system(
         preview_state.scene_handle = None;
         preview_state.applied_model_path = None;
         preview_state.framed_model_path = None;
+        preview_state.model_size = None;
         preview_state.load_status = PreviewLoadStatus::Idle;
         return;
     };
@@ -83,6 +85,7 @@ pub(crate) fn sync_preview_scene_system(
     preview_state.scene_handle = Some(handle);
     preview_state.applied_model_path = Some(path);
     preview_state.framed_model_path = None;
+    preview_state.model_size = None;
     preview_state.load_status = PreviewLoadStatus::Loading;
 }
 
@@ -128,7 +131,7 @@ pub(crate) fn frame_loaded_scene_system(
     if preview_state.load_status != PreviewLoadStatus::Ready {
         return;
     }
-    let Some(model_path) = preview_state.applied_model_path.as_ref() else {
+    let Some(model_path) = preview_state.applied_model_path.clone() else {
         return;
     };
     if preview_state.framed_model_path.as_deref() == Some(model_path.as_str()) {
@@ -143,6 +146,7 @@ pub(crate) fn frame_loaded_scene_system(
     };
 
     let size = bounds.size();
+    preview_state.model_size = Some(size);
     let half_extents = size * 0.5;
     let vertical_half_fov = std::f32::consts::FRAC_PI_4 * 0.5;
     let target_fill = DEFAULT_MODEL_VIEWPORT_FILL.clamp(0.1, 0.95);
@@ -158,47 +162,16 @@ pub(crate) fn frame_loaded_scene_system(
         pitch_radians: -0.12,
         radius,
     });
-    preview_state.framed_model_path = Some(model_path.clone());
-}
-
-pub(crate) fn update_pivot_info_system(
-    ui_state: Res<ViewerUiState>,
-    mut preview_state: ResMut<PreviewState>,
-    transform_query: Query<&GlobalTransform>,
-) {
-    if !ui_state.show_pivot {
-        preview_state.pivot_info = None;
-        return;
-    }
-
-    let Some(scene_root) = preview_state.scene_instance else {
-        preview_state.pivot_info = None;
-        return;
-    };
-    let Ok(global_transform) = transform_query.get(scene_root) else {
-        preview_state.pivot_info = None;
-        return;
-    };
-
-    let transform = global_transform.compute_transform();
-    let (rotation_x, rotation_y, rotation_z) = transform.rotation.to_euler(EulerRot::XYZ);
-    preview_state.pivot_info = Some(PivotInfo {
-        translation: transform.translation,
-        rotation_degrees: Vec3::new(
-            rotation_x.to_degrees(),
-            rotation_y.to_degrees(),
-            rotation_z.to_degrees(),
-        ),
-    });
+    preview_state.framed_model_path = Some(model_path);
 }
 
 pub(crate) fn draw_pivot_gizmo_system(
-    ui_state: Res<ViewerUiState>,
+    pivot_visibility: Res<PreviewPivotVisibility>,
     preview_state: Res<PreviewState>,
     transform_query: Query<&GlobalTransform>,
     mut gizmos: Gizmos,
 ) {
-    if !ui_state.show_pivot {
+    if !pivot_visibility.visible {
         return;
     }
 
@@ -210,7 +183,7 @@ pub(crate) fn draw_pivot_gizmo_system(
     };
 
     let transform = global_transform.compute_transform();
-    draw_pivot_gizmo(&mut gizmos, transform.translation, transform.rotation);
+    draw_preview_pivot_gizmo(&mut gizmos, transform.translation, transform.rotation);
 }
 
 fn scene_world_bounds(
@@ -257,45 +230,6 @@ fn scene_world_bounds(
     }
 
     bounds
-}
-
-fn draw_pivot_gizmo(gizmos: &mut Gizmos, origin: Vec3, rotation: Quat) {
-    let axis_length = 0.36;
-    let marker_radius = 0.055;
-    let x_axis = rotation * Vec3::X;
-    let y_axis = rotation * Vec3::Y;
-    let z_axis = rotation * Vec3::Z;
-
-    gizmos.line(
-        origin - x_axis * marker_radius,
-        origin + x_axis * marker_radius,
-        Color::WHITE,
-    );
-    gizmos.line(
-        origin - y_axis * marker_radius,
-        origin + y_axis * marker_radius,
-        Color::WHITE,
-    );
-    gizmos.line(
-        origin - z_axis * marker_radius,
-        origin + z_axis * marker_radius,
-        Color::WHITE,
-    );
-    gizmos.line(
-        origin,
-        origin + x_axis * axis_length,
-        Color::srgb(1.0, 0.16, 0.12),
-    );
-    gizmos.line(
-        origin,
-        origin + y_axis * axis_length,
-        Color::srgb(0.16, 0.9, 0.24),
-    );
-    gizmos.line(
-        origin,
-        origin + z_axis * axis_length,
-        Color::srgb(0.16, 0.36, 1.0),
-    );
 }
 
 pub(crate) fn paint_axis_gizmo(

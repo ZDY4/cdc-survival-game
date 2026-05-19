@@ -38,10 +38,12 @@ pub use model_tools::{
     BlockbenchSourceKind,
 };
 pub use preview::{
-    apply_preview_orbit_camera, preview_camera_input_system, preview_camera_sync_system,
+    apply_preview_orbit_camera, draw_preview_pivot_gizmo, preview_camera_input_system,
+    preview_camera_sync_system, preview_size_label, render_model_preview_hud,
     replace_preview_scene, spawn_preview_floor, spawn_preview_light_rig, spawn_preview_origin_axes,
-    spawn_preview_scene_host, sync_preview_ground_visibility_system, PreviewCameraController,
-    PreviewFloor, PreviewGroundVisibility, PreviewOrbitCamera, PreviewOriginAxes, PreviewSceneHost,
+    spawn_preview_scene_host, sync_preview_ground_visibility_system, ModelPreviewHud,
+    ModelPreviewHudResponse, PreviewCameraController, PreviewFloor, PreviewGroundVisibility,
+    PreviewOrbitCamera, PreviewOriginAxes, PreviewPivotVisibility, PreviewSceneHost,
     PreviewSceneInstance, PreviewViewportRect,
 };
 pub use preview_stage::{setup_preview_stage, PreviewStageConfig, PreviewStageEntities};

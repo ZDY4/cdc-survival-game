@@ -6,17 +6,17 @@ use game_editor::{
     configure_editor_app_shell, configure_game_ui_fonts_system, preview_camera_input_system,
     preview_camera_sync_system, setup_preview_stage, sync_preview_ground_visibility_system,
     write_editor_session, EditorAppShellConfig, EditorKind, GameUiFontsState,
-    PreviewCameraController, PreviewGroundVisibility, PreviewStageConfig,
+    PreviewCameraController, PreviewGroundVisibility, PreviewPivotVisibility, PreviewStageConfig,
     WindowSizePersistenceConfig,
 };
 
 use crate::commands::{handle_item_editor_commands, ItemEditorCommand};
 use crate::data::{load_editor_resources, poll_external_selection_system};
 use crate::preview::{
-    default_preview_orbit, frame_loaded_scene_system, refresh_preview_load_status_system,
-    sync_preview_mesh_pick_index_system, sync_preview_request_from_selection,
-    sync_preview_scene_system, PreviewCamera, PreviewState, CAMERA_RADIUS_MAX, CAMERA_RADIUS_MIN,
-    PREVIEW_BG,
+    default_preview_orbit, draw_pivot_gizmo_system, frame_loaded_scene_system,
+    refresh_preview_load_status_system, sync_preview_mesh_pick_index_system,
+    sync_preview_request_from_selection, sync_preview_scene_system, PreviewCamera, PreviewState,
+    CAMERA_RADIUS_MAX, CAMERA_RADIUS_MIN, PREVIEW_BG,
 };
 use crate::state::ExternalItemSelectionState;
 use crate::ui::editor_ui_system;
@@ -53,6 +53,7 @@ pub(crate) fn run(initial_selection: Option<u32>) {
         .insert_resource(PreviewState::default())
         .insert_resource(MeshPickIndex::<String>::default())
         .insert_resource(PreviewGroundVisibility::visible())
+        .insert_resource(PreviewPivotVisibility::hidden())
         .insert_resource(GameUiFontsState::default())
         .add_systems(Startup, setup_editor)
         .add_systems(
@@ -70,6 +71,7 @@ pub(crate) fn run(initial_selection: Option<u32>) {
                     frame_loaded_scene_system,
                     sync_preview_mesh_pick_index_system,
                     sync_preview_ground_visibility_system,
+                    draw_pivot_gizmo_system,
                     preview_camera_input_system,
                     preview_camera_sync_system,
                 )

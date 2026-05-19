@@ -22,8 +22,6 @@ pub(crate) enum GltfViewerCommand {
     SaveBbmodelLink,
     ClearBbmodelLink,
     UseSiblingBbmodelLink,
-    ToggleGround,
-    TogglePivot,
     ToggleSocketEditor,
     RescanCatalog,
 }
@@ -35,7 +33,6 @@ pub(crate) fn handle_viewer_commands(
     mut preview_state: ResMut<PreviewState>,
     asset_root: Res<ViewerAssetRoot>,
     asset_server: Res<AssetServer>,
-    mut ground_visibility: ResMut<game_editor::PreviewGroundVisibility>,
     mut next_state: ResMut<NextState<ViewerAppState>>,
     mut preview_camera: Query<&mut game_editor::PreviewCameraController, With<PreviewCamera>>,
     loading_tasks: Query<(), With<CatalogLoadingTask>>,
@@ -137,12 +134,6 @@ pub(crate) fn handle_viewer_commands(
                     }
                 }
             }
-            GltfViewerCommand::ToggleGround => {
-                ground_visibility.toggle();
-            }
-            GltfViewerCommand::TogglePivot => {
-                ui_state.show_pivot = !ui_state.show_pivot;
-            }
             GltfViewerCommand::ToggleSocketEditor => {
                 ui_state.show_socket_editor = !ui_state.show_socket_editor;
             }
@@ -164,6 +155,7 @@ fn select_model(
 ) {
     ui_state.selected_model_path = Some(path.to_string());
     preview_state.requested_model_path = Some(path.to_string());
+    preview_state.model_size = None;
     ui_state.external_tool_status = None;
     ui_state.bbmodel_link_model_path = None;
     if let Ok(mut preview_camera) = preview_camera.single_mut() {
@@ -181,6 +173,7 @@ fn reload_model(
     preview_state.applied_model_path = None;
     preview_state.framed_model_path = None;
     preview_state.requested_model_path = Some(path.clone());
+    preview_state.model_size = None;
     preview_state.load_status = crate::state::PreviewLoadStatus::Loading;
     ui_state.external_tool_status = Some(format!("已请求重载: {path}"));
 }

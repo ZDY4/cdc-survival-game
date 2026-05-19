@@ -10,7 +10,8 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use game_bevy::MeshPickIndex;
 use game_editor::{
-    selectable_list_row, GameUiFontsState, PreviewCameraController, PreviewViewportRect,
+    render_model_preview_hud, selectable_list_row, GameUiFontsState, ModelPreviewHud,
+    PreviewCameraController, PreviewGroundVisibility, PreviewPivotVisibility, PreviewViewportRect,
 };
 
 use crate::camera_mode::{PreviewCameraMode, PreviewCameraModeState};
@@ -87,6 +88,8 @@ pub(crate) fn editor_ui_system(
     preview_state: Res<PreviewState>,
     pick_index: Res<MeshPickIndex<String>>,
     camera_mode: Res<PreviewCameraModeState>,
+    mut ground_visibility: ResMut<PreviewGroundVisibility>,
+    mut pivot_visibility: ResMut<PreviewPivotVisibility>,
     mut preview_camera_query: Query<
         (&Camera, &GlobalTransform, &mut PreviewCameraController),
         With<PreviewCamera>,
@@ -192,15 +195,24 @@ pub(crate) fn editor_ui_system(
                     ui.close();
                 }
             });
-            render_preview_overlay(
+            let preview_title = selected_character_label(&data, &ui_state);
+            let hud_response = render_preview_overlay(
                 ui.ctx(),
                 rect,
-                &ui_state,
+                preview_title.as_str(),
                 &preview_state,
                 &camera_mode,
+                &mut ground_visibility,
+                &mut pivot_visibility,
                 &mut preview_camera,
                 &mut requests,
             );
+            if hud_response.toggle_ground {
+                ground_visibility.toggle();
+            }
+            if hud_response.toggle_pivot {
+                pivot_visibility.toggle();
+            }
         });
 }
 
@@ -254,55 +266,44 @@ fn render_character_list_panel(
 fn render_preview_overlay(
     ctx: &egui::Context,
     rect: egui::Rect,
-    _ui_state: &EditorUiState,
+    title: &str,
     preview_state: &PreviewState,
     camera_mode: &PreviewCameraModeState,
+    ground_visibility: &mut PreviewGroundVisibility,
+    pivot_visibility: &mut PreviewPivotVisibility,
     preview_camera: &mut PreviewCameraController,
     requests: &mut MessageWriter<CharacterEditorCommand>,
-) {
-    let area = egui::Area::new("character_preview_overlay".into())
-        .order(egui::Order::Foreground)
-        .fixed_pos(rect.left_top() + egui::vec2(10.0, 10.0))
-        .show(ctx, |ui| {
-            egui::Frame::NONE
-                .fill(egui::Color32::from_rgba_unmultiplied(18, 21, 28, 176))
-                .corner_radius(6.0)
-                .inner_margin(egui::Margin::same(10))
-                .show(ui, |ui| {
-                    ui.set_width(420.0);
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new("角色外观预览")
-                                .size(14.0)
-                                .color(egui::Color32::from_rgb(228, 231, 238)),
-                        );
-                        ui.add_space(8.0);
-                        ui.label(
-                            egui::RichText::new(camera_mode.mode.badge_text())
-                                .size(11.0)
-                                .color(egui::Color32::from_rgb(164, 170, 184)),
-                        );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .small_button(camera_mode.mode.toggle_button_label())
-                                .clicked()
-                            {
-                                let next_mode = match camera_mode.mode {
-                                    PreviewCameraMode::Free => PreviewCameraMode::GameFixed,
-                                    PreviewCameraMode::GameFixed => PreviewCameraMode::Free,
-                                };
-                                requests.write(CharacterEditorCommand::SetCameraMode(next_mode));
-                            }
-                        });
-                    });
-                    ui.add_space(4.0);
-                    ui.label(
-                        egui::RichText::new(camera_mode.mode.interaction_hint())
-                            .size(11.0)
-                            .color(egui::Color32::from_rgb(164, 170, 184)),
-                    );
-                });
-        });
+) -> game_editor::ModelPreviewHudResponse {
+    let response = render_model_preview_hud(
+        ctx,
+        "character_preview_hud",
+        rect,
+        ModelPreviewHud {
+            title,
+            size: preview_state.model_size,
+            status: None,
+            ground_visible: ground_visibility.visible,
+            pivot_visible: pivot_visibility.visible,
+        },
+        |ui| {
+            ui.separator();
+            ui.label(
+                egui::RichText::new(camera_mode.mode.badge_text())
+                    .size(12.0)
+                    .color(egui::Color32::from_rgb(164, 170, 184)),
+            );
+            let camera_mode_response = ui
+                .small_button(camera_mode.mode.toggle_button_label())
+                .on_hover_text(camera_mode.mode.interaction_hint());
+            if camera_mode_response.clicked() {
+                let next_mode = match camera_mode.mode {
+                    PreviewCameraMode::Free => PreviewCameraMode::GameFixed,
+                    PreviewCameraMode::GameFixed => PreviewCameraMode::Free,
+                };
+                requests.write(CharacterEditorCommand::SetCameraMode(next_mode));
+            }
+        },
+    );
 
     if let Some(notice) = preview_state.preview_notice.as_deref() {
         egui::Area::new("character_preview_notice".into())
@@ -324,7 +325,19 @@ fn render_preview_overlay(
                     });
             });
     }
-    preview_camera.block_pointer_input = area.response.hovered();
+    preview_camera.block_pointer_input = response.hovered;
+    response
+}
+
+fn selected_character_label(data: &EditorData, ui_state: &EditorUiState) -> String {
+    let Some(selected_id) = ui_state.selected_character_id.as_deref() else {
+        return "未选择角色".to_string();
+    };
+    data.character_summaries
+        .iter()
+        .find(|summary| summary.id == selected_id)
+        .map(|summary| summary.display_name.clone())
+        .unwrap_or_else(|| selected_id.to_string())
 }
 
 fn picked_preview_model_asset(

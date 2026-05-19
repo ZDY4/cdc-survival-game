@@ -125,6 +125,7 @@ pub(crate) struct PreviewState {
     pub(crate) ai_preview: Option<CharacterAiPreview>,
     pub(crate) ai_error: Option<String>,
     pub(crate) appearance_error: Option<String>,
+    pub(crate) model_size: Option<Vec3>,
 }
 
 #[derive(Resource, Debug, Clone, Default)]

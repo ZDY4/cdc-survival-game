@@ -14,7 +14,26 @@ pub struct PreviewGroundVisibility {
     pub visible: bool,
 }
 
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreviewPivotVisibility {
+    pub visible: bool,
+}
+
 impl PreviewGroundVisibility {
+    pub fn visible() -> Self {
+        Self { visible: true }
+    }
+
+    pub fn hidden() -> Self {
+        Self { visible: false }
+    }
+
+    pub fn toggle(&mut self) {
+        self.visible = !self.visible;
+    }
+}
+
+impl PreviewPivotVisibility {
     pub fn visible() -> Self {
         Self { visible: true }
     }
@@ -31,6 +50,12 @@ impl PreviewGroundVisibility {
 impl Default for PreviewGroundVisibility {
     fn default() -> Self {
         Self::visible()
+    }
+}
+
+impl Default for PreviewPivotVisibility {
+    fn default() -> Self {
+        Self::hidden()
     }
 }
 
@@ -136,6 +161,45 @@ pub fn sync_preview_ground_visibility_system(
     for mut floor_visibility in &mut floor_query {
         *floor_visibility = visibility;
     }
+}
+
+pub fn draw_preview_pivot_gizmo(gizmos: &mut Gizmos, origin: Vec3, rotation: Quat) {
+    let axis_length = 0.36;
+    let marker_radius = 0.055;
+    let x_axis = rotation * Vec3::X;
+    let y_axis = rotation * Vec3::Y;
+    let z_axis = rotation * Vec3::Z;
+
+    gizmos.line(
+        origin - x_axis * marker_radius,
+        origin + x_axis * marker_radius,
+        Color::WHITE,
+    );
+    gizmos.line(
+        origin - y_axis * marker_radius,
+        origin + y_axis * marker_radius,
+        Color::WHITE,
+    );
+    gizmos.line(
+        origin - z_axis * marker_radius,
+        origin + z_axis * marker_radius,
+        Color::WHITE,
+    );
+    gizmos.line(
+        origin,
+        origin + x_axis * axis_length,
+        Color::srgb(1.0, 0.16, 0.12),
+    );
+    gizmos.line(
+        origin,
+        origin + y_axis * axis_length,
+        Color::srgb(0.16, 0.9, 0.24),
+    );
+    gizmos.line(
+        origin,
+        origin + z_axis * axis_length,
+        Color::srgb(0.16, 0.36, 1.0),
+    );
 }
 
 pub fn spawn_preview_origin_axes(
