@@ -174,6 +174,9 @@ pub(crate) struct ActorBodyVisual {
 pub(crate) struct ActorMotionVisualAnchor;
 
 #[derive(Component)]
+pub(crate) struct ActorModelGroundAnchor;
+
+#[derive(Component)]
 pub(crate) struct KeyLight;
 
 #[derive(Component)]

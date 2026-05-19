@@ -129,6 +129,18 @@ pub(crate) struct WorldVisualSyncParams<'w, 's> {
         (
             With<crate::render::ActorMotionVisualAnchor>,
             Without<crate::render::ActorBodyVisual>,
+            Without<crate::render::ActorModelGroundAnchor>,
+            Without<crate::render::GeneratedDoorPivot>,
+        ),
+    >,
+    actor_model_ground_anchors: Query<
+        'w,
+        's,
+        &'static mut Transform,
+        (
+            With<crate::render::ActorModelGroundAnchor>,
+            Without<crate::render::ActorBodyVisual>,
+            Without<crate::render::ActorMotionVisualAnchor>,
             Without<crate::render::GeneratedDoorPivot>,
         ),
     >,
@@ -236,6 +248,7 @@ pub(crate) fn profiled_sync_world_visuals(
         params.mesh_pick_index,
         params.actor_visuals,
         params.actor_motion_anchors,
+        params.actor_model_ground_anchors,
         params.door_pivots,
     );
     if let Some(start) = start {

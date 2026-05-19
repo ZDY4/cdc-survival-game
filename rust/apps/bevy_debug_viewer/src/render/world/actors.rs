@@ -5,6 +5,8 @@ use crate::state::ActorMotionTrack;
 
 const ACTOR_STEP_BOB_HEIGHT: f32 = 0.035;
 const ACTOR_STEP_LEAN_RADIANS: f32 = 0.055;
+const BUILTIN_HUMANOID_MANNEQUIN_ASSET: &str = "bevy_preview/characters/humanoid_mannequin.gltf";
+const BUILTIN_HUMANOID_MANNEQUIN_FOOT_MIN_Y: f32 = 0.015;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sync_actor_visuals(
@@ -32,6 +34,16 @@ pub(super) fn sync_actor_visuals(
         (
             With<ActorMotionVisualAnchor>,
             Without<ActorBodyVisual>,
+            Without<ActorModelGroundAnchor>,
+            Without<GeneratedDoorPivot>,
+        ),
+    >,
+    actor_model_ground_anchors: &mut Query<
+        &mut Transform,
+        (
+            With<ActorModelGroundAnchor>,
+            Without<ActorBodyVisual>,
+            Without<ActorMotionVisualAnchor>,
             Without<GeneratedDoorPivot>,
         ),
     >,
@@ -59,6 +71,19 @@ pub(super) fn sync_actor_visuals(
             actor.actor_id,
             actor.definition_id.as_ref().map(|id| id.as_str()),
         );
+        let appearance_preview = character_definitions
+            .zip(item_definitions)
+            .zip(character_appearance_definitions)
+            .and_then(|((definitions, items), appearances)| {
+                game_bevy::resolve_runtime_character_preview(
+                    definitions,
+                    items,
+                    appearances,
+                    &runtime_state.runtime,
+                    actor.actor_id,
+                    actor.definition_id.as_ref().map(|id| id.as_str()),
+                )
+            });
         let motion_track = motion_state.tracks.get(&actor.actor_id);
         let previous_yaw = actor_visual_state
             .by_actor
@@ -68,9 +93,14 @@ pub(super) fn sync_actor_visuals(
         let facing_yaw = actor_facing_yaw(motion_track, previous_yaw);
         let root_rotation = Quat::from_rotation_y(facing_yaw);
         let anchor_transform = actor_motion_anchor_transform(motion_track);
+        let appearance_available = appearance_preview
+            .as_ref()
+            .is_some_and(game_bevy::character_preview_is_available);
 
         if let Some(existing) = actor_visual_state.by_actor.get(&actor.actor_id).cloned() {
-            if existing.appearance_key == appearance_key {
+            if existing.appearance_key == appearance_key
+                && existing.model_ground_anchor_entity.is_some() == appearance_available
+            {
                 if let Ok((_, mut transform, body)) = actor_visuals.get_mut(existing.root_entity) {
                     if body.actor_id == actor.actor_id {
                         transform.translation = translation;
@@ -79,6 +109,20 @@ pub(super) fn sync_actor_visuals(
                             actor_motion_anchors.get_mut(existing.motion_anchor_entity)
                         {
                             *anchor = anchor_transform;
+                        }
+                        if let (Some(model_ground_anchor_entity), Some(preview)) = (
+                            existing.model_ground_anchor_entity,
+                            appearance_preview.as_ref(),
+                        ) {
+                            if let Ok(mut model_ground_anchor) =
+                                actor_model_ground_anchors.get_mut(model_ground_anchor_entity)
+                            {
+                                *model_ground_anchor = actor_model_ground_anchor_transform(
+                                    render_config,
+                                    grid_size,
+                                    preview.base_model_asset.as_str(),
+                                );
+                            }
                         }
                         if let Some(entry) = actor_visual_state.by_actor.get_mut(&actor.actor_id) {
                             entry.facing_yaw = facing_yaw;
@@ -100,23 +144,24 @@ pub(super) fn sync_actor_visuals(
             actor_visual_state.by_actor.remove(&actor.actor_id);
         }
 
-        let (root_entity, motion_anchor_entity) = spawn_actor_visual_root(
-            commands,
-            asset_server,
-            meshes,
-            materials,
-            palette,
-            render_config,
-            grid_size,
-            actor,
-            translation,
-            root_rotation,
-            anchor_transform,
-            character_definitions,
-            item_definitions,
-            character_appearance_definitions,
-            runtime_state,
-        );
+        let (root_entity, motion_anchor_entity, model_ground_anchor_entity) =
+            spawn_actor_visual_root(
+                commands,
+                asset_server,
+                meshes,
+                materials,
+                palette,
+                render_config,
+                grid_size,
+                actor,
+                translation,
+                root_rotation,
+                anchor_transform,
+                character_definitions,
+                item_definitions,
+                character_appearance_definitions,
+                runtime_state,
+            );
         register_actor_pick_mesh(
             mesh_pick_index,
             root_entity,
@@ -130,6 +175,7 @@ pub(super) fn sync_actor_visuals(
             ActorVisualEntry {
                 root_entity,
                 motion_anchor_entity,
+                model_ground_anchor_entity,
                 appearance_key,
                 facing_yaw,
             },
@@ -165,6 +211,28 @@ fn actor_motion_anchor_transform(motion_track: Option<&ActorMotionTrack>) -> Tra
     let step_arc = motion_track.map(ActorMotionTrack::step_arc).unwrap_or(0.0);
     Transform::from_translation(Vec3::Y * (step_arc * ACTOR_STEP_BOB_HEIGHT))
         .with_rotation(Quat::from_rotation_x(step_arc * ACTOR_STEP_LEAN_RADIANS))
+}
+
+fn actor_model_ground_anchor_transform(
+    render_config: ViewerRenderConfig,
+    grid_size: f32,
+    base_model_asset: &str,
+) -> Transform {
+    // 角色 root 沿用旧代理体中心高度；模型单独下移到地面顶面，避免资产 pivot 影响贴地。
+    let root_to_floor_top_local = render_config.floor_thickness_world / grid_size.max(0.001)
+        - (render_config.actor_radius_world + render_config.actor_body_length_world * 0.5);
+    let foot_min_y = actor_model_foot_min_y(base_model_asset);
+    Transform::from_translation(Vec3::Y * (root_to_floor_top_local - foot_min_y))
+}
+
+fn actor_model_foot_min_y(base_model_asset: &str) -> f32 {
+    let asset = base_model_asset.trim();
+    if asset == BUILTIN_HUMANOID_MANNEQUIN_ASSET || game_bevy::is_builtin_humanoid_mannequin(asset)
+    {
+        BUILTIN_HUMANOID_MANNEQUIN_FOOT_MIN_Y
+    } else {
+        0.0
+    }
 }
 
 pub(crate) fn sync_actor_precise_pick_meshes(
@@ -225,7 +293,7 @@ fn spawn_actor_visual_root(
     item_definitions: Option<&game_bevy::ItemDefinitions>,
     character_appearance_definitions: Option<&game_bevy::CharacterAppearanceDefinitions>,
     runtime_state: &ViewerRuntimeState,
-) -> (Entity, Entity) {
+) -> (Entity, Entity, Option<Entity>) {
     let actor_transform = Transform::from_translation(translation)
         .with_rotation(root_rotation)
         .with_scale(Vec3::splat(grid_size));
@@ -313,15 +381,42 @@ fn spawn_actor_visual_root(
             ));
         });
 
-    if let Some(preview) = appearance_preview.filter(game_bevy::character_preview_is_available) {
+    let model_ground_anchor_entity = if let Some(preview) =
+        appearance_preview.filter(game_bevy::character_preview_is_available)
+    {
+        let model_ground_anchor_transform = actor_model_ground_anchor_transform(
+            render_config,
+            grid_size,
+            preview.base_model_asset.as_str(),
+        );
+        let model_ground_anchor_entity = commands
+            .spawn((
+                model_ground_anchor_transform,
+                GlobalTransform::from(model_ground_anchor_transform),
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
+                ActorModelGroundAnchor,
+            ))
+            .id();
+        commands
+            .entity(motion_anchor_entity)
+            .add_child(model_ground_anchor_entity);
+
         let appearance_entity =
             game_bevy::spawn_character_preview_scene(commands, asset_server, materials, &preview);
         commands
-            .entity(motion_anchor_entity)
+            .entity(model_ground_anchor_entity)
             .add_child(appearance_entity);
-    }
+        Some(model_ground_anchor_entity)
+    } else {
+        None
+    };
 
-    (root_entity, motion_anchor_entity)
+    (
+        root_entity,
+        motion_anchor_entity,
+        model_ground_anchor_entity,
+    )
 }
 
 fn register_actor_pick_mesh(

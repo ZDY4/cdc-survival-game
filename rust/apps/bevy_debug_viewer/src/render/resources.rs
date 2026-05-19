@@ -47,6 +47,7 @@ pub(crate) struct ActorVisualState {
 pub(crate) struct ActorVisualEntry {
     pub root_entity: Entity,
     pub motion_anchor_entity: Entity,
+    pub model_ground_anchor_entity: Option<Entity>,
     pub appearance_key: RuntimeCharacterAppearanceKey,
     pub facing_yaw: f32,
 }

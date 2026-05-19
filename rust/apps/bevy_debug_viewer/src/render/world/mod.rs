@@ -62,6 +62,16 @@ pub(crate) fn sync_world_visuals(
         (
             With<ActorMotionVisualAnchor>,
             Without<ActorBodyVisual>,
+            Without<ActorModelGroundAnchor>,
+            Without<GeneratedDoorPivot>,
+        ),
+    >,
+    mut actor_model_ground_anchors: Query<
+        &mut Transform,
+        (
+            With<ActorModelGroundAnchor>,
+            Without<ActorBodyVisual>,
+            Without<ActorMotionVisualAnchor>,
             Without<GeneratedDoorPivot>,
         ),
     >,
@@ -138,6 +148,7 @@ pub(crate) fn sync_world_visuals(
         &mut actor_visual_state,
         &mut actor_visuals,
         &mut actor_motion_anchors,
+        &mut actor_model_ground_anchors,
         &mut mesh_pick_index,
     );
 }
