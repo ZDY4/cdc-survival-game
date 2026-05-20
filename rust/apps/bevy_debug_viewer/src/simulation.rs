@@ -45,10 +45,6 @@ pub(crate) use runtime_basics::{
 };
 pub(crate) use runtime_bridge::viewer_event_entry;
 
-const ACTOR_MOTION_DURATION_SCALE: f32 = 0.9;
-const ACTOR_MOTION_MIN_DURATION_SEC: f32 = 0.04 * ACTOR_MOTION_DURATION_SCALE;
-const ACTOR_MOTION_MAX_DURATION_SEC: f32 = 0.08 * ACTOR_MOTION_DURATION_SCALE;
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -57,7 +53,6 @@ mod tests {
     use super::{
         advance_online_npc_actions, advance_online_npc_combat, advance_runtime_progression,
         collect_events, event_feedback, refresh_interaction_prompt, sync_npc_runtime_presence,
-        ACTOR_MOTION_DURATION_SCALE, ACTOR_MOTION_MAX_DURATION_SEC, ACTOR_MOTION_MIN_DURATION_SEC,
     };
     use crate::dialogue::apply_interaction_result;
     use crate::state::{
@@ -404,21 +399,10 @@ mod tests {
     }
 
     #[test]
-    fn actor_motion_duration_is_clamped() {
-        assert_eq!(
-            event_feedback::actor_motion_duration_sec(0.0),
-            ACTOR_MOTION_MIN_DURATION_SEC
-        );
-        assert_eq!(
-            event_feedback::actor_motion_duration_sec(1.0),
-            ACTOR_MOTION_MAX_DURATION_SEC
-        );
-        assert!(
-            (event_feedback::actor_motion_duration_sec(0.08)
-                - (0.08 * ACTOR_MOTION_DURATION_SCALE))
-                .abs()
-                <= 0.0001
-        );
+    fn actor_motion_duration_matches_progression_interval() {
+        assert_eq!(event_feedback::actor_motion_duration_sec(0.0), 0.0);
+        assert_eq!(event_feedback::actor_motion_duration_sec(0.08), 0.08);
+        assert_eq!(event_feedback::actor_motion_duration_sec(1.0), 1.0);
     }
 
     #[test]

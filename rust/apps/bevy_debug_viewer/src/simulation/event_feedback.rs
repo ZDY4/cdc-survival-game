@@ -169,8 +169,7 @@ pub(super) fn queue_actor_motion(
 }
 
 pub(super) fn actor_motion_duration_sec(min_progression_interval_sec: f32) -> f32 {
-    (min_progression_interval_sec * ACTOR_MOTION_DURATION_SCALE)
-        .clamp(ACTOR_MOTION_MIN_DURATION_SEC, ACTOR_MOTION_MAX_DURATION_SEC)
+    min_progression_interval_sec.max(0.0)
 }
 
 pub(super) fn queue_attack_and_hit_feedback(
