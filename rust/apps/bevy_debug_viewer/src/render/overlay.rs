@@ -283,7 +283,7 @@ pub(crate) fn update_interaction_menu(
     mut commands: Commands,
     window: Single<&Window>,
     menu_root: Single<(&mut Node, &mut Visibility), (With<InteractionMenuRoot>, Without<Button>)>,
-    options_root: Single<(Entity, &Children), With<InteractionMenuOptionsRoot>>,
+    options_root: Single<Entity, With<InteractionMenuOptionsRoot>>,
     mut rows: Query<
         (
             &InteractionMenuOptionRow,
@@ -300,10 +300,19 @@ pub(crate) fn update_interaction_menu(
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
     console_state: Res<crate::console::ViewerConsoleState>,
+    mut last_diagnostic: Local<Option<String>>,
 ) {
     let (mut node, mut visibility) = menu_root.into_inner();
-    let (options_entity, _) = options_root.into_inner();
+    let options_entity = options_root.into_inner();
     if scene_kind.is_main_menu() || console_state.is_open {
+        log_interaction_menu_diagnostic(
+            &mut last_diagnostic,
+            "hidden_scene_or_console",
+            scene_kind.as_ref(),
+            console_state.is_open,
+            viewer_state.interaction_menu.as_ref(),
+            viewer_state.current_prompt.as_ref(),
+        );
         *visibility = Visibility::Hidden;
         for (_, mut row_visibility, ..) in &mut rows {
             *row_visibility = Visibility::Hidden;
@@ -311,6 +320,14 @@ pub(crate) fn update_interaction_menu(
         return;
     }
     let Some(menu_state) = viewer_state.interaction_menu.as_ref() else {
+        log_interaction_menu_diagnostic(
+            &mut last_diagnostic,
+            "hidden_no_menu_state",
+            scene_kind.as_ref(),
+            console_state.is_open,
+            None,
+            viewer_state.current_prompt.as_ref(),
+        );
         *visibility = Visibility::Hidden;
         for (_, mut row_visibility, ..) in &mut rows {
             *row_visibility = Visibility::Hidden;
@@ -318,6 +335,14 @@ pub(crate) fn update_interaction_menu(
         return;
     };
     let Some(prompt) = viewer_state.current_prompt.as_ref() else {
+        log_interaction_menu_diagnostic(
+            &mut last_diagnostic,
+            "hidden_no_prompt",
+            scene_kind.as_ref(),
+            console_state.is_open,
+            Some(menu_state),
+            None,
+        );
         *visibility = Visibility::Hidden;
         for (_, mut row_visibility, ..) in &mut rows {
             *row_visibility = Visibility::Hidden;
@@ -325,6 +350,14 @@ pub(crate) fn update_interaction_menu(
         return;
     };
     if prompt.target_id != menu_state.target_id || prompt.options.is_empty() {
+        log_interaction_menu_diagnostic(
+            &mut last_diagnostic,
+            "hidden_prompt_mismatch_or_empty",
+            scene_kind.as_ref(),
+            console_state.is_open,
+            Some(menu_state),
+            Some(prompt),
+        );
         *visibility = Visibility::Hidden;
         for (_, mut row_visibility, ..) in &mut rows {
             *row_visibility = Visibility::Hidden;
@@ -336,6 +369,14 @@ pub(crate) fn update_interaction_menu(
     node.left = px(layout.left);
     node.top = px(layout.top);
     *visibility = Visibility::Visible;
+    log_interaction_menu_diagnostic(
+        &mut last_diagnostic,
+        "visible",
+        scene_kind.as_ref(),
+        console_state.is_open,
+        Some(menu_state),
+        Some(prompt),
+    );
     let menu_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);
     let existing_rows = rows.iter().count();
     if existing_rows < prompt.options.len() {
@@ -401,6 +442,30 @@ pub(crate) fn update_interaction_menu(
         button.option_id = option.id.clone();
         button.is_primary = is_primary;
     }
+}
+
+fn log_interaction_menu_diagnostic(
+    last_diagnostic: &mut Local<Option<String>>,
+    reason: &str,
+    scene_kind: &ViewerSceneKind,
+    console_open: bool,
+    menu_state: Option<&InteractionMenuState>,
+    prompt: Option<&game_data::InteractionPrompt>,
+) {
+    let menu_target = menu_state.map(|menu| format!("{:?}", menu.target_id));
+    let prompt_target = prompt.map(|prompt| format!("{:?}", prompt.target_id));
+    let prompt_options = prompt
+        .map(|prompt| prompt.options.len())
+        .unwrap_or_default();
+    let diagnostic = format!(
+        "reason={reason};scene={scene_kind:?};console={console_open};menu_target={menu_target:?};prompt_target={prompt_target:?};prompt_options={prompt_options}"
+    );
+    if last_diagnostic.as_ref() == Some(&diagnostic) {
+        return;
+    }
+
+    info!("viewer.interaction.menu_diagnostic {diagnostic}");
+    **last_diagnostic = Some(diagnostic);
 }
 
 pub(crate) fn sync_dialogue_panel_diagnostics(

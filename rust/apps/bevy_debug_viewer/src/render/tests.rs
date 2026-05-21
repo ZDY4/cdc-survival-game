@@ -327,6 +327,50 @@ fn interaction_menu_button_font_size_shrinks_for_long_labels() {
 }
 
 #[test]
+fn interaction_menu_update_initializes_rows_from_empty_options_root() {
+    let prompt = sample_prompt(2);
+    let mut app = App::new();
+    app.world_mut().spawn(Window {
+        resolution: (640, 360).into(),
+        ..default()
+    });
+    app.insert_resource(ViewerSceneKind::Gameplay);
+    app.insert_resource(crate::console::ViewerConsoleState::default());
+    app.insert_resource(ViewerUiFont(Handle::<Font>::default()));
+    app.insert_resource(ViewerState {
+        current_prompt: Some(prompt.clone()),
+        interaction_menu: Some(InteractionMenuState {
+            target_id: prompt.target_id.clone(),
+            cursor_position: Vec2::new(120.0, 90.0),
+        }),
+        ..ViewerState::default()
+    });
+    let menu_root = app
+        .world_mut()
+        .spawn((Node::default(), Visibility::Hidden, InteractionMenuRoot))
+        .id();
+    let options_root = app
+        .world_mut()
+        .spawn((Node::default(), InteractionMenuOptionsRoot))
+        .id();
+    app.add_systems(Update, update_interaction_menu);
+
+    app.update();
+
+    assert_eq!(
+        app.world().entity(menu_root).get::<Visibility>().copied(),
+        Some(Visibility::Visible)
+    );
+    assert_eq!(
+        app.world()
+            .entity(options_root)
+            .get::<Children>()
+            .map(Children::len),
+        Some(2)
+    );
+}
+
+#[test]
 fn occupied_cells_box_uses_full_footprint() {
     let (center_x, center_z, width, depth) = occupied_cells_box(
         &[
