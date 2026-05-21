@@ -458,9 +458,6 @@ pub(crate) fn handle_game_ui_buttons(
                         .unwrap_or_else(|error| error.to_string());
                 }
             }
-            GameUiButtonAction::SelectMapLocation(location_id) => {
-                ui.menu_state.selected_map_location_id = Some(location_id);
-            }
             GameUiButtonAction::EnterOverworldLocation(location_id) => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
                     match ui

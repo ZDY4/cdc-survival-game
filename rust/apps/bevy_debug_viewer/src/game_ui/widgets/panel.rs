@@ -29,6 +29,7 @@ pub(in crate::game_ui) fn panel_tab_label(panel: UiMenuPanel) -> &'static str {
 pub(in crate::game_ui) fn panel_width(panel: UiMenuPanel) -> f32 {
     match panel {
         UiMenuPanel::Inventory => INVENTORY_PANEL_WIDTH,
+        UiMenuPanel::Map => MAP_PANEL_WIDTH,
         UiMenuPanel::Skills => SKILLS_PANEL_WIDTH,
         _ => UI_PANEL_WIDTH,
     }

@@ -536,10 +536,11 @@ fn panel_render_key(
             game_bevy::crafting_snapshot(&ui.runtime_state.runtime, actor_id, &content.recipes.0)
         ),
         UiMenuPanel::Map => format!(
-            "{panel:?}|{:?}|{:?}|{:?}",
-            ui.runtime_state.runtime.current_overworld_state(),
-            ui.menu_state.selected_map_location_id,
-            content.overworld.0
+            "{panel:?}|{}",
+            map_panel_render_key(
+                &ui.runtime_state.runtime.snapshot(),
+                ui.viewer_state.current_level
+            )
         ),
         UiMenuPanel::Settings => format!("{panel:?}|{:?}", ui.settings.as_ref()),
     }
@@ -650,13 +651,8 @@ fn render_single_panel(
         }
         UiMenuPanel::Map => {
             render_panel_shell(parent, font, panel);
-            render_map_panel(
-                parent,
-                font,
-                &ui.runtime_state.runtime.current_overworld_state(),
-                &content.overworld.0,
-                &ui.menu_state,
-            );
+            let snapshot = ui.runtime_state.runtime.snapshot();
+            render_map_panel(parent, font, &snapshot, ui.viewer_state.current_level);
         }
         UiMenuPanel::Settings => {
             render_settings_panel(parent, font, &ui.settings);

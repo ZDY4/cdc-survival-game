@@ -46,6 +46,7 @@ use crate::ui_context_menu::{
 
 const UI_PANEL_WIDTH: f32 = 448.0;
 const INVENTORY_PANEL_WIDTH: f32 = 300.0;
+const MAP_PANEL_WIDTH: f32 = 720.0;
 const SKILLS_PANEL_WIDTH: f32 = 940.0;
 const SCREEN_EDGE_PADDING: f32 = 18.0;
 const LEFT_STAGE_PANEL_X: f32 = SCREEN_EDGE_PADDING;

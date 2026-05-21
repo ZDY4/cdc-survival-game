@@ -5,6 +5,8 @@ mod character;
 mod crafting;
 mod inventory;
 mod journal;
+mod map;
+mod map_canvas;
 mod map_settings;
 mod skills;
 mod skills_graph;
@@ -68,11 +70,25 @@ pub(super) fn render_skills_panel(
 pub(super) fn render_map_panel(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
-    current: &game_core::OverworldStateSnapshot,
-    overworld: &game_data::OverworldLibrary,
-    menu_state: &UiMenuState,
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
 ) {
-    map_settings::render_map_panel(parent, font, current, overworld, menu_state)
+    map::render_map_panel(parent, font, snapshot, current_level)
+}
+
+pub(super) fn map_panel_render_key(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+) -> String {
+    map::map_panel_render_key(snapshot, current_level)
+}
+
+#[cfg(test)]
+pub(super) fn map_panel_summary(
+    snapshot: &game_core::SimulationSnapshot,
+    current_level: i32,
+) -> map::MapPanelSummary {
+    map::map_panel_summary(snapshot, current_level)
 }
 
 pub(super) fn render_settings_panel(

@@ -440,7 +440,6 @@ pub(crate) enum GameUiButtonAction {
     ToggleObPlayback,
     SetObPlaybackSpeed(ViewerObserveSpeed),
     CraftRecipe(String),
-    SelectMapLocation(String),
     EnterOverworldLocation(String),
     QueueTradeBuy {
         shop_id: String,

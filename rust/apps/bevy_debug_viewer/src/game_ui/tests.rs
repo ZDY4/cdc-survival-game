@@ -17,8 +17,15 @@ use game_bevy::{
     ItemDefinitions, NewGameConfig, NewGameEquipmentEntry, NewGameItemStack, UiMenuPanel,
     UiMenuState, UiModalState,
 };
-use game_core::create_demo_runtime;
-use game_data::{DialogueData, InteractionTargetId, ItemDefinition, ItemFragment};
+use game_core::{
+    create_demo_runtime, ActorDebugState, CombatDebugState, GridDebugState, MapCellDebugState,
+    MapObjectDebugState, SimulationSnapshot,
+};
+use game_data::{
+    ActorKind, ActorSide, CharacterId, DialogueData, GridCoord, InteractionContextSnapshot,
+    InteractionTargetId, ItemDefinition, ItemFragment, MapId, MapObjectFootprint, MapObjectKind,
+    MapRotation, TurnState, WorldMode,
+};
 
 fn sample_new_game_item_definitions() -> ItemDefinitions {
     let stackable = |id: u32, name: &str| ItemDefinition {
@@ -433,4 +440,158 @@ fn setup_game_ui_keeps_retained_roots_stable_across_updates() {
         .world()
         .entity(first.main_menu)
         .contains::<MainMenuRoot>());
+}
+
+#[test]
+fn game_ui_map_render_key_changes_when_actor_moves() {
+    let mut snapshot = sample_map_panel_snapshot();
+    let first_key = map_panel_render_key(&snapshot, 0);
+
+    snapshot.actors[0].grid_position = GridCoord::new(2, 0, 1);
+    let second_key = map_panel_render_key(&snapshot, 0);
+
+    assert_ne!(first_key, second_key);
+}
+
+#[test]
+fn game_ui_map_summary_filters_by_current_level() {
+    let snapshot = sample_map_panel_snapshot();
+
+    let ground = map_panel_summary(&snapshot, 0);
+    assert_eq!(ground.visible_buildings, 1);
+    assert_eq!(ground.visible_objects, 0);
+    assert_eq!(ground.visible_actors, 1);
+
+    let upper = map_panel_summary(&snapshot, 1);
+    assert_eq!(upper.visible_buildings, 0);
+    assert_eq!(upper.visible_objects, 1);
+    assert_eq!(upper.visible_actors, 1);
+}
+
+#[test]
+fn game_ui_map_key_handles_missing_grid_map() {
+    let mut snapshot = sample_map_panel_snapshot();
+    snapshot.grid.map_id = None;
+    snapshot.grid.map_width = None;
+    snapshot.grid.map_height = None;
+    snapshot.interaction_context.world_mode = WorldMode::Overworld;
+
+    let key = map_panel_render_key(&snapshot, 0);
+    let summary = map_panel_summary(&snapshot, 0);
+
+    assert!(key.contains("mode=Overworld"));
+    assert_eq!(summary.visible_actors, 1);
+}
+
+fn sample_map_panel_snapshot() -> SimulationSnapshot {
+    SimulationSnapshot {
+        turn: TurnState::default(),
+        actors: vec![
+            ActorDebugState {
+                actor_id: game_data::ActorId(1),
+                definition_id: Some(CharacterId("player".into())),
+                display_name: "Player".into(),
+                kind: ActorKind::Player,
+                side: ActorSide::Player,
+                group_id: "player".into(),
+                ap: 6.0,
+                available_steps: 3,
+                turn_open: false,
+                in_combat: false,
+                grid_position: GridCoord::new(1, 0, 1),
+                level: 1,
+                current_xp: 0,
+                available_stat_points: 0,
+                available_skill_points: 0,
+                hp: 10.0,
+                max_hp: 10.0,
+            },
+            ActorDebugState {
+                actor_id: game_data::ActorId(2),
+                definition_id: Some(CharacterId("guard".into())),
+                display_name: "Guard".into(),
+                kind: ActorKind::Npc,
+                side: ActorSide::Friendly,
+                group_id: "npc".into(),
+                ap: 6.0,
+                available_steps: 3,
+                turn_open: false,
+                in_combat: false,
+                grid_position: GridCoord::new(3, 1, 2),
+                level: 1,
+                current_xp: 0,
+                available_stat_points: 0,
+                available_skill_points: 0,
+                hp: 10.0,
+                max_hp: 10.0,
+            },
+        ],
+        grid: GridDebugState {
+            grid_size: 1.0,
+            map_id: Some(MapId("test_map".into())),
+            map_width: Some(6),
+            map_height: Some(5),
+            default_level: Some(0),
+            levels: vec![0, 1],
+            static_obstacles: Vec::new(),
+            map_blocked_cells: Vec::new(),
+            map_cells: vec![MapCellDebugState {
+                grid: GridCoord::new(1, 0, 1),
+                blocks_movement: false,
+                blocks_sight: false,
+                terrain: "road".into(),
+                visual: None,
+            }],
+            map_objects: vec![
+                MapObjectDebugState {
+                    object_id: "building_a".into(),
+                    kind: MapObjectKind::Building,
+                    anchor: GridCoord::new(0, 0, 0),
+                    footprint: MapObjectFootprint {
+                        width: 2,
+                        height: 2,
+                    },
+                    rotation: MapRotation::North,
+                    blocks_movement: true,
+                    blocks_sight: true,
+                    occupied_cells: vec![
+                        GridCoord::new(0, 0, 0),
+                        GridCoord::new(1, 0, 0),
+                        GridCoord::new(0, 0, 1),
+                        GridCoord::new(1, 0, 1),
+                    ],
+                    payload_summary: BTreeMap::new(),
+                },
+                MapObjectDebugState {
+                    object_id: "terminal_b".into(),
+                    kind: MapObjectKind::Interactive,
+                    anchor: GridCoord::new(3, 1, 1),
+                    footprint: MapObjectFootprint::default(),
+                    rotation: MapRotation::North,
+                    blocks_movement: false,
+                    blocks_sight: false,
+                    occupied_cells: vec![GridCoord::new(3, 1, 1)],
+                    payload_summary: BTreeMap::new(),
+                },
+            ],
+            runtime_blocked_cells: Vec::new(),
+            topology_version: 1,
+            runtime_obstacle_version: 0,
+        },
+        vision: Default::default(),
+        generated_buildings: Vec::new(),
+        generated_doors: Vec::new(),
+        combat: CombatDebugState {
+            in_combat: false,
+            current_actor_id: None,
+            current_group_id: None,
+            current_turn_index: 0,
+        },
+        interaction_context: InteractionContextSnapshot {
+            world_mode: WorldMode::Outdoor,
+            ..Default::default()
+        },
+        overworld: Default::default(),
+        path_preview: Vec::new(),
+    }
 }
