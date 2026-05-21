@@ -15,6 +15,7 @@
 - `edit-character.md`
 - `edit-map.md`
 - `review-map-visual.md`
+- `test-bevy-game.md`
 
 ## General Rules
 
@@ -43,6 +44,7 @@
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
+- `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
 
 保底编译基线：
 
@@ -59,6 +61,11 @@
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
+
+游戏 smoke 复核：
+
+- `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
+- `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu`
 
 当前 handoff 行为：
 

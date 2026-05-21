@@ -142,6 +142,50 @@ pub(super) fn focus_target_and_peek_prompt(
     prompt
 }
 
+pub(super) fn open_interaction_menu_for_targets(
+    runtime_state: &ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    targets: impl IntoIterator<Item = InteractionTargetId>,
+    cursor_position: Vec2,
+    input_source: &'static str,
+) -> bool {
+    let mut saw_target = false;
+    for target_id in targets {
+        saw_target = true;
+        let prompt = focus_target_and_peek_prompt(runtime_state, viewer_state, target_id.clone());
+        let Some(prompt) = prompt else {
+            continue;
+        };
+        if prompt.options.is_empty() {
+            info!(
+                "viewer.interaction.menu_unavailable target={target_id:?} target_name={} reason=no_options input_source={input_source}",
+                prompt.target_name
+            );
+            continue;
+        }
+
+        log_viewer_interaction(
+            "menu_open",
+            viewer_state.selected_actor,
+            &target_id,
+            &prompt.target_name,
+            None,
+            input_source,
+        );
+        viewer_state.interaction_menu = Some(InteractionMenuState {
+            target_id,
+            cursor_position,
+        });
+        viewer_state.status_line = format!("interaction menu: {} option(s)", prompt.options.len());
+        return true;
+    }
+
+    if saw_target {
+        viewer_state.status_line = "interaction: no available options".to_string();
+    }
+    false
+}
+
 pub(super) fn cursor_interaction_target(
     command_actor_id: Option<ActorId>,
     actor: Option<&game_core::ActorDebugState>,

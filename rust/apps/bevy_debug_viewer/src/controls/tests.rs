@@ -7,9 +7,9 @@ use super::{
     enter_attack_targeting, enter_skill_targeting, execute_primary_target_interaction,
     focus_target_and_query_prompt, handle_keyboard_input, handle_object_primary_click,
     is_command_actor_self_target, manual_pan_offset_from_follow_focus,
-    post_cancel_turn_policy_for_context, refresh_targeting_preview,
-    request_cancel_pending_interaction, request_cancel_pending_movement, CancelMovementContext,
-    PostCancelTurnPolicy,
+    open_interaction_menu_for_targets, post_cancel_turn_policy_for_context,
+    refresh_targeting_preview, request_cancel_pending_interaction, request_cancel_pending_movement,
+    CancelMovementContext, PostCancelTurnPolicy,
 };
 use crate::console::ViewerConsoleState;
 use crate::geometry::{clamp_camera_pan_offset, grid_bounds, selected_actor};
@@ -27,9 +27,9 @@ use game_core::{
 use game_data::{
     ActorId, ActorKind, ActorSide, CharacterId, GridCoord, InteractionOptionId,
     InteractionTargetId, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
-    MapLevelDefinition, MapObjectFootprint, MapObjectKind, MapRotation, MapSize,
-    SkillActivationDefinition, SkillActivationEffect, SkillDefinition, SkillExecutionKind,
-    SkillModifierDefinition, SkillTargetingDefinition,
+    MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
+    MapPickupProps, MapRotation, MapSize, SkillActivationDefinition, SkillActivationEffect,
+    SkillDefinition, SkillExecutionKind, SkillModifierDefinition, SkillTargetingDefinition,
 };
 
 #[test]
@@ -913,6 +913,46 @@ fn cursor_interaction_targets_falls_back_to_grid_actor_after_picked_target() {
 }
 
 #[test]
+fn agent_smoke_right_click_pickup_opens_interaction_menu() {
+    let (runtime, player) = agent_smoke_pickup_runtime();
+    let runtime_state = ViewerRuntimeState {
+        runtime,
+        recent_events: Vec::new(),
+        ai_snapshot: SettlementDebugSnapshot::default(),
+    };
+    let mut viewer_state = ViewerState::default();
+    viewer_state.select_actor(player, ActorSide::Player);
+    let cursor_position = Vec2::new(320.0, 240.0);
+    let target = InteractionTargetId::MapObject("pickup".into());
+
+    let opened = open_interaction_menu_for_targets(
+        &runtime_state,
+        &mut viewer_state,
+        vec![target.clone()],
+        cursor_position,
+        "agent_smoke",
+    );
+
+    assert!(opened, "agent smoke target should open an interaction menu");
+    let menu = viewer_state
+        .interaction_menu
+        .as_ref()
+        .expect("interaction menu should be open");
+    assert_eq!(menu.target_id, target);
+    assert_eq!(menu.cursor_position, cursor_position);
+    let prompt = viewer_state
+        .current_prompt
+        .as_ref()
+        .expect("menu should keep the target prompt visible");
+    assert_eq!(prompt.target_id, target);
+    assert_eq!(
+        prompt.options.first().map(|option| option.id.0.as_str()),
+        Some("pickup")
+    );
+    assert_eq!(viewer_state.status_line, "interaction menu: 1 option(s)");
+}
+
+#[test]
 fn self_primary_interaction_wait_queues_turn_progression() {
     let (runtime, handles) = create_demo_runtime();
     let snapshot = runtime.snapshot();
@@ -1172,6 +1212,75 @@ fn pending_talk_runtime() -> (SimulationRuntime, ActorId, ActorId) {
     });
 
     (SimulationRuntime::from_simulation(simulation), player, npc)
+}
+
+fn agent_smoke_pickup_runtime() -> (SimulationRuntime, ActorId) {
+    let mut simulation = Simulation::new();
+    simulation
+        .grid_world_mut()
+        .load_map(&agent_smoke_pickup_map_definition());
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("agent_smoke_player".into())),
+        display_name: "Agent Smoke Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 1),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation.set_actor_ap(player, 1.0);
+
+    (SimulationRuntime::from_simulation(simulation), player)
+}
+
+fn agent_smoke_pickup_map_definition() -> MapDefinition {
+    MapDefinition {
+        id: MapId("agent_smoke_pickup_map".into()),
+        name: "Agent Smoke Pickup Map".into(),
+        size: MapSize {
+            width: 6,
+            height: 6,
+        },
+        default_level: 0,
+        levels: vec![MapLevelDefinition {
+            y: 0,
+            cells: vec![MapCellDefinition {
+                x: 0,
+                z: 1,
+                blocks_movement: false,
+                blocks_sight: false,
+                terrain: "floor".into(),
+                visual: None,
+                extra: BTreeMap::new(),
+            }],
+        }],
+        entry_points: vec![MapEntryPointDefinition {
+            id: "default_entry".into(),
+            grid: GridCoord::new(0, 0, 1),
+            facing: None,
+            extra: BTreeMap::new(),
+        }],
+        objects: vec![MapObjectDefinition {
+            object_id: "pickup".into(),
+            kind: MapObjectKind::Pickup,
+            anchor: GridCoord::new(2, 0, 1),
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                pickup: Some(MapPickupProps {
+                    item_id: "1005".into(),
+                    min_count: 1,
+                    max_count: 1,
+                    extra: BTreeMap::new(),
+                }),
+                ..MapObjectProps::default()
+            },
+        }],
+    }
 }
 
 #[test]

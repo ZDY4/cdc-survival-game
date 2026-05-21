@@ -315,44 +315,13 @@ pub(crate) fn handle_mouse_input(
                 CancelMovementContext::TargetClick,
                 snapshot.combat.in_combat,
             );
-            let mut opened_menu = false;
-            for target_id in cursor_targets {
-                let prompt = focus_target_and_peek_prompt(
-                    &runtime_state,
-                    &mut viewer_state,
-                    target_id.clone(),
-                );
-                let Some(prompt) = prompt else {
-                    continue;
-                };
-                if prompt.options.is_empty() {
-                    info!(
-                        "viewer.interaction.menu_unavailable target={target_id:?} target_name={} reason=no_options input_source=mouse_menu",
-                        prompt.target_name
-                    );
-                    continue;
-                }
-                log_viewer_interaction(
-                    "menu_open",
-                    viewer_state.selected_actor,
-                    &target_id,
-                    &prompt.target_name,
-                    None,
-                    "mouse_menu",
-                );
-                viewer_state.interaction_menu = Some(InteractionMenuState {
-                    target_id,
-                    cursor_position,
-                });
-                viewer_state.status_line =
-                    format!("interaction menu: {} option(s)", prompt.options.len());
-                opened_menu = true;
-                break;
-            }
-
-            if !opened_menu {
-                viewer_state.status_line = "interaction: no available options".to_string();
-            }
+            open_interaction_menu_for_targets(
+                &runtime_state,
+                &mut viewer_state,
+                cursor_targets,
+                cursor_position,
+                "mouse_menu",
+            );
         } else {
             let cancel_outcome = request_cancel_pending_movement(
                 &mut runtime_state,

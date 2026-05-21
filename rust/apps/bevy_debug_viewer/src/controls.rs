@@ -42,8 +42,9 @@ mod targeting;
 
 pub(crate) use camera::{handle_camera_pan, handle_mouse_wheel_zoom};
 use interaction_input::{
-    cursor_interaction_targets, execute_primary_target_interaction, focus_target_and_peek_prompt,
-    handle_object_primary_click, interaction_menu_contains_cursor, is_command_actor_self_target,
+    cursor_interaction_targets, execute_primary_target_interaction, handle_object_primary_click,
+    interaction_menu_contains_cursor, is_command_actor_self_target,
+    open_interaction_menu_for_targets,
 };
 pub(crate) use interaction_input::{
     handle_dialogue_choice_buttons, handle_interaction_menu_buttons,

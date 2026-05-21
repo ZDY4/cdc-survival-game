@@ -70,6 +70,30 @@ pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map factory -NoOpenEdit
 - 默认继续调用 `open-editor.ps1 -Map <id>` 打开或复用 `bevy_map_editor`。
 - 若使用 `-NoOpenEditor`，则只输出 CLI 复核信息，不启动 editor。
 
+### `test-bevy-game.ps1`
+
+用途：
+
+- 运行 Bevy game 的 agent smoke 测试，验证可自动进入确定的 gameplay runtime 并检查关键交互链路。
+
+何时使用：
+
+- 修改 `bevy_debug_viewer` 输入、picking、交互菜单、运行时 prompt 或世界交互 UI 后。
+- 需要确认 agent 可以用一条命令复核“右键可交互目标会打开交互菜单”。
+
+示例：
+
+```powershell
+pwsh -NoProfile -File tools/agent/test-bevy-game.ps1
+pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu
+```
+
+行为：
+
+- 在 `rust/` workspace 下运行目标 `cargo test`。
+- 当前 `WorldInteractionMenu` 场景会构造固定 gameplay runtime、选中玩家、定位 pickup 目标，并断言交互菜单和 prompt 正常。
+- 输出 console log 和 result JSON 到 `.local/agent-smoke/bevy_game/<timestamp>/`。
+
 ## Maintenance Rule
 
 - 新增脚本时，至少补齐：
