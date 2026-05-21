@@ -163,6 +163,11 @@ impl UiMenuState {
         self.overlay_panel == Some(UiMenuPanel::Settings)
     }
 
+    /// 只有覆盖式 menu 和地图需要暂停玩家的其它 gameplay 输入。
+    pub fn blocks_gameplay_input(&self) -> bool {
+        self.is_settings_open() || self.is_panel_open(UiMenuPanel::Map)
+    }
+
     pub fn open_panel(&mut self, panel: UiMenuPanel) {
         match Self::panel_region(panel) {
             UiMenuRegion::Left => {

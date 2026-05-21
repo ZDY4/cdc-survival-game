@@ -102,7 +102,7 @@ pub(crate) fn handle_mouse_input(
     );
 
     if scene_kind.is_main_menu()
-        || menu_state.any_panel_open()
+        || menu_state.blocks_gameplay_input()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {

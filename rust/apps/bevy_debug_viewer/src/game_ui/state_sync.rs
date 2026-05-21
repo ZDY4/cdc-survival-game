@@ -137,15 +137,16 @@ pub(crate) fn sync_game_ui_state(
     }
 
     let in_main_menu_scene = should_render_main_menu(*scene_kind);
+    let menu_blocks_gameplay_input = menu_state.blocks_gameplay_input();
     input_block_state.blocked = in_main_menu_scene
-        || menu_state.any_panel_open()
+        || menu_blocks_gameplay_input
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
         || modal_state.container.is_some()
         || viewer_state.active_dialogue.is_some()
         || viewer_state.interaction_menu.is_some();
     if (in_main_menu_scene
-        || menu_state.any_panel_open()
+        || menu_blocks_gameplay_input
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
         || modal_state.container.is_some()
@@ -164,7 +165,7 @@ pub(crate) fn sync_game_ui_state(
         "container".to_string()
     } else if viewer_state.active_dialogue.is_some() {
         "dialogue".to_string()
-    } else if menu_state.any_panel_open() {
+    } else if menu_blocks_gameplay_input {
         "menu_panel".to_string()
     } else if viewer_state.interaction_menu.is_some() {
         "interaction_menu".to_string()

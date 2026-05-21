@@ -22,7 +22,7 @@ pub(crate) fn handle_mouse_wheel_zoom(
     }
 
     if scene_kind.is_main_menu()
-        || menu_state.any_panel_open()
+        || menu_state.blocks_gameplay_input()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {
@@ -85,7 +85,7 @@ pub(crate) fn handle_camera_pan(
     }
 
     if scene_kind.is_main_menu()
-        || menu_state.any_panel_open()
+        || menu_state.blocks_gameplay_input()
         || modal_state.item_quantity.is_some()
         || modal_state.trade.is_some()
     {
