@@ -302,15 +302,6 @@ pub(super) fn interaction_menu_contains_cursor(
 }
 
 pub(crate) fn handle_interaction_menu_buttons(
-    mut close_buttons: Query<
-        (&Interaction, &mut BackgroundColor),
-        (
-            Changed<Interaction>,
-            With<Button>,
-            With<crate::state::InteractionMenuCloseButton>,
-            Without<InteractionMenuButton>,
-        ),
-    >,
     mut buttons: Query<
         (
             &Interaction,
@@ -318,11 +309,7 @@ pub(crate) fn handle_interaction_menu_buttons(
             &InteractionMenuButton,
             Option<&crate::ui_context_menu::ContextMenuItemDisabled>,
         ),
-        (
-            Changed<Interaction>,
-            With<Button>,
-            Without<crate::state::InteractionMenuCloseButton>,
-        ),
+        (Changed<Interaction>, With<Button>),
     >,
     mut runtime_state: ResMut<ViewerRuntimeState>,
     mut viewer_state: ResMut<ViewerState>,
@@ -330,14 +317,6 @@ pub(crate) fn handle_interaction_menu_buttons(
 ) {
     if console_state.is_open {
         return;
-    }
-
-    for (interaction, mut background) in &mut close_buttons {
-        *background = BackgroundColor(close_icon_button_color(*interaction));
-        if *interaction == Interaction::Pressed {
-            viewer_state.interaction_menu = None;
-            viewer_state.status_line = "interaction menu: closed".to_string();
-        }
     }
 
     let button_style = ContextMenuStyle::for_variant(ContextMenuVariant::WorldInteraction);

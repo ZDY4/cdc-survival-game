@@ -110,41 +110,6 @@ pub(crate) fn setup_viewer(
             menu.spawn((
                 Node {
                     width: Val::Percent(100.0),
-                    min_height: px(18),
-                    justify_content: JustifyContent::FlexEnd,
-                    ..default()
-                },
-                viewer_ui_passthrough_bundle(),
-            ))
-            .with_children(|header| {
-                header
-                    .spawn((
-                        Button,
-                        Node {
-                            width: px(18),
-                            height: px(18),
-                            padding: UiRect::ZERO,
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        BackgroundColor(close_icon_button_color(Interaction::None)),
-                        viewer_ui_passthrough_bundle(),
-                        crate::state::InteractionMenuCloseButton,
-                    ))
-                    .with_children(|button| {
-                        button.spawn((
-                            Text::new("X"),
-                            TextFont::from_font_size(9.0).with_font(ui_font.clone()),
-                            TextColor(context_menu_text_color()),
-                            TextLayout::new(Justify::Center, LineBreak::NoWrap),
-                            viewer_ui_passthrough_bundle(),
-                        ));
-                    });
-            });
-            menu.spawn((
-                Node {
-                    width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },
