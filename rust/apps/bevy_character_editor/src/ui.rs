@@ -158,7 +158,6 @@ pub(crate) fn editor_ui_system(
                 width: rect.width(),
                 height: rect.height(),
             });
-            preview_camera.block_pointer_input = false;
             let response = ui.allocate_rect(rect, egui::Sense::hover());
             if response.secondary_clicked() {
                 ui_state.preview_context_model_path = picked_preview_model_asset(
@@ -325,7 +324,7 @@ fn render_preview_overlay(
                     });
             });
     }
-    preview_camera.block_pointer_input = response.hovered;
+    preview_camera.block_pointer_input = ctx.is_using_pointer() || response.hovered;
     response
 }
 

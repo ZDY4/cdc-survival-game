@@ -51,11 +51,16 @@ pub(crate) fn editor_ui_system(
 
     egui::SidePanel::right("item_details")
         .default_width(DETAIL_PANEL_WIDTH)
+        .width_range(280.0..=760.0)
         .resizable(true)
         .show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                panels::render_detail_panel(ui, &editor, &preview_state);
-            });
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.set_max_width(ui.available_width());
+                    panels::render_detail_panel(ui, &editor, &preview_state);
+                });
         });
 
     let Ok((preview_camera_component, preview_camera_transform, mut preview_camera)) =
@@ -134,6 +139,7 @@ pub(crate) fn editor_ui_system(
             if hud_response.toggle_pivot {
                 pivot_visibility.toggle();
             }
+            preview_camera.block_pointer_input = ctx.is_using_pointer() || hud_response.hovered;
         });
 }
 
