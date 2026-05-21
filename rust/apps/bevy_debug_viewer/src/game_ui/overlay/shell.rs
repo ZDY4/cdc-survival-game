@@ -11,53 +11,60 @@ pub(super) fn render_main_menu(
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Percent(50.0),
-                top: Val::Percent(50.0),
-                margin: UiRect {
-                    left: px(-220),
-                    top: px(-150),
-                    ..default()
-                },
-                width: px(440),
-                padding: UiRect::all(px(18)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(8),
+                left: px(0),
+                top: px(0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(ui_panel_background()),
             viewer_ui_passthrough_bundle(),
         ))
-        .with_children(|menu| {
-            menu.spawn(text_bundle(font, "CDC Survival Game", 20.0, Color::WHITE));
-            menu.spawn(text_bundle(
-                font,
-                "Bevy 主流程界面",
-                12.0,
-                ui_text_secondary_color(),
-            ));
-            if !status_text.trim().is_empty() {
+        .with_children(|root| {
+            root.spawn((
+                Node {
+                    width: px(440),
+                    padding: UiRect::all(px(18)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(8),
+                    ..default()
+                },
+                BackgroundColor(ui_panel_background()),
+                viewer_ui_passthrough_bundle(),
+            ))
+            .with_children(|menu| {
+                menu.spawn(text_bundle(font, "CDC Survival Game", 20.0, Color::WHITE));
                 menu.spawn(text_bundle(
                     font,
-                    status_text,
-                    11.5,
-                    Color::srgba(0.92, 0.8, 0.56, 1.0),
+                    "Bevy 主流程界面",
+                    12.0,
+                    ui_text_secondary_color(),
                 ));
-            }
-            menu.spawn(action_button(
-                font,
-                "开始新游戏",
-                GameUiButtonAction::MainMenuNewGame,
-            ));
-            menu.spawn(action_button(
-                font,
-                "继续游戏",
-                GameUiButtonAction::MainMenuContinue,
-            ));
-            menu.spawn(action_button(
-                font,
-                "退出游戏",
-                GameUiButtonAction::MainMenuExit,
-            ));
+                if !status_text.trim().is_empty() {
+                    menu.spawn(text_bundle(
+                        font,
+                        status_text,
+                        11.5,
+                        Color::srgba(0.92, 0.8, 0.56, 1.0),
+                    ));
+                }
+                menu.spawn(action_button(
+                    font,
+                    "开始新游戏",
+                    GameUiButtonAction::MainMenuNewGame,
+                ));
+                menu.spawn(action_button(
+                    font,
+                    "继续游戏",
+                    GameUiButtonAction::MainMenuContinue,
+                ));
+                menu.spawn(action_button(
+                    font,
+                    "退出游戏",
+                    GameUiButtonAction::MainMenuExit,
+                ));
+            });
         });
 }
 
