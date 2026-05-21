@@ -49,7 +49,7 @@ pub(crate) fn editor_ui_system(
             panels::render_item_list_panel(ui, &mut editor, &mut commands)
         });
 
-    egui::SidePanel::right("item_details")
+    egui::SidePanel::left("item_details")
         .default_width(DETAIL_PANEL_WIDTH)
         .width_range(280.0..=760.0)
         .resizable(true)
