@@ -189,15 +189,8 @@ pub(super) fn render_inventory_context_menu(
                 font,
                 window,
                 ui.inventory_context_menu.cursor_position,
-                context_menu_estimated_height(actions.len(), true),
+                context_menu_estimated_height(actions.len(), false),
                 |menu| {
-                    spawn_ui_context_menu_header(
-                        menu,
-                        font,
-                        "操作",
-                        &detail.name,
-                        &format!("{} · x{}", detail.item_type.as_str(), detail.count),
-                    );
                     for (label, action) in actions {
                         spawn_context_menu_button(
                             menu,
@@ -223,28 +216,21 @@ pub(super) fn render_inventory_context_menu(
                 &container_state.container_id,
                 &content.items.0,
             );
-            let Some(entry) = snapshot
+            if !snapshot
                 .entries
                 .iter()
-                .find(|entry| entry.item_id == *item_id)
-            else {
+                .any(|entry| entry.item_id == *item_id)
+            {
                 return;
-            };
+            }
             let actions = container_context_menu_actions(&container_state.container_id, *item_id);
             render_ui_context_menu_container(
                 parent,
                 font,
                 window,
                 ui.inventory_context_menu.cursor_position,
-                context_menu_estimated_height(actions.len(), true),
+                context_menu_estimated_height(actions.len(), false),
                 |menu| {
-                    spawn_ui_context_menu_header(
-                        menu,
-                        font,
-                        "操作",
-                        &entry.name,
-                        &format!("容器库存 · x{}", entry.count),
-                    );
                     for (label, action) in actions {
                         spawn_context_menu_button(
                             menu,
@@ -261,20 +247,10 @@ pub(super) fn render_inventory_context_menu(
                 },
             );
         }
-        UiContextMenuTarget::EquipmentSlot { slot_id, item_id } => {
-            let snapshot = inventory_snapshot(
-                &ui.runtime_state.runtime,
-                player_actor,
-                &content.items.0,
-                ui.filter_state.filter,
-                None,
-            );
-            let slot_name = snapshot
-                .equipment
-                .iter()
-                .find(|slot| slot.slot_id == *slot_id)
-                .and_then(|slot| slot.item_name.clone())
-                .unwrap_or_else(|| item_id.to_string());
+        UiContextMenuTarget::EquipmentSlot {
+            slot_id,
+            item_id: _,
+        } => {
             let actions = equipment_context_menu_actions(
                 trade_state.map(|trade| trade.shop_id.as_str()),
                 slot_id,
@@ -284,15 +260,8 @@ pub(super) fn render_inventory_context_menu(
                 font,
                 window,
                 ui.inventory_context_menu.cursor_position,
-                context_menu_estimated_height(actions.len(), true),
+                context_menu_estimated_height(actions.len(), false),
                 |menu| {
-                    spawn_ui_context_menu_header(
-                        menu,
-                        font,
-                        "操作",
-                        &slot_name,
-                        &format!("装备槽: {slot_id}"),
-                    );
                     for (label, action) in actions {
                         spawn_context_menu_button(
                             menu,
