@@ -180,7 +180,7 @@ struct PanelAnchor {
 fn panel_anchor(panel: UiMenuPanel, width: f32) -> PanelAnchor {
     match panel {
         UiMenuPanel::Character | UiMenuPanel::Journal | UiMenuPanel::Skills => PanelAnchor {
-            left: px(LEFT_STAGE_PANEL_X),
+            left: px(0),
             right: Val::Auto,
             margin: default(),
         },
@@ -194,7 +194,7 @@ fn panel_anchor(panel: UiMenuPanel, width: f32) -> PanelAnchor {
         },
         UiMenuPanel::Inventory | UiMenuPanel::Crafting => PanelAnchor {
             left: Val::Auto,
-            right: px(SCREEN_EDGE_PADDING),
+            right: px(0),
             margin: default(),
         },
         UiMenuPanel::Settings => PanelAnchor {
