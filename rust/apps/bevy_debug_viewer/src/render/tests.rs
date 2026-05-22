@@ -267,6 +267,54 @@ fn selection_ring_skips_player_actor() {
 }
 
 #[test]
+fn actor_visibility_to_focus_uses_visible_tiles_when_available() {
+    let mut snapshot = snapshot_with_focus_actor();
+    let map_id = game_data::MapId("test_map".into());
+    snapshot.grid.map_id = Some(map_id.clone());
+    snapshot.actors[1].grid_position = GridCoord::new(1, 0, 0);
+    snapshot.actors[1].level = 0;
+    snapshot.vision = game_core::vision::VisionRuntimeSnapshot {
+        actors: vec![game_core::vision::ActorVisionSnapshot {
+            actor_id: ActorId(1),
+            radius: 10,
+            active_map_id: Some(map_id),
+            visible_cells: vec![GridCoord::new(0, 0, 0)],
+            explored_maps: Vec::new(),
+        }],
+    };
+    let viewer_state = ViewerState {
+        controlled_player_actor: Some(ActorId(1)),
+        ..ViewerState::default()
+    };
+
+    assert!(actor_is_visible_to_focus(
+        &snapshot,
+        &viewer_state,
+        &snapshot.actors[0]
+    ));
+    assert!(!actor_is_visible_to_focus(
+        &snapshot,
+        &viewer_state,
+        &snapshot.actors[1]
+    ));
+}
+
+#[test]
+fn actor_visibility_to_focus_keeps_debug_fallback_without_vision() {
+    let snapshot = snapshot_with_focus_actor();
+    let viewer_state = ViewerState {
+        controlled_player_actor: Some(ActorId(1)),
+        ..ViewerState::default()
+    };
+
+    assert!(actor_is_visible_to_focus(
+        &snapshot,
+        &viewer_state,
+        &snapshot.actors[1]
+    ));
+}
+
+#[test]
 fn interaction_menu_layout_clamps_to_window_bounds() {
     let window = Window {
         resolution: (320, 180).into(),

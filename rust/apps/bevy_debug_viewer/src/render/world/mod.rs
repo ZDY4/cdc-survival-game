@@ -153,6 +153,8 @@ pub(crate) fn sync_world_visuals(
     );
 }
 
+#[cfg(test)]
+pub(crate) use actors::actor_is_visible_to_focus;
 pub(crate) use actors::sync_actor_precise_pick_meshes;
 
 pub(crate) fn update_occluding_world_visuals(

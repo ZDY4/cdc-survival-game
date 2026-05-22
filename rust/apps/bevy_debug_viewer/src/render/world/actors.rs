@@ -56,6 +56,7 @@ pub(super) fn sync_actor_visuals(
         .actors
         .iter()
         .filter(|actor| actor.grid_position.y == viewer_state.current_level)
+        .filter(|actor| actor_is_visible_to_focus(snapshot, viewer_state, actor))
     {
         seen_actor_ids.insert(actor.actor_id);
         let translation = actor_visual_translation(
@@ -183,6 +184,16 @@ pub(super) fn sync_actor_visuals(
     }
 }
 
+pub(crate) fn actor_is_visible_to_focus(
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    actor: &game_core::ActorDebugState,
+) -> bool {
+    current_focus_actor_vision(snapshot, viewer_state)
+        .map(|vision| vision.visible_cells.contains(&actor.grid_position))
+        .unwrap_or(true)
+}
+
 fn actor_motion_anchor_transform(motion_track: Option<&ActorMotionTrack>) -> Transform {
     let step_arc = motion_track.map(ActorMotionTrack::step_arc).unwrap_or(0.0);
     Transform::from_translation(Vec3::Y * (step_arc * ACTOR_STEP_BOB_HEIGHT))
@@ -212,6 +223,7 @@ fn actor_model_foot_min_y(base_model_asset: &str) -> f32 {
 }
 
 pub(crate) fn sync_actor_precise_pick_meshes(
+    actor_visual_state: Res<ActorVisualState>,
     mut mesh_pick_index: ResMut<crate::picking::ViewerMeshPickIndex>,
     meshes: Res<Assets<Mesh>>,
     actor_roots: Query<(Entity, &ActorBodyVisual)>,
@@ -219,6 +231,15 @@ pub(crate) fn sync_actor_precise_pick_meshes(
     mesh_query: Query<(Entity, &Mesh3d, &GlobalTransform)>,
 ) {
     for (root_entity, body) in &actor_roots {
+        if actor_visual_state
+            .by_actor
+            .get(&body.actor_id)
+            .map_or(true, |entry| entry.root_entity != root_entity)
+        {
+            mesh_pick_index.clear_precise_entity(root_entity);
+            continue;
+        }
+
         // The fallback body proxy is registered by sync_actor_visuals. Clear only the previous
         // frame's precise child meshes here so loaded glTF parts can move/update without growing
         // duplicate pick instances or losing the fallback before assets are ready.
