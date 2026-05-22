@@ -93,6 +93,7 @@ fn bake_building_wall_placeholders(asset_dir: &Path, data_dir: &Path) -> Result<
             grid: GridCoord::new(0, 0, 0),
             wall_set_id: WorldWallTileSetId("building_wall".into()),
             translation: Vec3::ZERO,
+            footprint_size: Vec2::splat(1.0),
             height: 2.4,
             thickness: 0.6,
             visual_kind: MapBuildingWallVisualKind::Grid,

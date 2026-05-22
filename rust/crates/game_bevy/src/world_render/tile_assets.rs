@@ -123,26 +123,46 @@ fn prepare_tile_batch(
             .instances
             .iter()
             .enumerate()
-            .map(|(instance_index, instance)| PreparedTileInstance {
-                handle: WorldRenderTileInstanceHandle {
-                    batch_id: WorldRenderTileBatchId(batch_index),
-                    instance_index: instance_index as u32,
-                },
-                transform: Transform::from_translation(instance.translation)
-                    .with_rotation(instance.rotation)
-                    .with_scale(instance.scale),
-                semantic: instance.semantic.clone(),
-                occluder_kind: instance.occluder_kind.clone(),
-                occluder_cells: instance.occluder_cells.clone(),
-                world_aabb_center: instance.translation + instance.rotation * local_center,
-                world_aabb_half_extents: Vec3::new(
-                    local_half_extents.x * instance.scale.x.abs().max(0.001),
-                    local_half_extents.y * instance.scale.y.abs().max(0.001),
-                    local_half_extents.z * instance.scale.z.abs().max(0.001),
-                ),
+            .map(|(instance_index, instance)| {
+                let (world_aabb_center, world_aabb_half_extents) =
+                    prepared_instance_world_bounds(instance, local_center, local_half_extents);
+                PreparedTileInstance {
+                    handle: WorldRenderTileInstanceHandle {
+                        batch_id: WorldRenderTileBatchId(batch_index),
+                        instance_index: instance_index as u32,
+                    },
+                    transform: Transform::from_translation(instance.translation)
+                        .with_rotation(instance.rotation)
+                        .with_scale(instance.scale),
+                    semantic: instance.semantic.clone(),
+                    occluder_kind: instance.occluder_kind.clone(),
+                    occluder_cells: instance.occluder_cells.clone(),
+                    world_aabb_center,
+                    world_aabb_half_extents,
+                }
             })
             .collect(),
     })
+}
+
+fn prepared_instance_world_bounds(
+    instance: &crate::tile_world::TileInstanceSpec,
+    local_center: Vec3,
+    local_half_extents: Vec3,
+) -> (Vec3, Vec3) {
+    if let Some(bounds) = instance.world_bounds {
+        // 显式 bounds 来自规则或内容规格，优先级高于资产 catalog 的近似 AABB。
+        return (bounds.center, bounds.half_extents);
+    }
+
+    (
+        instance.translation + instance.rotation * local_center,
+        Vec3::new(
+            local_half_extents.x * instance.scale.x.abs().max(0.001),
+            local_half_extents.y * instance.scale.y.abs().max(0.001),
+            local_half_extents.z * instance.scale.z.abs().max(0.001),
+        ),
+    )
 }
 
 impl PreparedTileBatch {
@@ -240,4 +260,33 @@ fn gltf_node_transform(node: &gltf::Node<'_>) -> Transform {
 
 fn asset_path_on_disk(asset_path: &str) -> std::path::PathBuf {
     rust_asset_path(asset_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::prepared_instance_world_bounds;
+    use crate::tile_world::{TileInstanceSpec, TileWorldBounds};
+    use bevy::prelude::*;
+
+    #[test]
+    fn prepared_instance_world_bounds_prefers_explicit_bounds() {
+        let instance = TileInstanceSpec {
+            translation: Vec3::new(10.0, 0.0, 10.0),
+            rotation: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+            scale: Vec3::splat(4.0),
+            semantic: None,
+            occluder_kind: None,
+            occluder_cells: Vec::new(),
+            world_bounds: Some(TileWorldBounds {
+                center: Vec3::new(1.5, 2.0, 3.5),
+                half_extents: Vec3::new(0.5, 0.75, 0.5),
+            }),
+        };
+
+        let (center, half_extents) =
+            prepared_instance_world_bounds(&instance, Vec3::ZERO, Vec3::splat(2.0));
+
+        assert_eq!(center, Vec3::new(1.5, 2.0, 3.5));
+        assert_eq!(half_extents, Vec3::new(0.5, 0.75, 0.5));
+    }
 }

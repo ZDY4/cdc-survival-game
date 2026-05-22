@@ -103,6 +103,7 @@ pub struct StaticWorldBuildingWallTileSpec {
     pub grid: GridCoord,
     pub wall_set_id: WorldWallTileSetId,
     pub translation: Vec3,
+    pub footprint_size: Vec2,
     pub height: f32,
     pub thickness: f32,
     pub visual_kind: MapBuildingWallVisualKind,

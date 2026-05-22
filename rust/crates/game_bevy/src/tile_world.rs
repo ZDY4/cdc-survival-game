@@ -3,7 +3,7 @@ use game_core::{MapCellDebugState, MapObjectDebugState, SimulationSnapshot};
 use game_data::{
     expand_object_footprint, GridCoord, MapDefinition, MapObjectDefinition, MapRotation,
     OverworldCellDefinition, OverworldDefinition, TileSlopeKind, WorldSurfaceTileSetDefinition,
-    WorldTileBounds, WorldTileLibrary, WorldTilePrototypeId,
+    WorldTileBounds, WorldTileLibrary, WorldTilePrototypeDefinition, WorldTilePrototypeId,
 };
 use std::collections::HashMap;
 
@@ -25,6 +25,13 @@ pub struct TilePickProxySpec {
     pub semantic: Option<StaticWorldSemantic>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TileWorldBounds {
+    // 规则层已经能给出明确几何时，渲染/拾取/遮挡都应使用这份 world-space bounds。
+    pub center: Vec3,
+    pub half_extents: Vec3,
+}
+
 #[derive(Debug, Clone)]
 pub struct TilePlacementSpec {
     pub prototype_id: WorldTilePrototypeId,
@@ -35,6 +42,7 @@ pub struct TilePlacementSpec {
     pub semantic: Option<StaticWorldSemantic>,
     pub occluder_kind: Option<StaticWorldOccluderKind>,
     pub occluder_cells: Vec<GridCoord>,
+    pub world_bounds: Option<TileWorldBounds>,
     pub pick_proxy: Option<TilePickProxySpec>,
 }
 
@@ -58,6 +66,7 @@ pub struct TileInstanceSpec {
     pub semantic: Option<StaticWorldSemantic>,
     pub occluder_kind: Option<StaticWorldOccluderKind>,
     pub occluder_cells: Vec<GridCoord>,
+    pub world_bounds: Option<TileWorldBounds>,
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +102,7 @@ pub fn resolve_tile_world_scene(
             semantic: placement.semantic.clone(),
             occluder_kind: placement.occluder_kind.clone(),
             occluder_cells: placement.occluder_cells.clone(),
+            world_bounds: placement.world_bounds,
         };
         let batch_index = if let Some(index) = batch_indices.get(&key) {
             *index
@@ -140,6 +150,7 @@ pub fn resolve_surface_tile_placements(
                 semantic: tile.semantic.clone(),
                 occluder_kind: None,
                 occluder_cells: Vec::new(),
+                world_bounds: None,
                 pick_proxy: None,
             })
         })
@@ -173,21 +184,48 @@ pub fn resolve_building_wall_tile_placements(
                 WallTopologyArchetype::TJunction => wall_set.t_junction_prototype_id.clone(),
                 WallTopologyArchetype::Cross => wall_set.cross_prototype_id.clone(),
             };
+            let scale = building_wall_tile_scale(tile, library.prototype(&prototype_id));
             Some(TilePlacementSpec {
                 prototype_id,
                 translation: tile.translation,
                 rotation,
-                scale: Vec3::ONE,
+                scale,
                 render_class: TileRenderClass::BuildingWallGrid(tile.visual_kind),
                 semantic: tile.semantic.clone(),
                 occluder_kind: Some(StaticWorldOccluderKind::MapObject(
                     game_data::MapObjectKind::Building,
                 )),
                 occluder_cells: tile.occluder_cells.clone(),
+                world_bounds: Some(building_wall_tile_world_bounds(tile)),
                 pick_proxy: None,
             })
         })
         .collect()
+}
+
+fn building_wall_tile_world_bounds(tile: &StaticWorldBuildingWallTileSpec) -> TileWorldBounds {
+    TileWorldBounds {
+        center: tile.translation,
+        half_extents: Vec3::new(
+            tile.footprint_size.x.max(0.001) * 0.5,
+            tile.height.max(0.001) * 0.5,
+            tile.footprint_size.y.max(0.001) * 0.5,
+        ),
+    }
+}
+
+fn building_wall_tile_scale(
+    tile: &StaticWorldBuildingWallTileSpec,
+    prototype: Option<&WorldTilePrototypeDefinition>,
+) -> Vec3 {
+    let Some(bounds) = prototype.map(|prototype| &prototype.bounds) else {
+        return Vec3::ONE;
+    };
+    Vec3::new(
+        scale_axis(tile.footprint_size.x.max(0.001), bounds.size.x),
+        scale_axis(tile.height.max(0.001), bounds.size.y),
+        scale_axis(tile.footprint_size.y.max(0.001), bounds.size.z),
+    )
 }
 
 pub fn resolve_map_object_visual_placements(
@@ -340,6 +378,7 @@ fn map_object_visual_placement(
         occluder_kind: (object.blocks_movement || object.blocks_sight)
             .then_some(StaticWorldOccluderKind::MapObject(object.kind)),
         occluder_cells: occupied_cells.clone(),
+        world_bounds: None,
         pick_proxy: Some(TilePickProxySpec {
             size: Vec3::new(
                 width.max(grid_size * 0.4),
@@ -384,6 +423,7 @@ fn snapshot_object_visual_placement(
         occluder_kind: (object.blocks_movement || object.blocks_sight)
             .then_some(StaticWorldOccluderKind::MapObject(object.kind)),
         occluder_cells: object.occupied_cells.clone(),
+        world_bounds: None,
         pick_proxy: Some(TilePickProxySpec {
             size: Vec3::new(
                 width.max(grid_size * 0.4),
@@ -562,6 +602,7 @@ fn push_surface_top_placement(
         semantic: None,
         occluder_kind: None,
         occluder_cells: Vec::new(),
+        world_bounds: None,
         pick_proxy: None,
     });
 }
@@ -738,6 +779,7 @@ fn push_surface_vertical_placement(
         semantic: None,
         occluder_kind: None,
         occluder_cells: Vec::new(),
+        world_bounds: None,
         pick_proxy: None,
     });
 }
@@ -863,7 +905,7 @@ mod tests {
     use game_data::{
         load_world_tile_library, MapBuildingWallVisualKind, MapCellDefinition, MapCellVisualSpec,
         MapDefinition, MapEntryPointDefinition, MapId, MapLevelDefinition, MapSize,
-        WorldSurfaceTileSetId,
+        WorldSurfaceTileSetId, WorldWallTileSetId,
     };
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -888,6 +930,69 @@ mod tests {
     }
 
     #[test]
+    fn building_wall_placement_uses_wall_spec_bounds_and_scale() {
+        let temp_dir = create_temp_dir("tile_world_building_wall_bounds");
+        fs::write(
+            temp_dir.join("wall.json"),
+            serde_json::to_string_pretty(&json!({
+                "prototypes": [
+                    prototype_json("building_wall/isolated", 1.0, 2.4, 1.0),
+                    prototype_json("building_wall/end", 1.0, 2.4, 1.0),
+                    prototype_json("building_wall/straight", 1.0, 2.4, 1.0),
+                    prototype_json("building_wall/corner", 1.0, 2.4, 1.0),
+                    prototype_json("building_wall/t_junction", 1.0, 2.4, 1.0),
+                    prototype_json("building_wall/cross", 1.0, 2.4, 1.0)
+                ],
+                "wall_sets": [{
+                    "id": "building_wall",
+                    "isolated_prototype_id": "building_wall/isolated",
+                    "end_prototype_id": "building_wall/end",
+                    "straight_prototype_id": "building_wall/straight",
+                    "corner_prototype_id": "building_wall/corner",
+                    "t_junction_prototype_id": "building_wall/t_junction",
+                    "cross_prototype_id": "building_wall/cross"
+                }]
+            }))
+            .expect("serialize catalog"),
+        )
+        .expect("write catalog");
+        let library = load_world_tile_library(&temp_dir).expect("load test tile library");
+        let wall = StaticWorldBuildingWallTileSpec {
+            building_object_id: "building".into(),
+            story_level: 0,
+            grid: GridCoord::new(4, 0, 7),
+            wall_set_id: WorldWallTileSetId("building_wall".into()),
+            translation: Vec3::new(4.5, 0.86, 7.5),
+            footprint_size: Vec2::splat(1.0),
+            height: 1.5,
+            thickness: 0.36,
+            visual_kind: MapBuildingWallVisualKind::Grid,
+            neighbors: BuildingWallNeighborMask {
+                north: true,
+                east: false,
+                south: true,
+                west: false,
+            },
+            occluder_cells: vec![GridCoord::new(4, 0, 7)],
+            semantic: Some(StaticWorldSemantic::MapObject("building".into())),
+        };
+
+        let placements = resolve_building_wall_tile_placements(&[wall], &library);
+
+        assert_eq!(placements.len(), 1);
+        let placement = &placements[0];
+        assert_eq!(placement.prototype_id.as_str(), "building_wall/straight");
+        assert!((placement.scale.y - 0.625).abs() < 0.0001);
+        assert_eq!(
+            placement.world_bounds,
+            Some(TileWorldBounds {
+                center: Vec3::new(4.5, 0.86, 7.5),
+                half_extents: Vec3::new(0.5, 0.75, 0.5),
+            })
+        );
+    }
+
+    #[test]
     fn resolve_tile_world_scene_batches_same_prototype_and_render_class() {
         let placements = vec![
             TilePlacementSpec {
@@ -899,6 +1004,7 @@ mod tests {
                 semantic: None,
                 occluder_kind: None,
                 occluder_cells: Vec::new(),
+                world_bounds: None,
                 pick_proxy: Some(TilePickProxySpec {
                     size: Vec3::splat(1.0),
                     translation: Vec3::new(1.0, 0.5, 1.0),
@@ -914,6 +1020,7 @@ mod tests {
                 semantic: None,
                 occluder_kind: None,
                 occluder_cells: Vec::new(),
+                world_bounds: None,
                 pick_proxy: None,
             },
             TilePlacementSpec {
@@ -925,6 +1032,7 @@ mod tests {
                 semantic: None,
                 occluder_kind: None,
                 occluder_cells: Vec::new(),
+                world_bounds: None,
                 pick_proxy: None,
             },
         ];

@@ -267,6 +267,7 @@ fn push_generated_building_specs(
                 floor_top + wall_height * 0.5,
                 (cell.z as f32 + 0.5) * grid_size,
             ),
+            footprint_size: Vec2::splat(grid_size),
             height: wall_height,
             thickness: (story.wall_thickness * grid_size).clamp(0.02, grid_size),
             visual_kind: building.wall_visual.kind,

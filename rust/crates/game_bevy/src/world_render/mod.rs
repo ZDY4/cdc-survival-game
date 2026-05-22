@@ -555,6 +555,7 @@ fn overworld_location_marker_placement(
         semantic: semantic.clone(),
         occluder_kind: None,
         occluder_cells: vec![grid],
+        world_bounds: None,
         pick_proxy: Some(TilePickProxySpec {
             size: Vec3::new(grid_size * 0.86, grid_size, grid_size * 0.86),
             translation: Vec3::new(center_x, floor_top + grid_size * 0.5, center_z),
