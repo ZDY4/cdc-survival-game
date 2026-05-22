@@ -1,6 +1,7 @@
 //! Viewer 相机与基础场景入口：负责相机、灯光、UI 根节点初始化以及相机跟随更新。
 
 use super::*;
+use crate::debug_panel::spawn_debug_panel;
 use crate::info_panels::spawn_info_panel_ui;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::picking::prelude::MeshPickingCamera;
@@ -283,7 +284,8 @@ pub(crate) fn setup_viewer(
                 DialoguePanelHintLabel,
             ));
         });
-    spawn_console_panel(&mut commands, ui_font, &palette);
+    spawn_console_panel(&mut commands, ui_font.clone(), &palette);
+    spawn_debug_panel(&mut commands, ui_font, &palette);
 }
 
 pub(crate) fn update_camera(

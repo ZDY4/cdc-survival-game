@@ -2,6 +2,7 @@ mod app;
 mod bootstrap;
 pub(crate) mod console;
 mod controls;
+mod debug_panel;
 mod dialogue;
 mod game_ui;
 mod geometry;

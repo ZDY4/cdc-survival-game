@@ -33,12 +33,12 @@ const CONSOLE_HINT_SIZE_PX: f32 = 10.0;
 const CONSOLE_FEEDBACK_SIZE_PX: f32 = 11.5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ConsoleCommandSpec {
-    name: &'static str,
-    summary: &'static str,
+pub(crate) struct ConsoleCommandSpec {
+    pub name: &'static str,
+    pub summary: &'static str,
 }
 
-const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[
+pub(crate) const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[
     ConsoleCommandSpec {
         name: "ob mode",
         summary: "Toggle player control / free observe mode.",
@@ -455,7 +455,7 @@ fn submission_command_line(console_state: &ViewerConsoleState) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn execute_console_command(
+pub(crate) fn execute_console_command(
     command_line: &str,
     runtime_state: &mut ViewerRuntimeState,
     viewer_state: &mut ViewerState,

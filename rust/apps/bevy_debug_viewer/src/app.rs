@@ -18,8 +18,13 @@ use crate::console::{
     handle_console_input, toggle_console, update_console_panel, ViewerConsoleState,
 };
 use crate::controls::{
-    handle_camera_pan, handle_dialogue_body_mouse_wheel, handle_dialogue_choice_buttons, handle_interaction_menu_buttons,
-    handle_keyboard_input, handle_mouse_input, handle_mouse_wheel_zoom,
+    handle_camera_pan, handle_dialogue_body_mouse_wheel, handle_dialogue_choice_buttons,
+    handle_interaction_menu_buttons, handle_keyboard_input, handle_mouse_input,
+    handle_mouse_wheel_zoom,
+};
+use crate::debug_panel::{
+    handle_debug_panel_buttons, handle_debug_panel_keyboard_input, toggle_debug_panel,
+    update_debug_panel, ViewerDebugPanelState,
 };
 use crate::game_ui::{
     apply_ui_settings_system, handle_game_ui_buttons, handle_inventory_list_mouse_wheel,
@@ -36,10 +41,10 @@ use crate::profiling::{
     ViewerSystemProfilerState,
 };
 use crate::render::{
-    setup_viewer, sync_actor_precise_pick_meshes, sync_dialogue_body_scrollbar, sync_dialogue_panel_diagnostics,
-    sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals, sync_hover_mesh_outlines,
-    sync_stable_interaction_hover, tick_fog_of_war_transition, update_camera,
-    update_dialogue_panel, update_interaction_menu, FogOfWarPostProcessPlugin,
+    setup_viewer, sync_actor_precise_pick_meshes, sync_dialogue_body_scrollbar,
+    sync_dialogue_panel_diagnostics, sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals,
+    sync_hover_mesh_outlines, sync_stable_interaction_hover, tick_fog_of_war_transition,
+    update_camera, update_dialogue_panel, update_interaction_menu, FogOfWarPostProcessPlugin,
     StableInteractionHoverState,
 };
 use crate::simulation::{
@@ -110,6 +115,7 @@ pub(crate) fn run() {
         .insert_resource(UiInventoryScrollbarDragState::default())
         .insert_resource(ViewerInfoPanelState::default())
         .insert_resource(ViewerConsoleState::default())
+        .insert_resource(ViewerDebugPanelState::default())
         .insert_resource(ViewerSystemProfilerState::default())
         .insert_resource(ViewerVisionTrackerState::default())
         .insert_resource(bootstrap_status)
@@ -223,6 +229,8 @@ impl Plugin for ViewerAppPlugin {
                 sync_ai_snapshot,
                 toggle_console,
                 handle_console_input,
+                toggle_debug_panel,
+                handle_debug_panel_keyboard_input,
                 handle_keyboard_input,
                 handle_dialogue_body_mouse_wheel,
                 handle_mouse_wheel_zoom,
@@ -240,6 +248,7 @@ impl Plugin for ViewerAppPlugin {
                 handle_interaction_menu_buttons,
                 handle_dialogue_choice_buttons,
                 handle_inventory_panel_pointer_input,
+                handle_debug_panel_buttons,
                 handle_game_ui_buttons,
                 sync_profiler_activation,
                 profiled_tick_runtime,
@@ -297,6 +306,7 @@ impl Plugin for ViewerAppPlugin {
                 crate::info_panels::update_info_panel,
                 crate::info_panels::update_fps_overlay,
                 update_console_panel,
+                update_debug_panel,
                 update_hover_tooltip_state,
                 profiled_update_game_ui,
                 sync_inventory_list_scrollbar,

@@ -15,9 +15,14 @@ pub(crate) fn handle_keyboard_input(
     settings: Res<ViewerUiSettings>,
     skills: Res<SkillDefinitions>,
     console_state: Res<ViewerConsoleState>,
+    debug_panel_state: Option<Res<crate::debug_panel::ViewerDebugPanelState>>,
     scene_kind: Res<ViewerSceneKind>,
 ) {
-    if console_state.is_open {
+    if console_state.is_open
+        || debug_panel_state
+            .as_ref()
+            .is_some_and(|state| state.is_open)
+    {
         clear_world_hover_state(&runtime_state, &mut viewer_state);
         return;
     }
