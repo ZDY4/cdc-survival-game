@@ -1,4 +1,16 @@
-//! 遮挡可视化模块：负责 occluder 状态构建、材质淡化和世界悬停屏蔽判定。
+//! debug viewer 的遮挡半透运行时逻辑。
+//!
+//! 本模块不负责决定哪些地图元素要生成，它只接收 `static_world` 和 `doors`
+//! 构建出的 `StaticWorldOccluderVisual`，在每帧根据相机、焦点和玩家可见格子决定
+//! occluder 是否进入半透状态。当前有两类触发规则：
+//!
+//! - `RayOrVisibleCells`：门和普通物体使用；相机到焦点的线段被挡住，或投影遮住玩家
+//!   可见格子，都会半透。
+//! - `VisibleCellsOnly`：建筑墙使用；只有墙片投影遮住玩家可见格子时才半透，不能因为
+//!   相机射线穿过墙片就触发，否则会把与玩家视野无关的墙段淡化。
+//!
+//! 建筑墙是 instanced 渲染，半透状态通过 per-instance visual state 写入 shader；不要在
+//! 这里直接改共享墙材质，否则同一 batch 的其它墙片会被一起影响。
 
 use super::*;
 

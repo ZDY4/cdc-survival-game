@@ -1,5 +1,17 @@
-//! 共享静态世界适配层：把 `game_bevy::static_world` 的共享 scene spec
-//! 映射到 debug viewer 的材质、拾取与 occlusion 语义。
+//! debug viewer 的静态世界渲染适配层。
+//!
+//! 共享层负责从模拟快照生成地图 tile、建筑墙、地物和语义信息；本模块把这些共享
+//! scene spec 转成 debug viewer 需要的 Bevy entity、材质、拾取代理和 occluder。
+//! 这里不是地图规则来源，也不重新定义长期数据结构，只做运行时表现层装配。
+//!
+//! 维护时重点注意三条边界：
+//!
+//! - 建筑墙走 `TileRenderClass::BuildingWallGrid` 的 instanced 渲染路径；每片墙都要注册
+//!   tile instance handle，半透由 per-instance visual state 控制，不能改整批共享材质。
+//! - 墙片 occluder 使用 `VisibleCellsOnly`，只在遮挡玩家可见格子时半透；普通 tile 和门
+//!   仍由 occlusion/doors 模块保留射线触发半透。
+//! - 建筑墙为了能点选和显示 outline，会额外生成不可见 pick proxy；这个 proxy 只负责
+//!   交互，不参与墙面半透材质计算。
 
 use super::*;
 use bevy::camera::visibility::NoFrustumCulling;
