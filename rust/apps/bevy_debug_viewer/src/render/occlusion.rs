@@ -192,6 +192,8 @@ pub(super) fn project_shadowed_visible_cells(
     grid_size: f32,
     render_config: ViewerRenderConfig,
 ) -> Vec<GridCoord> {
+    // 用相机 pitch/yaw 把遮挡物顶部向地面投影，得到“从当前视角会被挡住”的格子集合。
+    // 后续只要这些格子里有玩家可见格子，就认为 occluder 正在遮挡视野。
     if base_cells.is_empty() {
         return Vec::new();
     }
@@ -221,6 +223,7 @@ pub(super) fn project_shadowed_visible_cells(
     let base_cells_set = base_cells.iter().copied().collect::<HashSet<_>>();
     let mut shadowed = HashSet::new();
     let step = 0.2_f32;
+    // 同一格内多点采样，避免细墙或斜向投影时只取中心点导致漏掉相邻可见格。
     let sample_offsets = [
         Vec2::new(0.5, 0.5),
         Vec2::new(0.2, 0.2),
@@ -258,6 +261,7 @@ pub(super) fn occluder_blocks_visible_cells(
     occluder: &StaticWorldOccluderVisual,
     visible_cells: &HashSet<GridCoord>,
 ) -> bool {
+    // 这里比较的是“投影遮挡格子”和“玩家当前可见格子”，不是 occluder 自身占用格。
     occluder
         .shadowed_visible_cells
         .iter()
@@ -276,6 +280,7 @@ pub(super) fn should_fade_occluder(
             occluder_blocks_visible_cells(occluder, visible_cells)
         }
         StaticWorldOccluderFadeRule::RayOrVisibleCells => {
+            // 门和普通物体沿用旧体验：挡住焦点射线或挡住可见格子，都会触发半透。
             occluder_should_fade(
                 camera_position,
                 focus_points,
@@ -390,6 +395,7 @@ pub(super) fn update_occluder_list_fade(
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
     for occluder in occluders {
+        // 当前鼠标悬停的门不强制半透，避免玩家操作门时门面闪烁或难以点中。
         let should_fade = if occluder.hover_map_object_id.as_deref() == hovered_map_object_id {
             false
         } else {
@@ -419,6 +425,7 @@ pub(super) fn apply_tile_instance_fade_updates(
             continue;
         }
 
+        // 建筑墙使用 instanced material，半透状态通过 per-instance visual state 写入 shader。
         let visual_state = tile_instance_visual_state_for_fade(
             tile_instance.base_color,
             tile_instance.desired_faded,

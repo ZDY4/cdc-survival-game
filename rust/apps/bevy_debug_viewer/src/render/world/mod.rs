@@ -178,6 +178,7 @@ pub(crate) fn update_occluding_world_visuals(
     let visible_cells = current_focus_actor_vision(&snapshot, &viewer_state)
         .filter(|vision| vision.active_map_id.as_ref() == snapshot.grid.map_id.as_ref())
         .map(|vision| {
+            // 半透只关心当前楼层里玩家已经可见的格子，跨楼层视野不参与墙面淡化。
             vision
                 .visible_cells
                 .iter()
@@ -211,6 +212,7 @@ pub(crate) fn update_occluding_world_visuals(
     {
         let state = &mut *static_world_state;
         let (occluders, tile_instances) = (&mut state.occluders, &mut state.tile_instances);
+        // 静态世界每帧先计算 occluder 是否应淡化，再批量写回 tile instance 的渲染状态。
         update_occluder_list_fade(
             occluders,
             camera_position,

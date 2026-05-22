@@ -110,6 +110,7 @@ pub(super) fn collect_closed_door_occluders(
         .map(|visual| StaticWorldOccluderVisual {
             material: visual.material.clone(),
             tile_instance_handle: None,
+            // 门保留射线触发半透，玩家靠近或悬停门时仍能看清/点中门后的焦点。
             fade_rule: StaticWorldOccluderFadeRule::RayOrVisibleCells,
             base_color: visual.base_color,
             base_alpha: visual.base_alpha,

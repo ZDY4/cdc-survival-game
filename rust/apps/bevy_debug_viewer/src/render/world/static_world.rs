@@ -301,6 +301,8 @@ pub(super) fn rebuild_static_world(
                 commands.entity(batch_root).add_child(proxy_entity);
             }
             if let Some(handle) = spawned.tile_instance_handle {
+                // 墙体半透由 tile instance visual state 驱动，不能改共享材质；
+                // 否则一个实例淡化会把同 batch 里其它墙片一起带成半透。
                 static_world_state.tile_instances.insert(
                     handle,
                     StaticWorldTileInstanceVisual {
@@ -508,6 +510,7 @@ fn spawn_tile_instance(
                 material: building_wall_instance_material
                     .expect("building wall tile metadata should carry wall material"),
                 tile_instance_handle: Some(instance.handle),
+                // 每个墙片独立按投影遮挡的可见格判断，不用相机到焦点的射线规则。
                 occluder_fade_rule: StaticWorldOccluderFadeRule::VisibleCellsOnly,
                 aabb_center: instance.world_aabb_center,
                 aabb_half_extents: instance.world_aabb_half_extents,

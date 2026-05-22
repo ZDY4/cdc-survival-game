@@ -46,7 +46,9 @@ pub(crate) enum StaticWorldOccluderKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StaticWorldOccluderFadeRule {
+    // 普通遮挡物和门：既要保证玩家/悬停目标不被相机方向挡住，也要处理可见格子被遮挡。
     RayOrVisibleCells,
+    // 建筑墙：只在墙面挡住玩家已经可见的格子时半透，避免整排墙被相机射线误触发。
     VisibleCellsOnly,
 }
 
@@ -60,6 +62,7 @@ pub(crate) struct StaticWorldOccluderVisual {
     pub base_alpha_mode: AlphaMode,
     pub aabb_center: Vec3,
     pub aabb_half_extents: Vec3,
+    // 当前相机角度下，该遮挡物在地面上投影会盖住的格子；用于判断是否遮挡玩家视野。
     pub shadowed_visible_cells: Vec<GridCoord>,
     pub hover_map_object_id: Option<String>,
     pub currently_faded: bool,
