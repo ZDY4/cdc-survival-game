@@ -16,6 +16,11 @@ pub(crate) fn handle_mouse_wheel_zoom(
         return;
     }
 
+    if viewer_state.active_dialogue.is_some() {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    }
+
     if viewer_state.is_interaction_menu_open() {
         for _ in mouse_wheel_events.read() {}
         return;
@@ -46,6 +51,92 @@ pub(crate) fn handle_mouse_wheel_zoom(
     let zoom_multiplier = (1.0 + scroll_delta * 0.12).clamp(0.5, 2.0);
     render_config.zoom_factor = (render_config.zoom_factor * zoom_multiplier).clamp(0.5, 4.0);
     viewer_state.status_line = format!("zoom: {:.0}%", render_config.zoom_factor * 100.0);
+}
+
+pub(crate) fn handle_dialogue_body_mouse_wheel(
+    window: Single<&Window>,
+    mut mouse_wheel_events: MessageReader<MouseWheel>,
+    scene_kind: Res<ViewerSceneKind>,
+    console_state: Res<ViewerConsoleState>,
+    viewer_state: Res<ViewerState>,
+    mut scroll_areas: Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+            &InheritedVisibility,
+            &mut ScrollPosition,
+        ),
+        With<DialoguePanelBodyScrollArea>,
+    >,
+) {
+    if scene_kind.is_main_menu() || console_state.is_open || viewer_state.active_dialogue.is_none()
+    {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    }
+
+    let Some(cursor_position) = window.cursor_position() else {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    };
+
+    let Some((computed, _, _, _, _, mut scroll_position)) =
+        scroll_areas.iter_mut().find(
+            |(computed, transform, cursor, visibility, inherited_visibility, _)| {
+                visible_node_contains_cursor(
+                    cursor_position,
+                    computed,
+                    transform,
+                    *cursor,
+                    *visibility,
+                    inherited_visibility,
+                )
+            },
+        )
+    else {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    };
+
+    let max_scroll =
+        (computed.content_size.y - computed.size.y + computed.scrollbar_size.y).max(0.0);
+    if max_scroll <= f32::EPSILON {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    }
+
+    let mut scroll_delta = 0.0f32;
+    for event in mouse_wheel_events.read() {
+        scroll_delta += match event.unit {
+            bevy::input::mouse::MouseScrollUnit::Line => event.y * 36.0,
+            bevy::input::mouse::MouseScrollUnit::Pixel => event.y,
+        };
+    }
+    if scroll_delta.abs() <= f32::EPSILON {
+        return;
+    }
+
+    scroll_position.y = (scroll_position.y - scroll_delta).clamp(0.0, max_scroll);
+}
+
+fn visible_node_contains_cursor(
+    cursor_position: Vec2,
+    computed_node: &ComputedNode,
+    transform: &UiGlobalTransform,
+    cursor: Option<&RelativeCursorPosition>,
+    visibility: Option<&Visibility>,
+    inherited_visibility: &InheritedVisibility,
+) -> bool {
+    if !inherited_visibility.get()
+        || visibility.is_some_and(|visibility| *visibility == Visibility::Hidden)
+    {
+        return false;
+    }
+
+    cursor.is_some_and(RelativeCursorPosition::cursor_over)
+        || computed_node.contains_point(*transform, cursor_position)
 }
 
 pub(crate) fn handle_camera_pan(

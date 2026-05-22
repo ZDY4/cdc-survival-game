@@ -24,10 +24,10 @@ use crate::render::interaction_menu_layout;
 use crate::simulation::{cancel_pending_interaction, cancel_pending_movement, submit_end_turn};
 use crate::state::{
     cursor_over_visible_ui_blocker, visible_ui_blocker_contains_cursor, DialogueChoiceButton,
-    InteractionMenuButton, InteractionMenuState, UiMouseBlocker, UiMouseBlockerName,
-    ViewerActorMotionState, ViewerCamera, ViewerInfoPanelState, ViewerRenderConfig,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction, ViewerTargetingSource,
-    ViewerTargetingState, ViewerUiSettings,
+    DialoguePanelBodyScrollArea, InteractionMenuButton, InteractionMenuState, UiMouseBlocker,
+    UiMouseBlockerName, ViewerActorMotionState, ViewerCamera, ViewerInfoPanelState,
+    ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerTargetingAction,
+    ViewerTargetingSource, ViewerTargetingState, ViewerUiSettings,
 };
 use crate::ui_context_menu::{
     close_icon_button_color, context_menu_button_color, dialogue_choice_button_color,
@@ -40,7 +40,9 @@ mod keyboard;
 mod mouse;
 mod targeting;
 
-pub(crate) use camera::{handle_camera_pan, handle_mouse_wheel_zoom};
+pub(crate) use camera::{
+    handle_camera_pan, handle_dialogue_body_mouse_wheel, handle_mouse_wheel_zoom,
+};
 use interaction_input::{
     cursor_interaction_targets, execute_primary_target_interaction, handle_object_primary_click,
     interaction_menu_contains_cursor, is_command_actor_self_target,

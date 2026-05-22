@@ -124,12 +124,14 @@ pub(crate) fn setup_viewer(
                 left: Val::Percent(50.0),
                 bottom: px(DIALOGUE_PANEL_BOTTOM_PX),
                 width: px(720),
+                height: px(DIALOGUE_PANEL_HEIGHT_PX),
                 margin: UiRect {
                     left: px(-360),
                     ..default()
                 },
                 padding: UiRect::all(px(16)),
                 flex_direction: FlexDirection::Column,
+                overflow: Overflow::clip_y(),
                 ..default()
             },
             BackgroundColor(palette.dialogue_background),
@@ -194,17 +196,76 @@ pub(crate) fn setup_viewer(
                 viewer_ui_passthrough_bundle(),
                 DialoguePanelSpeakerLabel,
             ));
-            panel.spawn((
-                Text::new(""),
-                TextFont::from_font_size(15.0).with_font(ui_font.clone()),
-                TextColor(Color::srgba(0.96, 0.95, 0.93, 0.98)),
-                Node {
-                    margin: UiRect::bottom(px(12)),
-                    ..default()
-                },
-                viewer_ui_passthrough_bundle(),
-                DialoguePanelBodyLabel,
-            ));
+            panel
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: px(DIALOGUE_PANEL_BODY_HEIGHT_PX),
+                        margin: UiRect::bottom(px(12)),
+                        flex_direction: FlexDirection::Row,
+                        ..default()
+                    },
+                    viewer_ui_passthrough_bundle(),
+                ))
+                .with_children(|body_row| {
+                    body_row
+                        .spawn((
+                            Node {
+                                flex_grow: 1.0,
+                                height: Val::Percent(100.0),
+                                overflow: Overflow::scroll_y(),
+                                padding: UiRect::right(px(4)),
+                                ..default()
+                            },
+                            ScrollPosition::default(),
+                            RelativeCursorPosition::default(),
+                            viewer_ui_passthrough_bundle(),
+                            DialoguePanelBodyScrollArea,
+                        ))
+                        .with_children(|body| {
+                            body.spawn((
+                                Text::new(""),
+                                TextFont::from_font_size(15.0).with_font(ui_font.clone()),
+                                TextColor(Color::srgba(0.96, 0.95, 0.93, 0.98)),
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    ..default()
+                                },
+                                viewer_ui_passthrough_bundle(),
+                                DialoguePanelBodyLabel,
+                            ));
+                        });
+                    body_row
+                        .spawn((
+                            Node {
+                                position_type: PositionType::Relative,
+                                width: px(5),
+                                height: Val::Percent(100.0),
+                                margin: UiRect::left(px(7)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(0.28, 0.27, 0.23, 0.42)),
+                            Visibility::Hidden,
+                            viewer_ui_passthrough_bundle(),
+                            DialoguePanelBodyScrollbarTrack,
+                        ))
+                        .with_children(|track| {
+                            track.spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    left: px(0),
+                                    top: px(0),
+                                    width: Val::Percent(100.0),
+                                    height: px(24),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgba(0.82, 0.76, 0.58, 0.72)),
+                                Visibility::Hidden,
+                                viewer_ui_passthrough_bundle(),
+                                DialoguePanelBodyScrollbarThumb,
+                            ));
+                        });
+                });
             panel.spawn((
                 Node {
                     width: Val::Percent(100.0),

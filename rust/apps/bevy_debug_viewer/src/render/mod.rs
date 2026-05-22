@@ -31,7 +31,8 @@ use crate::geometry::{
 pub(super) use crate::picking::{pickable_target, ViewerPickBindingSpec, ViewerPickTarget};
 use crate::state::{
     cursor_over_visible_ui_blocker, viewer_ui_passthrough_bundle, ActorLabel, ActorLabelEntities,
-    DialogueChoiceButton, DialogueChoiceRow, DialoguePanelBodyLabel, DialoguePanelChoicesRoot,
+    DialogueChoiceButton, DialogueChoiceRow, DialoguePanelBodyLabel, DialoguePanelBodyScrollArea,
+    DialoguePanelBodyScrollbarThumb, DialoguePanelBodyScrollbarTrack, DialoguePanelChoicesRoot,
     DialoguePanelHintLabel, DialoguePanelRoot, DialoguePanelSpeakerLabel, DialoguePanelTitleLabel,
     InteractionLockedActorTag, InteractionMenuButton, InteractionMenuOptionRow,
     InteractionMenuOptionsRoot, InteractionMenuRoot, InteractionMenuState, UiMouseBlocker,

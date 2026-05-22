@@ -556,6 +556,7 @@ pub(crate) fn update_dialogue_panel(
         With<Button>,
     >,
     mut choice_texts: Query<(&DialogueChoiceLabel, &mut Text), With<DialogueChoiceLabel>>,
+    mut body_scroll_positions: Query<&mut ScrollPosition, With<DialoguePanelBodyScrollArea>>,
     scene_kind: Res<ViewerSceneKind>,
     viewer_state: Res<ViewerState>,
     viewer_font: Res<ViewerUiFont>,
@@ -637,6 +638,7 @@ pub(crate) fn update_dialogue_panel(
     let width =
         (window.width() - 520.0).clamp(DIALOGUE_PANEL_MIN_WIDTH_PX, DIALOGUE_PANEL_MAX_WIDTH_PX);
     node.width = px(width);
+    node.height = px(DIALOGUE_PANEL_HEIGHT_PX);
     node.left = Val::Percent(50.0);
     node.margin.left = px(-(width / 2.0));
     node.bottom = px(DIALOGUE_PANEL_BOTTOM_PX);
@@ -649,6 +651,9 @@ pub(crate) fn update_dialogue_panel(
         dialogue.current_node_id.clone(),
     );
     if last_logged_dialogue.as_ref() != Some(&dialogue_key) {
+        for mut scroll_position in &mut body_scroll_positions {
+            scroll_position.y = 0.0;
+        }
         info!(
             "viewer.dialogue.panel_visible actor={:?} target={:?} dialog_id={} dialogue_key={} node={} target_name={} choices={} width={}",
             dialogue.actor_id,
@@ -724,6 +729,81 @@ pub(crate) fn update_dialogue_panel(
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DialogueBodyScrollbarMetrics {
+    max_scroll: f32,
+    thumb_height: f32,
+    travel: f32,
+}
+
+pub(crate) fn sync_dialogue_body_scrollbar(
+    mut tracks: Query<
+        (&ComputedNode, &mut Visibility),
+        (
+            With<DialoguePanelBodyScrollbarTrack>,
+            Without<DialoguePanelBodyScrollbarThumb>,
+        ),
+    >,
+    mut thumbs: Query<
+        (&mut Node, &mut Visibility),
+        (
+            With<DialoguePanelBodyScrollbarThumb>,
+            Without<DialoguePanelBodyScrollbarTrack>,
+        ),
+    >,
+    scroll_areas: Query<&ComputedNode, With<DialoguePanelBodyScrollArea>>,
+) {
+    let Ok(scroll_area) = scroll_areas.single() else {
+        return;
+    };
+    let Ok((track, mut track_visibility)) = tracks.single_mut() else {
+        return;
+    };
+    let Ok((mut thumb_node, mut thumb_visibility)) = thumbs.single_mut() else {
+        return;
+    };
+
+    let Some(metrics) = dialogue_body_scrollbar_metrics(scroll_area, track) else {
+        *track_visibility = Visibility::Hidden;
+        *thumb_visibility = Visibility::Hidden;
+        return;
+    };
+
+    *track_visibility = Visibility::Visible;
+    *thumb_visibility = Visibility::Visible;
+    let thumb_top = if metrics.max_scroll <= f32::EPSILON {
+        0.0
+    } else {
+        metrics.travel * (scroll_area.scroll_position.y / metrics.max_scroll).clamp(0.0, 1.0)
+    };
+
+    thumb_node.top = px(thumb_top);
+    thumb_node.height = px(metrics.thumb_height);
+}
+
+fn dialogue_body_scrollbar_metrics(
+    scroll_area: &ComputedNode,
+    track: &ComputedNode,
+) -> Option<DialogueBodyScrollbarMetrics> {
+    let viewport_height = scroll_area.size.y.max(0.0);
+    let content_height = scroll_area.content_size.y.max(0.0);
+    let track_height = track.size.y.max(0.0);
+    let max_scroll = (content_height - viewport_height + scroll_area.scrollbar_size.y).max(0.0);
+    let can_scroll = max_scroll > 0.5 && track_height > 0.0 && content_height > f32::EPSILON;
+    if !can_scroll {
+        return None;
+    }
+
+    let visible_ratio = (viewport_height / content_height).clamp(0.0, 1.0);
+    let thumb_height = (track_height * visible_ratio).clamp(24.0, track_height);
+    let travel = (track_height - thumb_height).max(0.0);
+    Some(DialogueBodyScrollbarMetrics {
+        max_scroll,
+        thumb_height,
+        travel,
+    })
 }
 
 fn log_dialogue_panel_setup_error(

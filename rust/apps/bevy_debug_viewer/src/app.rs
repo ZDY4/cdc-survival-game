@@ -18,7 +18,7 @@ use crate::console::{
     handle_console_input, toggle_console, update_console_panel, ViewerConsoleState,
 };
 use crate::controls::{
-    handle_camera_pan, handle_dialogue_choice_buttons, handle_interaction_menu_buttons,
+    handle_camera_pan, handle_dialogue_body_mouse_wheel, handle_dialogue_choice_buttons, handle_interaction_menu_buttons,
     handle_keyboard_input, handle_mouse_input, handle_mouse_wheel_zoom,
 };
 use crate::game_ui::{
@@ -36,7 +36,7 @@ use crate::profiling::{
     ViewerSystemProfilerState,
 };
 use crate::render::{
-    setup_viewer, sync_actor_precise_pick_meshes, sync_dialogue_panel_diagnostics,
+    setup_viewer, sync_actor_precise_pick_meshes, sync_dialogue_body_scrollbar, sync_dialogue_panel_diagnostics,
     sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals, sync_hover_mesh_outlines,
     sync_stable_interaction_hover, tick_fog_of_war_transition, update_camera,
     update_dialogue_panel, update_interaction_menu, FogOfWarPostProcessPlugin,
@@ -224,6 +224,7 @@ impl Plugin for ViewerAppPlugin {
                 toggle_console,
                 handle_console_input,
                 handle_keyboard_input,
+                handle_dialogue_body_mouse_wheel,
                 handle_mouse_wheel_zoom,
                 handle_inventory_list_mouse_wheel,
                 handle_camera_pan,
@@ -302,6 +303,7 @@ impl Plugin for ViewerAppPlugin {
                 update_interaction_menu,
                 sync_dialogue_panel_diagnostics,
                 update_dialogue_panel,
+                sync_dialogue_body_scrollbar.after(update_dialogue_panel),
                 profiled_draw_world,
             )
                 .in_set(ViewerUpdateSet::Hud),

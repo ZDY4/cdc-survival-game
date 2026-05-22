@@ -733,6 +733,15 @@ pub(crate) struct DialoguePanelSpeakerLabel;
 pub(crate) struct DialoguePanelBodyLabel;
 
 #[derive(Component)]
+pub(crate) struct DialoguePanelBodyScrollArea;
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelBodyScrollbarTrack;
+
+#[derive(Component)]
+pub(crate) struct DialoguePanelBodyScrollbarThumb;
+
+#[derive(Component)]
 pub(crate) struct DialoguePanelChoicesRoot;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
