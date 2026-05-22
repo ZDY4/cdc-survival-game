@@ -6,6 +6,7 @@ use bevy::log::info;
 pub(crate) fn setup_game_ui(mut commands: Commands, mut menu_state: ResMut<UiMenuState>) {
     menu_state.main_menu_open = false;
     menu_state.close_all_panels();
+    commands.insert_resource(UiMapViewState::default());
     let overlay_layer = || {
         (
             Node {

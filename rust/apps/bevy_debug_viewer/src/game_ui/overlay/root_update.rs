@@ -539,7 +539,8 @@ fn panel_render_key(
             "{panel:?}|{}",
             map_panel_render_key(
                 &ui.runtime_state.runtime.snapshot(),
-                ui.viewer_state.current_level
+                ui.viewer_state.current_level,
+                &ui.map_view_state,
             )
         ),
         UiMenuPanel::Settings => format!("{panel:?}|{:?}", ui.settings.as_ref()),
@@ -652,7 +653,13 @@ fn render_single_panel(
         UiMenuPanel::Map => {
             render_panel_shell(parent, font, panel);
             let snapshot = ui.runtime_state.runtime.snapshot();
-            render_map_panel(parent, font, &snapshot, ui.viewer_state.current_level);
+            render_map_panel(
+                parent,
+                font,
+                &snapshot,
+                ui.viewer_state.current_level,
+                &ui.map_view_state,
+            );
         }
         UiMenuPanel::Settings => {
             render_settings_panel(parent, font, &ui.settings);

@@ -72,15 +72,17 @@ pub(super) fn render_map_panel(
     font: &ViewerUiFont,
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
+    view_state: &UiMapViewState,
 ) {
-    map::render_map_panel(parent, font, snapshot, current_level)
+    map::render_map_panel(parent, font, snapshot, current_level, view_state)
 }
 
 pub(super) fn map_panel_render_key(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
+    view_state: &UiMapViewState,
 ) -> String {
-    map::map_panel_render_key(snapshot, current_level)
+    map::map_panel_render_key(snapshot, current_level, view_state)
 }
 
 #[cfg(test)]

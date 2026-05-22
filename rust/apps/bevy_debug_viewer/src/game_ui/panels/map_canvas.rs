@@ -15,15 +15,21 @@ pub(super) fn spawn_map_canvas(
     font: &ViewerUiFont,
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
+    view_state: &UiMapViewState,
 ) -> bool {
-    let Some(layout) = MapPanelLayout::from_snapshot(snapshot) else {
+    let Some(layout) = MapPanelLayout::from_snapshot(snapshot, view_state) else {
         return false;
     };
-    body.spawn(map_canvas_node(layout)).with_children(|canvas| {
-        spawn_terrain_cells(canvas, snapshot, current_level, layout);
-        spawn_map_objects(canvas, snapshot, current_level, layout);
-        spawn_actor_markers(canvas, font, snapshot, current_level, layout);
-    });
+    body.spawn(map_canvas_viewport_node())
+        .with_children(|viewport| {
+            viewport
+                .spawn(map_canvas_content_node(layout))
+                .with_children(|canvas| {
+                    spawn_terrain_cells(canvas, snapshot, current_level, layout);
+                    spawn_map_objects(canvas, snapshot, current_level, layout);
+                    spawn_actor_markers(canvas, font, snapshot, current_level, layout);
+                });
+        });
     true
 }
 
@@ -173,18 +179,37 @@ fn actor_marker_node(left: f32, top: f32, color: Color) -> impl Bundle {
     )
 }
 
-fn map_canvas_node(layout: MapPanelLayout) -> impl Bundle {
+fn map_canvas_viewport_node() -> impl Bundle {
     (
         Node {
-            width: px(layout.canvas_width),
-            height: px(layout.canvas_height),
+            width: px(MAP_CANVAS_MAX_WIDTH),
+            height: px(MAP_CANVAS_MAX_HEIGHT),
             align_self: AlignSelf::Center,
             position_type: PositionType::Relative,
+            overflow: Overflow::clip(),
             border: UiRect::all(px(1)),
             ..default()
         },
         BackgroundColor(Color::srgba(0.025, 0.026, 0.024, 0.98)),
         BorderColor::all(ui_border_strong_color()),
+        RelativeCursorPosition::default(),
+        MapPanelViewport,
+        UiMouseBlocker,
+        UiMouseBlockerName("地图画布".to_string()),
+        viewer_ui_passthrough_bundle(),
+    )
+}
+
+fn map_canvas_content_node(layout: MapPanelLayout) -> impl Bundle {
+    (
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(layout.content_left),
+            top: px(layout.content_top),
+            width: px(layout.canvas_width),
+            height: px(layout.canvas_height),
+            ..default()
+        },
         viewer_ui_passthrough_bundle(),
     )
 }
@@ -235,10 +260,15 @@ struct MapPanelLayout {
     cell_size: f32,
     canvas_width: f32,
     canvas_height: f32,
+    content_left: f32,
+    content_top: f32,
 }
 
 impl MapPanelLayout {
-    fn from_snapshot(snapshot: &game_core::SimulationSnapshot) -> Option<Self> {
+    fn from_snapshot(
+        snapshot: &game_core::SimulationSnapshot,
+        view_state: &UiMapViewState,
+    ) -> Option<Self> {
         let map_width = snapshot.grid.map_width?;
         let map_height = snapshot.grid.map_height?;
         if map_width == 0 || map_height == 0 {
@@ -247,17 +277,25 @@ impl MapPanelLayout {
         let raw_cell_size = (MAP_CANVAS_MAX_WIDTH / map_width as f32)
             .min(MAP_CANVAS_MAX_HEIGHT / map_height as f32)
             .min(MAP_CELL_MAX_SIZE);
-        let cell_size = if raw_cell_size < MAP_CELL_MIN_SIZE {
+        let base_cell_size = if raw_cell_size < MAP_CELL_MIN_SIZE {
             raw_cell_size.max(0.75)
         } else {
             raw_cell_size
         };
+        let cell_size = base_cell_size
+            * view_state
+                .zoom
+                .clamp(UiMapViewState::MIN_ZOOM, UiMapViewState::MAX_ZOOM);
+        let canvas_width = cell_size * map_width as f32;
+        let canvas_height = cell_size * map_height as f32;
         Some(Self {
             map_width,
             map_height,
             cell_size,
-            canvas_width: cell_size * map_width as f32,
-            canvas_height: cell_size * map_height as f32,
+            canvas_width,
+            canvas_height,
+            content_left: (MAP_CANVAS_MAX_WIDTH - canvas_width) * 0.5 + view_state.pan.x,
+            content_top: (MAP_CANVAS_MAX_HEIGHT - canvas_height) * 0.5 + view_state.pan.y,
         })
     }
 

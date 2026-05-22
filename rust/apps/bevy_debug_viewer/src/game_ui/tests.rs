@@ -445,12 +445,38 @@ fn setup_game_ui_keeps_retained_roots_stable_across_updates() {
 #[test]
 fn game_ui_map_render_key_changes_when_actor_moves() {
     let mut snapshot = sample_map_panel_snapshot();
-    let first_key = map_panel_render_key(&snapshot, 0);
+    let map_view = UiMapViewState::default();
+    let first_key = map_panel_render_key(&snapshot, 0, &map_view);
 
     snapshot.actors[0].grid_position = GridCoord::new(2, 0, 1);
-    let second_key = map_panel_render_key(&snapshot, 0);
+    let second_key = map_panel_render_key(&snapshot, 0, &map_view);
 
     assert_ne!(first_key, second_key);
+}
+
+#[test]
+fn game_ui_map_render_key_changes_when_view_changes() {
+    let snapshot = sample_map_panel_snapshot();
+    let mut map_view = UiMapViewState::default();
+    let first_key = map_panel_render_key(&snapshot, 0, &map_view);
+
+    map_view.pan = Vec2::new(24.0, -12.0);
+    map_view.zoom = 1.5;
+    let second_key = map_panel_render_key(&snapshot, 0, &map_view);
+
+    assert_ne!(first_key, second_key);
+}
+
+#[test]
+fn game_ui_map_zoom_keeps_focus_stable() {
+    let mut map_view = UiMapViewState::default();
+    let focus = Vec2::new(120.0, 80.0);
+
+    map_view.zoom_by_steps(1.0, focus);
+
+    assert!(map_view.zoom > 1.0);
+    assert!(map_view.pan.x < 0.0);
+    assert!(map_view.pan.y < 0.0);
 }
 
 #[test]
@@ -476,7 +502,7 @@ fn game_ui_map_key_handles_missing_grid_map() {
     snapshot.grid.map_height = None;
     snapshot.interaction_context.world_mode = WorldMode::Overworld;
 
-    let key = map_panel_render_key(&snapshot, 0);
+    let key = map_panel_render_key(&snapshot, 0, &UiMapViewState::default());
     let summary = map_panel_summary(&snapshot, 0);
 
     assert!(key.contains("mode=Overworld"));

@@ -382,6 +382,71 @@ pub(crate) struct InventoryEntryScrollbarTrack;
 pub(crate) struct InventoryEntryScrollbarThumb;
 
 #[derive(Component)]
+pub(crate) struct MapPanelViewport;
+
+#[derive(Resource, Debug, Clone, PartialEq)]
+pub(crate) struct UiMapViewState {
+    pub zoom: f32,
+    pub pan: Vec2,
+    drag_start_cursor: Option<Vec2>,
+    drag_start_pan: Vec2,
+}
+
+impl Default for UiMapViewState {
+    fn default() -> Self {
+        Self {
+            zoom: 1.0,
+            pan: Vec2::ZERO,
+            drag_start_cursor: None,
+            drag_start_pan: Vec2::ZERO,
+        }
+    }
+}
+
+impl UiMapViewState {
+    pub(crate) const MIN_ZOOM: f32 = 0.5;
+    pub(crate) const MAX_ZOOM: f32 = 4.0;
+
+    pub(crate) fn is_dragging(&self) -> bool {
+        self.drag_start_cursor.is_some()
+    }
+
+    pub(crate) fn begin_drag(&mut self, cursor_position: Vec2) {
+        self.drag_start_cursor = Some(cursor_position);
+        self.drag_start_pan = self.pan;
+    }
+
+    pub(crate) fn update_drag(&mut self, cursor_position: Vec2) {
+        let Some(start_cursor) = self.drag_start_cursor else {
+            return;
+        };
+        self.pan = self.drag_start_pan + cursor_position - start_cursor;
+    }
+
+    pub(crate) fn clear_drag(&mut self) {
+        self.drag_start_cursor = None;
+        self.drag_start_pan = self.pan;
+    }
+
+    pub(crate) fn zoom_by_steps(&mut self, scroll_steps: f32, focus_in_viewport: Vec2) {
+        if scroll_steps.abs() <= f32::EPSILON {
+            return;
+        }
+        let previous_zoom = self.zoom.max(0.001);
+        let zoom_multiplier = (1.0 + scroll_steps * 0.12).clamp(0.5, 2.0);
+        let next_zoom = (previous_zoom * zoom_multiplier).clamp(Self::MIN_ZOOM, Self::MAX_ZOOM);
+        if (next_zoom - previous_zoom).abs() <= f32::EPSILON {
+            return;
+        }
+
+        // 缩放围绕鼠标指向的画布位置展开，避免滚轮后目标点跳走。
+        let scale = next_zoom / previous_zoom;
+        self.pan = focus_in_viewport - (focus_in_viewport - self.pan) * scale;
+        self.zoom = next_zoom;
+    }
+}
+
+#[derive(Component)]
 pub(crate) struct TradeInventoryPanelBounds;
 
 #[derive(Component)]

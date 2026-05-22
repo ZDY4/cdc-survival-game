@@ -15,6 +15,7 @@ pub(super) fn render_map_panel(
     font: &ViewerUiFont,
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
+    view_state: &UiMapViewState,
 ) {
     let body = panel_body(parent, UiMenuPanel::Map);
     parent.commands().entity(body).with_children(|body| {
@@ -52,7 +53,7 @@ pub(super) fn render_map_panel(
             ui_text_muted_color(),
         ));
 
-        if !spawn_map_canvas(body, font, snapshot, current_level) {
+        if !spawn_map_canvas(body, font, snapshot, current_level, view_state) {
             body.spawn(wrapped_text_bundle(
                 font,
                 "当前地图尺寸不可用，无法绘制地图图像。",
@@ -74,6 +75,7 @@ pub(super) fn render_map_panel(
 pub(super) fn map_panel_render_key(
     snapshot: &game_core::SimulationSnapshot,
     current_level: i32,
+    view_state: &UiMapViewState,
 ) -> String {
     let actors = snapshot
         .actors
@@ -110,13 +112,16 @@ pub(super) fn map_panel_render_key(
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "map={:?}|mode={:?}|level={current_level}|size={:?}x{:?}|topology={}|obstacles={}|actors={actors}|objects={objects}",
+        "map={:?}|mode={:?}|level={current_level}|size={:?}x{:?}|topology={}|obstacles={}|zoom={:.3}|pan={:.1},{:.1}|actors={actors}|objects={objects}",
         snapshot.grid.map_id,
         snapshot.interaction_context.world_mode,
         snapshot.grid.map_width,
         snapshot.grid.map_height,
         snapshot.grid.topology_version,
         snapshot.grid.runtime_obstacle_version,
+        view_state.zoom,
+        view_state.pan.x,
+        view_state.pan.y,
     )
 }
 

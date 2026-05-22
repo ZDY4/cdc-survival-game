@@ -17,6 +17,7 @@ pub(crate) struct InventoryPointerUiState<'w, 's> {
     context_menu: ResMut<'w, UiContextMenuState>,
     drag_state: ResMut<'w, UiInventoryDragState>,
     scrollbar_drag_state: ResMut<'w, UiInventoryScrollbarDragState>,
+    map_view_state: ResMut<'w, UiMapViewState>,
     runtime_state: ResMut<'w, ViewerRuntimeState>,
     viewer_state: ResMut<'w, ViewerState>,
     save_path: Res<'w, ViewerRuntimeSavePath>,
@@ -214,6 +215,17 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
             Without<InventoryEntryScrollbarTrack>,
         ),
     >,
+    map_viewports: Query<
+        'w,
+        's,
+        (
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            Option<&'static RelativeCursorPosition>,
+            Option<&'static Visibility>,
+        ),
+        With<MapPanelViewport>,
+    >,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -227,20 +239,36 @@ pub(crate) fn handle_inventory_panel_pointer_input(
     let container_active = ui.modal_state.container.is_some();
     let item_modal_open = ui.modal_state.item_quantity.is_some();
     let inventory_panel_active = ui.menu_state.is_panel_open(UiMenuPanel::Inventory);
+    let map_panel_active = ui.menu_state.is_panel_open(UiMenuPanel::Map);
     let skills_panel_active =
         !trade_active && !container_active && ui.menu_state.is_panel_open(UiMenuPanel::Skills);
     if ui.scene_kind.is_main_menu() {
         ui.context_menu.clear();
         ui.drag_state.clear();
         ui.scrollbar_drag_state.clear();
+        ui.map_view_state.clear_drag();
         return;
     }
     if item_modal_open {
         ui.context_menu.clear();
         ui.drag_state.clear();
         ui.scrollbar_drag_state.clear();
+        ui.map_view_state.clear_drag();
         return;
     }
+    if map_panel_active {
+        ui.context_menu.clear();
+        ui.drag_state.clear();
+        ui.scrollbar_drag_state.clear();
+        handle_map_panel_pointer_input(
+            &window,
+            &buttons,
+            &mut ui.map_view_state,
+            &targets.map_viewports,
+        );
+        return;
+    }
+    ui.map_view_state.clear_drag();
     if !trade_active && !container_active && !inventory_panel_active && !skills_panel_active {
         ui.context_menu.clear();
         ui.drag_state.clear();
@@ -1251,6 +1279,16 @@ pub(crate) fn handle_inventory_list_mouse_wheel(
     modal_state: Res<UiModalState>,
     scene_kind: Res<ViewerSceneKind>,
     mut mouse_wheel_events: MessageReader<bevy::input::mouse::MouseWheel>,
+    mut map_view_state: ResMut<UiMapViewState>,
+    map_viewports: Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<MapPanelViewport>,
+    >,
     mut scroll_areas: Query<
         (
             &ComputedNode,
@@ -1262,6 +1300,16 @@ pub(crate) fn handle_inventory_list_mouse_wheel(
         With<InventoryEntryScrollArea>,
     >,
 ) {
+    if !scene_kind.is_main_menu() && menu_state.is_panel_open(UiMenuPanel::Map) {
+        handle_map_panel_mouse_wheel(
+            &window,
+            &mut mouse_wheel_events,
+            &mut map_view_state,
+            &map_viewports,
+        );
+        return;
+    }
+
     if scene_kind.is_main_menu()
         || modal_state.item_quantity.is_some()
         || (modal_state.container.is_none() && !menu_state.is_panel_open(UiMenuPanel::Inventory))
@@ -1304,6 +1352,108 @@ pub(crate) fn handle_inventory_list_mouse_wheel(
     }
 
     scroll_position.y = (scroll_position.y - scroll_delta).clamp(0.0, max_scroll);
+}
+
+fn handle_map_panel_pointer_input(
+    window: &Window,
+    buttons: &ButtonInput<MouseButton>,
+    map_view_state: &mut UiMapViewState,
+    viewports: &Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<MapPanelViewport>,
+    >,
+) {
+    let left_just_pressed = buttons.just_pressed(MouseButton::Left);
+    let left_pressed = buttons.pressed(MouseButton::Left);
+    let left_just_released = buttons.just_released(MouseButton::Left);
+    if !left_just_pressed && !left_pressed && !left_just_released && !map_view_state.is_dragging() {
+        return;
+    }
+
+    if left_just_released {
+        map_view_state.clear_drag();
+        return;
+    }
+
+    let Some(cursor_position) = window.cursor_position() else {
+        map_view_state.clear_drag();
+        return;
+    };
+    let cursor_over_map = viewports
+        .iter()
+        .any(|(computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+        });
+
+    if left_just_pressed {
+        if cursor_over_map {
+            map_view_state.begin_drag(cursor_position);
+        } else {
+            map_view_state.clear_drag();
+        }
+        return;
+    }
+
+    if left_pressed && map_view_state.is_dragging() {
+        map_view_state.update_drag(cursor_position);
+    }
+}
+
+fn handle_map_panel_mouse_wheel(
+    window: &Window,
+    mouse_wheel_events: &mut MessageReader<bevy::input::mouse::MouseWheel>,
+    map_view_state: &mut UiMapViewState,
+    viewports: &Query<
+        (
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<MapPanelViewport>,
+    >,
+) {
+    let Some(cursor_position) = window.cursor_position() else {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    };
+    let Some((computed, transform, _, _)) =
+        viewports
+            .iter()
+            .find(|(computed, transform, cursor, visibility)| {
+                hover_target_contains_cursor(
+                    cursor_position,
+                    computed,
+                    transform,
+                    *cursor,
+                    *visibility,
+                )
+            })
+    else {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    };
+
+    let mut scroll_steps = 0.0f32;
+    for event in mouse_wheel_events.read() {
+        scroll_steps += match event.unit {
+            bevy::input::mouse::MouseScrollUnit::Line => event.y,
+            bevy::input::mouse::MouseScrollUnit::Pixel => event.y / 36.0,
+        };
+    }
+    if scroll_steps.abs() <= f32::EPSILON {
+        return;
+    }
+    let Some(focus_in_viewport) = cursor_offset_within_node(computed, transform, cursor_position)
+    else {
+        return;
+    };
+    map_view_state.zoom_by_steps(scroll_steps, focus_in_viewport);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1446,9 +1596,22 @@ fn cursor_offset_within_node_y(
     transform: &UiGlobalTransform,
     cursor_position: Vec2,
 ) -> Option<f32> {
+    cursor_offset_within_node(computed, transform, cursor_position).map(|offset| offset.y)
+}
+
+fn cursor_offset_within_node(
+    computed: &ComputedNode,
+    transform: &UiGlobalTransform,
+    cursor_position: Vec2,
+) -> Option<Vec2> {
     computed
         .normalize_point(*transform, cursor_position)
-        .map(|normalized| (normalized.y + 0.5) * computed.size.y)
+        .map(|normalized| {
+            Vec2::new(
+                (normalized.x + 0.5) * computed.size.x,
+                (normalized.y + 0.5) * computed.size.y,
+            )
+        })
 }
 
 fn set_inventory_scroll_position_from_track_cursor(
