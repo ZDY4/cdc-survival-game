@@ -18,6 +18,7 @@ pub(crate) struct InventoryPointerUiState<'w, 's> {
     drag_state: ResMut<'w, UiInventoryDragState>,
     scrollbar_drag_state: ResMut<'w, UiInventoryScrollbarDragState>,
     map_view_state: ResMut<'w, UiMapViewState>,
+    skill_tree_view_state: ResMut<'w, UiSkillTreeViewState>,
     runtime_state: ResMut<'w, ViewerRuntimeState>,
     viewer_state: ResMut<'w, ViewerState>,
     save_path: Res<'w, ViewerRuntimeSavePath>,
@@ -226,6 +227,17 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
         ),
         With<MapPanelViewport>,
     >,
+    skill_tree_viewports: Query<
+        'w,
+        's,
+        (
+            &'static SkillTreeCanvasViewport,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            Option<&'static RelativeCursorPosition>,
+            Option<&'static Visibility>,
+        ),
+    >,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -247,6 +259,7 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         ui.drag_state.clear();
         ui.scrollbar_drag_state.clear();
         ui.map_view_state.clear_drag();
+        ui.skill_tree_view_state.clear_drag();
         return;
     }
     if item_modal_open {
@@ -254,12 +267,14 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         ui.drag_state.clear();
         ui.scrollbar_drag_state.clear();
         ui.map_view_state.clear_drag();
+        ui.skill_tree_view_state.clear_drag();
         return;
     }
     if map_panel_active {
         ui.context_menu.clear();
         ui.drag_state.clear();
         ui.scrollbar_drag_state.clear();
+        ui.skill_tree_view_state.clear_drag();
         handle_map_panel_pointer_input(
             &window,
             &buttons,
@@ -269,10 +284,14 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         return;
     }
     ui.map_view_state.clear_drag();
+    if !skills_panel_active {
+        ui.skill_tree_view_state.clear_drag();
+    }
     if !trade_active && !container_active && !inventory_panel_active && !skills_panel_active {
         ui.context_menu.clear();
         ui.drag_state.clear();
         ui.scrollbar_drag_state.clear();
+        ui.skill_tree_view_state.clear_drag();
         return;
     }
 
@@ -285,6 +304,7 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         && !right_just_pressed
         && !ui.drag_state.is_active()
         && !ui.scrollbar_drag_state.is_active()
+        && !ui.skill_tree_view_state.is_dragging()
     {
         return;
     }
@@ -293,6 +313,7 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         ui.context_menu.clear();
         ui.drag_state.clear();
         ui.scrollbar_drag_state.clear();
+        ui.skill_tree_view_state.clear_drag();
         return;
     };
 
@@ -342,6 +363,21 @@ pub(crate) fn handle_inventory_panel_pointer_input(
     let skill_hit = skills_panel_active
         .then(|| find_skill_hover_target(cursor_position, &targets.skill_targets))
         .flatten();
+    if handle_skill_tree_pointer_input(
+        cursor_position,
+        &buttons,
+        skills_panel_active,
+        skill_hit.is_some(),
+        &mut ui.skill_tree_view_state,
+        &targets.skill_tree_viewports,
+    ) {
+        if left_just_pressed {
+            ui.context_menu.clear();
+        }
+        ui.drag_state.clear();
+        ui.scrollbar_drag_state.clear();
+        return;
+    }
     if let Some((tree_id, skill_id)) = skill_hit {
         if right_just_pressed {
             ui.menu_state.selected_skill_tree_id = Some(tree_id.clone());
@@ -1402,6 +1438,71 @@ fn handle_map_panel_pointer_input(
     if left_pressed && map_view_state.is_dragging() {
         map_view_state.update_drag(cursor_position);
     }
+}
+
+fn handle_skill_tree_pointer_input(
+    cursor_position: Vec2,
+    buttons: &ButtonInput<MouseButton>,
+    skills_panel_active: bool,
+    cursor_over_skill_node: bool,
+    view_state: &mut UiSkillTreeViewState,
+    viewports: &Query<(
+        &SkillTreeCanvasViewport,
+        &ComputedNode,
+        &UiGlobalTransform,
+        Option<&RelativeCursorPosition>,
+        Option<&Visibility>,
+    )>,
+) -> bool {
+    if !skills_panel_active {
+        view_state.clear_drag();
+        return false;
+    }
+
+    let left_just_pressed = buttons.just_pressed(MouseButton::Left);
+    let left_pressed = buttons.pressed(MouseButton::Left);
+    let left_just_released = buttons.just_released(MouseButton::Left);
+    if left_just_released && view_state.is_dragging() {
+        view_state.clear_drag();
+        return true;
+    }
+    if !left_just_pressed && !left_pressed && !view_state.is_dragging() {
+        return false;
+    }
+
+    let hovered_viewport =
+        viewports
+            .iter()
+            .find(|(_viewport, computed, transform, cursor, visibility)| {
+                hover_target_contains_cursor(
+                    cursor_position,
+                    computed,
+                    transform,
+                    *cursor,
+                    *visibility,
+                )
+            });
+    if left_just_pressed {
+        // 技能节点仍保留点击和右键行为，只允许从树图空白处开始平移。
+        if hovered_viewport.is_some() && !cursor_over_skill_node {
+            view_state.begin_drag(cursor_position);
+            return true;
+        }
+        view_state.clear_drag();
+        return false;
+    }
+
+    if left_pressed && view_state.is_dragging() {
+        let Some((viewport, computed, ..)) = hovered_viewport.or_else(|| viewports.iter().next())
+        else {
+            view_state.clear_drag();
+            return false;
+        };
+        view_state.update_drag(cursor_position, computed.size, viewport.content_size);
+        return true;
+    }
+
+    false
 }
 
 fn handle_map_panel_mouse_wheel(

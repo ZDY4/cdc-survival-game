@@ -384,6 +384,11 @@ pub(crate) struct InventoryEntryScrollbarThumb;
 #[derive(Component)]
 pub(crate) struct MapPanelViewport;
 
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SkillTreeCanvasViewport {
+    pub content_size: Vec2,
+}
+
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub(crate) struct UiMapViewState {
     pub zoom: f32,
@@ -443,6 +448,66 @@ impl UiMapViewState {
         let scale = next_zoom / previous_zoom;
         self.pan = focus_in_viewport - (focus_in_viewport - self.pan) * scale;
         self.zoom = next_zoom;
+    }
+}
+
+#[derive(Resource, Debug, Clone, PartialEq)]
+pub(crate) struct UiSkillTreeViewState {
+    pub pan: Vec2,
+    drag_start_cursor: Option<Vec2>,
+    drag_start_pan: Vec2,
+}
+
+impl Default for UiSkillTreeViewState {
+    fn default() -> Self {
+        Self {
+            pan: Vec2::ZERO,
+            drag_start_cursor: None,
+            drag_start_pan: Vec2::ZERO,
+        }
+    }
+}
+
+impl UiSkillTreeViewState {
+    pub(crate) fn is_dragging(&self) -> bool {
+        self.drag_start_cursor.is_some()
+    }
+
+    pub(crate) fn begin_drag(&mut self, cursor_position: Vec2) {
+        self.drag_start_cursor = Some(cursor_position);
+        self.drag_start_pan = self.pan;
+    }
+
+    pub(crate) fn update_drag(
+        &mut self,
+        cursor_position: Vec2,
+        viewport_size: Vec2,
+        content_size: Vec2,
+    ) {
+        let Some(start_cursor) = self.drag_start_cursor else {
+            return;
+        };
+        self.pan = self.drag_start_pan + cursor_position - start_cursor;
+        self.clamp_to_viewport(viewport_size, content_size);
+    }
+
+    pub(crate) fn clear_drag(&mut self) {
+        self.drag_start_cursor = None;
+        self.drag_start_pan = self.pan;
+    }
+
+    fn clamp_to_viewport(&mut self, viewport_size: Vec2, content_size: Vec2) {
+        // 技能树只在内容超出视口时允许被拖走，避免短树被误拖到看不见的位置。
+        self.pan.x = clamp_axis_pan(self.pan.x, viewport_size.x, content_size.x);
+        self.pan.y = clamp_axis_pan(self.pan.y, viewport_size.y, content_size.y);
+    }
+}
+
+fn clamp_axis_pan(pan: f32, viewport_extent: f32, content_extent: f32) -> f32 {
+    if content_extent <= viewport_extent {
+        0.0
+    } else {
+        pan.clamp(viewport_extent - content_extent, 0.0)
     }
 }
 

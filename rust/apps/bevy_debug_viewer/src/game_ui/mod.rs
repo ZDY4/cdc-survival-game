@@ -31,14 +31,14 @@ use crate::state::{
     GameUiScaffold, HotbarRoot, InventoryContextMenuLayerRoot, InventoryEntryScrollArea,
     InventoryEntryScrollbarThumb, InventoryEntryScrollbarTrack, InventoryItemClickTarget,
     InventoryItemHoverTarget, InventoryListDropZone, InventoryPanelBounds, MainMenuRoot,
-    MapPanelViewport, OverworldPromptRoot, SkillHoverTarget, TooltipRoot, TopBadgeRoot,
-    TradeInventoryItemClickTarget, TradeInventoryListDropZone, TradeInventoryPanelBounds,
-    TradeRoot, TradeSellZone, UiContextMenuRoot, UiContextMenuState, UiContextMenuTarget,
-    UiHoverTooltipContent, UiHoverTooltipState, UiInventoryDragHoverTarget, UiInventoryDragSource,
-    UiInventoryDragState, UiInventoryScrollbarDragState, UiMapViewState, UiMouseBlocker,
-    UiMouseBlockerName, ViewerCamera, ViewerPalette, ViewerRenderConfig, ViewerRuntimeSavePath,
-    ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerUiFont, ViewerUiSettings,
-    ViewerUiSettingsPath, ViewerWindowResolution,
+    MapPanelViewport, OverworldPromptRoot, SkillHoverTarget, SkillTreeCanvasViewport, TooltipRoot,
+    TopBadgeRoot, TradeInventoryItemClickTarget, TradeInventoryListDropZone,
+    TradeInventoryPanelBounds, TradeRoot, TradeSellZone, UiContextMenuRoot, UiContextMenuState,
+    UiContextMenuTarget, UiHoverTooltipContent, UiHoverTooltipState, UiInventoryDragHoverTarget,
+    UiInventoryDragSource, UiInventoryDragState, UiInventoryScrollbarDragState, UiMapViewState,
+    UiMouseBlocker, UiMouseBlockerName, UiSkillTreeViewState, ViewerCamera, ViewerPalette,
+    ViewerRenderConfig, ViewerRuntimeSavePath, ViewerRuntimeState, ViewerSceneKind, ViewerState,
+    ViewerUiFont, ViewerUiSettings, ViewerUiSettingsPath, ViewerWindowResolution,
 };
 use crate::ui_context_menu::{
     close_icon_button_color, context_menu_button_color, ContextMenuStyle, ContextMenuVariant,
@@ -47,7 +47,7 @@ use crate::ui_context_menu::{
 const UI_PANEL_WIDTH: f32 = 448.0;
 const INVENTORY_PANEL_WIDTH: f32 = 300.0;
 const MAP_PANEL_WIDTH: f32 = 720.0;
-const SKILLS_PANEL_WIDTH: f32 = 940.0;
+const SKILLS_PANEL_WIDTH: f32 = INVENTORY_PANEL_WIDTH;
 const SCREEN_EDGE_PADDING: f32 = 18.0;
 const LEFT_STAGE_PANEL_X: f32 = SCREEN_EDGE_PADDING;
 const TOP_BADGE_WIDTH: f32 = 348.0;
@@ -86,6 +86,7 @@ pub(crate) struct GameUiViewState<'w, 's> {
     inventory_context_menu: Res<'w, UiContextMenuState>,
     drag_state: Res<'w, UiInventoryDragState>,
     map_view_state: Res<'w, UiMapViewState>,
+    skill_tree_view_state: Res<'w, UiSkillTreeViewState>,
     console_state: Res<'w, ViewerConsoleState>,
     marker: PhantomData<&'s ()>,
 }

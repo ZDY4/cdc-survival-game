@@ -521,7 +521,7 @@ fn panel_render_key(
             journal_snapshot(&ui.runtime_state.runtime, actor_id, &content.quests.0)
         ),
         UiMenuPanel::Skills => format!(
-            "{panel:?}|{:?}|{:?}|{:?}",
+            "{panel:?}|{:?}|{:?}|{:?}|{:?}",
             skills_snapshot(
                 &ui.runtime_state.runtime,
                 actor_id,
@@ -529,7 +529,8 @@ fn panel_render_key(
                 &content.skill_trees.0,
             ),
             ui.menu_state,
-            ui.hotbar_state
+            ui.hotbar_state,
+            ui.skill_tree_view_state
         ),
         UiMenuPanel::Crafting => format!(
             "{panel:?}|{:?}",
@@ -639,7 +640,14 @@ fn render_single_panel(
                 &content.skills.0,
                 &content.skill_trees.0,
             );
-            render_skills_panel(parent, font, &snapshot, &ui.menu_state, &ui.hotbar_state);
+            render_skills_panel(
+                parent,
+                font,
+                &snapshot,
+                &ui.menu_state,
+                &ui.hotbar_state,
+                &ui.skill_tree_view_state,
+            );
         }
         UiMenuPanel::Crafting => {
             render_panel_shell(parent, font, panel);

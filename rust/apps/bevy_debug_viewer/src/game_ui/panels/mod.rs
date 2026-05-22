@@ -63,8 +63,9 @@ pub(super) fn render_skills_panel(
     snapshot: &game_bevy::UiSkillsSnapshot,
     menu_state: &UiMenuState,
     hotbar_state: &UiHotbarState,
+    view_state: &UiSkillTreeViewState,
 ) {
-    skills::render_skills_panel(parent, font, snapshot, menu_state, hotbar_state)
+    skills::render_skills_panel(parent, font, snapshot, menu_state, hotbar_state, view_state)
 }
 
 pub(super) fn render_map_panel(

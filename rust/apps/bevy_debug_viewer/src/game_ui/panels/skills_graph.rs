@@ -4,11 +4,12 @@ use std::collections::BTreeMap;
 
 use super::*;
 
-const SKILL_TREE_NODE_WIDTH: f32 = 136.0;
-const SKILL_TREE_NODE_HEIGHT: f32 = 72.0;
-const SKILL_TREE_CANVAS_PADDING: f32 = 28.0;
+const SKILL_TREE_NODE_WIDTH: f32 = 210.0;
+const SKILL_TREE_NODE_HEIGHT: f32 = 64.0;
+const SKILL_TREE_NODE_GAP: f32 = 18.0;
+const SKILL_TREE_CANVAS_PADDING: f32 = 14.0;
 const SKILL_TREE_LINK_THICKNESS: f32 = 2.0;
-const SKILL_TREE_MIN_CANVAS_HEIGHT: f32 = 260.0;
+const SKILL_TREE_MAX_VIEWPORT_HEIGHT: f32 = 300.0;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct SkillTreeCanvasNodeFrame {
@@ -31,42 +32,26 @@ pub(super) fn build_skill_tree_canvas_layout(
     if tree.nodes.is_empty() {
         return SkillTreeCanvasLayout {
             width: SKILL_TREE_NODE_WIDTH + SKILL_TREE_CANVAS_PADDING * 2.0,
-            height: SKILL_TREE_MIN_CANVAS_HEIGHT,
+            height: SKILL_TREE_NODE_HEIGHT + SKILL_TREE_CANVAS_PADDING * 2.0,
             node_frames: BTreeMap::new(),
         };
     }
 
-    let min_x = tree
-        .nodes
-        .iter()
-        .map(|node| node.x)
-        .min_by(f32::total_cmp)
-        .unwrap_or_default();
-    let max_x = tree
-        .nodes
-        .iter()
-        .map(|node| node.x)
-        .max_by(f32::total_cmp)
-        .unwrap_or_default();
-    let min_y = tree
-        .nodes
-        .iter()
-        .map(|node| node.y)
-        .min_by(f32::total_cmp)
-        .unwrap_or_default();
-    let max_y = tree
-        .nodes
-        .iter()
-        .map(|node| node.y)
-        .max_by(f32::total_cmp)
-        .unwrap_or_default();
+    let mut sorted_nodes = tree.nodes.iter().collect::<Vec<_>>();
+    sorted_nodes.sort_by(|left, right| {
+        left.y
+            .total_cmp(&right.y)
+            .then_with(|| left.x.total_cmp(&right.x))
+            .then_with(|| left.skill_id.cmp(&right.skill_id))
+    });
 
-    let node_frames = tree
-        .nodes
-        .iter()
-        .map(|node| {
-            let left = SKILL_TREE_CANVAS_PADDING + (node.x - min_x);
-            let top = SKILL_TREE_CANVAS_PADDING + (node.y - min_y);
+    let node_frames = sorted_nodes
+        .into_iter()
+        .enumerate()
+        .map(|(index, node)| {
+            let left = SKILL_TREE_CANVAS_PADDING;
+            let top = SKILL_TREE_CANVAS_PADDING
+                + index as f32 * (SKILL_TREE_NODE_HEIGHT + SKILL_TREE_NODE_GAP);
             (
                 node.skill_id.clone(),
                 SkillTreeCanvasNodeFrame {
@@ -80,9 +65,10 @@ pub(super) fn build_skill_tree_canvas_layout(
         .collect();
 
     SkillTreeCanvasLayout {
-        width: (max_x - min_x) + SKILL_TREE_NODE_WIDTH + SKILL_TREE_CANVAS_PADDING * 2.0,
-        height: ((max_y - min_y) + SKILL_TREE_NODE_HEIGHT + SKILL_TREE_CANVAS_PADDING * 2.0)
-            .max(SKILL_TREE_MIN_CANVAS_HEIGHT),
+        width: SKILL_TREE_NODE_WIDTH + SKILL_TREE_CANVAS_PADDING * 2.0,
+        height: tree.nodes.len() as f32 * SKILL_TREE_NODE_HEIGHT
+            + tree.nodes.len().saturating_sub(1) as f32 * SKILL_TREE_NODE_GAP
+            + SKILL_TREE_CANVAS_PADDING * 2.0,
         node_frames,
     }
 }
@@ -92,8 +78,11 @@ pub(super) fn render_skill_tree_canvas(
     font: &ViewerUiFont,
     tree: &game_bevy::UiSkillTreeView,
     menu_state: &UiMenuState,
+    view_state: &UiSkillTreeViewState,
 ) {
     let layout = build_skill_tree_canvas_layout(tree);
+    let viewport_height = layout.height.min(SKILL_TREE_MAX_VIEWPORT_HEIGHT);
+    let pan = clamped_render_pan(view_state.pan, layout.height, viewport_height);
     let entries_by_id = tree
         .entries
         .iter()
@@ -104,22 +93,28 @@ pub(super) fn render_skill_tree_canvas(
         .spawn((
             Node {
                 width: Val::Percent(100.0),
-                min_height: px(layout.height),
-                padding: UiRect::all(px(10)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Start,
+                height: px(viewport_height),
+                min_height: px(viewport_height),
+                position_type: PositionType::Relative,
                 overflow: Overflow::clip(),
                 border: UiRect::all(px(1)),
                 ..default()
             },
             BackgroundColor(ui_panel_background_alt().into()),
             BorderColor::all(ui_border_color()),
+            SkillTreeCanvasViewport {
+                content_size: Vec2::new(layout.width, layout.height),
+            },
+            RelativeCursorPosition::default(),
             viewer_ui_passthrough_bundle(),
         ))
         .with_children(|frame| {
             frame
                 .spawn((
                     Node {
+                        position_type: PositionType::Absolute,
+                        left: px(pan.x),
+                        top: px(pan.y),
                         width: px(layout.width),
                         height: px(layout.height),
                         min_width: px(layout.width),
@@ -206,6 +201,17 @@ pub(super) fn render_skill_tree_canvas(
                     }
                 });
         });
+}
+
+fn clamped_render_pan(pan: Vec2, content_height: f32, viewport_height: f32) -> Vec2 {
+    Vec2::new(
+        0.0,
+        if content_height <= viewport_height {
+            0.0
+        } else {
+            pan.y.clamp(viewport_height - content_height, 0.0)
+        },
+    )
 }
 
 fn spawn_skill_tree_link(
