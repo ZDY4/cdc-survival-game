@@ -35,15 +35,15 @@ pub(super) fn render_trade_page(
                         position_type: PositionType::Absolute,
                         left: Val::Percent(50.0),
                         top: px(TRADE_PAGE_TOP),
+                        bottom: px(TRADE_PAGE_BOTTOM),
                         margin: UiRect {
                             left: px(-(trade_page_width() / 2.0)),
                             ..default()
                         },
                         width: px(trade_page_width()),
-                        padding: UiRect::axes(px(18), px(14)),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        align_items: AlignItems::Center,
+                        padding: UiRect::all(px(14)),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(10),
                         border: UiRect::all(px(1)),
                         ..default()
                     },
@@ -55,18 +55,17 @@ pub(super) fn render_trade_page(
                     UiMouseBlocker,
                     UiMouseBlockerName("交易标题栏".to_string()),
                 ))
-                .with_children(|header| {
-                    header
+                .with_children(|panel| {
+                    panel
                         .spawn(Node {
                             flex_direction: FlexDirection::Row,
                             align_items: AlignItems::Center,
-                            column_gap: px(18),
-                            flex_grow: 1.0,
-                            min_width: px(0),
+                            justify_content: JustifyContent::SpaceBetween,
+                            column_gap: px(12),
                             ..default()
                         })
-                        .with_children(|header_body| {
-                            header_body
+                        .with_children(|header| {
+                            header
                                 .spawn(Node {
                                     flex_direction: FlexDirection::Column,
                                     row_gap: px(4),
@@ -94,53 +93,75 @@ pub(super) fn render_trade_page(
                                         ui_text_secondary_color(),
                                     ));
                                 });
-                            header_body.spawn(action_button(
+                            let close_action = GameUiButtonAction::CloseTrade;
+                            header
+                                .spawn(close_icon_button(close_action))
+                                .with_children(|button| {
+                                    button.spawn(close_icon_label(font));
+                                });
+                        });
+                    panel
+                        .spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                flex_grow: 1.0,
+                                min_height: px(0),
+                                flex_direction: FlexDirection::Row,
+                                column_gap: px(TRADE_PAGE_GAP),
+                                ..default()
+                            },
+                            viewer_ui_passthrough_bundle(),
+                        ))
+                        .with_children(|columns| {
+                            render_trade_shop_column(
+                                columns,
                                 font,
-                                "确认交易",
-                                GameUiButtonAction::ConfirmTradeCart,
+                                trade,
+                                trade_snapshot,
+                                drag_state,
+                            );
+                            render_trade_inventory_column(
+                                columns,
+                                font,
+                                trade,
+                                trade_snapshot,
+                                inventory_snapshot,
+                                drag_state,
+                            );
+                        });
+                    panel
+                        .spawn(Node {
+                            width: Val::Percent(100.0),
+                            min_height: px(42),
+                            padding: UiRect::axes(px(4), px(4)),
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: px(10),
+                            ..default()
+                        })
+                        .with_children(|footer| {
+                            footer.spawn((
+                                Text::new(settlement_text(&trade.cart)),
+                                TextFont::from_font_size(11.0).with_font(font.0.clone()),
+                                TextColor(ui_text_secondary_color()),
+                                Node {
+                                    flex_grow: 1.0,
+                                    min_width: px(0),
+                                    ..default()
+                                },
+                                viewer_ui_passthrough_bundle(),
                             ));
-                            header_body.spawn(action_button(
+                            footer.spawn(action_button(
                                 font,
                                 "清空",
                                 GameUiButtonAction::ClearTradeCart,
                             ));
+                            footer.spawn(action_button(
+                                font,
+                                "确认交易",
+                                GameUiButtonAction::ConfirmTradeCart,
+                            ));
                         });
-                    let close_action = GameUiButtonAction::CloseTrade;
-                    header
-                        .spawn(close_icon_button(close_action))
-                        .with_children(|button| {
-                            button.spawn(close_icon_label(font));
-                        });
-                });
-
-            overlay
-                .spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(50.0),
-                        top: px(TRADE_PAGE_TOP + 74.0),
-                        bottom: px(TRADE_PAGE_BOTTOM),
-                        margin: UiRect {
-                            left: px(-(trade_page_width() / 2.0)),
-                            ..default()
-                        },
-                        width: px(trade_page_width()),
-                        flex_direction: FlexDirection::Row,
-                        column_gap: px(TRADE_PAGE_GAP),
-                        ..default()
-                    },
-                    viewer_ui_passthrough_bundle(),
-                ))
-                .with_children(|columns| {
-                    render_trade_shop_column(columns, font, trade, trade_snapshot, drag_state);
-                    render_trade_inventory_column(
-                        columns,
-                        font,
-                        trade,
-                        trade_snapshot,
-                        inventory_snapshot,
-                        drag_state,
-                    );
                 });
         });
 }
@@ -162,9 +183,9 @@ fn render_trade_inventory_column(
             Node {
                 width: px(TRADE_PAGE_RIGHT_WIDTH),
                 height: Val::Percent(100.0),
-                padding: UiRect::all(px(14)),
+                padding: UiRect::all(px(12)),
                 flex_direction: FlexDirection::Column,
-                row_gap: px(10),
+                row_gap: px(8),
                 border: UiRect::all(px(1)),
                 overflow: Overflow::clip_y(),
                 ..default()
@@ -174,6 +195,7 @@ fn render_trade_inventory_column(
             FocusPolicy::Block,
             RelativeCursorPosition::default(),
             TradeInventoryPanelBounds,
+            TradeBuyZone,
             viewer_ui_passthrough_bundle(),
             UiMouseBlocker,
             UiMouseBlockerName("交易背包栏".to_string()),
@@ -182,7 +204,7 @@ fn render_trade_inventory_column(
             body.spawn(text_bundle(font, "玩家物品", 11.4, ui_text_heading_color()));
             body.spawn(text_bundle(
                 font,
-                "点击条目加入待卖出，已装备物品显示 E 标记。",
+                "待买入会显示在这里；已装备物品显示 E 标记。",
                 9.6,
                 ui_text_muted_color(),
             ));
@@ -207,11 +229,11 @@ fn render_trade_shop_column(
     parent
         .spawn((
             Node {
-                width: px(TRADE_PAGE_RIGHT_WIDTH),
+                width: px(TRADE_PAGE_LEFT_WIDTH),
                 height: Val::Percent(100.0),
-                padding: UiRect::all(px(14)),
+                padding: UiRect::all(px(12)),
                 flex_direction: FlexDirection::Column,
-                row_gap: px(10),
+                row_gap: px(8),
                 border: UiRect::all(px(1)),
                 overflow: Overflow::clip_y(),
                 ..default()
@@ -239,7 +261,7 @@ fn render_trade_shop_column(
             ));
             body.spawn(text_bundle(
                 font,
-                "点击条目加入待买入；可堆叠物品会先选择数量。",
+                "待卖出会显示在这里；可拖拽物品到对方列表。",
                 9.8,
                 ui_text_muted_color(),
             ));
@@ -260,7 +282,7 @@ fn render_trade_shop_column(
                 viewer_ui_passthrough_bundle(),
             ))
             .with_children(|items| {
-                if snapshot.shop_items.is_empty() {
+                if snapshot.shop_items.is_empty() && trade.cart.sell_lines.is_empty() {
                     items.spawn(text_bundle(
                         font,
                         "商店库存为空",
@@ -268,28 +290,64 @@ fn render_trade_shop_column(
                         ui_text_muted_color(),
                     ));
                 }
+                let mut rendered_item_ids = std::collections::BTreeSet::new();
                 for item in &snapshot.shop_items {
-                    let queued = trade.cart.queued_buy_count(item.item_id);
+                    rendered_item_ids.insert(item.item_id);
+                    let queued = queued_sell_count_for_item(&trade.cart, item.item_id);
+                    let queued_source = queued_sell_source_for_item(&trade.cart, item.item_id);
                     render_trade_item_row(
                         items,
                         font,
                         "物",
-                        &trade_item_count_label(&item.name, item.count, "待买", queued),
+                        &trade_item_count_label(&item.name, item.count, "待卖", queued),
                         item.unit_price,
                         queued,
-                        true,
-                        GameUiButtonAction::QueueTradeBuy {
-                            shop_id: snapshot.shop_id.clone(),
+                        false,
+                        None,
+                        Some(TradeRowTarget::ShopItem {
                             item_id: item.item_id,
-                        },
-                        Some(GameUiButtonAction::AdjustTradeBuy {
-                            item_id: item.item_id,
-                            delta: -1,
                         }),
-                        Some(GameUiButtonAction::RemoveTradeBuy {
+                        queued_source
+                            .clone()
+                            .map(|source| GameUiButtonAction::AdjustTradeSell {
+                                item_id: item.item_id,
+                                source,
+                                delta: -1,
+                            }),
+                        queued_source.map(|source| GameUiButtonAction::RemoveTradeSell {
                             item_id: item.item_id,
+                            source,
                         }),
                         Some(item.item_id),
+                        false,
+                    );
+                }
+                for line in &trade.cart.sell_lines {
+                    if !rendered_item_ids.insert(line.item_id) {
+                        continue;
+                    }
+                    render_trade_item_row(
+                        items,
+                        font,
+                        "物",
+                        &trade_item_count_label(&line.name, 0, "待卖", line.count),
+                        line.unit_price,
+                        line.count,
+                        false,
+                        None,
+                        Some(TradeRowTarget::InventoryItem {
+                            item_id: line.item_id,
+                        }),
+                        Some(GameUiButtonAction::AdjustTradeSell {
+                            item_id: line.item_id,
+                            source: line.source.clone(),
+                            delta: -1,
+                        }),
+                        Some(GameUiButtonAction::RemoveTradeSell {
+                            item_id: line.item_id,
+                            source: line.source.clone(),
+                        }),
+                        Some(line.item_id),
                         false,
                     );
                 }
@@ -320,10 +378,12 @@ fn render_trade_player_list(
             },
             BackgroundColor(ui_panel_background()),
             BorderColor::all(ui_border_color()),
+            TradeBuyZone,
+            TradeInventoryListDropZone,
             viewer_ui_passthrough_bundle(),
         ))
         .with_children(|items| {
-            if inventory_snapshot.entries.is_empty() {
+            if inventory_snapshot.entries.is_empty() && trade.cart.buy_lines.is_empty() {
                 items.spawn(text_bundle(
                     font,
                     "当前筛选下没有物品",
@@ -331,24 +391,15 @@ fn render_trade_player_list(
                     ui_text_muted_color(),
                 ));
             }
+            let mut rendered_item_ids = std::collections::BTreeSet::new();
             for item in &inventory_snapshot.entries {
-                let equipped_source = item.equipped_slot_id.as_ref().map(|slot_id| {
-                    game_bevy::UiTradeCartSellSource::Equipped {
-                        slot_id: slot_id.clone(),
-                    }
-                });
-                let source = equipped_source
-                    .clone()
-                    .unwrap_or(game_bevy::UiTradeCartSellSource::Inventory);
-                let queued = match &source {
-                    game_bevy::UiTradeCartSellSource::Inventory => {
-                        trade.cart.queued_inventory_sell_count(item.item_id)
-                    }
-                    game_bevy::UiTradeCartSellSource::Equipped { slot_id } => {
-                        i32::from(trade.cart.has_equipped_sell_slot(slot_id))
-                    }
-                };
-                let price = trade_unit_price_for_player_item(trade_snapshot, item.item_id);
+                rendered_item_ids.insert(item.item_id);
+                let queued = trade.cart.queued_buy_count(item.item_id);
+                let price = trade_buy_unit_price_for_cart(&trade.cart, item.item_id)
+                    .filter(|_| queued > 0)
+                    .unwrap_or_else(|| {
+                        trade_unit_price_for_player_item(trade_snapshot, item.item_id)
+                    });
                 let icon = trade_item_icon_label(item.item_type, item.equipped_slot_id.is_some());
                 let is_drag_hover = matches!(
                     drag_state.hover_target.as_ref(),
@@ -359,35 +410,66 @@ fn render_trade_player_list(
                     items,
                     font,
                     icon,
-                    &trade_item_count_label(&item.name, item.count, "待卖", queued),
+                    &trade_item_count_label(&item.name, item.count, "待买", queued),
                     price,
                     queued,
-                    false,
-                    if let Some(slot_id) = item.equipped_slot_id.clone() {
-                        GameUiButtonAction::QueueTradeEquippedSell {
-                            shop_id: trade_snapshot.shop_id.clone(),
-                            slot_id,
-                        }
-                    } else {
-                        GameUiButtonAction::QueueTradeSell {
-                            shop_id: trade_snapshot.shop_id.clone(),
+                    true,
+                    None,
+                    item.equipped_slot_id
+                        .as_ref()
+                        .map(|slot_id| TradeRowTarget::EquippedItem {
+                            slot_id: slot_id.clone(),
                             item_id: item.item_id,
-                        }
-                    },
-                    Some(GameUiButtonAction::AdjustTradeSell {
+                        })
+                        .or(Some(TradeRowTarget::InventoryItem {
+                            item_id: item.item_id,
+                        })),
+                    Some(GameUiButtonAction::AdjustTradeBuy {
                         item_id: item.item_id,
-                        source: source.clone(),
                         delta: -1,
                     }),
-                    Some(GameUiButtonAction::RemoveTradeSell {
+                    Some(GameUiButtonAction::RemoveTradeBuy {
                         item_id: item.item_id,
-                        source,
                     }),
                     Some(item.item_id),
                     is_drag_hover,
                 );
             }
+            for line in &trade.cart.buy_lines {
+                if !rendered_item_ids.insert(line.item_id) {
+                    continue;
+                }
+                render_trade_item_row(
+                    items,
+                    font,
+                    "物",
+                    &trade_item_count_label(&line.name, 0, "待买", line.count),
+                    line.unit_price,
+                    line.count,
+                    true,
+                    None,
+                    Some(TradeRowTarget::ShopItem {
+                        item_id: line.item_id,
+                    }),
+                    Some(GameUiButtonAction::AdjustTradeBuy {
+                        item_id: line.item_id,
+                        delta: -1,
+                    }),
+                    Some(GameUiButtonAction::RemoveTradeBuy {
+                        item_id: line.item_id,
+                    }),
+                    Some(line.item_id),
+                    false,
+                );
+            }
         });
+}
+
+#[derive(Debug, Clone)]
+enum TradeRowTarget {
+    InventoryItem { item_id: u32 },
+    EquippedItem { slot_id: String, item_id: u32 },
+    ShopItem { item_id: u32 },
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -399,7 +481,8 @@ fn render_trade_item_row(
     unit_price: i32,
     queued: i32,
     buying: bool,
-    row_action: GameUiButtonAction,
+    row_action: Option<GameUiButtonAction>,
+    row_target: Option<TradeRowTarget>,
     decrease_action: Option<GameUiButtonAction>,
     remove_action: Option<GameUiButtonAction>,
     hover_item_id: Option<u32>,
@@ -431,10 +514,24 @@ fn render_trade_item_row(
         } else {
             ui_border_color()
         }),
-        row_action,
         RelativeCursorPosition::default(),
         viewer_ui_passthrough_bundle(),
     ));
+    if let Some(action) = row_action {
+        row.insert(action);
+    }
+    match row_target {
+        Some(TradeRowTarget::InventoryItem { item_id }) => {
+            row.insert(TradeInventoryItemClickTarget { item_id });
+        }
+        Some(TradeRowTarget::EquippedItem { slot_id, item_id }) => {
+            row.insert(TradeEquippedItemClickTarget { slot_id, item_id });
+        }
+        Some(TradeRowTarget::ShopItem { item_id }) => {
+            row.insert(TradeShopItemClickTarget { item_id });
+        }
+        None => {}
+    }
     if let Some(item_id) = hover_item_id {
         row.insert(InventoryItemHoverTarget { item_id });
     }
@@ -527,6 +624,24 @@ fn trade_item_icon_label(item_type: game_bevy::UiItemType, equipped: bool) -> &'
     }
 }
 
+fn queued_sell_count_for_item(cart: &game_bevy::UiTradeCartState, item_id: u32) -> i32 {
+    cart.sell_lines
+        .iter()
+        .filter(|line| line.item_id == item_id)
+        .map(|line| line.count.max(0))
+        .sum()
+}
+
+fn queued_sell_source_for_item(
+    cart: &game_bevy::UiTradeCartState,
+    item_id: u32,
+) -> Option<game_bevy::UiTradeCartSellSource> {
+    cart.sell_lines
+        .iter()
+        .find(|line| line.item_id == item_id)
+        .map(|line| line.source.clone())
+}
+
 fn trade_unit_price_for_player_item(snapshot: &game_bevy::UiTradeSnapshot, item_id: u32) -> i32 {
     snapshot
         .player_items
@@ -534,6 +649,13 @@ fn trade_unit_price_for_player_item(snapshot: &game_bevy::UiTradeSnapshot, item_
         .find(|entry| entry.item_id == item_id)
         .map(|entry| entry.unit_price)
         .unwrap_or(0)
+}
+
+fn trade_buy_unit_price_for_cart(cart: &game_bevy::UiTradeCartState, item_id: u32) -> Option<i32> {
+    cart.buy_lines
+        .iter()
+        .find(|line| line.item_id == item_id)
+        .map(|line| line.unit_price)
 }
 
 fn settlement_text(cart: &game_bevy::UiTradeCartState) -> String {

@@ -2,8 +2,9 @@
 
 use super::button_actions::{
     execute_inventory_drop, plan_container_store, plan_container_take, plan_inventory_drop,
-    plan_trade_cart_sell, queue_trade_equipped_sell, queue_trade_sell, trade_sell_unit_price,
-    ContainerQuantityPlan, InventoryDropPlan, TradeQuantityPlan,
+    plan_trade_cart_buy, plan_trade_cart_sell, queue_trade_buy, queue_trade_equipped_sell,
+    queue_trade_sell, trade_buy_unit_price, trade_sell_unit_price, ContainerQuantityPlan,
+    InventoryDropPlan, TradeQuantityPlan,
 };
 use super::*;
 
@@ -45,6 +46,30 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
         's,
         (
             &'static TradeInventoryItemClickTarget,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            Option<&'static RelativeCursorPosition>,
+            Option<&'static Visibility>,
+        ),
+        With<Button>,
+    >,
+    trade_equipped_targets: Query<
+        'w,
+        's,
+        (
+            &'static TradeEquippedItemClickTarget,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            Option<&'static RelativeCursorPosition>,
+            Option<&'static Visibility>,
+        ),
+        With<Button>,
+    >,
+    trade_shop_targets: Query<
+        'w,
+        's,
+        (
+            &'static TradeShopItemClickTarget,
             &'static ComputedNode,
             &'static UiGlobalTransform,
             Option<&'static RelativeCursorPosition>,
@@ -142,6 +167,17 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
             Option<&'static Visibility>,
         ),
         With<TradeInventoryListDropZone>,
+    >,
+    trade_buy_zones: Query<
+        'w,
+        's,
+        (
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            Option<&'static RelativeCursorPosition>,
+            Option<&'static Visibility>,
+        ),
+        With<TradeBuyZone>,
     >,
     container_panel_bounds: Query<
         'w,
@@ -335,6 +371,9 @@ pub(crate) fn handle_inventory_panel_pointer_input(
     let inventory_hit = find_inventory_click_target(cursor_position, &targets.inventory_targets);
     let trade_inventory_hit =
         find_trade_inventory_click_target(cursor_position, &targets.trade_inventory_targets);
+    let trade_equipped_hit =
+        find_trade_equipped_click_target(cursor_position, &targets.trade_equipped_targets);
+    let trade_shop_hit = find_trade_shop_click_target(cursor_position, &targets.trade_shop_targets);
     let container_item_hit = find_container_inventory_click_target(
         cursor_position,
         &targets.container_inventory_targets,
@@ -450,6 +489,19 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                     visibility,
                 )
             });
+    let cursor_in_trade_buy_zone =
+        targets
+            .trade_buy_zones
+            .iter()
+            .any(|(computed, transform, cursor, visibility)| {
+                hover_target_contains_cursor(
+                    cursor_position,
+                    computed,
+                    transform,
+                    cursor,
+                    visibility,
+                )
+            });
     let cursor_in_container_panel =
         targets
             .container_panel_bounds
@@ -545,6 +597,31 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 return;
             }
         } else if trade_active {
+            if let Some(item_id) = trade_shop_hit {
+                begin_inventory_drag(
+                    &mut ui.drag_state,
+                    UiInventoryDragSource::ShopItem { item_id },
+                    item_preview_label(&ui.items.0, item_id),
+                    Vec::new(),
+                    cursor_position,
+                );
+                ui.context_menu.clear();
+                return;
+            }
+            if let Some(target) = trade_equipped_hit.as_ref() {
+                begin_inventory_drag(
+                    &mut ui.drag_state,
+                    UiInventoryDragSource::EquipmentSlot {
+                        slot_id: target.slot_id.clone(),
+                        item_id: target.item_id,
+                    },
+                    item_preview_label(&ui.items.0, target.item_id),
+                    item_allowed_equipment_slots(&ui.items.0, target.item_id),
+                    cursor_position,
+                );
+                ui.context_menu.clear();
+                return;
+            }
             if let Some(item_id) = effective_inventory_hit {
                 begin_inventory_drag(
                     &mut ui.drag_state,
@@ -624,6 +701,7 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 equipment_hit.as_ref(),
                 cursor_in_inventory_list,
                 cursor_in_container_list,
+                cursor_in_trade_buy_zone,
                 cursor_in_trade_sell_zone,
             );
         }
@@ -645,6 +723,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             &ui.save_path,
             &ui.items,
             effective_inventory_hit,
+            trade_shop_hit,
+            trade_equipped_hit.as_ref(),
             container_item_hit,
             equipment_hit.as_ref(),
             clicked_context_menu,
@@ -673,6 +753,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             &ui.save_path,
             &ui.items,
             effective_inventory_hit,
+            trade_shop_hit,
+            trade_equipped_hit.as_ref(),
             container_item_hit,
             equipment_hit.as_ref(),
             clicked_context_menu,
@@ -856,6 +938,33 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 }
             }
         }
+        UiInventoryDragSource::ShopItem { item_id } => {
+            if trade_active {
+                if let Some(trade_shop_id) = ui
+                    .modal_state
+                    .trade
+                    .as_ref()
+                    .map(|trade| trade.shop_id.clone())
+                {
+                    if matches!(
+                        hover_target,
+                        Some(UiInventoryDragHoverTarget::TradeBuyZone)
+                            | Some(UiInventoryDragHoverTarget::InventoryItem { .. })
+                            | Some(UiInventoryDragHoverTarget::InventoryListEnd)
+                    ) {
+                        applied_drop = apply_trade_buy(
+                            &mut ui.runtime_state,
+                            &mut ui.viewer_state,
+                            &mut ui.menu_state,
+                            &mut ui.modal_state,
+                            &ui.items,
+                            &trade_shop_id,
+                            item_id,
+                        );
+                    }
+                }
+            }
+        }
         UiInventoryDragSource::ContainerItem {
             ref container_id,
             item_id,
@@ -977,6 +1086,7 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         ui.drag_state.suppress_button_press_once = true;
         ui.menu_state.selected_inventory_item = match &source {
             UiInventoryDragSource::InventoryItem { item_id } => Some(*item_id),
+            UiInventoryDragSource::ShopItem { item_id } => Some(*item_id),
             UiInventoryDragSource::ContainerItem { .. } => ui.menu_state.selected_inventory_item,
             UiInventoryDragSource::EquipmentSlot { .. } => ui.menu_state.selected_inventory_item,
         };
@@ -1034,6 +1144,48 @@ pub(super) fn find_trade_inventory_click_target(
     targets: &Query<
         (
             &TradeInventoryItemClickTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) -> Option<u32> {
+    targets
+        .iter()
+        .find_map(|(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+                .then_some(target.item_id)
+        })
+}
+
+pub(super) fn find_trade_equipped_click_target(
+    cursor_position: Vec2,
+    targets: &Query<
+        (
+            &TradeEquippedItemClickTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) -> Option<TradeEquippedItemClickTarget> {
+    targets
+        .iter()
+        .find_map(|(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+                .then(|| target.clone())
+        })
+}
+
+pub(super) fn find_trade_shop_click_target(
+    cursor_position: Vec2,
+    targets: &Query<
+        (
+            &TradeShopItemClickTarget,
             &ComputedNode,
             &UiGlobalTransform,
             Option<&RelativeCursorPosition>,
@@ -1132,9 +1284,18 @@ fn resolve_drag_hover_target(
     equipment_hit: Option<&EquipmentSlotClickTarget>,
     cursor_in_inventory_list: bool,
     cursor_in_container_list: bool,
+    cursor_in_trade_buy_zone: bool,
     cursor_in_trade_sell_zone: bool,
 ) -> Option<UiInventoryDragHoverTarget> {
     if trade_active {
+        if cursor_in_trade_buy_zone
+            && matches!(
+                drag_state.active_source.as_ref(),
+                Some(UiInventoryDragSource::ShopItem { .. })
+            )
+        {
+            return Some(UiInventoryDragHoverTarget::TradeBuyZone);
+        }
         if cursor_in_trade_sell_zone {
             return Some(UiInventoryDragHoverTarget::TradeSellZone);
         }
@@ -1219,10 +1380,73 @@ fn handle_click_release(
     _save_path: &ViewerRuntimeSavePath,
     items: &ItemDefinitions,
     inventory_hit: Option<u32>,
+    trade_shop_hit: Option<u32>,
+    trade_equipped_hit: Option<&TradeEquippedItemClickTarget>,
     container_item_hit: Option<u32>,
     equipment_hit: Option<&EquipmentSlotClickTarget>,
     clicked_context_menu: bool,
 ) {
+    if let Some(item_id) = trade_shop_hit {
+        if trade_active {
+            if let Some(trade) = modal_state.trade.clone() {
+                match plan_trade_cart_buy(&runtime_state.runtime, &trade, item_id, items) {
+                    TradeQuantityPlan::Immediate { count } => {
+                        if let Some(unit_price) = trade_buy_unit_price(
+                            &runtime_state.runtime,
+                            &trade.shop_id,
+                            item_id,
+                            items,
+                        ) {
+                            let status = queue_trade_buy(
+                                modal_state,
+                                items,
+                                &trade.shop_id,
+                                item_id,
+                                unit_price,
+                                count,
+                            );
+                            viewer_state.status_line = status.clone();
+                            menu_state.status_text = status;
+                        }
+                    }
+                    TradeQuantityPlan::OpenModal(modal) => {
+                        modal_state.item_quantity = Some(modal);
+                        viewer_state.status_line = "选择要加入待买入的数量".to_string();
+                        menu_state.status_text = viewer_state.status_line.clone();
+                    }
+                    TradeQuantityPlan::Blocked { status } => {
+                        viewer_state.status_line = status.clone();
+                        menu_state.status_text = status;
+                    }
+                }
+            }
+            context_menu.clear();
+            return;
+        }
+    }
+
+    if let Some(target) = trade_equipped_hit {
+        if trade_active {
+            if let (Some(actor_id), Some(trade)) = (
+                player_actor_id(&runtime_state.runtime),
+                modal_state.trade.clone(),
+            ) {
+                let status = queue_trade_equipped_sell(
+                    &runtime_state.runtime,
+                    modal_state,
+                    items,
+                    actor_id,
+                    &trade.shop_id,
+                    &target.slot_id,
+                );
+                viewer_state.status_line = status.clone();
+                menu_state.status_text = status;
+            }
+            context_menu.clear();
+            return;
+        }
+    }
+
     if let Some(item_id) = inventory_hit {
         if trade_active {
             if let (Some(actor_id), Some(trade)) = (
@@ -1949,6 +2173,49 @@ fn apply_trade_sell(
         TradeQuantityPlan::OpenModal(modal) => {
             modal_state.item_quantity = Some(modal);
             viewer_state.status_line = "选择要卖出的数量".to_string();
+            menu_state.status_text = viewer_state.status_line.clone();
+            true
+        }
+        TradeQuantityPlan::Blocked { status } => {
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+            false
+        }
+    }
+}
+
+fn apply_trade_buy(
+    runtime_state: &mut ViewerRuntimeState,
+    viewer_state: &mut ViewerState,
+    menu_state: &mut UiMenuState,
+    modal_state: &mut UiModalState,
+    items: &ItemDefinitions,
+    shop_id: &str,
+    item_id: u32,
+) -> bool {
+    let Some(trade) = modal_state.trade.clone() else {
+        viewer_state.status_line = "交易会话已关闭".to_string();
+        menu_state.status_text = viewer_state.status_line.clone();
+        return false;
+    };
+    match plan_trade_cart_buy(&runtime_state.runtime, &trade, item_id, items) {
+        TradeQuantityPlan::Immediate { count } => {
+            let Some(unit_price) =
+                trade_buy_unit_price(&runtime_state.runtime, shop_id, item_id, items)
+            else {
+                let status = format!("unknown_item:{item_id}");
+                viewer_state.status_line = status.clone();
+                menu_state.status_text = status;
+                return false;
+            };
+            let status = queue_trade_buy(modal_state, items, shop_id, item_id, unit_price, count);
+            viewer_state.status_line = status.clone();
+            menu_state.status_text = status;
+            true
+        }
+        TradeQuantityPlan::OpenModal(modal) => {
+            modal_state.item_quantity = Some(modal);
+            viewer_state.status_line = "选择要买入的数量".to_string();
             menu_state.status_text = viewer_state.status_line.clone();
             true
         }

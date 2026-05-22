@@ -125,6 +125,7 @@ impl UiContextMenuState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UiInventoryDragSource {
     InventoryItem { item_id: u32 },
+    ShopItem { item_id: u32 },
     ContainerItem { container_id: String, item_id: u32 },
     EquipmentSlot { slot_id: String, item_id: u32 },
 }
@@ -136,6 +137,7 @@ pub(crate) enum UiInventoryDragHoverTarget {
     EquipmentSlot { slot_id: String },
     InventoryListEnd,
     ContainerListEnd,
+    TradeBuyZone,
     TradeSellZone,
 }
 
@@ -355,6 +357,17 @@ pub(crate) struct TradeInventoryItemClickTarget {
     pub item_id: u32,
 }
 
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TradeEquippedItemClickTarget {
+    pub slot_id: String,
+    pub item_id: u32,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TradeShopItemClickTarget {
+    pub item_id: u32,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ContainerInventoryItemClickTarget {
     pub item_id: u32,
@@ -516,6 +529,9 @@ pub(crate) struct TradeInventoryPanelBounds;
 
 #[derive(Component)]
 pub(crate) struct TradeInventoryListDropZone;
+
+#[derive(Component)]
+pub(crate) struct TradeBuyZone;
 
 #[derive(Component)]
 pub(crate) struct ContainerInventoryPanelBounds;
