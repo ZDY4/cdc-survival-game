@@ -676,7 +676,7 @@ impl Default for ViewerRenderConfig {
             overlay_mode: ViewerOverlayMode::Gameplay,
             ground_variation_strength: 0.32,
             object_style_seed: 17,
-            fow_fog_color: Color::srgba(0.0, 0.0, 0.0, 1.0),
+            fow_fog_color: ViewerPalette::default().clear_color,
             fow_explored_alpha: 0.75,
             fow_unexplored_alpha: 1.0,
             fow_edge_softness: 0.0075,
