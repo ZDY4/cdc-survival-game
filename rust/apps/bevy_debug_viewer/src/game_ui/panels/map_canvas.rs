@@ -2,6 +2,10 @@
 
 use std::collections::BTreeMap;
 
+use super::map_canvas_geometry::{object_occupied_rects, GridRect};
+use super::map_canvas_style::{
+    actor_marker_color, object_cell_color, object_outline_color, TerrainVisualKind,
+};
 use super::*;
 
 const MAP_CANVAS_MAX_WIDTH: f32 = MAP_PANEL_WIDTH - 40.0;
@@ -48,16 +52,23 @@ fn spawn_terrain_cells(
         .collect::<BTreeMap<_, _>>();
 
     for z in 0..layout.map_height {
-        for x in 0..layout.map_width {
-            let cell = cells.get(&(x as i32, z as i32)).copied();
-            canvas.spawn(map_cell_node(
-                x,
-                z,
-                layout,
-                cell.map(terrain_cell_color)
-                    .unwrap_or_else(unknown_cell_color),
-                cell.is_some_and(|cell| cell.blocks_movement),
-            ));
+        let mut run_start = 0;
+        let mut run_style = terrain_style_at(&cells, 0, z);
+        for x in 1..=layout.map_width {
+            let next_style = (x < layout.map_width).then(|| terrain_style_at(&cells, x, z));
+            if next_style != Some(run_style) {
+                canvas.spawn(map_terrain_run_node(
+                    run_start,
+                    z,
+                    x - run_start,
+                    layout,
+                    run_style,
+                ));
+                run_start = x;
+                if let Some(next_style) = next_style {
+                    run_style = next_style;
+                }
+            }
         }
     }
 }
@@ -75,13 +86,9 @@ fn spawn_map_objects(
         .filter(|object| super::map::object_visible_on_level(object, current_level))
     {
         let color = object_cell_color(object);
-        for cell in object
-            .occupied_cells
-            .iter()
-            .copied()
-            .filter(|cell| cell.y == current_level)
-        {
-            canvas.spawn(map_cell_overlay_node(cell.x, cell.z, layout, color));
+        let outline_color = object_outline_color(object);
+        for rect in object_occupied_rects(object, current_level) {
+            canvas.spawn(map_object_rect_node(rect, layout, color, outline_color));
         }
     }
 }
@@ -122,42 +129,45 @@ fn spawn_actor_markers(
     }
 }
 
-fn map_cell_node(
+fn map_terrain_run_node(
     x: u32,
     z: u32,
+    width_cells: u32,
     layout: MapPanelLayout,
-    color: Color,
-    blocked: bool,
+    style: TerrainVisualKind,
 ) -> impl Bundle {
     (
         Node {
             position_type: PositionType::Absolute,
             left: px(layout.cell_left(x as i32)),
             top: px(layout.cell_top(z as i32)),
-            width: px(layout.cell_draw_size()),
-            height: px(layout.cell_draw_size()),
-            border: UiRect::all(px(if blocked { 1.0 } else { 0.0 })),
+            width: px(layout.run_draw_width(width_cells)),
+            height: px(layout.terrain_draw_size()),
             ..default()
         },
-        BackgroundColor(color),
-        BorderColor::all(Color::srgba(0.15, 0.14, 0.12, 0.7)),
+        BackgroundColor(style.color()),
         viewer_ui_passthrough_bundle(),
     )
 }
 
-fn map_cell_overlay_node(x: i32, z: i32, layout: MapPanelLayout, color: Color) -> impl Bundle {
+fn map_object_rect_node(
+    rect: GridRect,
+    layout: MapPanelLayout,
+    color: Color,
+    outline_color: Color,
+) -> impl Bundle {
     (
         Node {
             position_type: PositionType::Absolute,
-            left: px(layout.cell_left(x)),
-            top: px(layout.cell_top(z)),
-            width: px(layout.cell_draw_size()),
-            height: px(layout.cell_draw_size()),
+            left: px(layout.cell_left(rect.x)),
+            top: px(layout.cell_top(rect.z)),
+            width: px(layout.object_draw_width(rect.width)),
+            height: px(layout.object_draw_height(rect.height)),
             border: UiRect::all(px(1)),
             ..default()
         },
         BackgroundColor(color),
-        BorderColor::all(Color::srgba(0.02, 0.02, 0.018, 0.82)),
+        BorderColor::all(outline_color),
         viewer_ui_passthrough_bundle(),
     )
 }
@@ -214,43 +224,12 @@ fn map_canvas_content_node(layout: MapPanelLayout) -> impl Bundle {
     )
 }
 
-fn terrain_cell_color(cell: &game_core::MapCellDebugState) -> Color {
-    let terrain = cell.terrain.as_str();
-    if cell.blocks_movement {
-        return Color::srgba(0.12, 0.115, 0.105, 1.0);
-    }
-    match terrain {
-        "road" | "asphalt" | "concrete" => Color::srgba(0.23, 0.235, 0.23, 1.0),
-        "grass" | "plain" | "field" => Color::srgba(0.16, 0.24, 0.15, 1.0),
-        "forest" => Color::srgba(0.10, 0.19, 0.12, 1.0),
-        "water" => Color::srgba(0.08, 0.19, 0.28, 1.0),
-        "urban" => Color::srgba(0.20, 0.20, 0.19, 1.0),
-        _ => Color::srgba(0.18, 0.18, 0.165, 1.0),
-    }
-}
-
-fn unknown_cell_color() -> Color {
-    Color::srgba(0.065, 0.065, 0.06, 1.0)
-}
-
-fn object_cell_color(object: &game_core::MapObjectDebugState) -> Color {
-    match object.kind {
-        game_data::MapObjectKind::Building => Color::srgba(0.47, 0.42, 0.34, 0.95),
-        game_data::MapObjectKind::Trigger => Color::srgba(0.70, 0.56, 0.18, 0.42),
-        game_data::MapObjectKind::Interactive => Color::srgba(0.36, 0.46, 0.56, 0.55),
-        game_data::MapObjectKind::AiSpawn => Color::srgba(0.48, 0.28, 0.58, 0.45),
-        game_data::MapObjectKind::Pickup => Color::srgba(0.56, 0.44, 0.25, 0.45),
-        game_data::MapObjectKind::Prop => Color::srgba(0.28, 0.27, 0.25, 0.55),
-    }
-}
-
-fn actor_marker_color(side: game_data::ActorSide) -> Color {
-    match side {
-        game_data::ActorSide::Player => Color::srgba(0.24, 0.56, 0.95, 1.0),
-        game_data::ActorSide::Friendly => Color::srgba(0.24, 0.68, 0.34, 1.0),
-        game_data::ActorSide::Hostile => Color::srgba(0.90, 0.24, 0.20, 1.0),
-        game_data::ActorSide::Neutral => Color::srgba(0.74, 0.72, 0.66, 1.0),
-    }
+fn terrain_style_at(
+    cells: &BTreeMap<(i32, i32), &game_core::MapCellDebugState>,
+    x: u32,
+    z: u32,
+) -> TerrainVisualKind {
+    TerrainVisualKind::from_cell(cells.get(&(x as i32, z as i32)).copied())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -307,7 +286,19 @@ impl MapPanelLayout {
         z.max(0) as f32 * self.cell_size
     }
 
-    fn cell_draw_size(self) -> f32 {
-        (self.cell_size - 1.0).max(0.75)
+    fn terrain_draw_size(self) -> f32 {
+        (self.cell_size - 0.15).max(0.75)
+    }
+
+    fn run_draw_width(self, cells: u32) -> f32 {
+        (self.cell_size * cells as f32 - 0.15).max(0.75)
+    }
+
+    fn object_draw_width(self, cells: u32) -> f32 {
+        (self.cell_size * cells as f32 - 0.4).max(1.0)
+    }
+
+    fn object_draw_height(self, cells: u32) -> f32 {
+        (self.cell_size * cells as f32 - 0.4).max(1.0)
     }
 }

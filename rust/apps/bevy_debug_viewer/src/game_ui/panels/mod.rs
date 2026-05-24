@@ -7,6 +7,8 @@ mod inventory;
 mod journal;
 mod map;
 mod map_canvas;
+mod map_canvas_geometry;
+mod map_canvas_style;
 mod map_settings;
 mod skills;
 mod skills_graph;
