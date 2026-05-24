@@ -1,5 +1,8 @@
 use bevy::asset::uuid_handle;
 use bevy::core_pipeline::core_3d::{Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey, Transparent3d};
+use bevy::core_pipeline::prepass::{
+    Opaque3dPrepass, OpaqueNoLightmap3dBatchSetKey, OpaqueNoLightmap3dBinKey,
+};
 use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::log::warn;
@@ -55,6 +58,7 @@ impl Plugin for WorldRenderStandardTileInstancingPlugin {
             .add_render_command::<Opaque3d, DrawWorldRenderStandardTileInstancedOpaque>()
             .add_render_command::<Transparent3d, DrawWorldRenderStandardTileInstancedTransparent>()
             .add_render_command::<Shadow, DrawWorldRenderStandardTileInstancedShadow>()
+            .add_render_command::<Opaque3dPrepass, DrawWorldRenderStandardTileInstancedPrepass>()
             .init_resource::<SpecializedMeshPipelines<WorldRenderStandardTilePipeline>>()
             .add_systems(
                 RenderStartup,
@@ -72,6 +76,8 @@ impl Plugin for WorldRenderStandardTileInstancingPlugin {
                     queue_world_render_standard_tile_transparent_batches
                         .in_set(RenderSystems::QueueMeshes),
                     queue_world_render_standard_tile_shadow_batches
+                        .in_set(RenderSystems::QueueMeshes),
+                    queue_world_render_standard_tile_prepass_batches
                         .in_set(RenderSystems::QueueMeshes),
                     prepare_world_render_standard_tile_instance_buffers
                         .in_set(RenderSystems::PrepareResources),
@@ -614,6 +620,98 @@ fn queue_world_render_standard_tile_shadow_batches(
     }
 }
 
+fn queue_world_render_standard_tile_prepass_batches(
+    prepass_draw_functions: Res<DrawFunctions<Opaque3dPrepass>>,
+    custom_pipeline: Res<WorldRenderStandardTileShadowPipeline>,
+    mut pipelines: ResMut<SpecializedMeshPipelines<PrepassPipelineSpecializer>>,
+    pipeline_cache: Res<PipelineCache>,
+    meshes: Res<RenderAssets<RenderMesh>>,
+    render_mesh_instances: Res<RenderMeshInstances>,
+    mesh_allocator: Res<MeshAllocator>,
+    gpu_preprocessing_support: Res<GpuPreprocessingSupport>,
+    batches: Query<
+        (
+            Entity,
+            &MainEntity,
+            &WorldRenderStandardTileOpaqueInstanceBuffer,
+        ),
+        With<WorldRenderStandardTileBatchMaterialState>,
+    >,
+    mut prepass_render_phases: ResMut<ViewBinnedRenderPhases<Opaque3dPrepass>>,
+    views: Query<&ExtractedView>,
+    mut change_tick: Local<Tick>,
+) {
+    let draw_function = prepass_draw_functions
+        .read()
+        .id::<DrawWorldRenderStandardTileInstancedPrepass>();
+
+    for view in &views {
+        let Some(prepass_phase) = prepass_render_phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+
+        let mut view_key = MeshPipelineKey::DEPTH_PREPASS;
+        view_key.set(
+            MeshPipelineKey::UNCLIPPED_DEPTH_ORTHO,
+            view.clip_from_view.w_axis.w.abs() > 0.5,
+        );
+
+        for (entity, main_entity, instance_buffer) in &batches {
+            if instance_buffer.length == 0 {
+                continue;
+            }
+
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
+            else {
+                continue;
+            };
+            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
+                continue;
+            };
+            let (vertex_slab, index_slab) = mesh_allocator.mesh_slabs(&mesh_instance.mesh_asset_id);
+            let mesh_key =
+                view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
+            let pipeline = match pipelines.specialize(
+                &pipeline_cache,
+                &PrepassPipelineSpecializer {
+                    pipeline: custom_pipeline.pipeline.clone(),
+                    properties: custom_pipeline.properties.clone(),
+                },
+                ErasedMaterialPipelineKey {
+                    mesh_key,
+                    material_key: ErasedMaterialKey::default(),
+                    type_id: TypeId::of::<WorldRenderStandardTileShadowPipeline>(),
+                },
+                &mesh.layout,
+            ) {
+                Ok(pipeline) => pipeline,
+                Err(_) => continue,
+            };
+
+            let next_change_tick = change_tick.get().wrapping_add(1);
+            change_tick.set(next_change_tick);
+
+            prepass_phase.add(
+                OpaqueNoLightmap3dBatchSetKey {
+                    pipeline,
+                    draw_function,
+                    material_bind_group_index: None,
+                    vertex_slab: vertex_slab.unwrap_or_default(),
+                    index_slab,
+                },
+                OpaqueNoLightmap3dBinKey {
+                    asset_id: mesh_instance.mesh_asset_id.into(),
+                },
+                (entity, *main_entity),
+                mesh_instance.current_uniform_index,
+                // Instance data is stored in the batch entity's custom buffer.
+                BinnedRenderPhaseType::mesh(false, &gpu_preprocessing_support),
+                *change_tick,
+            );
+        }
+    }
+}
+
 impl SpecializedMeshPipeline for WorldRenderStandardTilePipeline {
     type Key = WorldRenderStandardTilePipelineKey;
 
@@ -710,6 +808,8 @@ type DrawWorldRenderStandardTileInstancedShadow = (
     SetPrepassViewEmptyBindGroup<3>,
     DrawWorldRenderStandardTileInstancedOpaqueMesh,
 );
+
+type DrawWorldRenderStandardTileInstancedPrepass = DrawWorldRenderStandardTileInstancedShadow;
 
 struct DrawWorldRenderStandardTileInstancedOpaqueMesh;
 
