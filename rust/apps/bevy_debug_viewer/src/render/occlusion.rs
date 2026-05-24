@@ -4,9 +4,9 @@
 //! 构建出的 `StaticWorldOccluderVisual`，在每帧根据相机、焦点和玩家可见格子决定
 //! occluder 是否进入半透状态。当前有两类触发规则：
 //!
-//! - `RayOrVisibleCells`：门和普通物体使用；相机到焦点的线段被挡住，或投影遮住玩家
+//! - `RayOrVisibleCells`：门和普通物体使用；相机到焦点的线段被挡住，或几何上挡住玩家
 //!   可见格子，都会半透。
-//! - `VisibleCellsOnly`：建筑墙使用；只有墙片投影遮住玩家可见格子时才半透，不能因为
+//! - `VisibleCellsOnly`：建筑墙使用；只有墙片几何上挡住玩家可见格子时才半透，不能因为
 //!   相机射线穿过墙片就触发，否则会把与玩家视野无关的墙段淡化。
 //!
 //! 建筑墙是 instanced 渲染，半透状态通过 per-instance visual state 写入 shader；不要在
@@ -139,13 +139,8 @@ pub(super) fn cursor_over_hotbar_dock(window: &Window, cursor_position: Option<V
 
 pub(super) fn occluder_visual_from_spawned_box(
     spawned: SpawnedBoxVisual,
-    base_cells: Vec<GridCoord>,
-    floor_top: f32,
-    grid_size: f32,
-    render_config: ViewerRenderConfig,
 ) -> StaticWorldOccluderVisual {
     let base_alpha = spawned.color.to_srgba().alpha;
-    let top_y = spawned.translation.y + spawned.size.y * 0.5;
     StaticWorldOccluderVisual {
         material: spawned.material,
         tile_instance_handle: None,
@@ -155,13 +150,6 @@ pub(super) fn occluder_visual_from_spawned_box(
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: spawned.translation,
         aabb_half_extents: spawned.size * 0.5,
-        shadowed_visible_cells: project_shadowed_visible_cells(
-            &base_cells,
-            floor_top,
-            top_y,
-            grid_size,
-            render_config,
-        ),
         hover_map_object_id: None,
         currently_faded: false,
     }
@@ -169,13 +157,8 @@ pub(super) fn occluder_visual_from_spawned_box(
 
 pub(super) fn occluder_visual_from_spawned_mesh(
     spawned: SpawnedMeshVisual,
-    base_cells: Vec<GridCoord>,
-    floor_top: f32,
-    grid_size: f32,
-    render_config: ViewerRenderConfig,
 ) -> StaticWorldOccluderVisual {
     let base_alpha = spawned.color.to_srgba().alpha;
-    let top_y = spawned.aabb_center.y + spawned.aabb_half_extents.y;
     StaticWorldOccluderVisual {
         material: spawned.material,
         tile_instance_handle: spawned.tile_instance_handle,
@@ -185,111 +168,66 @@ pub(super) fn occluder_visual_from_spawned_mesh(
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: spawned.aabb_center,
         aabb_half_extents: spawned.aabb_half_extents,
-        shadowed_visible_cells: project_shadowed_visible_cells(
-            &base_cells,
-            floor_top,
-            top_y,
-            grid_size,
-            render_config,
-        ),
         hover_map_object_id: None,
         currently_faded: false,
     }
 }
 
-pub(super) fn project_shadowed_visible_cells(
-    base_cells: &[GridCoord],
-    floor_top: f32,
-    top_y: f32,
+pub(super) fn visible_cell_occlusion_world_points(
+    visible_cells: &HashSet<GridCoord>,
     grid_size: f32,
-    render_config: ViewerRenderConfig,
-) -> Vec<GridCoord> {
-    // 用相机 pitch/yaw 把遮挡物顶部向地面投影，得到“从当前视角会被挡住”的格子集合。
-    // 后续只要这些格子里有玩家可见格子，就认为 occluder 正在遮挡视野。
-    if base_cells.is_empty() {
-        return Vec::new();
-    }
-
-    let pitch = render_config.camera_pitch_radians();
-    let tan_pitch = pitch.tan();
-    if tan_pitch <= f32::EPSILON {
-        return Vec::new();
-    }
-
-    let height = (top_y - floor_top).max(0.0);
-    if height <= f32::EPSILON {
-        return Vec::new();
-    }
-
-    let projected_distance_cells = height / tan_pitch / grid_size.max(0.0001);
-    if projected_distance_cells <= 0.05 {
-        return Vec::new();
-    }
-
-    let yaw = render_config.camera_yaw_radians();
-    let direction = Vec2::new(-yaw.sin(), yaw.cos());
-    if direction.length_squared() <= f32::EPSILON {
-        return Vec::new();
-    }
-    let direction = direction.normalize();
-    let base_cells_set = base_cells.iter().copied().collect::<HashSet<_>>();
-    let mut shadowed = HashSet::new();
-    let step = 0.2_f32;
-    // 同一格内多点采样，避免细墙或斜向投影时只取中心点导致漏掉相邻可见格。
+    y_offset: f32,
+) -> Vec<Vec3> {
+    // 可见格遮挡用真实相机射线判定；每格采多个点，避免细长 occluder 只挡住格子边缘时漏判。
+    let grid_size = grid_size.max(0.0001);
     let sample_offsets = [
         Vec2::new(0.5, 0.5),
         Vec2::new(0.2, 0.2),
-        Vec2::new(0.5, 0.2),
         Vec2::new(0.8, 0.2),
-        Vec2::new(0.2, 0.5),
-        Vec2::new(0.8, 0.5),
         Vec2::new(0.2, 0.8),
-        Vec2::new(0.5, 0.8),
         Vec2::new(0.8, 0.8),
     ];
-
-    for base_cell in base_cells {
-        for sample in sample_offsets {
-            let start = Vec2::new(base_cell.x as f32 + sample.x, base_cell.z as f32 + sample.y);
-            let mut distance = step;
-            while distance <= projected_distance_cells + step * 0.5 {
-                let point = start + direction * distance;
-                let grid =
-                    GridCoord::new(point.x.floor() as i32, base_cell.y, point.y.floor() as i32);
-                if !base_cells_set.contains(&grid) {
-                    shadowed.insert(grid);
-                }
-                distance += step;
-            }
+    let mut points = Vec::with_capacity(visible_cells.len() * sample_offsets.len());
+    for cell in visible_cells {
+        let y = level_base_height(cell.y, grid_size) + y_offset;
+        for offset in sample_offsets {
+            points.push(Vec3::new(
+                (cell.x as f32 + offset.x) * grid_size,
+                y,
+                (cell.z as f32 + offset.y) * grid_size,
+            ));
         }
     }
-
-    let mut shadowed = shadowed.into_iter().collect::<Vec<_>>();
-    shadowed.sort_unstable_by_key(|grid| (grid.y, grid.z, grid.x));
-    shadowed
+    points
 }
 
 pub(super) fn occluder_blocks_visible_cells(
+    camera_position: Vec3,
     occluder: &StaticWorldOccluderVisual,
-    visible_cells: &HashSet<GridCoord>,
+    visible_cell_world_points: &[Vec3],
 ) -> bool {
-    // 这里比较的是“投影遮挡格子”和“玩家当前可见格子”，不是 occluder 自身占用格。
-    occluder
-        .shadowed_visible_cells
-        .iter()
-        .any(|cell| visible_cells.contains(cell))
+    // 这里用真实相机线段和 occluder AABB 判断，避免离散投影漏掉墙自身所在的可见格、
+    // 斜角格子或未来其它非建筑遮挡物的细边缘遮挡。
+    visible_cell_world_points.iter().copied().any(|point| {
+        occluder_blocks_target(
+            camera_position,
+            point,
+            occluder.aabb_center,
+            occluder.aabb_half_extents,
+        )
+    })
 }
 
 pub(super) fn should_fade_occluder(
     camera_position: Vec3,
     focus_points: &[Vec3],
     occluder: &StaticWorldOccluderVisual,
-    visible_cells: &HashSet<GridCoord>,
+    visible_cell_world_points: &[Vec3],
 ) -> bool {
     match occluder.fade_rule {
         // 建筑墙只在遮挡玩家可见格子时半透，避免相机到角色的射线让无关墙段一起淡化。
         StaticWorldOccluderFadeRule::VisibleCellsOnly => {
-            occluder_blocks_visible_cells(occluder, visible_cells)
+            occluder_blocks_visible_cells(camera_position, occluder, visible_cell_world_points)
         }
         StaticWorldOccluderFadeRule::RayOrVisibleCells => {
             // 门和普通物体沿用旧体验：挡住焦点射线或挡住可见格子，都会触发半透。
@@ -298,7 +236,7 @@ pub(super) fn should_fade_occluder(
                 focus_points,
                 occluder.aabb_center,
                 occluder.aabb_half_extents,
-            ) || occluder_blocks_visible_cells(occluder, visible_cells)
+            ) || occluder_blocks_visible_cells(camera_position, occluder, visible_cell_world_points)
         }
     }
 }
@@ -398,7 +336,7 @@ pub(super) fn update_occluder_list_fade(
     occluders: &mut [StaticWorldOccluderVisual],
     camera_position: Vec3,
     focus_points: &[Vec3],
-    visible_cells: &HashSet<GridCoord>,
+    visible_cell_world_points: &[Vec3],
     hovered_map_object_id: Option<&str>,
     mut tile_instances: Option<
         &mut HashMap<WorldRenderTileInstanceHandle, StaticWorldTileInstanceVisual>,
@@ -411,7 +349,12 @@ pub(super) fn update_occluder_list_fade(
         let should_fade = if occluder.hover_map_object_id.as_deref() == hovered_map_object_id {
             false
         } else {
-            should_fade_occluder(camera_position, focus_points, occluder, visible_cells)
+            should_fade_occluder(
+                camera_position,
+                focus_points,
+                occluder,
+                visible_cell_world_points,
+            )
         };
         set_occluder_faded(
             occluder,

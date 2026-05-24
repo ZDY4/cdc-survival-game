@@ -9,10 +9,10 @@ use super::{
     collect_walkable_tile_overlay_cells, darken_color, generated_door_render_polygon,
     interaction_menu_button_font_size_for_label, interaction_menu_layout, lighten_color,
     occluder_blocks_visible_cells, occluder_should_fade, occupied_cells_box,
-    project_shadowed_visible_cells, refresh_closed_door_occluders,
-    resolve_active_interaction_hover, should_draw_actor_selection_ring, should_fade_occluder,
-    should_hide_building_roofs, should_show_actor_label, sync_hover_mesh_outlines,
-    update_camera_follow_focus, GridBounds, HoverOutlineMember, MaterialStyle,
+    refresh_closed_door_occluders, resolve_active_interaction_hover,
+    should_draw_actor_selection_ring, should_fade_occluder, should_hide_building_roofs,
+    should_show_actor_label, sync_hover_mesh_outlines, update_camera_follow_focus,
+    visible_cell_occlusion_world_points, GridBounds, HoverOutlineMember, MaterialStyle,
     StaticWorldOccluderKind, WalkableTileOverlayKind, HOVER_MESH_OUTLINE_WIDTH_PX,
     INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
     INTERACTION_MENU_ITEM_HEIGHT_PX, INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX,
@@ -845,129 +845,82 @@ fn occluder_does_not_fade_without_focus_points() {
 }
 
 #[test]
-fn projected_shadow_cells_extend_forward_for_tall_occluder() {
-    let cells = project_shadowed_visible_cells(
-        &[GridCoord::new(0, 0, 0)],
-        0.0,
-        1.2,
-        1.0,
-        ViewerRenderConfig::default(),
-    );
-
-    assert!(cells.contains(&GridCoord::new(0, 0, 1)));
-    assert!(cells.contains(&GridCoord::new(0, 0, 2)));
-    assert!(!cells.contains(&GridCoord::new(0, 0, 0)));
-}
-
-#[test]
-fn projected_shadow_cells_for_short_occluder_do_not_skip_extra_row() {
-    let cells = project_shadowed_visible_cells(
-        &[GridCoord::new(0, 0, 0)],
-        0.0,
-        0.2,
-        1.0,
-        ViewerRenderConfig::default(),
-    );
-
-    assert!(cells.contains(&GridCoord::new(0, 0, 1)));
-    assert!(!cells.contains(&GridCoord::new(0, 0, 2)));
-}
-
-#[test]
-fn projected_shadow_cells_preserve_multi_cell_footprint() {
-    let cells = project_shadowed_visible_cells(
-        &[GridCoord::new(0, 0, 0), GridCoord::new(1, 0, 0)],
-        0.0,
-        0.4,
-        1.0,
-        ViewerRenderConfig::default(),
-    );
-
-    assert!(cells.contains(&GridCoord::new(0, 0, 1)));
-    assert!(cells.contains(&GridCoord::new(1, 0, 1)));
-}
-
-#[test]
-fn occluder_detects_visible_cells_only_from_projected_shadow() {
-    let occluder = sample_occluder(
-        vec![GridCoord::new(0, 0, 1), GridCoord::new(0, 0, 2)],
-        Vec3::new(2.0, 0.5, 2.0),
-    );
+fn occluder_detects_visible_cells_from_camera_geometry() {
+    let occluder = sample_occluder(Vec3::new(0.5, 0.5, 1.5));
     let visible = HashSet::from([GridCoord::new(0, 0, 2)]);
+    let visible_points = visible_cell_occlusion_world_points(&visible, 1.0, 0.14);
 
-    assert!(occluder_blocks_visible_cells(&occluder, &visible));
+    assert!(occluder_blocks_visible_cells(
+        Vec3::new(0.5, 2.0, -4.0),
+        &occluder,
+        &visible_points,
+    ));
 }
 
 #[test]
-fn occluder_does_not_treat_base_cells_as_projected_shadow() {
-    let shadowed_visible_cells = project_shadowed_visible_cells(
-        &[GridCoord::new(0, 0, 0)],
-        0.0,
-        0.35,
-        1.0,
-        ViewerRenderConfig::default(),
-    );
-    let occluder = sample_occluder(shadowed_visible_cells, Vec3::new(4.0, 0.5, 4.0));
+fn visible_cell_occlusion_can_fade_wall_occupying_visible_cell() {
+    let occluder = sample_occluder(Vec3::new(0.5, 0.5, 0.5));
     let visible = HashSet::from([GridCoord::new(0, 0, 0)]);
+    let visible_points = visible_cell_occlusion_world_points(&visible, 1.0, 0.14);
 
-    assert!(!occluder_blocks_visible_cells(&occluder, &visible));
+    assert!(occluder_blocks_visible_cells(
+        Vec3::new(0.5, 2.0, -4.0),
+        &occluder,
+        &visible_points,
+    ));
 }
 
 #[test]
-fn occluder_can_fade_from_ray_or_projected_visible_cells() {
-    let ray_only = sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0));
-    let vision_only = sample_occluder(vec![GridCoord::new(5, 0, 5)], Vec3::new(20.0, 1.0, -5.0));
+fn occluder_can_fade_from_ray_or_visible_cell_geometry() {
+    let ray_only = sample_occluder(Vec3::new(0.0, 1.0, -5.0));
+    let vision_only = sample_occluder(Vec3::new(20.5, 0.5, -5.5));
 
     assert!(should_fade_occluder(
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
         &ray_only,
-        &HashSet::new(),
+        &[],
     ));
     assert!(should_fade_occluder(
-        Vec3::new(0.0, 2.0, -10.0),
+        Vec3::new(20.5, 2.0, -10.0),
         &[],
         &vision_only,
-        &HashSet::from([GridCoord::new(5, 0, 5)]),
+        &[Vec3::new(20.5, 0.14, -5.5)],
     ));
 }
 
 #[test]
 fn visible_cell_only_occluder_ignores_ray_fade() {
-    let mut wall = sample_occluder(vec![GridCoord::new(5, 0, 5)], Vec3::new(0.0, 1.0, -5.0));
+    let mut wall = sample_occluder(Vec3::new(0.0, 0.64, -5.0));
     wall.fade_rule = StaticWorldOccluderFadeRule::VisibleCellsOnly;
 
     assert!(!should_fade_occluder(
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
         &wall,
-        &HashSet::new(),
+        &[],
     ));
     assert!(should_fade_occluder(
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
         &wall,
-        &HashSet::from([GridCoord::new(5, 0, 5)]),
+        &[Vec3::new(0.0, 0.2, -5.0)],
     ));
 }
 
 #[test]
 fn closed_doors_only_contribute_occluders() {
-    let closed_shadow = vec![GridCoord::new(2, 0, 3)];
     let mut door_visual_state = GeneratedDoorVisualState::default();
-    door_visual_state.by_door.insert(
-        "closed".into(),
-        sample_door_visual(false, closed_shadow.clone()),
-    );
-    door_visual_state.by_door.insert(
-        "open".into(),
-        sample_door_visual(true, vec![GridCoord::new(9, 0, 9)]),
-    );
+    door_visual_state
+        .by_door
+        .insert("closed".into(), sample_door_visual(false));
+    door_visual_state
+        .by_door
+        .insert("open".into(), sample_door_visual(true));
 
     let occluders = collect_closed_door_occluders(&door_visual_state);
 
     assert_eq!(occluders.len(), 1);
-    assert_eq!(occluders[0].shadowed_visible_cells, closed_shadow);
     assert_eq!(
         occluders[0].hover_map_object_id.as_deref(),
         Some("door_object")
@@ -988,7 +941,7 @@ fn closed_door_occluder_refresh_preserves_existing_fade() {
         ..default()
     });
     let mut door_visual_state = GeneratedDoorVisualState::default();
-    let mut visual = sample_door_visual(false, vec![GridCoord::new(2, 0, 3)]);
+    let mut visual = sample_door_visual(false);
     visual.material = StaticWorldMaterialHandle::Standard(material_handle.clone());
     door_visual_state.by_door.insert("closed".into(), visual);
     let mut previous_occluders = collect_closed_door_occluders(&door_visual_state);
@@ -1026,7 +979,7 @@ fn closed_door_occluder_refresh_restores_opened_doors() {
         ..default()
     });
     let mut door_visual_state = GeneratedDoorVisualState::default();
-    let mut visual = sample_door_visual(false, vec![GridCoord::new(2, 0, 3)]);
+    let mut visual = sample_door_visual(false);
     visual.material = StaticWorldMaterialHandle::Standard(material_handle.clone());
     door_visual_state
         .by_door
@@ -1800,10 +1753,7 @@ fn world_from_grid(grid: GridCoord) -> WorldCoord {
     )
 }
 
-fn sample_occluder(
-    shadowed_visible_cells: Vec<GridCoord>,
-    aabb_center: Vec3,
-) -> StaticWorldOccluderVisual {
+fn sample_occluder(aabb_center: Vec3) -> StaticWorldOccluderVisual {
     StaticWorldOccluderVisual {
         material: StaticWorldMaterialHandle::Standard(Handle::default()),
         tile_instance_handle: None,
@@ -1813,7 +1763,6 @@ fn sample_occluder(
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center,
         aabb_half_extents: Vec3::splat(0.5),
-        shadowed_visible_cells,
         hover_map_object_id: None,
         currently_faded: false,
     }
@@ -1881,7 +1830,6 @@ fn building_wall_grid_occluder_hides_grid_lines_when_faded_and_restores_them() {
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: Vec3::ZERO,
         aabb_half_extents: Vec3::splat(0.5),
-        shadowed_visible_cells: Vec::new(),
         hover_map_object_id: None,
         currently_faded: false,
     };
@@ -1948,7 +1896,6 @@ fn tile_instance_occluder_records_desired_fade_before_material_apply() {
         base_alpha_mode: AlphaMode::Opaque,
         aabb_center: Vec3::ZERO,
         aabb_half_extents: Vec3::splat(0.5),
-        shadowed_visible_cells: Vec::new(),
         hover_map_object_id: None,
         currently_faded: false,
     };
@@ -2004,7 +1951,7 @@ fn tile_instance_occluder_records_desired_fade_before_material_apply() {
 
 #[test]
 fn hovered_closed_door_stays_opaque_even_when_occlusion_would_fade_it() {
-    let mut door_occluders = vec![sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0))];
+    let mut door_occluders = vec![sample_occluder(Vec3::new(0.0, 1.0, -5.0))];
     door_occluders[0].hover_map_object_id = Some("door_object".into());
     let mut materials = Assets::<StandardMaterial>::default();
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
@@ -2013,7 +1960,7 @@ fn hovered_closed_door_stays_opaque_even_when_occlusion_would_fade_it() {
         &mut door_occluders,
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
-        &HashSet::new(),
+        &[],
         Some("door_object"),
         None,
         &mut materials,
@@ -2025,7 +1972,7 @@ fn hovered_closed_door_stays_opaque_even_when_occlusion_would_fade_it() {
 
 #[test]
 fn door_fade_returns_after_hover_leaves() {
-    let mut door_occluders = vec![sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0))];
+    let mut door_occluders = vec![sample_occluder(Vec3::new(0.0, 1.0, -5.0))];
     door_occluders[0].hover_map_object_id = Some("door_object".into());
     let mut materials = Assets::<StandardMaterial>::default();
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
@@ -2034,7 +1981,7 @@ fn door_fade_returns_after_hover_leaves() {
         &mut door_occluders,
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
-        &HashSet::new(),
+        &[],
         Some("door_object"),
         None,
         &mut materials,
@@ -2044,7 +1991,7 @@ fn door_fade_returns_after_hover_leaves() {
         &mut door_occluders,
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
-        &HashSet::new(),
+        &[],
         None,
         None,
         &mut materials,
@@ -2056,7 +2003,7 @@ fn door_fade_returns_after_hover_leaves() {
 
 #[test]
 fn hovered_door_override_does_not_change_static_world_occluders() {
-    let mut static_occluders = vec![sample_occluder(Vec::new(), Vec3::new(0.0, 1.0, -5.0))];
+    let mut static_occluders = vec![sample_occluder(Vec3::new(0.0, 1.0, -5.0))];
     let mut materials = Assets::<StandardMaterial>::default();
     let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
 
@@ -2064,7 +2011,7 @@ fn hovered_door_override_does_not_change_static_world_occluders() {
         &mut static_occluders,
         Vec3::new(0.0, 2.0, -10.0),
         &[Vec3::new(0.0, 0.2, 0.0)],
-        &HashSet::new(),
+        &[],
         Some("door_object"),
         None,
         &mut materials,
@@ -2074,10 +2021,7 @@ fn hovered_door_override_does_not_change_static_world_occluders() {
     assert!(static_occluders[0].currently_faded);
 }
 
-fn sample_door_visual(
-    is_open: bool,
-    shadowed_visible_cells: Vec<GridCoord>,
-) -> GeneratedDoorVisual {
+fn sample_door_visual(is_open: bool) -> GeneratedDoorVisual {
     GeneratedDoorVisual {
         pivot_entity: Entity::from_bits(1),
         leaf_entity: Entity::from_bits(2),
@@ -2093,7 +2037,6 @@ fn sample_door_visual(
         open_yaw: std::f32::consts::FRAC_PI_2,
         closed_aabb_center: Vec3::ZERO,
         closed_aabb_half_extents: Vec3::splat(0.5),
-        shadowed_visible_cells,
         is_open,
     }
 }
