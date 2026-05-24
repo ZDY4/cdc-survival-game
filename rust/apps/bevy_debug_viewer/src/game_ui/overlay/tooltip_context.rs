@@ -375,7 +375,7 @@ pub(super) fn inventory_context_menu_actions(
         }
         if count > 0 {
             actions.push((
-                "加入待卖出".to_string(),
+                "卖出".to_string(),
                 GameUiButtonAction::QueueTradeSell {
                     shop_id: shop_id.to_string(),
                     item_id,
@@ -425,7 +425,7 @@ pub(super) fn equipment_context_menu_actions(
     let mut actions = vec![("卸下", GameUiButtonAction::UnequipSlot(slot_id.to_string()))];
     if let Some(shop_id) = trade_shop_id {
         actions.push((
-            "加入待卖出",
+            "卖出",
             GameUiButtonAction::QueueTradeEquippedSell {
                 shop_id: shop_id.to_string(),
                 slot_id: slot_id.to_string(),
