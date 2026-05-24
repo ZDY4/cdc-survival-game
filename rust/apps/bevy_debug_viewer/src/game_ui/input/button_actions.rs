@@ -246,8 +246,9 @@ pub(crate) fn handle_game_ui_buttons(
                 }
             }
             GameUiButtonAction::ConfirmItemQuantity => {
+                let modal = ui.modal_state.item_quantity.clone();
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
-                    if let Some(modal) = ui.modal_state.item_quantity.clone() {
+                    if let Some(modal) = modal.clone() {
                         execute_item_quantity_modal(
                             &mut ui.runtime_state,
                             &mut ui.viewer_state,
@@ -260,10 +261,13 @@ pub(crate) fn handle_game_ui_buttons(
                         );
                     }
                 }
+                if modal.is_some() {
+                    consume_item_quantity_modal_pointer(&mut ui.mouse_buttons, &mut ui.drag_state);
+                }
             }
             GameUiButtonAction::CancelItemQuantity => {
                 ui.modal_state.item_quantity = None;
-                ui.drag_state.clear();
+                consume_item_quantity_modal_pointer(&mut ui.mouse_buttons, &mut ui.drag_state);
             }
             GameUiButtonAction::UnequipSlot(slot_id) => {
                 if let Some(actor_id) = player_actor_id(&ui.runtime_state.runtime) {
@@ -545,6 +549,16 @@ pub(super) fn plan_inventory_drop(
 
 pub(crate) fn adjust_item_quantity(current: i32, available_count: i32, delta: i32) -> i32 {
     (current + delta).clamp(1, available_count.max(1))
+}
+
+fn consume_item_quantity_modal_pointer(
+    mouse_buttons: &mut ButtonInput<MouseButton>,
+    drag_state: &mut UiInventoryDragState,
+) {
+    mouse_buttons.reset_all();
+    drag_state.clear();
+    // 数量弹窗关闭后，本次点击不能再穿透到底层交易列表。
+    drag_state.suppress_button_press_once = true;
 }
 
 pub(crate) fn plan_trade_cart_buy(
@@ -1203,10 +1217,14 @@ pub(super) fn cycle_binding(settings: &mut ViewerUiSettings, action_name: &str) 
 #[cfg(test)]
 mod tests {
     use super::{
-        adjust_item_quantity, execute_inventory_drop, plan_inventory_drop, plan_trade_cart_buy,
-        InventoryDropPlan, TradeQuantityPlan,
+        adjust_item_quantity, consume_item_quantity_modal_pointer, execute_inventory_drop,
+        plan_inventory_drop, plan_trade_cart_buy, InventoryDropPlan, TradeQuantityPlan,
     };
-    use crate::state::{ViewerRuntimeSavePath, ViewerRuntimeState, ViewerState};
+    use crate::state::{
+        UiInventoryDragSource, UiInventoryDragState, ViewerRuntimeSavePath, ViewerRuntimeState,
+        ViewerState,
+    };
+    use bevy::prelude::{ButtonInput, MouseButton};
     use game_bevy::{ItemDefinitions, UiMenuState, UiModalState};
     use game_core::{create_demo_runtime, SimulationCommand};
     use game_data::{ItemDefinition, ItemFragment, ShopDefinition, ShopInventoryEntry};
@@ -1304,6 +1322,25 @@ mod tests {
                 status: "商店库存不足".to_string()
             }
         );
+    }
+
+    #[test]
+    fn closing_quantity_modal_consumes_mouse_release() {
+        let mut mouse_buttons = ButtonInput::<MouseButton>::default();
+        mouse_buttons.press(MouseButton::Left);
+        mouse_buttons.release(MouseButton::Left);
+        let mut drag_state = UiInventoryDragState {
+            active_source: Some(UiInventoryDragSource::InventoryItem { item_id: 1006 }),
+            ..UiInventoryDragState::default()
+        };
+
+        consume_item_quantity_modal_pointer(&mut mouse_buttons, &mut drag_state);
+
+        assert!(!mouse_buttons.pressed(MouseButton::Left));
+        assert!(!mouse_buttons.just_pressed(MouseButton::Left));
+        assert!(!mouse_buttons.just_released(MouseButton::Left));
+        assert!(drag_state.active_source.is_none());
+        assert!(drag_state.suppress_button_press_once);
     }
 
     #[test]
