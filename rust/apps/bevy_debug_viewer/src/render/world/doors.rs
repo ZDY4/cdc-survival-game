@@ -76,6 +76,7 @@ pub(super) fn sync_generated_door_visuals(
                     door,
                     floor_top,
                     grid_size,
+                    render_config,
                     palette,
                 )
             });
@@ -116,6 +117,7 @@ pub(super) fn collect_closed_door_occluders(
             base_alpha_mode: visual.base_alpha_mode.clone(),
             aabb_center: visual.closed_aabb_center,
             aabb_half_extents: visual.closed_aabb_half_extents,
+            shadowed_visible_cells: visual.shadowed_visible_cells.clone(),
             hover_map_object_id: Some(visual.map_object_id.clone()),
             currently_faded: false,
         })
@@ -176,6 +178,7 @@ pub(super) fn spawn_generated_door_visual(
     door: &game_core::GeneratedDoorDebugState,
     floor_top: f32,
     grid_size: f32,
+    render_config: ViewerRenderConfig,
     _palette: &ViewerPalette,
 ) -> GeneratedDoorVisual {
     let mesh_spec = build_generated_door_mesh_spec(door, floor_top, grid_size)
@@ -188,6 +191,15 @@ pub(super) fn spawn_generated_door_visual(
         MaterialStyle::BuildingDoor,
     );
     let mesh_handle = meshes.add(mesh_spec.mesh);
+    let shadowed_visible_cells = project_shadowed_visible_cells(
+        &[door.anchor_grid],
+        floor_top,
+        mesh_spec.pivot_translation.y
+            + mesh_spec.local_aabb_center.y
+            + mesh_spec.local_aabb_half_extents.y,
+        grid_size,
+        render_config,
+    );
     let mut leaf_entity = None;
     let pivot_transform = Transform::from_translation(mesh_spec.pivot_translation);
     let pivot_entity = commands
@@ -249,6 +261,7 @@ pub(super) fn spawn_generated_door_visual(
         open_yaw: mesh_spec.open_yaw,
         closed_aabb_center: mesh_spec.pivot_translation + mesh_spec.local_aabb_center,
         closed_aabb_half_extents: mesh_spec.local_aabb_half_extents,
+        shadowed_visible_cells,
         is_open: door.is_open,
     }
 }

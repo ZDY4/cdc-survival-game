@@ -55,6 +55,10 @@ pub(super) fn rebuild_static_world(
     static_world_state.occluder_by_tile_instance.clear();
     static_world_state.tile_instances.clear();
     mesh_pick_index.clear();
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top =
+        level_base_height(current_level, grid_size) + render_config.floor_thickness_world;
+
     let world_render_scene = build_world_render_scene_from_simulation_snapshot(
         snapshot,
         current_level,
@@ -123,6 +127,7 @@ pub(super) fn rebuild_static_world(
         .into_iter()
         .map(shared_box_spec_to_viewer_box_spec)
     {
+        let occluder_cells = spec.occluder_cells.clone();
         let occluder_kind = spec.occluder_kind.clone();
         let pick_binding = spec.pick_binding.clone();
         let size = spec.size;
@@ -139,7 +144,13 @@ pub(super) fn rebuild_static_world(
         if occluder_kind.is_some() {
             static_world_state
                 .occluders
-                .push(occluder_visual_from_spawned_box(spawned));
+                .push(occluder_visual_from_spawned_box(
+                    spawned,
+                    occluder_cells,
+                    floor_top,
+                    grid_size,
+                    render_config,
+                ));
         }
     }
 
@@ -285,7 +296,7 @@ pub(super) fn rebuild_static_world(
             TileRenderClass::Standard => None,
         };
         for instance in &batch.instances {
-            let Some((spawned, occluder_kind)) = spawn_tile_instance(
+            let Some((spawned, occluder_cells, occluder_kind)) = spawn_tile_instance(
                 commands,
                 meshes,
                 materials,
@@ -330,7 +341,13 @@ pub(super) fn rebuild_static_world(
             if occluder_kind.is_some() {
                 static_world_state
                     .occluders
-                    .push(occluder_visual_from_spawned_mesh(spawned));
+                    .push(occluder_visual_from_spawned_mesh(
+                        spawned,
+                        occluder_cells,
+                        floor_top,
+                        grid_size,
+                        render_config,
+                    ));
             }
         }
     }
@@ -444,7 +461,11 @@ fn spawn_tile_instance(
     instance: &PreparedTileInstance,
     standard_instance_material: Option<Handle<StandardMaterial>>,
     building_wall_instance_material: Option<StaticWorldMaterialHandle>,
-) -> Option<(SpawnedMeshVisual, Option<StaticWorldOccluderKind>)> {
+) -> Option<(
+    SpawnedMeshVisual,
+    Vec<GridCoord>,
+    Option<StaticWorldOccluderKind>,
+)> {
     let semantic = instance.semantic.clone();
     let pick_binding = semantic.as_ref().map(shared_semantic_to_binding);
     let outline_target = pick_binding
@@ -484,6 +505,7 @@ fn spawn_tile_instance(
                     color: Color::srgba(1.0, 1.0, 1.0, 0.0),
                     material_style: MaterialStyle::InvisiblePickProxy,
                     occluder_kind: None,
+                    occluder_cells: Vec::new(),
                     pick_binding: wall_pick_binding,
                     outline_target: outline_target.clone(),
                 },
@@ -521,6 +543,7 @@ fn spawn_tile_instance(
 
     Some((
         spawned,
+        instance.occluder_cells.clone(),
         instance.occluder_kind.clone().map(|kind| match kind {
             shared_static_world::StaticWorldOccluderKind::MapObject(kind) => {
                 StaticWorldOccluderKind::MapObject(kind)
@@ -657,6 +680,7 @@ fn shared_box_spec_to_viewer_box_spec(
                 StaticWorldOccluderKind::MapObject(kind)
             }
         }),
+        occluder_cells: spec.occluder_cells,
         pick_binding,
         outline_target,
     }
@@ -955,6 +979,7 @@ fn shared_box_spec_for_collection(
                 StaticWorldOccluderKind::MapObject(kind)
             }
         }),
+        occluder_cells: spec.occluder_cells,
         pick_binding: shared_semantic_pick_binding(spec.semantic.clone()),
         outline_target,
     }

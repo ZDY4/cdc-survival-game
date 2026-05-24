@@ -62,6 +62,8 @@ pub(crate) struct StaticWorldOccluderVisual {
     pub base_alpha_mode: AlphaMode,
     pub aabb_center: Vec3,
     pub aabb_half_extents: Vec3,
+    // 当前相机角度下，该遮挡物屏幕投影会覆盖的格子；用于判断是否遮挡玩家视野。
+    pub shadowed_visible_cells: Vec<GridCoord>,
     pub hover_map_object_id: Option<String>,
     pub currently_faded: bool,
 }
@@ -85,6 +87,7 @@ pub(crate) struct StaticWorldBoxSpec {
     pub color: Color,
     pub material_style: MaterialStyle,
     pub occluder_kind: Option<StaticWorldOccluderKind>,
+    pub occluder_cells: Vec<GridCoord>,
     pub pick_binding: Option<ViewerPickBindingSpec>,
     pub outline_target: Option<ViewerPickTarget>,
 }
@@ -148,6 +151,7 @@ pub(crate) struct GeneratedDoorVisual {
     pub open_yaw: f32,
     pub closed_aabb_center: Vec3,
     pub closed_aabb_half_extents: Vec3,
+    pub shadowed_visible_cells: Vec<GridCoord>,
     pub is_open: bool,
 }
 

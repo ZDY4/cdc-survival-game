@@ -202,11 +202,6 @@ pub(crate) fn update_occluding_world_visuals(
         hover_focus_enabled,
         &mut hover_occlusion_buffer,
     );
-    let visible_cell_world_points = visible_cell_occlusion_world_points(
-        &visible_cells,
-        snapshot.grid.grid_size,
-        render_config.floor_thickness_world + OVERLAY_ELEVATION,
-    );
     let camera_position = camera_query.translation;
     let hovered_door_object_id =
         stable_hover
@@ -224,7 +219,7 @@ pub(crate) fn update_occluding_world_visuals(
             occluders,
             camera_position,
             &focus_points,
-            &visible_cell_world_points,
+            &visible_cells,
             None,
             Some(&mut *tile_instances),
             &mut render_params.materials,
@@ -245,7 +240,7 @@ pub(crate) fn update_occluding_world_visuals(
         &mut door_visual_state.occluders,
         camera_position,
         &focus_points,
-        &visible_cell_world_points,
+        &visible_cells,
         hovered_door_object_id,
         None,
         &mut render_params.materials,
