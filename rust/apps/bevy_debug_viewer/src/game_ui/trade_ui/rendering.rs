@@ -82,13 +82,7 @@ pub(super) fn render_trade_page(
                                     ));
                                     titles.spawn(text_bundle(
                                         font,
-                                        &format!(
-                                            "友好度 {} · 玩家资金 {} · 商店资金 {} · {}",
-                                            trade_snapshot.relation_score,
-                                            trade_snapshot.player_money,
-                                            trade_snapshot.shop_money,
-                                            settlement_text(&trade.cart)
-                                        ),
+                                        &format!("友好度 {}", trade_snapshot.relation_score),
                                         10.4,
                                         ui_text_secondary_color(),
                                     ));
@@ -216,6 +210,7 @@ fn render_trade_inventory_column(
                 inventory_snapshot,
                 drag_state,
             );
+            render_trade_funds_row(font, body, "玩家资金", trade_snapshot.player_money);
         });
 }
 
@@ -352,6 +347,40 @@ fn render_trade_shop_column(
                     );
                 }
             });
+            render_trade_funds_row(font, body, "商店资金", snapshot.shop_money);
+        });
+}
+
+fn render_trade_funds_row(
+    font: &ViewerUiFont,
+    parent: &mut ChildSpawnerCommands,
+    label: &str,
+    amount: i32,
+) {
+    parent
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                min_height: px(32),
+                padding: UiRect::axes(px(10), px(6)),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                border: UiRect::all(px(1)),
+                ..default()
+            },
+            BackgroundColor(ui_panel_background_alt().into()),
+            BorderColor::all(ui_border_color()),
+            viewer_ui_passthrough_bundle(),
+        ))
+        .with_children(|row| {
+            row.spawn(text_bundle(font, label, 10.0, ui_text_muted_color()));
+            row.spawn(text_bundle(
+                font,
+                &amount.to_string(),
+                11.0,
+                ui_text_heading_color(),
+            ));
         });
 }
 
