@@ -1,4 +1,4 @@
-//! 交易动作模块：负责交易目标会话解析、待交易篮维护与确认结算。
+//! 交易动作模块：负责交易目标会话解析、交易篮维护与确认结算。
 
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -88,14 +88,14 @@ pub(super) fn handle_trade_button_action(
                 }
             } else if let Some(trade) = ui.modal_state.trade.as_mut() {
                 trade.cart.adjust_buy(*item_id, *delta);
-                set_trade_status(ui, "已调整待买入数量".to_string());
+                set_trade_status(ui, "已调整买入数量".to_string());
             }
             true
         }
         GameUiButtonAction::RemoveTradeBuy { item_id } => {
             if let Some(trade) = ui.modal_state.trade.as_mut() {
                 trade.cart.buy_lines.retain(|line| line.item_id != *item_id);
-                set_trade_status(ui, "已移除待买入物品".to_string());
+                set_trade_status(ui, "已移除买入物品".to_string());
             }
             true
         }
@@ -132,7 +132,7 @@ pub(super) fn handle_trade_button_action(
                 }
             } else if let Some(trade) = ui.modal_state.trade.as_mut() {
                 trade.cart.adjust_sell(*item_id, source, *delta);
-                set_trade_status(ui, "已调整待卖出数量".to_string());
+                set_trade_status(ui, "已调整卖出数量".to_string());
             }
             true
         }
@@ -142,14 +142,14 @@ pub(super) fn handle_trade_button_action(
                     .cart
                     .sell_lines
                     .retain(|line| !(line.item_id == *item_id && line.source == *source));
-                set_trade_status(ui, "已移除待卖出物品".to_string());
+                set_trade_status(ui, "已移除卖出物品".to_string());
             }
             true
         }
         GameUiButtonAction::ClearTradeCart => {
             if let Some(trade) = ui.modal_state.trade.as_mut() {
                 trade.cart = game_bevy::UiTradeCartState::default();
-                set_trade_status(ui, "已清空待交易列表".to_string());
+                set_trade_status(ui, "已清空交易列表".to_string());
             }
             true
         }
@@ -196,7 +196,7 @@ fn queue_trade_buy_action(
         }
         TradeQuantityPlan::OpenModal(modal) => {
             ui.modal_state.item_quantity = Some(modal);
-            set_trade_status(ui, "选择要加入待买入的数量".to_string());
+            set_trade_status(ui, "选择买入数量".to_string());
         }
         TradeQuantityPlan::Blocked { status } => set_trade_status(ui, status),
     }
@@ -246,7 +246,7 @@ fn queue_trade_sell_action(
         }
         TradeQuantityPlan::OpenModal(modal) => {
             ui.modal_state.item_quantity = Some(modal);
-            set_trade_status(ui, "选择要加入待卖出的数量".to_string());
+            set_trade_status(ui, "选择卖出数量".to_string());
         }
         TradeQuantityPlan::Blocked { status } => set_trade_status(ui, status),
     }
@@ -266,7 +266,7 @@ fn confirm_trade_cart(
         return;
     };
     if trade.cart.is_empty() {
-        set_trade_status(ui, "待交易列表为空".to_string());
+        set_trade_status(ui, "交易列表为空".to_string());
         return;
     }
     if let Err(error) = validate_trade_cart(
@@ -333,7 +333,7 @@ pub(super) fn validate_trade_cart(
     let mut buy_counts = BTreeMap::<u32, i32>::new();
     for line in &cart.buy_lines {
         if line.count <= 0 {
-            return Err("待买入数量无效".to_string());
+            return Err("买入数量无效".to_string());
         }
         *buy_counts.entry(line.item_id).or_default() += line.count;
     }
@@ -352,7 +352,7 @@ pub(super) fn validate_trade_cart(
     let mut equipped_slots = BTreeSet::<String>::new();
     for line in &cart.sell_lines {
         if line.count <= 0 {
-            return Err("待卖出数量无效".to_string());
+            return Err("卖出数量无效".to_string());
         }
         match &line.source {
             game_bevy::UiTradeCartSellSource::Inventory => {
@@ -363,7 +363,7 @@ pub(super) fn validate_trade_cart(
                     return Err("装备卖出数量无效".to_string());
                 }
                 if !equipped_slots.insert(slot_id.clone()) {
-                    return Err("同一装备槽重复加入待卖出".to_string());
+                    return Err("同一装备槽重复卖出".to_string());
                 }
                 let current_item = runtime
                     .economy()

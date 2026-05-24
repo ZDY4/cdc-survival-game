@@ -1411,7 +1411,7 @@ fn handle_click_release(
                     }
                     TradeQuantityPlan::OpenModal(modal) => {
                         modal_state.item_quantity = Some(modal);
-                        viewer_state.status_line = "选择要加入待买入的数量".to_string();
+                        viewer_state.status_line = "选择买入数量".to_string();
                         menu_state.status_text = viewer_state.status_line.clone();
                     }
                     TradeQuantityPlan::Blocked { status } => {
@@ -1476,7 +1476,7 @@ fn handle_click_release(
                     }
                     TradeQuantityPlan::OpenModal(modal) => {
                         modal_state.item_quantity = Some(modal);
-                        viewer_state.status_line = "选择要加入待卖出的数量".to_string();
+                        viewer_state.status_line = "选择卖出数量".to_string();
                         menu_state.status_text = viewer_state.status_line.clone();
                     }
                     TradeQuantityPlan::Blocked { status } => {

@@ -198,7 +198,7 @@ fn render_trade_inventory_column(
             body.spawn(text_bundle(font, "玩家物品", 11.4, ui_text_heading_color()));
             body.spawn(text_bundle(
                 font,
-                "待买入会显示在这里；已装备物品显示 E 标记。",
+                "买入物品会显示在这里；已装备物品显示 E 标记。",
                 9.6,
                 ui_text_muted_color(),
             ));
@@ -256,7 +256,7 @@ fn render_trade_shop_column(
             ));
             body.spawn(text_bundle(
                 font,
-                "待卖出会显示在这里；可拖拽物品到对方列表。",
+                "卖出物品会显示在这里；可拖拽物品到对方列表。",
                 9.8,
                 ui_text_muted_color(),
             ));
@@ -294,7 +294,7 @@ fn render_trade_shop_column(
                         items,
                         font,
                         "物",
-                        &trade_item_count_label(&item.name, item.count, "待卖", queued),
+                        &trade_item_count_label(&item.name, item.count, "卖出", queued),
                         item.unit_price,
                         queued,
                         false,
@@ -325,7 +325,7 @@ fn render_trade_shop_column(
                         items,
                         font,
                         "物",
-                        &trade_item_count_label(&line.name, 0, "待卖", line.count),
+                        &trade_item_count_label(&line.name, 0, "卖出", line.count),
                         line.unit_price,
                         line.count,
                         false,
@@ -439,7 +439,7 @@ fn render_trade_player_list(
                     items,
                     font,
                     icon,
-                    &trade_item_count_label(&item.name, item.count, "待买", queued),
+                    &trade_item_count_label(&item.name, item.count, "买入", queued),
                     price,
                     queued,
                     true,
@@ -472,7 +472,7 @@ fn render_trade_player_list(
                     items,
                     font,
                     "物",
-                    &trade_item_count_label(&line.name, 0, "待买", line.count),
+                    &trade_item_count_label(&line.name, 0, "买入", line.count),
                     line.unit_price,
                     line.count,
                     true,
@@ -601,9 +601,9 @@ fn render_trade_item_row(
         if queued > 0 {
             row.spawn((
                 Text::new(if buying {
-                    format!("待买 x{queued}")
+                    format!("买入 x{queued}")
                 } else {
-                    format!("待卖 x{queued}")
+                    format!("卖出 x{queued}")
                 }),
                 TextFont::from_font_size(9.2).with_font(font.0.clone()),
                 TextColor(Color::srgba(0.94, 0.84, 0.52, 1.0)),

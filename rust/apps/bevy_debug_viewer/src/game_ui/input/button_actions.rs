@@ -637,7 +637,7 @@ pub(crate) fn queue_trade_buy(
     trade
         .cart
         .add_buy(item_id, item_name.clone(), count, unit_price);
-    format!("已加入待买入 {item_name} x{count}")
+    format!("已选择买入 {item_name} x{count}")
 }
 
 pub(crate) fn queue_trade_sell(
@@ -658,7 +658,7 @@ pub(crate) fn queue_trade_sell(
     trade
         .cart
         .add_inventory_sell(item_id, item_name.clone(), count, unit_price);
-    format!("已加入待卖出 {item_name} x{count}")
+    format!("已选择卖出 {item_name} x{count}")
 }
 
 pub(crate) fn queue_trade_equipped_sell(
@@ -676,7 +676,7 @@ pub(crate) fn queue_trade_equipped_sell(
         return "交易对象已变化，请重新选择物品".to_string();
     }
     if trade.cart.has_equipped_sell_slot(slot_id) {
-        return "该装备已在待卖出列表".to_string();
+        return "该装备已选择卖出".to_string();
     }
     let Some(item_id) = runtime
         .economy()
@@ -693,7 +693,7 @@ pub(crate) fn queue_trade_equipped_sell(
     trade
         .cart
         .add_equipped_sell(item_id, item_name.clone(), slot_id.to_string(), unit_price);
-    format!("已加入待卖出装备 {item_name} x1")
+    format!("已选择卖出装备 {item_name} x1")
 }
 
 pub(crate) fn plan_container_store(
