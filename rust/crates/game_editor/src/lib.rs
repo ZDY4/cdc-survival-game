@@ -4,6 +4,7 @@ pub mod editor_handoff;
 pub mod flow_graph;
 pub mod fonts;
 pub mod list_row;
+pub mod model_hierarchy;
 pub mod model_tools;
 pub mod preview;
 pub mod preview_stage;
@@ -31,6 +32,10 @@ pub use fonts::{
     GameUiFontsState, GAME_UI_FONT_NAME,
 };
 pub use list_row::selectable_list_row;
+pub use model_hierarchy::{
+    render_model_hierarchy_panel, ModelHierarchyPanelResponse, ModelHierarchyPanelState,
+    ModelHierarchySource,
+};
 pub use model_tools::{
     clear_explicit_link, explicit_bbmodel_link, normalize_relative_asset_path,
     open_model_directory, open_model_in_blockbench, open_model_in_gltf_viewer,

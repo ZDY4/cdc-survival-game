@@ -15,8 +15,8 @@ use game_editor::{
     preview_camera_sync_system as shared_preview_camera_sync_system, setup_preview_stage,
     sync_builtin_humanoid_mannequin_scene_system, sync_preview_ground_visibility_system,
     write_editor_session, EditorAppShellConfig, EditorKind, GameUiFontsState,
-    PreviewCameraController, PreviewGroundVisibility, PreviewPivotVisibility, PreviewStageConfig,
-    WindowSizePersistenceConfig,
+    ModelHierarchyPanelState, PreviewCameraController, PreviewGroundVisibility,
+    PreviewPivotVisibility, PreviewStageConfig, WindowSizePersistenceConfig,
 };
 
 use crate::camera_mode::{PreviewCameraModeState, FREE_PREVIEW_FOV};
@@ -70,6 +70,7 @@ pub(crate) fn run(initial_character_id: Option<String>) {
         .insert_resource(MeshPickIndex::<String>::default())
         .insert_resource(PreviewGroundVisibility::visible())
         .insert_resource(PreviewPivotVisibility::hidden())
+        .insert_resource(ModelHierarchyPanelState::default())
         .insert_resource(PreviewCameraModeState::default())
         .insert_resource(GameUiFontsState::default())
         .insert_resource(CharacterUiStyleState::default())

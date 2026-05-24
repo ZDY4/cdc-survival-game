@@ -4,8 +4,9 @@ use game_bevy::rust_asset_dir;
 use game_editor::{
     configure_editor_app_shell, configure_game_ui_fonts_system, preview_camera_input_system,
     preview_camera_sync_system, setup_preview_stage, sync_preview_ground_visibility_system,
-    EditorAppShellConfig, GameUiFontsState, PreviewCameraController, PreviewGroundVisibility,
-    PreviewPivotVisibility, PreviewStageConfig, WindowSizePersistenceConfig,
+    EditorAppShellConfig, GameUiFontsState, ModelHierarchyPanelState, PreviewCameraController,
+    PreviewGroundVisibility, PreviewPivotVisibility, PreviewStageConfig,
+    WindowSizePersistenceConfig,
 };
 
 use crate::catalog::{handle_catalog_loading_task, spawn_catalog_scan_task};
@@ -46,6 +47,7 @@ pub(crate) fn run(initial_model_path: Option<String>) {
         .insert_resource(InitialModelSelection(initial_model_path))
         .insert_resource(PreviewGroundVisibility::hidden())
         .insert_resource(PreviewPivotVisibility::hidden())
+        .insert_resource(ModelHierarchyPanelState::default())
         .insert_resource(ViewerUiState::default())
         .insert_resource(PreviewState::default())
         .insert_resource(SocketEditorState::default())

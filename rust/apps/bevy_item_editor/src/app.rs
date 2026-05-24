@@ -6,8 +6,8 @@ use game_editor::{
     configure_editor_app_shell, configure_game_ui_fonts_system, preview_camera_input_system,
     preview_camera_sync_system, setup_preview_stage, sync_preview_ground_visibility_system,
     write_editor_session, EditorAppShellConfig, EditorKind, GameUiFontsState,
-    PreviewCameraController, PreviewGroundVisibility, PreviewPivotVisibility, PreviewStageConfig,
-    WindowSizePersistenceConfig,
+    ModelHierarchyPanelState, PreviewCameraController, PreviewGroundVisibility,
+    PreviewPivotVisibility, PreviewStageConfig, WindowSizePersistenceConfig,
 };
 
 use crate::commands::{handle_item_editor_commands, ItemEditorCommand};
@@ -54,6 +54,7 @@ pub(crate) fn run(initial_selection: Option<u32>) {
         .insert_resource(MeshPickIndex::<String>::default())
         .insert_resource(PreviewGroundVisibility::visible())
         .insert_resource(PreviewPivotVisibility::hidden())
+        .insert_resource(ModelHierarchyPanelState::default())
         .insert_resource(GameUiFontsState::default())
         .add_systems(Startup, setup_editor)
         .add_systems(

@@ -3,9 +3,10 @@ mod panels;
 use bevy::log::warn;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use game_bevy::MeshPickIndex;
+use game_bevy::{rust_asset_dir, MeshPickIndex};
 use game_editor::{
-    render_model_preview_hud, ModelPreviewHud, PreviewGroundVisibility, PreviewPivotVisibility,
+    render_model_hierarchy_panel, render_model_preview_hud, ModelHierarchyPanelState,
+    ModelHierarchySource, ModelPreviewHud, PreviewGroundVisibility, PreviewPivotVisibility,
     PreviewViewportRect,
 };
 
@@ -22,6 +23,7 @@ pub(crate) fn editor_ui_system(
     pick_index: Res<MeshPickIndex<String>>,
     mut ground_visibility: ResMut<PreviewGroundVisibility>,
     mut pivot_visibility: ResMut<PreviewPivotVisibility>,
+    mut hierarchy_panel: ResMut<ModelHierarchyPanelState>,
     mut preview_camera: Query<
         (
             &Camera,
@@ -131,7 +133,12 @@ pub(crate) fn editor_ui_system(
                     ground_visible: ground_visibility.visible,
                     pivot_visible: pivot_visibility.visible,
                 },
-                |_| {},
+                |ui| {
+                    let mut hierarchy_visible = hierarchy_panel.visible;
+                    if ui.checkbox(&mut hierarchy_visible, "层级树").changed() {
+                        hierarchy_panel.visible = hierarchy_visible;
+                    }
+                },
             );
             if hud_response.toggle_ground {
                 ground_visibility.toggle();
@@ -139,7 +146,22 @@ pub(crate) fn editor_ui_system(
             if hud_response.toggle_pivot {
                 pivot_visibility.toggle();
             }
-            preview_camera.block_pointer_input = ctx.is_using_pointer() || hud_response.hovered;
+            let hierarchy_sources = preview_state
+                .applied_asset_path
+                .as_ref()
+                .map(|path| vec![ModelHierarchySource::new("当前物品", path.clone())])
+                .unwrap_or_default();
+            let asset_root = rust_asset_dir();
+            let hierarchy_response = render_model_hierarchy_panel(
+                ui.ctx(),
+                "item_model_hierarchy",
+                rect,
+                &mut hierarchy_panel,
+                &asset_root,
+                &hierarchy_sources,
+            );
+            preview_camera.block_pointer_input =
+                ctx.is_using_pointer() || hud_response.hovered || hierarchy_response.hovered;
         });
 }
 

@@ -9,18 +9,6 @@ use serde_json::{Map, Number, Value};
 
 use crate::state::{PreviewState, ViewerAssetRoot, ViewerUiState};
 
-pub(crate) const SOCKET_PRESETS: &[&str] = &[
-    "body_socket",
-    "hands_socket",
-    "head_socket",
-    "back_socket",
-    "accessory_socket",
-    "legs_socket",
-    "feet_socket",
-    "hand_l",
-    "hand_r",
-];
-
 #[derive(Message, Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SocketEditorCommand {
     Save,
@@ -316,15 +304,6 @@ fn render_socket_form(
     document: &mut GltfSocketDocument,
 ) {
     ui.label("名称");
-    egui::ComboBox::from_id_salt("socket_preset")
-        .selected_text("选择预设")
-        .show_ui(ui, |ui| {
-            for preset in SOCKET_PRESETS {
-                if ui.button(*preset).clicked() {
-                    editor.draft.name = (*preset).to_string();
-                }
-            }
-        });
     ui.text_edit_singleline(&mut editor.draft.name);
 
     ui.add_space(6.0);
@@ -393,9 +372,8 @@ fn render_socket_form(
             }
         }
     }
-    if !editor.draft.name.trim().ends_with("_socket")
-        && !SOCKET_PRESETS.contains(&editor.draft.name.trim())
-    {
+    let draft_name = editor.draft.name.trim();
+    if !draft_name.ends_with("_socket") && !is_legacy_socket_name(draft_name) {
         ui.small("建议自定义名称以 _socket 结尾。");
     }
 }
@@ -727,13 +705,17 @@ impl GltfSocketDocument {
 }
 
 fn is_socket_node(node: &Value, name: &str) -> bool {
-    SOCKET_PRESETS.contains(&name)
-        || name.ends_with("_socket")
+    name.ends_with("_socket")
+        || is_legacy_socket_name(name)
         || node
             .get("extras")
             .and_then(|extras| extras.get("cdc_socket"))
             .and_then(Value::as_bool)
             .unwrap_or(false)
+}
+
+fn is_legacy_socket_name(name: &str) -> bool {
+    matches!(name, "hand_l" | "hand_r")
 }
 
 fn read_node_transform(node: &Value) -> SocketTransform {

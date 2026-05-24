@@ -8,10 +8,13 @@ mod detail_panel;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use game_bevy::MeshPickIndex;
+use game_bevy::{
+    is_builtin_humanoid_mannequin, resolve_item_preview_asset_path, rust_asset_dir, MeshPickIndex,
+};
 use game_editor::{
-    render_model_preview_hud, selectable_list_row, GameUiFontsState, ModelPreviewHud,
-    PreviewCameraController, PreviewGroundVisibility, PreviewPivotVisibility, PreviewViewportRect,
+    render_model_hierarchy_panel, render_model_preview_hud, selectable_list_row, GameUiFontsState,
+    ModelHierarchyPanelState, ModelHierarchySource, ModelPreviewHud, PreviewCameraController,
+    PreviewGroundVisibility, PreviewPivotVisibility, PreviewViewportRect,
 };
 
 use crate::camera_mode::{PreviewCameraMode, PreviewCameraModeState};
@@ -90,6 +93,7 @@ pub(crate) fn editor_ui_system(
     camera_mode: Res<PreviewCameraModeState>,
     mut ground_visibility: ResMut<PreviewGroundVisibility>,
     mut pivot_visibility: ResMut<PreviewPivotVisibility>,
+    mut hierarchy_panel: ResMut<ModelHierarchyPanelState>,
     mut preview_camera_query: Query<
         (&Camera, &GlobalTransform, &mut PreviewCameraController),
         With<PreviewCamera>,
@@ -203,6 +207,7 @@ pub(crate) fn editor_ui_system(
                 &camera_mode,
                 &mut ground_visibility,
                 &mut pivot_visibility,
+                &mut hierarchy_panel,
                 &mut preview_camera,
                 &mut requests,
             );
@@ -212,6 +217,18 @@ pub(crate) fn editor_ui_system(
             if hud_response.toggle_pivot {
                 pivot_visibility.toggle();
             }
+            let hierarchy_sources = character_hierarchy_sources(&preview_state);
+            let asset_root = rust_asset_dir();
+            let hierarchy_response = render_model_hierarchy_panel(
+                ui.ctx(),
+                "character_model_hierarchy",
+                rect,
+                &mut hierarchy_panel,
+                &asset_root,
+                &hierarchy_sources,
+            );
+            preview_camera.block_pointer_input =
+                ui.ctx().is_using_pointer() || hud_response.hovered || hierarchy_response.hovered;
         });
 }
 
@@ -270,6 +287,7 @@ fn render_preview_overlay(
     camera_mode: &PreviewCameraModeState,
     ground_visibility: &mut PreviewGroundVisibility,
     pivot_visibility: &mut PreviewPivotVisibility,
+    hierarchy_panel: &mut ModelHierarchyPanelState,
     preview_camera: &mut PreviewCameraController,
     requests: &mut MessageWriter<CharacterEditorCommand>,
 ) -> game_editor::ModelPreviewHudResponse {
@@ -285,6 +303,10 @@ fn render_preview_overlay(
             pivot_visible: pivot_visibility.visible,
         },
         |ui| {
+            let mut hierarchy_visible = hierarchy_panel.visible;
+            if ui.checkbox(&mut hierarchy_visible, "层级树").changed() {
+                hierarchy_panel.visible = hierarchy_visible;
+            }
             ui.separator();
             ui.label(
                 egui::RichText::new(camera_mode.mode.badge_text())
@@ -326,6 +348,32 @@ fn render_preview_overlay(
     }
     preview_camera.block_pointer_input = ctx.is_using_pointer() || response.hovered;
     response
+}
+
+fn character_hierarchy_sources(preview_state: &PreviewState) -> Vec<ModelHierarchySource> {
+    let Some(preview) = preview_state.resolved_preview.as_ref() else {
+        return Vec::new();
+    };
+    let mut sources = Vec::new();
+    if let Some(base_model) = character_base_hierarchy_asset(preview.base_model_asset.as_str()) {
+        sources.push(ModelHierarchySource::new("角色本体", base_model));
+    }
+    for equipment in &preview.equipment {
+        if let Some(asset_path) = resolve_item_preview_asset_path(&equipment.visual_asset) {
+            sources.push(ModelHierarchySource::new(
+                format!("{} · {}", equipment.equip_slot, equipment.item_name),
+                asset_path,
+            ));
+        }
+    }
+    sources
+}
+
+fn character_base_hierarchy_asset(asset: &str) -> Option<String> {
+    if is_builtin_humanoid_mannequin(asset) {
+        return Some("bevy_preview/characters/humanoid_mannequin.gltf".to_string());
+    }
+    resolve_item_preview_asset_path(asset)
 }
 
 fn selected_character_label(data: &EditorData, ui_state: &EditorUiState) -> String {
