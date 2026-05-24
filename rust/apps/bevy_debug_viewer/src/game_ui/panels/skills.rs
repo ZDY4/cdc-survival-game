@@ -1,4 +1,4 @@
-//! 技能页面：窄侧栏内纵向组织技能树选择、树图和当前技能摘要。
+//! 技能页面：左侧选择技能树，右侧渲染当前树图和技能摘要。
 
 use super::skills_graph::render_skill_tree_canvas;
 
@@ -33,6 +33,39 @@ pub(super) fn render_skills_panel(
         body.spawn((
             Node {
                 width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                column_gap: px(8),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Stretch,
+                overflow: Overflow::clip_y(),
+                ..default()
+            },
+            viewer_ui_passthrough_bundle(),
+        ))
+        .with_children(|columns| {
+            render_skill_tree_list(columns, font, snapshot, selected_tree);
+            render_skill_tree_content(
+                columns,
+                font,
+                selected_tree,
+                menu_state,
+                hotbar_state,
+                view_state,
+            );
+        });
+    });
+}
+
+fn render_skill_tree_list(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    snapshot: &game_bevy::UiSkillsSnapshot,
+    selected_tree: Option<&game_bevy::UiSkillTreeView>,
+) {
+    parent
+        .spawn((
+            Node {
+                width: px(150),
                 padding: UiRect::all(px(8)),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(6),
@@ -55,59 +88,77 @@ pub(super) fn render_skills_panel(
                 ));
             }
             for tree in &snapshot.trees {
-                let (learned_count, total_count) = skill_tree_progress(tree);
-                let is_selected = selected_tree
-                    .map(|selected| selected.tree_id == tree.tree_id)
-                    .unwrap_or(false);
-                tree_column
-                    .spawn((
-                        Button,
-                        Node {
-                            width: Val::Percent(100.0),
-                            padding: UiRect::axes(px(8), px(6)),
-                            margin: UiRect::bottom(px(1)),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: px(2),
-                            border: UiRect::all(px(if is_selected { 2.0 } else { 1.0 })),
-                            ..default()
-                        },
-                        BackgroundColor(if is_selected {
-                            ui_panel_background_selected().into()
-                        } else {
-                            ui_panel_background_alt().into()
-                        }),
-                        BorderColor::all(if is_selected {
-                            ui_border_selected_color()
-                        } else {
-                            ui_border_color()
-                        }),
-                        GameUiButtonAction::SelectSkillTree(tree.tree_id.clone()),
-                        viewer_ui_passthrough_bundle(),
-                    ))
-                    .with_children(|button| {
-                        button.spawn(text_bundle(
-                            font,
-                            &compact_skill_name(&tree.tree_name, 18),
-                            10.3,
-                            if is_selected {
-                                Color::WHITE
-                            } else {
-                                ui_text_secondary_color()
-                            },
-                        ));
-                        button.spawn(text_bundle(
-                            font,
-                            &format!("{learned_count}/{total_count} 已学习"),
-                            8.8,
-                            ui_text_muted_color(),
-                        ));
-                    });
+                render_skill_tree_list_entry(tree_column, font, tree, selected_tree);
             }
         });
+}
 
-        body.spawn((
+fn render_skill_tree_list_entry(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    tree: &game_bevy::UiSkillTreeView,
+    selected_tree: Option<&game_bevy::UiSkillTreeView>,
+) {
+    let (learned_count, total_count) = skill_tree_progress(tree);
+    let is_selected = selected_tree
+        .map(|selected| selected.tree_id == tree.tree_id)
+        .unwrap_or(false);
+    parent
+        .spawn((
+            Button,
             Node {
                 width: Val::Percent(100.0),
+                padding: UiRect::axes(px(8), px(6)),
+                margin: UiRect::bottom(px(1)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(2),
+                border: UiRect::all(px(if is_selected { 2.0 } else { 1.0 })),
+                ..default()
+            },
+            BackgroundColor(if is_selected {
+                ui_panel_background_selected().into()
+            } else {
+                ui_panel_background_alt().into()
+            }),
+            BorderColor::all(if is_selected {
+                ui_border_selected_color()
+            } else {
+                ui_border_color()
+            }),
+            GameUiButtonAction::SelectSkillTree(tree.tree_id.clone()),
+            viewer_ui_passthrough_bundle(),
+        ))
+        .with_children(|button| {
+            button.spawn(text_bundle(
+                font,
+                &compact_skill_name(&tree.tree_name, 12),
+                10.0,
+                if is_selected {
+                    Color::WHITE
+                } else {
+                    ui_text_secondary_color()
+                },
+            ));
+            button.spawn(text_bundle(
+                font,
+                &format!("{learned_count}/{total_count} 已学习"),
+                8.8,
+                ui_text_muted_color(),
+            ));
+        });
+}
+
+fn render_skill_tree_content(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    selected_tree: Option<&game_bevy::UiSkillTreeView>,
+    menu_state: &UiMenuState,
+    hotbar_state: &UiHotbarState,
+    view_state: &UiSkillTreeViewState,
+) {
+    parent
+        .spawn((
+            Node {
                 flex_grow: 1.0,
                 padding: UiRect::all(px(8)),
                 flex_direction: FlexDirection::Column,
@@ -125,68 +176,66 @@ pub(super) fn render_skills_panel(
                 .map(|tree| format!("{} 技能树", compact_skill_name(&tree.tree_name, 14)))
                 .unwrap_or_else(|| "技能树详情".to_string());
             tree_canvas_column.spawn(text_bundle(font, &title, 11.5, ui_text_heading_color()));
-            if let Some(tree) = selected_tree {
-                if !tree.tree_description.trim().is_empty() {
-                    tree_canvas_column.spawn(text_bundle(
-                        font,
-                        &tree.tree_description,
-                        9.6,
-                        ui_text_muted_color(),
-                    ));
-                }
-                if tree.entries.is_empty() {
-                    tree_canvas_column.spawn(text_bundle(
-                        font,
-                        "该技能树暂无技能条目",
-                        10.5,
-                        ui_text_muted_color(),
-                    ));
-                } else {
-                    render_skill_tree_canvas(
-                        tree_canvas_column,
-                        font,
-                        tree,
-                        menu_state,
-                        view_state,
-                    );
-                }
-
-                if let Some(entry) =
-                    selected_skill_entry(tree, menu_state.selected_skill_id.as_deref())
-                {
-                    let detail = build_skill_detail_display(Some(tree), entry, hotbar_state);
-                    tree_canvas_column
-                        .spawn((
-                            Node {
-                                width: Val::Percent(100.0),
-                                padding: UiRect::all(px(8)),
-                                flex_direction: FlexDirection::Column,
-                                row_gap: px(5),
-                                border: UiRect::all(px(1)),
-                                ..default()
-                            },
-                            BackgroundColor(ui_panel_background_alt().into()),
-                            BorderColor::all(ui_border_color()),
-                            viewer_ui_passthrough_bundle(),
-                        ))
-                        .with_children(|detail_column| {
-                            detail_column.spawn(text_bundle(
-                                font,
-                                "当前技能",
-                                10.5,
-                                ui_text_heading_color(),
-                            ));
-                            render_skill_detail_content(detail_column, font, &detail, entry, false);
-                        });
-                }
-            } else {
+            let Some(tree) = selected_tree else {
                 tree_canvas_column.spawn(text_bundle(
                     font,
                     "没有可供选择的技能",
                     10.5,
                     ui_text_muted_color(),
                 ));
+                return;
+            };
+
+            if !tree.tree_description.trim().is_empty() {
+                tree_canvas_column.spawn(text_bundle(
+                    font,
+                    &tree.tree_description,
+                    9.6,
+                    ui_text_muted_color(),
+                ));
+            }
+            if tree.entries.is_empty() {
+                tree_canvas_column.spawn(text_bundle(
+                    font,
+                    "该技能树暂无技能条目",
+                    10.5,
+                    ui_text_muted_color(),
+                ));
+            } else {
+                render_skill_tree_canvas(tree_canvas_column, font, tree, menu_state, view_state);
+            }
+
+            if let Some(entry) = selected_skill_entry(tree, menu_state.selected_skill_id.as_deref())
+            {
+                render_selected_skill_detail(tree_canvas_column, font, tree, entry, hotbar_state);
             }
         });
-    });
+}
+
+fn render_selected_skill_detail(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    tree: &game_bevy::UiSkillTreeView,
+    entry: &game_bevy::UiSkillEntryView,
+    hotbar_state: &UiHotbarState,
+) {
+    let detail = build_skill_detail_display(Some(tree), entry, hotbar_state);
+    parent
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                padding: UiRect::all(px(8)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(5),
+                border: UiRect::all(px(1)),
+                ..default()
+            },
+            BackgroundColor(ui_panel_background_alt().into()),
+            BorderColor::all(ui_border_color()),
+            viewer_ui_passthrough_bundle(),
+        ))
+        .with_children(|detail_column| {
+            detail_column.spawn(text_bundle(font, "当前技能", 10.5, ui_text_heading_color()));
+            render_skill_detail_content(detail_column, font, &detail, entry, false);
+        });
 }
