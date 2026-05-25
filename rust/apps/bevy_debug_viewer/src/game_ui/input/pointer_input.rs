@@ -77,6 +77,30 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
         ),
         With<Button>,
     >,
+    queued_trade_buy_targets: Query<
+        'w,
+        's,
+        (
+            &'static QueuedTradeBuyClickTarget,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            Option<&'static RelativeCursorPosition>,
+            Option<&'static Visibility>,
+        ),
+        With<Button>,
+    >,
+    queued_trade_sell_targets: Query<
+        'w,
+        's,
+        (
+            &'static QueuedTradeSellClickTarget,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+            Option<&'static RelativeCursorPosition>,
+            Option<&'static Visibility>,
+        ),
+        With<Button>,
+    >,
     container_inventory_targets: Query<
         'w,
         's,
@@ -256,12 +280,12 @@ pub(crate) struct InventoryPointerTargets<'w, 's> {
         'w,
         's,
         (
+            &'static MapPanelViewport,
             &'static ComputedNode,
             &'static UiGlobalTransform,
             Option<&'static RelativeCursorPosition>,
             Option<&'static Visibility>,
         ),
-        With<MapPanelViewport>,
     >,
     skill_tree_viewports: Query<
         'w,
@@ -374,6 +398,10 @@ pub(crate) fn handle_inventory_panel_pointer_input(
     let trade_equipped_hit =
         find_trade_equipped_click_target(cursor_position, &targets.trade_equipped_targets);
     let trade_shop_hit = find_trade_shop_click_target(cursor_position, &targets.trade_shop_targets);
+    let queued_trade_buy_hit =
+        find_queued_trade_buy_click_target(cursor_position, &targets.queued_trade_buy_targets);
+    let queued_trade_sell_hit =
+        find_queued_trade_sell_click_target(cursor_position, &targets.queued_trade_sell_targets);
     let container_item_hit = find_container_inventory_click_target(
         cursor_position,
         &targets.container_inventory_targets,
@@ -597,6 +625,31 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 return;
             }
         } else if trade_active {
+            if let Some(item_id) = queued_trade_buy_hit {
+                begin_inventory_drag(
+                    &mut ui.drag_state,
+                    UiInventoryDragSource::QueuedTradeBuy { item_id },
+                    item_preview_label(&ui.items.0, item_id),
+                    Vec::new(),
+                    cursor_position,
+                );
+                ui.context_menu.clear();
+                return;
+            }
+            if let Some(target) = queued_trade_sell_hit.as_ref() {
+                begin_inventory_drag(
+                    &mut ui.drag_state,
+                    UiInventoryDragSource::QueuedTradeSell {
+                        item_id: target.item_id,
+                        source: target.source.clone(),
+                    },
+                    item_preview_label(&ui.items.0, target.item_id),
+                    Vec::new(),
+                    cursor_position,
+                );
+                ui.context_menu.clear();
+                return;
+            }
             if let Some(item_id) = trade_shop_hit {
                 begin_inventory_drag(
                     &mut ui.drag_state,
@@ -724,6 +777,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             &ui.items,
             effective_inventory_hit,
             trade_shop_hit,
+            queued_trade_buy_hit,
+            queued_trade_sell_hit.as_ref(),
             trade_equipped_hit.as_ref(),
             container_item_hit,
             equipment_hit.as_ref(),
@@ -754,6 +809,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
             &ui.items,
             effective_inventory_hit,
             trade_shop_hit,
+            queued_trade_buy_hit,
+            queued_trade_sell_hit.as_ref(),
             trade_equipped_hit.as_ref(),
             container_item_hit,
             equipment_hit.as_ref(),
@@ -965,6 +1022,43 @@ pub(crate) fn handle_inventory_panel_pointer_input(
                 }
             }
         }
+        UiInventoryDragSource::QueuedTradeBuy { item_id } => {
+            if trade_active
+                && matches!(
+                    hover_target,
+                    Some(UiInventoryDragHoverTarget::TradeSellZone)
+                        | Some(UiInventoryDragHoverTarget::ContainerListEnd)
+                )
+            {
+                applied_drop = remove_queued_trade_buy(
+                    &mut ui.viewer_state,
+                    &mut ui.menu_state,
+                    &mut ui.modal_state,
+                    item_id,
+                );
+            }
+        }
+        UiInventoryDragSource::QueuedTradeSell {
+            item_id,
+            ref source,
+        } => {
+            if trade_active
+                && matches!(
+                    hover_target,
+                    Some(UiInventoryDragHoverTarget::TradeBuyZone)
+                        | Some(UiInventoryDragHoverTarget::InventoryItem { .. })
+                        | Some(UiInventoryDragHoverTarget::InventoryListEnd)
+                )
+            {
+                applied_drop = remove_queued_trade_sell(
+                    &mut ui.viewer_state,
+                    &mut ui.menu_state,
+                    &mut ui.modal_state,
+                    item_id,
+                    source,
+                );
+            }
+        }
         UiInventoryDragSource::ContainerItem {
             ref container_id,
             item_id,
@@ -1087,6 +1181,8 @@ pub(crate) fn handle_inventory_panel_pointer_input(
         ui.menu_state.selected_inventory_item = match &source {
             UiInventoryDragSource::InventoryItem { item_id } => Some(*item_id),
             UiInventoryDragSource::ShopItem { item_id } => Some(*item_id),
+            UiInventoryDragSource::QueuedTradeBuy { item_id } => Some(*item_id),
+            UiInventoryDragSource::QueuedTradeSell { item_id, .. } => Some(*item_id),
             UiInventoryDragSource::ContainerItem { .. } => ui.menu_state.selected_inventory_item,
             UiInventoryDragSource::EquipmentSlot { .. } => ui.menu_state.selected_inventory_item,
         };
@@ -1202,6 +1298,48 @@ pub(super) fn find_trade_shop_click_target(
         })
 }
 
+pub(super) fn find_queued_trade_buy_click_target(
+    cursor_position: Vec2,
+    targets: &Query<
+        (
+            &QueuedTradeBuyClickTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) -> Option<u32> {
+    targets
+        .iter()
+        .find_map(|(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+                .then_some(target.item_id)
+        })
+}
+
+pub(super) fn find_queued_trade_sell_click_target(
+    cursor_position: Vec2,
+    targets: &Query<
+        (
+            &QueuedTradeSellClickTarget,
+            &ComputedNode,
+            &UiGlobalTransform,
+            Option<&RelativeCursorPosition>,
+            Option<&Visibility>,
+        ),
+        With<Button>,
+    >,
+) -> Option<QueuedTradeSellClickTarget> {
+    targets
+        .iter()
+        .find_map(|(target, computed, transform, cursor, visibility)| {
+            hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
+                .then(|| target.clone())
+        })
+}
+
 pub(super) fn find_container_inventory_click_target(
     cursor_position: Vec2,
     targets: &Query<
@@ -1292,6 +1430,7 @@ fn resolve_drag_hover_target(
             && matches!(
                 drag_state.active_source.as_ref(),
                 Some(UiInventoryDragSource::ShopItem { .. })
+                    | Some(UiInventoryDragSource::QueuedTradeSell { .. })
             )
         {
             return Some(UiInventoryDragHoverTarget::TradeBuyZone);
@@ -1381,11 +1520,35 @@ fn handle_click_release(
     items: &ItemDefinitions,
     inventory_hit: Option<u32>,
     trade_shop_hit: Option<u32>,
+    queued_trade_buy_hit: Option<u32>,
+    queued_trade_sell_hit: Option<&QueuedTradeSellClickTarget>,
     trade_equipped_hit: Option<&TradeEquippedItemClickTarget>,
     container_item_hit: Option<u32>,
     equipment_hit: Option<&EquipmentSlotClickTarget>,
     clicked_context_menu: bool,
 ) {
+    if let Some(item_id) = queued_trade_buy_hit {
+        if trade_active {
+            remove_queued_trade_buy(viewer_state, menu_state, modal_state, item_id);
+            context_menu.clear();
+            return;
+        }
+    }
+
+    if let Some(target) = queued_trade_sell_hit {
+        if trade_active {
+            remove_queued_trade_sell(
+                viewer_state,
+                menu_state,
+                modal_state,
+                target.item_id,
+                &target.source,
+            );
+            context_menu.clear();
+            return;
+        }
+    }
+
     if let Some(item_id) = trade_shop_hit {
         if trade_active {
             if let Some(trade) = modal_state.trade.clone() {
@@ -1540,15 +1703,13 @@ pub(crate) fn handle_inventory_list_mouse_wheel(
     scene_kind: Res<ViewerSceneKind>,
     mut mouse_wheel_events: MessageReader<bevy::input::mouse::MouseWheel>,
     mut map_view_state: ResMut<UiMapViewState>,
-    map_viewports: Query<
-        (
-            &ComputedNode,
-            &UiGlobalTransform,
-            Option<&RelativeCursorPosition>,
-            Option<&Visibility>,
-        ),
-        With<MapPanelViewport>,
-    >,
+    map_viewports: Query<(
+        &MapPanelViewport,
+        &ComputedNode,
+        &UiGlobalTransform,
+        Option<&RelativeCursorPosition>,
+        Option<&Visibility>,
+    )>,
     mut scroll_areas: Query<
         (
             &ComputedNode,
@@ -1618,15 +1779,13 @@ fn handle_map_panel_pointer_input(
     window: &Window,
     buttons: &ButtonInput<MouseButton>,
     map_view_state: &mut UiMapViewState,
-    viewports: &Query<
-        (
-            &ComputedNode,
-            &UiGlobalTransform,
-            Option<&RelativeCursorPosition>,
-            Option<&Visibility>,
-        ),
-        With<MapPanelViewport>,
-    >,
+    viewports: &Query<(
+        &MapPanelViewport,
+        &ComputedNode,
+        &UiGlobalTransform,
+        Option<&RelativeCursorPosition>,
+        Option<&Visibility>,
+    )>,
 ) {
     let left_just_pressed = buttons.just_pressed(MouseButton::Left);
     let left_pressed = buttons.pressed(MouseButton::Left);
@@ -1646,7 +1805,7 @@ fn handle_map_panel_pointer_input(
     };
     let cursor_over_map = viewports
         .iter()
-        .any(|(computed, transform, cursor, visibility)| {
+        .any(|(_, computed, transform, cursor, visibility)| {
             hover_target_contains_cursor(cursor_position, computed, transform, cursor, visibility)
         });
 
@@ -1733,24 +1892,22 @@ fn handle_map_panel_mouse_wheel(
     window: &Window,
     mouse_wheel_events: &mut MessageReader<bevy::input::mouse::MouseWheel>,
     map_view_state: &mut UiMapViewState,
-    viewports: &Query<
-        (
-            &ComputedNode,
-            &UiGlobalTransform,
-            Option<&RelativeCursorPosition>,
-            Option<&Visibility>,
-        ),
-        With<MapPanelViewport>,
-    >,
+    viewports: &Query<(
+        &MapPanelViewport,
+        &ComputedNode,
+        &UiGlobalTransform,
+        Option<&RelativeCursorPosition>,
+        Option<&Visibility>,
+    )>,
 ) {
     let Some(cursor_position) = window.cursor_position() else {
         for _ in mouse_wheel_events.read() {}
         return;
     };
-    let Some((computed, transform, _, _)) =
+    let Some((viewport, computed, transform, _, _)) =
         viewports
             .iter()
-            .find(|(computed, transform, cursor, visibility)| {
+            .find(|(_, computed, transform, cursor, visibility)| {
                 hover_target_contains_cursor(
                     cursor_position,
                     computed,
@@ -1778,7 +1935,12 @@ fn handle_map_panel_mouse_wheel(
     else {
         return;
     };
-    map_view_state.zoom_by_steps(scroll_steps, focus_in_viewport);
+    map_view_state.zoom_by_steps(
+        scroll_steps,
+        focus_in_viewport,
+        computed.size,
+        viewport.base_content_size,
+    );
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2182,6 +2344,58 @@ fn apply_trade_sell(
             false
         }
     }
+}
+
+fn remove_queued_trade_buy(
+    viewer_state: &mut ViewerState,
+    menu_state: &mut UiMenuState,
+    modal_state: &mut UiModalState,
+    item_id: u32,
+) -> bool {
+    let Some(trade) = modal_state.trade.as_mut() else {
+        viewer_state.status_line = "交易会话已关闭".to_string();
+        menu_state.status_text = viewer_state.status_line.clone();
+        return false;
+    };
+    let before = trade.cart.buy_lines.len();
+    trade.cart.buy_lines.retain(|line| line.item_id != item_id);
+    let removed = trade.cart.buy_lines.len() != before;
+    let status = if removed {
+        "已移除买入物品"
+    } else {
+        "未找到买入物品"
+    };
+    viewer_state.status_line = status.to_string();
+    menu_state.status_text = viewer_state.status_line.clone();
+    removed
+}
+
+fn remove_queued_trade_sell(
+    viewer_state: &mut ViewerState,
+    menu_state: &mut UiMenuState,
+    modal_state: &mut UiModalState,
+    item_id: u32,
+    source: &game_bevy::UiTradeCartSellSource,
+) -> bool {
+    let Some(trade) = modal_state.trade.as_mut() else {
+        viewer_state.status_line = "交易会话已关闭".to_string();
+        menu_state.status_text = viewer_state.status_line.clone();
+        return false;
+    };
+    let before = trade.cart.sell_lines.len();
+    trade
+        .cart
+        .sell_lines
+        .retain(|line| !(line.item_id == item_id && line.source == *source));
+    let removed = trade.cart.sell_lines.len() != before;
+    let status = if removed {
+        "已移除卖出物品"
+    } else {
+        "未找到卖出物品"
+    };
+    viewer_state.status_line = status.to_string();
+    menu_state.status_text = viewer_state.status_line.clone();
+    removed
 }
 
 fn apply_trade_buy(

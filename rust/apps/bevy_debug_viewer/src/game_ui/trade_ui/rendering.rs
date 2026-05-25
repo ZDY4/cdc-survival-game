@@ -277,7 +277,11 @@ fn render_trade_shop_column(
                 viewer_ui_passthrough_bundle(),
             ))
             .with_children(|items| {
-                if snapshot.shop_items.is_empty() && trade.cart.sell_lines.is_empty() {
+                let has_visible_shop_item = snapshot
+                    .shop_items
+                    .iter()
+                    .any(|item| remaining_shop_count(item, &trade.cart) > 0);
+                if !has_visible_shop_item && trade.cart.sell_lines.is_empty() {
                     items.spawn(text_bundle(
                         font,
                         "商店库存为空",
@@ -285,60 +289,38 @@ fn render_trade_shop_column(
                         ui_text_muted_color(),
                     ));
                 }
-                let mut rendered_item_ids = std::collections::BTreeSet::new();
                 for item in &snapshot.shop_items {
-                    rendered_item_ids.insert(item.item_id);
-                    let queued = queued_sell_count_for_item(&trade.cart, item.item_id);
-                    let queued_source = queued_sell_source_for_item(&trade.cart, item.item_id);
-                    render_trade_item_row(
-                        items,
-                        font,
-                        "物",
-                        &trade_item_count_label(&item.name, item.count, "卖出", queued),
-                        item.unit_price,
-                        queued,
-                        false,
-                        None,
-                        Some(TradeRowTarget::ShopItem {
-                            item_id: item.item_id,
-                        }),
-                        queued_source
-                            .clone()
-                            .map(|source| GameUiButtonAction::AdjustTradeSell {
-                                item_id: item.item_id,
-                                source,
-                                delta: -1,
-                            }),
-                        queued_source.map(|source| GameUiButtonAction::RemoveTradeSell {
-                            item_id: item.item_id,
-                            source,
-                        }),
-                        Some(item.item_id),
-                        false,
-                    );
-                }
-                for line in &trade.cart.sell_lines {
-                    if !rendered_item_ids.insert(line.item_id) {
+                    let remaining_count = remaining_shop_count(item, &trade.cart);
+                    if remaining_count <= 0 {
                         continue;
                     }
                     render_trade_item_row(
                         items,
                         font,
                         "物",
-                        &trade_item_count_label(&line.name, 0, "卖出", line.count),
+                        &trade_item_count_label(&item.name, remaining_count, None),
+                        item.unit_price,
+                        0,
+                        false,
+                        None,
+                        Some(TradeRowTarget::ShopItem {
+                            item_id: item.item_id,
+                        }),
+                        Some(item.item_id),
+                        false,
+                    );
+                }
+                for line in &trade.cart.sell_lines {
+                    render_trade_item_row(
+                        items,
+                        font,
+                        "物",
+                        &trade_item_count_label(&line.name, line.count, Some("卖出")),
                         line.unit_price,
                         line.count,
                         false,
                         None,
-                        Some(TradeRowTarget::InventoryItem {
-                            item_id: line.item_id,
-                        }),
-                        Some(GameUiButtonAction::AdjustTradeSell {
-                            item_id: line.item_id,
-                            source: line.source.clone(),
-                            delta: -1,
-                        }),
-                        Some(GameUiButtonAction::RemoveTradeSell {
+                        Some(TradeRowTarget::QueuedSell {
                             item_id: line.item_id,
                             source: line.source.clone(),
                         }),
@@ -412,7 +394,11 @@ fn render_trade_player_list(
             viewer_ui_passthrough_bundle(),
         ))
         .with_children(|items| {
-            if inventory_snapshot.entries.is_empty() && trade.cart.buy_lines.is_empty() {
+            let has_visible_inventory_item = inventory_snapshot
+                .entries
+                .iter()
+                .any(|item| remaining_player_count(item, &trade.cart) > 0);
+            if !has_visible_inventory_item && trade.cart.buy_lines.is_empty() {
                 items.spawn(text_bundle(
                     font,
                     "当前筛选下没有物品",
@@ -420,15 +406,12 @@ fn render_trade_player_list(
                     ui_text_muted_color(),
                 ));
             }
-            let mut rendered_item_ids = std::collections::BTreeSet::new();
             for item in &inventory_snapshot.entries {
-                rendered_item_ids.insert(item.item_id);
-                let queued = trade.cart.queued_buy_count(item.item_id);
-                let price = trade_buy_unit_price_for_cart(&trade.cart, item.item_id)
-                    .filter(|_| queued > 0)
-                    .unwrap_or_else(|| {
-                        trade_unit_price_for_player_item(trade_snapshot, item.item_id)
-                    });
+                let remaining_count = remaining_player_count(item, &trade.cart);
+                if remaining_count <= 0 {
+                    continue;
+                }
+                let price = trade_unit_price_for_player_item(trade_snapshot, item.item_id);
                 let icon = trade_item_icon_label(item.item_type, item.equipped_slot_id.is_some());
                 let is_drag_hover = matches!(
                     drag_state.hover_target.as_ref(),
@@ -439,9 +422,9 @@ fn render_trade_player_list(
                     items,
                     font,
                     icon,
-                    &trade_item_count_label(&item.name, item.count, "买入", queued),
+                    &trade_item_count_label(&item.name, remaining_count, None),
                     price,
-                    queued,
+                    0,
                     true,
                     None,
                     item.equipped_slot_id
@@ -453,38 +436,21 @@ fn render_trade_player_list(
                         .or(Some(TradeRowTarget::InventoryItem {
                             item_id: item.item_id,
                         })),
-                    Some(GameUiButtonAction::AdjustTradeBuy {
-                        item_id: item.item_id,
-                        delta: -1,
-                    }),
-                    Some(GameUiButtonAction::RemoveTradeBuy {
-                        item_id: item.item_id,
-                    }),
                     Some(item.item_id),
                     is_drag_hover,
                 );
             }
             for line in &trade.cart.buy_lines {
-                if !rendered_item_ids.insert(line.item_id) {
-                    continue;
-                }
                 render_trade_item_row(
                     items,
                     font,
                     "物",
-                    &trade_item_count_label(&line.name, 0, "买入", line.count),
+                    &trade_item_count_label(&line.name, line.count, Some("买入")),
                     line.unit_price,
                     line.count,
                     true,
                     None,
-                    Some(TradeRowTarget::ShopItem {
-                        item_id: line.item_id,
-                    }),
-                    Some(GameUiButtonAction::AdjustTradeBuy {
-                        item_id: line.item_id,
-                        delta: -1,
-                    }),
-                    Some(GameUiButtonAction::RemoveTradeBuy {
+                    Some(TradeRowTarget::QueuedBuy {
                         item_id: line.item_id,
                     }),
                     Some(line.item_id),
@@ -496,12 +462,25 @@ fn render_trade_player_list(
 
 #[derive(Debug, Clone)]
 enum TradeRowTarget {
-    InventoryItem { item_id: u32 },
-    EquippedItem { slot_id: String, item_id: u32 },
-    ShopItem { item_id: u32 },
+    InventoryItem {
+        item_id: u32,
+    },
+    EquippedItem {
+        slot_id: String,
+        item_id: u32,
+    },
+    ShopItem {
+        item_id: u32,
+    },
+    QueuedBuy {
+        item_id: u32,
+    },
+    QueuedSell {
+        item_id: u32,
+        source: game_bevy::UiTradeCartSellSource,
+    },
 }
 
-#[allow(clippy::too_many_arguments)]
 fn render_trade_item_row(
     parent: &mut ChildSpawnerCommands,
     font: &ViewerUiFont,
@@ -512,8 +491,6 @@ fn render_trade_item_row(
     buying: bool,
     row_action: Option<GameUiButtonAction>,
     row_target: Option<TradeRowTarget>,
-    decrease_action: Option<GameUiButtonAction>,
-    remove_action: Option<GameUiButtonAction>,
     hover_item_id: Option<u32>,
     highlighted: bool,
 ) {
@@ -558,6 +535,12 @@ fn render_trade_item_row(
         }
         Some(TradeRowTarget::ShopItem { item_id }) => {
             row.insert(TradeShopItemClickTarget { item_id });
+        }
+        Some(TradeRowTarget::QueuedBuy { item_id }) => {
+            row.insert(QueuedTradeBuyClickTarget { item_id });
+        }
+        Some(TradeRowTarget::QueuedSell { item_id, source }) => {
+            row.insert(QueuedTradeSellClickTarget { item_id, source });
         }
         None => {}
     }
@@ -621,20 +604,13 @@ fn render_trade_item_row(
             },
             viewer_ui_passthrough_bundle(),
         ));
-        if let Some(decrease_action) = decrease_action.filter(|_| queued > 0) {
-            row.spawn(action_button(font, "-1", decrease_action));
-        }
-        if let Some(remove_action) = remove_action.filter(|_| queued > 0) {
-            row.spawn(action_button(font, "移除", remove_action));
-        }
     });
 }
 
-fn trade_item_count_label(name: &str, count: i32, pending_label: &str, queued: i32) -> String {
-    if queued > 0 {
-        format!("{name} x{count} · {pending_label} x{queued}")
-    } else {
-        format!("{name} x{count}")
+fn trade_item_count_label(name: &str, count: i32, trade_label: Option<&str>) -> String {
+    match trade_label {
+        Some(label) => format!("{name} x{count} · {label} x{count}"),
+        None => format!("{name} x{count}"),
     }
 }
 
@@ -653,22 +629,23 @@ fn trade_item_icon_label(item_type: game_bevy::UiItemType, equipped: bool) -> &'
     }
 }
 
-fn queued_sell_count_for_item(cart: &game_bevy::UiTradeCartState, item_id: u32) -> i32 {
-    cart.sell_lines
-        .iter()
-        .filter(|line| line.item_id == item_id)
-        .map(|line| line.count.max(0))
-        .sum()
+fn remaining_shop_count(
+    item: &game_bevy::UiTradeEntryView,
+    cart: &game_bevy::UiTradeCartState,
+) -> i32 {
+    (item.count - cart.queued_buy_count(item.item_id)).max(0)
 }
 
-fn queued_sell_source_for_item(
+fn remaining_player_count(
+    item: &game_bevy::UiInventoryEntryView,
     cart: &game_bevy::UiTradeCartState,
-    item_id: u32,
-) -> Option<game_bevy::UiTradeCartSellSource> {
-    cart.sell_lines
-        .iter()
-        .find(|line| line.item_id == item_id)
-        .map(|line| line.source.clone())
+) -> i32 {
+    let queued = if let Some(slot_id) = item.equipped_slot_id.as_ref() {
+        i32::from(cart.has_equipped_sell_slot(slot_id))
+    } else {
+        cart.queued_inventory_sell_count(item.item_id)
+    };
+    (item.count - queued).max(0)
 }
 
 fn trade_unit_price_for_player_item(snapshot: &game_bevy::UiTradeSnapshot, item_id: u32) -> i32 {
@@ -678,13 +655,6 @@ fn trade_unit_price_for_player_item(snapshot: &game_bevy::UiTradeSnapshot, item_
         .find(|entry| entry.item_id == item_id)
         .map(|entry| entry.unit_price)
         .unwrap_or(0)
-}
-
-fn trade_buy_unit_price_for_cart(cart: &game_bevy::UiTradeCartState, item_id: u32) -> Option<i32> {
-    cart.buy_lines
-        .iter()
-        .find(|line| line.item_id == item_id)
-        .map(|line| line.unit_price)
 }
 
 fn settlement_text(cart: &game_bevy::UiTradeCartState) -> String {

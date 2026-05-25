@@ -124,10 +124,27 @@ impl UiContextMenuState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UiInventoryDragSource {
-    InventoryItem { item_id: u32 },
-    ShopItem { item_id: u32 },
-    ContainerItem { container_id: String, item_id: u32 },
-    EquipmentSlot { slot_id: String, item_id: u32 },
+    InventoryItem {
+        item_id: u32,
+    },
+    ShopItem {
+        item_id: u32,
+    },
+    QueuedTradeBuy {
+        item_id: u32,
+    },
+    QueuedTradeSell {
+        item_id: u32,
+        source: game_bevy::UiTradeCartSellSource,
+    },
+    ContainerItem {
+        container_id: String,
+        item_id: u32,
+    },
+    EquipmentSlot {
+        slot_id: String,
+        item_id: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -369,6 +386,17 @@ pub(crate) struct TradeShopItemClickTarget {
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct QueuedTradeBuyClickTarget {
+    pub item_id: u32,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QueuedTradeSellClickTarget {
+    pub item_id: u32,
+    pub source: game_bevy::UiTradeCartSellSource,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ContainerInventoryItemClickTarget {
     pub item_id: u32,
 }
@@ -394,8 +422,10 @@ pub(crate) struct InventoryEntryScrollbarTrack;
 #[derive(Component)]
 pub(crate) struct InventoryEntryScrollbarThumb;
 
-#[derive(Component)]
-pub(crate) struct MapPanelViewport;
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub(crate) struct MapPanelViewport {
+    pub base_content_size: Vec2,
+}
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub(crate) struct SkillTreeCanvasViewport {
@@ -446,7 +476,13 @@ impl UiMapViewState {
         self.drag_start_pan = self.pan;
     }
 
-    pub(crate) fn zoom_by_steps(&mut self, scroll_steps: f32, focus_in_viewport: Vec2) {
+    pub(crate) fn zoom_by_steps(
+        &mut self,
+        scroll_steps: f32,
+        focus_in_viewport: Vec2,
+        viewport_size: Vec2,
+        base_content_size: Vec2,
+    ) {
         if scroll_steps.abs() <= f32::EPSILON {
             return;
         }
@@ -457,9 +493,11 @@ impl UiMapViewState {
             return;
         }
 
-        // 缩放围绕鼠标指向的画布位置展开，避免滚轮后目标点跳走。
-        let scale = next_zoom / previous_zoom;
-        self.pan = focus_in_viewport - (focus_in_viewport - self.pan) * scale;
+        // 缩放围绕鼠标指向的画布位置展开；居中偏移也要参与换算，否则目标点会漂移。
+        let previous_center_offset = (viewport_size - base_content_size * previous_zoom) * 0.5;
+        let next_center_offset = (viewport_size - base_content_size * next_zoom) * 0.5;
+        let content_point = (focus_in_viewport - previous_center_offset - self.pan) / previous_zoom;
+        self.pan = focus_in_viewport - next_center_offset - content_point * next_zoom;
         self.zoom = next_zoom;
     }
 }
