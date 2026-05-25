@@ -471,12 +471,20 @@ fn game_ui_map_render_key_changes_when_view_changes() {
 fn game_ui_map_zoom_keeps_focus_stable() {
     let mut map_view = UiMapViewState::default();
     let focus = Vec2::new(120.0, 80.0);
+    let viewport_size = Vec2::new(680.0, 430.0);
+    let base_content_size = Vec2::new(340.0, 215.0);
+    let content_before =
+        (focus - (viewport_size - base_content_size * map_view.zoom) * 0.5 - map_view.pan)
+            / map_view.zoom;
 
-    map_view.zoom_by_steps(1.0, focus);
+    map_view.zoom_by_steps(1.0, focus, viewport_size, base_content_size);
+
+    let content_after =
+        (focus - (viewport_size - base_content_size * map_view.zoom) * 0.5 - map_view.pan)
+            / map_view.zoom;
 
     assert!(map_view.zoom > 1.0);
-    assert!(map_view.pan.x < 0.0);
-    assert!(map_view.pan.y < 0.0);
+    assert!((content_before - content_after).length() < 0.001);
 }
 
 #[test]

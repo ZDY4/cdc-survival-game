@@ -24,7 +24,7 @@ pub(super) fn spawn_map_canvas(
     let Some(layout) = MapPanelLayout::from_snapshot(snapshot, view_state) else {
         return false;
     };
-    body.spawn(map_canvas_viewport_node())
+    body.spawn(map_canvas_viewport_node(layout))
         .with_children(|viewport| {
             viewport
                 .spawn(map_canvas_content_node(layout))
@@ -160,7 +160,7 @@ fn map_object_rect_node(
         Node {
             position_type: PositionType::Absolute,
             left: px(layout.cell_left(rect.x)),
-            top: px(layout.cell_top(rect.z)),
+            top: px(layout.rect_top(rect.z, rect.height)),
             width: px(layout.object_draw_width(rect.width)),
             height: px(layout.object_draw_height(rect.height)),
             border: UiRect::all(px(1)),
@@ -189,7 +189,7 @@ fn actor_marker_node(left: f32, top: f32, color: Color) -> impl Bundle {
     )
 }
 
-fn map_canvas_viewport_node() -> impl Bundle {
+fn map_canvas_viewport_node(layout: MapPanelLayout) -> impl Bundle {
     (
         Node {
             width: px(MAP_CANVAS_MAX_WIDTH),
@@ -203,7 +203,9 @@ fn map_canvas_viewport_node() -> impl Bundle {
         BackgroundColor(Color::srgba(0.025, 0.026, 0.024, 0.98)),
         BorderColor::all(ui_border_strong_color()),
         RelativeCursorPosition::default(),
-        MapPanelViewport,
+        MapPanelViewport {
+            base_content_size: layout.base_content_size,
+        },
         UiMouseBlocker,
         UiMouseBlockerName("地图画布".to_string()),
         viewer_ui_passthrough_bundle(),
@@ -237,6 +239,7 @@ struct MapPanelLayout {
     map_width: u32,
     map_height: u32,
     cell_size: f32,
+    base_content_size: Vec2,
     canvas_width: f32,
     canvas_height: f32,
     content_left: f32,
@@ -265,12 +268,17 @@ impl MapPanelLayout {
             * view_state
                 .zoom
                 .clamp(UiMapViewState::MIN_ZOOM, UiMapViewState::MAX_ZOOM);
-        let canvas_width = cell_size * map_width as f32;
-        let canvas_height = cell_size * map_height as f32;
+        let base_content_size = Vec2::new(
+            base_cell_size * map_width as f32,
+            base_cell_size * map_height as f32,
+        );
+        let canvas_width = base_content_size.x * view_state.zoom;
+        let canvas_height = base_content_size.y * view_state.zoom;
         Some(Self {
             map_width,
             map_height,
             cell_size,
+            base_content_size,
             canvas_width,
             canvas_height,
             content_left: (MAP_CANVAS_MAX_WIDTH - canvas_width) * 0.5 + view_state.pan.x,
@@ -283,15 +291,21 @@ impl MapPanelLayout {
     }
 
     fn cell_top(self, z: i32) -> f32 {
-        z.max(0) as f32 * self.cell_size
+        let flipped_z = self.map_height as i32 - z - 1;
+        flipped_z.max(0) as f32 * self.cell_size
+    }
+
+    fn rect_top(self, z: i32, height: u32) -> f32 {
+        let flipped_z = self.map_height as i32 - z - height as i32;
+        flipped_z.max(0) as f32 * self.cell_size
     }
 
     fn terrain_draw_size(self) -> f32 {
-        (self.cell_size - 0.15).max(0.75)
+        self.cell_size.max(0.75)
     }
 
     fn run_draw_width(self, cells: u32) -> f32 {
-        (self.cell_size * cells as f32 - 0.15).max(0.75)
+        (self.cell_size * cells as f32 + 0.25).max(0.75)
     }
 
     fn object_draw_width(self, cells: u32) -> f32 {
