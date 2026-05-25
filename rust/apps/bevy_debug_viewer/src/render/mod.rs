@@ -35,16 +35,18 @@ use crate::state::{
     DialoguePanelBodyScrollbarThumb, DialoguePanelBodyScrollbarTrack, DialoguePanelChoicesRoot,
     DialoguePanelHintLabel, DialoguePanelRoot, DialoguePanelSpeakerLabel, DialoguePanelTitleLabel,
     InteractionLockedActorTag, InteractionMenuButton, InteractionMenuOptionRow,
-    InteractionMenuOptionsRoot, InteractionMenuRoot, InteractionMenuState, UiMouseBlocker,
-    UiMouseBlockerName, ViewerActorFeedbackState, ViewerActorMotionState, ViewerCamera,
-    ViewerCameraFollowState, ViewerCameraShakeState, ViewerDamageNumberState, ViewerHudPage,
-    ViewerInfoPanelState, ViewerOverlayMode, ViewerPalette, ViewerRenderConfig, ViewerRuntimeState,
-    ViewerSceneKind, ViewerState, ViewerStyleProfile, ViewerUiFont,
+    InteractionMenuOptionsRoot, InteractionMenuRoot, InteractionMenuState,
+    InteractionMenuTargetLabel, UiMouseBlocker, UiMouseBlockerName, ViewerActorFeedbackState,
+    ViewerActorMotionState, ViewerCamera, ViewerCameraFollowState, ViewerCameraShakeState,
+    ViewerDamageNumberState, ViewerHudPage, ViewerInfoPanelState, ViewerOverlayMode, ViewerPalette,
+    ViewerRenderConfig, ViewerRuntimeState, ViewerSceneKind, ViewerState, ViewerStyleProfile,
+    ViewerUiFont,
 };
 use crate::ui_context_menu::{
     close_icon_button_color, context_menu_border_color, context_menu_button_color,
-    context_menu_button_node, context_menu_panel_color, context_menu_root_node,
-    context_menu_text_color, dialogue_choice_button_color, ContextMenuStyle, ContextMenuVariant,
+    context_menu_button_node, context_menu_muted_text_color, context_menu_panel_color,
+    context_menu_root_node, context_menu_text_color, dialogue_choice_button_color,
+    ContextMenuStyle, ContextMenuVariant,
 };
 
 mod camera;

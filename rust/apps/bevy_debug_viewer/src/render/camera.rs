@@ -111,6 +111,22 @@ pub(crate) fn setup_viewer(
             menu.spawn((
                 Node {
                     width: Val::Percent(100.0),
+                    min_height: px(INTERACTION_MENU_TARGET_NAME_HEIGHT_PX),
+                    margin: UiRect::bottom(px(INTERACTION_MENU_TARGET_NAME_GAP_PX)),
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Text::new(""),
+                TextFont::from_font_size(INTERACTION_MENU_TARGET_NAME_FONT_SIZE_PX)
+                    .with_font(ui_font.clone()),
+                TextColor(context_menu_muted_text_color()),
+                TextLayout::new(Justify::Left, LineBreak::NoWrap),
+                viewer_ui_passthrough_bundle(),
+                InteractionMenuTargetLabel,
+            ));
+            menu.spawn((
+                Node {
+                    width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },

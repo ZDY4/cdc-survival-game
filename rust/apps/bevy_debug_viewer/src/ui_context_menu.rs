@@ -55,7 +55,7 @@ impl ContextMenuStyle {
                 disabled_alpha: 0.56,
             },
             ContextMenuVariant::WorldInteraction => Self {
-                width: 70.0,
+                width: 128.0,
                 padding: 6.0,
                 row_gap: 0.0,
                 border_width: 1.0,

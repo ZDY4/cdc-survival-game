@@ -168,7 +168,6 @@ pub(crate) fn resolve_interactive_object_options(
 
     let mut option = InteractionOptionDefinition {
         kind: InteractionOptionKind::OpenContainer,
-        display_name: interactive_object_display_name(object),
         interaction_distance: interactive.interaction_distance.max(1.4),
         priority: 850,
         ..InteractionOptionDefinition::default()

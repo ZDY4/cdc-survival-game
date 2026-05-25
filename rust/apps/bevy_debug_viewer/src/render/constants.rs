@@ -1,8 +1,11 @@
 //! 渲染常量：集中定义交互菜单、对话面板、网格和墙体相关的共享尺寸参数。
 
-pub(crate) const INTERACTION_MENU_WIDTH_PX: f32 = 70.0;
+pub(crate) const INTERACTION_MENU_WIDTH_PX: f32 = 128.0;
 pub(crate) const INTERACTION_MENU_PADDING_PX: f32 = 6.0;
 pub(crate) const INTERACTION_MENU_BORDER_WIDTH_PX: f32 = 1.0;
+pub(crate) const INTERACTION_MENU_TARGET_NAME_HEIGHT_PX: f32 = 14.0;
+pub(crate) const INTERACTION_MENU_TARGET_NAME_GAP_PX: f32 = 4.0;
+pub(crate) const INTERACTION_MENU_TARGET_NAME_FONT_SIZE_PX: f32 = 8.8;
 pub(crate) const INTERACTION_MENU_ITEM_HEIGHT_PX: f32 = 20.0;
 pub(crate) const INTERACTION_MENU_ITEM_GAP_PX: f32 = 2.0;
 pub(crate) const INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX: f32 = 5.5;

@@ -336,7 +336,7 @@ fn interaction_menu_layout_clamps_to_window_bounds() {
 }
 
 #[test]
-fn interaction_menu_layout_height_only_accounts_for_option_list() {
+fn interaction_menu_layout_height_accounts_for_target_header_and_options() {
     let window = Window {
         resolution: (640, 360).into(),
         ..default()
@@ -353,6 +353,8 @@ fn interaction_menu_layout_height_only_accounts_for_option_list() {
         layout.height,
         INTERACTION_MENU_BORDER_WIDTH_PX * 2.0
             + INTERACTION_MENU_PADDING_PX * 2.0
+            + INTERACTION_MENU_TARGET_NAME_HEIGHT_PX
+            + INTERACTION_MENU_TARGET_NAME_GAP_PX
             + 3.0 * INTERACTION_MENU_ITEM_HEIGHT_PX
             + 2.0 * INTERACTION_MENU_ITEM_GAP_PX
     );

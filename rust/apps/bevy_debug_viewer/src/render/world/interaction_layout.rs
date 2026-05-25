@@ -29,6 +29,8 @@ pub(super) fn interaction_menu_layout(
 pub(super) fn interaction_menu_height(option_count: usize) -> f32 {
     INTERACTION_MENU_BORDER_WIDTH_PX * 2.0
         + INTERACTION_MENU_PADDING_PX * 2.0
+        + INTERACTION_MENU_TARGET_NAME_HEIGHT_PX
+        + INTERACTION_MENU_TARGET_NAME_GAP_PX
         + option_count as f32 * INTERACTION_MENU_ITEM_HEIGHT_PX
         + option_count.saturating_sub(1) as f32 * INTERACTION_MENU_ITEM_GAP_PX
 }

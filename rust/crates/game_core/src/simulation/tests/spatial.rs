@@ -546,6 +546,77 @@ fn loaded_map_enforces_bounds_from_map_size_and_levels() {
 }
 
 #[test]
+fn default_container_interaction_uses_action_label_not_target_name() {
+    let mut simulation = Simulation::new();
+    simulation.grid_world_mut().load_map(&MapDefinition {
+        id: MapId("container_label_test".into()),
+        name: "Container Label Test".into(),
+        size: MapSize {
+            width: 4,
+            height: 4,
+        },
+        default_level: 0,
+        levels: vec![MapLevelDefinition {
+            y: 0,
+            cells: Vec::new(),
+        }],
+        entry_points: vec![MapEntryPointDefinition {
+            id: "default_entry".into(),
+            grid: GridCoord::new(0, 0, 0),
+            facing: None,
+            extra: BTreeMap::new(),
+        }],
+        objects: vec![MapObjectDefinition {
+            object_id: "field_crate".into(),
+            kind: MapObjectKind::Interactive,
+            anchor: GridCoord::new(1, 0, 1),
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                interactive: Some(MapInteractiveProps {
+                    display_name: "补给箱".into(),
+                    interaction_distance: 1.4,
+                    interaction_kind: String::new(),
+                    target_id: None,
+                    options: Vec::new(),
+                    extra: BTreeMap::new(),
+                }),
+                container: Some(MapContainerProps {
+                    display_name: "补给箱".into(),
+                    ..MapContainerProps::default()
+                }),
+                ..MapObjectProps::default()
+            },
+        }],
+    });
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: Some(CharacterId("player".into())),
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+
+    let prompt = simulation
+        .query_interaction_options(
+            player,
+            &InteractionTargetId::MapObject("field_crate".into()),
+        )
+        .expect("container should expose default open interaction");
+
+    assert_eq!(prompt.target_name, "补给箱");
+    assert_eq!(prompt.options.len(), 1);
+    assert_eq!(prompt.options[0].kind, InteractionOptionKind::OpenContainer);
+    assert_eq!(prompt.options[0].display_name, "打开容器");
+}
+
+#[test]
 fn building_footprint_from_loaded_map_blocks_pathfinding() {
     let mut world = crate::grid::GridWorld::default();
     world.load_map(&sample_map_definition());

@@ -284,6 +284,7 @@ pub(crate) fn update_interaction_menu(
     window: Single<&Window>,
     menu_root: Single<(&mut Node, &mut Visibility), (With<InteractionMenuRoot>, Without<Button>)>,
     options_root: Single<Entity, With<InteractionMenuOptionsRoot>>,
+    target_label: Single<&mut Text, (With<InteractionMenuTargetLabel>, Without<Button>)>,
     mut rows: Query<
         (
             &InteractionMenuOptionRow,
@@ -369,6 +370,8 @@ pub(crate) fn update_interaction_menu(
     node.left = px(layout.left);
     node.top = px(layout.top);
     *visibility = Visibility::Visible;
+    let mut target_label = target_label.into_inner();
+    *target_label = Text::new(prompt.target_name.clone());
     log_interaction_menu_diagnostic(
         &mut last_diagnostic,
         "visible",

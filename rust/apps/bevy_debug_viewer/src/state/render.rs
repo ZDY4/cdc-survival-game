@@ -710,6 +710,9 @@ pub(crate) struct ViewerCamera;
 pub(crate) struct InteractionMenuRoot;
 
 #[derive(Component)]
+pub(crate) struct InteractionMenuTargetLabel;
+
+#[derive(Component)]
 pub(crate) struct DialoguePanelRoot;
 
 #[derive(Component)]
