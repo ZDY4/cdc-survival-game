@@ -13,20 +13,6 @@ pub(super) fn render_skills_panel(
     view_state: &UiSkillTreeViewState,
 ) {
     let body = panel_body(parent, UiMenuPanel::Skills);
-    parent.commands().entity(body).insert(Node {
-        position_type: PositionType::Absolute,
-        top: px(RIGHT_PANEL_TOP + RIGHT_PANEL_HEADER_HEIGHT - 1.0),
-        left: px(0),
-        right: Val::Auto,
-        width: px(SKILLS_PANEL_WIDTH),
-        bottom: px(RIGHT_PANEL_BOTTOM),
-        padding: UiRect::all(px(12)),
-        flex_direction: FlexDirection::Column,
-        row_gap: px(8),
-        overflow: Overflow::clip_y(),
-        border: UiRect::all(px(1)),
-        ..default()
-    });
     let selected_tree = selected_skill_tree(snapshot, menu_state);
 
     parent.commands().entity(body).with_children(|body| {
@@ -65,7 +51,7 @@ fn render_skill_tree_list(
     parent
         .spawn((
             Node {
-                width: px(150),
+                width: px(120),
                 padding: UiRect::all(px(8)),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(6),
