@@ -27,6 +27,7 @@ use crate::state::{
 use bevy_mesh_outline::MeshOutline;
 use game_bevy::world_render::{
     building_door_color, building_wall_visual_profile, make_building_wall_material,
+    WorldRenderTileBatchId, WorldRenderTileInstanceHandle,
 };
 use game_bevy::SettlementDebugSnapshot;
 use game_core::{
@@ -957,6 +958,120 @@ fn visible_cell_only_occluder_ignores_ray_fade() {
 }
 
 #[test]
+fn survivor_outpost_building_wall_fades_when_projected_shadow_hits_visible_cell() {
+    let bootstrap = game_bevy::load_runtime_bootstrap(
+        &game_bevy::CharacterDefinitionPath::default().0,
+        &game_bevy::MapDefinitionPath::default().0,
+        &game_bevy::OverworldDefinitionPath::default().0,
+        &game_bevy::RuntimeStartupConfigPath::default().0,
+    )
+    .expect("runtime bootstrap should load current content");
+    let mut runtime = game_bevy::build_runtime_from_default_startup_seed(&bootstrap)
+        .expect("survivor_outpost_01 runtime should build");
+    let snapshot = runtime.snapshot();
+    assert_eq!(
+        snapshot.grid.map_id.as_ref().map(|map_id| map_id.as_str()),
+        Some("survivor_outpost_01")
+    );
+    let viewer_state = ViewerState {
+        controlled_player_actor: snapshot.actors.first().map(|actor| actor.actor_id),
+        selected_actor: snapshot.actors.first().map(|actor| actor.actor_id),
+        current_level: 0,
+        ..ViewerState::default()
+    };
+    let focus_actor_id = viewer_state
+        .focus_actor_id(&snapshot)
+        .expect("survivor_outpost_01 should have a focus actor");
+    runtime.set_actor_vision_radius(focus_actor_id, game_core::vision::DEFAULT_VISION_RADIUS);
+    runtime
+        .refresh_actor_vision(focus_actor_id)
+        .expect("focus actor vision should refresh");
+    let snapshot = runtime.snapshot();
+    let visible_cells = current_focus_actor_vision(&snapshot, &viewer_state)
+        .expect("focus actor should have a vision snapshot")
+        .visible_cells
+        .iter()
+        .copied()
+        .filter(|grid| grid.y == viewer_state.current_level)
+        .collect::<HashSet<_>>();
+    assert!(
+        !visible_cells.is_empty(),
+        "survivor_outpost_01 focus actor vision should expose visible cells"
+    );
+
+    let render_config = ViewerRenderConfig::default();
+    let bounds = grid_bounds(&snapshot, viewer_state.current_level);
+    let wall_specs = collect_static_world_building_wall_tile_specs(
+        &snapshot,
+        viewer_state.current_level,
+        render_config,
+        bounds,
+    );
+    assert!(
+        !wall_specs.is_empty(),
+        "survivor_outpost_01 should generate building wall tile specs"
+    );
+    let grid_size = snapshot.grid.grid_size;
+    let floor_top = level_base_height(viewer_state.current_level, grid_size)
+        + render_config.floor_thickness_world;
+    let mut materials = Assets::<StandardMaterial>::default();
+    let mut building_wall_materials = Assets::<BuildingWallGridMaterial>::default();
+    let (mut static_world_state, matching_handles) = static_world_state_from_wall_specs_for_test(
+        &wall_specs,
+        floor_top,
+        grid_size,
+        render_config,
+        &mut building_wall_materials,
+        &visible_cells,
+    );
+    let diagnostics = building_wall_occlusion_diagnostics(&static_world_state, &visible_cells);
+    assert!(
+        !matching_handles.is_empty(),
+        "expected at least one survivor_outpost_01 wall occluder to project onto focus actor visible cells; diagnostics={diagnostics:?}"
+    );
+    let target_handle = matching_handles[0];
+    let mut written_visual_states = Vec::new();
+
+    update_static_world_occlusion_fade_state(
+        &mut static_world_state,
+        Vec3::new(-999.0, 999.0, -999.0),
+        &[],
+        &visible_cells,
+        |entity, visual_state| written_visual_states.push((entity, visual_state)),
+        &mut materials,
+        &mut building_wall_materials,
+    );
+
+    let occluder_index = static_world_state
+        .occluder_by_tile_instance
+        .get(&target_handle)
+        .copied()
+        .expect("target wall should keep an occluder index");
+    assert!(
+        static_world_state.occluders[occluder_index].currently_faded,
+        "wall occluder with projected visible-cell intersection should fade; diagnostics={diagnostics:?}"
+    );
+    let tile_instance = static_world_state
+        .tile_instances
+        .get(&target_handle)
+        .expect("target wall tile instance should exist");
+    assert!(
+        tile_instance.desired_faded,
+        "wall tile instance should record desired_faded after occluder update"
+    );
+    assert!(
+        tile_instance.applied_faded,
+        "wall tile instance fade should be applied in the same static-world update"
+    );
+    let (entity, visual_state) = written_visual_states
+        .into_iter()
+        .find(|(entity, _)| *entity == tile_instance.entity)
+        .expect("target wall visual state should be written");
+    assert_eq!(entity, tile_instance.entity);
+    assert_eq!(visual_state.fade_alpha, 0.28);
+}
+
+#[test]
 fn closed_doors_only_contribute_occluders() {
     let mut door_visual_state = GeneratedDoorVisualState::default();
     door_visual_state
@@ -1822,6 +1937,113 @@ fn sample_occluder(
         hover_map_object_id: None,
         currently_faded: false,
     }
+}
+
+#[derive(Debug)]
+struct BuildingWallOcclusionDiagnostics {
+    wall_occluders: usize,
+    non_empty_shadow: usize,
+    intersects_visible_cells: usize,
+    missing_tile_handle: usize,
+}
+
+fn static_world_state_from_wall_specs_for_test(
+    wall_specs: &[game_bevy::static_world::StaticWorldBuildingWallTileSpec],
+    floor_top: f32,
+    grid_size: f32,
+    render_config: ViewerRenderConfig,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+    visible_cells: &HashSet<GridCoord>,
+) -> (StaticWorldVisualState, Vec<WorldRenderTileInstanceHandle>) {
+    let mut state = StaticWorldVisualState::default();
+    let mut matching_handles = Vec::new();
+    for (index, wall) in wall_specs.iter().enumerate() {
+        let wall_profile = building_wall_visual_profile(wall.visual_kind);
+        let material = make_building_wall_material(building_wall_materials, wall_profile.clone());
+        let handle = WorldRenderTileInstanceHandle {
+            batch_id: WorldRenderTileBatchId(0),
+            instance_index: index as u32,
+        };
+        let entity = Entity::from_bits(10_000 + index as u64);
+        let shadowed_visible_cells = project_shadowed_visible_cells(
+            &wall.occluder_cells,
+            floor_top,
+            wall.translation.y + wall.height * 0.5,
+            grid_size,
+            render_config,
+        );
+        if shadowed_visible_cells
+            .iter()
+            .any(|cell| visible_cells.contains(cell))
+        {
+            matching_handles.push(handle);
+        }
+
+        state.tile_instances.insert(
+            handle,
+            StaticWorldTileInstanceVisual {
+                entity,
+                material: material.clone(),
+                material_fade_enabled: false,
+                base_color: wall_profile.face_color,
+                base_alpha: 1.0,
+                base_alpha_mode: AlphaMode::Opaque,
+                desired_faded: false,
+                applied_faded: false,
+            },
+        );
+        state.occluders.push(StaticWorldOccluderVisual {
+            material,
+            tile_instance_handle: Some(handle),
+            fade_rule: StaticWorldOccluderFadeRule::VisibleCellsOnly,
+            base_color: wall_profile.face_color,
+            base_alpha: 1.0,
+            base_alpha_mode: AlphaMode::Opaque,
+            aabb_center: wall.translation,
+            aabb_half_extents: Vec3::new(
+                wall.footprint_size.x.max(0.001) * 0.5,
+                wall.height.max(0.001) * 0.5,
+                wall.footprint_size.y.max(0.001) * 0.5,
+            ),
+            shadowed_visible_cells,
+            hover_map_object_id: None,
+            currently_faded: false,
+        });
+    }
+    state.rebuild_occluder_index();
+    (state, matching_handles)
+}
+
+fn building_wall_occlusion_diagnostics(
+    state: &StaticWorldVisualState,
+    visible_cells: &HashSet<GridCoord>,
+) -> BuildingWallOcclusionDiagnostics {
+    let mut diagnostics = BuildingWallOcclusionDiagnostics {
+        wall_occluders: 0,
+        non_empty_shadow: 0,
+        intersects_visible_cells: 0,
+        missing_tile_handle: 0,
+    };
+    for occluder in &state.occluders {
+        if occluder.fade_rule != StaticWorldOccluderFadeRule::VisibleCellsOnly {
+            continue;
+        }
+        diagnostics.wall_occluders += 1;
+        if !occluder.shadowed_visible_cells.is_empty() {
+            diagnostics.non_empty_shadow += 1;
+        }
+        if occluder.tile_instance_handle.is_none() {
+            diagnostics.missing_tile_handle += 1;
+        }
+        if occluder
+            .shadowed_visible_cells
+            .iter()
+            .any(|cell| visible_cells.contains(cell))
+        {
+            diagnostics.intersects_visible_cells += 1;
+        }
+    }
+    diagnostics
 }
 
 #[test]

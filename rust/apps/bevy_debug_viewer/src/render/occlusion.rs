@@ -408,8 +408,11 @@ pub(super) fn update_occluder_list_fade(
     building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
 ) {
     for occluder in occluders {
-        // 当前鼠标悬停的门不强制半透，避免玩家操作门时门面闪烁或难以点中。
-        let should_fade = if occluder.hover_map_object_id.as_deref() == hovered_map_object_id {
+        // 只有明确悬停到同一个门 object 时才跳过淡化；两个 None 不能视为命中，
+        // 否则没有 hover id 的静态墙会被永久强制保持不半透。
+        let hovered_occluder = hovered_map_object_id.is_some()
+            && occluder.hover_map_object_id.as_deref() == hovered_map_object_id;
+        let should_fade = if hovered_occluder {
             false
         } else {
             should_fade_occluder(camera_position, focus_points, occluder, visible_cells)

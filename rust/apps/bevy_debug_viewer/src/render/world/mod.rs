@@ -211,31 +211,19 @@ pub(crate) fn update_occluding_world_visuals(
                 ViewerPickTarget::MapObject(object_id) => Some(object_id.as_str()),
                 _ => None,
             });
-    {
-        let state = &mut *static_world_state;
-        let (occluders, tile_instances) = (&mut state.occluders, &mut state.tile_instances);
-        // 静态世界每帧先计算 occluder 是否应淡化，再批量写回 tile instance 的渲染状态。
-        update_occluder_list_fade(
-            occluders,
-            camera_position,
-            &focus_points,
-            &visible_cells,
-            None,
-            Some(&mut *tile_instances),
-            &mut render_params.materials,
-            &mut render_params.building_wall_materials,
-        );
-        apply_tile_instance_fade_updates(
-            tile_instances,
-            |entity, visual_state| {
-                if let Ok(mut state) = render_params.tile_instance_visual_states.get_mut(entity) {
-                    *state = visual_state;
-                }
-            },
-            &mut render_params.materials,
-            &mut render_params.building_wall_materials,
-        );
-    }
+    update_static_world_occlusion_fade_state(
+        &mut static_world_state,
+        camera_position,
+        &focus_points,
+        &visible_cells,
+        |entity, visual_state| {
+            if let Ok(mut state) = render_params.tile_instance_visual_states.get_mut(entity) {
+                *state = visual_state;
+            }
+        },
+        &mut render_params.materials,
+        &mut render_params.building_wall_materials,
+    );
     update_occluder_list_fade(
         &mut door_visual_state.occluders,
         camera_position,
@@ -245,6 +233,38 @@ pub(crate) fn update_occluding_world_visuals(
         None,
         &mut render_params.materials,
         &mut render_params.building_wall_materials,
+    );
+}
+
+pub(crate) fn update_static_world_occlusion_fade_state(
+    static_world_state: &mut StaticWorldVisualState,
+    camera_position: Vec3,
+    focus_points: &[Vec3],
+    visible_cells: &HashSet<GridCoord>,
+    write_visual_state: impl FnMut(Entity, game_bevy::world_render::WorldRenderTileInstanceVisualState),
+    materials: &mut Assets<StandardMaterial>,
+    building_wall_materials: &mut Assets<BuildingWallGridMaterial>,
+) {
+    let (occluders, tile_instances) = (
+        &mut static_world_state.occluders,
+        &mut static_world_state.tile_instances,
+    );
+    // 静态世界半透先按 occluder 规则更新意图，再统一写入 tile instance 状态，避免改共享材质。
+    update_occluder_list_fade(
+        occluders,
+        camera_position,
+        focus_points,
+        visible_cells,
+        None,
+        Some(&mut *tile_instances),
+        materials,
+        building_wall_materials,
+    );
+    apply_tile_instance_fade_updates(
+        tile_instances,
+        write_visual_state,
+        materials,
+        building_wall_materials,
     );
 }
 
