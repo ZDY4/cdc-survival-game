@@ -432,6 +432,28 @@
       }
     },
     {
+      "object_id": "survivor_outpost_01_overworld_exit",
+      "kind": "trigger",
+      "anchor": { "x": 24, "y": 0, "z": 39 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "trigger": {
+          "display_name": "前往大地图",
+          "interaction_distance": 1.4,
+          "interaction_kind": "enter_overworld",
+          "target_id": "survivor_outpost_01",
+          "options": []
+        },
+        "ai_spawn": null
+      }
+    },
+    {
       "object_id": "survivor_outpost_01_canteen_table_a",
       "kind": "prop",
       "anchor": { "x": 8, "y": 0, "z": 20 },

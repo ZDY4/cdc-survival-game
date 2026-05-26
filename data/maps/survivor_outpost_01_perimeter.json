@@ -136,6 +136,28 @@
       }
     },
     {
+      "object_id": "survivor_outpost_01_perimeter_overworld_exit",
+      "kind": "trigger",
+      "anchor": { "x": 1, "y": 0, "z": 10 },
+      "footprint": { "width": 1, "height": 1 },
+      "rotation": "north",
+      "blocks_movement": false,
+      "blocks_sight": false,
+      "props": {
+        "building": null,
+        "pickup": null,
+        "interactive": null,
+        "trigger": {
+          "display_name": "前往大地图",
+          "interaction_distance": 1.4,
+          "interaction_kind": "enter_overworld",
+          "target_id": "survivor_outpost_01_perimeter",
+          "options": []
+        },
+        "ai_spawn": null
+      }
+    },
+    {
       "object_id": "survivor_outpost_01_perimeter_roadblock_prop",
       "kind": "prop",
       "anchor": { "x": 4, "y": 0, "z": 8 },
