@@ -5,14 +5,15 @@ use thiserror::Error;
 use crate::{
     build_runtime_from_seed, debug_seed_characters_for_map, load_character_definitions,
     load_map_definitions, load_overworld_definitions, load_runtime_startup_config,
-    resolve_startup_map_id, validate_runtime_outdoor_transition_layout, CharacterDefinitions,
-    MapDefinitions, NewGameConfigError, OverworldDefinitions, RuntimeBuildError,
-    RuntimeScenarioSeed, RuntimeStartupConfig, RuntimeStartupConfigError,
+    resolve_startup_map_id, validate_runtime_map_exit_coverage,
+    validate_runtime_outdoor_transition_layout, CharacterDefinitions, MapDefinitions,
+    NewGameConfigError, OverworldDefinitions, RuntimeBuildError, RuntimeScenarioSeed,
+    RuntimeStartupConfig, RuntimeStartupConfigError,
 };
 use game_core::SimulationRuntime;
 use game_data::{
-    CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapLoadError,
-    OutdoorTransitionTriggerLayoutValidationError, OverworldLoadError, WorldMode,
+    CharacterLoadError, DialogueLoadError, DialogueRuleLoadError, MapExitCoverageValidationError,
+    MapLoadError, OutdoorTransitionTriggerLayoutValidationError, OverworldLoadError, WorldMode,
 };
 
 #[derive(Debug, Clone)]
@@ -38,6 +39,8 @@ pub enum RuntimeBootstrapError {
     #[error(transparent)]
     OutdoorTransitionTriggerLayout(#[from] OutdoorTransitionTriggerLayoutValidationError),
     #[error(transparent)]
+    MapExitCoverage(#[from] MapExitCoverageValidationError),
+    #[error(transparent)]
     RuntimeStartupConfig(#[from] RuntimeStartupConfigError),
     #[error(transparent)]
     NewGameConfig(#[from] NewGameConfigError),
@@ -54,6 +57,7 @@ pub fn load_runtime_bootstrap(
     let character_definitions = load_character_definitions(character_path)?;
     let map_definitions = load_map_definitions(map_path)?;
     let overworld_definitions = load_overworld_definitions(overworld_path)?;
+    validate_runtime_map_exit_coverage(&map_definitions)?;
     validate_runtime_outdoor_transition_layout(&map_definitions, &overworld_definitions)?;
 
     Ok(RuntimeBootstrapBundle {

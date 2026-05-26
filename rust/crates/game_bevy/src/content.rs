@@ -11,11 +11,12 @@ use game_data::{
     load_dialogue_library, load_dialogue_rule_library, load_effect_library, load_item_library,
     load_map_library, load_overworld_library, load_quest_library, load_recipe_library,
     load_settlement_library, load_shop_library, load_skill_library, load_skill_tree_library,
-    load_world_tile_library, validate_outdoor_transition_trigger_layout, AiModuleLibrary,
-    AiModuleLoadError, CharacterAppearanceLibrary, CharacterAppearanceLoadError, CharacterLibrary,
-    CharacterLoadError, DialogueLibrary, DialogueLoadError, DialogueRuleLibrary,
-    DialogueRuleLoadError, EffectLibrary, EffectLoadError, ItemLibrary, ItemLoadError, MapId,
-    MapLibrary, MapLoadError, OutdoorTransitionTriggerLayoutValidationError, OverworldLibrary,
+    load_world_tile_library, validate_map_exit_coverage,
+    validate_outdoor_transition_trigger_layout, AiModuleLibrary, AiModuleLoadError,
+    CharacterAppearanceLibrary, CharacterAppearanceLoadError, CharacterLibrary, CharacterLoadError,
+    DialogueLibrary, DialogueLoadError, DialogueRuleLibrary, DialogueRuleLoadError, EffectLibrary,
+    EffectLoadError, ItemLibrary, ItemLoadError, MapExitCoverageValidationError, MapId, MapLibrary,
+    MapLoadError, OutdoorTransitionTriggerLayoutValidationError, OverworldLibrary,
     OverworldLoadError, QuestLibrary, QuestLoadError, RecipeLibrary, RecipeLoadError,
     SettlementLibrary, SettlementLoadError, ShopLibrary, ShopLoadError, SkillLibrary,
     SkillLoadError, SkillTreeLibrary, SkillTreeLoadError, WorldTileLibrary, WorldTileLoadError,
@@ -351,6 +352,7 @@ impl Plugin for RuntimeContentPlugin {
             .add_systems(
                 Startup,
                 (
+                    validate_map_exit_coverage_on_startup,
                     validate_outdoor_transition_trigger_layout_on_startup,
                     finalize_runtime_content_load_state,
                 )
@@ -511,6 +513,12 @@ pub fn validate_runtime_outdoor_transition_layout(
     overworld: &OverworldDefinitions,
 ) -> Result<(), OutdoorTransitionTriggerLayoutValidationError> {
     validate_outdoor_transition_trigger_layout(&maps.0, &overworld.0)
+}
+
+pub fn validate_runtime_map_exit_coverage(
+    maps: &MapDefinitions,
+) -> Result<(), MapExitCoverageValidationError> {
+    validate_map_exit_coverage(&maps.0)
 }
 
 pub fn apply_gameplay_libraries(
@@ -797,6 +805,18 @@ fn validate_outdoor_transition_trigger_layout_on_startup(
     };
     if let Err(error) = validate_runtime_outdoor_transition_layout(&maps, &overworld) {
         state.record_failure("outdoor_transition_trigger_layout", error.to_string());
+    }
+}
+
+fn validate_map_exit_coverage_on_startup(
+    maps: Option<Res<MapDefinitions>>,
+    mut state: ResMut<RuntimeContentLoadState>,
+) {
+    let Some(maps) = maps else {
+        return;
+    };
+    if let Err(error) = validate_runtime_map_exit_coverage(&maps) {
+        state.record_failure("map_exit_coverage", error.to_string());
     }
 }
 
