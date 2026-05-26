@@ -29,7 +29,9 @@
   "unlockedLocations": [
     "survivor_outpost_01",
     "survivor_outpost_01_perimeter",
-    "survivor_outpost_01_interior"
+    "survivor_outpost_01_interior",
+    "hospital",
+    "factory"
   ],
   "spawnEntries": [
     {
