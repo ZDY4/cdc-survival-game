@@ -9,12 +9,13 @@ use game_core::{GeneratedBuildingDebugState, GeneratedBuildingStory, GeneratedWa
 use game_data::{
     GridCoord, InteractionOptionDefinition, InteractionOptionId, MapBuildingLayoutSpec,
     MapBuildingProps, MapBuildingStorySpec, MapBuildingTileSetSpec, MapBuildingWallVisualKind,
-    MapBuildingWallVisualSpec, MapCellDefinition, MapDefinition, MapEntryPointDefinition, MapId,
-    MapLevelDefinition, MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps,
-    MapObjectVisualSpec, MapRotation, MapSize, MapTriggerProps, OverworldCellDefinition,
-    OverworldDefinition, OverworldId, OverworldLocationDefinition, OverworldLocationId,
-    OverworldLocationKind, OverworldTerrainKind, OverworldTravelRuleSet, RelativeGridCell,
-    WorldSurfaceTileSetId, WorldTilePrototypeId, WorldWallTileSetId,
+    MapBuildingWallVisualSpec, MapCellDefinition, MapContainerProps, MapDefinition,
+    MapEntryPointDefinition, MapId, MapInteractiveProps, MapLevelDefinition, MapObjectDefinition,
+    MapObjectFootprint, MapObjectKind, MapObjectProps, MapObjectVisualSpec, MapRotation, MapSize,
+    MapTriggerProps, OverworldCellDefinition, OverworldDefinition, OverworldId,
+    OverworldLocationDefinition, OverworldLocationId, OverworldLocationKind, OverworldTerrainKind,
+    OverworldTravelRuleSet, RelativeGridCell, WorldSurfaceTileSetId, WorldTilePrototypeId,
+    WorldWallTileSetId,
 };
 use std::collections::BTreeMap;
 
@@ -170,6 +171,26 @@ fn non_visual_interactives_downgrade_to_pick_proxies_only() {
     );
 
     assert!(scene.boxes.is_empty());
+    assert_eq!(scene.pick_proxies.len(), 1);
+    assert!(scene
+        .pick_proxies
+        .iter()
+        .all(|spec| spec.material_role == StaticWorldMaterialRole::InvisiblePickProxy));
+}
+
+#[test]
+fn corpse_interactives_emit_visible_marker_and_pick_proxy() {
+    let scene = build_static_world_from_map_definition(
+        &sample_map_with_corpse_object(),
+        0,
+        StaticWorldBuildConfig::default(),
+    );
+
+    assert_eq!(scene.boxes.len(), 1);
+    assert_eq!(
+        scene.boxes[0].material_role,
+        StaticWorldMaterialRole::CorpseMarker
+    );
     assert_eq!(scene.pick_proxies.len(), 1);
     assert!(scene
         .pick_proxies
@@ -464,6 +485,56 @@ fn sample_map_with_interactive_object(include_visual: bool) -> MapDefinition {
                     ..MapObjectVisualSpec::default()
                 }),
                 interactive: Some(Default::default()),
+                ..MapObjectProps::default()
+            },
+        }],
+    }
+}
+
+fn sample_map_with_corpse_object() -> MapDefinition {
+    let mut extra = BTreeMap::new();
+    extra.insert("corpse".to_string(), serde_json::Value::Bool(true));
+    MapDefinition {
+        id: MapId("corpse_map".into()),
+        name: "Corpse Map".into(),
+        size: MapSize {
+            width: 2,
+            height: 2,
+        },
+        default_level: 0,
+        levels: vec![MapLevelDefinition {
+            y: 0,
+            cells: vec![MapCellDefinition {
+                x: 0,
+                z: 0,
+                blocks_movement: false,
+                blocks_sight: false,
+                terrain: String::new(),
+                visual: None,
+                extra: BTreeMap::new(),
+            }],
+        }],
+        entry_points: vec![MapEntryPointDefinition {
+            id: "default".into(),
+            grid: GridCoord::new(0, 0, 0),
+            facing: None,
+            extra: BTreeMap::new(),
+        }],
+        objects: vec![MapObjectDefinition {
+            object_id: "corpse_2".into(),
+            kind: MapObjectKind::Interactive,
+            anchor: GridCoord::new(1, 0, 1),
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::South,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                interactive: Some(MapInteractiveProps::default()),
+                container: Some(MapContainerProps {
+                    visual_id: Some("corpse".into()),
+                    ..MapContainerProps::default()
+                }),
+                extra,
                 ..MapObjectProps::default()
             },
         }],

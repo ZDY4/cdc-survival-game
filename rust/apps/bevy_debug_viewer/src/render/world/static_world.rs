@@ -637,6 +637,7 @@ fn shared_material_role_to_viewer_material_style(
         }
         shared_static_world::StaticWorldMaterialRole::StairAccent
         | shared_static_world::StaticWorldMaterialRole::TriggerAccent
+        | shared_static_world::StaticWorldMaterialRole::CorpseMarker
         | shared_static_world::StaticWorldMaterialRole::OverworldBlockedCell => {
             MaterialStyle::UtilityAccent
         }
@@ -894,6 +895,7 @@ fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {
         SharedRole::StairBase => darken_color(palette.interactive, 0.18),
         SharedRole::StairAccent => lighten_color(palette.current_turn, 0.12),
         SharedRole::TriggerAccent => palette.trigger,
+        SharedRole::CorpseMarker => Color::srgb(0.34, 0.07, 0.055),
         SharedRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
         SharedRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
         SharedRole::OverworldBlockedCell => Color::srgb(0.52, 0.19, 0.14),
@@ -903,7 +905,9 @@ fn shared_role_color(role: SharedRole, palette: &ViewerPalette) -> Color {
 
 fn shared_role_material_style(role: SharedRole) -> MaterialStyle {
     match role {
-        SharedRole::TriggerAccent | SharedRole::StairAccent => MaterialStyle::Utility,
+        SharedRole::TriggerAccent | SharedRole::StairAccent | SharedRole::CorpseMarker => {
+            MaterialStyle::Utility
+        }
         SharedRole::InvisiblePickProxy => MaterialStyle::InvisiblePickProxy,
         _ => MaterialStyle::UtilityAccent,
     }

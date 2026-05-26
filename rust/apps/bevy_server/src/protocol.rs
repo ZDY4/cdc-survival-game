@@ -710,6 +710,24 @@ fn runtime_event_envelope(sequence: u64, event: SimulationEvent) -> RuntimeEvent
             payload: json!({ "targetActor": target_actor }),
             ..RuntimeEventEnvelope::default()
         },
+        SimulationEvent::CorpseCreated {
+            actor_id,
+            target_actor,
+            object_id,
+            grid,
+            item_count,
+        } => RuntimeEventEnvelope {
+            sequence,
+            event_type: "corpse_created".into(),
+            actor_id: Some(actor_id),
+            payload: json!({
+                "targetActor": target_actor,
+                "objectId": object_id,
+                "grid": grid,
+                "itemCount": item_count
+            }),
+            ..RuntimeEventEnvelope::default()
+        },
         SimulationEvent::LootDropped {
             actor_id,
             target_actor,

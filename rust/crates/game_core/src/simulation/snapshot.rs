@@ -112,6 +112,31 @@ impl Simulation {
                         }
                     }
                     MapObjectKind::Interactive => {
+                        if object
+                            .props
+                            .extra
+                            .get("corpse")
+                            .and_then(|value| value.as_bool())
+                            .unwrap_or(false)
+                        {
+                            payload_summary.insert("corpse".to_string(), "true".to_string());
+                            if let Some(source_actor_id) =
+                                object.props.extra.get("source_actor_id")
+                            {
+                                payload_summary.insert(
+                                    "source_actor_id".to_string(),
+                                    source_actor_id.to_string(),
+                                );
+                            }
+                            if let Some(defeated_by_actor_id) =
+                                object.props.extra.get("defeated_by_actor_id")
+                            {
+                                payload_summary.insert(
+                                    "defeated_by_actor_id".to_string(),
+                                    defeated_by_actor_id.to_string(),
+                                );
+                            }
+                        }
                         if let Some(interactive) = object.props.interactive.as_ref() {
                             payload_summary.insert(
                                 "interaction_kind".to_string(),

@@ -39,6 +39,7 @@ pub enum StaticWorldMaterialRole {
     StairBase,
     StairAccent,
     TriggerAccent,
+    CorpseMarker,
     InvisiblePickProxy,
     OverworldCell,
     OverworldBlockedCell,
@@ -183,6 +184,7 @@ pub(crate) struct StaticMapObject {
     pub has_viewer_function: bool,
     pub has_visual_placement: bool,
     pub is_generated_door: bool,
+    pub is_corpse: bool,
     pub trigger_kind: Option<String>,
 }
 
@@ -207,6 +209,7 @@ pub fn default_color_for_role(role: StaticWorldMaterialRole) -> Color {
         StaticWorldMaterialRole::StairBase => Color::srgb(0.29, 0.50, 0.75),
         StaticWorldMaterialRole::StairAccent => Color::srgb(0.44, 0.72, 0.93),
         StaticWorldMaterialRole::TriggerAccent => Color::srgb(0.96, 0.72, 0.29),
+        StaticWorldMaterialRole::CorpseMarker => Color::srgb(0.34, 0.07, 0.055),
         StaticWorldMaterialRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
         StaticWorldMaterialRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
         StaticWorldMaterialRole::OverworldBlockedCell => Color::srgb(0.52, 0.19, 0.14),

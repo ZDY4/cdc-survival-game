@@ -175,6 +175,7 @@ pub fn world_render_color_for_role(
         StaticWorldMaterialRole::StairBase => darken_color(palette.interactive, 0.18),
         StaticWorldMaterialRole::StairAccent => lighten_color(palette.current_turn, 0.12),
         StaticWorldMaterialRole::TriggerAccent => palette.trigger,
+        StaticWorldMaterialRole::CorpseMarker => Color::srgb(0.34, 0.07, 0.055),
         StaticWorldMaterialRole::InvisiblePickProxy => Color::srgba(1.0, 1.0, 1.0, 0.0),
         StaticWorldMaterialRole::OverworldCell => Color::srgb(0.18, 0.42, 0.28),
         StaticWorldMaterialRole::OverworldBlockedCell => Color::srgb(0.52, 0.19, 0.14),
@@ -186,9 +187,9 @@ pub fn world_render_material_style_for_role(
     role: StaticWorldMaterialRole,
 ) -> WorldRenderMaterialStyle {
     match role {
-        StaticWorldMaterialRole::TriggerAccent | StaticWorldMaterialRole::StairAccent => {
-            WorldRenderMaterialStyle::Utility
-        }
+        StaticWorldMaterialRole::TriggerAccent
+        | StaticWorldMaterialRole::StairAccent
+        | StaticWorldMaterialRole::CorpseMarker => WorldRenderMaterialStyle::Utility,
         StaticWorldMaterialRole::InvisiblePickProxy => WorldRenderMaterialStyle::InvisiblePickProxy,
         _ => WorldRenderMaterialStyle::UtilityAccent,
     }

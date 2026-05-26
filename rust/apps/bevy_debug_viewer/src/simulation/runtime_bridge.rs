@@ -96,7 +96,8 @@ pub(crate) fn classify_event(event: &SimulationEvent) -> HudEventCategory {
         | SimulationEvent::SkillActivated { .. }
         | SimulationEvent::SkillActivationFailed { .. }
         | SimulationEvent::ActorDamaged { .. }
-        | SimulationEvent::ActorDefeated { .. } => HudEventCategory::Combat,
+        | SimulationEvent::ActorDefeated { .. }
+        | SimulationEvent::CorpseCreated { .. } => HudEventCategory::Combat,
         SimulationEvent::InteractionOptionsResolved { .. }
         | SimulationEvent::InteractionApproachPlanned { .. }
         | SimulationEvent::InteractionStarted { .. }
@@ -399,6 +400,16 @@ fn format_event_text(event: SimulationEvent) -> String {
         } => format!(
             "actor defeated attacker={:?} target={:?}",
             actor_id, target_actor
+        ),
+        SimulationEvent::CorpseCreated {
+            actor_id,
+            target_actor,
+            object_id,
+            grid,
+            item_count,
+        } => format!(
+            "corpse created attacker={:?} target={:?} object={} grid=({}, {}, {}) items={}",
+            actor_id, target_actor, object_id, grid.x, grid.y, grid.z, item_count
         ),
         SimulationEvent::LootDropped {
             actor_id,

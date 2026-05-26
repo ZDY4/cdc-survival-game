@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 
 use game_data::{
     ActionPhase, ActionRequest, ActionType, ActorId, ActorSide, AttackHitKind, AttackOutcome,
-    CharacterLootEntry, GridCoord, MapObjectDefinition, MapObjectFootprint, MapObjectKind,
-    MapObjectProps, MapPickupProps, MapRotation,
+    CharacterLootEntry, GridCoord, MapContainerItemEntry, MapContainerProps, MapInteractiveProps,
+    MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
 };
+use serde_json::Value;
 
 use crate::movement::PendingProgressionStep;
 use crate::vision::{has_grid_line_of_sight, DEFAULT_VISION_RADIUS};
@@ -13,6 +14,7 @@ use super::{Simulation, SimulationEvent};
 use tracing::{info, warn};
 
 const COMBAT_EXIT_NO_SIGHT_TURNS: u8 = 3;
+const CORPSE_CONTAINER_VISUAL_ID: &str = "corpse";
 
 impl Simulation {
     pub fn perform_attack(
@@ -321,52 +323,6 @@ impl Simulation {
         (raw as f64 / u64::MAX as f64) as f32
     }
 
-    fn spawn_loot_drops(&mut self, actor_id: ActorId, target_actor: ActorId, grid: GridCoord) {
-        let Some(loot_entries) = self.actor_loot_tables.get(&target_actor).cloned() else {
-            return;
-        };
-
-        for entry in loot_entries {
-            let count = self.resolve_loot_drop_count(target_actor, &entry);
-            if count <= 0 {
-                continue;
-            }
-
-            let object_id = format!(
-                "loot_{}_{}_{}",
-                target_actor.0,
-                entry.item_id,
-                self.events.len()
-            );
-            self.grid_world.upsert_map_object(MapObjectDefinition {
-                object_id: object_id.clone(),
-                kind: MapObjectKind::Pickup,
-                anchor: grid,
-                footprint: MapObjectFootprint::default(),
-                rotation: MapRotation::North,
-                blocks_movement: false,
-                blocks_sight: false,
-                props: MapObjectProps {
-                    pickup: Some(MapPickupProps {
-                        item_id: entry.item_id.to_string(),
-                        min_count: count,
-                        max_count: count,
-                        extra: BTreeMap::new(),
-                    }),
-                    ..MapObjectProps::default()
-                },
-            });
-            self.events.push(SimulationEvent::LootDropped {
-                actor_id,
-                target_actor,
-                object_id,
-                item_id: entry.item_id,
-                count,
-                grid,
-            });
-        }
-    }
-
     fn resolve_loot_drop_count(&self, target_actor: ActorId, entry: &CharacterLootEntry) -> i32 {
         if entry.max < entry.min || entry.max <= 0 || entry.chance <= 0.0 {
             return 0;
@@ -381,6 +337,119 @@ impl Simulation {
         let span = (entry.max - entry.min).max(0) as u64;
         let count_roll = ((roll_seed / 97) % (span + 1)) as i32;
         (entry.min + count_roll).max(0)
+    }
+
+    fn spawn_corpse_container(
+        &mut self,
+        actor_id: ActorId,
+        target_actor: ActorId,
+        grid: GridCoord,
+    ) -> Option<String> {
+        let display_name = self
+            .actors
+            .get(target_actor)
+            .map(|actor| actor.display_name.trim())
+            .filter(|name| !name.is_empty())
+            .unwrap_or("未知角色");
+        let corpse_name = format!("{display_name}的尸体");
+        let inventory = self.collect_corpse_inventory(target_actor);
+        let item_count = inventory.values().copied().sum::<i32>();
+        let initial_inventory = inventory
+            .into_iter()
+            .filter(|(_, count)| *count > 0)
+            .map(|(item_id, count)| MapContainerItemEntry {
+                item_id: item_id.to_string(),
+                count,
+            })
+            .collect::<Vec<_>>();
+        let object_id = self.next_corpse_object_id(target_actor);
+        let mut extra = BTreeMap::new();
+        extra.insert("corpse".to_string(), Value::Bool(true));
+        extra.insert(
+            "source_actor_id".to_string(),
+            Value::Number(target_actor.0.into()),
+        );
+        extra.insert(
+            "defeated_by_actor_id".to_string(),
+            Value::Number(actor_id.0.into()),
+        );
+
+        // 尸体只作为可交互容器保留在地图上，不继续承担角色、碰撞或战斗目标语义。
+        self.grid_world.upsert_map_object(MapObjectDefinition {
+            object_id: object_id.clone(),
+            kind: MapObjectKind::Interactive,
+            anchor: grid,
+            footprint: MapObjectFootprint::default(),
+            rotation: MapRotation::North,
+            blocks_movement: false,
+            blocks_sight: false,
+            props: MapObjectProps {
+                interactive: Some(MapInteractiveProps {
+                    display_name: corpse_name.clone(),
+                    interaction_distance: 1.4,
+                    extra: BTreeMap::from([("corpse".to_string(), Value::Bool(true))]),
+                    ..MapInteractiveProps::default()
+                }),
+                container: Some(MapContainerProps {
+                    display_name: corpse_name,
+                    visual_id: Some(CORPSE_CONTAINER_VISUAL_ID.to_string()),
+                    initial_inventory,
+                    extra: BTreeMap::new(),
+                }),
+                extra,
+                ..MapObjectProps::default()
+            },
+        });
+        self.events.push(SimulationEvent::CorpseCreated {
+            actor_id,
+            target_actor,
+            object_id: object_id.clone(),
+            grid,
+            item_count,
+        });
+        info!(
+            "core.combat.corpse_created actor={:?} target_actor={:?} object_id={} grid={:?} item_count={}",
+            actor_id, target_actor, object_id, grid, item_count
+        );
+        Some(object_id)
+    }
+
+    fn collect_corpse_inventory(&self, target_actor: ActorId) -> BTreeMap<u32, i32> {
+        let mut inventory = BTreeMap::new();
+        if let Some(actor_economy) = self.economy.actor(target_actor) {
+            for (item_id, count) in &actor_economy.inventory {
+                add_corpse_item(&mut inventory, *item_id, *count);
+            }
+            for equipped in actor_economy.equipped_slots.values() {
+                add_corpse_item(&mut inventory, equipped.item_id, 1);
+            }
+            for (ammo_item_id, count) in &actor_economy.ammo_reserves {
+                add_corpse_item(&mut inventory, *ammo_item_id, *count);
+            }
+        }
+        if let Some(loot_entries) = self.actor_loot_tables.get(&target_actor) {
+            for entry in loot_entries {
+                let count = self.resolve_loot_drop_count(target_actor, entry);
+                add_corpse_item(&mut inventory, entry.item_id, count);
+            }
+        }
+        inventory
+    }
+
+    fn next_corpse_object_id(&self, target_actor: ActorId) -> String {
+        let base = format!("corpse_{}", target_actor.0);
+        if self.grid_world.map_object(&base).is_none() {
+            return base;
+        }
+
+        let mut suffix = 1u32;
+        loop {
+            let candidate = format!("{base}_{suffix}");
+            if self.grid_world.map_object(&candidate).is_none() {
+                return candidate;
+            }
+            suffix = suffix.saturating_add(1);
+        }
     }
 
     pub(super) fn end_current_combat_turn(&mut self) {
@@ -556,7 +625,7 @@ impl Simulation {
                 target_actor,
             });
             if let Some(grid) = defeat_position {
-                self.spawn_loot_drops(actor_id, target_actor, grid);
+                let _ = self.spawn_corpse_container(actor_id, target_actor, grid);
             }
             self.unregister_actor(target_actor);
         }
@@ -698,4 +767,11 @@ fn splitmix64(mut state: u64) -> u64 {
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     z ^ (z >> 31)
+}
+
+fn add_corpse_item(inventory: &mut BTreeMap<u32, i32>, item_id: u32, count: i32) {
+    if item_id == 0 || count <= 0 {
+        return;
+    }
+    *inventory.entry(item_id).or_insert(0) += count;
 }

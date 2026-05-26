@@ -239,7 +239,7 @@ fn lethal_attack_unregisters_target_actor() {
 }
 
 #[test]
-fn lethal_attack_spawns_runtime_pickup_loot() {
+fn lethal_attack_creates_lootable_corpse_container() {
     let mut simulation = Simulation::new();
     let player = simulation.register_actor(RegisterActor {
         definition_id: None,
@@ -280,22 +280,215 @@ fn lethal_attack_spawns_runtime_pickup_loot() {
     let result = simulation.perform_attack(player, hostile);
 
     assert!(result.success);
-    let loot_object = simulation
+    assert!(!simulation.actors.contains(hostile));
+    let corpse_object = simulation
         .grid_world()
         .map_object_entries()
         .into_iter()
-        .find(|object| object.object_id.starts_with("loot_"))
-        .expect("loot drop should be spawned");
-    assert_eq!(loot_object.kind, MapObjectKind::Pickup);
-    assert_eq!(loot_object.anchor, GridCoord::new(1, 0, 0));
+        .find(|object| object.object_id.starts_with("corpse_"))
+        .expect("corpse object should be spawned");
+    assert_eq!(corpse_object.kind, MapObjectKind::Interactive);
+    assert_eq!(corpse_object.anchor, GridCoord::new(1, 0, 0));
+    assert!(!corpse_object.blocks_movement);
+    assert!(!corpse_object.blocks_sight);
     assert_eq!(
-        loot_object.props.pickup.as_ref().map(|pickup| (
-            pickup.item_id.clone(),
-            pickup.min_count,
-            pickup.max_count
-        )),
-        Some(("1010".to_string(), 2, 2))
+        corpse_object
+            .props
+            .interactive
+            .as_ref()
+            .map(|interactive| interactive.display_name.as_str()),
+        Some("Hostile的尸体")
     );
+    assert_eq!(
+        corpse_object
+            .props
+            .container
+            .as_ref()
+            .and_then(|container| container.visual_id.as_deref()),
+        Some("corpse")
+    );
+    assert_eq!(
+        corpse_object
+            .props
+            .container
+            .as_ref()
+            .and_then(|container| container.initial_inventory.first())
+            .map(|entry| (entry.item_id.as_str(), entry.count)),
+        Some(("1010", 2))
+    );
+    assert!(simulation.drain_events().into_iter().any(|event| matches!(
+        event,
+        SimulationEvent::CorpseCreated {
+            actor_id,
+            target_actor,
+            item_count: 2,
+            ..
+        } if actor_id == player && target_actor == hostile
+    )));
+}
+
+#[test]
+fn lethal_attack_merges_actor_inventory_equipment_ammo_and_loot_into_corpse() {
+    let items = sample_combat_item_library();
+    let mut simulation = Simulation::new();
+    simulation.set_item_library(items.clone());
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let hostile = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Bandit".into(),
+        kind: ActorKind::Enemy,
+        side: ActorSide::Hostile,
+        group_id: "hostile".into(),
+        grid_position: GridCoord::new(1, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation.economy.set_actor_level(hostile, 8);
+    simulation
+        .economy
+        .add_item(hostile, 1004, 1, &items)
+        .expect("pistol should add");
+    simulation
+        .economy
+        .add_item(hostile, 1009, 3, &items)
+        .expect("ammo stack should add");
+    simulation
+        .economy
+        .add_ammo(hostile, 1009, 4, &items)
+        .expect("ammo reserve should add");
+    simulation
+        .economy
+        .equip_item(hostile, 1004, Some("main_hand"), &items)
+        .expect("pistol should equip");
+    simulation.seed_actor_loot_table(
+        hostile,
+        vec![CharacterLootEntry {
+            item_id: 1009,
+            chance: 1.0,
+            min: 2,
+            max: 2,
+        }],
+    );
+    simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+    simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+    simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+    simulation.set_actor_resource(hostile, "hp", 5.0);
+
+    let result = simulation.perform_attack(player, hostile);
+
+    assert!(result.success);
+    let corpse_object = simulation
+        .grid_world()
+        .map_object_entries()
+        .into_iter()
+        .find(|object| object.object_id.starts_with("corpse_"))
+        .expect("corpse object should be spawned");
+    let container = corpse_object
+        .props
+        .container
+        .as_ref()
+        .expect("corpse should be a container");
+    let inventory = container
+        .initial_inventory
+        .iter()
+        .map(|entry| (entry.item_id.as_str(), entry.count))
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(inventory.get("1004"), Some(&1));
+    assert_eq!(inventory.get("1009"), Some(&9));
+}
+
+#[test]
+fn corpse_container_can_be_opened_after_target_actor_is_removed() {
+    let mut simulation = Simulation::new();
+    simulation
+        .grid_world_mut()
+        .load_map(&sample_two_level_combat_map_definition());
+    let player = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Player".into(),
+        kind: ActorKind::Player,
+        side: ActorSide::Player,
+        group_id: "player".into(),
+        grid_position: GridCoord::new(0, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    let hostile = simulation.register_actor(RegisterActor {
+        definition_id: None,
+        display_name: "Hostile".into(),
+        kind: ActorKind::Enemy,
+        side: ActorSide::Hostile,
+        group_id: "hostile".into(),
+        grid_position: GridCoord::new(1, 0, 0),
+        interaction: None,
+        attack_range: 1.2,
+        ai_controller: None,
+    });
+    simulation.set_actor_combat_attribute(player, "attack_power", 10.0);
+    simulation.set_actor_combat_attribute(player, "accuracy", 100.0);
+    simulation.set_actor_combat_attribute(hostile, "max_hp", 5.0);
+    simulation.set_actor_resource(hostile, "hp", 5.0);
+    simulation.seed_actor_loot_table(
+        hostile,
+        vec![CharacterLootEntry {
+            item_id: 1010,
+            chance: 1.0,
+            min: 1,
+            max: 1,
+        }],
+    );
+
+    let result = simulation.perform_attack(player, hostile);
+    assert!(result.success);
+    assert!(!simulation.actors.contains(hostile));
+    let object_id = simulation
+        .grid_world()
+        .map_object_entries()
+        .into_iter()
+        .find(|object| object.object_id.starts_with("corpse_"))
+        .map(|object| object.object_id)
+        .expect("corpse object should exist");
+    let target_id = InteractionTargetId::MapObject(object_id.clone());
+    let prompt = simulation
+        .query_interaction_options(player, &target_id)
+        .expect("corpse interaction prompt should resolve");
+    assert_eq!(prompt.target_name, "Hostile的尸体");
+    assert!(prompt
+        .options
+        .iter()
+        .any(|option| option.kind == InteractionOptionKind::OpenContainer));
+    let option_id = prompt
+        .primary_option_id
+        .clone()
+        .expect("corpse should have a primary open option");
+
+    let execution = simulation.execute_interaction(InteractionExecutionRequest {
+        actor_id: player,
+        target_id: target_id.clone(),
+        option_id,
+    });
+
+    assert!(execution.success);
+    let container_id = format!("combat_two_level_map::{object_id}");
+    assert_eq!(
+        simulation
+            .economy
+            .container_inventory_count(&container_id, 1010),
+        Some(1)
+    );
+    assert!(simulation.query_combat_ai(hostile).is_none());
 }
 
 #[test]

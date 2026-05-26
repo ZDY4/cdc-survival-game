@@ -299,6 +299,13 @@ pub enum SimulationEvent {
         actor_id: ActorId,
         target_actor: ActorId,
     },
+    CorpseCreated {
+        actor_id: ActorId,
+        target_actor: ActorId,
+        object_id: String,
+        grid: GridCoord,
+        item_count: i32,
+    },
     LootDropped {
         actor_id: ActorId,
         target_actor: ActorId,

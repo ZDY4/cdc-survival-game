@@ -364,6 +364,19 @@ fn push_object_specs(
     let (center_x, center_z, footprint_width, footprint_depth) =
         occupied_cells_box(&object.occupied_cells, grid_size);
     let semantic = Some(StaticWorldSemantic::MapObject(object.object_id.clone()));
+    if object.is_corpse {
+        push_corpse_specs(
+            scene,
+            center_x,
+            center_z,
+            footprint_width,
+            footprint_depth,
+            floor_top,
+            grid_size,
+            semantic,
+        );
+        return;
+    }
 
     match object.kind {
         MapObjectKind::Prop => {}
@@ -384,6 +397,39 @@ fn push_object_specs(
         MapObjectKind::AiSpawn => {}
         MapObjectKind::Building => {}
     }
+}
+
+fn push_corpse_specs(
+    scene: &mut StaticWorldSceneSpec,
+    center_x: f32,
+    center_z: f32,
+    footprint_width: f32,
+    footprint_depth: f32,
+    floor_top: f32,
+    grid_size: f32,
+    semantic: Option<StaticWorldSemantic>,
+) {
+    scene.boxes.push(StaticWorldBoxSpec {
+        size: Vec3::new(
+            footprint_width.max(grid_size * 0.66),
+            grid_size * 0.06,
+            footprint_depth.max(grid_size * 0.38),
+        ),
+        translation: Vec3::new(center_x, floor_top + grid_size * 0.035, center_z),
+        material_role: StaticWorldMaterialRole::CorpseMarker,
+        occluder_kind: None,
+        occluder_cells: Vec::new(),
+        semantic: semantic.clone(),
+    });
+    scene.pick_proxies.push(object_pick_proxy_box_spec(
+        center_x,
+        center_z,
+        footprint_width,
+        footprint_depth,
+        floor_top,
+        grid_size,
+        semantic,
+    ));
 }
 
 fn push_trigger_specs(
@@ -485,6 +531,7 @@ fn static_map_object_from_definition(object: MapObjectDefinition) -> StaticMapOb
         has_viewer_function,
         has_visual_placement: object.props.visual.is_some(),
         is_generated_door,
+        is_corpse: map_object_is_corpse(&object),
         trigger_kind,
     }
 }
@@ -505,6 +552,29 @@ fn static_map_object_from_debug(object: &MapObjectDebugState) -> StaticMapObject
             .payload_summary
             .get("generated_door")
             .is_some_and(|value| value == "true"),
+        is_corpse: object
+            .payload_summary
+            .get("corpse")
+            .is_some_and(|value| value == "true")
+            || object
+                .payload_summary
+                .get("container_visual_id")
+                .is_some_and(|value| value.trim() == "corpse"),
         trigger_kind: object.payload_summary.get("trigger_kind").cloned(),
     }
+}
+
+fn map_object_is_corpse(object: &MapObjectDefinition) -> bool {
+    object
+        .props
+        .extra
+        .get("corpse")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        || object
+            .props
+            .container
+            .as_ref()
+            .and_then(|container| container.visual_id.as_deref())
+            .is_some_and(|visual_id| visual_id.trim() == "corpse")
 }
