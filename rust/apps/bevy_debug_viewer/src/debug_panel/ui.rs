@@ -75,7 +75,7 @@ pub(crate) fn update_debug_panel(
     commands.entity(body_entity).with_children(|parent| {
         render_tabs(parent, &font, &panel_state);
         match panel_state.active_tab {
-            DebugPanelTab::Console => render_console_tab(parent, &font),
+            DebugPanelTab::Console => render_console_tab(parent, &font, &mut panel_state),
             DebugPanelTab::Cheats => render_cheats_tab(parent, &font, &panel_state, &items),
         }
         render_feedback(parent, &font, &panel_state);
@@ -110,27 +110,137 @@ fn render_tabs(
         });
 }
 
-fn render_console_tab(parent: &mut ChildSpawnerCommands, font: &ViewerUiFont) {
-    parent.spawn(text(font, "Console Commands", 11.2, muted_color()));
+fn render_console_tab(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    panel_state: &mut ViewerDebugPanelState,
+) {
+    panel_state.clamp_console_scroll(CONSOLE_COMMANDS.len(), DEBUG_PANEL_VISIBLE_COMMAND_ROWS);
+    let total = CONSOLE_COMMANDS.len();
+    let visible_rows = DEBUG_PANEL_VISIBLE_COMMAND_ROWS.min(total);
+    let max_offset = max_console_scroll_offset(total, DEBUG_PANEL_VISIBLE_COMMAND_ROWS);
+    let offset = panel_state.console_scroll_offset.min(max_offset);
+    let first_row = if total == 0 { 0 } else { offset + 1 };
+    let last_row = (offset + visible_rows).min(total);
+
+    parent.spawn(text(
+        font,
+        &format!("Console Commands  {first_row}-{last_row}/{total}"),
+        11.2,
+        muted_color(),
+    ));
     parent
         .spawn((
             Node {
                 width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(5),
+                column_gap: px(7),
+                min_height: px(0),
                 ..default()
             },
             viewer_ui_passthrough_bundle(),
         ))
-        .with_children(|list| {
-            for command in CONSOLE_COMMANDS {
-                list.spawn(console_command_button(command.name))
-                    .with_children(|button| {
-                        button.spawn(text(font, command.name, 11.0, heading_color()));
-                        button.spawn(text(font, command.summary, 9.2, dim_color()));
-                    });
+        .with_children(|row| {
+            row.spawn((
+                Node {
+                    flex_grow: 1.0,
+                    flex_basis: px(0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(5),
+                    min_height: px(0),
+                    ..default()
+                },
+                viewer_ui_passthrough_bundle(),
+            ))
+            .with_children(|list| {
+                for command in CONSOLE_COMMANDS.iter().skip(offset).take(visible_rows) {
+                    list.spawn(console_command_button(command.name))
+                        .with_children(|button| {
+                            button.spawn(text(font, command.name, 11.0, heading_color()));
+                            button.spawn(text(font, command.summary, 9.2, dim_color()));
+                        });
+                }
+            });
+
+            if max_offset > 0 {
+                render_console_scrollbar(row, font, total, visible_rows, offset);
             }
         });
+}
+
+fn render_console_scrollbar(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    total: usize,
+    visible_rows: usize,
+    offset: usize,
+) {
+    let (thumb_top, thumb_height) = console_scrollbar_thumb(total, visible_rows, offset);
+    parent
+        .spawn((
+            Node {
+                width: px(24),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: px(4),
+                ..default()
+            },
+            viewer_ui_passthrough_bundle(),
+        ))
+        .with_children(|bar| {
+            bar.spawn(scroll_button(
+                font,
+                "^",
+                DebugPanelButtonAction::ScrollConsoleLines(-1),
+            ));
+            bar.spawn((
+                Node {
+                    position_type: PositionType::Relative,
+                    width: px(8),
+                    flex_grow: 1.0,
+                    min_height: px(220),
+                    border: UiRect::all(px(1)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.05, 0.05, 0.048, 0.96)),
+                BorderColor::all(border_color()),
+                viewer_ui_passthrough_bundle(),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: Val::Percent(thumb_top),
+                        left: px(1),
+                        right: px(1),
+                        height: Val::Percent(thumb_height),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.58, 0.57, 0.52, 0.92)),
+                    viewer_ui_passthrough_bundle(),
+                ));
+            });
+            bar.spawn(scroll_button(
+                font,
+                "v",
+                DebugPanelButtonAction::ScrollConsoleLines(1),
+            ));
+        });
+}
+
+fn console_scrollbar_thumb(total: usize, visible_rows: usize, offset: usize) -> (f32, f32) {
+    if total <= visible_rows || total == 0 {
+        return (0.0, 100.0);
+    }
+    let visible_fraction = visible_rows as f32 / total as f32;
+    let thumb_height = (visible_fraction * 100.0).clamp(18.0, 100.0);
+    let max_offset = max_console_scroll_offset(total, visible_rows);
+    let travel = 100.0 - thumb_height;
+    let top = if max_offset == 0 {
+        0.0
+    } else {
+        travel * (offset.min(max_offset) as f32 / max_offset as f32)
+    };
+    (top, thumb_height)
 }
 
 fn render_cheats_tab(
@@ -387,6 +497,31 @@ fn add_item_button(font: &ViewerUiFont) -> impl Bundle {
         Text::new("Add Item"),
         TextFont::from_font_size(11.0).with_font(font.0.clone()),
         TextColor(Color::WHITE),
+        viewer_ui_passthrough_bundle(),
+    )
+}
+
+fn scroll_button(
+    font: &ViewerUiFont,
+    label: &'static str,
+    action: DebugPanelButtonAction,
+) -> impl Bundle {
+    (
+        Button,
+        Node {
+            width: px(20),
+            height: px(20),
+            border: UiRect::all(px(1)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        BackgroundColor(button_color()),
+        BorderColor::all(border_color()),
+        action,
+        Text::new(label),
+        TextFont::from_font_size(10.0).with_font(font.0.clone()),
+        TextColor(heading_color()),
         viewer_ui_passthrough_bundle(),
     )
 }

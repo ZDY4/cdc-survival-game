@@ -64,6 +64,10 @@ pub(crate) const CONSOLE_COMMANDS: &[ConsoleCommandSpec] = &[
         summary: "Toggle the walkable tiles debug overlay.",
     },
     ConsoleCommandSpec {
+        name: "show vision",
+        summary: "Toggle the focused actor vision debug overlay.",
+    },
+    ConsoleCommandSpec {
         name: "show actor",
         summary: "Toggle the Actor info panel.",
     },
@@ -576,6 +580,22 @@ fn execute_show_command(
                 text: status,
             }
         }
+        [target] if target.eq_ignore_ascii_case("vision") => {
+            viewer_state.show_vision_overlay = !viewer_state.show_vision_overlay;
+            let status = format!(
+                "vision overlay: {}",
+                if viewer_state.show_vision_overlay {
+                    "on"
+                } else {
+                    "off"
+                }
+            );
+            viewer_state.status_line = status.clone();
+            ConsoleFeedback {
+                is_error: false,
+                text: status,
+            }
+        }
         [target] => {
             let normalized = target.to_ascii_lowercase();
             let Some(page) = ViewerHudPage::from_console_name(normalized.as_str()) else {
@@ -599,7 +619,7 @@ fn execute_show_command(
         }
         [] => ConsoleFeedback {
             is_error: true,
-            text: "Usage: show fps|walkable_tiles|overview|selection|actor|world|interaction|turn_sys|events|ai|performance"
+            text: "Usage: show fps|walkable_tiles|vision|overview|selection|actor|world|interaction|turn_sys|events|ai|performance"
                 .to_string(),
         },
         _ => ConsoleFeedback {
@@ -944,6 +964,14 @@ mod tests {
     }
 
     #[test]
+    fn console_suggestions_match_show_vision_prefix() {
+        let suggestions = console_suggestions("show vi");
+
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].name, "show vision");
+    }
+
+    #[test]
     fn console_suggestions_match_observe_mode_prefix() {
         let suggestions = console_suggestions("ob");
 
@@ -1077,6 +1105,22 @@ mod tests {
         assert!(!second.is_error);
         assert!(!viewer_state.show_walkable_tiles_overlay);
         assert_eq!(second.text, "walkable tiles overlay: off");
+    }
+
+    #[test]
+    fn show_vision_toggles_overlay_flag() {
+        let mut viewer_state = ViewerState::default();
+        let mut info_panel_state = ViewerInfoPanelState::default();
+
+        let first = execute_show_command(&["vision"], &mut viewer_state, &mut info_panel_state);
+        assert!(!first.is_error);
+        assert!(viewer_state.show_vision_overlay);
+        assert_eq!(first.text, "vision overlay: on");
+
+        let second = execute_show_command(&["vision"], &mut viewer_state, &mut info_panel_state);
+        assert!(!second.is_error);
+        assert!(!viewer_state.show_vision_overlay);
+        assert_eq!(second.text, "vision overlay: off");
     }
 
     #[test]

@@ -23,8 +23,8 @@ use crate::controls::{
     handle_mouse_wheel_zoom,
 };
 use crate::debug_panel::{
-    handle_debug_panel_buttons, handle_debug_panel_keyboard_input, toggle_debug_panel,
-    update_debug_panel, ViewerDebugPanelState,
+    handle_debug_panel_buttons, handle_debug_panel_keyboard_input, handle_debug_panel_mouse_wheel,
+    toggle_debug_panel, update_debug_panel, ViewerDebugPanelState,
 };
 use crate::game_ui::{
     apply_ui_settings_system, handle_game_ui_buttons, handle_inventory_list_mouse_wheel,
@@ -41,10 +41,11 @@ use crate::profiling::{
     ViewerSystemProfilerState,
 };
 use crate::render::{
-    setup_viewer, sync_actor_precise_pick_meshes, sync_dialogue_body_scrollbar,
-    sync_dialogue_panel_diagnostics, sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals,
-    sync_hover_mesh_outlines, sync_stable_interaction_hover, tick_fog_of_war_transition,
-    update_camera, update_dialogue_panel, update_interaction_menu, FogOfWarPostProcessPlugin,
+    setup_viewer, sync_actor_precise_pick_meshes, sync_debug_tile_overlay_visuals,
+    sync_dialogue_body_scrollbar, sync_dialogue_panel_diagnostics,
+    sync_fog_of_war_post_process_camera, sync_fog_of_war_visuals, sync_hover_mesh_outlines,
+    sync_stable_interaction_hover, tick_fog_of_war_transition, update_camera,
+    update_dialogue_panel, update_interaction_menu, FogOfWarPostProcessPlugin,
     StableInteractionHoverState,
 };
 use crate::simulation::{
@@ -231,6 +232,7 @@ impl Plugin for ViewerAppPlugin {
                 handle_console_input,
                 toggle_debug_panel,
                 handle_debug_panel_keyboard_input,
+                handle_debug_panel_mouse_wheel,
                 handle_keyboard_input,
                 handle_dialogue_body_mouse_wheel,
                 handle_mouse_wheel_zoom,
@@ -276,6 +278,7 @@ impl Plugin for ViewerAppPlugin {
             (
                 profiled_sync_world_visuals,
                 sync_actor_precise_pick_meshes.after(profiled_sync_world_visuals),
+                sync_debug_tile_overlay_visuals.after(profiled_sync_world_visuals),
                 sync_fog_of_war_visuals,
                 tick_fog_of_war_transition,
                 sync_fog_of_war_post_process_camera,

@@ -75,6 +75,38 @@ pub(crate) fn handle_debug_panel_keyboard_input(
     }
 }
 
+pub(crate) fn handle_debug_panel_mouse_wheel(
+    mut mouse_wheel_events: MessageReader<MouseWheel>,
+    console_state: Res<crate::console::ViewerConsoleState>,
+    mut panel_state: ResMut<ViewerDebugPanelState>,
+) {
+    let mut scroll_delta = 0.0f32;
+    for event in mouse_wheel_events.read() {
+        let unit_scale = match event.unit {
+            MouseScrollUnit::Line => 1.0,
+            MouseScrollUnit::Pixel => 0.1,
+        };
+        scroll_delta += event.y * unit_scale;
+    }
+
+    if console_state.is_open
+        || !panel_state.is_open
+        || panel_state.active_tab != DebugPanelTab::Console
+        || scroll_delta.abs() < f32::EPSILON
+    {
+        return;
+    }
+
+    let row_delta = (-scroll_delta).round() as i32;
+    if row_delta != 0 {
+        panel_state.scroll_console_by(
+            row_delta,
+            CONSOLE_COMMANDS.len(),
+            DEBUG_PANEL_VISIBLE_COMMAND_ROWS,
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_debug_panel_buttons(
     mut buttons: Query<
@@ -136,6 +168,13 @@ pub(crate) fn handle_debug_panel_buttons(
                 &mut damage_number_state,
             );
             panel_state.last_feedback = Some(feedback.into());
+        }
+        DebugPanelButtonAction::ScrollConsoleLines(delta_rows) => {
+            panel_state.scroll_console_by(
+                delta_rows,
+                CONSOLE_COMMANDS.len(),
+                DEBUG_PANEL_VISIBLE_COMMAND_ROWS,
+            );
         }
         DebugPanelButtonAction::ToggleItemDropdown => {
             panel_state.item_dropdown_open = !panel_state.item_dropdown_open;
@@ -308,10 +347,13 @@ fn is_printable_char(chr: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{add_item_cheat, parse_quantity, toggle_debug_panel};
+    use super::{
+        add_item_cheat, handle_debug_panel_mouse_wheel, parse_quantity, toggle_debug_panel,
+    };
     use crate::console::ViewerConsoleState;
     use crate::debug_panel::ViewerDebugPanelState;
     use crate::state::{ViewerRuntimeSavePath, ViewerRuntimeState, ViewerState};
+    use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
     use bevy::prelude::*;
     use game_bevy::ItemDefinitions;
     use game_core::create_demo_runtime;
@@ -358,6 +400,34 @@ mod tests {
         app.update();
 
         assert!(!app.world().resource::<ViewerDebugPanelState>().is_open);
+    }
+
+    #[test]
+    fn mouse_wheel_scrolls_console_command_list() {
+        let mut app = App::new();
+        app.add_message::<MouseWheel>()
+            .insert_resource(ViewerConsoleState::default())
+            .insert_resource(ViewerDebugPanelState {
+                is_open: true,
+                active_tab: crate::debug_panel::state::DebugPanelTab::Console,
+                ..ViewerDebugPanelState::default()
+            })
+            .add_systems(Update, handle_debug_panel_mouse_wheel);
+
+        app.world_mut().write_message(MouseWheel {
+            unit: MouseScrollUnit::Line,
+            x: 0.0,
+            y: -3.0,
+            window: Entity::PLACEHOLDER,
+        });
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<ViewerDebugPanelState>()
+                .console_scroll_offset,
+            3
+        );
     }
 
     #[test]

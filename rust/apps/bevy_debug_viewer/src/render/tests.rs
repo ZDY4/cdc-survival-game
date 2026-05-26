@@ -4,16 +4,17 @@ use super::*;
 
 use super::{
     actor_visual_translation, actor_visual_world_position, camera_follow_requires_reset,
-    collect_closed_door_occluders, collect_ground_cells_to_render, collect_static_world_box_specs,
-    collect_static_world_building_wall_tile_specs, collect_static_world_decal_specs,
-    collect_walkable_tile_overlay_cells, darken_color, generated_door_render_polygon,
-    interaction_menu_button_font_size_for_label, interaction_menu_layout, lighten_color,
-    occluder_blocks_visible_cells, occluder_should_fade, occupied_cells_box,
-    project_shadowed_visible_cells, refresh_closed_door_occluders,
+    collect_closed_door_occluders, collect_current_focus_vision_overlay_cells,
+    collect_debug_tile_overlay_specs, collect_ground_cells_to_render,
+    collect_static_world_box_specs, collect_static_world_building_wall_tile_specs,
+    collect_static_world_decal_specs, collect_walkable_tile_overlay_cells, darken_color,
+    generated_door_render_polygon, interaction_menu_button_font_size_for_label,
+    interaction_menu_layout, lighten_color, occluder_blocks_visible_cells, occluder_should_fade,
+    occupied_cells_box, project_shadowed_visible_cells, refresh_closed_door_occluders,
     resolve_active_interaction_hover, should_draw_actor_selection_ring, should_fade_occluder,
     should_hide_building_roofs, should_show_actor_label, sync_hover_mesh_outlines,
-    update_camera_follow_focus, GridBounds, HoverOutlineMember, MaterialStyle,
-    StaticWorldOccluderKind, WalkableTileOverlayKind, HOVER_MESH_OUTLINE_WIDTH_PX,
+    update_camera_follow_focus, DebugTileOverlayLayer, GridBounds, HoverOutlineMember,
+    MaterialStyle, StaticWorldOccluderKind, WalkableTileOverlayKind, HOVER_MESH_OUTLINE_WIDTH_PX,
     INTERACTION_MENU_BORDER_WIDTH_PX, INTERACTION_MENU_ITEM_GAP_PX,
     INTERACTION_MENU_ITEM_HEIGHT_PX, INTERACTION_MENU_ITEM_MIN_FONT_SIZE_PX,
     INTERACTION_MENU_PADDING_PX, INTERACTION_MENU_WIDTH_PX,
@@ -1758,6 +1759,93 @@ fn walkable_tile_overlay_only_collects_cells_on_current_level() {
 
     assert!(!cells.is_empty());
     assert!(cells.iter().all(|(grid, _)| grid.y == 0));
+}
+
+#[test]
+fn debug_tile_overlay_specs_use_mesh_layers_for_walkable_tiles() {
+    let (runtime, handles) = create_demo_runtime();
+    let snapshot = runtime.snapshot();
+    let player_grid = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == handles.player)
+        .expect("player actor should exist")
+        .grid_position;
+    let viewer_state = ViewerState {
+        selected_actor: Some(handles.player),
+        current_level: player_grid.y,
+        show_walkable_tiles_overlay: true,
+        ..ViewerState::default()
+    };
+
+    let specs = collect_debug_tile_overlay_specs(
+        &runtime,
+        &snapshot,
+        &viewer_state,
+        &ViewerPalette::default(),
+        grid_bounds(&snapshot, player_grid.y),
+    );
+
+    assert!(!specs.is_empty());
+    assert!(specs
+        .iter()
+        .any(|spec| spec.layer == DebugTileOverlayLayer::Walkable));
+    assert!(specs
+        .iter()
+        .any(|spec| spec.layer == DebugTileOverlayLayer::Blocked));
+}
+
+#[test]
+fn vision_overlay_collects_focused_actor_visible_cells() {
+    let bootstrap = game_bevy::load_runtime_bootstrap(
+        &game_bevy::CharacterDefinitionPath::default().0,
+        &game_bevy::MapDefinitionPath::default().0,
+        &game_bevy::OverworldDefinitionPath::default().0,
+        &game_bevy::RuntimeStartupConfigPath::default().0,
+    )
+    .expect("runtime bootstrap should load current content");
+    let mut runtime = game_bevy::build_runtime_from_default_startup_seed(&bootstrap)
+        .expect("runtime should build from current startup seed");
+    let snapshot = runtime.snapshot();
+    let focus_actor_id = snapshot
+        .actors
+        .first()
+        .expect("startup runtime should have an actor")
+        .actor_id;
+    runtime.set_actor_vision_radius(focus_actor_id, game_core::vision::DEFAULT_VISION_RADIUS);
+    runtime
+        .refresh_actor_vision(focus_actor_id)
+        .expect("focus actor vision should refresh");
+    let snapshot = runtime.snapshot();
+    let player_grid = snapshot
+        .actors
+        .iter()
+        .find(|actor| actor.actor_id == focus_actor_id)
+        .expect("focus actor should exist")
+        .grid_position;
+    let viewer_state = ViewerState {
+        controlled_player_actor: Some(focus_actor_id),
+        selected_actor: Some(focus_actor_id),
+        current_level: player_grid.y,
+        show_vision_overlay: true,
+        ..ViewerState::default()
+    };
+
+    let cells = collect_current_focus_vision_overlay_cells(&snapshot, &viewer_state);
+    let specs = collect_debug_tile_overlay_specs(
+        &runtime,
+        &snapshot,
+        &viewer_state,
+        &ViewerPalette::default(),
+        grid_bounds(&snapshot, player_grid.y),
+    );
+
+    assert!(!cells.is_empty());
+    assert!(cells.iter().all(|grid| grid.y == player_grid.y));
+    assert_eq!(specs.len(), cells.len());
+    assert!(specs
+        .iter()
+        .all(|spec| spec.layer == DebugTileOverlayLayer::Vision));
 }
 
 fn sample_prompt(option_count: usize) -> InteractionPrompt {

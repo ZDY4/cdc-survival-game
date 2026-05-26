@@ -30,6 +30,7 @@ pub(crate) fn setup_viewer(
         previous_fow_mask.clone(),
     ));
     commands.insert_resource(DamageNumberVisualState::default());
+    commands.insert_resource(DebugTileOverlayVisualState::default());
     commands.insert_resource(TriggerDecalAssets {
         arrow_texture: trigger_arrow_texture,
     });

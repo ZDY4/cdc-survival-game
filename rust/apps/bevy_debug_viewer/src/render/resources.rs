@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use super::types::{
-    GeneratedDoorVisual, GeneratedDoorVisualKey, StaticWorldOccluderVisual,
+    DebugTileOverlayKey, GeneratedDoorVisual, GeneratedDoorVisualKey, StaticWorldOccluderVisual,
     StaticWorldTileInstanceVisual, StaticWorldVisualKey,
 };
 use crate::geometry::GridBounds;
@@ -104,6 +104,12 @@ impl FogOfWarMaskState {
 #[derive(Resource, Default)]
 pub(crate) struct DamageNumberVisualState {
     pub by_id: HashMap<u64, Entity>,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct DebugTileOverlayVisualState {
+    pub key: Option<DebugTileOverlayKey>,
+    pub entities: Vec<Entity>,
 }
 
 #[derive(Resource, Clone)]

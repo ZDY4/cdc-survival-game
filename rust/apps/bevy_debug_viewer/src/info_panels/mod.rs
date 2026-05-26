@@ -351,10 +351,10 @@ pub(crate) fn update_fps_overlay(
 pub(crate) fn footer_hint(page: ViewerHudPage) -> &'static str {
     match page {
         ViewerHudPage::Overview => {
-            "[ / ] 切信息分类 · /帮助 · ~控制台 · show fps 开关右上角 FPS · show walkable_tiles 开关可行走格叠层 · show overview/selection/actor/... 开关信息面板"
+            "[ / ] 切信息分类 · /帮助 · ~控制台 · show fps 开关右上角 FPS · show walkable_tiles/vision 开关调试叠层 · show overview/selection/actor/... 开关信息面板"
         }
         ViewerHudPage::Selection => {
-            "[ / ] 切信息分类 · /帮助 · ~控制台 · show selection 查看当前悬停格与交互选项 · show walkable_tiles 查看可行走格"
+            "[ / ] 切信息分类 · /帮助 · ~控制台 · show selection 查看当前悬停格与交互选项 · show walkable_tiles/vision 查看格子调试叠层"
         }
         ViewerHudPage::SelectedActor => {
             "[ / ] 切信息分类 · /帮助 · ~控制台 · A切换自动tick · V切换调试叠层 · ob mode 切换控制/观察"
@@ -388,6 +388,7 @@ fn format_controls_help() -> String {
             "Console command: show overview/selection/actor/world/interaction/turn_sys/events/ai/performance toggles info panels".to_string(),
             "Console command: show fps toggles top-right FPS overlay".to_string(),
             "Console command: show walkable_tiles toggles the walkable tiles overlay".to_string(),
+            "Console command: show vision toggles the focused actor vision overlay".to_string(),
             "Console command: ob mode toggles player control / free observe".to_string(),
             "[ / ] switch visible info tabs when multiple panels are enabled".to_string(),
             "/ toggle detailed help".to_string(),

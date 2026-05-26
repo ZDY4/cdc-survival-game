@@ -120,6 +120,26 @@ pub(crate) struct SpawnedMeshVisual {
     pub color: Color,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum DebugTileOverlayLayer {
+    Walkable,
+    Blocked,
+    Vision,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DebugTileOverlayTile {
+    pub grid: GridCoord,
+    pub layer: DebugTileOverlayLayer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DebugTileOverlayKey {
+    pub map_id: Option<MapId>,
+    pub current_level: i32,
+    pub tiles: Vec<DebugTileOverlayTile>,
+}
+
 #[derive(Default)]
 pub(crate) struct HoverOcclusionBuffer {
     pub current: Option<GridCoord>,

@@ -3,10 +3,11 @@
 use super::*;
 use crate::geometry::MISSING_GEO_BUILDING_PLACEHOLDER_HEIGHT_SCALE;
 use crate::picking::{BuildingPartKind, ViewerPickTarget, ViewerPickingState};
+use bevy::picking::prelude::Pickable;
 
-const WALKABLE_TILE_OVERLAY_LINE_COUNT: usize = 4;
-const WALKABLE_TILE_OVERLAY_INSET_RATIO: f32 = 0.12;
 const WALKABLE_TILE_OVERLAY_ELEVATION_MULTIPLIER: f32 = 0.55;
+const VISION_TILE_OVERLAY_ELEVATION_MULTIPLIER: f32 = 0.75;
+const DEBUG_TILE_OVERLAY_ALPHA: f32 = 0.2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WalkableTileOverlayKind {
@@ -57,18 +58,6 @@ pub(crate) fn draw_world(
             grid_size,
             render_config.floor_thickness_world,
             effective_grid_line_opacity(*render_config),
-        );
-    }
-
-    if viewer_state.show_walkable_tiles_overlay {
-        draw_walkable_tiles_overlay(
-            &mut gizmos,
-            &runtime_state.runtime,
-            &snapshot,
-            &viewer_state,
-            &palette,
-            *render_config,
-            bounds,
         );
     }
 
@@ -271,6 +260,153 @@ pub(crate) fn draw_world(
     }
 }
 
+pub(crate) fn sync_debug_tile_overlay_visuals(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    runtime_state: Res<ViewerRuntimeState>,
+    scene_kind: Res<ViewerSceneKind>,
+    viewer_state: Res<ViewerState>,
+    palette: Res<ViewerPalette>,
+    render_config: Res<ViewerRenderConfig>,
+    mut overlay_state: ResMut<DebugTileOverlayVisualState>,
+) {
+    let snapshot = runtime_state.runtime.snapshot();
+    let specs = if scene_kind.is_main_menu() {
+        Vec::new()
+    } else {
+        collect_debug_tile_overlay_specs(
+            &runtime_state.runtime,
+            &snapshot,
+            &viewer_state,
+            &palette,
+            grid_bounds(&snapshot, viewer_state.current_level),
+        )
+    };
+    let key = DebugTileOverlayKey {
+        map_id: snapshot.grid.map_id.clone(),
+        current_level: viewer_state.current_level,
+        tiles: specs
+            .iter()
+            .map(|spec| DebugTileOverlayTile {
+                grid: spec.grid,
+                layer: spec.layer,
+            })
+            .collect(),
+    };
+    if overlay_state.key.as_ref() == Some(&key) {
+        return;
+    }
+
+    clear_debug_tile_overlay_visuals(&mut commands, &mut overlay_state);
+    if specs.is_empty() {
+        overlay_state.key = Some(key);
+        return;
+    }
+
+    let mut material_cache = HashMap::<DebugTileOverlayLayer, Handle<StandardMaterial>>::new();
+    for spec in specs {
+        let material = material_cache
+            .entry(spec.layer)
+            .or_insert_with(|| {
+                materials.add(StandardMaterial {
+                    base_color: spec.color,
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    cull_mode: None,
+                    perceptual_roughness: 1.0,
+                    metallic: 0.0,
+                    ..default()
+                })
+            })
+            .clone();
+        let grid_size = snapshot.grid.grid_size;
+        let mesh = meshes.add(Plane3d::default().mesh().size(grid_size, grid_size));
+        let translation = Vec3::new(
+            (spec.grid.x as f32 + 0.5) * grid_size,
+            level_base_height(spec.grid.y, grid_size)
+                + render_config.floor_thickness_world
+                + OVERLAY_ELEVATION * spec.elevation_multiplier,
+            (spec.grid.z as f32 + 0.5) * grid_size,
+        );
+        let entity = commands
+            .spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(material),
+                Transform::from_translation(translation),
+                Pickable::IGNORE,
+            ))
+            .id();
+        overlay_state.entities.push(entity);
+    }
+    overlay_state.key = Some(key);
+}
+
+fn clear_debug_tile_overlay_visuals(
+    commands: &mut Commands,
+    overlay_state: &mut DebugTileOverlayVisualState,
+) {
+    for entity in overlay_state.entities.drain(..) {
+        commands.entity(entity).despawn();
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct DebugTileOverlaySpec {
+    pub grid: GridCoord,
+    pub layer: DebugTileOverlayLayer,
+    pub color: Color,
+    pub elevation_multiplier: f32,
+}
+
+pub(super) fn collect_debug_tile_overlay_specs(
+    runtime: &game_core::SimulationRuntime,
+    snapshot: &game_core::SimulationSnapshot,
+    viewer_state: &ViewerState,
+    palette: &ViewerPalette,
+    bounds: crate::geometry::GridBounds,
+) -> Vec<DebugTileOverlaySpec> {
+    let mut specs = Vec::new();
+    if viewer_state.show_walkable_tiles_overlay {
+        specs.extend(
+            collect_walkable_tile_overlay_cells(runtime, snapshot, viewer_state, bounds)
+                .into_iter()
+                .map(|(grid, kind)| {
+                    let (layer, color) = match kind {
+                        WalkableTileOverlayKind::Walkable => (
+                            DebugTileOverlayLayer::Walkable,
+                            with_alpha(palette.friendly, DEBUG_TILE_OVERLAY_ALPHA),
+                        ),
+                        WalkableTileOverlayKind::Blocked => (
+                            DebugTileOverlayLayer::Blocked,
+                            with_alpha(palette.hostile, DEBUG_TILE_OVERLAY_ALPHA),
+                        ),
+                    };
+                    DebugTileOverlaySpec {
+                        grid,
+                        layer,
+                        color,
+                        elevation_multiplier: WALKABLE_TILE_OVERLAY_ELEVATION_MULTIPLIER,
+                    }
+                }),
+        );
+    }
+
+    if viewer_state.show_vision_overlay {
+        specs.extend(
+            collect_current_focus_vision_overlay_cells(snapshot, viewer_state)
+                .into_iter()
+                .map(|grid| DebugTileOverlaySpec {
+                    grid,
+                    layer: DebugTileOverlayLayer::Vision,
+                    color: with_alpha(palette.interactive, DEBUG_TILE_OVERLAY_ALPHA),
+                    elevation_multiplier: VISION_TILE_OVERLAY_ELEVATION_MULTIPLIER,
+                }),
+        );
+    }
+    specs
+}
+
 pub(super) fn collect_walkable_tile_overlay_cells(
     runtime: &game_core::SimulationRuntime,
     snapshot: &game_core::SimulationSnapshot,
@@ -296,53 +432,25 @@ pub(super) fn collect_walkable_tile_overlay_cells(
     cells
 }
 
-fn draw_walkable_tiles_overlay(
-    gizmos: &mut Gizmos,
-    runtime: &game_core::SimulationRuntime,
+pub(super) fn collect_current_focus_vision_overlay_cells(
     snapshot: &game_core::SimulationSnapshot,
     viewer_state: &ViewerState,
-    palette: &ViewerPalette,
-    render_config: ViewerRenderConfig,
-    bounds: crate::geometry::GridBounds,
-) {
-    for (grid, kind) in collect_walkable_tile_overlay_cells(runtime, snapshot, viewer_state, bounds)
-    {
-        let color = match kind {
-            WalkableTileOverlayKind::Walkable => with_alpha(palette.friendly, 0.34),
-            WalkableTileOverlayKind::Blocked => with_alpha(palette.hostile, 0.34),
-        };
-        draw_grid_tile_overlay(
-            gizmos,
-            grid,
-            snapshot.grid.grid_size,
-            render_config.floor_thickness_world
-                + OVERLAY_ELEVATION * WALKABLE_TILE_OVERLAY_ELEVATION_MULTIPLIER,
-            color,
-        );
+) -> Vec<GridCoord> {
+    let Some(vision) = current_focus_actor_vision(snapshot, viewer_state) else {
+        return Vec::new();
+    };
+    if vision.active_map_id.as_ref() != snapshot.grid.map_id.as_ref() {
+        return Vec::new();
     }
-}
-
-fn draw_grid_tile_overlay(
-    gizmos: &mut Gizmos,
-    grid: GridCoord,
-    grid_size: f32,
-    y_offset: f32,
-    color: Color,
-) {
-    let inset = grid_size * WALKABLE_TILE_OVERLAY_INSET_RATIO;
-    let x0 = grid.x as f32 * grid_size + inset;
-    let x1 = (grid.x + 1) as f32 * grid_size - inset;
-    let z0 = grid.z as f32 * grid_size + inset;
-    let z1 = (grid.z + 1) as f32 * grid_size - inset;
-    let y = level_base_height(grid.y, grid_size) + y_offset;
-
-    for index in 0..WALKABLE_TILE_OVERLAY_LINE_COUNT {
-        let t = (index as f32 + 1.0) / (WALKABLE_TILE_OVERLAY_LINE_COUNT as f32 + 1.0);
-        let z = z0 + (z1 - z0) * t;
-        gizmos.line(Vec3::new(x0, y, z), Vec3::new(x1, y, z), color);
-    }
-
-    draw_grid_outline(gizmos, grid, grid_size, y_offset, 0.94, color);
+    let mut cells = vision
+        .visible_cells
+        .iter()
+        .copied()
+        .filter(|grid| grid.y == viewer_state.current_level)
+        .collect::<Vec<_>>();
+    cells.sort_unstable_by_key(|grid| (grid.z, grid.x, grid.y));
+    cells.dedup();
+    cells
 }
 
 #[cfg_attr(not(test), allow(dead_code))]

@@ -9,9 +9,15 @@ pub(crate) fn handle_mouse_wheel_zoom(
     menu_state: Res<UiMenuState>,
     modal_state: Res<UiModalState>,
     console_state: Res<ViewerConsoleState>,
+    debug_panel_state: Option<Res<crate::debug_panel::ViewerDebugPanelState>>,
     scene_kind: Res<ViewerSceneKind>,
 ) {
     if console_state.is_open {
+        for _ in mouse_wheel_events.read() {}
+        return;
+    }
+
+    if debug_panel_state.is_some_and(|state| state.is_open) {
         for _ in mouse_wheel_events.read() {}
         return;
     }
