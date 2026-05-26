@@ -250,17 +250,35 @@ fn render_cheats_tab(
     items: &ItemDefinitions,
 ) {
     parent.spawn(text(font, "Add Item", 11.2, muted_color()));
-    parent.spawn(field_label(font, "Item"));
-    parent.spawn(item_select_button(font, panel_state, items));
+    render_add_item_row(parent, font, panel_state, items);
 
     if panel_state.item_dropdown_open {
         render_item_filter(parent, font, panel_state);
         render_item_dropdown(parent, font, panel_state, items);
     }
+}
 
-    parent.spawn(field_label(font, "Quantity"));
-    parent.spawn(quantity_button(font, panel_state));
-    parent.spawn(add_item_button(font));
+fn render_add_item_row(
+    parent: &mut ChildSpawnerCommands,
+    font: &ViewerUiFont,
+    panel_state: &ViewerDebugPanelState,
+    items: &ItemDefinitions,
+) {
+    parent
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                column_gap: px(6),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            viewer_ui_passthrough_bundle(),
+        ))
+        .with_children(|row| {
+            row.spawn(item_select_row_button(font, panel_state, items));
+            row.spawn(quantity_row_button(font, panel_state));
+            row.spawn(add_item_button(font));
+        });
 }
 
 fn render_item_filter(
@@ -437,6 +455,38 @@ fn item_select_button(
     )
 }
 
+fn item_select_row_button(
+    font: &ViewerUiFont,
+    panel_state: &ViewerDebugPanelState,
+    items: &ItemDefinitions,
+) -> impl Bundle {
+    let label = selected_item_label(panel_state, items);
+    let label = if panel_state.item_dropdown_open {
+        format!("{}  [open]", compact_label(label.as_str(), 24))
+    } else {
+        compact_label(label.as_str(), 28)
+    };
+    input_button_with_node(
+        font,
+        label,
+        panel_state.item_dropdown_open,
+        DebugPanelButtonAction::ToggleItemDropdown,
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_width: px(0),
+            padding: UiRect::axes(px(8), px(6)),
+            border: UiRect::all(px(if panel_state.item_dropdown_open {
+                2.0
+            } else {
+                1.0
+            })),
+            align_items: AlignItems::Center,
+            ..default()
+        },
+    )
+}
+
 fn item_choice_button(font: &ViewerUiFont, item_id: u32, label: &str) -> impl Bundle {
     (
         Button,
@@ -480,11 +530,42 @@ fn quantity_button(font: &ViewerUiFont, panel_state: &ViewerDebugPanelState) -> 
     )
 }
 
+fn quantity_row_button(font: &ViewerUiFont, panel_state: &ViewerDebugPanelState) -> impl Bundle {
+    let focused = panel_state.text_focus == DebugPanelTextFocus::Quantity;
+    let value = if panel_state.quantity_input.is_empty() {
+        if focused {
+            "_".to_string()
+        } else {
+            "1".to_string()
+        }
+    } else {
+        format!(
+            "{}{}",
+            panel_state.quantity_input,
+            if focused { "_" } else { "" }
+        )
+    };
+    input_button_with_node(
+        font,
+        format!("x{value}"),
+        focused,
+        DebugPanelButtonAction::FocusQuantity,
+        Node {
+            width: px(82),
+            padding: UiRect::axes(px(8), px(6)),
+            border: UiRect::all(px(if focused { 2.0 } else { 1.0 })),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+    )
+}
+
 fn add_item_button(font: &ViewerUiFont) -> impl Bundle {
     (
         Button,
         Node {
-            width: Val::Percent(100.0),
+            width: px(76),
             padding: UiRect::axes(px(10), px(7)),
             border: UiRect::all(px(1)),
             justify_content: JustifyContent::Center,
@@ -494,7 +575,7 @@ fn add_item_button(font: &ViewerUiFont) -> impl Bundle {
         BackgroundColor(Color::srgba(0.12, 0.17, 0.12, 0.96)),
         BorderColor::all(Color::srgba(0.36, 0.52, 0.34, 1.0)),
         DebugPanelButtonAction::AddItem,
-        Text::new("Add Item"),
+        Text::new("Add"),
         TextFont::from_font_size(11.0).with_font(font.0.clone()),
         TextColor(Color::WHITE),
         viewer_ui_passthrough_bundle(),
@@ -532,8 +613,11 @@ fn input_button(
     focused: bool,
     action: DebugPanelButtonAction,
 ) -> impl Bundle {
-    (
-        Button,
+    input_button_with_node(
+        font,
+        label,
+        focused,
+        action,
         Node {
             width: Val::Percent(100.0),
             padding: UiRect::axes(px(8), px(6)),
@@ -541,6 +625,19 @@ fn input_button(
             align_items: AlignItems::Center,
             ..default()
         },
+    )
+}
+
+fn input_button_with_node(
+    font: &ViewerUiFont,
+    label: String,
+    focused: bool,
+    action: DebugPanelButtonAction,
+    node: Node,
+) -> impl Bundle {
+    (
+        Button,
+        node,
         BackgroundColor(if focused {
             selected_color()
         } else {
@@ -559,8 +656,13 @@ fn input_button(
     )
 }
 
-fn field_label(font: &ViewerUiFont, label: &str) -> impl Bundle {
-    text(font, label, 9.5, dim_color())
+fn compact_label(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let mut compact = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_some() {
+        compact.push_str("...");
+    }
+    compact
 }
 
 fn text(font: &ViewerUiFont, value: &str, size: f32, color: Color) -> impl Bundle {
