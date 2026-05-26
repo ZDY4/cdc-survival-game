@@ -88,20 +88,18 @@ pub(crate) fn handle_dialogue_body_mouse_wheel(
         return;
     };
 
-    let Some((computed, _, _, _, _, mut scroll_position)) =
-        scroll_areas.iter_mut().find(
-            |(computed, transform, cursor, visibility, inherited_visibility, _)| {
-                visible_node_contains_cursor(
-                    cursor_position,
-                    computed,
-                    transform,
-                    *cursor,
-                    *visibility,
-                    inherited_visibility,
-                )
-            },
-        )
-    else {
+    let Some((computed, _, _, _, _, mut scroll_position)) = scroll_areas.iter_mut().find(
+        |(computed, transform, cursor, visibility, inherited_visibility, _)| {
+            visible_node_contains_cursor(
+                cursor_position,
+                computed,
+                transform,
+                *cursor,
+                *visibility,
+                inherited_visibility,
+            )
+        },
+    ) else {
         for _ in mouse_wheel_events.read() {}
         return;
     };
