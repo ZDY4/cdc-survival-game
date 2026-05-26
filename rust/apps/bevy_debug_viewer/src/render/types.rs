@@ -200,6 +200,12 @@ pub(crate) struct ActorMotionVisualAnchor;
 pub(crate) struct ActorModelGroundAnchor;
 
 #[derive(Component)]
+pub(crate) struct CorpseBodyVisual;
+
+#[derive(Component)]
+pub(crate) struct CorpseModelGroundAnchor;
+
+#[derive(Component)]
 pub(crate) struct KeyLight;
 
 #[derive(Component)]

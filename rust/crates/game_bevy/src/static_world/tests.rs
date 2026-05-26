@@ -199,6 +199,22 @@ fn corpse_interactives_emit_visible_marker_and_pick_proxy() {
 }
 
 #[test]
+fn corpse_with_character_metadata_uses_model_visual_path_only() {
+    let scene = build_static_world_from_map_definition(
+        &sample_map_with_character_corpse_object(),
+        0,
+        StaticWorldBuildConfig::default(),
+    );
+
+    assert!(scene.boxes.is_empty());
+    assert_eq!(scene.pick_proxies.len(), 1);
+    assert!(scene
+        .pick_proxies
+        .iter()
+        .all(|spec| spec.material_role == StaticWorldMaterialRole::InvisiblePickProxy));
+}
+
+#[test]
 fn non_visual_pickups_downgrade_to_pick_proxies_only() {
     let scene = build_static_world_from_map_definition(
         &sample_map_with_pickup_object(false),
@@ -494,6 +510,20 @@ fn sample_map_with_interactive_object(include_visual: bool) -> MapDefinition {
 fn sample_map_with_corpse_object() -> MapDefinition {
     let mut extra = BTreeMap::new();
     extra.insert("corpse".to_string(), serde_json::Value::Bool(true));
+    sample_map_with_corpse_extra(extra)
+}
+
+fn sample_map_with_character_corpse_object() -> MapDefinition {
+    let mut extra = BTreeMap::new();
+    extra.insert("corpse".to_string(), serde_json::Value::Bool(true));
+    extra.insert(
+        "corpse_character_id".to_string(),
+        serde_json::Value::String("bandit_raider".into()),
+    );
+    sample_map_with_corpse_extra(extra)
+}
+
+fn sample_map_with_corpse_extra(extra: BTreeMap<String, serde_json::Value>) -> MapDefinition {
     MapDefinition {
         id: MapId("corpse_map".into()),
         name: "Corpse Map".into(),

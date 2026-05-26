@@ -25,6 +25,7 @@ pub(crate) fn setup_viewer(
     commands.insert_resource(StaticWorldVisualState::default());
     commands.insert_resource(GeneratedDoorVisualState::default());
     commands.insert_resource(ActorVisualState::default());
+    commands.insert_resource(CorpseVisualState::default());
     commands.insert_resource(FogOfWarMaskState::new(
         current_fow_mask.clone(),
         previous_fow_mask.clone(),

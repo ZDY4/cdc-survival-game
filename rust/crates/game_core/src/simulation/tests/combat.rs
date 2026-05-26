@@ -344,7 +344,7 @@ fn lethal_attack_merges_actor_inventory_equipment_ammo_and_loot_into_corpse() {
         ai_controller: None,
     });
     let hostile = simulation.register_actor(RegisterActor {
-        definition_id: None,
+        definition_id: Some(game_data::CharacterId("bandit_raider".into())),
         display_name: "Bandit".into(),
         kind: ActorKind::Enemy,
         side: ActorSide::Hostile,
@@ -406,6 +406,24 @@ fn lethal_attack_merges_actor_inventory_equipment_ammo_and_loot_into_corpse() {
         .collect::<BTreeMap<_, _>>();
     assert_eq!(inventory.get("1004"), Some(&1));
     assert_eq!(inventory.get("1009"), Some(&9));
+    assert_eq!(
+        corpse_object
+            .props
+            .extra
+            .get("corpse_character_id")
+            .and_then(|value| value.as_str()),
+        Some("bandit_raider")
+    );
+    assert_eq!(
+        corpse_object
+            .props
+            .extra
+            .get("corpse_equipped_slots")
+            .and_then(|value| value.as_object())
+            .and_then(|slots| slots.get("main_hand"))
+            .and_then(|value| value.as_u64()),
+        Some(1004)
+    );
 }
 
 #[test]

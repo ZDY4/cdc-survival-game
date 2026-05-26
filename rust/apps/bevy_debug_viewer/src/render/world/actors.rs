@@ -27,7 +27,7 @@ pub(super) fn sync_actor_visuals(
     actor_visual_state: &mut ActorVisualState,
     actor_visuals: &mut Query<
         (Entity, &mut Transform, &ActorBodyVisual),
-        Without<GeneratedDoorPivot>,
+        (Without<GeneratedDoorPivot>, Without<CorpseBodyVisual>),
     >,
     actor_motion_anchors: &mut Query<
         &mut Transform,
@@ -36,6 +36,7 @@ pub(super) fn sync_actor_visuals(
             Without<ActorBodyVisual>,
             Without<ActorModelGroundAnchor>,
             Without<GeneratedDoorPivot>,
+            Without<CorpseBodyVisual>,
         ),
     >,
     actor_model_ground_anchors: &mut Query<
@@ -45,6 +46,7 @@ pub(super) fn sync_actor_visuals(
             Without<ActorBodyVisual>,
             Without<ActorMotionVisualAnchor>,
             Without<GeneratedDoorPivot>,
+            Without<CorpseBodyVisual>,
         ),
     >,
     mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
@@ -200,7 +202,7 @@ fn actor_motion_anchor_transform(motion_track: Option<&ActorMotionTrack>) -> Tra
         .with_rotation(Quat::from_rotation_x(step_arc * ACTOR_STEP_LEAN_RADIANS))
 }
 
-fn actor_model_ground_anchor_transform(
+pub(super) fn actor_model_ground_anchor_transform(
     render_config: ViewerRenderConfig,
     grid_size: f32,
     base_model_asset: &str,

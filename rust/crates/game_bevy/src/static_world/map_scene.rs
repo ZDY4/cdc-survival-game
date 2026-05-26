@@ -365,16 +365,28 @@ fn push_object_specs(
         occupied_cells_box(&object.occupied_cells, grid_size);
     let semantic = Some(StaticWorldSemantic::MapObject(object.object_id.clone()));
     if object.is_corpse {
-        push_corpse_specs(
-            scene,
-            center_x,
-            center_z,
-            footprint_width,
-            footprint_depth,
-            floor_top,
-            grid_size,
-            semantic,
-        );
+        if object.has_corpse_model_metadata {
+            scene.pick_proxies.push(object_pick_proxy_box_spec(
+                center_x,
+                center_z,
+                footprint_width,
+                footprint_depth,
+                floor_top,
+                grid_size,
+                semantic,
+            ));
+        } else {
+            push_corpse_specs(
+                scene,
+                center_x,
+                center_z,
+                footprint_width,
+                footprint_depth,
+                floor_top,
+                grid_size,
+                semantic,
+            );
+        }
         return;
     }
 
@@ -532,6 +544,7 @@ fn static_map_object_from_definition(object: MapObjectDefinition) -> StaticMapOb
         has_visual_placement: object.props.visual.is_some(),
         is_generated_door,
         is_corpse: map_object_is_corpse(&object),
+        has_corpse_model_metadata: map_object_has_corpse_model_metadata(&object),
         trigger_kind,
     }
 }
@@ -560,6 +573,10 @@ fn static_map_object_from_debug(object: &MapObjectDebugState) -> StaticMapObject
                 .payload_summary
                 .get("container_visual_id")
                 .is_some_and(|value| value.trim() == "corpse"),
+        has_corpse_model_metadata: object
+            .payload_summary
+            .get("corpse_character_id")
+            .is_some_and(|value| !value.trim().is_empty()),
         trigger_kind: object.payload_summary.get("trigger_kind").cloned(),
     }
 }
@@ -577,4 +594,13 @@ fn map_object_is_corpse(object: &MapObjectDefinition) -> bool {
             .as_ref()
             .and_then(|container| container.visual_id.as_deref())
             .is_some_and(|visual_id| visual_id.trim() == "corpse")
+}
+
+fn map_object_has_corpse_model_metadata(object: &MapObjectDefinition) -> bool {
+    object
+        .props
+        .extra
+        .get("corpse_character_id")
+        .and_then(|value| value.as_str())
+        .is_some_and(|value| !value.trim().is_empty())
 }

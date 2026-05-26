@@ -4,6 +4,7 @@ use super::*;
 use bevy::ecs::system::SystemParam;
 
 mod actors;
+mod corpses;
 mod doors;
 mod helpers;
 mod interaction_layout;
@@ -22,11 +23,13 @@ pub(crate) fn clear_world_visuals(
     mut static_world_state: ResMut<StaticWorldVisualState>,
     mut door_visual_state: ResMut<GeneratedDoorVisualState>,
     mut actor_visual_state: ResMut<ActorVisualState>,
+    mut corpse_visual_state: ResMut<CorpseVisualState>,
     mut mesh_pick_index: ResMut<crate::picking::ViewerMeshPickIndex>,
 ) {
     clear_static_world_entities(&mut commands, &mut static_world_state);
     clear_generated_door_entities(&mut commands, &mut door_visual_state);
     clear_actor_visual_entities(&mut commands, &mut actor_visual_state);
+    clear_corpse_visual_entities(&mut commands, &mut corpse_visual_state);
     mesh_pick_index.clear();
 }
 
@@ -52,10 +55,11 @@ pub(crate) fn sync_world_visuals(
     mut static_world_state: ResMut<StaticWorldVisualState>,
     mut door_visual_state: ResMut<GeneratedDoorVisualState>,
     mut actor_visual_state: ResMut<ActorVisualState>,
+    mut corpse_visual_state: ResMut<CorpseVisualState>,
     mut mesh_pick_index: ResMut<crate::picking::ViewerMeshPickIndex>,
     mut actor_visuals: Query<
         (Entity, &mut Transform, &ActorBodyVisual),
-        Without<GeneratedDoorPivot>,
+        (Without<GeneratedDoorPivot>, Without<CorpseBodyVisual>),
     >,
     mut actor_motion_anchors: Query<
         &mut Transform,
@@ -64,6 +68,7 @@ pub(crate) fn sync_world_visuals(
             Without<ActorBodyVisual>,
             Without<ActorModelGroundAnchor>,
             Without<GeneratedDoorPivot>,
+            Without<CorpseBodyVisual>,
         ),
     >,
     mut actor_model_ground_anchors: Query<
@@ -73,9 +78,17 @@ pub(crate) fn sync_world_visuals(
             Without<ActorBodyVisual>,
             Without<ActorMotionVisualAnchor>,
             Without<GeneratedDoorPivot>,
+            Without<CorpseBodyVisual>,
         ),
     >,
-    mut door_pivots: Query<&mut Transform, (With<GeneratedDoorPivot>, Without<ActorBodyVisual>)>,
+    mut door_pivots: Query<
+        &mut Transform,
+        (
+            With<GeneratedDoorPivot>,
+            Without<ActorBodyVisual>,
+            Without<CorpseBodyVisual>,
+        ),
+    >,
 ) {
     let snapshot = runtime_state.runtime.snapshot();
     let bounds = grid_bounds(&snapshot, viewer_state.current_level);
@@ -128,6 +141,20 @@ pub(crate) fn sync_world_visuals(
         &mut door_visual_state,
         &mut door_pivots,
         &mut mesh_pick_index,
+    );
+
+    corpses::sync_corpse_visuals(
+        &mut commands,
+        &asset_server,
+        &mut materials,
+        character_definitions.as_deref(),
+        item_definitions.as_deref(),
+        character_appearance_definitions.as_deref(),
+        &runtime_state,
+        &snapshot,
+        viewer_state.current_level,
+        *render_config,
+        &mut corpse_visual_state,
     );
 
     actors::sync_actor_visuals(
@@ -349,6 +376,19 @@ fn clear_generated_door_entities(
 fn clear_actor_visual_entities(commands: &mut Commands, actor_visual_state: &mut ActorVisualState) {
     for entity in actor_visual_state
         .by_actor
+        .drain()
+        .map(|(_, entry)| entry.root_entity)
+    {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn clear_corpse_visual_entities(
+    commands: &mut Commands,
+    corpse_visual_state: &mut CorpseVisualState,
+) {
+    for entity in corpse_visual_state
+        .by_object
         .drain()
         .map(|(_, entry)| entry.root_entity)
     {

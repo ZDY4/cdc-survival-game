@@ -51,6 +51,18 @@ pub(crate) struct ActorVisualEntry {
     pub appearance_key: RuntimeCharacterAppearanceKey,
 }
 
+#[derive(Resource, Default)]
+pub(crate) struct CorpseVisualState {
+    pub by_object: HashMap<String, CorpseVisualEntry>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CorpseVisualEntry {
+    pub root_entity: Entity,
+    pub grid: GridCoord,
+    pub appearance_key: RuntimeCharacterAppearanceKey,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FogOfWarMaskKey {
     pub map_id: Option<MapId>,

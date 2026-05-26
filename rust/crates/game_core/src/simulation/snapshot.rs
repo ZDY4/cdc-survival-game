@@ -136,6 +136,30 @@ impl Simulation {
                                     defeated_by_actor_id.to_string(),
                                 );
                             }
+                            if let Some(character_id) = object
+                                .props
+                                .extra
+                                .get("corpse_character_id")
+                                .and_then(|value| value.as_str())
+                                .map(str::trim)
+                                .filter(|value| !value.is_empty())
+                            {
+                                payload_summary.insert(
+                                    "corpse_character_id".to_string(),
+                                    character_id.to_string(),
+                                );
+                            }
+                            if let Some(equipped_slots) = object
+                                .props
+                                .extra
+                                .get("corpse_equipped_slots")
+                                .and_then(format_corpse_equipped_slots)
+                            {
+                                payload_summary.insert(
+                                    "corpse_equipped_slots".to_string(),
+                                    equipped_slots,
+                                );
+                            }
                         }
                         if let Some(interactive) = object.props.interactive.as_ref() {
                             payload_summary.insert(
@@ -573,4 +597,22 @@ impl Simulation {
         self.next_registration_index = snapshot.next_registration_index;
         self.events.clear();
     }
+}
+
+fn format_corpse_equipped_slots(value: &serde_json::Value) -> Option<String> {
+    let slots = value.as_object()?;
+    let formatted = slots
+        .iter()
+        .filter_map(|(slot, item_id)| {
+            let slot = slot.trim();
+            if slot.is_empty() {
+                return None;
+            }
+            item_id
+                .as_u64()
+                .filter(|item_id| *item_id > 0)
+                .map(|item_id| format!("{slot}:{item_id}"))
+        })
+        .collect::<Vec<_>>();
+    (!formatted.is_empty()).then(|| formatted.join(","))
 }

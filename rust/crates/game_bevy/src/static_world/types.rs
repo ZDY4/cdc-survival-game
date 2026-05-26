@@ -185,6 +185,7 @@ pub(crate) struct StaticMapObject {
     pub has_visual_placement: bool,
     pub is_generated_door: bool,
     pub is_corpse: bool,
+    pub has_corpse_model_metadata: bool,
     pub trigger_kind: Option<String>,
 }
 

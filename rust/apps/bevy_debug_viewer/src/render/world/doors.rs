@@ -16,7 +16,14 @@ pub(super) fn sync_generated_door_visuals(
     render_config: ViewerRenderConfig,
     palette: &ViewerPalette,
     door_visual_state: &mut GeneratedDoorVisualState,
-    door_pivots: &mut Query<&mut Transform, (With<GeneratedDoorPivot>, Without<ActorBodyVisual>)>,
+    door_pivots: &mut Query<
+        &mut Transform,
+        (
+            With<GeneratedDoorPivot>,
+            Without<ActorBodyVisual>,
+            Without<CorpseBodyVisual>,
+        ),
+    >,
     mesh_pick_index: &mut crate::picking::ViewerMeshPickIndex,
 ) {
     let next_key = GeneratedDoorVisualKey {

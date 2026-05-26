@@ -5,7 +5,7 @@ use game_data::{
     CharacterLootEntry, GridCoord, MapContainerItemEntry, MapContainerProps, MapInteractiveProps,
     MapObjectDefinition, MapObjectFootprint, MapObjectKind, MapObjectProps, MapRotation,
 };
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::movement::PendingProgressionStep;
 use crate::vision::{has_grid_line_of_sight, DEFAULT_VISION_RADIUS};
@@ -15,6 +15,8 @@ use tracing::{info, warn};
 
 const COMBAT_EXIT_NO_SIGHT_TURNS: u8 = 3;
 const CORPSE_CONTAINER_VISUAL_ID: &str = "corpse";
+const CORPSE_CHARACTER_ID_KEY: &str = "corpse_character_id";
+const CORPSE_EQUIPPED_SLOTS_KEY: &str = "corpse_equipped_slots";
 
 impl Simulation {
     pub fn perform_attack(
@@ -351,6 +353,11 @@ impl Simulation {
             .map(|actor| actor.display_name.trim())
             .filter(|name| !name.is_empty())
             .unwrap_or("未知角色");
+        let character_id = self
+            .actors
+            .get(target_actor)
+            .and_then(|actor| actor.definition_id.clone());
+        let equipped_slots = self.collect_corpse_equipped_slots(target_actor);
         let corpse_name = format!("{display_name}的尸体");
         let inventory = self.collect_corpse_inventory(target_actor);
         let item_count = inventory.values().copied().sum::<i32>();
@@ -373,6 +380,18 @@ impl Simulation {
             "defeated_by_actor_id".to_string(),
             Value::Number(actor_id.0.into()),
         );
+        if let Some(character_id) = character_id.as_ref() {
+            extra.insert(
+                CORPSE_CHARACTER_ID_KEY.to_string(),
+                Value::String(character_id.as_str().to_string()),
+            );
+        }
+        if !equipped_slots.is_empty() {
+            extra.insert(
+                CORPSE_EQUIPPED_SLOTS_KEY.to_string(),
+                corpse_equipped_slots_value(&equipped_slots),
+            );
+        }
 
         // 尸体只作为可交互容器保留在地图上，不继续承担角色、碰撞或战斗目标语义。
         self.grid_world.upsert_map_object(MapObjectDefinition {
@@ -394,7 +413,10 @@ impl Simulation {
                     display_name: corpse_name,
                     visual_id: Some(CORPSE_CONTAINER_VISUAL_ID.to_string()),
                     initial_inventory,
-                    extra: BTreeMap::new(),
+                    extra: corpse_container_extra(
+                        character_id.as_ref().map(|id| id.as_str()),
+                        &equipped_slots,
+                    ),
                 }),
                 extra,
                 ..MapObjectProps::default()
@@ -434,6 +456,19 @@ impl Simulation {
             }
         }
         inventory
+    }
+
+    fn collect_corpse_equipped_slots(&self, target_actor: ActorId) -> BTreeMap<String, u32> {
+        self.economy
+            .actor(target_actor)
+            .map(|actor_economy| {
+                actor_economy
+                    .equipped_slots
+                    .iter()
+                    .map(|(slot, equipped)| (slot.clone(), equipped.item_id))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn next_corpse_object_id(&self, target_actor: ActorId) -> String {
@@ -774,4 +809,33 @@ fn add_corpse_item(inventory: &mut BTreeMap<u32, i32>, item_id: u32, count: i32)
         return;
     }
     *inventory.entry(item_id).or_insert(0) += count;
+}
+
+fn corpse_container_extra(
+    character_id: Option<&str>,
+    equipped_slots: &BTreeMap<String, u32>,
+) -> BTreeMap<String, Value> {
+    let mut extra = BTreeMap::new();
+    if let Some(character_id) = character_id {
+        extra.insert(
+            CORPSE_CHARACTER_ID_KEY.to_string(),
+            Value::String(character_id.to_string()),
+        );
+    }
+    if !equipped_slots.is_empty() {
+        extra.insert(
+            CORPSE_EQUIPPED_SLOTS_KEY.to_string(),
+            corpse_equipped_slots_value(equipped_slots),
+        );
+    }
+    extra
+}
+
+fn corpse_equipped_slots_value(equipped_slots: &BTreeMap<String, u32>) -> Value {
+    Value::Object(
+        equipped_slots
+            .iter()
+            .map(|(slot, item_id)| (slot.clone(), Value::Number((*item_id).into())))
+            .collect::<Map<String, Value>>(),
+    )
 }

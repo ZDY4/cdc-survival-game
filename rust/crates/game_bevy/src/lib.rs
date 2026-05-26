@@ -37,11 +37,11 @@ pub use bootstrap::{
     RuntimeBootstrapBundle, RuntimeBootstrapError,
 };
 pub use character_preview::{
-    character_preview_is_available, parse_preview_color, resolve_runtime_character_preview,
-    runtime_actor_equipped_loadout, runtime_character_appearance_key,
-    spawn_character_preview_scene, sync_builtin_humanoid_mannequin_scene_system,
-    CharacterPreviewModelAsset, CharacterPreviewPart, CharacterPreviewRoot,
-    RuntimeCharacterAppearanceKey,
+    character_preview_is_available, parse_preview_color, resolve_character_preview_for_loadout,
+    resolve_runtime_character_preview, runtime_actor_equipped_loadout,
+    runtime_character_appearance_key, spawn_character_preview_scene,
+    sync_builtin_humanoid_mannequin_scene_system, CharacterPreviewModelAsset, CharacterPreviewPart,
+    CharacterPreviewRoot, RuntimeCharacterAppearanceKey,
 };
 pub use container_visuals::{ContainerVisualDefinition, ContainerVisualRegistry};
 pub use content::*;

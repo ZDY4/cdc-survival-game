@@ -317,6 +317,24 @@ pub fn resolve_runtime_character_preview(
     .ok()
 }
 
+pub fn resolve_character_preview_for_loadout(
+    definitions: &CharacterDefinitions,
+    items: &ItemDefinitions,
+    appearances: &CharacterAppearanceDefinitions,
+    definition_id: Option<&str>,
+    equipped_slots: &BTreeMap<String, u32>,
+) -> Option<ResolvedCharacterAppearancePreview> {
+    let definition_id = definition_id?;
+    build_character_appearance_preview(
+        &definitions.0,
+        &items.0,
+        &appearances.0,
+        &game_data::CharacterId(definition_id.to_string()),
+        equipped_slots,
+    )
+    .ok()
+}
+
 pub fn runtime_actor_equipped_loadout(
     runtime: &SimulationRuntime,
     actor_id: ActorId,
