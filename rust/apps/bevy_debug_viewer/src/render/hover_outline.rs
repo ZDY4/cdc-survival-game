@@ -84,15 +84,17 @@ pub(crate) fn sync_stable_interaction_hover(
 
 pub(crate) fn sync_hover_mesh_outlines(
     mut commands: Commands,
+    runtime_state: Res<ViewerRuntimeState>,
     palette: Res<ViewerPalette>,
     stable_hover: Res<StableInteractionHoverState>,
     members: Query<(Entity, &HoverOutlineMember, Option<&MeshOutline>)>,
 ) {
+    let snapshot = runtime_state.runtime.snapshot();
     let active_hover = stable_hover.active.as_ref();
     let active_target = active_hover.as_ref().map(|hovered| &hovered.semantic);
     let active_outline = active_hover
         .as_ref()
-        .map(|hovered| hover_mesh_outline(hover_outline_color(hovered, &palette)));
+        .map(|hovered| hover_mesh_outline(hover_outline_color(hovered, &palette, &snapshot)));
 
     for (entity, member, current_outline) in &members {
         let should_outline = active_target == Some(&member.target);
@@ -337,12 +339,35 @@ fn outline_kind_for_target(
     }
 }
 
-fn hover_outline_color(hovered: &ActiveInteractionHover, palette: &ViewerPalette) -> Color {
-    let base = match hovered.outline_kind {
-        HoveredGridOutlineKind::Neutral => palette.hover_walkable,
-        HoveredGridOutlineKind::Hostile => palette.hover_hostile,
+fn hover_outline_color(
+    hovered: &ActiveInteractionHover,
+    palette: &ViewerPalette,
+    snapshot: &game_core::SimulationSnapshot,
+) -> Color {
+    let base = match &hovered.semantic {
+        ViewerPickTarget::Actor(actor_id) => snapshot
+            .actors
+            .iter()
+            .find(|actor| actor.actor_id == *actor_id)
+            .map(|actor| hover_actor_outline_color(actor.side, palette))
+            .unwrap_or(palette.hover_walkable),
+        ViewerPickTarget::MapObject(_) | ViewerPickTarget::BuildingPart(_) => {
+            match hovered.outline_kind {
+                HoveredGridOutlineKind::Neutral => palette.hover_walkable,
+                HoveredGridOutlineKind::Hostile => palette.hover_hostile,
+            }
+        }
     };
     with_alpha(base, 0.98)
+}
+
+pub(super) fn hover_actor_outline_color(side: ActorSide, palette: &ViewerPalette) -> Color {
+    match side {
+        ActorSide::Player => palette.player,
+        ActorSide::Friendly => palette.friendly,
+        ActorSide::Hostile => palette.hover_hostile,
+        ActorSide::Neutral => palette.neutral,
+    }
 }
 
 fn refresh_preserved_hover(

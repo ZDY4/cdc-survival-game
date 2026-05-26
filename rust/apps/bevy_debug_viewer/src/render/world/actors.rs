@@ -223,6 +223,7 @@ fn actor_model_foot_min_y(base_model_asset: &str) -> f32 {
 }
 
 pub(crate) fn sync_actor_precise_pick_meshes(
+    mut commands: Commands,
     actor_visual_state: Res<ActorVisualState>,
     mut mesh_pick_index: ResMut<crate::picking::ViewerMeshPickIndex>,
     meshes: Res<Assets<Mesh>>,
@@ -231,20 +232,22 @@ pub(crate) fn sync_actor_precise_pick_meshes(
     mesh_query: Query<(Entity, &Mesh3d, &GlobalTransform)>,
 ) {
     for (root_entity, body) in &actor_roots {
-        if actor_visual_state
-            .by_actor
-            .get(&body.actor_id)
-            .map_or(true, |entry| entry.root_entity != root_entity)
-        {
+        let Some(entry) = actor_visual_state.by_actor.get(&body.actor_id) else {
+            mesh_pick_index.clear_precise_entity(root_entity);
+            continue;
+        };
+        if entry.root_entity != root_entity {
             mesh_pick_index.clear_precise_entity(root_entity);
             continue;
         }
 
-        // The fallback body proxy is registered by sync_actor_visuals. Clear only the previous
-        // frame's precise child meshes here so loaded glTF parts can move/update without growing
-        // duplicate pick instances or losing the fallback before assets are ready.
+        // 只索引真实角色模型的子 mesh；阴影和不可见拾取代理继续作为 fallback，
+        // 不参与 precise pick 或 MeshOutline，避免 hover 外形退化成代理盒。
         mesh_pick_index.clear_precise_entity(root_entity);
-        let mut stack = vec![root_entity];
+        let Some(model_ground_anchor_entity) = entry.model_ground_anchor_entity else {
+            continue;
+        };
+        let mut stack = vec![model_ground_anchor_entity];
         while let Some(entity) = stack.pop() {
             if let Ok(children) = children_query.get(entity) {
                 for child in children.iter() {
@@ -269,6 +272,11 @@ pub(crate) fn sync_actor_precise_pick_meshes(
                 transform,
                 ViewerPickBindingSpec::actor(body.actor_id),
             );
+            commands
+                .entity(entity)
+                .insert(HoverOutlineMember::new(ViewerPickTarget::Actor(
+                    body.actor_id,
+                )));
         }
     }
 }
@@ -331,7 +339,7 @@ fn spawn_actor_visual_root(
     let shadow_width = body_width * 1.55;
     let shadow_depth = body_depth * 1.7;
     let pick_binding = ViewerPickBindingSpec::actor(actor.actor_id);
-    let outline_member = HoverOutlineMember::new(ViewerPickTarget::Actor(actor.actor_id));
+    let outline_target = ViewerPickTarget::Actor(actor.actor_id);
     let pick_proxy_material = make_standard_material(
         materials,
         actor_color(actor.side, palette),
@@ -351,6 +359,9 @@ fn spawn_actor_visual_root(
                 actor.definition_id.as_ref().map(|id| id.as_str()),
             )
         });
+    let appearance_available = appearance_preview
+        .as_ref()
+        .is_some_and(game_bevy::character_preview_is_available);
 
     commands.entity(root_entity).with_children(|parent| {
         parent.spawn((
@@ -367,13 +378,15 @@ fn spawn_actor_visual_root(
     commands
         .entity(motion_anchor_entity)
         .with_children(|parent| {
-            parent.spawn((
+            let mut proxy = parent.spawn((
                 Mesh3d(meshes.add(Cuboid::new(body_width, body_height, body_depth))),
                 MeshMaterial3d(pick_proxy_material),
                 Transform::from_xyz(0.0, -render_config.actor_radius_world, 0.0),
                 pickable_target(pick_binding.into()),
-                outline_member,
             ));
+            if !appearance_available {
+                proxy.insert(HoverOutlineMember::new(outline_target.clone()));
+            }
         });
 
     let model_ground_anchor_entity = if let Some(preview) =

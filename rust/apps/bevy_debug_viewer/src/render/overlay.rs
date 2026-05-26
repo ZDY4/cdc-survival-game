@@ -4,6 +4,11 @@ use super::*;
 use bevy::log::{info, warn};
 use bevy::text::{Justify, LineBreak, TextLayout};
 
+const ACTOR_LABEL_FALLBACK_HEIGHT_PX: f32 = 22.0;
+const ACTOR_LABEL_SCREEN_GAP_PX: f32 = 5.0;
+const ACTOR_LABEL_FONT_SIZE_PX: f32 = 13.5;
+const ACTOR_LABEL_HORIZONTAL_PADDING_PX: f32 = 16.0;
+
 pub(crate) fn clear_actor_labels(
     mut commands: Commands,
     mut label_entities: ResMut<ActorLabelEntities>,
@@ -18,6 +23,7 @@ pub(crate) fn sync_actor_labels(
     runtime_state: Res<ViewerRuntimeState>,
     motion_state: Res<ViewerActorMotionState>,
     viewer_state: Res<ViewerState>,
+    picking_state: Res<crate::picking::ViewerPickingState>,
     info_panel_state: Res<ViewerInfoPanelState>,
     palette: Res<ViewerPalette>,
     render_config: Res<ViewerRenderConfig>,
@@ -30,6 +36,7 @@ pub(crate) fn sync_actor_labels(
         &mut Node,
         &mut TextColor,
         &mut Visibility,
+        Option<&ComputedNode>,
         Option<&InteractionLockedActorTag>,
         &ActorLabel,
     )>,
@@ -40,13 +47,18 @@ pub(crate) fn sync_actor_labels(
     let mut seen_actor_ids = HashSet::new();
     let hovered_actor_id = viewer_state
         .hovered_grid
-        .and_then(|grid| {
-            snapshot
-                .actors
-                .iter()
-                .find(|actor| actor.grid_position == grid)
-        })
-        .map(|actor| actor.actor_id);
+        .and_then(|_| picking_state_hovered_actor_id(&picking_state))
+        .or_else(|| {
+            viewer_state
+                .hovered_grid
+                .and_then(|grid| {
+                    snapshot
+                        .actors
+                        .iter()
+                        .find(|actor| actor.grid_position == grid)
+                })
+                .map(|actor| actor.actor_id)
+        });
     let current_actor_label_enabled =
         info_panel_state.active_page() == Some(ViewerHudPage::TurnSys);
 
@@ -87,6 +99,7 @@ pub(crate) fn sync_actor_labels(
                 mut node,
                 mut text_color,
                 mut visibility,
+                computed_node,
                 interaction_tag,
                 label_actor,
             )) = labels.get_mut(entity)
@@ -95,9 +108,14 @@ pub(crate) fn sync_actor_labels(
                     *text = Text::new(label);
                     *text_color = TextColor(color);
                     if let Ok(viewport_position) = viewport {
-                        node.left =
-                            px(viewport_position.x + render_config.label_screen_offset_px.x);
-                        node.top = px(viewport_position.y + render_config.label_screen_offset_px.y);
+                        let label_position = actor_label_screen_position(
+                            viewport_position,
+                            &text.0,
+                            *render_config,
+                            computed_node,
+                        );
+                        node.left = px(label_position.x);
+                        node.top = px(label_position.y);
                         *visibility = if should_show_label {
                             Visibility::Visible
                         } else {
@@ -125,14 +143,16 @@ pub(crate) fn sync_actor_labels(
         let mut visibility = Visibility::Hidden;
         if should_show_label {
             if let Ok(viewport_position) = viewport {
-                node.left = px(viewport_position.x + render_config.label_screen_offset_px.x);
-                node.top = px(viewport_position.y + render_config.label_screen_offset_px.y);
+                let label_position =
+                    actor_label_screen_position(viewport_position, &label, *render_config, None);
+                node.left = px(label_position.x);
+                node.top = px(label_position.y);
                 visibility = Visibility::Visible;
             }
         }
         let mut entity = commands.spawn((
             Text::new(label),
-            TextFont::from_font_size(13.5).with_font(viewer_font.0.clone()),
+            TextFont::from_font_size(ACTOR_LABEL_FONT_SIZE_PX).with_font(viewer_font.0.clone()),
             TextColor(color),
             node,
             BackgroundColor(palette.label_background),
@@ -159,6 +179,53 @@ pub(crate) fn sync_actor_labels(
             commands.entity(entity).despawn();
         }
     }
+}
+
+fn picking_state_hovered_actor_id(
+    picking_state: &crate::picking::ViewerPickingState,
+) -> Option<ActorId> {
+    match &picking_state.hovered.as_ref()?.semantic {
+        ViewerPickTarget::Actor(actor_id) => Some(*actor_id),
+        ViewerPickTarget::MapObject(_) | ViewerPickTarget::BuildingPart(_) => None,
+    }
+}
+
+fn actor_label_screen_position(
+    viewport_position: Vec2,
+    label: &str,
+    render_config: ViewerRenderConfig,
+    computed_node: Option<&ComputedNode>,
+) -> Vec2 {
+    let size = computed_node
+        .map(|node| node.size)
+        .filter(|size| size.x > 0.0 && size.y > 0.0)
+        .unwrap_or_else(|| {
+            Vec2::new(
+                estimated_actor_label_width(label),
+                ACTOR_LABEL_FALLBACK_HEIGHT_PX,
+            )
+        });
+    Vec2::new(
+        viewport_position.x - size.x * 0.5 + render_config.label_screen_offset_px.x,
+        viewport_position.y - size.y - ACTOR_LABEL_SCREEN_GAP_PX
+            + render_config.label_screen_offset_px.y,
+    )
+}
+
+fn estimated_actor_label_width(label: &str) -> f32 {
+    let units = label
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_whitespace() {
+                0.35
+            } else if ch.is_ascii() {
+                0.58
+            } else {
+                1.0
+            }
+        })
+        .sum::<f32>();
+    units * ACTOR_LABEL_FONT_SIZE_PX + ACTOR_LABEL_HORIZONTAL_PADDING_PX
 }
 
 fn actor_overlay_label(
