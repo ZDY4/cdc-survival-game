@@ -857,7 +857,7 @@ fn projected_shadow_cells_extend_forward_for_tall_occluder() {
         ViewerRenderConfig::default(),
     );
 
-    assert!(cells.contains(&GridCoord::new(0, 0, 0)));
+    assert!(!cells.contains(&GridCoord::new(0, 0, 0)));
     assert!(cells.contains(&GridCoord::new(0, 0, 1)));
     assert!(cells.contains(&GridCoord::new(0, 0, 2)));
 }
@@ -872,7 +872,7 @@ fn projected_shadow_cells_for_short_occluder_do_not_skip_extra_row() {
         ViewerRenderConfig::default(),
     );
 
-    assert!(cells.contains(&GridCoord::new(0, 0, 0)));
+    assert!(!cells.contains(&GridCoord::new(0, 0, 0)));
     assert!(cells.contains(&GridCoord::new(0, 0, 1)));
     assert!(!cells.contains(&GridCoord::new(0, 0, 2)));
 }
@@ -887,8 +887,8 @@ fn projected_shadow_cells_preserve_multi_cell_footprint() {
         ViewerRenderConfig::default(),
     );
 
-    assert!(cells.contains(&GridCoord::new(0, 0, 0)));
-    assert!(cells.contains(&GridCoord::new(1, 0, 0)));
+    assert!(!cells.contains(&GridCoord::new(0, 0, 0)));
+    assert!(!cells.contains(&GridCoord::new(1, 0, 0)));
     assert!(cells.contains(&GridCoord::new(0, 0, 1)));
     assert!(cells.contains(&GridCoord::new(1, 0, 1)));
 }
@@ -905,7 +905,7 @@ fn occluder_detects_visible_cells_from_projected_shadow() {
 }
 
 #[test]
-fn projected_shadow_includes_base_cells_visible_to_actor() {
+fn projected_shadow_excludes_base_cells_visible_to_actor() {
     let shadowed_visible_cells = project_shadowed_visible_cells(
         &[GridCoord::new(0, 0, 0)],
         0.0,
@@ -916,7 +916,7 @@ fn projected_shadow_includes_base_cells_visible_to_actor() {
     let occluder = sample_occluder(shadowed_visible_cells, Vec3::new(4.0, 0.5, 4.0));
     let visible = HashSet::from([GridCoord::new(0, 0, 0)]);
 
-    assert!(occluder_blocks_visible_cells(&occluder, &visible));
+    assert!(!occluder_blocks_visible_cells(&occluder, &visible));
 }
 
 #[test]

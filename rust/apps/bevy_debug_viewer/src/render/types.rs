@@ -62,7 +62,7 @@ pub(crate) struct StaticWorldOccluderVisual {
     pub base_alpha_mode: AlphaMode,
     pub aabb_center: Vec3,
     pub aabb_half_extents: Vec3,
-    // 当前相机角度下，该遮挡物屏幕投影会覆盖的格子；用于判断是否遮挡玩家视野。
+    // 当前相机角度下，该遮挡物后方投影会覆盖的格子；不包含遮挡物自身所在格。
     pub shadowed_visible_cells: Vec<GridCoord>,
     pub hover_map_object_id: Option<String>,
     pub currently_faded: bool,

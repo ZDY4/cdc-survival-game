@@ -204,11 +204,12 @@ pub(super) fn project_shadowed_visible_cells(
     grid_size: f32,
     render_config: ViewerRenderConfig,
 ) -> Vec<GridCoord> {
-    // 用相机 pitch/yaw 把遮挡物顶部向地面投影，得到“从当前视角会被挡住”的格子集合。
-    // game_core 视野会把阻挡视线的目标格本身算作可见，因此这里必须包含 base_cells。
+    // 用相机 pitch/yaw 把遮挡物顶部向地面投影，只返回遮挡物后方会被挡住的地面格。
+    // base_cells 是遮挡物自身所在格，不属于“被遮挡的可见格”，避免墙自身可见时误触发半透。
     if base_cells.is_empty() {
         return Vec::new();
     }
+    let base_cell_set = base_cells.iter().copied().collect::<HashSet<_>>();
 
     let pitch = render_config.camera_pitch_radians();
     let tan_pitch = pitch.tan();
@@ -218,21 +219,19 @@ pub(super) fn project_shadowed_visible_cells(
 
     let height = (top_y - floor_top).max(0.0);
     if height <= f32::EPSILON {
-        return base_cells.iter().copied().collect();
+        return Vec::new();
     }
 
     let projected_distance_cells = height / tan_pitch / grid_size.max(0.0001);
     let yaw = render_config.camera_yaw_radians();
     let direction = Vec2::new(-yaw.sin(), yaw.cos());
     if direction.length_squared() <= f32::EPSILON {
-        return base_cells.iter().copied().collect();
+        return Vec::new();
     }
     let direction = direction.normalize();
-    let mut shadowed = base_cells.iter().copied().collect::<HashSet<_>>();
+    let mut shadowed = HashSet::new();
     if projected_distance_cells <= 0.05 {
-        let mut shadowed = shadowed.into_iter().collect::<Vec<_>>();
-        shadowed.sort_unstable_by_key(|grid| (grid.y, grid.z, grid.x));
-        return shadowed;
+        return Vec::new();
     }
 
     let step = 0.2_f32;
@@ -263,6 +262,9 @@ pub(super) fn project_shadowed_visible_cells(
                 distance += step;
             }
         }
+    }
+    for base_cell in base_cell_set {
+        shadowed.remove(&base_cell);
     }
 
     let mut shadowed = shadowed.into_iter().collect::<Vec<_>>();
