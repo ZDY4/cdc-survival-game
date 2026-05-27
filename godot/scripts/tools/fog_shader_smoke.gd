@@ -1,6 +1,7 @@
 extends SceneTree
 
 const SHADER_PATH := "res://assets/shaders/fog_of_war_canvas.gdshader"
+const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
 
 
 func _init() -> void:
@@ -55,6 +56,7 @@ func _run() -> Array[String]:
 		errors.append("current mask texture uniform was not assigned")
 	if material.get_shader_parameter("previous_mask_texture") == null:
 		errors.append("previous mask texture uniform was not assigned")
+	_expect_overlay_controller(errors)
 	return errors
 
 
@@ -68,3 +70,34 @@ func _expect_parameter(errors: Array[String], material: ShaderMaterial, name: St
 	var actual: Variant = material.get_shader_parameter(name)
 	if actual != expected:
 		errors.append("shader parameter %s expected %s, got %s" % [name, expected, actual])
+
+
+func _expect_overlay_controller(errors: Array[String]) -> void:
+	var root := Control.new()
+	get_root().add_child(root)
+	var controller := FogOverlayController.new()
+	var map_snapshot := {"size": {"width": 4, "height": 3}}
+	var runtime_snapshot := {
+		"active_map_id": "smoke_map",
+		"vision": {
+			"actors": [{
+				"actor_id": 1,
+				"visible_cells": [{"x": 1, "y": 0, "z": 1}],
+				"explored_maps": [{
+					"map_id": "smoke_map",
+					"explored_cells": [{"x": 0, "y": 0, "z": 0}, {"x": 1, "y": 0, "z": 1}],
+				}],
+			}],
+		},
+	}
+	var overlay := controller.ensure_overlay(root, map_snapshot, runtime_snapshot)
+	if overlay == null:
+		errors.append("fog overlay controller did not create overlay")
+	elif overlay.material == null:
+		errors.append("fog overlay controller did not assign shader material")
+	var report: Dictionary = controller.update_overlay(map_snapshot, runtime_snapshot)
+	if not bool(report.get("ok", false)):
+		errors.append("fog overlay update failed: %s" % report.get("reason", "unknown"))
+	if controller.current_mask == null:
+		errors.append("fog overlay controller did not create current mask")
+	root.queue_free()

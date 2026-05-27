@@ -4,25 +4,18 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
-const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
-const DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
-const InventorySnapshot = preload("res://scripts/ui/snapshots/inventory_snapshot.gd")
-const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
-const ContainerSnapshot = preload("res://scripts/ui/snapshots/container_snapshot.gd")
-const JournalSnapshot = preload("res://scripts/ui/snapshots/journal_snapshot.gd")
+const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
+const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
-const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
-const DIALOGUE_PANEL_SCENE = preload("res://scenes/ui/dialogue_panel.tscn")
-const INVENTORY_PANEL_SCENE = preload("res://scenes/ui/inventory_panel.tscn")
-const TRADE_PANEL_SCENE = preload("res://scenes/ui/trade_panel.tscn")
-const CONTAINER_PANEL_SCENE = preload("res://scenes/ui/container_panel.tscn")
-const JOURNAL_PANEL_SCENE = preload("res://scenes/ui/journal_panel.tscn")
 
 var registry: ContentRegistry
 var simulation: RefCounted
 var world_result: Dictionary = {}
 var interaction_controller: RefCounted
+var panel_controller: RefCounted
+var fog_overlay_controller: RefCounted = FogOverlayController.new()
 var world_container: Node3D
+var fog_overlay: ColorRect
 var hud: Control
 var dialogue_panel: Control
 var inventory_panel: Control
@@ -52,63 +45,58 @@ func _ready() -> void:
 	interaction_controller = PlayerInteractionController.new(registry, simulation, world_result)
 	_setup_world_container()
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
-	_setup_hud()
-	_setup_dialogue_panel()
-	_setup_inventory_panel()
-	_setup_trade_panel()
-	_setup_container_panel()
-	_setup_journal_panel()
-	refresh_hud()
+	_refresh_fog_overlay()
+	_setup_panels()
+	refresh_all_panels()
+	print("Godot game root generated world: %s" % JSON.stringify(counts))
+
+
+func refresh_hud(selected_prompt: Dictionary = {}) -> void:
+	if panel_controller == null:
+		return
+	if selected_prompt.is_empty():
+		selected_prompt = current_interaction_prompt()
+	panel_controller.refresh_hud(selected_prompt)
+
+
+func refresh_dialogue_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.refresh_dialogue_panel()
+
+
+func refresh_inventory_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.refresh_inventory_panel()
+
+
+func refresh_trade_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.active_trade_target = active_trade_target
+	panel_controller.refresh_trade_panel()
+
+
+func refresh_container_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.refresh_container_panel()
+
+
+func refresh_journal_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.refresh_journal_panel()
+
+
+func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
+	refresh_hud(selected_prompt)
 	refresh_dialogue_panel()
 	refresh_inventory_panel()
 	refresh_trade_panel()
 	refresh_container_panel()
 	refresh_journal_panel()
-	print("Godot game root generated world: %s" % JSON.stringify(counts))
-
-
-func refresh_hud(selected_prompt: Dictionary = {}) -> void:
-	if hud == null or simulation == null:
-		return
-	if selected_prompt.is_empty():
-		selected_prompt = current_interaction_prompt()
-	var snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, selected_prompt)
-	hud.apply_snapshot(snapshot)
-
-
-func refresh_dialogue_panel() -> void:
-	if dialogue_panel == null or simulation == null:
-		return
-	var snapshot: Dictionary = DialogueSnapshot.new(registry).build(simulation.snapshot())
-	dialogue_panel.apply_snapshot(snapshot)
-
-
-func refresh_inventory_panel() -> void:
-	if inventory_panel == null or simulation == null:
-		return
-	var snapshot: Dictionary = InventorySnapshot.new(registry).build(simulation.snapshot())
-	inventory_panel.apply_snapshot(snapshot)
-
-
-func refresh_trade_panel() -> void:
-	if trade_panel == null or simulation == null:
-		return
-	var snapshot: Dictionary = TradeSnapshot.new(registry).build(simulation.snapshot(), active_trade_target)
-	trade_panel.apply_snapshot(snapshot)
-
-
-func refresh_container_panel() -> void:
-	if container_panel == null or simulation == null:
-		return
-	var snapshot: Dictionary = ContainerSnapshot.new(registry).build(simulation.snapshot())
-	container_panel.apply_snapshot(snapshot)
-
-
-func refresh_journal_panel() -> void:
-	if journal_panel == null or simulation == null:
-		return
-	var snapshot: Dictionary = JournalSnapshot.new(registry).build(simulation.snapshot())
-	journal_panel.apply_snapshot(snapshot)
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
@@ -145,18 +133,9 @@ func execute_primary_interaction() -> Dictionary:
 	# 地图切换或对象消费后需要重绘占位世界，保证 scene tree 与运行时快照一致。
 	_setup_world_container()
 	WorldSceneRenderer.new().render_world(world_container, world_result)
-	_setup_hud()
-	_setup_dialogue_panel()
-	_setup_inventory_panel()
-	_setup_trade_panel()
-	_setup_container_panel()
-	_setup_journal_panel()
-	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
-	refresh_dialogue_panel()
-	refresh_inventory_panel()
-	refresh_trade_panel()
-	refresh_container_panel()
-	refresh_journal_panel()
+	_refresh_fog_overlay()
+	_setup_panels()
+	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
 	return result
 
 
@@ -213,52 +192,25 @@ func _setup_world_container() -> void:
 	add_child(world_container)
 
 
-func _setup_hud() -> void:
-	if hud != null:
+func _refresh_fog_overlay() -> void:
+	if simulation == null or world_result.is_empty():
 		return
-	hud = HUD_SCENE.instantiate()
-	hud.name = "Hud"
-	add_child(hud)
+	fog_overlay = fog_overlay_controller.ensure_overlay(self, _dictionary_or_empty(world_result.get("map", {})), simulation.snapshot())
 
 
-func _setup_dialogue_panel() -> void:
-	if dialogue_panel != null:
-		return
-	dialogue_panel = DIALOGUE_PANEL_SCENE.instantiate()
-	dialogue_panel.name = "DialoguePanelRoot"
-	add_child(dialogue_panel)
-
-
-func _setup_inventory_panel() -> void:
-	if inventory_panel != null:
-		return
-	inventory_panel = INVENTORY_PANEL_SCENE.instantiate()
-	inventory_panel.name = "InventoryPanelRoot"
-	add_child(inventory_panel)
-
-
-func _setup_trade_panel() -> void:
-	if trade_panel != null:
-		return
-	trade_panel = TRADE_PANEL_SCENE.instantiate()
-	trade_panel.name = "TradePanelRoot"
-	add_child(trade_panel)
-
-
-func _setup_container_panel() -> void:
-	if container_panel != null:
-		return
-	container_panel = CONTAINER_PANEL_SCENE.instantiate()
-	container_panel.name = "ContainerPanelRoot"
-	add_child(container_panel)
-
-
-func _setup_journal_panel() -> void:
-	if journal_panel != null:
-		return
-	journal_panel = JOURNAL_PANEL_SCENE.instantiate()
-	journal_panel.name = "JournalPanelRoot"
-	add_child(journal_panel)
+func _setup_panels() -> void:
+	if panel_controller == null:
+		panel_controller = GamePanelController.new(self, registry, simulation, world_result)
+	panel_controller.update_world_result(world_result)
+	panel_controller.active_trade_target = active_trade_target
+	panel_controller.setup_panels()
+	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
+	hud = panel_controller.hud
+	dialogue_panel = panel_controller.dialogue_panel
+	inventory_panel = panel_controller.inventory_panel
+	trade_panel = panel_controller.trade_panel
+	container_panel = panel_controller.container_panel
+	journal_panel = panel_controller.journal_panel
 
 
 func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:

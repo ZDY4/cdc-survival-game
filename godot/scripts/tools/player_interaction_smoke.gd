@@ -34,6 +34,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["game root did not initialize simulation"]
 	if game_root.hud == null:
 		return ["game root did not initialize HUD"]
+	if game_root.fog_overlay == null:
+		return ["game root did not initialize fog overlay"]
+	if game_root.fog_overlay.material == null:
+		return ["fog overlay should use shader material"]
 
 	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
 	if pickup_node == null:
@@ -69,6 +73,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("door execution did not switch active map")
 	if not _hud_world_line(game_root).contains("survivor_outpost_01_interior"):
 		errors.append("HUD world line did not refresh after map transition")
+	if game_root.fog_overlay == null or game_root.fog_overlay.material == null:
+		errors.append("fog overlay did not survive map transition redraw")
 	return errors
 
 
