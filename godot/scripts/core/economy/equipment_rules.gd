@@ -1,5 +1,9 @@
 extends RefCounted
 
+const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+
+var _inventory_entries := InventoryEntries.new()
+
 
 func equip_item(actor: RefCounted, item_id: String, requested_slot: String, item_library: Dictionary) -> Dictionary:
 	if actor == null:
@@ -26,9 +30,9 @@ func equip_item(actor: RefCounted, item_id: String, requested_slot: String, item
 		}
 
 	var previous_item_id: String = str(actor.equipment.get(slot_id, ""))
-	_add_actor_item(actor, item_id, -1)
+	_inventory_entries.add_actor_item(actor, item_id, -1)
 	if not previous_item_id.is_empty():
-		_add_actor_item(actor, previous_item_id, 1)
+		_inventory_entries.add_actor_item(actor, previous_item_id, 1)
 	actor.equipment[slot_id] = item_id
 	return {
 		"success": true,
@@ -46,7 +50,7 @@ func unequip_item(actor: RefCounted, slot_id: String) -> Dictionary:
 	if item_id.is_empty():
 		return {"success": false, "reason": "empty_equipment_slot", "slot_id": normalized_slot}
 	actor.equipment.erase(normalized_slot)
-	_add_actor_item(actor, item_id, 1)
+	_inventory_entries.add_actor_item(actor, item_id, 1)
 	return {
 		"success": true,
 		"item_id": item_id,
@@ -88,14 +92,6 @@ func _fragment_by_kind(item: Dictionary, kind: String) -> Dictionary:
 		if str(fragment_data.get("kind", "")) == kind:
 			return fragment_data
 	return {}
-
-
-func _add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
-	var next_count: int = int(actor.inventory.get(item_id, 0)) + delta
-	if next_count <= 0:
-		actor.inventory.erase(item_id)
-	else:
-		actor.inventory[item_id] = next_count
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
