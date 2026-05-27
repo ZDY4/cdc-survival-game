@@ -15,6 +15,7 @@ var inventory: Dictionary = {}
 var equipment: Dictionary = {}
 var money: int = 0
 var active_dialogue_id: String = ""
+var active_dialogue_node_id: String = ""
 var active_container_id: String = ""
 var max_hp: float = 1.0
 var hp: float = 1.0
@@ -40,6 +41,7 @@ func to_dictionary() -> Dictionary:
 		"equipment": equipment,
 		"money": money,
 		"active_dialogue_id": active_dialogue_id,
+		"active_dialogue_node_id": active_dialogue_node_id,
 		"active_container_id": active_container_id,
 		"combat": {
 			"max_hp": max_hp,

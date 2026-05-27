@@ -25,16 +25,19 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var nodes: Array = dialogue_data.get("nodes", [])
 	var node_map: Dictionary = _nodes_by_id(nodes)
 	var start_node: Dictionary = _start_node(nodes)
-	var next_node: Dictionary = _dictionary_or_empty(node_map.get(str(start_node.get("next", "")), {}))
+	var current_node: Dictionary = _current_node(player, start_node, node_map)
+	var choice_node: Dictionary = current_node
+	if current_node.get("type", "") == "dialog":
+		choice_node = _dictionary_or_empty(node_map.get(str(current_node.get("next", "")), {}))
 
 	return {
 		"active": true,
 		"dialogue_id": dialogue_id,
-		"node_id": start_node.get("id", ""),
-		"speaker": start_node.get("speaker", ""),
-		"text": start_node.get("text", ""),
-		"portrait": start_node.get("portrait", ""),
-		"options": _options_from_node(next_node),
+		"node_id": current_node.get("id", ""),
+		"speaker": current_node.get("speaker", ""),
+		"text": current_node.get("text", ""),
+		"portrait": current_node.get("portrait", ""),
+		"options": _options_from_node(choice_node),
 	}
 
 
@@ -64,6 +67,13 @@ func _start_node(nodes: Array) -> Dictionary:
 	if not nodes.is_empty():
 		return _dictionary_or_empty(nodes[0])
 	return {}
+
+
+func _current_node(player: Dictionary, start_node: Dictionary, node_map: Dictionary) -> Dictionary:
+	var current_node_id: String = str(player.get("active_dialogue_node_id", ""))
+	if not current_node_id.is_empty() and node_map.has(current_node_id):
+		return _dictionary_or_empty(node_map[current_node_id])
+	return start_node
 
 
 func _options_from_node(node: Dictionary) -> Array[Dictionary]:

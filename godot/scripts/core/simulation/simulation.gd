@@ -41,6 +41,60 @@ func configure_quests(quests: Dictionary) -> void:
 	_start_available_quests()
 
 
+func start_quest(actor_id: int, quest_id: String) -> bool:
+	if actor_registry.get_actor(actor_id) == null:
+		return false
+	if quest_id.is_empty() or active_quests.has(quest_id) or completed_quests.has(quest_id):
+		return false
+	var quest_data: Dictionary = _quest_data(quest_id)
+	if quest_data.is_empty() or not _quest_prerequisites_completed(quest_data):
+		return false
+	_start_quest(quest_id, quest_data, actor_id)
+	_advance_active_quest(actor_id, quest_id)
+	return true
+
+
+func turn_in_quest(actor_id: int, quest_id: String) -> Dictionary:
+	if actor_registry.get_actor(actor_id) == null:
+		return {"success": false, "reason": "unknown_actor"}
+	if not active_quests.has(quest_id):
+		return {"success": false, "reason": "quest_not_active"}
+	var quest_data: Dictionary = _quest_data(quest_id)
+	var objective: Dictionary = _first_objective_node(quest_data)
+	if objective.is_empty() or not bool(objective.get("manual_turn_in", false)):
+		return {"success": false, "reason": "quest_not_waiting_for_turn_in"}
+	var state: Dictionary = _dictionary_or_empty(active_quests.get(quest_id, {}))
+	var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
+	var objective_id: String = str(objective.get("id", ""))
+	var target_count: int = max(1, int(objective.get("count", 1)))
+	var current: int = int(completed.get(objective_id, 0))
+	if current < target_count:
+		return {"success": false, "reason": "quest_objective_incomplete", "current": current, "target": target_count}
+
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var item_id: String = _normalize_content_id(objective.get("item_id", ""))
+	if not item_id.is_empty():
+		if int(actor.inventory.get(item_id, 0)) < target_count:
+			return {"success": false, "reason": "not_enough_items", "item_id": item_id, "required": target_count, "current": int(actor.inventory.get(item_id, 0))}
+		_add_actor_item(actor, item_id, -target_count)
+	_grant_quest_rewards(actor_id, quest_id, quest_data)
+	_complete_quest(actor_id, quest_id)
+	return {"success": true, "quest_id": quest_id}
+
+
+func unlock_location(location_id: String) -> bool:
+	var normalized_location_id: String = str(location_id)
+	if normalized_location_id.is_empty():
+		return false
+	if not unlocked_locations.has(normalized_location_id):
+		unlocked_locations.append(normalized_location_id)
+		_emit("location_unlocked", {
+			"location_id": normalized_location_id,
+		})
+		return true
+	return false
+
+
 func configure_shops(shops: Dictionary) -> void:
 	for shop_id in shops.keys():
 		var record: Dictionary = _dictionary_or_empty(shops[shop_id])
@@ -349,6 +403,35 @@ func record_enemy_defeated(actor_id: int, enemy_definition_id: String, enemy_kin
 	_advance_kill_quests(actor_id, enemy_definition_id, enemy_kind)
 
 
+func advance_dialogue(actor_id: int, option_ref: Variant, dialogue_library: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var dialogue_id: String = str(actor.active_dialogue_id)
+	if dialogue_id.is_empty():
+		return {"success": false, "reason": "dialogue_session_missing"}
+	var dialogue: Dictionary = _dialogue_data(dialogue_id, dialogue_library)
+	if dialogue.is_empty():
+		return {"success": false, "reason": "unknown_dialogue", "dialogue_id": dialogue_id}
+	var nodes: Dictionary = _dialogue_nodes_by_id(_array_or_empty(dialogue.get("nodes", [])))
+	var current_node_id: String = _active_dialogue_node_id(actor, dialogue)
+	var current_node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
+	if current_node.is_empty():
+		return {"success": false, "reason": "dialogue_node_missing", "node_id": current_node_id}
+	if str(current_node.get("type", "")) != "choice":
+		return {"success": false, "reason": "dialogue_choice_unavailable", "node_id": current_node_id}
+
+	var option: Dictionary = _resolve_dialogue_option(current_node, option_ref)
+	if option.is_empty():
+		return {"success": false, "reason": "dialogue_option_unavailable", "node_id": current_node_id}
+
+	var emitted_actions: Array[Dictionary] = []
+	var outcome: Dictionary = _advance_dialogue_to_node(actor_id, actor, dialogue_id, str(option.get("next", "")), nodes, emitted_actions)
+	outcome["selected_option"] = option
+	outcome["emitted_actions"] = emitted_actions
+	return outcome
+
+
 func query_interaction_options(actor_id: int, target: Dictionary) -> Dictionary:
 	if actor_registry.get_actor(actor_id) == null:
 		return _failed_prompt("unknown_actor")
@@ -580,6 +663,7 @@ func _execute_talk(actor_id: int, prompt: Dictionary, option: Dictionary) -> Dic
 
 	var dialogue_id: String = str(option.get("dialogue_id", ""))
 	actor.active_dialogue_id = dialogue_id
+	actor.active_dialogue_node_id = ""
 	_emit("dialogue_started", {
 		"actor_id": actor_id,
 		"dialogue_id": dialogue_id,
@@ -665,6 +749,165 @@ func _execute_scene_transition(actor_id: int, prompt: Dictionary, option: Dictio
 	}
 
 
+func _dialogue_data(dialogue_id: String, dialogue_library: Dictionary) -> Dictionary:
+	var record: Dictionary = _dictionary_or_empty(dialogue_library.get(dialogue_id, {}))
+	return _dictionary_or_empty(record.get("data", record))
+
+
+func _dialogue_nodes_by_id(nodes: Array) -> Dictionary:
+	var output: Dictionary = {}
+	for node in nodes:
+		var node_data: Dictionary = _dictionary_or_empty(node)
+		var node_id: String = str(node_data.get("id", ""))
+		if not node_id.is_empty():
+			output[node_id] = node_data
+	return output
+
+
+func _active_dialogue_node_id(actor: RefCounted, dialogue: Dictionary) -> String:
+	var current_node_id: String = str(actor.active_dialogue_node_id)
+	if not current_node_id.is_empty():
+		return current_node_id
+	var start_node: Dictionary = _dialogue_start_node(_array_or_empty(dialogue.get("nodes", [])))
+	var next_node_id: String = str(start_node.get("next", ""))
+	if next_node_id.is_empty():
+		return str(start_node.get("id", ""))
+	actor.active_dialogue_node_id = next_node_id
+	return next_node_id
+
+
+func _dialogue_start_node(nodes: Array) -> Dictionary:
+	for node in nodes:
+		var node_data: Dictionary = _dictionary_or_empty(node)
+		if bool(node_data.get("is_start", false)):
+			return node_data
+	if not nodes.is_empty():
+		return _dictionary_or_empty(nodes[0])
+	return {}
+
+
+func _resolve_dialogue_option(choice_node: Dictionary, option_ref: Variant) -> Dictionary:
+	var options: Array = _array_or_empty(choice_node.get("options", []))
+	if options.is_empty():
+		return {}
+	if typeof(option_ref) == TYPE_INT:
+		var index: int = int(option_ref)
+		if index >= 0 and index < options.size():
+			return _dictionary_or_empty(options[index])
+		if index > 0 and index <= options.size():
+			return _dictionary_or_empty(options[index - 1])
+	var option_key: String = str(option_ref).strip_edges()
+	if option_key.is_empty():
+		return _dictionary_or_empty(options[0])
+	if option_key.begins_with("choice_"):
+		var choice_index: int = int(option_key.trim_prefix("choice_")) - 1
+		if choice_index >= 0 and choice_index < options.size():
+			return _dictionary_or_empty(options[choice_index])
+	if option_key.is_valid_int():
+		var parsed: int = int(option_key)
+		if parsed > 0 and parsed <= options.size():
+			return _dictionary_or_empty(options[parsed - 1])
+		if parsed == 0:
+			return _dictionary_or_empty(options[0])
+	for option in options:
+		var option_data: Dictionary = _dictionary_or_empty(option)
+		if str(option_data.get("id", "")) == option_key:
+			return option_data
+		if str(option_data.get("next", "")) == option_key:
+			return option_data
+		if str(option_data.get("text", "")) == option_key:
+			return option_data
+	return {}
+
+
+func _advance_dialogue_to_node(actor_id: int, actor: RefCounted, dialogue_id: String, node_id: String, nodes: Dictionary, emitted_actions: Array[Dictionary]) -> Dictionary:
+	var current_node_id: String = node_id
+	while not current_node_id.is_empty():
+		var node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
+		if node.is_empty():
+			return {"success": false, "reason": "dialogue_node_missing", "node_id": current_node_id}
+		var node_type: String = str(node.get("type", ""))
+		match node_type:
+			"action":
+				for action in _array_or_empty(node.get("actions", [])):
+					var action_data: Dictionary = _dictionary_or_empty(action)
+					var action_result: Dictionary = _apply_dialogue_action(actor_id, action_data)
+					emitted_actions.append(action_result)
+				current_node_id = str(node.get("next", ""))
+			"dialog", "choice":
+				actor.active_dialogue_node_id = current_node_id
+				_emit("dialogue_advanced", {
+					"actor_id": actor_id,
+					"dialogue_id": dialogue_id,
+					"node_id": current_node_id,
+				})
+				return {
+					"success": true,
+					"dialogue_id": dialogue_id,
+					"node_id": current_node_id,
+					"finished": false,
+				}
+			"end":
+				var end_type: String = str(node.get("end_type", "leave"))
+				actor.active_dialogue_id = ""
+				actor.active_dialogue_node_id = ""
+				_emit("dialogue_finished", {
+					"actor_id": actor_id,
+					"dialogue_id": dialogue_id,
+					"node_id": current_node_id,
+					"end_type": end_type,
+				})
+				return {
+					"success": true,
+					"dialogue_id": dialogue_id,
+					"node_id": current_node_id,
+					"finished": true,
+					"end_type": end_type,
+				}
+			_:
+				return {"success": false, "reason": "dialogue_node_unsupported", "node_id": current_node_id, "node_type": node_type}
+
+	var actor_dialogue_id: String = str(actor.active_dialogue_id)
+	actor.active_dialogue_id = ""
+	actor.active_dialogue_node_id = ""
+	return {
+		"success": true,
+		"dialogue_id": actor_dialogue_id,
+		"finished": true,
+		"end_type": "leave",
+	}
+
+
+func _apply_dialogue_action(actor_id: int, action: Dictionary) -> Dictionary:
+	var action_type: String = str(action.get("type", action.get("action_type", "")))
+	match action_type:
+		"start_quest":
+			var quest_id: String = str(action.get("quest_id", action.get("questId", "")))
+			var started: bool = start_quest(actor_id, quest_id)
+			return {"type": action_type, "success": started, "quest_id": quest_id}
+		"turn_in_quest":
+			var quest_id: String = str(action.get("quest_id", action.get("questId", "")))
+			var result: Dictionary = turn_in_quest(actor_id, quest_id)
+			result["type"] = action_type
+			result["quest_id"] = quest_id
+			return result
+		"unlock_location":
+			var location_id: String = str(action.get("location_id", action.get("locationId", "")))
+			var unlocked: bool = unlock_location(location_id)
+			return {"type": action_type, "success": unlocked, "location_id": location_id}
+		"open_trade":
+			_emit("dialogue_trade_requested", {
+				"actor_id": actor_id,
+			})
+			return {"type": action_type, "success": true}
+		_:
+			_emit("dialogue_action_unsupported", {
+				"actor_id": actor_id,
+				"action_type": action_type,
+			})
+			return {"type": action_type, "success": false, "reason": "unsupported_dialogue_action"}
+
+
 func _failed_prompt(reason: String) -> Dictionary:
 	return {
 		"ok": false,
@@ -684,10 +927,11 @@ func _start_available_quests() -> void:
 			var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", {}))
 			if _quest_prerequisites_completed(quest_data):
 				_start_quest(quest_key, quest_data)
+				_advance_active_quest(1, quest_key)
 				started = true
 
 
-func _start_quest(quest_id: String, quest_data: Dictionary) -> void:
+func _start_quest(quest_id: String, quest_data: Dictionary, actor_id: int = 1) -> void:
 	var objective: Dictionary = _first_objective_node(quest_data)
 	active_quests[quest_id] = {
 		"quest_id": quest_id,
@@ -695,6 +939,7 @@ func _start_quest(quest_id: String, quest_data: Dictionary) -> void:
 		"completed_objectives": {},
 	}
 	_emit("quest_started", {
+		"actor_id": actor_id,
 		"quest_id": quest_id,
 		"title": quest_data.get("title", quest_id),
 	})
@@ -724,11 +969,11 @@ func _advance_collect_quests(actor_id: int, item_id: String, count: int) -> void
 			"current": current,
 			"target": target_count,
 		})
-		if current >= target_count and not bool(objective.get("manual_turn_in", false)):
+		if current >= target_count:
 			completed_now.append(str(quest_id))
 
 	for quest_id in completed_now:
-		_complete_quest(actor_id, quest_id)
+		_advance_active_quest(actor_id, quest_id)
 
 
 func _complete_quest(actor_id: int, quest_id: String) -> void:
@@ -741,6 +986,48 @@ func _complete_quest(actor_id: int, quest_id: String) -> void:
 		"quest_id": quest_id,
 	})
 	_start_available_quests()
+
+
+func _advance_active_quest(actor_id: int, quest_id: String) -> void:
+	var quest_data: Dictionary = _quest_data(quest_id)
+	if quest_data.is_empty() or not active_quests.has(quest_id):
+		return
+	var objective: Dictionary = _first_objective_node(quest_data)
+	if objective.is_empty():
+		return
+	var state: Dictionary = _dictionary_or_empty(active_quests.get(quest_id, {}))
+	var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
+	var objective_id: String = str(objective.get("id", ""))
+	var target_count: int = max(1, int(objective.get("count", 1)))
+	var current: int = int(completed.get(objective_id, 0))
+	if current < target_count:
+		return
+	if bool(objective.get("manual_turn_in", false)):
+		return
+	_grant_quest_rewards(actor_id, quest_id, quest_data)
+	_complete_quest(actor_id, quest_id)
+
+
+func _grant_quest_rewards(actor_id: int, quest_id: String, quest_data: Dictionary) -> void:
+	var reward_node: Dictionary = _first_reward_node(quest_data)
+	if reward_node.is_empty():
+		return
+	var rewards: Dictionary = _dictionary_or_empty(reward_node.get("rewards", {}))
+	for item in _array_or_empty(rewards.get("items", [])):
+		var item_data: Dictionary = _dictionary_or_empty(item)
+		var item_id: String = _normalize_content_id(item_data.get("id", item_data.get("item_id", "")))
+		var count: int = max(1, int(item_data.get("count", 1)))
+		if not item_id.is_empty():
+			var actor: RefCounted = actor_registry.get_actor(actor_id)
+			if actor != null:
+				_add_actor_item(actor, item_id, count)
+	if int(rewards.get("experience", 0)) > 0 or int(rewards.get("skill_points", 0)) > 0:
+		_emit("quest_reward_granted", {
+			"actor_id": actor_id,
+			"quest_id": quest_id,
+			"experience": int(rewards.get("experience", 0)),
+			"skill_points": int(rewards.get("skill_points", 0)),
+		})
 
 
 func _advance_kill_quests(actor_id: int, enemy_definition_id: String, enemy_kind: String) -> void:
@@ -768,11 +1055,11 @@ func _advance_kill_quests(actor_id: int, enemy_definition_id: String, enemy_kind
 			"current": current,
 			"target": target_count,
 		})
-		if current >= target_count and not bool(objective.get("manual_turn_in", false)):
+		if current >= target_count:
 			completed_now.append(str(quest_id))
 
 	for quest_id in completed_now:
-		_complete_quest(actor_id, quest_id)
+		_advance_active_quest(actor_id, quest_id)
 
 
 func _active_quest_snapshots() -> Array[Dictionary]:
@@ -837,6 +1124,16 @@ func _first_objective_node(quest_data: Dictionary) -> Dictionary:
 	for node_id in nodes.keys():
 		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
 		if node.get("type", "") == "objective":
+			return node
+	return {}
+
+
+func _first_reward_node(quest_data: Dictionary) -> Dictionary:
+	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
+	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
+	for node_id in nodes.keys():
+		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
+		if node.get("type", "") == "reward":
 			return node
 	return {}
 

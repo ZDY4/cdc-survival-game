@@ -171,6 +171,19 @@ func close_trade_panel() -> void:
 	refresh_trade_panel()
 
 
+func choose_dialogue_option(option_ref: Variant) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.advance_dialogue(1, option_ref, registry.get_library("dialogues"))
+	if bool(result.get("success", false)) and result.get("end_type", "") == "trade":
+		active_trade_target = _dialogue_trade_target()
+	refresh_dialogue_panel()
+	refresh_inventory_panel()
+	refresh_trade_panel()
+	refresh_journal_panel()
+	return result
+
+
 func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
@@ -260,6 +273,15 @@ func _update_trade_target_after_interaction(result: Dictionary, executed_target:
 		option_kind = str(option.get("kind", ""))
 	if option_kind == "talk" and executed_target.get("target_type", "") == "actor":
 		active_trade_target = executed_target.duplicate(true)
+
+
+func _dialogue_trade_target() -> Dictionary:
+	if active_trade_target.get("target_type", "") == "actor":
+		return active_trade_target.duplicate(true)
+	return {
+		"target_type": "actor",
+		"actor_id": 0,
+	}
 
 
 func _active_container_id() -> String:
