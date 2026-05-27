@@ -39,6 +39,8 @@ tmp/narrative_lab_regression_*/
 # Build artifacts
 *.pck
 *.wasm
+godot/.godot/
+godot/**/*.uid
 rust/target/
 tools/tauri_editor/node_modules/
 tools/tauri_editor/dist/

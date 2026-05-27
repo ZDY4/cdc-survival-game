@@ -38,6 +38,12 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Item <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Recipe <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Dialogue <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
 - `cargo run -p content_tools -- locate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate changed`
@@ -64,7 +70,16 @@
 
 ## Editor Handoff
 
-当修改已经完成，需要进入 Bevy editor 做可视化复核或手工精修时，统一使用：
+当修改已经完成，需要进入 Godot editor 做迁移期复核或手工精修时，优先使用：
+
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Item <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Recipe <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Dialogue <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
+
+旧 Bevy editor 对照入口：
 
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe <id>`
@@ -87,6 +102,8 @@ Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和
 
 当前 handoff 行为：
 
+- Godot `CDC Agent Handoff` dock 会写 `tmp/editor_handoff/godot_editor.session.json`
+- `open-godot-editor.ps1` 会写 `tmp/editor_handoff/godot_editor.navigation.json`
 - 若对应 editor 最近处于活跃状态，会优先复用现有实例
 - 脚本会把目标 id 写入 `tmp/editor_handoff/*.navigation.json`
 - editor 会读取 handoff 请求并切换到目标记录

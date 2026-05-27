@@ -40,6 +40,10 @@
 
 - `cargo check -p bevy_item_editor -p content_tools`
 
+如需进入 editor 复核或手工精修：
+
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Item <id>`
+
 ## Output Expectations
 
 - 修改了哪些字段

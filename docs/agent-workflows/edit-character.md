@@ -41,7 +41,8 @@
 
 如需进入 editor 复核或手工精修：
 
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>` 仅作为旧 Bevy 对照
 
 ## Output Expectations
 
