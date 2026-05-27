@@ -58,6 +58,8 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"target_type": "map_object",
 		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
 	})
+	simulation.take_item_from_container(1, "survivor_outpost_01_clinic_supply_cabinet", "1031", 1, registry.get_library("items"))
+	simulation.store_item_in_container(1, "survivor_outpost_01_clinic_supply_cabinet", "1008", 1, registry.get_library("items"))
 	simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))
@@ -100,7 +102,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	for key in ["active_map_id", "consumed_interaction_targets", "completed_quests"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
-	if JSON.stringify(restored.get("container_sessions")) != JSON.stringify(original.get("container_sessions")):
+	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
 		errors.append("container sessions did not roundtrip")
 	if JSON.stringify(restored.get("shop_sessions")) != JSON.stringify(original.get("shop_sessions")):
 		errors.append("shop sessions did not roundtrip")
@@ -110,6 +112,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	var player_restored: Dictionary = _player_actor(restored)
 	if _inventory_count(player_restored, "1006") != _inventory_count(player_original, "1006"):
 		errors.append("player inventory did not roundtrip")
+	if _inventory_count(player_restored, "1031") != 1:
+		errors.append("taken container item did not roundtrip in player inventory")
 	if JSON.stringify(player_restored.get("equipment", {})) != JSON.stringify(player_original.get("equipment", {})):
 		errors.append("player equipment did not roundtrip")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
@@ -118,6 +122,10 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player active container did not roundtrip")
 	if int(player_restored.get("money", 0)) != int(player_original.get("money", 0)):
 		errors.append("player money did not roundtrip")
+	if _container_count(restored, "survivor_outpost_01_clinic_supply_cabinet", "1008") != 1:
+		errors.append("stored player item did not roundtrip in container")
+	if _container_count(restored, "survivor_outpost_01_clinic_supply_cabinet", "1031") != 0:
+		errors.append("taken container item still appeared in restored container")
 	if _active_quest_ids(restored) != _active_quest_ids(original):
 		errors.append("active quests did not roundtrip")
 	if restored.get("events", []).size() != original.get("events", []).size():
@@ -144,6 +152,51 @@ func _active_quest_ids(snapshot: Dictionary) -> Array[String]:
 func _inventory_count(actor: Dictionary, item_id: String) -> int:
 	var inventory: Dictionary = actor.get("inventory", {})
 	return int(inventory.get(item_id, 0))
+
+
+func _container_count(snapshot: Dictionary, container_id: String, item_id: String) -> int:
+	for container in snapshot.get("container_sessions", []):
+		var container_data: Dictionary = container
+		if str(container_data.get("container_id", "")) != container_id:
+			continue
+		for entry in container_data.get("inventory", []):
+			var entry_data: Dictionary = entry
+			if str(entry_data.get("item_id", "")) == item_id:
+				return int(entry_data.get("count", 0))
+	return 0
+
+
+func _normalized_container_sessions(snapshot: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for container in snapshot.get("container_sessions", []):
+		var container_data: Dictionary = container
+		output.append({
+			"container_id": str(container_data.get("container_id", "")),
+			"display_name": str(container_data.get("display_name", "")),
+			"inventory": _normalized_inventory_entries(container_data.get("inventory", [])),
+		})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("container_id", "")) < str(b.get("container_id", ""))
+	)
+	return output
+
+
+func _normalized_inventory_entries(entries: Array) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in entries:
+		var entry_data: Dictionary = entry
+		var item_id: String = str(entry_data.get("item_id", ""))
+		var count: int = int(entry_data.get("count", 0))
+		if item_id.is_empty() or count <= 0:
+			continue
+		output.append({
+			"item_id": item_id,
+			"count": count,
+		})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("item_id", "")) < str(b.get("item_id", ""))
+	)
+	return output
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:

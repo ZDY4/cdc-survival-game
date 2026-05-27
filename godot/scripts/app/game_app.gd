@@ -8,12 +8,14 @@ const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
 const DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
 const InventorySnapshot = preload("res://scripts/ui/snapshots/inventory_snapshot.gd")
 const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
+const ContainerSnapshot = preload("res://scripts/ui/snapshots/container_snapshot.gd")
 const JournalSnapshot = preload("res://scripts/ui/snapshots/journal_snapshot.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 const DIALOGUE_PANEL_SCENE = preload("res://scenes/ui/dialogue_panel.tscn")
 const INVENTORY_PANEL_SCENE = preload("res://scenes/ui/inventory_panel.tscn")
 const TRADE_PANEL_SCENE = preload("res://scenes/ui/trade_panel.tscn")
+const CONTAINER_PANEL_SCENE = preload("res://scenes/ui/container_panel.tscn")
 const JOURNAL_PANEL_SCENE = preload("res://scenes/ui/journal_panel.tscn")
 
 var registry: ContentRegistry
@@ -25,6 +27,7 @@ var hud: Control
 var dialogue_panel: Control
 var inventory_panel: Control
 var trade_panel: Control
+var container_panel: Control
 var journal_panel: Control
 var active_trade_target: Dictionary = {}
 
@@ -53,11 +56,13 @@ func _ready() -> void:
 	_setup_dialogue_panel()
 	_setup_inventory_panel()
 	_setup_trade_panel()
+	_setup_container_panel()
 	_setup_journal_panel()
 	refresh_hud()
 	refresh_dialogue_panel()
 	refresh_inventory_panel()
 	refresh_trade_panel()
+	refresh_container_panel()
 	refresh_journal_panel()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
 
@@ -90,6 +95,13 @@ func refresh_trade_panel() -> void:
 		return
 	var snapshot: Dictionary = TradeSnapshot.new(registry).build(simulation.snapshot(), active_trade_target)
 	trade_panel.apply_snapshot(snapshot)
+
+
+func refresh_container_panel() -> void:
+	if container_panel == null or simulation == null:
+		return
+	var snapshot: Dictionary = ContainerSnapshot.new(registry).build(simulation.snapshot())
+	container_panel.apply_snapshot(snapshot)
 
 
 func refresh_journal_panel() -> void:
@@ -137,11 +149,13 @@ func execute_primary_interaction() -> Dictionary:
 	_setup_dialogue_panel()
 	_setup_inventory_panel()
 	_setup_trade_panel()
+	_setup_container_panel()
 	_setup_journal_panel()
 	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	refresh_dialogue_panel()
 	refresh_inventory_panel()
 	refresh_trade_panel()
+	refresh_container_panel()
 	refresh_journal_panel()
 	return result
 
@@ -155,6 +169,27 @@ func current_interaction_prompt() -> Dictionary:
 func close_trade_panel() -> void:
 	active_trade_target = {}
 	refresh_trade_panel()
+
+
+func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
+	var container_id: String = _active_container_id()
+	if container_id.is_empty():
+		return {"success": false, "reason": "active_container_missing"}
+	var result: Dictionary = simulation.take_item_from_container(1, container_id, item_id, count, registry.get_library("items"))
+	refresh_inventory_panel()
+	refresh_container_panel()
+	refresh_journal_panel()
+	return result
+
+
+func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
+	var container_id: String = _active_container_id()
+	if container_id.is_empty():
+		return {"success": false, "reason": "active_container_missing"}
+	var result: Dictionary = simulation.store_item_in_container(1, container_id, item_id, count, registry.get_library("items"))
+	refresh_inventory_panel()
+	refresh_container_panel()
+	return result
 
 
 func _setup_world_container() -> void:
@@ -197,6 +232,14 @@ func _setup_trade_panel() -> void:
 	add_child(trade_panel)
 
 
+func _setup_container_panel() -> void:
+	if container_panel != null:
+		return
+	container_panel = CONTAINER_PANEL_SCENE.instantiate()
+	container_panel.name = "ContainerPanelRoot"
+	add_child(container_panel)
+
+
 func _setup_journal_panel() -> void:
 	if journal_panel != null:
 		return
@@ -217,6 +260,17 @@ func _update_trade_target_after_interaction(result: Dictionary, executed_target:
 		option_kind = str(option.get("kind", ""))
 	if option_kind == "talk" and executed_target.get("target_type", "") == "actor":
 		active_trade_target = executed_target.duplicate(true)
+
+
+func _active_container_id() -> String:
+	if simulation == null:
+		return ""
+	var snapshot: Dictionary = simulation.snapshot()
+	for actor in snapshot.get("actors", []):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if actor_data.get("kind", "") == "player":
+			return str(actor_data.get("active_container_id", ""))
+	return ""
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

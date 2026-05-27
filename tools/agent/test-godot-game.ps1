@@ -37,6 +37,7 @@ param(
         "UI",
         "DialogueUI",
         "InventoryUI",
+        "ContainerUI",
         "JournalUI",
         "TradeUI",
         "Quest",
@@ -72,6 +73,7 @@ $scenarioScripts = [ordered]@{
     UI                = "res://scripts/tools/ui_smoke.gd"
     DialogueUI        = "res://scripts/tools/dialogue_ui_smoke.gd"
     InventoryUI       = "res://scripts/tools/inventory_ui_smoke.gd"
+    ContainerUI       = "res://scripts/tools/container_ui_smoke.gd"
     JournalUI         = "res://scripts/tools/journal_ui_smoke.gd"
     TradeUI           = "res://scripts/tools/trade_ui_smoke.gd"
     Quest             = "res://scripts/tools/quest_smoke.gd"
