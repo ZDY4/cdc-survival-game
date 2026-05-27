@@ -5,6 +5,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentCliDomains = preload("res://scripts/tools/content_cli_domains.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
+const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 
 
 func _init() -> void:
@@ -274,50 +275,8 @@ func _diff_summary_command(args: Array[String]) -> int:
 
 
 func _print_summary(domain: String, id_value: String, record: Dictionary) -> void:
-	var data: Dictionary = record["data"]
-	print("kind: %s" % _singular_domain(domain))
-	print("id: %s" % id_value)
-	print("relative_path: %s" % _repo_relative_path(str(record.get("path", ""))))
-	match domain:
-		"items":
-			print("name: %s" % data.get("name", ""))
-			print("value: %d" % int(data.get("value", 0)))
-			print("weight: %.2f" % float(data.get("weight", 0.0)))
-			var fragment_kinds: Array[String] = []
-			for fragment in data.get("fragments", []):
-				var fragment_data: Dictionary = _dictionary_or_empty(fragment)
-				fragment_kinds.append(str(fragment_data.get("kind", "")))
-			print("fragment_count: %d" % fragment_kinds.size())
-			print("fragment_kinds: %s" % _join_or_dash(fragment_kinds))
-		"recipes":
-			var output: Dictionary = _dictionary_or_empty(data.get("output", {}))
-			print("name: %s" % data.get("name", ""))
-			print("output_item_id: %s" % ContentRegistry.normalize_content_id(output.get("item_id", "")))
-			print("output_count: %d" % int(output.get("count", 0)))
-			print("materials_count: %d" % data.get("materials", []).size())
-			print("required_tools_count: %d" % data.get("required_tools", []).size())
-			print("optional_tools_count: %d" % data.get("optional_tools", []).size())
-		"characters":
-			var identity: Dictionary = _dictionary_or_empty(data.get("identity", {}))
-			var faction: Dictionary = _dictionary_or_empty(data.get("faction", {}))
-			var combat: Dictionary = _dictionary_or_empty(data.get("combat", {}))
-			var progression: Dictionary = _dictionary_or_empty(data.get("progression", {}))
-			print("display_name: %s" % identity.get("display_name", ""))
-			print("archetype: %s" % data.get("archetype", ""))
-			print("camp_id: %s" % faction.get("camp_id", ""))
-			print("disposition: %s" % faction.get("disposition", ""))
-			print("behavior: %s" % combat.get("behavior", ""))
-			print("level: %d" % int(progression.get("level", 0)))
-			print("loot_entries: %d" % combat.get("loot", []).size())
-		"maps":
-			var size: Dictionary = _dictionary_or_empty(data.get("size", {}))
-			print("name: %s" % data.get("name", ""))
-			print("size: %dx%d" % [int(size.get("width", 0)), int(size.get("height", 0))])
-			print("default_level: %d" % int(data.get("default_level", 0)))
-			print("level_count: %d" % data.get("levels", []).size())
-			print("entry_points: %d" % data.get("entry_points", []).size())
-			print("objects: %d" % data.get("objects", []).size())
-			print("object_kinds: %s" % _map_object_kind_counts(data))
+	var presenter: ContentSummaryPresenter = ContentSummaryPresenter.new()
+	presenter.print_summary(domain, id_value, record, _repo_relative_path(str(record.get("path", ""))))
 
 
 func _print_references(kind: String, id_value: String, path: String, hits: Array[Dictionary]) -> void:
@@ -356,19 +315,6 @@ func _print_validation(kind: String, domain: String, id_value: String, record: D
 			data.get("field", "$"),
 		])
 	return 0 if bool(validation.get("ok", false)) else 2
-
-
-func _map_object_kind_counts(data: Dictionary) -> String:
-	var counts: Dictionary = {}
-	for object in data.get("objects", []):
-		var object_data: Dictionary = _dictionary_or_empty(object)
-		var kind: String = str(object_data.get("kind", ""))
-		counts[kind] = int(counts.get(kind, 0)) + 1
-	var parts: Array[String] = []
-	for kind in counts.keys():
-		parts.append("%s=%d" % [kind, int(counts[kind])])
-	parts.sort()
-	return _join_or_dash(parts)
 
 
 func _format_record(domain: String, id_value: String, record: Dictionary) -> Dictionary:
@@ -614,12 +560,6 @@ func _singular_domain(domain: String) -> String:
 			return "settlement"
 		_:
 			return domain
-
-
-func _join_or_dash(values: Array[String]) -> String:
-	if values.is_empty():
-		return "-"
-	return ", ".join(values)
 
 
 func _repo_relative_path(path: String) -> String:

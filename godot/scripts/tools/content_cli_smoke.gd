@@ -3,6 +3,7 @@ extends SceneTree
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
+const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 
 
 func _init() -> void:
@@ -50,6 +51,7 @@ func _run() -> Array[String]:
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_format_domain_support(errors, registry)
+	_expect_summary_domains(errors, registry)
 	return errors
 
 
@@ -166,6 +168,34 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		var record: Dictionary = registry.get_library(domain).get(relative_path.get_file().get_basename(), {})
 		if record.is_empty():
 			errors.append("format support smoke missing fixture for %s @ %s" % [domain, relative_path])
+
+
+func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -> void:
+	var presenter: ContentSummaryPresenter = ContentSummaryPresenter.new()
+	var cases := [
+		{"domain": "dialogues", "id": "trader_lao_wang_intro", "expected": "action_types: open_trade, start_quest"},
+		{"domain": "quests", "id": "tutorial_survive", "expected": "node_types: end=1, objective=1, reward=1, start=1"},
+		{"domain": "skills", "id": "survival", "expected": "activation_mode: passive"},
+		{"domain": "skill_trees", "id": "survival", "expected": "skill_count: 4"},
+		{"domain": "settlements", "id": "survivor_outpost_01_settlement", "expected": "smart_objects: 13"},
+		{"domain": "overworld", "id": "main_overworld", "expected": "locations: 12"},
+	]
+	for test_case in cases:
+		var domain := str(test_case["domain"])
+		var id_value := str(test_case["id"])
+		var record: Dictionary = registry.get_library(domain).get(id_value, {})
+		var output := "\n".join(presenter.summary_lines(domain, id_value, record, _repo_relative_path(str(record.get("path", "")))))
+		if not output.contains(str(test_case["expected"])):
+			errors.append("summary for %s %s missing '%s': %s" % [domain, id_value, test_case["expected"], output])
+
+
+func _repo_relative_path(path: String) -> String:
+	var relative_path := path.replace("\\", "/")
+	var marker := "/data/"
+	var index := relative_path.find(marker)
+	if index >= 0:
+		return relative_path.substr(index + 1)
+	return relative_path
 
 
 func _registry_with_override(registry: ContentRegistry, domain: String, id_value: String, record: Dictionary) -> ContentRegistry:
