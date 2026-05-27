@@ -3,6 +3,7 @@ extends SceneTree
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
+const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 
 
 func _init() -> void:
@@ -22,7 +23,7 @@ func _init() -> void:
 			if registry == null:
 				quit(1)
 				return
-			exit_code = _validate_command(args)
+			exit_code = _validate_command(args, registry)
 		"locate":
 			var registry: ContentRegistry = _load_registry_or_null()
 			if registry == null:
@@ -77,15 +78,48 @@ func _load_registry_or_null() -> ContentRegistry:
 	return registry
 
 
-func _validate_command(args: Array[String]) -> int:
+func _validate_command(args: Array[String], registry: ContentRegistry) -> int:
 	if args.size() == 2 and args[1] == "changed":
-		print("validate changed: Godot migration loader currently validates all migrated content domains")
-		return 0
+		return _validate_changed_command(registry)
 	if args.size() == 3:
-		print("validate %s %s: ok" % [args[1], args[2]])
-		return 0
+		var domain := _normalize_domain(args[1])
+		var id_value := ContentRegistry.normalize_content_id(args[2])
+		var record: Dictionary = registry.get_library(domain).get(id_value, {})
+		if record.is_empty():
+			printerr("not found: %s %s" % [args[1], id_value])
+			return 1
+		return _print_validation(args[1], domain, id_value, record, registry)
 	printerr(_usage())
 	return 2
+
+
+func _validate_changed_command(registry: ContentRegistry) -> int:
+	var validator: ContentRecordValidator = ContentRecordValidator.new()
+	var checked_records := 0
+	var invalid_records := 0
+	print("mode: validate_changed")
+	print("domains: item, recipe, character, map")
+	for domain in ["items", "recipes", "characters", "maps"]:
+		for id_value in registry.get_library(domain).keys():
+			var id_string := str(id_value)
+			var record: Dictionary = registry.get_library(domain).get(id_string, {})
+			var validation := validator.validate_record(domain, id_string, registry)
+			checked_records += 1
+			if not bool(validation.get("ok", false)):
+				invalid_records += 1
+				print("- [%s] %s @ %s" % [_singular_domain(domain), id_string, _repo_relative_path(str(record.get("path", "")))])
+				for issue in validation.get("issues", []):
+					var data: Dictionary = _dictionary_or_empty(issue)
+					print("  - [%s] %s: %s (%s)" % [
+						data.get("severity", "error"),
+						data.get("code", "validation_error"),
+						data.get("message", ""),
+						data.get("field", "$"),
+					])
+	print("checked_records: %d" % checked_records)
+	print("invalid_records: %d" % invalid_records)
+	print("status: %s" % ("ok" if invalid_records == 0 else "invalid"))
+	return 0 if invalid_records == 0 else 2
 
 
 func _locate_command(args: Array[String], registry: ContentRegistry) -> int:
@@ -300,6 +334,27 @@ func _print_references(kind: String, id_value: String, path: String, hits: Array
 			_repo_relative_path(str(hit.get("path", ""))),
 			hit.get("detail", ""),
 		])
+
+
+func _print_validation(kind: String, domain: String, id_value: String, record: Dictionary, registry: ContentRegistry) -> int:
+	var validator: ContentRecordValidator = ContentRecordValidator.new()
+	var validation := validator.validate_record(domain, id_value, registry)
+	var issues: Array = validation.get("issues", [])
+	print("kind: %s" % _singular_domain(domain))
+	print("id: %s" % id_value)
+	print("relative_path: %s" % _repo_relative_path(str(record.get("path", ""))))
+	print("status: %s" % validation.get("status", "invalid"))
+	if not validator.supports_domain(domain):
+		print("- [warning] shallow_validation: validate currently checks existence only for %s" % kind)
+	for issue in issues:
+		var data: Dictionary = _dictionary_or_empty(issue)
+		print("- [%s] %s: %s (%s)" % [
+			data.get("severity", "error"),
+			data.get("code", "validation_error"),
+			data.get("message", ""),
+			data.get("field", "$"),
+		])
+	return 0 if bool(validation.get("ok", false)) else 2
 
 
 func _map_object_kind_counts(data: Dictionary) -> String:

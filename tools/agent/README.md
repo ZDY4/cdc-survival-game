@@ -152,7 +152,8 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 行为：
 
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`。
-- 当前覆盖 `locate` / `summarize` / `references` / `validate changed` / `format` / `format changed` / `diff-summary`。
+- 当前覆盖 `locate` / `summarize` / `references` / `validate` / `validate changed` / `format` / `format changed` / `diff-summary`。
+- `validate` 对 `item` / `recipe` / `character` / `map` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容。
 - `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `settlement` / `overworld` / `map`，用于替代旧 `content_tools` 的常用引用查询。
 - `format` 只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
 
