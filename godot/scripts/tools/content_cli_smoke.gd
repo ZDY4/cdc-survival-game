@@ -47,9 +47,13 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "quests", "tutorial_survive")
 	_expect_valid_record(errors, registry, "skills", "survival")
 	_expect_valid_record(errors, registry, "skill_trees", "survival")
+	_expect_valid_record(errors, registry, "settlements", "survivor_outpost_01_settlement")
+	_expect_valid_record(errors, registry, "overworld", "main_overworld")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
+	_expect_invalid_settlement_anchor(errors, registry)
+	_expect_invalid_overworld_entry(errors, registry)
 	_expect_format_domain_support(errors, registry)
 	_expect_summary_domains(errors, registry)
 	return errors
@@ -74,7 +78,7 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld"]:
 		for id_value in registry.get_library(domain).keys():
 			var validation := validator.validate_record(domain, str(id_value), registry)
 			checked += 1
@@ -137,6 +141,54 @@ func _expect_invalid_dialogue_ref(errors: Array[String], registry: ContentRegist
 						errors.append("invalid dialogue reference smoke did not report unknown_quest: %s" % validation.get("issues", []))
 					return
 	errors.append("dialogue validation smoke could not find start_quest action")
+
+
+func _expect_invalid_settlement_anchor(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("settlements").get("survivor_outpost_01_settlement", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing survivor_outpost_01_settlement fixture for settlement validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var smart_objects: Array = data.get("smart_objects", []).duplicate(true)
+	if smart_objects.is_empty():
+		errors.append("settlement validation smoke missing smart object fixture")
+		return
+	var smart_object: Dictionary = smart_objects[0].duplicate(true)
+	smart_object["anchor_id"] = "missing_anchor_for_validator_smoke"
+	smart_objects[0] = smart_object
+	data["smart_objects"] = smart_objects
+	source["data"] = data
+	var validator: ContentRecordValidator = ContentRecordValidator.new()
+	var validation := validator.validate_record("settlements", "survivor_outpost_01_settlement", _registry_with_override(registry, "settlements", "survivor_outpost_01_settlement", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid settlement anchor smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_anchor"):
+		errors.append("invalid settlement anchor smoke did not report unknown_anchor: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_overworld_entry(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("overworld").get("main_overworld", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing main_overworld fixture for overworld validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var locations: Array = data.get("locations", []).duplicate(true)
+	if locations.is_empty():
+		errors.append("overworld validation smoke missing location fixture")
+		return
+	var location: Dictionary = locations[0].duplicate(true)
+	location["entry_point_id"] = "missing_entry_for_validator_smoke"
+	locations[0] = location
+	data["locations"] = locations
+	source["data"] = data
+	var validator: ContentRecordValidator = ContentRecordValidator.new()
+	var validation := validator.validate_record("overworld", "main_overworld", _registry_with_override(registry, "overworld", "main_overworld", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid overworld entry smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_entry_point"):
+		errors.append("invalid overworld entry smoke did not report unknown_entry_point: %s" % validation.get("issues", []))
 
 
 func _has_issue_code(issues: Array, code: String) -> bool:

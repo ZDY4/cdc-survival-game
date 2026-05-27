@@ -100,7 +100,7 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 	var checked_records := 0
 	var invalid_records := 0
 	print("mode: validate_changed")
-	print("domains: %s" % ContentCliDomains.format_domain_names())
+	print("domains: %s" % ContentCliDomains.validate_domain_names())
 	for domain in ContentCliDomains.VALIDATE_CHANGED_DOMAINS:
 		for id_value in registry.get_library(domain).keys():
 			var id_string := str(id_value)
