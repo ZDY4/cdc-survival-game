@@ -120,6 +120,32 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 - 当前 `WorldInteractionMenu` 场景会构造固定 gameplay runtime、选中玩家、定位 pickup 目标，并断言交互菜单和 prompt 正常。
 - 输出 console log 和 result JSON 到 `.local/agent-smoke/bevy_game/<timestamp>/`。
 
+### `test-godot-game.ps1`
+
+用途：
+
+- 运行 Godot runtime / game 的 agent smoke 测试，作为 Bevy game smoke 的迁移替代入口。
+
+何时使用：
+
+- 修改 Godot runtime、世界生成、交互、UI、任务、战斗或存档后。
+- 需要一条命令复核当前 Godot 可玩闭环。
+
+示例：
+
+```powershell
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Combat
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
+```
+
+行为：
+
+- 固定调用 `D:\godot\godot.cmd --headless --path godot --script <smoke>`。
+- 默认 `-Scenario All` 会运行所有已迁移 Godot smoke。
+- 输出 console log 和 result JSON 到 `.local/agent-smoke/godot_game/<timestamp>/`。
+
 ## Maintenance Rule
 
 - 新增脚本时，至少补齐：

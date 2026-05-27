@@ -16,6 +16,7 @@
 - `edit-map.md`
 - `review-map-visual.md`
 - `test-bevy-game.md`
+- `test-godot-game.md`
 
 ## General Rules
 
@@ -48,6 +49,8 @@
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
 
 保底编译基线：
@@ -68,8 +71,12 @@
 
 游戏 smoke 复核：
 
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu`
+
+Godot 迁移期间，运行时/游戏闭环优先跑 `test-godot-game.ps1`；Bevy smoke 保留为旧客户端行为对照。
 
 Godot 迁移期间，内容定位、摘要、引用和全量校验优先跑 `godot-content.ps1`；Rust `content_tools` 保留为旧基线和差异对照。
 
