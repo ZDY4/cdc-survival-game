@@ -98,12 +98,12 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 
 用途：
 
-- 通过 Godot headless content CLI 执行内容定位、摘要、引用和校验，作为 `content_tools` 的迁移替代入口。
+- 通过 Godot headless content CLI 执行内容定位、摘要、引用、校验、格式化和 diff 摘要，作为 `content_tools` 的迁移替代入口。
 
 何时使用：
 
 - 需要在不进入 Rust workspace 的情况下检查 `data/` 内容。
-- 需要验证 Godot loader 对当前内容的读取、摘要和引用结果。
+- 需要验证 Godot loader 对当前内容的读取、摘要、引用和格式化结果。
 
 示例：
 
@@ -112,13 +112,16 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind item -
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind map -Id survivor_outpost_01
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind item -Id 1006
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -Id 1006
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id data/items/1006.json
 ```
 
 行为：
 
-- 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd`。
-- 当前覆盖 `locate` / `summarize` / `references` / `validate changed`。
+- 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`。
+- 当前覆盖 `locate` / `summarize` / `references` / `validate changed` / `format` / `format changed` / `diff-summary`。
 - `references` 当前覆盖 `item` 和 `map`，与旧 `content_tools` 的主路径保持一致。
+- `format` 只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
 
 ### `test-bevy-game.ps1`
 

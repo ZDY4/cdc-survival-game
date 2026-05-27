@@ -25,17 +25,18 @@
 3. 修改 JSON。
 4. 跑最小校验。
 5. 输出本次操作摘要。
-6. 默认要求再用 `bevy_map_editor` 做空间复核。
+6. 默认要求再用 Godot map review 入口做空间复核。
 
 ## Validation
 
 当前优先使用：
 
-- `cargo run -p content_tools -- locate map <id>`
-- `cargo run -p content_tools -- summarize map <id>`
-- `cargo run -p content_tools -- references map <id>`
-- `cargo run -p content_tools -- format map <id>`
-- `cargo run -p content_tools -- validate map <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind map -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind map -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind map -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind map -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind map -Id <id>`
+- `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
 
 保底编译基线：
 
@@ -53,4 +54,5 @@
 
 - 改了哪些对象/格子/入口
 - 是否影响 selected map 的可达性或诊断
-- 是否建议打开 `bevy_map_editor` 复核
+- 是否已运行 `review-godot-map-visual.ps1`
+- 是否还需要打开旧 `bevy_map_editor` 做行为对照

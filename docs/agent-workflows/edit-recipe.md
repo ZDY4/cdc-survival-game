@@ -30,10 +30,10 @@
 
 当前优先使用：
 
-- `cargo run -p content_tools -- locate recipe <id>`
-- `cargo run -p content_tools -- summarize recipe <id>`
-- `cargo run -p content_tools -- format recipe <id>`
-- `cargo run -p content_tools -- validate recipe <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind recipe -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind recipe -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind recipe -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind recipe -Id <id>`
 
 保底编译基线：
 

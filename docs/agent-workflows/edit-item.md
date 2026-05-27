@@ -30,11 +30,11 @@
 
 当前优先使用：
 
-- `cargo run -p content_tools -- locate item <id>`
-- `cargo run -p content_tools -- summarize item <id>`
-- `cargo run -p content_tools -- references item <id>`
-- `cargo run -p content_tools -- format item <id>`
-- `cargo run -p content_tools -- validate item <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind item -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind item -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind item -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind item -Id <id>`
 
 保底编译基线：
 

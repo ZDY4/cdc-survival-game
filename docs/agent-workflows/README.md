@@ -35,6 +35,9 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind <item|recipe|character|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind <item|map> -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|map> -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
 - `cargo run -p content_tools -- locate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate changed`
@@ -80,7 +83,7 @@
 
 Godot 迁移期间，运行时/游戏闭环优先跑 `test-godot-game.ps1`；Bevy smoke 保留为旧客户端行为对照。
 
-Godot 迁移期间，内容定位、摘要、引用和全量校验优先跑 `godot-content.ps1`；Rust `content_tools` 保留为旧基线和差异对照。
+Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和全量校验优先跑 `godot-content.ps1`；Rust `content_tools` 保留为旧基线和差异对照。
 
 当前 handoff 行为：
 
