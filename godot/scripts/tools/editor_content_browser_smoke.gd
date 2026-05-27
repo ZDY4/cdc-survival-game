@@ -17,7 +17,7 @@ func _init() -> void:
 
 	print("editor_content_browser_smoke passed:")
 	print({
-		"covered_kinds": ["item", "recipe", "character", "dialogue", "quest", "skill", "settlement", "overworld", "map"],
+		"covered_kinds": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"],
 	})
 	quit(0)
 
@@ -44,6 +44,7 @@ func _run() -> Array[String]:
 	_expect_rows(errors, presenter, registry, "dialogue", "trader", "trader_lao_wang_intro")
 	_expect_rows(errors, presenter, registry, "quest", "补给", "tutorial_survive")
 	_expect_rows(errors, presenter, registry, "skill", "生存", "survival")
+	_expect_rows(errors, presenter, registry, "skill_tree", "生存系", "survival")
 	_expect_rows(errors, presenter, registry, "settlement", "outpost", "survivor_outpost_01_settlement")
 	_expect_rows(errors, presenter, registry, "overworld", "main", "main_overworld")
 	_expect_rows(errors, presenter, registry, "map", "outpost", "survivor_outpost_01")
@@ -53,6 +54,7 @@ func _run() -> Array[String]:
 	_expect_detail(errors, presenter, registry, "dialogue", "trader_lao_wang_intro", "actions:")
 	_expect_detail(errors, presenter, registry, "quest", "tutorial_survive", "title:")
 	_expect_detail(errors, presenter, registry, "skill", "survival", "tree_id:")
+	_expect_detail(errors, presenter, registry, "skill_tree", "survival", "links:")
 	_expect_detail(errors, presenter, registry, "settlement", "survivor_outpost_01_settlement", "smart_objects:")
 	_expect_detail(errors, presenter, registry, "overworld", "main_overworld", "locations:")
 	_expect_detail(errors, presenter, registry, "map", "survivor_outpost_01", "map_review_checks:")

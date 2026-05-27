@@ -21,6 +21,8 @@ func references_for(domain: String, id_value: String, registry: ContentRegistry)
 			return _quest_references(id_value, registry)
 		"skills":
 			return _skill_references(id_value, registry)
+		"skill_trees":
+			return _skill_tree_references(id_value, registry)
 		"settlements":
 			return _settlement_references(id_value, registry)
 		"overworld":
@@ -37,6 +39,7 @@ func supports_domain(domain: String) -> bool:
 		"dialogues",
 		"quests",
 		"skills",
+		"skill_trees",
 		"settlements",
 		"overworld",
 	].has(domain)
@@ -234,6 +237,15 @@ func _skill_references(skill_id: String, registry: ContentRegistry) -> Array[Dic
 		var record: Dictionary = registry.get_library("recipes")[recipe_id]
 		if _dictionary_or_empty(record["data"].get("skill_requirements", {})).has(skill_id):
 			hits.append(_reference_hit("recipe", recipe_id, record["path"], "skill_requirements.%s" % skill_id))
+	return hits
+
+
+func _skill_tree_references(skill_tree_id: String, registry: ContentRegistry) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	for skill_id in registry.get_library("skills").keys():
+		var record: Dictionary = registry.get_library("skills")[skill_id]
+		if str(record["data"].get("tree_id", "")) == skill_tree_id:
+			hits.append(_reference_hit("skill", skill_id, record["path"], "tree_id"))
 	return hits
 
 

@@ -45,7 +45,7 @@ pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map forest
 
 用途：
 
-- 打开或复用 Godot editor，并把指定 `item` / `recipe` / `dialogue` / `quest` / `character` / `skill` / `settlement` / `overworld` / `map` 写入 Godot editor handoff dock。
+- 打开或复用 Godot editor，并把指定 `item` / `recipe` / `dialogue` / `quest` / `character` / `skill` / `skill_tree` / `settlement` / `overworld` / `map` 写入 Godot editor handoff dock。
 
 何时使用：
 
@@ -61,6 +61,7 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Dialogue trader_lao_wan
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest tutorial_survive
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character scavenger_maya
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill survival
+pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -SkillTree survival
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Settlement survivor_outpost_01_settlement
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld main_overworld
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
@@ -70,7 +71,7 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 
 - 写入 `tmp/editor_handoff/godot_editor.navigation.json`。
 - `CDC Agent Handoff` dock 会读取目标内容摘要和引用预览。
-- `CDC Content Browser` dock 会在 Godot editor 内浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `settlement` / `overworld` / `map`，并显示记录级校验状态、详情和可编辑字段清单。
+- `CDC Content Browser` dock 会在 Godot editor 内浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，并显示记录级校验状态、详情和可编辑字段清单。
 - 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前表单保存仅覆盖 `item` / `recipe` / `character` / `map`，其他内容域先保持只读。
 - 若 `CDC Agent Handoff` dock 已有最近 session，会复用现有 Godot editor。
 - 若没有最近 session，则启动 `D:\godot\godot.cmd --editor --path godot`。
@@ -162,7 +163,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 - 当前覆盖 `locate` / `summarize` / `references` / `validate` / `validate changed` / `format` / `format changed` / `diff-summary`。
 - `summarize` 输出 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` 的高信号字段摘要。
 - `validate` 对 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容。
-- `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `settlement` / `overworld` / `map`，用于替代旧 `content_tools` 的常用引用查询。
+- `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，用于替代旧 `content_tools` 的常用引用查询。
 - `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
 
 ### `test-bevy-game.ps1`

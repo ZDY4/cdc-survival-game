@@ -26,6 +26,9 @@ Character id to open in the Godot editor handoff dock.
 .PARAMETER Skill
 Skill id to open in the Godot editor handoff dock.
 
+.PARAMETER SkillTree
+Skill tree id to open in the Godot editor handoff dock.
+
 .PARAMETER Settlement
 Settlement id to open in the Godot editor handoff dock.
 
@@ -50,6 +53,9 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest tutorial_survive
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill survival
 
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -SkillTree survival
+
 .NOTES
 Use exactly one content target parameter.
 #>
@@ -61,6 +67,7 @@ param(
     [string]$Quest,
     [string]$Character,
     [string]$Skill,
+    [string]$SkillTree,
     [string]$Settlement,
     [string]$Overworld,
     [string]$Map,
@@ -156,13 +163,14 @@ $requestedTargets = @(
     if ($PSBoundParameters.ContainsKey("Quest")) { "quest" }
     if ($PSBoundParameters.ContainsKey("Character")) { "character" }
     if ($PSBoundParameters.ContainsKey("Skill")) { "skill" }
+    if ($PSBoundParameters.ContainsKey("SkillTree")) { "skill_tree" }
     if ($PSBoundParameters.ContainsKey("Settlement")) { "settlement" }
     if ($PSBoundParameters.ContainsKey("Overworld")) { "overworld" }
     if ($PSBoundParameters.ContainsKey("Map")) { "map" }
 )
 
 if ($requestedTargets.Count -ne 1) {
-    throw "use exactly one of -Item, -Recipe, -Dialogue, -Quest, -Character, -Skill, -Settlement, -Overworld, or -Map"
+    throw "use exactly one of -Item, -Recipe, -Dialogue, -Quest, -Character, -Skill, -SkillTree, -Settlement, -Overworld, or -Map"
 }
 if (-not (Test-Path -LiteralPath $Godot)) {
     throw "Godot command not found: $Godot"
@@ -182,6 +190,7 @@ $targetId = switch ($targetKind) {
     "quest" { $Quest }
     "character" { $Character }
     "skill" { $Skill }
+    "skill_tree" { $SkillTree }
     "settlement" { $Settlement }
     "overworld" { $Overworld }
     "map" { $Map }

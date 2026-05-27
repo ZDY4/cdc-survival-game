@@ -14,7 +14,7 @@ func _init() -> void:
 
 	print("editor_handoff_smoke passed:")
 	print({
-		"covered_targets": ["item", "recipe", "character", "dialogue", "quest", "skill", "settlement", "overworld", "map"],
+		"covered_targets": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"],
 	})
 	quit(0)
 
@@ -37,6 +37,7 @@ func _run() -> Array[String]:
 		{"kind": "dialogue", "id": "trader_lao_wang_intro", "must_contain": "start_node:"},
 		{"kind": "quest", "id": "tutorial_survive", "must_contain": "prerequisites:"},
 		{"kind": "skill", "id": "survival", "must_contain": "max_level:"},
+		{"kind": "skill_tree", "id": "survival", "must_contain": "links:"},
 		{"kind": "settlement", "id": "survivor_outpost_01_settlement", "must_contain": "smart_objects:"},
 		{"kind": "overworld", "id": "main_overworld", "must_contain": "locations:"},
 		{"kind": "map", "id": "survivor_outpost_01", "must_contain": "objects:", "review_must_contain": "map_review_checks:"},

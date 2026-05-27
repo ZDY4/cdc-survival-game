@@ -31,10 +31,10 @@
 
 当前优先使用：
 
-- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind <item|recipe|character|dialogue|quest|skill|settlement|overworld|map> -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind <item|recipe|character|map> -Id <id>`
-- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind <item|recipe|character|dialogue|quest|skill|settlement|overworld|map> -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
@@ -44,6 +44,7 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -SkillTree <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Settlement <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
@@ -81,6 +82,7 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -SkillTree <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Settlement <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
@@ -110,7 +112,7 @@ Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和
 
 - Godot `CDC Agent Handoff` dock 会写 `tmp/editor_handoff/godot_editor.session.json`
 - `open-godot-editor.ps1` 会写 `tmp/editor_handoff/godot_editor.navigation.json`
-- Godot `CDC Content Browser` dock 会浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `settlement` / `overworld` / `map`，显示过滤列表、记录级校验状态、详情摘要和可编辑字段清单
+- Godot `CDC Content Browser` dock 会浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，显示过滤列表、记录级校验状态、详情摘要和可编辑字段清单
 - `godot/scripts/data/content_edit_service.gd` 是迁移期内容保存边界；后续 Godot 表单 UI 必须通过该服务写回 JSON
 - 当前表单保存仅覆盖 `item` / `recipe` / `character` / `map`，其他内容域先保持只读
 - `item` / `recipe` / `character` / `map` 目标会显示只读 `edit_plan`，列出可编辑字段组、引用影响和保存后复核 checklist

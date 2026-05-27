@@ -16,7 +16,7 @@ func _init() -> void:
 
 	print("content_cli_smoke passed:")
 	print({
-		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "settlement", "overworld", "map"],
+		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"],
 	})
 	quit(0)
 
@@ -36,6 +36,7 @@ func _run() -> Array[String]:
 	_expect_min_refs(errors, index, registry, "dialogues", "trader_lao_wang_intro", 1)
 	_expect_min_refs(errors, index, registry, "quests", "tutorial_survive", 1)
 	_expect_min_refs(errors, index, registry, "skills", "survival", 1)
+	_expect_min_refs(errors, index, registry, "skill_trees", "survival", 1)
 	_expect_min_refs(errors, index, registry, "settlements", "survivor_outpost_01_settlement", 1)
 	_expect_min_refs(errors, index, registry, "overworld", "main_overworld", 1)
 	_expect_min_refs(errors, index, registry, "maps", "survivor_outpost_01", 1)

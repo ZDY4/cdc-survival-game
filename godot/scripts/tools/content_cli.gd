@@ -578,7 +578,7 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 
 
 func _reference_domain_list() -> String:
-	return "item, recipe, character, dialogue, quest, skill, settlement, overworld, and map"
+	return "item, recipe, character, dialogue, quest, skill, skill_tree, settlement, overworld, and map"
 
 
 func _usage() -> String:

@@ -6,7 +6,7 @@ const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const EditorContentPresenter = preload("res://addons/cdc_game_editor/editor_content_presenter.gd")
 
-const BROWSER_KINDS := ["item", "recipe", "character", "dialogue", "quest", "skill", "settlement", "overworld", "map"]
+const BROWSER_KINDS := ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"]
 
 
 func supported_kinds() -> Array[String]:
@@ -147,6 +147,8 @@ func _label_for_record(domain: String, data: Dictionary) -> String:
 		"quests":
 			return str(data.get("title", ""))
 		"skills":
+			return str(data.get("name", ""))
+		"skill_trees":
 			return str(data.get("name", ""))
 		"settlements":
 			return str(data.get("map_id", ""))

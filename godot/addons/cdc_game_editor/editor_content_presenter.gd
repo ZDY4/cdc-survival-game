@@ -10,7 +10,7 @@ const MAX_REFERENCE_LINES := 12
 
 
 func supported_kinds() -> Array[String]:
-	return ["item", "recipe", "character", "dialogue", "quest", "skill", "settlement", "overworld", "map"]
+	return ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"]
 
 
 func domain_for_kind(kind: String) -> String:
@@ -27,6 +27,8 @@ func domain_for_kind(kind: String) -> String:
 			return "quests"
 		"skill":
 			return "skills"
+		"skill_tree":
+			return "skill_trees"
 		"settlement":
 			return "settlements"
 		"overworld":
@@ -126,6 +128,10 @@ func _summary_for_record(domain: String, target_id: String, record: Dictionary, 
 			lines.append("tree_id: %s" % data.get("tree_id", ""))
 			lines.append("max_level: %d" % int(data.get("max_level", 0)))
 			lines.append("prerequisites: %s" % _array_or_dash(data.get("prerequisites", [])))
+		"skill_trees":
+			lines.append("name: %s" % data.get("name", ""))
+			lines.append("skills: %d" % data.get("skills", []).size())
+			lines.append("links: %d" % data.get("links", []).size())
 		"settlements":
 			lines.append("map_id: %s" % data.get("map_id", ""))
 			lines.append("anchors: %d" % data.get("anchors", []).size())
@@ -203,6 +209,8 @@ func _kind_for_domain(domain: String) -> String:
 			return "quest"
 		"skills":
 			return "skill"
+		"skill_trees":
+			return "skill_tree"
 		"settlements":
 			return "settlement"
 		"maps":
