@@ -45,6 +45,8 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>` 仅作为旧 Bevy 对照
 
+Godot `CDC Agent Handoff` dock 会显示只读 `edit_plan`，用于确认角色可编辑字段组、spawn / dialogue 影响和保存后 checklist；实际数据仍以 `data/characters/*.json` 为权威。
+
 ## Output Expectations
 
 - 修改了哪些角色字段

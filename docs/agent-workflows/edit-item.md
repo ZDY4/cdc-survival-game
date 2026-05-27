@@ -44,6 +44,8 @@
 
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Item <id>`
 
+Godot `CDC Agent Handoff` dock 会显示只读 `edit_plan`，用于确认可编辑字段组、引用影响和保存后 checklist；实际数据仍以 `data/items/*.json` 为权威。
+
 ## Output Expectations
 
 - 修改了哪些字段

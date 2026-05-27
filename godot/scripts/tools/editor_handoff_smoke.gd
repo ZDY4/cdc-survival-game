@@ -57,12 +57,18 @@ func _expect_selection(errors: Array[String], presenter: EditorContentPresenter,
 	var combined_text := "%s\n%s\n%s\n%s" % [
 		selection.get("summary", ""),
 		selection.get("reference_summary", ""),
+		selection.get("edit_plan_summary", ""),
+		selection.get("edit_plan_checklist", ""),
+	]
+	combined_text += "\n%s\n%s" % [
 		selection.get("review_summary", ""),
 		selection.get("review_checklist", ""),
 	]
 	var required := str(target.get("must_contain", ""))
 	if not combined_text.contains(required):
 		errors.append("selection summary for %s %s missing '%s'" % [kind, id_value, required])
+	if ["item", "recipe", "character", "map"].has(kind) and not combined_text.contains("edit_plan_checks:"):
+		errors.append("selection edit plan for %s %s missing edit_plan_checks" % [kind, id_value])
 	var review_required := str(target.get("review_must_contain", ""))
 	if not review_required.is_empty() and not combined_text.contains(review_required):
 		errors.append("selection review for %s %s missing '%s'" % [kind, id_value, review_required])

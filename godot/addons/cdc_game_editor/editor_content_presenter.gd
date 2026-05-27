@@ -3,6 +3,7 @@ extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
+const EditPlanPresenter = preload("res://addons/cdc_game_editor/edit_plan_presenter.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
 
 const MAX_REFERENCE_LINES := 12
@@ -58,6 +59,7 @@ func build_selection(target_kind: String, target_id: String, registry: ContentRe
 	var reference_index: ContentReferenceIndex = ContentReferenceIndex.new()
 	var references := reference_index.references_for(domain, normalized_id, registry)
 	var review: Dictionary = _review_for_record(domain, record)
+	var edit_plan: Dictionary = EditPlanPresenter.new().build_plan(domain, record, references)
 	return {
 		"ok": true,
 		"status": "selected",
@@ -70,6 +72,8 @@ func build_selection(target_kind: String, target_id: String, registry: ContentRe
 		"reference_summary": _references_text(references, repo_root),
 		"review_summary": review.get("summary", ""),
 		"review_checklist": review.get("checklist", ""),
+		"edit_plan_summary": edit_plan.get("summary", ""),
+		"edit_plan_checklist": edit_plan.get("checklist", ""),
 	}
 
 

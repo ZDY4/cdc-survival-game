@@ -110,6 +110,8 @@ Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和
 
 - Godot `CDC Agent Handoff` dock 会写 `tmp/editor_handoff/godot_editor.session.json`
 - `open-godot-editor.ps1` 会写 `tmp/editor_handoff/godot_editor.navigation.json`
+- `item` / `recipe` / `character` / `map` 目标会显示只读 `edit_plan`，列出可编辑字段组、引用影响和保存后复核 checklist
+- `map` 目标额外显示 `map_review` 和 `map_review_checks`，用于替代旧 Bevy map editor 的基础空间复核摘要
 - 若对应 editor 最近处于活跃状态，会优先复用现有实例
 - 脚本会把目标 id 写入 `tmp/editor_handoff/*.navigation.json`
 - editor 会读取 handoff 请求并切换到目标记录

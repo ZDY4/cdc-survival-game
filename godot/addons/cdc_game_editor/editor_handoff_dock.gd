@@ -159,7 +159,7 @@ func _apply_navigation(request: Dictionary) -> void:
 		str(selection.get("summary", "")),
 		str(selection.get("reference_summary", "")),
 	]
-	for field in ["review_summary", "review_checklist"]:
+	for field in ["edit_plan_summary", "edit_plan_checklist", "review_summary", "review_checklist"]:
 		var text := str(selection.get(field, ""))
 		if not text.is_empty():
 			sections.append(text)
