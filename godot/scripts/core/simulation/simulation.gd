@@ -2,6 +2,7 @@ extends RefCounted
 
 const ActorRegistry = preload("res://scripts/core/actor/actor_registry.gd")
 const AiRules = preload("res://scripts/core/ai/ai_rules.gd")
+const CombatRunner = preload("res://scripts/core/combat/combat_runner.gd")
 const DialogueRunner = preload("res://scripts/core/dialogue/dialogue_runner.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
@@ -31,6 +32,7 @@ var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
 var ai_intents: Dictionary = {}
 var _ai_rules := AiRules.new()
+var _combat_runner := CombatRunner.new()
 var _dialogue_runner := DialogueRunner.new()
 var _equipment_rules := EquipmentRules.new()
 var _inventory_entries := InventoryEntries.new()
@@ -533,45 +535,7 @@ func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary) 
 
 
 func perform_attack(actor_id: int, target_actor_id: int) -> Dictionary:
-	var attacker: RefCounted = actor_registry.get_actor(actor_id)
-	var target: RefCounted = actor_registry.get_actor(target_actor_id)
-	if attacker == null:
-		return {"success": false, "reason": "unknown_attacker"}
-	if target == null:
-		return {"success": false, "reason": "unknown_target"}
-	if target.side != "hostile" and attacker.side != "hostile":
-		return {"success": false, "reason": "target_not_hostile"}
-
-	var damage: float = max(1.0, attacker.attack_power - target.defense)
-	target.hp = max(0.0, target.hp - damage)
-	_emit("attack_performed", {
-		"actor_id": actor_id,
-		"target_actor_id": target_actor_id,
-		"damage": damage,
-		"target_hp": target.hp,
-	})
-
-	var defeated: bool = target.hp <= 0.0
-	if defeated:
-		var defeated_definition_id: String = target.definition_id
-		var defeated_kind: String = target.kind
-		var defeated_xp_reward: int = target.xp_reward
-		actor_registry.unregister_actor(target_actor_id)
-		_emit("actor_defeated", {
-			"actor_id": target_actor_id,
-			"definition_id": defeated_definition_id,
-			"kind": defeated_kind,
-			"defeated_by": actor_id,
-		})
-		grant_experience(actor_id, defeated_xp_reward, "kill:%s" % defeated_definition_id)
-		record_enemy_defeated(actor_id, defeated_definition_id, defeated_kind)
-
-	return {
-		"success": true,
-		"damage": damage,
-		"defeated": defeated,
-		"target_actor_id": target_actor_id,
-	}
+	return _combat_runner.perform_attack(self, actor_id, target_actor_id)
 
 
 func record_enemy_defeated(actor_id: int, enemy_definition_id: String, enemy_kind: String = "enemy") -> void:
