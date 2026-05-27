@@ -11,6 +11,9 @@ var unlocked_locations: Array[String] = []
 var events: Array[SimulationEvent] = []
 var map_interaction_targets: Dictionary = {}
 var consumed_interaction_targets: Dictionary = {}
+var quest_library: Dictionary = {}
+var active_quests: Dictionary = {}
+var completed_quests: Dictionary = {}
 
 
 func register_actor(request: Dictionary) -> int:
@@ -27,6 +30,15 @@ func register_actor(request: Dictionary) -> int:
 
 func configure_map_interactions(targets: Dictionary) -> void:
 	map_interaction_targets = targets.duplicate(true)
+
+
+func configure_quests(quests: Dictionary) -> void:
+	quest_library = quests.duplicate(true)
+	_start_available_quests()
+
+
+func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
+	_advance_collect_quests(actor_id, item_id, count)
 
 
 func query_interaction_options(actor_id: int, target: Dictionary) -> Dictionary:
@@ -97,6 +109,8 @@ func snapshot() -> Dictionary:
 		"actors": actor_registry.snapshot(),
 		"events": event_output,
 		"consumed_interaction_targets": consumed_interaction_targets.keys(),
+		"active_quests": _active_quest_snapshots(),
+		"completed_quests": completed_quests.keys(),
 	}
 
 
@@ -174,6 +188,7 @@ func _execute_pickup(actor_id: int, prompt: Dictionary, option: Dictionary) -> D
 		return {"success": false, "reason": "pickup_item_invalid", "prompt": prompt}
 
 	actor.inventory[item_id] = int(actor.inventory.get(item_id, 0)) + count
+	record_item_collected(actor_id, item_id, count)
 	var target_id: String = str(option.get("target_id", ""))
 	consumed_interaction_targets[target_id] = true
 	_emit("pickup_granted", {
@@ -251,3 +266,126 @@ func _failed_prompt(reason: String) -> Dictionary:
 		"ok": false,
 		"reason": reason,
 	}
+
+
+func _start_available_quests() -> void:
+	var started := true
+	while started:
+		started = false
+		for quest_id in quest_library.keys():
+			var quest_key: String = str(quest_id)
+			if active_quests.has(quest_key) or completed_quests.has(quest_key):
+				continue
+			var quest_record: Dictionary = _dictionary_or_empty(quest_library[quest_id])
+			var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", {}))
+			if _quest_prerequisites_completed(quest_data):
+				_start_quest(quest_key, quest_data)
+				started = true
+
+
+func _start_quest(quest_id: String, quest_data: Dictionary) -> void:
+	var objective: Dictionary = _first_objective_node(quest_data)
+	active_quests[quest_id] = {
+		"quest_id": quest_id,
+		"current_node_id": str(objective.get("id", "")),
+		"completed_objectives": {},
+	}
+	_emit("quest_started", {
+		"quest_id": quest_id,
+		"title": quest_data.get("title", quest_id),
+	})
+
+
+func _advance_collect_quests(actor_id: int, item_id: String, count: int) -> void:
+	var completed_now: Array[String] = []
+	for quest_id in active_quests.keys():
+		var quest_data: Dictionary = _quest_data(str(quest_id))
+		var objective: Dictionary = _first_objective_node(quest_data)
+		if objective.get("objective_type", "") != "collect":
+			continue
+		if _normalize_content_id(objective.get("item_id", "")) != item_id:
+			continue
+		var state: Dictionary = active_quests[quest_id]
+		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
+		var objective_id: String = str(objective.get("id", ""))
+		var target_count: int = max(1, int(objective.get("count", 1)))
+		var current: int = min(target_count, int(completed.get(objective_id, 0)) + count)
+		completed[objective_id] = current
+		state["completed_objectives"] = completed
+		active_quests[quest_id] = state
+		_emit("quest_progressed", {
+			"actor_id": actor_id,
+			"quest_id": quest_id,
+			"objective_id": objective_id,
+			"current": current,
+			"target": target_count,
+		})
+		if current >= target_count and not bool(objective.get("manual_turn_in", false)):
+			completed_now.append(str(quest_id))
+
+	for quest_id in completed_now:
+		_complete_quest(actor_id, quest_id)
+
+
+func _complete_quest(actor_id: int, quest_id: String) -> void:
+	if not active_quests.has(quest_id):
+		return
+	active_quests.erase(quest_id)
+	completed_quests[quest_id] = true
+	_emit("quest_completed", {
+		"actor_id": actor_id,
+		"quest_id": quest_id,
+	})
+	_start_available_quests()
+
+
+func _active_quest_snapshots() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var ids: Array = active_quests.keys()
+	ids.sort()
+	for quest_id in ids:
+		var state: Dictionary = active_quests[quest_id]
+		output.append({
+			"quest_id": str(state.get("quest_id", quest_id)),
+			"current_node_id": str(state.get("current_node_id", "")),
+			"completed_objectives": _dictionary_or_empty(state.get("completed_objectives", {})).duplicate(true),
+		})
+	return output
+
+
+func _quest_prerequisites_completed(quest_data: Dictionary) -> bool:
+	for prerequisite in quest_data.get("prerequisites", []):
+		if not completed_quests.has(str(prerequisite)):
+			return false
+	return true
+
+
+func _quest_data(quest_id: String) -> Dictionary:
+	var record: Dictionary = _dictionary_or_empty(quest_library.get(quest_id, {}))
+	return _dictionary_or_empty(record.get("data", {}))
+
+
+func _first_objective_node(quest_data: Dictionary) -> Dictionary:
+	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
+	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
+	for node_id in nodes.keys():
+		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
+		if node.get("type", "") == "objective":
+			return node
+	return {}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _normalize_content_id(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		if is_equal_approx(float_value, roundf(float_value)):
+			return str(int(float_value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	return str(value)

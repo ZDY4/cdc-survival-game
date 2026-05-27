@@ -52,8 +52,10 @@ func _validate_new_game_snapshot(snapshot: Dictionary) -> Array[String]:
 			if int(actual.get(axis, -9999)) != int(expected[axis]):
 				errors.append("%s expected %s=%d, got %s" % [definition_id, axis, expected[axis], actual.get(axis)])
 
-	if snapshot.get("events", []).size() != 3:
+	if _event_count(snapshot, "actor_registered") != 3:
 		errors.append("expected 3 actor_registered events")
+	if not _active_quest_ids(snapshot).has("tutorial_survive"):
+		errors.append("expected tutorial_survive to auto start")
 	return errors
 
 
@@ -64,5 +66,23 @@ func _snapshot_digest(snapshot: Dictionary) -> Dictionary:
 	return {
 		"active_map_id": snapshot.get("active_map_id", ""),
 		"actors": actors,
+		"active_quests": _active_quest_ids(snapshot),
 		"event_count": snapshot.get("events", []).size(),
 	}
+
+
+func _event_count(snapshot: Dictionary, kind: String) -> int:
+	var count := 0
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			count += 1
+	return count
+
+
+func _active_quest_ids(snapshot: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	for quest in snapshot.get("active_quests", []):
+		var quest_data: Dictionary = quest
+		output.append(str(quest_data.get("quest_id", "")))
+	return output

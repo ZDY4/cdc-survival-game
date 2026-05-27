@@ -76,4 +76,5 @@ func _label(node_name: String) -> Label:
 
 func _clear_items() -> void:
 	for child in _items_box.get_children():
-		child.queue_free()
+		_items_box.remove_child(child)
+		child.free()

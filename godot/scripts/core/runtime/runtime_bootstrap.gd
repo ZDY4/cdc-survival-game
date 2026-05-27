@@ -22,6 +22,7 @@ func build_new_game_runtime() -> Dictionary:
 	for spawn_entry in bootstrap.get("spawnEntries", []):
 		_register_spawn_entry(simulation, spawn_entry)
 
+	simulation.configure_quests(registry.get_library("quests"))
 	_configure_startup_map_interactions(simulation)
 	return {
 		"ok": true,
