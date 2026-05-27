@@ -7,10 +7,12 @@ const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd"
 const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
 const DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
 const InventorySnapshot = preload("res://scripts/ui/snapshots/inventory_snapshot.gd")
+const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 const DIALOGUE_PANEL_SCENE = preload("res://scenes/ui/dialogue_panel.tscn")
 const INVENTORY_PANEL_SCENE = preload("res://scenes/ui/inventory_panel.tscn")
+const TRADE_PANEL_SCENE = preload("res://scenes/ui/trade_panel.tscn")
 
 var registry: ContentRegistry
 var simulation: RefCounted
@@ -20,6 +22,8 @@ var world_container: Node3D
 var hud: Control
 var dialogue_panel: Control
 var inventory_panel: Control
+var trade_panel: Control
+var active_trade_target: Dictionary = {}
 
 
 func _ready() -> void:
@@ -45,9 +49,11 @@ func _ready() -> void:
 	_setup_hud()
 	_setup_dialogue_panel()
 	_setup_inventory_panel()
+	_setup_trade_panel()
 	refresh_hud()
 	refresh_dialogue_panel()
 	refresh_inventory_panel()
+	refresh_trade_panel()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
 
 
@@ -72,6 +78,13 @@ func refresh_inventory_panel() -> void:
 		return
 	var snapshot: Dictionary = InventorySnapshot.new(registry).build(simulation.snapshot())
 	inventory_panel.apply_snapshot(snapshot)
+
+
+func refresh_trade_panel() -> void:
+	if trade_panel == null or simulation == null:
+		return
+	var snapshot: Dictionary = TradeSnapshot.new(registry).build(simulation.snapshot(), active_trade_target)
+	trade_panel.apply_snapshot(snapshot)
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
@@ -101,7 +114,9 @@ func clear_interaction_selection() -> Dictionary:
 func execute_primary_interaction() -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
+	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
 	var result: Dictionary = interaction_controller.execute_primary_interaction()
+	_update_trade_target_after_interaction(result, executed_target)
 	world_result = interaction_controller.world_result
 	# 地图切换或对象消费后需要重绘占位世界，保证 scene tree 与运行时快照一致。
 	_setup_world_container()
@@ -109,9 +124,11 @@ func execute_primary_interaction() -> Dictionary:
 	_setup_hud()
 	_setup_dialogue_panel()
 	_setup_inventory_panel()
+	_setup_trade_panel()
 	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	refresh_dialogue_panel()
 	refresh_inventory_panel()
+	refresh_trade_panel()
 	return result
 
 
@@ -119,6 +136,11 @@ func current_interaction_prompt() -> Dictionary:
 	if interaction_controller == null:
 		return {}
 	return interaction_controller.current_prompt()
+
+
+func close_trade_panel() -> void:
+	active_trade_target = {}
+	refresh_trade_panel()
 
 
 func _setup_world_container() -> void:
@@ -151,6 +173,28 @@ func _setup_inventory_panel() -> void:
 	inventory_panel = INVENTORY_PANEL_SCENE.instantiate()
 	inventory_panel.name = "InventoryPanelRoot"
 	add_child(inventory_panel)
+
+
+func _setup_trade_panel() -> void:
+	if trade_panel != null:
+		return
+	trade_panel = TRADE_PANEL_SCENE.instantiate()
+	trade_panel.name = "TradePanelRoot"
+	add_child(trade_panel)
+
+
+func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:
+	if not bool(result.get("success", false)):
+		return
+	var interaction_result: Dictionary = _dictionary_or_empty(result.get("result", {}))
+	var prompt: Dictionary = _dictionary_or_empty(interaction_result.get("prompt", {}))
+	var option_kind: String = ""
+	var options: Array = prompt.get("options", [])
+	if not options.is_empty():
+		var option: Dictionary = _dictionary_or_empty(options[0])
+		option_kind = str(option.get("kind", ""))
+	if option_kind == "talk" and executed_target.get("target_type", "") == "actor":
+		active_trade_target = executed_target.duplicate(true)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
