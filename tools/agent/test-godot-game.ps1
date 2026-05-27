@@ -34,6 +34,7 @@ param(
         "ContentEdit",
         "EditorHandoff",
         "EditorBrowser",
+        "MapPreview",
         "World",
         "Scene",
         "Overworld",
@@ -80,6 +81,7 @@ $scenarioScripts = [ordered]@{
     ContentEdit       = "res://scripts/tools/content_edit_service_smoke.gd"
     EditorHandoff     = "res://scripts/tools/editor_handoff_smoke.gd"
     EditorBrowser     = "res://scripts/tools/editor_content_browser_smoke.gd"
+    MapPreview        = "res://scripts/tools/map_preview_smoke.gd"
     World             = "res://scripts/tools/world_smoke.gd"
     Scene             = "res://scripts/tools/scene_smoke.gd"
     Overworld         = "res://scripts/tools/overworld_smoke.gd"
