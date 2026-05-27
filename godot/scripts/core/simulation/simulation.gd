@@ -7,6 +7,7 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
+const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 
 var actor_registry := ActorRegistry.new()
@@ -29,6 +30,7 @@ var _ai_rules := AiRules.new()
 var _equipment_rules := EquipmentRules.new()
 var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
+var _snapshot_codec := SimulationSnapshotCodec.new()
 var _vision_rules := VisionRules.new()
 
 
@@ -689,86 +691,11 @@ func execute_interaction(actor_id: int, target: Dictionary, option_id: String = 
 
 
 func snapshot() -> Dictionary:
-	var event_output: Array[Dictionary] = []
-	for event in events:
-		event_output.append(event.to_dictionary())
-	return {
-		"schema_version": 1,
-		"active_map_id": active_map_id,
-		"start_location_id": start_location_id,
-		"start_entry_point_id": start_entry_point_id,
-		"active_location_id": active_location_id,
-		"active_entry_point_id": active_entry_point_id,
-		"unlocked_locations": unlocked_locations.duplicate(),
-		"actors": actor_registry.snapshot(),
-		"events": event_output,
-		"consumed_interaction_targets": consumed_interaction_targets.keys(),
-		"container_sessions": _container_session_snapshots(),
-		"shop_sessions": _shop_session_snapshots(),
-		"active_quests": _active_quest_snapshots(),
-		"completed_quests": completed_quests.keys(),
-		"ai_intents": _ai_intent_snapshots(),
-		"vision": _vision_rules.snapshot(),
-	}
+	return _snapshot_codec.build(self)
 
 
 func load_snapshot(snapshot_data: Dictionary) -> void:
-	active_map_id = str(snapshot_data.get("active_map_id", ""))
-	start_location_id = str(snapshot_data.get("start_location_id", ""))
-	start_entry_point_id = str(snapshot_data.get("start_entry_point_id", ""))
-	active_location_id = str(snapshot_data.get("active_location_id", snapshot_data.get("start_location_id", "")))
-	active_entry_point_id = str(snapshot_data.get("active_entry_point_id", snapshot_data.get("start_entry_point_id", "")))
-	unlocked_locations = _string_array(snapshot_data.get("unlocked_locations", []))
-	actor_registry.load_snapshot(snapshot_data.get("actors", []))
-	events = []
-	for event_data in snapshot_data.get("events", []):
-		var event: Dictionary = _dictionary_or_empty(event_data)
-		events.append(SimulationEvent.new(str(event.get("kind", "")), _dictionary_or_empty(event.get("payload", {}))))
-	consumed_interaction_targets = {}
-	for target_id in snapshot_data.get("consumed_interaction_targets", []):
-		consumed_interaction_targets[str(target_id)] = true
-	container_sessions = {}
-	for session in snapshot_data.get("container_sessions", []):
-		var session_data: Dictionary = _dictionary_or_empty(session)
-		var container_id: String = str(session_data.get("container_id", ""))
-		if not container_id.is_empty():
-			container_sessions[container_id] = {
-				"container_id": container_id,
-				"display_name": str(session_data.get("display_name", container_id)),
-				"inventory": _array_or_empty(session_data.get("inventory", [])).duplicate(true),
-			}
-	shop_sessions = {}
-	for session in snapshot_data.get("shop_sessions", []):
-		var shop_data: Dictionary = _dictionary_or_empty(session)
-		var shop_id: String = str(shop_data.get("shop_id", ""))
-		if not shop_id.is_empty():
-			shop_sessions[shop_id] = {
-				"shop_id": shop_id,
-				"money": max(0, int(shop_data.get("money", 0))),
-				"buy_price_modifier": max(0.0, float(shop_data.get("buy_price_modifier", 1.0))),
-				"sell_price_modifier": max(0.0, float(shop_data.get("sell_price_modifier", 1.0))),
-				"inventory": _normalize_item_entries(shop_data.get("inventory", [])),
-			}
-	active_quests = {}
-	for quest_state in snapshot_data.get("active_quests", []):
-		var state: Dictionary = _dictionary_or_empty(quest_state)
-		var quest_id: String = str(state.get("quest_id", ""))
-		if not quest_id.is_empty():
-			active_quests[quest_id] = {
-				"quest_id": quest_id,
-				"current_node_id": str(state.get("current_node_id", "")),
-				"completed_objectives": _dictionary_or_empty(state.get("completed_objectives", {})).duplicate(true),
-			}
-	completed_quests = {}
-	for quest_id in snapshot_data.get("completed_quests", []):
-		completed_quests[str(quest_id)] = true
-	ai_intents = {}
-	for intent in snapshot_data.get("ai_intents", []):
-		var intent_data: Dictionary = _dictionary_or_empty(intent)
-		var actor_id: int = int(intent_data.get("actor_id", 0))
-		if actor_id > 0:
-			ai_intents[actor_id] = intent_data.duplicate(true)
-	_vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
+	_snapshot_codec.load(self, snapshot_data)
 
 
 func _emit(kind: String, payload: Dictionary) -> void:
@@ -1296,59 +1223,6 @@ func _advance_kill_quests(actor_id: int, enemy_definition_id: String, enemy_kind
 
 	for quest_id in completed_now:
 		_advance_active_quest(actor_id, quest_id)
-
-
-func _active_quest_snapshots() -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var ids: Array = active_quests.keys()
-	ids.sort()
-	for quest_id in ids:
-		var state: Dictionary = active_quests[quest_id]
-		output.append({
-			"quest_id": str(state.get("quest_id", quest_id)),
-			"current_node_id": str(state.get("current_node_id", "")),
-			"completed_objectives": _dictionary_or_empty(state.get("completed_objectives", {})).duplicate(true),
-		})
-	return output
-
-
-func _ai_intent_snapshots() -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var ids: Array = ai_intents.keys()
-	ids.sort()
-	for actor_id in ids:
-		output.append(_dictionary_or_empty(ai_intents[actor_id]).duplicate(true))
-	return output
-
-
-func _container_session_snapshots() -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var ids: Array = container_sessions.keys()
-	ids.sort()
-	for container_id in ids:
-		var session: Dictionary = _dictionary_or_empty(container_sessions[container_id])
-		output.append({
-			"container_id": str(session.get("container_id", container_id)),
-			"display_name": str(session.get("display_name", container_id)),
-			"inventory": _array_or_empty(session.get("inventory", [])).duplicate(true),
-		})
-	return output
-
-
-func _shop_session_snapshots() -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var ids: Array = shop_sessions.keys()
-	ids.sort()
-	for shop_id in ids:
-		var session: Dictionary = _dictionary_or_empty(shop_sessions[shop_id])
-		output.append({
-			"shop_id": str(session.get("shop_id", shop_id)),
-			"money": max(0, int(session.get("money", 0))),
-			"buy_price_modifier": max(0.0, float(session.get("buy_price_modifier", 1.0))),
-			"sell_price_modifier": max(0.0, float(session.get("sell_price_modifier", 1.0))),
-			"inventory": _normalize_item_entries(session.get("inventory", [])),
-		})
-	return output
 
 
 func _quest_prerequisites_completed(quest_data: Dictionary) -> bool:
