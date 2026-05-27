@@ -20,11 +20,20 @@ Dialogue id to open in the Godot editor handoff dock.
 .PARAMETER Quest
 Quest id to open in the Godot editor handoff dock.
 
-.PARAMETER Map
-Map id to open in the Godot editor handoff dock.
-
 .PARAMETER Character
 Character id to open in the Godot editor handoff dock.
+
+.PARAMETER Skill
+Skill id to open in the Godot editor handoff dock.
+
+.PARAMETER Settlement
+Settlement id to open in the Godot editor handoff dock.
+
+.PARAMETER Overworld
+Overworld id to open in the Godot editor handoff dock.
+
+.PARAMETER Map
+Map id to open in the Godot editor handoff dock.
 
 .PARAMETER Godot
 Path to the Godot command line entrypoint.
@@ -38,8 +47,11 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest tutorial_survive
 
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill survival
+
 .NOTES
-Use exactly one of `-Item`, `-Recipe`, `-Dialogue`, `-Quest`, `-Map`, or `-Character`.
+Use exactly one content target parameter.
 #>
 [CmdletBinding()]
 param(
@@ -47,8 +59,11 @@ param(
     [string]$Recipe,
     [string]$Dialogue,
     [string]$Quest,
-    [string]$Map,
     [string]$Character,
+    [string]$Skill,
+    [string]$Settlement,
+    [string]$Overworld,
+    [string]$Map,
     [string]$Godot = "D:\godot\godot.cmd"
 )
 
@@ -139,12 +154,15 @@ $requestedTargets = @(
     if ($PSBoundParameters.ContainsKey("Recipe")) { "recipe" }
     if ($PSBoundParameters.ContainsKey("Dialogue")) { "dialogue" }
     if ($PSBoundParameters.ContainsKey("Quest")) { "quest" }
-    if ($PSBoundParameters.ContainsKey("Map")) { "map" }
     if ($PSBoundParameters.ContainsKey("Character")) { "character" }
+    if ($PSBoundParameters.ContainsKey("Skill")) { "skill" }
+    if ($PSBoundParameters.ContainsKey("Settlement")) { "settlement" }
+    if ($PSBoundParameters.ContainsKey("Overworld")) { "overworld" }
+    if ($PSBoundParameters.ContainsKey("Map")) { "map" }
 )
 
 if ($requestedTargets.Count -ne 1) {
-    throw "use exactly one of -Item, -Recipe, -Dialogue, -Quest, -Map, or -Character"
+    throw "use exactly one of -Item, -Recipe, -Dialogue, -Quest, -Character, -Skill, -Settlement, -Overworld, or -Map"
 }
 if (-not (Test-Path -LiteralPath $Godot)) {
     throw "Godot command not found: $Godot"
@@ -162,8 +180,11 @@ $targetId = switch ($targetKind) {
     "recipe" { $Recipe }
     "dialogue" { $Dialogue }
     "quest" { $Quest }
-    "map" { $Map }
     "character" { $Character }
+    "skill" { $Skill }
+    "settlement" { $Settlement }
+    "overworld" { $Overworld }
+    "map" { $Map }
     default { throw "unsupported navigation target: $targetKind" }
 }
 if ([string]::IsNullOrWhiteSpace($targetId)) {

@@ -2,6 +2,7 @@
 extends VBoxContainer
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const EditorContentPresenter = preload("res://addons/cdc_game_editor/editor_content_presenter.gd")
 
 const SESSION_FILE := "godot_editor.session.json"
 const NAVIGATION_FILE := "godot_editor.navigation.json"
@@ -13,6 +14,7 @@ var session_path: String = ""
 var navigation_path: String = ""
 var last_request_id: String = ""
 var registry: ContentRegistry
+var presenter: EditorContentPresenter
 
 var target_label: Label
 var path_label: Label
@@ -27,6 +29,7 @@ func _ready() -> void:
 	session_path = handoff_dir.path_join(SESSION_FILE)
 	navigation_path = handoff_dir.path_join(NAVIGATION_FILE)
 	registry = ContentRegistry.new()
+	presenter = EditorContentPresenter.new()
 
 	_build_ui()
 	_refresh_registry()
@@ -140,100 +143,23 @@ func _apply_navigation(request: Dictionary) -> void:
 	if domain.is_empty():
 		status_label.text = "Status: unsupported target kind %s" % target_kind
 		path_label.text = "Path: -"
-		summary_label.text = "Supported kinds: item, recipe, character, map, dialogue, quest."
+		summary_label.text = "Supported kinds: %s." % ", ".join(presenter.supported_kinds())
 		return
 
-	var record: Dictionary = registry.get_library(domain).get(ContentRegistry.normalize_content_id(target_id), {})
-	if record.is_empty():
-		status_label.text = "Status: target not found"
+	var selection := presenter.build_selection(target_kind, target_id, registry, repo_root)
+	if not bool(selection.get("ok", false)):
+		status_label.text = "Status: %s" % selection.get("status", "failed")
 		path_label.text = "Path: -"
-		summary_label.text = "Could not find %s %s in migrated Godot content registry." % [target_kind, target_id]
+		summary_label.text = str(selection.get("message", "Failed to select target."))
 		return
 
-	var path := _repo_relative_path(str(record.get("path", "")))
 	status_label.text = "Status: selected"
-	path_label.text = "Path: %s" % path
-	summary_label.text = _summary_for_record(domain, target_id, record)
+	path_label.text = "Path: %s" % selection.get("path", "")
+	summary_label.text = "%s\n\n%s" % [
+		selection.get("summary", ""),
+		selection.get("reference_summary", ""),
+	]
 
 
 func _domain_for_kind(kind: String) -> String:
-	match kind:
-		"item":
-			return "items"
-		"recipe":
-			return "recipes"
-		"character":
-			return "characters"
-		"map":
-			return "maps"
-		"dialogue":
-			return "dialogues"
-		"quest":
-			return "quests"
-		_:
-			return ""
-
-
-func _summary_for_record(domain: String, target_id: String, record: Dictionary) -> String:
-	var data: Dictionary = record.get("data", {})
-	var lines: Array[String] = [
-		"kind: %s" % _kind_for_domain(domain),
-		"id: %s" % target_id,
-		"path: %s" % _repo_relative_path(str(record.get("path", ""))),
-	]
-	match domain:
-		"items":
-			lines.append("name: %s" % data.get("name", ""))
-			lines.append("fragments: %d" % data.get("fragments", []).size())
-		"recipes":
-			var output: Dictionary = _dictionary_or_empty(data.get("output", {}))
-			lines.append("name: %s" % data.get("name", ""))
-			lines.append("output_item_id: %s" % output.get("item_id", ""))
-			lines.append("materials: %d" % data.get("materials", []).size())
-		"characters":
-			var identity: Dictionary = _dictionary_or_empty(data.get("identity", {}))
-			lines.append("display_name: %s" % identity.get("display_name", ""))
-			lines.append("archetype: %s" % data.get("archetype", ""))
-		"maps":
-			var size: Dictionary = _dictionary_or_empty(data.get("size", {}))
-			lines.append("name: %s" % data.get("name", ""))
-			lines.append("size: %sx%s" % [size.get("width", ""), size.get("height", "")])
-			lines.append("objects: %d" % data.get("objects", []).size())
-		"dialogues":
-			lines.append("nodes: %d" % data.get("nodes", []).size())
-		"quests":
-			lines.append("title: %s" % data.get("title", ""))
-			lines.append("flow_entries: %d" % data.get("flow", []).size())
-	return "\n".join(lines)
-
-
-func _kind_for_domain(domain: String) -> String:
-	match domain:
-		"items":
-			return "item"
-		"recipes":
-			return "recipe"
-		"characters":
-			return "character"
-		"maps":
-			return "map"
-		"dialogues":
-			return "dialogue"
-		"quests":
-			return "quest"
-		_:
-			return domain
-
-
-func _repo_relative_path(path: String) -> String:
-	var normalized := path.replace("\\", "/")
-	var root := repo_root.replace("\\", "/")
-	if normalized.begins_with(root + "/"):
-		return normalized.substr(root.length() + 1)
-	return normalized
-
-
-func _dictionary_or_empty(value: Variant) -> Dictionary:
-	if typeof(value) == TYPE_DICTIONARY:
-		return value
-	return {}
+	return presenter.domain_for_kind(kind)

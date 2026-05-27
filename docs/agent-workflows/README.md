@@ -42,8 +42,11 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Recipe <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Dialogue <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest <id>`
-- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Settlement <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
 - `cargo run -p content_tools -- locate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate changed`
@@ -77,6 +80,9 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Dialogue <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Settlement <id>`
+- `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
 
 旧 Bevy editor 对照入口：

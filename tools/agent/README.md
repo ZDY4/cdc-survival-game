@@ -45,7 +45,7 @@ pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map forest
 
 用途：
 
-- 打开或复用 Godot editor，并把指定 `item` / `recipe` / `dialogue` / `quest` / `character` / `map` 写入 Godot editor handoff dock。
+- 打开或复用 Godot editor，并把指定 `item` / `recipe` / `dialogue` / `quest` / `character` / `skill` / `settlement` / `overworld` / `map` 写入 Godot editor handoff dock。
 
 何时使用：
 
@@ -60,12 +60,16 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Recipe recipe_bandage_b
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Dialogue trader_lao_wang
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Quest tutorial_survive
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character scavenger_maya
+pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Skill survival
+pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Settlement survivor_outpost_01_settlement
+pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld main_overworld
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 ```
 
 行为：
 
 - 写入 `tmp/editor_handoff/godot_editor.navigation.json`。
+- `CDC Agent Handoff` dock 会读取目标内容摘要和引用预览。
 - 若 `CDC Agent Handoff` dock 已有最近 session，会复用现有 Godot editor。
 - 若没有最近 session，则启动 `D:\godot\godot.cmd --editor --path godot`。
 
@@ -192,6 +196,7 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 ```powershell
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction
