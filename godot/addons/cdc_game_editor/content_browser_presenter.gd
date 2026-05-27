@@ -6,7 +6,7 @@ const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const EditorContentPresenter = preload("res://addons/cdc_game_editor/editor_content_presenter.gd")
 
-const BROWSER_KINDS := ["item", "recipe", "character", "map"]
+const BROWSER_KINDS := ["item", "recipe", "character", "dialogue", "quest", "skill", "settlement", "overworld", "map"]
 
 
 func supported_kinds() -> Array[String]:
@@ -142,8 +142,32 @@ func _label_for_record(domain: String, data: Dictionary) -> String:
 			return str(data.get("name", ""))
 		"characters":
 			return str(_dictionary_or_empty(data.get("identity", {})).get("display_name", ""))
+		"dialogues":
+			return str(data.get("dialog_id", _dialogue_start_label(data)))
+		"quests":
+			return str(data.get("title", ""))
+		"skills":
+			return str(data.get("name", ""))
+		"settlements":
+			return str(data.get("map_id", ""))
+		"overworld":
+			return "%d locations" % data.get("locations", []).size()
 		"maps":
 			return str(data.get("name", ""))
+	return ""
+
+
+func _dialogue_start_label(data: Dictionary) -> String:
+	for node in data.get("nodes", []):
+		var node_data: Dictionary = _dictionary_or_empty(node)
+		if bool(node_data.get("is_start", false)):
+			var speaker := str(node_data.get("speaker", ""))
+			var title := str(node_data.get("title", ""))
+			if not speaker.is_empty() and not title.is_empty():
+				return "%s %s" % [speaker, title]
+			if not speaker.is_empty():
+				return speaker
+			return title
 	return ""
 
 

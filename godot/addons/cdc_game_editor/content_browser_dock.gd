@@ -129,7 +129,10 @@ func _refresh_form() -> void:
 		return
 	var record: Dictionary = registry.get_library(domain).get(selected_id, {})
 	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
-	for field in edit_service.editable_fields(domain):
+	var editable_fields := edit_service.editable_fields(domain)
+	if editable_fields.is_empty():
+		return
+	for field in editable_fields:
 		var field_type := edit_service.field_type(domain, field)
 		edit_inputs[field] = TypedFieldForm.add_field_row(form_container, field, field_type, TypedFieldForm.get_field(data, field))
 	var button_row := HBoxContainer.new()

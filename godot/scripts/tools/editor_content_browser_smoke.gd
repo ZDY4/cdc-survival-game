@@ -17,7 +17,7 @@ func _init() -> void:
 
 	print("editor_content_browser_smoke passed:")
 	print({
-		"covered_kinds": ["item", "recipe", "character", "map"],
+		"covered_kinds": ["item", "recipe", "character", "dialogue", "quest", "skill", "settlement", "overworld", "map"],
 	})
 	quit(0)
 
@@ -41,12 +41,23 @@ func _run() -> Array[String]:
 	_expect_rows(errors, presenter, registry, "item", "绷带", "1006")
 	_expect_rows(errors, presenter, registry, "recipe", "急救包", "recipe_first_aid_kit")
 	_expect_rows(errors, presenter, registry, "character", "行尸", "zombie_walker")
+	_expect_rows(errors, presenter, registry, "dialogue", "trader", "trader_lao_wang_intro")
+	_expect_rows(errors, presenter, registry, "quest", "补给", "tutorial_survive")
+	_expect_rows(errors, presenter, registry, "skill", "生存", "survival")
+	_expect_rows(errors, presenter, registry, "settlement", "outpost", "survivor_outpost_01_settlement")
+	_expect_rows(errors, presenter, registry, "overworld", "main", "main_overworld")
 	_expect_rows(errors, presenter, registry, "map", "outpost", "survivor_outpost_01")
 	_expect_detail(errors, presenter, registry, "item", "1006", "validation:")
 	_expect_detail(errors, presenter, registry, "recipe", "recipe_first_aid_kit", "edit_plan_checks:")
 	_expect_detail(errors, presenter, registry, "character", "zombie_walker", "references:")
+	_expect_detail(errors, presenter, registry, "dialogue", "trader_lao_wang_intro", "actions:")
+	_expect_detail(errors, presenter, registry, "quest", "tutorial_survive", "title:")
+	_expect_detail(errors, presenter, registry, "skill", "survival", "tree_id:")
+	_expect_detail(errors, presenter, registry, "settlement", "survivor_outpost_01_settlement", "smart_objects:")
+	_expect_detail(errors, presenter, registry, "overworld", "main_overworld", "locations:")
 	_expect_detail(errors, presenter, registry, "map", "survivor_outpost_01", "map_review_checks:")
 	_expect_detail(errors, presenter, registry, "item", "1006", "editable_fields:")
+	_expect_read_only_form(errors, registry)
 	_expect_dock_patch(errors, registry)
 	_expect_dock_typed_inputs(errors)
 	return errors
@@ -89,6 +100,21 @@ func _expect_dock_patch(errors: Array[String], registry: ContentRegistry) -> voi
 	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
 	if not raw.contains("绷带 dock smoke"):
 		errors.append("browser dock patch did not write expected value")
+	dock.free()
+
+
+func _expect_read_only_form(errors: Array[String], registry: ContentRegistry) -> void:
+	var dock: ContentBrowserDock = ContentBrowserDock.new()
+	dock.registry = registry
+	dock.presenter = ContentBrowserPresenter.new()
+	dock.edit_service = ContentEditService.new()
+	dock.form_container = VBoxContainer.new()
+	dock.selected_kind = "dialogue"
+	dock.selected_id = "trader_lao_wang_intro"
+	dock._refresh_form()
+	if dock.form_container.get_child_count() != 0:
+		errors.append("read-only browser domains should not expose edit form controls")
+	dock.form_container.free()
 	dock.free()
 
 
