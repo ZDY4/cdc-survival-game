@@ -1,6 +1,7 @@
 extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 
 
 func _init() -> void:
@@ -32,16 +33,31 @@ func _run_new_game_smoke() -> int:
 			printerr(error)
 		return 1
 
-	var bootstrap := registry.bootstrap_config
-	if bootstrap.is_empty():
+	if registry.bootstrap_config.is_empty():
 		printerr("new_game_smoke missing bootstrap config")
 		return 1
 
-	var spawn_entries: Array = bootstrap.get("spawnEntries", [])
-	var actor_ids: Array[String] = []
-	for entry in spawn_entries:
-		actor_ids.append(str(entry.get("definitionId", "")))
+	var runtime_bootstrap := CoreRuntimeBootstrap.new(registry)
+	var runtime_result: Dictionary = runtime_bootstrap.build_new_game_runtime()
+	var snapshot: Dictionary = runtime_result.get("snapshot", {})
+	var actors: Array = snapshot.get("actors", [])
+	if actors.is_empty():
+		printerr("new_game_smoke produced no actors")
+		return 1
 
-	var startup_map := str(bootstrap.get("startupMapId", ""))
-	print("new_game_smoke ok: map=%s spawns=%s" % [startup_map, ", ".join(actor_ids)])
+	var actor_labels: Array[String] = []
+	for actor in actors:
+		actor_labels.append("%s#%d@%s" % [
+			actor.get("definition_id", ""),
+			int(actor.get("actor_id", 0)),
+			actor.get("grid_position", {}),
+		])
+
+	print("new_game_smoke ok:")
+	print(JSON.stringify({
+		"active_map_id": snapshot.get("active_map_id", ""),
+		"actor_count": actors.size(),
+		"event_count": snapshot.get("events", []).size(),
+		"actors": actor_labels,
+	}, "\t"))
 	return 0
