@@ -14,7 +14,7 @@ func _init() -> void:
 
 	print("map_edit_service_smoke passed:")
 	print({
-		"covered_domains": ["map_object"],
+		"covered_domains": ["map_object", "entry_point"],
 	})
 	quit(0)
 
@@ -31,6 +31,7 @@ func _run() -> Array[String]:
 	var service: MapEditService = MapEditService.new()
 	_expect_field_types(errors, service)
 	_expect_map_object_patch(errors, service, registry)
+	_expect_entry_point_patch(errors, service, registry)
 	return errors
 
 
@@ -82,6 +83,38 @@ func _expect_map_object_patch(errors: Array[String], service: MapEditService, re
 	)
 	if bool(invalid.get("ok", false)):
 		errors.append("invalid map object patch should fail validation")
+
+
+func _expect_entry_point_patch(errors: Array[String], service: MapEditService, registry: ContentRegistry) -> void:
+	var isolated := _registry_with_temp_record(registry, "survivor_outpost_01")
+	var report := service.save_entry_point_patch(
+		"survivor_outpost_01",
+		"default_entry",
+		{
+			"grid.x": "23",
+			"grid.z": "38",
+		},
+		isolated,
+		{"allow_external_path": true}
+	)
+	if not bool(report.get("ok", false)):
+		errors.append("entry point patch failed: %s" % report)
+		return
+	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
+	if not raw.contains("\"x\": 23"):
+		errors.append("entry point patch should write normalized x coordinate")
+	if not raw.contains("\"z\": 38"):
+		errors.append("entry point patch should write normalized z coordinate")
+
+	var invalid := service.save_entry_point_patch(
+		"survivor_outpost_01",
+		"default_entry",
+		{"grid.x": -1},
+		isolated,
+		{"allow_external_path": true}
+	)
+	if bool(invalid.get("ok", false)):
+		errors.append("invalid entry point patch should fail validation")
 
 
 func _registry_with_temp_record(registry: ContentRegistry, map_id: String) -> ContentRegistry:

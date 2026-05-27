@@ -15,6 +15,13 @@ const MAP_OBJECT_FIELD_TYPES := {
 	"blocks_sight": "bool",
 }
 
+const ENTRY_POINT_FIELD_TYPES := {
+	"grid.x": "int",
+	"grid.y": "int",
+	"grid.z": "int",
+	"facing": "string",
+}
+
 
 func map_object_editable_fields() -> Array[String]:
 	var fields: Array[String] = []
@@ -33,6 +40,26 @@ func normalize_map_object_patch(raw_patch: Dictionary) -> Dictionary:
 	for field in raw_patch.keys():
 		var field_path := str(field)
 		patch[field_path] = _coerce_value(raw_patch[field], map_object_field_type(field_path))
+	return patch
+
+
+func entry_point_editable_fields() -> Array[String]:
+	var fields: Array[String] = []
+	for field in ENTRY_POINT_FIELD_TYPES.keys():
+		fields.append(str(field))
+	fields.sort()
+	return fields
+
+
+func entry_point_field_type(field_path: String) -> String:
+	return str(ENTRY_POINT_FIELD_TYPES.get(field_path, "string"))
+
+
+func normalize_entry_point_patch(raw_patch: Dictionary) -> Dictionary:
+	var patch: Dictionary = {}
+	for field in raw_patch.keys():
+		var field_path := str(field)
+		patch[field_path] = _coerce_value(raw_patch[field], entry_point_field_type(field_path))
 	return patch
 
 
@@ -109,6 +136,79 @@ func save_map_object_patch(map_id: String, object_id: String, patch: Dictionary,
 	}
 
 
+func save_entry_point_patch(map_id: String, entry_id: String, patch: Dictionary, registry: ContentRegistry, options: Dictionary = {}) -> Dictionary:
+	if patch.is_empty():
+		return _failed("empty_patch", "patch must contain at least one editable entry point field")
+
+	var record: Dictionary = registry.get_library("maps").get(map_id, {})
+	if record.is_empty():
+		return _failed("not_found", "map record not found: %s" % map_id)
+
+	var path := str(record.get("path", ""))
+	if path.is_empty():
+		return _failed("missing_path", "map record has no source path")
+	if not bool(options.get("allow_external_path", false)) and not _is_under_data_root(path):
+		return _failed("path_outside_data", "refusing to write outside data root: %s" % path)
+
+	var next_data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
+	var entry_points: Array = _array_or_empty(next_data.get("entry_points", []))
+	var entry_index := _entry_point_index(entry_points, entry_id)
+	if entry_index < 0:
+		return _failed("entry_not_found", "entry point not found: %s in %s" % [entry_id, map_id])
+
+	var normalized_patch := normalize_entry_point_patch(patch)
+	var entry_data: Dictionary = _dictionary_or_empty(entry_points[entry_index]).duplicate(true)
+	var changed_fields: Array[String] = []
+	for field in normalized_patch.keys():
+		var field_path := str(field)
+		if not ENTRY_POINT_FIELD_TYPES.has(field_path):
+			return _failed("unsupported_field", "field %s is not editable for entry points" % field_path)
+		var before: Variant = _get_field(entry_data, field_path)
+		var after: Variant = normalized_patch[field]
+		if before != after:
+			_set_field(entry_data, field_path, after)
+			changed_fields.append(field_path)
+	entry_points[entry_index] = entry_data
+	next_data["entry_points"] = entry_points
+
+	var validation := _validate_map_data(map_id, record, next_data, registry)
+	if not bool(validation.get("ok", false)):
+		return {
+			"ok": false,
+			"status": "invalid",
+			"code": "validation_failed",
+			"message": "patched entry point did not pass record validation",
+			"issues": validation.get("issues", []),
+			"changed_fields": changed_fields,
+			"path": path,
+			"map_id": map_id,
+			"entry_id": entry_id,
+		}
+
+	var formatted := JSON.stringify(next_data, "  ") + "\n"
+	var before_text := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
+	var changed := before_text != formatted
+	if not bool(options.get("dry_run", false)) and changed:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file == null:
+			return _failed("write_failed", "failed to open %s for write: %s" % [path, error_string(FileAccess.get_open_error())])
+		file.store_string(formatted)
+
+	return {
+		"ok": true,
+		"status": "ok",
+		"domain": "maps",
+		"id": map_id,
+		"map_id": map_id,
+		"entry_id": entry_id,
+		"path": path,
+		"relative_path": _repo_relative_path(path),
+		"changed": changed,
+		"changed_fields": changed_fields,
+		"dry_run": bool(options.get("dry_run", false)),
+	}
+
+
 func _validate_map_data(map_id: String, record: Dictionary, data: Dictionary, registry: ContentRegistry) -> Dictionary:
 	var copy: ContentRegistry = ContentRegistry.new()
 	copy.libraries = registry.libraries.duplicate(true)
@@ -152,6 +252,14 @@ func _map_object_index(objects: Array, object_id: String) -> int:
 	for i in range(objects.size()):
 		var object: Dictionary = _dictionary_or_empty(objects[i])
 		if str(object.get("object_id", "")) == object_id:
+			return i
+	return -1
+
+
+func _entry_point_index(entry_points: Array, entry_id: String) -> int:
+	for i in range(entry_points.size()):
+		var entry: Dictionary = _dictionary_or_empty(entry_points[i])
+		if str(entry.get("id", "")) == entry_id:
 			return i
 	return -1
 

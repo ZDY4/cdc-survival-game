@@ -57,6 +57,7 @@ func _run_checks() -> Array[String]:
 		errors.append("map preview status should include selected map id")
 	if target_map_id == "survivor_outpost_01":
 		_expect_object_editing(errors, dock)
+		_expect_entry_editing(errors, dock)
 
 	_cleanup(dock)
 	return errors
@@ -101,6 +102,45 @@ func _expect_object_editing(errors: Array[String], dock: MapPreviewDock) -> void
 	var raw := FileAccess.get_file_as_string(str(saved.get("path", "")))
 	if not raw.contains("\"x\": 21"):
 		errors.append("map preview object save should write updated x coordinate")
+
+
+func _expect_entry_editing(errors: Array[String], dock: MapPreviewDock) -> void:
+	dock.registry = _registry_with_temp_record(dock.registry, "survivor_outpost_01")
+	var result := dock.select_map("survivor_outpost_01")
+	if not bool(result.get("ok", false)):
+		errors.append("map preview entry temp select_map failed: %s" % result)
+		return
+	dock.selected_entry_id = "default_entry"
+	dock._refresh_entry_form(dock._entry_point_data(dock.selected_map_id, dock.selected_entry_id))
+	if dock.entry_inputs.is_empty():
+		errors.append("map preview should build entry point edit inputs")
+		return
+
+	var grid_x: SpinBox = dock.entry_inputs.get("grid.x", null)
+	var grid_z: SpinBox = dock.entry_inputs.get("grid.z", null)
+	if grid_x == null:
+		errors.append("map preview entry form missing grid.x editor")
+		return
+	if grid_z == null:
+		errors.append("map preview entry form missing grid.z editor")
+		return
+	grid_x.value = 23
+	grid_z.value = 38
+	var patch := dock.build_entry_patch_from_inputs()
+	if typeof(patch.get("grid.x")) != TYPE_INT:
+		errors.append("map preview entry patch should preserve int values")
+
+	var dry_run := dock.apply_entry_patch(patch, true, {"allow_external_path": true})
+	if not bool(dry_run.get("ok", false)):
+		errors.append("map preview entry dry run failed: %s" % dry_run)
+
+	var saved := dock.apply_entry_patch(patch, false, {"allow_external_path": true})
+	if not bool(saved.get("ok", false)):
+		errors.append("map preview entry save failed: %s" % saved)
+		return
+	var raw := FileAccess.get_file_as_string(str(saved.get("path", "")))
+	if not raw.contains("\"x\": 23"):
+		errors.append("map preview entry save should write updated x coordinate")
 
 
 func _cleanup(dock: MapPreviewDock) -> void:

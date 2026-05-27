@@ -3,24 +3,25 @@ extends VBoxContainer
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const MapEditService = preload("res://scripts/data/map_edit_service.gd")
+const MapEditFormPanel = preload("res://addons/cdc_game_editor/map_edit_form_panel.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
-const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 
 var registry: ContentRegistry
 var edit_service: MapEditService
 var presenter: MapReviewPresenter
 var renderer: WorldSceneRenderer
+var entry_panel: MapEditFormPanel
+var object_panel: MapEditFormPanel
 var selected_map_id := ""
 var selected_object_id := ""
+var selected_entry_id := ""
 var map_ids: Array[String] = []
-var object_ids: Array[String] = []
 var object_inputs: Dictionary = {}
+var entry_inputs: Dictionary = {}
 
 var status_label: Label
 var map_option: OptionButton
-var object_option: OptionButton
-var object_form: VBoxContainer
 var viewport: SubViewport
 var preview_root: Node3D
 var detail: RichTextLabel
@@ -31,6 +32,8 @@ func _ready() -> void:
 	edit_service = MapEditService.new()
 	presenter = MapReviewPresenter.new()
 	renderer = WorldSceneRenderer.new()
+	entry_panel = MapEditFormPanel.new()
+	object_panel = MapEditFormPanel.new()
 	_build_ui()
 	refresh_maps()
 
@@ -62,13 +65,10 @@ func _build_ui() -> void:
 	refresh_button.pressed.connect(refresh_maps)
 	toolbar.add_child(refresh_button)
 
-	var object_toolbar := HBoxContainer.new()
-	add_child(object_toolbar)
-
-	object_option = OptionButton.new()
-	object_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	object_option.item_selected.connect(_on_object_selected)
-	object_toolbar.add_child(object_option)
+	entry_panel.attach(self)
+	entry_panel.selected.connect(_on_entry_selected)
+	entry_panel.save_requested.connect(_save_entry_patch)
+	entry_inputs = entry_panel.inputs
 
 	var viewport_container := SubViewportContainer.new()
 	viewport_container.custom_minimum_size = Vector2(360, 260)
@@ -84,8 +84,10 @@ func _build_ui() -> void:
 	preview_root.name = "MapPreviewRoot"
 	viewport.add_child(preview_root)
 
-	object_form = VBoxContainer.new()
-	add_child(object_form)
+	object_panel.attach(self)
+	object_panel.selected.connect(_on_object_selected)
+	object_panel.save_requested.connect(_save_object_patch)
+	object_inputs = object_panel.inputs
 
 	detail = RichTextLabel.new()
 	detail.fit_content = true
@@ -133,6 +135,7 @@ func select_map(map_id: String) -> Dictionary:
 		"actors": [],
 	}
 	var counts := renderer.render_world(preview_root, world_snapshot)
+	_refresh_entry_options(map_data)
 	_refresh_object_options(map_data)
 	_set_status("Status: preview %s | objects %d | cells %d" % [
 		map_id,
@@ -157,8 +160,21 @@ func apply_object_patch(patch: Dictionary, dry_run: bool = false, options: Dicti
 	return report
 
 
+func apply_entry_patch(patch: Dictionary, dry_run: bool = false, options: Dictionary = {}) -> Dictionary:
+	var save_options := options.duplicate()
+	save_options["dry_run"] = dry_run
+	var report := edit_service.save_entry_point_patch(selected_map_id, selected_entry_id, patch, registry, save_options)
+	if bool(report.get("ok", false)) and not dry_run:
+		refresh_maps()
+	return report
+
+
 func build_object_patch_from_inputs() -> Dictionary:
-	return TypedFieldForm.build_patch(object_inputs)
+	return object_panel.build_patch()
+
+
+func build_entry_patch_from_inputs() -> Dictionary:
+	return entry_panel.build_patch()
 
 
 func _on_map_selected(index: int) -> void:
@@ -167,19 +183,25 @@ func _on_map_selected(index: int) -> void:
 	select_map(map_ids[index])
 
 
-func _on_object_selected(index: int) -> void:
-	if index < 0 or index >= object_ids.size():
-		return
-	selected_object_id = object_ids[index]
+func _on_entry_selected(entry_id: String) -> void:
+	selected_entry_id = entry_id
+	_refresh_entry_form(_entry_point_data(selected_map_id, selected_entry_id))
+
+
+func _on_object_selected(object_id: String) -> void:
+	selected_object_id = object_id
 	_refresh_object_form(_map_object_data(selected_map_id, selected_object_id))
 
 
-func _on_object_dry_run_pressed() -> void:
-	_save_object_patch(true)
-
-
-func _on_object_save_pressed() -> void:
-	_save_object_patch(false)
+func _save_entry_patch(dry_run: bool) -> void:
+	var report := apply_entry_patch(build_entry_patch_from_inputs(), dry_run)
+	if not bool(report.get("ok", false)):
+		_set_status("Status: entry point save failed")
+		_set_detail("entry_point_save_failed:\n%s" % JSON.stringify(report, "\t"))
+		return
+	_set_status("Status: dry run ok" if dry_run else "Status: saved %s" % report.get("relative_path", ""))
+	if dry_run:
+		_set_detail("entry_point_dry_run:\n%s" % JSON.stringify(report, "\t"))
 
 
 func _save_object_patch(dry_run: bool) -> void:
@@ -193,46 +215,50 @@ func _save_object_patch(dry_run: bool) -> void:
 		_set_detail("map_object_dry_run:\n%s" % JSON.stringify(report, "\t"))
 
 
-func _refresh_object_options(map_data: Dictionary) -> void:
-	object_ids = _map_object_ids(map_data)
-	object_option.clear()
-	for object_id in object_ids:
-		var object: Dictionary = _map_object_from_data(map_data, object_id)
-		object_option.add_item("%s  [%s]" % [object_id, object.get("kind", "")])
-	if object_ids.is_empty():
-		selected_object_id = ""
-		_refresh_object_form({})
-		return
+func _refresh_entry_options(map_data: Dictionary) -> void:
+	entry_panel.selected_id = selected_entry_id
+	entry_panel.refresh_options(_array_or_empty(map_data.get("entry_points", [])), "id", Callable(self, "_entry_label"))
+	selected_entry_id = entry_panel.selected_id
+	_refresh_entry_form(_entry_point_from_data(map_data, selected_entry_id))
 
-	var selected_index := max(0, object_ids.find(selected_object_id))
-	object_option.select(selected_index)
-	selected_object_id = object_ids[selected_index]
+
+func _refresh_object_options(map_data: Dictionary) -> void:
+	object_panel.selected_id = selected_object_id
+	object_panel.refresh_options(_array_or_empty(map_data.get("objects", [])), "object_id", Callable(self, "_object_label"))
+	selected_object_id = object_panel.selected_id
 	_refresh_object_form(_map_object_from_data(map_data, selected_object_id))
 
 
 func _refresh_object_form(object_data: Dictionary) -> void:
-	TypedFieldForm.clear_container(object_form)
-	object_inputs.clear()
-	if object_data.is_empty():
-		return
-	for field in edit_service.map_object_editable_fields():
-		var field_type := edit_service.map_object_field_type(field)
-		object_inputs[field] = TypedFieldForm.add_field_row(object_form, field, field_type, TypedFieldForm.get_field(object_data, field), 150.0)
+	object_panel.refresh_form(
+		object_data,
+		edit_service.map_object_editable_fields(),
+		Callable(edit_service, "map_object_field_type")
+	)
 
-	var button_row := HBoxContainer.new()
-	var dry_run_button := Button.new()
-	dry_run_button.text = "Dry Run"
-	dry_run_button.pressed.connect(_on_object_dry_run_pressed)
-	button_row.add_child(dry_run_button)
-	var save_button := Button.new()
-	save_button.text = "Save"
-	save_button.pressed.connect(_on_object_save_pressed)
-	button_row.add_child(save_button)
-	object_form.add_child(button_row)
+
+func _refresh_entry_form(entry_data: Dictionary) -> void:
+	entry_panel.refresh_form(
+		entry_data,
+		edit_service.entry_point_editable_fields(),
+		Callable(edit_service, "entry_point_field_type")
+	)
 
 
 func _map_data(map_id: String) -> Dictionary:
 	return _dictionary_or_empty(_dictionary_or_empty(registry.get_library("maps").get(map_id, {})).get("data", {}))
+
+
+func _entry_point_data(map_id: String, entry_id: String) -> Dictionary:
+	return _entry_point_from_data(_map_data(map_id), entry_id)
+
+
+func _entry_point_from_data(map_data: Dictionary, entry_id: String) -> Dictionary:
+	for entry in _array_or_empty(map_data.get("entry_points", [])):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("id", "")) == entry_id:
+			return entry_data
+	return {}
 
 
 func _map_object_data(map_id: String, object_id: String) -> Dictionary:
@@ -245,17 +271,6 @@ func _map_object_from_data(map_data: Dictionary, object_id: String) -> Dictionar
 		if str(object_data.get("object_id", "")) == object_id:
 			return object_data
 	return {}
-
-
-func _map_object_ids(map_data: Dictionary) -> Array[String]:
-	var ids: Array[String] = []
-	for object in _array_or_empty(map_data.get("objects", [])):
-		var object_data: Dictionary = _dictionary_or_empty(object)
-		var object_id := str(object_data.get("object_id", ""))
-		if not object_id.is_empty():
-			ids.append(object_id)
-	ids.sort()
-	return ids
 
 
 func _sorted_map_ids(library: Dictionary) -> Array[String]:
@@ -274,6 +289,18 @@ func _set_status(text: String) -> void:
 func _set_detail(text: String) -> void:
 	if detail != null:
 		detail.text = text
+
+
+func _grid_label(grid: Dictionary) -> String:
+	return "(%s,%s,%s)" % [grid.get("x", ""), grid.get("y", ""), grid.get("z", "")]
+
+
+func _entry_label(entry_data: Dictionary, entry_id: String) -> String:
+	return "%s  @ %s" % [entry_id, _grid_label(_dictionary_or_empty(entry_data.get("grid", {})))]
+
+
+func _object_label(object_data: Dictionary, object_id: String) -> String:
+	return "%s  [%s]" % [object_id, object_data.get("kind", "")]
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
