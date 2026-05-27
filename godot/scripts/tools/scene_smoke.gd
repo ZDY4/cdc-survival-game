@@ -52,8 +52,22 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 		errors.append("expected object marker meshes")
 	if int(counts.get("actors", 0)) != 3:
 		errors.append("expected 3 actor markers")
+	if _interaction_target_node_count(root) <= 0:
+		errors.append("expected interaction target metadata on generated nodes")
 	if int(counts.get("lights", 0)) <= 0:
 		errors.append("expected light")
 	if int(counts.get("cameras", 0)) <= 0:
 		errors.append("expected camera")
 	return errors
+
+
+func _interaction_target_node_count(root: Node) -> int:
+	var count: int = 0
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node.has_meta("interaction_target"):
+			count += 1
+		for child in node.get_children():
+			pending.append(child)
+	return count

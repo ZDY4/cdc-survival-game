@@ -80,6 +80,10 @@ func _spawn_object_marker(root: Node3D, object: Dictionary, material: Material) 
 	node.name = "MapObject_%s" % object.get("object_id", "")
 	node.mesh = mesh
 	node.material_override = material
+	node.set_meta("interaction_target", {
+		"target_type": "map_object",
+		"target_id": str(object.get("object_id", "")),
+	})
 	node.position = Vector3(
 		(float(anchor.get("x", 0)) + (width - 1.0) * 0.5) * GRID_SIZE,
 		0.18,
@@ -109,6 +113,10 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		node.name = "Actor_%s_%d" % [actor_data.get("definition_id", ""), int(actor_data.get("actor_id", 0))]
 		node.mesh = mesh
 		node.material_override = player_material if actor_data.get("kind", "") == "player" else actor_material
+		node.set_meta("interaction_target", {
+			"target_type": "actor",
+			"actor_id": int(actor_data.get("actor_id", 0)),
+		})
 		node.position = _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), 0.58)
 		root.add_child(node)
 	return actors.size()

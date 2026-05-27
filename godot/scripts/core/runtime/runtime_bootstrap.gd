@@ -2,6 +2,7 @@ extends RefCounted
 
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Simulation = preload("res://scripts/core/simulation/simulation.gd")
+const MapBuilder = preload("res://scripts/world/map_builder.gd")
 
 var registry: RefCounted
 
@@ -21,6 +22,7 @@ func build_new_game_runtime() -> Dictionary:
 	for spawn_entry in bootstrap.get("spawnEntries", []):
 		_register_spawn_entry(simulation, spawn_entry)
 
+	_configure_startup_map_interactions(simulation)
 	return {
 		"ok": true,
 		"simulation": simulation,
@@ -49,6 +51,15 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"group_id": _actor_group_id(archetype, faction),
 		"grid_position": GridCoord.from_dictionary(grid_data),
 	})
+
+
+func _configure_startup_map_interactions(simulation: RefCounted) -> void:
+	var map_record: Dictionary = registry.get_library("maps").get(simulation.active_map_id, {})
+	if map_record.is_empty():
+		push_error("cannot configure interactions for unknown map: %s" % simulation.active_map_id)
+		return
+	var topology: RefCounted = MapBuilder.new().build_from_definition(map_record["data"])
+	simulation.configure_map_interactions(topology.interaction_targets)
 
 
 func _actor_kind_from_archetype(archetype: String) -> String:

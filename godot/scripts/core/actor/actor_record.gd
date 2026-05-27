@@ -11,6 +11,8 @@ var ap: float = 0.0
 var turn_open: bool = false
 var in_combat: bool = false
 var grid_position: RefCounted
+var inventory: Dictionary = {}
+var active_dialogue_id: String = ""
 
 
 func to_dictionary() -> Dictionary:
@@ -26,4 +28,6 @@ func to_dictionary() -> Dictionary:
 		"turn_open": turn_open,
 		"in_combat": in_combat,
 		"grid_position": grid_position.to_dictionary(),
+		"inventory": inventory,
+		"active_dialogue_id": active_dialogue_id,
 	}

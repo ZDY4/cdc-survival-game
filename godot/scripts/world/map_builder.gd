@@ -61,10 +61,13 @@ func _collect_objects(topology: MapTopology, objects: Array) -> void:
 		match kind:
 			"interactive":
 				topology.interactive_objects.append(summary)
+				topology.interaction_targets[object_id] = _interaction_target(summary, "container")
 			"trigger":
 				topology.trigger_objects.append(summary)
+				topology.interaction_targets[object_id] = _interaction_target(summary, "scene_transition")
 			"pickup":
 				topology.pickup_objects.append(summary)
+				topology.interaction_targets[object_id] = _interaction_target(summary, "pickup")
 			"ai_spawn":
 				topology.ai_spawn_objects.append(summary)
 
@@ -125,6 +128,41 @@ func _object_summary(object: Dictionary, cells: Array[RefCounted]) -> Dictionary
 		"rotation": str(object.get("rotation", "north")),
 		"cells": cell_output,
 		"props": _dictionary_or_empty(object.get("props", {})),
+	}
+
+
+func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> Dictionary:
+	var props: Dictionary = _dictionary_or_empty(object_summary.get("props", {}))
+	var interaction_props: Dictionary = _dictionary_or_empty(props.get("interactive", {}))
+	var trigger_props: Dictionary = _dictionary_or_empty(props.get("trigger", {}))
+	var pickup_props: Dictionary = _dictionary_or_empty(props.get("pickup", {}))
+	var container_props: Dictionary = _dictionary_or_empty(props.get("container", {}))
+	var interaction_kind: String = str(interaction_props.get("interaction_kind", ""))
+	if interaction_kind.is_empty():
+		interaction_kind = str(trigger_props.get("interaction_kind", ""))
+	if interaction_kind.is_empty():
+		interaction_kind = fallback_kind
+
+	var display_name: String = str(interaction_props.get("display_name", ""))
+	if display_name.is_empty():
+		display_name = str(trigger_props.get("display_name", ""))
+	if display_name.is_empty():
+		display_name = str(container_props.get("display_name", ""))
+	if display_name.is_empty():
+		display_name = str(object_summary.get("object_id", ""))
+
+	return {
+		"target_id": object_summary.get("object_id", ""),
+		"target_type": "map_object",
+		"display_name": display_name,
+		"kind": interaction_kind,
+		"anchor": object_summary.get("anchor", {}),
+		"cells": object_summary.get("cells", []),
+		"item_id": str(pickup_props.get("item_id", "")),
+		"min_count": int(pickup_props.get("min_count", 1)),
+		"max_count": int(pickup_props.get("max_count", pickup_props.get("min_count", 1))),
+		"target_map_id": str(trigger_props.get("target_id", interaction_props.get("target_id", ""))),
+		"container_inventory": _array_or_empty(container_props.get("initial_inventory", [])),
 	}
 
 

@@ -32,6 +32,13 @@ func get_actor(actor_id: int) -> ActorRecord:
 	return _records.get(actor_id)
 
 
+func require_actor(actor_id: int) -> ActorRecord:
+	var record: ActorRecord = get_actor(actor_id)
+	if record == null:
+		push_error("unknown actor id: %d" % actor_id)
+	return record
+
+
 func actors() -> Array[ActorRecord]:
 	var output: Array[ActorRecord] = []
 	for actor_id in _registration_order:

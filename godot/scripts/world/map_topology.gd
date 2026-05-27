@@ -15,6 +15,7 @@ var interactive_objects: Array[Dictionary] = []
 var trigger_objects: Array[Dictionary] = []
 var pickup_objects: Array[Dictionary] = []
 var ai_spawn_objects: Array[Dictionary] = []
+var interaction_targets: Dictionary = {}
 
 
 func to_dictionary() -> Dictionary:
@@ -37,4 +38,5 @@ func to_dictionary() -> Dictionary:
 		"trigger_objects": trigger_objects,
 		"pickup_objects": pickup_objects,
 		"ai_spawn_objects": ai_spawn_objects,
+		"interaction_targets": interaction_targets,
 	}
