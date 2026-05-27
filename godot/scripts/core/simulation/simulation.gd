@@ -9,6 +9,7 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const InteractionExecutor = preload("res://scripts/core/interactions/interaction_executor.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
+const QuestRunner = preload("res://scripts/core/quests/quest_runner.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
@@ -36,6 +37,7 @@ var _inventory_entries := InventoryEntries.new()
 var _interaction_executor := InteractionExecutor.new()
 var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
+var _quest_runner := QuestRunner.new()
 var _snapshot_codec := SimulationSnapshotCodec.new()
 var _vision_rules := VisionRules.new()
 
@@ -57,49 +59,15 @@ func configure_map_interactions(targets: Dictionary) -> void:
 
 
 func configure_quests(quests: Dictionary) -> void:
-	quest_library = quests.duplicate(true)
-	_start_available_quests()
+	_quest_runner.configure(self, quests)
 
 
 func start_quest(actor_id: int, quest_id: String) -> bool:
-	if actor_registry.get_actor(actor_id) == null:
-		return false
-	if quest_id.is_empty() or active_quests.has(quest_id) or completed_quests.has(quest_id):
-		return false
-	var quest_data: Dictionary = _quest_data(quest_id)
-	if quest_data.is_empty() or not _quest_prerequisites_completed(quest_data):
-		return false
-	_start_quest(quest_id, quest_data, actor_id)
-	_advance_active_quest(actor_id, quest_id)
-	return true
+	return _quest_runner.start(self, actor_id, quest_id)
 
 
 func turn_in_quest(actor_id: int, quest_id: String) -> Dictionary:
-	if actor_registry.get_actor(actor_id) == null:
-		return {"success": false, "reason": "unknown_actor"}
-	if not active_quests.has(quest_id):
-		return {"success": false, "reason": "quest_not_active"}
-	var quest_data: Dictionary = _quest_data(quest_id)
-	var objective: Dictionary = _first_objective_node(quest_data)
-	if objective.is_empty() or not bool(objective.get("manual_turn_in", false)):
-		return {"success": false, "reason": "quest_not_waiting_for_turn_in"}
-	var state: Dictionary = _dictionary_or_empty(active_quests.get(quest_id, {}))
-	var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
-	var objective_id: String = str(objective.get("id", ""))
-	var target_count: int = max(1, int(objective.get("count", 1)))
-	var current: int = int(completed.get(objective_id, 0))
-	if current < target_count:
-		return {"success": false, "reason": "quest_objective_incomplete", "current": current, "target": target_count}
-
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var item_id: String = _normalize_content_id(objective.get("item_id", ""))
-	if not item_id.is_empty():
-		if int(actor.inventory.get(item_id, 0)) < target_count:
-			return {"success": false, "reason": "not_enough_items", "item_id": item_id, "required": target_count, "current": int(actor.inventory.get(item_id, 0))}
-		_inventory_entries.add_actor_item(actor, item_id, -target_count)
-	_grant_quest_rewards(actor_id, quest_id, quest_data)
-	_complete_quest(actor_id, quest_id)
-	return {"success": true, "quest_id": quest_id}
+	return _quest_runner.turn_in(self, actor_id, quest_id)
 
 
 func grant_experience(actor_id: int, amount: int, source: String = "") -> Dictionary:
@@ -285,7 +253,7 @@ func configure_shops(shops: Dictionary) -> void:
 
 
 func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
-	_advance_collect_quests(actor_id, item_id, count)
+	_quest_runner.record_item_collected(self, actor_id, item_id, count)
 
 
 func move_actor_to(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
@@ -607,7 +575,7 @@ func perform_attack(actor_id: int, target_actor_id: int) -> Dictionary:
 
 
 func record_enemy_defeated(actor_id: int, enemy_definition_id: String, enemy_kind: String = "enemy") -> void:
-	_advance_kill_quests(actor_id, enemy_definition_id, enemy_kind)
+	_quest_runner.record_enemy_defeated(self, actor_id, enemy_definition_id, enemy_kind)
 
 
 func advance_dialogue(actor_id: int, option_ref: Variant, dialogue_library: Dictionary) -> Dictionary:
@@ -656,197 +624,6 @@ func _overworld_location(location_id: String, overworld_library: Dictionary) -> 
 			if str(location_data.get("id", "")) == location_id:
 				return location_data
 	return {}
-
-
-func _start_available_quests() -> void:
-	var started := true
-	while started:
-		started = false
-		for quest_id in quest_library.keys():
-			var quest_key: String = str(quest_id)
-			if active_quests.has(quest_key) or completed_quests.has(quest_key):
-				continue
-			var quest_record: Dictionary = _dictionary_or_empty(quest_library[quest_id])
-			var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", {}))
-			if _quest_prerequisites_completed(quest_data):
-				_start_quest(quest_key, quest_data)
-				_advance_active_quest(1, quest_key)
-				started = true
-
-
-func _start_quest(quest_id: String, quest_data: Dictionary, actor_id: int = 1) -> void:
-	var objective: Dictionary = _first_objective_node(quest_data)
-	active_quests[quest_id] = {
-		"quest_id": quest_id,
-		"current_node_id": str(objective.get("id", "")),
-		"completed_objectives": {},
-	}
-	_emit("quest_started", {
-		"actor_id": actor_id,
-		"quest_id": quest_id,
-		"title": quest_data.get("title", quest_id),
-	})
-
-
-func _advance_collect_quests(actor_id: int, item_id: String, count: int) -> void:
-	var completed_now: Array[String] = []
-	for quest_id in active_quests.keys():
-		var quest_data: Dictionary = _quest_data(str(quest_id))
-		var objective: Dictionary = _first_objective_node(quest_data)
-		if objective.get("objective_type", "") != "collect":
-			continue
-		if _normalize_content_id(objective.get("item_id", "")) != item_id:
-			continue
-		var state: Dictionary = active_quests[quest_id]
-		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
-		var objective_id: String = str(objective.get("id", ""))
-		var target_count: int = max(1, int(objective.get("count", 1)))
-		var current: int = min(target_count, int(completed.get(objective_id, 0)) + count)
-		completed[objective_id] = current
-		state["completed_objectives"] = completed
-		active_quests[quest_id] = state
-		_emit("quest_progressed", {
-			"actor_id": actor_id,
-			"quest_id": quest_id,
-			"objective_id": objective_id,
-			"current": current,
-			"target": target_count,
-		})
-		if current >= target_count:
-			completed_now.append(str(quest_id))
-
-	for quest_id in completed_now:
-		_advance_active_quest(actor_id, quest_id)
-
-
-func _complete_quest(actor_id: int, quest_id: String) -> void:
-	if not active_quests.has(quest_id):
-		return
-	active_quests.erase(quest_id)
-	completed_quests[quest_id] = true
-	_emit("quest_completed", {
-		"actor_id": actor_id,
-		"quest_id": quest_id,
-	})
-	_start_available_quests()
-
-
-func _advance_active_quest(actor_id: int, quest_id: String) -> void:
-	var quest_data: Dictionary = _quest_data(quest_id)
-	if quest_data.is_empty() or not active_quests.has(quest_id):
-		return
-	var objective: Dictionary = _first_objective_node(quest_data)
-	if objective.is_empty():
-		return
-	var state: Dictionary = _dictionary_or_empty(active_quests.get(quest_id, {}))
-	var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
-	var objective_id: String = str(objective.get("id", ""))
-	var target_count: int = max(1, int(objective.get("count", 1)))
-	var current: int = int(completed.get(objective_id, 0))
-	if current < target_count:
-		return
-	if bool(objective.get("manual_turn_in", false)):
-		return
-	_grant_quest_rewards(actor_id, quest_id, quest_data)
-	_complete_quest(actor_id, quest_id)
-
-
-func _grant_quest_rewards(actor_id: int, quest_id: String, quest_data: Dictionary) -> void:
-	var reward_node: Dictionary = _first_reward_node(quest_data)
-	if reward_node.is_empty():
-		return
-	var rewards: Dictionary = _dictionary_or_empty(reward_node.get("rewards", {}))
-	for item in _array_or_empty(rewards.get("items", [])):
-		var item_data: Dictionary = _dictionary_or_empty(item)
-		var item_id: String = _normalize_content_id(item_data.get("id", item_data.get("item_id", "")))
-		var count: int = max(1, int(item_data.get("count", 1)))
-		if not item_id.is_empty():
-			var actor: RefCounted = actor_registry.get_actor(actor_id)
-			if actor != null:
-				_inventory_entries.add_actor_item(actor, item_id, count)
-	if int(rewards.get("experience", 0)) > 0 or int(rewards.get("skill_points", 0)) > 0:
-		if int(rewards.get("experience", 0)) > 0:
-			grant_experience(actor_id, int(rewards.get("experience", 0)), "quest:%s" % quest_id)
-		if int(rewards.get("skill_points", 0)) > 0:
-			grant_skill_points(actor_id, int(rewards.get("skill_points", 0)), "quest:%s" % quest_id)
-		_emit("quest_reward_granted", {
-			"actor_id": actor_id,
-			"quest_id": quest_id,
-			"experience": int(rewards.get("experience", 0)),
-			"skill_points": int(rewards.get("skill_points", 0)),
-		})
-
-
-func _advance_kill_quests(actor_id: int, enemy_definition_id: String, enemy_kind: String) -> void:
-	var completed_now: Array[String] = []
-	for quest_id in active_quests.keys():
-		var quest_data: Dictionary = _quest_data(str(quest_id))
-		var objective: Dictionary = _first_objective_node(quest_data)
-		if objective.get("objective_type", "") != "kill":
-			continue
-		var enemy_type: String = str(objective.get("enemy_type", ""))
-		if not enemy_type.is_empty() and not _enemy_matches_objective(enemy_definition_id, enemy_kind, enemy_type):
-			continue
-		var state: Dictionary = active_quests[quest_id]
-		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
-		var objective_id: String = str(objective.get("id", ""))
-		var target_count: int = max(1, int(objective.get("count", 1)))
-		var current: int = min(target_count, int(completed.get(objective_id, 0)) + 1)
-		completed[objective_id] = current
-		state["completed_objectives"] = completed
-		active_quests[quest_id] = state
-		_emit("quest_progressed", {
-			"actor_id": actor_id,
-			"quest_id": quest_id,
-			"objective_id": objective_id,
-			"current": current,
-			"target": target_count,
-		})
-		if current >= target_count:
-			completed_now.append(str(quest_id))
-
-	for quest_id in completed_now:
-		_advance_active_quest(actor_id, quest_id)
-
-
-func _quest_prerequisites_completed(quest_data: Dictionary) -> bool:
-	for prerequisite in quest_data.get("prerequisites", []):
-		if not completed_quests.has(str(prerequisite)):
-			return false
-	return true
-
-
-func _quest_data(quest_id: String) -> Dictionary:
-	var record: Dictionary = _dictionary_or_empty(quest_library.get(quest_id, {}))
-	return _dictionary_or_empty(record.get("data", {}))
-
-
-func _first_objective_node(quest_data: Dictionary) -> Dictionary:
-	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
-	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
-	for node_id in nodes.keys():
-		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
-		if node.get("type", "") == "objective":
-			return node
-	return {}
-
-
-func _first_reward_node(quest_data: Dictionary) -> Dictionary:
-	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
-	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
-	for node_id in nodes.keys():
-		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
-		if node.get("type", "") == "reward":
-			return node
-	return {}
-
-
-func _enemy_matches_objective(enemy_definition_id: String, enemy_kind: String, enemy_type: String) -> bool:
-	if enemy_type == enemy_kind or enemy_type == enemy_definition_id:
-		return true
-	if enemy_type == "zombie" and enemy_definition_id.begins_with("zombie_"):
-		return true
-	return false
 
 
 func _trade_unit_price(item_id: String, modifier: float, item_library: Dictionary) -> int:
