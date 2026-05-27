@@ -1,0 +1,74 @@
+extends RefCounted
+
+
+func unlock_location(simulation: RefCounted, location_id: String) -> bool:
+	var normalized_location_id: String = str(location_id)
+	if normalized_location_id.is_empty():
+		return false
+	if not simulation.unlocked_locations.has(normalized_location_id):
+		simulation.unlocked_locations.append(normalized_location_id)
+		simulation.emit_event("location_unlocked", {
+			"location_id": normalized_location_id,
+		})
+		return true
+	return false
+
+
+func enter_location(simulation: RefCounted, actor_id: int, location_id: String, overworld_library: Dictionary, entry_point_override: String = "") -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var location: Dictionary = _overworld_location(location_id, overworld_library)
+	if location.is_empty():
+		return {"success": false, "reason": "unknown_location", "location_id": location_id}
+	var normalized_location_id: String = str(location.get("id", location_id))
+	if not simulation.unlocked_locations.has(normalized_location_id):
+		return {"success": false, "reason": "location_locked", "location_id": normalized_location_id}
+	var map_id: String = str(location.get("map_id", ""))
+	if map_id.is_empty():
+		return {"success": false, "reason": "location_map_missing", "location_id": normalized_location_id}
+	var entry_point_id: String = str(entry_point_override)
+	if entry_point_id.is_empty():
+		entry_point_id = str(location.get("entry_point_id", ""))
+	var previous_map_id: String = simulation.active_map_id
+	simulation.active_map_id = map_id
+	simulation.active_location_id = normalized_location_id
+	simulation.active_entry_point_id = entry_point_id
+	simulation.start_entry_point_id = entry_point_id
+	actor.active_container_id = ""
+	simulation.emit_event("location_entered", {
+		"actor_id": actor_id,
+		"location_id": normalized_location_id,
+		"from_map_id": previous_map_id,
+		"to_map_id": map_id,
+		"entry_point_id": entry_point_id,
+	})
+	return {
+		"success": true,
+		"location_id": normalized_location_id,
+		"map_id": map_id,
+		"entry_point_id": entry_point_id,
+	}
+
+
+func _overworld_location(location_id: String, overworld_library: Dictionary) -> Dictionary:
+	for overworld_id in overworld_library.keys():
+		var record: Dictionary = _dictionary_or_empty(overworld_library[overworld_id])
+		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+		for location in _array_or_empty(data.get("locations", [])):
+			var location_data: Dictionary = _dictionary_or_empty(location)
+			if str(location_data.get("id", "")) == location_id:
+				return location_data
+	return {}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

@@ -10,6 +10,7 @@ const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const InteractionExecutor = preload("res://scripts/core/interactions/interaction_executor.gd")
+const OverworldRunner = preload("res://scripts/core/overworld/overworld_runner.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 const ProgressionRunner = preload("res://scripts/core/progression/progression_runner.gd")
@@ -42,6 +43,7 @@ var _economy_transactions := EconomyTransactions.new()
 var _equipment_rules := EquipmentRules.new()
 var _inventory_entries := InventoryEntries.new()
 var _interaction_executor := InteractionExecutor.new()
+var _overworld_runner := OverworldRunner.new()
 var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
 var _progression_runner := ProgressionRunner.new()
@@ -140,53 +142,11 @@ func decide_all_ai_intents(context: Dictionary = {}) -> Array[Dictionary]:
 
 
 func unlock_location(location_id: String) -> bool:
-	var normalized_location_id: String = str(location_id)
-	if normalized_location_id.is_empty():
-		return false
-	if not unlocked_locations.has(normalized_location_id):
-		unlocked_locations.append(normalized_location_id)
-		_emit("location_unlocked", {
-			"location_id": normalized_location_id,
-		})
-		return true
-	return false
+	return _overworld_runner.unlock_location(self, location_id)
 
 
 func enter_location(actor_id: int, location_id: String, overworld_library: Dictionary, entry_point_override: String = "") -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var location: Dictionary = _overworld_location(location_id, overworld_library)
-	if location.is_empty():
-		return {"success": false, "reason": "unknown_location", "location_id": location_id}
-	var normalized_location_id: String = str(location.get("id", location_id))
-	if not unlocked_locations.has(normalized_location_id):
-		return {"success": false, "reason": "location_locked", "location_id": normalized_location_id}
-	var map_id: String = str(location.get("map_id", ""))
-	if map_id.is_empty():
-		return {"success": false, "reason": "location_map_missing", "location_id": normalized_location_id}
-	var entry_point_id: String = str(entry_point_override)
-	if entry_point_id.is_empty():
-		entry_point_id = str(location.get("entry_point_id", ""))
-	var previous_map_id: String = active_map_id
-	active_map_id = map_id
-	active_location_id = normalized_location_id
-	active_entry_point_id = entry_point_id
-	start_entry_point_id = entry_point_id
-	actor.active_container_id = ""
-	_emit("location_entered", {
-		"actor_id": actor_id,
-		"location_id": normalized_location_id,
-		"from_map_id": previous_map_id,
-		"to_map_id": map_id,
-		"entry_point_id": entry_point_id,
-	})
-	return {
-		"success": true,
-		"location_id": normalized_location_id,
-		"map_id": map_id,
-		"entry_point_id": entry_point_id,
-	}
+	return _overworld_runner.enter_location(self, actor_id, location_id, overworld_library, entry_point_override)
 
 
 func configure_shops(shops: Dictionary) -> void:
@@ -313,17 +273,6 @@ func _occupied_actor_cells(excluded_actor_id: int) -> Dictionary:
 			continue
 		output[actor.grid_position.key()] = actor.actor_id
 	return output
-
-
-func _overworld_location(location_id: String, overworld_library: Dictionary) -> Dictionary:
-	for overworld_id in overworld_library.keys():
-		var record: Dictionary = _dictionary_or_empty(overworld_library[overworld_id])
-		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
-		for location in _array_or_empty(data.get("locations", [])):
-			var location_data: Dictionary = _dictionary_or_empty(location)
-			if str(location_data.get("id", "")) == location_id:
-				return location_data
-	return {}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
