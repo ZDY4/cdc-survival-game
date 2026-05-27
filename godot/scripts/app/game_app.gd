@@ -6,9 +6,11 @@ const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
 const DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
+const InventorySnapshot = preload("res://scripts/ui/snapshots/inventory_snapshot.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 const DIALOGUE_PANEL_SCENE = preload("res://scenes/ui/dialogue_panel.tscn")
+const INVENTORY_PANEL_SCENE = preload("res://scenes/ui/inventory_panel.tscn")
 
 var registry: ContentRegistry
 var simulation: RefCounted
@@ -17,6 +19,7 @@ var interaction_controller: RefCounted
 var world_container: Node3D
 var hud: Control
 var dialogue_panel: Control
+var inventory_panel: Control
 
 
 func _ready() -> void:
@@ -41,8 +44,10 @@ func _ready() -> void:
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
 	_setup_hud()
 	_setup_dialogue_panel()
+	_setup_inventory_panel()
 	refresh_hud()
 	refresh_dialogue_panel()
+	refresh_inventory_panel()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
 
 
@@ -60,6 +65,13 @@ func refresh_dialogue_panel() -> void:
 		return
 	var snapshot: Dictionary = DialogueSnapshot.new(registry).build(simulation.snapshot())
 	dialogue_panel.apply_snapshot(snapshot)
+
+
+func refresh_inventory_panel() -> void:
+	if inventory_panel == null or simulation == null:
+		return
+	var snapshot: Dictionary = InventorySnapshot.new(registry).build(simulation.snapshot())
+	inventory_panel.apply_snapshot(snapshot)
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
@@ -96,8 +108,10 @@ func execute_primary_interaction() -> Dictionary:
 	WorldSceneRenderer.new().render_world(world_container, world_result)
 	_setup_hud()
 	_setup_dialogue_panel()
+	_setup_inventory_panel()
 	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	refresh_dialogue_panel()
+	refresh_inventory_panel()
 	return result
 
 
@@ -129,6 +143,14 @@ func _setup_dialogue_panel() -> void:
 	dialogue_panel = DIALOGUE_PANEL_SCENE.instantiate()
 	dialogue_panel.name = "DialoguePanelRoot"
 	add_child(dialogue_panel)
+
+
+func _setup_inventory_panel() -> void:
+	if inventory_panel != null:
+		return
+	inventory_panel = INVENTORY_PANEL_SCENE.instantiate()
+	inventory_panel.name = "InventoryPanelRoot"
+	add_child(inventory_panel)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
